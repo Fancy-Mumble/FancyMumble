@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { loadImage, cropToCanvas, resizeImage } from "@core/features/settings/imageUtils";
 import styles from "./SettingsPage.module.css";
 import panelStyles from "./ImageEditor.module.css";
+import { SearchIcon } from "../../icons";
 
 interface ImageEditorProps {
   /** Raw image data-URL to edit. */
@@ -199,7 +200,9 @@ export function ImageEditor({
 
         {/* Zoom slider */}
         <div className={panelStyles.editorControls}>
-          <span className={panelStyles.editorZoomIcon}>??</span>
+          <span className={panelStyles.editorZoomIcon}>
+            <SearchIcon width={16} height={16} />
+          </span>
           <input
             type="range"
             min={minZoom}

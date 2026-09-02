@@ -13,6 +13,9 @@ import enCommon from "./src/core/locales/en/common.json";
 import enServer from "./src/core/locales/en/server.json";
 import enSettings from "./src/core/locales/en/settings.json";
 import enSidebar from "./src/core/locales/en/sidebar.json";
+// Nebula keeps its own strings in their own namespaces, so a page of its
+// settings reads nothing but bare keys without this one registered too.
+import enNebulaSettings from "./src/core/locales/nebula/en/settings.json";
 
 type NestedRecord = { [key: string]: unknown };
 
@@ -22,6 +25,7 @@ const NAMESPACES: Record<string, NestedRecord> = {
   server: enServer as NestedRecord,
   settings: enSettings as NestedRecord,
   sidebar: enSidebar as NestedRecord,
+  nebulaSettings: enNebulaSettings as NestedRecord,
 };
 
 function resolveKey(data: NestedRecord, key: string): unknown {

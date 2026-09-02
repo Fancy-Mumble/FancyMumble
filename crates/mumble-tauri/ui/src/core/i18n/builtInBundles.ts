@@ -9,26 +9,26 @@
  * needs every built-in language at once to show the source plus side-by-side
  * reference translations.
  */
-import enCommon from "../locales/en/common.json";
-import enSettings from "../locales/en/settings.json";
-import enChat from "../locales/en/chat.json";
-import enServer from "../locales/en/server.json";
-import enSidebar from "../locales/en/sidebar.json";
-import deCommon from "../locales/de/common.json";
-import deSettings from "../locales/de/settings.json";
-import deChat from "../locales/de/chat.json";
-import deServer from "../locales/de/server.json";
-import deSidebar from "../locales/de/sidebar.json";
-import frCommon from "../locales/fr/common.json";
-import frSettings from "../locales/fr/settings.json";
-import frChat from "../locales/fr/chat.json";
-import frServer from "../locales/fr/server.json";
-import frSidebar from "../locales/fr/sidebar.json";
-import zhCommon from "../locales/zh/common.json";
-import zhSettings from "../locales/zh/settings.json";
-import zhChat from "../locales/zh/chat.json";
-import zhServer from "../locales/zh/server.json";
-import zhSidebar from "../locales/zh/sidebar.json";
+import enCommon from "../locales/common/en/common.json";
+import enSettings from "../locales/common/en/settings.json";
+import enChat from "../locales/common/en/chat.json";
+import enServer from "../locales/common/en/server.json";
+import enSidebar from "../locales/common/en/sidebar.json";
+import deCommon from "../locales/common/de/common.json";
+import deSettings from "../locales/common/de/settings.json";
+import deChat from "../locales/common/de/chat.json";
+import deServer from "../locales/common/de/server.json";
+import deSidebar from "../locales/common/de/sidebar.json";
+import frCommon from "../locales/common/fr/common.json";
+import frSettings from "../locales/common/fr/settings.json";
+import frChat from "../locales/common/fr/chat.json";
+import frServer from "../locales/common/fr/server.json";
+import frSidebar from "../locales/common/fr/sidebar.json";
+import zhCommon from "../locales/common/zh/common.json";
+import zhSettings from "../locales/common/zh/settings.json";
+import zhChat from "../locales/common/zh/chat.json";
+import zhServer from "../locales/common/zh/server.json";
+import zhSidebar from "../locales/common/zh/sidebar.json";
 
 export const BUILT_IN_RESOURCES = {
   en: { common: enCommon, settings: enSettings, chat: enChat, server: enServer, sidebar: enSidebar },

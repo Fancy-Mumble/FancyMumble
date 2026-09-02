@@ -69,16 +69,18 @@ function open(
 
   const onClose = vi.fn();
   const onMessage = vi.fn();
+  const onJoinChannel = vi.fn();
   render(
     withNebulaTheme(
       <UserMenu
         target={{ user: target, x: 40, y: 60 }}
         onClose={onClose}
         onMessage={options.onMessage === false ? undefined : onMessage}
+        onJoinChannel={onJoinChannel}
       />,
     ),
   );
-  return { onClose, onMessage };
+  return { onClose, onMessage, onJoinChannel };
 }
 
 describe("UserMenu", () => {
@@ -88,7 +90,7 @@ describe("UserMenu", () => {
   });
 
   it("shows nothing until a row is right-clicked", () => {
-    render(withNebulaTheme(<UserMenu target={null} onClose={vi.fn()} />));
+    render(withNebulaTheme(<UserMenu target={null} onClose={vi.fn()} onJoinChannel={vi.fn()} />));
     expect(screen.queryByRole("menu")).toBeNull();
   });
 

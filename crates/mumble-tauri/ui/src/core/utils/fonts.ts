@@ -14,9 +14,17 @@ const SYSTEM_DEFAULT_STACK = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'In
 
 const fontCssById = new Map(FONT_FAMILIES.map((f) => [f.id, f.css]));
 
-/** Apply a font family globally by updating the `--font-family` CSS variable on `:root`. */
+/**
+ * Apply a font family globally by updating the `--font-family` CSS variable on
+ * `:root`.
+ *
+ * "System default" defers to `--nebula-font` where a UI pack publishes one, so
+ * a design-sheet theme's own typeface is what an unset font preference means -
+ * and an explicitly chosen family still outranks it. Packs that publish no such
+ * variable fall straight through to the platform stack, as before.
+ */
 export function applyFont(id: string): void {
   const css = fontCssById.get(id);
-  const value = !css || css === "inherit" ? SYSTEM_DEFAULT_STACK : css;
+  const value = !css || css === "inherit" ? `var(--nebula-font, ${SYSTEM_DEFAULT_STACK})` : css;
   document.documentElement.style.setProperty("--font-family", value);
 }

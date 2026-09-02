@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FocusEvent, type ReactNode } from "react";
-import { Autocomplete, Box, Button, Chip, IconButton, Switch, TextField, Typography } from "@mui/material";
+import { Box, Button, IconButton, Switch, TextField, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@core/store";
 import { rootChannelId } from "@core/features/admin/rootChannel";
@@ -7,14 +7,22 @@ import { useChannelAcl } from "@core/features/admin/useChannelAcl";
 import { isOnboardingSupported, useOnboardingStore } from "@core/features/onboarding/onboardingStore";
 import type { OnboardingAnswer, OnboardingConfig, OnboardingQuestion } from "@core/types";
 import { ChevronDownIcon, ChevronRightIcon, CloseIcon, TrashIcon } from "@ui/icons";
-import { Stack, UserAvatar } from "../primitives";
+import { Stack } from "../primitives";
 import { Banner, EmptyState } from "../settings/controls";
 import { AdminPage } from "./controls";
-import { serverTint } from "../../selectors";
-import { useServerLivery } from "../../useServerLivery";
+import { Segmented } from "./nodes";
+import { MemberPreview } from "./onboarding/MemberPreview";
+import { OnboardingCanvas } from "./onboarding/OnboardingCanvas";
+import { MappingPicker, groupMapping, type Mapping, type TFn } from "./onboarding/mapping";
+import {
+  MAX_QUESTIONS,
+  configOf,
+  graphOf,
+  positionsOf,
+  publishable,
+  type OnboardingGraph,
+} from "./onboarding/model";
 import { radius } from "../../tokens";
-
-const MAX_QUESTIONS = 5;
 
 const emptyAnswer = (): OnboardingAnswer => ({
   id: crypto.randomUUID(),
@@ -39,8 +47,6 @@ const emptyConfig = (): OnboardingConfig => ({
   questions: [emptyQuestion()],
   revision: 0,
 });
-
-type TFn = (key: string, opts?: Record<string, unknown>) => string;
 
 interface Template {
   id: string;
@@ -115,11 +121,6 @@ function buildFromTemplate(template: Template, t: TFn): OnboardingQuestion {
   };
 }
 
-/** One thing an answer places the user into: a channel here, or an ACL group. */
-type Mapping = { kind: "channel"; id: number; label: string } | { kind: "group"; id: string; label: string };
-
-const groupMapping = (name: string): Mapping => ({ kind: "group", id: `g:${name}`, label: name });
-
 /**
  * The onboarding questionnaire an admin defines and new users answer.
  *
@@ -157,11 +158,19 @@ export function OnboardingAdmin() {
   const [draft, setDraft] = useState<OnboardingConfig>(() => remote ?? emptyConfig());
   const [openId, setOpenId] = useState<string | null>(() => draft.questions[0]?.id ?? null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // The same questionnaire as a drawing. Built the first time the canvas is
+  // opened and kept afterwards, so the layout an admin arranged survives a trip
+  // back to the rail.
+  const [graph, setGraph] = useState<OnboardingGraph | null>(null);
+  const [drawn, setDrawn] = useState(false);
 
   // Re-seeded when the server pushes a newer revision, so this editor does not
-  // publish over another admin's change.
+  // publish over another admin's change. The drawing follows the document, and
+  // keeps every node where it was put.
   useEffect(() => {
-    if (remote) setDraft(remote);
+    if (!remote) return;
+    setDraft(remote);
+    setGraph((current) => (current ? graphOf(remote, positionsOf(current)) : current));
   }, [remote]);
 
   // A step cannot stay open once the question behind it is gone - deleted here,
@@ -230,184 +239,235 @@ export function OnboardingAdmin() {
   };
 
   const save = () => {
-    const sanitized: OnboardingConfig = {
-      ...draft,
-      questions: draft.questions
-        .filter((question) => question.text.trim().length > 0)
-        .map((question) => ({
-          ...question,
-          answers: question.answers.filter((answer) => answer.label.trim().length > 0),
-        }))
-        .filter((question) => question.answers.length > 0),
-    };
-    saveConfig(sanitized).catch(() => undefined);
+    saveConfig(publishable(draft)).catch(() => undefined);
   };
+
+  /**
+   * An edit made on the canvas, in both of the shapes the page holds.
+   *
+   * The drawing is what the admin is manipulating and the config is what gets
+   * saved, so every wire and every keystroke updates the two together - which
+   * is what makes switching to the rail mid-edit show the change rather than
+   * the document as it was when the canvas opened.
+   */
+  const onGraph = (next: OnboardingGraph) => {
+    setGraph(next);
+    setDraft(configOf(next, draft));
+  };
+
+  const openCanvas = () => {
+    setGraph((current) => graphOf(draft, current ? positionsOf(current) : {}));
+    setDrawn(true);
+  };
+
+  const views = [
+    { id: "steps", label: t("onboarding.admin.canvas.viewSteps") },
+    { id: "canvas", label: t("onboarding.admin.canvas.viewCanvas") },
+  ];
+  const viewSwitch = (
+    <Segmented
+      value={drawn ? "canvas" : "steps"}
+      options={views}
+      onChange={(id) => (id === "canvas" ? openCanvas() : setDrawn(false))}
+    />
+  );
 
   if (!supported) {
     return (
-      <AdminPage title={t("onboarding.admin.heading")}>
-        <EmptyState>{t("onboarding.admin.unsupportedServer")}</EmptyState>
-      </AdminPage>
+      <Reading>
+        <AdminPage title={t("onboarding.admin.heading")}>
+          <EmptyState>{t("onboarding.admin.unsupportedServer")}</EmptyState>
+        </AdminPage>
+      </Reading>
+    );
+  }
+
+  if (drawn && graph) {
+    return (
+      <OnboardingCanvas
+        graph={graph}
+        onChange={onGraph}
+        channels={channels}
+        t={tFn}
+        busy={busy}
+        onSave={save}
+        onRebuild={() => setGraph(graphOf(draft))}
+        leading={viewSwitch}
+      />
     );
   }
 
   const remaining = MAX_QUESTIONS - draft.questions.length;
 
   return (
-    // The preview wraps under the editor rather than disappearing on a narrow
-    // window: it is where the consequence of every control on this page is
-    // shown, and a hidden one leaves the mapping invisible exactly when the
-    // column is too tight to read the chips either.
-    <Stack direction="row" gap={5} alignItems="flex-start" flexWrap="wrap" sx={{ maxWidth: 1080 }}>
-      <Box sx={{ flex: "1 1 420px", minWidth: 0, maxWidth: 620 }}>
-        <AdminPage
-          title={t("onboarding.admin.heading")}
-          hint={t("onboarding.admin.description")}
-          toolbar={
-            <>
-              <Typography
-                sx={(theme) => ({ alignSelf: "center", fontSize: 10.5, color: theme.palette.nebula.dim })}
-              >
-                {t("onboarding.admin.revShort", { n: draft.revision })}
+    <Reading>
+      {/* The preview wraps under the editor rather than disappearing on a
+          narrow window: it is where the consequence of every control on this
+          page is shown, and a hidden one leaves the mapping invisible exactly
+          when the column is too tight to read the chips either. */}
+      <Stack direction="row" gap={5} alignItems="flex-start" flexWrap="wrap" sx={{ maxWidth: 1080 }}>
+        <Box sx={{ flex: "1 1 420px", minWidth: 0, maxWidth: 620 }}>
+          <AdminPage
+            title={t("onboarding.admin.heading")}
+            hint={t("onboarding.admin.description")}
+            toolbar={
+              <>
+                {viewSwitch}
+                <Typography
+                  sx={(theme) => ({ alignSelf: "center", fontSize: 10.5, color: theme.palette.nebula.dim })}
+                >
+                  {t("onboarding.admin.revShort", { n: draft.revision })}
+                </Typography>
+                <Switch
+                  checked={draft.enabled}
+                  onChange={() => setDraft({ ...draft, enabled: !draft.enabled })}
+                  slotProps={{ input: { "aria-label": t("onboarding.admin.enabledLabel") } }}
+                />
+              </>
+            }
+          >
+            {error && <Banner tone="danger">{error}</Banner>}
+
+            <Step marker="→" tone="start">
+              <Typography sx={{ pt: "3px", fontSize: 12.5, fontWeight: 600 }}>
+                {t("onboarding.admin.startsIn")}
               </Typography>
-              <Switch
-                checked={draft.enabled}
-                onChange={() => setDraft({ ...draft, enabled: !draft.enabled })}
-                slotProps={{ input: { "aria-label": t("onboarding.admin.enabledLabel") } }}
-              />
-            </>
-          }
-        >
-          {error && <Banner tone="danger">{error}</Banner>}
-
-          <Step marker="→" tone="start">
-            <Typography sx={{ pt: "3px", fontSize: 12.5, fontWeight: 600 }}>
-              {t("onboarding.admin.startsIn")}
-            </Typography>
-            <Box sx={{ mt: "8px" }}>
-              <MappingPicker
-                ariaLabel={t("onboarding.admin.startsIn")}
-                placeholder={t("onboarding.admin.startsInPlaceholder")}
-                options={channelMappings}
-                value={toMappings({ channel_ids: draft.default_channel_ids, group_names: [] })}
-                groups={false}
-                onChange={(picked) =>
-                  setDraft({ ...draft, default_channel_ids: fromMappings(picked).channel_ids })
-                }
-              />
-            </Box>
-          </Step>
-
-          {draft.questions.map((question, index) =>
-            question.id === openId ? (
-              <Step key={question.id} marker={String(index + 1)} tone="open">
-                <QuestionCard
-                  question={question}
-                  t={tFn}
-                  canDelete={draft.questions.length > 1}
-                  advancedOpen={advancedOpen}
-                  onToggleAdvanced={() => setAdvancedOpen((open) => !open)}
-                  options={[...channelMappings, ...groupMappings]}
-                  mappingsOf={toMappings}
-                  onDelete={() =>
-                    setDraft((prev) => ({
-                      ...prev,
-                      questions: prev.questions.filter((entry) => entry.id !== question.id),
-                    }))
-                  }
-                  onChange={(patch) => updateQuestion(question.id, patch)}
-                  onChangeAnswer={(answerId, patch) => updateAnswer(question.id, answerId, patch)}
-                  onChangeMapping={(answerId, picked) =>
-                    updateAnswer(question.id, answerId, fromMappings(picked))
+              <Box sx={{ mt: "8px" }}>
+                <MappingPicker
+                  ariaLabel={t("onboarding.admin.startsIn")}
+                  placeholder={t("onboarding.admin.startsInPlaceholder")}
+                  options={channelMappings}
+                  value={toMappings({ channel_ids: draft.default_channel_ids, group_names: [] })}
+                  groups={false}
+                  onChange={(picked) =>
+                    setDraft({ ...draft, default_channel_ids: fromMappings(picked).channel_ids })
                   }
                 />
-              </Step>
-            ) : (
-              <Step key={question.id} marker={String(index + 1)} tone="idle">
-                <CollapsedQuestion
-                  question={question}
-                  t={tFn}
-                  onOpen={() => {
-                    setOpenId(question.id);
-                    setAdvancedOpen(false);
-                  }}
-                />
-              </Step>
-            ),
-          )}
-
-          <Step marker="+" tone="add" last>
-            <Stack direction="row" alignItems="center" gap={1.25} flexWrap="wrap">
-              <Box
-                component="button"
-                disabled={remaining <= 0}
-                onClick={() => addQuestion(emptyQuestion())}
-                sx={(theme) => ({
-                  all: "unset",
-                  cursor: remaining > 0 ? "pointer" : "not-allowed",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  color: remaining > 0 ? theme.palette.nebula.muted : theme.palette.nebula.dim,
-                  "&:hover": { color: remaining > 0 ? theme.palette.nebula.text : undefined },
-                })}
-              >
-                {t("onboarding.admin.addQuestionBtn")}
               </Box>
-              <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })}>
-                {t("onboarding.admin.questionsLeft", { n: Math.max(remaining, 0), max: MAX_QUESTIONS })} ·{" "}
-                {t("onboarding.admin.templateIntro")}
-              </Typography>
-            </Stack>
-            <Stack direction="row" gap={0.875} flexWrap="wrap" sx={{ mt: "9px" }}>
-              {TEMPLATES.map((template) => (
+            </Step>
+
+            {draft.questions.map((question, index) =>
+              question.id === openId ? (
+                <Step key={question.id} marker={String(index + 1)} tone="open">
+                  <QuestionCard
+                    question={question}
+                    t={tFn}
+                    canDelete={draft.questions.length > 1}
+                    advancedOpen={advancedOpen}
+                    onToggleAdvanced={() => setAdvancedOpen((open) => !open)}
+                    options={[...channelMappings, ...groupMappings]}
+                    mappingsOf={toMappings}
+                    onDelete={() =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        questions: prev.questions.filter((entry) => entry.id !== question.id),
+                      }))
+                    }
+                    onChange={(patch) => updateQuestion(question.id, patch)}
+                    onChangeAnswer={(answerId, patch) => updateAnswer(question.id, answerId, patch)}
+                    onChangeMapping={(answerId, picked) =>
+                      updateAnswer(question.id, answerId, fromMappings(picked))
+                    }
+                  />
+                </Step>
+              ) : (
+                <Step key={question.id} marker={String(index + 1)} tone="idle">
+                  <CollapsedQuestion
+                    question={question}
+                    t={tFn}
+                    onOpen={() => {
+                      setOpenId(question.id);
+                      setAdvancedOpen(false);
+                    }}
+                  />
+                </Step>
+              ),
+            )}
+
+            <Step marker="+" tone="add" last>
+              <Stack direction="row" alignItems="center" gap={1.25} flexWrap="wrap">
                 <Box
-                  key={template.id}
                   component="button"
                   disabled={remaining <= 0}
-                  onClick={() => addQuestion(buildFromTemplate(template, tFn))}
+                  onClick={() => addQuestion(emptyQuestion())}
                   sx={(theme) => ({
                     all: "unset",
                     cursor: remaining > 0 ? "pointer" : "not-allowed",
-                    px: "12px",
-                    py: "6px",
-                    borderRadius: radius("md"),
-                    fontSize: 11,
-                    opacity: remaining > 0 ? 1 : 0.5,
-                    background: theme.palette.nebula.card,
-                    border: `1px solid ${theme.palette.nebula.line}`,
-                    "&:hover": {
-                      borderColor: remaining > 0 ? theme.palette.nebula.accentLine : undefined,
-                    },
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: remaining > 0 ? theme.palette.nebula.muted : theme.palette.nebula.dim,
+                    "&:hover": { color: remaining > 0 ? theme.palette.nebula.text : undefined },
                   })}
                 >
-                  {template.emoji} {tFn(template.chipKey)}
+                  {t("onboarding.admin.addQuestionBtn")}
                 </Box>
-              ))}
+                <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })}>
+                  {t("onboarding.admin.questionsLeft", { n: Math.max(remaining, 0), max: MAX_QUESTIONS })} ·{" "}
+                  {t("onboarding.admin.templateIntro")}
+                </Typography>
+              </Stack>
+              <Stack direction="row" gap={0.875} flexWrap="wrap" sx={{ mt: "9px" }}>
+                {TEMPLATES.map((template) => (
+                  <Box
+                    key={template.id}
+                    component="button"
+                    disabled={remaining <= 0}
+                    onClick={() => addQuestion(buildFromTemplate(template, tFn))}
+                    sx={(theme) => ({
+                      all: "unset",
+                      cursor: remaining > 0 ? "pointer" : "not-allowed",
+                      px: "12px",
+                      py: "6px",
+                      borderRadius: radius("md"),
+                      fontSize: 11,
+                      opacity: remaining > 0 ? 1 : 0.5,
+                      background: theme.palette.nebula.card,
+                      border: `1px solid ${theme.palette.nebula.line}`,
+                      "&:hover": {
+                        borderColor: remaining > 0 ? theme.palette.nebula.accentLine : undefined,
+                      },
+                    })}
+                  >
+                    {template.emoji} {tFn(template.chipKey)}
+                  </Box>
+                ))}
+              </Stack>
+            </Step>
+
+            <Stack direction="row" alignItems="center" gap={1.5} sx={{ mt: "26px" }} flexWrap="wrap">
+              <Button variant="contained" disabled={busy} onClick={save}>
+                {busy ? t("onboarding.admin.savingBtn") : t("onboarding.admin.saveBroadcastBtn")}
+              </Button>
+              <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })}>
+                {t("onboarding.admin.broadcastHint")}
+              </Typography>
             </Stack>
-          </Step>
+          </AdminPage>
+        </Box>
 
-          <Stack direction="row" alignItems="center" gap={1.5} sx={{ mt: "26px" }} flexWrap="wrap">
-            <Button variant="contained" disabled={busy} onClick={save}>
-              {busy ? t("onboarding.admin.savingBtn") : t("onboarding.admin.saveBroadcastBtn")}
-            </Button>
-            <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })}>
-              {t("onboarding.admin.broadcastHint")}
-            </Typography>
-          </Stack>
-        </AdminPage>
-      </Box>
-
-      <Box sx={{ flex: "1 1 260px", maxWidth: 300, position: "sticky", top: 0 }}>
-        <MemberPreview
-          question={openQuestion}
-          index={draft.questions.findIndex((entry) => entry.id === openId)}
-          total={draft.questions.length}
-          mappingsOf={toMappings}
-          t={tFn}
-        />
-      </Box>
-    </Stack>
+        <Box sx={{ flex: "1 1 260px", maxWidth: 300, position: "sticky", top: 0 }}>
+          <MemberPreview
+            question={openQuestion}
+            index={draft.questions.findIndex((entry) => entry.id === openId)}
+            total={draft.questions.length}
+            mappingsOf={toMappings}
+            t={tFn}
+          />
+        </Box>
+      </Stack>
+    </Reading>
   );
+}
+
+/**
+ * The margin the pane no longer applies for this page.
+ *
+ * Administration gives a page either a reading margin or the whole pane, and
+ * this one wants both: the rail is prose and the canvas is a room. So the pane
+ * hands it the room and the rail pads itself.
+ */
+function Reading({ children }: Readonly<{ children: ReactNode }>) {
+  return <Box sx={{ px: "52px", py: "38px" }}>{children}</Box>;
 }
 
 type StepTone = "start" | "open" | "idle" | "add";
@@ -443,7 +503,7 @@ function Step({
               fontSize: 11,
               fontWeight: 600,
             } as const;
-            if (tone === "open") return { ...base, background: nebula.accent, color: "#fff" };
+            if (tone === "open") return { ...base, background: nebula.accent, color: nebula.onAccent };
             if (tone === "start")
               return {
                 ...base,
@@ -843,256 +903,5 @@ function AnswerRow({
         />
       )}
     </Box>
-  );
-}
-
-/**
- * Channels and groups an answer grants, picked as one list.
- *
- * They are two different things to the server and one decision to the admin -
- * "where does this answer put someone" - so they share a picker, tinted apart
- * by their chips. Free text creates a group: the questionnaire is often written
- * before the roles it hands out exist.
- */
-function MappingPicker({
-  ariaLabel,
-  placeholder,
-  options,
-  value,
-  onChange,
-  dense,
-  groups = true,
-}: Readonly<{
-  ariaLabel: string;
-  placeholder: string;
-  options: readonly Mapping[];
-  value: Mapping[];
-  onChange: (picked: readonly Mapping[]) => void;
-  dense?: boolean;
-  /**
-   * Whether typing a name that is not on the list creates a group. Off where
-   * only channels mean anything, so a typed word is refused rather than
-   * accepted into a list that then drops it on the next change.
-   */
-  groups?: boolean;
-}>) {
-  return (
-    <Autocomplete
-      multiple
-      freeSolo={groups}
-      size="small"
-      options={options as Mapping[]}
-      value={value}
-      disableClearable
-      isOptionEqualToValue={(option, selected) =>
-        typeof selected !== "string" && option.kind === selected.kind && option.id === selected.id
-      }
-      getOptionLabel={(option) =>
-        typeof option === "string" ? option : `${option.kind === "channel" ? "# " : ""}${option.label}`
-      }
-      onChange={(_, picked) =>
-        onChange(picked.map((entry) => (typeof entry === "string" ? groupMapping(entry.trim()) : entry)))
-      }
-      renderValue={(selected, getItemProps) =>
-        selected.map((option, index) => {
-          const mapping = typeof option === "string" ? groupMapping(option) : option;
-          return (
-            <Chip
-              size="small"
-              label={mapping.kind === "channel" ? `# ${mapping.label}` : mapping.label}
-              color={mapping.kind === "channel" ? "primary" : "default"}
-              variant={mapping.kind === "channel" ? "outlined" : "filled"}
-              {...getItemProps({ index })}
-              key={mapping.id}
-            />
-          );
-        })
-      }
-      renderInput={(params) => (
-        <TextField
-          {...params}
-          variant="standard"
-          placeholder={value.length > 0 ? "" : placeholder}
-          slotProps={{
-            ...params.slotProps,
-            input: { ...params.slotProps.input, disableUnderline: true },
-            // The label has to reach the `input` itself: on the field it names
-            // the wrapper, and the box a screen reader lands in stays unnamed.
-            htmlInput: { ...params.slotProps.htmlInput, "aria-label": ariaLabel },
-          }}
-          sx={(theme) => ({
-            "& .MuiInputBase-root": {
-              px: dense ? "6px" : "12px",
-              py: dense ? "2px" : "8px",
-              borderRadius: radius("md"),
-              fontSize: dense ? 11 : 12,
-              background: dense ? "transparent" : theme.palette.nebula.card,
-              border: dense ? "none" : `1px solid ${theme.palette.nebula.line2}`,
-            },
-          })}
-        />
-      )}
-    />
-  );
-}
-
-/**
- * The questionnaire from the other side.
- *
- * Every control on this page decides something a new member sees once, on their
- * way in, and never again - so the card that shows it is the page's second
- * column rather than a preview button. The line under it spells out the
- * consequence of the first answer, which is the part that is otherwise invisible
- * until someone has already been placed somewhere.
- */
-function MemberPreview({
-  question,
-  index,
-  total,
-  mappingsOf,
-  t,
-}: Readonly<{
-  question: OnboardingQuestion | null;
-  index: number;
-  total: number;
-  mappingsOf: (answer: OnboardingAnswer) => Mapping[];
-  t: TFn;
-}>) {
-  const sessions = useAppStore((state) => state.sessions);
-  const activeServerId = useAppStore((state) => state.activeServerId);
-  // The tab this page is administering, never whichever server pushed last.
-  const livery = useServerLivery(activeServerId);
-  const active = sessions.find((session) => session.id === activeServerId);
-  const serverName = livery?.displayName || active?.label || active?.host || t("onboarding.admin.thisServer");
-  const first = question?.answers[0] ?? null;
-  const firstMappings = first ? mappingsOf(first) : [];
-
-  return (
-    <>
-      <Typography
-        sx={(theme) => ({
-          mb: "10px",
-          fontSize: 10.5,
-          fontWeight: 600,
-          letterSpacing: ".08em",
-          color: theme.palette.nebula.dim,
-        })}
-      >
-        {t("onboarding.admin.previewTitle")}
-      </Typography>
-      <Box
-        sx={(theme) => ({
-          p: "18px",
-          borderRadius: radius("xl"),
-          border: `1px solid ${theme.palette.nebula.line2}`,
-          background: `${theme.palette.nebula.tint},${theme.palette.nebula.bg0}`,
-          boxShadow: theme.palette.nebula.shadow,
-          backdropFilter: "blur(16px)",
-        })}
-      >
-        <Stack direction="row" alignItems="center" gap={1.125}>
-          <UserAvatar
-            name={serverName}
-            size={30}
-            square
-            src={livery?.iconSrc ?? null}
-            gradient={serverTint(active ? `${active.host}:${active.port}` : serverName)}
-          />
-          <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontSize: 12.5, fontWeight: 600 }} noWrap>
-              {t("onboarding.admin.previewWelcome", { server: serverName })}
-            </Typography>
-            <Typography sx={(theme) => ({ fontSize: 10, color: theme.palette.nebula.dim })}>
-              {t("onboarding.admin.previewStep", { n: Math.max(index + 1, 1), m: Math.max(total, 1) })}
-            </Typography>
-          </Box>
-        </Stack>
-
-        <Typography sx={{ mt: "14px", fontSize: 13, fontWeight: 600 }}>
-          {question?.text || t("onboarding.admin.untitledQuestion")}
-        </Typography>
-
-        <Stack gap={0.75} sx={{ mt: "10px" }}>
-          {(question?.answers ?? []).map((answer, position) => {
-            const picked = position === 0;
-            return (
-              <Stack
-                key={answer.id}
-                direction="row"
-                alignItems="center"
-                gap={1.125}
-                sx={(theme) => ({
-                  px: "11px",
-                  py: "9px",
-                  borderRadius: radius("md"),
-                  fontSize: 12,
-                  fontWeight: picked ? 500 : 400,
-                  color: picked ? theme.palette.nebula.text : theme.palette.nebula.muted,
-                  background: picked ? theme.palette.nebula.accentSoft : theme.palette.nebula.card,
-                  border: `1px solid ${picked ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
-                })}
-              >
-                <Box component="span" sx={{ minWidth: 0 }}>
-                  {answer.emoji ? `${answer.emoji} ` : ""}
-                  {answer.label || t("onboarding.admin.answerLabelField")}
-                </Box>
-                <Box
-                  aria-hidden
-                  sx={(theme) => ({
-                    ml: "auto",
-                    flex: "none",
-                    width: 14,
-                    height: 14,
-                    borderRadius: question?.multi_select ? radius("sm") : "50%",
-                    border: picked
-                      ? `4.5px solid ${theme.palette.nebula.accent}`
-                      : `1.5px solid ${theme.palette.nebula.line2}`,
-                  })}
-                />
-              </Stack>
-            );
-          })}
-        </Stack>
-
-        <Stack direction="row" alignItems="center" sx={{ mt: "16px" }}>
-          <Typography sx={(theme) => ({ fontSize: 11, color: theme.palette.nebula.dim })}>
-            {question?.required ? t("onboarding.modal.required") : t("onboarding.modal.skipBtn")}
-          </Typography>
-          <Box
-            sx={(theme) => ({
-              ml: "auto",
-              px: "16px",
-              py: "7px",
-              borderRadius: radius("md"),
-              background: theme.palette.nebula.accent,
-              color: "#fff",
-              fontSize: 11.5,
-              fontWeight: 600,
-            })}
-          >
-            {index + 1 < total ? t("onboarding.modal.nextBtn") : t("onboarding.modal.finishBtn")}
-          </Box>
-        </Stack>
-      </Box>
-
-      <Typography
-        sx={(theme) => ({
-          mt: "8px",
-          fontSize: 10.5,
-          lineHeight: 1.5,
-          textAlign: "center",
-          color: theme.palette.nebula.dim,
-        })}
-      >
-        {first && first.label && firstMappings.length > 0
-          ? t("onboarding.admin.previewMapping", {
-              answer: first.label,
-              targets: firstMappings
-                .map((mapping) => (mapping.kind === "channel" ? `# ${mapping.label}` : mapping.label))
-                .join(", "),
-            })
-          : t("onboarding.admin.previewNoMapping")}
-      </Typography>
-    </>
   );
 }

@@ -194,3 +194,133 @@
   font-size: 0.85rem;
   color: var(--color-warning, #f0a04b);
 }
+
+/* ---- Bare presentation ------------------------------------------
+   A photograph is its own card. Nebula draws attachments this way: the
+   picture at its own shape with nothing framing it, and the row of
+   filename, size and buttons - which is chrome around content the picture
+   already is - folded into a strip that only appears under the pointer. */
+
+.bare {
+  background: none;
+  border: none;
+  border-radius: 0;
+  width: fit-content;
+  max-width: 100%;
+  overflow: visible;
+}
+
+/* The picture is sized by width alone, never by `max-height`.
+ *
+ * A height cap shrinks what is *drawn* without shrinking the box reserved for
+ * it - the intrinsic width a replaced element contributes ignores it - so a
+ * portrait photo ended up drawn at 240px inside a 420px slot, and the hover
+ * strip, anchored to the slot, floated off the side of the picture.
+ *
+ * So the cap is expressed as a width instead: `--bare-ratio` is the picture's
+ * own width/height, set once it has loaded, which turns "no taller than
+ * --bare-max-h" into a third width to take the minimum of. Until then the
+ * ratio reads as 100, leaving that term far too large to win, and the picture
+ * is simply capped by its width. */
+.bareImage {
+  --bare-max-w: 420px;
+  --bare-max-h: 320px;
+  display: block;
+  /* The narrow-pane cap is `max-width`, deliberately not a third term in the
+     `min()`: a percentage inside the width makes the whole expression
+     unresolvable while the browser is measuring, which sends `fit-content` on
+     the wrapper back to the full column and puts the strip adrift again. */
+  width: min(var(--bare-max-w), calc(var(--bare-max-h) * var(--bare-ratio, 100)));
+  max-width: 100%;
+  height: auto;
+  background: none;
+  border-radius: 0.75rem;
+}
+
+/* Both hug the picture, so the strip's corner is the picture's corner. */
+.bare .previewWrap,
+.bare .previewImageBtn {
+  width: fit-content;
+}
+
+/* The strip rides the picture's top-right corner rather than sitting under
+   it, so a resting message is only ever the photograph. */
+.bareActions {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  /* A tall picture is a narrow one, and the strip wraps rather than hanging
+     off the side of it. */
+  flex-wrap: wrap;
+  max-width: calc(100% - 1rem);
+  gap: 0.35rem;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.previewWrap:hover .bareActions,
+.bareActions:focus-within {
+  opacity: 1;
+}
+
+.bareBtn {
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(10, 12, 20, 0.58);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+.bareBtn:hover:not(:disabled) {
+  background: rgba(10, 12, 20, 0.78);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.bareBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* A load failure has no picture left to hang a strip on, so it says so in
+   the flow instead of silently leaving an empty space. */
+.bareError {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--error, #ff6b6b);
+}
+
+/* ---- One tile of a gallery -------------------------------------
+   A batch of photographs is one block, so each card gives up its own shape
+   and fills the cell it was handed. The rounding lives on the block. */
+
+.tile,
+.tile .previewWrap,
+.tile .previewImageBtn {
+  width: 100%;
+  height: 100%;
+}
+
+.tileImage {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
+  background: none;
+}
+
+/* A flag on a tile has far less room than one on a whole picture, and it is a
+   button: clipped, the half that copies the link is the half that goes. */
+.tile .previewOverlay {
+  max-width: calc(100% - 1rem);
+}

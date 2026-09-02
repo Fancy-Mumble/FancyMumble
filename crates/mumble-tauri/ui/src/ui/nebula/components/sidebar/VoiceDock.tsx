@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, Menu, MenuItem, Switch, Tooltip, Typography } from "@mui/material";
 import type { Theme } from "@mui/material/styles";
 import { useAppStore } from "@core/store";
 import { selectMicLive, selectSelfDeafened } from "@core/store/voiceSelectors";
 import { stopOwnBroadcast } from "@standard/components/chat/stream/useScreenShare";
+import { captureHolders, useCaptureError } from "@standard/hooks/useCaptureError";
 import {
   HeadphonesIcon,
   HeadphonesOffIcon,
@@ -17,6 +19,7 @@ import {
   WebcamIcon,
 } from "@ui/icons";
 import { SectionLabel, Stack, UserAvatar } from "../primitives";
+import { chamferedSurface } from "../../theme";
 import { radius } from "../../tokens";
 
 /** The dock sits on the composer's inset; they are one strip. */
@@ -75,6 +78,7 @@ export function VoiceDock({
   onShareScreen,
   onShareCamera,
 }: Readonly<VoiceDockProps>) {
+  const { t } = useTranslation(["nebulaSidebar", "common", "chat", "sidebar"]);
   const micLive = useAppStore(selectMicLive);
   const deafened = useAppStore(selectSelfDeafened);
   const voiceState = useAppStore((state) => state.voiceState);
@@ -82,6 +86,17 @@ export function VoiceDock({
   const broadcastingOwnSession = useAppStore((state) => state.broadcastingOwnSession);
   const [open, setOpen] = useState(false);
   const card = useRef<HTMLDivElement>(null);
+
+  // Another application holding the input device is the one mic fault the user
+  // can act on, and it is invisible from inside the client: the button looks
+  // live, and nothing goes out. The dock marks it and names the holder where
+  // the backend could work one out, rather than only saying "busy".
+  const captureError = useCaptureError();
+  const micBusy = captureError?.kind === "device_busy";
+  const micHolders = captureHolders(captureError);
+  const micBusyLabel = micHolders
+    ? t("sidebar:channelSidebar.micInUseBy", { app: micHolders })
+    : t("sidebar:channelSidebar.micInUse");
 
   // Read from the store rather than from `useScreenShare`: that hook owns the
   // capture and only one component may. All the dock needs to know is whether
@@ -103,10 +118,12 @@ export function VoiceDock({
         rowGap: "8px",
         alignItems: "center",
         borderRadius: radius("lg"),
-        background: theme.palette.nebula.wash,
-        border: `1px solid ${theme.palette.nebula.washLine}`,
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
+        // A card, so it takes the same chamfer the HUD skins cut into every
+        // other surface - stroke included, which is what `chamferedSurface`
+        // is for. `none` everywhere else leaves the radius above alone.
+        ...chamferedSurface(theme, theme.palette.nebula.card, theme.palette.nebula.line2),
+        backdropFilter: "blur(var(--nebula-blur, 12px))",
+        WebkitBackdropFilter: "blur(var(--nebula-blur, 12px))",
         boxShadow: "0 8px 28px rgba(0,0,0,.14)",
       })}
     >
@@ -114,7 +131,7 @@ export function VoiceDock({
         component="button"
         onClick={onOpenProfile}
         onContextMenu={onContextMenuProfile}
-        aria-label="Your profile"
+        aria-label={t("nebulaSidebar:dock.profile")}
         sx={{ all: "unset", cursor: "pointer", display: "flex", gridRow: "1 / 3" }}
       >
         {/* The avatar draws its own presence dot - a second one here sat
@@ -139,21 +156,34 @@ export function VoiceDock({
             sx={(theme) => ({ fontSize: 10.5, lineHeight: 1.35, color: theme.palette.nebula.muted })}
             noWrap
           >
-            {voiceState === "inactive" ? "Voice off" : (channelName ?? "Not in voice")}
-            {latencyMs != null && voiceState !== "inactive" ? ` · ${latencyMs} ms` : ""}
+            {voiceState === "inactive"
+              ? t("common:minimal.voiceOff")
+              : (channelName ?? t("nebulaSidebar:dock.notInVoice"))}
+            {latencyMs != null && voiceState !== "inactive"
+              ? t("nebulaSidebar:dock.latency", { ms: latencyMs })
+              : ""}
           </Typography>
         </Stack>
 
-        <DockButton label="More" active={open} width={28} onClick={() => setOpen(true)}>
+        <DockButton label={t("common:actions.more")} active={open} width={28} onClick={() => setOpen(true)}>
           <KebabMenuIcon width={15} height={15} />
         </DockButton>
       </Stack>
 
       <Stack direction="row" alignItems="center" gap="4px">
         <DockButton
-          label={micLive ? "Mute" : voiceState === "inactive" ? "Enable voice" : "Unmute"}
-          active={!micLive}
-          alert
+          label={
+            micBusy
+              ? micBusyLabel
+              : micLive
+                ? t("chat:callControls.mute")
+                : voiceState === "inactive"
+                  ? t("nebulaSidebar:dock.enableVoice")
+                  : t("chat:callControls.unmute")
+          }
+          active={micBusy || !micLive}
+          alert={!micBusy}
+          warn={micBusy}
           onClick={() =>
             void (voiceState === "inactive"
               ? useAppStore.getState().enableVoice()
@@ -164,7 +194,7 @@ export function VoiceDock({
         </DockButton>
 
         <DockButton
-          label={deafened ? "Undeafen" : "Deafen"}
+          label={deafened ? t("chat:callControls.undeafen") : t("chat:callControls.deafen")}
           active={deafened}
           alert
           onClick={() => void useAppStore.getState().toggleDeafen()}
@@ -178,7 +208,7 @@ export function VoiceDock({
 
         {onShareScreen && (
           <DockButton
-            label={sharing ? "Stop sharing your screen" : "Share your screen"}
+            label={sharing ? t("chat:screenShare.stopScreenShare") : t("nebulaSidebar:dock.shareScreen")}
             active={sharing}
             accent
             trailing
@@ -215,7 +245,7 @@ export function VoiceDock({
           },
         }}
       >
-        {onShareCamera && <Group first>SHARE</Group>}
+        {onShareCamera && <Group first>{t("nebulaSidebar:dock.groupShare")}</Group>}
         {onShareCamera && (
           <MenuItem
             onClick={() => {
@@ -226,11 +256,11 @@ export function VoiceDock({
             <MenuGlyph>
               <WebcamIcon width={15} height={15} />
             </MenuGlyph>
-            Share your camera
+            {t("nebulaSidebar:dock.shareCamera")}
           </MenuItem>
         )}
 
-        <Group first={!onShareCamera}>APP</Group>
+        <Group first={!onShareCamera}>{t("nebulaSidebar:dock.groupApp")}</Group>
         <MenuItem
           onClick={() => {
             setOpen(false);
@@ -240,10 +270,10 @@ export function VoiceDock({
           <MenuGlyph>
             <SettingsIcon width={15} height={15} />
           </MenuGlyph>
-          Settings
+          {t("common:minimal.settings")}
         </MenuItem>
 
-        <Group>CHANNEL LIST</Group>
+        <Group>{t("nebulaSidebar:dock.groupChannelList")}</Group>
         <MenuItem
           role="menuitemcheckbox"
           aria-checked={hideEmpty}
@@ -255,7 +285,7 @@ export function VoiceDock({
           <MenuGlyph>
             <UserXIcon width={15} height={15} />
           </MenuGlyph>
-          Hide empty channels
+          {t("sidebar:channelSidebar.hideEmptyChannels")}
           {/* The row is the control; the switch only shows its state, so it is
               kept out of the tab order and off the accessibility tree. */}
           <Switch
@@ -267,7 +297,7 @@ export function VoiceDock({
           />
         </MenuItem>
 
-        {onOpenAdmin && <Group>SERVER</Group>}
+        {onOpenAdmin && <Group>{t("nebulaSidebar:dock.groupServer")}</Group>}
         {onOpenAdmin && (
           <MenuItem
             onClick={() => {
@@ -278,7 +308,7 @@ export function VoiceDock({
             <MenuGlyph>
               <ShieldIcon width={15} height={15} />
             </MenuGlyph>
-            Server admin
+            {t("nebulaSidebar:dock.serverAdmin")}
           </MenuItem>
         )}
       </Menu>
@@ -318,12 +348,15 @@ function dockButtonBase(theme: Theme) {
  * Off is bare; on is a filled chip. `alert` is for the two controls whose "on"
  * is a warning - a muted mic, stopped ears - and `accent` for the one whose
  * "on" is simply live, so a share in progress does not read as a fault.
+ * `warn` is neither: something outside the client is in the way, which is not
+ * a state the user chose and not one this button can clear.
  */
 function DockButton({
   label,
   active = false,
   alert = false,
   accent = false,
+  warn = false,
   width = 30,
   trailing = false,
   onClick,
@@ -333,6 +366,7 @@ function DockButton({
   active?: boolean;
   alert?: boolean;
   accent?: boolean;
+  warn?: boolean;
   width?: number;
   /** Pushes the button to the end of the row. */
   trailing?: boolean;
@@ -350,15 +384,17 @@ function DockButton({
         sx={(theme: Theme) => {
           const { nebula } = theme.palette;
           const align = trailing ? { marginLeft: "auto" } : {};
-          const fill = alert
-            ? { background: `${nebula.bad}29`, border: `1px solid ${nebula.bad}57`, color: nebula.bad }
-            : accent
-              ? {
-                  background: nebula.accentSoft,
-                  border: `1px solid ${nebula.accentLine}`,
-                  color: nebula.accent,
-                }
-              : { background: nebula.card2, color: nebula.text };
+          const fill = warn
+            ? { background: `${nebula.warn}29`, border: `1px solid ${nebula.warn}57`, color: nebula.warn }
+            : alert
+              ? { background: `${nebula.bad}29`, border: `1px solid ${nebula.bad}57`, color: nebula.bad }
+              : accent
+                ? {
+                    background: nebula.accentSoft,
+                    border: `1px solid ${nebula.accentLine}`,
+                    color: nebula.accent,
+                  }
+                : { background: nebula.card2, color: nebula.text };
           return {
             ...dockButtonBase(theme),
             width,

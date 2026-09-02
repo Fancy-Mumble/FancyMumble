@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, InputBase, Tooltip, Typography } from "@mui/material";
 import type { FileAccessMode } from "@core/types";
 import type { StagedAttachment } from "@core/features/chat/useFileUpload";
@@ -95,6 +96,7 @@ export function AttachmentTray({
   // smaller has nothing to offer either.
   const photos = attachments.filter((file) => file.compressed !== undefined);
   const compressing = photos.some((file) => file.compressed === "pending");
+  const { t } = useTranslation(TRAY_NS);
   const qualityRow = photos.some((file) => file.compressed === "pending" || !!file.compressed);
   // Visibility and expiry are always drawn, even on a server that can only
   // do one thing - a row that vanishes the moment it would say "no" reads as
@@ -109,12 +111,18 @@ export function AttachmentTray({
   // KB apart, both rounding to the same "5.7 MiB" next to a 5.4 MiB video.
   const fullBytes = totalBytes(photos, false);
   const compressedBytes = totalBytes(photos, true);
-  const here = target.startsWith("@") ? "This conversation" : "This channel";
+  const isChannel = !target.startsWith("@");
+  const here = isChannel ? t("attachment.thisChannel") : t("attachment.thisConversation");
   // The channel or person's name alone, for a note that says who "here" is
   // rather than the chip's own generic label.
   const audience = target.replace(/^[#@]/, "");
-  const visibilityLabel = { session: here, public: "Anyone with link", password: "Password" }[options.mode];
-  const qualityLabel = options.quality === "compressed" ? "Compressed" : "Full quality";
+  const visibilityLabel = {
+    session: here,
+    public: t("attachment.anyoneWithLink"),
+    password: t("chat:fileShare.passwordLabel"),
+  }[options.mode];
+  const qualityLabel =
+    options.quality === "compressed" ? t("attachment.compressed") : t("attachment.fullQuality");
   const summary = [qualityRow ? qualityLabel : null, visibilityLabel].filter(Boolean).join(" · ");
 
   return (
@@ -124,11 +132,11 @@ export function AttachmentTray({
           {attachments.map((file) => (
             <AttachmentTile key={file.id} file={file} onRemove={() => onRemove(file.id)} />
           ))}
-          <Tooltip title="Add another file">
+          <Tooltip title={t("attachment.addAnotherFile")}>
             <Box
               component="button"
               type="button"
-              aria-label="Add another file"
+              aria-label={t("attachment.addAnotherFile")}
               disabled={disabled}
               onClick={onAddMore}
               sx={(theme) => ({
@@ -161,7 +169,7 @@ export function AttachmentTray({
             alignItems="center"
             gap="5px"
             aria-expanded={open}
-            aria-label="Sending options"
+            aria-label={t("attachment.sendingOptions")}
             onClick={() => setOpen((was) => !was)}
             sx={(theme) => ({
               // `all: unset` lands after the `Stack` shim's own `direction`/
@@ -189,7 +197,7 @@ export function AttachmentTray({
               },
             })}
           >
-            Options
+            {t("attachment.options")}
             <Box
               aria-hidden
               sx={{
@@ -217,14 +225,14 @@ export function AttachmentTray({
       {open && (
         <>
           {qualityRow && (
-            <OptionRow label="Sending as" note={QUALITY_NOTES[options.quality]} first>
+            <OptionRow label={t("attachment.sendingAs")} note={t(QUALITY_NOTE_KEYS[options.quality])} first>
               <Chip
                 selected={options.quality === "compressed"}
                 onClick={() => onOptionsChange({ ...options, quality: "compressed" })}
                 icon={<ShrinkGlyph />}
                 detail={compressing ? "…" : formatBytes(compressedBytes)}
               >
-                Compressed
+                {t("attachment.compressed")}
               </Chip>
               <Chip
                 selected={options.quality === "full"}
@@ -232,7 +240,7 @@ export function AttachmentTray({
                 icon={<ExpandGlyph />}
                 detail={formatBytes(fullBytes)}
               >
-                Full quality
+                {t("attachment.fullQuality")}
               </Chip>
             </OptionRow>
           )}
@@ -241,9 +249,11 @@ export function AttachmentTray({
               chips: a row of disabled buttons invites clicking to see what
               happens, and nothing does. */}
           <OptionRow
-            label="Visible to"
+            label={t("attachment.visibleTo")}
             note={
-              visibilityLocked ? "Only option on this server" : visibilityNote(options.mode, audience, here)
+              visibilityLocked
+                ? t("attachment.onlyOption")
+                : visibilityNote(t, options.mode, audience, isChannel)
             }
             first={!qualityRow}
           >
@@ -261,14 +271,14 @@ export function AttachmentTray({
                   onClick={() => onOptionsChange({ ...options, mode: "public" })}
                   icon={<Link2Icon width={12} height={12} />}
                 >
-                  Anyone with link
+                  {t("attachment.anyoneWithLink")}
                 </Chip>
                 <Chip
                   selected={options.mode === "password"}
                   onClick={() => onOptionsChange({ ...options, mode: "password" })}
                   icon={<LockIcon width={12} height={12} />}
                 >
-                  Password
+                  {t("chat:fileShare.passwordLabel")}
                 </Chip>
               </>
             )}
@@ -279,8 +289,8 @@ export function AttachmentTray({
                 autoFocus
                 value={options.password}
                 onChange={(event) => onOptionsChange({ ...options, password: event.target.value })}
-                placeholder="Password for the link"
-                inputProps={{ "aria-label": "Password for the link" }}
+                placeholder={t("attachment.passwordForLink")}
+                inputProps={{ "aria-label": t("attachment.passwordForLink") }}
                 sx={(theme) => ({
                   flex: 1,
                   minWidth: 0,
@@ -310,21 +320,23 @@ export function AttachmentTray({
                   "&:hover": { textDecoration: "underline" },
                 })}
               >
-                Generate
+                {t("attachment.generate")}
               </Box>
             </Stack>
           )}
 
           <OptionRow
-            label="Expires"
-            note={expiryLocked ? "Not supported here" : expiryNote(options.ttlSeconds)}
+            label={t("chat:mySharedFiles.colExpires")}
+            note={
+              expiryLocked ? t("attachment.notSupportedHere") : expiryNote(t, options.ttlSeconds)
+            }
             first={false}
           >
             <Chip
               selected={expiryLocked || options.ttlSeconds === TTL_NEVER}
               onClick={() => onOptionsChange({ ...options, ttlSeconds: TTL_NEVER })}
             >
-              Never
+              {t("attachment.never")}
             </Chip>
             {!expiryLocked && (
               <>
@@ -332,13 +344,13 @@ export function AttachmentTray({
                   selected={options.ttlSeconds === TTL_24_HOURS}
                   onClick={() => onOptionsChange({ ...options, ttlSeconds: TTL_24_HOURS })}
                 >
-                  24 hours
+                  {t("attachment.hours24")}
                 </Chip>
                 <Chip
                   selected={options.ttlSeconds === TTL_7_DAYS}
                   onClick={() => onOptionsChange({ ...options, ttlSeconds: TTL_7_DAYS })}
                 >
-                  7 days
+                  {t("attachment.days7")}
                 </Chip>
               </>
             )}
@@ -349,27 +361,40 @@ export function AttachmentTray({
   );
 }
 
-const QUALITY_NOTES: Record<AttachmentQuality, string> = {
-  compressed: "Photos fit inside 2048 px",
-  full: "Sent exactly as they are",
-};
+const QUALITY_NOTE_KEYS = {
+  compressed: "attachment.photosFit",
+  full: "attachment.sentExactly",
+} as const satisfies Record<AttachmentQuality, string>;
 
-function visibilityNote(mode: FileAccessMode, audience: string, here: string): string {
-  if (mode === "public") return "Public URL, no sign-in";
-  if (mode === "password") return "Password unlocks the link";
-  return here === "This channel" ? `Members of #${audience} only` : "Just the two of you";
+/** The namespaces this tray reads, so the notes below take the same `t`. */
+const TRAY_NS = ["nebulaChat", "chat"] as const;
+type TrayT = ReturnType<typeof useTranslation<typeof TRAY_NS>>["t"];
+
+function visibilityNote(
+  t: TrayT,
+  mode: FileAccessMode,
+  audience: string,
+  isChannel: boolean,
+): string {
+  if (mode === "public") return t("nebulaChat:attachment.publicUrl");
+  if (mode === "password") return t("nebulaChat:attachment.passwordUnlocks");
+  // A boolean rather than the label it came from: comparing against the
+  // English wording would stop being true the moment it is translated.
+  return isChannel
+    ? t("nebulaChat:attachment.membersOnly", { channel: audience })
+    : t("nebulaChat:attachment.justTheTwoOfYou");
 }
 
 /** What the "Expires" chip row says about the choice, once it can be honoured. */
-function expiryNote(ttlSeconds: number): string {
-  if (ttlSeconds === TTL_NEVER) return "Never expires";
+function expiryNote(t: TrayT, ttlSeconds: number): string {
+  if (ttlSeconds === TTL_NEVER) return t("nebulaChat:attachment.neverExpires");
   const at = new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(Date.now() + ttlSeconds * 1000));
-  return `Expires ${at}`;
+  return t("nebulaChat:attachment.expiresAt", { at });
 }
 
 /**

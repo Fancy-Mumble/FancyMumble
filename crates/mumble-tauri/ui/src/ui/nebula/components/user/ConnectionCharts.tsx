@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Box, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { SAMPLE_WINDOW, type StatsSample } from "./userInfoModel";
@@ -39,6 +40,7 @@ interface RoundTripChartProps {
  * to zero is a flat line for anyone on a decent connection.
  */
 export function RoundTripChart({ samples, height = 64 }: Readonly<RoundTripChartProps>) {
+  const { t } = useTranslation("nebulaUser");
   const { nebula } = useTheme().palette;
   const count = samples.length;
   const latest = samples[count - 1];
@@ -59,8 +61,14 @@ export function RoundTripChart({ samples, height = 64 }: Readonly<RoundTripChart
       : "";
 
   const summary = latest
-    ? `Round trip over the last ${SAMPLE_WINDOW} seconds: UDP ${latest.udpPing.toFixed(1)} ms, TCP ${latest.tcpPing.toFixed(1)} ms, between ${low.toFixed(0)} and ${high.toFixed(0)} ms`
-    : "Round trip: no readings yet";
+    ? t("charts.roundTrip", {
+        seconds: SAMPLE_WINDOW,
+        udp: latest.udpPing.toFixed(1),
+        tcp: latest.tcpPing.toFixed(1),
+        low: low.toFixed(0),
+        high: high.toFixed(0),
+      })
+    : t("charts.roundTripEmpty");
 
   return (
     <Box
@@ -114,8 +122,8 @@ export function RoundTripChart({ samples, height = 64 }: Readonly<RoundTripChart
       </svg>
       {count > 1 ? (
         <>
-          <Scale at="top">{`${high.toFixed(0)} ms`}</Scale>
-          <Scale at="bottom">{`${low.toFixed(0)} ms`}</Scale>
+          <Scale at="top">{t("charts.milliseconds", { value: high.toFixed(0) })}</Scale>
+          <Scale at="bottom">{t("charts.milliseconds", { value: low.toFixed(0) })}</Scale>
         </>
       ) : (
         <Typography
@@ -129,7 +137,7 @@ export function RoundTripChart({ samples, height = 64 }: Readonly<RoundTripChart
             color: nebula.dim,
           }}
         >
-          Collecting readings…
+          {t("charts.collecting")}
         </Typography>
       )}
     </Box>
@@ -177,6 +185,7 @@ interface BarStripProps {
  * out, so the strip keeps its time axis.
  */
 export function BarStrip({ values, color, format, label, height = 26 }: Readonly<BarStripProps>) {
+  const { t } = useTranslation("nebulaUser");
   const { nebula } = useTheme().palette;
   const slots = Math.max(SAMPLE_WINDOW, values.length);
   const step = W / slots;
@@ -189,7 +198,9 @@ export function BarStrip({ values, color, format, label, height = 26 }: Readonly
     <svg
       role="img"
       aria-label={
-        known.length ? `${label}: latest ${format(known[known.length - 1])}` : `${label}: no readings yet`
+        known.length
+          ? t("charts.seriesLatest", { label, value: format(known[known.length - 1]) })
+          : t("charts.seriesEmpty", { label })
       }
       viewBox={`0 0 ${W} ${height}`}
       preserveAspectRatio="none"
@@ -208,7 +219,7 @@ export function BarStrip({ values, color, format, label, height = 26 }: Readonly
             rx={1}
             fill={value === null ? nebula.line : color}
           >
-            <title>{value === null ? "No reading" : format(value)}</title>
+            <title>{value === null ? t("charts.noReading") : format(value)}</title>
           </rect>
         );
       })}

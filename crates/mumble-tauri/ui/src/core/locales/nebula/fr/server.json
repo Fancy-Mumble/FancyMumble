@@ -1,0 +1,22 @@
+﻿{
+  "panel": {
+    "heading": "Infos du serveur",
+    "activityLog": "Journal d’activité",
+    "noActivity": "Aucune activité pour l’instant",
+    "audioTransport": "Transport audio",
+    "audioSettings": "Paramètres audio",
+    "connectionState": "Connexion et état",
+    "networkLatency": "Latence réseau",
+    "fileServer": "Serveur de fichiers",
+    "cspViolations": "Violations CSP",
+    "officialPlugin": "Extension officielle",
+    "pluginTitle": "{{name}} v{{version}}",
+    "fancyVersion": "v{{version}}",
+    "kbps": "{{value}} ko/s",
+    "milliseconds": "{{value}} ms",
+    "percent": "{{value}} %",
+    "decibels": "{{value}} dB",
+    "megabytes": "{{value}} Mo",
+    "seconds": "{{value}} s"
+  }
+}

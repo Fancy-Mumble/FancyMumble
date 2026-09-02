@@ -7,6 +7,7 @@
  * content cannot drift because there is one hook filling it.
  */
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useUserAvatar, useUserComment } from "@core/lazyBlobs";
 import { parseComment } from "@core/profileFormat";
 import { useAppStore } from "@core/store";
@@ -43,20 +44,29 @@ export function groupsOf(groups: readonly AclGroup[], userId: number | null | un
  * a user the session knows about but cannot place.
  */
 function presenceOf(
+  t: CardT,
   user: UserEntry,
   channelName: string | undefined,
   muted: boolean,
   deafened: boolean,
   talking: boolean,
 ): ProfileCardModel["presence"] {
-  if (user.session < 0) return { tone: "offline", label: "Offline" };
-  const label = channelName ? `In ${channelName}` : "Connected";
+  if (user.session < 0) return { tone: "offline", label: t("card.presenceOffline") };
+  const label = channelName
+    ? t("card.presenceInChannel", { channel: channelName })
+    : t("card.presenceConnected");
   if (deafened) return { tone: "deafened", label };
   if (muted) return { tone: "muted", label };
   return { tone: talking ? "talking" : "online", label };
 }
 
+/** The namespaces this model reads, in one place so the helper below can take
+ *  exactly the `t` the hook hands out. */
+const CARD_NS = ["nebulaUser", "sidebar"] as const;
+type CardT = ReturnType<typeof useTranslation<typeof CARD_NS>>["t"];
+
 export function useUserCardModel(user: UserEntry, tokens: ProfileCardTokens): ProfileCardModel {
+  const { t } = useTranslation(CARD_NS);
   const avatar = useUserAvatar(user.session, user.texture_size);
   const liveComment = useUserComment(user.session, user.comment_size);
   const stats = useUserStats(user.session, user.session >= 0);
@@ -112,30 +122,39 @@ export function useUserCardModel(user: UserEntry, tokens: ProfileCardTokens): Pr
     }
     if (!channel) return null;
     return {
-      title: `In voice — ${channel.name}`,
+      title: t("card.activityInVoice", { channel: channel.name }),
       detail: [
         stats?.onlinesecs != null ? formatSpan(stats.onlinesecs) : null,
-        deafened ? "deafened" : muted ? "muted" : talking ? "talking" : "listening",
+        deafened
+          ? t("card.voiceDeafened")
+          : muted
+            ? t("card.voiceMuted")
+            : talking
+              ? t("card.voiceTalking")
+              : t("card.voiceListening"),
       ]
         .filter(Boolean)
         .join(" · "),
     };
-  }, [presence, channel, stats?.onlinesecs, muted, deafened, talking]);
+  }, [presence, channel, stats?.onlinesecs, muted, deafened, talking, t]);
 
   const stats3 = useMemo<CardStat[]>(() => {
     const sent = messages.filter((message) =>
       user.hash ? message.sender_hash === user.hash : message.sender_session === user.session,
     ).length;
-    const rows: CardStat[] = [{ id: "messages", value: formatCount(sent), label: "Messages" }];
+    const rows: CardStat[] = [
+      { id: "messages", value: formatCount(sent), label: t("card.statMessages") },
+    ];
     if (stats?.onlinesecs != null)
-      rows.push({ id: "voice", value: formatSpan(stats.onlinesecs), label: "In voice" });
+      rows.push({ id: "voice", value: formatSpan(stats.onlinesecs), label: t("card.statInVoice") });
     rows.push({
       id: "account",
-      value: user.user_id == null ? "Guest" : `#${user.user_id}`,
-      label: user.user_id == null ? "Account" : "Registered",
+      value:
+        user.user_id == null ? t("card.statGuest") : t("card.statAccountId", { id: user.user_id }),
+      label: user.user_id == null ? t("card.statAccount") : t("sidebar:userProfile.labelRegistered"),
     });
     return rows;
-  }, [messages, user.hash, user.session, user.user_id, stats?.onlinesecs]);
+  }, [messages, user.hash, user.session, user.user_id, stats?.onlinesecs, t]);
 
   return {
     name: user.name,
@@ -146,7 +165,7 @@ export function useUserCardModel(user: UserEntry, tokens: ProfileCardTokens): Pr
     avatar,
     profile,
     bio,
-    presence: presenceOf(user, channel?.name, muted, deafened, talking),
+    presence: presenceOf(t, user, channel?.name, muted, deafened, talking),
     verified: user.user_id != null,
     badges,
     shelves: [],

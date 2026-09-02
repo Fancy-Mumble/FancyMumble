@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, Snackbar, Typography } from "@mui/material";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "@core/store";
@@ -31,7 +32,14 @@ const StreamStatsPanel = lazy(() => import("@standard/components/chat/stream/Str
  */
 type FitMode = "fit" | "fill" | "actual";
 
-const FIT_LABEL: Record<FitMode, string> = { fit: "Fit", fill: "Fill", actual: "1:1" };
+/** The modes the pill offers, in the order it draws them. */
+const FIT_MODES = ["fit", "fill", "actual"] as const satisfies readonly FitMode[];
+
+/** How each fit mode is named. `1:1` is a ratio, so it is not translated. */
+const FIT_LABEL_KEYS = {
+  fit: "share.fit",
+  fill: "share.fill",
+} as const satisfies Record<Exclude<FitMode, "actual">, string>;
 
 /**
  * The chrome over the picture is drawn in fixed dark colours in both themes.
@@ -52,11 +60,11 @@ const RAIL_WIDTH = 116;
 const RAIL_WIDTH_EXPANDED = 156;
 const TILE_HEIGHT = 68;
 
-const SCREENSHOT_MESSAGE: Record<ScreenshotOutcome, string> = {
-  copied: "Frame copied to the clipboard",
-  unsupported: "This webview cannot put images on the clipboard",
-  failed: "Could not capture that frame",
-};
+const SCREENSHOT_MESSAGE_KEYS = {
+  copied: "share.frameCopied",
+  unsupported: "share.clipboardUnsupported",
+  failed: "share.captureFailed",
+} as const satisfies Record<ScreenshotOutcome, string>;
 
 export interface ScreenShareStageProps {
   /** Every live feed in the channel, own broadcast first. Never empty - the
@@ -77,6 +85,7 @@ export interface ScreenShareStageProps {
  * switch to, with the conversation still running underneath.
  */
 export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<ScreenShareStageProps>) {
+  const { t } = useTranslation(["nebulaChat", "chat"]);
   const ownSession = useAppStore((state) => state.ownSession);
   const activeServerId = useAppStore((state) => state.activeServerId);
   const currentChannel = useAppStore((state) => state.currentChannel);
@@ -243,11 +252,11 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
   // width the rail would have used.
   const showRail = feeds.length > 1;
 
-  const quality = presetOf(share.settings)?.toUpperCase() ?? "Custom";
+  const quality = presetOf(share.settings)?.toUpperCase() ?? t("share.custom");
   const caption = [
     feedSummary(feeds),
-    stats.rttMs === null ? null : `${Math.round(stats.rttMs)} ms`,
-    stats.fps === null ? null : `${Math.round(stats.fps)} fps`,
+    stats.rttMs === null ? null : t("share.rtt", { ms: Math.round(stats.rttMs) }),
+    stats.fps === null ? null : t("share.fps", { fps: Math.round(stats.fps) }),
   ]
     .filter(Boolean)
     .join(" · ");
@@ -319,7 +328,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
           {!focused.live && (
             <Stack sx={{ position: "absolute", inset: 0, alignItems: "center", justifyContent: "center" }}>
               <Typography sx={{ fontSize: 11.5, color: "#9aa0a8" }}>
-                {focused.failed ? "Stream unavailable" : "Connecting…"}
+                {focused.failed ? t("share.unavailable") : t("share.connecting")}
               </Typography>
             </Stack>
           )}
@@ -427,7 +436,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
                 backdropFilter: GLASS_BLUR,
               }}
             >
-              {(Object.keys(FIT_LABEL) as FitMode[]).map((mode) => (
+              {FIT_MODES.map((mode) => (
                 <Box
                   key={mode}
                   component="button"
@@ -448,31 +457,34 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
                     color: fitMode === mode ? "#d3ebfb" : "#b3bbc8",
                   }}
                 >
-                  {FIT_LABEL[mode]}
+                  {mode === "actual" ? "1:1" : t(FIT_LABEL_KEYS[mode])}
                 </Box>
               ))}
             </Stack>
 
             <Stack direction="row" alignItems="center" gap="5px" sx={{ marginLeft: "auto" }}>
-              <OverlayButton title="Copy a screenshot of this feed" onClick={takeScreenshot}>
+              <OverlayButton title={t("share.copyScreenshot")} onClick={takeScreenshot}>
                 <CameraIcon width={12} height={12} />
               </OverlayButton>
               <OverlayButton
-                title="Share your camera"
+                title={t("share.shareCamera")}
                 testId={TID.cameraShareToggle}
                 onClick={share.startCameraSharing}
               >
                 <WebcamIcon width={12} height={12} />
               </OverlayButton>
               <OverlayButton
-                title="Stream options"
+                title={t("share.streamOptions")}
                 testId={TID.streamConfigMenu}
                 active={menuOpen}
                 onClick={() => setMenuOpen((open) => !open)}
               >
                 <KebabMenuIcon width={12} height={12} />
               </OverlayButton>
-              <OverlayButton title={expanded ? "Exit fullscreen" : "Fullscreen"} onClick={toggleExpanded}>
+              <OverlayButton
+                title={expanded ? t("chat:screenShare.exitFullscreen") : t("chat:screenShare.fullscreen")}
+                onClick={toggleExpanded}
+              >
                 {expanded ? (
                   <FullscreenExitIcon width={12} height={12} />
                 ) : (
@@ -487,7 +499,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
                   component="button"
                   type="button"
                   onClick={share.stopSharing}
-                  title="Stop sharing"
+                  title={t("chat:screenShare.stopSharing")}
                   data-testid={TID.screenShareToggle}
                   sx={{
                     display: "flex",
@@ -508,7 +520,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
                     "&:hover": { background: "rgba(217,87,87,.3)" },
                   }}
                 >
-                  Stop
+                  {t("share.stop")}
                 </Box>
               )}
             </Stack>
@@ -536,7 +548,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
                 {share.isBroadcasting && (
                   <>
                     <StreamMenuItem
-                      label="Stream quality"
+                      label={t("chat:screenShare.config.quality")}
                       value={quality}
                       onClick={() => {
                         setMenuOpen(false);
@@ -544,7 +556,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
                       }}
                     />
                     <StreamMenuItem
-                      label="Change source"
+                      label={t("share.changeSource")}
                       onClick={() => {
                         setMenuOpen(false);
                         share.startSharing();
@@ -555,16 +567,16 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
                         has no such mechanism, so there is nothing to offer. */}
                     {!isLinux && (
                       <StreamMenuItem
-                        label="Allow screenshots"
-                        value={capture.hidden ? "Off" : "On"}
+                        label={t("share.allowScreenshots")}
+                        value={capture.hidden ? t("share.off") : t("share.on")}
                         onClick={() => capture.setHidden(!capture.hidden)}
                       />
                     )}
                   </>
                 )}
                 <StreamMenuItem
-                  label="Stats for nerds"
-                  value={statsOpen ? "On" : undefined}
+                  label={t("chat:screenShare.stats.toggle")}
+                  value={statsOpen ? t("share.on") : undefined}
                   onClick={() => {
                     setMenuOpen(false);
                     setStatsOpen((open) => !open);
@@ -573,7 +585,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
                 {/* The popout builds its own webview viewer; the native family
                     has none to build it in, and mobile has no second window. */}
                 {!focused.own && !usesNativeSurface() && !isMobile && (
-                  <StreamMenuItem label="Pop out to window" onClick={popOut} />
+                  <StreamMenuItem label={t("share.popOut")} onClick={popOut} />
                 )}
               </Stack>
             </>
@@ -617,7 +629,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
         open={shot !== null}
         autoHideDuration={2600}
         onClose={() => setShot(null)}
-        message={shot ? SCREENSHOT_MESSAGE[shot] : ""}
+        message={shot ? t(SCREENSHOT_MESSAGE_KEYS[shot]) : ""}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
     </Box>

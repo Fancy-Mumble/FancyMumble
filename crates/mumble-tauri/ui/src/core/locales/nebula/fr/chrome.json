@@ -1,0 +1,19 @@
+﻿{
+  "miniMode": {
+    "expand": "Agrandir la fenêtre",
+    "latency": "{{ms}} ms",
+    "you": "vous"
+  },
+  "search": {
+    "placeholder": "Rechercher des salons, des personnes et des messages",
+    "close": "Fermer la recherche",
+    "empty": "Rien à ouvrir pour l'instant.",
+    "noMatch": "Aucun résultat pour « {{query}} ».",
+    "headingChannel": "Salons",
+    "headingPerson": "Personnes",
+    "headingMessage": "Messages",
+    "headingServer": "Serveurs",
+    "results_one": "{{count}} résultat",
+    "results_other": "{{count}} résultats"
+  }
+}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, InputBase, Typography } from "@mui/material";
 import { CloseIcon } from "@ui/icons";
 import { Stack } from "../../primitives";
@@ -28,6 +29,7 @@ export function PollPopover({
   onSubmit: (question: string, options: string[], multiple: boolean) => void;
   onClose: () => void;
 }>) {
+  const { t } = useTranslation("nebulaChat");
   const [question, setQuestion] = useState("");
   const [options, setOptions] = useState<string[]>(["", ""]);
   const [multiple, setMultiple] = useState(false);
@@ -47,14 +49,14 @@ export function PollPopover({
   };
 
   return (
-    <PopoverPanel width={POLL_POPOVER_WIDTH} left={left} title="New poll" onClose={onClose}>
+    <PopoverPanel width={POLL_POPOVER_WIDTH} left={left} title={t("poll.title")} onClose={onClose}>
       <Box sx={{ px: "14px", pt: "14px", pb: "6px" }}>
         <InputBase
           autoFocus
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
-          placeholder="Ask something…"
-          inputProps={{ "aria-label": "Poll question" }}
+          placeholder={t("poll.questionPlaceholder")}
+          inputProps={{ "aria-label": t("poll.questionLabel") }}
           sx={{
             width: "100%",
             fontSize: 19,
@@ -84,15 +86,15 @@ export function PollPopover({
             <InputBase
               value={option}
               onChange={(event) => setOption(index, event.target.value)}
-              placeholder={index >= 2 ? "Add an option…" : "Option"}
-              inputProps={{ "aria-label": `Option ${index + 1}` }}
+              placeholder={index >= 2 ? t("poll.optionPlaceholder") : t("poll.option")}
+              inputProps={{ "aria-label": t("poll.optionAria", { index: index + 1 }) }}
               sx={{ flex: 1, fontSize: 14, "& .MuiInputBase-input": { padding: 0 } }}
             />
             {options.length > 2 && (
               <Box
                 component="button"
                 type="button"
-                aria-label={`Remove option ${index + 1}`}
+                aria-label={t("poll.removeOption", { index: index + 1 })}
                 onClick={() => setOptions((prev) => prev.filter((_, at) => at !== index))}
                 sx={(theme) => ({
                   all: "unset",
@@ -149,7 +151,7 @@ export function PollPopover({
                   background: on ? theme.palette.nebula.hover : "transparent",
                 })}
               >
-                {mode}
+                {mode === "Multi" ? t("poll.multi") : t("poll.single")}
               </Box>
             );
           })}
@@ -177,7 +179,7 @@ export function PollPopover({
             color: postable ? theme.palette.nebula.onAccent : theme.palette.nebula.dim,
           })}
         >
-          Post poll
+          {t("poll.post")}
         </Box>
       </Stack>
     </PopoverPanel>

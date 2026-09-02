@@ -169,10 +169,28 @@ export function bakeBackgroundVideo(fileName: string, sigma: number, dim: number
   return invoke<string>("bake_chat_background_video", { fileName, sigma, dim });
 }
 
-/** Forget the wallpaper: every stored file, and every cached blob URL. */
+/** Forget every wallpaper: every stored file, and every cached blob URL. */
 export async function clearChatBackgroundStore(): Promise<void> {
   await invoke("clear_chat_background");
   releaseStoredBackgrounds();
+}
+
+/**
+ * Delete every stored file outside `keep`, and release its blob URL.
+ *
+ * The store's only garbage collection. Nothing deletes on its own any more -
+ * the shelf holds several wallpapers at once, so a pick, a bake and a poster
+ * all just add files - and the record is what says which of them are still
+ * spoken for. Pass `referencedFiles(record)` after writing the record, never
+ * before: a prune against a record that has not landed yet would delete files
+ * the next reader still expects.
+ *
+ * Best-effort. A file that outlives its record costs disk and nothing else,
+ * so a failed prune is never worth failing a pick over.
+ */
+export async function pruneChatBackgrounds(keep: readonly string[]): Promise<void> {
+  releaseStoredBackgrounds(keep);
+  await invoke("prune_chat_backgrounds", { keep: [...keep] });
 }
 
 export interface BakeProgress {

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildMemberGroups, regsToOfflineEntries } from "../sidebar/MembersTab";
+import { buildMemberGroups } from "../sidebar/MembersTab";
+import { regsToOfflineEntries } from "@core/features/roster/registeredMembers";
 import type { AclGroup, RegisteredUser, UserEntry } from "@core/types";
 
 function user(session: number, name: string, userId: number | null = null): UserEntry {

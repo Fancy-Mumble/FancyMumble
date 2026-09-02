@@ -128,17 +128,21 @@ export const LIVERY_TONE: Record<LiveryStatus, "ok" | "warn" | "bad" | "muted"> 
   unreachable: "bad",
 };
 
-/** What the indicator says when pointed at. One sentence, in the user's terms. */
-export const LIVERY_TITLE: Record<LiveryStatus, string> = {
-  probing: "Checking this server for branding",
-  live: "Showing this server's branding, live from the connection",
-  cached: "Showing this server's branding, confirmed current",
-  fetching: "Loading this server's branding",
-  failed: "This server has branding, but it could not be loaded",
-  absent: "This server has no branding set",
-  unverified: "This server does not report branding",
-  unreachable: "Could not reach this server to check its branding",
-};
+/**
+ * What the indicator says when pointed at, as `nebulaConnect` keys - one
+ * sentence each, in the user's terms.  `as const` keeps the values literal so
+ * `t()` still type-checks them at the call site.
+ */
+export const LIVERY_TITLE_KEYS = {
+  probing: "livery.probing",
+  live: "livery.live",
+  cached: "livery.cached",
+  fetching: "livery.fetching",
+  failed: "livery.failed",
+  absent: "livery.absent",
+  unverified: "livery.unverified",
+  unreachable: "livery.unreachable",
+} as const satisfies Record<LiveryStatus, string>;
 
 /** Statuses that mean something is still in flight, for a spinner or a pulse. */
 export const LIVERY_BUSY: ReadonlySet<LiveryStatus> = new Set<LiveryStatus>(["probing", "fetching"]);

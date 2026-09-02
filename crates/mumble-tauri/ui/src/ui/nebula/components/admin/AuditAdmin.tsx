@@ -58,8 +58,8 @@ import {
   writeEnumPref,
 } from "@core/features/admin/auditPrefs";
 import DashboardChart from "@standard/pages/admin/DashboardChart";
-import { QueryAutocomplete } from "@standard/pages/admin/QueryAutocomplete";
-import { SqlEditor } from "@standard/pages/admin/SqlEditor";
+import { QueryAutocomplete } from "./QueryAutocomplete";
+import { SqlEditor } from "./SqlEditor";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,

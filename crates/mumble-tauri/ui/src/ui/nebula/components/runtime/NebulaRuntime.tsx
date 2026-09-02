@@ -28,6 +28,7 @@ const TranslationPickerOverlay = lazy(
 );
 const PluginDisabledDialog = lazy(() => import("@standard/components/elements/PluginDisabledDialog"));
 const WelcomeMessageModal = lazy(() => import("@standard/components/server/WelcomeMessageModal"));
+const OnboardingModal = lazy(() => import("../onboarding/OnboardingModal"));
 
 /**
  * Everything the client has to do that is not a screen: preference bootstrap,
@@ -158,6 +159,7 @@ function NebulaRuntimeInner({ onOpenMarketplace }: { onOpenMarketplace: (pluginI
       <TranslationPickerOverlay />
       <PluginDisabledDialog />
       <WelcomeMessageModal />
+      <OnboardingModal />
     </Suspense>
   );
 }

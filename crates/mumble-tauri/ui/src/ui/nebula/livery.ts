@@ -90,7 +90,7 @@ export function parseHex(value: string | undefined): [number, number, number] | 
   return [0, 2, 4].map((at) => Number.parseInt(digits.slice(at, at + 2), 16)) as [number, number, number];
 }
 
-function toHex(colour: readonly [number, number, number]): string {
+export function toHex(colour: readonly [number, number, number]): string {
   return `#${colour.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
@@ -112,7 +112,7 @@ export function contrast(
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-function toHsl(colour: readonly [number, number, number]): [number, number, number] {
+export function toHsl(colour: readonly [number, number, number]): [number, number, number] {
   const [red, green, blue] = colour.map((channel) => channel / 255);
   const max = Math.max(red, green, blue);
   const min = Math.min(red, green, blue);
@@ -127,7 +127,7 @@ function toHsl(colour: readonly [number, number, number]): [number, number, numb
   return [hue * 60, saturation, lightness];
 }
 
-function fromHsl(hue: number, saturation: number, lightness: number): [number, number, number] {
+export function fromHsl(hue: number, saturation: number, lightness: number): [number, number, number] {
   const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
   const sector = (((hue % 360) + 360) % 360) / 60;
   const second = chroma * (1 - Math.abs((sector % 2) - 1));

@@ -78,7 +78,7 @@ const EVENT_KEYS = {
  * normal mode an event is on or off and uses its default sound.
  */
 export function NotificationsSettings() {
-  const { t } = useTranslation("settings");
+  const { t } = useTranslation(["settings", "nebulaSettings"]);
   const { prefs, set, toggle } = usePreferenceSettings();
   const [sounds, setSounds] = useState<NotificationSoundSettings | null>(null);
   const previewAudio = useRef<HTMLAudioElement | null>(null);
@@ -211,7 +211,9 @@ export function NotificationsSettings() {
                         value={config.sound}
                         onChange={(event) => patchEvent(key, { sound: event.target.value })}
                         sx={{ flex: 1 }}
-                        slotProps={{ htmlInput: { "aria-label": `${label} sound` } }}
+                        slotProps={{
+                          htmlInput: { "aria-label": t("nebulaSettings:notifications.soundFor", { label }) },
+                        }}
                       >
                         {SOUND_IDS.map((id) => (
                           <MenuItem key={id} value={id}>

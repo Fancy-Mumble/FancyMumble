@@ -195,10 +195,10 @@ export function SuperSearch({ open, onClose, onSelectChannel, onSelectUser }: Su
         {/* Footer hints */}
         <div className={styles.footer}>
           <span>
-            <span className={styles.footerKey}>â†‘â†“</span> {t("superSearch.hintNavigate")}
+            <span className={styles.footerKey}>↑↓</span> {t("superSearch.hintNavigate")}
           </span>
           <span>
-            <span className={styles.footerKey}>â†µ</span> {t("superSearch.hintSelect")}
+            <span className={styles.footerKey}>↵</span> {t("superSearch.hintSelect")}
           </span>
           <span>
             <span className={styles.footerKey}>esc</span> {t("superSearch.hintClose")}

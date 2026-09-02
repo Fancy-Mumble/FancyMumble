@@ -1,10 +1,60 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { useAppStore } from "@core/store";
 import type { ChatMessage } from "@core/types";
 import { withNebulaTheme } from "../../testTheme";
 import { MessageList } from "./MessageList";
 
 vi.mock("@core/lazyBlobs", () => ({ useUserAvatars: () => new Map() }));
+
+const invokeMock = vi.fn<(cmd: string, args?: unknown) => Promise<unknown>>(() => Promise.resolve());
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: (...args: unknown[]) => invokeMock(args[0] as string, args[1]),
+}));
+
+/** A body big enough, and inline enough, to be worth putting away. */
+const HEAVY_BODY = `<img src="data:image/png;base64,${"A".repeat(5000)}">`;
+
+/**
+ * An `IntersectionObserver` the test drives itself.
+ *
+ * jsdom lays nothing out, so nothing is ever really in or out of view; the
+ * setup file's inert stub is what keeps that from throwing. Offloading is
+ * *entirely* a question of what is in view, so testing it at all means saying
+ * so by hand.
+ */
+class FakeIntersectionObserver {
+  static instances: FakeIntersectionObserver[] = [];
+  readonly targets = new Set<Element>();
+
+  constructor(
+    readonly callback: IntersectionObserverCallback,
+    readonly options?: IntersectionObserverInit,
+  ) {
+    FakeIntersectionObserver.instances.push(this);
+  }
+
+  observe(element: Element): void {
+    this.targets.add(element);
+  }
+  unobserve(element: Element): void {
+    this.targets.delete(element);
+  }
+  disconnect(): void {
+    this.targets.clear();
+  }
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+
+  /** Report a row as having left the viewport, or arrived in it. */
+  fire(element: Element, isIntersecting: boolean): void {
+    this.callback(
+      [{ target: element, isIntersecting } as IntersectionObserverEntry],
+      this as unknown as IntersectionObserver,
+    );
+  }
+}
 
 function message(id: string, timestamp = 1_700_000_000_000): ChatMessage {
   return {
@@ -31,6 +81,10 @@ function draw(props: Partial<React.ComponentProps<typeof MessageList>> = {}) {
   );
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("MessageList", () => {
   it("draws the header above the oldest message, inside the scroller", () => {
     const { container } = draw({ header: <div data-testid="banner">persistence</div> });
@@ -47,6 +101,42 @@ describe("MessageList", () => {
   it("marks each row with its id so a quote can be followed to it", () => {
     const { container } = draw();
     expect(container.querySelector('[data-message-id="b"]')).toBeTruthy();
+  });
+
+  it("tells each row whether the block ends with it", () => {
+    // The row draws the timestamp off this: only the last of a run carries
+    // one, and the list is the only thing that can see what comes next.
+    const ends: Array<[string, boolean]> = [];
+    const minute = 60_000;
+    draw({
+      // "c" is a quarter of an hour later, so it starts a block of its own -
+      // which makes "b" the end of the first one and "c" the end of its own.
+      messages: [message("a"), message("b", 1_700_000_000_000 + minute), message("c", 1_700_000_900_000)],
+      renderMessage: (m, _avatar, _grouped, _restoring, endsGroup) => {
+        ends.push([m.body, endsGroup]);
+        return <span>{m.body}</span>;
+      },
+    });
+
+    expect(ends).toEqual([
+      ["a", false],
+      ["b", true],
+      ["c", true],
+    ]);
+  });
+
+  it("closes up the air inside a block and keeps it between blocks", () => {
+    const minute = 60_000;
+    const { container } = draw({
+      messages: [message("a"), message("b", 1_700_000_000_000 + minute), message("c", 1_700_000_900_000)],
+    });
+    const top = (id: string) => container.querySelector<HTMLElement>(`[data-message-id="${id}"]`)!;
+
+    // Spacing is the only thing left saying that two messages are one person
+    // talking, once the repeated name and clock have gone.
+    const inside = getComputedStyle(top("b")).marginTop;
+    const between = getComputedStyle(top("c")).marginTop;
+    expect(parseFloat(inside)).toBeLessThan(parseFloat(between));
   });
 
   it("draws the unread rule above the message it is given", () => {
@@ -105,5 +195,54 @@ describe("MessageList", () => {
 
     expect(scrollIntoView).toHaveBeenCalled();
     Element.prototype.scrollIntoView = original;
+  });
+
+  it("marks a heavy body for the offloader and leaves a light one alone", () => {
+    const { container } = draw({
+      messages: [message("light"), { ...message("heavy"), body: HEAVY_BODY }],
+    });
+
+    // A pasted screenshot is worth megabytes; a line of text is worth putting
+    // away only in the sense that the write costs more than it saves.
+    expect(container.querySelector('[data-message-id="heavy"]')!.hasAttribute("data-msg-heavy")).toBe(true);
+    expect(container.querySelector('[data-message-id="light"]')!.hasAttribute("data-msg-heavy")).toBe(false);
+  });
+
+  it("hands a heavy body to cold storage once it has been out of view a while", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
+    FakeIntersectionObserver.instances = [];
+    invokeMock.mockClear();
+    useAppStore.setState({ refreshMessages: vi.fn().mockResolvedValue(undefined) });
+
+    const { container } = draw({
+      messages: [{ ...message("cold"), body: HEAVY_BODY }],
+      currentScope: () => ({ scope: "channel", scopeId: "7" }),
+    });
+
+    const observer = FakeIntersectionObserver.instances.at(-1)!;
+    const row = container.querySelector('[data-message-id="cold"]')!;
+    // Watching the scroller rather than the window: the river scrolls inside
+    // its own box, and the window never moves.
+    expect(observer.options?.root).toBe(container.firstElementChild);
+    expect([...observer.targets]).toContain(row);
+
+    await act(async () => {
+      observer.fire(row, false);
+      // Longer than the grace period a row gets before it is written out, so
+      // a flick of the wheel past a picture does not encrypt it.
+      await vi.advanceTimersByTimeAsync(6000);
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("offload_message", {
+      messageId: "cold",
+      scope: "channel",
+      scopeId: "7",
+    });
+    // And the conversation is re-read, or the body the backend just replaced
+    // would go on being drawn from React's copy of it.
+    expect(useAppStore.getState().refreshMessages).toHaveBeenCalledWith(7);
+
+    vi.useRealTimers();
   });
 });

@@ -9,10 +9,11 @@
  * gradients) that have no MUI palette slot.
  */
 import { createTheme, alpha, type Theme } from "@mui/material/styles";
+import { over } from "@shared/profilecard";
 import { liveryTokens, type ServerLivery } from "./livery";
+import { DEFAULT_SKIN, type NebulaSkin } from "./themeCatalog";
 import {
   NEBULA_MONO,
-  NEBULA_RADIUS,
   NEBULA_SANS,
   NEBULA_TOKENS,
   radius,
@@ -23,14 +24,91 @@ import {
 declare module "@mui/material/styles" {
   interface Palette {
     nebula: NebulaTokens;
+    /** The theme's shape, type voice and glass - see `themeCatalog.ts`. */
+    nebulaSkin: NebulaSkin;
   }
   interface PaletteOptions {
     nebula: NebulaTokens;
+    nebulaSkin: NebulaSkin;
   }
 }
 
 /** The mock sizes everything against a 13px root, not MUI's 16px. */
 const BASE_FONT_SIZE = 13;
+
+/**
+ * The scheme, restated as Standard's custom properties.
+ *
+ * Nebula borrows a good deal of Standard - the markdown composer, the emoji and
+ * GIF pickers, the mention list, the file preview - and every one of those is
+ * painted by `--color-*` off the cascade rather than by `palette.nebula`. Left
+ * alone they wear whichever Standard stylesheet `data-theme` selected, which
+ * was merely a near-miss before and is now a plain contradiction: a theme can
+ * be worn in either scheme, and Standard's stylesheet only has the one.
+ *
+ * So the pack publishes its own answer over the top. Only the properties those
+ * borrowed surfaces actually read are restated - the rest of the theme file
+ * still shows through, which is what keeps this a bridge rather than a second
+ * theme system.
+ *
+ * Written under `:root:root` so it outranks the theme file's `[data-theme=…]`
+ * block whatever order the two stylesheets end up in.
+ */
+function standardVariables(t: NebulaTokens): Record<string, string> {
+  const surface = over(t.card, t.bg0);
+  return {
+    "--color-bg-primary": t.bg0,
+    "--color-bg-secondary": over(t.panel, t.bg0),
+    "--color-bg-elevated": surface,
+    "--color-surface": surface,
+    "--color-bg-deepest": t.bg0,
+    "--color-surface-titlebar": over(t.bar, t.bg0),
+    "--color-surface-action-bar": over(t.header, t.bg0),
+    "--color-surface-toast": surface,
+
+    "--color-text-primary": t.text,
+    "--color-text-secondary": t.muted,
+    "--color-text-muted": t.dim,
+    "--color-text-button": t.muted,
+    "--color-text-placeholder": t.dim,
+    "--color-text-on-accent": t.onAccent,
+
+    "--color-accent": t.accent,
+    "--color-accent-hover": t.accent,
+    "--color-accent-bright": t.accentText,
+    "--color-accent-soft": t.accentSoft,
+    "--color-accent-subtle": t.accentSoft,
+    "--color-accent-light": t.accentSoft,
+    "--color-accent-medium": t.accentSoft,
+    "--color-accent-strong": t.accentLine,
+    "--color-accent-fill": t.accentLine,
+    "--color-accent-border": t.accentLine,
+    "--color-accent-border-strong": t.accentLine,
+    "--color-accent-selection": t.accentSoft,
+    "--color-accent-glow": t.accentLine,
+    "--color-link": t.accentText,
+    "--color-purple": t.accent2,
+
+    "--color-glass": t.card,
+    "--color-glass-subtle": t.card,
+    "--color-glass-hover": t.hover,
+    "--color-glass-medium": t.card2,
+    "--color-glass-active": t.accentSoft,
+    "--color-glass-strong": t.card2,
+    "--color-glass-heavy": t.card2,
+    "--color-glass-border": t.line,
+    "--color-glass-border-hover": t.line2,
+
+    "--color-danger": t.bad,
+    "--color-danger-alt": t.bad,
+    "--color-warning": t.warn,
+    "--color-warning-amber": t.warn,
+    "--color-online": t.ok,
+
+    "--color-scrollbar": t.card2,
+    "--color-scrollbar-hover": t.line2,
+  };
+}
 
 /** Input types the baseline must not touch - they are not text surfaces. */
 const UNSTYLED_INPUT_TYPES = [
@@ -45,32 +123,39 @@ const UNSTYLED_INPUT_TYPES = [
   '[type="reset"]',
 ].join(", ");
 
+/**
+ * Nebula's MUI theme for one scheme.
+ *
+ * `base` is where the user's colour theme arrives: `themeTokens` renders the
+ * stylesheet on `<html>` into this pack's tokens, and passing nothing keeps the
+ * mock's own - which is what the two neutral themes, and every test, want.
+ */
 export function createNebulaTheme(
   mode: NebulaMode,
-  accentOverride?: string,
+  base?: NebulaTokens | null,
   livery?: ServerLivery | null,
+  skin: NebulaSkin = DEFAULT_SKIN,
 ): Theme {
-  const base = NEBULA_TOKENS[mode];
-  const withAccent: NebulaTokens = accentOverride
-    ? {
-        ...base,
-        accent: accentOverride,
-        accentSoft: alpha(accentOverride, mode === "dark" ? 0.22 : 0.12),
-        accentLine: alpha(accentOverride, mode === "dark" ? 0.52 : 0.34),
-      }
-    : base;
-
   // Last, and on top of whatever the app resolved: a server's colours are the
   // most specific statement about this window. Whether one is passed at all is
   // the caller's decision, which is where the user's own "use this server's
   // colours" switch lives - livery is a suggestion, never a mandate.
-  const nebula = liveryTokens(withAccent, livery ?? null, mode);
+  const nebula = liveryTokens(base ?? NEBULA_TOKENS[mode], livery ?? null, mode);
+  // The theme's own typeface, unless the user named one in Personalization -
+  // an explicit choice outranks a skin's suggestion, and `--font-family` is
+  // where that choice lands.
+  const sans = `var(--font-family, ${skin.font})`;
 
   return createTheme({
     palette: {
       mode,
       nebula,
-      primary: { main: nebula.accent, contrastText: "#ffffff" },
+      nebulaSkin: skin,
+      // The scheme's own ink, never a hardcoded white: Midnight's accent is
+      // acid yellow and Mobel's is ochre, and white on either is unreadable.
+      // Everything MUI paints on `primary` - filled buttons above all - reads
+      // this, which is why it is the one place the pairing is stated.
+      primary: { main: nebula.accent, contrastText: nebula.onAccent },
       success: { main: nebula.ok },
       error: { main: nebula.bad },
       warning: { main: nebula.warn },
@@ -78,9 +163,11 @@ export function createNebulaTheme(
       text: { primary: nebula.text, secondary: nebula.muted, disabled: nebula.dim },
       divider: nebula.line,
     },
-    shape: { borderRadius: NEBULA_RADIUS.md },
+    // MUI's own scalar, kept in step with the skin so any component that
+    // has not been given an explicit radius still lands on the theme's step.
+    shape: { borderRadius: Number.parseInt(skin.radiusMd, 10) || 0 },
     typography: {
-      fontFamily: NEBULA_SANS,
+      fontFamily: sans,
       fontSize: BASE_FONT_SIZE,
       htmlFontSize: 16,
       // The mock's type is a small, tight set rather than a full scale: a
@@ -90,8 +177,12 @@ export function createNebulaTheme(
       h3: { fontSize: 15, fontWeight: 600, lineHeight: 1.3 },
       subtitle1: { fontSize: 13, fontWeight: 600, lineHeight: 1.35 },
       subtitle2: { fontSize: 12.5, fontWeight: 600, lineHeight: 1.35 },
-      body1: { fontSize: 13, lineHeight: 1.55 },
-      body2: { fontSize: 12, lineHeight: 1.5 },
+      // Tracking and base weight are the skin's, so a condensed caps theme
+      // (Guardbase, Midnight) reads as one and a serif theme does not get
+      // letter-spacing it never asked for.
+      allVariants: { letterSpacing: skin.track },
+      body1: { fontSize: 13, lineHeight: 1.55, fontWeight: skin.weight },
+      body2: { fontSize: 12, lineHeight: 1.5, fontWeight: skin.weight },
       caption: { fontSize: 11, lineHeight: 1.45, color: nebula.muted },
       // Reserved for the mock's tracked-out section labels ("JOIN AS").
       overline: {
@@ -109,15 +200,31 @@ export function createNebulaTheme(
           ":root": {
             colorScheme: mode,
             // The one place the scale is given a value. Everything below -
-            // component defaults and screens alike - reads the variable.
-            "--nebula-radius-sm": `${NEBULA_RADIUS.sm}px`,
-            "--nebula-radius-md": `${NEBULA_RADIUS.md}px`,
-            "--nebula-radius-lg": `${NEBULA_RADIUS.lg}px`,
-            "--nebula-radius-xl": `${NEBULA_RADIUS.xl}px`,
+            // component defaults and screens alike - reads the variable, which
+            // is what lets a theme restate the whole corner language in six
+            // numbers and have every rounded thing in the pack follow.
+            "--nebula-radius-sm": skin.radiusSm,
+            "--nebula-radius-md": skin.radiusMd,
+            "--nebula-radius-lg": skin.radiusLg,
+            "--nebula-radius-xl": skin.radiusXl,
+            "--nebula-radius-rail": skin.radiusRail,
+            "--nebula-radius-avatar": skin.radiusAvatar,
+            // The theme's own face, for the "system default" font setting to
+            // fall through to. See `applyFont`.
+            "--nebula-font": skin.font,
+            // How far the chrome blurs what is behind it: 0 for the opaque
+            // skins, 40px for Aurora. `glassChrome` and friends read it.
+            "--nebula-blur": skin.glass ? `${skin.blurPx}px` : "0px",
+            "--nebula-clip-window": skin.clipWindow,
+            "--nebula-clip-selection": skin.clipSelection,
+            "--nebula-clip-bubble": skin.clipBubble,
           },
+          // The borrowed-Standard bridge. Doubled selector so it wins against
+          // the theme file's own `[data-theme=…]` block; see the note above.
+          ":root:root": standardVariables(nebula),
           body: {
             margin: 0,
-            fontFamily: NEBULA_SANS,
+            fontFamily: sans,
             fontSize: BASE_FONT_SIZE,
             // The main window is transparent and undecorated, so the page must
             // not paint an opaque rectangle behind the shell - the shell's own
@@ -144,7 +251,7 @@ export function createNebulaTheme(
             padding: "8px 12px",
             borderRadius: radius("sm"),
             border: `1px solid ${nebula.line2}`,
-            background: nebula.card2,
+            background: nebula.input,
             color: nebula.text,
             fontFamily: "inherit",
             fontSize: "inherit",
@@ -204,7 +311,7 @@ export function createNebulaTheme(
           root: { borderRadius: radius("md"), minWidth: 0, padding: "6px 13px", fontWeight: 500 },
           contained: {
             backgroundColor: nebula.accent,
-            color: "#fff",
+            color: nebula.onAccent,
             boxShadow: `0 4px 14px ${alpha(nebula.accent, 0.4)}`,
             "&:hover": { backgroundColor: nebula.accent, filter: "brightness(1.08)" },
           },
@@ -320,7 +427,11 @@ export function createNebulaTheme(
         styleOverrides: {
           root: {
             borderRadius: radius("md"),
-            backgroundColor: nebula.card,
+            // The sheet's `input`, not `card`: a field is a hole in the surface
+            // rather than a card raised off it, and several skins colour the
+            // two differently - Midnight's near-black field on a steel panel,
+            // Aurora's opaque white one on glass.
+            backgroundColor: nebula.input,
             "& .MuiOutlinedInput-notchedOutline": { borderColor: nebula.line2 },
             "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: nebula.line2 },
             "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
@@ -337,7 +448,9 @@ export function createNebulaTheme(
           root: { width: 32, height: 18, padding: 0 },
           switchBase: {
             padding: 2,
-            "&.Mui-checked": { transform: "translateX(14px)", color: "#fff" },
+            // The thumb rides on the accent track once checked, so it takes the
+            // same ink every other filled control does.
+            "&.Mui-checked": { transform: "translateX(14px)", color: nebula.onAccent },
             "&.Mui-checked + .MuiSwitch-track": { backgroundColor: nebula.accent, opacity: 1 },
           },
           thumb: { width: 14, height: 14, boxShadow: "none" },
@@ -352,7 +465,9 @@ export function createNebulaTheme(
           thumb: {
             width: 12,
             height: 12,
-            backgroundColor: "#fff",
+            // The knob sits on the accent-filled track; a white one disappears
+            // into a light scheme and glares in Ply's black one.
+            backgroundColor: nebula.onAccent,
             boxShadow: "0 1px 3px rgba(0,0,0,.35)",
             "&:hover,&.Mui-focusVisible": { boxShadow: "0 1px 3px rgba(0,0,0,.35)" },
           },
@@ -385,12 +500,71 @@ export function createNebulaTheme(
  * obscure, and an opaque fallback would turn the bar into exactly the flat slab
  * the translucency exists to avoid. Blur is a refinement here, not the effect.
  */
+/**
+ * A surface with a stroke that survives a chamfer.
+ *
+ * `clip-path` cuts the border off with the box, so a chamfered card drawn the
+ * ordinary way loses its outline on exactly the two corners the theme cut -
+ * which is what "you forgot the border" is. The stroke is therefore painted:
+ * the element's own background *is* the line, and an inset pseudo-element one
+ * pixel in carries the fill. Both are clipped, so the line follows the cut.
+ *
+ * The same recipe is correct for the skins that cut nothing - a 1px inset fill
+ * over a line-coloured ground is a 1px border - so there is one path rather
+ * than a chamfered branch and a bordered one.
+ */
+export function chamferedSurface(theme: Theme, fill: string, line: string) {
+  const { nebula } = theme.palette;
+  return {
+    position: "relative",
+    // Keeps the negative z-index below inside this card rather than letting it
+    // fall behind whatever the card is sitting on.
+    isolation: "isolate",
+    clipPath: "var(--nebula-clip-bubble, none)",
+    background: line || nebula.line2,
+    border: "none",
+    "&::before": {
+      content: '""',
+      position: "absolute",
+      inset: "1px",
+      zIndex: -1,
+      background: fill,
+      borderRadius: "inherit",
+      clipPath: "var(--nebula-clip-bubble, none)",
+    },
+  } as const;
+}
+
 export function glassChrome(theme: Theme) {
   const { nebula } = theme.palette;
   return {
-    background: nebula.panel,
-    WebkitBackdropFilter: "blur(14px)",
-    backdropFilter: "blur(14px)",
+    // The channel header and the composer are the sheet's `header`, not its
+    // `side` - several skins tint the two differently, and sharing one token
+    // was what flattened them into a single band.
+    background: nebula.header,
+    // How far a panel blurs is the skin's, not a constant: an opaque skin must
+    // not blur at all, and Aurora blurs at 40px. `--nebula-blur` carries it.
+    WebkitBackdropFilter: "blur(var(--nebula-blur, 14px)) saturate(1.15)",
+    backdropFilter: "blur(var(--nebula-blur, 14px)) saturate(1.15)",
+  } as const;
+}
+
+/**
+ * The glass a panel that hangs over the conversation is cut from.
+ *
+ * `floatingSurface` paints the scheme's own colour, which is right for a menu
+ * sitting on the window; this is for the surfaces that float over the
+ * wallpaper, where what is behind them is the point. One recipe rather than
+ * two, so the composer's popovers and the pinned panel cannot drift apart in
+ * blur or hairline.
+ */
+export function washPanel(theme: Theme) {
+  const { nebula } = theme.palette;
+  return {
+    background: nebula.wash,
+    WebkitBackdropFilter: "blur(36px) saturate(160%)",
+    backdropFilter: "blur(36px) saturate(160%)",
+    border: `1px solid ${nebula.washLine}`,
   } as const;
 }
 

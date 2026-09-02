@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, Dialog, InputBase, Typography } from "@mui/material";
 import { invoke } from "@tauri-apps/api/core";
 import type { ChannelEntry, SearchResult, UserEntry } from "@core/types";
@@ -9,15 +10,18 @@ import {
   type GlobalSearchRow,
   type GroupableSession,
 } from "../../selectors";
+import { DEFAULT_TIME_DISPLAY, type TimeDisplay } from "../../selectors";
 import { radius } from "../../tokens";
 import { SectionLabel, StatusDot, UserAvatar } from "../primitives";
 
-const HEADINGS: Readonly<Record<GlobalSearchKind, string>> = {
-  channel: "Channels",
-  person: "People",
-  message: "Messages",
-  server: "Servers",
-};
+/** The group heading each kind of row sits under, as a `nebulaChrome` key.
+ *  `as const` keeps the values literal so `t()` still type-checks them. */
+const HEADING_KEYS = {
+  channel: "search.headingChannel",
+  person: "search.headingPerson",
+  message: "search.headingMessage",
+  server: "search.headingServer",
+} as const satisfies Record<GlobalSearchKind, string>;
 
 /** Long enough to swallow a burst of typing, short enough to feel answered. */
 const DEBOUNCE_MS = 120;
@@ -30,6 +34,14 @@ interface GlobalSearchProps {
   ownSession: number | null;
   /** How the connected server is named under a channel row. */
   serverLabel: string;
+  /**
+   * The clock a matched message's time is read under.
+   *
+   * The client's one copy, handed down: a message found through search has to
+   * read the same time as the same message read in the river, and the palette
+   * is not the place to go and ask the platform for the OS clock format again.
+   */
+  time?: TimeDisplay;
   onClose: () => void;
   onSelect: (row: GlobalSearchRow) => void;
 }
@@ -56,9 +68,14 @@ export function GlobalSearch({
   sessions,
   ownSession,
   serverLabel,
+  time = DEFAULT_TIME_DISPLAY,
   onClose,
   onSelect,
 }: Readonly<GlobalSearchProps>) {
+  const { t } = useTranslation("nebulaChrome");
+  // A second handle on the catalogue, for the selectors that name the rows:
+  // they say what they find in `nebulaCommon`, and their `t` is typed to it.
+  const { t: label } = useTranslation("nebulaCommon");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<readonly SearchResult[]>([]);
   const [active, setActive] = useState(0);
@@ -70,8 +87,9 @@ export function GlobalSearch({
   const settledRef = useRef(0);
 
   const rows = useMemo(
-    () => globalSearchRows({ results, channels, users, sessions, ownSession, serverLabel, query }),
-    [channels, ownSession, query, results, serverLabel, sessions, users],
+    () =>
+      globalSearchRows({ t: label, results, channels, users, sessions, ownSession, serverLabel, query, time }),
+    [channels, ownSession, query, results, serverLabel, sessions, time, users],
   );
 
   const search = useCallback((text: string) => {
@@ -181,14 +199,14 @@ export function GlobalSearch({
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Search channels, people and messages"
-          inputProps={{ "aria-label": "Search channels, people and messages" }}
+          placeholder={t("search.placeholder")}
+          inputProps={{ "aria-label": t("search.placeholder") }}
           sx={{ flex: 1, fontSize: 13.5 }}
         />
         <Box
           component="button"
           type="button"
-          aria-label="Close search"
+          aria-label={t("search.close")}
           onClick={onClose}
           sx={(theme) => ({
             all: "unset",
@@ -207,11 +225,11 @@ export function GlobalSearch({
       <Box ref={listRef} sx={{ p: "8px", maxHeight: 420, overflowY: "auto" }}>
         {rows.length === 0 && (
           <Typography sx={(theme) => ({ p: "14px", fontSize: 12.5, color: theme.palette.nebula.muted })}>
-            {query.trim() ? `Nothing matches "${query.trim()}".` : "Nothing to jump to yet."}
+            {query.trim() ? t("search.noMatch", { query: query.trim() }) : t("search.empty")}
           </Typography>
         )}
         {rows.map((row, index) => {
-          const heading = row.kind === previousKind ? null : HEADINGS[row.kind];
+          const heading = row.kind === previousKind ? null : t(HEADING_KEYS[row.kind]);
           previousKind = row.kind;
           return (
             <Box key={row.key}>
@@ -386,6 +404,7 @@ function Highlighted({ text, query }: Readonly<{ text: string; query: string }>)
 }
 
 function Footer({ count }: Readonly<{ count: number }>) {
+  const { t } = useTranslation(["nebulaChrome", "sidebar"]);
   return (
     <Box
       sx={(theme) => ({
@@ -399,16 +418,16 @@ function Footer({ count }: Readonly<{ count: number }>) {
       })}
     >
       <Typography component="span" sx={{ fontSize: "inherit" }}>
-        <KeyChip>↑↓</KeyChip> navigate
+        <KeyChip>↑↓</KeyChip> {t("sidebar:superSearch.hintNavigate")}
       </Typography>
       <Typography component="span" sx={{ fontSize: "inherit" }}>
-        <KeyChip>↵</KeyChip> select
+        <KeyChip>↵</KeyChip> {t("sidebar:superSearch.hintSelect")}
       </Typography>
       <Typography component="span" sx={{ fontSize: "inherit" }}>
-        <KeyChip>esc</KeyChip> close
+        <KeyChip>esc</KeyChip> {t("sidebar:superSearch.hintClose")}
       </Typography>
       <Typography component="span" sx={{ ml: "auto", fontSize: "inherit" }}>
-        {count === 1 ? "1 result" : `${count} results`}
+        {t("nebulaChrome:search.results", { count })}
       </Typography>
     </Box>
   );

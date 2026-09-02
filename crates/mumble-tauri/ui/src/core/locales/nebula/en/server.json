@@ -1,0 +1,22 @@
+﻿{
+  "panel": {
+    "heading": "Server info",
+    "activityLog": "Activity log",
+    "noActivity": "No activity yet",
+    "audioTransport": "Audio transport",
+    "audioSettings": "Audio settings",
+    "connectionState": "Connection & state",
+    "networkLatency": "Network latency",
+    "fileServer": "File server",
+    "cspViolations": "CSP violations",
+    "officialPlugin": "Official first-party plugin",
+    "pluginTitle": "{{name}} v{{version}}",
+    "fancyVersion": "v{{version}}",
+    "kbps": "{{value}} kb/s",
+    "milliseconds": "{{value}} ms",
+    "percent": "{{value}}%",
+    "decibels": "{{value}} dB",
+    "megabytes": "{{value}} MB",
+    "seconds": "{{value}}s"
+  }
+}

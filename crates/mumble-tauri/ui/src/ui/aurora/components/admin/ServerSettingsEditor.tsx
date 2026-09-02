@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useServerSettingsStore } from "@core/features/admin/serverSettingsStore";
+import { isRichTextSetting } from "@core/features/admin/serverSettingKinds";
 import type { ServerSetting, ServerSettingsEvent } from "@core/types";
 import { Button, RichTextEditor, TextAreaField, TextField } from "../primitives";
 import styles from "./ServerSettingsEditor.module.css";
-
-/** Server text settings whose value is HTML and deserves a WYSIWYG editor. */
-const RICH_TEXT_SETTING = /welcome|motd/i;
 
 export default function ServerSettingsEditor() {
   const snapshot = useServerSettingsStore((state) => state.snapshot);
@@ -64,8 +62,9 @@ export default function ServerSettingsEditor() {
           ))}
         </select>
       );
-    // Welcome text / MOTD are HTML on the wire, so edit them as rich text.
-    if (setting.type === "text" && RICH_TEXT_SETTING.test(`${setting.key} ${setting.label ?? ""}`)) {
+    // A value the server calls markup - or one it only calls "text" while
+    // naming it like the setting that has always been markup.
+    if (isRichTextSetting(setting)) {
       return (
         <RichTextEditor
           label={setting.label || setting.key}

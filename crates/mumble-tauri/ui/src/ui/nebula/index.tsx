@@ -3,6 +3,9 @@
 // administration) are written against them. Nebula pulls in the tokens only -
 // not Standard's layout reset, which MUI's CssBaseline replaces.
 import "@standard/theme.css";
+// Nebula's own translation namespaces, registered as this chunk loads so the
+// pack's strings cost a client running another design nothing at all.
+import "@core/i18n/nebula";
 import { lazy, Suspense, type ReactNode } from "react";
 import { initializeStandardAppearance } from "@standard/appearance";
 import NebulaClientApp from "./NebulaClientApp";

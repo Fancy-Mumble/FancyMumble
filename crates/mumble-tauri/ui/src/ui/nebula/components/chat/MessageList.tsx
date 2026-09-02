@@ -1,4 +1,5 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Stack } from "../primitives";
 import { Box, Divider, Typography } from "@mui/material";
 import { useUserAvatars } from "@core/lazyBlobs";
@@ -10,17 +11,21 @@ import {
   tailCountAfterAppend,
   tailCountToInclude,
 } from "@core/features/chat/chatWindowing";
+import { useMessageOffload } from "@core/features/chat/useMessageOffload";
+import { isHeavyContent, type MessageScope } from "@core/messageOffload";
 import { groupMessagesByDay } from "../../selectors";
-import { radius } from "../../tokens";
+import { DEFAULT_CHAT_DISPLAY, type ChatDisplay } from "../../useChatDisplay";
+import { CHAT_COLUMN_INSET_PX, CHAT_COLUMN_MAX_WIDTH, radius } from "../../tokens";
 
 /**
- * Where the message column stops growing.
+ * The name the scroller publishes its scrollbar's width under.
  *
- * Earlier than the composer, because prose is read by the line: a paragraph
- * spanning an ultrawide pane loses the reader on the way back to the left. On
- * 21:9 the leftover width falls outside both caps rather than being filled.
+ * The composer is not inside the scroller, so it is the one element in the
+ * pane that has no scrollbar taking width off it - and a river that stops a
+ * scrollbar short of the box below it is the mismatch this measures away.
+ * Read as `var(--nebula-chat-gutter)` by whatever has to match this column.
  */
-const COLUMN_MAX_WIDTH = 980;
+const GUTTER_VAR = "--nebula-chat-gutter";
 
 interface MessageListProps {
   messages: readonly ChatMessage[];
@@ -43,11 +48,39 @@ interface MessageListProps {
    * has to flash it again, or the click reads as broken.
    */
   jumpTo?: { messageId: string; nonce: number } | null;
-  renderMessage: (message: ChatMessage, avatar: string | null, grouped: boolean) => React.ReactNode;
+  /**
+   * Text size and density, from the personalization record.
+   *
+   * The size is set on the column rather than on each row: the rows draw their
+   * bodies at the inherited size, and their own furniture - names, timestamps,
+   * badges - is chrome that the mock sizes rather than the reader.
+   */
+  display?: ChatDisplay;
+  /**
+   * The open conversation, for cold storage.
+   *
+   * A body worth megabytes is written to an encrypted temp file while it is
+   * out of view and read back before the reader returns to it, and the scope
+   * is what the two halves are keyed by. Omitting it leaves every body in
+   * memory, which is what a list drawn outside a conversation wants.
+   */
+  currentScope?: () => MessageScope | null;
+  renderMessage: (
+    message: ChatMessage,
+    avatar: string | null,
+    grouped: boolean,
+    /** Its body is in cold storage and on its way back - draw a placeholder. */
+    restoring: boolean,
+    /** Nothing below it belongs to the same block - it carries the timestamp. */
+    endsGroup: boolean,
+  ) => React.ReactNode;
 }
 
 /** Consecutive messages from one sender collapse into a single block. */
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
+
+/** Stable "no conversation", so the default does not re-arm the observer. */
+const NO_SCOPE = (): MessageScope | null => null;
 
 function isGrouped(message: ChatMessage, previous: ChatMessage | undefined): boolean {
   if (!previous) return false;
@@ -69,9 +102,54 @@ export function MessageList({
   firstUnreadId,
   header,
   jumpTo,
+  display = DEFAULT_CHAT_DISPLAY,
+  currentScope = NO_SCOPE,
   renderMessage,
 }: Readonly<MessageListProps>) {
+  const { t } = useTranslation("nebulaCommon");
+  // Compact mode is the reader asking for more conversation per screen, so the
+  // air between messages goes the way the avatars do - and the compact message
+  // style is the same request made from the other setting.
+  const rowGap = display.compact || display.bubbleStyle === "compact" ? "9px" : "19px";
+  /**
+   * The air inside a block, as against `rowGap` between blocks.
+   *
+   * Spacing is the only thing left saying that six bubbles are one person
+   * talking once the repeated name and clock have gone: at the full gap a run
+   * of short messages reads as six separate arrivals, spread down the screen
+   * with nothing tying them together. Closed up, the run is one shape and the
+   * gap above it is what marks where the next speaker starts.
+   */
+  const groupGap = display.compact || display.bubbleStyle === "compact" ? "2px" : "4px";
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** The column the rows are mounted in - the observer's subtree. */
+  const columnRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Cold storage for the heavy bodies in this river.
+   *
+   * The window above unmounts the *row*; this releases the *content*, which is
+   * the part that costs megabytes - a channel where people paste screenshots
+   * holds the lot in memory otherwise, whether or not any of it is on screen.
+   * The rows below carry the two attributes it watches for.
+   */
+  const { restoringKeys } = useMessageOffload({
+    containerRef: scrollRef,
+    innerRef: columnRef,
+    currentScope,
+    // Nebula's rows already carry their id for the jump-to logic; there is no
+    // sense in labelling them twice with two names that must agree.
+    idAttribute: "data-message-id",
+  });
+
+  // Publish what the scrollbar costs, once. It is a property of the platform
+  // rather than of the conversation, so nothing here re-measures it; a browser
+  // that reserves nothing simply publishes zero.
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    document.documentElement.style.setProperty(GUTTER_VAR, `${node.offsetWidth - node.clientWidth}px`);
+  }, []);
   const pinnedToBottom = useRef(true);
 
   /**
@@ -124,7 +202,7 @@ export function MessageList({
     });
   }, [users, windowed]);
   const avatars = useUserAvatars(senders);
-  const sections = useMemo(() => groupMessagesByDay(windowed), [windowed]);
+  const sections = useMemo(() => groupMessagesByDay(t, windowed), [t, windowed]);
 
   // Reading position is held across three different kinds of change, and they
   // want opposite things: an arriving message should follow the reader down if
@@ -185,6 +263,9 @@ export function MessageList({
       sx={{
         flex: 1,
         overflowY: "auto",
+        // Reserved whether or not there is anything to scroll, so the column
+        // does not step sideways as a conversation grows past one screen.
+        scrollbarGutter: "stable",
         minHeight: 0,
         pt: "26px",
         pb: "12px",
@@ -193,20 +274,25 @@ export function MessageList({
       }}
     >
       <Box
+        ref={columnRef}
         sx={{
           width: "100%",
-          maxWidth: COLUMN_MAX_WIDTH,
+          maxWidth: CHAT_COLUMN_MAX_WIDTH,
           mx: "auto",
           boxSizing: "border-box",
-          px: "20px",
+          px: `${CHAT_COLUMN_INSET_PX}px`,
           display: "flex",
           flexDirection: "column",
-          gap: "19px",
+          gap: rowGap,
+          fontSize: `${display.fontSizePx}px`,
         }}
       >
         {header}
+        {/* The rows space themselves, so the section itself sets no gap: only
+            the row knows whether it continues the block above it or starts a
+            new one, and one gap for the whole column cannot say both. */}
         {sections.map((section) => (
-          <Stack key={section.key} gap="19px">
+          <Stack key={section.key} gap={0}>
             <Box sx={{ display: "flex", justifyContent: "center" }}>
               <Typography
                 sx={(theme) => ({
@@ -222,20 +308,34 @@ export function MessageList({
                 {section.label}
               </Typography>
             </Box>
-            {section.messages.map((message, index) => (
-              <Stack
-                key={message.message_id ?? `${message.timestamp}-${index}`}
-                data-message-id={message.message_id ?? undefined}
-                gap="19px"
-              >
-                {firstUnreadId && message.message_id === firstUnreadId && <UnreadRule />}
-                {renderMessage(
-                  message,
-                  message.sender_session == null ? null : (avatars.get(message.sender_session) ?? null),
-                  isGrouped(message, section.messages[index - 1]),
-                )}
-              </Stack>
-            ))}
+            {section.messages.map((message, index) => {
+              const grouped = isGrouped(message, section.messages[index - 1]);
+              const next = section.messages[index + 1];
+              const endsGroup = !next || !isGrouped(next, message);
+              // The rule is a section break of its own: a message that happens
+              // to continue the block above still needs room for it.
+              const unread = !!firstUnreadId && message.message_id === firstUnreadId;
+              return (
+                <Stack
+                  key={message.message_id ?? `${message.timestamp}-${index}`}
+                  data-message-id={message.message_id ?? undefined}
+                  // What the observer offloads. A body with no id cannot be
+                  // asked for again, so it is never handed away.
+                  data-msg-heavy={message.message_id && isHeavyContent(message.body) ? "" : undefined}
+                  gap={rowGap}
+                  sx={{ mt: grouped && !unread ? groupGap : rowGap }}
+                >
+                  {unread && <UnreadRule />}
+                  {renderMessage(
+                    message,
+                    message.sender_session == null ? null : (avatars.get(message.sender_session) ?? null),
+                    grouped,
+                    message.message_id ? restoringKeys.has(message.message_id) : false,
+                    endsGroup,
+                  )}
+                </Stack>
+              );
+            })}
           </Stack>
         ))}
       </Box>

@@ -1,11 +1,12 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, Portal, Tooltip } from "@mui/material";
-import { ChevronRightIcon, LogOutIcon, PlusIcon } from "@ui/icons";
+import { ChevronRightIcon, LogOutIcon, PlusIcon, UsersGroupIcon } from "@ui/icons";
 import { reorderServerRail, serverTint, type ServerGroup, type ServerRailEntry } from "../../selectors";
 import { UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
 import type { ServerPingResult } from "@core/types";
-import { ServerRailPanel, ServerRailRowGhost } from "./ServerRailPanel";
+import { ServerRailPanel, ServerRailRowGhost, type RailFriends } from "./ServerRailPanel";
 import { ServerRailCard, type RailCardOccupant } from "./ServerRailCard";
 
 /** Every tile, and the two buttons that bracket them, are one square. */
@@ -83,6 +84,8 @@ interface ServerRailProps {
   onToggleFavorite?: (group: ServerGroup) => void;
   /** Absent while nothing is connected - there is then nothing to leave. */
   onDisconnect?: () => void;
+  /** Friends, when the title bar is not carrying it. */
+  friends?: RailFriends;
   /** The new order, by host:port, after a tile is dropped. */
   onReorder?: (keys: readonly string[]) => void;
 }
@@ -117,10 +120,15 @@ function RailTile({
   onDragPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
   registerRef: (element: HTMLElement | null) => void;
 }>) {
+  const { t } = useTranslation("nebulaSidebar");
   const { group, status, unread } = entry;
   const waiting = unread > 99 ? "99+" : String(unread);
   const detail =
-    status === "connecting" ? "connecting" : status === "connected" ? "connected" : "not connected";
+    status === "connecting"
+      ? t("servers.connecting_state")
+      : status === "connected"
+        ? t("servers.connected")
+        : t("servers.notConnected");
 
   return (
     // No tooltip: hovering a tile opens the card, and the two would collide.
@@ -128,7 +136,11 @@ function RailTile({
       component="button"
       type="button"
       aria-current={active ? "true" : undefined}
-      aria-label={group.label + ", " + detail + (unread > 0 ? ", " + unread + " unread" : "")}
+      aria-label={
+        unread > 0
+          ? t("servers.tileLabelUnread", { server: group.label, state: detail, count: unread })
+          : t("servers.tileLabel", { server: group.label, state: detail })
+      }
       onClick={onSelect}
       onMouseEnter={(event: { currentTarget: HTMLElement }) => onHover(event.currentTarget.offsetTop)}
       onMouseLeave={onLeave}
@@ -154,7 +166,7 @@ function RailTile({
         // The avatar inside is an img, which the browser will happily drag on
         // its own; the tile owns this gesture, not its contents.
         "& img": { WebkitUserDrag: "none", pointerEvents: "none" },
-        borderRadius: radius("lg"),
+        borderRadius: radius("rail"),
         outline: active ? "2px solid " + theme.palette.nebula.accent : "none",
         outlineOffset: 2,
         opacity: dragging ? 0.4 : status === "saved" ? 0.72 : 1,
@@ -219,6 +231,77 @@ function ConnectionPip({ status }: Readonly<{ status: ServerRailEntry["status"] 
   );
 }
 
+/**
+ * Friends, as a tile.
+ *
+ * Shaped like `RailButton` rather than like `RailTile`: it is a destination,
+ * not a server, and giving it an avatar would put it in the list it is meant
+ * to sit apart from. It takes the same ring and the same badge as a tile,
+ * because "you are here" and "something is waiting" have to read the same way
+ * everywhere in this column.
+ */
+function FriendsTile({ active, unread, onOpen }: Readonly<RailFriends>) {
+  const { t } = useTranslation(["nebulaSidebar", "server"]);
+  const waiting = unread > 99 ? "99+" : String(unread);
+  return (
+    <Tooltip title={t("server:tabsBar.friends")} placement="right">
+      <Box
+        component="button"
+        type="button"
+        aria-label={
+          unread > 0
+            ? t("nebulaSidebar:friends.tileLabelUnread", { count: unread })
+            : t("server:tabsBar.friends")
+        }
+        aria-current={active ? "true" : undefined}
+        onClick={onOpen}
+        sx={(theme) => ({
+          all: "unset",
+          boxSizing: "border-box",
+          position: "relative",
+          width: TILE,
+          height: TILE,
+          flex: "none",
+          display: "grid",
+          placeItems: "center",
+          cursor: "pointer",
+          borderRadius: radius("rail"),
+          // A filled plate, like every other square in this column. Every
+          // server tile is artwork edge to edge, so an outline round a small
+          // glyph read as a lighter thing than its neighbours rather than as
+          // one of them - the fill is what makes it weigh the same.
+          border: "1px solid " + (active ? theme.palette.nebula.accentLine : theme.palette.nebula.line2),
+          background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.card2,
+          color: active ? theme.palette.nebula.accent : theme.palette.nebula.muted,
+          outline: active ? "2px solid " + theme.palette.nebula.accent : "none",
+          outlineOffset: 2,
+          "&:hover": {
+            borderColor: theme.palette.nebula.accentLine,
+            color: active ? theme.palette.nebula.accent : theme.palette.nebula.text,
+          },
+          "&:focus-visible": { outline: "2px solid " + theme.palette.nebula.accent, outlineOffset: 2 },
+        })}
+      >
+        {/* Sized against a tile filled by a 40px avatar, not against the icons
+            in the buttons above and below it: the glyph has to carry the same
+            square the artwork does. */}
+        <UsersGroupIcon width={22} height={22} />
+        {unread > 0 && <UnreadBadge label={waiting} />}
+      </Box>
+    </Tooltip>
+  );
+}
+
+/** The hairline that separates one group of the column from the next. */
+function RailDivider() {
+  return (
+    <Box
+      aria-hidden
+      sx={(theme) => ({ width: 22, height: "1px", my: "1px", background: theme.palette.nebula.line2 })}
+    />
+  );
+}
+
 /** Top-right: what is waiting, capped so three digits never widen the tile. */
 function UnreadBadge({ label }: Readonly<{ label: string }>) {
   return (
@@ -272,8 +355,10 @@ export function ServerRail({
   onAddServer,
   onToggleFavorite,
   onDisconnect,
+  friends,
   onReorder,
 }: Readonly<ServerRailProps>) {
+  const { t } = useTranslation("nebulaSidebar");
   // Pinned, the list is simply always open; there is no tile column left to
   // collapse back into.
   const open = expanded || pinned;
@@ -417,13 +502,14 @@ export function ServerRail({
       search={search}
       // Only the filter can empty a list that has servers in it; with none
       // saved at all the add button below is the whole answer.
-      empty={entries.length > 0 ? "No server matches that." : undefined}
+      empty={entries.length > 0 ? t("servers.noMatch") : undefined}
       registerRowRef={(key, element) => {
         if (element) rowRefs.current.set(key, element);
         else rowRefs.current.delete(key);
       }}
       onRowPointerDown={beginGesture}
       onClose={pinned ? undefined : onToggleExpanded}
+      friends={friends}
       onSelect={onSelect}
       onAddServer={onAddServer}
       onToggleFavorite={onToggleFavorite}
@@ -444,7 +530,7 @@ export function ServerRail({
   return (
     <Box
       component="nav"
-      aria-label="Servers"
+      aria-label={t("servers.title")}
       data-testid="nebula-server-rail"
       sx={(theme) => ({
         width: 56,
@@ -460,14 +546,11 @@ export function ServerRail({
         // whole has to sit above it instead.
         zIndex: 45,
         borderRight: "1px solid " + theme.palette.nebula.line,
-        background: theme.palette.nebula.panel,
+        background: theme.palette.nebula.rail,
         backdropFilter: "blur(14px)",
       })}
     >
-      <RailButton
-        label={expanded ? "Collapse the server list" : "Pin the server list open"}
-        onClick={onToggleExpanded}
-      >
+      <RailButton label={expanded ? t("servers.collapse") : t("servers.pinOpen")} onClick={onToggleExpanded}>
         <ChevronRightIcon
           width={15}
           height={15}
@@ -475,10 +558,17 @@ export function ServerRail({
         />
       </RailButton>
 
-      <Box
-        aria-hidden
-        sx={(theme) => ({ width: 22, height: "1px", my: "1px", background: theme.palette.nebula.line2 })}
-      />
+      <RailDivider />
+
+      {/* Friends sits between the expander and the servers, fenced off from
+          both: it is a place to go, not a server to switch to, and the two
+          would otherwise read as one list. */}
+      {friends && (
+        <>
+          <FriendsTile {...friends} />
+          <RailDivider />
+        </>
+      )}
 
       {entries.map((entry) => (
         <Fragment key={entry.group.key}>
@@ -512,12 +602,12 @@ export function ServerRail({
 
       {ghost}
 
-      <RailButton label="Add a server" onClick={onAddServer} dashed>
+      <RailButton label={t("servers.add")} onClick={onAddServer} dashed>
         <PlusIcon width={15} height={15} />
       </RailButton>
 
       {onDisconnect && (
-        <RailButton label="Disconnect from this server" onClick={onDisconnect} tone="bad" atBottom>
+        <RailButton label={t("servers.disconnect")} onClick={onDisconnect} tone="bad" atBottom>
           <LogOutIcon width={15} height={15} />
         </RailButton>
       )}
@@ -605,7 +695,7 @@ function DragGhost({
           height,
           zIndex: 60,
           pointerEvents: "none",
-          borderRadius: radius("lg"),
+          borderRadius: radius("rail"),
           overflow: "hidden",
           transform: "scale(1.04)",
           boxShadow: "0 12px 28px rgba(2,6,18,.55)",
@@ -653,9 +743,9 @@ function RailButton({
           display: "grid",
           placeItems: "center",
           cursor: "pointer",
-          borderRadius: radius("lg"),
+          borderRadius: radius("rail"),
           border: dashed ? "1px dashed " + theme.palette.nebula.line2 : "1px solid transparent",
-          color: tone === "bad" ? theme.palette.nebula.bad : theme.palette.nebula.dim,
+          color: tone === "bad" ? theme.palette.nebula.bad : theme.palette.nebula.railDim,
           "&:hover": {
             background: dashed ? "transparent" : theme.palette.nebula.hover,
             borderColor: dashed ? theme.palette.nebula.accentLine : "transparent",

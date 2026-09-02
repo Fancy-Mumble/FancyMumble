@@ -36,6 +36,8 @@ export default function WelcomeMessageModal() {
   // connect ("always"): checking it downgrades to "show once".  When already
   // at "show once" the checkbox is hidden (there is nothing to opt out of).
   const [canSwitchToOnce, setCanSwitchToOnce] = useState(false);
+  /** What to record once the reader has actually dismissed it. */
+  const [shownFor, setShownFor] = useState<{ serverKey: string; text: string } | null>(null);
   const [switchToOnce, setSwitchToOnce] = useState(false);
 
   useEffect(() => {
@@ -45,12 +47,17 @@ export default function WelcomeMessageModal() {
         const prefs = await getPreferences().catch(() => null);
         const mode = prefs?.welcomeMessageDisplay ?? "once";
         if (mode === "hide") return;
-        if (mode === "once" && serverKey && (await hasShownWelcome(serverKey))) return;
+        // Fetched before the check, not after: whether this has been shown
+        // is a question about the *text*, so there is nothing to ask until
+        // the text is in hand.
         const text = await fetchWelcomeWithRetry();
         if (!text) return;
-        if (mode === "once" && serverKey) await markWelcomeShown(serverKey);
+        if (mode === "once" && serverKey && (await hasShownWelcome(serverKey, text))) {
+          return;
+        }
         setCanSwitchToOnce(mode === "always");
         setSwitchToOnce(false);
+        setShownFor(mode === "once" && serverKey ? { serverKey, text } : null);
         setHtml(text);
       })();
     };
@@ -62,8 +69,14 @@ export default function WelcomeMessageModal() {
     if (switchToOnce) {
       void updatePreferences({ welcomeMessageDisplay: "once" });
     }
+    // Recorded on dismissal rather than before the dialog renders. It used
+    // to be marked on the way in, so a message the user never actually saw
+    // - the window closed, the app quit, the connection dropped - counted
+    // as read and was never shown again.
+    if (shownFor) void markWelcomeShown(shownFor.serverKey, shownFor.text);
+    setShownFor(null);
     setHtml(null);
-  }, [switchToOnce]);
+  }, [switchToOnce, shownFor]);
 
   if (html == null) return null;
 

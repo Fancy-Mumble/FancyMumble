@@ -15,23 +15,51 @@
  * person meant to write.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, ClickAwayListener, useTheme } from "@mui/material";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import type { EditorView } from "@tiptap/pm/view";
-import StarterKit from "@tiptap/starter-kit";
-import { TextStyle } from "@tiptap/extension-text-style";
-import Color from "@tiptap/extension-color";
-import Placeholder from "@tiptap/extension-placeholder";
-import TiptapImage from "@tiptap/extension-image";
 import { resizeImage } from "@core/features/settings/imageUtils";
-import { BoldIcon, ImageIcon, ItalicIcon } from "@ui/icons";
+import {
+  AlignCenterIcon,
+  AlignLeftIcon,
+  AlignRightIcon,
+  BoldIcon,
+  ImageIcon,
+  ItalicIcon,
+  ListIcon,
+  ListOrderedIcon,
+} from "@ui/icons";
+import { richTextExtensions, type RichTextPreset } from "./richText";
 import { Stack } from "./Stack";
 import { radius } from "../../tokens";
 
 /** A button the toolbar can carry. */
-export type RichTextTool = "bold" | "italic" | "underline" | "strike" | "colour" | "image";
+export type RichTextTool =
+  "bold" | "italic" | "underline" | "strike" | "colour" | "image" | "heading" | "lists" | "align";
 
 const DEFAULT_TOOLS: readonly RichTextTool[] = ["bold", "italic", "underline", "colour"];
+
+/**
+ * The headings a document offers.
+ *
+ * Deeper ones still survive the round trip - the schema carries all six - but
+ * three is what a welcome screen uses and six buttons is a toolbar nobody
+ * reads. Labelled from the live-doc catalogue, which already names these in
+ * every locale this client ships.
+ */
+const HEADING_LEVELS = [
+  { level: 1, labelKey: "chat:liveDoc.toolbar.h1" },
+  { level: 2, labelKey: "chat:liveDoc.toolbar.h2" },
+  { level: 3, labelKey: "chat:liveDoc.toolbar.h3" },
+] as const;
+
+/** The alignments, with the icon and the name each one gets. */
+const ALIGNMENTS = [
+  { value: "left", Icon: AlignLeftIcon, labelKey: "chat:liveDoc.toolbar.alignLeft" },
+  { value: "center", Icon: AlignCenterIcon, labelKey: "chat:liveDoc.toolbar.alignCenter" },
+  { value: "right", Icon: AlignRightIcon, labelKey: "chat:liveDoc.toolbar.alignRight" },
+] as const;
 
 /**
  * The quick-pick colours, matching the Standard UI's grid.
@@ -100,6 +128,13 @@ export interface RichTextFieldProps {
   singleLine?: boolean;
   /** Cap on the markup, counted without embedded image data. */
   maxLength?: number;
+  /**
+   * How much document this field is willing to be.
+   *
+   * `prose` is the default because it is what a bio and a channel description
+   * are, and widening the schema under them would change what they store.
+   */
+  preset?: RichTextPreset;
   tools?: readonly RichTextTool[];
   minHeight?: number;
   maxHeight?: number;
@@ -114,11 +149,13 @@ export function RichTextField({
   placeholder,
   singleLine = false,
   maxLength = 2000,
+  preset = "prose",
   tools = DEFAULT_TOOLS,
   minHeight = singleLine ? 0 : 76,
   maxHeight = singleLine ? 0 : 220,
   ariaLabel,
 }: Readonly<RichTextFieldProps>) {
+  const { t } = useTranslation(["nebulaCommon", "nebulaChat", "chat"]);
   const { nebula } = useTheme().palette;
   const [swatches, setSwatches] = useState(false);
   const file = useRef<HTMLInputElement>(null);
@@ -126,26 +163,7 @@ export function RichTextField({
   // through `setContent`, which would move the caret to the end mid-sentence.
   const echo = useRef(false);
 
-  const extensions = useMemo(
-    () => [
-      StarterKit.configure({
-        // A bio is prose, not a document: the block nodes below would all be
-        // dropped by the card's allow-list anyway, so they are not offered.
-        heading: false,
-        blockquote: false,
-        codeBlock: false,
-        horizontalRule: false,
-        bulletList: false,
-        orderedList: false,
-        listItem: false,
-      }),
-      TextStyle,
-      Color,
-      Placeholder.configure({ placeholder: placeholder ?? "" }),
-      TiptapImage.configure({ inline: true, allowBase64: true }),
-    ],
-    [placeholder],
-  );
+  const extensions = useMemo(() => richTextExtensions(preset, placeholder ?? ""), [preset, placeholder]);
 
   const editor = useEditor({
     extensions,
@@ -222,7 +240,12 @@ export function RichTextField({
         sx={{ px: "6px", py: "4px", borderBottom: `1px solid ${nebula.line}` }}
       >
         {shown.has("bold") && (
-          <ToolButton editor={editor} mark="bold" label="Bold" onClick={(chain) => chain.toggleBold().run()}>
+          <ToolButton
+            editor={editor}
+            mark="bold"
+            label={t("chat:liveDoc.toolbar.bold")}
+            onClick={(chain) => chain.toggleBold().run()}
+          >
             <BoldIcon width={13} height={13} />
           </ToolButton>
         )}
@@ -230,7 +253,7 @@ export function RichTextField({
           <ToolButton
             editor={editor}
             mark="italic"
-            label="Italic"
+            label={t("chat:liveDoc.toolbar.italic")}
             onClick={(chain) => chain.toggleItalic().run()}
           >
             <ItalicIcon width={13} height={13} />
@@ -240,7 +263,7 @@ export function RichTextField({
           <ToolButton
             editor={editor}
             mark="underline"
-            label="Underline"
+            label={t("nebulaCommon:richText.underline")}
             onClick={(chain) => chain.toggleUnderline().run()}
           >
             <Box component="span" sx={{ textDecoration: "underline", fontSize: 12.5, fontWeight: 600 }}>
@@ -252,7 +275,7 @@ export function RichTextField({
           <ToolButton
             editor={editor}
             mark="strike"
-            label="Strikethrough"
+            label={t("chat:liveDoc.toolbar.strike")}
             onClick={(chain) => chain.toggleStrike().run()}
           >
             <Box component="span" sx={{ textDecoration: "line-through", fontSize: 12.5, fontWeight: 600 }}>
@@ -261,13 +284,62 @@ export function RichTextField({
           </ToolButton>
         )}
 
+        {shown.has("heading") &&
+          HEADING_LEVELS.map(({ level, labelKey }) => (
+            <ToolButton
+              key={level}
+              editor={editor}
+              active={editor.isActive("heading", { level })}
+              label={t(labelKey)}
+              onClick={(chain) => chain.toggleHeading({ level }).run()}
+            >
+              <Box component="span" sx={{ fontSize: 11.5, fontWeight: 700, lineHeight: 1 }}>
+                H{level}
+              </Box>
+            </ToolButton>
+          ))}
+
+        {shown.has("lists") && (
+          <>
+            <ToolButton
+              editor={editor}
+              mark="bulletList"
+              label={t("chat:liveDoc.toolbar.bulletList")}
+              onClick={(chain) => chain.toggleBulletList().run()}
+            >
+              <ListIcon width={13} height={13} />
+            </ToolButton>
+            <ToolButton
+              editor={editor}
+              mark="orderedList"
+              label={t("chat:liveDoc.toolbar.orderedList")}
+              onClick={(chain) => chain.toggleOrderedList().run()}
+            >
+              <ListOrderedIcon width={13} height={13} />
+            </ToolButton>
+          </>
+        )}
+
+        {shown.has("align") &&
+          ALIGNMENTS.map(({ value: alignment, Icon, labelKey }) => (
+            <ToolButton
+              key={alignment}
+              editor={editor}
+              active={editor.isActive({ textAlign: alignment })}
+              label={t(labelKey)}
+              onClick={(chain) => chain.setTextAlign(alignment).run()}
+            >
+              <Icon width={13} height={13} />
+            </ToolButton>
+          ))}
+
         {shown.has("colour") && (
           <ClickAwayListener onClickAway={() => setSwatches(false)}>
             <Box sx={{ position: "relative", display: "inline-flex" }}>
               <ToolButton
                 editor={editor}
                 active={swatches}
-                label="Text colour"
+                label={t("nebulaCommon:richText.textColour")}
                 onClick={() => setSwatches((open) => !open)}
               >
                 <Box
@@ -307,7 +379,11 @@ export function RichTextField({
                 event.target.value = "";
               }}
             />
-            <ToolButton editor={editor} label="Insert image" onClick={() => file.current?.click()}>
+            <ToolButton
+              editor={editor}
+              label={t("nebulaCommon:richText.insertImage")}
+              onClick={() => file.current?.click()}
+            >
               <ImageIcon width={13} height={13} />
             </ToolButton>
           </>
@@ -328,6 +404,35 @@ export function RichTextField({
           },
           "& p": { margin: 0 },
           "& p + p": { marginTop: "0.5em" },
+          // A document preset renders structure, so the structure has to look
+          // like itself here as well as where it is finally read.
+          "& h1, & h2, & h3, & h4, & h5, & h6": {
+            margin: "0.6em 0 0.3em",
+            lineHeight: 1.25,
+            fontWeight: 700,
+          },
+          "& h1": { fontSize: "1.6em" },
+          "& h2": { fontSize: "1.35em" },
+          "& h3": { fontSize: "1.15em" },
+          "& ul, & ol": { margin: "0.4em 0", paddingLeft: "1.4em" },
+          "& li": { margin: "0.15em 0" },
+          "& li > p": { margin: 0 },
+          "& blockquote": {
+            margin: "0.5em 0",
+            paddingLeft: "0.8em",
+            borderLeft: `2px solid ${nebula.line2}`,
+            color: nebula.muted,
+          },
+          "& hr": { border: 0, borderTop: `1px solid ${nebula.line2}`, margin: "0.8em 0" },
+          "& table": { borderCollapse: "collapse", margin: "0.5em 0" },
+          "& td, & th": { border: `1px solid ${nebula.line2}`, padding: "3px 6px" },
+          "& pre": {
+            margin: "0.5em 0",
+            padding: "6px 8px",
+            borderRadius: radius("sm"),
+            background: nebula.card2,
+            overflowX: "auto",
+          },
           "& img": {
             maxWidth: "100%",
             height: "auto",
@@ -403,6 +508,7 @@ function ToolButton({
 }
 
 function Swatches({ onPick, onClear }: Readonly<{ onPick: (colour: string) => void; onClear: () => void }>) {
+  const { t } = useTranslation("nebulaCommon");
   return (
     <Box
       sx={(theme) => ({
@@ -459,7 +565,7 @@ function Swatches({ onPick, onClear }: Readonly<{ onPick: (colour: string) => vo
           "&:hover": { color: theme.palette.nebula.text },
         })}
       >
-        Reset colour
+        {t("richText.resetColour")}
       </Box>
     </Box>
   );

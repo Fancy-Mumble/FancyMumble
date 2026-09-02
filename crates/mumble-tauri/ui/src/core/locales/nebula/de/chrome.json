@@ -1,0 +1,19 @@
+﻿{
+  "miniMode": {
+    "expand": "Fenster vergrößern",
+    "latency": "{{ms}} ms",
+    "you": "du"
+  },
+  "search": {
+    "placeholder": "Kanäle, Personen und Nachrichten durchsuchen",
+    "close": "Suche schließen",
+    "empty": "Noch nichts zum Aufrufen.",
+    "noMatch": "Nichts passt zu „{{query}}“.",
+    "headingChannel": "Kanäle",
+    "headingPerson": "Personen",
+    "headingMessage": "Nachrichten",
+    "headingServer": "Server",
+    "results_one": "{{count}} Treffer",
+    "results_other": "{{count}} Treffer"
+  }
+}

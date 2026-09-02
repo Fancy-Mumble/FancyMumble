@@ -1,0 +1,22 @@
+﻿{
+  "panel": {
+    "heading": "服务器信息",
+    "activityLog": "活动日志",
+    "noActivity": "暂无活动",
+    "audioTransport": "音频传输",
+    "audioSettings": "音频设置",
+    "connectionState": "连接与状态",
+    "networkLatency": "网络延迟",
+    "fileServer": "文件服务器",
+    "cspViolations": "CSP 违规",
+    "officialPlugin": "官方第一方插件",
+    "pluginTitle": "{{name}} v{{version}}",
+    "fancyVersion": "v{{version}}",
+    "kbps": "{{value}} kb/s",
+    "milliseconds": "{{value}} 毫秒",
+    "percent": "{{value}}%",
+    "decibels": "{{value}} dB",
+    "megabytes": "{{value}} MB",
+    "seconds": "{{value}} 秒"
+  }
+}

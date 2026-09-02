@@ -33,6 +33,15 @@ function makeAdapter(): {
     pause: vi.fn().mockResolvedValue(undefined),
     seek: vi.fn().mockResolvedValue(undefined),
     currentTime: () => 0,
+    duration: () => 0,
+    buffered: () => 0,
+    volume: () => 1,
+    setVolume: () => undefined,
+    muted: () => false,
+    setMuted: () => undefined,
+    rate: () => 1,
+    setRate: () => undefined,
+    quality: () => null,
     setOnLocalEvent: (next) => {
       cb = next;
     },

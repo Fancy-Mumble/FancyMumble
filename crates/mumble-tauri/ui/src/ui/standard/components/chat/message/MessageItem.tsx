@@ -11,7 +11,7 @@ import { useUserComment } from "@core/lazyBlobs";
 import { useUserStats } from "../../../hooks/useUserStats";
 import { isMobile } from "@core/utils/platform";
 import { formatTimestamp, colorFor } from "@core/utils/format";
-import { extractOffloadInfo } from "@core/messageOffload";
+import { extractOffloadInfo, offloadSkeletonHeight } from "@core/messageOffload";
 import { useLinkPreviews } from "@core/features/chat/useLinkPreviews";
 import { containsSelfMention } from "@core/utils/mentions";
 import { TID } from "@core/testids";
@@ -286,14 +286,9 @@ export default memo(function MessageItem({
           />
         );
       }
-      // Estimate skeleton height from the original content byte-length.
-      // Images/videos encoded as data-URLs are ~1.37x larger than the
-      // decoded pixels, so a rough heuristic of 1 byte ~= 0.003 px
-      // gives a decent approximation without knowing the actual
-      // dimensions.  Clamp to a reasonable range.
-      const contentLen = offloadInfo?.contentLength ?? 0;
-      const estimatedHeight =
-        contentLen > 0 ? Math.max(80, Math.min(Math.round(contentLen * 0.003), 600)) : 80;
+      // Hold the row's height open from the original content byte-length, so
+      // the column does not jump when the real body lands.
+      const estimatedHeight = offloadSkeletonHeight(offloadInfo?.contentLength ?? 0);
 
       return (
         <div>

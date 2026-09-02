@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Box, IconButton, Tooltip, Typography } from "@mui/material";
 import { Stack } from "../primitives";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -8,13 +9,24 @@ import { serverTint, type ServerRailEntry } from "../../selectors";
 import { UserAvatar } from "../primitives";
 
 interface TitleBarProps {
-  /** Label of the connected server, or undefined while disconnected. */
+  /**
+   * What to call the connected server, or undefined while disconnected.
+   *
+   * The server's own name, not the login - see `activeServerName` in
+   * `NebulaClientApp`, which is where the precedence is decided.
+   */
   serverLabel?: string;
   friendsActive: boolean;
   onOpenFriends: () => void;
-  onOpenChat: () => void;
-  /** Opens quick connect, anchored to the button that was clicked. */
-  onQuickConnect: (anchor: HTMLElement) => void;
+  /** Every waiting direct message, summed, for the dot beside Friends. */
+  friendsUnread?: number;
+  /**
+   * Opens quick connect, anchored to the button that was clicked.
+   *
+   * Omitted when the rail is on screen: the rail already ends in an add-server
+   * button, and two plus signs one column apart read as two different things.
+   */
+  onQuickConnect?: (anchor: HTMLElement) => void;
   /** Whether quick connect is currently showing, for the button's state. */
   quickConnectOpen: boolean;
   onDisconnect?: () => void;
@@ -24,7 +36,12 @@ interface TitleBarProps {
   icons?: ReadonlyMap<string, string>;
   activeKey?: string | null;
   onSelectServer?: (entry: ServerRailEntry) => void;
-  /** True when the title bar carries the whole list rather than one pill. */
+  /**
+   * True when the title bar carries the whole list rather than one pill.
+   *
+   * False is not "no servers up here": the bar then centres the name of the
+   * server you are on, because that is the window's title.
+   */
   tabs?: boolean;
 }
 
@@ -43,7 +60,7 @@ export function TitleBar({
   serverLabel,
   friendsActive,
   onOpenFriends,
-  onOpenChat,
+  friendsUnread = 0,
   onQuickConnect,
   quickConnectOpen,
   onDisconnect,
@@ -53,8 +70,7 @@ export function TitleBar({
   onSelectServer,
   tabs = false,
 }: Readonly<TitleBarProps>) {
-  const activeEntry = entries.find((entry) => entry.group.key === activeKey) ?? null;
-
+  const { t } = useTranslation(["nebulaCommon", "common", "server"]);
   return (
     <Stack
       direction="row"
@@ -64,8 +80,9 @@ export function TitleBar({
       sx={(theme) => ({
         height: 44,
         flex: "none",
+        position: "relative",
         px: "14px",
-        background: theme.palette.nebula.panel,
+        background: theme.palette.nebula.bar,
         borderBottom: `1px solid ${theme.palette.nebula.line}`,
         backdropFilter: "blur(14px)",
       })}
@@ -79,7 +96,7 @@ export function TitleBar({
           display: "grid",
           placeItems: "center",
           background: theme.palette.nebula.accent,
-          color: "#fff",
+          color: theme.palette.nebula.onAccent,
           fontWeight: 700,
           fontSize: 12,
         })}
@@ -87,27 +104,52 @@ export function TitleBar({
         M
       </Box>
       <Typography sx={{ fontWeight: 600, fontSize: 13, mr: "6px", whiteSpace: "nowrap" }}>
-        Fancy Mumble
+        {t("common:brand")}
       </Typography>
 
-      <Box
-        component="button"
-        onClick={onOpenFriends}
-        sx={(theme) => ({
-          all: "unset",
-          cursor: "pointer",
-          px: "11px",
-          py: "5px",
-          borderRadius: radius("md"),
-          fontSize: 12.5,
-          fontWeight: 500,
-          color: friendsActive ? theme.palette.nebula.text : theme.palette.nebula.muted,
-          background: friendsActive ? theme.palette.nebula.card2 : "transparent",
-          "&:hover": { background: theme.palette.nebula.hover },
-        })}
-      >
-        Friends
-      </Box>
+      {/* Friends belongs to whichever surface is carrying the navigation. With
+          the strip gone the rail has it, and drawing it in both places would
+          leave the window with two of the same destination. */}
+      {tabs && (
+        <Box
+          component="button"
+          onClick={onOpenFriends}
+          sx={(theme) => ({
+            all: "unset",
+            position: "relative",
+            cursor: "pointer",
+            px: "11px",
+            py: "5px",
+            borderRadius: radius("md"),
+            fontSize: 12.5,
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+            color: friendsActive ? theme.palette.nebula.barText : theme.palette.nebula.barDim,
+            background: friendsActive ? theme.palette.nebula.card2 : "transparent",
+            "&:hover": { background: theme.palette.nebula.hover },
+          })}
+        >
+          {t("server:tabsBar.friends")}
+          {friendsUnread > 0 && (
+            <Box
+              component="span"
+              aria-label={t("server:tabsBar.unreadCount", { count: friendsUnread })}
+              sx={(theme) => ({
+                ml: "6px",
+                px: "5px",
+                borderRadius: "8px",
+                fontSize: 9,
+                fontWeight: 700,
+                fontVariantNumeric: "tabular-nums",
+                background: theme.palette.nebula.bad,
+                color: theme.palette.nebula.bg0,
+              })}
+            >
+              {friendsUnread > 99 ? "99+" : friendsUnread}
+            </Box>
+          )}
+        </Box>
+      )}
 
       {/* The strip gives way before the window controls do: a dozen servers
           must not push the close button off the bar. */}
@@ -136,94 +178,66 @@ export function TitleBar({
         </Stack>
       )}
 
+      {/* Without the strip the bar simply names the server you are on, centred
+          the way a window title is. Deliberately not a tab: no plate, no close
+          affordance, nothing to aim at - the rail (or the strip above) is where
+          servers are switched and left, and a second control here would only be
+          a smaller copy of one of them. Centring is absolute so it tracks the
+          middle of the *window*; a flex slot would drift with the width of
+          whatever sits beside it. */}
       {!tabs && serverLabel && (
-        <Stack
-          direction="row"
-          alignItems="center"
-          gap={1}
+        <Typography
+          data-tauri-drag-region
           sx={(theme) => ({
-            px: "11px",
-            py: "5px",
-            borderRadius: radius("md"),
+            position: "absolute",
+            left: "50%",
+            transform: "translateX(-50%)",
+            maxWidth: "40%",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
             fontSize: 12.5,
-            fontWeight: 500,
-            background: theme.palette.nebula.card2,
+            fontWeight: 600,
+            color: theme.palette.nebula.text,
+            // The bar drags by its background, and this label is part of that
+            // background rather than something laid over it.
+            pointerEvents: "none",
           })}
         >
-          <Box
-            component="button"
-            onClick={onOpenChat}
-            sx={{
-              all: "unset",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-            }}
-          >
-            {activeEntry ? (
-              <ServerFavicon entry={activeEntry} icon={icons?.get(activeEntry.group.key)} />
-            ) : (
-              <Box
-                component="span"
-                sx={(theme) => ({
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: theme.palette.nebula.ok,
-                })}
-              />
-            )}
-            {serverLabel}
-          </Box>
-          {onDisconnect && (
-            <Box
-              component="button"
-              aria-label={`Disconnect from ${serverLabel}`}
-              onClick={onDisconnect}
-              sx={(theme) => ({
-                all: "unset",
-                cursor: "pointer",
-                fontSize: 11,
-                lineHeight: 1,
-                color: theme.palette.nebula.dim,
-                "&:hover": { color: theme.palette.nebula.bad },
-              })}
-            >
-              ✕
-            </Box>
-          )}
-        </Stack>
+          {serverLabel}
+        </Typography>
       )}
 
-      <Tooltip title="Quick connect">
-        <IconButton
-          size="small"
-          aria-label="Quick connect"
-          aria-haspopup="menu"
-          aria-expanded={quickConnectOpen}
-          onClick={(event) => onQuickConnect(event.currentTarget)}
-          sx={(theme) => ({
-            color: quickConnectOpen ? theme.palette.nebula.text : undefined,
-            background: quickConnectOpen ? theme.palette.nebula.card2 : undefined,
-          })}
-        >
-          <PlusIcon width={14} height={14} />
-        </IconButton>
-      </Tooltip>
+      {onQuickConnect && (
+        <Tooltip title={t("nebulaCommon:quickConnect")}>
+          <IconButton
+            size="small"
+            aria-label={t("nebulaCommon:quickConnect")}
+            aria-haspopup="menu"
+            aria-expanded={quickConnectOpen}
+            onClick={(event) => onQuickConnect(event.currentTarget)}
+            sx={(theme) => ({
+              color: quickConnectOpen ? theme.palette.nebula.text : undefined,
+              background: quickConnectOpen ? theme.palette.nebula.card2 : undefined,
+            })}
+          >
+            <PlusIcon width={14} height={14} />
+          </IconButton>
+        </Tooltip>
+      )}
 
       <Box sx={{ ml: "auto" }} />
       {isDesktopPlatform() && (
         <Stack direction="row" gap={0.5}>
-          <IconButton size="small" aria-label="Minimize" onClick={minimize}>
+          <IconButton size="small" aria-label={t("common:actions.minimize")} onClick={minimize}>
             <MinimizeIcon width={13} height={13} />
           </IconButton>
-          <IconButton size="small" aria-label="Maximize" onClick={toggleMaximize}>
+          <IconButton size="small" aria-label={t("common:actions.maximize")} onClick={toggleMaximize}>
             <SquareIcon width={11} height={11} />
           </IconButton>
           <IconButton
             size="small"
-            aria-label="Close"
+            aria-label={t("common:actions.close")}
             onClick={close}
             sx={(theme) => ({ "&:hover": { background: `${theme.palette.nebula.bad}33` } })}
           >
@@ -255,6 +269,7 @@ function ServerTab({
   onSelect: () => void;
   onDisconnect?: () => void;
 }>) {
+  const { t } = useTranslation("server");
   const { group, status, unread } = entry;
   return (
     <Stack
@@ -320,7 +335,7 @@ function ServerTab({
         <Box
           component="button"
           type="button"
-          aria-label={"Disconnect from " + group.label}
+          aria-label={t("tabsBar.disconnectFrom", { label: group.label })}
           onClick={onDisconnect}
           sx={(theme) => ({
             all: "unset",

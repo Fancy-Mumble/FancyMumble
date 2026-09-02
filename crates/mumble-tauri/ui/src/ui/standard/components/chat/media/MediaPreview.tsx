@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 import MediaPlayer from "@shared/mediaplayer/MediaPlayer";
 import styles from "./MediaPreview.module.css";
 import { ExternalLinkGuard } from "../../elements/ExternalLinkGuard";
-import { EyeOffIcon } from "../../../icons";
+import { CloseIcon, EyeOffIcon } from "../../../icons";
 import type { TimeFormat } from "@core/types";
 import { formatTimestamp } from "@core/utils/format";
 
@@ -608,8 +608,8 @@ export function MediaLightbox({
         ) : (
           <img className={styles.lightboxMedia} src={item.src} alt={item.alt} />
         )}
-        <button type="button" className={styles.lightboxClose} onClick={onClose}>
-          ?
+        <button type="button" className={styles.lightboxClose} onClick={onClose} aria-label="Close">
+          <CloseIcon width={18} height={18} />
         </button>
         {senderName && (
           <div className={styles.lightboxCaption}>

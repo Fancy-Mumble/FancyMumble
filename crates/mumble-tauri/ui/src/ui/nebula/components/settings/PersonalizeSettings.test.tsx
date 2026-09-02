@@ -31,6 +31,7 @@ const probeVideoPlayback = vi.fn<() => Promise<{ playable: boolean; reason: stri
 const bakeBackgroundVideo = vi.fn<() => Promise<string>>();
 const processBackgroundImage = vi.fn<() => Promise<string>>();
 const clearChatBackgroundStore = vi.fn<() => Promise<void>>();
+const pruneChatBackgrounds = vi.fn<(keep: readonly string[]) => Promise<void>>();
 
 vi.mock("@core/features/settings/chatBackground", () => ({
   isStoreRef: (v: unknown) => typeof v === "string" && v.startsWith("bgstore:"),
@@ -45,8 +46,26 @@ vi.mock("@core/features/settings/chatBackground", () => ({
   bakeBackgroundVideo: (...a: unknown[]) => bakeBackgroundVideo(...(a as [])),
   processBackgroundImage: (...a: unknown[]) => processBackgroundImage(...(a as [])),
   clearChatBackgroundStore: () => clearChatBackgroundStore(),
+  pruneChatBackgrounds: (...a: unknown[]) => pruneChatBackgrounds(...(a as [string[]])),
   onBakeProgress: () => () => undefined,
 }));
+
+/** A stored still, in the shape the record's shelf keeps it. */
+const still = (name: string) => ({
+  original: `bgstore:${name}`,
+  blurred: null,
+  video: null,
+  videoBaked: null,
+  videoBakedSigma: 0,
+  videoBakedDim: 0,
+});
+
+/** The `original`s on the shelf a write left behind, newest first. */
+const shelfOf = (write: Record<string, unknown>) =>
+  (write.chatBgRecents as { original: string }[]).map((entry) => entry.original);
+
+/** The keep-list of the last prune, sorted so order is not part of the claim. */
+const lastPruneKeep = () => [...(pruneChatBackgrounds.mock.calls.at(-1)?.[0] ?? [])].sort();
 
 const { PersonalizeSettings } = await import("./PersonalizeSettings");
 const { PERSONALIZATION_DEFAULTS, savePersonalization } = await import("@standard/personalizationStorage");
@@ -69,9 +88,11 @@ beforeEach(async () => {
     bakeBackgroundVideo,
     processBackgroundImage,
     clearChatBackgroundStore,
+    pruneChatBackgrounds,
   ])
     mock.mockReset();
   clearChatBackgroundStore.mockResolvedValue(undefined);
+  pruneChatBackgrounds.mockResolvedValue(undefined);
   storedBackgroundUrl.mockResolvedValue("blob:clip");
   probeVideoPlayback.mockResolvedValue({ playable: true, reason: null });
   await savePersonalization({ ...PERSONALIZATION_DEFAULTS });
@@ -154,7 +175,13 @@ describe("picking a clip", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("keeps nothing when no decoder anywhere can open the clip", async () => {
+  it("leaves the wallpaper that was up alone when no decoder can open the clip", async () => {
+    await savePersonalization({
+      ...PERSONALIZATION_DEFAULTS,
+      chatBgOriginal: "bgstore:image-old.jpg",
+      chatBgRecents: [still("image-old.jpg")],
+    });
+    writes.length = 0;
     pickChatBackground.mockResolvedValue({ kind: "video", fileName: "video-a.webm" });
     extractBackgroundPoster.mockResolvedValue(null);
     captureAndStorePoster.mockRejectedValue(
@@ -166,11 +193,11 @@ describe("picking a clip", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/missing the codecs/i);
-    expect(clearChatBackgroundStore).toHaveBeenCalled();
-    // The record ends cleared, since the pick already emptied the store.
-    const last = writes.at(-1) as Record<string, unknown>;
-    expect(last.chatBgVideo).toBeNull();
-    expect(last.chatBgOriginal).toBeNull();
+    // A pick only adds files now, so a failed one costs nothing: the record
+    // is untouched and only the half-stored clip is swept up.
+    expect(clearChatBackgroundStore).not.toHaveBeenCalled();
+    expect(writes.length).toBe(0);
+    await waitFor(() => expect(lastPruneKeep()).toEqual(["image-old.jpg"]));
   });
 
   it("says so when the clip stores fine but this webview cannot play it", async () => {
@@ -191,6 +218,132 @@ describe("picking a clip", () => {
     // Advisory, not an error - the pick is kept.
     expect(screen.queryByRole("alert")).toBeNull();
     expect((writes[0] as Record<string, unknown>).chatBgVideo).toBe("video-a.mp4");
+  });
+});
+
+describe("the wallpaper shelf", () => {
+  it("keeps the wallpaper it replaced instead of deleting it", async () => {
+    await renderPage();
+
+    pickChatBackground.mockResolvedValue({ kind: "image", fileName: "image-a.jpg" });
+    choose();
+    await waitFor(() => expect(writes.length).toBe(1));
+
+    pickChatBackground.mockResolvedValue({ kind: "image", fileName: "image-b.jpg" });
+    choose();
+    await waitFor(() => expect(writes.length).toBe(2));
+
+    const last = writes.at(-1) as Record<string, unknown>;
+    expect(last.chatBgOriginal).toBe("bgstore:image-b.jpg");
+    expect(shelfOf(last)).toEqual(["bgstore:image-b.jpg", "bgstore:image-a.jpg"]);
+    // Both sets of files survive - which is the whole point, and exactly what
+    // the store used to make impossible.
+    await waitFor(() => expect(lastPruneKeep()).toEqual(["image-a.jpg", "image-b.jpg"]));
+  });
+
+  it("holds five and lets the sixth push the oldest off", async () => {
+    await savePersonalization({
+      ...PERSONALIZATION_DEFAULTS,
+      chatBgOriginal: "bgstore:image-5.jpg",
+      chatBgRecents: [1, 2, 3, 4, 5].map((n) => still(`image-${n}.jpg`)).reverse(),
+    });
+    writes.length = 0;
+    pickChatBackground.mockResolvedValue({ kind: "image", fileName: "image-6.jpg" });
+
+    await renderPage();
+    choose();
+
+    await waitFor(() => expect(writes.length).toBe(1));
+    const shelf = shelfOf(writes[0] as Record<string, unknown>);
+    expect(shelf).toHaveLength(5);
+    expect(shelf[0]).toBe("bgstore:image-6.jpg");
+    expect(shelf).not.toContain("bgstore:image-1.jpg");
+    // The one that fell off the end is the one whose files get collected.
+    await waitFor(() =>
+      expect(lastPruneKeep()).toEqual([
+        "image-2.jpg",
+        "image-3.jpg",
+        "image-4.jpg",
+        "image-5.jpg",
+        "image-6.jpg",
+      ]),
+    );
+  });
+
+  it("switches to a saved wallpaper without opening the picker", async () => {
+    await savePersonalization({
+      ...PERSONALIZATION_DEFAULTS,
+      chatBgOriginal: "bgstore:image-b.jpg",
+      chatBgRecents: [still("image-b.jpg"), still("image-a.jpg")],
+    });
+    writes.length = 0;
+
+    await renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Saved" }));
+
+    await waitFor(() => expect(writes.length).toBe(1));
+    const last = writes.at(-1) as Record<string, unknown>;
+    expect(last.chatBgOriginal).toBe("bgstore:image-a.jpg");
+    // No dialog, no re-copy, no re-decode - and the shelf is unchanged, so
+    // switching back and forth never reorders the tiles under the cursor.
+    expect(pickChatBackground).not.toHaveBeenCalled();
+    expect(shelfOf(last)).toEqual(["bgstore:image-b.jpg", "bgstore:image-a.jpg"]);
+    await waitFor(() => expect(lastPruneKeep()).toEqual(["image-a.jpg", "image-b.jpg"]));
+  });
+
+  it("shows no wallpaper for Default, and keeps the shelf anyway", async () => {
+    await savePersonalization({
+      ...PERSONALIZATION_DEFAULTS,
+      chatBgOriginal: "bgstore:image-a.jpg",
+      chatBgRecents: [still("image-a.jpg")],
+    });
+    writes.length = 0;
+
+    await renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /Default/ }));
+
+    await waitFor(() => expect(writes.length).toBe(1));
+    const last = writes.at(-1) as Record<string, unknown>;
+    expect(last.chatBgOriginal).toBeNull();
+    // "Not showing it" stopped meaning "not having it" the moment there was
+    // more than one to have.
+    expect(shelfOf(last)).toEqual(["bgstore:image-a.jpg"]);
+    await waitFor(() => expect(lastPruneKeep()).toEqual(["image-a.jpg"]));
+  });
+
+  it("throws a wallpaper away only when asked, and takes its files with it", async () => {
+    await savePersonalization({
+      ...PERSONALIZATION_DEFAULTS,
+      chatBgOriginal: "bgstore:image-b.jpg",
+      chatBgRecents: [still("image-b.jpg"), still("image-a.jpg")],
+    });
+    writes.length = 0;
+
+    await renderPage();
+    const [, saved] = screen.getAllByRole("button", { name: "Remove this background" });
+    fireEvent.click(saved);
+
+    await waitFor(() => expect(writes.length).toBe(1));
+    const last = writes.at(-1) as Record<string, unknown>;
+    expect(shelfOf(last)).toEqual(["bgstore:image-b.jpg"]);
+    // Still the wallpaper on screen; only the one let go is collected.
+    expect(last.chatBgOriginal).toBe("bgstore:image-b.jpg");
+    await waitFor(() => expect(lastPruneKeep()).toEqual(["image-b.jpg"]));
+  });
+
+  it("gives a wallpaper set before the shelf existed a tile of its own", async () => {
+    await savePersonalization({
+      ...PERSONALIZATION_DEFAULTS,
+      chatBgOriginal: "bgstore:image-legacy.jpg",
+    });
+    writes.length = 0;
+
+    await renderPage();
+
+    // Nothing on the shelf, yet the picture is on screen - it still gets a
+    // tile, so the picker never draws a wallpaper the user cannot switch back
+    // to.
+    expect(screen.getByRole("button", { name: "Current" })).toBeTruthy();
   });
 });
 
@@ -219,6 +372,30 @@ describe("slider commits over an animated wallpaper", () => {
       expect(last.chatBgVideoBaked).toBe("video-baked-new.mp4");
       expect(last.chatBgVideoBakedSigma).toBe(12);
     });
+  });
+});
+
+describe("how the message river is drawn", () => {
+  it("writes the text-size preset the chat reads", async () => {
+    await renderPage();
+    fireEvent.click(screen.getByRole("radio", { name: "Small" }));
+
+    await waitFor(() => expect(writes.at(-1)?.fontSize).toBe("small"));
+  });
+
+  it("keeps the per-pixel size behind expert mode", async () => {
+    await renderPage();
+    expect(screen.queryByLabelText("Custom size")).toBeNull();
+  });
+
+  it("writes compact mode and always-visible actions", async () => {
+    await renderPage();
+
+    fireEvent.click(screen.getByLabelText("Compact mode"));
+    await waitFor(() => expect(writes.at(-1)?.compactMode).toBe(true));
+
+    fireEvent.click(screen.getByLabelText("Always show message actions"));
+    await waitFor(() => expect(writes.at(-1)?.alwaysShowMessageActions).toBe(true));
   });
 });
 

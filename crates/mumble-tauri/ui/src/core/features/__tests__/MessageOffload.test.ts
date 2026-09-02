@@ -14,6 +14,7 @@ import {
   isHeavyContent,
   isOffloaded,
   offloadPlaceholder,
+  offloadSkeletonHeight,
   extractOffloadInfo,
   MessageOffloadManager,
   type MessageContentProvider,
@@ -155,6 +156,26 @@ describe("extractOffloadInfo", () => {
   it("handles zero content length", () => {
     const info = extractOffloadInfo("<!-- OFFLOADED:key:0 -->");
     expect(info).toEqual({ key: "key", contentLength: 0 });
+  });
+});
+
+// --- offloadSkeletonHeight ----------------------------------------
+
+describe("offloadSkeletonHeight", () => {
+  it("scales with the size the body ran to", () => {
+    expect(offloadSkeletonHeight(100_000)).toBe(300);
+    expect(offloadSkeletonHeight(200_000)).toBe(600);
+  });
+
+  it("clamps at both ends", () => {
+    // A thumbnail must not collapse to a line, and a screenshot must not open
+    // a hole the reader has to scroll past.
+    expect(offloadSkeletonHeight(1)).toBe(80);
+    expect(offloadSkeletonHeight(50_000_000)).toBe(600);
+  });
+
+  it("falls back to the floor for a legacy placeholder with no size", () => {
+    expect(offloadSkeletonHeight(0)).toBe(80);
   });
 });
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Box } from "@mui/material";
 import { TID } from "@core/testids";
 import { STAGE_HEIGHT_DEFAULT, STAGE_HEIGHT_MIN, STAGE_HEIGHT_STEP } from "./stageHeight";
@@ -92,15 +93,17 @@ export function StageResizeHandle({
     onCommit();
   }, [onChange, onCommit]);
 
+  const { t } = useTranslation("nebulaChat");
+
   return (
     <Box
       role="separator"
       aria-orientation="horizontal"
-      aria-label="Resize the stage"
+      aria-label={t("share.resizeStage")}
       aria-valuemin={STAGE_HEIGHT_MIN}
       aria-valuenow={height}
       tabIndex={0}
-      title="Drag to change how much room the stage takes. Double-click to reset."
+      title={t("share.resizeHint")}
       data-testid={TID.streamStageResizeHandle}
       data-dragging={dragging ? "true" : undefined}
       onPointerDown={onPointerDown}

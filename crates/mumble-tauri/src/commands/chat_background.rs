@@ -14,8 +14,13 @@
 //! Tauri's custom scheme, so `<video src="asset://...">` dies on Linux with a
 //! misleading decode error).
 //!
-//! File names are role-prefixed so derived files can be replaced without
-//! touching their source:
+//! The store holds several wallpapers at once - the record's shelf keeps the
+//! last few picks, and switching between them must not cost a re-copy - so
+//! nothing in here deletes on its own. Files only ever accumulate until
+//! [`prune_chat_backgrounds`] is handed the list the record still refers to.
+//!
+//! File names are role-prefixed, which is what lets a derived file be told
+//! apart from its source at a glance:
 //!
 //! - `image-*`: the picked still, or the poster frame of a picked clip
 //! - `processed-*`: the still with blur/dim baked in (`fancy_utils` pipeline)
@@ -96,9 +101,13 @@ fn background_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> 
     Ok(dir)
 }
 
-/// Delete every stored file whose name starts with one of `roles` (all files
-/// when `roles` is empty). Missing directory is fine - nothing was stored.
-fn clear_roles(dir: &std::path::Path, roles: &[&str]) -> Result<(), String> {
+/// Delete every stored file whose name is not in `keep` (all of them when
+/// `keep` is empty). Missing directory is fine - nothing was stored.
+///
+/// The store's only deletion: a wallpaper's files go when the record stops
+/// naming them, and not a moment earlier. Doing it any other way - retiring a
+/// role when a new file takes it - is what limited the store to one wallpaper.
+fn retain_only(dir: &std::path::Path, keep: &[String]) -> Result<(), String> {
     let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -106,11 +115,10 @@ fn clear_roles(dir: &std::path::Path, roles: &[&str]) -> Result<(), String> {
     };
     for entry in entries.flatten() {
         let name = entry.file_name();
-        let matches_role = roles.is_empty()
-            || roles
-                .iter()
-                .any(|role| name.to_string_lossy().starts_with(role));
-        if matches_role && entry.path().is_file() {
+        let spoken_for = keep
+            .iter()
+            .any(|wanted| name.as_os_str() == std::ffi::OsStr::new(wanted.as_str()));
+        if !spoken_for && entry.path().is_file() {
             let _ = std::fs::remove_file(entry.path());
         }
     }
@@ -180,7 +188,6 @@ pub(crate) async fn pick_chat_background(
                 MAX_VIDEO_BYTES / (1024 * 1024)
             ));
         }
-        clear_roles(&dir, &[])?;
         let file_name = format!("video-{}.{extension}", uuid::Uuid::new_v4());
         let destination = dir.join(&file_name);
         let _bytes = tokio::fs::copy(&source, &destination)
@@ -224,7 +231,6 @@ pub(crate) async fn pick_chat_background(
                 image::ImageFormat::Jpeg,
             )
             .map_err(|e| format!("encode image: {e}"))?;
-        clear_roles(&dir, &[])?;
         let file_name = format!("image-{}.jpg", uuid::Uuid::new_v4());
         std::fs::write(dir.join(&file_name), &jpeg).map_err(|e| format!("store image: {e}"))?;
         Ok(file_name)
@@ -256,8 +262,7 @@ pub(crate) fn read_chat_background(
     Ok(tauri::ipc::Response::new(bytes))
 }
 
-/// Bake blur/dim into a stored still, replacing any previous `processed-*`
-/// file, and return the new file's name.
+/// Bake blur/dim into a stored still and return the new file's name.
 #[tauri::command]
 pub(crate) async fn process_chat_background_image(
     app_handle: tauri::AppHandle,
@@ -285,7 +290,6 @@ pub(crate) async fn process_chat_background_image(
         }
         let processed = process_pipeline(&bytes, &transforms, true).map_err(|e| e.to_string())?;
 
-        clear_roles(&dir, &["processed-"])?;
         let out_name = format!("processed-{}.jpg", uuid::Uuid::new_v4());
         std::fs::write(dir.join(&out_name), &processed)
             .map_err(|e| format!("store processed image: {e}"))?;
@@ -313,7 +317,6 @@ pub(crate) async fn extract_chat_background_poster(
         let Ok(jpeg) = crate::media::chat_wallpaper::extract_poster(&path) else {
             return Ok(None);
         };
-        clear_roles(&dir, &["image-"])?;
         let out_name = format!("image-{}.jpg", uuid::Uuid::new_v4());
         std::fs::write(dir.join(&out_name), &jpeg).map_err(|e| format!("store poster: {e}"))?;
         Ok(Some(out_name))
@@ -334,7 +337,6 @@ pub(crate) async fn store_chat_background_poster(
         .decode(&image_base64)
         .map_err(|e| format!("decode poster: {e}"))?;
     let dir = background_dir(&app_handle)?;
-    clear_roles(&dir, &["image-"])?;
     let out_name = format!("image-{}.jpg", uuid::Uuid::new_v4());
     tokio::fs::write(dir.join(&out_name), &bytes)
         .await
@@ -342,8 +344,8 @@ pub(crate) async fn store_chat_background_poster(
     Ok(out_name)
 }
 
-/// Bake blur/dim into every frame of a stored clip ([`crate::media`]),
-/// replacing any previous `video-baked-*` file, and return the new name.
+/// Bake blur/dim into every frame of a stored clip ([`crate::media`]) and
+/// return the new file's name.
 ///
 /// Long-running: minutes for a long clip. Progress goes out as
 /// `chat-background-bake-progress` events; the caller decides what to do with
@@ -370,27 +372,34 @@ pub(crate) async fn bake_chat_background_video(
         .inspect_err(|_| {
             let _ = std::fs::remove_file(&out_path);
         })?;
-        // Only retire the previous bake once the new one exists, so a failed
-        // bake never leaves the record pointing at nothing.
-        let entries = std::fs::read_dir(&dir).map_err(|e| format!("read store: {e}"))?;
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            let name = name.to_string_lossy();
-            if name.starts_with("video-baked-") && name != out_name.as_str() {
-                let _ = std::fs::remove_file(entry.path());
-            }
-        }
+        // The bake it supersedes stays on disk until the record stops naming
+        // it, so a failed bake never leaves the record pointing at nothing.
         Ok(out_name)
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
-/// Forget the wallpaper, deleting every stored file.
+/// Delete every stored file the record no longer names.
+///
+/// The frontend collects `keep` from the record - the wallpaper on screen plus
+/// everything still on the shelf - after writing it, so anything left over is
+/// a wallpaper that was let go, a superseded bake, or the debris of a pick that
+/// failed part way through.
+#[tauri::command]
+pub(crate) fn prune_chat_backgrounds(
+    app_handle: tauri::AppHandle,
+    keep: Vec<String>,
+) -> Result<(), String> {
+    let dir = crate::e2e_data_dir(&app_handle)?.join(BACKGROUND_DIR);
+    retain_only(&dir, &keep)
+}
+
+/// Forget every wallpaper, deleting every stored file.
 #[tauri::command]
 pub(crate) fn clear_chat_background(app_handle: tauri::AppHandle) -> Result<(), String> {
     let dir = crate::e2e_data_dir(&app_handle)?.join(BACKGROUND_DIR);
-    clear_roles(&dir, &[])
+    retain_only(&dir, &[])
 }
 
 #[cfg(test)]
@@ -409,36 +418,60 @@ mod tests {
     }
 
     #[test]
-    fn clearing_by_role_leaves_other_roles_alone() {
+    fn pruning_keeps_exactly_what_the_record_still_names() {
         let temp = tempfile::tempdir().expect("tempdir");
         let dir = temp.path().join(BACKGROUND_DIR);
         std::fs::create_dir_all(&dir).expect("create");
-        std::fs::write(dir.join("video-a.mp4"), b"clip").expect("write");
-        std::fs::write(dir.join("video-baked-b.mp4"), b"baked").expect("write");
-        std::fs::write(dir.join("image-c.jpg"), b"poster").expect("write");
+        for name in [
+            "video-a.mp4",
+            "video-baked-b.mp4",
+            "image-c.jpg",
+            "processed-d.jpg",
+        ] {
+            std::fs::write(dir.join(name), b"bytes").expect("write");
+        }
 
-        clear_roles(&dir, &["video-baked-"]).expect("clear");
+        // The shelf still holds the clip and its poster; the superseded bake
+        // and the processed still it belonged to are what the prune is for.
+        retain_only(&dir, &["video-a.mp4".into(), "image-c.jpg".into()]).expect("prune");
         assert!(dir.join("video-a.mp4").exists());
-        assert!(!dir.join("video-baked-b.mp4").exists());
         assert!(dir.join("image-c.jpg").exists());
+        assert!(!dir.join("video-baked-b.mp4").exists());
+        assert!(!dir.join("processed-d.jpg").exists());
 
-        clear_roles(&dir, &[]).expect("clear all");
+        retain_only(&dir, &[]).expect("clear all");
         assert_eq!(std::fs::read_dir(&dir).expect("read").count(), 0);
 
-        // A pick before anything was ever stored must not error.
-        clear_roles(&temp.path().join("never-created"), &[]).expect("missing dir is fine");
+        // A prune before anything was ever stored must not error.
+        retain_only(&temp.path().join("never-created"), &[]).expect("missing dir is fine");
     }
 
     #[test]
-    fn video_baked_names_do_not_match_the_video_role_prefix_accidentally() {
-        // "video-baked-" starts with "video-", so clearing the raw clip role
-        // would also take the bake with it. That is intended: a new clip
-        // invalidates its predecessor's bake. This test just pins it down.
+    fn a_second_pick_leaves_the_first_wallpapers_files_alone() {
+        // What made the store single-wallpaper: every write retired its role,
+        // so the shelf could never name two of anything. Nothing deletes now
+        // except the prune, and the prune is handed the whole shelf.
         let temp = tempfile::tempdir().expect("tempdir");
         let dir = temp.path().join(BACKGROUND_DIR);
         std::fs::create_dir_all(&dir).expect("create");
-        std::fs::write(dir.join("video-baked-b.mp4"), b"baked").expect("write");
-        clear_roles(&dir, &["video-"]).expect("clear");
-        assert!(!dir.join("video-baked-b.mp4").exists());
+        std::fs::write(dir.join("image-first.jpg"), b"first").expect("write");
+        std::fs::write(dir.join("image-second.jpg"), b"second").expect("write");
+
+        retain_only(&dir, &["image-first.jpg".into(), "image-second.jpg".into()]).expect("prune");
+        assert!(dir.join("image-first.jpg").exists());
+        assert!(dir.join("image-second.jpg").exists());
+    }
+
+    #[test]
+    fn a_name_the_store_does_not_have_prunes_nothing_extra() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let dir = temp.path().join(BACKGROUND_DIR);
+        std::fs::create_dir_all(&dir).expect("create");
+        std::fs::write(dir.join("image-c.jpg"), b"poster").expect("write");
+
+        // A record copied from another machine names files this store never
+        // had; that must not take the files it does have with it.
+        retain_only(&dir, &["image-c.jpg".into(), "image-elsewhere.jpg".into()]).expect("prune");
+        assert!(dir.join("image-c.jpg").exists());
     }
 }

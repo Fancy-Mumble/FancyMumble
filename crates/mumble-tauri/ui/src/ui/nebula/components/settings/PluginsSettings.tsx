@@ -18,8 +18,8 @@ import {
   decodePluginInfo,
   type TrustRecord,
 } from "@core/plugins/tier1/trust";
-import { OfficialBadge, isOfficialPlugin } from "@standard/components/elements/OfficialBadge";
-import { Stack } from "../primitives";
+import { isOfficialPlugin } from "@core/plugins/tier1/official";
+import { OfficialBadge, Stack } from "../primitives";
 import { EmptyState, PageTitle, SettingsCard } from "./controls";
 
 interface PluginRow {

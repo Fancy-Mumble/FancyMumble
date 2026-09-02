@@ -7,15 +7,20 @@
  * component body. Keeping them pure means the layout decisions they encode
  * (ordering, indent depth, what counts as "today") are testable on their own.
  */
+import type { useTranslation } from "react-i18next";
 import { htmlToMarkdown, markdownToHtml } from "@standard/components/chat/markdown/MarkdownInput";
 import { hslToHex } from "@core/utils/colorUtils";
+import { formatTimestamp } from "@core/utils/format";
 import { hueFromKey } from "@shared/profilecard/tint";
+import { primaryRoles } from "@core/features/roster/roles";
 import type {
+  AclGroup,
   ChannelEntry,
   ConnectionStatus,
   KeyHolderEntry,
   SavedServer,
   SearchResult,
+  TimeFormat,
   UserEntry,
 } from "@core/types";
 import {
@@ -47,6 +52,16 @@ export interface ChannelFilter {
  * A channel survives the filter when it matches on its own, and its ancestors
  * are always kept so a deep match never appears detached from its parent.
  */
+/**
+ * The `t` the label-producing selectors take.
+ *
+ * They stay pure - the sentence is still decided here and only its wording
+ * comes from outside - so their tests need no i18n runtime, just a stub.  The
+ * type is derived from the hook so a caller's `t` always fits: everything
+ * these functions say lives in `nebulaCommon`.
+ */
+export type SelectorT = ReturnType<typeof useTranslation<"nebulaCommon">>["t"];
+
 export function orderChannels(input: ChannelFilter): OrderedChannel[] {
   const candidates = input.channels.filter((channel) => !channel.detached);
   const byId = new Map(candidates.map((channel) => [channel.id, channel]));
@@ -129,6 +144,144 @@ function byName(left: UserEntry, right: UserEntry) {
   return left.name.localeCompare(right.name);
 }
 
+/** A member row: the person, and the two facts a row outside the open channel
+ *  states about them - where they are, and whether they are here at all. */
+export interface RosterMember {
+  user: UserEntry;
+  /** The channel they are sitting in; null for someone who is not connected. */
+  channel: string | null;
+  offline: boolean;
+}
+
+/** The kinds of heading the roster draws, in the order they appear. */
+export type RosterGroupKind = "channel" | "role" | "members" | "guests";
+
+export interface RosterGroup {
+  /** Stable across renders: the role's name, or the kind for the fixed ones. */
+  key: string;
+  kind: RosterGroupKind;
+  /** The role's name. Empty for the three fixed groups, which name themselves. */
+  label: string;
+  /** The colour the server gave the role, where it gave one. */
+  color: string | null;
+  members: readonly RosterMember[];
+}
+
+export interface RosterInput {
+  /** Everyone the server has announced as connected. */
+  users: readonly UserEntry[];
+  /** Every registered user as an offline row (see `useRegisteredMembers`);
+   *  the ones who are connected are dropped here rather than by the caller. */
+  registered: readonly UserEntry[];
+  /** The root channel's ACL groups - what this server calls its roles. */
+  roles: readonly AclGroup[];
+  /** Read for the "where are they" column; a name, not an id, is what a row says. */
+  channels: readonly ChannelEntry[];
+  /** The panel's own search box. */
+  query: string;
+  /** The channel whose conversation is open: its occupants are the people who
+   *  can hear each other, which is what the first section is. */
+  selectedChannel: number | null;
+  /** Whether the registration table is drawn at all - on a server with
+   *  thousands registered it is not a small answer. */
+  showOffline: boolean;
+}
+
+/** Sentinel keys for the two catch-all buckets at the end of the list. */
+const ROSTER_MEMBERS = "__members__";
+const ROSTER_GUESTS = "__guests__";
+
+/** Online first, then alphabetical - an absent member is still a member, but
+ *  they are not who you are looking for when you open a roster. */
+function compareMembers(left: RosterMember, right: RosterMember): number {
+  if (left.offline !== right.offline) return left.offline ? 1 : -1;
+  return left.user.name.localeCompare(right.user.name);
+}
+
+/**
+ * The member panel, split into the groups it draws.
+ *
+ * Two questions, one list. "Who can hear me" is the channel you are reading,
+ * and it comes first because it is the one being asked while someone is
+ * talking. "Who is this server" is everyone else - and the answer worth
+ * reading is not a flat alphabet but the server's own structure, so the rest
+ * of the list is its roles in the order the operator put them in, each person
+ * under the first role that claims them.
+ *
+ * People appear twice on purpose: an admin sitting in your channel is both
+ * someone you are talking to and the person to ask, and a roster that made you
+ * choose which of those to look at would answer neither question.
+ *
+ * Empty groups are dropped, so a server with no roles configured is a channel
+ * section and one "Members" list rather than a column of empty headings.
+ */
+export function rosterGroups(input: RosterInput): RosterGroup[] {
+  const needle = input.query.trim().toLocaleLowerCase();
+  const matches = (user: UserEntry) => !needle || user.name.toLocaleLowerCase().includes(needle);
+  const channelNames = new Map(input.channels.map((channel) => [channel.id, channel.name]));
+
+  const here: RosterMember[] = [];
+  const everyone: RosterMember[] = [];
+  const connectedIds = new Set<number>();
+  for (const user of input.users) {
+    if (user.user_id != null && user.user_id > 0) connectedIds.add(user.user_id);
+    if (!matches(user)) continue;
+    const member: RosterMember = {
+      user,
+      channel: channelNames.get(user.channel_id) ?? null,
+      offline: false,
+    };
+    if (input.selectedChannel !== null && user.channel_id === input.selectedChannel) here.push(member);
+    everyone.push(member);
+  }
+
+  if (input.showOffline) {
+    for (const entry of input.registered) {
+      if (entry.user_id != null && connectedIds.has(entry.user_id)) continue;
+      if (!matches(entry)) continue;
+      // No channel: someone who is not connected is nowhere, and the last
+      // channel the registration table remembers is not where they are.
+      everyone.push({ user: entry, channel: null, offline: true });
+    }
+  }
+
+  const { roleOf, order, colors } = primaryRoles(input.roles);
+  const buckets = new Map<string, RosterMember[]>();
+  for (const member of everyone) {
+    const id = member.user.user_id;
+    // A user id of zero or below is Mumble's way of saying "not registered",
+    // and an unregistered user is in no group by definition.
+    const key = id == null || id <= 0 ? ROSTER_GUESTS : (roleOf.get(id) ?? ROSTER_MEMBERS);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(member);
+    else buckets.set(key, [member]);
+  }
+
+  const groups: RosterGroup[] = [
+    { key: "channel", kind: "channel", label: "", color: null, members: here.sort(compareMembers) },
+  ];
+  for (const name of order) {
+    const members = buckets.get(name);
+    if (!members) continue;
+    groups.push({
+      key: name,
+      kind: "role",
+      label: name,
+      color: colors.get(name) ?? null,
+      members: members.sort(compareMembers),
+    });
+  }
+  for (const [key, kind] of [
+    [ROSTER_MEMBERS, "members"],
+    [ROSTER_GUESTS, "guests"],
+  ] as const) {
+    const members = buckets.get(key);
+    if (!members) continue;
+    groups.push({ key, kind, label: "", color: null, members: members.sort(compareMembers) });
+  }
+  return groups.filter((group) => group.members.length > 0);
+}
+
 export interface ChannelPresence {
   /** People sitting in the channel right now. */
   inVoice: number;
@@ -168,11 +321,11 @@ export function channelPresence(
  * ordinary channel, where everyone who belongs is present, "5 in voice ·
  * 5 members" says one thing twice.
  */
-export function presenceLabel(presence: ChannelPresence): string {
-  if (presence.members === 0) return "Nobody here";
-  const voice = `${presence.inVoice} in voice`;
+export function presenceLabel(t: SelectorT, presence: ChannelPresence): string {
+  if (presence.members === 0) return t("presence.nobodyHere");
+  const voice = t("presence.inVoice", { count: presence.inVoice });
   if (presence.members <= presence.inVoice) return voice;
-  return `${voice} · ${presence.members} ${presence.members === 1 ? "member" : "members"}`;
+  return t("presence.withMembers", { voice, count: presence.members });
 }
 
 /**
@@ -291,6 +444,7 @@ function dayKey(date: Date): string {
  * changes just because a sender's client is old.
  */
 export function groupMessagesByDay<T extends { timestamp?: number | null }>(
+  t: SelectorT,
   messages: readonly T[],
   now: Date = new Date(),
 ): DaySection<T>[] {
@@ -310,9 +464,9 @@ export function groupMessagesByDay<T extends { timestamp?: number | null }>(
     }
     const label =
       key === today
-        ? "Today"
+        ? t("day.today")
         : key === yesterday
-          ? "Yesterday"
+          ? t("day.yesterday")
           : new Date(stamp ?? now.getTime()).toLocaleDateString(undefined, {
               weekday: "short",
               day: "numeric",
@@ -321,57 +475,6 @@ export function groupMessagesByDay<T extends { timestamp?: number | null }>(
     sections.push({ key, label, messages: [message] });
   }
   return sections;
-}
-
-export interface DirectConversation {
-  user: UserEntry;
-  /** Rendered preview of the most recent message, or null when there is none. */
-  preview: string | null;
-  timestamp: number | null;
-  unread: number;
-}
-
-/**
- * The Messages list: everyone with DM history first (most recent first), then
- * the rest of the server so a conversation can be started with anyone.
- */
-export function listDirectConversations(input: {
-  users: readonly UserEntry[];
-  ownSession: number | null;
-  /** Known thread tails, keyed by partner session. The store only keeps the
-   *  open conversation in memory, so most entries are absent and the row falls
-   *  back to a name-only preview. */
-  history: ReadonlyMap<number, readonly { body: string; timestamp?: number | null }[]>;
-  unreadCounts: ReadonlyMap<number, number> | Record<number, number>;
-  query: string;
-}): DirectConversation[] {
-  const counts: ReadonlyMap<number, number> =
-    input.unreadCounts instanceof Map
-      ? input.unreadCounts
-      : new Map(Object.entries(input.unreadCounts).map(([key, value]) => [Number(key), value]));
-  const unreadOf = (session: number) => counts.get(session) ?? 0;
-  const needle = input.query.trim().toLocaleLowerCase();
-
-  return input.users
-    .filter((user) => user.session !== input.ownSession)
-    .filter((user) => !needle || user.name.toLocaleLowerCase().includes(needle))
-    .map((user) => {
-      const thread = input.history.get(user.session) ?? [];
-      const last = thread.at(-1);
-      return {
-        user,
-        preview: last ? plainText(last.body) : null,
-        timestamp: last?.timestamp ?? null,
-        unread: unreadOf(user.session),
-      };
-    })
-    .sort(
-      (left, right) =>
-        Number(right.unread > 0) - Number(left.unread > 0) ||
-        Number(right.timestamp != null) - Number(left.timestamp != null) ||
-        (right.timestamp ?? 0) - (left.timestamp ?? 0) ||
-        left.user.name.localeCompare(right.user.name),
-    );
 }
 
 /** Message bodies are HTML; sidebar previews want one line of text. */
@@ -398,10 +501,55 @@ export type MessageContent = {
   /** Ids of the messages this one is replying to, oldest marker first. */
   quoteIds: string[];
   html: string;
-} & ({ kind: "text" } | { kind: "poll"; pollId: string } | { kind: "file"; payload: string });
+} & (
+  | { kind: "text" }
+  | { kind: "poll"; pollId: string }
+  /** Every file marker in the body, in the order they were written. */
+  | { kind: "file"; payloads: string[] }
+);
+
+/** One picture lifted out of a message body. */
+export interface BodyImage {
+  readonly src: string;
+  readonly alt: string;
+}
+
+/**
+ * Take the pictures out of a message body and hand them back separately.
+ *
+ * Rendered inside the body, a photograph inherits the bubble: a rounded panel,
+ * fourteen pixels of padding and a border, all of it drawn around a picture
+ * that is already a rectangle with an edge. That is the frame around every
+ * received image - and it is why several pictures sent together came out as a
+ * column of framed rectangles rather than one block.
+ *
+ * So they come out, and the row draws them itself: text keeps the bubble,
+ * pictures get the gallery, and a message that is only pictures gets no
+ * bubble at all.
+ *
+ * The `src` is handed over exactly as written - the lightbox's gallery is
+ * indexed by that string, not by the URL a browser would resolve it to.
+ */
+export function splitBodyImages(html: string): { html: string; images: BodyImage[] } {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const found = doc.querySelectorAll("img");
+  // Nothing was touched, so hand back the string that came in rather than a
+  // re-serialised copy of it.
+  if (found.length === 0) return { html, images: [] };
+
+  const images: BodyImage[] = [];
+  for (const image of found) {
+    const src = image.getAttribute("src") ?? "";
+    // A picture with no source is nothing to show and nothing to enlarge, but
+    // it is still markup: drop it rather than leaving a broken tile behind.
+    if (src) images.push({ src, alt: image.getAttribute("alt") ?? "" });
+    image.remove();
+  }
+  return { html: doc.body.innerHTML.trim(), images };
+}
 
 const POLL_MARKER = /<!-- FANCY_POLL:(.+?) -->/;
-const FILE_MARKER = /<!-- FANCY_FILE:([A-Za-z0-9+/=]+) -->/;
+const FILE_MARKER = /<!-- FANCY_FILE:([A-Za-z0-9+/=]+) -->/g;
 const QUOTE_MARKER = /<!-- FANCY_QUOTE:(.+?) -->/g;
 
 export function messageContent(body: string): MessageContent {
@@ -417,9 +565,12 @@ export function messageContent(body: string): MessageContent {
     return { kind: "poll", pollId: poll[1], quoteIds, html: rest.replace(POLL_MARKER, "").trim() };
   }
 
-  const file = FILE_MARKER.exec(rest);
-  if (file) {
-    return { kind: "file", payload: file[1], quoteIds, html: rest.replace(FILE_MARKER, "").trim() };
+  // Every marker, not the first: a batch of photographs sent together is one
+  // message carrying one marker each, and reading only the first would draw
+  // the first picture and silently drop the rest.
+  const files = [...rest.matchAll(FILE_MARKER)].map((match) => match[1]!);
+  if (files.length > 0) {
+    return { kind: "file", payloads: files, quoteIds, html: rest.replaceAll(FILE_MARKER, "").trim() };
   }
 
   return { kind: "text", quoteIds, html: rest };
@@ -455,9 +606,43 @@ export function editableText(body: string): string {
 }
 
 /** `18:06` in the user's locale, matching the mock's message stamps. */
-export function formatTime(timestamp: number | null | undefined): string {
+/**
+ * The clock settings a timestamp is read under.
+ *
+ * Three separate preferences decide what "14:05" should say, and a reading
+ * that consults none of them is not a shorter answer but a different one: the
+ * user picked 12-hour and got 24, or asked for the server's time and got their
+ * own. They travel together because they are only ever used together.
+ */
+export interface TimeDisplay {
+  /** "12h", "24h", or "auto" - follow the operating system. */
+  timeFormat: TimeFormat;
+  /** False reads the stamp in UTC, which is what "show server time" asks for. */
+  localTime: boolean;
+  /** What the OS reports for "auto"; undefined falls back to `Intl`. */
+  systemUses24h: boolean | undefined;
+}
+
+/** What the clock reads as before the stored preferences have arrived. */
+export const DEFAULT_TIME_DISPLAY: TimeDisplay = {
+  timeFormat: "auto",
+  localTime: true,
+  systemUses24h: undefined,
+};
+
+/**
+ * A message's time of day, under the reader's own settings.
+ *
+ * The formatting itself is core's, shared with Standard: a clock that differs
+ * between two designs of the same client is a bug in whichever one you are not
+ * looking at. Nebula's Language & format page writes exactly these fields.
+ */
+export function formatTime(
+  timestamp: number | null | undefined,
+  display: TimeDisplay = DEFAULT_TIME_DISPLAY,
+): string {
   if (!timestamp) return "";
-  return new Date(timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return formatTimestamp(timestamp, display.timeFormat, display.localTime, display.systemUses24h);
 }
 
 export interface ServerGroup {
@@ -776,6 +961,8 @@ export interface QuickSwitchTarget {
 
 /** Everything the quick switcher can reach, before the query narrows it. */
 export interface QuickSwitchInput {
+  /** Rides in the input so the whole matching chain can name what it found. */
+  t: SelectorT;
   channels: readonly ChannelEntry[];
   users: readonly UserEntry[];
   sessions: readonly (GroupableSession & { label?: string })[];
@@ -798,6 +985,7 @@ export interface QuickSwitchInput {
  * open with yourself.
  */
 export function quickSwitchTargets(input: QuickSwitchInput): QuickSwitchTarget[] {
+  const { t } = input;
   const targets: QuickSwitchTarget[] = [
     ...input.channels
       .filter((channel) => !channel.detached)
@@ -806,7 +994,7 @@ export function quickSwitchTargets(input: QuickSwitchInput): QuickSwitchTarget[]
         kind: "channel" as const,
         id: channel.id,
         label: channel.name,
-        detail: channel.user_count === 1 ? "1 person here" : `${channel.user_count} people here`,
+        detail: t("jump.peopleHere", { count: channel.user_count }),
       })),
     ...input.users
       .filter((user) => user.session !== input.ownSession)
@@ -815,7 +1003,7 @@ export function quickSwitchTargets(input: QuickSwitchInput): QuickSwitchTarget[]
         kind: "person" as const,
         id: user.session,
         label: user.name,
-        detail: "Direct message",
+        detail: t("app.directMessage"),
       })),
     ...input.sessions.filter(isLive).map((session) => ({
       key: `server-${session.id}`,
@@ -885,6 +1073,8 @@ export interface GlobalSearchRow {
 
 /** Everything the global search draws from, for one query. */
 export interface GlobalSearchInput {
+  /** Rides in the input so the whole matching chain can name what it found. */
+  t: SelectorT;
   /** What `super_search` answered with. Empty while the query is blank - the
    *  backend has nothing to fuzzy-match against and returns nothing. */
   results: readonly SearchResult[];
@@ -895,6 +1085,8 @@ export interface GlobalSearchInput {
   /** How the server the results came from is named under a channel. */
   serverLabel: string;
   query: string;
+  /** The clock a matched message's time is read under. */
+  time?: TimeDisplay;
 }
 
 /** Kinds in the order the mock heads them, and the tie-break when two groups
@@ -930,11 +1122,12 @@ function substringScore(query: string, text: string): number | null {
   return haystack.length - needle.length;
 }
 
-function occupancy(count: number): string {
-  return count === 1 ? "1 person here" : `${count} people here`;
+function occupancy(t: SelectorT, count: number): string {
+  return t("jump.peopleHere", { count });
 }
 
 function channelRow(
+  t: SelectorT,
   id: number,
   fallbackName: string,
   channel: ChannelEntry | undefined,
@@ -949,7 +1142,7 @@ function channelRow(
     title: channel?.name ?? fallbackName,
     context: null,
     subtitle: serverLabel,
-    meta: occupancy(count),
+    meta: occupancy(t, count),
     occupied: count > 0,
     score,
     opens: "channel",
@@ -959,6 +1152,7 @@ function channelRow(
 }
 
 function personRow(
+  t: SelectorT,
   session: number,
   fallbackName: string,
   user: UserEntry | undefined,
@@ -976,7 +1170,7 @@ function personRow(
     // Everyone on a Mumble server occupies a channel, so a person the roster
     // still knows is by definition reachable in voice; one who has left is
     // only somebody to write to.
-    subtitle: seat ? `in voice · # ${seat.name}` : "Direct message",
+    subtitle: seat ? t("jump.inVoiceChannel", { channel: seat.name }) : t("app.directMessage"),
     meta: "",
     occupied: false,
     score,
@@ -1020,11 +1214,11 @@ function matchedRows(input: GlobalSearchInput): GlobalSearchRow[] {
     if (result.category === "channel") {
       const channel = input.channels.find((entry) => entry.id === result.id);
       if (channel?.detached) continue;
-      rows.push(channelRow(result.id, result.title, channel, input.serverLabel, result.score));
+      rows.push(channelRow(input.t, result.id, result.title, channel, input.serverLabel, result.score));
     } else if (result.category === "user") {
       if (result.id === input.ownSession) continue;
       const user = input.users.find((entry) => entry.session === result.id);
-      rows.push(personRow(result.id, result.title, user, input.channels, result.score));
+      rows.push(personRow(input.t, result.id, result.title, user, input.channels, result.score));
     } else {
       const message = result.message;
       if (!message) continue;
@@ -1038,7 +1232,7 @@ function matchedRows(input: GlobalSearchInput): GlobalSearchRow[] {
         title: message.sender_name,
         context: message.context,
         subtitle: plainText(result.title),
-        meta: formatTime(message.timestamp),
+        meta: formatTime(message.timestamp, input.time),
         occupied: false,
         score: result.score,
         opens: message.dm ? "person" : "channel",
@@ -1080,6 +1274,7 @@ function localRows(input: GlobalSearchInput): GlobalSearchRow[] {
     if (target.kind === "channel") {
       const id = Number(target.id);
       return channelRow(
+        input.t,
         id,
         target.label,
         input.channels.find((channel) => channel.id === id),
@@ -1090,6 +1285,7 @@ function localRows(input: GlobalSearchInput): GlobalSearchRow[] {
     if (target.kind === "person") {
       const session = Number(target.id);
       return personRow(
+        input.t,
         session,
         target.label,
         input.users.find((user) => user.session === session),

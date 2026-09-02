@@ -1,7 +1,8 @@
 import { useRef, useEffect, useLayoutEffect, useCallback, useState, useMemo } from "react";
 import { useAppStore } from "../../store";
 import type { ChatMessage } from "../../types";
-import { offloadManager, type MessageScope } from "../../messageOffload";
+import type { MessageScope } from "../../messageOffload";
+import { useMessageOffload } from "./useMessageOffload";
 import {
   BASE_WINDOW,
   GROW_THRESHOLD_PX,
@@ -78,8 +79,16 @@ export function useChatScroll({
   /** Track the first message ID to detect history-prepend vs new-message-append. */
   const prevFirstMsgIdRef = useRef<string | null>(null);
 
-  /** Set of message IDs currently being restored from offload storage. */
-  const [restoringKeys, setRestoringKeys] = useState<Set<string>>(new Set());
+  /**
+   * Heavy bodies are handed to cold storage while they are out of view; the
+   * set is the ones coming back right now.  See `useMessageOffload` - the rows
+   * below carry the two attributes it watches for.
+   */
+  const { restoringKeys } = useMessageOffload({
+    containerRef: messagesContainerRef,
+    innerRef: messagesInnerRef,
+    currentScope,
+  });
 
   /**
    * Pending unread count captured when switching to a channel that had
@@ -388,90 +397,6 @@ export function useChatScroll({
     // "new messages" divider with context above it.
     growPendingRef.current = null;
     setTailCount(initialTailCount(pendingUnreadRef.current));
-  }, [selectedChannel, selectedDmUser]);
-
-  // Offload IntersectionObserver.
-  const scopeRef = useRef(currentScope);
-  scopeRef.current = currentScope;
-
-  useEffect(() => {
-    const inner = messagesInnerRef.current;
-    const container = messagesContainerRef.current;
-    if (!inner || !container) return;
-
-    const refreshForScope = (scope: MessageScope) => {
-      const state = useAppStore.getState();
-      if (scope.scope === "channel") {
-        state.refreshMessages(Number(scope.scopeId));
-      } else if (scope.scope === "dm") {
-        state.refreshDmMessages(Number(scope.scopeId));
-      }
-    };
-
-    const handleRestored = (scope: MessageScope, restoredIds: string[]) => {
-      setRestoringKeys((prev) => {
-        const next = new Set(prev);
-        for (const id of restoredIds) next.delete(id);
-        return next;
-      });
-      if (restoredIds.length > 0) refreshForScope(scope);
-    };
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const scope = scopeRef.current();
-        if (!scope) return;
-
-        const toRestore: string[] = [];
-
-        for (const entry of entries) {
-          const el = entry.target as HTMLElement;
-          const msgId = el.dataset.msgId;
-          if (!msgId) continue;
-
-          if (entry.isIntersecting) {
-            offloadManager.cancelOffload(msgId);
-            if (offloadManager.isOffloaded(msgId)) {
-              toRestore.push(msgId);
-            }
-          } else if (el.dataset.msgHeavy !== undefined) {
-            offloadManager.scheduleOffload(msgId, scope, () => {
-              refreshForScope(scope);
-            });
-          }
-        }
-
-        if (toRestore.length > 0) {
-          setRestoringKeys((prev) => {
-            const next = new Set(prev);
-            for (const id of toRestore) next.add(id);
-            return next;
-          });
-          offloadManager.restoreMany(toRestore, scope).then((results) => {
-            handleRestored(scope, Object.keys(results));
-          });
-        }
-      },
-      {
-        root: container,
-        rootMargin: "800px 0px 800px 0px",
-      },
-    );
-
-    const observeAll = () => {
-      for (const el of inner.querySelectorAll<HTMLElement>("[data-msg-id]")) {
-        observer.observe(el);
-      }
-    };
-    observeAll();
-
-    const mutObs = new MutationObserver(observeAll);
-    mutObs.observe(inner, { childList: true, subtree: true });
-
-    return () => {
-      observer.disconnect();
-      mutObs.disconnect();
-    };
   }, [selectedChannel, selectedDmUser]);
 
   /** Jump-to-bottom handler used by the "new messages" pill. */

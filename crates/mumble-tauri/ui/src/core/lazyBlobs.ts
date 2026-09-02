@@ -75,7 +75,7 @@ async function fetchUserAvatar(session: number, expectedSize: number): Promise<s
   const promise = (async () => {
     try {
       // Offline registered users use a negative pseudo-session
-      // `-(user_id + 1)` (see MembersTab.synthesiseOfflineEntry); their avatar
+      // `-(user_id + 1)` (see roster/registeredMembers.synthesiseOfflineEntry); their avatar
       // lives in the per-user_id cache, fetched via a separate command.
       const bytes =
         session < 0

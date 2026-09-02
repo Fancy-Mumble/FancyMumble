@@ -1,5 +1,7 @@
+import { useTranslation } from "react-i18next";
 import { Box, Typography } from "@mui/material";
 import { Stack } from "../../primitives";
+import { washPanel } from "../../../theme";
 import { CloseIcon } from "@ui/icons";
 
 /**
@@ -38,6 +40,7 @@ export function PopoverPanel({
   footer,
   children,
 }: Readonly<PopoverPanelProps>) {
+  const { t } = useTranslation("common");
   return (
     <Box
       role="dialog"
@@ -54,10 +57,7 @@ export function PopoverPanel({
         flexDirection: "column",
         borderRadius: "16px",
         overflow: "hidden",
-        background: theme.palette.nebula.wash,
-        backdropFilter: "blur(36px) saturate(160%)",
-        WebkitBackdropFilter: "blur(36px) saturate(160%)",
-        border: `1px solid ${theme.palette.nebula.washLine}`,
+        ...washPanel(theme),
       })}
     >
       {header ?? (
@@ -86,7 +86,7 @@ export function PopoverPanel({
           <Box
             component="button"
             type="button"
-            aria-label="Close"
+            aria-label={t("actions.close")}
             onClick={onClose}
             sx={(theme) => ({
               all: "unset",

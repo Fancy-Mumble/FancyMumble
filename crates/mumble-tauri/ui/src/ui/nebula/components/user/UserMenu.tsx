@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Alert,
   Box,
@@ -53,6 +54,14 @@ export interface UserMenuTarget {
   y: number;
 }
 
+/**
+ * The namespaces this menu reads, kept in one place so the helpers below can
+ * take exactly the `t` the components hand them - a `t` typed against a
+ * different namespace list is not the same function to TypeScript.
+ */
+const MENU_NS = ["nebulaUser", "sidebar", "common"] as const;
+type MenuT = ReturnType<typeof useTranslation<typeof MENU_NS>>["t"];
+
 interface UserMenuProps {
   /** The row that was right-clicked, or null when the menu is closed. */
   target: UserMenuTarget | null;
@@ -61,6 +70,9 @@ interface UserMenuProps {
   onMessage?: (session: number) => void;
   /** Open the User Information sheet; omitted from the menu without it. */
   onInfo?: (session: number) => void;
+  /** Enter the channel this person is in. The shell answers this rather than
+   *  the store, because a restricted room has a password to ask for first. */
+  onJoinChannel: (channelId: number) => void;
 }
 
 /**
@@ -83,7 +95,14 @@ interface UserMenuProps {
  * their own copy of the target so dismissing the menu to show a dialog does
  * not take the dialog's subject with it.
  */
-export function UserMenu({ target, onClose, onMessage, onInfo }: Readonly<UserMenuProps>) {
+export function UserMenu({
+  target,
+  onClose,
+  onMessage,
+  onInfo,
+  onJoinChannel,
+}: Readonly<UserMenuProps>) {
+  const { t } = useTranslation(MENU_NS);
   const [pending, setPending] = useState<Pending | null>(null);
   const [note, setNote] = useState<Note | null>(null);
 
@@ -95,6 +114,7 @@ export function UserMenu({ target, onClose, onMessage, onInfo }: Readonly<UserMe
           onClose={onClose}
           onMessage={onMessage}
           onInfo={onInfo}
+          onJoinChannel={onJoinChannel}
           onConfirm={setPending}
           onNote={setNote}
         />
@@ -113,12 +133,12 @@ export function UserMenu({ target, onClose, onMessage, onInfo }: Readonly<UserMe
 
       {pending && pending.kind !== "move" && (
         <ConfirmDialog
-          {...CONFIRMATIONS[pending.kind](pending.user)}
+          {...confirmationFor(t, pending.kind, pending.user)}
           onCancel={() => setPending(null)}
           onConfirm={() => {
             const request = pending;
             setPending(null);
-            void runConfirmed(request).then(setNote);
+            void runConfirmed(t, request).then(setNote);
           }}
         />
       )}
@@ -146,6 +166,7 @@ interface UserMenuSurfaceProps {
   onClose: () => void;
   onMessage?: (session: number) => void;
   onInfo?: (session: number) => void;
+  onJoinChannel: (channelId: number) => void;
   onConfirm: (pending: Pending) => void;
   onNote: (note: Note) => void;
 }
@@ -155,9 +176,11 @@ function UserMenuSurface({
   onClose,
   onMessage,
   onInfo,
+  onJoinChannel,
   onConfirm,
   onNote,
 }: Readonly<UserMenuSurfaceProps>) {
+  const { t } = useTranslation(MENU_NS);
   const { user } = target;
   const channels = useAppStore((state) => state.channels);
   const ownSession = useAppStore((state) => state.ownSession);
@@ -201,11 +224,11 @@ function UserMenuSurface({
 
   const toggleFriend = async () => {
     try {
-      onNote(await writeFriend(user, friend));
+      onNote(await writeFriend(t, user, friend));
       onClose();
     } catch (error) {
       console.error("toggle friend failed:", error);
-      onNote({ severity: "error", message: "Could not update your friends list." });
+      onNote({ severity: "error", message: t("nebulaUser:notes.friendsFailed") });
     }
   };
 
@@ -224,14 +247,14 @@ function UserMenuSurface({
               key="self"
               sx={(theme) => ({ px: "14px", py: "8px", fontSize: 11.5, color: theme.palette.nebula.muted })}
             >
-              That&rsquo;s you.
+              {t("nebulaUser:menu.self")}
             </Typography>,
             onInfo ? (
               <MenuItem key="info" onClick={run(() => onInfo(user.session))}>
                 <Glyph>
                   <InfoIcon width={13} height={13} />
                 </Glyph>
-                User information
+                {t("nebulaUser:menu.userInformation")}
               </MenuItem>
             ) : null,
           ]
@@ -254,7 +277,7 @@ function UserMenuSurface({
                 min={0}
                 max={200}
                 value={volume}
-                aria-label={`Volume for ${user.name}`}
+                aria-label={t("nebulaUser:menu.volumeFor", { name: user.name })}
                 onChange={(_event, next) => setVolume(next as number)}
                 onChangeCommitted={(_event, next) => applyVolume(next as number)}
                 sx={{ flex: 1 }}
@@ -276,7 +299,7 @@ function UserMenuSurface({
                 <Glyph>
                   <MessageCircleIcon width={13} height={13} />
                 </Glyph>
-                Message
+                {t("nebulaUser:menu.message")}
               </MenuItem>
             ) : null,
 
@@ -285,7 +308,7 @@ function UserMenuSurface({
                 <Glyph>
                   <InfoIcon width={13} height={13} />
                 </Glyph>
-                User information
+                {t("nebulaUser:menu.userInformation")}
               </MenuItem>
             ) : null,
 
@@ -293,18 +316,20 @@ function UserMenuSurface({
               <Glyph>
                 {friend ? <UserXIcon width={13} height={13} /> : <UserPlusIcon width={13} height={13} />}
               </Glyph>
-              {friend ? "Remove friend" : "Add friend"}
+              {friend ? t("sidebar:userMenu.removeFriend") : t("nebulaUser:menu.addFriend")}
             </MenuItem>,
 
             actions.canJoinChannel ? (
               <MenuItem
                 key="join"
-                onClick={run(() => void useAppStore.getState().joinChannel(user.channel_id))}
+                onClick={run(() => onJoinChannel(user.channel_id))}
               >
                 <Glyph>
                   <HashIcon width={13} height={13} />
                 </Glyph>
-                {`Join ${actions.userChannel?.name ?? "their channel"}`}
+                {t("nebulaUser:menu.joinChannel", {
+                  channel: actions.userChannel?.name ?? t("nebulaUser:menu.theirChannel"),
+                })}
               </MenuItem>
             ) : null,
           ]}
@@ -318,7 +343,7 @@ function UserMenuSurface({
                 <Glyph>
                   {user.mute ? <MicIcon width={13} height={13} /> : <MicOffIcon width={13} height={13} />}
                 </Glyph>
-                {user.mute ? "Unmute on server" : "Mute on server"}
+                {user.mute ? t("nebulaUser:menu.unmuteOnServer") : t("nebulaUser:menu.muteOnServer")}
               </MenuItem>
             ) : null,
             actions.canMuteDeafen ? (
@@ -330,7 +355,9 @@ function UserMenuSurface({
                     <HeadphonesOffIcon width={13} height={13} />
                   )}
                 </Glyph>
-                {user.deaf ? "Undeafen on server" : "Deafen on server"}
+                {user.deaf
+                  ? t("nebulaUser:menu.undeafenOnServer")
+                  : t("nebulaUser:menu.deafenOnServer")}
               </MenuItem>
             ) : null,
             actions.canMuteDeafen ? (
@@ -338,7 +365,9 @@ function UserMenuSurface({
                 <Glyph>
                   <StarIcon width={13} height={13} />
                 </Glyph>
-                {user.priority_speaker ? "Remove priority speaker" : "Priority speaker"}
+                {user.priority_speaker
+                  ? t("nebulaUser:menu.removePrioritySpeaker")
+                  : t("sidebar:userMenu.prioritySpeaker")}
               </MenuItem>
             ) : null,
             actions.canMove ? (
@@ -346,7 +375,7 @@ function UserMenuSurface({
                 <Glyph>
                   <HashIcon width={13} height={13} />
                 </Glyph>
-                Move to channel…
+                {t("nebulaUser:menu.moveToChannel")}
               </MenuItem>
             ) : null,
             actions.canRegister ? (
@@ -354,7 +383,7 @@ function UserMenuSurface({
                 <Glyph>
                   <UserPlusIcon width={13} height={13} />
                 </Glyph>
-                Register on server…
+                {t("nebulaUser:menu.registerOnServer")}
               </MenuItem>
             ) : null,
             actions.canUnregister ? (
@@ -366,7 +395,7 @@ function UserMenuSurface({
                 <Glyph>
                   <UserXIcon width={13} height={13} />
                 </Glyph>
-                Deregister…
+                {t("nebulaUser:menu.deregister")}
               </MenuItem>
             ) : null,
 
@@ -376,7 +405,7 @@ function UserMenuSurface({
                 <Glyph>
                   <MessageMinusIcon width={13} height={13} />
                 </Glyph>
-                Reset comment
+                {t("sidebar:userMenu.resetComment")}
               </MenuItem>
             ) : null,
             actions.canResetContent ? (
@@ -384,7 +413,7 @@ function UserMenuSurface({
                 <Glyph>
                   <ImageIcon width={13} height={13} />
                 </Glyph>
-                Remove avatar
+                {t("sidebar:userMenu.removeAvatar")}
               </MenuItem>
             ) : null,
 
@@ -400,7 +429,7 @@ function UserMenuSurface({
                 <Glyph>
                   <TrashIcon width={13} height={13} />
                 </Glyph>
-                Delete their messages…
+                {t("nebulaUser:menu.deleteTheirMessages")}
               </MenuItem>
             ) : null,
             actions.canKick ? (
@@ -408,7 +437,7 @@ function UserMenuSurface({
                 <Glyph>
                   <UserXIcon width={13} height={13} />
                 </Glyph>
-                Kick
+                {t("sidebar:userMenu.kick")}
               </MenuItem>
             ) : null,
             actions.canBan ? (
@@ -416,7 +445,7 @@ function UserMenuSurface({
                 <Glyph>
                   <BlockIcon width={13} height={13} />
                 </Glyph>
-                Ban
+                {t("sidebar:userMenu.ban")}
               </MenuItem>
             ) : null,
           ]
@@ -475,10 +504,10 @@ function useFriendEntry(user: UserEntry, isSelf: boolean): Friend | null {
 }
 
 /** Add or drop the friend, capturing enough to reach them while they are offline. */
-async function writeFriend(user: UserEntry, friend: Friend | null): Promise<Note> {
+async function writeFriend(t: MenuT, user: UserEntry, friend: Friend | null): Promise<Note> {
   if (friend) {
     await removeFriend(friend.id);
-    return { severity: "info", message: `${user.name} is no longer a friend.` };
+    return { severity: "info", message: t("nebulaUser:notes.friendRemoved", { name: user.name }) };
   }
 
   const { activeServerId, sessions } = useAppStore.getState();
@@ -500,7 +529,7 @@ async function writeFriend(user: UserEntry, friend: Friend | null): Promise<Note
         }
       : {}),
   });
-  return { severity: "success", message: `${user.name} added to your friends.` };
+  return { severity: "success", message: t("nebulaUser:notes.friendAdded", { name: user.name }) };
 }
 
 // -- Moderation -----------------------------------------------------
@@ -544,60 +573,80 @@ export interface Note {
   message: string;
 }
 
-const CONFIRMATIONS: Record<
-  Exclude<Pending["kind"], "move">,
-  (user: UserEntry) => { title: string; body: string; confirmLabel: string; danger?: boolean }
-> = {
-  register: (user) => ({
-    title: "Register this user?",
-    body: `${user.name} will get a permanent account on this server, keeping their name and any groups they are put in.`,
-    confirmLabel: "Register",
-  }),
-  unregister: (user) => ({
-    title: "Deregister this user?",
-    body: `${user.name}'s account and everything the server stores against it are deleted. This cannot be undone.`,
-    confirmLabel: "Deregister",
-    danger: true,
-  }),
-  "delete-messages": (user) => ({
-    title: "Delete their messages?",
-    body: `Every message ${user.name} has sent in this channel is removed for everyone. This cannot be undone.`,
-    confirmLabel: "Delete",
-    danger: true,
-  }),
-};
+/** What the confirmation for one destructive action says. */
+function confirmationFor(
+  t: MenuT,
+  kind: Exclude<Pending["kind"], "move">,
+  user: UserEntry,
+): { title: string; body: string; confirmLabel: string; danger?: boolean } {
+  const name = user.name;
+  switch (kind) {
+    case "register":
+      return {
+        title: t("nebulaUser:confirm.registerTitle"),
+        body: t("nebulaUser:confirm.registerBody", { name }),
+        confirmLabel: t("sidebar:userMenu.register"),
+      };
+    case "unregister":
+      return {
+        title: t("nebulaUser:confirm.deregisterTitle"),
+        body: t("nebulaUser:confirm.deregisterBody", { name }),
+        confirmLabel: t("nebulaUser:confirm.deregisterConfirm"),
+        danger: true,
+      };
+    case "delete-messages":
+      return {
+        title: t("nebulaUser:confirm.deleteMessagesTitle"),
+        body: t("nebulaUser:confirm.deleteMessagesBody", { name }),
+        confirmLabel: t("sidebar:userMenu.deleteConfirm"),
+        danger: true,
+      };
+  }
+}
 
 /** Carry out a confirmed action and say how it went. */
-async function runConfirmed(pending: Exclude<Pending, { kind: "move" }>): Promise<Note> {
+async function runConfirmed(t: MenuT, pending: Exclude<Pending, { kind: "move" }>): Promise<Note> {
   const { user } = pending;
   switch (pending.kind) {
     case "register":
       try {
         await invoke("register_user", { session: user.session });
-        return { severity: "success", message: `${user.name} is now registered.` };
+        return { severity: "success", message: t("nebulaUser:notes.registered", { name: user.name }) };
       } catch (error) {
         console.error("register_user failed:", error);
-        return { severity: "error", message: `Could not register ${user.name}.` };
+        return {
+          severity: "error",
+          message: t("nebulaUser:notes.registerFailed", { name: user.name }),
+        };
       }
     case "unregister":
       try {
         // Deregistering is an edit of the server's user list with the name
         // cleared, not a command of its own.
         await invoke("update_user_list", { users: [{ user_id: user.user_id, name: null }] });
-        return { severity: "success", message: `${user.name} is no longer registered.` };
+        return { severity: "success", message: t("nebulaUser:notes.deregistered", { name: user.name }) };
       } catch (error) {
         console.error("unregister (update_user_list) failed:", error);
-        return { severity: "error", message: `Could not deregister ${user.name}.` };
+        return {
+          severity: "error",
+          message: t("nebulaUser:notes.deregisterFailed", { name: user.name }),
+        };
       }
     case "delete-messages":
       if (pending.channelId === null || !user.hash)
-        return { severity: "error", message: "There is no channel to delete from." };
+        return { severity: "error", message: t("nebulaUser:notes.noChannelToDeleteFrom") };
       try {
         await useAppStore.getState().deletePchatMessages(pending.channelId, { senderHash: user.hash });
-        return { severity: "success", message: `Deleted ${user.name}'s messages in this channel.` };
+        return {
+          severity: "success",
+          message: t("nebulaUser:notes.messagesDeleted", { name: user.name }),
+        };
       } catch (error) {
         console.error("delete user messages failed:", error);
-        return { severity: "error", message: `Could not delete ${user.name}'s messages.` };
+        return {
+          severity: "error",
+          message: t("nebulaUser:notes.deleteMessagesFailed", { name: user.name }),
+        };
       }
   }
 }
@@ -620,6 +669,7 @@ function ConfirmDialog({
   onConfirm,
   onCancel,
 }: Readonly<ConfirmDialogProps>) {
+  const { t } = useTranslation("common");
   return (
     <Dialog open onClose={onCancel} maxWidth="xs" fullWidth>
       <DialogContent>
@@ -629,7 +679,7 @@ function ConfirmDialog({
         </Typography>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onCancel}>Cancel</Button>
+        <Button onClick={onCancel}>{t("actions.cancel")}</Button>
         <Button
           onClick={onConfirm}
           variant="contained"
@@ -658,6 +708,7 @@ interface MoveUserDialogProps {
  * channel" is nearly always answered by which one has people in it.
  */
 export function MoveUserDialog({ user, onClose, onDone }: Readonly<MoveUserDialogProps>) {
+  const { t } = useTranslation(MENU_NS);
   const channels = useAppStore((state) => state.channels);
   const users = useAppStore((state) => state.users);
   const [query, setQuery] = useState("");
@@ -678,33 +729,41 @@ export function MoveUserDialog({ user, onClose, onDone }: Readonly<MoveUserDialo
 
   const pick = useCallback(
     async (channel: ChannelEntry) => {
-      const name = channel.name || "the root channel";
+      const name = channel.name || t("nebulaUser:move.rootChannel");
       try {
         await invoke("move_user_to_channel", { session: user.session, channelId: channel.id });
-        onDone({ severity: "success", message: `Moved ${user.name} to ${name}.` });
+        onDone({
+          severity: "success",
+          message: t("nebulaUser:notes.moved", { name: user.name, channel: name }),
+        });
       } catch (error) {
         console.error("move_user_to_channel failed:", error);
-        onDone({ severity: "error", message: `Could not move ${user.name}.` });
+        onDone({ severity: "error", message: t("nebulaUser:notes.moveFailed", { name: user.name }) });
       }
     },
-    [user.session, user.name, onDone],
+    [user.session, user.name, onDone, t],
   );
 
   return (
     <Dialog open onClose={onClose} maxWidth="xs" fullWidth>
       <DialogContent>
-        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>Move to channel</Typography>
+        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{t("nebulaUser:move.title")}</Typography>
         <Typography sx={(theme) => ({ fontSize: 12, color: theme.palette.nebula.muted, mb: "10px" })}>
-          Where should {user.name} go?
+          {t("nebulaUser:move.prompt", { name: user.name })}
         </Typography>
-        <SearchBox autoFocus value={query} onChange={setQuery} placeholder="Filter channels" />
+        <SearchBox
+          autoFocus
+          value={query}
+          onChange={setQuery}
+          placeholder={t("nebulaUser:move.filterPlaceholder")}
+        />
         <Box
           component="ul"
           sx={{ listStyle: "none", m: 0, mt: "8px", p: 0, maxHeight: 280, overflowY: "auto" }}
         >
           {matches.length === 0 ? (
             <Typography sx={(theme) => ({ fontSize: 12, color: theme.palette.nebula.dim, py: "10px" })}>
-              No channels match.
+              {t("nebulaUser:move.noMatches")}
             </Typography>
           ) : (
             matches.map((channel) => {
@@ -729,7 +788,7 @@ export function MoveUserDialog({ user, onClose, onDone }: Readonly<MoveUserDialo
                     <HashIcon width={13} height={13} />
                   </Glyph>
                   <Typography sx={{ fontSize: 12.5 }} noWrap>
-                    {channel.name || "Root"}
+                    {channel.name || t("sidebar:movePicker.root")}
                   </Typography>
                   {count > 0 && (
                     <Typography
@@ -745,7 +804,7 @@ export function MoveUserDialog({ user, onClose, onDone }: Readonly<MoveUserDialo
         </Box>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose}>{t("common:actions.cancel")}</Button>
       </DialogActions>
     </Dialog>
   );

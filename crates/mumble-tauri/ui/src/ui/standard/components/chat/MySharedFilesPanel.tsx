@@ -20,6 +20,8 @@ import {
   myListFiles,
   deleteMyFile,
   myFileLink,
+  myFilesAvailable,
+  myFileLinkSupported,
   makeMyFilesSource,
   dropPreview,
 } from "../fileserver/fileServerMe";
@@ -28,10 +30,15 @@ import styles from "./MySharedFilesPanel.module.css";
 export default function MySharedFilesPanel() {
   const { t } = useTranslation(["chat", "settings"]);
   const config = useAppStore((s) => s.fileServerConfig);
+  const kind = useAppStore((s) => s.fileServerKind);
   const channels = useAppStore((s) => s.channels);
 
-  const baseUrl = config?.baseUrl;
-  const sessionJwt = config?.sessionJwt;
+  const baseUrl = config?.baseUrl ?? "";
+  const sessionJwt = config?.sessionJwt ?? "";
+  // The canon carries neither of those and still serves this panel, so what
+  // gates the work is whether the server can answer, not whether it handed
+  // over HTTP credentials.
+  const available = myFilesAvailable(kind, config);
 
   const [files, setFiles] = useState<AdminFileEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -40,7 +47,7 @@ export default function MySharedFilesPanel() {
   const [deleting, setDeleting] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!baseUrl || !sessionJwt) return;
+    if (!available) return;
     setLoading(true);
     setError(null);
     try {
@@ -51,15 +58,15 @@ export default function MySharedFilesPanel() {
     } finally {
       setLoading(false);
     }
-  }, [baseUrl, sessionJwt]);
+  }, [available, baseUrl, sessionJwt]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   const source = useMemo(
-    () => (baseUrl && sessionJwt ? makeMyFilesSource({ baseUrl, sessionJwt }) : null),
-    [baseUrl, sessionJwt],
+    () => (available ? makeMyFilesSource({ baseUrl, sessionJwt }) : null),
+    [available, baseUrl, sessionJwt],
   );
 
   const channelName = useCallback(
@@ -87,7 +94,7 @@ export default function MySharedFilesPanel() {
 
   const handleDelete = useCallback(
     async (f: AdminFileEntry) => {
-      if (!baseUrl || !sessionJwt) return;
+      if (!available) return;
       const ok = await askConfirm(
         t("mySharedFiles.confirmDelete", {
           defaultValue: 'Delete "{{name}}"? The shared link will stop working.',
@@ -110,7 +117,7 @@ export default function MySharedFilesPanel() {
         setDeleting(null);
       }
     },
-    [baseUrl, sessionJwt, t],
+    [available, baseUrl, sessionJwt, t],
   );
 
   let body: React.ReactNode;
@@ -190,7 +197,7 @@ export default function MySharedFilesPanel() {
                 )}
               </td>
               <td className={styles.actionsCell}>
-                {f.access_mode === "public" && (
+                {f.access_mode === "public" && myFileLinkSupported(kind) && (
                   <button
                     type="button"
                     className={styles.iconBtn}

@@ -1,10 +1,29 @@
 import { Fragment, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, IconButton, Tooltip, Typography } from "@mui/material";
 import type { ServerPingResult } from "@core/types";
-import { CloseIcon, PlusIcon, StarIcon } from "@ui/icons";
+import { CloseIcon, PlusIcon, StarIcon, UsersGroupIcon } from "@ui/icons";
 import { serverTint, type ServerGroup, type ServerRailEntry } from "../../selectors";
 import { UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
+
+/**
+ * The Friends destination, when the server list is the one carrying it.
+ *
+ * Absent while the title bar has the tab strip: Friends sits up there instead,
+ * and two of it on screen would be one too many. `unread` is every waiting
+ * direct message, summed - there is one entry for the destination, not one per
+ * conversation, so what it can say is that something is waiting.
+ *
+ * Declared here rather than in `ServerRail` because the rail already imports
+ * this module; putting it the other way round would make the two circular.
+ */
+export interface RailFriends {
+  /** True while the Friends screen is the one open. */
+  active: boolean;
+  unread: number;
+  onOpen: () => void;
+}
 
 interface ServerRailPanelProps {
   entries: readonly ServerRailEntry[];
@@ -35,10 +54,75 @@ interface ServerRailPanelProps {
   empty?: ReactNode;
   /** Absent while the panel floats: there is then no room to collapse into. */
   onClose?: () => void;
+  /**
+   * Friends, when the title bar is not carrying it.
+   *
+   * Pinned, this panel *is* the sidebar - the column of tiles gives way to it -
+   * so the destination the rail would have drawn has to be reachable from in
+   * here too, or the connect screen loses its way to Friends entirely.
+   */
+  friends?: RailFriends;
   onSelect: (entry: ServerRailEntry) => void;
   onAddServer: () => void;
   /** Absent where favouriting is not offered; the star is then not drawn. */
   onToggleFavorite?: (group: ServerGroup) => void;
+}
+
+/** Friends, as a row of the open list. Shaped like a server row, minus the
+ *  avatar: it is a destination rather than a place to connect to. */
+/** The namespaces this panel reads, so `subtitle` can take the same `t`. */
+const PANEL_NS = ["nebulaSidebar", "nebulaConnect", "server"] as const;
+type PanelT = ReturnType<typeof useTranslation<typeof PANEL_NS>>["t"];
+
+function FriendsRow({ active, unread, onOpen }: Readonly<RailFriends>) {
+  const { t } = useTranslation(PANEL_NS);
+  return (
+    <Box
+      component="button"
+      type="button"
+      aria-current={active ? "true" : undefined}
+      onClick={onOpen}
+      sx={(theme) => ({
+        all: "unset",
+        boxSizing: "border-box",
+        display: "flex",
+        alignItems: "center",
+        gap: "9px",
+        px: "10px",
+        py: "9px",
+        cursor: "pointer",
+        borderRadius: radius("lg"),
+        background: active ? theme.palette.nebula.card2 : "transparent",
+        color: active ? theme.palette.nebula.text : theme.palette.nebula.muted,
+        "&:hover": { background: theme.palette.nebula.hover, color: theme.palette.nebula.text },
+        "&:focus-visible": { outline: "2px solid " + theme.palette.nebula.accent, outlineOffset: 2 },
+      })}
+    >
+      <UsersGroupIcon width={16} height={16} />
+      <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{t("server:tabsBar.friends")}</Typography>
+      {unread > 0 && (
+        <Box
+          aria-label={t("server:tabsBar.unreadCount", { count: unread })}
+          sx={(theme) => ({
+            ml: "auto",
+            minWidth: 18,
+            height: 18,
+            px: "5px",
+            borderRadius: "9px",
+            display: "grid",
+            placeItems: "center",
+            background: theme.palette.nebula.bad,
+            color: theme.palette.nebula.bg0,
+            fontSize: 10,
+            fontWeight: 700,
+            fontVariantNumeric: "tabular-nums",
+          })}
+        >
+          {unread > 99 ? "99+" : unread}
+        </Box>
+      )}
+    </Box>
+  );
 }
 
 /** Where the carried row would land, drawn without moving anything. */
@@ -74,24 +158,34 @@ function occupancy(ping: ServerPingResult | undefined): string | null {
  * for it.
  */
 function subtitle(
+  t: PanelT,
   entry: ServerRailEntry,
   ping: ServerPingResult | undefined,
   activeChannelName: string | null | undefined,
 ): string {
-  if (entry.status === "connecting") return "connecting…";
+  if (entry.status === "connecting") return t("nebulaSidebar:servers.connecting");
 
   const parts: string[] = [];
   const heads = occupancy(ping);
   if (entry.status === "connected") {
     if (heads) parts.push(heads);
-    if (ping?.latency_ms != null) parts.push(ping.latency_ms + " ms");
-    if (activeChannelName) parts.push("in #" + activeChannelName);
-    return parts.length > 0 ? parts.join(" · ") : "connected";
+    if (ping?.latency_ms != null) parts.push(t("nebulaConnect:status.latency", { ms: ping.latency_ms }));
+    if (activeChannelName) parts.push(t("nebulaSidebar:servers.inChannel", { channel: activeChannelName }));
+    return parts.length > 0 ? parts.join(" · ") : t("nebulaSidebar:servers.connected");
   }
 
-  parts.push(heads ? heads + " online" : "offline");
+  parts.push(
+    heads
+      ? ping?.max_user_count
+        ? t("nebulaConnect:status.onlineOfMax", {
+            users: ping.user_count ?? 0,
+            max: ping.max_user_count,
+          })
+        : t("nebulaConnect:status.online", { users: ping?.user_count ?? 0 })
+      : t("nebulaConnect:status.offline"),
+  );
   const count = entry.group.identities.length;
-  if (count > 0) parts.push(count + (count === 1 ? " identity" : " identities"));
+  if (count > 0) parts.push(t("nebulaSidebar:servers.identities", { count }));
   return parts.join(" · ");
 }
 /**
@@ -129,8 +223,9 @@ function PanelRow({
   /** Keeps the right edge clear for the star drawn over the row. */
   reserveTrailing?: boolean;
 }>) {
+  const { t } = useTranslation(PANEL_NS);
   const { group, status, unread } = entry;
-  const meta = subtitle(entry, ping, activeChannelName);
+  const meta = subtitle(t, entry, ping, activeChannelName);
 
   return (
     <Box
@@ -253,7 +348,8 @@ function FavouriteStar({
   group,
   onToggle,
 }: Readonly<{ group: ServerGroup; onToggle: (group: ServerGroup) => void }>) {
-  const label = group.favorite ? "Remove from favourites" : "Add to favourites";
+  const { t } = useTranslation("server");
+  const label = group.favorite ? t("list.removeFromFavorites") : t("list.addToFavorites");
   return (
     <Tooltip title={label}>
       <IconButton
@@ -306,14 +402,16 @@ export function ServerRailPanel({
   search,
   empty,
   onClose,
+  friends,
   onSelect,
   onAddServer,
   onToggleFavorite,
 }: Readonly<ServerRailPanelProps>) {
+  const { t } = useTranslation(PANEL_NS);
   return (
     <Box
       component={pinned ? "nav" : "div"}
-      aria-label="Servers"
+      aria-label={t("nebulaSidebar:servers.title")}
       data-testid="nebula-server-rail-panel"
       sx={(theme) => ({
         // Pinned it is a column of the window, so it takes part in the layout;
@@ -337,12 +435,29 @@ export function ServerRailPanel({
         boxShadow: pinned ? "none" : "34px 0 70px rgba(2,6,18,.5)",
       })}
     >
+      {/* Friends above the servers and fenced off from them: it is a place to
+          go, not a server to switch to. */}
+      {friends && (
+        <>
+          <FriendsRow {...friends} />
+          <Box
+            aria-hidden
+            sx={(theme) => ({
+              height: "1px",
+              mx: "6px",
+              my: "5px",
+              background: theme.palette.nebula.line2,
+            })}
+          />
+        </>
+      )}
+
       <Box sx={{ display: "flex", alignItems: "center", gap: "9px", px: "6px", pt: "5px", pb: "8px" }}>
         {onClose && (
           <Box
             component="button"
             type="button"
-            aria-label="Collapse the server list"
+            aria-label={t("nebulaSidebar:servers.collapse")}
             onClick={onClose}
             sx={(theme) => ({
               all: "unset",
@@ -361,7 +476,9 @@ export function ServerRailPanel({
             <CloseIcon width={15} height={15} />
           </Box>
         )}
-        <Typography sx={{ fontSize: pinned ? 15 : 12, fontWeight: 600 }}>Servers</Typography>
+        <Typography sx={{ fontSize: pinned ? 15 : 12, fontWeight: 600 }}>
+          {t("nebulaSidebar:servers.title")}
+        </Typography>
         <Box
           component="button"
           type="button"
@@ -448,7 +565,7 @@ export function ServerRailPanel({
           })}
         >
           <PlusIcon width={14} height={14} style={{ flex: "none" }} />
-          Add a server
+          {t("nebulaSidebar:servers.add")}
         </Box>
       </Box>
 
@@ -456,7 +573,7 @@ export function ServerRailPanel({
         <Typography
           sx={(theme) => ({ px: "6px", pt: "6px", pb: "4px", fontSize: 10, color: theme.palette.nebula.dim })}
         >
-          Hover a tile for the same card without pinning
+          {t("nebulaSidebar:servers.hoverHint")}
         </Typography>
       )}
     </Box>

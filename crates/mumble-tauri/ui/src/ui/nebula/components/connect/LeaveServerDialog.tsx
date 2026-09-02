@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   Button,
   Checkbox,
@@ -36,14 +37,15 @@ export function LeaveServerDialog({
   onConfirm,
   onCancel,
 }: Readonly<LeaveServerDialogProps>) {
+  const { t } = useTranslation(["nebulaConnect", "common", "server"]);
   return (
     <Dialog open={session !== null} onClose={onCancel} maxWidth="xs" fullWidth>
       <DialogContent>
-        <Typography sx={{ fontWeight: 600, fontSize: 14, mb: "6px" }}>Leave this server?</Typography>
+        <Typography sx={{ fontWeight: 600, fontSize: 14, mb: "6px" }}>
+          {t("nebulaConnect:leave.title")}
+        </Typography>
         <Typography sx={(theme) => ({ fontSize: 12.5, color: theme.palette.nebula.muted })}>
-          {session
-            ? `You will be disconnected from ${session.label || session.host} and dropped out of voice.`
-            : ""}
+          {session ? t("nebulaConnect:leave.body", { server: session.label || session.host }) : ""}
         </Typography>
         <FormControlLabel
           sx={{ mt: "10px" }}
@@ -54,12 +56,12 @@ export function LeaveServerDialog({
               onChange={(event) => onNeverAskChange(event.target.checked)}
             />
           }
-          label={<Typography sx={{ fontSize: 12 }}>Don&rsquo;t ask again</Typography>}
+          label={<Typography sx={{ fontSize: 12 }}>{t("server:tabsBar.disconnectNeverShow")}</Typography>}
         />
       </DialogContent>
       <DialogActions>
         <Button onClick={onCancel} disabled={leaving}>
-          Cancel
+          {t("common:actions.cancel")}
         </Button>
         <Button
           onClick={onConfirm}
@@ -67,7 +69,7 @@ export function LeaveServerDialog({
           variant="contained"
           sx={(theme) => ({ background: theme.palette.nebula.bad })}
         >
-          {leaving ? "Leaving…" : "Leave"}
+          {leaving ? t("nebulaConnect:leave.leaving") : t("common:actions.leave")}
         </Button>
       </DialogActions>
     </Dialog>

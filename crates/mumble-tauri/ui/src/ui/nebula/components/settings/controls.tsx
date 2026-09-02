@@ -7,6 +7,18 @@ import { NEBULA_MONO, radius } from "../../tokens";
 import { Stack } from "../primitives";
 
 /**
+ * Marks a control's heading for the settings search.
+ *
+ * The search matches a query against these rather than against everything the
+ * page renders: a heading is the thing a result can point at, while scanning
+ * all text would flash the sentence that happens to mention a word as readily
+ * as the switch that carries it. `SettingsScreen` reads them back with one
+ * query when a result is chosen. Absent on a control whose title is not a
+ * plain string - there is nothing to match against.
+ */
+const anchor = (title: string | undefined) => ({ "data-settings-anchor": title });
+
+/**
  * A settings page's title, one line of context, and anything the page as a
  * whole is switched by - which is the only thing that belongs beside a title
  * rather than under a heading.
@@ -19,7 +31,9 @@ export function PageTitle({
   return (
     <Stack direction="row" alignItems="flex-start" gap={2} sx={{ mb: "18px" }}>
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography sx={{ fontSize: 20, fontWeight: 600 }}>{title}</Typography>
+        <Typography {...anchor(title)} sx={{ fontSize: 20, fontWeight: 600 }}>
+          {title}
+        </Typography>
         {hint && (
           <Typography sx={(theme) => ({ mt: "4px", fontSize: 12, color: theme.palette.nebula.muted })}>
             {hint}
@@ -46,7 +60,12 @@ export function GroupTitle({
 }: Readonly<{ children: ReactNode; hint?: string; space?: "wide" }>) {
   return (
     <Box sx={{ mt: space === "wide" ? "52px" : "26px" }}>
-      <Typography sx={{ fontSize: 13, fontWeight: 600, mb: hint ? "3px" : "10px" }}>{children}</Typography>
+      <Typography
+        {...anchor(typeof children === "string" ? children : undefined)}
+        sx={{ fontSize: 13, fontWeight: 600, mb: hint ? "3px" : "10px" }}
+      >
+        {children}
+      </Typography>
       {hint && (
         <Typography sx={(theme) => ({ mb: "12px", fontSize: 11.5, color: theme.palette.nebula.muted })}>
           {hint}
@@ -64,7 +83,9 @@ export function Field({
 }: Readonly<{ label: string; children: ReactNode; sx?: object }>) {
   return (
     <Box sx={{ ...sx }}>
-      <Typography sx={{ fontSize: 12, fontWeight: 600, mb: "7px" }}>{label}</Typography>
+      <Typography {...anchor(label)} sx={{ fontSize: 12, fontWeight: 600, mb: "7px" }}>
+        {label}
+      </Typography>
       {children}
     </Box>
   );
@@ -190,7 +211,9 @@ export function ValueHeader({ label, value }: Readonly<{ label: string; value: s
       gap={2}
       sx={(theme) => ({ mb: "3px", fontSize: 11, color: theme.palette.nebula.muted })}
     >
-      <span>{label}</span>
+      <Box component="span" {...anchor(label)}>
+        {label}
+      </Box>
       <Box
         component="span"
         sx={(theme) => ({ color: theme.palette.nebula.text, fontWeight: 500, flex: "none" })}
@@ -349,7 +372,7 @@ export function ToggleRow({
     <Box sx={{ mb: "14px" }}>
       <Stack direction="row" alignItems="flex-start" gap={2}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography component="h3" sx={{ fontSize: 12.5, fontWeight: 600 }}>
+          <Typography component="h3" {...anchor(title)} sx={{ fontSize: 12.5, fontWeight: 600 }}>
             {title}
           </Typography>
           {hint && (
@@ -417,7 +440,7 @@ export function ToggleCard({
     >
       <Stack direction="row" alignItems="center" gap={1.5}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography component="h3" sx={{ fontSize: 12.5, fontWeight: 500 }}>
+          <Typography component="h3" {...anchor(title)} sx={{ fontSize: 12.5, fontWeight: 500 }}>
             {title}
           </Typography>
           {hint && (
@@ -457,7 +480,7 @@ export function ActionRow({
     <Box sx={{ mb: "14px" }}>
       <Stack direction="row" alignItems="center" gap={2}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography component="h3" sx={{ fontSize: 12.5, fontWeight: 600 }}>
+          <Typography component="h3" {...anchor(title)} sx={{ fontSize: 12.5, fontWeight: 600 }}>
             {title}
           </Typography>
           {hint && (

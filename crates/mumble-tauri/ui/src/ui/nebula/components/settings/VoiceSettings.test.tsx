@@ -30,9 +30,29 @@ vi.mock("@core/preferencesStorage", () => ({
   updatePreferences: () => Promise.resolve(undefined),
 }));
 
-import type { AudioSettings } from "@core/types";
+// Exclusive capture is a Windows switch and jsdom is not Windows, so the one
+// fact the page reads off the platform is stated here rather than left to the
+// user agent. Everything else in the module keeps its real behaviour.
+vi.mock("@core/utils/platform", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@core/utils/platform")>()),
+  isWindows: true,
+}));
+
+import type { AudioSettings, DenoiserParamSpec } from "@core/types";
 import { withNebulaTheme } from "../../testTheme";
 import { VoiceSettings } from "./VoiceSettings";
+
+/** One knob, shaped the way the backend describes them. */
+const ATTENUATION: DenoiserParamSpec = {
+  id: "attenuation_db",
+  label: "Attenuation limit",
+  description: "How much the denoiser may pull the noise floor down.",
+  min: 0,
+  max: 40,
+  step: 0.5,
+  default: 12,
+  unit: "dB",
+};
 
 const SETTINGS: AudioSettings = {
   selected_device: null,
@@ -178,5 +198,51 @@ describe("VoiceSettings", () => {
   it("says there are no packet counters rather than showing zeroes", async () => {
     await renderPage();
     expect(screen.getByText(/No statistics available/)).toBeTruthy();
+  });
+
+  it("takes the microphone exclusively, and says so to the engine", async () => {
+    await renderPage();
+    const toggle = screen.getByLabelText("Exclusive microphone mode") as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+
+    fireEvent.click(toggle);
+    await waitFor(() => expect(lastWrite()?.exclusive_input).toBe(true));
+    expect((saveAudio.mock.calls.at(-1)?.[0] as AudioSettings).exclusive_input).toBe(true);
+  });
+
+  it("keeps the denoiser knobs behind expert mode", async () => {
+    invokeMock.mockImplementation((cmd) =>
+      cmd === "get_denoiser_param_specs" ? Promise.resolve([ATTENUATION]) : backend(cmd),
+    );
+    render(withNebulaTheme(<VoiceSettings />));
+    await screen.findByRole("radio", { name: "Voice activation" });
+
+    expect(screen.queryByText("Fine tuning")).toBeNull();
+  });
+
+  it("draws one knob per parameter the algorithm exposes, and writes it", async () => {
+    preferences.userMode = "expert";
+    invokeMock.mockImplementation((cmd) =>
+      cmd === "get_denoiser_param_specs" ? Promise.resolve([ATTENUATION]) : backend(cmd),
+    );
+    render(withNebulaTheme(<VoiceSettings />));
+
+    // The spec's default stands in until the record carries a value.
+    const knob = await screen.findByLabelText("Attenuation limit");
+    expect(screen.getByText("12.0 dB")).toBeTruthy();
+
+    fireEvent.change(knob, { target: { value: "18.5" } });
+    await waitFor(() => expect(lastWrite()?.denoiser_params).toEqual({ attenuation_db: 18.5 }));
+  });
+
+  it("draws nothing where the algorithm has nothing to tune", async () => {
+    preferences.userMode = "expert";
+    await renderPage();
+    // `backend` answers the specs call with undefined, which is what an
+    // algorithm with no knobs amounts to.
+    await waitFor(() =>
+      expect(invokeMock.mock.calls.some(([cmd]) => cmd === "get_denoiser_param_specs")).toBe(true),
+    );
+    expect(screen.queryByText("Fine tuning")).toBeNull();
   });
 });

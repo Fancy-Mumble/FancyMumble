@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Alert, Dialog, Snackbar } from "@mui/material";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -9,7 +10,7 @@ import type { BanEntry, UserEntry } from "@core/types";
 import { useAclGroups } from "@ui/standard/hooks/useAclGroups";
 import { userMenuActions } from "../../selectors";
 import { groupsOf } from "./userCardModel";
-import { describeBans, viewerIsAdmin } from "./userInfoModel";
+import { describeBans, viewerIsAdmin, type BanNote } from "./userInfoModel";
 import { useLiveUserStats } from "./useLiveUserStats";
 import { useUserLocation } from "./useUserLocation";
 import { UserInfoSheet } from "./UserInfoSheet";
@@ -71,6 +72,7 @@ function UserInfoContent({ user, onClose }: Readonly<{ user: UserEntry; onClose:
     () => userMenuActions({ user, channels, ownSession, currentChannel }),
     [user, channels, ownSession, currentChannel],
   );
+  const { t } = useTranslation("nebulaUser");
   const admin = viewerIsAdmin(channels);
   const aclGroups = useAclGroups();
   const groups = useMemo(
@@ -89,7 +91,10 @@ function UserInfoContent({ user, onClose }: Readonly<{ user: UserEntry; onClose:
   const moderate = (action: ModerationAction) => {
     void invokeModeration(action, user).catch((error: unknown) => {
       console.error(`user action "${action}" failed:`, error);
-      setNote({ severity: "error", message: `Could not ${action} ${user.name}.` });
+      setNote({
+        severity: "error",
+        message: t("notes.actionFailed", { action, name: user.name }),
+      });
     });
   };
 
@@ -176,7 +181,7 @@ function useBansAgainst(
   user: UserEntry,
   address: string | null | undefined,
   allowed: boolean,
-): { count: number; note: string } | null {
+): { count: number; note: BanNote } | null {
   const [bans, setBans] = useState<BanEntry[] | null>(null);
 
   useEffect(() => {

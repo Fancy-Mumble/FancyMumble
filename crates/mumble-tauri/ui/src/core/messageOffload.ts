@@ -124,6 +124,21 @@ export function offloadPlaceholder(messageId: string, contentLength: number): st
 }
 
 /**
+ * Height (px) to hold open for an offloaded body of `contentLength` bytes.
+ *
+ * The placeholder has to stand in for a picture whose dimensions nobody
+ * recorded, and a placeholder of the wrong height makes the whole column jump
+ * when the real one lands.  A data-URL runs ~1.37x the bytes of the image it
+ * encodes, and at that ratio 1 byte ~= 0.003 px of height is close enough to
+ * keep the reflow small; the clamp keeps a thumbnail from collapsing and a
+ * screenshot from opening a hole.
+ */
+export function offloadSkeletonHeight(contentLength: number): number {
+  if (contentLength <= 0) return 80;
+  return Math.max(80, Math.min(Math.round(contentLength * 0.003), 600));
+}
+
+/**
  * Extract the message key and original content byte-length from an
  * offload placeholder.  Returns `null` for non-placeholder strings.
  */
@@ -146,6 +161,16 @@ export function extractOffloadInfo(body: string): { key: string; contentLength: 
 
 /** Delay (ms) before a message leaving the viewport is actually offloaded. */
 const OFFLOAD_DELAY_MS = 5_000;
+
+/** What the offload manager is holding, for a developer-mode readout. */
+export interface OffloadManagerStats {
+  /** Bodies written out and not yet asked for again. */
+  offloaded: number;
+  /** Bodies waiting out the grace period before they are written. */
+  queued: number;
+  /** Reads in flight right now. */
+  loading: number;
+}
 
 /**
  * Coordinates offloading and restoring of heavy message content.
@@ -180,6 +205,31 @@ export class MessageOffloadManager {
   /** Whether the given message ID is currently being restored. */
   isLoading(id: string): boolean {
     return this._loading.has(id);
+  }
+
+  /**
+   * Whether the given message ID is waiting out its grace period.
+   *
+   * Queued is not yet offloaded: the body is still in memory, and scrolling
+   * back to it cancels the write.
+   */
+  isQueued(id: string): boolean {
+    return this.pendingOffloads.has(id);
+  }
+
+  /**
+   * What the manager is holding right now, across every conversation.
+   *
+   * For developer-mode readouts. The manager keys by message id and not by
+   * scope, so these are whole-client figures; a per-conversation view has to
+   * be counted off that conversation's messages (see `offloadQueueSnapshot`).
+   */
+  stats(): OffloadManagerStats {
+    return {
+      offloaded: this._offloaded.size,
+      queued: this.pendingOffloads.size,
+      loading: this._loading.size,
+    };
   }
 
   /**

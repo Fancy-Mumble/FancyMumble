@@ -59,6 +59,7 @@ export type AdminPageId =
   | "fileServer"
   | "serverSettings"
   | "livery"
+  | "welcome"
   | "auditLog";
 
 export interface AdminCapabilities {
@@ -151,6 +152,12 @@ export const ADMIN_PAGES: readonly AdminEntry[] = [
     available: (c) => c.canAdminister,
   },
   { id: "livery", labelKey: "adminTabs.livery", fallback: "Livery", available: (c) => c.canAdminister },
+  {
+    id: "welcome",
+    labelKey: "adminTabs.welcome",
+    fallback: "Welcome message",
+    available: (c) => c.canAdminister,
+  },
   {
     id: "auditLog",
     labelKey: "adminTabs.auditLog",

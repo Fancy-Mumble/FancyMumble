@@ -6,18 +6,63 @@ import { initReactI18next } from "react-i18next";
 // custom languages) load on demand via the backend below, keeping ~200 kB of
 // inactive-language JSON off the startup heap.  The full 4-language set for the
 // translation editor lives in `./builtInBundles.ts` (loaded with that lazy page).
-import enCommon from "../locales/en/common.json";
-import enSettings from "../locales/en/settings.json";
-import enChat from "../locales/en/chat.json";
-import enServer from "../locales/en/server.json";
-import enSidebar from "../locales/en/sidebar.json";
+import enCommon from "../locales/common/en/common.json";
+import enSettings from "../locales/common/en/settings.json";
+import enChat from "../locales/common/en/chat.json";
+import enServer from "../locales/common/en/server.json";
+import enSidebar from "../locales/common/en/sidebar.json";
 
 export const BUILT_IN_LANGUAGES = ["en", "de", "fr", "zh"] as const;
 export type BuiltInLanguage = (typeof BUILT_IN_LANGUAGES)[number];
 
+/**
+ * Namespaces every UI pack shares.  Their JSON lives under
+ * `locales/common/<lang>/`, and a string belongs there as soon as a second
+ * pack says it - the pack folders hold only what one design says on its own.
+ */
+export const SHARED_NAMESPACES = ["common", "chat", "server", "settings", "sidebar"] as const;
+
+/**
+ * Namespaces owned by the Nebula pack, from `locales/nebula/<lang>/`.  They are
+ * split along Nebula's own component folders rather than the shared feature
+ * split, because that is the boundary a Nebula string is written against.
+ */
+export const NEBULA_NAMESPACES = [
+  "nebulaCommon",
+  "nebulaChrome",
+  "nebulaSidebar",
+  "nebulaChat",
+  "nebulaConnect",
+  "nebulaUser",
+  "nebulaServer",
+  "nebulaSettings",
+] as const;
+
 /** Public list of namespaces shipped with the app. */
-export const I18N_NAMESPACES = ["common", "chat", "server", "settings", "sidebar"] as const;
+export const I18N_NAMESPACES = [...SHARED_NAMESPACES, ...NEBULA_NAMESPACES] as const;
 export type I18nNamespace = (typeof I18N_NAMESPACES)[number];
+
+/**
+ * Where a namespace's JSON lives, as `locales/<group>/<lang>/<file>.json`.
+ * Namespace ids stay flat (`nebulaChat`, not `nebula/chat`) so they survive a
+ * round trip through the translation editor, which names exported files after
+ * them - a slash would not.
+ */
+const NAMESPACE_SOURCES: Record<I18nNamespace, { group: string; file: string }> = {
+  common: { group: "common", file: "common" },
+  chat: { group: "common", file: "chat" },
+  server: { group: "common", file: "server" },
+  settings: { group: "common", file: "settings" },
+  sidebar: { group: "common", file: "sidebar" },
+  nebulaCommon: { group: "nebula", file: "common" },
+  nebulaChrome: { group: "nebula", file: "chrome" },
+  nebulaSidebar: { group: "nebula", file: "sidebar" },
+  nebulaChat: { group: "nebula", file: "chat" },
+  nebulaConnect: { group: "nebula", file: "connect" },
+  nebulaUser: { group: "nebula", file: "user" },
+  nebulaServer: { group: "nebula", file: "server" },
+  nebulaSettings: { group: "nebula", file: "settings" },
+};
 
 export const LANGUAGE_STORAGE_KEY = "mumble-language";
 
@@ -101,7 +146,16 @@ const lazyLocaleBackend = {
     namespace: string,
     callback: (err: unknown, data: Record<string, unknown> | null) => void,
   ) {
-    import(`../locales/${language}/${namespace}.json`)
+    const source = NAMESPACE_SOURCES[namespace as I18nNamespace];
+    if (!source) {
+      callback(new Error(`Unknown i18n namespace: ${namespace}`), null);
+      return;
+    }
+    // Three interpolated segments, so Vite globs this as `../locales/*/*/*.json`
+    // - one `*` per path segment, which is exactly the locale tree's shape.  A
+    // namespace id carrying its own slash would collapse two segments into one
+    // and find nothing.
+    import(`../locales/${source.group}/${language}/${source.file}.json`)
       .then((m: { default: Record<string, unknown> }) => callback(null, m.default))
       .catch((err: unknown) => callback(err, null));
   },
@@ -155,7 +209,10 @@ void i18n
     fallbackLng: SOURCE_LANGUAGE,
     nonExplicitSupportedLngs: true,
     defaultNS: "common",
-    ns: [...I18N_NAMESPACES],
+    // Only the shared namespaces are loaded up front.  A pack's own namespaces
+    // are dead weight in every other pack, so they are fetched when that pack's
+    // chunk asks for them (see `@core/i18n/nebula`).
+    ns: [...SHARED_NAMESPACES],
     interpolation: { escapeValue: false },
     react: { useSuspense: false },
     detection: {

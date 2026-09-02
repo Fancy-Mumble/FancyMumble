@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, Typography } from "@mui/material";
 import { Stack } from "../primitives";
 import { radius } from "../../tokens";
@@ -29,6 +30,7 @@ export function ExpandableRow({
   onToggle,
   children,
 }: Readonly<ExpandableRowProps>) {
+  const { t } = useTranslation("nebulaSettings");
   return (
     <Box>
       <Stack
@@ -47,7 +49,9 @@ export function ExpandableRow({
       >
         <Box sx={{ flex: "none", display: "flex", alignItems: "center" }}>{preview}</Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{title}</Typography>
+          <Typography data-settings-anchor={title} sx={{ fontSize: 12.5, fontWeight: 600 }}>
+            {title}
+          </Typography>
           <Typography sx={(theme) => ({ fontSize: 11, color: theme.palette.nebula.muted })} noWrap>
             {value}
           </Typography>
@@ -69,7 +73,7 @@ export function ExpandableRow({
             "&:hover": { background: theme.palette.nebula.hover },
           })}
         >
-          {open ? "Done" : "Change"}
+          {open ? t("row.done") : t("row.change")}
         </Box>
       </Stack>
       {open && (

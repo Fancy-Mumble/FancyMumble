@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, InputBase, Typography } from "@mui/material";
 import { CATEGORIES } from "@standard/components/elements/EmojiPicker";
 import { getServerCustomReactions } from "@core/features/chat/reaction/reactionStore";
@@ -50,11 +51,13 @@ export function EmojiPopover({
     return chosen ? [chosen] : [];
   }, [active, query]);
 
+  const { t } = useTranslation("nebulaChat");
+
   return (
     <PopoverPanel
       width={EMOJI_POPOVER_WIDTH}
       left={left}
-      title="Emoji"
+      title={t("emoji.title")}
       onClose={onClose}
       header={
         <Stack
@@ -75,12 +78,14 @@ export function EmojiPopover({
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search emoji"
-            inputProps={{ "aria-label": "Search emoji" }}
+            placeholder={t("emoji.search")}
+            inputProps={{ "aria-label": t("emoji.search") }}
             onKeyDown={(event) => event.key === "Escape" && onClose()}
             sx={{ flex: 1, fontSize: 14, "& .MuiInputBase-input": { padding: 0 } }}
           />
-          <Typography sx={(theme) => ({ fontSize: 11, color: theme.palette.nebula.muted })}>esc</Typography>
+          <Typography sx={(theme) => ({ fontSize: 11, color: theme.palette.nebula.muted })}>
+            {t("emoji.esc")}
+          </Typography>
         </Stack>
       }
     >
@@ -127,7 +132,7 @@ export function EmojiPopover({
       <Stack gap="8px" sx={{ px: "14px", py: "12px", maxHeight: 260, overflowY: "auto" }}>
         {custom.length > 0 && !query && (
           <>
-            <SectionLabel>This server</SectionLabel>
+            <SectionLabel>{t("emoji.thisServer")}</SectionLabel>
             <Grid emojis={custom} onSelect={onSelect} />
           </>
         )}

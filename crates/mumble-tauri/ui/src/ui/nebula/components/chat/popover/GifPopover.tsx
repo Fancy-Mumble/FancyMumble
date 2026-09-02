@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, InputBase, Typography } from "@mui/material";
 import { fetchTrending, searchGifs, type KlipyGif } from "@standard/pages/settings/KlipyGifBrowser";
 import { SearchIcon } from "@ui/icons";
@@ -8,9 +9,16 @@ import { PopoverPanel } from "./PopoverPanel";
 /** The canvas's width for this panel. */
 export const GIF_POPOVER_WIDTH = 400;
 
-/** The tabs the canvas draws. Trending is the source's own; the rest are queries. */
+/** The tabs the canvas draws. Trending is the source's own; the rest are
+ *  queries - which is why the ids stay English however the label is written. */
 const TABS = ["Trending", "Reactions", "Anime"] as const;
 type Tab = (typeof TABS)[number];
+
+const TAB_LABEL_KEYS = {
+  Trending: "gif.trending",
+  Reactions: "gif.reactions",
+  Anime: "gif.anime",
+} as const satisfies Record<Tab, string>;
 
 /**
  * The GIF panel.
@@ -27,6 +35,7 @@ export function GifPopover({
   onSelect,
   onClose,
 }: Readonly<{ left: number; onSelect: (url: string) => void; onClose: () => void }>) {
+  const { t } = useTranslation("nebulaChat");
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<Tab>("Trending");
   const [gifs, setGifs] = useState<readonly KlipyGif[]>([]);
@@ -60,7 +69,7 @@ export function GifPopover({
       footer={
         <>
           <Box component="span" sx={{ flex: 1 }}>
-            ↵ to send · ⇧↵ to preview
+            {t("gif.sendHint")}
           </Box>
           <Box component="span">Klipy</Box>
         </>
@@ -84,8 +93,8 @@ export function GifPopover({
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search GIFs"
-            inputProps={{ "aria-label": "Search GIFs" }}
+            placeholder={t("gif.search")}
+            inputProps={{ "aria-label": t("gif.search") }}
             onKeyDown={(event) => event.key === "Escape" && onClose()}
             sx={{ flex: 1, fontSize: 14, "& .MuiInputBase-input": { padding: 0 } }}
           />
@@ -125,7 +134,7 @@ export function GifPopover({
                 background: tab === name ? theme.palette.nebula.accentSoft : "transparent",
               })}
             >
-              {name}
+              {t(TAB_LABEL_KEYS[name])}
             </Box>
           ))}
         </Stack>
@@ -134,7 +143,7 @@ export function GifPopover({
       <Box sx={{ px: "12px", py: "12px", maxHeight: 300, overflowY: "auto" }}>
         {state === "failed" ? (
           <Typography sx={(theme) => ({ fontSize: 13, color: theme.palette.nebula.muted, py: "20px" })}>
-            GIFs could not be loaded.
+            {t("gif.loadFailed")}
           </Typography>
         ) : (
           <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: "8px" }}>

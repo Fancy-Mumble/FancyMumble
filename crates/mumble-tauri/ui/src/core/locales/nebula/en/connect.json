@@ -1,0 +1,79 @@
+{
+  "challenge": {
+    "eyebrow": "SECURE CONNECTION",
+    "titleTotp": "Two-factor authentication",
+    "titlePassword": "Server password required",
+    "titleUsername": "Connect under another name",
+    "intro": "Connect as {{username}} to {{target}}.",
+    "usernameIntro": "{{host}} would not take that name. Pick another and it will be tried again straight away.",
+    "codeLabel": "Six-digit authentication code",
+    "passwordLabel": "Server password",
+    "remember": "Remember for this saved server",
+    "submit": "Connect securely"
+  },
+  "reconnect": {
+    "title": "Connection interrupted",
+    "waiting": "Waiting to reconnect",
+    "retryIn": "Retrying in {{seconds}}s",
+    "detail": "{{state}} · attempt {{attempt}}",
+    "retryNow": "Retry now"
+  },
+  "quickConnect": {
+    "sectionOpenAsNewTab": "OPEN AS NEW TAB",
+    "noneSaved": "No servers saved yet.",
+    "allOpen": "Every saved login is already open.",
+    "lastJoined": "last joined {{when}}",
+    "asIdentity": "as {{username}}",
+    "addByAddress": "Add server by address…"
+  },
+  "addServer": {
+    "eyebrowIdentity": "NEW IDENTITY",
+    "eyebrowEdit": "SAVED SERVER",
+    "eyebrowServer": "NEW SERVER",
+    "titleIdentity": "Join {{server}} as someone else",
+    "titleServer": "Add a server",
+    "displayName": "Display name",
+    "address": "Address",
+    "certificate": "Certificate",
+    "certificateHelp": "Optional. A certificate lets the server recognise you across reconnects.",
+    "anonymous": "Connect anonymously",
+    "required": "Address, port and username are required."
+  },
+  "leave": {
+    "title": "Leave this server?",
+    "body": "You will be disconnected from {{server}} and dropped out of voice.",
+    "leaving": "Leaving…"
+  },
+  "status": {
+    "checkingEllipsis": "checking…",
+    "offline": "offline",
+    "online": "{{users}} online",
+    "onlineOfMax": "{{users}}/{{max}} online",
+    "checking": "checking",
+    "latency": "{{ms}} ms",
+    "version": "Mumble {{version}}"
+  },
+  "screen": {
+    "pickTitle": "Pick a server",
+    "pickBody": "Choose one from the list, or add a new address.",
+    "joinAs": "JOIN AS",
+    "newIdentity": "+ New identity",
+    "editIdentity": "Edit the saved details for {{username}}",
+    "certificate": "certificate · {{label}}",
+    "noCertificate": "no certificate",
+    "connecting": "Connecting…",
+    "connectAs": "Connect as {{username}}",
+    "autoConnect": "Auto-connect",
+    "autoConnectAria": "Connect to this server automatically at launch"
+  },
+  "livery": {
+    "probing": "Checking this server for branding",
+    "live": "Showing this server's branding, live from the connection",
+    "cached": "Showing this server's branding, confirmed current",
+    "fetching": "Loading this server's branding",
+    "failed": "This server has branding, but it could not be loaded",
+    "absent": "This server has no branding set",
+    "unverified": "This server does not report branding",
+    "unreachable": "Could not reach this server to check its branding"
+  }
+}

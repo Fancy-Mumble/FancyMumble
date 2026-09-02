@@ -179,6 +179,19 @@ function newUploadId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `upload-${Math.random().toString(36).slice(2)}`;
 }
 
+/** What separates a caption from its markers, and one marker from the next. */
+const NEWLINE = "\n";
+
+/** One file in a batch, as the tray already knows it. */
+export interface StagedUpload {
+  readonly filePath: string;
+  readonly filename: string;
+  /** Size on disk, so the row can say it before a byte has moved. */
+  readonly sizeBytes?: number;
+  /** A local preview, for the kinds that have one. */
+  readonly previewUrl?: string;
+}
+
 export interface FileUploadTarget {
   /** Channel the message announcing the file is sent to. */
   channelId: number | null;
@@ -194,78 +207,98 @@ export function useFileUpload({ channelId, dmSession }: FileUploadTarget) {
     setPlaceholders((prev) => prev.filter((entry) => entry.id !== id));
   }, []);
 
+  /**
+   * Put a batch of files up, then announce all of them in one message.
+   *
+   * One message rather than one each: four photographs dropped together are
+   * one thing the sender did, and four messages is what made them arrive as
+   * four separate pictures that could never be grouped. The markers ride in
+   * the order they were staged, so the gallery reads the way the tray did.
+   *
+   * A file that fails keeps its row and the rest still go - a batch is not a
+   * transaction, and holding four good uploads back because the fifth was
+   * refused would lose work the user has already waited for.
+   */
   const upload = useCallback(
-    async (
-      filePath: string,
-      filename: string,
-      choice: FileShareChoice,
-      /** What the stager already knows about the file, so the row can say it. */
-      known: { sizeBytes?: number; previewUrl?: string } = {},
-    ) => {
-      if (channelId === null) return;
-      const id = newUploadId();
-      setPlaceholders((prev) => [
-        ...prev,
-        {
-          id,
-          filename,
-          state: "uploading",
-          totalBytes: known.sizeBytes,
-          previewUrl: known.previewUrl,
-        },
-      ]);
+    async (files: readonly StagedUpload[], choice: FileShareChoice) => {
+      if (channelId === null || files.length === 0) return;
       uploading.current = true;
-      const startedAt = Date.now();
+      const markers: string[] = [];
 
-      let unlisten: (() => void) | undefined;
       try {
-        const { listen } = await import("@tauri-apps/api/event");
-        unlisten = await listen<{ uploadId: string; bytesSent: number; totalBytes: number }>(
-          "upload-progress",
-          (event) => {
-            if (event.payload.uploadId !== id) return;
-            const { bytesSent, totalBytes } = event.payload;
-            const pct = totalBytes > 0 ? Math.min(99, Math.round((bytesSent / totalBytes) * 100)) : 0;
-            setPlaceholders((prev) =>
-              prev.map((entry) =>
-                entry.id === id
-                  ? {
-                      ...entry,
-                      progress: pct,
-                      totalBytes: totalBytes > 0 ? totalBytes : entry.totalBytes,
-                      etaSeconds: remainingSeconds(startedAt, bytesSent, totalBytes),
-                    }
-                  : entry,
-              ),
+        for (const file of files) {
+          const id = newUploadId();
+          setPlaceholders((prev) => [
+            ...prev,
+            {
+              id,
+              filename: file.filename,
+              state: "uploading",
+              totalBytes: file.sizeBytes,
+              previewUrl: file.previewUrl,
+            },
+          ]);
+          const startedAt = Date.now();
+          let unlisten: (() => void) | undefined;
+
+          try {
+            const { listen } = await import("@tauri-apps/api/event");
+            unlisten = await listen<{ uploadId: string; bytesSent: number; totalBytes: number }>(
+              "upload-progress",
+              (event) => {
+                if (event.payload.uploadId !== id) return;
+                const { bytesSent, totalBytes } = event.payload;
+                const pct = totalBytes > 0 ? Math.min(99, Math.round((bytesSent / totalBytes) * 100)) : 0;
+                setPlaceholders((prev) =>
+                  prev.map((entry) =>
+                    entry.id === id
+                      ? {
+                          ...entry,
+                          progress: pct,
+                          totalBytes: totalBytes > 0 ? totalBytes : entry.totalBytes,
+                          etaSeconds: remainingSeconds(startedAt, bytesSent, totalBytes),
+                        }
+                      : entry,
+                  ),
+                );
+              },
             );
-          },
-        );
 
+            const info = await uploadAttachment({
+              filePath: file.filePath,
+              channelId,
+              filename: file.filename,
+              uploadId: id,
+              choice,
+            });
+            markers.push(encodeFileAttachmentMarker(info));
+            setPlaceholders((prev) => prev.filter((entry) => entry.id !== id));
+          } catch (e) {
+            const detail = e instanceof Error ? e.message : String(e);
+            // A cancelled upload has already had its row taken away by whoever
+            // cancelled it; turning it into an error would put one back.
+            if (detail === "upload cancelled") {
+              setPlaceholders((prev) => prev.filter((entry) => entry.id !== id));
+            } else {
+              console.error("file upload failed:", e);
+              setPlaceholders((prev) =>
+                prev.map((entry) =>
+                  entry.id === id ? { ...entry, state: "error" as const, errorMessage: detail } : entry,
+                ),
+              );
+            }
+          } finally {
+            unlisten?.();
+          }
+        }
+
+        if (markers.length === 0) return;
+        const joined = markers.join(NEWLINE);
+        const body = choice.message ? `${choice.message}${NEWLINE}${joined}` : joined;
         const store = useAppStore.getState();
-        const info = await uploadAttachment({ filePath, channelId, filename, uploadId: id, choice });
-        const marker = encodeFileAttachmentMarker(info);
-        const body = choice.message ? `${choice.message}\n${marker}` : marker;
-
         if (dmSession !== null) await store.sendDm(dmSession, body);
         else await store.sendMessage(channelId, body);
-
-        setPlaceholders((prev) => prev.filter((entry) => entry.id !== id));
-      } catch (e) {
-        const detail = e instanceof Error ? e.message : String(e);
-        // A cancelled upload has already had its row taken away by whoever
-        // cancelled it; turning it into an error would put one back.
-        if (detail === "upload cancelled") {
-          setPlaceholders((prev) => prev.filter((entry) => entry.id !== id));
-          return;
-        }
-        console.error("file upload failed:", e);
-        setPlaceholders((prev) =>
-          prev.map((entry) =>
-            entry.id === id ? { ...entry, state: "error" as const, errorMessage: detail } : entry,
-          ),
-        );
       } finally {
-        unlisten?.();
         uploading.current = false;
       }
     },

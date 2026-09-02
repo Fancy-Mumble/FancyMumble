@@ -247,13 +247,12 @@ export default function TranslationPopoutPage() {
   }, [filter, nsFilter, bundle, displayBundle]);
 
   const grouped = useMemo(() => {
-    const out: Record<I18nNamespace, typeof KEY_INDEX> = {
-      common: [],
-      chat: [],
-      server: [],
-      settings: [],
-      sidebar: [],
-    };
+    // Built from the namespace list rather than spelled out, so a UI pack
+    // adding a namespace of its own never has to edit the editor.
+    const out = Object.fromEntries(I18N_NAMESPACES.map((ns) => [ns, [] as typeof KEY_INDEX])) as Record<
+      I18nNamespace,
+      typeof KEY_INDEX
+    >;
     for (const k of filteredKeys) out[k.ns].push(k);
     return out;
   }, [filteredKeys]);

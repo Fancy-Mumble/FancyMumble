@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Box, Tooltip } from "@mui/material";
 import { Stack } from "./Stack";
 import type { UserEntry } from "@core/types";
@@ -35,9 +36,10 @@ export function speakerState(user: UserEntry) {
  * mock groups it with the name accordingly.
  */
 export function PriorityBadge({ user }: Readonly<{ user: UserEntry }>) {
+  const { t } = useTranslation("sidebar");
   if (!user.priority_speaker) return null;
   return (
-    <Badge label="Priority speaker" tone="warn">
+    <Badge label={t("userListItem.prioritySpeakerTitle")} tone="warn">
       <PriorityIcon width={10} height={10} fill="currentColor" stroke="none" />
     </Badge>
   );
@@ -55,27 +57,28 @@ export function PriorityBadge({ user }: Readonly<{ user: UserEntry }>) {
  * make every member look like they had a state worth reading.
  */
 export function VoiceStateBadges({ user }: Readonly<{ user: UserEntry }>) {
+  const { t } = useTranslation("sidebar");
   const state = speakerState(user);
   if (!state.serverMuted && !state.serverDeafened && !state.selfMuted && !state.selfDeafened) return null;
   return (
     <Stack direction="row" alignItems="center" gap="4px" sx={{ flex: "none" }}>
       {state.serverMuted && (
-        <Badge label="Server muted" tone="bad">
+        <Badge label={t("userListItem.serverMutedTitle")} tone="bad">
           <MicOffIcon width={11} height={11} />
         </Badge>
       )}
       {state.serverDeafened && (
-        <Badge label="Server deafened" tone="bad">
+        <Badge label={t("userListItem.serverDeafenedTitle")} tone="bad">
           <HeadphonesOffIcon width={11} height={11} />
         </Badge>
       )}
       {state.selfMuted && (
-        <Badge label="Muted (self)" tone="dim">
+        <Badge label={t("userListItem.selfMutedTitle")} tone="dim">
           <MicOffIcon width={11} height={11} />
         </Badge>
       )}
       {state.selfDeafened && (
-        <Badge label="Deafened (self)" tone="dim">
+        <Badge label={t("userListItem.selfDeafenedTitle")} tone="dim">
           <HeadphonesOffIcon width={11} height={11} />
         </Badge>
       )}

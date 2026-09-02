@@ -10,6 +10,34 @@ export type BubbleStyle = "bubbles" | "flat" | "compact";
 export type FontSize = "small" | "medium" | "large";
 export type BgFit = "cover" | "tile";
 export type ChannelViewerStyle = "classic" | "flat" | "modern";
+export type ColorMode = "system" | "light" | "dark";
+
+/**
+ * One wallpaper, as the record remembers it.
+ *
+ * Exactly the fields that describe a *picture* - the sliders are not in here,
+ * because blur, dim and opacity are settings of the chat column that outlive
+ * any one wallpaper rather than properties of the picture behind it. The two
+ * derived files (`blurred`, `videoBaked`) are, since they are that picture
+ * rendered at particular slider values and are worth keeping alongside it.
+ */
+export interface ChatBackgroundEntry {
+  /** The still - data-URL or `bgstore:` ref. For a clip, its poster frame. */
+  original: string | null;
+  /** The still with blur/dim baked in, or null. */
+  blurred: string | null;
+  /** Stored clip name, or null for a still. */
+  video: string | null;
+  /** The clip's bake; valid only while the stamps below match the sliders. */
+  videoBaked: string | null;
+  /** The sigma the bake was computed with. */
+  videoBakedSigma: number;
+  /** The dim the bake was computed with. */
+  videoBakedDim: number;
+}
+
+/** How many wallpapers the shelf holds before the oldest is let go. */
+export const CHAT_BG_RECENTS_MAX = 5;
 
 export interface PersonalizationData {
   /**
@@ -53,6 +81,20 @@ export interface PersonalizationData {
   chatBgVideoBakedSigma: number;
   /** The dim the current bake was computed with. */
   chatBgVideoBakedDim: number;
+  /**
+   * The wallpaper shelf: the last few picks, newest first, capped at
+   * [`CHAT_BG_RECENTS_MAX`].
+   *
+   * The `chatBg*` fields above stay the single answer to "what is on screen" -
+   * every renderer reads those and nothing else - and this list is only the
+   * memory behind them, so switching wallpapers is a record write rather than
+   * a re-pick. The entry matching the live fields is the active one; a shelf
+   * with no active entry is the "Default" (no wallpaper) state.
+   *
+   * Names, never bytes: the store keeps every file the list still refers to,
+   * and `pruneChatBackgrounds` deletes the rest.
+   */
+  chatBgRecents: ChatBackgroundEntry[];
   /** Message bubble visual style. */
   bubbleStyle: BubbleStyle;
   /** Font size preset (or custom px value stored as number). */
@@ -67,6 +109,15 @@ export interface PersonalizationData {
   channelViewerStyle: ChannelViewerStyle;
   /** Active color theme. */
   theme: ThemeId;
+  /**
+   * Light or dark, independent of which theme is chosen.
+   *
+   * The design sheet draws every theme in both schemes - the names are brands,
+   * not modes - so which scheme a theme is worn in is a separate choice.
+   * "system" follows the platform. Themes that exist only as a single Standard
+   * stylesheet ignore this and keep the one scheme they have.
+   */
+  colorMode: ColorMode;
   /** Always render the copy/reply/reaction action bar at the bottom of every
    *  text message instead of only showing it on hover. */
   alwaysShowMessageActions: boolean;
@@ -86,6 +137,7 @@ export const PERSONALIZATION_DEFAULTS: PersonalizationData = {
   chatBgVideoBaked: null,
   chatBgVideoBakedSigma: 0,
   chatBgVideoBakedDim: 0,
+  chatBgRecents: [],
   bubbleStyle: "bubbles",
   fontSize: "medium",
   fontSizeCustomPx: 14,
@@ -93,6 +145,7 @@ export const PERSONALIZATION_DEFAULTS: PersonalizationData = {
   compactMode: false,
   channelViewerStyle: "flat",
   theme: "dark",
+  colorMode: "system",
   alwaysShowMessageActions: false,
 };
 

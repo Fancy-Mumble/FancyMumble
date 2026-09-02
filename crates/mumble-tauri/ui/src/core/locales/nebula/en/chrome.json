@@ -1,0 +1,19 @@
+﻿{
+  "miniMode": {
+    "expand": "Expand window",
+    "latency": "{{ms}} ms",
+    "you": "you"
+  },
+  "search": {
+    "placeholder": "Search channels, people and messages",
+    "close": "Close search",
+    "empty": "Nothing to jump to yet.",
+    "noMatch": "Nothing matches \"{{query}}\".",
+    "headingChannel": "Channels",
+    "headingPerson": "People",
+    "headingMessage": "Messages",
+    "headingServer": "Servers",
+    "results_one": "{{count}} result",
+    "results_other": "{{count}} results"
+  }
+}

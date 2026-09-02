@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Accordion,
   AccordionDetails,
@@ -37,10 +38,12 @@ import { ChevronDownIcon, CloseIcon, RefreshCwIcon, ServerIcon, ShieldCheckIcon 
 import { NEBULA_MONO, radius } from "../../tokens";
 import { LinkGuard, SectionLabel, Stack } from "../primitives";
 
-const ACTIVATION_LABELS = {
-  ptt: "Push to Talk",
-  vad: "Voice Activation",
-  continuous: "Continuous",
+/** How each activation mode is named, as `server` keys - the wording is the
+ *  same one Standard's panel uses, so it lives in the shared namespace. */
+const ACTIVATION_KEYS = {
+  ptt: "server:infoPanel.activationPtt",
+  vad: "server:infoPanel.activationVad",
+  continuous: "server:infoPanel.activationContinuous",
 } as const;
 
 /** A titled group of facts, separated from its neighbours by a hairline. */
@@ -183,21 +186,24 @@ function Folds({ children }: Readonly<{ children: ReactNode }>) {
 }
 
 function PluginFacts({ plugin }: Readonly<{ plugin: PluginInfoRecord }>) {
+  const { t } = useTranslation("server");
   const info = plugin.info;
   const rows = Array.isArray(info.debug_rows) ? info.debug_rows : [];
   const caps = Array.isArray(info.capabilities) ? info.capabilities : [];
   return (
     <Facts mono>
       {typeof info.description === "string" && info.description.length > 0 && (
-        <Fact mono label="Description" value={info.description} />
+        <Fact mono label={t("infoPanel.plugins.description")} value={info.description} />
       )}
       {typeof info.author === "string" && info.author.length > 0 && (
-        <Fact mono label="Author" value={info.author} />
+        <Fact mono label={t("infoPanel.plugins.author")} value={info.author} />
       )}
       {typeof info.homepage === "string" && info.homepage.length > 0 && (
-        <Fact mono label="Homepage" value={info.homepage} />
+        <Fact mono label={t("infoPanel.plugins.homepage")} value={info.homepage} />
       )}
-      {caps.length > 0 && <Fact mono label="Capabilities" value={caps.join(", ")} />}
+      {caps.length > 0 && (
+        <Fact mono label={t("infoPanel.plugins.capabilities")} value={caps.join(", ")} />
+      )}
       {rows.map((row, i) => (
         <Fact mono key={`${row.label}-${i}`} label={row.label} value={row.value} />
       ))}
@@ -235,6 +241,7 @@ function WelcomeText({ html }: Readonly<{ html: string }>) {
 }
 
 function ActivityLog() {
+  const { t } = useTranslation("nebulaServer");
   const serverLog = useAppStore((s) => s.serverLog);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -247,7 +254,7 @@ function ActivityLog() {
   if (serverLog.length === 0) {
     return (
       <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.dim })}>
-        No activity yet
+        {t("panel.noActivity")}
       </Typography>
     );
   }
@@ -321,6 +328,7 @@ interface ServerInfoPanelProps {
 }
 
 export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
+  const { t } = useTranslation(["nebulaServer", "server"]);
   const {
     info,
     welcomeText,
@@ -340,7 +348,7 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
   return (
     <Stack
       component="aside"
-      aria-label="Server info"
+      aria-label={t("nebulaServer:panel.heading")}
       sx={(theme) => ({
         width: 320,
         flex: "none",
@@ -367,7 +375,7 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
         </Box>
         <Box sx={{ minWidth: 0 }}>
           <Typography sx={{ fontSize: 15, fontWeight: 600 }} noWrap>
-            Server info
+            {t("nebulaServer:panel.heading")}
           </Typography>
           {info && (
             <Typography sx={(theme) => ({ fontSize: 11, color: theme.palette.nebula.muted })} noWrap>
@@ -375,7 +383,12 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
             </Typography>
           )}
         </Box>
-        <IconButton size="small" aria-label="Close server info" sx={{ ml: "auto" }} onClick={onClose}>
+        <IconButton
+          size="small"
+          aria-label={t("server:infoPanel.closeAriaLabel")}
+          sx={{ ml: "auto" }}
+          onClick={onClose}
+        >
           <CloseIcon width={13} height={13} />
         </IconButton>
       </Stack>
@@ -383,52 +396,65 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
       <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", px: "14px", pb: "14px" }}>
         {info && (
           <>
-            <Section title="Connection">
+            <Section title={t("server:infoPanel.sectionConnection")}>
               <Facts>
-                <Fact label="Host" value={streamerMode ? maskSensitive(info.host) : info.host} />
-                <Fact label="Port" value={streamerMode ? maskSensitive(info.port) : info.port} />
                 <Fact
-                  label="Users"
+                  label={t("server:infoPanel.labelHost")}
+                  value={streamerMode ? maskSensitive(info.host) : info.host}
+                />
+                <Fact
+                  label={t("server:infoPanel.labelPort")}
+                  value={streamerMode ? maskSensitive(info.port) : info.port}
+                />
+                <Fact
+                  label={t("server:infoPanel.labelUsers")}
                   value={`${info.user_count}${info.max_users == null ? "" : ` / ${info.max_users}`}`}
                 />
               </Facts>
             </Section>
 
-            <Section title="Server">
+            <Section title={t("server:infoPanel.sectionServer")}>
               <Facts>
-                {info.release && <Fact label="Release" value={info.release} />}
-                {info.os && <Fact label="OS" value={info.os} />}
-                {info.protocol_version && <Fact label="Protocol" value={info.protocol_version} />}
+                {info.release && <Fact label={t("server:infoPanel.labelRelease")} value={info.release} />}
+                {info.os && <Fact label={t("server:infoPanel.labelOs")} value={info.os} />}
+                {info.protocol_version && (
+                  <Fact label={t("server:infoPanel.labelProtocol")} value={info.protocol_version} />
+                )}
                 <Fact
-                  label="Fancy Mumble"
+                  label={t("server:infoPanel.labelFancyMumble")}
                   value={
                     info.fancy_version == null
-                      ? "Not supported"
-                      : `v${decodeFancyVersion(info.fancy_version)}`
+                      ? t("server:infoPanel.notSupported")
+                      : t("nebulaServer:panel.fancyVersion", {
+                          version: decodeFancyVersion(info.fancy_version),
+                        })
                   }
                 />
               </Facts>
             </Section>
 
-            <Section title="Audio">
+            <Section title={t("server:infoPanel.sectionAudio")}>
               <Facts>
                 {info.max_bandwidth != null && (
-                  <Fact label="Max bandwidth" value={formatBandwidth(info.max_bandwidth)} />
+                  <Fact
+                    label={t("server:infoPanel.labelMaxBandwidth")}
+                    value={formatBandwidth(info.max_bandwidth)}
+                  />
                 )}
-                <Fact label="Codec" value={info.opus ? "Opus" : "CELT"} />
+                <Fact label={t("server:infoPanel.labelCodec")} value={info.opus ? "Opus" : "CELT"} />
               </Facts>
             </Section>
 
             {welcomeText && (
               <Section>
-                <Fold title="Welcome">
+                <Fold title={t("server:infoPanel.accordionWelcome")}>
                   <WelcomeText html={welcomeText} />
                 </Fold>
               </Section>
             )}
 
             {livePlugins.length > 0 && (
-              <Section title="Plugins">
+              <Section title={t("server:infoPanel.sectionPlugins")}>
                 <Folds>
                   {livePlugins.map((plugin) => (
                     <Fold
@@ -438,9 +464,12 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
                           component="span"
                           sx={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
                         >
-                          {`${plugin.name} v${plugin.version}`}
+                          {t("nebulaServer:panel.pluginTitle", {
+                            name: plugin.name,
+                            version: plugin.version,
+                          })}
                           {isOfficialPlugin(plugin.name) && (
-                            <Tooltip title="Official first-party plugin">
+                            <Tooltip title={t("nebulaServer:panel.officialPlugin")}>
                               <Box
                                 component="span"
                                 sx={(theme) => ({ display: "inline-flex", color: theme.palette.nebula.ok })}
@@ -460,62 +489,118 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
             )}
 
             <Section>
-              <Fold title="Activity log" defaultExpanded>
+              <Fold title={t("nebulaServer:panel.activityLog")} defaultExpanded>
                 <ActivityLog />
               </Fold>
             </Section>
 
             {devMode && (
               <Section
-                title="Developer"
+                title={t("server:infoPanel.sectionDeveloper")}
                 action={
-                  <Tooltip title="Refresh">
-                    <IconButton size="small" aria-label="Refresh debug stats" onClick={refreshStats}>
+                  <Tooltip title={t("server:infoPanel.refreshTitle")}>
+                    <IconButton
+                      size="small"
+                      aria-label={t("server:infoPanel.refreshAriaLabel")}
+                      onClick={refreshStats}
+                    >
                       <RefreshCwIcon width={13} height={13} />
                     </IconButton>
                   </Tooltip>
                 }
               >
                 <Folds>
-                  <Fold title="Audio transport">
+                  <Fold title={t("nebulaServer:panel.audioTransport")}>
                     <Facts mono>
-                      <Fact mono label="Transport" value={udpActive ? "UDP (encrypted)" : "TCP tunnel"} />
-                      {udpActive && <Fact mono label="Encryption" value={udpCipher ?? "unknown"} />}
-                      <Fact mono label="Force TCP" value={audioSettings?.force_tcp_audio ?? false} />
+                      <Fact
+                        mono
+                        label={t("server:infoPanel.debug.transport")}
+                        value={
+                          udpActive
+                            ? t("server:infoPanel.transportUdp")
+                            : t("server:infoPanel.transportTcp")
+                        }
+                      />
+                      {udpActive && (
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.encryption")}
+                          value={udpCipher ?? t("server:infoPanel.encryptionUnknown")}
+                        />
+                      )}
+                      <Fact
+                        mono
+                        label={t("server:infoPanel.debug.forceTcp")}
+                        value={audioSettings?.force_tcp_audio ?? false}
+                      />
                     </Facts>
                   </Fold>
 
                   {audioSettings && (
-                    <Fold title="Audio settings">
+                    <Fold title={t("nebulaServer:panel.audioSettings")}>
                       <Facts mono>
                         <Fact
                           mono
-                          label="Input device"
-                          value={audioSettings.selected_device ?? "System default"}
-                        />
-                        <Fact mono label="Bitrate" value={`${audioSettings.bitrate_bps / 1000} kb/s`} />
-                        <Fact mono label="Frame size" value={`${audioSettings.frame_size_ms} ms`} />
-                        <Fact
-                          mono
-                          label="VAD threshold"
-                          value={`${(audioSettings.vad_threshold * 100).toFixed(1)}%`}
-                        />
-                        <Fact mono label="Auto gain" value={audioSettings.auto_gain} />
-                        <Fact mono label="Max gain" value={`${audioSettings.max_gain_db} dB`} />
-                        <Fact
-                          mono
-                          label="Activation"
-                          value={ACTIVATION_LABELS[activationKind(audioSettings)]}
+                          label={t("server:infoPanel.debug.inputDevice")}
+                          value={audioSettings.selected_device ?? t("server:infoPanel.systemDefault")}
                         />
                         <Fact
                           mono
-                          label="Gate close ratio"
-                          value={`${(audioSettings.noise_gate_close_ratio * 100).toFixed(0)}%`}
+                          label={t("server:infoPanel.debug.bitrate")}
+                          value={t("nebulaServer:panel.kbps", { value: audioSettings.bitrate_bps / 1000 })}
                         />
-                        <Fact mono label="Hold frames" value={audioSettings.hold_frames} />
-                        <Fact mono label="Push to talk" value={audioSettings.push_to_talk} />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.frameSize")}
+                          value={t("nebulaServer:panel.milliseconds", {
+                            value: audioSettings.frame_size_ms,
+                          })}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.vadThreshold")}
+                          value={t("nebulaServer:panel.percent", {
+                            value: (audioSettings.vad_threshold * 100).toFixed(1),
+                          })}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.autoGain")}
+                          value={audioSettings.auto_gain}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.maxGain")}
+                          value={t("nebulaServer:panel.decibels", { value: audioSettings.max_gain_db })}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.activation")}
+                          value={t(ACTIVATION_KEYS[activationKind(audioSettings)])}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.gateCloseRatio")}
+                          value={t("nebulaServer:panel.percent", {
+                            value: (audioSettings.noise_gate_close_ratio * 100).toFixed(0),
+                          })}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.holdFrames")}
+                          value={audioSettings.hold_frames}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.pushToTalk")}
+                          value={audioSettings.push_to_talk}
+                        />
                         {audioSettings.push_to_talk_key && (
-                          <Fact mono label="PTT key" value={audioSettings.push_to_talk_key} />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.pttKey")}
+                            value={audioSettings.push_to_talk_key}
+                          />
                         )}
                       </Facts>
                     </Fold>
@@ -523,87 +608,144 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
 
                   {debugStats && (
                     <>
-                      <Fold title="Connection & state">
+                      <Fold title={t("nebulaServer:panel.connectionState")}>
                         <Facts mono>
-                          <Fact mono label="Voice state" value={debugStats.voice_state} />
-                          <Fact mono label="Connection epoch" value={debugStats.connection_epoch} />
-                          <Fact mono label="App uptime" value={formatDuration(debugStats.uptime_seconds)} />
-                          <Fact mono label="Users" value={debugStats.user_count} />
-                          <Fact mono label="Channels" value={debugStats.channel_count} />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.voiceState")}
+                            value={debugStats.voice_state}
+                          />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.connectionEpoch")}
+                            value={debugStats.connection_epoch}
+                          />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.appUptime")}
+                            value={formatDuration(debugStats.uptime_seconds)}
+                          />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.users")}
+                            value={debugStats.user_count}
+                          />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.channels")}
+                            value={debugStats.channel_count}
+                          />
                         </Facts>
                       </Fold>
 
-                      <Fold title="Messages">
+                      <Fold title={t("server:infoPanel.accordionMessages")}>
                         <Facts mono>
-                          <Fact mono label="Channel messages" value={debugStats.channel_message_count} />
-                          <Fact mono label="DM messages" value={debugStats.dm_message_count} />
-                          <Fact mono label="Total messages" value={debugStats.total_message_count} />
-                          <Fact mono label="Offloaded" value={debugStats.offloaded_count} />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.channelMessages")}
+                            value={debugStats.channel_message_count}
+                          />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.dmMessages")}
+                            value={debugStats.dm_message_count}
+                          />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.totalMessages")}
+                            value={debugStats.total_message_count}
+                          />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.offloaded")}
+                            value={debugStats.offloaded_count}
+                          />
                         </Facts>
                       </Fold>
 
-                      <Fold title="Network latency">
+                      <Fold title={t("nebulaServer:panel.networkLatency")}>
                         <LatencyGraph />
                       </Fold>
                     </>
                   )}
 
                   {capabilities && (
-                    <Fold title="File server">
+                    <Fold title={t("nebulaServer:panel.fileServer")}>
                       <Facts mono>
                         <Fact
                           mono
-                          label="Plugin"
-                          value={`${capabilities.plugin.name} v${capabilities.plugin.version}`}
-                        />
-                        <Fact mono label="Mumble version" value={capabilities.mumble_version.display} />
-                        <Fact mono label="Fancy version" value={capabilities.fancy_version.display} />
-                        <Fact
-                          mono
-                          label="Max file size"
-                          value={`${(capabilities.limits.max_file_size_bytes / 1024 / 1024).toFixed(0)} MB`}
+                          label={t("server:infoPanel.debug.plugin")}
+                          value={t("nebulaServer:panel.pluginTitle", {
+                            name: capabilities.plugin.name,
+                            version: capabilities.plugin.version,
+                          })}
                         />
                         <Fact
                           mono
-                          label="Max storage"
-                          value={`${(capabilities.limits.max_total_storage_bytes / 1024 / 1024).toFixed(0)} MB`}
+                          label={t("server:infoPanel.debug.mumbleVersion")}
+                          value={capabilities.mumble_version.display}
                         />
                         <Fact
                           mono
-                          label="File TTL"
+                          label={t("server:infoPanel.debug.fancyVersion")}
+                          value={capabilities.fancy_version.display}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.maxFileSize")}
+                          value={t("nebulaServer:panel.megabytes", {
+                            value: (capabilities.limits.max_file_size_bytes / 1024 / 1024).toFixed(0),
+                          })}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.maxStorage")}
+                          value={t("nebulaServer:panel.megabytes", {
+                            value: (capabilities.limits.max_total_storage_bytes / 1024 / 1024).toFixed(0),
+                          })}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.fileTtl")}
                           value={
                             capabilities.features.file_ttl
-                              ? `${capabilities.limits.ttl_seconds}s`
-                              : "disabled"
+                              ? t("nebulaServer:panel.seconds", {
+                                  value: capabilities.limits.ttl_seconds,
+                                })
+                              : t("server:infoPanel.disabled")
                           }
                         />
                         <Fact
                           mono
-                          label="Delete on download"
+                          label={t("server:infoPanel.debug.deleteOnDownload")}
                           value={capabilities.features.delete_on_download}
                         />
                         <Fact
                           mono
-                          label="Delete on disconnect"
+                          label={t("server:infoPanel.debug.deleteOnDisconnect")}
                           value={capabilities.features.delete_on_disconnect}
                         />
-                        <Fact mono label="Custom emotes" value={capabilities.features.custom_emotes} />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.customEmotes")}
+                          value={capabilities.features.custom_emotes}
+                        />
                       </Facts>
                     </Fold>
                   )}
 
-                  <Fold title="CSP violations">
+                  <Fold title={t("nebulaServer:panel.cspViolations")}>
                     <Stack direction="row" alignItems="center" sx={{ mb: "6px" }}>
                       <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted })}>
                         {cspViolations.length === 0
-                          ? "No violations recorded."
-                          : `${cspViolations.length} violation(s)`}
+                          ? t("server:infoPanel.cspNoViolations")
+                          : t("server:infoPanel.cspViolationCount", { count: cspViolations.length })}
                       </Typography>
                       {cspViolations.length > 0 && (
-                        <Tooltip title="Clear violations">
+                        <Tooltip title={t("server:infoPanel.cspClearTitle")}>
                           <IconButton
                             size="small"
-                            aria-label="Clear violations"
+                            aria-label={t("server:infoPanel.cspClearTitle")}
                             sx={{ ml: "auto" }}
                             onClick={clearCspViolations}
                           >

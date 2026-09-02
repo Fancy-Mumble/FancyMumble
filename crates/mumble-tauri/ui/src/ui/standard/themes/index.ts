@@ -9,7 +9,8 @@ export type ThemeId =
   | "macchiato"
   | "midnight-pretenders"
   | "ply"
-  | "guardbase";
+  | "guardbase"
+  | "aurora";
 
 export interface ThemeOption {
   readonly id: ThemeId;
@@ -33,12 +34,31 @@ export const THEMES: readonly ThemeOption[] = [
   },
   { id: "ply", label: "Ply", swatches: ["#F2F2F2", "#0D0D0D", "#93ABBF", "#F20505"] },
   { id: "guardbase", label: "Guardbase", swatches: ["#0E1826", "#012340", "#2E4959", "#687E8C"] },
+  { id: "aurora", label: "Aurora", swatches: ["#0a0f1c", "#1c2740", "#7fb0ff", "#b795ff"] },
 ];
 
 export const DEFAULT_THEME: ThemeId = "dark";
 
 export function applyTheme(id: ThemeId): void {
   document.documentElement.setAttribute("data-theme", id);
+}
+
+/**
+ * Which scheme the chosen theme is worn in.
+ *
+ * A second attribute rather than a second set of theme ids: the design sheet
+ * draws each theme in both light and dark, so the scheme is orthogonal to the
+ * brand. Stamped on `<html>` exactly as the theme is, which is what lets the
+ * pack observe one attribute filter and pick both changes up.
+ */
+export function applyColorMode(mode: "system" | "light" | "dark"): void {
+  if (mode === "system") document.documentElement.removeAttribute("data-color-mode");
+  else document.documentElement.setAttribute("data-color-mode", mode);
+}
+
+export function getCurrentColorMode(): "system" | "light" | "dark" {
+  const value = document.documentElement.getAttribute("data-color-mode");
+  return value === "light" || value === "dark" ? value : "system";
 }
 
 export function getCurrentTheme(): ThemeId {

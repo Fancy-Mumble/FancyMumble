@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, Tooltip } from "@mui/material";
 import type { Theme } from "@mui/material/styles";
 import { isApple } from "@core/utils/platform";
@@ -27,8 +28,9 @@ export type FormatAction =
   { kind: "mark"; before: string; after: string } | { kind: "list"; list: "bullet" | "ordered" };
 
 interface FormatButton {
-  /** What the button is called, in the tooltip and to assistive technology. */
-  label: string;
+  /** What the button is called, in the tooltip and to assistive technology,
+   *  as a translation key. */
+  labelKey: string;
   icon: React.ReactNode;
   action: FormatAction;
   /** Starts a new group, drawn behind a hairline. */
@@ -44,13 +46,17 @@ const mark = (before: string, after = before): FormatAction => ({ kind: "mark", 
  * a marker the message renderer prints back as literal text would look like
  * formatting and arrive as punctuation, which is worse than not offering it.
  */
-const BUTTONS: readonly FormatButton[] = [
-  { label: "Bold", icon: <BoldIcon width={15} height={15} />, action: mark("**") },
-  { label: "Italic", icon: <ItalicIcon width={15} height={15} />, action: mark("*") },
-  { label: "Strikethrough", icon: <StrikethroughIcon width={15} height={15} />, action: mark("~~") },
-  { label: "Code", icon: <CodeIcon width={15} height={15} />, action: mark("`") },
+const BUTTONS = [
+  { labelKey: "chat:liveDoc.toolbar.bold", icon: <BoldIcon width={15} height={15} />, action: mark("**") },
+  { labelKey: "chat:liveDoc.toolbar.italic", icon: <ItalicIcon width={15} height={15} />, action: mark("*") },
   {
-    label: "Link",
+    labelKey: "chat:liveDoc.toolbar.strike",
+    icon: <StrikethroughIcon width={15} height={15} />,
+    action: mark("~~"),
+  },
+  { labelKey: "nebulaChat:format.code", icon: <CodeIcon width={15} height={15} />, action: mark("`") },
+  {
+    labelKey: "chat:liveDoc.ribbon.link",
     icon: <Link2Icon width={15} height={15} />,
     // The selection becomes the text and the caret lands in the empty target,
     // which is the part the author still has to supply.
@@ -58,16 +64,16 @@ const BUTTONS: readonly FormatButton[] = [
     separated: true,
   },
   {
-    label: "Bulleted list",
+    labelKey: "nebulaChat:format.bulletedList",
     icon: <ListIcon width={15} height={15} />,
     action: { kind: "list", list: "bullet" },
   },
   {
-    label: "Numbered list",
+    labelKey: "chat:liveDoc.toolbar.orderedList",
     icon: <ListOrderedIcon width={15} height={15} />,
     action: { kind: "list", list: "ordered" },
   },
-];
+] as const satisfies readonly FormatButton[];
 
 /** The bold shortcut, written the way this platform writes it. */
 const BOLD_HINT = isApple ? "⌘B" : "Ctrl+B";
@@ -99,13 +105,14 @@ export function FormatBar({
   onFormat: (action: FormatAction) => void;
   onEmoji?: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }>) {
+  const { t } = useTranslation(["nebulaChat", "chat"]);
   return (
     <Stack
       direction="row"
       alignItems="center"
       gap="2px"
       role="toolbar"
-      aria-label="Formatting"
+      aria-label={t("nebulaChat:format.bar")}
       sx={(theme) => ({
         ...floatingSurface(theme),
         alignSelf: "flex-start",
@@ -115,13 +122,13 @@ export function FormatBar({
       })}
     >
       {BUTTONS.map((button) => (
-        <Fragment key={button.label}>
-          {button.separated && <Hairline />}
-          <Tooltip title={button.label}>
+        <Fragment key={button.labelKey}>
+          {"separated" in button && button.separated && <Hairline />}
+          <Tooltip title={t(button.labelKey)}>
             <Box
               component="button"
               type="button"
-              aria-label={button.label}
+              aria-label={t(button.labelKey)}
               // The composer's selection is what these act on, and a button
               // takes focus on mousedown - which collapses it before the click
               // ever arrives. Refusing the focus is what keeps the selection.
@@ -148,11 +155,11 @@ export function FormatBar({
       {onEmoji && (
         <>
           <Hairline />
-          <Tooltip title="Insert emoji">
+          <Tooltip title={t("nebulaChat:format.insertEmoji")}>
             <Box
               component="button"
               type="button"
-              aria-label="Insert emoji"
+              aria-label={t("nebulaChat:format.insertEmoji")}
               onMouseDown={(event: React.MouseEvent) => event.preventDefault()}
               onClick={onEmoji}
               sx={(theme: Theme) => ({

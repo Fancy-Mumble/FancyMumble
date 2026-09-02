@@ -33,9 +33,11 @@ interface Segment {
   code?: boolean;
   link?: boolean;
   spoiler?: boolean;
-  /** Inline user mention (<@SESSION>); rendered as @Username chip. */
+  /** Inline mention (<@SESSION> or <@&ROLE>); rendered as an @name chip. */
   mention?: boolean;
   mentionSession?: number;
+  /** Role name, for a `<@&ROLE>` mention. The marker carries it verbatim. */
+  mentionRole?: string;
   /** Global CSS class from hljs for syntax-highlighted code tokens. */
   hljsClass?: string;
   /** Marker set by parseMarkdown; expanded to hljs tokens by expandFenceSegments. */
@@ -95,6 +97,23 @@ function parseMarkdown(raw: string): Segment[] {
   };
 
   while (i < raw.length) {
+    // <@&ROLE> role mention token
+    //
+    // Without this the marker stayed in the draft as machine syntax - the
+    // author picked "admin" off the autocomplete and was shown `<@&admin>`,
+    // which is neither what they typed nor what anyone will receive.
+    if (raw[i] === "<" && raw[i + 1] === "@" && raw[i + 2] === "&") {
+      const close = raw.indexOf(">", i + 3);
+      const name = close === -1 ? "" : raw.slice(i + 3, close);
+      // The shape the wire regex accepts: a name, with no whitespace in it.
+      if (name.length > 0 && !/\s/.test(name)) {
+        pushCurrent();
+        segments.push({ text: raw.slice(i, close + 1), mention: true, mentionRole: name });
+        i = close + 1;
+        continue;
+      }
+    }
+
     // <@SESSION> user mention token
     if (raw[i] === "<" && raw[i + 1] === "@" && raw[i + 2] !== "&") {
       let j = i + 2;
@@ -274,6 +293,21 @@ function getSegmentClass(seg: Segment): string {
 }
 
 /**
+ * The `@name` a mention segment draws as, or null when it is not one.
+ *
+ * A role marker carries its own name and needs nothing looked up; a user
+ * mention carries only a session id, which the caller is the only one able to
+ * put a name to - and falls back to the bare id where it cannot, so a mention
+ * of somebody who has left still reads as a mention.
+ */
+function mentionChipLabel(seg: Segment, resolve?: (session: number) => string | undefined): string | null {
+  if (!seg.mention) return null;
+  if (seg.mentionRole !== undefined) return `@${seg.mentionRole}`;
+  if (seg.mentionSession === undefined) return null;
+  return `@${resolve?.(seg.mentionSession) ?? seg.mentionSession}`;
+}
+
+/**
  * Render segments with a custom caret and selection highlight.
  *
  * The caret is a blinking vertical line inserted at the correct character
@@ -311,9 +345,9 @@ function renderFormattedOverlay(
     const segEnd = charIdx + seg.text.length;
     const cls = getSegmentClass(seg);
 
-    // Mention segments are rendered atomically as @Username chips.
-    if (seg.mention && seg.mentionSession !== undefined) {
-      const name = mentionResolver?.(seg.mentionSession) ?? String(seg.mentionSession);
+    // Mention segments are rendered atomically as @name chips.
+    const chipLabel = mentionChipLabel(seg, mentionResolver);
+    if (chipLabel !== null) {
       const inSel = hasSelection && segStart < selTo && segEnd > selFrom;
       const chipCls = `${styles.mdMention}${inSel ? ` ${styles.selection}` : ""}`;
 
@@ -321,7 +355,11 @@ function renderFormattedOverlay(
         nodes.push(<span key="caret" className={styles.caret} />);
         cursorInserted = true;
       }
-      nodes.push(<span key={keyIdx++} className={chipCls}>{`@${name}`}</span>);
+      nodes.push(
+        <span key={keyIdx++} className={chipCls}>
+          {chipLabel}
+        </span>,
+      );
       if (!cursorInserted && cursorPos > segStart && cursorPos <= segEnd) {
         nodes.push(<span key="caret" className={styles.caret} />);
         cursorInserted = true;

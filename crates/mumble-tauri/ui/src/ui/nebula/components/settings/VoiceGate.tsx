@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Box, Typography } from "@mui/material";
 import type { AudioSettings } from "@core/types";
 import { VuMeter, type VuMarker } from "@standard/pages/settings/VuMeter";
@@ -16,15 +17,15 @@ type Mode = "auto" | "manual";
 const MODES = [
   {
     id: "auto" as const,
-    label: "Auto calibrate",
-    hint: "Speak ~5 s; threshold, hysteresis and hold tune themselves.",
+    labelKey: "gate.modeAuto",
+    hintKey: "gate.modeAutoHint",
   },
   {
     id: "manual" as const,
-    label: "Manual calibrate",
-    hint: "Drag Open and Close markers directly on the meter.",
+    labelKey: "gate.modeManual",
+    hintKey: "gate.modeManualHint",
   },
-];
+] as const;
 
 /**
  * The voice gate: how it is tuned, and proof that it is.
@@ -45,15 +46,20 @@ export function VoiceGate({
   settings: AudioSettings;
   onChange: (patch: Partial<AudioSettings>) => void;
 }>) {
+  const { t } = useTranslation("nebulaSettings");
   const gate = useVoiceCalibration(settings, onChange);
   const mode: Mode = settings.auto_input_sensitivity ? "auto" : "manual";
 
   return (
     <>
-      <GroupTitle>Voice gate</GroupTitle>
+      <GroupTitle>{t("gate.title")}</GroupTitle>
       <ChoiceCards
-        ariaLabel="Voice gate"
-        options={MODES}
+        ariaLabel={t("gate.title")}
+        options={MODES.map((option) => ({
+          id: option.id,
+          label: t(option.labelKey),
+          hint: t(option.hintKey),
+        }))}
         value={mode}
         onChange={(next) => onChange({ auto_input_sensitivity: next === "auto" })}
       />
@@ -92,17 +98,20 @@ type Gate = ReturnType<typeof useVoiceCalibration>;
  * when the five seconds end.
  */
 function AutoGate({ settings, gate }: Readonly<{ settings: AudioSettings; gate: Gate }>) {
+  const { t } = useTranslation("nebulaSettings");
   const needed = !gate.hasCalibrated && !gate.testing;
   const seconds = (gate.speechProgress * (SPEECH_TARGET_MS / 1000)).toFixed(1);
 
   const [title, hint] = gate.testing
     ? [
-        gate.speechProgress >= 1 ? "That's enough — stop when you like" : "Listening…",
-        gate.speaking ? `Speaking · ${seconds} / 5.0 s` : `Silent · ${seconds} / 5.0 s`,
+        gate.speechProgress >= 1 ? t("gate.enough") : t("gate.listening"),
+        gate.speaking
+          ? t("gate.speakingProgress", { seconds })
+          : t("gate.silentProgress", { seconds }),
       ]
     : needed
-      ? ["Calibration needed", "Speak naturally for 5 seconds so the gate tunes itself to your mic."]
-      : ["Gate calibrated", "Run it again if you change microphone, room or filters."];
+      ? [t("gate.needed"), t("gate.neededHint")]
+      : [t("gate.calibrated"), t("gate.calibratedHint")];
 
   return (
     <>
@@ -134,7 +143,7 @@ function AutoGate({ settings, gate }: Readonly<{ settings: AudioSettings; gate: 
           </Typography>
         </Box>
         <GateButton primary={!gate.testing} onClick={gate.toggleTest}>
-          {gate.testing ? "Stop" : needed ? "Calibrate" : "Recalibrate"}
+          {gate.testing ? t("gate.stop") : needed ? t("gate.calibrate") : t("gate.recalibrate")}
         </GateButton>
       </Stack>
 
@@ -188,13 +197,14 @@ function ManualGate({
   onChange: (patch: Partial<AudioSettings>) => void;
   gate: Gate;
 }>) {
+  const { t } = useTranslation("nebulaSettings");
   const close = settings.vad_threshold * settings.noise_gate_close_ratio;
 
   const markers: VuMarker[] = [
     {
       ...openCloseMarkers(settings)[0],
       onChange: (next) => onChange({ vad_threshold: next }),
-      ariaLabel: "Open threshold",
+      ariaLabel: t("gate.openThreshold"),
     },
     {
       ...openCloseMarkers(settings)[1],
@@ -205,7 +215,7 @@ function ManualGate({
         const open = Math.max(settings.vad_threshold, next + 1e-4);
         onChange({ noise_gate_close_ratio: Math.min(0.99, Math.max(0.1, next / open)) });
       },
-      ariaLabel: "Close threshold",
+      ariaLabel: t("gate.closeThreshold"),
     },
   ];
 
@@ -221,8 +231,12 @@ function ManualGate({
       })}
     >
       <Typography sx={(theme) => ({ fontSize: 11, lineHeight: 1.5, color: theme.palette.nebula.muted })}>
-        Transmission starts above <GateWord tone="open">Open</GateWord> and stops below{" "}
-        <GateWord tone="close">Close</GateWord>, so a pause between words does not cut you off.
+        {/* Three fragments rather than one string: the two coloured words are
+            components, and every language shipped puts them in this order.
+            A language that does not would need the sentence restructured. */}
+        {t("gate.explainerBefore")} <GateWord tone="open">{t("gate.open")}</GateWord>{" "}
+        {t("gate.explainerMiddle")} <GateWord tone="close">{t("gate.close")}</GateWord>
+        {t("gate.explainerAfter")}
       </Typography>
 
       <Box sx={{ mt: "4px" }}>
@@ -233,20 +247,23 @@ function ManualGate({
         <Typography sx={(theme) => ({ flex: 1, fontSize: 11, color: theme.palette.nebula.muted })}>
           {gate.testing
             ? gate.talking
-              ? `Transmitting now · open ${(settings.vad_threshold * 100).toFixed(1)}% · close ${(close * 100).toFixed(1)}%`
-              : "Below the threshold — nothing is being sent."
-            : "Start the meter to see where your voice sits against the markers."}
+              ? t("gate.transmitting", {
+                  open: (settings.vad_threshold * 100).toFixed(1),
+                  close: (close * 100).toFixed(1),
+                })
+              : t("gate.belowThreshold")
+            : t("gate.startMeterHint")}
         </Typography>
         <GateButton primary={!gate.testing} onClick={gate.toggleTest}>
-          {gate.testing ? "Stop" : "Test microphone"}
+          {gate.testing ? t("gate.stop") : t("gate.testMicrophone")}
         </GateButton>
       </Stack>
 
       <Box sx={{ mt: "12px" }}>
         <SliderRow
-          label="Hold — how long the gate stays open after you stop"
+          label={t("gate.hold")}
           value={settings.hold_frames}
-          display={`${settings.hold_frames} frames`}
+          display={t("gate.holdFrames", { count: settings.hold_frames })}
           min={1}
           max={50}
           step={1}
@@ -259,14 +276,21 @@ function ManualGate({
 
 /** The replay recorder, drawn as the mock's card rather than a bare button. */
 function HearYourself({ gate }: Readonly<{ gate: Gate }>) {
+  const { t } = useTranslation("nebulaSettings");
   const { replay } = gate;
   const active = replay.phase !== "idle";
   const label =
     replay.phase === "idle"
-      ? "Record sample"
+      ? t("gate.recordSample")
       : replay.phase === "recording"
-        ? `Stop recording · ${Math.round(replay.elapsed_ms / 1000)} / ${Math.round(replay.capacity_ms / 1000)} s`
-        : `Stop playback · ${Math.round(replay.elapsed_ms / 1000)} / ${Math.round(replay.total_ms / 1000)} s`;
+        ? t("gate.stopRecording", {
+            elapsed: Math.round(replay.elapsed_ms / 1000),
+            total: Math.round(replay.capacity_ms / 1000),
+          })
+        : t("gate.stopPlayback", {
+            elapsed: Math.round(replay.elapsed_ms / 1000),
+            total: Math.round(replay.total_ms / 1000),
+          });
 
   return (
     <Box
@@ -279,7 +303,7 @@ function HearYourself({ gate }: Readonly<{ gate: Gate }>) {
         border: `1px solid ${theme.palette.nebula.line}`,
       })}
     >
-      <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>Hear yourself</Typography>
+      <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{t("gate.hearYourself")}</Typography>
       <Typography
         sx={(theme) => ({
           my: "4px",
@@ -289,8 +313,7 @@ function HearYourself({ gate }: Readonly<{ gate: Gate }>) {
           color: theme.palette.nebula.muted,
         })}
       >
-        Record up to {REPLAY_CAPACITY_MS / 1000} s through the same filters your listeners receive, then play
-        it back.
+        {t("gate.replayHint", { seconds: REPLAY_CAPACITY_MS / 1000 })}
       </Typography>
       <Box
         component="button"

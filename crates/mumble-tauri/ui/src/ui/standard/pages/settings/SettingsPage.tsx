@@ -123,6 +123,7 @@ const PERSONALIZATION_DEFAULTS: PersonalizationData = {
   chatBgVideoBaked: null,
   chatBgVideoBakedSigma: 0,
   chatBgVideoBakedDim: 0,
+  chatBgRecents: [],
   bubbleStyle: "bubbles",
   fontSize: "medium",
   fontSizeCustomPx: 14,
@@ -130,6 +131,7 @@ const PERSONALIZATION_DEFAULTS: PersonalizationData = {
   compactMode: false,
   channelViewerStyle: "flat",
   theme: "dark",
+  colorMode: "system",
   alwaysShowMessageActions: false,
 };
 

@@ -3,6 +3,7 @@ import React, { lazy, Suspense, useState, useEffect, useCallback, useMemo, useRe
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore, liveDocKey } from "@core/store";
+import { myFilesAvailable } from "../fileserver/fileServerMe";
 import { PLUGIN_NAME_CALENDAR, PLUGIN_NAME_LIVE_DOC } from "@core/constants/pluginData";
 import type { ChatMessage, TimeFormat, LiveDocDocLink } from "@core/types";
 import { getPreferences } from "@core/preferencesStorage";
@@ -30,13 +31,11 @@ import Toast from "../elements/Toast";
 import type { FileShareChoice } from "./file/FileShareDialog";
 import { uploadAttachment } from "@core/features/chat/useFileUpload";
 const FileShareDialog = lazy(() => import("./file/FileShareDialog"));
-import {
-  encodeFileAttachmentMarker,
-  decodeFileAttachmentPayload,
-  previewKindForFilename,
-  FANCY_FILE_MARKER_RE,
-  type FileAttachmentInfo,
-} from "./file/FileAttachmentCard";
+import { encodeFileAttachmentMarker, type FileAttachmentInfo } from "./file/FileAttachmentCard";
+// Which picture a message carries, and which of its words caption it, is the
+// same answer in every pack that offers the popout, so it lives in core.
+import { findPopOutImageSrc, imagePopoutCaption } from "@core/features/chat/imagePopout";
+import { openDmPopout } from "@core/features/chat/dmPopout";
 import { usePersistentChat } from "../security/PersistentChatOverlays";
 import { BannerStack } from "../security/InfoBanner";
 import { useUserAvatars } from "@core/lazyBlobs";
@@ -79,19 +78,8 @@ import {
   resolveDropTarget,
   type LiveDocDropMode,
 } from "@core/features/chat/livedoc/liveDocDropStore";
+import { newDocSlug } from "@core/features/chat/livedoc/newDocSlug";
 
-/** Build a URL-safe, *unique* slug for a brand-new document so two docs
- *  that share a title (e.g. the default "Untitled") never collapse onto
- *  the same server-side document or the same sidebar entry. */
-function newDocSlug(title: string): string {
-  const base = title
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48);
-  const rand = Math.random().toString(36).slice(2, 8);
-  return base ? `${base}-${rand}` : `doc-${rand}`;
-}
 import ActiveWatchBanner from "./watch/ActiveWatchBanner";
 import styles from "./ChatView.module.css";
 import { Lightbox, type LightboxHandle } from "../elements/Lightbox";
@@ -134,20 +122,6 @@ function computeHeader(
 ): [string, number] {
   if (isDmMode) return [dmPartner?.name ?? fallbackDm, 0];
   return [channel?.name ?? fallbackChannel, memberCount];
-}
-
-/** Find the first poppable image source in a message body, or null if none. */
-function findPopOutImageSrc(body: string): string | null {
-  const inline = /<img[^>]+src="([^"]+)"/i.exec(body);
-  if (inline?.[1]) return inline[1];
-  const fileMatch = FANCY_FILE_MARKER_RE.exec(body);
-  if (fileMatch) {
-    const info: FileAttachmentInfo | null = decodeFileAttachmentPayload(fileMatch[1]);
-    if (info && previewKindForFilename(info.filename) === "image" && info.mode === "public") {
-      return info.url;
-    }
-  }
-  return null;
 }
 
 export default function ChatView({
@@ -219,6 +193,7 @@ export default function ChatView({
     chatBgVideoBaked: null,
     chatBgVideoBakedSigma: 0,
     chatBgVideoBakedDim: 0,
+  chatBgRecents: [],
     bubbleStyle: "bubbles",
     fontSize: "medium",
     fontSizeCustomPx: 14,
@@ -226,6 +201,7 @@ export default function ChatView({
     compactMode: false,
     channelViewerStyle: "modern",
     theme: "dark",
+    colorMode: "system",
     alwaysShowMessageActions: false,
   });
 
@@ -412,31 +388,12 @@ export default function ChatView({
   const sessions = useAppStore((s) => s.sessions);
   const handlePopOutDm = useCallback(() => {
     if (!isDmMode || !dmPartner) return;
-    const session = sessions.find((s) => s.id === activeServerId);
-    const payload = {
-      server_id: activeServerId ?? "",
-      server_label: session?.label ?? session?.host ?? null,
-      user_session: dmPartner.session,
-      user_name: dmPartner.name,
-      user_hash: dmPartner.hash ?? null,
-    };
-    invoke("open_dm_popout", { payload }).catch((err) => {
-      console.error("Failed to open DM popout:", err);
-    });
+    void openDmPopout(dmPartner, sessions.find((s) => s.id === activeServerId) ?? null);
   }, [isDmMode, dmPartner, sessions, activeServerId]);
 
   const handlePopOutImage = useCallback(
     (msg: ChatMessage, src: string) => {
-      const captionRaw = msg.body
-        .replaceAll(/<!--[\s\S]*?-->/g, "")
-        .replaceAll(/<img\b[^>]*>/gi, "")
-        .replaceAll(/<br\s*\/?>/gi, "\n")
-        .replaceAll(/<[^>]*>/g, "")
-        .replaceAll("&lt;", "<")
-        .replaceAll("&gt;", ">")
-        .replaceAll("&amp;", "&")
-        .trim();
-      const caption = captionRaw.length > 0 ? captionRaw.slice(0, 280) : null;
+      const caption = imagePopoutCaption(msg.body);
       const senderAvatar = msg.sender_hash ? (avatarByHash.get(msg.sender_hash) ?? null) : null;
       const payload = {
         src,
@@ -604,6 +561,7 @@ export default function ChatView({
   });
 
   const fileServerConfig = useAppStore((s) => s.fileServerConfig);
+  const fileServerKind = useAppStore((s) => s.fileServerKind);
   const uploadFile = useAppStore((s) => s.uploadFile);
   const sendMessageAction = useAppStore((s) => s.sendMessage);
   const sendDmAction = useAppStore((s) => s.sendDm);
@@ -1257,7 +1215,9 @@ export default function ChatView({
             onDownloads={handleOpenDownloadsPanel}
             onRichPresence={handleOpenRichPresencePanel}
             onOpenCalendar={calendarActive ? handleOpenCalendar : undefined}
-            onMySharedFiles={fileServerConfig ? handleOpenMySharedFiles : undefined}
+            onMySharedFiles={
+              myFilesAvailable(fileServerKind, fileServerConfig) ? handleOpenMySharedFiles : undefined
+            }
             onOpenDocLibrary={liveDocActive ? handleOpenDocLibrary : undefined}
             onScheduledMessages={!isDmMode && selectedChannel !== null ? handleOpenScheduledPanel : undefined}
             onPopOutDm={inPopout ? undefined : handlePopOutDm}

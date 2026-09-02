@@ -1,0 +1,79 @@
+{
+  "challenge": {
+    "eyebrow": "CONNEXION SÉCURISÉE",
+    "titleTotp": "Authentification à deux facteurs",
+    "titlePassword": "Mot de passe du serveur requis",
+    "titleUsername": "Se connecter sous un autre nom",
+    "intro": "Se connecter en tant que {{username}} à {{target}}.",
+    "usernameIntro": "{{host}} a refusé ce nom. Choisissez-en un autre et la connexion sera aussitôt relancée.",
+    "codeLabel": "Code d’authentification à six chiffres",
+    "passwordLabel": "Mot de passe du serveur",
+    "remember": "Retenir pour ce serveur enregistré",
+    "submit": "Se connecter en toute sécurité"
+  },
+  "reconnect": {
+    "title": "Connexion interrompue",
+    "waiting": "En attente de reconnexion",
+    "retryIn": "Nouvelle tentative dans {{seconds}} s",
+    "detail": "{{state}} · tentative {{attempt}}",
+    "retryNow": "Réessayer maintenant"
+  },
+  "quickConnect": {
+    "sectionOpenAsNewTab": "OUVRIR DANS UN NOUVEL ONGLET",
+    "noneSaved": "Aucun serveur enregistré pour l’instant.",
+    "allOpen": "Tous les identifiants enregistrés sont déjà ouverts.",
+    "lastJoined": "dernière connexion {{when}}",
+    "asIdentity": "en tant que {{username}}",
+    "addByAddress": "Ajouter un serveur par adresse…"
+  },
+  "addServer": {
+    "eyebrowIdentity": "NOUVELLE IDENTITÉ",
+    "eyebrowEdit": "SERVEUR ENREGISTRÉ",
+    "eyebrowServer": "NOUVEAU SERVEUR",
+    "titleIdentity": "Rejoindre {{server}} sous une autre identité",
+    "titleServer": "Ajouter un serveur",
+    "displayName": "Nom affiché",
+    "address": "Adresse",
+    "certificate": "Certificat",
+    "certificateHelp": "Facultatif. Un certificat permet au serveur de vous reconnaître d’une connexion à l’autre.",
+    "anonymous": "Se connecter anonymement",
+    "required": "L’adresse, le port et le nom d’utilisateur sont obligatoires."
+  },
+  "leave": {
+    "title": "Quitter ce serveur ?",
+    "body": "Vous serez déconnecté de {{server}} et sortirez du salon vocal.",
+    "leaving": "Déconnexion…"
+  },
+  "status": {
+    "checkingEllipsis": "vérification…",
+    "offline": "hors ligne",
+    "online": "{{users}} en ligne",
+    "onlineOfMax": "{{users}}/{{max}} en ligne",
+    "checking": "vérification",
+    "latency": "{{ms}} ms",
+    "version": "Mumble {{version}}"
+  },
+  "screen": {
+    "pickTitle": "Choisissez un serveur",
+    "pickBody": "Choisissez-en un dans la liste, ou ajoutez une nouvelle adresse.",
+    "joinAs": "REJOINDRE EN TANT QUE",
+    "newIdentity": "+ Nouvelle identité",
+    "editIdentity": "Modifier les informations enregistrées pour {{username}}",
+    "certificate": "certificat · {{label}}",
+    "noCertificate": "aucun certificat",
+    "connecting": "Connexion…",
+    "connectAs": "Se connecter en tant que {{username}}",
+    "autoConnect": "Connexion auto",
+    "autoConnectAria": "Se connecter automatiquement à ce serveur au démarrage"
+  },
+  "livery": {
+    "probing": "Recherche d’une identité visuelle sur ce serveur",
+    "live": "Identité visuelle du serveur affichée, en direct depuis la connexion",
+    "cached": "Identité visuelle du serveur affichée, confirmée à jour",
+    "fetching": "Chargement de l’identité visuelle du serveur",
+    "failed": "Ce serveur a une identité visuelle, mais elle n’a pas pu être chargée",
+    "absent": "Aucune identité visuelle définie sur ce serveur",
+    "unverified": "Ce serveur ne signale aucune identité visuelle",
+    "unreachable": "Impossible de joindre ce serveur pour vérifier son identité visuelle"
+  }
+}
