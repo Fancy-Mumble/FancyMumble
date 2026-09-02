@@ -37,6 +37,35 @@ page has to remember which of its switches is one of those.
 Nebula may import from `standard`; it must never import from `aurora`, and
 nothing in `standard` or `aurora` may import from here. Packs are peers.
 
+## Finding a setting
+
+Twenty-six pages sit behind the settings nav, so the sidebar carries a search
+field over the list. It reports **pages and how much of each matched**, not a
+list of hits: the page is where you are going, and eight rows that all say
+"Voice" is a longer way of saying "Voice, eight".
+
+Standard has each panel register its own settings at module scope. That cannot
+work here, because Nebula loads one page per chunk (see *Chunks*) and an index
+built at module scope would only ever hold the pages already visited. So the
+index is a data module, `settingsSearchIndex.ts`, eagerly loaded and listing
+every page's headings, with `titleKey` on the pages drawn from the translation
+catalogue and a plain string on the ones written in the page - the search has
+to match what is on screen, whichever of the two a page is. A page that gains a
+translation gains a key here and nothing else.
+
+Choosing a result opens the page *and lights the heading*, which is the part
+that makes it an answer rather than a shorter walk: "it is somewhere on
+Advanced" is what the user already knew. The controls in `controls.tsx` publish
+their title as `data-settings-anchor`, and `SettingsScreen` looks those up once
+the chosen page has mounted - retried for a few seconds a frame at a time,
+because a page arriving is two waits, its chunk and then its own first answer
+from the backend. A query that matched on a keyword rather than on text ("ptt")
+would light nothing, so the result carries the headings it matched and those
+stand in.
+
+Administration is deliberately not indexed: those nav labels *are* their
+contents.
+
 ## Where the design lives
 
 The mock is a flat set of CSS custom properties (`--bg0`, `--card`, `--ln`, …)
@@ -251,6 +280,53 @@ this to work, which is why `substringScore` mirrors the substring half of the
 backend's `fuzzy_score`. Each group is capped at six, or a server with a few
 dozen channels fills the panel with them and appears to have no people in it.
 
+## Friends
+
+Friends is the second destination the shell has - the title bar's button, or the
+rail's tile when the tab strip is off - and it draws the saved friends list,
+not the server's roster.
+
+That distinction is the whole feature. The column used to be `Messages`, and it
+listed everyone on whichever connection happened to be active, which answers
+"who is here" when the question is "who do I talk to". The people you keep are a
+saved set that outlives any one connection: `@core/friendsStorage`, the same
+record Standard's Friends page reads and Nebula's user menu writes, so a friend
+added in either design is a friend in both.
+
+A friend is a TLS certificate hash. Only the backend can say where one is, so
+`useFriends` asks it - `find_user_by_hash`, across every open connection,
+whenever the list or the connections change and on a slow timer besides, because
+a friend can arrive on a server without anything in this client moving. What is
+learned while they are visible is written back: the registered user id, the
+connection target of their server, and their avatar. Those are what make the
+*other* rows work.
+
+Because a friend chat between two registered users is a persisted,
+end-to-end-encrypted channel rather than a live direct message, one click means
+three different things:
+
+- online, on an open server: the direct message, which the store upgrades to the
+  pair's room by itself;
+- offline, on an open server: no session to address, so the `fancy-friends`
+  plugin is asked for the room directly - it can be written to now and is
+  replayed to them when they return;
+- on a server that is not open: a dialog offering to connect, after which the
+  chat opens by itself.
+
+Only an anonymous friend on a closed server is inert, which is why the rows are
+grouped by server with the one you are on first: the grouping is what makes it
+legible that half the rows would reconnect before they opened anything.
+
+Yourself is listed as a friend, under your own name, because the notepad the
+plugin keeps for you is the same kind of room a friend chat is. It appears only
+where it can exist - a registered account, and the plugin loaded.
+
+Once a chat has become its `__dm:` channel the conversation is a *channel*, and
+its name is the two user ids in it. `dmChannelLabel` is what stops the header
+announcing `__dm:3-7`: the live user names it while they are here, the saved
+friend names it when they are not. That room is peeked rather than joined, so
+the header offers no voice and no roster for it either.
+
 ## Leaving a server
 
 Three controls mean "leave": the dock's `Leave`, mini mode's `Leave`, and the
@@ -331,21 +407,47 @@ are gone with the surfaces they opened.
 ### Borrowed leaf widgets
 
 A handful of self-contained controls are Standard's, mounted inside Nebula's
-pages: the VU meter, the role colour/icon pickers and preview card, the member
-picker, the file preview and thumbnail, the chart canvas, the audit query
-autocomplete and SQL editor, and the sanitising HTML renderer. These are
-measurement and picker widgets rather than layout, they already draw from the
-active colour theme, and there is no second version of any of them worth
+pages: the VU meter, the file preview and thumbnail, the chart canvas, the
+emoji picker, the markdown input, the lightbox, the image editor and the
+sanitising HTML renderer. These are measurement, media and picker widgets
+rather than layout, and there is no second version of any of them worth
 having. Pages are Nebula's; these are not.
 
-The voice calibration *card* used to be on that list and is not any more. A
-whole card is layout - the mock disagrees with Standard about every box in it -
-so what is shared is the behaviour behind it: `useVoiceCalibration` owns the mic
-test, the level stream, the speech timer, the calibrator's answer and the replay
-recorder, and Standard's `CalibrationPanel` and Nebula's `VoiceGate` are two
-drawings of it. The meter inside both is still Standard's, because a dB axis
-with draggable thresholds is a measurement widget and a second one would be a
-second set of numbers to keep honest.
+The list used to be longer. The role colour and icon pickers, the role preview
+card, the member picker, the audit query autocomplete and its SQL editor, the
+role chip, the official-plugin badge, the reaction bar, the quote block, the
+poll card, the read receipt, the typing indicator, the stream-backend switch
+and the composer's two lists were all Standard's, and are now drawn here in
+MUI. What decided each of them was not size: it was whether the thing is a
+*surface* - something with a card, a row, a hairline and a colour that the mock
+has an opinion about. Those cannot be borrowed, because a borrowed one keeps
+Standard's opinion and reads as a foreign object in the page. A dB axis with
+draggable thresholds has no such opinion, and stays.
+
+Redrawing a widget never means re-deriving it. The keyboard contract behind the
+mention list and the slash list is still `handleMentionKey`, `handleSlashKey`
+and `candidateInsertText` from Standard's modules, because what a key does and
+what a mention becomes on the wire are not this pack's to decide; the poll card
+still reads the shared poll store, the receipt still asks the shared read
+store, and the role chip decodes its icon with `@core/profileFormat` rather
+than a second copy of the same six lines. What moved is the drawing.
+
+Two of them are less obvious than the rest. The reaction bar hand-positioned a
+tooltip through a portal, which MUI's `Tooltip` already owns, so that code is
+simply gone. The audit query field and the SQL editor are a transparent control
+sitting exactly on top of a coloured copy of their own text: the two layers line
+up only while they agree on every metric, so `highlightField.tsx` holds those
+metrics once and both fields read them, rather than two blocks that happen to
+match today.
+
+The voice calibration *card* was the first to come off that list, and it is the
+rule the rest followed. A whole card is layout - the mock disagrees with
+Standard about every box in it - so what is shared is the behaviour behind it:
+`useVoiceCalibration` owns the mic test, the level stream, the speech timer, the
+calibrator's answer and the replay recorder, and Standard's `CalibrationPanel`
+and Nebula's `VoiceGate` are two drawings of it. The meter inside both is still
+Standard's, because a dB axis with draggable thresholds is a measurement widget
+and a second one would be a second set of numbers to keep honest.
 
 ### Absent
 
@@ -383,8 +485,8 @@ before, because a feature landed and its line was never struck.
 
 - No watch-together host controls. An active session's card renders; starting
   one does not.
-- No first-run onboarding wizard, friends page, shared-files panel,
-  rich-presence panel, saved-server editor or channel recording.
+- No first-run onboarding wizard, shared-files panel, rich-presence panel,
+  saved-server editor or channel recording.
 - No mobile layout. Nebula assumes a desktop window.
 
 
@@ -421,6 +523,16 @@ copy, pin, delete. Everything else is on the right-click menu, so the strip does
 not grow into a toolbar covering the message it belongs to. Reacting had to be
 on both: the reaction bar owns the "+" that adds one, and the bar only draws
 once a reaction exists, so the first one could never be placed.
+
+Three things about the river are the reader's to set, and they are records the
+whole app shares rather than Nebula's own: text size, compact mode, and whether
+the action strip stays up. `useChatDisplay` reads them once at the top of the
+client and they arrive as props, because the alternative is every row
+subscribing to the same event for a value that changes when somebody visits a
+settings page. Compact mode drops the avatar column rather than emptying it -
+the width is the picture, not an indent - and the pinned strip is drawn *in the
+flow* under its own message: the hover pill hangs over the row above, which is
+right for the one row under the pointer and unreadable on all of them at once.
 
 Several things are about the *conversation* rather than about what is on
 screen - the read watermark, where reading stopped, the lightbox gallery - so
@@ -475,11 +587,130 @@ those to the occupants, and the second half of the subtitle appears only when
 it is not restating the first.
 
 Absent members are counted by key rather than by "offline". Counting the
-offline ones - which is what the channel info panel does, because it labels
-them - would make the number drop as one of them connected and sat somewhere
-else, and a membership that shrinks when a member appears is worse than none.
-The count is only ever asked for once per persisted channel opened, since
-`query_key_holders` is a round trip.
+offline ones - which is what Standard's channel info panel does, because it
+labels them - would make the number drop as one of them connected and sat
+somewhere else, and a membership that shrinks when a member appears is worse
+than none. The count is only ever asked for once per persisted channel opened,
+since `query_key_holders` is a round trip.
+
+`ChannelInfoSheet` counts the same way, so the header's number and the sheet's
+never disagree about the same room; what the sheet adds is the *names* behind
+it, which is the thing neither the header nor the roster can say.
+
+
+## The channel's own panel
+
+`ChannelInfoPanel` is the thin dialog; `ChannelInfoSheet` is what it draws.
+The split is `UserInfoDialog`/`UserInfoSheet`'s, and so is the shape: the mock
+draws the two information sheets with one banner, one identity row and one
+stack of cards, so both are assembled from the shared `InfoCard`, `InfoCaps`
+and `InfoFact` primitives rather than from two sets that would drift apart a
+pixel at a time.
+
+It opens over the shell rather than beside it. It still shares the `surface`
+value with the roster and the server details, so opening one closes the
+others, but a 560px sheet over a scrim is what the mock asks for and it leaves
+the conversation its full width instead of narrowing it by a rail.
+
+It exists because the pack had nowhere to read a channel's description and no
+caller for `update_channel` at all: a server that lets you write one from
+Standard and not from here is one design quietly losing a field. Editing is
+gated on Write and sends only what moved - `update_channel` reads null as
+"leave it", so echoing the description back would overwrite the server's copy
+with whatever this client had fetched.
+
+Whether the channel is persisted is read off the protocol the server announced
+on the channel, not off the persistence state `usePersistentChat` fetches. The
+panel opens on a channel picked from the tree, which the shell may never have
+selected and so may never have asked about.
+
+### The room's own look
+
+The protocol has no field for a channel icon or a channel banner, so both live
+in the description, behind the marker `core/channelProfile` reads:
+`<!--FANCYCHAN:{...}-->` at the head, the visible description after it. That is
+`profileFormat`'s trick applied to a room instead of a person - a legacy client
+renders the text and never shows the comment - and the payload's `banner` block
+is deliberately shaped like a profile's, so both sheets hand it to
+`resolveProfilePaint` and a channel photograph gets the same fade a user's
+does. A room that has set neither still falls back to a tint keyed on its own
+name, which is what it always did.
+
+An empty appearance writes no marker at all. Otherwise every channel that was
+ever edited would carry a payload saying nothing, and clearing the last picture
+would never quite clear it.
+
+Pictures are cropped and squeezed before they are stored, harder than the
+profile card squeezes its own: these travel inside the description rather than
+in a field of their own, and the server's default `image_message_length` is
+128 KiB for the description entire.
+
+Before this existed, the only icon a channel could have was "the first image in
+its description", which `ChannelIconList` guessed at. It still does, as the
+fallback: a description written anywhere else has no marker, and the guess is
+better than nothing.
+
+The counts that can only be read off the loaded conversation - messages today,
+the last one, the pinned ones - are absent rather than zero when the store is
+holding some other room's messages. Which room that is comes from
+`selectedChannel`, not from whether any messages happen to match: an empty
+channel you are standing in is loaded, and telling its reader to go and open
+the room they are already in is the bug that phrasing invites. The sheet opens on a channel picked from
+the tree, and "no messages today" about a room nobody has opened would be a
+claim the design has no room to qualify.
+
+It is lazily loaded. Nothing about it is on screen at rest, and the key
+takeover it carries is of no use to a session that never opens it.
+
+
+## Pinned messages
+
+The pins are the one surface here that is *not* the right-hand slot. Nebula
+used to borrow Standard's `PinnedMessagesPanel`, which is a column of the chat
+pane: opening it narrowed the conversation the pins point into, and it arrived
+here without the close button Standard's splitter draws for it - so the only
+way out was to open something else.
+
+`components/chat/pinned/PinnedPanel` is a popover hung from the header's own
+pin instead, on the same glass the composer's popovers use (`washPanel`, shared
+so the two cannot drift apart in blur or hairline). A pin list is a glance, not
+a place: it is dismissed by a click anywhere else, by Escape, or by choosing a
+pin - which jumps the conversation to it through the shell's `jumpToMessage`,
+the same one a quote uses.
+
+Pins earned a header button rather than a menu entry, because they are the
+surface that fills up on its own, and a thing that announces itself has to be
+reachable without first opening the menu that announced it. The kebab's dot is
+now downloads alone.
+
+The two decisions a row actually makes are pure and live in `pinnedModel.ts`.
+`pinPreview` flattens a body to one line, keeping code spans as their own runs
+- what people pin most is an address or a command, and those are read
+character by character rather than scanned. `pinAge` coarsens with distance: a
+clock today, a weekday and a clock this week, a bare interval for a fortnight,
+a date past a month, because "2 weeks ago" is the answer a pin list is being
+asked for and the hour it was sent at is noise.
+
+Unread pins keep an accent rule down the left rather than a dot beside the
+name - the row already says four things - and *Mark read* drops those marks
+without waiting for the next open. Opening the panel is what clears the
+channel's badge; the marks deliberately outlive that open, so the badge that
+sent you here can still say what it was about.
+
+
+## Entering a channel
+
+Every way in goes through the shell's `enterChannel`, never the store's
+`joinChannel` directly - the tree, the channel menu, the header's voice button,
+"join them" on a person's menu, the jump-to-root shortcut. A restricted channel
+refuses a plain join *silently*: the request is not honoured and the tree does
+not move, which reads as the client having ignored the click. So the shell asks
+for the password first and joins with it.
+
+A hidden room is the exception. Private and meeting rooms deny entry to
+everyone and grant it to invitees by id, and older servers mark those
+`is_enter_restricted` all the same - prompting an invited user would demand a
+secret that does not exist.
 
 
 ## Where history comes from
@@ -605,6 +836,51 @@ What is *not* split is anything the window shows at rest. The composer's
 pickers, the profile card and the message row are all on screen in the first
 second of a session, so deferring them would only add a round trip to the thing
 the user is already looking at.
+
+
+## Live Docs
+
+A Live Doc is a collaborative document opened onto a channel. The document
+itself is Standard's - the editor, the ribbon, the outline, the citation and
+reference stack, the library and the launch dialog - and Nebula hosts it rather
+than redrawing it. That is the same call the emoji picker and the poll card
+get, made for a much larger surface: what a document *is* - how it paginates,
+what a cross-reference resolves to, how a bibliography is styled - is not a
+question this pack has a different answer to, and seventeen thousand lines of
+it re-typed in MUI would be seventeen thousand lines to keep in step.
+
+What Nebula owns is where the document sits and how it is reached.
+`LiveDocDock` gives it two shapes: with the conversation put away it takes the
+pane under the header, and with the conversation showing it yields the bottom
+of the pane and grows a drag handle. The conversation underneath is hidden by
+`display`, never unmounted - the scroll position, the draft in the composer and
+the staged attachments are each worth more than the render.
+
+Standard's panel words that state the other way round: its `compactChat` asks
+whether the chat below is a compact strip, which is exactly what this pack
+calls "the conversation is showing". The prop is mapped, not renamed, so the
+toggle inside the borrowed ribbon keeps meaning what it draws.
+
+`useNebulaLiveDoc` holds the state around the panel - which document belongs to
+the channel on screen, whether the conversation stays visible, where a new
+document is filed. All of it is keyed on the channel the pane happens to be
+showing and none of it survives a move to another one.
+
+Two entry points, both gated on the server having the `fancy-live-doc` plugin
+loaded, so they vanish with it: **Documents** in the header's kebab opens the
+library, and **New document** in the composer's attach menu opens the launch
+dialog. Neither appears in a direct message, which has no channel to publish a
+document to.
+
+One rule is worth stating because breaking it is invisible until someone
+switches design: a newly created document is filed under
+`liveDoc.sidebar.defaultSection` - Standard's own translated string - and not
+under a name this pack chose. The sidebar is one list per person, not one per
+pack, and a second heading saying nearly the same thing would split it.
+
+The panel is lazily loaded and lands in its own chunk. It is the largest thing
+the pack can pull in, and a session that never opens a document never pays for
+it - which is the rule the section above is about.
 
 
 ## The composer surface

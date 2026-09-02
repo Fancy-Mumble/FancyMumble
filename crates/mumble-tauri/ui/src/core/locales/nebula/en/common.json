@@ -1,0 +1,50 @@
+﻿{
+  "linkWarning": {
+    "title": "Leaving Fancy Mumble",
+    "body": "This link opens in your browser. Fancy Mumble can’t vouch for where it goes.",
+    "trust": "Trust {{host}}",
+    "open": "Open link"
+  },
+  "quickConnect": "Quick connect",
+  "app": {
+    "back": "Back",
+    "addServer": "+ Add",
+    "searchServers": "Search servers",
+    "searchChannels": "Search channels",
+    "searchConversation": "Search this conversation",
+    "chooseConversation": "Choose a conversation",
+    "directMessage": "Direct message",
+    "pickChannel": "Pick a channel on the left",
+    "startWith": "Start a conversation with {{name}}",
+    "startOfChannel": "This is the start of #{{channel}}",
+    "nothingSelected": "Nothing selected",
+    "emptyHint": "Messages and shared moments will appear here.",
+    "localFilesOnly": "Only files from this computer can be dropped here",
+    "noFileSharingAllowed": "This server does not let you share files",
+    "noFileSharing": "This server has no file sharing",
+    "pickConversationFirst": "Pick a conversation first",
+    "deleteChannelTitle": "Delete #{{channel}}?",
+    "deleteChannelBody": "Its sub-channels and stored messages go with it. This cannot be undone."
+  },
+  "presence": {
+    "nobodyHere": "Nobody here",
+    "inVoice": "{{count}} in voice",
+    "withMembers_one": "{{voice}} · {{count}} member",
+    "withMembers_other": "{{voice}} · {{count}} members"
+  },
+  "day": {
+    "today": "Today",
+    "yesterday": "Yesterday"
+  },
+  "jump": {
+    "peopleHere_one": "{{count}} person here",
+    "peopleHere_other": "{{count}} people here",
+    "inVoiceChannel": "in voice · # {{channel}}"
+  },
+  "richText": {
+    "underline": "Underline",
+    "textColour": "Text colour",
+    "insertImage": "Insert image",
+    "resetColour": "Reset colour"
+  }
+}

@@ -1,7 +1,12 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChannelEntry } from "@core/types";
-import { PERM_MAKE_CHANNEL, PERM_MAKE_TEMP_CHANNEL, PERM_WRITE } from "@core/utils/permissions";
+import {
+  PERM_DELETE_MESSAGE,
+  PERM_MAKE_CHANNEL,
+  PERM_MAKE_TEMP_CHANNEL,
+  PERM_WRITE,
+} from "@core/utils/permissions";
 import { ChannelAttribute } from "@core/utils/channelAttributes";
 import { withNebulaTheme } from "../../testTheme";
 import { ChannelMenu } from "./ChannelMenu";
@@ -30,8 +35,12 @@ const channel = (partial: Partial<ChannelEntry> = {}) =>
 function open(props: Partial<React.ComponentProps<typeof ChannelMenu>> = {}) {
   const handlers = {
     onToggleHideEmpty: vi.fn(),
+    onJoin: vi.fn(),
+    onShowInfo: vi.fn(),
     onEdit: vi.fn(),
     onCreate: vi.fn(),
+    onMoveAllUsers: vi.fn(),
+    onPurgeHistory: vi.fn(),
     onDelete: vi.fn(),
     onEditPermissions: vi.fn(),
     onClose: vi.fn(),
@@ -42,6 +51,7 @@ function open(props: Partial<React.ComponentProps<typeof ChannelMenu>> = {}) {
         target={{ channel: channel(), x: 120, y: 240 }}
         listening={false}
         notificationsMuted={false}
+        occupantCount={2}
         hideEmpty={false}
         {...handlers}
         {...props}
@@ -73,10 +83,13 @@ describe("ChannelMenu", () => {
       expect(screen.getByText(label)).toBeTruthy();
   });
 
-  it("joins the channel it was opened on, then closes", () => {
+  it("hands the channel it was opened on back to the shell to enter, then closes", () => {
+    // The shell, not the store: a restricted room has a password to ask
+    // for first, and the menu is not the surface that asks it.
     const handlers = open();
     fireEvent.click(screen.getByText("Join channel"));
-    expect(actions.joinChannel).toHaveBeenCalledWith(3);
+    expect(handlers.onJoin).toHaveBeenCalledWith(expect.objectContaining({ id: 3 }));
+    expect(actions.joinChannel).not.toHaveBeenCalled();
     expect(handlers.onClose).toHaveBeenCalled();
   });
 
@@ -131,10 +144,15 @@ function open_props() {
   return {
     listening: false,
     notificationsMuted: false,
+    occupantCount: 2,
     hideEmpty: false,
     onToggleHideEmpty: vi.fn(),
+    onJoin: vi.fn(),
+    onShowInfo: vi.fn(),
     onEdit: vi.fn(),
     onCreate: vi.fn(),
+    onMoveAllUsers: vi.fn(),
+    onPurgeHistory: vi.fn(),
     onDelete: vi.fn(),
     onEditPermissions: vi.fn(),
     onClose: vi.fn(),
@@ -180,5 +198,63 @@ describe("ChannelMenu administration", () => {
     fireEvent.click(screen.getByText("Delete channel"));
     expect(handlers.onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: 4 }));
     expect(actions.selectChannel).not.toHaveBeenCalled();
+  });
+});
+
+describe("ChannelMenu, acting on the room", () => {
+  it("describes the channel without entering it", () => {
+    const handlers = open({ target: { channel: channel({ id: 6 }), x: 0, y: 0 } });
+    fireEvent.click(screen.getByText("Channel info"));
+    expect(handlers.onShowInfo).toHaveBeenCalledWith(expect.objectContaining({ id: 6 }));
+    expect(actions.joinChannel).not.toHaveBeenCalled();
+  });
+
+  it("offers to move the room only where there is a room to move", () => {
+    // Write, but nobody in it: an action with no subject.
+    open({ occupantCount: 0 });
+    expect(screen.queryByText("Move all users to...")).toBeNull();
+    cleanup();
+
+    // Somebody in it, but no Write: the server would refuse.
+    open({ occupantCount: 3, target: { channel: channel({ permissions: 0 }), x: 0, y: 0 } });
+    expect(screen.queryByText("Move all users to...")).toBeNull();
+    cleanup();
+
+    const handlers = open({
+      occupantCount: 3,
+      target: { channel: channel({ id: 5, permissions: PERM_WRITE }), x: 0, y: 0 },
+    });
+    fireEvent.click(screen.getByText("Move all users to..."));
+    expect(handlers.onMoveAllUsers).toHaveBeenCalledWith(expect.objectContaining({ id: 5 }));
+  });
+
+  it("offers to purge only where the server keeps a history and grants deleting it", () => {
+    // The grant without a stored history is nothing to purge...
+    open({
+      target: { channel: channel({ permissions: PERM_WRITE | PERM_DELETE_MESSAGE }), x: 0, y: 0 },
+    });
+    expect(screen.queryByText("Purge chat history")).toBeNull();
+    cleanup();
+
+    // ...and a stored history without the grant is not this user's to empty.
+    open({
+      target: {
+        channel: channel({ permissions: PERM_WRITE, pchat_protocol: "signal_v1" }),
+        x: 0,
+        y: 0,
+      },
+    });
+    expect(screen.queryByText("Purge chat history")).toBeNull();
+    cleanup();
+
+    const handlers = open({
+      target: {
+        channel: channel({ id: 8, permissions: PERM_DELETE_MESSAGE, pchat_protocol: "signal_v1" }),
+        x: 0,
+        y: 0,
+      },
+    });
+    fireEvent.click(screen.getByText("Purge chat history"));
+    expect(handlers.onPurgeHistory).toHaveBeenCalledWith(expect.objectContaining({ id: 8 }));
   });
 });

@@ -29,6 +29,13 @@ export interface PlayerAdapterArgs {
   sourceUrl: string;
   /** Notification callback for any locally-originated event (host only). */
   onLocalEvent?: (event: LocalPlayerEvent) => void;
+  /**
+   * Draw the player's own transport controls. Default true.
+   *
+   * A surface that draws its own progress bar passes false, so the reader is
+   * not given two scrubbers that disagree about who is in charge.
+   */
+  controls?: boolean;
 }
 
 /** Common adapter API. */
@@ -41,6 +48,36 @@ export interface PlayerAdapter {
   seek(at: number): Promise<void>;
   /** Read the current playback position in seconds. */
   currentTime(): number;
+  /**
+   * Length of the source in seconds, or 0 where it is not known yet.
+   *
+   * Metadata arrives after the player mounts, and a live stream has no
+   * length at all, so a caller drawing a progress bar has to treat 0 as
+   * "not yet" rather than as the start of a zero-length video.
+   */
+  duration(): number;
+  /**
+   * Seconds buffered from the start, or 0 when nothing is known.
+   *
+   * What a progress bar draws behind the played part. Every player reports
+   * this differently (ranges here, a loaded fraction there), so the adapter
+   * answers in the one unit the caller can draw with.
+   */
+  buffered(): number;
+  /** Playback volume, 0 to 1, independent of mute. */
+  volume(): number;
+  setVolume(value: number): void;
+  muted(): boolean;
+  setMuted(value: boolean): void;
+  /** Playback rate, 1 being normal speed. */
+  rate(): number;
+  setRate(value: number): void;
+  /**
+   * A short label for what is being played back, `"1080p"` and the like, or
+   * null where the player will not say. Never a promise about bandwidth - it
+   * is what the player reports it is currently showing.
+   */
+  quality(): string | null;
   /** Replace (or clear) the local-event callback after construction. */
   setOnLocalEvent(cb: ((event: LocalPlayerEvent) => void) | undefined): void;
   /** Tear down the underlying player and remove DOM nodes. */

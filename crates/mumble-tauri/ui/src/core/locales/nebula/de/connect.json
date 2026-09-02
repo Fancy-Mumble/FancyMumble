@@ -1,0 +1,79 @@
+{
+  "challenge": {
+    "eyebrow": "SICHERE VERBINDUNG",
+    "titleTotp": "Zwei-Faktor-Authentifizierung",
+    "titlePassword": "Serverpasswort erforderlich",
+    "titleUsername": "Unter anderem Namen verbinden",
+    "intro": "Als {{username}} mit {{target}} verbinden.",
+    "usernameIntro": "{{host}} hat diesen Namen nicht angenommen. Wähle einen anderen, dann wird sofort erneut verbunden.",
+    "codeLabel": "Sechsstelliger Authentifizierungscode",
+    "passwordLabel": "Serverpasswort",
+    "remember": "Für diesen gespeicherten Server merken",
+    "submit": "Sicher verbinden"
+  },
+  "reconnect": {
+    "title": "Verbindung unterbrochen",
+    "waiting": "Warte auf erneute Verbindung",
+    "retryIn": "Neuer Versuch in {{seconds}} s",
+    "detail": "{{state}} · Versuch {{attempt}}",
+    "retryNow": "Jetzt erneut versuchen"
+  },
+  "quickConnect": {
+    "sectionOpenAsNewTab": "IN NEUEM TAB ÖFFNEN",
+    "noneSaved": "Noch keine Server gespeichert.",
+    "allOpen": "Alle gespeicherten Logins sind bereits geöffnet.",
+    "lastJoined": "zuletzt beigetreten {{when}}",
+    "asIdentity": "als {{username}}",
+    "addByAddress": "Server über Adresse hinzufügen…"
+  },
+  "addServer": {
+    "eyebrowIdentity": "NEUE IDENTITÄT",
+    "eyebrowEdit": "GESPEICHERTER SERVER",
+    "eyebrowServer": "NEUER SERVER",
+    "titleIdentity": "{{server}} als jemand anderes betreten",
+    "titleServer": "Server hinzufügen",
+    "displayName": "Anzeigename",
+    "address": "Adresse",
+    "certificate": "Zertifikat",
+    "certificateHelp": "Optional. Mit einem Zertifikat erkennt dich der Server über Neuverbindungen hinweg wieder.",
+    "anonymous": "Anonym verbinden",
+    "required": "Adresse, Port und Benutzername sind erforderlich."
+  },
+  "leave": {
+    "title": "Diesen Server verlassen?",
+    "body": "Du wirst von {{server}} getrennt und verlässt den Sprachkanal.",
+    "leaving": "Verlasse…"
+  },
+  "status": {
+    "checkingEllipsis": "prüfe…",
+    "offline": "offline",
+    "online": "{{users}} online",
+    "onlineOfMax": "{{users}}/{{max}} online",
+    "checking": "prüfe",
+    "latency": "{{ms}} ms",
+    "version": "Mumble {{version}}"
+  },
+  "screen": {
+    "pickTitle": "Server auswählen",
+    "pickBody": "Wähle einen aus der Liste oder füge eine neue Adresse hinzu.",
+    "joinAs": "BEITRETEN ALS",
+    "newIdentity": "+ Neue Identität",
+    "editIdentity": "Gespeicherte Daten für {{username}} bearbeiten",
+    "certificate": "Zertifikat · {{label}}",
+    "noCertificate": "kein Zertifikat",
+    "connecting": "Verbinde…",
+    "connectAs": "Als {{username}} verbinden",
+    "autoConnect": "Automatisch verbinden",
+    "autoConnectAria": "Beim Start automatisch mit diesem Server verbinden"
+  },
+  "livery": {
+    "probing": "Server wird auf Branding geprüft",
+    "live": "Branding dieses Servers wird angezeigt, live über die Verbindung",
+    "cached": "Branding dieses Servers wird angezeigt, als aktuell bestätigt",
+    "fetching": "Branding dieses Servers wird geladen",
+    "failed": "Dieser Server hat Branding, es konnte aber nicht geladen werden",
+    "absent": "Für diesen Server ist kein Branding hinterlegt",
+    "unverified": "Dieser Server meldet kein Branding",
+    "unreachable": "Server für die Branding-Prüfung nicht erreichbar"
+  }
+}

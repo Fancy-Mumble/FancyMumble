@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Box, Typography } from "@mui/material";
 import type { ServerPingResult } from "@core/types";
 import { serverTint, type ServerRailEntry } from "../../selectors";
@@ -162,6 +163,7 @@ export function ServerRailCard({
   onPointerEnter,
   onPointerLeave,
 }: Readonly<ServerRailCardProps>) {
+  const { t } = useTranslation(["nebulaSidebar", "nebulaConnect"]);
   const { group, status, unread } = entry;
   const here = status === "connected" && Boolean(channelName);
 
@@ -233,18 +235,27 @@ export function ServerRailCard({
 
         <Box sx={{ display: "flex", gap: "5px", flexWrap: "wrap", mt: "8px" }}>
           {status === "connecting" ? (
-            <Chip tone="warn">connecting…</Chip>
+            <Chip tone="warn">{t("nebulaSidebar:servers.connecting")}</Chip>
           ) : (
             ping?.online && (
               <Chip tone="ok">
-                {(ping.user_count ?? 0) + (ping.max_user_count ? "/" + ping.max_user_count : "") + " online"}
+                {ping.max_user_count
+                  ? t("nebulaConnect:status.onlineOfMax", {
+                      users: ping.user_count ?? 0,
+                      max: ping.max_user_count,
+                    })
+                  : t("nebulaConnect:status.online", { users: ping.user_count ?? 0 })}
               </Chip>
             )
           )}
-          {ping?.latency_ms != null && status !== "connecting" && <Chip>{ping.latency_ms + " ms"}</Chip>}
-          {ping?.server_version && status !== "connecting" && <Chip>{"Mumble " + ping.server_version}</Chip>}
+          {ping?.latency_ms != null && status !== "connecting" && (
+            <Chip>{t("nebulaConnect:status.latency", { ms: ping.latency_ms })}</Chip>
+          )}
+          {ping?.server_version && status !== "connecting" && (
+            <Chip>{t("nebulaConnect:status.version", { version: ping.server_version })}</Chip>
+          )}
           {group.identities.length > 0 && status === "connecting" && (
-            <Chip>{group.identities.length + " identities"}</Chip>
+            <Chip>{t("nebulaSidebar:servers.identities", { count: group.identities.length })}</Chip>
           )}
         </Box>
 
@@ -287,6 +298,7 @@ function CardBody({
   onOpen: () => void;
   onCancel?: () => void;
 }>) {
+  const { t } = useTranslation(["nebulaSidebar", "common"]);
   if (entry.status === "connecting") {
     return (
       <>
@@ -305,10 +317,10 @@ function CardBody({
             })}
           />
           <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted })}>
-            Handshaking with the server…
+            {t("nebulaSidebar:servers.handshaking")}
           </Typography>
         </Box>
-        {onCancel && <CardAction label="Cancel" onClick={onCancel} quiet />}
+        {onCancel && <CardAction label={t("common:actions.cancel")} onClick={onCancel} quiet />}
       </>
     );
   }
@@ -326,7 +338,13 @@ function CardBody({
             mb: "7px",
           })}
         >
-          {("YOU’RE IN #" + channelName + (ownName ? " AS " + ownName : "")).toUpperCase()}
+          {/* Uppercased here rather than in the translation, so a translator
+              writes the sentence in normal case and every language gets the
+              mock's caps treatment. */}
+          {(ownName
+            ? t("nebulaSidebar:card.youreInAs", { channel: channelName, name: ownName })
+            : t("nebulaSidebar:card.youreIn", { channel: channelName })
+          ).toUpperCase()}
         </Typography>
         <Box sx={{ display: "flex", flexDirection: "column", gap: "5px" }}>
           {occupants.map((person) => (
@@ -340,13 +358,17 @@ function CardBody({
                   color: person.muted ? theme.palette.nebula.bad : theme.palette.nebula.dim,
                 })}
               >
-                {person.muted ? "muted" : person.talking ? "speaking" : ""}
+                {person.muted
+                  ? t("nebulaSidebar:card.muted")
+                  : person.talking
+                    ? t("nebulaSidebar:card.speaking")
+                    : ""}
               </Typography>
             </Box>
           ))}
         </Box>
         <Typography sx={(theme) => ({ mt: "10px", fontSize: 10.5, color: theme.palette.nebula.dim })}>
-          You’re connected here
+          {t("nebulaSidebar:servers.connectedHere")}
         </Typography>
       </>
     );
@@ -374,16 +396,22 @@ function CardBody({
             {unread > 99 ? "99+" : unread}
           </Box>
           <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.bad })}>
-            unread
+            {t("nebulaSidebar:card.unread")}
           </Typography>
         </Box>
       )}
       <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })}>
-        {(count > 0 ? count + (count === 1 ? " identity saved" : " identities saved") : "no identity saved") +
-          (entry.session ? "" : " · not connected")}
+        {(count > 0
+          ? t("nebulaSidebar:card.identitiesSummary", { count })
+          : t("nebulaSidebar:card.noIdentitySaved")) +
+          (entry.session ? "" : t("nebulaSidebar:card.notConnectedSuffix"))}
       </Typography>
       <CardAction
-        label={(entry.session ? "Switch to " : "Connect to ") + entry.group.label}
+        label={
+          entry.session
+            ? t("nebulaSidebar:servers.switchTo", { server: entry.group.label })
+            : t("nebulaSidebar:servers.connectTo", { server: entry.group.label })
+        }
         onClick={onOpen}
       />
     </>

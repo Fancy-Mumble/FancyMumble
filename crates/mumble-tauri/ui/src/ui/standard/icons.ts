@@ -55,6 +55,7 @@ export {
   EllipsisVertical as KebabMenuIcon,
   Key as KeyIcon,
   Keyboard as KeyboardIcon,
+  Lightbulb as LightbulbIcon,
   Ear as ListenBadgeIcon,
   Lock as LockIcon,
   Lock as LockSvg,

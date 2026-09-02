@@ -49,6 +49,7 @@ const DEFAULTS: UserPreferences = {
   skippedUpdateVersion: null,
   persistDms: false,
   hideEmptyChannels: false,
+  showOfflineMembers: true,
   welcomeMessageDisplay: "once",
   showDisconnectWarning: true,
   trustedLinkHosts: [],
@@ -283,25 +284,71 @@ export async function setMutedPushChannel(
 // -- Welcome-message "shown once" tracking (per-server) ------------
 
 /**
- * Server keys ("host:port") whose welcome message has already been shown
- * under the "Show once" preference, so it isn't shown again on reconnect.
+ * What each server's welcome message looked like when it was last shown,
+ * for the "Show once" preference.
+ *
+ * A digest of the text rather than a bare list of servers. It used to be
+ * the list, and that made the setting mean something nobody asked for: an
+ * operator who rewrote their welcome - or, now, drew a greeting that says
+ * something new - never showed it again to anyone who had already seen the
+ * old one. Once means once *per message*, not once per server forever.
  */
 const WELCOME_SHOWN_KEY = "welcomeShownServers";
 
-/** Whether the welcome message has already been shown for a server. */
-export async function hasShownWelcome(serverKey: string): Promise<boolean> {
-  const store = await getStore();
-  const seen = (await store.get<string[]>(WELCOME_SHOWN_KEY)) ?? [];
-  return seen.includes(serverKey);
+/**
+ * A stable digest of the welcome text.
+ *
+ * FNV-1a with an avalanche, not a cryptographic hash: this decides whether
+ * to show a dialog, and the only party who could benefit from a collision
+ * is the server, which could simply not send the message. It has to be
+ * synchronous, because `crypto.subtle` is not and this is read on the
+ * connect path.
+ */
+export function welcomeDigest(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x21f0aaad);
+  hash ^= hash >>> 15;
+  return (hash >>> 0).toString(36);
 }
 
-/** Record that a server's welcome message has been shown. */
-export async function markWelcomeShown(serverKey: string): Promise<void> {
+/** The digests already shown, keyed by `host:port`. */
+async function shownWelcomes(): Promise<Record<string, string>> {
   const store = await getStore();
-  const seen = (await store.get<string[]>(WELCOME_SHOWN_KEY)) ?? [];
-  if (!seen.includes(serverKey)) {
-    await store.set(WELCOME_SHOWN_KEY, [...seen, serverKey]);
+  const held = await store.get<string[] | Record<string, string>>(WELCOME_SHOWN_KEY);
+  // The old shape was a bare list of servers. Read as "seen something,
+  // text unknown": an empty digest matches nothing, so the next connect
+  // shows the current message once and records what it was. Better than
+  // discarding the record, which would re-show every welcome the user has
+  // ever dismissed on the first launch after an update.
+  if (Array.isArray(held)) {
+    return Object.fromEntries(held.map((key) => [key, ""]));
   }
+  return held ?? {};
+}
+
+/**
+ * Whether this exact welcome text has already been shown for a server.
+ *
+ * A server with no key, or a message whose digest differs from the one
+ * recorded, has not been shown - which is what makes an edited greeting
+ * appear again without an operator having to ask anyone to clear anything.
+ */
+export async function hasShownWelcome(serverKey: string, text: string): Promise<boolean> {
+  const seen = await shownWelcomes();
+  const held = seen[serverKey];
+  return held !== undefined && held === welcomeDigest(text);
+}
+
+/** Record that this welcome text has been shown for a server. */
+export async function markWelcomeShown(serverKey: string, text: string): Promise<void> {
+  const store = await getStore();
+  const seen = await shownWelcomes();
+  await store.set(WELCOME_SHOWN_KEY, { ...seen, [serverKey]: welcomeDigest(text) });
 }
 
 // -- Notification sound settings -----------------------------------

@@ -1,15 +1,20 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, IconButton, Menu, MenuItem, Tooltip, Typography } from "@mui/material";
 import type { KeyTrustLevel } from "@core/types";
 import {
   ChevronDownIcon,
   DownloadIcon,
+  FileTextIcon,
   HashIcon,
   InfoIcon,
   KebabMenuIcon,
   MonitorIcon,
   PinIcon,
+  PopoutIcon,
+  RadioIcon,
   SearchIcon,
+  UploadIcon,
   UsersGroupIcon,
   VolumeIcon,
 } from "@ui/icons";
@@ -39,20 +44,45 @@ interface ChatHeaderProps {
   onShowMembers: () => void;
   onShareScreen: () => void;
   onShowPinned: () => void;
+  /** Whether the pinned panel is the one currently hanging from the header. */
+  pinnedOpen?: boolean;
   onShowInfo: () => void;
   onShowDownloads: () => void;
+  /** Describe the open channel. Absent for a direct message, which is not one. */
+  onShowChannelInfo?: () => void;
+  /** Something has been pinned since the panel was last opened. */
+  hasNewPins?: boolean;
+  /** A download has finished since the panel was last opened. */
+  hasNewDownloads?: boolean;
+  /** Open this channel's document library. Absent where the server has no
+   *  live-doc plugin loaded, which is what hides the entry. */
+  onShowDocs?: () => void;
+  /** Send this conversation to its own window. Absent outside a direct
+   *  message, and inside a popout, which has nothing left to pop out. */
+  onPopOutDm?: () => void;
+  /** List what you have uploaded to this server's file store. Absent where
+   *  the server runs no file server, which is what hides the entry. */
+  onShowMyFiles?: () => void;
+  /** Show what the applications on this machine are publishing. Absent while
+   *  rich presence is switched off, so the entry appears with the feature. */
+  onShowPresence?: () => void;
 }
 
 /**
  * The 66px conversation header.
  *
- * It says three things about the channel and offers three actions. The facts -
+ * It says three things about the channel and offers four actions. The facts -
  * who is here, whether the history is kept, whether it is encrypted and
  * trusted - sit beside the name, because they qualify the room rather than the
- * conversation. Everything past the roster and search lives behind the kebab,
- * so the header stays the same width however many surfaces a channel has.
+ * conversation. Everything past the roster, search and the pins lives behind
+ * the kebab, so the header stays the same width however many surfaces a
+ * channel has.
  *
- * The name itself is the fourth control: clicking it opens the same menu the
+ * Pins earned their own button rather than a menu entry: they are the one
+ * surface here that fills up on its own, and a thing that announces itself has
+ * to be reachable without first opening the menu that was announcing it.
+ *
+ * The name itself is the fifth control: clicking it opens the same menu the
  * kebab does, which is what the chevron beside it promises.
  */
 export function ChatHeader({
@@ -70,9 +100,18 @@ export function ChatHeader({
   onShowMembers,
   onShareScreen,
   onShowPinned,
+  pinnedOpen = false,
   onShowInfo,
   onShowDownloads,
+  onShowChannelInfo,
+  hasNewPins = false,
+  hasNewDownloads = false,
+  onShowDocs,
+  onPopOutDm,
+  onShowMyFiles,
+  onShowPresence,
 }: Readonly<ChatHeaderProps>) {
+  const { t } = useTranslation(["nebulaChat", "common", "chat", "server"]);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const closeMenu = () => setMenuAnchor(null);
   const run = (action: () => void) => () => {
@@ -166,9 +205,9 @@ export function ChatHeader({
 
       <Stack direction="row" alignItems="center" gap={0.375} sx={{ ml: "auto" }}>
         {memberCount !== undefined && (
-          <Tooltip title="Members">
+          <Tooltip title={t("nebulaChat:header.members")}>
             <IconButton
-              aria-label={`Members (${memberCount})`}
+              aria-label={t("nebulaChat:header.membersCount", { count: memberCount })}
               onClick={onShowMembers}
               sx={{ gap: "6px", px: "9px" }}
             >
@@ -180,24 +219,57 @@ export function ChatHeader({
           </Tooltip>
         )}
         {canJoinVoice && (
-          <Tooltip title="Join voice">
-            <IconButton aria-label="Join voice" onClick={onJoinVoice}>
+          <Tooltip title={t("nebulaChat:header.joinVoice")}>
+            <IconButton aria-label={t("nebulaChat:header.joinVoice")} onClick={onJoinVoice}>
               <VolumeIcon width={14} height={14} />
             </IconButton>
           </Tooltip>
         )}
-        <Tooltip title="Search messages">
-          <IconButton aria-label="Search messages" onClick={onToggleSearch}>
+        <Tooltip title={t("nebulaChat:header.searchMessages")}>
+          <IconButton aria-label={t("nebulaChat:header.searchMessages")} onClick={onToggleSearch}>
             <SearchIcon width={14} height={14} />
           </IconButton>
         </Tooltip>
-        <Tooltip title="More">
+        <Tooltip title={t("chat:header.pinnedMessages")}>
           <IconButton
-            aria-label="Channel menu"
+            aria-label={hasNewPins ? t("nebulaChat:header.pinnedNew") : t("chat:header.pinnedMessages")}
+            aria-expanded={pinnedOpen}
+            onClick={onShowPinned}
+            sx={(theme) => ({
+              position: "relative",
+              // Lit while its panel is hanging from it, so the popover reads as
+              // this button's own rather than as a card that appeared.
+              ...(pinnedOpen
+                ? {
+                    background: theme.palette.nebula.accentSoft,
+                    color: theme.palette.nebula.text,
+                    boxShadow: `inset 0 0 0 1px ${theme.palette.nebula.accentLine}`,
+                    "&:hover": { background: theme.palette.nebula.accentSoft },
+                  }
+                : {}),
+            })}
+          >
+            <PinIcon width={14} height={14} />
+            {hasNewPins && <NewDot label={t("nebulaChat:header.new")} corner />}
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={t("common:actions.more")}>
+          <IconButton
+            aria-label={
+              hasNewDownloads ? t("nebulaChat:header.channelMenuNew") : t("nebulaChat:header.channelMenu")
+            }
             onClick={(event) => setMenuAnchor(event.currentTarget)}
-            sx={(theme) => (menuAnchor ? { background: theme.palette.nebula.hover } : {})}
+            sx={(theme) => ({
+              position: "relative",
+              ...(menuAnchor ? { background: theme.palette.nebula.hover } : {}),
+            })}
           >
             <KebabMenuIcon width={14} height={14} />
+            {/* The kebab carries what its menu is hiding - downloads only, now
+                that pins have a button of their own. The panel is a click
+                further in, so without this the only way to learn a download
+                landed is to go and look. */}
+            {hasNewDownloads && <NewDot label={t("nebulaChat:header.new")} corner />}
           </IconButton>
         </Tooltip>
       </Stack>
@@ -211,25 +283,84 @@ export function ChatHeader({
       >
         <MenuItem onClick={run(onShowMembers)}>
           <UsersGroupIcon width={13} height={13} />
-          Members
+          {t("nebulaChat:header.members")}
         </MenuItem>
         <MenuItem onClick={run(onShareScreen)}>
           <MonitorIcon width={13} height={13} />
-          Share screen
+          {t("chat:header.shareScreen")}
         </MenuItem>
-        <MenuItem onClick={run(onShowPinned)}>
-          <PinIcon width={13} height={13} />
-          Pinned messages
-        </MenuItem>
+        {onShowChannelInfo && (
+          <MenuItem onClick={run(onShowChannelInfo)}>
+            <HashIcon width={13} height={13} />
+            {t("chat:header.channelInfo")}
+          </MenuItem>
+        )}
         <MenuItem onClick={run(onShowInfo)}>
           <InfoIcon width={13} height={13} />
-          Server info
+          {t("server:infoPanel.heading")}
         </MenuItem>
         <MenuItem onClick={run(onShowDownloads)}>
           <DownloadIcon width={13} height={13} />
-          Downloads
+          {t("chat:header.downloads")}
+          {hasNewDownloads && <NewDot label={t("nebulaChat:header.new")} />}
         </MenuItem>
+        {/* Beside Downloads, because the pair is "what I took off this server"
+            and "what I put on it", and only one of them was reachable. */}
+        {onShowMyFiles && (
+          <MenuItem onClick={run(onShowMyFiles)}>
+            <UploadIcon width={13} height={13} />
+            {t("chat:mySharedFiles.title")}
+          </MenuItem>
+        )}
+        {onShowPresence && (
+          <MenuItem onClick={run(onShowPresence)}>
+            <RadioIcon width={13} height={13} />
+            {t("chat:richPresence.title")}
+          </MenuItem>
+        )}
+        {onShowDocs && (
+          <MenuItem onClick={run(onShowDocs)}>
+            <FileTextIcon width={13} height={13} />
+            {t("nebulaChat:header.documents")}
+          </MenuItem>
+        )}
+        {onPopOutDm && (
+          <MenuItem onClick={run(onPopOutDm)}>
+            <PopoutIcon width={13} height={13} />
+            {t("chat:header.popOutDm")}
+          </MenuItem>
+        )}
       </Menu>
     </Stack>
+  );
+}
+
+/**
+ * The mark on a control whose panel has something in it you have not seen.
+ *
+ * On a menu entry it is held to the row's right edge rather than set beside
+ * its icon, so a row that has one and a row that does not still read as the
+ * same column of labels; `corner` puts the same dot on a header button's
+ * top-right instead. One dot for both, because they mean the same thing and a
+ * second one drawn by hand is how two badges end up different sizes.
+ *
+ * The word is on the dot rather than in the label because the label is the
+ * panel's name, and "Downloads (new)" would make it a different one.
+ */
+function NewDot({ label, corner = false }: Readonly<{ label: string; corner?: boolean }>) {
+  return (
+    <Box
+      component="span"
+      role="img"
+      aria-label={label}
+      sx={(theme) => ({
+        width: 6,
+        height: 6,
+        flex: "none",
+        borderRadius: "50%",
+        background: theme.palette.nebula.accent,
+        ...(corner ? { position: "absolute", top: 5, right: 5 } : { ml: "auto" }),
+      })}
+    />
   );
 }

@@ -57,14 +57,25 @@ export function appendSample(
   return next.length > limit ? next.slice(next.length - limit) : next;
 }
 
-/** "Strong" or "Weak / none" - the mock's wording, and its warning colour. */
-export function certificateLabel(strong: boolean): { label: string; tone: "ok" | "warn" } {
-  return strong ? { label: "Strong", tone: "ok" } : { label: "Weak / none", tone: "warn" };
+/**
+ * Strong or weak certificate, as a translation key and its warning colour.
+ *
+ * Keys rather than sentences, so this stays a pure function the sheet's facts
+ * can be tested through.  The literal union is what lets `t()` still check them
+ * at the call site.
+ */
+export function certificateLabel(strong: boolean): {
+  labelKey: "sidebar:userInfo.certStrong" | "sidebar:userInfo.certWeak";
+  tone: "ok" | "warn";
+} {
+  return strong
+    ? { labelKey: "sidebar:userInfo.certStrong", tone: "ok" }
+    : { labelKey: "sidebar:userInfo.certWeak", tone: "warn" };
 }
 
 /** Mumble speaks Opus at 48 kHz or the legacy CELT codecs; the flag says which. */
-export function codecLabel(opus: boolean): string {
-  return opus ? "Opus 48 kHz" : "CELT";
+export function codecLabel(opus: boolean): "nebulaUser:info.codecOpus" | "nebulaUser:info.codecCelt" {
+  return opus ? "nebulaUser:info.codecOpus" : "nebulaUser:info.codecCelt";
 }
 
 export function osLabel(os: string | null | undefined, version: string | null | undefined): string | null {
@@ -83,10 +94,16 @@ export function viewerIsAdmin(channels: readonly ChannelEntry[]): boolean {
   return ((root?.permissions ?? 0) & PERM_WRITE) !== 0;
 }
 
-/** "12 Jun" - a date the mock writes without a year, since bans are recent news. */
+/** "12 Jun" - a date the mock writes without a year, since bans are recent news.
+ *  `undefined` for the locale means the browser's, which is the user's. */
 function shortDate(epochMs: number): string {
   return new Date(epochMs).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
+
+/** What became of a ban, as a `nebulaUser` key and whatever it interpolates. */
+export type BanNote =
+  | { key: "nebulaUser:info.bansOnRecord" | "nebulaUser:info.bansPermanent" }
+  | { key: "nebulaUser:info.bansExpired" | "nebulaUser:info.bansExpires"; date: string };
 
 /**
  * The bans on record against this person: how many, and what became of the
@@ -102,7 +119,7 @@ export function describeBans(
   user: Readonly<{ hash?: string | null }>,
   address: string | null | undefined,
   now: number,
-): { count: number; note: string } | null {
+): { count: number; note: BanNote } | null {
   const matching = bans.filter(
     (ban) => (!!user.hash && ban.hash === user.hash) || (!!address && ban.address === address),
   );
@@ -112,11 +129,13 @@ export function describeBans(
     .map((ban) => ({ ban, start: Date.parse(ban.start) }))
     .sort((left, right) => (right.start || 0) - (left.start || 0))[0];
 
-  let note = "on record";
-  if (latest.ban.duration === 0) note = "permanent";
+  let note: BanNote = { key: "nebulaUser:info.bansOnRecord" };
+  if (latest.ban.duration === 0) note = { key: "nebulaUser:info.bansPermanent" };
   else if (!Number.isNaN(latest.start)) {
     const end = latest.start + latest.ban.duration * 1000;
-    note = end <= now ? `expired ${shortDate(end)}` : `expires ${shortDate(end)}`;
+    note = end <= now
+      ? { key: "nebulaUser:info.bansExpired", date: shortDate(end) }
+      : { key: "nebulaUser:info.bansExpires", date: shortDate(end) };
   }
   return { count: matching.length, note };
 }

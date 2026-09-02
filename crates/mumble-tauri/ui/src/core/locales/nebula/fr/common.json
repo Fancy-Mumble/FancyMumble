@@ -1,0 +1,50 @@
+﻿{
+  "linkWarning": {
+    "title": "Vous quittez Fancy Mumble",
+    "body": "Ce lien s’ouvre dans votre navigateur. Fancy Mumble ne peut pas garantir sa destination.",
+    "trust": "Faire confiance à {{host}}",
+    "open": "Ouvrir le lien"
+  },
+  "quickConnect": "Connexion rapide",
+  "app": {
+    "back": "Retour",
+    "addServer": "+ Ajouter",
+    "searchServers": "Rechercher des serveurs",
+    "searchChannels": "Rechercher des salons",
+    "searchConversation": "Rechercher dans cette conversation",
+    "chooseConversation": "Choisissez une conversation",
+    "directMessage": "Message privé",
+    "pickChannel": "Choisissez un salon à gauche",
+    "startWith": "Démarrez une conversation avec {{name}}",
+    "startOfChannel": "C’est le début de #{{channel}}",
+    "nothingSelected": "Rien de sélectionné",
+    "emptyHint": "Les messages et les moments partagés apparaîtront ici.",
+    "localFilesOnly": "Seuls les fichiers de cet ordinateur peuvent être déposés ici",
+    "noFileSharingAllowed": "Ce serveur ne vous autorise pas à partager des fichiers",
+    "noFileSharing": "Ce serveur n’a pas de partage de fichiers",
+    "pickConversationFirst": "Choisissez d’abord une conversation",
+    "deleteChannelTitle": "Supprimer #{{channel}} ?",
+    "deleteChannelBody": "Ses sous-salons et ses messages enregistrés partent avec lui. Cette action est irréversible."
+  },
+  "presence": {
+    "nobodyHere": "Personne ici",
+    "inVoice": "{{count}} en vocal",
+    "withMembers_one": "{{voice}} · {{count}} membre",
+    "withMembers_other": "{{voice}} · {{count}} membres"
+  },
+  "day": {
+    "today": "Aujourd’hui",
+    "yesterday": "Hier"
+  },
+  "jump": {
+    "peopleHere_one": "{{count}} personne ici",
+    "peopleHere_other": "{{count}} personnes ici",
+    "inVoiceChannel": "en vocal · # {{channel}}"
+  },
+  "richText": {
+    "underline": "Souligné",
+    "textColour": "Couleur du texte",
+    "insertImage": "Insérer une image",
+    "resetColour": "Réinitialiser la couleur"
+  }
+}

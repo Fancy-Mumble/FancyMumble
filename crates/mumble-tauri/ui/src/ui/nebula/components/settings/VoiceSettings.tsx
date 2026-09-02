@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Box, Button, MenuItem, TextField, Typography } from "@mui/material";
 import { useAppStore } from "@core/store";
 import { getSavedAudioSettings, saveAudioSettings } from "@core/preferencesStorage";
+import { isWindows } from "@core/utils/platform";
 import {
   NOISE_SUPPRESSION_LABELS,
   type AudioDevice,
   type AudioSettings,
   type CryptoStats,
+  type DenoiserParamSpec,
   type NoiseSuppressionAlgorithm,
   type PacketStats,
 } from "@core/types";
@@ -29,10 +32,14 @@ import { VoiceGate } from "./VoiceGate";
 type Activation = "voice" | "continuous" | "ptt";
 
 const ACTIVATION = [
-  { id: "voice" as const, label: "Voice activation", hint: "Transmits while you talk." },
-  { id: "continuous" as const, label: "Continuous", hint: "Always transmits." },
-  { id: "ptt" as const, label: "Push to talk", hint: "Only while a key is held." },
-];
+  { id: "voice" as const, labelKey: "voice.activationVoice", hintKey: "voice.activationVoiceHint" },
+  {
+    id: "continuous" as const,
+    labelKey: "voice.activationContinuous",
+    hintKey: "voice.activationContinuousHint",
+  },
+  { id: "ptt" as const, labelKey: "voice.activationPtt", hintKey: "voice.activationPttHint" },
+] as const;
 
 const ALGORITHMS = Object.keys(NOISE_SUPPRESSION_LABELS) as NoiseSuppressionAlgorithm[];
 
@@ -43,13 +50,13 @@ const ALGORITHMS = Object.keys(NOISE_SUPPRESSION_LABELS) as NoiseSuppressionAlgo
  * technique; the mock names the trade-off instead, because that is what the
  * choice is actually between.
  */
-const ALGORITHM_HINTS: Record<NoiseSuppressionAlgorithm, string> = {
-  none: "No processing — the microphone is sent as it is heard.",
-  rnnoise: "Neural network trained on real speech — works well in most environments.",
-  deepfilternet: "State-of-the-art deep learning. Best quality, highest CPU cost.",
-  omlsa_imcra: "Modern classical estimator — very smooth suppression.",
-  spectral_subtraction: "The lightest option, and the best on steady background noise.",
-};
+const ALGORITHM_HINT_KEYS = {
+  none: "voice.hintNone",
+  rnnoise: "voice.hintRnnoise",
+  deepfilternet: "voice.hintDeepfilternet",
+  omlsa_imcra: "voice.hintOmlsa",
+  spectral_subtraction: "voice.hintSpectral",
+} as const satisfies Record<NoiseSuppressionAlgorithm, string>;
 
 /** Opus packet lengths the encoder accepts. */
 const FRAME_SIZES = ["10", "20", "40", "60"] as const;
@@ -72,6 +79,7 @@ const algorithmLabel = (id: NoiseSuppressionAlgorithm) =>
  * four groups of one.
  */
 export function VoiceSettings() {
+  const { t } = useTranslation(["nebulaSettings", "settings"]);
   const voiceState = useAppStore((state) => state.voiceState);
   const { prefs } = usePreferenceSettings();
   const [settings, setSettings] = useState<AudioSettings | null>(null);
@@ -129,9 +137,9 @@ export function VoiceSettings() {
   if (unavailable)
     return (
       <Box sx={{ maxWidth: 640 }}>
-        <PageTitle title="Voice" />
+        <PageTitle title={t("settings:audio.panelTitle")} />
         <Typography sx={(theme) => ({ fontSize: 12.5, color: theme.palette.nebula.muted })}>
-          The audio engine is not responding, so voice settings cannot be read or changed right now.
+          {t("nebulaSettings:voice.engineDown")}
         </Typography>
       </Box>
     );
@@ -167,6 +175,7 @@ export function VoiceSettings() {
   );
 
   const running = voiceState !== "inactive";
+  const isExpert = prefs !== null && prefs.userMode !== "normal";
 
   return (
     <Box sx={{ maxWidth: 640 }}>
@@ -179,28 +188,28 @@ export function VoiceSettings() {
         than being the first of the settings on it.
       */}
       <PageTitle
-        title="Voice"
+        title={t("settings:audio.panelTitle")}
         action={
           <Button
             size="small"
             variant="outlined"
             title={
               running
-                ? "Stops capture and playback. Stays off across reconnects."
-                : "You are neither transmitting nor receiving while voice is off."
+                ? t("nebulaSettings:voice.voiceOnTitle")
+                : t("nebulaSettings:voice.voiceOffTitle")
             }
             onClick={() =>
               void (running ? useAppStore.getState().disableVoice() : useAppStore.getState().enableVoice())
             }
           >
-            {running ? "Turn voice off" : "Turn voice on"}
+            {running ? t("nebulaSettings:voice.turnVoiceOff") : t("nebulaSettings:voice.turnVoiceOn")}
           </Button>
         }
       />
 
       <Stack direction="row" gap={2.5}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Field label="Input device">
+          <Field label={t("nebulaSettings:voice.inputDevice")}>
             <TextField
               select
               fullWidth
@@ -210,9 +219,12 @@ export function VoiceSettings() {
               // Without `displayEmpty` a Select treats the empty value as
               // "nothing chosen" and renders a blank box, so the default
               // device - which is what most people are on - had no name.
-              slotProps={{ select: { displayEmpty: true }, htmlInput: { "aria-label": "Input device" } }}
+              slotProps={{
+                select: { displayEmpty: true },
+                htmlInput: { "aria-label": t("nebulaSettings:voice.inputDevice") },
+              }}
             >
-              <MenuItem value="">System default</MenuItem>
+              <MenuItem value="">{t("settings:audio.systemDefault")}</MenuItem>
               {inputs.map((device) => (
                 <MenuItem key={device.name} value={device.name}>
                   {device.name}
@@ -222,9 +234,11 @@ export function VoiceSettings() {
           </Field>
           <Box sx={{ mt: "14px" }}>
             <SliderRow
-              label="Microphone volume"
+              label={t("nebulaSettings:voice.microphoneVolume")}
               value={settings.input_volume}
-              display={`${Math.round(settings.input_volume * 100)}%`}
+              display={t("nebulaSettings:voice.percent", {
+                value: Math.round(settings.input_volume * 100),
+              })}
               min={0}
               max={2}
               step={0.01}
@@ -235,7 +249,7 @@ export function VoiceSettings() {
         </Box>
 
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Field label="Output device">
+          <Field label={t("nebulaSettings:voice.outputDevice")}>
             <TextField
               select
               fullWidth
@@ -245,9 +259,12 @@ export function VoiceSettings() {
               // Without `displayEmpty` a Select treats the empty value as
               // "nothing chosen" and renders a blank box, so the default
               // device - which is what most people are on - had no name.
-              slotProps={{ select: { displayEmpty: true }, htmlInput: { "aria-label": "Output device" } }}
+              slotProps={{
+                select: { displayEmpty: true },
+                htmlInput: { "aria-label": t("nebulaSettings:voice.outputDevice") },
+              }}
             >
-              <MenuItem value="">System default</MenuItem>
+              <MenuItem value="">{t("settings:audio.systemDefault")}</MenuItem>
               {outputs.map((device) => (
                 <MenuItem key={device.name} value={device.name}>
                   {device.name}
@@ -257,9 +274,11 @@ export function VoiceSettings() {
           </Field>
           <Box sx={{ mt: "14px" }}>
             <SliderRow
-              label="Speaker volume"
+              label={t("nebulaSettings:voice.speakerVolume")}
               value={settings.output_volume}
-              display={`${Math.round(settings.output_volume * 100)}%`}
+              display={t("nebulaSettings:voice.percent", {
+                value: Math.round(settings.output_volume * 100),
+              })}
               min={0}
               max={2}
               step={0.01}
@@ -270,10 +289,32 @@ export function VoiceSettings() {
         </Box>
       </Stack>
 
-      <GroupTitle>Activation mode</GroupTitle>
+      {/*
+        Exclusive capture is a fact about the *device*, so it sits with the
+        device pickers rather than in the expert group: it is the answer to
+        "another application has my microphone", which is a problem people
+        arrive at this page already having, not a knob to go looking for.
+        Windows-only because WASAPI is what has the mode - the backend ignores
+        the flag everywhere else.
+      */}
+      {isWindows && (
+        <ToggleCard
+          sx={{ mt: "18px" }}
+          title={t("settings:audio.exclusiveInput")}
+          hint={t("nebulaSettings:voice.exclusiveInputHint")}
+          checked={settings.exclusive_input ?? false}
+          onChange={() => patch({ exclusive_input: !settings.exclusive_input })}
+        />
+      )}
+
+      <GroupTitle>{t("nebulaSettings:voice.activationMode")}</GroupTitle>
       <ChoiceCards
-        ariaLabel="Activation mode"
-        options={ACTIVATION}
+        ariaLabel={t("nebulaSettings:voice.activationMode")}
+        options={ACTIVATION.map((option) => ({
+          id: option.id,
+          label: t(option.labelKey),
+          hint: t(option.hintKey),
+        }))}
         value={activation}
         onChange={setActivation}
       />
@@ -285,12 +326,12 @@ export function VoiceSettings() {
       */}
       {activation === "voice" && <VoiceGate settings={settings} onChange={patch} />}
 
-      <GroupTitle space="wide" hint="What happens to your voice before it leaves your machine.">
-        Processing
+      <GroupTitle space="wide" hint={t("nebulaSettings:voice.processingHint")}>
+        {t("nebulaSettings:voice.processing")}
       </GroupTitle>
       <ToggleCard
-        title="Auto gain"
-        hint="Automatically adjusts microphone volume for consistent levels."
+        title={t("nebulaSettings:voice.autoGain")}
+        hint={t("settings:audio.autoGainHint")}
         checked={settings.auto_gain}
         onChange={() => patch({ auto_gain: !settings.auto_gain })}
       >
@@ -302,9 +343,9 @@ export function VoiceSettings() {
         {settings.auto_gain && !settings.auto_input_sensitivity && (
           <Box sx={{ mt: "10px" }}>
             <SliderRow
-              label="Max amplification"
+              label={t("nebulaSettings:voice.maxAmplification")}
               value={settings.max_gain_db}
-              display={`${Math.round(settings.max_gain_db)} dB`}
+              display={t("nebulaSettings:voice.decibels", { value: Math.round(settings.max_gain_db) })}
               min={1}
               max={40}
               step={1}
@@ -316,10 +357,13 @@ export function VoiceSettings() {
       </ToggleCard>
 
       <Box sx={{ mt: "18px", mb: "8px" }}>
-        <ValueHeader label="Noise suppression" value={algorithmLabel(algorithm)} />
+        <ValueHeader
+          label={t("nebulaSettings:voice.noiseSuppression")}
+          value={algorithmLabel(algorithm)}
+        />
       </Box>
       <SegmentedGroup
-        ariaLabel="Noise suppression"
+        ariaLabel={t("nebulaSettings:voice.noiseSuppression")}
         value={algorithm}
         onChange={(id) =>
           patch(
@@ -331,16 +375,30 @@ export function VoiceSettings() {
         options={algorithms.map((id) => ({ id, label: algorithmLabel(id) }))}
       />
       <Typography sx={(theme) => ({ mt: "8px", fontSize: 11, color: theme.palette.nebula.dim })}>
-        {ALGORITHM_HINTS[algorithm]}
+        {t(ALGORITHM_HINT_KEYS[algorithm])}
       </Typography>
 
-      <GroupTitle space="wide" hint="How your voice travels to the server.">
-        Transmission
+      {/*
+        Expert-gated the way Standard gates it: the defaults are tuned, and a
+        mistuned denoiser sounds like a broken microphone rather than like a
+        setting someone changed.
+      */}
+      {isExpert && (
+        <DenoiserFineTuning
+          algorithm={algorithm}
+          params={settings.denoiser_params ?? {}}
+          onDrag={(denoiser_params) => setSettings({ ...settings, denoiser_params })}
+          onCommit={(denoiser_params) => patch({ denoiser_params })}
+        />
+      )}
+
+      <GroupTitle space="wide" hint={t("nebulaSettings:voice.transmissionHint")}>
+        {t("nebulaSettings:voice.transmission")}
       </GroupTitle>
       <SliderRow
-        label="Quality — higher bitrate means better audio, more bandwidth"
+        label={t("nebulaSettings:voice.quality")}
         value={settings.bitrate_bps / 1000}
-        display={`${Math.round(settings.bitrate_bps / 1000)} kb/s`}
+        display={t("nebulaSettings:voice.kbps", { value: Math.round(settings.bitrate_bps / 1000) })}
         min={8}
         max={320}
         step={8}
@@ -350,21 +408,24 @@ export function VoiceSettings() {
 
       <Box sx={{ mt: "16px", mb: "8px" }}>
         <ValueHeader
-          label="Audio per packet — smaller is lower latency, larger saves bandwidth"
-          value={`${settings.frame_size_ms} ms`}
+          label={t("nebulaSettings:voice.audioPerPacket")}
+          value={t("nebulaSettings:voice.milliseconds", { value: settings.frame_size_ms })}
         />
       </Box>
       <SegmentedGroup
-        ariaLabel="Audio per packet"
+        ariaLabel={t("nebulaSettings:voice.audioPerPacketShort")}
         value={String(settings.frame_size_ms)}
         onChange={(id) => patch({ frame_size_ms: Number(id) })}
-        options={FRAME_SIZES.map((ms) => ({ id: ms, label: `${ms} ms` }))}
+        options={FRAME_SIZES.map((ms) => ({
+          id: ms,
+          label: t("nebulaSettings:voice.milliseconds", { value: ms }),
+        }))}
       />
 
       <ToggleCard
         sx={{ mt: "18px" }}
-        title="Force TCP audio"
-        hint="Send audio over the TCP tunnel instead of UDP — for strict firewalls or NAT that blocks UDP."
+        title={t("nebulaSettings:voice.forceTcp")}
+        hint={t("nebulaSettings:voice.forceTcpHint")}
         checked={settings.force_tcp_audio}
         onChange={() => patch({ force_tcp_audio: !settings.force_tcp_audio })}
       />
@@ -374,12 +435,12 @@ export function VoiceSettings() {
         Nebula's Advanced page: choosing the audio backend can leave capture
         broken in a way the user has no way to connect back to a switch.
       */}
-      {prefs !== null && prefs.userMode !== "normal" && useRodio !== null && (
+      {isExpert && useRodio !== null && (
         <>
-          <GroupTitle space="wide">Expert</GroupTitle>
+          <GroupTitle space="wide">{t("nebulaSettings:voice.expert")}</GroupTitle>
           <ToggleCard
-            title="Legacy audio backend"
-            hint="Switch to the legacy cpal backend if the default rodio backend misbehaves. Takes effect on the next voice toggle."
+            title={t("nebulaSettings:voice.legacyBackend")}
+            hint={t("nebulaSettings:voice.legacyBackendHint")}
             checked={!useRodio}
             onChange={() => {
               const next = !useRodio;
@@ -390,10 +451,95 @@ export function VoiceSettings() {
         </>
       )}
 
-      <GroupTitle space="wide">Audio statistics</GroupTitle>
+      <GroupTitle space="wide">{t("nebulaSettings:voice.audioStatistics")}</GroupTitle>
       <AudioStats />
     </Box>
   );
+}
+
+/**
+ * The knobs behind whichever denoiser is running.
+ *
+ * The schema is asked of the backend rather than written out here: which knobs
+ * an algorithm has is a property of the code that implements it, and a table
+ * in the UI would go stale the first time one gained a parameter. Algorithms
+ * with nothing to tune - "none", RNNoise - answer with an empty list, so the
+ * section appears only when it has something in it.
+ *
+ * Dragging writes to the page's copy and only the released value reaches the
+ * engine: every write is an IPC round trip plus a disk write, and a drag is a
+ * hundred of them.
+ */
+function DenoiserFineTuning({
+  algorithm,
+  params,
+  onDrag,
+  onCommit,
+}: Readonly<{
+  algorithm: NoiseSuppressionAlgorithm;
+  params: Record<string, number>;
+  onDrag: (params: Record<string, number>) => void;
+  onCommit: (params: Record<string, number>) => void;
+}>) {
+  const { t } = useTranslation("nebulaSettings");
+  const [specs, setSpecs] = useState<DenoiserParamSpec[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    void invoke<DenoiserParamSpec[]>("get_denoiser_param_specs", { algorithm })
+      .then((fetched) => {
+        if (active) setSpecs(Array.isArray(fetched) ? fetched : []);
+      })
+      .catch(() => {
+        if (active) setSpecs([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [algorithm]);
+
+  if (specs.length === 0) return null;
+
+  return (
+    <Box sx={{ mt: "16px" }}>
+      <GroupTitle hint={t("voice.fineTuningHint")}>{t("voice.fineTuning")}</GroupTitle>
+      <Stack gap={1.75}>
+        {specs.map((spec) => {
+          const value = params[spec.id] ?? spec.default;
+          return (
+            <Box key={spec.id}>
+              <SliderRow
+                label={spec.label}
+                value={value}
+                display={formatParam(value, spec.step, spec.unit)}
+                min={spec.min}
+                max={spec.max}
+                step={spec.step}
+                onChange={(next) => onDrag({ ...params, [spec.id]: next })}
+                onCommit={(next) => onCommit({ ...params, [spec.id]: next })}
+              />
+              {spec.description && (
+                <Typography sx={(theme) => ({ mt: "3px", fontSize: 11, color: theme.palette.nebula.dim })}>
+                  {spec.description}
+                </Typography>
+              )}
+            </Box>
+          );
+        })}
+      </Stack>
+    </Box>
+  );
+}
+
+/**
+ * A parameter's value, with as many decimals as its step actually resolves.
+ *
+ * A knob stepping by 0.05 printed as "0.30000000000000004" is the float coming
+ * through; one stepping by 1 printed as "12.0" is noise.
+ */
+function formatParam(value: number, step: number, unit: string): string {
+  const decimals = step < 1 ? (String(step).split(".")[1]?.length ?? 2) : 0;
+  return `${value.toFixed(Math.min(decimals, 3))}${unit ? ` ${unit}` : ""}`;
 }
 
 /**
@@ -404,6 +550,7 @@ export function VoiceSettings() {
  * link rather than as no link at all.
  */
 function AudioStats() {
+  const { t } = useTranslation(["nebulaSettings", "settings"]);
   const [stats, setStats] = useState<CryptoStats | null>(null);
 
   useEffect(() => {
@@ -416,17 +563,17 @@ function AudioStats() {
   if (!stats)
     return (
       <Typography sx={(theme) => ({ pb: "8px", fontSize: 11.5, color: theme.palette.nebula.dim })}>
-        No statistics available. Connect to a server to see packet statistics.
+        {t("settings:audio.stats.noStats")}
       </Typography>
     );
 
   return (
     <>
       <Typography sx={(theme) => ({ mb: "10px", fontSize: 11.5, color: theme.palette.nebula.dim })}>
-        UDP packet counters since connection start.
+        {t("settings:audio.stats.udpCounters")}
       </Typography>
-      <StatsRow label="To client" stats={stats.to_client} />
-      <StatsRow label="From client" stats={stats.from_client} />
+      <StatsRow label={t("nebulaSettings:voice.toClient")} stats={stats.to_client} />
+      <StatsRow label={t("nebulaSettings:voice.fromClient")} stats={stats.from_client} />
     </>
   );
 }

@@ -182,7 +182,7 @@ export default function DmPopoutPage() {
           @ {payload.user_name}
           {payload.server_label && (
             <>
-              {" â€¢ "}
+              {" • "}
               <span className={styles.serverLabel}>{payload.server_label}</span>
             </>
           )}

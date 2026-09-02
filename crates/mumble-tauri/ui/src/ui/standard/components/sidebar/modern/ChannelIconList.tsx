@@ -31,6 +31,7 @@ import { isMobile } from "@core/utils/platform";
 import { useUserDrag, useChannelDropTarget } from "../../../utils/userMoveDnd";
 import { PERM_MOVE, PERM_ENTER } from "@core/utils/permissions";
 import { useAppStore } from "@core/store";
+import { parseChannelDescription } from "@core/channelProfile";
 import { PchatBadge } from "../PchatBadge";
 import { ChannelReorderWrapper, useChannelReorderHandler } from "../channel/channelReorder";
 import styles from "./ChannelIconList.module.css";
@@ -39,6 +40,18 @@ import styles from "./ChannelIconList.module.css";
 function extractDescriptionImage(html: string): string | null {
   const match = /<img[^>]+src=["']([^"']+)["']/i.exec(html);
   return match ? match[1] : null;
+}
+
+/**
+ * The picture this channel wants used as its icon.
+ *
+ * A channel set from the info sheet says so outright; before that field
+ * existed the only signal was "the first image in the description", which is a
+ * guess this keeps making for rooms whose description was written elsewhere.
+ */
+function channelIconSource(html: string): string | null {
+  const { profile, body } = parseChannelDescription(html);
+  return profile?.icon ?? extractDescriptionImage(body);
 }
 
 export interface ChannelIconListProps {
@@ -69,7 +82,7 @@ interface ChannelIconProps {
 
 function ChannelIcon({ channel, isCurrent }: ChannelIconProps) {
   const description = useChannelDescription(channel.id, channel.description_size);
-  const imgSrc = useMemo(() => (description ? extractDescriptionImage(description) : null), [description]);
+  const imgSrc = useMemo(() => (description ? channelIconSource(description) : null), [description]);
 
   if (imgSrc) {
     return (

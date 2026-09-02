@@ -1,10 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { UserEntry, AclGroup } from "@core/types";
-import {
-  membersForRole,
-  membersForChannelMention,
-  MAX_DISPLAYED_MEMBERS,
-} from "../chat/mention/MentionPopover";
+import { membersForRole, membersForChannelMention, MAX_DISPLAYED_MEMBERS } from "@core/utils/mentions";
 
 function user(session: number, channel_id: number, user_id: number | null = null): UserEntry {
   return {

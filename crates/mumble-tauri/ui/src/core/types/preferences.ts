@@ -26,6 +26,9 @@ export type DateFormat = "auto" | "dmy" | "mdy" | "ymd";
  *  no convention is privileged as "plain" or "default". */
 export type NumberFormat = "auto" | "comma-period" | "period-comma" | "space-comma";
 
+/** Which surface lists the servers: the rail, the title bar, or both. */
+export type ServerSwitcher = "rail" | "titlebar" | "both";
+
 /** App-wide user preferences stored persistently. */
 export interface UserPreferences {
   /** Complete UI implementation to load. */
@@ -78,16 +81,23 @@ export interface UserPreferences {
    */
   serverRailOrder?: string[];
   /**
-   * Where the list of servers lives: the rail down the left, or the title bar.
+   * Where the list of servers lives: the rail down the left, the title bar, or
+   * both at once.
    *
-   * Both show the same servers - this only decides which one is drawn, so
-   * whichever the user does not pick simply is not rendered.
+   * All three show the same servers - this only decides which surfaces are
+   * drawn, so whichever the user does not pick simply is not rendered. "both"
+   * exists because the two are not redundant: the rail carries occupancy and
+   * the pinned panel, the tabs carry the picture at a glance.
    */
-  serverSwitcher?: "rail" | "titlebar";
+  serverSwitcher?: ServerSwitcher;
   /** Collapsed/expanded state of sidebar sections. */
   sidebarSections?: SidebarSections;
   /** When true, the channel viewer hides channels that have no members. */
   hideEmptyChannels?: boolean;
+  /** When true, the member roster also lists the server's registered users who
+   *  are not connected. Kept with the preferences rather than with the panel
+   *  because it is a statement about the server, not about one UI pack. */
+  showOfflineMembers?: boolean;
   /** Saved-server id to connect to automatically at launch, or null for none.
    *  Holds an identity rather than an address: connecting requires knowing
    *  which account to arrive as. */

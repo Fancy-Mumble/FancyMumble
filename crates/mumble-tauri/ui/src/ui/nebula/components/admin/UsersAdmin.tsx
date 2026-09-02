@@ -22,9 +22,8 @@ import { rootChannelId } from "@core/features/admin/rootChannel";
 import { formatRelativeDate } from "@core/utils/format";
 import { TID } from "@core/testids";
 import type { AclData, AclGroup, RegisteredUser, RegisteredUserUpdate, UserEntry } from "@core/types";
-import { RoleChip } from "@standard/components/elements/role/RoleChip";
 import { KebabMenuIcon } from "@ui/icons";
-import { SearchBox, Stack } from "../primitives";
+import { RoleChip, SearchBox, Stack } from "../primitives";
 import { Banner } from "../settings/controls";
 import { AdminPage, DataTable, type Column } from "./controls";
 
@@ -301,6 +300,7 @@ export function UsersAdmin({ onOpenRole }: Readonly<{ onOpenRole?: (roleName: st
   return (
     <AdminPage
       wide
+      fill
       title={t("registeredUsers.title")}
       toolbar={
         <>
@@ -318,6 +318,7 @@ export function UsersAdmin({ onOpenRole }: Readonly<{ onOpenRole?: (roleName: st
       }
     >
       <DataTable
+        stickyHeader
         columns={columns}
         rows={filtered}
         rowKey={(user) => String(user.user_id)}

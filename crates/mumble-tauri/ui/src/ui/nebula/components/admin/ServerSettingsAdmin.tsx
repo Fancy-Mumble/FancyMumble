@@ -11,10 +11,13 @@ import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import * as Flags from "country-flag-icons/react/3x2";
 import { useServerSettingsStore } from "@core/features/admin/serverSettingsStore";
+import { isRichTextSetting } from "@core/features/admin/serverSettingKinds";
 import { COUNTRIES, countryName } from "@core/utils/countries";
 import type { ServerSetting, ServerSettingsEvent } from "@core/types";
 import { NEBULA_MONO, radius } from "../../tokens";
-import { Stack } from "../primitives";
+import { HtmlSourceField, LinkGuard, RichTextField, Stack } from "../primitives";
+import { sanitizeHtml } from "@core/utils/sanitizeHtml";
+import { richTextSurvives } from "../primitives/richText";
 import { Banner, EmptyState, GroupTitle } from "../settings/controls";
 import { AdminPage } from "./controls";
 
@@ -89,6 +92,191 @@ function CodeField({ setting, value, onChange }: FieldProps) {
         htmlInput: { "aria-label": labelOf(setting), spellCheck: false, style: { fontFamily: NEBULA_MONO } },
       }}
     />
+  );
+}
+
+/**
+ * How long a welcome text may get.
+ *
+ * Every connecting client is sent this in its `ServerSync`, so it is paid for
+ * on every join rather than once - generous enough for a page of house rules,
+ * short enough that it is not where somebody pastes a picture. The editor
+ * offers no image button for the same reason.
+ */
+const HTML_MAX_LENGTH = 16_000;
+
+/**
+ * A setting whose value is markup, in the two ways markup gets edited.
+ *
+ * **Rich text** is the same editor Nebula writes bios and channel descriptions
+ * with, widened to the document preset - a welcome screen has headings, lists
+ * and centred text, and the bio schema silently dropped all three.
+ *
+ * **HTML** is the source, and it is not a power-user affordance: an editor is a
+ * schema, and a document it has no node for comes back out of it *smaller*. A
+ * welcome text written by hand years ago can hold markup no WYSIWYG here can
+ * represent, and offering only the editor would flatten it the first time
+ * somebody fixed a typo - silently, in a field showing what looked like their
+ * own document. So the source view is where such a value opens, and says why.
+ *
+ * The check runs against the value the server sent rather than against what is
+ * being typed: an operator who chose rich text keeps it, and one editing source
+ * is not thrown into the editor the moment their markup happens to simplify.
+ */
+/** The three ways to look at a markup setting. */
+type HtmlMode = "rich" | "source" | "preview";
+
+function HtmlField({ setting, value, onChange }: FieldProps) {
+  const { t } = useTranslation("settings");
+  const original = originalValue(setting);
+  const survives = useMemo(() => richTextSurvives(original, "document"), [original]);
+  const [mode, setMode] = useState<HtmlMode>(survives ? "rich" : "source");
+
+  const lossy = t("serverSettings.richTextLossy");
+  // A document the editor cannot hold falls back to source however the mode
+  // was left, so nothing can put an operator in front of a lossy copy.
+  const shown: HtmlMode = mode === "rich" && !survives ? "source" : mode;
+
+  return (
+    <Stack gap={0.75}>
+      <Stack direction="row" gap={0.5} sx={{ alignSelf: "flex-end" }}>
+        <ModeButton
+          on={shown === "rich"}
+          // Not merely unselected: choosing it would rewrite the document, and
+          // an operator cannot be expected to know that from a toolbar.
+          disabled={!survives}
+          title={survives ? undefined : lossy}
+          onClick={() => setMode("rich")}
+        >
+          {t("serverSettings.modeRich")}
+        </ModeButton>
+        <ModeButton on={shown === "source"} onClick={() => setMode("source")}>
+          {t("serverSettings.modeSource")}
+        </ModeButton>
+        <ModeButton on={shown === "preview"} onClick={() => setMode("preview")}>
+          {t("serverSettings.modePreview")}
+        </ModeButton>
+      </Stack>
+
+      {shown === "rich" && (
+        <RichTextField
+          value={value}
+          onChange={onChange}
+          ariaLabel={labelOf(setting)}
+          preset="document"
+          maxLength={HTML_MAX_LENGTH}
+          tools={["bold", "italic", "underline", "strike", "heading", "lists", "align", "colour"]}
+          minHeight={160}
+          maxHeight={420}
+        />
+      )}
+      {shown === "source" && (
+        <HtmlSourceField value={value} onChange={onChange} ariaLabel={labelOf(setting)} />
+      )}
+      {shown === "preview" && <HtmlPreview html={value} label={labelOf(setting)} />}
+
+      {!survives && shown !== "preview" && (
+        <Typography sx={(theme) => ({ fontSize: 11, lineHeight: 1.5, color: theme.palette.nebula.muted })}>
+          {lossy}
+        </Typography>
+      )}
+    </Stack>
+  );
+}
+
+/**
+ * The markup as a connecting client will see it.
+ *
+ * Rendered through the same allow-list every surface in this app renders
+ * untrusted HTML through, so this is not an approximation of the welcome
+ * screen - it *is* what will be shown, and anything the sanitiser drops is
+ * missing here too, which is worth learning before saving rather than after.
+ *
+ * It earns its place most where the editor cannot go: a document laid out with
+ * tables is edited as source, and reading angle brackets is no way to tell
+ * whether a change landed where it was meant to.
+ */
+function HtmlPreview({ html, label }: Readonly<{ html: string; label: string }>) {
+  const { t } = useTranslation("settings");
+  const clean = useMemo(() => sanitizeHtml(html), [html]);
+  return (
+    <Box
+      aria-label={t("serverSettings.previewOf", { label })}
+      sx={(theme) => ({
+        minHeight: 160,
+        maxHeight: 420,
+        overflowY: "auto",
+        p: "13px",
+        borderRadius: radius("md"),
+        background: theme.palette.nebula.card,
+        border: `1px solid ${theme.palette.nebula.line2}`,
+        fontSize: 12.5,
+        lineHeight: 1.5,
+        wordBreak: "break-word",
+        "& a": { color: theme.palette.nebula.accent },
+        "& img": { maxWidth: "100%" },
+        "& table": { borderCollapse: "collapse" },
+      })}
+    >
+      {clean ? (
+        // A click here must not navigate the app's own window to the server's
+        // link, which is what the guard is for wherever this markup is shown.
+        <LinkGuard>
+          <Box dangerouslySetInnerHTML={{ __html: clean }} />
+        </LinkGuard>
+      ) : (
+        <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted })}>
+          {t("serverSettings.previewEmpty")}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+/** One of the two editing modes, drawn as a small segmented control. */
+function ModeButton({
+  on,
+  disabled = false,
+  title,
+  onClick,
+  children,
+}: Readonly<{
+  on: boolean;
+  disabled?: boolean;
+  title?: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}>) {
+  return (
+    <Box
+      component="button"
+      type="button"
+      aria-pressed={on}
+      disabled={disabled}
+      title={title}
+      onClick={onClick}
+      sx={(theme) => ({
+        all: "unset",
+        cursor: "pointer",
+        px: "8px",
+        py: "2px",
+        borderRadius: radius("sm"),
+        fontSize: 11,
+        fontWeight: 600,
+        color: on ? theme.palette.nebula.accent : theme.palette.nebula.muted,
+        background: on ? theme.palette.nebula.accentSoft : "transparent",
+        "&:disabled": { cursor: "not-allowed", color: theme.palette.nebula.dim },
+        "&:hover:not(:disabled)": {
+          color: on ? theme.palette.nebula.accent : theme.palette.nebula.text,
+        },
+        "&:focus-visible": {
+          outline: `2px solid ${theme.palette.nebula.accentLine}`,
+          outlineOffset: 1,
+        },
+      })}
+    >
+      {children}
+    </Box>
   );
 }
 
@@ -168,12 +356,26 @@ function CountryField({ setting, value, onChange }: FieldProps) {
 const FIELD_FACTORY: Record<string, FieldComponent> = {
   string: StringField,
   text: CodeField,
+  html: HtmlField,
   bool: BoolField,
   int: IntField,
   enum: EnumField,
   country: CountryField,
   password: PasswordField,
 };
+
+/**
+ * The control for one setting.
+ *
+ * Keyed on the declared type, except that a server which says only "text" for a
+ * value that has always been markup still gets the editor - see
+ * `isRichTextSetting`. An unknown type falls back to a text box rather than
+ * vanishing, so a setting added server-side appears without a client release.
+ */
+function fieldFor(setting: ServerSetting): FieldComponent {
+  if (isRichTextSetting(setting)) return HtmlField;
+  return FIELD_FACTORY[setting.type] ?? StringField;
+}
 
 /**
  * Server settings.
@@ -297,7 +499,7 @@ export function ServerSettingsAdmin() {
           <GroupTitle>{group}</GroupTitle>
           <Stack gap={1.5}>
             {items.map((setting) => {
-              const Field = FIELD_FACTORY[setting.type] ?? StringField;
+              const Field = fieldFor(setting);
               return (
                 <Stack
                   key={setting.key}

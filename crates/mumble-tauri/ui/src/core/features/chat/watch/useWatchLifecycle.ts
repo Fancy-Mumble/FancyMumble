@@ -78,6 +78,15 @@ export function useWatchLifecycle(): void {
     for (const session of sessions.values()) {
       if (session.channelId !== previous) continue;
       if (!session.participants.has(ownSession)) continue;
+      // Applied locally as well as sent. The server does not echo an event
+      // back to whoever sent it, so without this the client that just walked
+      // out would go on showing a session it has already ended for everyone
+      // else - a player floating over a channel you are no longer in.
+      const event =
+        session.hostSession === ownSession
+          ? ({ type: "end" } as const)
+          : ({ type: "leave", session: ownSession } as const);
+      applyWatchSyncEvent({ sessionId: session.sessionId, actor: ownSession, event });
       if (session.hostSession === ownSession) {
         void sendEnd(session.sessionId);
       } else {
