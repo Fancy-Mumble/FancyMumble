@@ -301,5 +301,34 @@
     "advancedHint": "完全掌控"
   },
   "submit": "开始使用",
-  "submitting": "启动中…"
+  "submitting": "启动中…",
+  "onboarding": {
+    "subtitle": "让我们用几个简单步骤设置 Fancy Mumble。",
+    "stepOf": "第 {{current}} 步，共 {{total}} 步",
+    "next": "下一步",
+    "back": "上一步",
+    "finish": "开始使用",
+    "steps": {
+      "identity": "身份",
+      "interface": "界面",
+      "appearance": "外观",
+      "ready": "完成"
+    },
+    "identity": {
+      "title": "我们该怎么称呼你？",
+      "hint": "这是其他人看到的名称。之后你可以为每个服务器使用不同的名称。"
+    },
+    "interface": {
+      "title": "选择你的界面",
+      "hint": "你随时可以在设置中切换。"
+    },
+    "appearance": {
+      "title": "挑选一个主题",
+      "hint": "打造属于你的风格 — 设置里还有更多选择。"
+    },
+    "ready": {
+      "title": "一切就绪，{{name}}！",
+      "hint": "开始吧，连接到你的第一个服务器。"
+    }
+  }
 }

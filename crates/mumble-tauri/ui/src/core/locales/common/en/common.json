@@ -19,7 +19,9 @@
     "hide": "Hide",
     "open": "Open",
     "collapse": "Collapse",
-    "optional": "(optional)"
+    "optional": "(optional)",
+    "more": "More",
+    "leave": "Leave"
   },
   "confirmDialog": {
     "confirmLabel": "Confirm",

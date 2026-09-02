@@ -19,7 +19,9 @@
     "hide": "隐藏",
     "open": "打开",
     "collapse": "折叠",
-    "optional": "（可选）"
+    "optional": "（可选）",
+    "more": "更多",
+    "leave": "离开"
   },
   "confirmDialog": {
     "confirmLabel": "确认",

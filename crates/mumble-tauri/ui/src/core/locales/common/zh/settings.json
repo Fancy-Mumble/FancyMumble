@@ -178,7 +178,8 @@
     "dangerZoneHint": "删除所有已保存的数据（服务器、偏好和证书），并返回欢迎界面。",
     "dangerConfirmText": "确定吗？此操作不可撤销。",
     "dangerConfirmBtn": "是的，重置全部数据",
-    "dangerResetBtn": "重置全部数据"
+    "dangerResetBtn": "重置全部数据",
+    "logFiles": "日志文件"
   },
   "shortcuts": {
     "panelTitle": "快捷键",
@@ -427,6 +428,7 @@
     "identityLabel": "身份",
     "manageIdentities": "管理身份",
     "viewingOtherIdentity": "正在查看其他身份的资料。修改会保存在本地，但只有当你以此身份连接时才会同步到服务器。",
+    "tooLarge": "你的个人资料对这个服务器来说太大了。请尝试更小的横幅图片或更短的简介。",
     "sectionUsername": "默认用户名",
     "usernameHint": "添加新服务器时自动填入。",
     "usernamePlaceholder": "你的用户名",
@@ -541,7 +543,11 @@
       "codeLabel": "6 位验证码",
       "verify": "确认并启用",
       "enabledHint": "2FA 已启用。每次登录都需要输入验证器应用生成的验证码。要停用，请输入当前验证码。",
-      "disable": "停用 2FA"
+      "disable": "停用 2FA",
+      "qrLabel": "供身份验证器应用扫描的二维码",
+      "cantScan": "无法扫描二维码？",
+      "linkHint": "复制设置链接，并在运行身份验证器应用的设备上打开 — 大多数应用会直接从链接注册账户。",
+      "revealSecret": "链接也不行？手动输入密钥"
     },
     "unregister": {
       "title": "删除注册",
@@ -567,7 +573,8 @@
       "totp_not_enabled": "2FA 未启用。",
       "totp_wrong_code": "验证码无效。请检查验证器应用和设备时钟。",
       "totp_generation_failed": "服务器无法生成 2FA 密钥。",
-      "unknown": "操作失败：{{code}}"
+      "unknown": "操作失败：{{code}}",
+      "timeout": "服务器没有响应。它可能尚不支持此功能，或者请求丢失了。"
     }
   },
   "bioEditor": {
@@ -676,6 +683,7 @@
     "marketplace": "插件市场",
     "fileServer": "文件服务器",
     "serverSettings": "服务器设置",
+    "welcome": "欢迎消息",
     "auditLog": "审计日志"
   },
   "audit": {
@@ -730,7 +738,22 @@
     "verifying": "验证中…",
     "saved": "已保存",
     "saving": "保存中…",
-    "saveChanges": "保存更改"
+    "saveChanges": "保存更改",
+    "collapseFilters": "收起快捷筛选",
+    "countNote": "已加载 {{count}} 条记录",
+    "endlessOff": "分页显示，每次 25 行。",
+    "endlessOn": "滚动时自动加载更多。",
+    "endlessScroll": "无限滚动",
+    "endOfResults": "已到结果末尾",
+    "expandFilters": "展开快捷筛选",
+    "filterCategory": "类别",
+    "nextPage": "下一页",
+    "pageDashboard": "总览",
+    "pageOf": "第 {{page}} 页，共 {{pages}} 页",
+    "pageResults": "结果",
+    "prevPage": "上一页",
+    "quickFilters": "快捷筛选",
+    "resultsLabel": "结果"
   },
   "serverSettings": {
     "intro": "在运行时修改服务器设置。修改会立即应用并保存在服务器上。",
@@ -738,7 +761,10 @@
     "unavailable": "无法修改服务器设置。该服务器可能不支持运行时设置，或你没有修改权限。",
     "save": "保存修改",
     "saving": "保存中…",
-    "saved": "已保存"
+    "saved": "已保存",
+    "modeRich": "富文本",
+    "modeSource": "HTML",
+    "richTextLossy": "这段欢迎文本使用了可视化编辑器无法保留的标记 — 表格布局，或它没有对应控件的样式。在那里编辑会重写它无法显示的部分，因此改为以 HTML 方式编辑。"
   },
   "fileServer": {
     "title": "文件服务器存储",
@@ -834,7 +860,14 @@
       "expires": "过期时间",
       "actions": "操作"
     },
-    "root": "根目录"
+    "root": "根目录",
+    "calendars": {
+      "empty": "尚未存储任何用户日历。",
+      "size": "大小",
+      "title": "活动日历",
+      "updated": "更新时间",
+      "user": "用户（服务器:ID）"
+    }
   },
   "registeredUsers": {
     "title": "已注册用户",
@@ -861,7 +894,8 @@
     "actionUnregister": "注销 {{name}} 的注册",
     "actionsAriaLabel": "{{name}} 的操作",
     "statusBar_one": "{{filtered}} / {{total}} 位用户",
-    "statusBar_other": "{{filtered}} / {{total}} 位用户"
+    "statusBar_other": "{{filtered}} / {{total}} 位用户",
+    "renameAriaLabel": "用户名"
   },
   "banList": {
     "title": "封禁列表",
@@ -897,7 +931,18 @@
     "saveChanges": "保存修改",
     "inheritAcls": "从父频道继承 ACL",
     "tabRules": "ACL 规则（{{count}}）",
-    "tabGroups": "用户组（{{count}}）"
+    "tabGroups": "用户组（{{count}}）",
+    "cancelDelete": "取消",
+    "tabUsers": "用户（{{count}}）",
+    "privateBadge": "私密",
+    "deleteChannel": "删除频道",
+    "confirmDeleteChannel": "删除频道“{{name}}”及其下的所有内容？此操作无法撤销。",
+    "accessAllUsers": "所有用户都可以访问此频道。",
+    "accessAllRegistered": "所有已注册用户都可以访问此频道。",
+    "accessViaGroup": "@{{group}} 的成员",
+    "accessNoneExplicit": "没有为特定用户授予访问权限；访问权限继承自上级 ACL。",
+    "accessUsersHeading": "拥有访问权限的用户",
+    "accessOnlineHint": "在线"
   },
   "roles": {
     "title": "服务器身份组",
@@ -1199,6 +1244,74 @@
           "a1": "访客",
           "a2": "成员"
         }
+      },
+      "answerCount_one": "{{count}} 个答案",
+      "canvas": {
+        "viewSteps": "步骤",
+        "viewCanvas": "节点编辑器",
+        "add": "+ 添加",
+        "complete": "流程完整",
+        "toFix": "{{n}} 项待修正",
+        "reset": "重新排列",
+        "live": "生效中",
+        "asks": "提问",
+        "answers": "选项",
+        "grants": "加入",
+        "thenAsk": "接着提问",
+        "landsIn": "所有人进入",
+        "wireAnswers": "将选项连接到这里",
+        "wireGrants": "将频道或群组连接到这里",
+        "pickChannel": "选择频道",
+        "note": "给他们的说明",
+        "groupName": "群组名称",
+        "unnamedGroup": "未命名群组",
+        "offFlowBadge": "不在流程中",
+        "offFlowHint": "不在流程中 — 请将上一个问题连接到这里。",
+        "looseAnswerHint": "未属于任何问题 — 请将它连接到提供它的问题。",
+        "nodes": {
+          "start": "开始",
+          "question": "问题",
+          "answer": "选项",
+          "channel": "频道",
+          "group": "群组"
+        },
+        "summary": "提出 {{questions}}，共 {{answers}}，并将成员分配到 {{channels}} 和 {{groups}}。",
+        "summaryEmpty": "没有任何内容连接到流程 — 不会向任何人提问。",
+        "summaryQuestions_other": "{{count}} 个问题",
+        "summaryAnswers_other": "{{count}} 个选项",
+        "summaryChannels_other": "{{count}} 个频道",
+        "summaryGroups_other": "{{count}} 个群组",
+        "problems": {
+          "noStart": "没有开始节点 — 请添加一个，说明所有人从哪里开始。",
+          "twoStarts": "有两个开始节点：流程只能开始一次。",
+          "noQuestions": "没有问题连接到开始节点，因此不会向任何人提问。",
+          "tooManyQuestions": "流程中的问题太多：最多只会提出 {{max}} 个。",
+          "questionText": "有一个问题没有文字。",
+          "questionAnswers": "“{{where}}” 没有提供任何选项。",
+          "offFlow": "有一个问题不在流程中，永远不会被提出。",
+          "answerLabel": "有一个选项没有标题。",
+          "looseAnswer": "有一个选项未连接到任何问题。",
+          "channelUnset": "有一个频道节点未选择频道。",
+          "groupUnset": "有一个群组节点未命名。"
+        },
+        "browse": "浏览模块",
+        "search": "搜索模块",
+        "favorites": "收藏",
+        "noMatches": "没有匹配的模块。",
+        "idle": "未启用",
+        "blocks": {
+          "category": "问卷",
+          "start": "所有人的起点，以及无论如何作答都会进入的频道。",
+          "question": "入服时的一个问题，以及它提供的选项。",
+          "answer": "成员可以选择的一个选项，以及选择后获得的权限。",
+          "channel": "某个选项会把成员加入的频道。",
+          "group": "某个选项会把成员加入的 ACL 群组。"
+        },
+        "ports": {
+          "step": "步骤",
+          "answer": "选项",
+          "place": "去向"
+        }
       }
     },
     "modal": {
@@ -1311,5 +1424,63 @@
     "fieldFingerprint": "指纹",
     "blockBtn": "阻止",
     "notNowBtn": "暂不启用"
+  },
+  "livery": {
+    "accent": "强调色",
+    "address": "运营 API",
+    "addTag": "+ 添加标签",
+    "artwork": "美术素材",
+    "aura": "光晕",
+    "badImageType": "该文件不是 PNG、JPEG 或 WebP。",
+    "banner": "横幅",
+    "cancel": "取消",
+    "clampLead": "已保留，但为便于阅读而调亮：",
+    "clampRenders": "渲染为",
+    "clampTail": "以保持文字清晰。存储的值未改变。",
+    "clear": "清除",
+    "close": "关闭",
+    "colours": "应用配色",
+    "coloursNote": "可选 — 仅设置横幅是常见做法",
+    "connectAs": "连接身份",
+    "dark": "深色",
+    "darkMode": "深色模式",
+    "digest": "摘要",
+    "displayName": "显示名称",
+    "displayNameHint": "显示在其旁边：",
+    "displayNameHintTail": "— 而不是取而代之。",
+    "dropHint": "拖放以替换",
+    "focusY": "焦点 Y",
+    "icon": "图标",
+    "identity": "身份",
+    "light": "浅色",
+    "lightMode": "浅色模式",
+    "lightStock": "未为浅色模式设置表面与光晕 — 访问者将看到默认配色。",
+    "motd": "每日公告",
+    "noBanner": "无横幅",
+    "plainText": "纯文本",
+    "previewTitle": "连接预览",
+    "remove": "移除",
+    "removeIcon": "移除图标",
+    "removeTag": "移除标签",
+    "replace": "替换",
+    "resized": "已调整为 {{width}}×{{height}}，{{before}} → {{after}}。",
+    "save": "保存更改",
+    "saveMeta": "仅发送已填写的字段",
+    "stock": "默认",
+    "surface": "表面",
+    "tagHref": "https://（可选）",
+    "tagHrefLabel": "链接",
+    "tagLabel": "标签文字",
+    "tagline": "标语",
+    "tags": "标签",
+    "tagsHint": "标签携带的是色调而非固定颜色 — 它们会适应每位访问者的主题。",
+    "ticketDenied": "此连接无法获得自动上传凭证",
+    "ticketNoAddress": "此服务器未发布运营 API 地址",
+    "ticketUnreachable": "无法连接服务器以获取自动上传凭证",
+    "title": "品牌外观",
+    "token": "令牌",
+    "tokenHint": "不会存储 — 每次会话重新输入。",
+    "use": "使用",
+    "version": "版本"
   }
 }

@@ -82,13 +82,13 @@ describe("samples", () => {
 
 describe("labels", () => {
   it("names the certificate in the mock's words", () => {
-    expect(certificateLabel(true)).toEqual({ label: "Strong", tone: "ok" });
-    expect(certificateLabel(false)).toEqual({ label: "Weak / none", tone: "warn" });
+    expect(certificateLabel(true)).toEqual({ labelKey: "sidebar:userInfo.certStrong", tone: "ok" });
+    expect(certificateLabel(false)).toEqual({ labelKey: "sidebar:userInfo.certWeak", tone: "warn" });
   });
 
   it("names the codec", () => {
-    expect(codecLabel(true)).toBe("Opus 48 kHz");
-    expect(codecLabel(false)).toBe("CELT");
+    expect(codecLabel(true)).toBe("nebulaUser:info.codecOpus");
+    expect(codecLabel(false)).toBe("nebulaUser:info.codecCelt");
   });
 
   it("joins the OS and its version, or says nothing", () => {
@@ -128,7 +128,7 @@ describe("describeBans", () => {
       NOW,
     );
     expect(result?.count).toBe(1);
-    expect(result?.note).toMatch(/^expired /);
+    expect(result?.note).toEqual({ key: "nebulaUser:info.bansExpired", date: expect.any(String) });
   });
 
   it("matches on the address too, and says when a ban still runs", () => {
@@ -139,7 +139,7 @@ describe("describeBans", () => {
       "203.0.113.9",
       NOW,
     );
-    expect(result?.note).toMatch(/^expires /);
+    expect(result?.note).toEqual({ key: "nebulaUser:info.bansExpires", date: expect.any(String) });
   });
 
   it("counts every match and describes the latest", () => {
@@ -151,7 +151,7 @@ describe("describeBans", () => {
       null,
       NOW,
     );
-    expect(result).toEqual({ count: 2, note: "permanent" });
+    expect(result).toEqual({ count: 2, note: { key: "nebulaUser:info.bansPermanent" } });
   });
 
   it("still counts a ban whose start it cannot read", () => {
@@ -159,7 +159,7 @@ describe("describeBans", () => {
       describeBans([ban({ hash: "abc", start: "?", duration: 60 })], { hash: "abc" }, null, NOW),
     ).toEqual({
       count: 1,
-      note: "on record",
+      note: { key: "nebulaUser:info.bansOnRecord" },
     });
   });
 });

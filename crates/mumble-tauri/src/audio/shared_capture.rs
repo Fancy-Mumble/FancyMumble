@@ -180,9 +180,7 @@ impl AudioCapture for SharedCaptureHandle {
         }
         if let Ok(dead) = self.inner.dead.lock() {
             if let Some(reason) = dead.as_ref() {
-                return Err(Error::InvalidState(format!(
-                    "capture device lost: {reason}"
-                )));
+                return Err(Error::DeviceLost(reason.clone()));
             }
         }
         let mut buf = self
@@ -354,7 +352,14 @@ fn pump(shared: Arc<StreamShared>, mut underlying: Box<dyn AudioCapture>, stop: 
             }
             Err(e) => {
                 warn!("shared capture '{}': device error: {e}", shared.key);
-                mark_subscribers_dead(&shared, &e.to_string());
+                // Store the bare reason. Subscribers re-wrap it in a
+                // `DeviceLost` of their own, so keeping the prefix here
+                // would read "Audio device lost: Audio device lost: ...".
+                let reason = match &e {
+                    Error::DeviceLost(reason) => reason.clone(),
+                    other => other.to_string(),
+                };
+                mark_subscribers_dead(&shared, &reason);
                 break;
             }
         }
@@ -589,6 +594,105 @@ mod tests {
             }
         }
         got
+    }
+
+    /// Device that serves `frames` reads and then dies, the way an
+    /// unplugged microphone does: the reader thread ends and every later
+    /// read fails identically.
+    struct DyingDevice {
+        remaining: usize,
+        running: bool,
+    }
+
+    impl AudioCapture for DyingDevice {
+        fn format(&self) -> AudioFormat {
+            AudioFormat::MONO_48KHZ_F32
+        }
+        fn read_frame(&mut self) -> Result<AudioFrame> {
+            if !self.running {
+                return Err(Error::InvalidState("not running".into()));
+            }
+            if self.remaining == 0 {
+                return Err(Error::DeviceLost("microphone stream ended".into()));
+            }
+            self.remaining -= 1;
+            Ok(AudioFrame {
+                data: vec![0u8; PUMP_FRAME * 4],
+                format: AudioFormat::MONO_48KHZ_F32,
+                sequence: 0,
+                is_silent: false,
+            })
+        }
+        fn start(&mut self) -> Result<()> {
+            self.running = true;
+            Ok(())
+        }
+        fn stop(&mut self) -> Result<()> {
+            self.running = false;
+            Ok(())
+        }
+    }
+
+    fn dying_factory(frames: usize) -> CaptureFactory {
+        Box::new(move || {
+            Ok(Box::new(DyingDevice {
+                remaining: frames,
+                running: false,
+            }) as Box<dyn AudioCapture>)
+        })
+    }
+
+    /// Unplugging the microphone must surface as `DeviceLost`, the signal
+    /// consumers use to tear down instead of retrying once per audio frame.
+    ///
+    /// It must also not wedge the broker: while a dead handle is alive it
+    /// still counts as an active consumer, so re-selecting the same device
+    /// would skip the cold start and hand the new consumer permanent
+    /// silence. Dropping the handle has to make the device re-openable.
+    #[test]
+    fn a_lost_device_reports_device_lost_and_frees_the_broker() {
+        let opens = Arc::new(AtomicUsize::new(0));
+        let closes = Arc::new(AtomicUsize::new(0));
+        let vol = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
+        let key = "test-shared-device-lost";
+
+        let mut a = acquire(Some(key), 480, Arc::clone(&vol), dying_factory(3));
+        a.start().unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let mut lost = None;
+        while Instant::now() < deadline {
+            match a.read_frame() {
+                Ok(_) => {}
+                Err(Error::NotEnoughSamples) => std::thread::sleep(Duration::from_millis(2)),
+                Err(e) => {
+                    lost = Some(e);
+                    break;
+                }
+            }
+        }
+        assert!(
+            matches!(lost, Some(Error::DeviceLost(_))),
+            "an unplugged device must read as DeviceLost, got {lost:?}"
+        );
+
+        // The consumer gives up and drops its handle, as the outbound
+        // audio loop now does on DeviceLost.
+        drop(a);
+
+        let mut b = acquire(
+            Some(key),
+            480,
+            vol,
+            fake_factory(Arc::clone(&opens), Arc::clone(&closes)),
+        );
+        b.start().unwrap();
+        assert!(
+            drain_frames(&mut b, 2, Duration::from_secs(2)) >= 2,
+            "the device did not re-open after the lost one was released"
+        );
+        b.stop().unwrap();
+        assert_eq!(opens.load(Ordering::SeqCst), 1, "expected one cold start");
     }
 
     /// A cold start must not join a pump that is about to keep running.

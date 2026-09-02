@@ -1,9 +1,17 @@
-import { Box, Menu, MenuItem } from "@mui/material";
+import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import { Box, Menu, MenuItem, Typography } from "@mui/material";
+import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "@core/store";
 import type { ChatMessage } from "@core/types";
+import { getCachedUserAvatar } from "@core/lazyBlobs";
+import { getReadersForMessage } from "@core/features/chat/readreceipt/readReceiptStore";
+import { findPopOutImageSrc, imagePopoutCaption } from "@core/features/chat/imagePopout";
+import { useWatchStart } from "@core/features/chat/watch/useWatchStart";
 import { canDeleteMessages } from "@standard/components/sidebar/channel/ChannelEditorDialog";
 import { EmojiPlusIcon } from "@ui/icons";
 import { plainText } from "../../selectors";
+import { Stack, UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
 
 export interface MessageMenuTarget {
@@ -24,6 +32,14 @@ interface MessageMenuProps {
   onEdit: (message: ChatMessage) => void;
   /** Enter selection mode with this message already picked. */
   onSelect: (messageId: string) => void;
+  /**
+   * Every id in the conversation, oldest first.
+   *
+   * A read receipt is a watermark - one id per person - rather than a flag per
+   * message, so who has read *this* one is a question about positions in this
+   * list. Without it the reader list is simply not offered.
+   */
+  allMessageIds?: readonly string[];
 }
 
 /**
@@ -57,8 +73,60 @@ export function MessageMenu({
   onQuote,
   onEdit,
   onSelect,
+  allMessageIds,
 }: Readonly<MessageMenuProps>) {
+  const { t } = useTranslation(["nebulaChat", "chat"]);
   const channels = useAppStore((state) => state.channels);
+  const users = useAppStore((state) => state.users);
+  const ownSession = useAppStore((state) => state.ownSession);
+  // Receipts live in a side store keyed by channel; the version counter is the
+  // only thing that tells React another one has landed.
+  const readReceiptVersion = useAppStore((state) => state.readReceiptVersion);
+
+  /**
+   * Who has read this, or null where the question does not apply.
+   *
+   * Only your own messages: a receipt says who has caught up to a message, and
+   * on somebody else's that is a list of who has read *them*, which is not the
+   * reader's business. Direct messages carry no channel watermark at all, and
+   * you are dropped from your own list - having read what you sent is not news.
+   */
+  const readers = useMemo(() => {
+    const messageId = target?.message.message_id;
+    if (!target || !messageId || !target.message.is_own) return null;
+    if (target.message.dm_session || !allMessageIds) return null;
+    const ownHash = users.find((user) => user.session === ownSession)?.hash;
+    void readReceiptVersion;
+    return getReadersForMessage(target.message.channel_id, messageId, [...allMessageIds])
+      .filter((state) => state.name && state.cert_hash !== ownHash)
+      .map((state) => {
+        const user = users.find((entry) => entry.hash === state.cert_hash);
+        return {
+          certHash: state.cert_hash,
+          name: state.name,
+          online: state.is_online,
+          session: user?.session ?? null,
+          avatar: user ? getCachedUserAvatar(user.session, user.texture_size) : null,
+        };
+      });
+  }, [target, allMessageIds, users, ownSession, readReceiptVersion]);
+
+  /**
+   * Whether this message can start a watch-together session, and the call that
+   * does it.
+   *
+   * Asked of every message because the answer is in the body - a video link -
+   * rather than in a flag, so the hook runs on menus that will never show the
+   * row. Nebula already renders the card and runs the lifecycle; starting one
+   * was the only part missing, and without it two Nebula users could join a
+   * session that neither of them could ever open.
+   */
+  const {
+    canStart: canWatchTogether,
+    busy: watchBusy,
+    start: startWatch,
+  } = useWatchStart(target?.message.body, target?.message.channel_id);
+
   if (!target) return null;
 
   const { message } = target;
@@ -72,6 +140,30 @@ export function MessageMenu({
   const run = (action: () => void) => () => {
     action();
     onClose();
+  };
+
+  /**
+   * The picture this message carries, if it is one that can stand alone.
+   *
+   * A popout is a second, always-on-top window over whatever the reader does
+   * next - watching a diagram while typing about it is the point - so it is
+   * offered only where there is actually a picture to put in it.
+   */
+  const popOutSrc = findPopOutImageSrc(message.body);
+
+  const popOutImage = (src: string) => {
+    const sender = users.find((entry) => entry.session === message.sender_session);
+    void invoke("open_image_popout", {
+      payload: {
+        src,
+        sender_name: message.sender_name || null,
+        // Whatever the river already fetched; the window has no session of its
+        // own to fetch an avatar through.
+        sender_avatar: sender ? getCachedUserAvatar(sender.session, sender.texture_size) : null,
+        caption: imagePopoutCaption(message.body),
+        timestamp_ms: message.timestamp ?? null,
+      },
+    }).catch(() => undefined);
   };
 
   return (
@@ -103,14 +195,14 @@ export function MessageMenu({
           {QUICK_REACTIONS.map((emoji) => (
             <ReactionButton
               key={emoji}
-              label={"React with " + emoji}
+              label={t("nebulaChat:menu.reactWith", { emoji })}
               onClick={run(() => onQuickReact(message, emoji))}
             >
               {emoji}
             </ReactionButton>
           ))}
           <ReactionButton
-            label="More reactions"
+            label={t("chat:contextMenu.moreReactions")}
             onClick={run(() => onReact(message, { x: target.x, y: target.y }))}
             muted
           >
@@ -121,12 +213,12 @@ export function MessageMenu({
       {hasId && <Rule />}
       {hasId && (
         <MenuItem sx={ITEM} onClick={run(() => onQuote(message))}>
-          Reply
+          {t("nebulaChat:menu.reply")}
         </MenuItem>
       )}
       {message.is_own && target.editable && hasId && (
         <MenuItem sx={ITEM} onClick={run(() => onEdit(message))}>
-          Edit
+          {t("chat:contextMenu.edit")}
         </MenuItem>
       )}
       {hasId && (
@@ -136,18 +228,34 @@ export function MessageMenu({
             useAppStore.getState().pinMessage(message.channel_id, message.message_id!, !!message.pinned),
           )}
         >
-          {message.pinned ? "Unpin from channel" : "Pin to channel"}
+          {message.pinned
+            ? t("nebulaChat:menu.unpinFromChannel")
+            : t("nebulaChat:menu.pinToChannel")}
         </MenuItem>
       )}
       <MenuItem sx={ITEM} onClick={run(() => void navigator.clipboard?.writeText(plainText(message.body)))}>
-        Copy text
+        {t("chat:contextMenu.copyText")}
       </MenuItem>
+      {popOutSrc && (
+        <MenuItem sx={ITEM} onClick={run(() => popOutImage(popOutSrc))}>
+          {t("chat:contextMenu.popOutImage")}
+        </MenuItem>
+      )}
+      {/* Beside the popout: both open what the message carries somewhere
+          larger, and both appear only where there is something to open. The
+          busy label is short-lived - the click closes the menu - but it is
+          what makes the disabled row legible while it goes. */}
+      {canWatchTogether && (
+        <MenuItem sx={ITEM} disabled={watchBusy} onClick={run(() => void startWatch())}>
+          {watchBusy ? t("chat:contextMenu.watchTogetherBusy") : t("chat:contextMenu.watchTogether")}
+        </MenuItem>
+      )}
 
       {canDelete && [
         <Rule key="danger" />,
         canBulkDelete ? (
           <MenuItem key="select" sx={ITEM} onClick={run(() => onSelect(message.message_id!))}>
-            Select messages…
+            {t("nebulaChat:menu.selectMessages")}
           </MenuItem>
         ) : null,
         <MenuItem
@@ -159,8 +267,56 @@ export function MessageMenu({
           )}
           sx={(theme) => ({ ...ITEM, color: theme.palette.nebula.bad })}
         >
-          Delete message
+          {t("chat:contextMenu.deleteMessage")}
         </MenuItem>,
+      ]}
+      {readers !== null && [
+        <Rule key="readers-rule" />,
+        <Box key="readers" sx={{ px: "10px", pt: "2px", pb: "5px" }}>
+          <Typography
+            sx={(theme) => ({
+              fontSize: 9.5,
+              fontWeight: 600,
+              letterSpacing: "0.09em",
+              textTransform: "uppercase",
+              color: theme.palette.nebula.dim,
+            })}
+          >
+            {t("chat:contextMenu.readBy")}
+          </Typography>
+          {readers.length === 0 ? (
+            <Typography sx={(theme) => ({ mt: "4px", fontSize: 12, color: theme.palette.nebula.muted })}>
+              {t("chat:contextMenu.noReaders")}
+            </Typography>
+          ) : (
+            <Stack gap="4px" sx={{ mt: "6px", maxHeight: 148, overflowY: "auto" }}>
+              {readers.map((reader) => (
+                <Stack
+                  key={reader.certHash}
+                  direction="row"
+                  alignItems="center"
+                  gap={1}
+                  // Somebody who read it and has since left still read it; the
+                  // row says so by fading rather than by disappearing.
+                  sx={{ opacity: reader.online ? 1 : 0.55 }}
+                >
+                  <UserAvatar name={reader.name} session={reader.session} src={reader.avatar} size={20} />
+                  <Typography
+                    sx={{
+                      minWidth: 0,
+                      fontSize: 12,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {reader.name}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+          )}
+        </Box>,
       ]}
     </Menu>
   );

@@ -232,13 +232,16 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
     (dataUrl: string) => {
       setEditorImage(null);
       // A freshly cropped still replaces whatever was there - including an
-      // animated wallpaper's stored files.
+      // animated wallpaper's stored files. This editor has no shelf of its
+      // own and empties the store outright, so the shelf Nebula keeps has to
+      // go with it rather than be left naming files that are gone.
       void clearChatBackgroundStore().catch(() => undefined);
       onChange({
         chatBgOriginal: dataUrl,
         chatBgBlurred: null,
         chatBgVideo: null,
         chatBgVideoBaked: null,
+        chatBgRecents: [],
       });
 
       const needsProcessing = data.chatBgBlurSigma > 0 || data.chatBgDim > 0;
@@ -263,6 +266,7 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
       chatBgVideo: null,
       chatBgVideoBaked: null,
       chatBgBlurSigma: 0,
+      chatBgRecents: [],
     });
   }, [onChange]);
 

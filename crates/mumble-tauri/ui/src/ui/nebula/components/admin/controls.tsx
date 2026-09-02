@@ -15,12 +15,18 @@ import { radius } from "../../tokens";
  * single reading column nor a table, and it needs the title and the toolbar
  * bounded with the content, so the save button stays over the column it saves
  * rather than drifting to the far edge of a wide window.
+ *
+ * `fill` claims the pane's full height and lays the page out as a column, for
+ * a page whose body is one long list: the child that opts in (a `DataTable`
+ * with `stickyHeader`) takes the leftover height and scrolls inside it, so the
+ * title, the toolbar and the count below the table all stay put.
  */
 export function AdminPage({
   title,
   hint,
   toolbar,
   wide,
+  fill,
   maxWidth,
   children,
 }: Readonly<{
@@ -28,11 +34,17 @@ export function AdminPage({
   hint?: string;
   toolbar?: ReactNode;
   wide?: boolean;
+  fill?: boolean;
   maxWidth?: number;
   children: ReactNode;
 }>) {
   return (
-    <Box sx={{ maxWidth: maxWidth ?? (wide ? "none" : 760) }}>
+    <Box
+      sx={{
+        maxWidth: maxWidth ?? (wide ? "none" : 760),
+        ...(fill && { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }),
+      }}
+    >
       <Stack
         direction="row"
         alignItems="flex-start"
@@ -165,6 +177,14 @@ export interface Column<T> {
  *
  * Its own horizontal scroller: an admin table can be wider than the window and
  * the page body must never scroll sideways, or the sidebar goes with it.
+ *
+ * `stickyHeader` pins the header row while the rows scroll under it. It also
+ * makes this box the vertical scroller, which is not optional: `overflow-x`
+ * already computes `overflow-y` to `auto`, so this box is a scroll container
+ * either way, and sticky resolves against the nearest one - left unbounded it
+ * never scrolls, and the header would sit in a box that cannot move while the
+ * page scrolled away beneath it. Bounding it needs the height the parent
+ * hands down, so the page above must be an `AdminPage` with `fill`.
  */
 export function DataTable<T>({
   columns,
@@ -174,6 +194,7 @@ export function DataTable<T>({
   onRowClick,
   selectedKey,
   rowAttrs,
+  stickyHeader,
 }: Readonly<{
   columns: readonly Column<T>[];
   rows: readonly T[];
@@ -183,6 +204,8 @@ export function DataTable<T>({
   selectedKey?: string | null;
   /** Extra DOM attributes per row - the hook the E2E suites address rows by. */
   rowAttrs?: (row: T) => Record<string, string | undefined>;
+  /** Pin the header row and scroll the rows inside the table. */
+  stickyHeader?: boolean;
 }>) {
   if (rows.length === 0) {
     return (
@@ -205,6 +228,10 @@ export function DataTable<T>({
     <Box
       sx={(theme) => ({
         overflowX: "auto",
+        // `0 1 auto`, not `1 1 auto`: a short table keeps its natural height
+        // rather than stretching an empty card down the pane; only a table
+        // taller than the space left over shrinks into a scroller.
+        ...(stickyHeader && { overflowY: "auto", flex: "0 1 auto", minHeight: 0 }),
         borderRadius: radius("lg"),
         background: theme.palette.nebula.card,
         border: `1px solid ${theme.palette.nebula.line}`,
@@ -229,6 +256,20 @@ export function DataTable<T>({
                   color: theme.palette.nebula.dim,
                   borderBottom: `1px solid ${theme.palette.nebula.line2}`,
                   whiteSpace: "nowrap",
+                  ...(stickyHeader && {
+                    position: "sticky",
+                    top: 0,
+                    zIndex: 1,
+                    // `card` is translucent, so rows would read straight
+                    // through the pinned strip. `bg0` is the window's own
+                    // surface and opaque, the colour AuditAdmin pins with.
+                    background: theme.palette.nebula.bg0,
+                    // `border-collapse: collapse` hands the cell borders over
+                    // to the table, which leaves them behind when the header
+                    // sticks; an inset shadow travels with the cell.
+                    borderBottom: "none",
+                    boxShadow: `inset 0 -1px 0 ${theme.palette.nebula.line2}`,
+                  }),
                 })}
               >
                 {column.header}

@@ -21,7 +21,7 @@ export class DirectMediaAdapter implements PlayerAdapter {
     this.onLocalEvent = args.onLocalEvent;
     this.video = document.createElement("video");
     this.video.src = args.sourceUrl;
-    this.video.controls = true;
+    this.video.controls = args.controls !== false;
     this.video.style.width = "100%";
     this.video.style.maxHeight = "60vh";
     this.video.style.background = "#000";
@@ -62,6 +62,52 @@ export class DirectMediaAdapter implements PlayerAdapter {
 
   currentTime(): number {
     return this.video.currentTime;
+  }
+
+  duration(): number {
+    // NaN until the browser has the metadata, Infinity for a live stream.
+    const value = this.video.duration;
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  buffered(): number {
+    // The ranges are not ordered by position and a seek can leave gaps, so the
+    // furthest end is the only honest answer to "buffered up to where".
+    const ranges = this.video.buffered;
+    let furthest = 0;
+    for (let i = 0; i < ranges.length; i++) {
+      furthest = Math.max(furthest, ranges.end(i));
+    }
+    return furthest;
+  }
+
+  volume(): number {
+    return this.video.volume;
+  }
+
+  setVolume(value: number): void {
+    this.video.volume = Math.min(1, Math.max(0, value));
+  }
+
+  muted(): boolean {
+    return this.video.muted;
+  }
+
+  setMuted(value: boolean): void {
+    this.video.muted = value;
+  }
+
+  rate(): number {
+    return this.video.playbackRate;
+  }
+
+  setRate(value: number): void {
+    this.video.playbackRate = value;
+  }
+
+  quality(): string | null {
+    // Zero until the metadata lands, which reads the same as "will not say".
+    return this.video.videoHeight > 0 ? `${this.video.videoHeight}p` : null;
   }
 
   setOnLocalEvent(cb: ((event: LocalPlayerEvent) => void) | undefined): void {

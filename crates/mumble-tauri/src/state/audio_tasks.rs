@@ -13,6 +13,7 @@ use mumble_protocol::audio::filter::automatic_gain::AutomaticGainControl;
 use mumble_protocol::audio::pipeline::{OutboundPipeline, OutboundTick};
 use mumble_protocol::client::ClientHandle;
 use mumble_protocol::command;
+use mumble_protocol::error::Error;
 use mumble_protocol::message::UdpMessage;
 use mumble_protocol::proto::mumble_udp;
 
@@ -131,7 +132,7 @@ pub(super) async fn outbound_audio_loop(
 
         // Process a bounded number of frames per tick.
         for _ in 0..5 {
-            if !process_outbound_tick(
+            match process_outbound_tick(
                 &mut pipeline,
                 &tx,
                 &app,
@@ -139,9 +140,44 @@ pub(super) async fn outbound_audio_loop(
                 &mut guard,
                 &mut stats,
             ) {
-                break;
+                TickOutcome::More => {}
+                TickOutcome::Idle => break,
+                TickOutcome::DeviceLost(reason) => {
+                    warn!("outbound_audio_loop: capture device lost ({reason}); stopping");
+                    super::audio::emit_capture_error(
+                        app.as_ref(),
+                        &format!("Microphone disconnected ({reason})"),
+                    );
+                    // Returning drops the pipeline, which releases the
+                    // shared-capture handle. That matters: while this task
+                    // held it the broker still counted an active consumer,
+                    // so re-selecting the same device could not cold-start
+                    // a new pump and the mic stayed silently dead.
+                    return;
+                }
             }
         }
+    }
+}
+
+/// What the caller should do after one outbound pipeline tick.
+enum TickOutcome {
+    /// A frame was handled; more may be waiting in this batch.
+    More,
+    /// Capture is drained for now - stop the batch and wait for the tick.
+    Idle,
+    /// The capture device is gone. Every later read fails the same way,
+    /// so the loop must exit rather than retry (and log) per frame.
+    DeviceLost(String),
+}
+
+/// The bare reason text behind a capture failure, without the error
+/// variant's own prefix, so a message built from it does not read
+/// "Microphone disconnected (Audio device lost: ...)".
+fn capture_failure_reason(e: &Error) -> String {
+    match e {
+        Error::DeviceLost(reason) => reason.clone(),
+        other => other.to_string(),
     }
 }
 
@@ -151,12 +187,12 @@ struct OutboundStats {
     packets: u64,
     silence: u64,
     total: u64,
+    /// Non-fatal tick errors, counted so they are logged at a sane rate
+    /// rather than once per 5 ms poll.
+    errors: u64,
 }
 
 /// Process a single outbound pipeline tick.
-///
-/// Returns `true` when more frames may be available in the same tick
-/// batch, `false` when the caller should stop the inner loop.
 fn process_outbound_tick(
     pipeline: &mut OutboundPipeline,
     tx: &tokio::sync::mpsc::Sender<AudioPacketOut>,
@@ -164,7 +200,7 @@ fn process_outbound_tick(
     own_session: Option<u32>,
     guard: &mut TalkingGuard,
     stats: &mut OutboundStats,
-) -> bool {
+) -> TickOutcome {
     use tauri::Emitter;
 
     match pipeline.tick() {
@@ -195,7 +231,7 @@ fn process_outbound_tick(
             {
                 warn!("outbound_audio: send channel full, dropping packet");
             }
-            true
+            TickOutcome::More
         }
         Ok(OutboundTick::Terminator(packet)) => {
             stats.total += 1;
@@ -214,7 +250,7 @@ fn process_outbound_tick(
                 sequence: packet.sequence,
                 is_terminator: true,
             });
-            true
+            TickOutcome::More
         }
         Ok(OutboundTick::Silence) => {
             stats.silence += 1;
@@ -232,12 +268,19 @@ fn process_outbound_tick(
                     },
                 );
             }
-            true
+            TickOutcome::More
         }
-        Ok(OutboundTick::NoData) => false,
+        Ok(OutboundTick::NoData) => TickOutcome::Idle,
+        Err(Error::DeviceLost(reason)) => TickOutcome::DeviceLost(reason),
         Err(e) => {
-            warn!("outbound audio error: {e}");
-            false
+            // Anything else may be a one-off (an encoder hiccup, a lock
+            // briefly contended), so keep running - but do not log once
+            // per 5 ms poll if it turns out to be permanent.
+            stats.errors += 1;
+            if stats.errors == 1 || stats.errors.is_multiple_of(500) {
+                warn!("outbound audio error (x{}): {e}", stats.errors);
+            }
+            TickOutcome::Idle
         }
     }
 }
@@ -311,8 +354,24 @@ pub(super) async fn mic_test_loop(
 
         // Drain all buffered frames to avoid latency buildup.
         let mut latest = None;
-        while let Ok(frame) = capture.read_frame() {
-            latest = Some(frame);
+        loop {
+            match capture.read_frame() {
+                Ok(frame) => latest = Some(frame),
+                // Normal end of the drain: no full frame buffered yet.
+                Err(Error::NotEnoughSamples) => break,
+                // The device is gone (or was never started). Reads would
+                // keep failing, so end the test and say so instead of
+                // spinning at 30 Hz on a dead device.
+                Err(e) => {
+                    let reason = capture_failure_reason(&e);
+                    warn!("mic_test_loop: capture device lost ({reason}); stopping");
+                    super::audio::emit_capture_error(
+                        Some(&app),
+                        &format!("Microphone disconnected ({reason})"),
+                    );
+                    return;
+                }
+            }
         }
         let Some(mut frame) = latest else {
             continue;
@@ -419,4 +478,114 @@ fn update_voice_activation_if_changed(
         hold_frames: settings.hold_frames,
         max_gain_db: settings.max_gain_db,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
+    use super::*;
+    use mumble_protocol::audio::encoder::{OpusEncoder, OpusEncoderConfig};
+    use mumble_protocol::audio::filter::FilterChain;
+    use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
+    use mumble_protocol::error::Result as AudioResult;
+
+    /// Capture whose device is gone, like a microphone pulled mid-call.
+    struct LostCapture;
+
+    impl AudioCapture for LostCapture {
+        fn format(&self) -> AudioFormat {
+            AudioFormat::MONO_48KHZ_F32
+        }
+        fn read_frame(&mut self) -> AudioResult<AudioFrame> {
+            Err(Error::DeviceLost("microphone stream ended".into()))
+        }
+        fn start(&mut self) -> AudioResult<()> {
+            Ok(())
+        }
+        fn stop(&mut self) -> AudioResult<()> {
+            Ok(())
+        }
+    }
+
+    fn lost_pipeline() -> OutboundPipeline {
+        let encoder = OpusEncoder::new(OpusEncoderConfig::default(), AudioFormat::MONO_48KHZ_F32)
+            .expect("opus encoder");
+        OutboundPipeline::new(Box::new(LostCapture), FilterChain::new(), Box::new(encoder))
+    }
+
+    /// Unplugging the microphone used to log "outbound audio error" on
+    /// every 5 ms poll forever, because the tick error only broke the
+    /// inner batch loop. A lost device must instead end the loop.
+    #[test]
+    fn a_lost_device_ends_the_outbound_loop() {
+        let mut pipeline = lost_pipeline();
+        let (tx, _rx) = tokio::sync::mpsc::channel::<AudioPacketOut>(1);
+        let mut guard = TalkingGuard {
+            app: None,
+            session: None,
+            is_talking: false,
+        };
+        let mut stats = OutboundStats::default();
+
+        let outcome =
+            process_outbound_tick(&mut pipeline, &tx, &None, None, &mut guard, &mut stats);
+
+        assert!(
+            matches!(outcome, TickOutcome::DeviceLost(_)),
+            "a lost device must stop the loop, not just end the batch"
+        );
+        assert_eq!(
+            stats.errors, 0,
+            "device loss is terminal, not a rate-limited transient error"
+        );
+    }
+
+    /// Capture that fails without the device being gone.
+    struct FlakyCapture;
+
+    impl AudioCapture for FlakyCapture {
+        fn format(&self) -> AudioFormat {
+            AudioFormat::MONO_48KHZ_F32
+        }
+        fn read_frame(&mut self) -> AudioResult<AudioFrame> {
+            Err(Error::InvalidState("hiccup".into()))
+        }
+        fn start(&mut self) -> AudioResult<()> {
+            Ok(())
+        }
+        fn stop(&mut self) -> AudioResult<()> {
+            Ok(())
+        }
+    }
+
+    /// Any other error may be a one-off, so the loop keeps running - but
+    /// it is counted, and the counter is what keeps a permanent one from
+    /// logging on every 5 ms poll.
+    #[test]
+    fn transient_tick_errors_are_counted_not_fatal() {
+        let encoder = OpusEncoder::new(OpusEncoderConfig::default(), AudioFormat::MONO_48KHZ_F32)
+            .expect("opus encoder");
+        let mut pipeline = OutboundPipeline::new(
+            Box::new(FlakyCapture),
+            FilterChain::new(),
+            Box::new(encoder),
+        );
+        let (tx, _rx) = tokio::sync::mpsc::channel::<AudioPacketOut>(1);
+        let mut guard = TalkingGuard {
+            app: None,
+            session: None,
+            is_talking: false,
+        };
+        let mut stats = OutboundStats::default();
+
+        for expected in 1..=3u64 {
+            let outcome =
+                process_outbound_tick(&mut pipeline, &tx, &None, None, &mut guard, &mut stats);
+            assert!(
+                matches!(outcome, TickOutcome::Idle),
+                "a transient error ends the batch, not the loop"
+            );
+            assert_eq!(stats.errors, expected);
+        }
+    }
 }

@@ -183,7 +183,7 @@ impl From<&fancy::files::ManagedFile> for ManagedFile {
             shared_at_ms: file.shared_at_ms,
             // Zero is the wire's "never"; `null` is what every card already
             // reads as the same thing.
-            expires_at: (file.expires_at_ms > 0).then(|| file.expires_at_ms / 1000),
+            expires_at: (file.expires_at_ms > 0).then_some(file.expires_at_ms / 1000),
             downloaded_at_ms: (file.downloaded_at_ms > 0).then_some(file.downloaded_at_ms),
             share_url: file.share_url.clone(),
             uploader_account: (file.uploader_account > 0).then_some(file.uploader_account),

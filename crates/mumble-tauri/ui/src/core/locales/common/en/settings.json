@@ -178,7 +178,8 @@
     "dangerConfirmBtn": "Yes, reset everything",
     "dangerResetBtn": "Reset all data",
     "disconnectWarning": "Disconnect confirmation",
-    "disconnectWarningHint": "Ask for confirmation before disconnecting from a server."
+    "disconnectWarningHint": "Ask for confirmation before disconnecting from a server.",
+    "logFiles": "Log files"
   },
   "shortcuts": {
     "panelTitle": "Shortcuts",
@@ -427,6 +428,7 @@
     "identityLabel": "Identity",
     "manageIdentities": "Manage identities",
     "viewingOtherIdentity": "Viewing profile for a different identity. Changes are saved locally but will not be applied to the server until you connect with this identity.",
+    "tooLarge": "Your profile is too large for this server. Try a smaller banner image or a shorter bio.",
     "sectionUsername": "Default Username",
     "usernameHint": "Pre-filled when you add a new server.",
     "usernamePlaceholder": "Your username",
@@ -651,6 +653,7 @@
     "marketplace": "Marketplace",
     "fileServer": "File server",
     "serverSettings": "Server settings",
+    "welcome": "Welcome message",
     "auditLog": "Audit log"
   },
   "audit": {
@@ -705,7 +708,22 @@
     "verifying": "Verifying…",
     "saved": "Saved",
     "saving": "Saving…",
-    "saveChanges": "Save changes"
+    "saveChanges": "Save changes",
+    "collapseFilters": "Collapse quick filters",
+    "countNote": "{{count}} entries loaded",
+    "endlessOff": "Paged, 25 rows at a time.",
+    "endlessOn": "Loads more as you scroll.",
+    "endlessScroll": "Endless scrolling",
+    "endOfResults": "End of results",
+    "expandFilters": "Expand quick filters",
+    "filterCategory": "Categories",
+    "nextPage": "Next",
+    "pageDashboard": "Dashboard",
+    "pageOf": "Page {{page}} of {{pages}}",
+    "pageResults": "Results",
+    "prevPage": "Previous",
+    "quickFilters": "Quick filters",
+    "resultsLabel": "Results"
   },
   "registeredUsers": {
     "title": "Registered Users",
@@ -732,7 +750,8 @@
     "actionUnregister": "Unregister {{name}}",
     "actionsAriaLabel": "Actions for {{name}}",
     "statusBar_one": "{{filtered}} of {{total}} user",
-    "statusBar_other": "{{filtered}} of {{total}} users"
+    "statusBar_other": "{{filtered}} of {{total}} users",
+    "renameAriaLabel": "User name"
   },
   "banList": {
     "title": "Ban List",
@@ -778,7 +797,8 @@
     "accessViaGroup": "Members of @{{group}}",
     "accessNoneExplicit": "No specific users are granted access; access is inherited from parent ACLs.",
     "accessUsersHeading": "Users with access",
-    "accessOnlineHint": "online"
+    "accessOnlineHint": "online",
+    "cancelDelete": "Cancel"
   },
   "roles": {
     "title": "Server Roles",
@@ -1105,6 +1125,77 @@
           "a1": "Guest",
           "a2": "Member"
         }
+      },
+      "canvas": {
+        "viewSteps": "Steps",
+        "viewCanvas": "Node canvas",
+        "add": "+ add",
+        "complete": "Flow complete",
+        "toFix": "{{n}} to fix",
+        "reset": "Lay out again",
+        "live": "LIVE",
+        "asks": "Asks",
+        "answers": "Answers",
+        "grants": "Puts them in",
+        "thenAsk": "Then ask",
+        "landsIn": "Everyone lands in",
+        "wireAnswers": "wire answers here",
+        "wireGrants": "wire a channel or group here",
+        "pickChannel": "pick a channel",
+        "note": "a note they read",
+        "groupName": "group name",
+        "unnamedGroup": "unnamed group",
+        "offFlowBadge": "off flow",
+        "offFlowHint": "Not on the flow — wire the question before it to here.",
+        "looseAnswerHint": "Not on a question — wire it to the question that offers it.",
+        "nodes": {
+          "start": "Start",
+          "question": "Question",
+          "answer": "Answer",
+          "channel": "Channel",
+          "group": "Group"
+        },
+        "summary": "Asks {{questions}}, offering {{answers}}, and places people in {{channels}} and {{groups}}.",
+        "summaryEmpty": "Nothing is wired to the flow — no one is asked anything.",
+        "summaryQuestions_one": "{{count}} question",
+        "summaryQuestions_other": "{{count}} questions",
+        "summaryAnswers_one": "{{count}} answer",
+        "summaryAnswers_other": "{{count}} answers",
+        "summaryChannels_one": "{{count}} channel",
+        "summaryChannels_other": "{{count}} channels",
+        "summaryGroups_one": "{{count}} group",
+        "summaryGroups_other": "{{count}} groups",
+        "problems": {
+          "noStart": "No start node — add one to say where everyone begins.",
+          "twoStarts": "Two start nodes: the flow can only begin once.",
+          "noQuestions": "No question is wired to the start, so nobody is asked anything.",
+          "tooManyQuestions": "Too many questions on the flow: at most {{max}} are asked.",
+          "questionText": "A question has no text.",
+          "questionAnswers": "“{{where}}” offers no answers.",
+          "offFlow": "A question is not on the flow, so it would never be asked.",
+          "answerLabel": "An answer has no label.",
+          "looseAnswer": "An answer is not wired to a question.",
+          "channelUnset": "A channel node names no channel.",
+          "groupUnset": "A group node names no group."
+        },
+        "browse": "Browse blocks",
+        "search": "Search blocks",
+        "favorites": "Favorites",
+        "noMatches": "No block matches that.",
+        "idle": "IDLE",
+        "blocks": {
+          "category": "Questionnaire",
+          "start": "Where everyone begins, and the channels they land in whatever they answer.",
+          "question": "One question on the way in, and the answers it offers.",
+          "answer": "One choice a member can pick, and what picking it grants them.",
+          "channel": "A channel an answer puts the member into.",
+          "group": "An ACL group an answer adds the member to."
+        },
+        "ports": {
+          "step": "step",
+          "answer": "answer",
+          "place": "place"
+        }
       }
     },
     "modal": {
@@ -1229,6 +1320,12 @@
     "loading": "Loading server settings…",
     "unavailable": "Server settings aren't available. This server may not support runtime settings, or you may not have permission to change them.",
     "save": "Save changes",
+    "modeRich": "Rich text",
+    "modeSource": "HTML",
+    "modePreview": "Preview",
+    "previewOf": "Preview of {{label}}",
+    "previewEmpty": "Nothing to show. This setting is empty, or every part of it was removed by the safety filter every client applies before rendering it.",
+    "richTextLossy": "This welcome text uses markup the visual editor cannot hold — a table layout, or styling it has no control for. Editing it there would rewrite the parts it cannot show, so it is edited as HTML.",
     "saving": "Saving…",
     "saved": "Saved"
   },
@@ -1326,6 +1423,71 @@
       "expires": "Expires",
       "actions": "Actions"
     },
-    "root": "Root"
+    "root": "Root",
+    "calendars": {
+      "empty": "No user calendars stored yet.",
+      "size": "Size",
+      "title": "Active calendars",
+      "updated": "Updated",
+      "user": "User (server:id)"
+    }
+  },
+  "livery": {
+    "accent": "accent",
+    "address": "Operator API",
+    "addTag": "+ Add tag",
+    "artwork": "Artwork",
+    "aura": "aura",
+    "badImageType": "That file isn't a PNG, JPEG or WebP.",
+    "banner": "Banner",
+    "cancel": "Cancel",
+    "clampLead": "Kept, but lightened for readability:",
+    "clampRenders": "renders as",
+    "clampTail": "so text stays legible. The stored value is unchanged.",
+    "clear": "Clear",
+    "close": "Close",
+    "colours": "App colours",
+    "coloursNote": "optional — banner alone is a common setup",
+    "connectAs": "Connect as",
+    "dark": "Dark",
+    "darkMode": "Dark mode",
+    "digest": "digest",
+    "displayName": "Display name",
+    "displayNameHint": "Shown next to",
+    "displayNameHintTail": "— never instead of it.",
+    "dropHint": "drop to replace",
+    "focusY": "Focus Y",
+    "icon": "Icon",
+    "identity": "Identity",
+    "light": "Light",
+    "lightMode": "Light mode",
+    "lightStock": "Surface & aura not set for light — viewers get stock colours.",
+    "motd": "Message of the day",
+    "noBanner": "No banner",
+    "plainText": "plain text",
+    "previewTitle": "CONNECT PREVIEW",
+    "remove": "Remove",
+    "removeIcon": "Remove icon",
+    "removeTag": "Remove tag",
+    "replace": "Replace",
+    "resized": "Resized to {{width}}×{{height}}, {{before}} → {{after}}.",
+    "save": "Save changes",
+    "saveMeta": "Only filled fields are sent",
+    "stock": "stock",
+    "surface": "surface",
+    "tagHref": "https:// (optional)",
+    "tagHrefLabel": "Link",
+    "tagLabel": "Label",
+    "tagline": "Tagline",
+    "tags": "Tags",
+    "tagsHint": "Tags carry a tone, not a colour — they adapt to each viewer's theme.",
+    "ticketDenied": "this connection cannot get an automatic upload credential",
+    "ticketNoAddress": "this server has not published an operator API address",
+    "ticketUnreachable": "could not reach the server for an automatic upload credential",
+    "title": "Livery",
+    "token": "Token",
+    "tokenHint": "Not stored — retyped each session.",
+    "use": "Use",
+    "version": "version"
   }
 }

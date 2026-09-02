@@ -178,7 +178,8 @@
     "persistDms": "Conserver l'historique des MP",
     "persistDmsHint": "Les messages privés échangés avec vos amis sont enregistrés sur cet appareil, chiffrés avec AES-GCM. Désactivez pour conserver les MP uniquement en mémoire ; l'historique existant est supprimé lorsque vous désactivez cette option.",
     "disconnectWarning": "Confirmation de déconnexion",
-    "disconnectWarningHint": "Demander une confirmation avant de se déconnecter d'un serveur."
+    "disconnectWarningHint": "Demander une confirmation avant de se déconnecter d'un serveur.",
+    "logFiles": "Fichiers journaux"
   },
   "shortcuts": {
     "panelTitle": "Raccourcis",
@@ -427,6 +428,7 @@
     "identityLabel": "Identité",
     "manageIdentities": "Gérer les identités",
     "viewingOtherIdentity": "Vous consultez le profil d'une autre identité. Les modifications sont enregistrées localement, mais ne seront envoyées au serveur que lorsque vous vous connecterez avec cette identité.",
+    "tooLarge": "Votre profil est trop volumineux pour ce serveur. Essayez une image de bannière plus petite ou une biographie plus courte.",
     "sectionUsername": "Nom d'utilisateur par défaut",
     "usernameHint": "Sera pré-rempli lors de l'ajout d'un nouveau serveur.",
     "usernamePlaceholder": "Votre nom d'utilisateur",
@@ -535,7 +537,11 @@
       "codeLabel": "Code à 6 chiffres",
       "verify": "Confirmer & activer",
       "enabledHint": "La 2FA est activée. À chaque connexion, un code de votre application d'authentification vous sera demandé. Pour la désactiver, saisissez un code actuel.",
-      "disable": "Désactiver la 2FA"
+      "disable": "Désactiver la 2FA",
+      "qrLabel": "QR code pour votre application d’authentification",
+      "cantScan": "Impossible de scanner le code ?",
+      "linkHint": "Copiez le lien de configuration et ouvrez-le sur l’appareil où tourne votre application d’authentification — la plupart enregistrent le compte directement depuis le lien.",
+      "revealSecret": "Le lien ne fonctionne pas non plus ? Saisissez la clé à la main"
     },
     "unregister": {
       "title": "Supprimer l'enregistrement",
@@ -561,7 +567,8 @@
       "totp_not_enabled": "La 2FA n'est pas activée.",
       "totp_wrong_code": "Le code n'est pas valide. Vérifiez votre application et l'horloge de l'appareil.",
       "totp_generation_failed": "Le serveur n'a pas pu générer de clé 2FA.",
-      "unknown": "L'opération a échoué : {{code}}"
+      "unknown": "L'opération a échoué : {{code}}",
+      "timeout": "Le serveur n’a pas répondu. Il ne prend peut-être pas encore cela en charge, ou la requête s’est perdue."
     }
   },
   "avatarEditor": {
@@ -646,6 +653,7 @@
     "marketplace": "Marché",
     "fileServer": "Serveur de fichiers",
     "serverSettings": "Paramètres du serveur",
+    "welcome": "Message d'accueil",
     "auditLog": "Journal d'audit"
   },
   "audit": {
@@ -700,7 +708,22 @@
     "verifying": "Vérification…",
     "saved": "Enregistré",
     "saving": "Enregistrement…",
-    "saveChanges": "Enregistrer les modifications"
+    "saveChanges": "Enregistrer les modifications",
+    "collapseFilters": "Replier les filtres rapides",
+    "countNote": "{{count}} entrées chargées",
+    "endlessOff": "Par pages, 25 lignes à la fois.",
+    "endlessOn": "Charge davantage au défilement.",
+    "endlessScroll": "Défilement infini",
+    "endOfResults": "Fin des résultats",
+    "expandFilters": "Déplier les filtres rapides",
+    "filterCategory": "Catégories",
+    "nextPage": "Suivant",
+    "pageDashboard": "Tableau de bord",
+    "pageOf": "Page {{page}} sur {{pages}}",
+    "pageResults": "Résultats",
+    "prevPage": "Précédent",
+    "quickFilters": "Filtres rapides",
+    "resultsLabel": "Résultats"
   },
   "registeredUsers": {
     "title": "Utilisateurs enregistrés",
@@ -727,7 +750,8 @@
     "actionUnregister": "Désinscrire {{name}}",
     "actionsAriaLabel": "Actions pour {{name}}",
     "statusBar_one": "{{filtered}} sur {{total}} utilisateur",
-    "statusBar_other": "{{filtered}} sur {{total}} utilisateurs"
+    "statusBar_other": "{{filtered}} sur {{total}} utilisateurs",
+    "renameAriaLabel": "Nom d’utilisateur"
   },
   "banList": {
     "title": "Liste de bans",
@@ -763,7 +787,18 @@
     "saveChanges": "Enregistrer les modifications",
     "inheritAcls": "Hériter les ACL du canal parent",
     "tabRules": "Règles ACL ({{count}})",
-    "tabGroups": "Groupes ({{count}})"
+    "tabGroups": "Groupes ({{count}})",
+    "cancelDelete": "Annuler",
+    "tabUsers": "Utilisateurs ({{count}})",
+    "privateBadge": "privé",
+    "deleteChannel": "Supprimer le salon",
+    "confirmDeleteChannel": "Supprimer le salon « {{name}} » et tout ce qu’il contient ? Cette action est irréversible.",
+    "accessAllUsers": "Tous les utilisateurs ont accès à ce salon.",
+    "accessAllRegistered": "Tous les utilisateurs enregistrés ont accès à ce salon.",
+    "accessViaGroup": "Membres de @{{group}}",
+    "accessNoneExplicit": "Aucun utilisateur particulier n’a d’accès ; l’accès est hérité des ACL parentes.",
+    "accessUsersHeading": "Utilisateurs ayant accès",
+    "accessOnlineHint": "en ligne"
   },
   "roles": {
     "title": "Rôles du serveur",
@@ -1090,6 +1125,77 @@
           "a1": "Invité",
           "a2": "Membre"
         }
+      },
+      "canvas": {
+        "viewSteps": "Étapes",
+        "viewCanvas": "Éditeur de nœuds",
+        "add": "+ ajouter",
+        "complete": "Parcours complet",
+        "toFix": "{{n}} à corriger",
+        "reset": "Réorganiser",
+        "live": "EN DIRECT",
+        "asks": "Demande",
+        "answers": "Réponses",
+        "grants": "Donne accès à",
+        "thenAsk": "Puis demander",
+        "landsIn": "Tout le monde arrive dans",
+        "wireAnswers": "reliez des réponses ici",
+        "wireGrants": "reliez un salon ou un groupe ici",
+        "pickChannel": "choisir un salon",
+        "note": "une note pour eux",
+        "groupName": "nom du groupe",
+        "unnamedGroup": "groupe sans nom",
+        "offFlowBadge": "hors parcours",
+        "offFlowHint": "Hors du parcours — reliez la question précédente ici.",
+        "looseAnswerHint": "Rattachée à aucune question — reliez-la à la question qui la propose.",
+        "nodes": {
+          "start": "Début",
+          "question": "Question",
+          "answer": "Réponse",
+          "channel": "Salon",
+          "group": "Groupe"
+        },
+        "summary": "Pose {{questions}}, propose {{answers}} et place les membres dans {{channels}} et {{groups}}.",
+        "summaryEmpty": "Rien n’est relié au parcours — personne n’est interrogé.",
+        "summaryQuestions_one": "{{count}} question",
+        "summaryQuestions_other": "{{count}} questions",
+        "summaryAnswers_one": "{{count}} réponse",
+        "summaryAnswers_other": "{{count}} réponses",
+        "summaryChannels_one": "{{count}} salon",
+        "summaryChannels_other": "{{count}} salons",
+        "summaryGroups_one": "{{count}} groupe",
+        "summaryGroups_other": "{{count}} groupes",
+        "problems": {
+          "noStart": "Aucun nœud de début — ajoutez-en un pour dire où tout le monde commence.",
+          "twoStarts": "Deux nœuds de début : le parcours ne peut commencer qu’une fois.",
+          "noQuestions": "Aucune question n’est reliée au début, personne n’est donc interrogé.",
+          "tooManyQuestions": "Trop de questions dans le parcours : {{max}} au maximum sont posées.",
+          "questionText": "Une question n’a pas de texte.",
+          "questionAnswers": "« {{where}} » ne propose aucune réponse.",
+          "offFlow": "Une question est hors du parcours ; elle ne serait jamais posée.",
+          "answerLabel": "Une réponse n’a pas de libellé.",
+          "looseAnswer": "Une réponse n’est reliée à aucune question.",
+          "channelUnset": "Un nœud salon ne nomme aucun salon.",
+          "groupUnset": "Un nœud groupe ne nomme aucun groupe."
+        },
+        "browse": "Parcourir les blocs",
+        "search": "Rechercher un bloc",
+        "favorites": "Favoris",
+        "noMatches": "Aucun bloc ne correspond.",
+        "idle": "INACTIF",
+        "blocks": {
+          "category": "Questionnaire",
+          "start": "Le point de départ de chacun, et les salons où tous arrivent quelle que soit leur réponse.",
+          "question": "Une question à l’arrivée, et les réponses qu’elle propose.",
+          "answer": "Un choix qu’un membre peut faire, et ce qu’il lui donne.",
+          "channel": "Un salon dans lequel une réponse place le membre.",
+          "group": "Un groupe ACL auquel une réponse ajoute le membre."
+        },
+        "ports": {
+          "step": "étape",
+          "answer": "réponse",
+          "place": "accès"
+        }
       }
     },
     "modal": {
@@ -1215,7 +1321,10 @@
     "unavailable": "Les paramètres du serveur ne sont pas disponibles. Ce serveur ne prend peut-être pas en charge les paramètres à chaud, ou vous n'avez pas l'autorisation de les modifier.",
     "save": "Enregistrer les modifications",
     "saving": "Enregistrement…",
-    "saved": "Enregistré"
+    "saved": "Enregistré",
+    "modeRich": "Texte enrichi",
+    "modeSource": "HTML",
+    "richTextLossy": "Ce texte d’accueil utilise un balisage que l’éditeur visuel ne peut pas conserver — une mise en page en tableau, ou un style pour lequel il n’a pas de contrôle. L’y modifier réécrirait les parties qu’il ne peut pas afficher, il est donc édité en HTML."
   },
   "fileServer": {
     "title": "Stockage du serveur de fichiers",
@@ -1311,6 +1420,71 @@
       "expires": "Expiration",
       "actions": "Actions"
     },
-    "root": "Racine"
+    "root": "Racine",
+    "calendars": {
+      "empty": "Aucun calendrier utilisateur enregistré pour l’instant.",
+      "size": "Taille",
+      "title": "Calendriers actifs",
+      "updated": "Mis à jour",
+      "user": "Utilisateur (serveur:id)"
+    }
+  },
+  "livery": {
+    "accent": "accent",
+    "address": "API opérateur",
+    "addTag": "+ Ajouter un tag",
+    "artwork": "Illustration",
+    "aura": "aura",
+    "badImageType": "Ce fichier n’est ni un PNG, ni un JPEG, ni un WebP.",
+    "banner": "Bannière",
+    "cancel": "Annuler",
+    "clampLead": "Conservé, mais éclairci pour la lisibilité :",
+    "clampRenders": "s’affiche comme",
+    "clampTail": "afin que le texte reste lisible. La valeur enregistrée est inchangée.",
+    "clear": "Effacer",
+    "close": "Fermer",
+    "colours": "Couleurs de l’application",
+    "coloursNote": "facultatif — une bannière seule est une configuration courante",
+    "connectAs": "Se connecter en tant que",
+    "dark": "Sombre",
+    "darkMode": "Mode sombre",
+    "digest": "empreinte",
+    "displayName": "Nom affiché",
+    "displayNameHint": "Affiché à côté de",
+    "displayNameHintTail": "— jamais à sa place.",
+    "dropHint": "déposez pour remplacer",
+    "focusY": "Focus Y",
+    "icon": "Icône",
+    "identity": "Identité",
+    "light": "Clair",
+    "lightMode": "Mode clair",
+    "lightStock": "Surface et aura non définies pour le mode clair — les visiteurs voient les couleurs par défaut.",
+    "motd": "Message du jour",
+    "noBanner": "Aucune bannière",
+    "plainText": "texte brut",
+    "previewTitle": "APERÇU DE CONNEXION",
+    "remove": "Supprimer",
+    "removeIcon": "Supprimer l’icône",
+    "removeTag": "Supprimer le tag",
+    "replace": "Remplacer",
+    "resized": "Redimensionné en {{width}}×{{height}}, {{before}} → {{after}}.",
+    "save": "Enregistrer les modifications",
+    "saveMeta": "Seuls les champs remplis sont envoyés",
+    "stock": "par défaut",
+    "surface": "surface",
+    "tagHref": "https:// (facultatif)",
+    "tagHrefLabel": "Lien",
+    "tagLabel": "Libellé",
+    "tagline": "Slogan",
+    "tags": "Tags",
+    "tagsHint": "Les tags portent une tonalité, pas une couleur — ils s’adaptent au thème de chaque visiteur.",
+    "ticketDenied": "cette connexion ne peut pas obtenir d’identifiant d’envoi automatique",
+    "ticketNoAddress": "ce serveur n’a pas publié d’adresse d’API opérateur",
+    "ticketUnreachable": "impossible de joindre le serveur pour un identifiant d’envoi automatique",
+    "title": "Livrée",
+    "token": "Jeton",
+    "tokenHint": "Non enregistré — à ressaisir à chaque session.",
+    "use": "Utiliser",
+    "version": "version"
   }
 }

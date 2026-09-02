@@ -43,9 +43,24 @@ interface BioEditorProps {
   readonly onChange: (html: string) => void;
   readonly maxLength?: number;
   readonly placeholder?: string;
+  /**
+   * Names the field for a screen reader, and for the tests.
+   *
+   * Optional because the two surfaces that had this first sit under their
+   * own heading and need no second name; a settings form labels every
+   * control, and an unlabelled box in a list of twenty is one nobody using
+   * a reader can tell from the next.
+   */
+  readonly ariaLabel?: string;
 }
 
-export function BioEditor({ value, onChange, maxLength = 2000, placeholder }: BioEditorProps) {
+export function BioEditor({
+  value,
+  onChange,
+  maxLength = 2000,
+  placeholder,
+  ariaLabel,
+}: BioEditorProps) {
   const { t } = useTranslation("settings");
   const resolvedPlaceholder = placeholder ?? t("bioEditor.placeholder");
   const [showColourPicker, setShowColourPicker] = useState(false);
@@ -192,6 +207,7 @@ export function BioEditor({ value, onChange, maxLength = 2000, placeholder }: Bi
     editorProps: {
       attributes: {
         class: styles.bioEditorContent,
+        ...(ariaLabel ? { "aria-label": ariaLabel, role: "textbox" } : {}),
       },
       handlePaste: handleEditorPaste,
     },

@@ -123,6 +123,40 @@ pub(crate) async fn livery_set(
     body(response).await.map(|_| ())
 }
 
+/// The welcome graph an operator drew.
+///
+/// Beside livery because it is the same journey: a nested document the
+/// control channel does not carry, reached with a short-lived ticket minted
+/// from the session this client already holds.
+#[tauri::command]
+pub(crate) async fn greeting_get(
+    base_url: String,
+    token: String,
+) -> Result<serde_json::Value, String> {
+    get_json(&format!("{}/v1/greeting", base(&base_url)?), &token).await
+}
+
+/// Replace the graph.
+///
+/// The whole document, unlike livery's field-wise patch: a graph is nodes and
+/// the wires between them, and merging two halves of one drawing produces
+/// wires with no nodes on their ends.
+#[tauri::command]
+pub(crate) async fn greeting_set(
+    base_url: String,
+    token: String,
+    graph: serde_json::Value,
+) -> Result<(), String> {
+    let response = client()?
+        .post(format!("{}/v1/greeting", base(&base_url)?))
+        .bearer_auth(&token)
+        .json(&graph)
+        .send()
+        .await
+        .map_err(|error| format!("request failed: {error}"))?;
+    body(response).await.map(|_| ())
+}
+
 /// What a client on `mode` will actually paint, after the contrast clamp.
 #[tauri::command]
 pub(crate) async fn livery_preview(

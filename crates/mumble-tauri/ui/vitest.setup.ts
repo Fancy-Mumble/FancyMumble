@@ -8,11 +8,21 @@
  */
 
 import { vi } from "vitest";
-import enChat from "./src/core/locales/en/chat.json";
-import enCommon from "./src/core/locales/en/common.json";
-import enServer from "./src/core/locales/en/server.json";
-import enSettings from "./src/core/locales/en/settings.json";
-import enSidebar from "./src/core/locales/en/sidebar.json";
+import enChat from "./src/core/locales/common/en/chat.json";
+import enCommon from "./src/core/locales/common/en/common.json";
+import enServer from "./src/core/locales/common/en/server.json";
+import enSettings from "./src/core/locales/common/en/settings.json";
+import enSidebar from "./src/core/locales/common/en/sidebar.json";
+// A UI pack's own namespaces, so a pack-specific string reads as the English
+// the user sees rather than as its key.
+import nebulaCommon from "./src/core/locales/nebula/en/common.json";
+import nebulaChrome from "./src/core/locales/nebula/en/chrome.json";
+import nebulaSidebar from "./src/core/locales/nebula/en/sidebar.json";
+import nebulaChat from "./src/core/locales/nebula/en/chat.json";
+import nebulaConnect from "./src/core/locales/nebula/en/connect.json";
+import nebulaUser from "./src/core/locales/nebula/en/user.json";
+import nebulaServer from "./src/core/locales/nebula/en/server.json";
+import nebulaSettings from "./src/core/locales/nebula/en/settings.json";
 
 type NestedRecord = { [key: string]: unknown };
 
@@ -22,6 +32,14 @@ const NAMESPACES: Record<string, NestedRecord> = {
   server: enServer as NestedRecord,
   settings: enSettings as NestedRecord,
   sidebar: enSidebar as NestedRecord,
+  nebulaCommon: nebulaCommon as NestedRecord,
+  nebulaChrome: nebulaChrome as NestedRecord,
+  nebulaSidebar: nebulaSidebar as NestedRecord,
+  nebulaChat: nebulaChat as NestedRecord,
+  nebulaConnect: nebulaConnect as NestedRecord,
+  nebulaUser: nebulaUser as NestedRecord,
+  nebulaServer: nebulaServer as NestedRecord,
+  nebulaSettings: nebulaSettings as NestedRecord,
 };
 
 function resolveKey(data: NestedRecord, key: string): unknown {
@@ -121,6 +139,39 @@ if (typeof Text !== "undefined" && !("getClientRects" in Text.prototype)) {
   Object.defineProperty(Text.prototype, "getClientRects", {
     configurable: true,
     value: () => NO_RECTS,
+  });
+}
+
+/**
+ * `IntersectionObserver`, which jsdom does not implement at all.
+ *
+ * Nothing here has a viewport to be inside of, so this observes what it is
+ * given and reports nothing - which is what a browser reports for a subtree
+ * that never becomes visible, and leaves anything driven by visibility (the
+ * message offloader, the history sentinel, the infinite-scroll lists) inert
+ * rather than throwing on mount. A test that wants the callback fires it
+ * itself, by installing its own in place of this one.
+ */
+if (typeof globalThis.IntersectionObserver === "undefined") {
+  class InertIntersectionObserver implements IntersectionObserver {
+    readonly root: Element | Document | null = null;
+    readonly rootMargin: string = "";
+    readonly thresholds: readonly number[] = [];
+    constructor(_callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+      this.root = (options?.root as Element | Document | null) ?? null;
+      this.rootMargin = options?.rootMargin ?? "0px";
+    }
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+  }
+  Object.defineProperty(globalThis, "IntersectionObserver", {
+    configurable: true,
+    writable: true,
+    value: InertIntersectionObserver,
   });
 }
 

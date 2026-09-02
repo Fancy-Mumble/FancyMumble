@@ -14,6 +14,7 @@
  * path is built to cause.
  */
 
+import { useTranslation } from "react-i18next";
 import { Box, Button, Checkbox, Dialog, FormControlLabel, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import { describeLink } from "@core/features/elements/externalLinks";
@@ -38,6 +39,7 @@ export function LinkWarningDialog({
   onConfirm,
   onCancel,
 }: Readonly<LinkWarningDialogProps>) {
+  const { t } = useTranslation(["nebulaCommon", "common"]);
   const { host, rest, scheme } = describeLink(url ?? "");
 
   return (
@@ -66,7 +68,7 @@ export function LinkWarningDialog({
         </Box>
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography id="nebula-link-warning-title" sx={{ fontSize: 14, fontWeight: 600 }}>
-            Leaving Fancy Mumble
+            {t("nebulaCommon:linkWarning.title")}
           </Typography>
           <Typography
             sx={(theme) => ({
@@ -76,7 +78,7 @@ export function LinkWarningDialog({
               color: theme.palette.nebula.muted,
             })}
           >
-            This link opens in your browser. Fancy Mumble can&rsquo;t vouch for where it goes.
+            {t("nebulaCommon:linkWarning.body")}
           </Typography>
         </Box>
       </Stack>
@@ -166,14 +168,14 @@ export function LinkWarningDialog({
                   whiteSpace: "nowrap",
                 })}
               >
-                Trust {host}
+                {t("nebulaCommon:linkWarning.trust", { host })}
               </Typography>
             }
           />
         ) : null}
         <Stack direction="row" gap="7px" sx={{ ml: "auto", flex: "none" }}>
           <Button variant="outlined" onClick={onCancel} sx={{ fontSize: 12 }}>
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button
             variant="contained"
@@ -181,7 +183,7 @@ export function LinkWarningDialog({
             endIcon={<ExternalLinkIcon width={12} height={12} />}
             sx={{ fontSize: 12, fontWeight: 600 }}
           >
-            Open link
+            {t("nebulaCommon:linkWarning.open")}
           </Button>
         </Stack>
       </Stack>

@@ -2807,7 +2807,9 @@ pub struct Setting {
     #[prost(string, optional, tag = "1")]
     pub key: ::core::option::Option<::prost::alloc::string::String>,
     /// Input type driving the client's field component:
-    /// "string" | "text" | "bool" | "int" | "enum" | "country" | "password".
+    /// "string" | "text" | "html" | "bool" | "int" | "enum" | "country" |
+    /// "password".  "html" is a value the client renders as markup and so edits
+    /// as formatted text; "text" is a paragraph shown as typed.
     #[prost(string, optional, tag = "2")]
     pub r#type: ::core::option::Option<::prost::alloc::string::String>,
     /// Group/section the setting belongs to (e.g. "General", "Registration", or

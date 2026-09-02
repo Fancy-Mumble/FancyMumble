@@ -12,6 +12,18 @@ pub(crate) fn get_server_settings(
     state.get_server_settings()
 }
 
+/// Ask the server for the settings, for a client it has not told.
+///
+/// An epoch-1 server answers a query rather than broadcasting after
+/// `ServerSync`, so nothing is cached until this is sent. The answer
+/// arrives as a `server-settings` event.
+#[tauri::command]
+pub(crate) async fn request_server_settings(
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    state.request_server_settings().await
+}
+
 /// Admin path: send changed settings to the server to apply at runtime.
 #[tauri::command]
 pub(crate) async fn save_server_settings(

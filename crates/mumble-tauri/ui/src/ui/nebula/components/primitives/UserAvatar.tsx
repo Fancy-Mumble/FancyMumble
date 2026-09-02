@@ -1,5 +1,6 @@
 import { Avatar, Box } from "@mui/material";
 import { useUserAvatar } from "@core/lazyBlobs";
+import { radius } from "../../tokens";
 import { StatusDot, type Status } from "./StatusDot";
 
 export function initials(name: string): string {
@@ -65,7 +66,11 @@ export function UserAvatar({
             ? `linear-gradient(135deg,${gradient.from},${gradient.to})`
             : theme.palette.nebula.card2,
           color: gradient ? "#fff" : theme.palette.nebula.muted,
-          borderRadius: square ? "28%" : "50%",
+          // Both shapes are the theme's, not this component's. A rail tile is
+          // the one square avatar in the pack and takes the rail step; every
+          // other avatar takes the avatar step, which is a circle in most skins
+          // and a hard 0px in the ones that square everything off.
+          borderRadius: square ? radius("rail") : radius("avatar"),
           boxShadow: talking
             ? `0 0 0 2px ${theme.palette.nebula.ok},0 0 14px ${theme.palette.nebula.ok}55`
             : "none",

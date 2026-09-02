@@ -36,8 +36,8 @@ export function SearchBox({
         px: "14px",
         py: "9px",
         borderRadius: radius("lg"),
-        background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        background: theme.palette.nebula.input,
+        border: `1px solid ${theme.palette.nebula.line2}`,
         color: theme.palette.nebula.dim,
       })}
     >

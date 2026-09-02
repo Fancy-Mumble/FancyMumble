@@ -369,6 +369,42 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
             };
             return Some((PCHAT, envelope.encode_to_vec()));
         }
+        ControlMessage::FancyServerSettingsQuery(query) => {
+            return Some((
+                SERVER_CONFIG,
+                fancy::domain::ServerConfigEnvelope {
+                    body: Some(fancy::domain::server_config_envelope::Body::Query(*query)),
+                }
+                .encode_to_vec(),
+            ));
+        }
+        // The schema is the server's, and an update names only what changed.
+        // Everything else on an epoch-0 `Setting` - the type, the label, the
+        // group - is the server describing its own form back to itself, and
+        // the canon leaves it out rather than inviting a client to claim it.
+        //
+        // A row with no key names no setting. Dropped rather than sent as the
+        // empty string, which on the far side is a key like any other and lands
+        // in `extra` as a setting nobody asked for.
+        ControlMessage::FancyServerSettingsUpdate(update) => {
+            let values = update
+                .settings
+                .iter()
+                .filter_map(|setting| {
+                    let key = setting.key.clone()?;
+                    (!key.is_empty()).then(|| (key, setting.value.clone().unwrap_or_default()))
+                })
+                .collect();
+            return Some((
+                SERVER_CONFIG,
+                fancy::domain::ServerConfigEnvelope {
+                    body: Some(fancy::domain::server_config_envelope::Body::Update(
+                        fancy::domain::ConfigUpdate { values },
+                    )),
+                }
+                .encode_to_vec(),
+            ));
+        }
         ControlMessage::FancyLiveryQuery(query) => {
             return Some((
                 SERVER_CONFIG,
@@ -667,6 +703,45 @@ fn audit_settings(config: &fancy::feature::Config) -> Vec<mumble_tcp::Setting> {
     ]
 }
 
+/// One editable server setting, in the shape the settings screen renders.
+///
+/// The canon states the kind as an enum and epoch 0 as the name of the field
+/// component to build; this is the only place that mapping lives, so a kind
+/// added to the canon shows up here as a non-exhaustive match rather than as a
+/// checkbox silently rendered as a text box.
+///
+/// A secret asks for a masked field. The canon says `secret` beside a kind of
+/// `STRING`, which is the truth about the *value*; what a form has to do with
+/// that truth is show dots, and epoch 0 spells that as a type of its own.
+fn config_setting(setting: &fancy::domain::Setting) -> mumble_tcp::Setting {
+    use fancy::domain::setting::Kind;
+
+    let kind = match setting.kind() {
+        Kind::Text => "text",
+        Kind::Html => "html",
+        Kind::Bool => "bool",
+        Kind::Int => "int",
+        Kind::Choice => "enum",
+        Kind::String if setting.secret => "password",
+        Kind::String => "string",
+    };
+    let named = |value: &str| (!value.is_empty()).then(|| value.to_owned());
+    mumble_tcp::Setting {
+        key: Some(setting.key.clone()),
+        r#type: Some(kind.to_owned()),
+        group: named(&setting.group),
+        label: named(&setting.label),
+        // Withheld rather than empty, which is the distinction a client draws
+        // between "no password set" and "the server will not tell you": an
+        // empty box on a secret means "leave it alone", and a value of `""`
+        // means "clear it".
+        value: (!setting.secret).then(|| setting.value.clone()),
+        options: setting.options.clone(),
+        secret: Some(setting.secret),
+        help: named(&setting.help),
+    }
+}
+
 /// One pchat message, encoded as a canon envelope.
 ///
 /// Everything the recipient needs to decrypt travels with it. `sender_cert` is
@@ -920,8 +995,14 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 Some(fancy::domain::server_config_envelope::Body::TicketReply(reply)) => {
                     Some(ControlMessage::FancyOperatorTicketReply(reply))
                 }
-                // The settings half of this envelope has no `ControlMessage`
-                // yet; livery is the first thing on 1013 the client acts on.
+                Some(fancy::domain::server_config_envelope::Body::Values(values)) => Some(
+                    ControlMessage::FancyServerSettings(mumble_tcp::FancyServerSettings {
+                        settings: values.settings.iter().map(config_setting).collect(),
+                        revision: Some(values.version),
+                    }),
+                ),
+                // The rest of 1013 is client->server: the two queries, the two
+                // updates, and the ticket request.
                 _ => None,
             })
         }
@@ -1383,20 +1464,164 @@ mod tests {
         }
     }
 
+    /// One canon setting, for the tests below.
+    fn canon_setting(key: &str, kind: fancy::domain::setting::Kind) -> fancy::domain::Setting {
+        fancy::domain::Setting {
+            key: key.to_owned(),
+            kind: kind as i32,
+            group: "General".to_owned(),
+            label: "Maximum users".to_owned(),
+            value: "42".to_owned(),
+            options: Vec::new(),
+            secret: false,
+            help: "Connections beyond this are rejected as full.".to_owned(),
+        }
+    }
+
     #[test]
-    fn the_settings_half_of_1013_is_still_ignored_rather_than_mistaken_for_livery() {
+    fn the_settings_half_of_1013_comes_back_off_the_wire() {
+        // Without this arm the admin screen said "this server may not support
+        // runtime settings" to an admin of a server that does: the snapshot
+        // arrived, decoded, and was dropped one match arm short of the store.
         let payload = fancy::domain::ServerConfigEnvelope {
             body: Some(fancy::domain::server_config_envelope::Body::Values(
                 fancy::domain::ConfigValues {
-                    settings: Vec::new(),
+                    settings: vec![canon_setting(
+                        "max_users",
+                        fancy::domain::setting::Kind::Int,
+                    )],
+                    version: 7,
+                },
+            )),
+        }
+        .encode_to_vec();
+
+        match from_canon(SERVER_CONFIG, &payload).expect("decodes") {
+            Some(ControlMessage::FancyServerSettings(settings)) => {
+                assert_eq!(settings.revision, Some(7));
+                let setting = settings.settings.first().expect("one setting");
+                assert_eq!(setting.key.as_deref(), Some("max_users"));
+                assert_eq!(setting.r#type.as_deref(), Some("int"));
+                assert_eq!(setting.value.as_deref(), Some("42"));
+                assert_eq!(setting.label.as_deref(), Some("Maximum users"));
+            }
+            other => panic!("not a settings snapshot: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_value_the_server_calls_markup_asks_for_a_field_that_edits_markup() {
+        // The welcome text is HTML, and every client puts it through an
+        // allow-list on the way to the screen. Carried as its own field type so
+        // the form can offer a toolbar instead of raw tags - one UI used to
+        // infer this from a regex over the label, which is a guess that gets the
+        // wrong answer as soon as a setting is renamed or translated.
+        let mut markup = canon_setting("welcome_text", fancy::domain::setting::Kind::Html);
+        markup.value = "<p>cozy corner</p>".to_owned();
+        let payload = fancy::domain::ServerConfigEnvelope {
+            body: Some(fancy::domain::server_config_envelope::Body::Values(
+                fancy::domain::ConfigValues {
+                    settings: vec![markup],
                     version: 1,
                 },
             )),
         }
         .encode_to_vec();
-        assert!(from_canon(SERVER_CONFIG, &payload)
-            .expect("decodes")
-            .is_none());
+
+        match from_canon(SERVER_CONFIG, &payload).expect("decodes") {
+            Some(ControlMessage::FancyServerSettings(settings)) => {
+                let setting = settings.settings.first().expect("one setting");
+                assert_eq!(setting.r#type.as_deref(), Some("html"));
+                assert_eq!(setting.value.as_deref(), Some("<p>cozy corner</p>"));
+            }
+            other => panic!("not a settings snapshot: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_secret_arrives_as_a_masked_field_with_no_value_on_it() {
+        // The two halves of a write-only setting: a form has to mask it, and
+        // an empty box has to keep meaning "unchanged" rather than "clear it".
+        let mut secret = canon_setting("password", fancy::domain::setting::Kind::String);
+        secret.secret = true;
+        secret.value = String::new();
+        let payload = fancy::domain::ServerConfigEnvelope {
+            body: Some(fancy::domain::server_config_envelope::Body::Values(
+                fancy::domain::ConfigValues {
+                    settings: vec![secret],
+                    version: 1,
+                },
+            )),
+        }
+        .encode_to_vec();
+
+        match from_canon(SERVER_CONFIG, &payload).expect("decodes") {
+            Some(ControlMessage::FancyServerSettings(settings)) => {
+                let setting = settings.settings.first().expect("one setting");
+                assert_eq!(setting.r#type.as_deref(), Some("password"));
+                assert_eq!(setting.secret, Some(true));
+                assert_eq!(setting.value, None, "a withheld value is not an empty one");
+            }
+            other => panic!("not a settings snapshot: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_settings_edit_reaches_the_server_as_the_keys_that_changed() {
+        // The schema is the server's. An update that carried the type, the
+        // label and the group back would be a client restating the form it was
+        // handed, and the canon has nowhere to put any of it.
+        let (outer, payload) = to_canon(&ControlMessage::FancyServerSettingsUpdate(
+            mumble_tcp::FancyServerSettingsUpdate {
+                settings: vec![
+                    mumble_tcp::Setting {
+                        key: Some("welcome_text".to_owned()),
+                        value: Some("cozy corner".to_owned()),
+                        ..Default::default()
+                    },
+                    // No key names no setting; sent as `""` it would land in
+                    // the server's `extra` as a knob nobody asked for.
+                    mumble_tcp::Setting {
+                        key: None,
+                        value: Some("nowhere".to_owned()),
+                        ..Default::default()
+                    },
+                ],
+            },
+        ))
+        .expect("the settings surface has a canon form");
+
+        assert_eq!(outer, SERVER_CONFIG);
+        let envelope =
+            fancy::domain::ServerConfigEnvelope::decode(payload.as_slice()).expect("an envelope");
+        match envelope.body {
+            Some(fancy::domain::server_config_envelope::Body::Update(update)) => {
+                assert_eq!(update.values.len(), 1, "a keyless row names no setting");
+                assert_eq!(
+                    update.values.get("welcome_text").map(String::as_str),
+                    Some("cozy corner")
+                );
+            }
+            other => panic!("not a settings update: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn asking_for_the_settings_reaches_the_server() {
+        // Epoch 0 broadcast them after `ServerSync`; the canon answers a
+        // question instead, so a client that cannot ask never sees any.
+        let (outer, payload) = to_canon(&ControlMessage::FancyServerSettingsQuery(
+            fancy::domain::ConfigQuery {},
+        ))
+        .expect("the settings surface has a canon form");
+
+        assert_eq!(outer, SERVER_CONFIG);
+        let envelope =
+            fancy::domain::ServerConfigEnvelope::decode(payload.as_slice()).expect("an envelope");
+        assert!(matches!(
+            envelope.body,
+            Some(fancy::domain::server_config_envelope::Body::Query(_))
+        ));
     }
 
     /// The canon body one account action translates to.

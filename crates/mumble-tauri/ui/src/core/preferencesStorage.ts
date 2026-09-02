@@ -49,6 +49,7 @@ const DEFAULTS: UserPreferences = {
   skippedUpdateVersion: null,
   persistDms: false,
   hideEmptyChannels: false,
+  showOfflineMembers: true,
   welcomeMessageDisplay: "once",
   showDisconnectWarning: true,
   trustedLinkHosts: [],

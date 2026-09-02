@@ -251,6 +251,7 @@ impl AppState {
             plugin_components: None,
         };
         msg.ensure_id();
+        msg.ensure_timestamp();
 
         if msg_data
             .pchat_protocol

@@ -21,6 +21,7 @@ use tracing::{debug, warn};
 use mumble_protocol::audio::capture::AudioCapture;
 use mumble_protocol::audio::filter::FilterChain;
 use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes};
+use mumble_protocol::error::Error;
 
 use crate::audio::{AudioDeviceFactory, MixingPlayback, PlatformAudioFactory};
 
@@ -130,8 +131,17 @@ async fn record(
             break;
         }
 
-        let Ok(mut frame) = ctx.capture.read_frame() else {
-            continue;
+        let mut frame = match ctx.capture.read_frame() {
+            Ok(frame) => frame,
+            // No full frame buffered yet - try again on the next tick.
+            Err(Error::NotEnoughSamples) => continue,
+            // The device vanished mid-recording: stop here and play back
+            // whatever was captured, rather than recording 20 s of
+            // nothing while every read fails.
+            Err(e) => {
+                warn!("voice_replay: capture device lost ({e}); ending recording");
+                break;
+            }
         };
 
         if let Err(e) = ctx.filters.process(&mut frame) {

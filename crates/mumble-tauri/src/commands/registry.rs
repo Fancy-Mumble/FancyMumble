@@ -35,6 +35,8 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         // -- livery admin (operator API proxy) -------------------------
         super::livery_admin::livery_get,
         super::livery_admin::livery_set,
+        super::livery_admin::greeting_get,
+        super::livery_admin::greeting_set,
         super::livery_admin::livery_preview,
         super::livery_admin::livery_upload_image,
         super::livery_admin::livery_clear_image,
@@ -224,6 +226,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::audit::query_audit_log,
         super::audit::save_audit_config,
         super::server_settings::get_server_settings,
+        super::server_settings::request_server_settings,
         super::server_settings::save_server_settings,
         // -- account (self-service) ------------------------------------
         super::account::get_account_settings,
@@ -248,6 +251,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::chat_background::extract_chat_background_poster,
         super::chat_background::store_chat_background_poster,
         super::chat_background::bake_chat_background_video,
+        super::chat_background::prune_chat_backgrounds,
         super::chat_background::clear_chat_background,
         // -- popouts / overlays / window -------------------------------
         super::popout::open_image_popout,

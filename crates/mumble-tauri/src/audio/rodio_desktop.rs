@@ -108,7 +108,9 @@ impl AudioCapture for RodioCapture {
                 Ok(chunk) => self.pending.extend_from_slice(&chunk),
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
-                    return Err(Error::InvalidState("Microphone stream ended".into()));
+                    // The reader thread exited: the device was unplugged
+                    // or disabled. Terminal - see `Error::DeviceLost`.
+                    return Err(Error::DeviceLost("microphone stream ended".into()));
                 }
             }
         }

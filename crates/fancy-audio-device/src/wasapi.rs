@@ -229,9 +229,7 @@ impl AudioCapture for WasapiCapture {
     fn read_frame(&mut self) -> Result<AudioFrame> {
         if let Ok(dead) = self.dead.lock() {
             if let Some(reason) = dead.as_ref() {
-                return Err(Error::InvalidState(format!(
-                    "wasapi capture lost: {reason}"
-                )));
+                return Err(Error::DeviceLost(reason.clone()));
             }
         }
         let mut buf = self

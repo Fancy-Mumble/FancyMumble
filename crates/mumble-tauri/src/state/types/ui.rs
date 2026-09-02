@@ -252,6 +252,30 @@ impl ChatMessage {
             self.message_id = Some(uuid::Uuid::new_v4().to_string());
         }
     }
+
+    /// Ensure the message has a `timestamp`, falling back to now.
+    ///
+    /// The stamp is a Fancy extension on `TextMessage`, so a legacy client, a
+    /// legacy server, or any hop that re-encodes the frame without the field
+    /// leaves it unset - and the UI has nothing to print but a blank where the
+    /// clock goes, which reads as a message that happened at no particular
+    /// moment. Arrival time is what murmur's own client shows in that case: it
+    /// is off by the delivery latency and right about the minute, which is the
+    /// resolution anybody reads a chat log at.
+    ///
+    /// Zero counts as absent. Nothing was sent at the epoch, and the paths
+    /// that decode an optional wire field with `unwrap_or(0)` hand it on as a
+    /// stamp rather than as the "missing" it means.
+    pub fn ensure_timestamp(&mut self) {
+        if self.timestamp.is_none_or(|ts| ts == 0) {
+            self.timestamp = Some(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64,
+            );
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]

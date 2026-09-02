@@ -301,5 +301,34 @@
     "youLabel": "Vous",
     "openSettings": "Ouvrir les paramètres",
     "noMatches": "Aucun ami ne correspond à votre recherche."
+  },
+  "onboarding": {
+    "subtitle": "Configurons Fancy Mumble en quelques étapes rapides.",
+    "stepOf": "Étape {{current}} sur {{total}}",
+    "next": "Suivant",
+    "back": "Retour",
+    "finish": "C’est parti",
+    "steps": {
+      "identity": "Identité",
+      "interface": "Interface",
+      "appearance": "Apparence",
+      "ready": "Terminé"
+    },
+    "identity": {
+      "title": "Comment devons-nous vous appeler ?",
+      "hint": "C’est le nom que les autres voient. Vous pourrez utiliser un nom différent par serveur plus tard."
+    },
+    "interface": {
+      "title": "Choisissez votre interface",
+      "hint": "Vous pouvez en changer à tout moment dans les paramètres."
+    },
+    "appearance": {
+      "title": "Choisissez un thème",
+      "hint": "Personnalisez-le — il y en a bien d’autres dans les paramètres."
+    },
+    "ready": {
+      "title": "Tout est prêt, {{name}} !",
+      "hint": "Lancez-vous et connectez-vous à votre premier serveur."
+    }
   }
 }

@@ -47,6 +47,16 @@ pub enum Error {
     #[error("Not enough samples")]
     NotEnoughSamples,
 
+    /// The capture device vanished mid-stream: unplugged, disabled, or
+    /// its driver reset.
+    ///
+    /// Distinct from [`Error::InvalidState`] because it is *terminal* for
+    /// that capture - every later `read_frame` fails identically - so a
+    /// caller must tear the pipeline down and surface the fault instead
+    /// of retrying once per audio frame.
+    #[error("Audio device lost: {0}")]
+    DeviceLost(String),
+
     /// The Opus codec reported an error.
     #[error("Opus codec error: {0}")]
     OpusCodec(String),

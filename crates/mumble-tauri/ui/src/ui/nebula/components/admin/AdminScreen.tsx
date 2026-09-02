@@ -32,6 +32,16 @@ const ServerSettingsAdmin = lazy(() =>
   import("./ServerSettingsAdmin").then((m) => ({ default: m.ServerSettingsAdmin })),
 );
 const UsersAdmin = lazy(() => import("./UsersAdmin").then((m) => ({ default: m.UsersAdmin })));
+const WelcomeAdmin = lazy(() => import("./WelcomeAdmin").then((m) => ({ default: m.WelcomeAdmin })));
+
+/**
+ * Pages whose own surface reaches the edges of the pane.
+ *
+ * Both draw a node canvas, which is a room rather than a card in one. The
+ * onboarding page has a second, prose-shaped view as well, so it pads that one
+ * itself - the pane cannot know which of the two is showing.
+ */
+const FULL_BLEED: readonly AdminPageId[] = ["welcome", "onboarding"];
 
 /**
  * The administration content area.
@@ -119,6 +129,9 @@ export function AdminScreen({
       case "livery":
         content = <LiveryAdmin />;
         break;
+      case "welcome":
+        content = <WelcomeAdmin />;
+        break;
       case "auditLog":
         content = <AuditAdmin />;
         break;
@@ -126,7 +139,24 @@ export function AdminScreen({
   }
 
   return (
-    <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", px: "52px", py: "38px" }}>
+    <Box
+      sx={{
+        flex: 1,
+        minHeight: 0,
+        overflowY: "auto",
+        // A column, so a page can opt into filling the pane (`AdminPage fill`)
+        // and hand the leftover height to a table that scrolls under a pinned
+        // header instead of scrolling the whole pane out from under it.
+        display: "flex",
+        flexDirection: "column",
+        // A page that draws its own canvas gets the pane exactly, and pads
+        // its own bars: a margin here would frame the canvas in a lighter
+        // panel, which is the one thing a full-bleed surface must not do.
+        // The reading pages keep the wide margin that makes prose legible.
+        px: FULL_BLEED.includes(page) ? 0 : "52px",
+        py: FULL_BLEED.includes(page) ? 0 : "38px",
+      }}
+    >
       <Suspense fallback={null}>{content}</Suspense>
     </Box>
   );

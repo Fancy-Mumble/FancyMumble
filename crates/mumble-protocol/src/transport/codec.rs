@@ -102,109 +102,142 @@ pub struct Framing {
 
 /// [`decode`], threading the per-connection framing state.
 pub fn decode_with(buf: &mut BytesMut, framing: &mut Framing) -> Result<Option<ControlMessage>> {
-    if buf.len() < HEADER_SIZE {
-        return Ok(None);
-    }
-
-    let msg_type = u16::from_be_bytes([buf[0], buf[1]]);
-    let payload_len = u32::from_be_bytes([buf[2], buf[3], buf[4], buf[5]]);
-
-    if payload_len > MAX_PAYLOAD_SIZE {
-        return Err(Error::InvalidState(format!(
-            "payload too large: {payload_len} bytes"
-        )));
-    }
-
-    let total = HEADER_SIZE + payload_len as usize;
-    if buf.len() < total {
-        return Ok(None);
-    }
-
-    buf.advance(HEADER_SIZE);
-    let mut payload = buf.split_to(payload_len as usize);
-
-    // `len` covers the sequence as well as the payload, so the frame is already
-    // whole; this only takes the eight bytes off the front of it.
-    if framing.sequenced {
-        if payload.len() < SEQ_SIZE {
-            return Err(Error::InvalidState(
-                "a sequenced frame shorter than its sequence".to_owned(),
-            ));
+    // A loop rather than one frame per call, because some frames produce no
+    // message: a batch unwraps into others, and anything this build cannot read
+    // is skipped. Returning `Ok(None)` for those made the caller wait on the
+    // socket (`transport::tcp`, `recv`) even when the very next frame was
+    // already in the buffer, so one skipped frame delayed a real one until more
+    // bytes happened to arrive. `Ok(None)` now means only what it says: there is
+    // no whole frame here yet.
+    loop {
+        if buf.len() < HEADER_SIZE {
+            return Ok(None);
         }
-        let seq = u64::from_be_bytes([
-            payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6],
-            payload[7],
-        ]);
-        payload.advance(SEQ_SIZE);
-        // A replay re-sends frames under the numbers they were written with, so
-        // a resumed stream legitimately repeats or steps forward - what it must
-        // not do is skip, which means the ring could not reach back far enough.
-        if seq > framing.last_seq + 1 && framing.last_seq != 0 {
-            framing.gap = true;
-        }
-        framing.last_seq = framing.last_seq.max(seq);
-    }
 
-    // A compressed batch is unwrapped before anything is routed: what comes out
-    // is ordinary frames, which the caller reads with this same function. It is
-    // handled here rather than in the service table because it is a property of
-    // the connection and not a destination on it.
-    //
-    // The frames are put back at the *front* of the buffer, so they are read
-    // next and in order - appending would deliver them after whatever else had
-    // already arrived, which reorders a stream whose ordering is the one thing
-    // the gateway guarantees.
-    if msg_type == COMPRESSED_BATCH {
-        let expanded = zstd::stream::decode_all(payload.as_ref())
-            .map_err(|_| Error::InvalidState("undecodable compressed batch".to_owned()))?;
-        if expanded.len() > MAX_BATCH_BYTES {
+        let msg_type = u16::from_be_bytes([buf[0], buf[1]]);
+        let payload_len = u32::from_be_bytes([buf[2], buf[3], buf[4], buf[5]]);
+
+        if payload_len > MAX_PAYLOAD_SIZE {
             return Err(Error::InvalidState(format!(
-                "compressed batch expands to {} bytes",
-                expanded.len()
+                "payload too large: {payload_len} bytes"
             )));
         }
-        let mut rest = std::mem::take(buf);
-        buf.extend_from_slice(&expanded);
-        buf.unsplit(std::mem::take(&mut rest));
-        return decode_with(buf, framing);
-    }
 
-    // Every Fancy message on the epoch-1 wire arrives under a service outer
-    // type, and the canon is the only thing that reads one.
-    //
-    // There is deliberately no second attempt. Until M3 this fell through to
-    // the proto2 envelopes when the canon did not recognise a payload - which
-    // meant a canon frame at a service the canon does not *cover* (server-config
-    // at 1013, say) was decoded as proto2, and where the wire types happened to
-    // coincide it produced a message that looked valid and was not. That is D1
-    // inbound. Skipping is the only honest answer, and costs nothing: an
-    // unreadable member of a service is exactly what the envelope design says
-    // may be ignored.
-    if msg_type >= crate::message::FANCY_SERVICE_TYPE_MIN {
-        let decoded = crate::canon::from_canon(msg_type, &payload).unwrap_or_else(|e| {
-            debug!(
-                msg_type,
-                len = payload.len(),
-                error = %e,
-                "undecodable canon payload; skipping the frame"
-            );
-            None
-        });
-        if decoded.is_none() {
-            // A service this build does not translate, or an arm added by a
-            // newer peer. The frame is consumed and skipped rather than fatal;
-            // `recv` loops, so `None` just reads on.
-            debug!(
-                msg_type,
-                len = payload.len(),
-                "skipping unknown service message"
-            );
+        let total = HEADER_SIZE + payload_len as usize;
+        if buf.len() < total {
+            return Ok(None);
         }
-        return Ok(decoded);
-    }
 
-    let msg = deserialize_control_message(msg_type, &payload)?;
-    Ok(Some(msg))
+        buf.advance(HEADER_SIZE);
+        let mut payload = buf.split_to(payload_len as usize);
+
+        // `len` covers the sequence as well as the payload, so the frame is already
+        // whole; this only takes the eight bytes off the front of it.
+        if framing.sequenced {
+            if payload.len() < SEQ_SIZE {
+                return Err(Error::InvalidState(
+                    "a sequenced frame shorter than its sequence".to_owned(),
+                ));
+            }
+            let seq = u64::from_be_bytes([
+                payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6],
+                payload[7],
+            ]);
+            payload.advance(SEQ_SIZE);
+            // A replay re-sends frames under the numbers they were written with, so
+            // a resumed stream legitimately repeats or steps forward - what it must
+            // not do is skip, which means the ring could not reach back far enough.
+            if seq > framing.last_seq + 1 && framing.last_seq != 0 {
+                framing.gap = true;
+            }
+            framing.last_seq = framing.last_seq.max(seq);
+        }
+
+        // A compressed batch is unwrapped before anything is routed: what comes out
+        // is ordinary frames, which the caller reads with this same function. It is
+        // handled here rather than in the service table because it is a property of
+        // the connection and not a destination on it.
+        //
+        // The frames are put back at the *front* of the buffer, so they are read
+        // next and in order - appending would deliver them after whatever else had
+        // already arrived, which reorders a stream whose ordering is the one thing
+        // the gateway guarantees.
+        if msg_type == COMPRESSED_BATCH {
+            let expanded = zstd::stream::decode_all(payload.as_ref())
+                .map_err(|_| Error::InvalidState("undecodable compressed batch".to_owned()))?;
+            if expanded.len() > MAX_BATCH_BYTES {
+                return Err(Error::InvalidState(format!(
+                    "compressed batch expands to {} bytes",
+                    expanded.len()
+                )));
+            }
+            let mut rest = std::mem::take(buf);
+            buf.extend_from_slice(&expanded);
+            buf.unsplit(std::mem::take(&mut rest));
+            continue;
+        }
+
+        // Every Fancy message on the epoch-1 wire arrives under a service outer
+        // type, and the canon is the only thing that reads one.
+        //
+        // There is deliberately no second attempt. Until M3 this fell through to
+        // the proto2 envelopes when the canon did not recognise a payload - which
+        // meant a canon frame at a service the canon does not *cover* (server-config
+        // at 1013, say) was decoded as proto2, and where the wire types happened to
+        // coincide it produced a message that looked valid and was not. That is D1
+        // inbound. Skipping is the only honest answer, and costs nothing: an
+        // unreadable member of a service is exactly what the envelope design says
+        // may be ignored.
+        if msg_type >= crate::message::FANCY_SERVICE_TYPE_MIN {
+            let decoded = crate::canon::from_canon(msg_type, &payload).unwrap_or_else(|e| {
+                debug!(
+                    msg_type,
+                    len = payload.len(),
+                    error = %e,
+                    "undecodable canon payload; skipping the frame"
+                );
+                None
+            });
+            match decoded {
+                Some(msg) => return Ok(Some(msg)),
+                // A service this build does not translate, or an arm added by a
+                // newer peer. The frame is consumed and skipped rather than
+                // fatal; the loop moves on to whatever came behind it.
+                None => {
+                    debug!(
+                        msg_type,
+                        len = payload.len(),
+                        "skipping unknown service message"
+                    );
+                    continue;
+                }
+            }
+        }
+
+        match deserialize_control_message(msg_type, &payload) {
+            Ok(msg) => return Ok(Some(msg)),
+            // A type this build has no variant for. Skipped, not fatal.
+            //
+            // This is the whole reason a 0.3.0 client could not stay connected
+            // to a server that had anything newer to say: `try_from` failed,
+            // the `?` carried the error out through `recv`, and the read loop
+            // treated it as a dead connection. An id we cannot name is a
+            // message we cannot act on, which is a feature we do not have --
+            // never a reason to drop a working session. Upstream will keep
+            // adding types above 26, and the burned 100-999 range is exactly
+            // what an older Fancy peer speaks.
+            Err(Error::UnknownMessageType(id)) => {
+                debug!(
+                    msg_type = id,
+                    len = payload.len(),
+                    "skipping a frame of an unknown type"
+                );
+            }
+            // A payload that does not parse *as the type it claims to be* is
+            // corruption, not novelty, and the stream is no longer trustworthy.
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 // -- Serialization helpers ------------------------------------------
@@ -239,6 +272,7 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
         FancyFileManaged(m) => m.encode_to_vec(),
         FancyFileForget(m) => m.encode_to_vec(),
         FancyFileRefused(m) => m.encode_to_vec(),
+        FancyServerSettingsQuery(m) => m.encode_to_vec(),
         FancyLiveryQuery(m) => m.encode_to_vec(),
         FancyServerLivery(m) => m.encode_to_vec(),
         FancyLiveryUpdate(m) => m.encode_to_vec(),
@@ -386,6 +420,9 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
         FancyFileRefused => {
             ControlMessage::FancyFileRefused(crate::proto::fancy::files::Refused::decode(payload)?)
         }
+        FancyServerSettingsQuery => ControlMessage::FancyServerSettingsQuery(
+            crate::proto::fancy::domain::ConfigQuery::decode(payload)?,
+        ),
         FancyLiveryQuery => ControlMessage::FancyLiveryQuery(
             crate::proto::fancy::domain::LiveryQuery::decode(payload)?,
         ),
@@ -653,6 +690,75 @@ mod tests {
         buf.put_u64(seq);
         buf.extend_from_slice(payload);
         buf
+    }
+
+    /// A flat frame with an arbitrary type id, built by hand.
+    ///
+    /// `encode` cannot make one: it only emits ids this build has a variant
+    /// for, and the point here is an id it does not.
+    fn flat_frame(type_id: u16, payload: &[u8]) -> BytesMut {
+        let mut buf = BytesMut::new();
+        buf.put_u16(type_id);
+        buf.put_u32(payload.len() as u32);
+        buf.extend_from_slice(payload);
+        buf
+    }
+
+    #[test]
+    fn an_unknown_flat_type_is_skipped_rather_than_killing_the_connection() {
+        // The failure this prevents is not a lost message, it is a lost
+        // session: `try_from` used to fail here, the `?` carried the error out
+        // through `recv`, and the read loop treated an unreadable frame as a
+        // dead connection. A 0.3.0 client was disconnected on the spot by a
+        // type it merely did not know.
+        //
+        // 27 is the first id upstream Mumble has not taken, so this is also
+        // what happens the day it takes one.
+        let mut buf = flat_frame(27, b"a type this build has no variant for");
+        assert!(
+            decode(&mut buf).unwrap().is_none(),
+            "an unknown type yields no message"
+        );
+        assert!(
+            buf.is_empty(),
+            "and is consumed, so the stream stays in sync"
+        );
+    }
+
+    #[test]
+    fn a_skipped_frame_does_not_hold_back_the_one_behind_it() {
+        // `Ok(None)` sends the caller to the socket for more bytes, so a skip
+        // that returned it stalled the *next* frame until something else
+        // happened to arrive - on a quiet connection, until the next ping.
+        // Decoding is a loop for this reason: the skip must not be visible to
+        // anyone above it.
+        let mut buf = flat_frame(27, b"skip me");
+        buf.extend_from_slice(
+            &encode(&ControlMessage::Ping(mumble_tcp::Ping {
+                timestamp: Some(7),
+                ..Default::default()
+            }))
+            .unwrap(),
+        );
+
+        let decoded = decode(&mut buf).unwrap();
+        match decoded {
+            Some(ControlMessage::Ping(ping)) => assert_eq!(ping.timestamp, Some(7)),
+            other => panic!("expected the Ping behind the skipped frame, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_known_type_with_a_corrupt_payload_is_still_fatal() {
+        // The line between novelty and corruption. An id we cannot name is a
+        // feature we do not have; a payload that does not parse as the type it
+        // claims to be means the stream is no longer trustworthy, and carrying
+        // on would be reading whatever comes next at the wrong offset.
+        let mut buf = flat_frame(
+            TcpMessageType::Version as u16,
+            &[0xff, 0xff, 0xff, 0xff, 0xff],
+        );
+        assert!(decode(&mut buf).is_err(), "a corrupt payload is an error");
     }
 
     #[test]

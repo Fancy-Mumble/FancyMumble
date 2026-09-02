@@ -79,7 +79,7 @@ pub(crate) fn handle_proto_msg_deliver(
         .map(|u| u.session);
 
     // The server never echoes PchatMessageDeliver back to the sender.
-    let chat_msg = ChatMessage {
+    let mut chat_msg = ChatMessage {
         sender_session,
         sender_name,
         sender_hash: Some(sender_hash),
@@ -98,6 +98,13 @@ pub(crate) fn handle_proto_msg_deliver(
         plugin_name: None,
         plugin_components: None,
     };
+
+    // `timestamp` above is `unwrap_or(0)`, so an envelope that arrived without
+    // one carries the epoch rather than nothing - which prints as a blank
+    // clock and sorts to the top of the history it just arrived at the bottom
+    // of. This is a live delivery, so now is both the honest answer and the
+    // one that keeps the order.
+    chat_msg.ensure_timestamp();
 
     insert_or_replace_message(
         &mut state,

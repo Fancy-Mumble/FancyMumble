@@ -80,7 +80,19 @@
     "forever": "0 = unbegrenzt",
     "saving": "Wird gespeichert...",
     "create": "Erstellen",
-    "save": "Speichern"
+    "save": "Speichern",
+    "hiddenLabel": "Versteckter Kanal (nur eingeladene Benutzer sehen ihn)",
+    "inviteesLabel": "Benutzer einladen",
+    "inviteesPlaceholder": "Benutzer per Name oder ID hinzufügen",
+    "expiryModeLabel": "Automatisch löschen",
+    "expiryNone": "Nie",
+    "expiryAbsolute": "Nach einer festen Zeit",
+    "expirySliding": "Nach Inaktivität",
+    "expiryAfterLabel": "Löschen nach",
+    "unitSeconds": "Sekunden",
+    "unitHours": "Stunden",
+    "unitDays": "Tagen",
+    "unitWeeks": "Wochen"
   },
   "channelSidebar": {
     "endCall": "Anruf beenden",

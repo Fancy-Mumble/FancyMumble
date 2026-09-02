@@ -68,6 +68,7 @@ impl AppState {
                 plugin_components: None,
             };
             msg.ensure_id();
+            msg.ensure_timestamp();
             let bucket = state.msgs.by_dm.entry(target_session).or_default();
             crate::state::push_capped(bucket, msg);
         }

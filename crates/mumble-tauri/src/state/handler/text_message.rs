@@ -308,6 +308,7 @@ fn handle_direct_message(
         plugin_components: None,
     };
     msg.ensure_id();
+    msg.ensure_timestamp();
     state
         .msgs
         .by_dm
@@ -386,6 +387,7 @@ fn handle_channel_message(
             plugin_components: None,
         };
         msg.ensure_id();
+        msg.ensure_timestamp();
         let bucket = state.msgs.by_channel.entry(ch_id).or_default();
         crate::state::push_capped(bucket, msg);
 

@@ -969,6 +969,79 @@ fn text_message_channel_message() {
     assert!(names.contains(&"unread-changed".to_string()));
 }
 
+/// A message with no wire timestamp is stamped on arrival.
+///
+/// `TextMessage.timestamp` is a Fancy extension, so a legacy client, a legacy
+/// server, or any hop that re-encodes the frame without it leaves the field
+/// unset - and the UI then has nothing to print where the clock goes, which
+/// reads as a message that happened at no particular moment.  Arrival time is
+/// off by the delivery latency and right about the minute, which is the
+/// resolution a chat log is read at.
+#[test]
+fn text_message_without_a_stamp_gets_the_arrival_time() {
+    let (ctx, _) = make_ctx();
+    let before = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+    {
+        let mut state = ctx.shared.lock().unwrap();
+        state.conn.own_session = Some(1);
+        let _ = state.users.insert(10, make_user(10, "Alice"));
+    }
+
+    mumble_tcp::TextMessage {
+        actor: Some(10),
+        channel_id: vec![5],
+        message: "no stamp".into(),
+        ..Default::default()
+    }
+    .handle(&ctx);
+    // The same message addressed at a person rather than a channel: the two
+    // take different paths through the handler and both draw a clock.
+    mumble_tcp::TextMessage {
+        actor: Some(10),
+        session: vec![1],
+        message: "no stamp".into(),
+        ..Default::default()
+    }
+    .handle(&ctx);
+
+    let state = ctx.shared.lock().unwrap();
+    for stamped in [
+        state.msgs.by_channel.get(&5).unwrap()[0].timestamp,
+        state.msgs.by_dm.get(&10).unwrap()[0].timestamp,
+    ] {
+        assert!(stamped.is_some_and(|ts| ts >= before), "{stamped:?}");
+    }
+}
+
+/// A stamp the sender did put on the wire is the one that is kept.
+#[test]
+fn text_message_keeps_the_stamp_the_sender_sent() {
+    let (ctx, _) = make_ctx();
+    {
+        let mut state = ctx.shared.lock().unwrap();
+        state.conn.own_session = Some(1);
+        let _ = state.users.insert(10, make_user(10, "Alice"));
+    }
+
+    mumble_tcp::TextMessage {
+        actor: Some(10),
+        channel_id: vec![5],
+        message: "stamped".into(),
+        timestamp: Some(1_700_000_000_000),
+        ..Default::default()
+    }
+    .handle(&ctx);
+
+    let state = ctx.shared.lock().unwrap();
+    assert_eq!(
+        state.msgs.by_channel.get(&5).unwrap()[0].timestamp,
+        Some(1_700_000_000_000)
+    );
+}
+
 /// Regression test: `new-message` and `request_user_attention` must be
 /// emitted via the `DeferredEmitter` (i.e. AFTER the `SharedState` lock
 /// is released).  Prior to the fix, these were emitted while the lock was
