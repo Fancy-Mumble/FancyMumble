@@ -1,0 +1,50 @@
+﻿{
+  "linkWarning": {
+    "title": "Fancy Mumble verlassen",
+    "body": "Dieser Link wird in deinem Browser geöffnet. Fancy Mumble kann nicht dafür einstehen, wohin er führt.",
+    "trust": "{{host}} vertrauen",
+    "open": "Link öffnen"
+  },
+  "quickConnect": "Schnellverbindung",
+  "app": {
+    "back": "Zurück",
+    "addServer": "+ Hinzufügen",
+    "searchServers": "Server durchsuchen",
+    "searchChannels": "Kanäle durchsuchen",
+    "searchConversation": "Dieses Gespräch durchsuchen",
+    "chooseConversation": "Gespräch auswählen",
+    "directMessage": "Direktnachricht",
+    "pickChannel": "Wähle links einen Kanal",
+    "startWith": "Beginne ein Gespräch mit {{name}}",
+    "startOfChannel": "Das ist der Anfang von #{{channel}}",
+    "nothingSelected": "Nichts ausgewählt",
+    "emptyHint": "Nachrichten und geteilte Momente erscheinen hier.",
+    "localFilesOnly": "Hier können nur Dateien von diesem Computer abgelegt werden",
+    "noFileSharingAllowed": "Dieser Server erlaubt dir das Teilen von Dateien nicht",
+    "noFileSharing": "Dieser Server bietet keine Dateifreigabe",
+    "pickConversationFirst": "Wähle zuerst ein Gespräch",
+    "deleteChannelTitle": "#{{channel}} löschen?",
+    "deleteChannelBody": "Unterkanäle und gespeicherte Nachrichten verschwinden mit. Das lässt sich nicht rückgängig machen."
+  },
+  "presence": {
+    "nobodyHere": "Niemand hier",
+    "inVoice": "{{count}} im Sprachkanal",
+    "withMembers_one": "{{voice}} · {{count}} Mitglied",
+    "withMembers_other": "{{voice}} · {{count}} Mitglieder"
+  },
+  "day": {
+    "today": "Heute",
+    "yesterday": "Gestern"
+  },
+  "jump": {
+    "peopleHere_one": "{{count}} Person hier",
+    "peopleHere_other": "{{count}} Personen hier",
+    "inVoiceChannel": "im Sprachkanal · # {{channel}}"
+  },
+  "richText": {
+    "underline": "Unterstrichen",
+    "textColour": "Textfarbe",
+    "insertImage": "Bild einfügen",
+    "resetColour": "Farbe zurücksetzen"
+  }
+}

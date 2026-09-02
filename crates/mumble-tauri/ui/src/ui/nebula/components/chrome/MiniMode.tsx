@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Box, Button, IconButton, Typography } from "@mui/material";
 import { useAppStore } from "@core/store";
 import { selectMicLive, selectSelfDeafened } from "@core/store/voiceSelectors";
@@ -39,6 +40,7 @@ export function MiniMode({
   onContextMenuUser,
   cardRef,
 }: Readonly<MiniModeProps>) {
+  const { t } = useTranslation(["nebulaChrome", "common", "chat"]);
   const micLive = useAppStore(selectMicLive);
   const deafened = useAppStore(selectSelfDeafened);
 
@@ -63,7 +65,7 @@ export function MiniMode({
             display: "grid",
             placeItems: "center",
             background: theme.palette.nebula.accent,
-            color: "#fff",
+            color: theme.palette.nebula.onAccent,
             fontWeight: 700,
             fontSize: 11,
           })}
@@ -76,10 +78,15 @@ export function MiniMode({
           </Typography>
           <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.muted })} noWrap>
             {serverLabel}
-            {latencyMs != null && ` · ${latencyMs} ms`}
+            {latencyMs != null && ` · ${t("nebulaChrome:miniMode.latency", { ms: latencyMs })}`}
           </Typography>
         </Box>
-        <IconButton size="small" aria-label="Expand window" sx={{ ml: "auto" }} onClick={onExpand}>
+        <IconButton
+          size="small"
+          aria-label={t("nebulaChrome:miniMode.expand")}
+          sx={{ ml: "auto" }}
+          onClick={onExpand}
+        >
           ⤢
         </IconButton>
       </Stack>
@@ -106,7 +113,7 @@ export function MiniMode({
             </Typography>
             {user.session === ownSession ? (
               <Typography sx={(theme) => ({ ml: "auto", fontSize: 9.5, color: theme.palette.nebula.dim })}>
-                you
+                {t("nebulaChrome:miniMode.you")}
               </Typography>
             ) : (
               <Box sx={{ ml: "auto", display: "flex" }}>
@@ -119,7 +126,7 @@ export function MiniMode({
 
       <Stack direction="row" gap={0.75} sx={{ px: "10px", pt: "8px", pb: "12px" }}>
         <IconButton
-          aria-label={micLive ? "Mute" : "Unmute"}
+          aria-label={micLive ? t("chat:callControls.mute") : t("chat:callControls.unmute")}
           onClick={() => void useAppStore.getState().toggleMute()}
           sx={(theme) => ({
             flex: 1,
@@ -131,7 +138,7 @@ export function MiniMode({
           {micLive ? <MicIcon width={13} height={13} /> : <MicOffIcon width={13} height={13} />}
         </IconButton>
         <IconButton
-          aria-label={deafened ? "Undeafen" : "Deafen"}
+          aria-label={deafened ? t("chat:callControls.undeafen") : t("chat:callControls.deafen")}
           onClick={() => void useAppStore.getState().toggleDeafen()}
           sx={(theme) => ({
             flex: 1,
@@ -152,7 +159,7 @@ export function MiniMode({
           onClick={onLeave}
           sx={(theme) => ({ flex: 1.8, height: 30, fontSize: 11.5, color: theme.palette.nebula.bad })}
         >
-          Leave
+          {t("common:actions.leave")}
         </Button>
       </Stack>
     </NebulaSurface>

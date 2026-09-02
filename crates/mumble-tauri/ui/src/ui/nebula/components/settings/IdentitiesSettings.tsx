@@ -21,7 +21,7 @@ import { usePreferenceSettings } from "./usePreferenceSettings";
  * the one the user is looking at.
  */
 export function IdentitiesSettings({ onEditProfile }: Readonly<{ onEditProfile?: (label: string) => void }>) {
-  const { t } = useTranslation(["settings", "common"]);
+  const { t } = useTranslation(["settings", "nebulaSettings", "common"]);
   const { prefs } = usePreferenceSettings();
   const connectedCertLabel = useAppStore((state) => state.connectedCertLabel);
   const [identities, setIdentities] = useState<string[]>([]);
@@ -69,7 +69,7 @@ export function IdentitiesSettings({ onEditProfile }: Readonly<{ onEditProfile?:
     void run(async () => {
       const destPath = await save({
         defaultPath: `${label}.fmid`,
-        filters: [{ name: "Fancy Mumble Identity", extensions: ["fmid"] }],
+        filters: [{ name: t("nebulaSettings:identities.certificateName"), extensions: ["fmid"] }],
       });
       if (destPath) await invoke("export_certificate", { label, destPath });
     });
@@ -78,7 +78,7 @@ export function IdentitiesSettings({ onEditProfile }: Readonly<{ onEditProfile?:
     void run(async () => {
       const selected = await open({
         multiple: false,
-        filters: [{ name: "Fancy Mumble Identity", extensions: ["fmid"] }],
+        filters: [{ name: t("nebulaSettings:identities.certificateName"), extensions: ["fmid"] }],
       });
       if (selected) await invoke("import_certificate", { srcPath: selected });
     });

@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Box } from "@mui/material";
 import { useAppStore } from "@core/store";
 import { isAccountSettingsSupported } from "@core/features/settings/accountStore";
@@ -20,9 +21,33 @@ export type SettingsPageId =
   | "plugins"
   | "advanced";
 
+/** The namespaces the nav's labels come from. */
+const NAV_NS = ["nebulaSettings", "settings"] as const;
+
+/**
+ * The keys the nav labels its pages with, spelled out as a union so `t()`
+ * still checks them - a bare `string` would opt the whole nav out of the
+ * catalogue's type checking.
+ */
+export type NavLabelKey =
+  | `settings:tabs.${
+      | "profile"
+      | "account"
+      | "voice"
+      | "personalize"
+      | "notifications"
+      | "privacy"
+      | "shortcuts"
+      | "identities"
+      | "plugins"
+      | "advanced"}`
+  | "nebulaSettings:nav.localization"
+  | "nebulaSettings:nav.channelsRoles";
+
 export interface NavEntry {
   id: SettingsPageId;
-  label: string;
+  /** What the page is called, as a key `t` can resolve. */
+  labelKey: NavLabelKey;
   /** Hidden unless this holds; absent means always shown. */
   available?: (context: SettingsNavContext) => boolean;
 }
@@ -52,18 +77,24 @@ export interface SettingsNavContext {
  * settings that can break something last.
  */
 export const SETTINGS_NAV: readonly NavEntry[] = [
-  { id: "profile", label: "Profile" },
-  { id: "account", label: "Account", available: (context) => context.accountSupported },
-  { id: "voice", label: "Voice" },
-  { id: "personalize", label: "Personalize" },
-  { id: "notifications", label: "Notifications" },
-  { id: "privacy", label: "Privacy" },
-  { id: "localization", label: "Language & format" },
-  { id: "shortcuts", label: "Shortcuts" },
-  { id: "identities", label: "Identities" },
-  { id: "channels-roles", label: "Channels & roles", available: (context) => context.onboardingSupported },
-  { id: "plugins", label: "Plugins", available: (context) => context.hasPlugins },
-  { id: "advanced", label: "Advanced" },
+  { id: "profile", labelKey: "settings:tabs.profile" },
+  { id: "account", labelKey: "settings:tabs.account", available: (context) => context.accountSupported },
+  { id: "voice", labelKey: "settings:tabs.voice" },
+  { id: "personalize", labelKey: "settings:tabs.personalize" },
+  { id: "notifications", labelKey: "settings:tabs.notifications" },
+  { id: "privacy", labelKey: "settings:tabs.privacy" },
+  // Standard titles these two; Nebula writes them in sentence case like the
+  // rest of its chrome, so they keep keys of their own.
+  { id: "localization", labelKey: "nebulaSettings:nav.localization" },
+  { id: "shortcuts", labelKey: "settings:tabs.shortcuts" },
+  { id: "identities", labelKey: "settings:tabs.identities" },
+  {
+    id: "channels-roles",
+    labelKey: "nebulaSettings:nav.channelsRoles",
+    available: (context) => context.onboardingSupported,
+  },
+  { id: "plugins", labelKey: "settings:tabs.plugins", available: (context) => context.hasPlugins },
+  { id: "advanced", labelKey: "settings:tabs.advanced" },
 ];
 
 /**
@@ -112,14 +143,21 @@ export function SettingsNav({
   onSelect: (id: SettingsPageId) => void;
   onOpenAdmin?: (id: string) => void;
 }>) {
+  const { t } = useTranslation(NAV_NS);
+  // The nav is routinely taller than the column it lives in - a dozen
+  // settings pages, plus a server admin section as long again - so it
+  // scrolls the way the other sidebar lists do rather than running its last
+  // entries off the bottom of the window where nothing can reach them.
   return (
-    <Stack sx={{ pb: "10px" }}>
-      <SectionLabel sx={{ px: "16px", pt: "10px", pb: "6px" }}>SETTINGS</SectionLabel>
+    <Stack sx={{ flex: 1, minHeight: 0, overflowY: "auto", pb: "10px" }}>
+      <SectionLabel sx={{ px: "16px", pt: "10px", pb: "6px" }}>
+        {t("nebulaSettings:nav.sectionSettings")}
+      </SectionLabel>
       <Stack sx={{ px: "10px", gap: "1px" }}>
         {visibleSettingsPages(context).map((entry) => (
           <NavButton
             key={entry.id}
-            label={entry.label}
+            label={t(entry.labelKey)}
             selected={admin?.active == null && entry.id === active}
             onClick={() => onSelect(entry.id)}
           />
@@ -128,7 +166,9 @@ export function SettingsNav({
 
       {admin && admin.entries.length > 0 && onOpenAdmin && (
         <>
-          <SectionLabel sx={{ px: "16px", pt: "16px", pb: "6px" }}>SERVER ADMIN</SectionLabel>
+          <SectionLabel sx={{ px: "16px", pt: "16px", pb: "6px" }}>
+            {t("nebulaSettings:nav.sectionServerAdmin")}
+          </SectionLabel>
           <Stack sx={{ px: "10px", gap: "1px" }}>
             {admin.entries.map((entry) => (
               <NavButton

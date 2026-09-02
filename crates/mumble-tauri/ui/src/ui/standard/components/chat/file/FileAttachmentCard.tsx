@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -35,12 +35,41 @@ interface FileAttachmentCardProps {
    * on the card.
    */
   readonly visibilityBadge?: (overlaid: boolean) => ReactNode;
+  /**
+   * Draw a photograph as itself, with no card around it.
+   *
+   * A picture is already the message; boxing it in a bordered panel and then
+   * letterboxing it to that panel's width states the same thing twice and
+   * makes the photograph the smaller half of it. In this mode the image keeps
+   * its own shape and the filename/size/buttons row becomes a strip over the
+   * top-right corner that appears under the pointer - nothing is taken away,
+   * it just stops competing with the picture.
+   *
+   * Only a still image can be drawn this way. Everything else - a player, a
+   * document, an expired link - has no picture to be, and falls back to the
+   * card whatever this says.
+   */
+  readonly bare?: boolean;
+  /**
+   * Fill the box this card was handed, cropping to do it.
+   *
+   * What `bare` means inside a gallery: several photographs sent together are
+   * one block of tiles, and a tile that kept its own proportions would leave
+   * the block ragged. Implies `bare`, and like it only applies to a picture.
+   */
+  readonly tile?: boolean;
 }
 
 /** HTML-comment marker used to embed a file attachment in a chat message
  *  body. Renderers detect the marker and render a {@link FileAttachmentCard}
  *  in place of the raw markdown link. Legacy clients see the inert comment. */
-export default function FileAttachmentCard({ info, visibilityBadge }: FileAttachmentCardProps) {
+export default function FileAttachmentCard({
+  info,
+  visibilityBadge,
+  bare: bareProp,
+  tile,
+}: FileAttachmentCardProps) {
+  const bare = bareProp || tile;
   const { t } = useTranslation("chat");
   const downloadFile = useAppStore((s) => s.downloadFile);
   const addDownload = useAppStore((s) => s.addDownload);
@@ -95,6 +124,13 @@ export default function FileAttachmentCard({ info, visibilityBadge }: FileAttach
   const handleImageClick = useCallback(() => {
     if (previewSrc) setLightboxOpen(true);
   }, [previewSrc]);
+
+  /** The picture's own width/height, which is what caps its height when bare. */
+  const [ratio, setRatio] = useState<number | null>(null);
+  const measure = useCallback((image: HTMLImageElement | null) => {
+    if (!image?.naturalHeight) return;
+    setRatio(image.naturalWidth / image.naturalHeight);
+  }, []);
 
   const closeLightbox = useCallback(() => setLightboxOpen(false), []);
 
@@ -193,9 +229,7 @@ export default function FileAttachmentCard({ info, visibilityBadge }: FileAttach
             // A canon password share is sealed, so saving it takes the same
             // two steps a browser does: the password buys a ticket, and the
             // ticket buys the bytes. The other two modes need none of it.
-            info.mode === "password" && password !== undefined
-              ? { url: info.url, password }
-              : undefined,
+            info.mode === "password" && password !== undefined ? { url: info.url, password } : undefined,
           )
         : await downloadFile({ url: info.url, destPath: dest, password });
       addDownload({
@@ -234,8 +268,16 @@ export default function FileAttachmentCard({ info, visibilityBadge }: FileAttach
           <img
             src={previewSrc}
             alt={info.filename}
-            className={styles.previewImage}
+            // Bare drops the filename row, so the name lives on the picture.
+            title={bare ? info.filename : undefined}
+            className={tile ? styles.tileImage : bare ? styles.bareImage : styles.previewImage}
+            // A cached picture can be complete before React ever sees a `load`,
+            // so the ref measures it too rather than waiting for an event that
+            // has already been and gone.
+            ref={bare ? measure : undefined}
+            style={bare && ratio ? ({ "--bare-ratio": ratio } as CSSProperties) : undefined}
             loading="lazy"
+            onLoad={bare ? (event) => measure(event.currentTarget) : undefined}
             onError={handlePreviewError}
           />
         </button>
@@ -305,6 +347,67 @@ export default function FileAttachmentCard({ info, visibilityBadge }: FileAttach
     );
   }
 
+  /** Everything a bare picture still has to offer, and the dialogs behind it. */
+  const trailer = (
+    <>
+      {lightboxOpen &&
+        previewSrc &&
+        kind === "image" &&
+        createPortal(
+          <MediaLightbox
+            item={{ kind: "image", src: previewSrc, alt: info.filename, spoiler: false }}
+            onClose={closeLightbox}
+          />,
+          document.body,
+        )}
+      {pwPromptOpen && (
+        <FilePasswordDialog
+          filename={info.filename}
+          onConfirm={(pw) => resolvePassword(pw)}
+          onCancel={() => resolvePassword(null)}
+        />
+      )}
+    </>
+  );
+
+  if (bare && preview && kind === "image") {
+    return (
+      <div className={tile ? `${styles.bare} ${styles.tile}` : styles.bare}>
+        <div className={styles.previewWrap}>
+          {preview}
+          {visibilityBadge && <div className={styles.previewOverlay}>{visibilityBadge(true)}</div>}
+          <div className={styles.bareActions}>
+            <button
+              type="button"
+              className={styles.bareBtn}
+              onClick={onSave}
+              disabled={busy}
+              title={saved ? t("fileAttachment.savedTooltip") : t("fileAttachment.downloadTooltip")}
+            >
+              {busy
+                ? t("fileAttachment.saving")
+                : saved
+                  ? t("fileAttachment.saved")
+                  : t("fileAttachment.save")}
+            </button>
+            {canOpenInBrowser && (
+              <button
+                type="button"
+                className={styles.bareBtn}
+                onClick={handleOpenInBrowser}
+                title={t("fileAttachment.openTooltip")}
+              >
+                {t("fileAttachment.open")}
+              </button>
+            )}
+          </div>
+        </div>
+        {error && <div className={styles.bareError}>{error}</div>}
+        {trailer}
+      </div>
+    );
+  }
+
   return (
     <div className={styles.card}>
       {overlaysPreview ? (
@@ -367,23 +470,7 @@ export default function FileAttachmentCard({ info, visibilityBadge }: FileAttach
           </button>
         )}
       </div>
-      {lightboxOpen &&
-        previewSrc &&
-        kind === "image" &&
-        createPortal(
-          <MediaLightbox
-            item={{ kind: "image", src: previewSrc, alt: info.filename, spoiler: false }}
-            onClose={closeLightbox}
-          />,
-          document.body,
-        )}
-      {pwPromptOpen && (
-        <FilePasswordDialog
-          filename={info.filename}
-          onConfirm={(pw) => resolvePassword(pw)}
-          onCancel={() => resolvePassword(null)}
-        />
-      )}
+      {trailer}
     </div>
   );
 }

@@ -1,0 +1,50 @@
+﻿{
+  "linkWarning": {
+    "title": "即将离开 Fancy Mumble",
+    "body": "该链接将在浏览器中打开。Fancy Mumble 无法保证其去向。",
+    "trust": "信任 {{host}}",
+    "open": "打开链接"
+  },
+  "quickConnect": "快速连接",
+  "app": {
+    "back": "返回",
+    "addServer": "+ 添加",
+    "searchServers": "搜索服务器",
+    "searchChannels": "搜索频道",
+    "searchConversation": "在此对话中搜索",
+    "chooseConversation": "选择一个对话",
+    "directMessage": "私信",
+    "pickChannel": "在左侧选择一个频道",
+    "startWith": "与 {{name}} 开始对话",
+    "startOfChannel": "这是 #{{channel}} 的开始",
+    "nothingSelected": "未选择任何内容",
+    "emptyHint": "消息和分享的瞬间将显示在这里。",
+    "localFilesOnly": "此处只能拖放本机上的文件",
+    "noFileSharingAllowed": "此服务器不允许你共享文件",
+    "noFileSharing": "此服务器没有文件共享功能",
+    "pickConversationFirst": "请先选择一个对话",
+    "deleteChannelTitle": "删除 #{{channel}}？",
+    "deleteChannelBody": "其子频道和已保存的消息将一并删除。此操作无法撤销。"
+  },
+  "presence": {
+    "nobodyHere": "这里没有人",
+    "inVoice": "{{count}} 人在语音",
+    "withMembers_one": "{{voice}} · {{count}} 名成员",
+    "withMembers_other": "{{voice}} · {{count}} 名成员"
+  },
+  "day": {
+    "today": "今天",
+    "yesterday": "昨天"
+  },
+  "jump": {
+    "peopleHere_one": "{{count}} 人在此",
+    "peopleHere_other": "{{count}} 人在此",
+    "inVoiceChannel": "语音中 · # {{channel}}"
+  },
+  "richText": {
+    "underline": "下划线",
+    "textColour": "文字颜色",
+    "insertImage": "插入图片",
+    "resetColour": "重置颜色"
+  }
+}

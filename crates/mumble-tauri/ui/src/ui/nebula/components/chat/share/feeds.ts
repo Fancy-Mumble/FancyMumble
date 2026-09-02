@@ -91,6 +91,8 @@ export function buildFeeds(
   ownSession: number | null,
   ownDisplayKind: FeedKind,
   nativeSurface: boolean,
+  /** What to call your own feed - the caller translates it. */
+  ownLabel: string,
 ): StreamFeed[] {
   const feeds: StreamFeed[] = [];
   for (const m of media) {
@@ -98,7 +100,7 @@ export function buildFeeds(
     const contents = Object.values(content);
     const hasScreenTrack = contents.includes("screen");
     const own = m.session === ownSession;
-    const name = own ? "You" : nameOf(m.session);
+    const name = own ? ownLabel : nameOf(m.session);
     const displayLive = nativeSurface ? m.hasDisplay : m.primary !== null;
 
     feeds.push({

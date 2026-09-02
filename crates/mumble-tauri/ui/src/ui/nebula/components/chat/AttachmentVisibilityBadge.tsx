@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Box, Tooltip, Typography } from "@mui/material";
 import type { FileAttachmentInfo } from "@core/features/chat/fileAttachments";
 import { formatDuration } from "@core/utils/format";
@@ -25,6 +26,7 @@ export function AttachmentVisibilityBadge({
   info,
   overlay = false,
 }: Readonly<{ info: FileAttachmentInfo; overlay?: boolean }>) {
+  const { t } = useTranslation("nebulaChat");
   const [copied, setCopied] = useState(false);
   if (info.mode === "session") return null;
 
@@ -34,7 +36,7 @@ export function AttachmentVisibilityBadge({
       ? formatDuration(Math.max(0, info.expiresAt - Date.now() / 1000))
       : null;
 
-  const label = info.mode === "password" ? "Password protected" : "Public link";
+  const label = info.mode === "password" ? t("attachment.passwordProtected") : t("attachment.publicLink");
   const canCopy = !expired && !!info.url;
 
   const copyLink = async () => {
@@ -49,7 +51,17 @@ export function AttachmentVisibilityBadge({
   };
 
   return (
-    <Tooltip title={canCopy ? (copied ? "Copied" : "Copy link") : expired ? "This link has expired" : label}>
+    <Tooltip
+      title={
+        canCopy
+          ? copied
+            ? t("attachment.copied")
+            : t("attachment.copyLink")
+          : expired
+            ? t("attachment.linkHasExpired")
+            : label
+      }
+    >
       <Stack
         component={canCopy ? "button" : "div"}
         direction="row"
@@ -65,6 +77,11 @@ export function AttachmentVisibilityBadge({
           cursor: canCopy ? "pointer" : "default",
           boxSizing: "border-box",
           width: "fit-content",
+          // On a gallery tile the flag has a corner rather than a picture's
+          // width to sit in, and the icon that copies the link is the last
+          // thing in the row - so the words give way before it does.
+          maxWidth: "100%",
+          minWidth: 0,
           padding: "3px 9px",
           borderRadius: radius("md"),
           fontSize: 10.5,
@@ -94,8 +111,19 @@ export function AttachmentVisibilityBadge({
             <Link2Icon width={11} height={11} />
           )}
         </Box>
-        <Typography component="span" sx={{ fontSize: "inherit", fontWeight: "inherit", color: "inherit" }}>
-          {expired ? "Link expired" : copied ? "Copied" : label}
+        <Typography
+          component="span"
+          sx={{
+            fontSize: "inherit",
+            fontWeight: "inherit",
+            color: "inherit",
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {expired ? t("attachment.linkExpired") : copied ? t("attachment.copied") : label}
         </Typography>
         {expiresIn && !copied && (
           <Typography
@@ -103,6 +131,10 @@ export function AttachmentVisibilityBadge({
             sx={(theme) => ({
               fontSize: "inherit",
               fontWeight: 500,
+              // "23h 59m left" broken over two lines is not a shorter flag,
+              // just a taller one - the words before it give way instead.
+              flex: "none",
+              whiteSpace: "nowrap",
               color: overlay ? "rgba(255, 255, 255, 0.72)" : theme.palette.nebula.dim,
             })}
           >

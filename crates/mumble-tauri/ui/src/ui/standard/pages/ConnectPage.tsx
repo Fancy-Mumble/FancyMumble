@@ -21,6 +21,7 @@ import TotpDialog from "../components/server/TotpDialog";
 import { TID } from "@core/testids";
 import styles from "./ConnectPage.module.css";
 import { TextField } from "../components/elements/TextField";
+import { LightbulbIcon } from "../icons";
 
 type View = "loading" | "servers" | "wizard" | "public";
 
@@ -541,7 +542,7 @@ export default function ConnectPage() {
                   {userMode === "normal" && defaultUsername && usingDefaultName ? (
                     <div className={styles.usernameSummary}>
                       <div className={styles.usernameConfirm}>
-                        <span className={styles.usernameCheckmark}>?</span>
+                        <span className={styles.usernameCheckmark}>✓</span>
                         <span className={styles.usernameValue}>{defaultUsername}</span>
                       </div>
                       <button
@@ -603,7 +604,9 @@ export default function ConnectPage() {
 
               {/* Hint card */}
               <div className={styles.hint}>
-                <span className={styles.hintIcon}>??</span>
+                <span className={styles.hintIcon}>
+                  <LightbulbIcon width={14} height={14} />
+                </span>
                 <span>{currentStep.hint}</span>
               </div>
 

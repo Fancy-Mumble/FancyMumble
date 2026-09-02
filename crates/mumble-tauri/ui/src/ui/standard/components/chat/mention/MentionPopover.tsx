@@ -8,11 +8,15 @@ import { useUserStats } from "../../../hooks/useUserStats";
 import { parseComment } from "@core/profileFormat";
 import { useUserAvatars, useUserComment } from "@core/lazyBlobs";
 import { colorFor } from "@core/utils/format";
+import {
+  MAX_DISPLAYED_MEMBERS,
+  MENTION_CHIP_SELECTOR,
+  membersForChannelMention,
+  membersForRole,
+  readMentionChip,
+} from "@core/utils/mentions";
 import { ProfilePreviewCard } from "../../../pages/settings/ProfilePreviewCard";
 import styles from "../ChatView.module.css";
-
-/** Maximum number of members rendered in a group/everyone/here popover. */
-export const MAX_DISPLAYED_MEMBERS = 30;
 
 /** Approximate dimensions used to clamp the popover within the viewport. */
 const POPOVER_WIDTH = 280;
@@ -116,26 +120,16 @@ function MemberList({ title, subtitle, members, avatarBySession }: MemberListPro
 /** Find the closest ancestor mention span and return its mention info. */
 function readMentionFromTarget(target: EventTarget | null): MentionState | null {
   if (!(target instanceof Element)) return null;
-  const el = target.closest<HTMLElement>(
-    "[data-mention-session], [data-mention-role], [data-mention-everyone], [data-mention-here]",
-  );
+  const el = target.closest<HTMLElement>(MENTION_CHIP_SELECTOR);
   if (!el) return null;
   // Only intercept clicks inside a chat message body.
   if (!el.closest(`.${CSS.escape(styles.messageBody)}`)) return null;
-  const rect = el.getBoundingClientRect();
-  if (el.dataset.mentionSession) {
-    return { kind: "user", target: el.dataset.mentionSession, anchorRect: rect };
-  }
-  if (el.dataset.mentionRole) {
-    return { kind: "role", target: el.dataset.mentionRole, anchorRect: rect };
-  }
-  if (el.dataset.mentionEveryone) {
-    return { kind: "everyone", target: "", anchorRect: rect };
-  }
-  if (el.dataset.mentionHere) {
-    return { kind: "here", target: "", anchorRect: rect };
-  }
-  return null;
+  const chip = readMentionChip(el);
+  if (!chip) return null;
+  const anchorRect = el.getBoundingClientRect();
+  if (chip.kind === "user") return { kind: "user", target: String(chip.session), anchorRect };
+  if (chip.kind === "role") return { kind: "role", target: chip.role, anchorRect };
+  return { kind: chip.kind, target: "", anchorRect };
 }
 
 /** Compute clamped popover position relative to the anchor rect. */
@@ -151,33 +145,6 @@ function computePosition(rect: DOMRect, popoverWidth: number): { top: number; le
   // Vertical clamping is best-effort; the popover itself is scrollable
   // and constrained by max-height in CSS.
   return { top: Math.min(top, vh - POPOVER_VIEWPORT_MARGIN), left };
-}
-
-/**
- * Build the displayed member list for an everyone/here mention.
- *
- * Uses the currently selected channel as the scope - matches how
- * the renderer treats `@everyone` (everyone in this channel).
- */
-export function membersForChannelMention(
-  users: readonly UserEntry[],
-  selectedChannel: number | null,
-): readonly UserEntry[] {
-  if (selectedChannel == null) return users;
-  return users.filter((u) => u.channel_id === selectedChannel);
-}
-
-/** Build the displayed member list for a role mention. */
-export function membersForRole(
-  users: readonly UserEntry[],
-  groupName: string,
-  groups: readonly { name: string; add: number[]; remove: number[]; inherited_members: number[] }[],
-): readonly UserEntry[] {
-  const group = groups.find((g) => g.name === groupName);
-  if (!group) return [];
-  const memberIds = new Set<number>([...group.add, ...group.inherited_members]);
-  for (const id of group.remove) memberIds.delete(id);
-  return users.filter((u) => u.user_id != null && memberIds.has(u.user_id));
 }
 
 /**

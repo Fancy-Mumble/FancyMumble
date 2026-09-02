@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ServerPingResult } from "@core/types";
 import type { ServerLivery } from "./livery";
 import type { CachedLivery } from "./liveryCache";
-import { LIVERY_TITLE, LIVERY_TONE, resolveLivery } from "./liveryStatus";
+import { LIVERY_TITLE_KEYS, LIVERY_TONE, resolveLivery } from "./liveryStatus";
 
 function livery(digest: string, tagline = "a motto"): ServerLivery {
   return { version: 1, digest, tagline, tags: [], palette: {} };
@@ -159,7 +159,7 @@ describe("resolveLivery", () => {
     ] as const;
     for (const state of states) {
       expect(LIVERY_TONE[state]).toBeTruthy();
-      expect(LIVERY_TITLE[state].length).toBeGreaterThan(0);
+      expect(LIVERY_TITLE_KEYS[state].length).toBeGreaterThan(0);
     }
   });
 });

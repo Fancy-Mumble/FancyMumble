@@ -36,6 +36,7 @@ describe("admin page gating", () => {
       "marketplace",
       "serverSettings",
       "livery",
+      "welcome",
     ]);
   });
 

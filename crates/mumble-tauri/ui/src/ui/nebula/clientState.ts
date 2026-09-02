@@ -18,7 +18,22 @@ export type Screen = "chat" | "messages" | "connect" | "settings";
 
 /** Full-window surfaces that cover the shell while open. */
 export type Surface =
-  "downloads" | "pinned" | "server-info" | "screen-share" | "camera-share" | "public-servers" | null;
+  | "downloads"
+  // What you have put *on* the file server, as against what you have taken
+  // off it. Two different questions, so two surfaces rather than two tabs.
+  | "my-files"
+  | "pinned"
+  | "server-info"
+  // What the machine is playing. A surface rather than an aside: it is a thing
+  // you glance at and dismiss, not a thing you keep open beside a conversation.
+  | "presence"
+  // Beside the conversation in the same slot as the server details, so opening
+  // one closes the other rather than stacking two 320px asides on a chat.
+  | "channel-info"
+  | "screen-share"
+  | "camera-share"
+  | "public-servers"
+  | null;
 
 export function useScreenRouting() {
   const [screen, setScreen] = useState<Screen>("chat");
@@ -131,12 +146,38 @@ export function useMessageSelection(conversationKey: unknown) {
   return { active, selected, toggle, begin, clear };
 }
 
-/** The optional right-hand roster and its own filter. */
+/**
+ * The optional right-hand roster: whether it is open, its own filter, and
+ * whether it reaches past the connected people.
+ *
+ * Only the last of those is remembered. What you last searched for is about a
+ * moment; "I want to see everyone who belongs here, not only who happens to be
+ * on" is about the server, so it is kept with the preferences and honoured the
+ * next time the panel opens.
+ */
 export function useMemberPanel() {
   const [open, setOpen] = useState(false);
-  const [scope, setScope] = useState<"channel" | "server">("channel");
   const [query, setQuery] = useState("");
-  return { open, setOpen, scope, setScope, query, setQuery };
+  const [showOffline, setShowOfflineState] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    void getPreferences()
+      .then((preferences) => {
+        if (active) setShowOfflineState(preferences.showOfflineMembers ?? true);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const setShowOffline = useCallback((next: boolean) => {
+    setShowOfflineState(next);
+    void updatePreferences({ showOfflineMembers: next });
+  }, []);
+
+  return { open, setOpen, query, setQuery, showOffline, setShowOffline };
 }
 
 /**

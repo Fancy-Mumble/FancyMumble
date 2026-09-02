@@ -37,12 +37,15 @@ export function useCaptureError(): CaptureError | null {
       .catch(() => {
         /* command unavailable (non-desktop) */
       });
+    // Guarded for the same reason the query above is: without a Tauri shell
+    // under it - a browser dev session, a test - subscribing rejects, and a
+    // mic-fault indicator is not worth an unhandled rejection per mount.
     const unlisten = listen<CaptureError | null>("capture-error", (event) => {
       setError(event.payload ?? null);
-    });
+    }).catch(() => null);
     return () => {
       active = false;
-      unlisten.then((f) => f());
+      void unlisten.then((f) => f?.());
     };
   }, []);
   return error;
