@@ -8,6 +8,7 @@ import type {
   AudioSettings,
   NotificationSoundSettings,
   RegisteredUser,
+  UiDesignId,
   UserMode,
   UserPreferences,
 } from "./types";
@@ -16,8 +17,19 @@ const STORE_FILE = "preferences.json";
 const KEY = "preferences";
 const AUDIO_KEY = "audioSettings";
 
+/**
+ * The design an install that predates the setting keeps.
+ *
+ * Records written before `uiDesign` existed have no such key, and those
+ * installs have been running Standard the whole time. Merging today's
+ * defaults into them would move a settled user to another interface on an
+ * update, which is not what a default for new profiles means.
+ */
+const PRE_CHOICE_UI_DESIGN: UiDesignId = "standard";
+
 const DEFAULTS: UserPreferences = {
-  uiDesign: "standard",
+  // What a new profile starts in. Older records keep PRE_CHOICE_UI_DESIGN.
+  uiDesign: "nebula",
   userMode: "normal",
   hasCompletedSetup: false,
   defaultUsername: "",
@@ -53,6 +65,14 @@ const DEFAULTS: UserPreferences = {
   welcomeMessageDisplay: "once",
   showDisconnectWarning: true,
   trustedLinkHosts: [],
+  gameOverlay: {
+    mode: "off",
+    corner: "topRight",
+    showLastMessage: true,
+    hideFromCapture: true,
+    rules: {},
+    asked: [],
+  },
 };
 
 async function getStore() {
@@ -68,8 +88,11 @@ export async function getPreferences(): Promise<UserPreferences> {
   if (cachedPrefs) return cachedPrefs;
   cachedPrefs = (async () => {
     const store = await getStore();
-    const prefs = await store.get<UserPreferences>(KEY);
-    return prefs ? { ...DEFAULTS, ...prefs } : { ...DEFAULTS };
+    const stored = await store.get<UserPreferences>(KEY);
+    if (!stored) return { ...DEFAULTS };
+    const merged = { ...DEFAULTS, ...stored };
+    if (typeof stored.uiDesign !== "string") merged.uiDesign = PRE_CHOICE_UI_DESIGN;
+    return merged;
   })();
   try {
     return await cachedPrefs;

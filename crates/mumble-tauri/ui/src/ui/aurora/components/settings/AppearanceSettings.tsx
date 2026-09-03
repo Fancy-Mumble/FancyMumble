@@ -134,7 +134,7 @@ export default function AppearanceSettings() {
       </section>
       <section>
         <h4>Interface design</h4>
-        <p>Choose which UI design pack loads. Standard is the default; Aurora is a design beta.</p>
+        <p>Choose which UI design pack loads. Nebula is the default; Aurora is a design beta.</p>
         <Button
           variant="bare"
           className={styles.toggle}

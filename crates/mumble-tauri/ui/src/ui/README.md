@@ -4,12 +4,14 @@ The application hosts complete, independently designed React interfaces that
 ship **side by side** as UI packs. Each pack is a named style, not a stage in a
 migration:
 
-- `standard` is the mature, feature-complete design and the default. It has the
-  broadest feature coverage and the most testing.
+- `nebula` is **the default**: the design a profile with no stored choice
+  opens in. Built on MUI 9 and styled to the "Fancy Mumble 2026" mock. See
+  `nebula/ARCHITECTURE.md`.
+- `standard` is the older design. It still has the broadest feature coverage
+  and the most testing, and remains selectable; every profile that already
+  chose it keeps it, because a stored preference beats the default.
 - `aurora` is an opt-in **design beta** - a distinct visual style offered
-  alongside `standard`. It is not a replacement for `standard`.
-- `nebula` is a second opt-in **design beta**, built on MUI 9 and styled to the
-  "Fancy Mumble 2026" mock. See `nebula/ARCHITECTURE.md`.
+  alongside the other two.
 
 All three are offered in Settings › Personalization as "Interface design".
 
@@ -24,6 +26,7 @@ selection for local development and E2E runs. Add packs only through
 
 Packs are peers, but `aurora` and `nebula` both reuse `standard` pages (popout
 windows, the updater) and some of its leaf widgets. That dependency is
-one-directional: a beta pack may import from `standard`, and never the reverse.
-Betas must not import from each other either - adding or changing one pack must
-not require touching another.
+one-directional: another pack may import from `standard`, and never the
+reverse - being the default does not license `nebula` to be imported from
+`standard`. Nor may `aurora` and `nebula` import from each other: adding or
+changing one pack must not require touching another.
