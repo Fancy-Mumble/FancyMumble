@@ -2,8 +2,15 @@
 //!
 //! Manages one [`AudioDecoder`] per remote speaker (keyed by session
 //! ID) so that each Opus stream is decoded independently.  Decoded
-//! samples are written into per-speaker ring buffers that the
-//! platform playback callback reads, sums, and outputs.
+//! samples are written into a per-speaker [`SpeakerBuffer`] that the
+//! platform playback callback drains, sums, and outputs.
+//!
+//! Each [`SpeakerBuffer`] is a small adaptive jitter buffer: playout of a
+//! talkspurt starts once the buffer holds its target depth, the target grows
+//! when a packet arrives too late to be played in time, relaxes back toward
+//! the floor across talkspurts that went well, and any depth the buffer
+//! accumulates above the target is taken back out while nobody is listening
+//! to the seam.  See [`JitterConfig`] for the two numbers a user can set.
 //!
 //! This replaces the single-decoder [`InboundPipeline`] approach
 //! which was fundamentally broken for multi-speaker scenarios because
@@ -13,11 +20,11 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::audio::decoder::{AudioDecoder, OpusDecoder};
 use crate::audio::encoder::EncodedPacket;
-use crate::audio::sample::{AudioFormat, SampleFormat};
+use crate::audio::sample::{AudioFormat, AudioFrame, SampleFormat};
 use crate::error::Result;
 
 /// Number of samples to crossfade at frame boundaries to smooth
@@ -34,11 +41,368 @@ const SPEAKER_TIMEOUT_SECS: u64 = 30;
 /// backgrounded).  Old samples are dropped from the front.
 const MAX_SPEAKER_BUFFER_SAMPLES: usize = 19_200;
 
+/// The rate every buffer runs at, in samples per second.
+const SAMPLE_RATE: usize = 48_000;
+
+/// Milliseconds to samples at [`SAMPLE_RATE`].
+const fn ms_to_samples(ms: u32) -> usize {
+    (ms as usize) * SAMPLE_RATE / 1000
+}
+
+// -- Jitter buffer ----------------------------------------------------
+
+/// How deep a speaker's buffer runs before playout starts, and how far it
+/// may grow when packets arrive late.
+///
+/// Two numbers, both in milliseconds. The floor is what every talkspurt
+/// starts at and what the target relaxes back toward while a speaker is
+/// behaving; the ceiling bounds what a bad network can push it to. The
+/// stock Mumble client's equivalents are its "Jitter buffer" slider (a
+/// nominal 10 ms that its speex buffer adapts around) and the fixed cap
+/// in its adaptation code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct JitterConfig {
+    /// Depth a talkspurt starts playing at, and the target's floor.
+    pub floor_ms: u32,
+    /// The most a target may grow to under late arrivals.
+    pub ceiling_ms: u32,
+}
+
+impl JitterConfig {
+    /// Two frames: one in the buffer while the next is in flight.
+    ///
+    /// Enough for the arrival jitter of a client whose decode runs on its
+    /// own task; the target grows on its own where the network needs more.
+    pub const DEFAULT_FLOOR_MS: u32 = 40;
+    /// Beyond this the network is the problem, not the buffer.
+    pub const DEFAULT_CEILING_MS: u32 = 200;
+    /// One frame. Below this every packet is late by definition.
+    pub const MIN_FLOOR_MS: u32 = 20;
+
+    /// Floor in samples, never below [`Self::MIN_FLOOR_MS`].
+    #[must_use]
+    pub const fn floor_samples(&self) -> usize {
+        let floor = if self.floor_ms < Self::MIN_FLOOR_MS {
+            Self::MIN_FLOOR_MS
+        } else {
+            self.floor_ms
+        };
+        ms_to_samples(floor)
+    }
+
+    /// Ceiling in samples, never below the floor and never above the
+    /// buffer's hard capacity.
+    #[must_use]
+    pub const fn ceiling_samples(&self) -> usize {
+        let floor = self.floor_samples();
+        let ceiling = ms_to_samples(self.ceiling_ms);
+        let ceiling = if ceiling < floor { floor } else { ceiling };
+        if ceiling > MAX_SPEAKER_BUFFER_SAMPLES {
+            MAX_SPEAKER_BUFFER_SAMPLES
+        } else {
+            ceiling
+        }
+    }
+}
+
+impl Default for JitterConfig {
+    fn default() -> Self {
+        Self {
+            floor_ms: Self::DEFAULT_FLOOR_MS,
+            ceiling_ms: Self::DEFAULT_CEILING_MS,
+        }
+    }
+}
+
+/// What one speaker's buffer has been through, for diagnostics.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct JitterStats {
+    /// Times the buffer ran dry mid-talkspurt, each of which grew the target.
+    pub underruns: u32,
+    /// Times excess depth was skipped out of the buffer.
+    pub shrinks: u32,
+    /// Samples skipped by those shrinks.
+    pub skipped_samples: usize,
+    /// Samples dropped because the buffer hit its hard cap.
+    pub overflow_dropped: usize,
+}
+
+/// A speaker whose last packet is older than this is between talkspurts,
+/// so its buffer running dry is the end of a sentence, not a late packet.
+const LIVE_WINDOW: Duration = Duration::from_millis(200);
+/// How much the target grows on one mid-talkspurt underrun (20 ms).
+const GROW_STEP: usize = 960;
+/// How much the target relaxes at the end of a talkspurt that had no
+/// underrun (10 ms).  Half the growth step, so recovery is slower than
+/// reaction.
+const RELAX_STEP: usize = 480;
+/// Samples that have to be played from a primed buffer before its slack is
+/// measured (2 s at 48 kHz).  Long enough that one deep moment does not
+/// count; short enough that a burst-induced offset is gone within a
+/// sentence.
+const SHRINK_WINDOW_SAMPLES: usize = 96_000;
+/// Slack below this is left alone (10 ms).
+const SHRINK_MIN: usize = 480;
+/// The most taken out in one skip (20 ms).
+const SHRINK_MAX: usize = 960;
+/// Crossfade across a skip seam (2.5 ms).
+const SKIP_FADE: usize = 120;
+
+/// One speaker's decoded audio, waiting to be played.
+///
+/// The playback callback calls [`drain_into`](Self::drain_into) once per
+/// output buffer; the mixer calls [`push`](Self::push) once per decoded
+/// frame. Everything adaptive happens inside those two calls, so a backend
+/// only has to mix what it is handed.
+///
+/// Depth is latency: a sample waits in here for exactly as long as the
+/// buffer is deep when it arrives. The buffer therefore starts each
+/// talkspurt at the target and no deeper, and takes back anything above the
+/// target that a burst of arrivals leaves behind.
+#[derive(Debug)]
+pub struct SpeakerBuffer {
+    samples: VecDeque<f32>,
+    floor: usize,
+    ceiling: usize,
+    /// Depth playout starts at.
+    target: usize,
+    /// Whether this talkspurt is being played out.
+    primed: bool,
+    /// The sender said this talkspurt is over (terminator frame).
+    ended: bool,
+    last_push: Instant,
+    /// Samples played since the current shrink window began.
+    window_played: usize,
+    /// Shallowest the buffer has been in the current window.
+    window_min_depth: usize,
+    stats: JitterStats,
+}
+
+impl SpeakerBuffer {
+    /// An empty buffer that will start playing at `cfg`'s floor.
+    #[must_use]
+    pub fn new(cfg: JitterConfig) -> Self {
+        let floor = cfg.floor_samples();
+        Self {
+            samples: VecDeque::with_capacity(MAX_SPEAKER_BUFFER_SAMPLES),
+            floor,
+            ceiling: cfg.ceiling_samples(),
+            target: floor,
+            primed: false,
+            ended: false,
+            last_push: Instant::now(),
+            window_played: 0,
+            window_min_depth: usize::MAX,
+            stats: JitterStats::default(),
+        }
+    }
+
+    /// A buffer pre-filled with `samples` and already playing.
+    ///
+    /// For tests and probes that want audio out immediately; a real stream
+    /// arrives through [`push`](Self::push) and primes itself.
+    #[must_use]
+    pub fn with_samples(cfg: JitterConfig, samples: impl IntoIterator<Item = f32>) -> Self {
+        let mut buf = Self::new(cfg);
+        buf.samples.extend(samples);
+        buf.start_playout();
+        buf
+    }
+
+    /// Samples waiting to be played.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.samples.len()
+    }
+
+    /// Whether nothing is waiting.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.samples.is_empty()
+    }
+
+    /// The waiting samples, oldest first, for readers that must not drain
+    /// (the recorder, the e2e tap).
+    #[must_use]
+    pub const fn samples(&self) -> &VecDeque<f32> {
+        &self.samples
+    }
+
+    /// Depth playout currently starts at, in samples.
+    #[must_use]
+    pub const fn target(&self) -> usize {
+        self.target
+    }
+
+    /// Whether the current talkspurt is being played out.
+    #[must_use]
+    pub const fn is_primed(&self) -> bool {
+        self.primed
+    }
+
+    /// What this buffer has been through.
+    #[must_use]
+    pub const fn stats(&self) -> JitterStats {
+        self.stats
+    }
+
+    /// Drop everything waiting and stop playout.
+    pub fn clear(&mut self) {
+        self.samples.clear();
+        self.primed = false;
+    }
+
+    /// Adopt new limits, keeping the learned target inside them.
+    pub fn retune(&mut self, cfg: JitterConfig) {
+        self.floor = cfg.floor_samples();
+        self.ceiling = cfg.ceiling_samples();
+        self.target = self.target.clamp(self.floor, self.ceiling);
+    }
+
+    /// Queue decoded samples.
+    ///
+    /// Returns how many of the oldest samples were dropped to stay under the
+    /// hard cap, which is zero unless playback has stopped draining.
+    pub fn push(&mut self, samples: &[f32]) -> usize {
+        self.samples.extend(samples.iter().copied());
+        let dropped = self.samples.len().saturating_sub(MAX_SPEAKER_BUFFER_SAMPLES);
+        if dropped > 0 {
+            let _ = self.samples.drain(..dropped);
+            self.stats.overflow_dropped = self.stats.overflow_dropped.saturating_add(dropped);
+        }
+        self.last_push = Instant::now();
+        self.ended = false;
+        if !self.primed && self.samples.len() >= self.target {
+            self.start_playout();
+        }
+        dropped
+    }
+
+    /// The sender has finished this talkspurt.
+    ///
+    /// A talkspurt shorter than the target ("yes") would otherwise never reach
+    /// it and never play, so this also starts playout of whatever is waiting.
+    pub fn mark_ended(&mut self) {
+        self.ended = true;
+        if !self.primed && !self.samples.is_empty() {
+            self.start_playout();
+        }
+    }
+
+    /// Mix up to `out.len()` samples into `out`, scaled by `gain`.
+    ///
+    /// Returns how many were mixed. Zero while the buffer is waiting to reach
+    /// its target; fewer than asked when it ran dry, which is where the
+    /// target adapts.
+    pub fn drain_into(&mut self, out: &mut [f32], gain: f32) -> usize {
+        let now = Instant::now();
+        if !self.primed {
+            // Samples nobody is adding to any more - a terminator that was
+            // lost, or a stream that stopped short of the target - are played
+            // rather than held forever.
+            let stale =
+                !self.samples.is_empty() && now.duration_since(self.last_push) > LIVE_WINDOW;
+            if !stale {
+                return 0;
+            }
+            self.start_playout();
+        }
+
+        self.take_out_slack();
+
+        let n = self.samples.len().min(out.len());
+        let (a, b) = self.samples.as_slices();
+        let from_a = n.min(a.len());
+        for (dst, src) in out[..from_a].iter_mut().zip(&a[..from_a]) {
+            *dst += *src * gain;
+        }
+        if from_a < n {
+            for (dst, src) in out[from_a..n].iter_mut().zip(&b[..n - from_a]) {
+                *dst += *src * gain;
+            }
+        }
+        let _ = self.samples.drain(..n);
+        self.window_played = self.window_played.saturating_add(n);
+
+        if n < out.len() {
+            self.ran_dry(now);
+        }
+        n
+    }
+
+    fn start_playout(&mut self) {
+        self.primed = true;
+        self.window_played = 0;
+        self.window_min_depth = usize::MAX;
+    }
+
+    /// Book the current depth and, once a window has played, skip out
+    /// whatever the buffer never dipped below.
+    ///
+    /// The shallowest depth over a window is the part of the buffer that
+    /// was never needed: had those samples not been there, no callback in
+    /// the window would have run dry. That is what a burst of arrivals
+    /// (a stalled event loop catching up, a bunched network) leaves behind,
+    /// and without this it would stay as added latency until the speaker
+    /// next fell silent.
+    fn take_out_slack(&mut self) {
+        self.window_min_depth = self.window_min_depth.min(self.samples.len());
+        if self.window_played < SHRINK_WINDOW_SAMPLES {
+            return;
+        }
+        let slack = self.window_min_depth.saturating_sub(self.target);
+        if slack >= SHRINK_MIN {
+            self.skip(slack.min(SHRINK_MAX));
+        }
+        self.window_played = 0;
+        self.window_min_depth = usize::MAX;
+    }
+
+    /// Drop the oldest `n` samples and smooth the seam.
+    fn skip(&mut self, n: usize) {
+        let n = n.min(self.samples.len().saturating_sub(SKIP_FADE));
+        if n == 0 {
+            return;
+        }
+        let before = self.samples.get(n - 1).copied().unwrap_or(0.0);
+        let _ = self.samples.drain(..n);
+        // The two sides of the seam are 20 ms apart in the signal, so their
+        // values are unrelated. Ramp the difference out over a few
+        // milliseconds rather than letting it land as a click.
+        if let Some(&first) = self.samples.front() {
+            let correction = before - first;
+            let len = SKIP_FADE.min(self.samples.len());
+            for (i, s) in self.samples.iter_mut().take(len).enumerate() {
+                let t = i as f32 / len as f32;
+                let w = 0.5 * (1.0 + (std::f32::consts::PI * t).cos());
+                *s += correction * w;
+            }
+        }
+        self.stats.shrinks = self.stats.shrinks.saturating_add(1);
+        self.stats.skipped_samples = self.stats.skipped_samples.saturating_add(n);
+    }
+
+    /// The buffer could not fill the output. Decide what that meant.
+    fn ran_dry(&mut self, now: Instant) {
+        self.primed = false;
+        if self.ended || now.duration_since(self.last_push) > LIVE_WINDOW {
+            // A talkspurt ended without an underrun: the target was enough,
+            // and may have been more than enough. Relax it a step.
+            self.target = self.target.saturating_sub(RELAX_STEP).max(self.floor);
+        } else {
+            // Mid-talkspurt, and the next frame is not here yet: it is late
+            // by more than the buffer could cover. Wait longer next time.
+            self.stats.underruns = self.stats.underruns.saturating_add(1);
+            self.target = (self.target + GROW_STEP).min(self.ceiling);
+        }
+    }
+}
+
 /// Shared per-speaker sample buffers.
 ///
 /// The mixer writes decoded samples per session, and the platform
 /// playback callback reads + mixes them in real time.
-pub type SpeakerBuffers = Arc<Mutex<HashMap<u32, VecDeque<f32>>>>;
+pub type SpeakerBuffers = Arc<Mutex<HashMap<u32, SpeakerBuffer>>>;
 
 /// An observer of decoded audio, in the order a listener would hear it.
 ///
@@ -48,7 +412,7 @@ pub type SpeakerBuffers = Arc<Mutex<HashMap<u32, VecDeque<f32>>>>;
 /// them both misses audio and repeats it - the only faithful tap is here,
 /// where each sample passes exactly once.
 ///
-/// Notified for **inserted silence as well as decoded frames**, because
+/// Notified for **concealment as well as decoded frames**, because
 /// concealment is part of what the listener hears. A dump that omitted it
 /// would show a clean stream where the real one had a gap.
 pub type DecodedTap = Box<dyn Fn(u32, &[f32]) + Send + Sync>;
@@ -84,6 +448,14 @@ pub type SpeakerVolumes = Arc<Mutex<HashMap<u32, f32>>>;
 /// `N / SAMPLES_PER_SEQ_UNIT` sequence units.
 const SAMPLES_PER_SEQ_UNIT: u64 = 480;
 
+/// The longest gap concealed with the decoder's PLC, in 10 ms units.
+///
+/// Sixty milliseconds: up to three lost 20 ms packets. Opus's concealment
+/// extrapolates the last frame and sounds right for about that long; past it
+/// the extrapolation is noise, and a gap that size is a pause or a loss burst
+/// the jitter target absorbs by itself.
+const MAX_PLC_UNITS: u64 = 6;
+
 /// Per-speaker decoder state.
 struct SpeakerDecoder {
     decoder: Box<dyn AudioDecoder>,
@@ -95,6 +467,9 @@ struct SpeakerDecoder {
     /// sender packs into each network packet.
     expected_next_seq: Option<u64>,
     prev_last_sample: Option<f32>,
+    /// The last sample this speaker queued, for smoothing a seam when a
+    /// gap is too long to conceal.
+    last_queued: Option<f32>,
     /// Set to true when the decoder is fresh (just created or reset)
     /// and the very next decoded frame must be faded in from silence.
     /// Without this fade, the first frame's first sample can start at
@@ -113,6 +488,7 @@ impl SpeakerDecoder {
             last_seq: None,
             expected_next_seq: None,
             prev_last_sample: None,
+            last_queued: None,
             needs_fade_in: true,
             last_activity: Instant::now(),
         })
@@ -126,6 +502,7 @@ pub struct AudioMixer {
     speakers: HashMap<u32, SpeakerDecoder>,
     buffers: SpeakerBuffers,
     format: AudioFormat,
+    jitter: JitterConfig,
 }
 
 impl std::fmt::Debug for AudioMixer {
@@ -133,6 +510,7 @@ impl std::fmt::Debug for AudioMixer {
         f.debug_struct("AudioMixer")
             .field("active_speakers", &self.speakers.len())
             .field("format", &self.format)
+            .field("jitter", &self.jitter)
             .finish_non_exhaustive()
     }
 }
@@ -144,7 +522,31 @@ impl AudioMixer {
             speakers: HashMap::new(),
             buffers,
             format,
+            jitter: JitterConfig::default(),
         }
+    }
+
+    /// The jitter limits every new speaker buffer starts with.
+    #[must_use]
+    pub fn with_jitter(mut self, jitter: JitterConfig) -> Self {
+        self.jitter = jitter;
+        self
+    }
+
+    /// Change the jitter limits, for new buffers and every live one.
+    pub fn set_jitter(&mut self, jitter: JitterConfig) {
+        self.jitter = jitter;
+        if let Ok(mut bufs) = self.buffers.lock() {
+            for buf in bufs.values_mut() {
+                buf.retune(jitter);
+            }
+        }
+    }
+
+    /// The jitter limits in force.
+    #[must_use]
+    pub const fn jitter(&self) -> JitterConfig {
+        self.jitter
     }
 
     /// Return a clone of the shared speaker buffers handle.
@@ -178,31 +580,32 @@ impl AudioMixer {
             }
         };
         speaker.last_activity = Instant::now();
-
-        // Conservative gap handling: only insert silence padding when
-        // we can be CERTAIN packets were lost.  We compute the expected
-        // next seq from the previous packet's decoded sample count
-        // (in 10 ms units, the protocol's sequence unit).  Anything
-        // beyond a generous tolerance is treated as real loss; small
-        // discrepancies (jitter, frames-per-packet variation) are
-        // ignored - libopus's internal state handles those gracefully
-        // on the next decode.
-        let silence_units = detect_certain_gap(speaker.expected_next_seq, packet.sequence);
-
-        if silence_units > 0 {
-            insert_silence(&self.buffers, session, silence_units, self.format);
-        }
-
-        let speaker = self.speakers.get_mut(&session).ok_or_else(|| {
-            crate::error::Error::InvalidState("speaker removed during gap fill".into())
-        })?;
         speaker.last_seq = Some(packet.sequence);
 
-        // After a silence padding insertion, the buffer ends in 0.0 -
-        // arm the crossfade so the next decoded frame ramps up smoothly
-        // from silence rather than jumping in at full amplitude.
-        if silence_units > 0 {
-            speaker.prev_last_sample = Some(0.0);
+        // Gap handling. The expected next sequence comes from the previous
+        // packet's decoded sample count (in 10 ms units, the protocol's
+        // sequence unit), so it is exact whatever the sender's packet
+        // length. A short gap is a lost packet or two: conceal it with the
+        // decoder's own PLC, which keeps the timeline and sounds like the
+        // speaker rather than like a hole. A long gap is a pause or a loss
+        // burst: nothing is inserted, the seam is smoothed, and the jitter
+        // buffer's target takes care of the timing on its own. Filling a
+        // long gap - as this once did, with up to 400 ms of zeros - put
+        // that much silence ahead of the real audio and left it there as
+        // latency for the rest of the talkspurt.
+        let gap_units = detect_gap(speaker.expected_next_seq, packet.sequence);
+        let mut discontinuity = false;
+        if gap_units > 0 {
+            if gap_units <= MAX_PLC_UNITS {
+                conceal(speaker, session, gap_units, &self.buffers, self.jitter)?;
+            } else {
+                discontinuity = true;
+            }
+        }
+        if discontinuity {
+            // Arm the seam correction with the last sample actually queued,
+            // so the new frame ramps from where the old audio left off.
+            speaker.prev_last_sample = speaker.last_queued.or(Some(0.0));
         }
 
         let mut frame = speaker.decoder.decode(packet)?;
@@ -223,47 +626,34 @@ impl AudioMixer {
             speaker.needs_fade_in = false;
         } else if speaker.prev_last_sample.is_some() {
             // Only apply the boundary crossfade after a real
-            // discontinuity event (silence padding).  libopus's
-            // stateful decode is naturally continuous between
-            // consecutive packets, so applying a crossfade on every
-            // frame would distort the first 24 samples of every
-            // 10 ms window - audible as a constant 100 Hz buzz
-            // riding on top of loud audio.
+            // discontinuity event.  libopus's stateful decode is
+            // naturally continuous between consecutive packets, so
+            // applying a crossfade on every frame would distort the
+            // first 24 samples of every 10 ms window - audible as a
+            // constant 100 Hz buzz riding on top of loud audio.
             apply_boundary_crossfade(&mut frame, &mut speaker.prev_last_sample);
         }
         // For continuous decode, do NOT track prev_last_sample - we
         // want the crossfade dormant until the next discontinuity.
         speaker.prev_last_sample = None;
-        push_samples(&self.buffers, session, &frame);
-        Ok(())
-    }
-
-    /// Generate a PLC (packet-loss concealment) frame for `session`.
-    ///
-    /// Currently unused by [`feed`] - kept for the recording path and
-    /// future jitter-buffer integration.
-    #[allow(
-        dead_code,
-        reason = "kept for future jitter-buffer integration and external callers"
-    )]
-    fn feed_lost(&mut self, session: u32) -> Result<()> {
-        let speaker = self
-            .speakers
-            .get_mut(&session)
-            .ok_or_else(|| crate::error::Error::InvalidState("unknown speaker".into()))?;
-
-        let mut frame = speaker.decoder.decode_lost()?;
-        apply_boundary_crossfade(&mut frame, &mut speaker.prev_last_sample);
-        push_samples(&self.buffers, session, &frame);
+        speaker.last_queued = frame.as_f32_samples().last().copied();
+        push_samples(&self.buffers, session, frame.as_f32_samples(), self.jitter);
         Ok(())
     }
 
     /// Reset the decoder for a speaker whose audio stream has ended
     /// (e.g. terminator received).  The sample buffer is kept so the
-    /// playback callback can drain remaining audio.  A fresh decoder
-    /// will be created automatically when the next stream arrives.
+    /// playback callback can drain remaining audio, and told the
+    /// talkspurt is over so a short one plays out rather than waiting
+    /// for a depth it will never reach.  A fresh decoder will be
+    /// created automatically when the next stream arrives.
     pub fn reset_speaker(&mut self, session: u32) {
         drop(self.speakers.remove(&session));
+        if let Ok(mut bufs) = self.buffers.lock() {
+            if let Some(buf) = bufs.get_mut(&session) {
+                buf.mark_ended();
+            }
+        }
     }
 
     /// Remove all state for a speaker (decoder and sample buffer).
@@ -289,7 +679,7 @@ impl AudioMixer {
     /// [`MAX_SPEAKER_BUFFER_SAMPLES`] capacity (~77 KB), so this keeps
     /// long sessions from accumulating one per user who ever spoke.
     pub fn remove_inactive_speakers(&mut self) {
-        let timeout = std::time::Duration::from_secs(SPEAKER_TIMEOUT_SECS);
+        let timeout = Duration::from_secs(SPEAKER_TIMEOUT_SECS);
         let now = Instant::now();
         let stale: Vec<u32> = self
             .speakers
@@ -319,97 +709,70 @@ impl AudioMixer {
     }
 }
 
-/// Push decoded F32 samples into the shared per-speaker buffer.
-/// Detect a *certain* loss gap between the expected next sequence and
-/// the incoming packet's sequence.
-///
-/// Returns the number of 10 ms units of silence to insert before the
-/// new packet.  The threshold is intentionally generous so that normal
-/// jitter, frames-per-packet variation, and packet reordering do NOT
-/// cause spurious gap fills (which were the source of the
-/// crackle/click artifacts heard on multi-frame-per-packet senders).
-///
-/// Capped at [`MAX_SILENCE_FILL_UNITS`] (matches the per-speaker
-/// buffer capacity) so that an inserted gap never displaces real
-/// decoded audio that has not been played yet.
-fn detect_certain_gap(expected: Option<u64>, incoming: u64) -> u64 {
-    /// Tolerance in 10 ms units.  Up to this many missing units are
-    /// silently absorbed; beyond it we treat the gap as real loss.
-    const GAP_TOLERANCE: u64 = 8;
-
+/// How many 10 ms units are missing between the packet we expected and the
+/// one that arrived. Zero when nothing is, including when the incoming
+/// packet is older than expected (reordering, which arrives too late to do
+/// anything about and is decoded as it comes).
+fn detect_gap(expected: Option<u64>, incoming: u64) -> u64 {
     let Some(expected) = expected else { return 0 };
-    if incoming <= expected + GAP_TOLERANCE {
-        return 0;
-    }
-    (incoming - expected).min(MAX_SILENCE_FILL_UNITS)
+    incoming.saturating_sub(expected)
 }
 
-/// Maximum silence-padding insertion in 10 ms units.  Matches the
-/// per-speaker buffer cap so that a gap fill cannot displace real
-/// already-decoded audio waiting to be played.
-const MAX_SILENCE_FILL_UNITS: u64 = (MAX_SPEAKER_BUFFER_SAMPLES as u64) / SAMPLES_PER_SEQ_UNIT;
-
 /// Number of 10 ms sequence units the given decoded frame represents.
-fn frame_seq_units(frame: &crate::audio::sample::AudioFrame, format: AudioFormat) -> u64 {
+fn frame_seq_units(frame: &AudioFrame, format: AudioFormat) -> u64 {
     let bytes_per_sample = format.sample_format.byte_width().max(1) as u64;
     let channels = format.channels.max(1) as u64;
     let total_samples = frame.data.len() as u64 / bytes_per_sample / channels;
     (total_samples / SAMPLES_PER_SEQ_UNIT).max(1)
 }
 
-/// Append `units * 10 ms` of silence to the speaker buffer to keep
-/// real-time alignment after a confirmed packet-loss gap.
+/// Cover `units * 10 ms` of missing audio with the decoder's concealment.
 ///
-/// Inserts at most [`MAX_SPEAKER_BUFFER_SAMPLES`] minus the current
-/// buffer length so that the cap-eviction at the end of `push_*`
-/// helpers never has to discard already-decoded real audio that has
-/// not been played yet.  Discarding real audio in favour of silence
-/// caused 100 - 400 ms perceptible dropouts every time a moderate
-/// gap was detected, sustained underrun in the playback mixer, and
-/// repeated re-prime cycles in the rodio source.
-fn insert_silence(buffers: &SpeakerBuffers, session: u32, units: u64, format: AudioFormat) {
-    let requested = (units as usize) * (SAMPLES_PER_SEQ_UNIT as usize) * format.channels as usize;
-    if requested == 0 {
-        return;
-    }
-    if let Ok(mut bufs) = buffers.lock() {
-        let buf = bufs
-            .entry(session)
-            .or_insert_with(|| VecDeque::with_capacity(MAX_SPEAKER_BUFFER_SAMPLES));
-        let remaining = MAX_SPEAKER_BUFFER_SAMPLES.saturating_sub(buf.len());
-        let to_insert = requested.min(remaining);
-        buf.resize(buf.len() + to_insert, 0.0);
-        // Concealment is audible, so an observer has to see it as the gap it
-        // is rather than as audio that never arrived.
-        notify_decoded(session, &vec![0.0; to_insert]);
-        if to_insert < requested {
-            tracing::debug!(
-                "insert_silence: clamped {requested} samples to {to_insert} for session {session} (buffer near cap, refusing to evict real audio)"
-            );
+/// Opus's PLC extrapolates from the decoder's own state, so the frames come
+/// out continuous with what preceded them and the decoder is left in the
+/// right state for the packet that follows - which is why this is done
+/// before that packet is decoded, not after.
+fn conceal(
+    speaker: &mut SpeakerDecoder,
+    session: u32,
+    units: u64,
+    buffers: &SpeakerBuffers,
+    jitter: JitterConfig,
+) -> Result<()> {
+    let mut remaining = (units as usize) * (SAMPLES_PER_SEQ_UNIT as usize);
+    // A decoder that conceals in 10 ms frames needs six calls for the longest
+    // gap; the bound is against one that returns nothing.
+    for _ in 0..(MAX_PLC_UNITS as usize) {
+        if remaining == 0 {
+            break;
         }
+        let frame = speaker.decoder.decode_lost()?;
+        let samples = frame.as_f32_samples();
+        if samples.is_empty() {
+            break;
+        }
+        speaker.last_queued = samples.last().copied();
+        push_samples(buffers, session, samples, jitter);
+        remaining = remaining.saturating_sub(samples.len());
     }
+    Ok(())
 }
 
-fn push_samples(buffers: &SpeakerBuffers, session: u32, frame: &crate::audio::sample::AudioFrame) {
-    let samples = frame.as_f32_samples();
+/// Queue decoded (or concealed) samples for `session`, telling the tap.
+fn push_samples(buffers: &SpeakerBuffers, session: u32, samples: &[f32], jitter: JitterConfig) {
     notify_decoded(session, samples);
     if let Ok(mut bufs) = buffers.lock() {
         let buf = bufs
             .entry(session)
-            .or_insert_with(|| VecDeque::with_capacity(MAX_SPEAKER_BUFFER_SAMPLES));
-        buf.extend(samples.iter().copied());
-        // Drop oldest samples when the buffer exceeds the cap so
-        // stale audio never accumulates beyond ~400 ms.  This is the
-        // last-resort overflow behaviour for live decoded audio
-        // arriving faster than the playback can drain it (e.g. on
-        // Android when the app is backgrounded); it should not happen
-        // in steady state on desktop.
-        if buf.len() > MAX_SPEAKER_BUFFER_SAMPLES {
-            let excess = buf.len() - MAX_SPEAKER_BUFFER_SAMPLES;
+            .or_insert_with(|| SpeakerBuffer::new(jitter));
+        let dropped = buf.push(samples);
+        // The hard cap is the last resort for live audio arriving faster
+        // than playback drains it (an Android app in the background); on
+        // the desktop the jitter buffer keeps depth far below it.
+        if dropped > 0 {
             tracing::debug!(
-                "push_samples: dropped {excess} oldest samples for session {session} (buffer overflow, playback falling behind)"
+                "push_samples: dropped {dropped} oldest samples for session {session} (buffer overflow, playback falling behind)"
             );
-            let _ = buf.drain(..excess);
         }
     }
 }
@@ -417,10 +780,7 @@ fn push_samples(buffers: &SpeakerBuffers, session: u32, frame: &crate::audio::sa
 /// Apply a short correction ramp at the start of a decoded frame to
 /// smooth sample-level discontinuities at the boundary (same algorithm
 /// as `InboundPipeline::apply_boundary_crossfade`).
-fn apply_boundary_crossfade(
-    frame: &mut crate::audio::sample::AudioFrame,
-    prev_last_sample: &mut Option<f32>,
-) {
+fn apply_boundary_crossfade(frame: &mut AudioFrame, prev_last_sample: &mut Option<f32>) {
     use std::sync::atomic::{AtomicU64, Ordering};
     static FRAME_COUNT: AtomicU64 = AtomicU64::new(0);
     static CORRECTED_COUNT: AtomicU64 = AtomicU64::new(0);
@@ -465,7 +825,7 @@ fn apply_boundary_crossfade(
 /// utterance and after every stream restart.  A 5 ms cosine fade-in is
 /// short enough to be inaudible to the listener (1/4 of a phoneme) but
 /// long enough to remove the broadband click.
-fn apply_cold_start_fade_in(frame: &mut crate::audio::sample::AudioFrame) {
+fn apply_cold_start_fade_in(frame: &mut AudioFrame) {
     if frame.format.sample_format != SampleFormat::F32 {
         return;
     }
@@ -495,13 +855,222 @@ mod tests {
         Arc::new(Mutex::new(HashMap::new()))
     }
 
+    /// A silent 20 ms Opus packet and the encoder that made it.
+    #[cfg(feature = "opus-codec")]
+    fn silent_packet() -> EncodedPacket {
+        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
+        let config = OpusEncoderConfig::default();
+        let frame_size = config.frame_size;
+        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
+        let silent = AudioFrame {
+            data: vec![0u8; frame_size * 4],
+            format: AudioFormat::MONO_48KHZ_F32,
+            sequence: 0,
+            is_silent: false,
+        };
+        enc.encode(&silent).unwrap()
+    }
+
+    /// The same payload at another sequence number.
+    #[cfg(feature = "opus-codec")]
+    fn at_seq(template: &EncodedPacket, sequence: u64) -> EncodedPacket {
+        EncodedPacket {
+            data: template.data.clone(),
+            sequence,
+            frame_samples: template.frame_samples,
+        }
+    }
+
+    // -- SpeakerBuffer -------------------------------------------------
+
+    #[test]
+    fn a_talkspurt_starts_playing_at_the_target_and_not_before() {
+        // Depth is latency: the first frame waits for the second, and no
+        // longer. The 100 ms prime this replaces made it wait for the fifth.
+        let mut buf = SpeakerBuffer::new(JitterConfig::default());
+        assert_eq!(buf.target(), 1920, "40 ms floor at 48 kHz");
+
+        let mut out = [0.0_f32; 480];
+        let _ = buf.push(&[0.5; 960]);
+        assert!(!buf.is_primed());
+        assert_eq!(buf.drain_into(&mut out, 1.0), 0, "one frame is not enough");
+
+        let _ = buf.push(&[0.5; 960]);
+        assert!(buf.is_primed(), "two frames reach the target");
+        assert_eq!(buf.drain_into(&mut out, 1.0), 480);
+        assert!(out.iter().all(|&s| (s - 0.5).abs() < 1e-6));
+    }
+
+    #[test]
+    fn a_short_utterance_plays_once_the_sender_says_it_is_over() {
+        // "Yes." can be one frame long. Without the terminator starting
+        // playout it would sit below the target until it went stale.
+        let mut buf = SpeakerBuffer::new(JitterConfig::default());
+        let _ = buf.push(&[0.3; 960]);
+        let mut out = [0.0_f32; 480];
+        assert_eq!(buf.drain_into(&mut out, 1.0), 0);
+
+        buf.mark_ended();
+        assert!(buf.is_primed());
+        assert_eq!(buf.drain_into(&mut out, 1.0), 480);
+    }
+
+    #[test]
+    fn running_dry_mid_talkspurt_grows_the_target_and_reprimes() {
+        // A late packet is the one thing a jitter buffer learns from.
+        let mut buf = SpeakerBuffer::new(JitterConfig::default());
+        let _ = buf.push(&[0.5; 1920]);
+        let mut out = [0.0_f32; 480];
+        for _ in 0..4 {
+            assert_eq!(buf.drain_into(&mut out, 1.0), 480);
+        }
+        // Empty, sender still live (just pushed): this is an underrun.
+        assert_eq!(buf.drain_into(&mut out, 1.0), 0);
+        assert_eq!(buf.stats().underruns, 1);
+        assert_eq!(buf.target(), 1920 + GROW_STEP);
+        assert!(!buf.is_primed(), "waits for the new target");
+
+        // The old target no longer primes; the new one does.
+        let _ = buf.push(&[0.5; 1920]);
+        assert!(!buf.is_primed());
+        let _ = buf.push(&[0.5; GROW_STEP]);
+        assert!(buf.is_primed());
+    }
+
+    #[test]
+    fn running_dry_after_the_end_relaxes_the_target_toward_the_floor() {
+        let mut buf = SpeakerBuffer::new(JitterConfig::default());
+        // Pretend an earlier underrun raised the target.
+        buf.target = 1920 + 2 * GROW_STEP;
+        let _ = buf.push(&[0.5; 4000]);
+        buf.mark_ended();
+        let mut out = [0.0_f32; 480];
+        while buf.drain_into(&mut out, 1.0) == 480 {}
+        assert_eq!(buf.stats().underruns, 0, "the end of a sentence is not an underrun");
+        assert_eq!(buf.target(), 1920 + 2 * GROW_STEP - RELAX_STEP);
+    }
+
+    #[test]
+    fn the_target_never_leaves_its_limits() {
+        let cfg = JitterConfig {
+            floor_ms: 20,
+            ceiling_ms: 60,
+        };
+        let mut buf = SpeakerBuffer::new(cfg);
+        let mut out = [0.0_f32; 480];
+        for _ in 0..10 {
+            let _ = buf.push(&[0.5; 2880]);
+            while buf.drain_into(&mut out, 1.0) == 480 {}
+        }
+        assert_eq!(buf.target(), cfg.ceiling_samples(), "capped at the ceiling");
+
+        buf.target = cfg.floor_samples();
+        let _ = buf.push(&[0.5; 960]);
+        buf.mark_ended();
+        while buf.drain_into(&mut out, 1.0) == 480 {}
+        assert_eq!(buf.target(), cfg.floor_samples(), "never below the floor");
+    }
+
+    #[test]
+    fn depth_the_buffer_never_needed_is_skipped_out() {
+        // A burst left the buffer 40 ms deeper than its target. Over a
+        // window of steady playout that slack is never touched, so it is
+        // pure latency - and it comes back out, a frame at a time.
+        let mut buf = SpeakerBuffer::new(JitterConfig::default());
+        let _ = buf.push(&[0.5; 1920 + 1920]);
+        let mut out = [0.0_f32; 480];
+        // Steady state: every 480 played, 480 arrive.
+        let callbacks = SHRINK_WINDOW_SAMPLES / 480 + 2;
+        for _ in 0..callbacks {
+            assert_eq!(buf.drain_into(&mut out, 1.0), 480);
+            let _ = buf.push(&[0.5; 480]);
+        }
+        assert_eq!(buf.stats().shrinks, 1);
+        assert_eq!(buf.stats().skipped_samples, SHRINK_MAX);
+        assert_eq!(buf.len(), 1920 + 1920 - SHRINK_MAX);
+    }
+
+    #[test]
+    fn a_skip_seam_is_ramped_not_stepped() {
+        let mut buf = SpeakerBuffer::with_samples(JitterConfig::default(), std::iter::empty());
+        // 960 samples at +0.8 then 960 at -0.8: skipping the first 960
+        // would put -0.8 right after nothing.
+        buf.samples.extend(std::iter::repeat_n(0.8_f32, 960));
+        buf.samples.extend(std::iter::repeat_n(-0.8_f32, 960));
+        buf.skip(960);
+        assert_eq!(buf.len(), 960);
+        let first = buf.samples()[0];
+        assert!(
+            (first - 0.8).abs() < 1e-3,
+            "the seam starts where the old audio was: {first}"
+        );
+        let settled = buf.samples()[SKIP_FADE];
+        assert!((settled + 0.8).abs() < 1e-6, "and reaches the new audio: {settled}");
+    }
+
+    #[test]
+    fn overflow_drops_the_oldest_and_counts_it() {
+        let mut buf = SpeakerBuffer::new(JitterConfig::default());
+        let count = MAX_SPEAKER_BUFFER_SAMPLES + 5_000;
+        let data: Vec<f32> = (0..count).map(|i| i as f32 * 0.001).collect();
+        let dropped = buf.push(&data);
+        assert_eq!(dropped, 5_000);
+        assert_eq!(buf.len(), MAX_SPEAKER_BUFFER_SAMPLES);
+        assert_eq!(buf.stats().overflow_dropped, 5_000);
+        let first_kept = buf.samples()[0];
+        let expected = 5_000_f32 * 0.001;
+        assert!((first_kept - expected).abs() < 1e-4, "oldest kept: {first_kept}");
+    }
+
+    #[test]
+    fn with_samples_is_ready_to_play() {
+        let mut buf = SpeakerBuffer::with_samples(JitterConfig::default(), vec![0.25; 10]);
+        let mut out = [0.0_f32; 10];
+        assert_eq!(buf.drain_into(&mut out, 2.0), 10);
+        assert!(out.iter().all(|&s| (s - 0.5).abs() < 1e-6), "gain applied");
+    }
+
+    #[test]
+    fn retune_keeps_the_learned_target_inside_the_new_limits() {
+        let mut buf = SpeakerBuffer::new(JitterConfig::default());
+        buf.target = ms_to_samples(150);
+        buf.retune(JitterConfig {
+            floor_ms: 20,
+            ceiling_ms: 100,
+        });
+        assert_eq!(buf.target(), ms_to_samples(100));
+        buf.retune(JitterConfig {
+            floor_ms: 120,
+            ceiling_ms: 200,
+        });
+        assert_eq!(buf.target(), ms_to_samples(120));
+    }
+
+    #[test]
+    fn the_config_floors_and_caps_itself() {
+        let silly = JitterConfig {
+            floor_ms: 0,
+            ceiling_ms: 5_000,
+        };
+        assert_eq!(silly.floor_samples(), ms_to_samples(JitterConfig::MIN_FLOOR_MS));
+        assert_eq!(silly.ceiling_samples(), MAX_SPEAKER_BUFFER_SAMPLES);
+        let inverted = JitterConfig {
+            floor_ms: 100,
+            ceiling_ms: 50,
+        };
+        assert_eq!(inverted.ceiling_samples(), inverted.floor_samples());
+    }
+
+    // -- AudioMixer ----------------------------------------------------
+
+    #[cfg(feature = "opus-codec")]
     #[test]
     fn the_decoded_tap_sees_audio_and_concealment_in_order() {
         // The tap exists so a test can compare what a listener heard against
         // what was spoken, and both halves of "heard" matter: decoded frames
-        // *and* the silence inserted to cover a gap. A tap that saw only the
-        // first would show a clean stream where the real one had a hole, which
-        // is the failure it is meant to detect.
+        // *and* the concealment that covers a gap. A tap that saw only the
+        // first would show a clean stream where the real one had a hole,
+        // which is the failure it is meant to detect.
         //
         // `set_decoded_tap` is write-once and global, so this is the only test
         // that may install one - a second would be silently ignored and would
@@ -513,54 +1082,51 @@ mod tests {
         // asserting on the first event to turn up passes or fails depending on
         // which test happened to run alongside.
         const SESSION: u32 = 909_090;
-        let (tx, rx) = std::sync::mpsc::channel::<(u32, usize, bool)>();
+        let (tx, rx) = std::sync::mpsc::channel::<(u32, usize)>();
         let tx = Mutex::new(tx);
         set_decoded_tap(Box::new(move |session, samples| {
-            let silent = samples.iter().all(|s| *s == 0.0);
             if let Ok(tx) = tx.lock() {
-                let _ = tx.send((session, samples.len(), silent));
+                let _ = tx.send((session, samples.len()));
             }
         }));
 
         /// The next event for our own session, ignoring other tests' traffic.
-        fn ours(
-            rx: &std::sync::mpsc::Receiver<(u32, usize, bool)>,
-            session: u32,
-        ) -> Option<(usize, bool)> {
-            let deadline = Instant::now() + std::time::Duration::from_secs(5);
+        fn ours(rx: &std::sync::mpsc::Receiver<(u32, usize)>, session: u32) -> Option<usize> {
+            let deadline = Instant::now() + Duration::from_secs(5);
             while Instant::now() < deadline {
-                match rx.recv_timeout(std::time::Duration::from_millis(200)) {
-                    Ok((got, len, silent)) if got == session => return Some((len, silent)),
-                    Ok(_) => continue,
-                    Err(_) => continue,
+                match rx.recv_timeout(Duration::from_millis(200)) {
+                    Ok((got, len)) if got == session => return Some(len),
+                    Ok(_) | Err(_) => continue,
                 }
             }
             None
         }
 
         let bufs = make_buffers();
-        let frame = crate::audio::sample::AudioFrame {
-            data: vec![0u8; 4 * 480]
-                .into_iter()
-                .enumerate()
-                .map(|(i, _)| if i % 4 == 0 { 64 } else { 0 })
-                .collect(),
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 1,
-            is_silent: false,
-        };
-        push_samples(&bufs, SESSION, &frame);
-        insert_silence(&bufs, SESSION, 1, AudioFormat::MONO_48KHZ_F32);
+        let mut mixer = AudioMixer::new(bufs, AudioFormat::MONO_48KHZ_F32);
+        let template = silent_packet();
+        mixer.feed(SESSION, &template).unwrap();
+        // seq 0 covered units 0-1; seq 4 leaves units 2-3 missing: one
+        // 20 ms hole, concealed before the frame is decoded.
+        mixer.feed(SESSION, &at_seq(&template, 4)).unwrap();
 
-        let (len, silent) = ours(&rx, SESSION).expect("the decoded frame was not observed");
-        assert_eq!(len, 480, "the whole frame must be observed, once");
-        assert!(!silent, "a decoded frame is not concealment");
+        assert_eq!(ours(&rx, SESSION), Some(960), "the first frame");
 
-        let (len, silent) = ours(&rx, SESSION).expect("the concealment was not observed");
-        assert!(
-            len > 0 && silent,
-            "inserted silence must be observed as silence"
-        );
+        // The concealment arrives in whatever frames the decoder conceals in
+        // (10 ms each, for Opus), so what matters is not how many events it
+        // takes but that they restore exactly the missing 20 ms - a listener
+        // whose timeline drifts by a frame per loss is the failure here.
+        let mut concealed = 0_usize;
+        let mut events = 0_u32;
+        while concealed < 960 {
+            let len = ours(&rx, SESSION).expect("the concealment was not observed");
+            assert!(len > 0, "an empty concealment frame is not concealment");
+            concealed += len;
+            events += 1;
+            assert!(events < 10, "concealment did not terminate");
+        }
+        assert_eq!(concealed, 960, "concealment must restore the gap exactly");
+        assert_eq!(ours(&rx, SESSION), Some(960), "the frame after the gap");
     }
 
     #[test]
@@ -576,21 +1142,7 @@ mod tests {
     fn feed_creates_speaker_and_buffers_samples() {
         let bufs = make_buffers();
         let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
-
-        // Encode a silent frame to get valid Opus data.
-        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
-        let config = OpusEncoderConfig::default();
-        let frame_size = config.frame_size;
-        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
-        let silent = crate::audio::sample::AudioFrame {
-            data: vec![0u8; frame_size * 4],
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 0,
-            is_silent: false,
-        };
-        let packet = enc.encode(&silent).unwrap();
-
-        mixer.feed(42, &packet).unwrap();
+        mixer.feed(42, &silent_packet()).unwrap();
         assert_eq!(mixer.speakers.len(), 1);
         let locked = bufs.lock().unwrap();
         assert!(locked.contains_key(&42));
@@ -599,26 +1151,36 @@ mod tests {
 
     #[cfg(feature = "opus-codec")]
     #[test]
+    fn new_speaker_buffers_carry_the_mixers_jitter_limits() {
+        let bufs = make_buffers();
+        let cfg = JitterConfig {
+            floor_ms: 60,
+            ceiling_ms: 120,
+        };
+        let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32).with_jitter(cfg);
+        mixer.feed(42, &silent_packet()).unwrap();
+        assert_eq!(bufs.lock().unwrap()[&42].target(), cfg.floor_samples());
+
+        let tighter = JitterConfig {
+            floor_ms: 20,
+            ceiling_ms: 40,
+        };
+        mixer.set_jitter(tighter);
+        assert_eq!(mixer.jitter(), tighter);
+        assert_eq!(
+            bufs.lock().unwrap()[&42].target(),
+            tighter.ceiling_samples(),
+            "a live buffer is retuned in place"
+        );
+    }
+
+    #[cfg(feature = "opus-codec")]
+    #[test]
     fn two_speakers_have_independent_buffers() {
         let bufs = make_buffers();
         let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
-
-        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
-        let config = OpusEncoderConfig::default();
-        let frame_size = config.frame_size;
-        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
-        let silent = crate::audio::sample::AudioFrame {
-            data: vec![0u8; frame_size * 4],
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 0,
-            is_silent: false,
-        };
-        let pkt1 = enc.encode(&silent).unwrap();
-        let pkt2 = EncodedPacket {
-            data: pkt1.data.clone(),
-            sequence: 0,
-            frame_samples: pkt1.frame_samples,
-        };
+        let pkt1 = silent_packet();
+        let pkt2 = at_seq(&pkt1, 0);
 
         mixer.feed(10, &pkt1).unwrap();
         mixer.feed(20, &pkt2).unwrap();
@@ -634,19 +1196,7 @@ mod tests {
     fn remove_speaker_drops_decoder_and_buffer() {
         let bufs = make_buffers();
         let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
-
-        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
-        let config = OpusEncoderConfig::default();
-        let frame_size = config.frame_size;
-        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
-        let silent = crate::audio::sample::AudioFrame {
-            data: vec![0u8; frame_size * 4],
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 0,
-            is_silent: false,
-        };
-        let pkt = enc.encode(&silent).unwrap();
-        mixer.feed(42, &pkt).unwrap();
+        mixer.feed(42, &silent_packet()).unwrap();
         assert!(bufs.lock().unwrap().contains_key(&42));
 
         mixer.remove_speaker(42);
@@ -668,11 +1218,12 @@ mod tests {
         {
             let mut locked = bufs.lock().unwrap();
             // Drained orphan: stream ended, playback consumed everything.
-            let _ = locked.insert(7, VecDeque::new());
+            let _ = locked.insert(7, SpeakerBuffer::new(JitterConfig::default()));
             // Still-draining orphan: terminator received but samples remain.
-            let mut draining = VecDeque::new();
-            draining.push_back(0.5);
-            let _ = locked.insert(8, draining);
+            let _ = locked.insert(
+                8,
+                SpeakerBuffer::with_samples(JitterConfig::default(), [0.5]),
+            );
         }
 
         mixer.remove_inactive_speakers();
@@ -693,19 +1244,7 @@ mod tests {
     fn remove_inactive_speakers_keeps_active_speaker_buffers() {
         let bufs = make_buffers();
         let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
-
-        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
-        let config = OpusEncoderConfig::default();
-        let frame_size = config.frame_size;
-        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
-        let silent = crate::audio::sample::AudioFrame {
-            data: vec![0u8; frame_size * 4],
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 0,
-            is_silent: false,
-        };
-        let pkt = enc.encode(&silent).unwrap();
-        mixer.feed(42, &pkt).unwrap();
+        mixer.feed(42, &silent_packet()).unwrap();
 
         // Drain the buffer: even empty, it must survive while the
         // speaker's decoder is live (mid-utterance).
@@ -725,19 +1264,7 @@ mod tests {
     fn reset_clears_everything() {
         let bufs = make_buffers();
         let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
-
-        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
-        let config = OpusEncoderConfig::default();
-        let frame_size = config.frame_size;
-        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
-        let silent = crate::audio::sample::AudioFrame {
-            data: vec![0u8; frame_size * 4],
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 0,
-            is_silent: false,
-        };
-        let pkt = enc.encode(&silent).unwrap();
-        mixer.feed(42, &pkt).unwrap();
+        mixer.feed(42, &silent_packet()).unwrap();
 
         mixer.reset();
         assert_eq!(mixer.speakers.len(), 0);
@@ -746,79 +1273,86 @@ mod tests {
 
     #[cfg(feature = "opus-codec")]
     #[test]
-    fn certain_gap_inserts_silence_padding() {
-        // A large, undeniable sequence gap should produce extra samples
-        // (silence padding) so the playback timeline stays aligned.
+    fn a_short_gap_is_concealed_with_plc() {
+        // One lost 20 ms packet: the decoder fills it, so the playback
+        // timeline keeps its alignment and the listener hears the speaker's
+        // own voice extrapolated rather than a hole.
         let bufs = make_buffers();
         let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
+        let template = silent_packet();
 
-        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
-        let config = OpusEncoderConfig::default();
-        let frame_size = config.frame_size;
-        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
-        let silent = crate::audio::sample::AudioFrame {
-            data: vec![0u8; frame_size * 4],
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 0,
-            is_silent: false,
-        };
-
-        // 20 ms frames -> seq increments by 2 per packet in protocol units.
-        let pkt1 = enc.encode(&silent).unwrap();
-        mixer.feed(1, &pkt1).unwrap();
+        mixer.feed(1, &template).unwrap();
         let after_first = bufs.lock().unwrap()[&1].len();
-
-        // Packet 2: contiguous (seq = 2).
-        let pkt2 = EncodedPacket {
-            data: pkt1.data.clone(),
-            sequence: 2,
-            frame_samples: pkt1.frame_samples,
-        };
-        mixer.feed(1, &pkt2).unwrap();
+        mixer.feed(1, &at_seq(&template, 2)).unwrap();
         let after_second = bufs.lock().unwrap()[&1].len();
-        let contiguous_added = after_second - after_first;
+        let per_frame = after_second - after_first;
+        assert_eq!(per_frame, 960);
 
-        // Packet 3: large gap (seq = 20, expected = 4) - 16 units of loss
-        // well above the 8-unit tolerance.
-        let pkt3 = EncodedPacket {
-            data: pkt1.data.clone(),
-            sequence: 20,
-            frame_samples: pkt1.frame_samples,
-        };
-        mixer.feed(1, &pkt3).unwrap();
+        // seq 6 where 4 was expected: 2 units = one 20 ms packet lost.
+        mixer.feed(1, &at_seq(&template, 6)).unwrap();
         let after_gap = bufs.lock().unwrap()[&1].len();
-        let gap_added = after_gap - after_second;
-
-        assert!(
-            gap_added > contiguous_added,
-            "Expected silence padding for a large gap: gap_added={gap_added}, contiguous_added={contiguous_added}"
+        assert_eq!(
+            after_gap - after_second,
+            2 * per_frame,
+            "one concealed frame plus the real one"
         );
     }
 
     #[cfg(feature = "opus-codec")]
     #[test]
-    fn multi_frame_per_packet_does_not_inject_silence() {
+    fn a_long_gap_is_a_discontinuity_not_a_fill() {
+        // 160 ms missing is a pause or a loss burst. The 400 ms of zeros
+        // this used to insert were played ahead of the real audio and
+        // stayed in the buffer as latency until the speaker next fell
+        // silent - the ratchet the jitter buffer exists to remove.
+        let bufs = make_buffers();
+        let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
+        let template = silent_packet();
+
+        mixer.feed(1, &template).unwrap();
+        let after_first = bufs.lock().unwrap()[&1].len();
+        // seq 20 where 2 was expected: 18 units.
+        mixer.feed(1, &at_seq(&template, 20)).unwrap();
+        let after_gap = bufs.lock().unwrap()[&1].len();
+        assert_eq!(after_gap - after_first, 960, "only the real frame was queued");
+        // The seam was smoothed and the crossfade is dormant again.
+        assert!(mixer.speakers[&1].prev_last_sample.is_none());
+    }
+
+    #[cfg(feature = "opus-codec")]
+    #[test]
+    fn concealment_never_exceeds_its_cap() {
+        // Whatever the gap, PLC adds at most MAX_PLC_UNITS worth of audio,
+        // so a gap can never push a buffer toward its hard cap and evict
+        // real audio the way a 400 ms fill once did.
+        let bufs = make_buffers();
+        let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
+        let template = silent_packet();
+        mixer.feed(1, &template).unwrap();
+        let before = bufs.lock().unwrap()[&1].len();
+        // Exactly the cap: 6 units missing (expected 2, got 8).
+        mixer.feed(1, &at_seq(&template, 8)).unwrap();
+        let added = bufs.lock().unwrap()[&1].len() - before;
+        assert!(
+            added <= 960 + (MAX_PLC_UNITS as usize) * (SAMPLES_PER_SEQ_UNIT as usize),
+            "added {added}"
+        );
+        assert!(added > 960, "the gap was concealed at all");
+    }
+
+    #[cfg(feature = "opus-codec")]
+    #[test]
+    fn multi_frame_per_packet_does_not_inject_anything() {
         // Regression: senders that pack multiple Opus frames per
         // network packet make the sequence number jump by more than 1
         // per packet.  The previous heuristic learned step=1 from the
         // first pair and then injected fake PLC frames at every
-        // multi-frame packet, causing audible clicks.  The new
-        // sample-accurate detector must absorb this without inserting
-        // any silence.
+        // multi-frame packet, causing audible clicks.  The
+        // sample-accurate detector must absorb this without concealing
+        // anything.
         let bufs = make_buffers();
         let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
-
-        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
-        let config = OpusEncoderConfig::default();
-        let frame_size = config.frame_size;
-        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
-        let silent = crate::audio::sample::AudioFrame {
-            data: vec![0u8; frame_size * 4],
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 0,
-            is_silent: false,
-        };
-        let template = enc.encode(&silent).unwrap();
+        let template = silent_packet();
 
         // First packet: seq = 0 (1 packet = 20 ms = 2 protocol units).
         mixer.feed(7, &template).unwrap();
@@ -827,21 +1361,16 @@ mod tests {
         assert_eq!(after_first, 960);
 
         // Subsequent packets: seq advances by 2 per packet (matching
-        // the 20 ms frame size).  No silence should ever be inserted.
+        // the 20 ms frame size).  Nothing extra should ever be queued.
         let mut prev_len = after_first;
         for i in 1..10_u64 {
-            let pkt = EncodedPacket {
-                data: template.data.clone(),
-                sequence: i * 2,
-                frame_samples: template.frame_samples,
-            };
-            mixer.feed(7, &pkt).unwrap();
+            mixer.feed(7, &at_seq(&template, i * 2)).unwrap();
             let len = bufs.lock().unwrap()[&7].len();
             let added = len - prev_len;
             assert_eq!(
                 added, 960,
                 "iteration {i}: each packet must decode to exactly 960 samples \
-                 with no silence padding (added={added})"
+                 with no concealment (added={added})"
             );
             prev_len = len;
         }
@@ -855,29 +1384,13 @@ mod tests {
         // the first 24 samples of each 10 ms frame are warped toward
         // the previous frame's last sample.  Continuous decode flow
         // must leave `prev_last_sample` cleared so the crossfade stays
-        // dormant until a real discontinuity (silence padding).
+        // dormant until a real discontinuity.
         let bufs = make_buffers();
-        let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
-
-        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
-        let config = OpusEncoderConfig::default();
-        let frame_size = config.frame_size;
-        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
-        let silent = crate::audio::sample::AudioFrame {
-            data: vec![0u8; frame_size * 4],
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 0,
-            is_silent: false,
-        };
-        let template = enc.encode(&silent).unwrap();
+        let mut mixer = AudioMixer::new(bufs, AudioFormat::MONO_48KHZ_F32);
+        let template = silent_packet();
 
         for i in 0..5_u64 {
-            let pkt = EncodedPacket {
-                data: template.data.clone(),
-                sequence: i * 2,
-                frame_samples: template.frame_samples,
-            };
-            mixer.feed(11, &pkt).unwrap();
+            mixer.feed(11, &at_seq(&template, i * 2)).unwrap();
             let speaker = mixer.speakers.get(&11).unwrap();
             assert!(
                 speaker.prev_last_sample.is_none(),
@@ -888,53 +1401,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "opus-codec")]
-    #[test]
-    fn silence_padding_arms_crossfade_for_next_frame() {
-        // After a confirmed gap, silence is appended and the next real
-        // decode should be smoothed in (not jumped to full amplitude).
-        // Verified indirectly by checking prev_last_sample is set to 0.0
-        // after silence insertion.
-        let bufs = make_buffers();
-        let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
-
-        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
-        let config = OpusEncoderConfig::default();
-        let frame_size = config.frame_size;
-        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
-        let silent = crate::audio::sample::AudioFrame {
-            data: vec![0u8; frame_size * 4],
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 0,
-            is_silent: false,
-        };
-        let template = enc.encode(&silent).unwrap();
-
-        // Prime: one normal packet (seq=0).
-        mixer.feed(13, &template).unwrap();
-        assert!(mixer.speakers.get(&13).unwrap().prev_last_sample.is_none());
-
-        // Large gap: seq jumps by 50 protocol units (above tolerance).
-        let pkt2 = EncodedPacket {
-            data: template.data.clone(),
-            sequence: 50,
-            frame_samples: template.frame_samples,
-        };
-        mixer.feed(13, &pkt2).unwrap();
-
-        // After the silence-then-decode, prev_last_sample is cleared
-        // again because the decoded frame consumed it via the crossfade.
-        assert!(mixer.speakers.get(&13).unwrap().prev_last_sample.is_none());
-
-        // The buffer should contain padding samples from the silence
-        // insertion plus the two real frames.
-        let len = bufs.lock().unwrap()[&13].len();
-        assert!(
-            len > 2 * 960,
-            "expected silence + two frames worth of samples, got {len}"
-        );
-    }
-
     #[test]
     fn cold_start_fade_in_attenuates_first_240_samples() {
         // Regression: a fresh decoder's first frame can begin at full
@@ -943,7 +1409,6 @@ mod tests {
         // audible as a pop at the start of every utterance.  The
         // cold-start fade-in must attenuate the first 5 ms of the very
         // first frame.
-        use crate::audio::sample::AudioFrame;
         let mut frame = AudioFrame {
             data: vec![0u8; 960 * 4],
             format: AudioFormat::MONO_48KHZ_F32,
@@ -995,19 +1460,8 @@ mod tests {
         // after the first feed, so subsequent frames are continuous
         // and never re-faded in mid-utterance.
         let bufs = make_buffers();
-        let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
-
-        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
-        let config = OpusEncoderConfig::default();
-        let frame_size = config.frame_size;
-        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
-        let silent = crate::audio::sample::AudioFrame {
-            data: vec![0u8; frame_size * 4],
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 0,
-            is_silent: false,
-        };
-        let template = enc.encode(&silent).unwrap();
+        let mut mixer = AudioMixer::new(bufs, AudioFormat::MONO_48KHZ_F32);
+        let template = silent_packet();
 
         mixer.feed(17, &template).unwrap();
         assert!(
@@ -1017,12 +1471,7 @@ mod tests {
 
         // Subsequent feeds keep the flag false.
         for i in 1..3_u64 {
-            let pkt = EncodedPacket {
-                data: template.data.clone(),
-                sequence: i * 2,
-                frame_samples: template.frame_samples,
-            };
-            mixer.feed(17, &pkt).unwrap();
+            mixer.feed(17, &at_seq(&template, i * 2)).unwrap();
             assert!(
                 !mixer.speakers.get(&17).unwrap().needs_fade_in,
                 "needs_fade_in must stay false on iteration {i}"
@@ -1038,26 +1487,11 @@ mod tests {
         // interleaved. This test verifies that interleaving is safe.
         let bufs = make_buffers();
         let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
-
-        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
-        let config = OpusEncoderConfig::default();
-        let frame_size = config.frame_size;
-        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
-        let silent = crate::audio::sample::AudioFrame {
-            data: vec![0u8; frame_size * 4],
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 0,
-            is_silent: false,
-        };
-        let pkt = enc.encode(&silent).unwrap();
+        let pkt = silent_packet();
 
         // Interleave packets from 3 speakers.
         for i in 0..5_u64 {
-            let p = EncodedPacket {
-                data: pkt.data.clone(),
-                sequence: i * 960,
-                frame_samples: pkt.frame_samples,
-            };
+            let p = at_seq(&pkt, i * 2);
             mixer.feed(100, &p).unwrap();
             mixer.feed(200, &p).unwrap();
             mixer.feed(300, &p).unwrap();
@@ -1075,41 +1509,6 @@ mod tests {
         assert!(len_100 > 0);
     }
 
-    #[test]
-    fn speaker_buffer_caps_at_max_samples() {
-        // Regression: the speaker buffer must not grow beyond
-        // MAX_SPEAKER_BUFFER_SAMPLES. Excess old samples are
-        // dropped from the front (oldest-first).
-        let bufs = make_buffers();
-        let count = MAX_SPEAKER_BUFFER_SAMPLES + 5_000;
-        let data: Vec<u8> = (0..count)
-            .flat_map(|i| (i as f32 * 0.001).to_ne_bytes())
-            .collect();
-        let frame = crate::audio::sample::AudioFrame {
-            data,
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 0,
-            is_silent: false,
-        };
-        push_samples(&bufs, 1, &frame);
-
-        let locked = bufs.lock().unwrap();
-        assert_eq!(
-            locked[&1].len(),
-            MAX_SPEAKER_BUFFER_SAMPLES,
-            "buffer should be capped at MAX_SPEAKER_BUFFER_SAMPLES"
-        );
-        // The kept samples are the newest; verify the first kept
-        // sample corresponds to the expected index.
-        let first_kept_idx = count - MAX_SPEAKER_BUFFER_SAMPLES;
-        let expected = first_kept_idx as f32 * 0.001;
-        let actual = locked[&1][0];
-        assert!(
-            (actual - expected).abs() < 1e-4,
-            "oldest kept sample should be index {first_kept_idx}: expected ~{expected}, got {actual}"
-        );
-    }
-
     #[cfg(feature = "opus-codec")]
     #[test]
     fn backward_sequence_jump_resets_decoder() {
@@ -1118,41 +1517,20 @@ mod tests {
         // contaminate the new stream.
         let bufs = make_buffers();
         let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
-
-        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
-        let config = OpusEncoderConfig::default();
-        let frame_size = config.frame_size;
-        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
-        let silent = crate::audio::sample::AudioFrame {
-            data: vec![0u8; frame_size * 4],
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 0,
-            is_silent: false,
-        };
-        let encoded = enc.encode(&silent).unwrap();
+        let encoded = silent_packet();
 
         // Feed packet at seq=100 to establish the speaker.
-        let pkt1 = EncodedPacket {
-            data: encoded.data.clone(),
-            sequence: 100,
-            frame_samples: 960,
-        };
-        mixer.feed(42, &pkt1).unwrap();
+        mixer.feed(42, &at_seq(&encoded, 100)).unwrap();
         let after_first = bufs.lock().unwrap()[&42].len();
 
         // Feed packet at seq=0 - large backward jump triggers reset.
-        let pkt2 = EncodedPacket {
-            data: encoded.data.clone(),
-            sequence: 0,
-            frame_samples: 960,
-        };
-        mixer.feed(42, &pkt2).unwrap();
+        mixer.feed(42, &at_seq(&encoded, 0)).unwrap();
 
         // Speaker still exists and both frames produced samples.
         assert_eq!(mixer.speakers.len(), 1);
         let total = bufs.lock().unwrap()[&42].len();
         assert!(
-            total >= after_first + frame_size,
+            total >= after_first + 960,
             "both frames should produce samples: total={total}, after_first={after_first}"
         );
     }
@@ -1162,26 +1540,15 @@ mod tests {
     fn reset_speaker_clears_decoder_but_keeps_buffer() {
         let bufs = make_buffers();
         let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
-
-        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
-        let config = OpusEncoderConfig::default();
-        let frame_size = config.frame_size;
-        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
-        let silent = crate::audio::sample::AudioFrame {
-            data: vec![0u8; frame_size * 4],
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 0,
-            is_silent: false,
-        };
-        let pkt = enc.encode(&silent).unwrap();
-        mixer.feed(42, &pkt).unwrap();
+        mixer.feed(42, &silent_packet()).unwrap();
         assert_eq!(mixer.speakers.len(), 1);
 
         // Reset simulates a terminator being received.
         mixer.reset_speaker(42);
         assert_eq!(mixer.speakers.len(), 0);
 
-        // Sample buffer is preserved for the playback callback to drain.
+        // Sample buffer is preserved for the playback callback to drain,
+        // and told the talkspurt is over so that one frame plays out.
         let locked = bufs.lock().unwrap();
         assert!(
             locked.contains_key(&42),
@@ -1191,103 +1558,14 @@ mod tests {
             !locked[&42].is_empty(),
             "previously buffered samples should still be available"
         );
+        assert!(locked[&42].is_primed(), "a one-frame utterance still plays");
     }
 
     #[test]
-    fn insert_silence_does_not_evict_buffered_real_audio() {
-        // Regression: a gap fill (insert_silence) used to push up to
-        // 100 * 480 = 48_000 zero samples into a buffer capped at
-        // MAX_SPEAKER_BUFFER_SAMPLES (19_200), causing the cap-eviction
-        // to discard 28_800 samples of REAL decoded audio that had not
-        // yet been played.  This was audible as a 100 - 400 ms dropout
-        // every time `detect_certain_gap` fired and was the root cause
-        // of sustained underruns + repeated re-prime cycles in the
-        // rodio mixer source under network jitter.
-        let bufs = make_buffers();
-
-        // Pre-fill with a recognisable real signal at the maximum
-        // possible level (sentinel value 1.0) so we can verify it
-        // survives the silence insertion.
-        let real_samples: Vec<f32> = vec![1.0; MAX_SPEAKER_BUFFER_SAMPLES / 2];
-        let frame = crate::audio::sample::AudioFrame {
-            data: real_samples.iter().flat_map(|s| s.to_ne_bytes()).collect(),
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 0,
-            is_silent: false,
-        };
-        push_samples(&bufs, 1, &frame);
-        let before_len = bufs.lock().unwrap()[&1].len();
-        assert_eq!(before_len, MAX_SPEAKER_BUFFER_SAMPLES / 2);
-
-        // Request a gap fill that, naively inserted, would overflow
-        // the buffer by a large margin (100 units = 48_000 samples,
-        // current free space is only ~9_600 samples).
-        insert_silence(&bufs, 1, 100, AudioFormat::MONO_48KHZ_F32);
-
-        let locked = bufs.lock().unwrap();
-        let buf = &locked[&1];
-        // Buffer must not exceed the cap.
-        assert!(
-            buf.len() <= MAX_SPEAKER_BUFFER_SAMPLES,
-            "buffer overflowed cap: len={}, cap={MAX_SPEAKER_BUFFER_SAMPLES}",
-            buf.len(),
-        );
-        // The original real samples must still be present at the
-        // front of the buffer (they were the oldest, queued for
-        // imminent playback).
-        let real_count = real_samples.len();
-        for (i, &s) in buf.iter().take(real_count).enumerate() {
-            assert!(
-                (s - 1.0).abs() < f32::EPSILON,
-                "real sample {i} was overwritten or evicted: got {s}, expected 1.0",
-            );
-        }
-    }
-
-    #[test]
-    fn insert_silence_into_full_buffer_is_a_noop() {
-        // When the buffer is already at capacity, inserting silence
-        // must not evict any real audio.  Without the cap-aware fix,
-        // this call would replace 100 % of the buffer contents with
-        // zeros - the worst-case dropout.
-        let bufs = make_buffers();
-        let real_samples: Vec<f32> = (0..MAX_SPEAKER_BUFFER_SAMPLES)
-            .map(|i| (i as f32).sin())
-            .collect();
-        let frame = crate::audio::sample::AudioFrame {
-            data: real_samples.iter().flat_map(|s| s.to_ne_bytes()).collect(),
-            format: AudioFormat::MONO_48KHZ_F32,
-            sequence: 0,
-            is_silent: false,
-        };
-        push_samples(&bufs, 1, &frame);
-
-        insert_silence(&bufs, 1, 100, AudioFormat::MONO_48KHZ_F32);
-
-        let locked = bufs.lock().unwrap();
-        let buf = &locked[&1];
-        assert_eq!(buf.len(), MAX_SPEAKER_BUFFER_SAMPLES);
-        for (i, &s) in buf.iter().enumerate() {
-            let expected = real_samples[i];
-            assert!(
-                (s - expected).abs() < f32::EPSILON,
-                "sample {i} was overwritten by silence: got {s}, expected {expected}",
-            );
-        }
-    }
-
-    #[test]
-    fn detect_certain_gap_capped_at_buffer_capacity() {
-        // The maximum gap fill must not exceed the buffer capacity in
-        // 10 ms units, so that a single gap fill can never displace
-        // real already-decoded audio.
-        let huge_jump = detect_certain_gap(Some(0), 100_000);
-        assert!(
-            huge_jump <= MAX_SILENCE_FILL_UNITS,
-            "gap fill {huge_jump} exceeds buffer capacity {MAX_SILENCE_FILL_UNITS} units",
-        );
-        // Ensure samples produced by the cap fit in the buffer.
-        let max_samples = (huge_jump as usize) * (SAMPLES_PER_SEQ_UNIT as usize);
-        assert!(max_samples <= MAX_SPEAKER_BUFFER_SAMPLES);
+    fn detect_gap_ignores_reordering_and_counts_holes() {
+        assert_eq!(detect_gap(None, 10), 0, "nothing expected yet");
+        assert_eq!(detect_gap(Some(4), 4), 0, "on time");
+        assert_eq!(detect_gap(Some(4), 2), 0, "older than expected: reordering");
+        assert_eq!(detect_gap(Some(4), 6), 2, "one 20 ms packet missing");
     }
 }

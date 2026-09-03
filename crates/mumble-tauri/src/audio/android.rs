@@ -221,21 +221,11 @@ struct MixingPlaybackCallback {
     buffers: mumble_protocol::audio::mixer::SpeakerBuffers,
     volume: Arc<AtomicU32>,
     last_sample: f32,
+    /// Scratch the speakers are summed into, one callback at a time.
+    mix: Vec<f32>,
 }
 
 impl MixingPlaybackCallback {
-    fn mix_buffers(map: &mut std::collections::HashMap<u32, VecDeque<f32>>) -> Option<f32> {
-        let mut sum = 0.0f32;
-        let mut count = 0u32;
-        for buf in map.values_mut() {
-            if let Some(s) = buf.pop_front() {
-                sum += s;
-                count += 1;
-            }
-        }
-        (count > 0).then_some(sum)
-    }
-
     fn next_sample(last_sample: &mut f32, mixed: Option<f32>, vol: f32) -> f32 {
         match mixed {
             Some(m) => {
@@ -264,14 +254,20 @@ impl AudioOutputCallback for MixingPlaybackCallback {
     ) -> DataCallbackResult {
         let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
 
+        // Each speaker's jitter buffer decides whether it is ready to play;
+        // `drain_into` mixes only from those that are. Whole callbacks at a
+        // time, so the lock is taken once per period rather than per sample.
+        self.mix.clear();
+        self.mix.resize(frames.len(), 0.0);
+        let mut valid = 0_usize;
         if let Ok(mut bufs) = self.buffers.lock() {
-            for sample in frames.iter_mut() {
-                *sample =
-                    Self::next_sample(&mut self.last_sample, Self::mix_buffers(&mut bufs), vol);
+            for buf in bufs.values_mut() {
+                valid = valid.max(buf.drain_into(&mut self.mix, 1.0));
             }
-            bufs.retain(|_, b| !b.is_empty());
-        } else {
-            frames.fill(0.0);
+        }
+        for (i, (out, mixed)) in frames.iter_mut().zip(self.mix.iter()).enumerate() {
+            let sample = (i < valid).then_some(*mixed);
+            *out = Self::next_sample(&mut self.last_sample, sample, vol);
         }
 
         DataCallbackResult::Continue
@@ -315,6 +311,7 @@ impl super::MixingPlayback for OboeMixingPlayback {
             buffers: self.buffers.clone(),
             volume: self.volume.clone(),
             last_sample: 0.0,
+            mix: Vec::new(),
         };
 
         let mut stream = AudioStreamBuilder::default()

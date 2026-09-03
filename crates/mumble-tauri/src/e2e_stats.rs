@@ -279,7 +279,12 @@ fn writer_loop(inner: &'static StatsInner) {
             };
             for (&session, buf) in bufs.iter() {
                 let take = buf.len().min(TONE_WINDOW);
-                let window: Vec<f32> = buf.iter().skip(buf.len() - take).copied().collect();
+                let window: Vec<f32> = buf
+                    .samples()
+                    .iter()
+                    .skip(buf.len() - take)
+                    .copied()
+                    .collect();
                 let _ = tone.insert(
                     session,
                     (
