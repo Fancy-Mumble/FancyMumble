@@ -81,8 +81,19 @@ function trimTrailingPunctuation(url: string): string {
 }
 
 /**
+ * Whether a character can sit next to an `_` that opens or closes italics.
+ *
+ * The string's own edge counts (`undefined`), and so does anything that is not
+ * part of a word. A letter or a digit does not: `snake_case` is one
+ * identifier, not a word with an italic in the middle of it.
+ */
+function isMarkerEdge(ch: string | undefined): boolean {
+  return ch === undefined || !/[\p{L}\p{N}_]/u.test(ch);
+}
+
+/**
  * Parse raw markdown text into decorated segments.
- * Handles: **bold**, *italic*, __underline__, ~~strike~~, `code`, URLs
+ * Handles: **bold**, *italic*, _italic_, __underline__, ~~strike~~, `code`, URLs
  */
 function parseMarkdown(raw: string): Segment[] {
   const segments: Segment[] = [];
@@ -194,6 +205,17 @@ function parseMarkdown(raw: string): Segment[] {
       if (end !== -1) {
         segments.push({ text: raw.slice(i, end + 2), underline: true });
         i = end + 2;
+        continue;
+      }
+    }
+
+    // _italic_ (single _, never inside a word - see markdownToHtml)
+    if (raw[i] === "_" && raw[i + 1] !== "_" && isMarkerEdge(raw[i - 1])) {
+      const end = raw.indexOf("_", i + 1);
+      if (end > i + 1 && raw[end + 1] !== "_" && isMarkerEdge(raw[end + 1])) {
+        pushCurrent();
+        segments.push({ text: raw.slice(i, end + 1), italic: true });
+        i = end + 1;
         continue;
       }
     }
@@ -541,6 +563,12 @@ export function markdownToHtml(raw: string): string {
   html = html.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, "<i>$1</i>");
   // __underline__
   html = html.replace(/__(.+?)__/g, "<u>$1</u>");
+  // _italic_ - the dialect every other chat client speaks, and the one bots
+  // and legacy clients write in. Underscores only count where they stand
+  // outside a word: without that guard `snake_case_name`, a URL path and an
+  // `__dunder__` all pick up an <i> in the middle of themselves. It runs
+  // after the underline pass, so `__x__` is already gone by here.
+  html = html.replace(/(?<![\p{L}\p{N}_])_([^_\n]+)_(?![\p{L}\p{N}_])/gu, "<i>$1</i>");
   // ~~strikethrough~~
   html = html.replace(/~~(.+?)~~/g, "<s>$1</s>");
   // ||spoiler||

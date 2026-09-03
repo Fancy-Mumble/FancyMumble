@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+﻿import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@core/store";
@@ -67,6 +67,27 @@ describe("MessageRow", () => {
     });
 
     expect(useAppStore.getState().watchSessions.size).toBe(1);
+  });
+
+  it("formats a body that arrived as the markdown a bot typed", () => {
+    // Five bots posting through the protocol printed their own asterisks and
+    // backticks down the whole river: their bodies are markdown, because a
+    // client that is not this one has no reason to send HTML.
+    const { container } = draw(message({ body: "**Nice settings** _channel fox_ `code 2994` and sure" }));
+
+    expect(container.querySelector("b")?.textContent).toBe("Nice settings");
+    expect(container.querySelector("i")?.textContent).toBe("channel fox");
+    expect(container.querySelector("code")?.textContent).toBe("code 2994");
+    expect(container.textContent).not.toContain("**");
+  });
+
+  it("leaves a body that is markup already exactly as it came", () => {
+    // The common case, and the one that must not change: reading HTML as
+    // markdown escapes its tags and prints them.
+    const { container } = draw(message({ body: "<b>Nice</b> and <i>fox</i>" }));
+
+    expect(container.querySelector("b")?.textContent).toBe("Nice");
+    expect(container.textContent).not.toContain("<b>");
   });
 
   it("keeps the strip clear of it where the message carries no video", () => {
@@ -446,7 +467,13 @@ describe("MessageRow", () => {
     for (const body of [mine, theirs]) {
       const style = getComputedStyle(body);
       expect(style.paddingLeft).toBe("14px");
-      expect(style.borderBottomStyle).toBe("solid");
+      // What proves a card is the surface under the words, and it is no
+      // longer a border: a skin may cut the bubble's corners, and a real
+      // border is sliced off at the diagonal, so the edge is drawn as a
+      // ground with the fill inset over it. Bare prose has no ground at
+      // all, which is the difference this is here to catch.
+      expect(style.backgroundColor).not.toBe("");
+      expect(style.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
     }
   });
 

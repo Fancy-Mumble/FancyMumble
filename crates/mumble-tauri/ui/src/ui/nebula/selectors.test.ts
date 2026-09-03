@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { useTranslation } from "react-i18next";
 import { hexToHsl } from "@core/utils/colorUtils";
 import type {
@@ -750,6 +750,20 @@ describe("messageContent", () => {
   it("lifts a file marker out and keeps the caption above it", () => {
     const content = messageContent("look at this <!-- FANCY_FILE:QUJD -->");
     expect(content).toEqual({ kind: "file", payloads: ["QUJD"], quoteIds: [], html: "look at this" });
+  });
+
+  it("formats a body that arrived as plain markdown", () => {
+    // A bot or a legacy client sends what it typed. Handed to the DOM as it
+    // stands, the asterisks are the message - which is what the chat river
+    // was printing for every bot line in it.
+    const content = messageContent("**Nice settings** _channel fox_ `code 2994`");
+    expect(content.html).toBe("<b>Nice settings</b> <i>channel fox</i> <code>code 2994</code>");
+  });
+
+  it("formats the caption sent beside an attachment", () => {
+    // The marker comes off first, so what is left is plain text again.
+    const content = messageContent("**look** at this <!-- FANCY_FILE:QUJD -->");
+    expect(content.html).toBe("<b>look</b> at this");
   });
 
   it("prefers a poll over a file when a body somehow carries both", () => {
