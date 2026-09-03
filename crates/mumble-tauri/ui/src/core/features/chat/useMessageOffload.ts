@@ -20,9 +20,10 @@
  * about the arrangement is.
  */
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useAppStore } from "../../store";
-import { offloadManager, type MessageScope } from "../../messageOffload";
+import { isHeavyContent, offloadManager, type MessageScope } from "../../messageOffload";
+import type { ChatMessage } from "../../types";
 
 /**
  * How far outside the scroller a row still counts as being in view.
@@ -46,6 +47,17 @@ export interface UseMessageOffloadOptions {
   readonly innerRef: RefObject<HTMLElement | null>;
   /** The open conversation, or null when there is none. */
   readonly currentScope: () => MessageScope | null;
+  /**
+   * Messages of the conversation that are in memory but have no row.
+   *
+   * The render window mounts only the newest stretch of a long conversation,
+   * and the observer can only ever see a row. Everything above the window is
+   * out of sight by construction, so its heavy bodies are put away without
+   * waiting for a row that will not come - otherwise a channel full of
+   * screenshots keeps every one of them in memory, on both sides of the IPC
+   * boundary, for as long as the reader stays at the bottom.
+   */
+  readonly unmounted?: readonly ChatMessage[];
   /** Attribute carrying a row's message id. */
   readonly idAttribute?: string;
   /** Attribute marking a row whose body is worth offloading. */
@@ -67,6 +79,7 @@ export function useMessageOffload({
   containerRef,
   innerRef,
   currentScope,
+  unmounted,
   idAttribute = "data-msg-id",
   heavyAttribute = "data-msg-heavy",
 }: UseMessageOffloadOptions): UseMessageOffloadResult {
@@ -83,10 +96,46 @@ export function useMessageOffload({
   const scope = currentScope();
   const scopeKey = scope ? `${scope.scope}:${scope.scopeId}` : null;
 
+  // The heavy bodies with no row, as one string: the caller's array is a
+  // fresh slice on most renders, and a body is only worth revisiting when
+  // the set of them changes.
+  const unmountedHeavyKey = useMemo(
+    () =>
+      (unmounted ?? [])
+        .filter((message) => message.message_id && isHeavyContent(message.body))
+        .map((message) => message.message_id)
+        .join("\n"),
+    [unmounted],
+  );
+
+  useEffect(() => {
+    if (!unmountedHeavyKey) return;
+    const target = scopeRef.current();
+    if (!target) return;
+    const refresh = () => {
+      const state = useAppStore.getState();
+      if (target.scope === "channel") {
+        state.refreshMessages(Number(target.scopeId));
+      } else if (target.scope === "dm") {
+        state.refreshDmMessages(Number(target.scopeId));
+      }
+    };
+    // Same grace period as a row leaving the viewport: a window that is about
+    // to grow over these must not find them half-written. A body that gets a
+    // row after all is handled by the observer from then on - cancelled if
+    // the row is in view, scheduled again if it is not.
+    for (const id of unmountedHeavyKey.split("\n")) {
+      offloadManager.scheduleOffload(id, target, refresh);
+    }
+  }, [unmountedHeavyKey, scopeKey]);
+
   useEffect(() => {
     const inner = innerRef.current;
     const container = containerRef.current;
     if (!inner || !container) return;
+    // A DOM without an observer (a test runner's) has no viewport to watch;
+    // the rows simply keep their bodies, as they would with nothing mounted.
+    if (typeof IntersectionObserver === "undefined") return;
 
     /**
      * Re-read the conversation from the store.

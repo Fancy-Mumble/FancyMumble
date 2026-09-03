@@ -3,11 +3,16 @@ import { useAppStore } from "../../store";
 import type { ChatMessage } from "../../types";
 import type { MessageScope } from "../../messageOffload";
 import { useMessageOffload } from "./useMessageOffload";
+
+/** One shared empty list, so an empty remainder never re-keys the offloader. */
+const EMPTY_MESSAGES: readonly ChatMessage[] = [];
 import {
   BASE_WINDOW,
   GROW_THRESHOLD_PX,
   grownTailCount,
   initialTailCount,
+  settledTailCount,
+  SETTLE_SHRINK_MS,
   tailCountAfterAppend,
   tailCountToInclude,
 } from "./chatWindowing";
@@ -80,17 +85,6 @@ export function useChatScroll({
   const prevFirstMsgIdRef = useRef<string | null>(null);
 
   /**
-   * Heavy bodies are handed to cold storage while they are out of view; the
-   * set is the ones coming back right now.  See `useMessageOffload` - the rows
-   * below carry the two attributes it watches for.
-   */
-  const { restoringKeys } = useMessageOffload({
-    containerRef: messagesContainerRef,
-    innerRef: messagesInnerRef,
-    currentScope,
-  });
-
-  /**
    * Pending unread count captured when switching to a channel that had
    * unread messages.  Used to position the "new messages" divider on the
    * first message batch after the switch.
@@ -113,12 +107,36 @@ export function useChatScroll({
   tailCountRef.current = tailCount;
 
   /**
+   * Heavy bodies are handed to cold storage while they are out of view; the
+   * set is the ones coming back right now.  See `useMessageOffload` - the rows
+   * below carry the two attributes it watches for, and the messages above the
+   * window, which have no row to watch, are handed over directly.
+   */
+  const unmounted = useMemo(
+    () =>
+      allMessages.length <= tailCount
+        ? EMPTY_MESSAGES
+        : allMessages.slice(0, allMessages.length - tailCount),
+    [allMessages, tailCount],
+  );
+  const { restoringKeys } = useMessageOffload({
+    containerRef: messagesContainerRef,
+    innerRef: messagesInnerRef,
+    currentScope,
+    unmounted,
+  });
+
+  /**
    * Scroll height captured just before the window grows at the top.
    * The layout effect below restores the scroll position by the height
    * of the newly mounted rows, so the viewport keeps showing the same
    * content (mirrors the history-prepend correction).
    */
   const growPendingRef = useRef<{ scrollHeight: number } | null>(null);
+
+  /** Pending "the reader has come to rest at the bottom" shrink. */
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(settleTimerRef.current), []);
 
   /** Mount one more chunk of older messages above the current window. */
   const growWindow = useCallback((el: HTMLElement) => {
@@ -219,6 +237,16 @@ export function useChatScroll({
       // history: mount the next chunk of older messages.
       if (!stickToBottomRef.current && el.scrollTop < GROW_THRESHOLD_PX) {
         growWindow(el);
+      }
+      // Growth is otherwise one-way: a reader who climbed through a busy
+      // channel and came back down keeps every row they passed, for as long
+      // as the app is open.  Coming to rest at the bottom releases them, and
+      // the rows released are all above the viewport.
+      clearTimeout(settleTimerRef.current);
+      if (stickToBottomRef.current) {
+        settleTimerRef.current = setTimeout(() => {
+          if (stickToBottomRef.current) setTailCount(settledTailCount);
+        }, SETTLE_SHRINK_MS);
       }
     };
 

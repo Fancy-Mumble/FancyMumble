@@ -1,6 +1,7 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@core/store";
+import { SETTLE_SHRINK_MS } from "@core/features/chat/chatWindowing";
 import type { ChatMessage } from "@core/types";
 import { withNebulaTheme } from "../../testTheme";
 import { MessageList } from "./MessageList";
@@ -185,6 +186,55 @@ describe("MessageList", () => {
     expect(container.querySelector('[data-message-id="m0"]')).toBeNull();
   });
 
+  it("lets the history go once the reader has settled back at the bottom", async () => {
+    vi.useFakeTimers();
+    const many = Array.from({ length: 400 }, (_, index) => message(`m${index}`));
+    const { container } = draw({ messages: many });
+    const scroller = container.firstElementChild as HTMLElement;
+    const rows = () => container.querySelectorAll("[data-message-id]").length;
+
+    // Climb towards the top: the window grows a chunk at a time.
+    Object.defineProperty(scroller, "scrollHeight", { value: 9000, configurable: true });
+    Object.defineProperty(scroller, "clientHeight", { value: 600, configurable: true });
+    scroller.scrollTop = 0;
+    await act(async () => {
+      fireEvent.scroll(scroller);
+    });
+    expect(rows()).toBeGreaterThan(100);
+
+    // Back to the bottom, and stay there.
+    scroller.scrollTop = 8400;
+    await act(async () => {
+      fireEvent.scroll(scroller);
+      await vi.advanceTimersByTimeAsync(SETTLE_SHRINK_MS + 100);
+    });
+    expect(rows()).toBe(100);
+    // Still the newest ones - what was released is all above the viewport.
+    expect(container.querySelector('[data-message-id="m399"]')).toBeTruthy();
+
+    vi.useRealTimers();
+  });
+
+  it("keeps the history mounted while the reader is still up in it", async () => {
+    vi.useFakeTimers();
+    const many = Array.from({ length: 400 }, (_, index) => message(`m${index}`));
+    const { container } = draw({ messages: many });
+    const scroller = container.firstElementChild as HTMLElement;
+    Object.defineProperty(scroller, "scrollHeight", { value: 9000, configurable: true });
+    Object.defineProperty(scroller, "clientHeight", { value: 600, configurable: true });
+
+    scroller.scrollTop = 0;
+    await act(async () => {
+      fireEvent.scroll(scroller);
+      await vi.advanceTimersByTimeAsync(SETTLE_SHRINK_MS + 100);
+    });
+
+    // Nowhere near the bottom: the rows they climbed through stay.
+    expect(container.querySelectorAll("[data-message-id]").length).toBeGreaterThan(100);
+
+    vi.useRealTimers();
+  });
+
   it("widens the window to reach a jump target that is not mounted", () => {
     const many = Array.from({ length: 260 }, (_, index) => message(`m${index}`));
     const scrollIntoView = vi.fn();
@@ -206,6 +256,39 @@ describe("MessageList", () => {
     // away only in the sense that the write costs more than it saves.
     expect(container.querySelector('[data-message-id="heavy"]')!.hasAttribute("data-msg-heavy")).toBe(true);
     expect(container.querySelector('[data-message-id="light"]')!.hasAttribute("data-msg-heavy")).toBe(false);
+  });
+
+  it("puts away the heavy bodies above the window without waiting for a row", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
+    FakeIntersectionObserver.instances = [];
+    invokeMock.mockClear();
+    useAppStore.setState({ refreshMessages: vi.fn().mockResolvedValue(undefined) });
+
+    // 260 messages: the oldest heavy one is far above the 100-row window and
+    // never gets a row; the newest heavy one is mounted and in view.
+    const many = Array.from({ length: 260 }, (_, index) => message(`m${index}`));
+    many[3] = { ...many[3], body: HEAVY_BODY };
+    many[259] = { ...many[259], body: HEAVY_BODY };
+    const { container } = draw({ messages: many, currentScope: () => ({ scope: "channel", scopeId: "7" }) });
+    expect(container.querySelector('[data-message-id="m3"]')).toBeNull();
+
+    const observer = FakeIntersectionObserver.instances.at(-1)!;
+    await act(async () => {
+      observer.fire(container.querySelector('[data-message-id="m259"]')!, true);
+      await vi.advanceTimersByTimeAsync(6000);
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("offload_message", {
+      messageId: "m3",
+      scope: "channel",
+      scopeId: "7",
+    });
+    // The one on screen stays where the reader can see it.
+    expect(invokeMock).not.toHaveBeenCalledWith("offload_message", expect.objectContaining({ messageId: "m259" }));
+    expect(useAppStore.getState().refreshMessages).toHaveBeenCalledWith(7);
+
+    vi.useRealTimers();
   });
 
   it("hands a heavy body to cold storage once it has been out of view a while", async () => {
