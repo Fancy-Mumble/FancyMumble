@@ -219,6 +219,7 @@ mod voice_pipeline {
     use mumble_protocol::audio::encoder::{OpusEncoder, OpusEncoderConfig};
     use mumble_protocol::audio::filter::automatic_gain::{AgcConfig, AutomaticGainControl};
     use mumble_protocol::audio::filter::denoiser::{DenoiserConfig, SpectralDenoiser};
+    use mumble_protocol::audio::filter::gated_denoiser::GatedDenoiser;
     use mumble_protocol::audio::filter::noise_gate::{NoiseGate, NoiseGateConfig};
     use mumble_protocol::audio::filter::FilterChain;
     use mumble_protocol::audio::mixer::{AudioMixer, SpeakerBuffers};
@@ -1168,13 +1169,19 @@ mod voice_pipeline {
                 params: settings.denoiser_params.clone(),
                 ..DenoiserConfig::default()
             };
-            filters.push(Box::new(SpectralDenoiser::new(denoiser_config)));
-            filters.push(Box::new(NoiseGate::new(NoiseGateConfig {
+            let gate = NoiseGate::new(NoiseGateConfig {
                 open_threshold: settings.vad_threshold,
                 close_threshold: settings.vad_threshold * settings.noise_gate_close_ratio,
                 hold_frames: settings.hold_frames,
                 ..NoiseGateConfig::default()
-            })));
+            });
+            // Fused rather than pushed one after the other: the denoiser is
+            // where an idle microphone's CPU goes, and fused it can skip the
+            // frames the gate is about to zero anyway.
+            filters.push(Box::new(GatedDenoiser::new(
+                Box::new(SpectralDenoiser::new(denoiser_config)),
+                gate,
+            )));
         }
         filters
     }

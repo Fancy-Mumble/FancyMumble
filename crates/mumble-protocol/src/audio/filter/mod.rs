@@ -7,6 +7,7 @@
 
 pub mod automatic_gain;
 pub mod denoiser;
+pub mod gated_denoiser;
 pub mod low_pass;
 pub mod noise_gate;
 pub mod volume;

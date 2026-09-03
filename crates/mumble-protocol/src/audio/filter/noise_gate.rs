@@ -81,8 +81,19 @@ impl NoiseGate {
         }
     }
 
+    /// Whether the gate is currently passing audio (open, or holding open
+    /// after speech paused).
+    pub fn is_open(&self) -> bool {
+        self.state == GateState::Open
+    }
+
+    /// The RMS level at which a closed gate opens.
+    pub fn open_threshold(&self) -> f32 {
+        self.config.open_threshold
+    }
+
     /// Compute the RMS of a slice of f32 samples.
-    fn rms(samples: &[f32]) -> f32 {
+    pub(crate) fn rms(samples: &[f32]) -> f32 {
         if samples.is_empty() {
             return 0.0;
         }
