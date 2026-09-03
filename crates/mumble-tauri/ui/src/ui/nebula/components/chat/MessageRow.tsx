@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, InputBase, Tooltip, Typography } from "@mui/material";
 import type { Theme } from "@mui/material/styles";
@@ -46,8 +46,8 @@ import { AttachmentGallery, MediaGallery } from "./MediaGallery";
 import { OffloadedBody } from "./OffloadedBody";
 import { MentionPopover, type MentionTarget } from "./MentionPopover";
 import { LinkGuard, UserAvatar, Stack } from "../primitives";
-import { floatingSurface } from "../../theme";
-import { radius } from "../../tokens";
+import { chamferedSurface, floatingSurface } from "../../theme";
+import { NEBULA_MONO, radius } from "../../tokens";
 import type { HoverEvent } from "../../clientState";
 
 /** The schemes a link in a message may point at; standard's renderer allows
@@ -133,6 +133,50 @@ function mentionSx(theme: Theme) {
     "& .mention-everyone:hover, & .mention-here:hover": {
       background: `color-mix(in srgb, ${nebula.warn} 32%, transparent)`,
     },
+  } as const;
+}
+
+/**
+ * How formatted markup sits inside a bubble.
+ *
+ * Bold, italic, underline and strikethrough need nothing here - they are tags
+ * and the browser draws them. Code does: an unstyled `<code>` is a run of
+ * ordinary prose, and an unstyled `<pre>` is a paragraph that has lost its
+ * line breaks, which is most of what a code block is for. Both bubbles take
+ * the same rules, because a code span that was a chip in a received message
+ * and prose in your own reads as two different messages.
+ */
+function bodyMarkupSx(theme: Theme) {
+  const { nebula } = theme.palette;
+  return {
+    "& code": {
+      fontFamily: theme.typography.fontFamily,
+      px: "6px",
+      borderRadius: radius("sm"),
+      background: nebula.card2,
+      fontSize: 11.5,
+    },
+    // A block keeps its own indentation, so it takes a real monospace face and
+    // scrolls rather than wrapping: a wrapped line of code is a wrong line.
+    "& pre": {
+      my: "6px",
+      p: "8px 10px",
+      borderRadius: radius("sm"),
+      background: nebula.card2,
+      border: `1px solid ${nebula.line}`,
+      overflowX: "auto",
+    },
+    "& pre code": {
+      fontFamily: NEBULA_MONO,
+      display: "block",
+      px: 0,
+      background: "none",
+      whiteSpace: "pre",
+    },
+    // A list keeps the river's rhythm: indented enough to read as one, not so
+    // far that it starts a column of its own.
+    "& ul, & ol": { my: "4px", pl: "22px" },
+    "& li": { my: "2px" },
   } as const;
 }
 
@@ -553,8 +597,17 @@ export function MessageRow({
                   px: "14px",
                   py: "9px",
                   borderRadius: `${radius("lg")} ${radius("lg")} ${radius("sm")} ${radius("lg")}`,
-                  background: theme.palette.nebula.accentSoft,
-                  border: `1px solid ${theme.palette.nebula.accentLine}`,
+                  // Edge and fill together, because a skin may cut the
+                  // bubble's corners: a real `border` is sliced off at the
+                  // diagonal and leaves the cut unstroked, so the edge is
+                  // drawn as a ground with the fill inset 1px over it. That
+                  // is a plain 1px border on the skins that cut nothing, so
+                  // there is one path here rather than two.
+                  ...chamferedSurface(
+                    theme,
+                    theme.palette.nebula.accentSoft,
+                    theme.palette.nebula.accentLine,
+                  ),
                   lineHeight: 1.55,
                   wordBreak: "break-word",
                   "& img": {
@@ -564,10 +617,7 @@ export function MessageRow({
                     cursor: "zoom-in",
                   },
                   "& a": { color: theme.palette.nebula.accent },
-                  // A list keeps the river's rhythm: indented enough to read
-                  // as one, not so far that it starts a column of its own.
-                  "& ul, & ol": { my: "4px", pl: "22px" },
-                  "& li": { my: "2px" },
+                  ...bodyMarkupSx(theme),
                   ...mentionSx(theme),
                 })}
                 dangerouslySetInnerHTML={{ __html: body }}
@@ -777,8 +827,11 @@ export function MessageRow({
                         px: "14px",
                         py: "9px",
                         borderRadius: `${radius("lg")} ${radius("lg")} ${radius("lg")} ${radius("sm")}`,
-                        background: theme.palette.nebula.card,
-                        border: `1px solid ${theme.palette.nebula.line}`,
+                        ...chamferedSurface(
+                          theme,
+                          theme.palette.nebula.card,
+                          theme.palette.nebula.line,
+                        ),
                       }
                     : {}),
                   // Compact runs the body into the name above it.
@@ -796,17 +849,7 @@ export function MessageRow({
                     cursor: "zoom-in",
                   },
                   "& a": { color: theme.palette.nebula.accent },
-                  "& code": {
-                    fontFamily: theme.typography.fontFamily,
-                    px: "6px",
-                    borderRadius: radius("sm"),
-                    background: theme.palette.nebula.card2,
-                    fontSize: 11.5,
-                  },
-                  // A list keeps the river's rhythm: indented enough to read
-                  // as one, not so far that it starts a column of its own.
-                  "& ul, & ol": { my: "4px", pl: "22px" },
-                  "& li": { my: "2px" },
+                  ...bodyMarkupSx(theme),
                   ...mentionSx(theme),
                 })}
                 dangerouslySetInnerHTML={{ __html: body }}

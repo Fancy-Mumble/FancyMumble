@@ -9,6 +9,7 @@
  */
 import type { useTranslation } from "react-i18next";
 import { htmlToMarkdown, markdownToHtml } from "@standard/components/chat/markdown/MarkdownInput";
+import { bodyToHtml } from "@standard/components/chat/markdown/bodyHtml";
 import { hslToHex } from "@core/utils/colorUtils";
 import { formatTimestamp } from "@core/utils/format";
 import { hueFromKey } from "@shared/profilecard/tint";
@@ -496,6 +497,12 @@ export function plainText(body: string): string {
  *
  * `html` is always what is left once the marker is lifted out, so a caption
  * sent alongside a file still renders above its card.
+ *
+ * It is also always renderable markup. A body that arrived as plain markdown -
+ * a bot, a bridge, a legacy client - is formatted here rather than at each of
+ * the four places that draw one, which is how Nebula came to print `**Nice**`
+ * with its asterisks showing. See `bodyToHtml`; markers come off first, so the
+ * caption beside a file is formatted too.
  */
 export type MessageContent = {
   /** Ids of the messages this one is replying to, oldest marker first. */
@@ -562,7 +569,8 @@ export function messageContent(body: string): MessageContent {
 
   const poll = POLL_MARKER.exec(rest);
   if (poll) {
-    return { kind: "poll", pollId: poll[1], quoteIds, html: rest.replace(POLL_MARKER, "").trim() };
+    const html = bodyToHtml(rest.replace(POLL_MARKER, "").trim());
+    return { kind: "poll", pollId: poll[1], quoteIds, html };
   }
 
   // Every marker, not the first: a batch of photographs sent together is one
@@ -570,10 +578,11 @@ export function messageContent(body: string): MessageContent {
   // the first picture and silently drop the rest.
   const files = [...rest.matchAll(FILE_MARKER)].map((match) => match[1]!);
   if (files.length > 0) {
-    return { kind: "file", payloads: files, quoteIds, html: rest.replaceAll(FILE_MARKER, "").trim() };
+    const html = bodyToHtml(rest.replaceAll(FILE_MARKER, "").trim());
+    return { kind: "file", payloads: files, quoteIds, html };
   }
 
-  return { kind: "text", quoteIds, html: rest };
+  return { kind: "text", quoteIds, html: bodyToHtml(rest) };
 }
 
 /**

@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useRef, useMemo, useEffect } from "react";
+﻿import { memo, useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { marked } from "marked";
@@ -17,6 +17,7 @@ import { containsSelfMention } from "@core/utils/mentions";
 import { TID } from "@core/testids";
 import PollCard, { getPoll } from "../poll/PollCard";
 import MediaPreview from "../media/MediaPreview";
+import { bodyToHtml } from "../markdown/bodyHtml";
 import LinkPreviewCard from "../linkpreview/LinkPreviewCard";
 import FileAttachmentCard, {
   FANCY_FILE_MARKER_RE,
@@ -398,10 +399,13 @@ export default memo(function MessageItem({
     }
 
     // Plugin chat messages carry a markdown body; convert to HTML so
-    // MediaPreview (which expects HTML) renders it formatted.
+    // MediaPreview (which expects HTML) renders it formatted.  Everything
+    // else is HTML already - except when it is not, which is what `bodyToHtml`
+    // is for: a bot or a legacy client sends the markdown it typed, and
+    // handing that straight to the DOM prints the asterisks.
     const htmlBody = msg.plugin_name
       ? String(marked.parse(bodyWithoutQuotes, { async: false, gfm: true }))
-      : bodyWithoutQuotes;
+      : bodyToHtml(bodyWithoutQuotes);
 
     return (
       <>

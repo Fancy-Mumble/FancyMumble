@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { htmlToMarkdown, markdownToHtml } from "./MarkdownInput";
 
 /**
@@ -72,5 +72,41 @@ describe("markdown lists", () => {
     // The fence is stashed before the list pass, so its contents are text.
     const html = markdownToHtml("```\n- not a list\n```");
     expect(html).toBe("<pre><code>- not a list</code></pre>");
+  });
+});
+
+/**
+ * Underscores are the dialect bots, bridges and every other chat client write
+ * italics in, so the converter has to read them - but they are also how code
+ * names things, and an italic in the middle of an identifier is worse than no
+ * italic at all. The rule is a word boundary on both ends.
+ */
+describe("underscore italics", () => {
+  it("formats a word between underscores", () => {
+    expect(markdownToHtml("_channel fox_ argues")).toBe("<i>channel fox</i> argues");
+  });
+
+  it("formats one against punctuation", () => {
+    expect(markdownToHtml("(_really_), yes")).toBe("(<i>really</i>), yes");
+  });
+
+  it("leaves an identifier alone", () => {
+    for (const typed of ["snake_case_name", "a_b_c", "__init__"]) {
+      expect(markdownToHtml(typed)).not.toContain("<i>");
+    }
+  });
+
+  it("leaves a URL path alone", () => {
+    expect(markdownToHtml("http://host/a_b_c_d")).toContain("a_b_c_d</a>");
+  });
+
+  it("still reads a dunder as underline", () => {
+    expect(markdownToHtml("__underlined__")).toBe("<u>underlined</u>");
+  });
+
+  it("comes back as the asterisk dialect when edited", () => {
+    // One canonical form on the way back: `<i>` is `*italic*`, so a saved
+    // edit does not depend on which dialect the author first typed.
+    expect(htmlToMarkdown(markdownToHtml("_it_"))).toBe("*it*");
   });
 });
