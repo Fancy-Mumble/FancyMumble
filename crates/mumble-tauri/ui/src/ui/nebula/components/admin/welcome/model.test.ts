@@ -1,22 +1,35 @@
 import { describe as suite, expect, it } from "vitest";
 import {
+  MAX_BODY,
   canConnect,
   connect,
   describe,
   graphStatus,
   makeNode,
+  markupOf,
   mayBeUnknown,
   patchNode,
+  previewMarkup,
   previewText,
   removeNode,
   snippetsOf,
+  switchView,
   usesOf,
+  writeMarkup,
+  type MessageNode,
   type WelcomeGraph,
   type WelcomeNode,
 } from "./model";
 import { seedGraph } from "./seed";
 
-const SUBJECT = { name: "Lyn", channel: "#Gaming", server: "magical.rocks" };
+const SUBJECT = { name: "Lyn", channel: "#Gaming", server: "magical.rocks", allowHtml: true };
+
+/** The seed's greeting, which is the formatted one. */
+function greetingNode(graph: WelcomeGraph = seedGraph()): MessageNode {
+  const node = graph.nodes.find((candidate) => candidate.kind === "greeting");
+  if (!node || node.kind !== "greeting") throw new Error("the seed has no greeting");
+  return node;
+}
 
 suite("welcome graph", () => {
   it("reads the mock's graph back as the sentence the status bar prints", () => {
@@ -174,6 +187,92 @@ suite("welcome graph", () => {
       const status = graphStatus(loose);
       expect(status.complete).toBe(false);
       expect(status.problems.some((p) => p.includes("FILTER") && p.includes("A"))).toBe(true);
+    });
+  });
+
+  suite("the two halves of a message", () => {
+    it("derives the plain half whenever the markup changes", () => {
+      // The invariant the whole rich-text half of this page rests on. An
+      // operator who formats a paragraph and leaves the plain field on last
+      // week's wording has published two greetings and can see only one.
+      const patch = writeMarkup("<h2>Welcome</h2><p>Rules are pinned.</p>");
+      expect(patch.html).toBe("<h2>Welcome</h2><p>Rules are pinned.</p>");
+      expect(patch.body).toBe("Welcome\n\nRules are pinned.");
+    });
+
+    it("sends no markup from a node being written as plain text", () => {
+      const graph = seedGraph();
+      const snippet = graph.nodes.find((node) => node.id === "rules");
+      expect(snippet && markupOf(snippet)).toBe("");
+      expect(markupOf(greetingNode(graph))).not.toBe("");
+    });
+
+    it("keeps the markup when a node is switched back to plain, and stops sending it", () => {
+      // Neither direction of the switch throws anything away, which is why
+      // neither has to ask the operator to confirm.
+      const greeting = greetingNode();
+      const plain = { ...greeting, ...switchView(greeting, "plain") } as MessageNode;
+      expect(plain.html).toBe(greeting.html);
+      expect(markupOf(plain)).toBe("");
+
+      const back = { ...plain, ...switchView(plain, "rich") } as MessageNode;
+      expect(markupOf(back)).toBe(greeting.html);
+    });
+
+    it("seeds the editor from what was typed when a plain node is formatted", () => {
+      const written = { ...makeNode("text", 0, 0), body: "Rules are in #Lounge." } as MessageNode;
+      const rich = { ...written, ...switchView(written, "rich") } as MessageNode;
+      expect(rich.html).toBe("<p>Rules are in #Lounge.</p>");
+      // And the plain half still says the same thing afterwards.
+      expect(rich.body).toBe("Rules are in #Lounge.");
+    });
+
+    it("names the node that is over the server's cap", () => {
+      // The server refuses the whole document for one over-long body, so an
+      // operator has to be told which node before the save, not after.
+      const graph = seedGraph();
+      const over = patchNode(graph, "greeting", {
+        html: "<p>" + "x".repeat(MAX_BODY) + "</p>",
+      } as Partial<WelcomeNode>);
+      const status = graphStatus(over);
+      expect(status.complete).toBe(false);
+      expect(status.problems.some((problem) => problem.includes("SHOW THIS GREETING"))).toBe(true);
+      expect(status.problems.some((problem) => problem.includes(String(MAX_BODY)))).toBe(true);
+    });
+  });
+
+  suite("the preview", () => {
+    it("assembles the markup the way the server does, snippets last", () => {
+      const markup = previewMarkup(seedGraph(), SUBJECT);
+      expect(markup).not.toBeNull();
+      // The greeting is formatted and the two snippets are plain, so the
+      // plain ones arrive wrapped - which is what the server's own fallback
+      // does with them.
+      expect(markup).toContain("<h2");
+      expect(markup?.indexOf("Willkommen")).toBeLessThan(markup?.indexOf("House rules") ?? -1);
+      expect(markup?.indexOf("House rules")).toBeLessThan(markup?.indexOf("Rotation") ?? -1);
+    });
+
+    it("fills the placeholders in both halves", () => {
+      expect(previewMarkup(seedGraph(), SUBJECT)).toContain("Willkommen, Lyn!");
+      expect(previewText(seedGraph(), SUBJECT)).toContain("Willkommen, Lyn!");
+    });
+
+    it("escapes a name on its way into markup", () => {
+      // A display name is text somebody chose, and the preview renders what it
+      // builds - so an unescaped one would be the plainest injection there is.
+      const markup = previewMarkup(seedGraph(), { ...SUBJECT, name: "<script>x</script>" });
+      expect(markup).toContain("&lt;script&gt;");
+      expect(markup).not.toContain("<script>");
+    });
+
+    it("says nothing in markup when no part of the greeting has any", () => {
+      // Such a graph is shown perfectly by the plain preview, and this one
+      // would only wrap it in a stray paragraph.
+      const graph = seedGraph();
+      const flat = patchNode(graph, "greeting", { html: "", view: "plain" } as Partial<WelcomeNode>);
+      expect(previewMarkup(flat, SUBJECT)).toBeNull();
+      expect(previewText(flat, SUBJECT)).toContain("House rules");
     });
   });
 });

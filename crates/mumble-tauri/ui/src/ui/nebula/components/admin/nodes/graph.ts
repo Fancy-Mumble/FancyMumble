@@ -13,6 +13,8 @@
  * be *saved* is a separate question, and one only a dialect can answer.
  */
 
+import type { Annotation } from "./annotate";
+
 /** A node's identity. Opaque; only equality is ever asked of it. */
 export type NodeId = string;
 
@@ -25,6 +27,18 @@ export interface GraphNode {
   readonly kind: string;
   x: number;
   y: number;
+  /**
+   * How big the operator dragged it, where their dialect lets them.
+   *
+   * Absent, or zero, means "whatever this kind's default is" - which is the
+   * answer for every node nobody has resized, and for every dialect that does
+   * not offer resizing at all. A nominal default is deliberately not written
+   * here: the default belongs to the spec that draws the node and differs per
+   * kind, so freezing one into the shape would freeze somebody else's layout
+   * decision into every stored document.
+   */
+  w?: number;
+  h?: number;
 }
 
 export interface Edge {
@@ -44,6 +58,14 @@ export interface NodeGraph<N extends GraphNode> {
   readonly edges: readonly Edge[];
   /** Off means the graph does nothing, without losing what was drawn. */
   readonly enabled: boolean;
+  /**
+   * What the operator wrote *about* the drawing: titles, notes, frames.
+   *
+   * A second layer over the same canvas rather than more kinds of node - see
+   * `annotate.ts`. Optional, because a dialect that does not offer it, and a
+   * document written before it existed, both simply have none.
+   */
+  readonly annotations?: readonly Annotation[];
 }
 
 /** The default output name, for the many nodes that have exactly one. */

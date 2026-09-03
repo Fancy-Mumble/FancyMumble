@@ -19,6 +19,8 @@ interface NodeCardProps<N extends GraphNode> {
   readonly onPatch: (patch: Partial<N>) => void;
   readonly onRemove: () => void;
   readonly onDragStart: (event: ReactPointerEvent) => void;
+  /** Present only where the dialect says this node may be dragged bigger. */
+  readonly onResizeStart?: (event: ReactPointerEvent) => void;
   readonly registerPort: RegisterPort;
   readonly onPortDown: PortDown;
 }
@@ -38,6 +40,7 @@ export function NodeCard<N extends GraphNode>({
   onPatch,
   onRemove,
   onDragStart,
+  onResizeStart,
   registerPort,
   onPortDown,
 }: NodeCardProps<N>) {
@@ -56,6 +59,7 @@ export function NodeCard<N extends GraphNode>({
         sx={(theme) => {
           const { nebula } = theme.palette;
           return {
+            position: "relative",
             borderRadius: radius("md"),
             // Opaque, not the bare `card` alpha: nodes overlap constantly on a
             // canvas, and a 10% surface over another node showed that node
@@ -141,6 +145,31 @@ export function NodeCard<N extends GraphNode>({
         <Box sx={{ px: "10px", py: "9px" }}>
           <Body node={node} graph={graph} onPatch={onPatch} />
         </Box>
+
+        {/* Bottom-right, outside the border, and only where the dialect allows
+            it: the corner is where every other tool puts this, and a handle
+            inside the box would sit on top of whichever field ends there. */}
+        {onResizeStart && (
+          <Box
+            onPointerDown={onResizeStart}
+            aria-label="Resize node"
+            sx={(theme) => ({
+              position: "absolute",
+              right: -4,
+              bottom: -4,
+              width: 12,
+              height: 12,
+              cursor: "nwse-resize",
+              borderRadius: "0 0 3px 0",
+              borderRight: `2px solid ${theme.palette.nebula.line2}`,
+              borderBottom: `2px solid ${theme.palette.nebula.line2}`,
+              "&:hover": {
+                borderRightColor: theme.palette.nebula.accent,
+                borderBottomColor: theme.palette.nebula.accent,
+              },
+            })}
+          />
+        )}
       </Box>
 
       {Attachment && <Attachment node={node} graph={graph} />}

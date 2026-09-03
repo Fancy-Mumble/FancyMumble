@@ -56,30 +56,38 @@ fn base(url: &str) -> Result<String, String> {
 }
 
 /// Turn a response into its body, or into the operator API's own message.
-async fn body(response: reqwest::Response) -> Result<String, String> {
+///
+/// `url` is named in the error only when the answer did not come from the
+/// operator API, and that distinction is the whole point of carrying it here.
+/// Starling refuses with `{"error": "..."}` and those messages are the only
+/// part an operator can act on - "tagline is longer than 120 characters" needs
+/// no address attached. Anything else answered instead of Starling: a reverse
+/// proxy with no route to it replies with its own 404 (Traefik's is the bare
+/// text `404 page not found`), and "404 page not found" with no address is a
+/// message an operator cannot begin to act on. Which address was called is
+/// then the entire diagnosis.
+async fn body(response: reqwest::Response, url: &str) -> Result<String, String> {
     let status = response.status();
     let text = response.text().await.unwrap_or_default();
     if status.is_success() {
         return Ok(text);
     }
-    // `{"error": "..."}` when the operator API refused; the raw body otherwise,
-    // which is what a reverse proxy in front of it would send.
-    let message = serde_json::from_str::<serde_json::Value>(&text)
+    let refused = serde_json::from_str::<serde_json::Value>(&text)
         .ok()
         .and_then(|value| {
             value
                 .get("error")
                 .and_then(serde_json::Value::as_str)
                 .map(ToOwned::to_owned)
-        })
-        .unwrap_or_else(|| {
-            if text.trim().is_empty() {
-                format!("HTTP {status}")
-            } else {
-                text.clone()
-            }
         });
-    Err(message)
+    Err(match refused {
+        Some(message) => message,
+        None if text.trim().is_empty() => format!("HTTP {status} from {url}"),
+        None => format!(
+            "{} — from {url}, which is not the operator API",
+            text.trim()
+        ),
+    })
 }
 
 async fn get_json(url: &str, token: &str) -> Result<serde_json::Value, String> {
@@ -89,7 +97,7 @@ async fn get_json(url: &str, token: &str) -> Result<serde_json::Value, String> {
         .send()
         .await
         .map_err(|error| format!("request failed: {error}"))?;
-    let text = body(response).await?;
+    let text = body(response, url).await?;
     serde_json::from_str(&text).map_err(|error| format!("the answer was not JSON: {error}"))
 }
 
@@ -113,14 +121,50 @@ pub(crate) async fn livery_set(
     token: String,
     patch: serde_json::Value,
 ) -> Result<(), String> {
+    let url = format!("{}/v1/livery", base(&base_url)?);
     let response = client()?
-        .post(format!("{}/v1/livery", base(&base_url)?))
+        .post(&url)
         .bearer_auth(&token)
         .json(&patch)
         .send()
         .await
         .map_err(|error| format!("request failed: {error}"))?;
-    body(response).await.map(|_| ())
+    body(response, &url).await.map(|_| ())
+}
+
+/// The welcome graph an operator drew.
+///
+/// Beside livery because it is the same journey: a nested document the
+/// control channel does not carry, reached with a short-lived ticket minted
+/// from the session this client already holds.
+#[tauri::command]
+pub(crate) async fn greeting_get(
+    base_url: String,
+    token: String,
+) -> Result<serde_json::Value, String> {
+    get_json(&format!("{}/v1/greeting", base(&base_url)?), &token).await
+}
+
+/// Replace the graph.
+///
+/// The whole document, unlike livery's field-wise patch: a graph is nodes and
+/// the wires between them, and merging two halves of one drawing produces
+/// wires with no nodes on their ends.
+#[tauri::command]
+pub(crate) async fn greeting_set(
+    base_url: String,
+    token: String,
+    graph: serde_json::Value,
+) -> Result<(), String> {
+    let url = format!("{}/v1/greeting", base(&base_url)?);
+    let response = client()?
+        .post(&url)
+        .bearer_auth(&token)
+        .json(&graph)
+        .send()
+        .await
+        .map_err(|error| format!("request failed: {error}"))?;
+    body(response, &url).await.map(|_| ())
 }
 
 /// What a client on `mode` will actually paint, after the contrast clamp.
@@ -146,18 +190,15 @@ pub(crate) async fn livery_upload_image(
     which: String,
     bytes: Vec<u8>,
 ) -> Result<(), String> {
+    let url = format!("{}/v1/livery/{}", base(&base_url)?, image_path(&which)?);
     let response = client()?
-        .put(format!(
-            "{}/v1/livery/{}",
-            base(&base_url)?,
-            image_path(&which)?
-        ))
+        .put(&url)
         .bearer_auth(&token)
         .body(bytes)
         .send()
         .await
         .map_err(|error| format!("request failed: {error}"))?;
-    body(response).await.map(|_| ())
+    body(response, &url).await.map(|_| ())
 }
 
 /// Remove an image and clear the key pointing at it.
@@ -167,17 +208,14 @@ pub(crate) async fn livery_clear_image(
     token: String,
     which: String,
 ) -> Result<(), String> {
+    let url = format!("{}/v1/livery/{}", base(&base_url)?, image_path(&which)?);
     let response = client()?
-        .delete(format!(
-            "{}/v1/livery/{}",
-            base(&base_url)?,
-            image_path(&which)?
-        ))
+        .delete(&url)
         .bearer_auth(&token)
         .send()
         .await
         .map_err(|error| format!("request failed: {error}"))?;
-    body(response).await.map(|_| ())
+    body(response, &url).await.map(|_| ())
 }
 
 /// An image as a `data:` URI, or `None` when none is set.
@@ -193,12 +231,9 @@ pub(crate) async fn livery_image_data_uri(
 ) -> Result<Option<String>, String> {
     use base64::Engine as _;
 
+    let url = format!("{}/v1/livery/{}", base(&base_url)?, image_path(&which)?);
     let response = client()?
-        .get(format!(
-            "{}/v1/livery/{}",
-            base(&base_url)?,
-            image_path(&which)?
-        ))
+        .get(&url)
         .bearer_auth(&token)
         .send()
         .await
@@ -210,7 +245,7 @@ pub(crate) async fn livery_image_data_uri(
         return Ok(None);
     }
     if !response.status().is_success() {
-        return Err(body(response)
+        return Err(body(response, &url)
             .await
             .err()
             .unwrap_or_else(|| "the operator API answered with an unexpected success".to_owned()));

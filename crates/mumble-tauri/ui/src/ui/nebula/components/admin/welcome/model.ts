@@ -23,6 +23,18 @@ import {
   type Wiring,
 } from "../nodes/graph";
 import type { GraphStatus } from "../nodes/spec";
+import { MAX_BODY, composeMarkup, composePlain, escapeHtml, paragraphsOf, plainTextOf } from "./markup";
+import {
+  isWebUrl,
+  makeSection,
+  markupOfScreen,
+  plainOfScreen,
+  screenSpeaks,
+  urlsOf,
+  type Section,
+} from "./layout";
+import { legacyMarkupOfScreen } from "./qtHtml";
+import { designProblems, type Design } from "./design";
 
 /**
  * The identity, the wire and the graph are the engine's, not this file's.
@@ -33,9 +45,54 @@ import type { GraphStatus } from "../nodes/spec";
  */
 export type { Edge, NodeId } from "../nodes/graph";
 export type { GraphStatus } from "../nodes/spec";
+export { MAX_BODY, paragraphsOf, plainTextOf } from "./markup";
+export {
+  ALIGNMENTS,
+  BAND_TONES,
+  PICTURES,
+  SECTION_FIELDS,
+  SECTION_KINDS,
+  SECTION_LABELS,
+  ALIGNABLE,
+  TONEABLE,
+  isWebUrl,
+  makeSection,
+  markupOfScreen,
+  plainOfScreen,
+  screenSpeaks,
+  urlsOf,
+  type Align,
+  type BandTone,
+  type Picture,
+  type Section,
+  type SectionKind,
+} from "./layout";
+export { hexColours, legacyMarkupOfScreen, qtSafe, qtStyle, qtViolations } from "./qtHtml";
+export * from "./design";
+export { assemble, compileAll, compileTarget, rowsOf, type Part } from "./compile";
+export {
+  ANNOTATION_SIZES,
+  addAnnotation,
+  annotationsOf,
+  makeAnnotation,
+  patchAnnotation,
+  removeAnnotation,
+  type Annotation,
+  type AnnotationKind,
+} from "../nodes/annotate";
 
 /** The comparisons a version condition offers. */
 export type VersionOp = "<" | "<=" | "=" | ">=" | ">";
+
+/**
+ * The same comparisons, plus the one only the fork's own version has.
+ *
+ * `any` is true of every build of the fork's client and of nothing else, and it
+ * is the op the node mostly wants: "is this one of ours" is the question, and
+ * spelling it `>= 0.0.0` reads like a comparison that happens to be vacuous.
+ */
+export const FANCY_OPS = ["any", "<", "<=", "=", ">=", ">"] as const;
+export type FancyOp = (typeof FANCY_OPS)[number];
 
 /** How long someone has been on the server, as the mock words it. */
 export type TenureOp = "less" | "more";
@@ -77,13 +134,67 @@ export type GateKind = (typeof GATE_KINDS)[number];
  */
 export type UnknownAs = "yes" | "no";
 
-/** Which port on a node a wire lands on. */
-export type PortId = "a" | "b" | "when" | "plus";
+/**
+ * Which port on a node a wire lands on.
+ *
+ * The four fixed ones, plus `in:<name>` for every input a design declares.
+ * A string rather than a closed union because a design block's ports are its
+ * *signature*: an operator adds an input, and a port appears. Nothing else in
+ * the dialect has ports that depend on what is written inside the node.
+ */
+export type PortId = string;
+
+/** The fixed ports, for the places that name one. */
+export const PORT = { a: "a", b: "b", when: "when", plus: "plus" } as const;
+
+/** The port a design input is wired to. */
+export const inputPort = (name: string): PortId => `in:${name}`;
+
+/** The input a port names, or null for one of the fixed four. */
+export function inputOfPort(port: PortId): string | null {
+  return port.startsWith("in:") ? port.slice(3) : null;
+}
+
+/**
+ * How a message node is being written.
+ *
+ * A property of the *editing*, not of the greeting: what goes on the wire is
+ * the markup half and the plain half, and this only says which field the
+ * operator is looking at. It is reconstructed on load from whether the node
+ * arrived with markup, so it costs the wire format nothing.
+ *
+ * `plain` is a node with no markup at all - the text nodes this editor had
+ * before, and still the right answer for one line of prose. `rich` is the
+ * WYSIWYG. `source` is the markup itself, which is not a power-user
+ * affordance: an editor is a schema, and a document it has no node for comes
+ * back out of it *smaller*, so a welcome text written by hand years ago has to
+ * be editable as what it is.
+ *
+ * `screen` is the fourth, and the only one that is not about markup at all: the
+ * greeting is built from bands - a hero, a button, a row of links - which the
+ * client draws in its own type scale. See `layout.ts`. A screen still carries
+ * the markup and plain halves, generated from its bands, because that is what
+ * every client that has never heard of a band will show.
+ *
+ * `legacy` is the same bands compiled for Mumble 1.5 and older, which draw a
+ * greeting with Qt and render a subset of HTML 4 - no flexbox, no grid, no
+ * rounded corners, and layout done with tables. See `qtHtml.ts`. It is a
+ * separate view rather than a switch on the compiler because the two are
+ * different *greetings*: an operator writes one for the old clients, wires it
+ * behind a version condition, and the modern one behind the other half.
+ */
+export type BodyView = "plain" | "rich" | "source" | "screen" | "legacy" | "design";
 
 interface Positioned {
   readonly id: NodeId;
   x: number;
   y: number;
+  /**
+   * How big the operator dragged it. Zero, or absent, means the default for
+   * the kind - which is what every node nobody has resized has.
+   */
+  w?: number;
+  h?: number;
 }
 
 export type WelcomeNode = Positioned &
@@ -91,14 +202,88 @@ export type WelcomeNode = Positioned &
     | { kind: "country"; codes: string[] }
     | { kind: "tenure"; op: TenureOp; window: TenureWindow }
     | { kind: "clientVersion"; op: VersionOp; version: string }
+    | { kind: "fancyVersion"; op: FancyOp; version: string }
     | { kind: "account"; state: AccountState }
     | { kind: "group"; group: string }
     | { kind: "os"; os: OsChoice }
     | { kind: "gate"; gate: GateKind }
     | { kind: "filter"; unknownAs: UnknownAs }
-    | { kind: "text"; name: string; body: string }
-    | { kind: "greeting"; body: string; once: boolean }
+    | { kind: "text"; name: string; body: string; html: string; view: BodyView }
+    | {
+        kind: "greeting";
+        body: string;
+        once: boolean;
+        html: string;
+        view: BodyView;
+        /** The bands, when this greeting is built as a screen. */
+        sections: Section[];
+        /**
+         * The design, when this greeting is one.
+         *
+         * Absent for every greeting written as prose, which is most of them -
+         * so a graph that never used a design reads exactly as it did before
+         * designs existed.
+         */
+        design?: Design;
+      }
   );
+
+/** The two kinds somebody writes prose into. */
+export type MessageNode = Extract<WelcomeNode, { kind: "text" | "greeting" }>;
+
+/** The one that can be a whole welcome screen. Bands live only here. */
+export type GreetingNode = Extract<WelcomeNode, { kind: "greeting" }>;
+
+export function isMessage(node: WelcomeNode): node is MessageNode {
+  return node.kind === "text" || node.kind === "greeting";
+}
+
+/**
+ * The markup half this node puts on the wire.
+ *
+ * Empty for a plain node even when it still holds markup from before somebody
+ * switched it: the node on screen shows plain text, and a node that showed one
+ * thing and sent another would be the worst kind of bug to find - visible only
+ * to the people arriving. Switching back within the session gets the markup
+ * again, because it was kept; saving as plain is what discards it.
+ */
+export function markupOf(node: WelcomeNode): string {
+  return isMessage(node) && node.view !== "plain" ? node.html : "";
+}
+
+/** Whether this greeting is built from bands, in either dialect. */
+export function isScreen(node: WelcomeNode): boolean {
+  return node.kind === "greeting" && (node.view === "screen" || node.view === "legacy");
+}
+
+/** The bands this greeting is built from, and none for every other node. */
+export function sectionsOf(node: WelcomeNode): readonly Section[] {
+  return node.kind === "greeting" && isScreen(node) ? node.sections : [];
+}
+
+/** Whether this greeting's markup is written for Qt rather than for a browser. */
+export function isLegacy(node: WelcomeNode): boolean {
+  return node.kind === "greeting" && node.view === "legacy";
+}
+
+/**
+ * The patch that sets a screen's bands, and the two prose halves with them.
+ *
+ * The same invariant `writeMarkup` keeps, one level up: all three
+ * representations of a greeting are written together, always, so a client that
+ * understands bands and one that does not are never shown different greetings.
+ */
+export function writeSections(sections: Section[], view: BodyView = "screen"): Partial<GreetingNode> {
+  return {
+    sections,
+    // The dialect the bands compile into is the whole difference between the
+    // two views, and it is decided here rather than at each call site: a
+    // screen edited in the legacy view that saved modern markup would look
+    // right in this editor and collapse on every client it was written for.
+    html: view === "legacy" ? legacyMarkupOfScreen(sections) : markupOfScreen(sections),
+    body: plainOfScreen(sections),
+  };
+}
 
 export type NodeKind = WelcomeNode["kind"];
 
@@ -108,7 +293,15 @@ export type WelcomeGraph = NodeGraph<WelcomeNode>;
 /* -- Shape ---------------------------------------------------------------- */
 
 /** The kinds that answer a yes/no question about the person arriving. */
-const CONDITION_KINDS: readonly NodeKind[] = ["country", "tenure", "clientVersion", "account", "group", "os"];
+const CONDITION_KINDS: readonly NodeKind[] = [
+  "country",
+  "tenure",
+  "clientVersion",
+  "fancyVersion",
+  "account",
+  "group",
+  "os",
+];
 
 export function isCondition(node: WelcomeNode): boolean {
   return CONDITION_KINDS.includes(node.kind);
@@ -118,8 +311,32 @@ export function isCondition(node: WelcomeNode): boolean {
 export function inputsOf(node: WelcomeNode): readonly PortId[] {
   if (node.kind === "gate") return node.gate === "not" ? ["a"] : ["a", "b"];
   if (node.kind === "filter") return ["a"];
-  if (node.kind === "greeting") return ["when", "plus"];
-  return [];
+  if (node.kind !== "greeting") return [];
+  // A design's ports are its signature: one per declared input, in the order
+  // the design declares them, so the node reads top to bottom as the design's
+  // own list does. `plus` stays for a greeting written as prose - a design has
+  // slots instead, which is the same idea with a name and a position.
+  const design = node.design;
+  if (!design) return ["when", "plus"];
+  return [
+    "when",
+    ...design.slots.map((input) => inputPort(input.name)),
+    ...design.conditions.map((input) => inputPort(input.name)),
+  ];
+}
+
+/** Whether this greeting is built in the design editor. */
+export function isDesign(node: WelcomeNode): boolean {
+  return node.kind === "greeting" && node.view === "design" && node.design !== undefined;
+}
+
+/** What an input port takes: prose, or a settled yes/no. */
+export function inputKindOf(node: WelcomeNode, port: PortId): "text" | "bool" | null {
+  const name = inputOfPort(port);
+  if (name === null || node.kind !== "greeting" || !node.design) return null;
+  if (node.design.slots.some((input) => input.name === name)) return "text";
+  if (node.design.conditions.some((input) => input.name === name)) return "bool";
+  return null;
 }
 
 /** Whether a node has an output at all. The greeting is the one that does not. */
@@ -143,9 +360,20 @@ export const welcomeWiring: Wiring<WelcomeNode> = {
   // snippets. Every other port holds exactly one wire and replaces it.
   multi: (_node, port) => port === OUT || port === "plus",
   accepts: (source, target, port) => {
+    const isText = source.kind === "text";
+
+    // A design's own ports, which are typed: a slot takes prose and a
+    // condition takes a settled yes or no. Same rule as a gate's inputs, and
+    // for the same reason - an undecided answer driving a visibility toggle
+    // hides a block for reasons nobody can see.
+    const input = inputKindOf(target, port);
+    if (input === "text") return isText;
+    if (input === "bool") return source.kind === "gate" || source.kind === "filter";
+    // A wire onto an input the design no longer declares lands nowhere.
+    if (inputOfPort(port) !== null) return false;
+
     // Text is prose appended to a greeting, never a truth value; the `plus`
     // port takes nothing else.
-    const isText = source.kind === "text";
     if (port === "plus") return isText;
     if (isText) return false;
 
@@ -190,6 +418,11 @@ export function makeNode(kind: NodeKind, x: number, y: number): WelcomeNode {
       return { id, x, y, kind, op: "less", window: "1 month" };
     case "clientVersion":
       return { id, x, y, kind, op: "<", version: "1.5.0" };
+    case "fancyVersion":
+      // `any` rather than a comparison, because a fresh node then already says
+      // something true - "anybody on our client" - instead of naming a release
+      // the operator has to correct before the node means anything.
+      return { id, x, y, kind, op: "any", version: "" };
     case "account":
       return { id, x, y, kind, state: "guest" };
     case "group":
@@ -201,10 +434,60 @@ export function makeNode(kind: NodeKind, x: number, y: number): WelcomeNode {
     case "filter":
       return { id, x, y, kind, unknownAs: "no" };
     case "text":
-      return { id, x, y, kind, name: "", body: "" };
+      return { id, x, y, kind, name: "", body: "", html: "", view: "plain" };
     case "greeting":
-      return { id, x, y, kind, body: "", once: true };
+      return { id, x, y, kind, body: "", once: true, html: "", view: "plain", sections: [] };
   }
+}
+
+/**
+ * The patch that sets a message node's markup, plain half and all.
+ *
+ * One function rather than two `onPatch` calls at each of the three call sites,
+ * because the invariant is the point: the plain half is *derived* from the
+ * markup, always, while the node is being written in the editor. An operator
+ * who formats a paragraph and leaves the plain field on last week's wording has
+ * published two different greetings and can only see one of them.
+ */
+export function writeMarkup(html: string): Partial<MessageNode> {
+  return { html, body: plainTextOf(html) };
+}
+
+/**
+ * The patch that moves a node between the three views.
+ *
+ * Switching from plain seeds the markup from what was typed, so nothing is lost
+ * by pressing the button; switching to plain keeps the markup but stops sending
+ * it, so nothing is lost by pressing it back. Neither direction asks the
+ * operator to confirm anything, because neither direction throws anything away.
+ */
+export function switchView<N extends MessageNode>(node: N, view: BodyView): Partial<N> {
+  if (view === node.view) return {} as Partial<N>;
+  if (view === "screen" || view === "legacy") {
+    if (node.kind !== "greeting") return {};
+    // Narrowed once, here: the caller has a greeting or it has nothing, and
+    // every field written below belongs to a greeting.
+    const patch = (fields: Partial<GreetingNode>) => fields as Partial<N>;
+    // An existing paragraph becomes the screen's first prose band rather than
+    // being thrown away: switching to a screen means "lay this out", not
+    // "start again".
+    const carried: Section[] =
+      node.sections.length > 0
+        ? node.sections
+        : [
+            makeSection("hero"),
+            ...(node.html.trim() === ""
+              ? [makeSection("prose")]
+              : [{ ...makeSection("prose"), html: node.html }]),
+          ];
+    return patch({ view, ...writeSections(carried, view) });
+  }
+  if (view === "plain") return { view } as Partial<N>;
+  // A node that has never held markup starts from its own words rather than
+  // from an empty editor: an operator switching a written paragraph to rich
+  // text means "format this", not "start again".
+  const html = node.html.trim() === "" ? paragraphsOf(node.body) : node.html;
+  return { view, html, body: plainTextOf(html) } as Partial<N>;
 }
 
 /* -- Reading the graph back in words -------------------------------------- */
@@ -218,6 +501,8 @@ function phrase(node: WelcomeNode): string {
       return `joined ${node.op === "less" ? "less" : "more"} than ${node.window} ago`;
     case "clientVersion":
       return `version ${node.op} ${node.version}`;
+    case "fancyVersion":
+      return node.op === "any" ? "on the Fancy client" : `Fancy version ${node.op} ${node.version}`;
     case "account":
       return `account is ${node.state}`;
     case "group":
@@ -268,30 +553,53 @@ function expressionOf(graph: WelcomeGraph, id: NodeId): string | null {
   return `(${left} ${node.gate} ${right})`;
 }
 
-/** The greeting node, of which a graph has exactly one. */
+/**
+ * Every greeting on the canvas, in the order the server considers them.
+ *
+ * Node order, and that is not an implementation detail leaking out: the server
+ * walks the stored nodes and shows the first definite match, so where a
+ * greeting sits in this list is what decides who sees it when two of them
+ * could. See `conflictsIn` in the solver beside this.
+ */
+export function greetingsOf(graph: WelcomeGraph): MessageNode[] {
+  return graph.nodes.filter((node): node is MessageNode => node.kind === "greeting");
+}
+
+/**
+ * The first greeting, for the places that speak about the graph as a whole.
+ *
+ * A graph may hold several. Anything that is *about* one of them - its
+ * preview, its condition, its snippets - takes an id instead, because a page
+ * that showed the first greeting's text under every greeting node is the bug
+ * this signature used to cause.
+ */
 export function greetingOf(graph: WelcomeGraph): WelcomeNode | undefined {
   return graph.nodes.find((n) => n.kind === "greeting");
 }
 
 /**
- * The whole rule in one line, for the status bar.
+ * One greeting's condition in one line.
  *
- * `null` when nothing is wired to the greeting - the bar then says what is
- * missing rather than printing an empty condition, because "shows when" with
- * nothing after it reads as "shows always", which is the opposite.
+ * `null` when nothing is wired to it - the bar then says what is missing
+ * rather than printing an empty condition, because "shows when" with nothing
+ * after it reads as "shows always", which is the opposite.
  */
-export function describe(graph: WelcomeGraph): string | null {
-  const greeting = greetingOf(graph);
-  if (!greeting) return null;
-  return expressionAt(graph, greeting.id, "when");
+export function describeGreeting(graph: WelcomeGraph, greeting: NodeId): string | null {
+  return expressionAt(graph, greeting, "when");
 }
 
-/** The snippets wired into the greeting's `plus` port, in wiring order. */
-export function snippetsOf(graph: WelcomeGraph): WelcomeNode[] {
+/** The first greeting's condition, for the places that speak about the graph. */
+export function describe(graph: WelcomeGraph): string | null {
   const greeting = greetingOf(graph);
-  if (!greeting) return [];
+  return greeting ? describeGreeting(graph, greeting.id) : null;
+}
+
+/** The snippets wired into a greeting's `plus` port, in wiring order. */
+export function snippetsOf(graph: WelcomeGraph, greeting?: NodeId): WelcomeNode[] {
+  const id = greeting ?? greetingOf(graph)?.id;
+  if (id === undefined) return [];
   return graph.edges
-    .filter((e) => e.to === greeting.id && e.port === "plus")
+    .filter((e) => e.to === id && e.port === "plus")
     .map((e) => graph.nodes.find((n) => n.id === e.from))
     .filter((n): n is WelcomeNode => n?.kind === "text");
 }
@@ -334,7 +642,20 @@ export function graphStatus(graph: WelcomeGraph): GraphStatus {
     problems.push("No greeting node - add one to say what people see.");
     return { complete: false, problems };
   }
-  if (greeting.kind === "greeting" && greeting.body.trim() === "") {
+  if (greeting.kind === "greeting" && greeting.design && greeting.view === "design") {
+    problems.push(...designProblems(greeting.design));
+  } else if (greeting.kind === "greeting" && isScreen(greeting)) {
+    // A screen of nothing but dividers has a body - the generated markup is a
+    // row of rules - so "is the body empty" is the wrong question to ask of it.
+    if (!screenSpeaks(greeting.sections)) {
+      problems.push("The welcome screen has no bands with anything in them.");
+    }
+    for (const url of urlsOf(greeting.sections)) {
+      if (url !== "" && !isWebUrl(url)) {
+        problems.push(`A link on the welcome screen is not http:// or https://: ${url}`);
+      }
+    }
+  } else if (greeting.kind === "greeting" && greeting.body.trim() === "") {
     problems.push("The greeting has no text.");
   }
   if (!graph.edges.some((e) => e.to === greeting.id && e.port === "when")) {
@@ -345,6 +666,9 @@ export function graphStatus(graph: WelcomeGraph): GraphStatus {
     for (const port of inputsOf(node)) {
       // `plus` is optional by design: a greeting with no snippets is ordinary.
       if (port === "plus") continue;
+      // A design's inputs are named in the design's own problems, with more to
+      // say than "empty input" - which of them, and what uses it.
+      if (inputOfPort(port) !== null) continue;
       if (!graph.edges.some((e) => e.to === node.id && e.port === port)) {
         problems.push(`${labelOf(node)} has an empty ${port.toUpperCase()} input.`);
       }
@@ -357,6 +681,15 @@ export function graphStatus(graph: WelcomeGraph): GraphStatus {
     }
     if (node.kind === "text" && node.body.trim() === "") {
       problems.push("A reusable text node is empty.");
+    }
+    // Checked against the server's own cap rather than left to the save: the
+    // server refuses the *whole document* for one over-long body, and an
+    // operator staring at a rejected graph of forty nodes has no way to tell
+    // which one it was.
+    for (const half of [markupOf(node), isMessage(node) ? node.body : ""]) {
+      if ([...half].length > MAX_BODY) {
+        problems.push(`${labelOf(node)} is ${[...half].length} characters; the server takes ${MAX_BODY}.`);
+      }
     }
   }
 
@@ -372,6 +705,8 @@ export function labelOf(node: WelcomeNode): string {
       return "ON SERVER SINCE";
     case "clientVersion":
       return "CLIENT VERSION";
+    case "fancyVersion":
+      return "FANCY VERSION";
     case "account":
       return "ACCOUNT";
     case "group":
@@ -396,6 +731,34 @@ export interface PreviewSubject {
   readonly name: string;
   readonly channel: string;
   readonly server: string;
+  /**
+   * Whether this server will send the markup half at all.
+   *
+   * Its `allow_html` setting, and the preview needs it: a server with the
+   * setting off sends the plain form, because a client that cannot render tags
+   * prints them and a greeting full of `<p>` reads as a broken server. A
+   * preview that showed headings regardless would be showing a document
+   * nobody receives.
+   */
+  readonly allowHtml: boolean;
+  /**
+   * The server's own artwork, for the bands that draw it.
+   *
+   * Object URLs the client already fetched and verified, never a URL a server
+   * chose - the same pictures every member of this server already has, which
+   * is why an `image` band costs the greeting document nothing.
+   */
+  readonly icon?: string | null;
+  readonly banner?: string | null;
+}
+
+/** One greeting's parts, in the order the server assembles them. */
+function partsOf(graph: WelcomeGraph, greeting?: NodeId): MessageNode[] {
+  const id = greeting ?? greetingOf(graph)?.id;
+  if (id === undefined) return [];
+  const node = graph.nodes.find((candidate) => candidate.id === id);
+  if (!node || node.kind !== "greeting") return [];
+  return [node, ...snippetsOf(graph, id).filter((part): part is MessageNode => part.kind === "text")];
 }
 
 /**
@@ -405,15 +768,44 @@ export interface PreviewSubject {
  * carries - one body, assembled server-side - and a preview that composed them
  * some other way would be showing something nobody will ever receive.
  */
-export function previewText(graph: WelcomeGraph, subject: PreviewSubject): string {
-  const greeting = greetingOf(graph);
-  if (!greeting || greeting.kind !== "greeting") return "";
-  const parts = [greeting.body, ...snippetsOf(graph).map((s) => (s.kind === "text" ? s.body : ""))];
-  return parts
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join(" ")
-    .replaceAll("{name}", subject.name)
-    .replaceAll("{channel}", subject.channel)
-    .replaceAll("{server}", subject.server);
+export function previewText(graph: WelcomeGraph, subject: PreviewSubject, greeting?: NodeId): string {
+  return fill(composePlain(partsOf(graph, greeting).map((node) => node.body)), subject, false);
+}
+
+/**
+ * The same greeting as markup, for a server that will send the markup half.
+ *
+ * Assembled by the server's own rule: each part contributes its markup where
+ * it has any and its plain text otherwise, and the parts are joined with
+ * nothing between them because each is a block that closes itself. A node
+ * mid-way through being written contributes what it has, so the preview keeps
+ * up with the typing rather than emptying out.
+ *
+ * `null` when no part carries markup at all, which is a graph the plain preview
+ * shows perfectly well and this one would only wrap in a stray paragraph.
+ */
+export function previewMarkup(
+  graph: WelcomeGraph,
+  subject: PreviewSubject,
+  greeting?: NodeId,
+): string | null {
+  const parts = partsOf(graph, greeting);
+  if (!parts.some((node) => markupOf(node) !== "")) return null;
+  const composed = composeMarkup(parts.map((node) => markupOf(node) || paragraphsOf(node.body)));
+  return fill(composed, subject, true);
+}
+
+/**
+ * The placeholders filled in, escaped where they are going into markup.
+ *
+ * A member's own name is text they chose, and putting it into a document
+ * without escaping it is the plainest injection there is - a display name of
+ * `<script>` would otherwise be one.
+ */
+function fill(text: string, subject: PreviewSubject, markup: boolean): string {
+  const value = (raw: string) => (markup ? escapeHtml(raw) : raw);
+  return text
+    .replaceAll("{name}", value(subject.name))
+    .replaceAll("{channel}", value(subject.channel))
+    .replaceAll("{server}", value(subject.server));
 }

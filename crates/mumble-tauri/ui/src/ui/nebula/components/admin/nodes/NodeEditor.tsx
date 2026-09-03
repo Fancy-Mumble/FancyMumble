@@ -4,9 +4,12 @@ import { radius } from "../../../tokens";
 import { Stack } from "../../primitives";
 import { MiniSwitch, SearchField } from "./controls";
 import { BrowsePanel } from "./BrowsePanel";
+import { TemplatePanel } from "./TemplatePanel";
 import { NodeCanvas } from "./NodeCanvas";
 import { useFavorites } from "./useFavorites";
 import { useBlockCarry, type CanvasDrop, type Carry } from "./useBlockCarry";
+import { insertFragment, type CanvasInsert, type GraphTemplate } from "./templates";
+import type { History } from "./useGraphHistory";
 import type { GraphNode, NodeGraph } from "./graph";
 import type { BlockDef, NodeSpec, Tone } from "./spec";
 
@@ -23,6 +26,14 @@ interface NodeEditorProps<N extends GraphNode> {
   /** The buttons at the far end of the footer. */
   readonly actions?: ReactNode;
   readonly onReset?: () => void;
+  /**
+   * Where the page keeps its undo history, if it keeps one.
+   *
+   * Optional because the history has to live *above* the editor - it is the
+   * page that owns the graph - and a page that has not adopted one should get
+   * an editor that simply has no undo rather than a broken one.
+   */
+  readonly history?: Pick<History<unknown>, "undo" | "redo" | "canUndo" | "canRedo">;
   /** Blocks starred for an operator who has never starred anything. */
   readonly suggested?: readonly string[];
 }
@@ -54,15 +65,27 @@ export function NodeEditor<N extends GraphNode>({
   actions,
   onReset,
   suggested,
+  history,
 }: NodeEditorProps<N>) {
   const status = spec.status(graph);
-  const [browsing, setBrowsing] = useState(false);
+  /**
+   * Which drawer is open, if either.
+   *
+   * One at a time rather than two toggles: both are tall, both push the canvas
+   * down, and an operator who has opened the gallery is not simultaneously
+   * hunting for an XNOR gate.
+   */
+  const [drawer, setDrawer] = useState<"blocks" | "templates" | null>(null);
+  const browsing = drawer === "blocks";
   const [query, setQuery] = useState("");
   const [starredOnly, setStarredOnly] = useState(false);
   const { favorites, toggle } = useFavorites(spec.id, suggested);
   // Filled in by whichever canvas is on screen, and null while the page is
   // showing its other view - so a block carried over prose lands nowhere.
   const dropRef = useRef<CanvasDrop<N> | null>(null);
+  // Likewise null while the page is showing its other view, which is what
+  // makes a template loaded from the prose view land without a view to fit.
+  const insertRef = useRef<CanvasInsert<N> | null>(null);
   const { carry, start } = useBlockCarry(dropRef);
   // Enabled says what the operator asked for; liveness says whether the drawing
   // can do anything at all. Both have to hold before the badge claims LIVE.
@@ -74,6 +97,21 @@ export function NodeEditor<N extends GraphNode>({
     const x = graph.nodes.reduce((max, node) => Math.max(max, node.x), 0) + 40;
     const y = 34 + (graph.nodes.length % 5) * 34;
     onChange({ ...graph, nodes: [...graph.nodes, block.create(x, y)] });
+  };
+
+  /**
+   * Lay a template down, through the canvas where there is one.
+   *
+   * The canvas selects what arrived and refits the view; without one on screen
+   * - the prose view - the graph is still changed, because the operator asked
+   * for it and switching views to find nothing would be worse.
+   */
+  const useTemplate = (template: GraphTemplate<N>, replace: boolean) => {
+    const fragment = template.build();
+    const canvas = insertRef.current;
+    if (canvas) canvas.insert(fragment, replace);
+    else onChange(insertFragment(graph, fragment, { replace, width: spec.width }).graph);
+    setDrawer(null);
   };
 
   return (
@@ -88,49 +126,27 @@ export function NodeEditor<N extends GraphNode>({
           placeholder={spec.strings.search}
           onChange={(next) => {
             setQuery(next);
-            if (next.trim() !== "") setBrowsing(true);
+            // Typing searches whichever drawer is open, and opens the blocks
+            // one when neither is: that is what most searches are for.
+            if (next.trim() !== "") setDrawer((open) => open ?? "blocks");
           }}
         />
         <Box sx={{ flex: 1, minWidth: 0 }} />
 
-        <Box
-          component="button"
-          type="button"
-          aria-expanded={browsing}
-          onClick={() => setBrowsing((open) => !open)}
-          sx={(theme) => ({
-            all: "unset",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "7px",
-            flex: "none",
-            px: "13px",
-            py: "6px",
-            cursor: "pointer",
-            borderRadius: radius("md"),
-            fontSize: 12,
-            fontWeight: 600,
-            color: theme.palette.nebula.accent,
-            background: browsing ? theme.palette.nebula.accentSoft : "transparent",
-            border: `1px solid ${theme.palette.nebula.accentLine}`,
-            "&:hover": { background: theme.palette.nebula.accentSoft },
-          })}
-        >
-          {spec.strings.browse}
-          <Box
-            component="svg"
-            width={9}
-            height={9}
-            viewBox="0 0 10 10"
-            sx={{
-              fill: "none",
-              transform: browsing ? "rotate(180deg)" : "none",
-              transition: "transform 120ms",
-            }}
-          >
-            <path d="M2 3.5L5 6.5 8 3.5" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" />
-          </Box>
-        </Box>
+        {/* Templates first: it is what an operator opening the page for the
+            first time wants, and the blocks are what they reach for after. */}
+        {spec.templates && (
+          <DrawerButton
+            label={spec.templates.strings.open}
+            open={drawer === "templates"}
+            onClick={() => setDrawer((open) => (open === "templates" ? null : "templates"))}
+          />
+        )}
+        <DrawerButton
+          label={spec.strings.browse}
+          open={browsing}
+          onClick={() => setDrawer((open) => (open === "blocks" ? null : "blocks"))}
+        />
 
         <Tooltip
           title={status.complete ? "" : status.problems.join("\n")}
@@ -155,12 +171,40 @@ export function NodeEditor<N extends GraphNode>({
             {status.complete ? spec.strings.complete : spec.strings.toFix(status.problems.length)}
           </Box>
         </Tooltip>
+        {history && (
+          <Stack direction="row" gap={0.25} sx={{ flex: "none" }}>
+            {/* Buttons as well as the chords: an operator who has just watched
+                a template replace their canvas is not in a mood to guess at a
+                keyboard shortcut. */}
+            <Button size="small" disabled={!history.canUndo} onClick={history.undo} title="Undo (Ctrl+Z)">
+              Undo
+            </Button>
+            <Button
+              size="small"
+              disabled={!history.canRedo}
+              onClick={history.redo}
+              title="Redo (Ctrl+Shift+Z)"
+            >
+              Redo
+            </Button>
+          </Stack>
+        )}
         {onReset && (
           <Button size="small" sx={{ flex: "none" }} onClick={onReset}>
             {spec.strings.reset}
           </Button>
         )}
       </Stack>
+
+      {drawer === "templates" && spec.templates && (
+        <TemplatePanel
+          templates={spec.templates.items}
+          strings={spec.templates.strings}
+          query={query}
+          occupied={graph.nodes.length > 0}
+          onUse={useTemplate}
+        />
+      )}
 
       {browsing && (
         <BrowsePanel
@@ -180,7 +224,17 @@ export function NodeEditor<N extends GraphNode>({
           to the window edge, which is what makes a graph this wide readable
           without scrolling. */}
       <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
-        {view ?? <NodeCanvas graph={graph} spec={spec} onChange={onChange} dropRef={dropRef} />}
+        {view ?? (
+          <NodeCanvas
+            graph={graph}
+            spec={spec}
+            onChange={onChange}
+            dropRef={dropRef}
+            insertRef={insertRef}
+            onUndo={history?.undo}
+            onRedo={history?.redo}
+          />
+        )}
       </Box>
 
       <Stack direction="row" alignItems="center" gap={1.5} sx={{ flex: "none", px: "14px", py: "11px" }}>
@@ -221,6 +275,60 @@ export function NodeEditor<N extends GraphNode>({
 
       {carry && <Ghost carry={carry} />}
     </Stack>
+  );
+}
+
+/**
+ * One of the two drawers, as its button in the bar.
+ *
+ * The same component twice rather than two buttons written out: they sit side
+ * by side, so any drift between them - a different weight, a caret that turns
+ * the other way - reads as one of them being the important one.
+ */
+function DrawerButton({
+  label,
+  open,
+  onClick,
+}: Readonly<{ label: string; open: boolean; onClick: () => void }>) {
+  return (
+    <Box
+      component="button"
+      type="button"
+      aria-expanded={open}
+      onClick={onClick}
+      sx={(theme) => ({
+        all: "unset",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "7px",
+        flex: "none",
+        px: "13px",
+        py: "6px",
+        cursor: "pointer",
+        borderRadius: radius("md"),
+        fontSize: 12,
+        fontWeight: 600,
+        color: theme.palette.nebula.accent,
+        background: open ? theme.palette.nebula.accentSoft : "transparent",
+        border: `1px solid ${theme.palette.nebula.accentLine}`,
+        "&:hover": { background: theme.palette.nebula.accentSoft },
+      })}
+    >
+      {label}
+      <Box
+        component="svg"
+        width={9}
+        height={9}
+        viewBox="0 0 10 10"
+        sx={{
+          fill: "none",
+          transform: open ? "rotate(180deg)" : "none",
+          transition: "transform 120ms",
+        }}
+      >
+        <path d="M2 3.5L5 6.5 8 3.5" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" />
+      </Box>
+    </Box>
   );
 }
 
