@@ -28,7 +28,7 @@
  *    `draw-stroke-snapshot`, so freshly opened popout/overlay windows
  *    start from the current canvas instead of an empty one.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
@@ -341,6 +341,9 @@ const PALETTE = [
 ];
 const DEFAULT_COLOR = PALETTE[0];
 const DEFAULT_WIDTH = 4;
+/** Stroke-width range the toolbar offers, in canvas pixels. */
+const MIN_WIDTH = 2;
+const MAX_WIDTH = 16;
 
 /**
  * Maximum send rate for in-flight stroke updates, in milliseconds.
@@ -395,6 +398,62 @@ export function computeContentRect(
   const w = videoIntrinsicW * scale;
   const h = videoIntrinsicH * scale;
   return { x: (canvasW - w) / 2, y: (canvasH - h) / 2, w, h };
+}
+
+/**
+ * How a media element lays the source out inside its own box.
+ *
+ * Standard's viewport is one fixed `object-fit: contain` picture the size of
+ * the canvas, which is what {@link computeContentRect} assumes. Nebula's stage
+ * lets the viewer switch between contain, cover and 1:1-in-a-scroller, and in
+ * two of the three the source is not where that assumption puts it: `cover`
+ * crops it outward past the canvas edges, `none` leaves it wherever the
+ * scroller has pushed it. Those hosts say which, and the rect gets measured
+ * off the element instead of guessed.
+ */
+export type MediaFit = "contain" | "cover" | "none";
+
+/** The part of a `DOMRect` this file reads - so the helper below is a
+ *  pure function two plain objects can be handed in a test. */
+export interface MediaBox {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * Content rect of a media element, measured against the canvas laid over it.
+ *
+ * The result is in canvas CSS pixels and is allowed to fall outside the
+ * canvas: under `cover` the source really does continue past the viewport,
+ * and under `none` it may be scrolled halfway out of it. Painting clips
+ * whatever lands off-canvas, and the normalised coordinates that go on the
+ * wire stay right for every other viewer's own choice of fit.
+ */
+export function mediaContentRect(
+  media: MediaBox,
+  canvas: MediaBox,
+  intrinsicW: number,
+  intrinsicH: number,
+  fit: MediaFit,
+): ContentRect {
+  if (media.width <= 0 || media.height <= 0 || intrinsicW <= 0 || intrinsicH <= 0) {
+    return { x: 0, y: 0, w: Math.max(canvas.width, 0), h: Math.max(canvas.height, 0) };
+  }
+  const sx = media.width / intrinsicW;
+  const sy = media.height / intrinsicH;
+  // `none` is the source at its own pixels, wherever the box happens to be -
+  // which is exactly what a 1:1 view is, so the scale is simply 1.
+  const scale = fit === "contain" ? Math.min(sx, sy) : fit === "cover" ? Math.max(sx, sy) : 1;
+  const w = intrinsicW * scale;
+  const h = intrinsicH * scale;
+  return {
+    x: media.left - canvas.left + (media.width - w) / 2,
+    y: media.top - canvas.top + (media.height - h) / 2,
+    w,
+    h,
+  };
 }
 
 function renderStroke(
@@ -470,6 +529,44 @@ interface DrawingOverlayProps {
    *  or the native viewer's `<canvas>`; intrinsic dimensions come from
    *  whichever is present. */
   readonly videoRef?: React.RefObject<HTMLVideoElement | HTMLCanvasElement | null>;
+  /**
+   * How the media element scales the source inside its own box. Given, the
+   * content rect is measured off that element (see {@link mediaContentRect})
+   * rather than assumed to be a contain-fitted picture filling the canvas.
+   * Omit it for Standard's fixed viewport, where the assumption holds.
+   */
+  readonly mediaFit?: MediaFit;
+  /**
+   * Draws the colour / width / clear chrome. A pack that wants those tools in
+   * its own visual language passes this; leaving it out keeps Standard's
+   * toolbar. Whatever comes back is mounted inside a `pointer-events: none`
+   * root, so it has to turn pointer events back on for itself.
+   *
+   * Only the chrome is the caller's - the tool *state* stays here, because
+   * the pointer handlers read it and a colour living in two places is a
+   * colour that can disagree with the ink.
+   */
+  readonly renderToolbar?: (tools: DrawingTools) => ReactNode;
+}
+
+/** What a pack-supplied toolbar gets to drive. */
+export interface DrawingTools {
+  /** The colours on offer, as ARGB ints (the wire's own encoding). */
+  readonly palette: readonly number[];
+  readonly color: number;
+  readonly setColor: (argb: number) => void;
+  readonly width: number;
+  readonly setWidth: (px: number) => void;
+  readonly minWidth: number;
+  readonly maxWidth: number;
+  /** Wipes drawings and tells the channel. */
+  readonly clear: () => void;
+  /** True when this client is the broadcaster, and `clear` therefore wipes
+   *  every sender's strokes rather than only its own - the label has to say
+   *  which, because the two are not the same promise. */
+  readonly clearsEveryone: boolean;
+  /** ARGB int to a CSS colour, for painting the swatches. */
+  readonly cssColor: (argb: number) => string;
 }
 
 export default function DrawingOverlay({
@@ -478,6 +575,8 @@ export default function DrawingOverlay({
   hideToolbar,
   viewOnly,
   videoRef,
+  mediaFit,
+  renderToolbar,
 }: DrawingOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { t } = useTranslation("chat");
@@ -549,11 +648,26 @@ export default function DrawingOverlay({
       // (the painted frame size) for the native viewer's <canvas>.
       const mediaW = media instanceof HTMLVideoElement ? media.videoWidth : (media?.width ?? 0);
       const mediaH = media instanceof HTMLVideoElement ? media.videoHeight : (media?.height ?? 0);
-      if (mediaW > 0 && mediaH > 0) {
-        contentRectRef.current = computeContentRect(mediaW, mediaH, canvasW, canvasH);
-      } else {
+      if (mediaW <= 0 || mediaH <= 0) {
         contentRectRef.current = { x: 0, y: 0, w: canvasW, h: canvasH };
+      } else if (mediaFit && media) {
+        contentRectRef.current = mediaContentRect(
+          media.getBoundingClientRect(),
+          canvas.getBoundingClientRect(),
+          mediaW,
+          mediaH,
+          mediaFit,
+        );
+      } else {
+        contentRectRef.current = computeContentRect(mediaW, mediaH, canvasW, canvasH);
       }
+    };
+
+    const remeasure = () => {
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      recomputeContentRect(rect.width, rect.height);
+      redrawAll(ctx, contentRectRef.current, getChannelStrokes(channelId));
     };
 
     const resize = () => {
@@ -578,24 +692,28 @@ export default function DrawingOverlay({
     // on the next layout pass).
     const media = videoRef?.current;
     const video = media instanceof HTMLVideoElement ? media : null;
-    const onVideoChange = () => {
-      const rect = canvas.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return;
-      recomputeContentRect(rect.width, rect.height);
-      redrawAll(ctx, contentRectRef.current, getChannelStrokes(channelId));
-    };
     if (video) {
-      video.addEventListener("loadedmetadata", onVideoChange);
-      video.addEventListener("resize", onVideoChange);
+      video.addEventListener("loadedmetadata", remeasure);
+      video.addEventListener("resize", remeasure);
+    }
+    // A measured host puts the picture in a box of its own, which can move
+    // and resize while the canvas over it does neither: a 1:1 view scrolls,
+    // and switching what the picture is fitted to changes the box alone.
+    // Scroll does not bubble, so this listens in the capture phase and
+    // catches whichever ancestor is the scroller.
+    if (mediaFit && media) {
+      observer.observe(media);
+      globalThis.addEventListener("scroll", remeasure, true);
     }
     return () => {
       observer.disconnect();
+      globalThis.removeEventListener("scroll", remeasure, true);
       if (video) {
-        video.removeEventListener("loadedmetadata", onVideoChange);
-        video.removeEventListener("resize", onVideoChange);
+        video.removeEventListener("loadedmetadata", remeasure);
+        video.removeEventListener("resize", remeasure);
       }
     };
-  }, [channelId, videoRef]);
+  }, [channelId, videoRef, mediaFit]);
 
   // Subscribe to channel-store changes (driven by the global draw-stroke listener).
   useEffect(() => {
@@ -874,44 +992,61 @@ export default function DrawingOverlay({
       />
 
       {/* Toolbar - colour/width/clear shown only while drawing is active.
-          The on/off toggle itself lives in the StreamControls bar below. */}
-      {!hideToolbar && drawingActive && (
-        <div className={styles.toolbar}>
-          {PALETTE.map((c) => (
-            <button
-              key={c}
-              type="button"
-              className={`${styles.colorSwatch} ${c === selectedColor ? styles.colorSwatchSelected : ""}`}
-              style={{ background: argbToCssColor(c) }}
-              onClick={() => setSelectedColor(c)}
-              title={t("drawing.selectColor", { color: c.toString(16) })}
-              aria-label={t("drawing.selectColor", { color: c.toString(16) })}
-              aria-pressed={c === selectedColor}
+          The on/off toggle itself lives in the StreamControls bar below.
+          A pack that draws its own gets the same tools through
+          `renderToolbar`; the default below is Standard's. */}
+      {!hideToolbar &&
+        drawingActive &&
+        (renderToolbar ? (
+          renderToolbar({
+            palette: PALETTE,
+            color: selectedColor,
+            setColor: setSelectedColor,
+            width: strokeWidth,
+            setWidth: setStrokeWidth,
+            minWidth: MIN_WIDTH,
+            maxWidth: MAX_WIDTH,
+            clear: handleClear,
+            clearsEveryone: isOwnBroadcaster,
+            cssColor: argbToCssColor,
+          })
+        ) : (
+          <div className={styles.toolbar}>
+            {PALETTE.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={`${styles.colorSwatch} ${c === selectedColor ? styles.colorSwatchSelected : ""}`}
+                style={{ background: argbToCssColor(c) }}
+                onClick={() => setSelectedColor(c)}
+                title={t("drawing.selectColor", { color: c.toString(16) })}
+                aria-label={t("drawing.selectColor", { color: c.toString(16) })}
+                aria-pressed={c === selectedColor}
+              />
+            ))}
+
+            <input
+              type="range"
+              min={MIN_WIDTH}
+              max={MAX_WIDTH}
+              value={strokeWidth}
+              onChange={(e) => setStrokeWidth(Number(e.target.value))}
+              className={styles.widthSlider}
+              aria-label={t("drawing.strokeWidth")}
+              title={t("drawing.widthTooltip", { strokeWidth })}
             />
-          ))}
 
-          <input
-            type="range"
-            min={2}
-            max={16}
-            value={strokeWidth}
-            onChange={(e) => setStrokeWidth(Number(e.target.value))}
-            className={styles.widthSlider}
-            aria-label={t("drawing.strokeWidth")}
-            title={t("drawing.widthTooltip", { strokeWidth })}
-          />
-
-          <button
-            type="button"
-            className={styles.toolBtn}
-            onClick={handleClear}
-            title={isOwnBroadcaster ? t("drawing.clearAll") : t("drawing.clearMine")}
-            aria-label={isOwnBroadcaster ? t("drawing.clearAll") : t("drawing.clearMine")}
-          >
-            <TrashIcon width={16} height={16} />
-          </button>
-        </div>
-      )}
+            <button
+              type="button"
+              className={styles.toolBtn}
+              onClick={handleClear}
+              title={isOwnBroadcaster ? t("drawing.clearAll") : t("drawing.clearMine")}
+              aria-label={isOwnBroadcaster ? t("drawing.clearAll") : t("drawing.clearMine")}
+            >
+              <TrashIcon width={16} height={16} />
+            </button>
+          </div>
+        ))}
     </div>
   );
 }

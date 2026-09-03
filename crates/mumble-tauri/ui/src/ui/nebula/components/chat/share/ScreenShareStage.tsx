@@ -10,7 +10,15 @@ import type { ScreenShareHook } from "@standard/components/chat/stream/useScreen
 import { useCaptureExclusion } from "@standard/components/chat/stream/useCaptureExclusion";
 import { getTrackContentMap } from "@standard/components/chat/stream/trackContent";
 import { activeStreamViewerStrategy } from "@standard/components/chat/stream/viewerStrategy";
-import { CameraIcon, FullscreenExitIcon, FullscreenIcon, KebabMenuIcon, WebcamIcon } from "@ui/icons";
+import type { MediaFit } from "@standard/components/chat/drawing/DrawingOverlay";
+import {
+  CameraIcon,
+  EditIcon,
+  FullscreenExitIcon,
+  FullscreenIcon,
+  KebabMenuIcon,
+  WebcamIcon,
+} from "@ui/icons";
 import { Stack } from "../../primitives";
 import { radius } from "../../../tokens";
 import { FEED_BADGE, feedSummary, type StreamFeed } from "./feeds";
@@ -19,6 +27,8 @@ import { useFeedStats } from "./useFeedStats";
 import { copyStreamFrame, type ScreenshotOutcome } from "./streamScreenshot";
 import { StageResizeHandle } from "./StageResizeHandle";
 import { CONVERSATION_MIN, clampStageHeight, readStageHeight, writeStageHeight } from "./stageHeight";
+import { AnnotationLayer } from "./AnnotationLayer";
+import { GLASS_BG, GLASS_BLUR, GLASS_LINE, OverlayButton, WELL_BG } from "./overlayChrome";
 
 // Heavy and off screen at rest: the panel pulls in a chart.
 const StreamStatsPanel = lazy(() => import("@standard/components/chat/stream/StreamStatsPanel"));
@@ -41,19 +51,14 @@ const FIT_LABEL_KEYS = {
   fill: "share.fill",
 } as const satisfies Record<Exclude<FitMode, "actual">, string>;
 
-/**
- * The chrome over the picture is drawn in fixed dark colours in both themes.
- *
- * Everything else in Nebula follows the user's scheme; these controls sit on an
- * arbitrary video frame, where a light panel is a bright hole in someone's
- * game. The well behind them is likewise always near-black.
- */
-const WELL_BG = "#05070c";
-const GLASS_BG = "rgba(12,16,24,.55)";
-const GLASS_BG_HOVER = "rgba(20,26,38,.8)";
-const GLASS_LINE = "1px solid rgba(255,255,255,.09)";
-const GLASS_BLUR = "blur(10px)";
-const OVERLAY_TEXT = "#cfd5e0";
+/** How each fit mode lays the source out inside the media element's box -
+ *  what the annotation canvas has to know to put a stroke where the pointer
+ *  was. See `DrawingOverlay`'s `mediaContentRect`. */
+const ANNOTATION_FIT = {
+  fit: "contain",
+  fill: "cover",
+  actual: "none",
+} as const satisfies Record<FitMode, MediaFit>;
 
 /** Filmstrip width, and the tile height inside it. */
 const RAIL_WIDTH = 116;
@@ -97,6 +102,13 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
   const [menuOpen, setMenuOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [shot, setShot] = useState<ScreenshotOutcome | null>(null);
+  // Drawing lives in the shared store rather than here: the desktop overlay
+  // window and the stream popout are separate webviews reading the same flag,
+  // and `useScreenShare` clears it when the broadcast it belonged to ends.
+  const annotating = useAppStore(
+    (state) => currentChannel !== null && state.drawingActiveChannels.has(currentChannel),
+  );
+  const desktopOverlay = useAppStore((state) => state.desktopDrawingOverlayOpen);
   // The split between picture and conversation, the user's to set; see
   // stageHeight.ts for why it is remembered per device.
   const [stageHeight, setStageHeight] = useState(readStageHeight);
@@ -242,6 +254,41 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
     }).catch((e) => console.error("open_stream_popout failed:", e));
   }, [activeServerId, currentChannel, focused.name, focused.own, focused.session, ownSession]);
 
+  const toggleAnnotating = useCallback(() => {
+    if (currentChannel === null) return;
+    const active = new Set(useAppStore.getState().drawingActiveChannels);
+    if (!active.delete(currentChannel)) active.add(currentChannel);
+    useAppStore.setState({ drawingActiveChannels: active });
+  }, [currentChannel]);
+
+  // The same annotations, pinned over the real desktop instead of over the
+  // picture: a click-through, capture-excluded window the Rust side places on
+  // whatever this client is sharing. Only the broadcaster is offered it,
+  // because only their machine has that source to sit on top of.
+  const toggleDesktopOverlay = useCallback(() => {
+    setMenuOpen(false);
+    if (desktopOverlay) {
+      invoke("close_drawing_overlay").catch(() => {});
+      useAppStore.setState({ desktopDrawingOverlayOpen: false });
+      return;
+    }
+    if (currentChannel === null || ownSession === null) return;
+    // Track settings only feed the Rust side's legacy fallback, for the case
+    // where no Rust broadcast is running to read the capture source from; the
+    // native family has no local MediaStream and leaves them null.
+    const track = feeds.find((feed) => feed.own)?.stream?.getVideoTracks()[0];
+    const settings = (track?.getSettings?.() ?? {}) as MediaTrackSettings & { displaySurface?: string };
+    invoke("open_drawing_overlay", {
+      channelId: currentChannel,
+      ownSession,
+      captureWidth: settings.width ?? null,
+      captureHeight: settings.height ?? null,
+      displaySurface: settings.displaySurface ?? null,
+    })
+      .then(() => useAppStore.setState({ desktopDrawingOverlayOpen: true }))
+      .catch((e) => console.error("open_drawing_overlay failed:", e));
+  }, [currentChannel, desktopOverlay, feeds, ownSession]);
+
   const statsSampler = useMemo(
     () => (statsOpen ? activeStreamViewerStrategy().createStatsSampler(focused.session) : null),
     [focused.session, statsOpen],
@@ -333,6 +380,15 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
             </Stack>
           )}
 
+          {currentChannel !== null && ownSession !== null && (
+            <AnnotationLayer
+              channelId={currentChannel}
+              ownSession={ownSession}
+              media={media}
+              fit={ANNOTATION_FIT[fitMode]}
+            />
+          )}
+
           {/* The picture is arbitrary, so the chrome brings its own contrast. */}
           <Box
             sx={{
@@ -361,7 +417,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
             direction="row"
             alignItems="center"
             gap="8px"
-            sx={{ position: "absolute", left: 9, right: 9, top: 8 }}
+            sx={{ position: "absolute", left: 9, right: 9, top: 8, zIndex: 4 }}
           >
             <Stack
               direction="row"
@@ -419,11 +475,13 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
             </Typography>
           </Stack>
 
+          {/* Above the annotation canvas (z-index 3), which covers the whole
+              well while drawing is on - including the button that ends it. */}
           <Stack
             direction="row"
             alignItems="center"
             gap="6px"
-            sx={{ position: "absolute", left: 9, right: 9, bottom: 8 }}
+            sx={{ position: "absolute", left: 9, right: 9, bottom: 8, zIndex: 4 }}
           >
             <Stack
               direction="row"
@@ -473,6 +531,16 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
               >
                 <WebcamIcon width={12} height={12} />
               </OverlayButton>
+              {currentChannel !== null && ownSession !== null && (
+                <OverlayButton
+                  title={annotating ? t("chat:screenShare.drawOff") : t("chat:screenShare.drawOn")}
+                  active={annotating}
+                  pressed={annotating}
+                  onClick={toggleAnnotating}
+                >
+                  <EditIcon width={12} height={12} />
+                </OverlayButton>
+              )}
               <OverlayButton
                 title={t("share.streamOptions")}
                 testId={TID.streamConfigMenu}
@@ -572,6 +640,11 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
                         onClick={() => capture.setHidden(!capture.hidden)}
                       />
                     )}
+                    <StreamMenuItem
+                      label={t("chat:screenShare.showOverlay")}
+                      value={desktopOverlay ? t("share.on") : t("share.off")}
+                      onClick={toggleDesktopOverlay}
+                    />
                   </>
                 )}
                 <StreamMenuItem
@@ -665,49 +738,6 @@ const MEDIA_STYLE: Record<FitMode, React.CSSProperties> = {
     flex: "none",
   },
 };
-
-function OverlayButton({
-  title,
-  onClick,
-  active = false,
-  testId,
-  children,
-}: Readonly<{
-  title: string;
-  onClick: () => void;
-  active?: boolean;
-  testId?: string;
-  children: React.ReactNode;
-}>) {
-  return (
-    <Box
-      component="button"
-      type="button"
-      title={title}
-      aria-label={title}
-      data-testid={testId}
-      onClick={onClick}
-      sx={{
-        width: 26,
-        height: 26,
-        flex: "none",
-        padding: 0,
-        borderRadius: radius("md"),
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        cursor: "pointer",
-        border: GLASS_LINE,
-        backdropFilter: GLASS_BLUR,
-        background: active ? GLASS_BG_HOVER : GLASS_BG,
-        color: active ? "#fff" : OVERLAY_TEXT,
-        "&:hover": { color: "#fff", background: GLASS_BG_HOVER },
-      }}
-    >
-      {children}
-    </Box>
-  );
-}
 
 function StreamMenuItem({
   label,
