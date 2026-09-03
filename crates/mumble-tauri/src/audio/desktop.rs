@@ -436,6 +436,41 @@ fn resample_linear(
     Some(s0 + (s1 - s0) * frac)
 }
 
+/// Fill a whole callback buffer with silence in one go when nothing is
+/// playing and the anti-pop decay has already reached zero.
+///
+/// Sitting in a channel with nobody speaking, the output callback still ran
+/// the per-sample resample-and-clip path a hundred times a second to write
+/// zeros - about one percent of a core, and the largest cost left in an idle
+/// client. A buffer of zeros is the same result without the arithmetic.
+///
+/// Returns `false` while the last sample is still decaying: those frames go
+/// through [`write_output_frame`] one at a time so the tail of the previous
+/// audio fades rather than cuts, exactly as before.
+fn write_silence_fast(data: &mut [f32], out_channels: usize, state: &mut PlaybackState) -> bool {
+    if state.last_sample != 0.0 {
+        return false;
+    }
+    data.fill(0.0);
+    state.in_underrun = true;
+    state.ramp_pos = 0;
+    state.underrun_samples = state
+        .underrun_samples
+        .saturating_add(data.len() / out_channels.max(1));
+    true
+}
+
+/// Write a callback's worth of silence: in one go once the anti-pop decay
+/// has reached zero, frame by frame while it is still fading out.
+fn write_silence(data: &mut [f32], out_channels: usize, state: &mut PlaybackState, vol: f32) {
+    if write_silence_fast(data, out_channels, state) {
+        return;
+    }
+    for frame in data.chunks_exact_mut(out_channels) {
+        write_output_frame(frame, None, state, vol);
+    }
+}
+
 /// Write one output frame (mono sample duplicated to all channels) with
 /// volume, underrun decay, and anti-pop ramp. Updates `state` in-place.
 fn write_output_frame(
@@ -608,9 +643,7 @@ impl super::MixingPlayback for CpalMixingPlayback {
                     );
                     let Some((drained, valid_count, buf_depth)) = drain_result else {
                         diag.none += 1;
-                        for frame in data.chunks_exact_mut(out_channels) {
-                            write_output_frame(frame, None, &mut pb_state, vol);
-                        }
+                        write_silence(data, out_channels, &mut pb_state, vol);
                         return;
                     };
                     diag.buf_depth = buf_depth;
@@ -633,6 +666,15 @@ impl super::MixingPlayback for CpalMixingPlayback {
                         }
                     }
                     diag.log_if_due(src_needed, valid_count, out_frames, src_ratio);
+
+                    // Nothing to play: every frame would resample to `None`
+                    // anyway, so skip straight to silence - one memset once
+                    // the fade-out is done, instead of a resample and a
+                    // soft-clip per sample for as long as the channel is quiet.
+                    if !drained || valid_count == 0 {
+                        write_silence(data, out_channels, &mut pb_state, vol);
+                        return;
+                    }
 
                     for (i, frame) in data.chunks_exact_mut(out_channels).enumerate() {
                         let sample_opt =
@@ -887,6 +929,37 @@ mod tests {
         let result = try_drain_speakers_checked(&bufs, &vols, &primed, &mut mixed, 480);
         assert!(result.is_some());
         assert!(primed.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn silence_fast_path_waits_for_the_decay_to_finish() {
+        let mut state = PlaybackState {
+            last_sample: 0.2,
+            in_underrun: false,
+            ramp_pos: 0,
+            underrun_samples: 0,
+        };
+        let mut data = vec![0.5_f32; 8];
+        assert!(!write_silence_fast(&mut data, 2, &mut state));
+        // Untouched: the caller fades these frames one by one.
+        assert!(data.iter().all(|&s| s == 0.5));
+    }
+
+    #[test]
+    fn silence_fast_path_zero_fills_once_decayed() {
+        let mut state = PlaybackState {
+            last_sample: 0.0,
+            in_underrun: false,
+            ramp_pos: 3,
+            underrun_samples: 5,
+        };
+        let mut data = vec![0.5_f32; 8];
+        assert!(write_silence_fast(&mut data, 2, &mut state));
+        assert!(data.iter().all(|&s| s == 0.0));
+        assert!(state.in_underrun);
+        assert_eq!(state.ramp_pos, 0);
+        // Four stereo frames of silence, counted like the slow path counts them.
+        assert_eq!(state.underrun_samples, 9);
     }
 
     #[test]
