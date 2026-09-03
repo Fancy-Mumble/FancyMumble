@@ -8,6 +8,9 @@ export interface ShortcutBindings {
   toggleMute: string;
   toggleDeafen: string;
   voicePriority: string;
+  /** Show or hide the game overlay for whatever is in the foreground. Global,
+   *  because the point of it is to work while a game has focus. */
+  toggleGameOverlay: string;
   // Voice - in-app
   toggleActivationMode: string;
   // Channel navigation - in-app
@@ -29,6 +32,7 @@ export const DEFAULT_SHORTCUTS: ShortcutBindings = {
   toggleMute: "Ctrl+Shift+M",
   toggleDeafen: "Ctrl+Shift+D",
   voicePriority: "",
+  toggleGameOverlay: "",
   toggleActivationMode: "",
   moveChannelUp: "Alt+ArrowUp",
   moveChannelDown: "Alt+ArrowDown",
@@ -46,6 +50,7 @@ export const DEFAULT_SHORTCUTS: ShortcutBindings = {
 const GLOBAL_SHORTCUT_COMMANDS: Partial<Record<keyof ShortcutBindings, string>> = {
   toggleMute: "toggle_mute",
   toggleDeafen: "toggle_deafen",
+  toggleGameOverlay: "game_overlay_toggle",
 };
 
 /** Shortcut keys that use press-and-release (PTT-style) global registration. */
