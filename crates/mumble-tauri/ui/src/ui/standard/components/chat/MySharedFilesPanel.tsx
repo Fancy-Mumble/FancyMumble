@@ -27,6 +27,15 @@ import {
 } from "../fileserver/fileServerMe";
 import styles from "./MySharedFilesPanel.module.css";
 
+/**
+ * Short, locale-aware "date, time" for the Uploaded column.
+ *
+ * `toLocaleString()` spends ~40px on seconds and a four-digit year nobody
+ * reads in a file list, and that was part of what pushed the actions column
+ * off the right edge.  The full stamp stays one hover away.
+ */
+const shortStamp = new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" });
+
 export default function MySharedFilesPanel() {
   const { t } = useTranslation(["chat", "settings"]);
   const config = useAppStore((s) => s.fileServerConfig);
@@ -74,6 +83,14 @@ export default function MySharedFilesPanel() {
       channels.find((c) => c.id === id)?.name ||
       t("fileServer.root", { ns: "settings", defaultValue: "Root" }),
     [channels, t],
+  );
+
+  /** Name, channel and upload time in one hover - the fallback for whatever
+   *  the narrow layout dropped. */
+  const fileTooltip = useCallback(
+    (f: AdminFileEntry) =>
+      [f.filename, `${channelName(f.channel_id)} · ${new Date(f.uploaded_at).toLocaleString()}`].join("\n"),
+    [channelName],
   );
 
   const handleShareLink = useCallback(
@@ -148,29 +165,37 @@ export default function MySharedFilesPanel() {
       <table className={styles.table}>
         <thead>
           <tr>
-            <th />
+            <th className={styles.colThumb} />
             <th>{t("mySharedFiles.colName", { defaultValue: "Name" })}</th>
-            <th>{t("mySharedFiles.colType", { defaultValue: "Type" })}</th>
-            <th className={styles.num}>{t("mySharedFiles.colSize", { defaultValue: "Size" })}</th>
-            <th>{t("mySharedFiles.colAccess", { defaultValue: "Access" })}</th>
-            <th>{t("mySharedFiles.colChannel", { defaultValue: "Channel" })}</th>
-            <th>{t("mySharedFiles.colUploaded", { defaultValue: "Uploaded" })}</th>
-            <th>{t("mySharedFiles.colExpires", { defaultValue: "Expires" })}</th>
-            <th />
+            <th className={styles.colType}>{t("mySharedFiles.colType", { defaultValue: "Type" })}</th>
+            <th className={styles.colSize}>{t("mySharedFiles.colSize", { defaultValue: "Size" })}</th>
+            <th className={styles.colAccess}>{t("mySharedFiles.colAccess", { defaultValue: "Access" })}</th>
+            <th className={styles.colChannel}>
+              {t("mySharedFiles.colChannel", { defaultValue: "Channel" })}
+            </th>
+            <th className={styles.colUploaded}>
+              {t("mySharedFiles.colUploaded", { defaultValue: "Uploaded" })}
+            </th>
+            <th className={styles.colExpires}>
+              {t("mySharedFiles.colExpires", { defaultValue: "Expires" })}
+            </th>
+            <th className={styles.colActions} />
           </tr>
         </thead>
         <tbody>
           {files.map((f) => (
             <tr key={f.id}>
-              <td>
+              <td className={styles.colThumb}>
                 <FileThumb file={f} source={source} onOpen={setPreview} />
               </td>
-              <td className={styles.nameCell}>
-                <span className={styles.fileName} title={f.filename}>
+              <td>
+                {/* The tooltip repeats what a narrow split hides, so dropping
+                    a column never makes its value unreachable. */}
+                <span className={styles.ellipsis} title={fileTooltip(f)}>
                   {f.filename}
                 </span>
               </td>
-              <td className={styles.typeCell}>
+              <td className={styles.colType}>
                 <CategoryIcon cat={categorize(f.mime_type)} size={14} />{" "}
                 <span title={f.mime_type}>
                   {t(`fileServer.category.${categorize(f.mime_type)}`, {
@@ -179,15 +204,19 @@ export default function MySharedFilesPanel() {
                   })}
                 </span>
               </td>
-              <td className={styles.num}>{formatBytes(f.size_bytes)}</td>
-              <td>
+              <td className={styles.colSize}>{formatBytes(f.size_bytes)}</td>
+              <td className={styles.colAccess}>
                 <span className={`${styles.accessBadge} ${styles[`access_${f.access_mode}`]}`}>
                   {t(`fileServer.access.${f.access_mode}`, { ns: "settings", defaultValue: f.access_mode })}
                 </span>
               </td>
-              <td title={`#${f.channel_id}`}>{channelName(f.channel_id)}</td>
-              <td className={styles.dateCell}>{new Date(f.uploaded_at).toLocaleString()}</td>
-              <td className={styles.dateCell}>
+              <td className={styles.colChannel} title={`#${f.channel_id}`}>
+                <span className={styles.ellipsis}>{channelName(f.channel_id)}</span>
+              </td>
+              <td className={styles.colUploaded} title={new Date(f.uploaded_at).toLocaleString()}>
+                {shortStamp.format(f.uploaded_at)}
+              </td>
+              <td className={styles.colExpires}>
                 {f.expires_at != null ? (
                   <ExpiryBadge expiresAt={f.expires_at} />
                 ) : (
@@ -196,7 +225,7 @@ export default function MySharedFilesPanel() {
                   </span>
                 )}
               </td>
-              <td className={styles.actionsCell}>
+              <td className={styles.colActions}>
                 {f.access_mode === "public" && myFileLinkSupported(kind) && (
                   <button
                     type="button"
