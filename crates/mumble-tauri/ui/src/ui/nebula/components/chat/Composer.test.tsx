@@ -406,23 +406,32 @@ describe("Composer", () => {
   });
 
   describe("focus", () => {
-    /** The accent the theme resolves for the scheme the tests draw in. */
+    /**
+     * The accent the theme resolves for the scheme the tests draw in.
+     *
+     * Read off the panel's own `background`, which is where its edge colour
+     * lives: a skin may cut the panel's corners, and a real border is sliced
+     * off at the diagonal and leaves the cut unstroked, so the edge is drawn
+     * as a ground with the fill inset 1px over it. The fill is on a
+     * pseudo-element, which `getComputedStyle` does not report - so this is
+     * the edge, and nothing here is reading the panel's interior.
+     */
     const panel = (container: HTMLElement) =>
       getComputedStyle(container.querySelector("[data-nebula-composer]") as Element);
 
     it("lights the panel while the editor holds the caret", () => {
       const { container, field } = draw();
-      const resting = panel(container).borderColor;
+      const resting = panel(container).backgroundColor;
 
       fireEvent.focus(field);
       const lit = panel(container);
       // The panel is the field, so focus is said on its own edge rather than
       // by a second ring drawn around the words inside it.
-      expect(lit.borderColor).not.toBe(resting);
+      expect(lit.backgroundColor).not.toBe(resting);
       expect(lit.boxShadow).toContain("0 0 0 1px");
 
       fireEvent.blur(field);
-      expect(panel(container).borderColor).toBe(resting);
+      expect(panel(container).backgroundColor).toBe(resting);
     });
 
     it("draws a caret in an empty composer that has been clicked into", () => {
@@ -441,11 +450,11 @@ describe("Composer", () => {
 
     it("stays unlit when it cannot be typed in", () => {
       const { container, field } = draw({ disabled: true });
-      const resting = panel(container).borderColor;
+      const resting = panel(container).backgroundColor;
       fireEvent.focus(field);
       // An accent edge on a disabled composer promises a keystroke it will
       // not take.
-      expect(panel(container).borderColor).toBe(resting);
+      expect(panel(container).backgroundColor).toBe(resting);
     });
   });
 
