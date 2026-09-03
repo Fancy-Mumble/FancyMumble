@@ -7,7 +7,34 @@
  */
 export { NodeEditor } from "./NodeEditor";
 export { BrowsePanel } from "./BrowsePanel";
+export { TemplatePanel } from "./TemplatePanel";
+export {
+  insertFragment,
+  offsetFor,
+  wire,
+  type CanvasInsert,
+  type Fragment,
+  type GraphTemplate,
+  type TemplateGallery,
+  type TemplateStrings,
+  type TemplateWire,
+} from "./templates";
 export { useFavorites } from "./useFavorites";
+export { useScrollGuard } from "./useScrollGuard";
+export { boundsOf, useCanvasView, type CanvasView } from "./useCanvasView";
+export { useGraphHistory, type History } from "./useGraphHistory";
+export { copyOut, decodeClipping, encodeClipping, pasteInto, type Clipping } from "./clipboard";
+export {
+  ANNOTATION_SIZES,
+  addAnnotation,
+  annotationsOf,
+  enclosedBy,
+  makeAnnotation,
+  patchAnnotation,
+  removeAnnotation,
+  type Annotation,
+  type AnnotationKind,
+} from "./annotate";
 export { useBlockCarry, type CanvasDrop, type Carry } from "./useBlockCarry";
 export { NodeCanvas } from "./NodeCanvas";
 export { NodeCard } from "./NodeCard";
