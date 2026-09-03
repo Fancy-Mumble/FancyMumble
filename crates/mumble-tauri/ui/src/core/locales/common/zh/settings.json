@@ -216,7 +216,8 @@
     "builtinEmojiPicker": "表情选择器",
     "builtinEmojiHint": "输入 : 后搜索",
     "builtinMentionPicker": "提及选择器",
-    "builtinMentionHint": "输入 @ 后搜索"
+    "builtinMentionHint": "输入 @ 后搜索",
+    "toggleGameOverlay": "切换游戏悬浮窗"
   },
   "userShortcuts": {
     "title": "跳转到用户（跨服务器）",
@@ -334,10 +335,10 @@
     "panelTitle": "个性化",
     "uiDesign": "界面设计",
     "beta": "测试版",
-    "uiDesignHint": "标准，或其中一个设计测试版。标准是默认选项，功能最完整。",
+    "uiDesignHint": "Nebula 是默认选项。标准是较早的界面，功能覆盖仍然最广；Aurora 是设计测试版。",
     "uiDesignStandard": "标准",
     "uiDesignAurora": "Aurora（测试版）",
-    "uiDesignNebula": "Nebula（测试版）",
+    "uiDesignNebula": "Nebula",
     "uiDesignOverrideHint": "开发 URL 参数当前将界面强制设为“{{design}}”。",
     "theme": "主题",
     "themeHint": "选择整个应用的视觉风格。",
