@@ -392,6 +392,14 @@ fn handle_channel_message(
         if selected != Some(ch_id) {
             *state.msgs.channel_unread.entry(ch_id).or_insert(0) += 1;
             unreads_changed = true;
+            // Nothing in a channel that is not on screen is being looked at,
+            // so a pasted picture arriving there goes straight to cold
+            // storage rather than sitting in this process until the reader
+            // happens to open the channel and scroll past it. Only the
+            // message that just arrived: this runs on the protocol thread
+            // with the state lock held, and everything older was already
+            // dealt with when it arrived or when the channel was left.
+            crate::state::offload_ops::offload_newest_if_idle(state, ch_id);
         }
 
         deferred.push(DeferredEvent::NewMessage {
