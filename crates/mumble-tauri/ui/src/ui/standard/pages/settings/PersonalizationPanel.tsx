@@ -37,6 +37,7 @@ import styles from "./SettingsPage.module.css";
 import panelStyles from "./PersonalizationPanel.module.css";
 import { registerSettings } from "@core/features/settings/settingsSearchRegistry";
 import { getSelectedUiDesign, getUiDesignOverride, setSelectedUiDesign } from "@ui/selection";
+import { DEFAULT_UI_DESIGN } from "@ui/registry";
 import type { UiDesignId } from "@core/types";
 
 registerSettings("personalize")
@@ -123,7 +124,7 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
   // than a switch; a dev URL override (`?ui=`) pins it and disables the field.
   const uiDesignOverride = getUiDesignOverride();
   const [uiDesign, setUiDesign] = useState<UiDesignId>(
-    () => (document.documentElement.dataset.uiDesign as UiDesignId | undefined) ?? "standard",
+    () => (document.documentElement.dataset.uiDesign as UiDesignId | undefined) ?? DEFAULT_UI_DESIGN,
   );
   const [uiDesignBusy, setUiDesignBusy] = useState(false);
 

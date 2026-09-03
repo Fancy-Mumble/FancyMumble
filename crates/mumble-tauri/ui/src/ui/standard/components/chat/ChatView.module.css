@@ -408,7 +408,7 @@
   margin-bottom: calc(-100cqh - 32px);
   background-image: var(--chat-bg-image);
   background-size: var(--chat-bg-size, cover);
-  background-position: center;
+  background-position: var(--chat-bg-position, center);
   background-repeat: var(--chat-bg-repeat, no-repeat);
   opacity: var(--chat-bg-opacity, 1);
   pointer-events: none;

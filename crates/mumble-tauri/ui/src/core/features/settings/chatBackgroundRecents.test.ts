@@ -97,7 +97,12 @@ describe("the shelf", () => {
 
 describe("round-tripping a wallpaper through the live fields", () => {
   it("survives showing and reading back", () => {
-    const entry = { ...clip("video-a.mp4", "image-p.jpg"), videoBaked: "video-baked-x.mp4" };
+    const entry = {
+      ...clip("video-a.mp4", "image-p.jpg"),
+      videoBaked: "video-baked-x.mp4",
+      focusX: 0.3,
+      focusY: 0.12,
+    };
     const record = { ...PERSONALIZATION_DEFAULTS, ...showBackground(entry) };
     expect(activeBackground(record)).toEqual(entry);
   });
@@ -115,7 +120,41 @@ describe("round-tripping a wallpaper through the live fields", () => {
       videoBaked: null,
       videoBakedSigma: 0,
       videoBakedDim: 0,
+      focusX: 0.5,
+      focusY: 0.5,
     });
+  });
+});
+
+describe("the focus point", () => {
+  it("rides along with the wallpaper, not with the window", () => {
+    const framed: Entry = { ...still("image-a.jpg"), focusX: 0.5, focusY: 0.18 };
+    const shelf = updateBackground([still("image-b.jpg"), still("image-a.jpg")], framed);
+    const record = { ...PERSONALIZATION_DEFAULTS, ...showBackground(shelf[1]) };
+
+    expect(record.chatBgFocusY).toBe(0.18);
+    // Switching to the other wallpaper does not carry the framing over: the
+    // subject of a different picture is somewhere else.
+    expect({ ...PERSONALIZATION_DEFAULTS, ...showBackground(shelf[0]) }.chatBgFocusY).toBe(0.5);
+  });
+
+  it("reads a wallpaper shelved before it existed as the middle", () => {
+    // The shelf shipped before the focus point did, so these entries are real
+    // and must not resolve to `undefined` - which CSS would drop entirely.
+    const legacy = { ...still("image-a.jpg") } as Entry;
+    delete legacy.focusX;
+    delete legacy.focusY;
+
+    const record = { ...PERSONALIZATION_DEFAULTS, ...showBackground(legacy) };
+    expect(record.chatBgFocusX).toBe(0.5);
+    expect(record.chatBgFocusY).toBe(0.5);
+  });
+
+  it("is not part of what makes a wallpaper itself", () => {
+    // Re-framing a picture must not shelve a second copy of it.
+    const framed = { ...still("image-a.jpg"), focusY: 0.1 };
+    expect(isSameBackground(still("image-a.jpg"), framed)).toBe(true);
+    expect(rememberBackground([still("image-a.jpg")], framed)).toHaveLength(1);
   });
 });
 

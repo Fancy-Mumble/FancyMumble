@@ -6,6 +6,7 @@ import {
   PERSONALIZATION_CHANGED_EVENT,
   type PersonalizationData,
 } from "@standard/personalizationStorage";
+import { useBakedStill } from "./stillBake";
 
 /** How often the watchdog samples the clip's position. */
 const WATCHDOG_INTERVAL_MS = 1000;
@@ -81,6 +82,11 @@ export function ChatBackdrop() {
 
   const sigma = personalization?.chatBgBlurSigma ?? 0;
   const dim = personalization?.chatBgDim ?? 0;
+
+  // A still being blurred live is baked here, once, and the record then names
+  // the processed file - see `stillBake.ts` for why the compositor should not
+  // be doing this work on every paint.
+  useBakedStill(personalization);
 
   // The bake is only trustworthy while its parameters match the live sliders;
   // a stale bake would show yesterday's blur.
@@ -217,6 +223,12 @@ export function ChatBackdrop() {
     width: "100%",
     height: "100%",
     objectFit: personalization?.chatBgFit === "tile" ? "none" : "cover",
+    // Where the crop is taken from. `cover` keeps the middle by default,
+    // which for a portrait in a column shorter than the picture is the part
+    // of a person nobody chose the picture for.
+    objectPosition: `${(personalization?.chatBgFocusX ?? 0.5) * 100}% ${
+      (personalization?.chatBgFocusY ?? 0.5) * 100
+    }%`,
     // The dim darkens the picture, not the conversation: painting it over the
     // whole column would take the wash, the message text and the chrome down
     // with it. Once the look is baked into the pixels only the saturation

@@ -33,7 +33,12 @@ type BackgroundFields = Pick<
   | "chatBgVideoBaked"
   | "chatBgVideoBakedSigma"
   | "chatBgVideoBakedDim"
+  | "chatBgFocusX"
+  | "chatBgFocusY"
 >;
+
+/** The middle, which is where CSS crops from when nobody has said otherwise. */
+const CENTER = 0.5;
 
 /** The wallpaper a record currently shows, as a shelf entry. */
 export function activeBackground(data: PersonalizationData): ChatBackgroundEntry {
@@ -44,6 +49,8 @@ export function activeBackground(data: PersonalizationData): ChatBackgroundEntry
     videoBaked: data.chatBgVideoBaked,
     videoBakedSigma: data.chatBgVideoBakedSigma,
     videoBakedDim: data.chatBgVideoBakedDim,
+    focusX: data.chatBgFocusX,
+    focusY: data.chatBgFocusY,
   };
 }
 
@@ -56,6 +63,11 @@ export function showBackground(entry: ChatBackgroundEntry | null): BackgroundFie
     chatBgVideoBaked: entry?.videoBaked ?? null,
     chatBgVideoBakedSigma: entry?.videoBakedSigma ?? 0,
     chatBgVideoBakedDim: entry?.videoBakedDim ?? 0,
+    // `??`, not a plain read: a wallpaper shelved before the focus point
+    // existed has no opinion about it, and the middle is what it was being
+    // drawn with all along.
+    chatBgFocusX: entry?.focusX ?? CENTER,
+    chatBgFocusY: entry?.focusY ?? CENTER,
   };
 }
 

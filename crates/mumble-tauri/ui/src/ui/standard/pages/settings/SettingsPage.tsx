@@ -119,6 +119,8 @@ const PERSONALIZATION_DEFAULTS: PersonalizationData = {
   chatBgOpacity: 0.25,
   chatBgDim: 0.5,
   chatBgFit: "cover",
+  chatBgFocusX: 0.5,
+  chatBgFocusY: 0.5,
   chatBgVideo: null,
   chatBgVideoBaked: null,
   chatBgVideoBakedSigma: 0,

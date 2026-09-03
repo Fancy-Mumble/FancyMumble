@@ -16,7 +16,14 @@ vi.mock("@core/utils/store", () => {
 
 /** Stands in for the backend store: file name -> blob URL. */
 const store = new Map<string, string>();
+/** The backend's still bake. Pending forever unless a test answers it. */
+const processBackgroundImage = vi.fn<(name: string, sigma: number, dim: number) => Promise<string>>(
+  () => new Promise<string>(() => undefined),
+);
+const pruneChatBackgrounds = vi.fn<(keep: readonly string[]) => Promise<void>>(async () => undefined);
 vi.mock("@core/features/settings/chatBackground", () => ({
+  processBackgroundImage: (...a: [string, number, number]) => processBackgroundImage(...a),
+  pruneChatBackgrounds: (...a: [readonly string[]]) => pruneChatBackgrounds(...a),
   isStoreRef: (v: unknown) => typeof v === "string" && v.startsWith("bgstore:"),
   toStoreRef: (name: string) => `bgstore:${name}`,
   storeRefName: (ref: string) => ref.slice("bgstore:".length),
@@ -31,7 +38,9 @@ vi.mock("@core/features/settings/chatBackground", () => ({
 }));
 
 const { ChatBackdrop, BLUR_GRACE_MS } = await import("./ChatBackdrop");
-const { PERSONALIZATION_DEFAULTS, savePersonalization } = await import("@standard/personalizationStorage");
+const { PERSONALIZATION_DEFAULTS, loadPersonalization, savePersonalization } = await import(
+  "@standard/personalizationStorage"
+);
 
 /** Seed a record and mount the backdrop over it. */
 async function mount(overrides: Record<string, unknown>) {
@@ -319,6 +328,8 @@ describe("Nebula still chat background", () => {
   beforeEach(() => {
     store.clear();
     store.set("image-still.jpg", "blob:still");
+    processBackgroundImage.mockClear();
+    pruneChatBackgrounds.mockClear();
   });
   afterEach(cleanup);
 
@@ -344,6 +355,64 @@ describe("Nebula still chat background", () => {
       getComputedStyle(node).background.includes("rgb(0, 0, 0)"),
     );
     expect(sheets).toHaveLength(0);
+  });
+
+  it("bakes an unprocessed still once and shows the result untouched", async () => {
+    store.set("processed-still.jpg", "blob:still-baked");
+    processBackgroundImage.mockResolvedValueOnce("processed-still.jpg");
+    await mount({
+      chatBgOriginal: "bgstore:image-still.jpg",
+      chatBgBlurred: null,
+      chatBgBlurSigma: 9,
+      chatBgDim: 0.4,
+      chatBgRecents: [
+        {
+          original: "bgstore:image-still.jpg",
+          blurred: null,
+          video: null,
+          videoBaked: null,
+          videoBakedSigma: 0,
+          videoBakedDim: 0,
+        },
+      ],
+    });
+
+    await waitFor(() => expect(processBackgroundImage).toHaveBeenCalledWith("image-still.jpg", 9, 0.4));
+    const img = await waitFor(() => {
+      const node = query<HTMLImageElement>("img");
+      expect(node?.getAttribute("src")).toBe("blob:still-baked");
+      return node as HTMLImageElement;
+    });
+    expect(getComputedStyle(img).filter).not.toContain("blur");
+
+    // The record names the file, the shelf's copy learned it too, and the
+    // prune was told to keep it.
+    const saved = await loadPersonalization();
+    expect(saved.chatBgBlurred).toBe("bgstore:processed-still.jpg");
+    expect(saved.chatBgRecents[0].blurred).toBe("bgstore:processed-still.jpg");
+    expect(pruneChatBackgrounds.mock.calls.at(-1)?.[0]).toContain("processed-still.jpg");
+    // Once: the record now says the look is baked in, so nothing asks again.
+    expect(processBackgroundImage).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays on the live filter when the bake fails", async () => {
+    processBackgroundImage.mockRejectedValueOnce(new Error("no decoder"));
+    await mount({
+      chatBgOriginal: "bgstore:image-still.jpg",
+      chatBgBlurred: null,
+      chatBgBlurSigma: 3,
+      chatBgDim: 0.2,
+    });
+
+    await waitFor(() => expect(processBackgroundImage).toHaveBeenCalledWith("image-still.jpg", 3, 0.2));
+    const img = await waitFor(() => {
+      const node = query<HTMLImageElement>("img");
+      expect(node).not.toBeNull();
+      return node as HTMLImageElement;
+    });
+    expect(img.getAttribute("src")).toBe("blob:still");
+    expect(getComputedStyle(img).filter).toContain("blur(3px)");
+    expect((await loadPersonalization()).chatBgBlurred).toBeNull();
   });
 
   it("shows a processed still untouched - its look is already baked in", async () => {
