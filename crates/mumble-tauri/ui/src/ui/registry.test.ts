@@ -2,9 +2,14 @@ import { describe, expect, it } from "vitest";
 import { resolveUiDesign, UI_PACK_LOADERS } from "./registry";
 
 describe("resolveUiDesign", () => {
-  it("keeps the Standard UI as the safe default", () => {
-    expect(resolveUiDesign("", undefined)).toBe("standard");
-    expect(resolveUiDesign("?ui=unknown", "unknown")).toBe("standard");
+  it("starts a profile with no stored choice in Nebula", () => {
+    expect(resolveUiDesign("", undefined)).toBe("nebula");
+    expect(resolveUiDesign("?ui=unknown", "unknown")).toBe("nebula");
+  });
+
+  it("still honours a profile that chose Standard", () => {
+    // The new default is for new users; nobody who picked a pack is moved.
+    expect(resolveUiDesign("", "standard")).toBe("standard");
   });
 
   it("uses a persisted design when there is no valid URL override", () => {
