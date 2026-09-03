@@ -296,7 +296,7 @@ fn snapshot_and_mix(
         }
         let start = *cursor;
         let n = (buf.len() - start).min(max_new);
-        let (a, b) = buf.as_slices();
+        let (a, b) = buf.samples().as_slices();
         for (i, dst) in mix_buf.iter_mut().take(n).enumerate() {
             let abs_idx = start + i;
             let sample = if abs_idx < a.len() {
@@ -322,7 +322,13 @@ fn snapshot_and_mix(
 mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
     use super::*;
-    use std::collections::{HashMap, VecDeque};
+    use mumble_protocol::audio::mixer::{JitterConfig, SpeakerBuffer};
+    use std::collections::HashMap;
+
+    /// A speaker buffer holding `samples`, as the mixer would leave it.
+    fn holding(samples: Vec<f32>) -> SpeakerBuffer {
+        SpeakerBuffer::with_samples(JitterConfig::default(), samples)
+    }
 
     #[test]
     fn test_expand_filename_template_basic() {
@@ -365,10 +371,7 @@ mod tests {
     #[test]
     fn test_snapshot_and_mix_single_speaker() {
         let mut map = HashMap::new();
-        let mut deque = VecDeque::new();
-        deque.push_back(0.5_f32);
-        deque.push_back(-0.3);
-        let _ = map.insert(1u32, deque);
+        let _ = map.insert(1u32, holding(vec![0.5_f32, -0.3]));
 
         let buffers: SpeakerBuffers = Arc::new(std::sync::Mutex::new(map));
         let mut mix = Vec::new();
@@ -382,15 +385,8 @@ mod tests {
     #[test]
     fn test_snapshot_and_mix_multiple_speakers_summed() {
         let mut map = HashMap::new();
-        let mut d1 = VecDeque::new();
-        d1.push_back(0.4_f32);
-        d1.push_back(0.3);
-        let _ = map.insert(1u32, d1);
-
-        let mut d2 = VecDeque::new();
-        d2.push_back(0.3_f32);
-        d2.push_back(0.2);
-        let _ = map.insert(2u32, d2);
+        let _ = map.insert(1u32, holding(vec![0.4_f32, 0.3]));
+        let _ = map.insert(2u32, holding(vec![0.3_f32, 0.2]));
 
         let buffers: SpeakerBuffers = Arc::new(std::sync::Mutex::new(map));
         let mut mix = Vec::new();
@@ -404,7 +400,7 @@ mod tests {
     #[test]
     fn test_snapshot_advances_cursors() {
         let mut map = HashMap::new();
-        let _ = map.insert(1u32, VecDeque::from(vec![0.1_f32, 0.2, 0.3, 0.4]));
+        let _ = map.insert(1u32, holding(vec![0.1_f32, 0.2, 0.3, 0.4]));
         let buffers: SpeakerBuffers = Arc::new(std::sync::Mutex::new(map));
         let mut mix = Vec::new();
         let mut cursors = HashMap::new();
@@ -421,7 +417,7 @@ mod tests {
     #[test]
     fn test_snapshot_cursor_skips_on_drain() {
         let mut map = HashMap::new();
-        let _ = map.insert(1u32, VecDeque::from(vec![0.1_f32, 0.2, 0.3, 0.4, 0.5]));
+        let _ = map.insert(1u32, holding(vec![0.1_f32, 0.2, 0.3, 0.4, 0.5]));
         let buffers: SpeakerBuffers = Arc::new(std::sync::Mutex::new(map));
         let mut mix = Vec::new();
         let mut cursors = HashMap::new();
@@ -435,9 +431,9 @@ mod tests {
         {
             let mut locked = buffers.lock().unwrap();
             let buf = locked.get_mut(&1).unwrap();
-            let _ = buf.drain(..3); // [0.4, 0.5]
-            buf.push_back(0.6); // [0.4, 0.5, 0.6]
-            buf.push_back(0.7); // [0.4, 0.5, 0.6, 0.7]
+            let mut played = [0.0_f32; 3];
+            let _ = buf.drain_into(&mut played, 1.0); // [0.4, 0.5]
+            let _ = buf.push(&[0.6, 0.7]); // [0.4, 0.5, 0.6, 0.7]
         }
 
         // cursor=5 > buf.len()=4 -> cursor skips to 4 (end), no re-read
@@ -448,7 +444,7 @@ mod tests {
         // Push one more sample
         {
             let mut locked = buffers.lock().unwrap();
-            locked.get_mut(&1).unwrap().push_back(0.8); // [0.4, 0.5, 0.6, 0.7, 0.8]
+            let _ = locked.get_mut(&1).unwrap().push(&[0.8]); // [0.4, 0.5, 0.6, 0.7, 0.8]
         }
 
         // Now reads only the new sample

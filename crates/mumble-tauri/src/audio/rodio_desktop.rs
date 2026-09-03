@@ -5,7 +5,6 @@
 //! avoids the low-level callback complexity of raw cpal and lets
 //! rodio handle device threading, sample-rate conversion, and mixing.
 
-use std::collections::VecDeque;
 use std::num::NonZero;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, SyncSender, TryRecvError};
@@ -17,7 +16,7 @@ const MONO_CHANNELS: NonZero<u16> = NonZero::new(1).unwrap();
 const SAMPLE_RATE_48K: NonZero<u32> = NonZero::new(48_000).unwrap();
 
 use mumble_protocol::audio::capture::AudioCapture;
-use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes};
+use mumble_protocol::audio::mixer::{SpeakerBuffer, SpeakerBuffers, SpeakerVolumes};
 use mumble_protocol::audio::resampler::StreamResampler;
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use mumble_protocol::error::{Error, Result};
@@ -429,19 +428,18 @@ impl RateWatch {
 
 // -- Custom Source for Mumble audio mixing --------------------------
 
-/// Number of mono samples to mix per refill (20 ms at 48 kHz).
-const MIX_CHUNK_SIZE: usize = 960;
-/// Minimum buffered samples before playback begins (~100 ms).
-const PRE_BUFFER_SAMPLES: usize = 4800;
+/// Number of mono samples to mix per refill (10 ms at 48 kHz).
+///
+/// The staging granularity, not a delay: samples pulled early sit here
+/// instead of in the speaker buffer and play at the same instant either
+/// way. Ten milliseconds matches the device period, so a frame that
+/// arrives just late is noticed one period later rather than two.
+const MIX_CHUNK_SIZE: usize = 480;
 /// Refill back-off (in mono samples) when a refill returns no data.
-/// 5 ms keeps the speaker buffer mutex contention bounded (max
-/// ~200 lock attempts/s per source) while letting a transient jitter
-/// recover within a few ms instead of forcing a full 20 ms of decay.
-const UNDERRUN_BACKOFF_SAMPLES: usize = 240;
-/// Consecutive empty refills before re-priming the buffer.  Each
-/// empty refill represents one [`UNDERRUN_BACKOFF_SAMPLES`] period
-/// (5 ms), so 300 corresponds to ~1.5 s of sustained silence.
-const REPRIME_AFTER: u32 = 300;
+/// 2 ms keeps the speaker buffer mutex contention bounded (at most 500
+/// lock attempts/s per source while idle) while letting a transient
+/// gap recover within a couple of ms instead of a full chunk of decay.
+const UNDERRUN_BACKOFF_SAMPLES: usize = 96;
 
 /// A rodio [`Source`] that reads from per-speaker ring buffers and
 /// yields mixed mono `f32` samples at 48 kHz.
@@ -449,6 +447,11 @@ const REPRIME_AFTER: u32 = 300;
 /// rodio's background output thread calls `Iterator::next()` to pull
 /// samples. Mixing is done in chunks of [`MIX_CHUNK_SIZE`] to avoid
 /// locking the speaker buffers on every single sample.
+///
+/// There is no priming at this level. Each speaker's jitter buffer
+/// decides for itself when its talkspurt is ready to play, so the source
+/// only ever mixes what it is handed and fades across whatever gaps are
+/// left.
 pub(super) struct MumbleMixerSource {
     buffers: SpeakerBuffers,
     speaker_volumes: SpeakerVolumes,
@@ -456,8 +459,6 @@ pub(super) struct MumbleMixerSource {
     mixed_chunk: Vec<f32>,
     chunk_pos: usize,
     chunk_valid: usize,
-    primed: bool,
-    consecutive_empty: u32,
     running: Arc<AtomicBool>,
     last_sample: f32,
     in_underrun: bool,
@@ -472,8 +473,8 @@ pub(super) struct MumbleMixerSource {
     fade_anchor: f32,
     /// Remaining samples to skip before the next `refill_chunk()` call.
     /// Prevents per-sample refill attempts during underrun by throttling
-    /// them to one every [`UNDERRUN_BACKOFF_SAMPLES`] (5 ms).  Short
-    /// enough that transient jitter recovers within a few ms instead
+    /// them to one every [`UNDERRUN_BACKOFF_SAMPLES`] (2 ms).  Short
+    /// enough that a transient gap recovers within a couple of ms instead
     /// of forcing a full chunk of decay/silence.
     underrun_cooldown: usize,
     diag: MixerDiag,
@@ -489,7 +490,6 @@ struct MixerDiag {
     peak: f32,
     max_buf_depth: usize,
     lock_failures: u64,
-    reprime_count: u64,
 }
 
 impl MumbleMixerSource {
@@ -506,8 +506,6 @@ impl MumbleMixerSource {
             mixed_chunk: vec![0.0; MIX_CHUNK_SIZE],
             chunk_pos: 0,
             chunk_valid: 0,
-            primed: false,
-            consecutive_empty: 0,
             running,
             last_sample: 0.0,
             in_underrun: false,
@@ -524,7 +522,6 @@ impl MumbleMixerSource {
                 peak: 0.0,
                 max_buf_depth: 0,
                 lock_failures: 0,
-                reprime_count: 0,
             },
         }
     }
@@ -537,17 +534,6 @@ impl MumbleMixerSource {
             self.underrun_cooldown = UNDERRUN_BACKOFF_SAMPLES;
             return;
         };
-
-        if !self.primed {
-            let max_available = bufs.values().map(VecDeque::len).max().unwrap_or(0);
-            if max_available < PRE_BUFFER_SAMPLES {
-                self.chunk_pos = 0;
-                self.chunk_valid = 0;
-                self.underrun_cooldown = UNDERRUN_BACKOFF_SAMPLES;
-                return;
-            }
-            self.primed = true;
-        }
 
         // try_lock avoids blocking the rodio output thread; on
         // contention we fall back to default volumes (1.0).  Borrow
@@ -569,12 +555,7 @@ impl MumbleMixerSource {
         self.diag.max_buf_depth = self.diag.max_buf_depth.max(buf_depth);
 
         if !drained || valid_count == 0 {
-            self.consecutive_empty += 1;
             self.diag.underrun_refills += 1;
-            if self.consecutive_empty >= REPRIME_AFTER {
-                self.primed = false;
-                self.diag.reprime_count += 1;
-            }
             self.chunk_pos = 0;
             self.chunk_valid = 0;
             self.underrun_cooldown = UNDERRUN_BACKOFF_SAMPLES;
@@ -582,7 +563,6 @@ impl MumbleMixerSource {
             if valid_count < MIX_CHUNK_SIZE {
                 self.diag.partial_refills += 1;
             }
-            self.consecutive_empty = 0;
             self.chunk_pos = 0;
             self.chunk_valid = valid_count;
         }
@@ -610,8 +590,7 @@ impl Iterator for MumbleMixerSource {
         if self.diag.samples_pulled.is_multiple_of(48_000) {
             trace!(
                 "rodio mixer diag: pulled={}, refills={}, underrun={}, partial={}, \
-                 ramps={}, peak={:.4}, max_buf={}, lock_fail={}, reprimes={}, \
-                 consec_empty={}, in_underrun={}",
+                 ramps={}, peak={:.4}, max_buf={}, lock_fail={}, in_underrun={}",
                 self.diag.samples_pulled,
                 self.diag.refills,
                 self.diag.underrun_refills,
@@ -620,8 +599,6 @@ impl Iterator for MumbleMixerSource {
                 self.diag.peak,
                 self.diag.max_buf_depth,
                 self.diag.lock_failures,
-                self.diag.reprime_count,
-                self.consecutive_empty,
                 self.in_underrun,
             );
         }
@@ -760,39 +737,81 @@ impl RodioMixingPlayback {
     fn find_output_by_name(name: &str) -> Option<cpal::Device> {
         super::devices::find_output(name)
     }
+
+    /// A builder for the configured output device, or the default one.
+    ///
+    /// Built on demand rather than once, because opening consumes the
+    /// builder and [`start`](Self::start) may need a second attempt at a
+    /// different buffer size.
+    fn builder(&self) -> Result<rodio::stream::DeviceSinkBuilder> {
+        let Some(name) = self.device_name.as_deref() else {
+            return rodio::stream::DeviceSinkBuilder::from_default_device()
+                .map_err(|e| Error::InvalidState(format!("Open output device: {e}")));
+        };
+        match Self::find_output_by_name(name) {
+            Some(device) => {
+                debug!("rodio playback: using selected output device '{name}'");
+                rodio::stream::DeviceSinkBuilder::from_device(device)
+                    .map_err(|e| Error::InvalidState(format!("Open output '{name}': {e}")))
+            }
+            None => {
+                warn!(
+                    "rodio playback: selected output device '{name}' not found, falling back to default"
+                );
+                rodio::stream::DeviceSinkBuilder::from_default_device()
+                    .map_err(|e| Error::InvalidState(format!("Open output device: {e}")))
+            }
+        }
+    }
 }
+
+/// Frames per output callback: 10 ms at 48 kHz.
+///
+/// Every sample handed to the OS waits in its buffer for up to one of
+/// these before it is heard, so this is playout latency as directly as the
+/// jitter buffer's depth is. rodio does not take the system's own period:
+/// `DeviceSinkBuilder::from_device` replaces `BufferSize::Default` with a
+/// fixed 50 ms ("Rodio configures a default buffer size of 100ms latency
+/// regardless of the system default", `rodio::stream`), which it chose
+/// because some systems report a nonsense default. Ten milliseconds is the
+/// WASAPI shared-mode engine period and a normal ALSA period, so it asks
+/// for what the hardware is already doing.
+///
+/// Expressed in frames, which is what cpal takes, so a device running at
+/// 44.1 kHz gets 10.9 ms rather than 10. Close enough: this is a latency
+/// budget, not a clock.
+const OUTPUT_BUFFER_FRAMES: u32 = 480;
 
 impl super::MixingPlayback for RodioMixingPlayback {
     fn start(&mut self) -> Result<()> {
-        let builder = if let Some(name) = self.device_name.as_deref() {
-            match Self::find_output_by_name(name) {
-                Some(device) => {
-                    debug!("rodio playback: using selected output device '{name}'");
-                    rodio::stream::DeviceSinkBuilder::from_device(device)
-                        .map_err(|e| Error::InvalidState(format!("Open output '{name}': {e}")))?
-                }
-                None => {
-                    warn!(
-                        "rodio playback: selected output device '{name}' not found, falling back to default"
-                    );
-                    rodio::stream::DeviceSinkBuilder::from_default_device()
-                        .map_err(|e| Error::InvalidState(format!("Open output device: {e}")))?
-                }
-            }
-        } else {
-            rodio::stream::DeviceSinkBuilder::from_default_device()
-                .map_err(|e| Error::InvalidState(format!("Open output device: {e}")))?
-        };
-        let device_sink = builder
+        // A short buffer first, rodio's 50 ms one only if the device
+        // refuses it. Not every driver accepts an arbitrary period, and a
+        // client that fails to open its speakers is worse than one that is
+        // 40 ms late.
+        let device_sink = match self
+            .builder()?
+            .with_buffer_size(cpal::BufferSize::Fixed(OUTPUT_BUFFER_FRAMES))
             .open_stream()
-            .map_err(|e| Error::InvalidState(format!("Open output stream: {e}")))?;
+        {
+            Ok(sink) => sink,
+            Err(e) => {
+                warn!(
+                    "rodio playback: device refused a {OUTPUT_BUFFER_FRAMES}-frame buffer ({e}); \
+                     falling back to rodio's default, which adds ~40 ms of playout latency"
+                );
+                self.builder()?
+                    .open_stream()
+                    .map_err(|e| Error::InvalidState(format!("Open output stream: {e}")))?
+            }
+        };
         let mixer = device_sink.mixer().clone();
 
         let cfg = device_sink.config();
         debug!(
-            "rodio playback opened: device_rate={} Hz, channels={}",
+            "rodio playback opened: device_rate={} Hz, channels={}, buffer={:?}",
             cfg.sample_rate().get(),
             cfg.channel_count().get(),
+            cfg.buffer_size(),
         );
 
         self.running.store(true, Ordering::Relaxed);
@@ -815,7 +834,7 @@ impl super::MixingPlayback for RodioMixingPlayback {
             sink.log_on_drop(false);
         }
         if let Ok(mut bufs) = self.buffers.lock() {
-            bufs.values_mut().for_each(VecDeque::clear);
+            bufs.values_mut().for_each(SpeakerBuffer::clear);
         }
         Ok(())
     }
@@ -860,6 +879,22 @@ mod tests {
         let volume = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
         let running = Arc::new(AtomicBool::new(true));
         MumbleMixerSource::new(buffers, speaker_volumes, volume, running)
+    }
+
+    /// Enough audio for the source tests: a jitter target plus a chunk.
+    const FILL: usize = 1920 + MIX_CHUNK_SIZE;
+
+    /// Put `samples` of `value` in speaker 1's buffer, ready to play.
+    fn fill_speaker(buffers: &SpeakerBuffers, value: f32, samples: usize) {
+        use mumble_protocol::audio::mixer::JitterConfig;
+        let mut bufs = buffers.lock().unwrap();
+        let _ = bufs.insert(
+            1,
+            SpeakerBuffer::with_samples(
+                JitterConfig::default(),
+                std::iter::repeat_n(value, samples),
+            ),
+        );
     }
 
     /// Contention diagnostic - probes EVERY cpal input device: default
@@ -1089,20 +1124,12 @@ mod tests {
     fn underrun_decays_smoothly_instead_of_hard_silence() {
         let buffers: SpeakerBuffers = Arc::new(Mutex::new(HashMap::new()));
         let svols: SpeakerVolumes = Arc::new(Mutex::new(HashMap::new()));
-
-        let total_samples = PRE_BUFFER_SAMPLES + MIX_CHUNK_SIZE;
-        {
-            let mut bufs = buffers.lock().unwrap();
-            let buf = bufs.entry(1).or_default();
-            for _ in 0..total_samples {
-                buf.push_back(0.5);
-            }
-        }
+        fill_speaker(&buffers, 0.5, FILL);
 
         let mut src = make_source(buffers, svols);
 
         // Drain all real audio samples.
-        for _ in 0..total_samples {
+        for _ in 0..FILL {
             let s = src.next().unwrap();
             assert!((s - 0.5).abs() < 0.01, "expected ~0.5, got {s}");
         }
@@ -1131,20 +1158,12 @@ mod tests {
     fn resume_after_underrun_ramps_smoothly() {
         let buffers: SpeakerBuffers = Arc::new(Mutex::new(HashMap::new()));
         let svols: SpeakerVolumes = Arc::new(Mutex::new(HashMap::new()));
-
-        let total_samples = PRE_BUFFER_SAMPLES + MIX_CHUNK_SIZE;
-        {
-            let mut bufs = buffers.lock().unwrap();
-            let buf = bufs.entry(1).or_default();
-            for _ in 0..total_samples {
-                buf.push_back(0.5);
-            }
-        }
+        fill_speaker(&buffers, 0.5, FILL);
 
         let mut src = make_source(buffers.clone(), svols);
 
         // Drain all real audio.
-        for _ in 0..total_samples {
+        for _ in 0..FILL {
             let _ = src.next();
         }
 
@@ -1155,12 +1174,14 @@ mod tests {
         assert!(src.in_underrun, "should be in underrun state");
 
         // Refill speaker buffer with new audio at a different level.
+        // Running dry mid-talkspurt made the jitter buffer wait for its
+        // (now larger) target before playing again, so give it that much.
         {
             let mut bufs = buffers.lock().unwrap();
-            let buf = bufs.entry(1).or_default();
-            for _ in 0..MIX_CHUNK_SIZE {
-                buf.push_back(-0.3);
-            }
+            let buf = bufs.get_mut(&1).unwrap();
+            let target = buf.target();
+            let _ = buf.push(&vec![-0.3; target]);
+            assert!(buf.is_primed(), "the target's worth of audio resumes playout");
         }
 
         // Drain remaining cooldown - the source continues decay output
@@ -1196,54 +1217,6 @@ mod tests {
     }
 
     #[test]
-    fn brief_underrun_does_not_trigger_reprime() {
-        let buffers: SpeakerBuffers = Arc::new(Mutex::new(HashMap::new()));
-        let svols: SpeakerVolumes = Arc::new(Mutex::new(HashMap::new()));
-
-        let total_samples = PRE_BUFFER_SAMPLES + MIX_CHUNK_SIZE;
-        {
-            let mut bufs = buffers.lock().unwrap();
-            let buf = bufs.entry(1).or_default();
-            for _ in 0..total_samples {
-                buf.push_back(0.5);
-            }
-        }
-
-        let mut src = make_source(buffers.clone(), svols);
-
-        for _ in 0..total_samples {
-            let _ = src.next();
-        }
-        assert!(src.primed, "should be primed after initial playback");
-
-        // Drain one full chunk's worth of underrun (MIX_CHUNK_SIZE samples).
-        // With the 5 ms back-off, this counts as
-        // MIX_CHUNK_SIZE / UNDERRUN_BACKOFF_SAMPLES empty refills.
-        for _ in 0..MIX_CHUNK_SIZE {
-            let _ = src.next();
-        }
-
-        let expected_empty = (MIX_CHUNK_SIZE / UNDERRUN_BACKOFF_SAMPLES) as u32;
-        assert!(
-            src.primed,
-            "should still be primed after a single-chunk underrun"
-        );
-        assert_eq!(
-            src.consecutive_empty, expected_empty,
-            "one chunk of underrun should count as {expected_empty} empty refills, not {}",
-            src.consecutive_empty
-        );
-        assert_eq!(
-            src.diag.reprime_count, 0,
-            "no repriming should have occurred"
-        );
-        assert!(
-            expected_empty < REPRIME_AFTER,
-            "REPRIME_AFTER ({REPRIME_AFTER}) must be larger than a single-chunk underrun ({expected_empty})"
-        );
-    }
-
-    #[test]
     fn speech_onset_after_long_silence_uses_long_fade_in() {
         // Regression: when audio starts after the source has been
         // silent for a long time (typical "user starts talking"), the
@@ -1268,13 +1241,7 @@ mod tests {
         );
 
         // Now simulate a speaker beginning to talk: fill the buffer.
-        {
-            let mut bufs = buffers.lock().unwrap();
-            let buf = bufs.entry(1).or_default();
-            for _ in 0..(PRE_BUFFER_SAMPLES + MIX_CHUNK_SIZE) {
-                buf.push_back(0.5);
-            }
-        }
+        fill_speaker(&buffers, 0.5, FILL);
 
         // Drain pending cooldown so the next call refills the chunk.
         let cooldown = src.underrun_cooldown;
@@ -1335,18 +1302,11 @@ mod tests {
 
         // Fill with a constant non-zero amplitude (e.g. peak of a
         // word's vowel formant).
-        let total_samples = PRE_BUFFER_SAMPLES + MIX_CHUNK_SIZE;
         const ANCHOR: f32 = 0.7;
-        {
-            let mut bufs = buffers.lock().unwrap();
-            let buf = bufs.entry(1).or_default();
-            for _ in 0..total_samples {
-                buf.push_back(ANCHOR);
-            }
-        }
+        fill_speaker(&buffers, ANCHOR, FILL);
 
         let mut src = make_source(buffers, svols);
-        for _ in 0..total_samples {
+        for _ in 0..FILL {
             let _ = src.next();
         }
 
@@ -1412,18 +1372,10 @@ mod tests {
         // amplitude, so brief jitter is barely audible.
         let buffers: SpeakerBuffers = Arc::new(Mutex::new(HashMap::new()));
         let svols: SpeakerVolumes = Arc::new(Mutex::new(HashMap::new()));
-
-        let total_samples = PRE_BUFFER_SAMPLES + MIX_CHUNK_SIZE;
-        {
-            let mut bufs = buffers.lock().unwrap();
-            let buf = bufs.entry(1).or_default();
-            for _ in 0..total_samples {
-                buf.push_back(0.5);
-            }
-        }
+        fill_speaker(&buffers, 0.5, FILL);
 
         let mut src = make_source(buffers.clone(), svols);
-        for _ in 0..total_samples {
+        for _ in 0..FILL {
             let _ = src.next();
         }
         // Now in steady-state, last_sample = 0.5.

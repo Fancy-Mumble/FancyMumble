@@ -284,11 +284,13 @@ impl super::AudioDeviceFactory for CpalAudioFactory {
 
 // -- Mixing playback -----------------------------------------------
 
-/// Batch-drain up to `mono_needed` samples from every active speaker
-/// into `mixed_buf` (summed/mixed).
+/// Batch-drain up to `mono_needed` samples from every speaker that is
+/// ready to play into `mixed_buf` (summed/mixed).
 ///
 /// Per-speaker volume is applied from `speaker_vols` (0.0-2.0,
-/// defaulting to 1.0 when absent).
+/// defaulting to 1.0 when absent). Whether a speaker is ready - its
+/// jitter buffer has reached its target, or its talkspurt is over - is
+/// each buffer's own decision, made inside `drain_into`.
 ///
 /// Returns `(had_data, valid_count, max_buf_before)`: whether any
 /// speaker contributed, the number of valid mixed samples (max drained
@@ -296,7 +298,7 @@ impl super::AudioDeviceFactory for CpalAudioFactory {
 /// speakers before draining.  Positions beyond `valid_count` in
 /// `mixed_buf` are zero and should be treated as underrun by the caller.
 pub(super) fn batch_drain_speakers(
-    bufs: &mut HashMap<u32, VecDeque<f32>>,
+    bufs: &mut HashMap<u32, mumble_protocol::audio::mixer::SpeakerBuffer>,
     speaker_vols: &HashMap<u32, f32>,
     mixed_buf: &mut Vec<f32>,
     mono_needed: usize,
@@ -308,26 +310,15 @@ pub(super) fn batch_drain_speakers(
     let mut max_buf_before: usize = 0;
 
     for (session, buf) in bufs.iter_mut() {
-        if buf.is_empty() {
+        let before = buf.len();
+        let vol = speaker_vols.get(session).copied().unwrap_or(1.0);
+        let n = buf.drain_into(mixed_buf, vol);
+        if n == 0 {
             continue;
         }
         any = true;
-        max_buf_before = max_buf_before.max(buf.len());
-        let vol = speaker_vols.get(session).copied().unwrap_or(1.0);
-        let n = buf.len().min(mono_needed);
         max_drained = max_drained.max(n);
-        let (a, b) = buf.as_slices();
-        let from_a = n.min(a.len());
-        for (dst, src) in mixed_buf[..from_a].iter_mut().zip(&a[..from_a]) {
-            *dst += *src * vol;
-        }
-        if from_a < n {
-            let from_b = n - from_a;
-            for (dst, src) in mixed_buf[from_a..n].iter_mut().zip(&b[..from_b]) {
-                *dst += *src * vol;
-            }
-        }
-        let _ = buf.drain(..n);
+        max_buf_before = max_buf_before.max(before);
     }
 
     (any, max_drained, max_buf_before)
@@ -357,26 +348,21 @@ struct PlaybackState {
 
 /// Try to drain speaker buffers into `mixed_buf`. Returns
 /// `Some((had_data, valid_count, buf_depth))` on success, or `None`
-/// when the caller should fill zeros and return early (not yet primed
-/// or lock failure).
+/// when the caller should fill zeros and return early (lock failure).
+///
+/// There is no priming here any more: each speaker's jitter buffer decides
+/// for itself when its talkspurt is ready to play, so a speaker who starts
+/// talking while another is mid-sentence gets the same protection as the
+/// first one did, rather than being mixed in with nothing buffered.
 fn try_drain_speakers_checked(
     buffers: &mumble_protocol::audio::mixer::SpeakerBuffers,
     speaker_volumes: &mumble_protocol::audio::mixer::SpeakerVolumes,
-    primed_cb: &AtomicBool,
     mixed_buf: &mut Vec<f32>,
     mono_needed: usize,
 ) -> Option<(bool, usize, usize)> {
-    const PRE_BUFFER_SAMPLES: usize = 4800;
     let Ok(mut bufs) = buffers.lock() else {
         return None;
     };
-    if !primed_cb.load(Ordering::Relaxed) {
-        let max_available = bufs.values().map(VecDeque::len).max().unwrap_or(0);
-        if max_available < PRE_BUFFER_SAMPLES {
-            return None;
-        }
-        primed_cb.store(true, Ordering::Relaxed);
-    }
     // try_lock avoids blocking the real-time audio thread on a second
     // mutex; on contention we fall back to default volumes (1.0).
     // Borrow the guard instead of cloning the HashMap - this runs on
@@ -603,9 +589,6 @@ impl super::MixingPlayback for CpalMixingPlayback {
         let src_ratio: f64 = 48_000.0 / device_rate as f64;
         let out_channels = device_channels as usize;
 
-        let primed = Arc::new(AtomicBool::new(false));
-        let primed_cb = primed.clone();
-
         let mut diag = CallbackDiag {
             callbacks: 0,
             underrun: 0,
@@ -621,7 +604,6 @@ impl super::MixingPlayback for CpalMixingPlayback {
             underrun_samples: 0,
         };
         let mut mixed_buf: Vec<f32> = Vec::new();
-        let mut consecutive_empty: u32 = 0;
 
         let stream = self
             .device
@@ -637,7 +619,6 @@ impl super::MixingPlayback for CpalMixingPlayback {
                     let drain_result = try_drain_speakers_checked(
                         &buffers,
                         &speaker_volumes,
-                        &primed_cb,
                         &mut mixed_buf,
                         src_needed,
                     );
@@ -650,20 +631,8 @@ impl super::MixingPlayback for CpalMixingPlayback {
 
                     if !drained || valid_count == 0 {
                         diag.underrun += 1;
-                        consecutive_empty += 1;
-                        // Only reprime after sustained silence (1.5 s).
-                        // Natural speech pauses (100-500 ms) are absorbed
-                        // by the buffer; repriming during those pauses
-                        // would introduce ~100 ms audible gaps.
-                        const REPRIME_AFTER: u32 = 150;
-                        if consecutive_empty >= REPRIME_AFTER {
-                            primed_cb.store(false, Ordering::Relaxed);
-                        }
-                    } else {
-                        consecutive_empty = 0;
-                        if valid_count < src_needed {
-                            diag.partial += 1;
-                        }
+                    } else if valid_count < src_needed {
+                        diag.partial += 1;
                     }
                     diag.log_if_due(src_needed, valid_count, out_frames, src_ratio);
 
@@ -715,6 +684,7 @@ mod tests {
         reason = "acceptable in test code"
     )]
     use super::*;
+    use mumble_protocol::audio::mixer::{JitterConfig, SpeakerBuffer};
     use mumble_protocol::audio::sample::AudioFormat;
 
     #[test]
@@ -753,11 +723,16 @@ mod tests {
         assert!(capture.read_frame().is_err());
     }
 
+    /// A speaker buffer that is already playing, holding `samples`.
+    fn ready(samples: Vec<f32>) -> SpeakerBuffer {
+        SpeakerBuffer::with_samples(JitterConfig::default(), samples)
+    }
+
     #[test]
     fn batch_drain_sums_multiple_speakers() {
         let mut bufs = HashMap::new();
-        bufs.insert(1u32, VecDeque::from(vec![0.5_f32; 10]));
-        bufs.insert(2, VecDeque::from(vec![0.25; 10]));
+        bufs.insert(1u32, ready(vec![0.5_f32; 10]));
+        bufs.insert(2, ready(vec![0.25; 10]));
         let speaker_vols: HashMap<u32, f32> = HashMap::new();
         let mut mixed = Vec::new();
 
@@ -777,7 +752,7 @@ mod tests {
     #[test]
     fn batch_drain_partial_speaker() {
         let mut bufs = HashMap::new();
-        bufs.insert(1u32, VecDeque::from(vec![1.0_f32; 5]));
+        bufs.insert(1u32, ready(vec![1.0_f32; 5]));
         let speaker_vols: HashMap<u32, f32> = HashMap::new();
         let mut mixed = Vec::new();
 
@@ -796,16 +771,35 @@ mod tests {
 
     #[test]
     fn batch_drain_empty_returns_false() {
-        let mut bufs: HashMap<u32, VecDeque<f32>> = HashMap::new();
+        let mut bufs: HashMap<u32, SpeakerBuffer> = HashMap::new();
         let speaker_vols: HashMap<u32, f32> = HashMap::new();
         let mut mixed = Vec::new();
         assert!(!batch_drain_speakers(&mut bufs, &speaker_vols, &mut mixed, 10).0);
     }
 
     #[test]
+    fn batch_drain_skips_a_speaker_still_filling_its_jitter_buffer() {
+        // A speaker one frame into a talkspurt has not reached its target;
+        // it contributes nothing yet and the mix reports no data. The
+        // global 100 ms prime this replaces would have held *everyone*
+        // for the slowest speaker instead.
+        let mut bufs = HashMap::new();
+        let mut filling = SpeakerBuffer::new(JitterConfig::default());
+        let _ = filling.push(&[1.0; 960]);
+        bufs.insert(1u32, filling);
+        let speaker_vols: HashMap<u32, f32> = HashMap::new();
+        let mut mixed = Vec::new();
+
+        let (had, valid, _depth) = batch_drain_speakers(&mut bufs, &speaker_vols, &mut mixed, 480);
+        assert!(!had);
+        assert_eq!(valid, 0);
+        assert_eq!(bufs[&1].len(), 960, "nothing was taken");
+    }
+
+    #[test]
     fn batch_drain_retains_leftover_samples() {
         let mut bufs = HashMap::new();
-        bufs.insert(1u32, VecDeque::from(vec![0.5_f32; 20]));
+        bufs.insert(1u32, ready(vec![0.5_f32; 20]));
         let speaker_vols: HashMap<u32, f32> = HashMap::new();
         let mut mixed = Vec::new();
 
@@ -817,8 +811,8 @@ mod tests {
     #[test]
     fn batch_drain_applies_per_speaker_volume() {
         let mut bufs = HashMap::new();
-        bufs.insert(1u32, VecDeque::from(vec![1.0_f32; 4]));
-        bufs.insert(2u32, VecDeque::from(vec![1.0_f32; 4]));
+        bufs.insert(1u32, ready(vec![1.0_f32; 4]));
+        bufs.insert(2u32, ready(vec![1.0_f32; 4]));
 
         let mut speaker_vols = HashMap::new();
         speaker_vols.insert(1u32, 0.5_f32); // speaker 1 at 50%
@@ -837,7 +831,7 @@ mod tests {
     #[test]
     fn batch_drain_default_volume_is_unity() {
         let mut bufs = HashMap::new();
-        bufs.insert(1u32, VecDeque::from(vec![0.8_f32; 4]));
+        bufs.insert(1u32, ready(vec![0.8_f32; 4]));
 
         // No entry for speaker 1 means default volume (1.0)
         let speaker_vols: HashMap<u32, f32> = HashMap::new();
@@ -850,7 +844,7 @@ mod tests {
     }
 
     fn make_speaker_buffers(
-        data: HashMap<u32, VecDeque<f32>>,
+        data: HashMap<u32, SpeakerBuffer>,
     ) -> mumble_protocol::audio::mixer::SpeakerBuffers {
         Arc::new(Mutex::new(data))
     }
@@ -862,73 +856,33 @@ mod tests {
     }
 
     #[test]
-    fn try_drain_returns_none_before_primed() {
-        let bufs = make_speaker_buffers(HashMap::from([(1, VecDeque::from(vec![1.0; 100]))]));
+    fn try_drain_mixes_what_is_ready() {
+        let bufs = make_speaker_buffers(HashMap::from([(1, ready(vec![1.0; 5000]))]));
         let vols = make_speaker_volumes(HashMap::new());
-        let primed = AtomicBool::new(false);
         let mut mixed = Vec::new();
 
-        // 100 samples is below PRE_BUFFER_SAMPLES (4800) -> returns None
-        let result = try_drain_speakers_checked(&bufs, &vols, &primed, &mut mixed, 100);
-        assert!(result.is_none());
-        assert!(!primed.load(Ordering::Relaxed));
-    }
-
-    #[test]
-    fn try_drain_primes_when_buffer_sufficient() {
-        let bufs = make_speaker_buffers(HashMap::from([(1, VecDeque::from(vec![1.0; 5000]))]));
-        let vols = make_speaker_volumes(HashMap::new());
-        let primed = AtomicBool::new(false);
-        let mut mixed = Vec::new();
-
-        let result = try_drain_speakers_checked(&bufs, &vols, &primed, &mut mixed, 480);
-        assert!(result.is_some());
-        assert!(primed.load(Ordering::Relaxed));
-        let (had_data, valid, _depth) = result.unwrap();
+        let result = try_drain_speakers_checked(&bufs, &vols, &mut mixed, 480);
+        let (had_data, valid, depth) = result.unwrap();
         assert!(had_data);
         assert_eq!(valid, 480);
+        assert_eq!(depth, 5000);
     }
 
     #[test]
-    fn try_drain_stays_primed_when_empty() {
-        let bufs = make_speaker_buffers(HashMap::from([(1, VecDeque::from(vec![1.0; 5000]))]));
+    fn try_drain_reports_an_empty_buffer_as_no_data() {
+        let bufs = make_speaker_buffers(HashMap::from([(1, ready(vec![1.0; 5000]))]));
         let vols = make_speaker_volumes(HashMap::new());
-        let primed = AtomicBool::new(false);
         let mut mixed = Vec::new();
 
-        // Prime the buffer
-        let _ = try_drain_speakers_checked(&bufs, &vols, &primed, &mut mixed, 480);
-        assert!(primed.load(Ordering::Relaxed));
-
-        // Drain all remaining data
+        let _ = try_drain_speakers_checked(&bufs, &vols, &mut mixed, 480);
         {
             let mut locked = bufs.lock().unwrap();
             locked.get_mut(&1).unwrap().clear();
         }
 
-        // Once primed, stays primed even when empty (returns zero-filled data)
-        let result = try_drain_speakers_checked(&bufs, &vols, &primed, &mut mixed, 480);
-        assert!(result.is_some());
-        assert!(primed.load(Ordering::Relaxed));
+        let result = try_drain_speakers_checked(&bufs, &vols, &mut mixed, 480);
         let (had_data, _valid, _depth) = result.unwrap();
-        assert!(!had_data);
-    }
-
-    #[test]
-    fn try_drain_stays_primed_with_data() {
-        let bufs = make_speaker_buffers(HashMap::from([(1, VecDeque::from(vec![1.0; 10000]))]));
-        let vols = make_speaker_volumes(HashMap::new());
-        let primed = AtomicBool::new(false);
-        let mut mixed = Vec::new();
-
-        // Prime
-        let _ = try_drain_speakers_checked(&bufs, &vols, &primed, &mut mixed, 480);
-        assert!(primed.load(Ordering::Relaxed));
-
-        // Drain again - still has data, should stay primed
-        let result = try_drain_speakers_checked(&bufs, &vols, &primed, &mut mixed, 480);
-        assert!(result.is_some());
-        assert!(primed.load(Ordering::Relaxed));
+        assert!(!had_data, "the caller fades to silence, it does not get zeros as audio");
     }
 
     #[test]
