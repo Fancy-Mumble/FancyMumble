@@ -60,6 +60,33 @@ export function grownTailCount(prev: number, total: number): number {
 }
 
 /**
+ * How long the reader has to sit at the bottom before the window lets the
+ * history above go.
+ *
+ * Long enough that flicking to the bottom and straight back up finds the rows
+ * still mounted, short enough that a conversation someone has scrolled through
+ * and left alone does not keep hundreds of rows for the rest of the session.
+ */
+export const SETTLE_SHRINK_MS = 2_000;
+
+/**
+ * Window size once the reader has settled back at the bottom.
+ *
+ * Growth was one-way: climbing towards the top mounted chunk after chunk, and
+ * only an *arriving* message ever snapped the window back
+ * ([`tailCountAfterAppend`]). A reader who scrolled up through a busy channel
+ * and came back down kept every row they had passed - in a quiet channel, for
+ * as long as the app was open. Coming to rest at the bottom is the same
+ * signal an arrival gives: the history above is no longer being read.
+ *
+ * Only ever shrinks, and only from the bottom, so the rows released are all
+ * above the viewport and the view does not move.
+ */
+export function settledTailCount(prev: number): number {
+  return Math.min(prev, BASE_WINDOW);
+}
+
+/**
  * Window size needed to render the message at `msgIdx` (plus context
  * above it), e.g. for jump-to-quote / search navigation.  Never shrinks.
  */
