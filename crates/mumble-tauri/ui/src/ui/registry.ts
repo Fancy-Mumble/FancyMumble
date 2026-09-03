@@ -1,7 +1,12 @@
 import type { ComponentType } from "react";
 import type { UiDesignId } from "@core/types";
 
-export const DEFAULT_UI_DESIGN: UiDesignId = "standard";
+/** The design a profile starts in when nothing is stored for it.
+ *
+ * Nebula is what a new user meets. It is only ever consulted when there is no
+ * saved choice, so an existing profile keeps whichever pack it has been using
+ * - a stored preference always wins over this. */
+export const DEFAULT_UI_DESIGN: UiDesignId = "nebula";
 export const UI_DESIGN_QUERY_PARAMETER = "ui";
 
 export interface UiPackModule {
