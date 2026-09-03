@@ -264,6 +264,12 @@ fn build_signal_bridge() {
     let profile = std::env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
     let mut cmd = std::process::Command::new("cargo");
     let _ = cmd.arg("build").current_dir(&bridge_dir);
+    // The bridge builds into its own `target/` (the copy below reads it from
+    // there). A `CARGO_TARGET_DIR` in the environment would send it into the
+    // parent's directory instead, where a debug-profile parent already holds
+    // the lock the nested build then waits for - a deadlock, and the copy
+    // would not find the library even if it finished. Same scrub as qt6ui.
+    let _ = cmd.env_remove("CARGO_TARGET_DIR");
     if profile == "release" {
         let _ = cmd.arg("--release");
     }
