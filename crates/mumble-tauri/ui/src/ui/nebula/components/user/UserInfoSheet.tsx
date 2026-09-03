@@ -1,6 +1,16 @@
 import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
-import { Box, Button, IconButton, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Typography,
+} from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import type { FancyProfile, UserEntry, UserStats } from "@core/types";
 import { formatBandwidth, formatDuration, formatTimestamp } from "@core/utils/format";
@@ -405,7 +415,7 @@ export function UserInfoSheet({
               </Box>
             </Box>
 
-            <Table
+            <FactTable
               head={[
                 "",
                 t("sidebar:userInfo.colPackets"),
@@ -428,7 +438,7 @@ export function UserInfoSheet({
               ]}
             />
             {(stats.from_client || stats.from_server) && (
-              <Table
+              <FactTable
                 head={[
                   "",
                   t("sidebar:userInfo.colGood"),
@@ -534,15 +544,24 @@ function Legend({ color, label, dashed }: Readonly<{ color: string; label: strin
   );
 }
 
-function Table({ head, rows }: Readonly<{ head: readonly string[]; rows: readonly (readonly string[])[] }>) {
+/**
+ * The label-and-figures table the sheet uses for codec and network facts.
+ *
+ * Rules and padding come off MUI's cells, not out of them: these rows are a
+ * reading of numbers, and a line under each one turns four facts into a grid.
+ */
+function FactTable({
+  head,
+  rows,
+}: Readonly<{ head: readonly string[]; rows: readonly (readonly string[])[] }>) {
   return (
-    <Box
-      component="table"
+    <Table
+      size="small"
       sx={(theme) => ({
         width: "100%",
         mt: "14px",
-        borderCollapse: "collapse",
         fontSize: 12,
+        "& th, & td": { border: "none" },
         "& th": {
           fontSize: 10,
           letterSpacing: ".1em",
@@ -550,29 +569,30 @@ function Table({ head, rows }: Readonly<{ head: readonly string[]; rows: readonl
           fontWeight: 600,
           color: theme.palette.nebula.dim,
           textAlign: "right",
+          p: 0,
           pb: "6px",
         },
-        "& td": { py: "4px", textAlign: "right" },
+        "& td": { p: 0, py: "4px", textAlign: "right", color: theme.palette.nebula.text },
         "& th:first-of-type, & td:first-of-type": { textAlign: "left", color: theme.palette.nebula.muted },
       })}
     >
-      <thead>
-        <tr>
+      <TableHead>
+        <TableRow>
           {head.map((cell, index) => (
-            <th key={index}>{cell}</th>
+            <TableCell key={index}>{cell}</TableCell>
           ))}
-        </tr>
-      </thead>
-      <tbody>
+        </TableRow>
+      </TableHead>
+      <TableBody>
         {rows.map((row) => (
-          <tr key={row[0]}>
+          <TableRow key={row[0]}>
             {row.map((cell, index) => (
-              <td key={index}>{cell}</td>
+              <TableCell key={index}>{cell}</TableCell>
             ))}
-          </tr>
+          </TableRow>
         ))}
-      </tbody>
-    </Box>
+      </TableBody>
+    </Table>
   );
 }
 

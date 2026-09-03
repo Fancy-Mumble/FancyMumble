@@ -24,7 +24,21 @@ import {
   type InputHTMLAttributes,
   type UIEvent,
 } from "react";
-import { Box, Button, IconButton, MenuItem, Switch, TextField, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  IconButton,
+  MenuItem,
+  Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
@@ -863,7 +877,7 @@ function AuditResults({
         </SettingsCard>
       )}
 
-      <Box
+      <TableContainer
         onScroll={onScroll}
         sx={(theme) => ({
           maxHeight: "52vh",
@@ -873,24 +887,20 @@ function AuditResults({
           border: `1px solid ${theme.palette.nebula.line}`,
         })}
       >
-        <Box
-          component="table"
+        <Table
+          stickyHeader
+          size="small"
           data-testid={TID.auditTable}
-          sx={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}
+          sx={{ fontSize: 11.5, borderSpacing: 0 }}
         >
-          <Box component="thead">
-            <Box component="tr">
+          <TableHead>
+            <TableRow>
               {HEADERS.map((header) => (
-                <Box
-                  component="th"
+                <TableCell
                   key={header}
                   sx={(theme) => ({
-                    position: "sticky",
-                    top: 0,
-                    zIndex: 1,
                     px: "10px",
                     py: "8px",
-                    textAlign: "left",
                     fontSize: 10,
                     fontWeight: 600,
                     letterSpacing: "0.07em",
@@ -902,20 +912,20 @@ function AuditResults({
                   })}
                 >
                   {header}
-                </Box>
+                </TableCell>
               ))}
-            </Box>
-          </Box>
-          <Box component="tbody">
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {visible.length === 0 && (
-              <Box component="tr">
-                <Box
-                  component="td"
+              <TableRow>
+                <TableCell
                   colSpan={8}
                   sx={(theme) => ({
                     px: "12px",
                     py: "26px",
                     textAlign: "center",
+                    border: "none",
                     color: theme.palette.nebula.muted,
                   })}
                 >
@@ -924,25 +934,22 @@ function AuditResults({
                     : t("audit.noEntries", {
                         defaultValue: "No entries. Run a search, or wait for the live tail.",
                       })}
-                </Box>
-              </Box>
+                </TableCell>
+              </TableRow>
             )}
             {visible.map((entry) => (
-              <Box
-                component="tr"
+              <TableRow
                 key={entry.id}
+                selected={selected?.id === entry.id}
                 data-testid={TID.auditRow}
                 data-entry-id={entry.id}
                 onClick={() => onSelect(entry)}
                 sx={(theme) => ({
                   cursor: "pointer",
-                  background: selected?.id === entry.id ? theme.palette.nebula.accentSoft : "transparent",
-                  "&:hover": {
-                    background:
-                      selected?.id === entry.id
-                        ? theme.palette.nebula.accentSoft
-                        : theme.palette.nebula.hover,
+                  "&.Mui-selected, &.Mui-selected:hover": {
+                    background: theme.palette.nebula.accentSoft,
                   },
+                  "&:hover": { background: theme.palette.nebula.hover },
                 })}
               >
                 <Cell sx={{ whiteSpace: "nowrap" }}>{fmtTime(entry.ts)}</Cell>
@@ -961,11 +968,11 @@ function AuditResults({
                   {entry.channelId != null ? (channelName(entry.channelId) ?? `#${entry.channelId}`) : "-"}
                 </Cell>
                 <Cell sx={{ maxWidth: 220 }}>{entry.reason || noReason}</Cell>
-              </Box>
+              </TableRow>
             ))}
-          </Box>
-        </Box>
-      </Box>
+          </TableBody>
+        </Table>
+      </TableContainer>
 
       <Stack direction="row" alignItems="center" gap={1.5} sx={{ mt: "10px" }} flexWrap="wrap">
         {endless ? (
@@ -1046,19 +1053,22 @@ function DetailKey({ children }: Readonly<{ children: React.ReactNode }>) {
 
 function Cell({ children, sx }: Readonly<{ children: React.ReactNode; sx?: object }>) {
   return (
-    <Box
-      component="td"
+    <TableCell
       sx={(theme) => ({
         px: "10px",
         py: "7px",
+        // The rule sits on top of each row, so the last one ends on the card
+        // rather than on a line; MUI's own bottom border would double it.
         borderTop: `1px solid ${theme.palette.nebula.line}`,
+        borderBottom: "none",
+        color: theme.palette.nebula.text,
         overflow: "hidden",
         textOverflow: "ellipsis",
         ...sx,
       })}
     >
       {children}
-    </Box>
+    </TableCell>
   );
 }
 
