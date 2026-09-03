@@ -4,6 +4,8 @@ import { Stack } from "../primitives";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isDesktopPlatform } from "@core/utils/platform";
 import { CloseIcon, MinimizeIcon, PlusIcon, SquareIcon } from "@ui/icons";
+import { BrandGlyph } from "@ui/BrandGlyph";
+import { MARK_FILL, MARK_STROKE, MARK_TILE_PX } from "../../brandMark";
 import { radius } from "../../tokens";
 import { serverTint, type ServerRailEntry } from "../../selectors";
 import { UserAvatar } from "../primitives";
@@ -87,22 +89,7 @@ export function TitleBar({
         backdropFilter: "blur(14px)",
       })}
     >
-      <Box
-        aria-hidden
-        sx={(theme) => ({
-          width: 22,
-          height: 22,
-          borderRadius: radius("md"),
-          display: "grid",
-          placeItems: "center",
-          background: theme.palette.nebula.accent,
-          color: theme.palette.nebula.onAccent,
-          fontWeight: 700,
-          fontSize: 12,
-        })}
-      >
-        M
-      </Box>
+      <BrandMark />
       <Typography sx={{ fontWeight: 600, fontSize: 13, mr: "6px", whiteSpace: "nowrap" }}>
         {t("common:brand")}
       </Typography>
@@ -363,6 +350,58 @@ function ServerFavicon({ entry, icon }: Readonly<{ entry: ServerRailEntry; icon?
         square
         src={icon}
         gradient={serverTint(entry.group.key)}
+      />
+    </Box>
+  );
+}
+
+/**
+ * The app's monogram, up in the chrome.
+ *
+ * The tile is Nebula's - the skin's accent, the skin's corner, and its cut
+ * when the skin cuts - and the letter inside it is the shared outline, which
+ * paints in `currentColor` and scales to the box it is given. The taskbar
+ * icon is the same tile and the same outline drawn onto a canvas, so the two
+ * are one mark rather than two that agree by hand.
+ */
+function BrandMark() {
+  return (
+    <Box
+      aria-hidden
+      sx={(theme) => ({
+        width: MARK_TILE_PX,
+        height: MARK_TILE_PX,
+        flex: "none",
+        display: "grid",
+        placeItems: "center",
+        borderRadius: radius("md"),
+        background: theme.palette.nebula.accent,
+        color: theme.palette.nebula.onAccent,
+        // A skin that cuts its corners cuts the mark's too, so the tile here
+        // and the icon on the taskbar are the same shape. Written out rather
+        // than taken from `--nebula-clip-bubble`, because that polygon is
+        // quoted in fixed pixels for a message bubble and 12px off a 22px
+        // tile would take half of it.
+        ...(theme.palette.nebulaSkin.clipBubble === "none"
+          ? {}
+          : {
+              clipPath:
+                "polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 4px 100%, 0 calc(100% - 4px))",
+            }),
+      })}
+    >
+      {/* The canvas icon strokes a fraction of the *tile*; this strokes a
+          fraction of the *glyph*, which is `MARK_FILL` of the tile - and the
+          stroke itself widens the box it is fitted into, which is where the
+          second term comes from. Without both, the mark in the chrome comes
+          out lighter than the one on the taskbar. */}
+      <BrandGlyph
+        embolden={MARK_STROKE / (MARK_FILL - MARK_STROKE)}
+        style={{
+          width: `${MARK_FILL * 100}%`,
+          height: `${MARK_FILL * 100}%`,
+          display: "block",
+        }}
       />
     </Box>
   );
