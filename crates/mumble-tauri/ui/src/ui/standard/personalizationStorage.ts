@@ -34,6 +34,22 @@ export interface ChatBackgroundEntry {
   videoBakedSigma: number;
   /** The dim the bake was computed with. */
   videoBakedDim: number;
+  /**
+   * Where the picture is anchored when it has to be cropped, as a fraction of
+   * its own width and height. `0.5`/`0.5` is the middle, which is what CSS
+   * does on its own.
+   *
+   * Per wallpaper rather than per window, because it answers a question about
+   * this picture - where in it the subject is - and the answer moves with the
+   * picture. A column narrower than the image crops the sides; a shorter one
+   * crops top and bottom, which is what puts a portrait's belly on screen and
+   * its face out of frame.
+   *
+   * Absent on a wallpaper shelved before the focus point existed, which is
+   * read as the middle - what it was being drawn with all along.
+   */
+  focusX?: number;
+  focusY?: number;
 }
 
 /** How many wallpapers the shelf holds before the oldest is let go. */
@@ -58,6 +74,13 @@ export interface PersonalizationData {
   chatBgDim: number;
   /** How the background image fills the chat area ("cover" or "tile"). */
   chatBgFit: BgFit;
+  /**
+   * The displayed wallpaper's focus point (see [`ChatBackgroundEntry`]), as
+   * fractions of the picture. Only meaningful while it is being cropped -
+   * a tiled background has nothing to crop.
+   */
+  chatBgFocusX: number;
+  chatBgFocusY: number;
   /**
    * File name of an animated background in the backend's store, or null for a
    * still (or no) background.
@@ -133,6 +156,8 @@ export const PERSONALIZATION_DEFAULTS: PersonalizationData = {
   chatBgOpacity: 0.25,
   chatBgDim: 0.5,
   chatBgFit: "cover",
+  chatBgFocusX: 0.5,
+  chatBgFocusY: 0.5,
   chatBgVideo: null,
   chatBgVideoBaked: null,
   chatBgVideoBakedSigma: 0,

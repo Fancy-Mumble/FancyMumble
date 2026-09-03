@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, Typography, useTheme } from "@mui/material";
 import { getSelectedUiDesign, getUiDesignOverride, setSelectedUiDesign } from "@ui/selection";
@@ -212,6 +212,7 @@ export function PersonalizeSettings() {
   // The scheme the cards preview in: whatever the window is wearing right now,
   // which is what the theme factory resolved from the same two inputs.
   const resolvedMode = muiTheme.palette.mode === "light" ? "light" : "dark";
+  const focusPreview = useResolvedBackgroundSource(data?.chatBgOriginal ?? null);
 
   // Bake progress, for the status line under the picker.
   useEffect(
@@ -338,6 +339,22 @@ export function PersonalizeSettings() {
   };
 
   /**
+   * Commit a focus point.
+   *
+   * Written to the shelf as well as to the live fields: where a picture's
+   * subject sits is a fact about that picture, so it has to travel with it
+   * rather than be re-found every time it comes back off the shelf.
+   */
+  const commitFocus = async (focusX: number, focusY: number) => {
+    const shownNext = { ...data, chatBgFocusX: focusX, chatBgFocusY: focusY };
+    await patch({
+      chatBgFocusX: focusX,
+      chatBgFocusY: focusY,
+      chatBgRecents: updateBackground(data.chatBgRecents, activeBackground(shownNext)),
+    });
+  };
+
+  /**
    * Pick a wallpaper - still or clip - through the one OS dialog.
    *
    * Nothing heavy crosses the webview: the backend stores (and, for images,
@@ -364,6 +381,8 @@ export function PersonalizeSettings() {
             videoBaked: null,
             videoBakedSigma: 0,
             videoBakedDim: 0,
+            focusX: 0.5,
+            focusY: 0.5,
           },
           true,
         );
@@ -386,6 +405,8 @@ export function PersonalizeSettings() {
           videoBaked: null,
           videoBakedSigma: 0,
           videoBakedDim: 0,
+          focusX: 0.5,
+          focusY: 0.5,
         },
         true,
       );
@@ -441,11 +462,25 @@ export function PersonalizeSettings() {
    */
   const commitEffectSlider = async (changes: Partial<PersonalizationData>) => {
     const next = { ...data, ...changes };
-    const saved = await patch(changes);
-    if (saved && next.chatBgVideo) {
-      const poster = isStoreRef(next.chatBgOriginal) ? storeRefName(next.chatBgOriginal) : null;
-      queueVideoBake(next.chatBgVideo, poster, next.chatBgBlurSigma, next.chatBgDim, reportBakeFailure);
+    if (next.chatBgVideo) {
+      const saved = await patch(changes);
+      if (saved) {
+        const poster = isStoreRef(next.chatBgOriginal) ? storeRefName(next.chatBgOriginal) : null;
+        queueVideoBake(next.chatBgVideo, poster, next.chatBgBlurSigma, next.chatBgDim, reportBakeFailure);
+      }
+      return;
     }
+    // A still's bake is only right for the sliders it was computed under, and
+    // it carries no stamp saying which those were. Dropping it - off the
+    // record and off the shelf - is what has the backdrop bake a fresh one for
+    // the new values (`stillBake.ts`); until it lands the live filter shows
+    // them. The prune then takes the files nothing names any more.
+    const saved = await patch({
+      ...changes,
+      chatBgBlurred: null,
+      chatBgRecents: data.chatBgRecents.map((entry) => (entry.video ? entry : { ...entry, blurred: null })),
+    });
+    if (saved) await pruneChatBackgrounds(referencedFiles(saved)).catch(() => undefined);
   };
 
   return (
@@ -606,15 +641,20 @@ export function PersonalizeSettings() {
           </Box>
         </BackgroundTile>
 
-        {shelf.map((entry) => (
-          <SavedBackgroundTile
-            key={entry.video ?? entry.original ?? ""}
-            entry={entry}
-            active={isSameBackground(entry, shown)}
-            onSelect={() => void selectBackground(entry)}
-            onForget={() => void forgetBackgroundEntry(entry)}
-          />
-        ))}
+        {shelf.map((entry) => {
+          const active = isSameBackground(entry, shown);
+          return (
+            <SavedBackgroundTile
+              key={entry.video ?? entry.original ?? ""}
+              // The shelf's copy of the wallpaper on screen is a write behind
+              // whatever is being dragged right now; the live fields are not.
+              entry={active ? shown : entry}
+              active={active}
+              onSelect={() => void selectBackground(entry)}
+              onForget={() => void forgetBackgroundEntry(entry)}
+            />
+          );
+        })}
       </Stack>
 
       <Box
@@ -640,6 +680,21 @@ export function PersonalizeSettings() {
           ? t("nebulaSettings:personalize.backgroundPreparing")
           : t("nebulaSettings:personalize.backgroundChoose")}
       </Box>
+
+      {hasBackground(shown) && (
+        <>
+          <GroupTitle hint={t("nebulaSettings:personalize.focusHint")}>
+            {t("nebulaSettings:personalize.focus")}
+          </GroupTitle>
+          <FocusPicker
+            src={focusPreview}
+            x={data.chatBgFocusX}
+            y={data.chatBgFocusY}
+            onChange={(focusX, focusY) => setData({ ...data, chatBgFocusX: focusX, chatBgFocusY: focusY })}
+            onCommit={(focusX, focusY) => void commitFocus(focusX, focusY)}
+          />
+        </>
+      )}
 
       {bakePercent !== null && (
         <Typography
@@ -742,6 +797,164 @@ export function PersonalizeSettings() {
   );
 }
 
+/** How far one arrow key moves the focus point. */
+const FOCUS_NUDGE = 0.02;
+
+/** The picker's box, which the picture is letterboxed inside. */
+const FOCUS_FRAME_WIDTH = 232;
+const FOCUS_FRAME_HEIGHT = 130;
+
+/**
+ * Where the wallpaper is anchored when the column has to crop it.
+ *
+ * Shows the whole picture, deliberately: cropping is the thing the reader is
+ * here to escape, and a picker that cropped its own preview would hide the
+ * face they are trying to bring back. The marker is the point that stays on
+ * screen - put it on the face and the column keeps the face.
+ *
+ * Click or drag it, or nudge it with the arrow keys; a pointer is the quick
+ * way and the keys are the only way for anyone not using one.
+ */
+function FocusPicker({
+  src,
+  x,
+  y,
+  onChange,
+  onCommit,
+}: Readonly<{
+  src: string | null;
+  x: number;
+  y: number;
+  onChange: (x: number, y: number) => void;
+  onCommit: (x: number, y: number) => void;
+}>) {
+  const { t } = useTranslation(["nebulaSettings"]);
+  const picture = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
+  // Until the still has loaded there is no shape to letterbox to; the frame's
+  // own is the least surprising thing to hold the space with.
+  const [aspect, setAspect] = useState(FOCUS_FRAME_WIDTH / FOCUS_FRAME_HEIGHT);
+
+  const clamp = (value: number) => Math.min(1, Math.max(0, value));
+
+  /** The pointer's position within the picture, or null if it has no size. */
+  const pointAt = (event: React.PointerEvent) => {
+    const box = picture.current?.getBoundingClientRect();
+    // A layout that has not happened yet measures zero, and dividing by it
+    // would write `NaN` into the record - a focus point nothing can recover
+    // from, since every later clamp keeps it.
+    if (!box?.width || !box.height) return null;
+    return {
+      x: clamp((event.clientX - box.left) / box.width),
+      y: clamp((event.clientY - box.top) / box.height),
+    };
+  };
+
+  const nudge = (event: React.KeyboardEvent) => {
+    const step =
+      event.key === "ArrowLeft" || event.key === "ArrowRight"
+        ? { x: event.key === "ArrowLeft" ? -FOCUS_NUDGE : FOCUS_NUDGE, y: 0 }
+        : event.key === "ArrowUp" || event.key === "ArrowDown"
+          ? { x: 0, y: event.key === "ArrowUp" ? -FOCUS_NUDGE : FOCUS_NUDGE }
+          : null;
+    if (!step) return;
+    event.preventDefault();
+    onCommit(clamp(x + step.x), clamp(y + step.y));
+  };
+
+  // Letterboxed rather than stretched: a focus point picked on a distorted
+  // picture would land somewhere else on the real one.
+  const wide = aspect >= FOCUS_FRAME_WIDTH / FOCUS_FRAME_HEIGHT;
+
+  return (
+    <Box
+      sx={(theme) => ({
+        width: FOCUS_FRAME_WIDTH,
+        height: FOCUS_FRAME_HEIGHT,
+        display: "grid",
+        placeItems: "center",
+        overflow: "hidden",
+        borderRadius: radius("md"),
+        background: theme.palette.nebula.card2,
+        border: `1px solid ${theme.palette.nebula.line}`,
+      })}
+    >
+      <Box
+        ref={picture}
+        role="group"
+        tabIndex={0}
+        aria-label={t("nebulaSettings:personalize.focus")}
+        aria-valuetext={t("nebulaSettings:personalize.focusAt", {
+          x: Math.round(x * 100),
+          y: Math.round(y * 100),
+        })}
+        onKeyDown={nudge}
+        onPointerDown={(event) => {
+          const point = pointAt(event);
+          if (!point) return;
+          dragging.current = true;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          onChange(point.x, point.y);
+        }}
+        onPointerMove={(event) => {
+          if (!dragging.current) return;
+          const point = pointAt(event);
+          if (point) onChange(point.x, point.y);
+        }}
+        onPointerUp={(event) => {
+          if (!dragging.current) return;
+          dragging.current = false;
+          event.currentTarget.releasePointerCapture(event.pointerId);
+          const point = pointAt(event);
+          onCommit(point?.x ?? x, point?.y ?? y);
+        }}
+        sx={(theme) => ({
+          position: "relative",
+          aspectRatio: `${aspect}`,
+          width: wide ? "100%" : "auto",
+          height: wide ? "auto" : "100%",
+          cursor: "crosshair",
+          // Or a drag would scroll the settings page out from under it.
+          touchAction: "none",
+          "&:focus-visible": { outline: `2px solid ${theme.palette.nebula.accent}` },
+        })}
+      >
+        {src && (
+          <Box
+            component="img"
+            src={src}
+            alt=""
+            draggable={false}
+            onLoad={(event) => {
+              const image = event.currentTarget;
+              if (image.naturalWidth > 0 && image.naturalHeight > 0)
+                setAspect(image.naturalWidth / image.naturalHeight);
+            }}
+            sx={{ width: "100%", height: "100%", display: "block", objectFit: "fill" }}
+          />
+        )}
+        <Box
+          aria-hidden
+          sx={(theme) => ({
+            position: "absolute",
+            left: `${x * 100}%`,
+            top: `${y * 100}%`,
+            width: 16,
+            height: 16,
+            transform: "translate(-50%, -50%)",
+            borderRadius: "50%",
+            border: `2px solid ${theme.palette.nebula.accent}`,
+            // A ring over a picture of unknown colour needs its own contrast,
+            // and the shadow does it without painting over what is under it.
+            boxShadow: "0 0 0 1px rgba(0,0,0,.65), inset 0 0 0 1px rgba(255,255,255,.85)",
+            pointerEvents: "none",
+          })}
+        />
+      </Box>
+    </Box>
+  );
+}
+
 /**
  * One wallpaper on the shelf.
  *
@@ -781,7 +994,9 @@ function SavedBackgroundTile({
         sx={(theme) => ({
           height: 64,
           borderRadius: radius("md"),
-          background: preview ? `center/cover url(${preview})` : theme.palette.nebula.card2,
+          background: preview
+            ? `${(entry.focusX ?? 0.5) * 100}% ${(entry.focusY ?? 0.5) * 100}%/cover url(${preview})`
+            : theme.palette.nebula.card2,
           boxShadow: active ? `0 0 0 2px ${theme.palette.nebula.accent}` : "none",
           border: active ? "none" : `1px solid ${theme.palette.nebula.line}`,
         })}

@@ -189,6 +189,8 @@ export default function ChatView({
     chatBgOpacity: 0.25,
     chatBgDim: 0.5,
     chatBgFit: "cover",
+    chatBgFocusX: 0.5,
+    chatBgFocusY: 0.5,
     chatBgVideo: null,
     chatBgVideoBaked: null,
     chatBgVideoBakedSigma: 0,
@@ -1470,6 +1472,9 @@ export default function ChatView({
                       "--chat-bg-opacity": String(personalization.chatBgOpacity),
                       "--chat-bg-size": personalization.chatBgFit === "tile" ? "auto" : "cover",
                       "--chat-bg-repeat": personalization.chatBgFit === "tile" ? "repeat" : "no-repeat",
+                      "--chat-bg-position": `${personalization.chatBgFocusX * 100}% ${
+                        personalization.chatBgFocusY * 100
+                      }%`,
                     }
                   : {}),
                 "--chat-font-size":
