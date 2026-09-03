@@ -38,6 +38,7 @@ const GROUPS = [
       { key: "toggleMute", labelKey: "shortcuts.toggleMute" },
       { key: "toggleDeafen", labelKey: "shortcuts.toggleDeafen" },
       { key: "voicePriority", labelKey: "shortcuts.voicePriority" },
+      { key: "toggleGameOverlay", labelKey: "shortcuts.toggleGameOverlay" },
     ],
   },
   {

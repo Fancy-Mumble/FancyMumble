@@ -16,6 +16,7 @@ export type SettingsPageId =
   | "privacy"
   | "localization"
   | "shortcuts"
+  | "overlay"
   | "identities"
   | "channels-roles"
   | "plugins"
@@ -41,6 +42,7 @@ export type NavLabelKey =
       | "identities"
       | "plugins"
       | "advanced"}`
+  | "nebulaSettings:nav.overlay"
   | "nebulaSettings:nav.localization"
   | "nebulaSettings:nav.channelsRoles";
 
@@ -87,6 +89,8 @@ export const SETTINGS_NAV: readonly NavEntry[] = [
   // rest of its chrome, so they keep keys of their own.
   { id: "localization", labelKey: "nebulaSettings:nav.localization" },
   { id: "shortcuts", labelKey: "settings:tabs.shortcuts" },
+  // Desktop-only, and Nebula names it itself - Standard has no such page.
+  { id: "overlay", labelKey: "nebulaSettings:nav.overlay" },
   { id: "identities", labelKey: "settings:tabs.identities" },
   {
     id: "channels-roles",

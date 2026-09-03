@@ -132,6 +132,8 @@ fancy-screenshare = { path = "../fancy-screenshare" }
 # Discord Rich Presence listener. Desktop only: it hosts the Discord IPC
 # endpoint (Unix socket / named pipe), which has no Android equivalent.
 fancy-presence = { path = "../fancy-presence" }
+# Decides whether the foreground window is a game worth overlaying.
+fancy-gamedetect = { path = "../fancy-gamedetect" }
 rodio = { version = "0.22", features = ["recording"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-window-state = "2"

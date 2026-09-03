@@ -2116,6 +2116,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fancy-gamedetect"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tracing",
+ "windows-sys 0.61.2",
+ "winreg",
+]
+
+[[package]]
 name = "fancy-presence"
 version = "0.1.0"
 dependencies = [
@@ -4221,6 +4232,7 @@ dependencies = [
  "dhat",
  "dns-lookup",
  "fancy-audio-device",
+ "fancy-gamedetect",
  "fancy-presence",
  "fancy-screenshare",
  "fancy-utils",

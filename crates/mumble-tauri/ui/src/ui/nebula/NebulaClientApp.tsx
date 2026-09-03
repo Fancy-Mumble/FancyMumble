@@ -18,10 +18,10 @@ import { isSpentWatchMarker } from "@core/features/chat/watch/watchMarker";
 import type { AudioSettings, ChannelEntry, ChatMessage, SavedServer, ServerSwitcher } from "@core/types";
 import ChannelEditorDialog from "@standard/components/sidebar/channel/ChannelEditorDialog";
 import DownloadsPanel from "@standard/components/chat/download/DownloadsPanel";
-import MySharedFilesPanel from "@standard/components/chat/MySharedFilesPanel";
+import MySharedFilesTable from "./components/chat/MySharedFilesTable";
 import { myFilesAvailable } from "@standard/components/fileserver/fileServerMe";
 import TypingIndicator from "./components/chat/TypingIndicator";
-import PublicServerList from "@standard/components/server/PublicServerList";
+import PublicServersSurface from "./components/connect/PublicServersSurface";
 import { PinnedPanel } from "./components/chat/pinned/PinnedPanel";
 import { LiveDocDock } from "./components/chat/livedoc/LiveDocDock";
 import { useNebulaLiveDoc } from "./components/chat/livedoc/useNebulaLiveDoc";
@@ -151,7 +151,10 @@ import { useChatDisplay } from "./useChatDisplay";
 import { useTimeDisplay } from "./useTimeDisplay";
 import { useLeaveServer } from "./useLeaveServer";
 import { useNebulaEventBridge } from "./useNebulaEventBridge";
+import { applyStoredGameOverlaySettings } from "@core/features/overlay/gameOverlay";
+import { GameOverlayPrompt } from "./components/overlay/GameOverlayPrompt";
 import { useNebulaTheme } from "./useNebulaAppearance";
+import { useThemedWindowIcon } from "./useBrandMark";
 import { useServerLiveries } from "./useServerLivery";
 import { radius } from "./tokens";
 
@@ -256,6 +259,11 @@ export default function NebulaClientApp() {
   // that is not open, and so has said nothing at all.
   const liveries = useServerLiveries();
   const theme = useNebulaTheme(liveries[activeServerId ?? ""] ?? null);
+  // The taskbar icon is chrome too, and it is the only piece that was a
+  // shipped picture rather than a drawing of the theme. Called here rather
+  // than in a provider branch below: there are three of them - loading,
+  // connect, client - and the window has one icon whichever is showing.
+  useThemedWindowIcon(theme);
   const channels = useAppStore((state) => state.channels);
   const users = useAppStore((state) => state.users);
   const selectedChannel = useAppStore((state) => state.selectedChannel);
@@ -381,6 +389,13 @@ export default function NebulaClientApp() {
     void getUserRelations()
       .then(setRelations)
       .catch(() => setRelations({}));
+  }, []);
+
+  // Hand the game overlay's detector the stored settings. It stays inert while
+  // the mode is "off", which is the default, so a client that never turns the
+  // overlay on never starts a detector or creates a window.
+  useEffect(() => {
+    void applyStoredGameOverlaySettings();
   }, []);
 
   // With nothing saved there is no conversation to show, so the connect screen
@@ -1441,6 +1456,8 @@ export default function NebulaClientApp() {
                           }
                         : undefined
                     }
+                    serverName={activeServerName}
+                    onLeaveServer={status === "connected" ? () => leave.request(activeSession) : undefined}
                     /* Both need a channel to broadcast into; the strip that
                        answers them lives on the chat screen, which is the only
                        screen this dock is drawn on. */
@@ -1981,7 +1998,7 @@ export default function NebulaClientApp() {
 
           {surface === "public-servers" && (
             <FullSurface onClose={() => setSurface(null)}>
-              <PublicServerList
+              <PublicServersSurface
                 disabled={connecting}
                 onBack={() => setSurface(null)}
                 // A public server is an address, not a login, so picking one
@@ -2010,14 +2027,14 @@ export default function NebulaClientApp() {
             </Dialog>
           )}
 
-          {/* Standard's table, in Nebula's dialog - the same borrowing
-              Downloads above does. What a file row has to say is a table's
-              worth of facts, and this pack has no different opinion about
-              how to say them. */}
+          {/* The table is the dialog: no content padding and no card of its
+              own, so it runs to the paper's edge and the paper's radius does
+              the cornering. `lg`, not `md` - nine columns of file facts in a
+              900px paper left the name column too narrow to read. */}
           {surface === "my-files" && (
-            <Dialog open onClose={() => setSurface(null)} maxWidth="md" fullWidth>
-              <DialogContent>
-                <MySharedFilesPanel />
+            <Dialog open onClose={() => setSurface(null)} maxWidth="lg" fullWidth>
+              <DialogContent sx={{ p: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                <MySharedFilesTable />
               </DialogContent>
             </Dialog>
           )}
@@ -2280,6 +2297,9 @@ export default function NebulaClientApp() {
             }}
           />
         </Stack>
+        {/* Asked at most once per program, and only for something that looks
+            like a game without being certain. */}
+        <GameOverlayPrompt />
       </Box>
     </ThemeProvider>
   );
