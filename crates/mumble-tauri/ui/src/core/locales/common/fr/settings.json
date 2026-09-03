@@ -216,7 +216,8 @@
     "builtinEmojiPicker": "Sélecteur d'emoji",
     "builtinEmojiHint": "Tapez : puis recherchez",
     "builtinMentionPicker": "Sélecteur de mention",
-    "builtinMentionHint": "Tapez @ puis recherchez"
+    "builtinMentionHint": "Tapez @ puis recherchez",
+    "toggleGameOverlay": "Afficher/masquer la surcouche de jeu"
   },
   "userShortcuts": {
     "title": "Aller à un utilisateur (entre serveurs)",
@@ -334,10 +335,10 @@
     "panelTitle": "Personnaliser",
     "uiDesign": "Design de l’interface",
     "beta": "Bêta",
-    "uiDesignHint": "Standard, ou l’une des bêtas de design. Standard est la valeur par défaut et couvre le plus de fonctionnalités.",
+    "uiDesignHint": "Nebula est la valeur par défaut. Standard est l’interface historique et couvre toujours le plus de fonctionnalités ; Aurora est une bêta de design.",
     "uiDesignStandard": "Standard",
     "uiDesignAurora": "Aurora (bêta)",
-    "uiDesignNebula": "Nebula (bêta)",
+    "uiDesignNebula": "Nebula",
     "uiDesignOverrideHint": "L’interface est actuellement forcée sur « {{design}} » par le paramètre d’URL de développement.",
     "theme": "Thème",
     "themeHint": "Choisissez le style visuel de toute l'application.",

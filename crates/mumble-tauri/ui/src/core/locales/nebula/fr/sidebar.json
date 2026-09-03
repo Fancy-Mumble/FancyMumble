@@ -51,11 +51,10 @@
     "shareScreen": "Partager votre écran",
     "shareCamera": "Partager votre caméra",
     "serverAdmin": "Administration du serveur",
-    "latency": " · {{ms}} ms",
-    "groupShare": "PARTAGE",
-    "groupApp": "APPLICATION",
-    "groupChannelList": "LISTE DES SALONS",
-    "groupServer": "SERVEUR"
+    "menuCaption": "Options du serveur et de l’application",
+    "hideEmptyHint": "Les canaux où vous ne pouvez pas écrire restent repliés",
+    "leaveServer": "Quitter le serveur",
+    "latency": " · {{ms}} ms"
   },
   "friends": {
     "search": "Rechercher des amis",

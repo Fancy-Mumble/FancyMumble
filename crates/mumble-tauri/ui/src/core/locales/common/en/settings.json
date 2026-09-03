@@ -216,7 +216,8 @@
     "builtinEmojiPicker": "Emoji picker",
     "builtinEmojiHint": "Type : then search",
     "builtinMentionPicker": "Mention picker",
-    "builtinMentionHint": "Type @ then search"
+    "builtinMentionHint": "Type @ then search",
+    "toggleGameOverlay": "Toggle game overlay"
   },
   "userShortcuts": {
     "title": "Jump to user (cross-server)",
@@ -334,10 +335,10 @@
     "panelTitle": "Personalize",
     "uiDesign": "Interface design",
     "beta": "Beta",
-    "uiDesignHint": "Standard, or one of the design betas. Standard is the default and has the broadest feature coverage.",
+    "uiDesignHint": "Nebula is the default. Standard is the older interface and still has the broadest feature coverage; Aurora is a design beta.",
     "uiDesignStandard": "Standard",
     "uiDesignAurora": "Aurora (beta)",
-    "uiDesignNebula": "Nebula (beta)",
+    "uiDesignNebula": "Nebula",
     "uiDesignOverrideHint": "The interface is currently forced to '{{design}}' by the development URL override.",
     "theme": "Theme",
     "themeHint": "Choose the visual style for the entire app.",

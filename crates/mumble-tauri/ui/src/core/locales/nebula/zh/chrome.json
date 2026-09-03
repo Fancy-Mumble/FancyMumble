@@ -15,5 +15,9 @@
     "headingServer": "服务器",
     "results_one": "{{count}} 个结果",
     "results_other": "{{count}} 个结果"
+  },
+  "gameOverlay": {
+    "you": "你",
+    "more": "还有 {{count}} 人"
   }
 }
