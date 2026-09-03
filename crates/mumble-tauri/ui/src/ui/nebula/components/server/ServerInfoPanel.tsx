@@ -7,7 +7,7 @@
  * lives in `@shared/serverinfo/model` and this file is presentation only.
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Accordion,
@@ -28,12 +28,11 @@ import type { PluginInfoRecord } from "@core/types";
 import {
   activationKind,
   decodeFancyVersion,
-  useLatencyGraph,
+  useLatencyFeed,
   useServerInfoModel,
-  LATENCY_GRAPH_H,
-  LATENCY_GRAPH_W,
-  type LatencyPalette,
 } from "@shared/serverinfo/model";
+import { LatencyChart, type LatencyPalette } from "@shared/serverinfo/LatencyChart";
+import { useServerFeatures, type FeatureSupport } from "@shared/serverinfo/features";
 import { ChevronDownIcon, CloseIcon, RefreshCwIcon, ServerIcon, ShieldCheckIcon } from "@ui/icons";
 import { NEBULA_MONO, radius } from "../../tokens";
 import { LinkGuard, SectionLabel, Stack } from "../primitives";
@@ -201,11 +200,55 @@ function PluginFacts({ plugin }: Readonly<{ plugin: PluginInfoRecord }>) {
       {typeof info.homepage === "string" && info.homepage.length > 0 && (
         <Fact mono label={t("infoPanel.plugins.homepage")} value={info.homepage} />
       )}
-      {caps.length > 0 && (
-        <Fact mono label={t("infoPanel.plugins.capabilities")} value={caps.join(", ")} />
-      )}
+      {caps.length > 0 && <Fact mono label={t("infoPanel.plugins.capabilities")} value={caps.join(", ")} />}
       {rows.map((row, i) => (
         <Fact mono key={`${row.label}-${i}`} label={row.label} value={row.value} />
+      ))}
+    </Facts>
+  );
+}
+
+/** What this server can do, one row per feature and how it was found out. */
+function ServerFeatures() {
+  const features = useServerFeatures();
+  const { nebula } = useTheme().palette;
+  // Absent is not broken: only a half-working feature earns the warning
+  // colour, and a feature the server simply does not have gets the muted dot.
+  const dot: Record<FeatureSupport, { background: string; border: string }> = {
+    yes: { background: nebula.ok, border: "none" },
+    partial: { background: nebula.warn, border: "none" },
+    no: { background: alpha(nebula.dim, 0.5), border: "none" },
+    unknown: { background: "transparent", border: `1px solid ${nebula.dim}` },
+  };
+
+  return (
+    <Facts mono>
+      {features.map((feature) => (
+        <Fragment key={feature.id}>
+          <Typography component="span" sx={{ fontSize: 11.5, color: nebula.muted, whiteSpace: "nowrap" }}>
+            {feature.label}
+          </Typography>
+          {/* A value long enough to wrap keeps its dot beside the first line. */}
+          <Stack direction="row" alignItems="flex-start" gap={0.75}>
+            <Box
+              aria-hidden
+              sx={{
+                flex: "none",
+                mt: "4px",
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                ...dot[feature.support],
+              }}
+            />
+            <Typography
+              component="span"
+              sx={{ fontSize: 11.5, fontFamily: NEBULA_MONO, wordBreak: "break-word" }}
+            >
+              {feature.value}
+            </Typography>
+          </Stack>
+        </Fragment>
       ))}
     </Facts>
   );
@@ -287,40 +330,31 @@ function ActivityLog() {
   );
 }
 
-/** The graph in Nebula's own colours rather than the shared defaults. */
+/** The chart in Nebula's own colours rather than a pack-neutral default. */
 function useLatencyPalette(): LatencyPalette {
   const { nebula } = useTheme().palette;
   return useMemo(
     () => ({
+      accent: nebula.accent,
+      surface: nebula.card2,
+      grid: alpha(nebula.text, 0.1),
+      dim: nebula.dim,
+      text: nebula.text,
+      tooltip: nebula.card,
+      tooltipLine: nebula.line,
       good: nebula.ok,
-      warn: nebula.warn,
-      bad: nebula.bad,
-      grid: alpha(nebula.text, 0.08),
-      axis: alpha(nebula.text, 0.35),
-      unit: alpha(nebula.text, 0.25),
+      fair: nebula.warn,
+      poor: nebula.bad,
+      radius: radius("md"),
     }),
     [nebula],
   );
 }
 
 function LatencyGraph() {
-  const svgRef = useRef<SVGSVGElement>(null);
+  const { samples, error } = useLatencyFeed();
   const palette = useLatencyPalette();
-  useLatencyGraph(svgRef, palette);
-  return (
-    <Box
-      component="svg"
-      ref={svgRef}
-      viewBox={`0 0 ${LATENCY_GRAPH_W} ${LATENCY_GRAPH_H}`}
-      preserveAspectRatio="none"
-      sx={(theme) => ({
-        width: "100%",
-        height: 100,
-        borderRadius: radius("md"),
-        background: theme.palette.nebula.card2,
-      })}
-    />
-  );
+  return <LatencyChart samples={samples} error={error} palette={palette} />;
 }
 
 interface ServerInfoPanelProps {
@@ -510,15 +544,17 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
                 }
               >
                 <Folds>
+                  <Fold title={t("server:infoPanel.accordionFeatures")}>
+                    <ServerFeatures />
+                  </Fold>
+
                   <Fold title={t("nebulaServer:panel.audioTransport")}>
                     <Facts mono>
                       <Fact
                         mono
                         label={t("server:infoPanel.debug.transport")}
                         value={
-                          udpActive
-                            ? t("server:infoPanel.transportUdp")
-                            : t("server:infoPanel.transportTcp")
+                          udpActive ? t("server:infoPanel.transportUdp") : t("server:infoPanel.transportTcp")
                         }
                       />
                       {udpActive && (

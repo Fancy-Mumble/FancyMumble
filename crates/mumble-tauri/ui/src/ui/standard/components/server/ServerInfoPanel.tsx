@@ -11,18 +11,18 @@ import { OfficialBadge, isOfficialPlugin } from "../elements/OfficialBadge";
  * from the backend.
  */
 
-import { useState, useRef, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import type { PluginInfoRecord } from "@core/types";
 import { formatBandwidth, formatDuration } from "@core/utils/format";
 import { maskSensitive } from "@core/utils/maskSensitive";
 import {
   activationKind,
   decodeFancyVersion,
-  useLatencyGraph,
+  useLatencyFeed,
   useServerInfoModel,
-  LATENCY_GRAPH_H,
-  LATENCY_GRAPH_W,
 } from "@shared/serverinfo/model";
+import { LatencyChart, type LatencyPalette } from "@shared/serverinfo/LatencyChart";
+import { useServerFeatures, type FeatureSupport } from "@shared/serverinfo/features";
 import { SafeHtml } from "../elements/SafeHtml";
 import ActivityLog from "./ActivityLog";
 import { useTranslation } from "react-i18next";
@@ -97,16 +97,66 @@ const ACTIVATION_KEYS = {
   continuous: "infoPanel.activationContinuous",
 } as const;
 
+/**
+ * Standard's colours reach the chart as values rather than as `var(--...)`:
+ * a canvas gradient stop is parsed by the 2D context, which knows nothing of
+ * the document's custom properties.
+ */
+function readLatencyPalette(): LatencyPalette {
+  const style = getComputedStyle(document.documentElement);
+  const token = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
+  return {
+    accent: token("--color-accent", "#468cdc"),
+    surface: token("--color-overlay-light", "rgba(0, 0, 0, 0.2)"),
+    grid: token("--color-glass-border", "rgba(255, 255, 255, 0.08)"),
+    dim: token("--color-text-muted", "rgba(255, 255, 255, 0.4)"),
+    text: token("--color-text-primary", "#ffffff"),
+    tooltip: token("--color-bg-elevated", "#303030"),
+    tooltipLine: token("--color-glass-border", "rgba(255, 255, 255, 0.08)"),
+    good: token("--color-online", "#3dbc5c"),
+    fair: token("--color-warning", "#d4a020"),
+    poor: token("--color-danger", "#e04848"),
+    radius: "4px",
+  };
+}
+
 function LatencyAccordion() {
-  const svgRef = useRef<SVGSVGElement>(null);
-  useLatencyGraph(svgRef);
+  const { samples, error } = useLatencyFeed();
+  // Themes are swapped by rewriting `data-theme` on the root, so the tokens are
+  // re-read when it changes rather than frozen at whichever theme was first.
+  const [palette, setPalette] = useState(readLatencyPalette);
+  useEffect(() => {
+    const observer = new MutationObserver(() => setPalette(readLatencyPalette()));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
+
+  return <LatencyChart samples={samples} error={error} palette={palette} />;
+}
+
+/** The dot beside a feature; the state is also spelled out beside it. */
+const SUPPORT_CLASS: Record<FeatureSupport, string> = {
+  yes: styles.supportYes,
+  partial: styles.supportPartial,
+  no: styles.supportNo,
+  unknown: styles.supportUnknown,
+};
+
+/** What this server can do, one row per feature and how it was found out. */
+function ServerFeatures() {
+  const features = useServerFeatures();
   return (
-    <svg
-      ref={svgRef}
-      className={styles.latencyGraph}
-      viewBox={`0 0 ${LATENCY_GRAPH_W} ${LATENCY_GRAPH_H}`}
-      preserveAspectRatio="none"
-    />
+    <div className={styles.debugGrid}>
+      {features.map((feature) => (
+        <Fragment key={feature.id}>
+          <span className={styles.debugLabel}>{feature.label}</span>
+          <span className={styles.featureValue}>
+            <span className={`${styles.featureDot} ${SUPPORT_CLASS[feature.support]}`} aria-hidden="true" />
+            {feature.value}
+          </span>
+        </Fragment>
+      ))}
+    </div>
   );
 }
 
@@ -268,6 +318,10 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
                   <RefreshCwIcon width={14} height={14} />
                 </button>
               </div>
+
+              <Accordion title={t("infoPanel.accordionFeatures")}>
+                <ServerFeatures />
+              </Accordion>
 
               <Accordion title={t("infoPanel.accordionAudioTransport")}>
                 <div className={styles.debugGrid}>

@@ -3,7 +3,7 @@
  *
  * Standard and Nebula show the same connection, audio and developer figures in
  * very different frames, so the invokes, the developer-mode poll, the CSP
- * listener and the latency graph live here once and each pack owns only its
+ * listener and the latency feed live here once and each pack owns only its
  * own markup.
  */
 
@@ -155,14 +155,7 @@ export function useServerInfoModel(): ServerInfoModel {
 }
 
 /** Decode a Mumble v2-encoded version into "major.minor.patch". */
-export function decodeFancyVersion(v: number): string {
-  // Encoding: (major << 48) | (minor << 32) | (patch << 16)
-  // JS bitwise ops are 32-bit, so use division for the upper bits.
-  const major = Math.trunc(v / 2 ** 48) & 0xffff;
-  const minor = Math.trunc(v / 2 ** 32) & 0xffff;
-  const patch = Math.trunc(v / 2 ** 16) & 0xffff;
-  return `${major}.${minor}.${patch}`;
-}
+export { fancyVersionDecode as decodeFancyVersion } from "@core/utils/version";
 
 export type ActivationKind = "ptt" | "vad" | "continuous";
 
@@ -176,126 +169,125 @@ export function activationKind(settings: {
   return "continuous";
 }
 
-// -- Latency graph ------------------------------------------------
+// -- Latency ------------------------------------------------------
 
-export const LATENCY_WINDOW_SECS = 10;
-export const LATENCY_GRAPH_W = 400;
-export const LATENCY_GRAPH_H = 100;
+/** How much of the recent past the chart keeps, in seconds. */
+export const LATENCY_WINDOW_SECS = 60;
 
-const PAD_L = 36;
-const PAD_R = 4;
-const PAD_T = 4;
-const PAD_B = 16;
+/** Round trips under this read as a healthy link. */
+export const LATENCY_GOOD_MS = 50;
+/** Round trips under this are still usable; at or over it the link is poor. */
+export const LATENCY_FAIR_MS = 120;
 
-interface LatencyPoint {
-  time: number;
-  rtt: number;
+/** One round-trip reading: when it landed, and what it measured. */
+export interface LatencySample {
+  /**
+   * `performance.now()` when the reading arrived.
+   *
+   * A monotonic clock rather than the wall one, so a system clock stepped
+   * while the panel is open cannot empty the window or stretch the axis.
+   */
+  readonly at: number;
+  /** Round trip in milliseconds. */
+  readonly rtt: number;
 }
 
-/** Colours the graph paints with, so each pack can stay on its own palette. */
-export interface LatencyPalette {
-  readonly good: string;
-  readonly warn: string;
-  readonly bad: string;
-  readonly grid: string;
-  readonly axis: string;
-  readonly unit: string;
+/** The three named bands, so a reading is described and not only coloured. */
+export type LatencyGrade = "good" | "fair" | "poor";
+
+export function latencyGrade(rtt: number): LatencyGrade {
+  if (rtt < LATENCY_GOOD_MS) return "good";
+  if (rtt < LATENCY_FAIR_MS) return "fair";
+  return "poor";
 }
 
-export const DEFAULT_LATENCY_PALETTE: LatencyPalette = {
-  good: "#22c55e",
-  warn: "#eab308",
-  bad: "#ef4444",
-  grid: "rgba(255,255,255,0.08)",
-  axis: "rgba(255,255,255,0.35)",
-  unit: "rgba(255,255,255,0.25)",
-};
-
-function latencyColor(rtt: number, palette: LatencyPalette): string {
-  if (rtt < 50) return palette.good;
-  if (rtt < 120) return palette.warn;
-  return palette.bad;
+/** The figures the readout states in text, beside the line that draws them. */
+export interface LatencySummary {
+  /** The most recent reading, or null before the first one lands. */
+  readonly latest: number | null;
+  readonly min: number;
+  readonly max: number;
+  readonly avg: number;
+  readonly count: number;
 }
 
-function drawGraph(buffer: readonly LatencyPoint[], svg: SVGSVGElement, palette: LatencyPalette): void {
-  const plotW = LATENCY_GRAPH_W - PAD_L - PAD_R;
-  const plotH = LATENCY_GRAPH_H - PAD_T - PAD_B;
-
-  const maxRtt = buffer.reduce((m, p) => Math.max(m, p.rtt), 0);
-  const yMax = Math.max(Math.ceil(maxRtt / 10) * 10, 20);
-
-  const now = buffer.length > 0 ? buffer[buffer.length - 1].time : performance.now();
-  const tMin = now - LATENCY_WINDOW_SECS * 1000;
-
-  let polyPoints = "";
-  for (const p of buffer) {
-    const x = PAD_L + ((p.time - tMin) / (LATENCY_WINDOW_SECS * 1000)) * plotW;
-    const y = PAD_T + plotH - (p.rtt / yMax) * plotH;
-    polyPoints += `${x},${y} `;
+export function summariseLatency(samples: readonly LatencySample[]): LatencySummary {
+  if (samples.length === 0) {
+    return { latest: null, min: 0, max: 0, avg: 0, count: 0 };
   }
-
-  const gridSteps = 4;
-  let gridSvg = "";
-  for (let i = 0; i <= gridSteps; i++) {
-    const y = PAD_T + (i / gridSteps) * plotH;
-    const val = Math.round(yMax * (1 - i / gridSteps));
-    gridSvg += `<line x1="${PAD_L}" y1="${y}" x2="${LATENCY_GRAPH_W - PAD_R}" y2="${y}" stroke="${palette.grid}" stroke-width="0.5"/>`;
-    gridSvg += `<text x="${PAD_L - 4}" y="${y + 3}" text-anchor="end" fill="${palette.axis}" font-size="8">${val}</text>`;
+  let min = Infinity;
+  let max = 0;
+  let total = 0;
+  for (const sample of samples) {
+    if (sample.rtt < min) min = sample.rtt;
+    if (sample.rtt > max) max = sample.rtt;
+    total += sample.rtt;
   }
-  gridSvg += `<text x="${PAD_L - 4}" y="${LATENCY_GRAPH_H - 1}" text-anchor="end" fill="${palette.unit}" font-size="7">ms</text>`;
+  return {
+    latest: samples[samples.length - 1].rtt,
+    min,
+    max,
+    avg: total / samples.length,
+    count: samples.length,
+  };
+}
 
-  const latest = buffer.length > 0 ? buffer[buffer.length - 1].rtt : 0;
-  const latestColor = latencyColor(latest, palette);
-
-  svg.innerHTML =
-    gridSvg +
-    `<polyline points="${polyPoints}" fill="none" stroke="${latestColor}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>` +
-    (buffer.length > 0
-      ? `<text x="${LATENCY_GRAPH_W - PAD_R}" y="${PAD_T + 10}" text-anchor="end" fill="${latestColor}" font-size="10" font-weight="600">${latest.toFixed(0)} ms</text>`
-      : "");
+/** What the chart is given: the window's readings, and why there are none. */
+export interface LatencyFeed {
+  readonly samples: readonly LatencySample[];
+  /** The reason the ping test would not start, or null while it is running. */
+  readonly error: string | null;
 }
 
 /**
- * Run the ping test while mounted and paint every sample into `svgRef`.
+ * Run the ping test for as long as something is showing it, and keep the
+ * readings it produces.
  *
- * The samples arrive faster than React should re-render, so the buffer is a ref
- * and the graph is drawn straight into the element on an animation frame.
+ * Two details are load-bearing. The listener goes up *before* the test is
+ * asked to start, because a server on the same machine answers in well under
+ * a millisecond and Tauri does not replay an event that arrived before
+ * anything was listening. And the failure to start is kept rather than
+ * swallowed: a panel that silently draws nothing looks exactly like a
+ * connection with no latency to report, which is how an empty graph went
+ * unexplained for as long as it did.
  */
-export function useLatencyGraph(
-  svgRef: React.RefObject<SVGSVGElement | null>,
-  palette: LatencyPalette = DEFAULT_LATENCY_PALETTE,
-): void {
-  const bufferRef = useRef<LatencyPoint[]>([]);
-  const rafId = useRef(0);
-  // Read through a ref so a caller passing a fresh palette object each render
-  // does not tear down the listener.
-  const paletteRef = useRef(palette);
-  paletteRef.current = palette;
+export function useLatencyFeed(): LatencyFeed {
+  const [samples, setSamples] = useState<LatencySample[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    invoke("start_latency_test").catch(() => {});
+    let live = true;
+    let unlisten: (() => void) | null = null;
+
+    void (async () => {
+      const off = await listen<{ rtt_ms: number }>("ping-latency", (event) => {
+        const at = performance.now();
+        const cutoff = at - LATENCY_WINDOW_SECS * 1000;
+        setSamples((current) => {
+          const next = current.filter((sample) => sample.at >= cutoff);
+          next.push({ at, rtt: event.payload.rtt_ms });
+          return next;
+        });
+      });
+      if (!live) {
+        off();
+        return;
+      }
+      unlisten = off;
+      try {
+        await invoke("start_latency_test");
+        if (live) setError(null);
+      } catch (e) {
+        if (live) setError(String(e));
+      }
+    })();
+
     return () => {
-      invoke("stop_latency_test").catch(() => {});
+      live = false;
+      unlisten?.();
+      invoke("stop_latency_test").catch(() => undefined);
     };
   }, []);
 
-  useEffect(() => {
-    const unlisten = listen<{ rtt_ms: number }>("ping-latency", (ev) => {
-      const buf = bufferRef.current;
-      buf.push({ time: performance.now(), rtt: ev.payload.rtt_ms });
-      const cutoff = performance.now() - LATENCY_WINDOW_SECS * 1000;
-      while (buf.length > 0 && buf[0].time < cutoff) buf.shift();
-
-      cancelAnimationFrame(rafId.current);
-      rafId.current = requestAnimationFrame(() => {
-        const svg = svgRef.current;
-        if (svg) drawGraph(buf, svg, paletteRef.current);
-      });
-    });
-
-    return () => {
-      cancelAnimationFrame(rafId.current);
-      unlisten.then((f) => f());
-    };
-  }, [svgRef]);
+  return { samples, error };
 }

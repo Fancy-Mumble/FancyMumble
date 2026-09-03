@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { useAppStore } from "@core/store";
 import { withNebulaTheme } from "../../testTheme";
 import { ServerInfoPanel } from "./ServerInfoPanel";
 
@@ -24,8 +25,11 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() => undefined) }));
+// The developer section is behind a preference, so the mode is a knob the
+// tests turn rather than a constant.
+const prefs = vi.hoisted(() => ({ userMode: "normal" }));
 vi.mock("@core/preferencesStorage", () => ({
-  getPreferences: () => Promise.resolve({ userMode: "normal" }),
+  getPreferences: () => Promise.resolve({ userMode: prefs.userMode }),
   getSavedAudioSettings: () => Promise.resolve(null),
 }));
 
@@ -49,5 +53,32 @@ describe("Nebula ServerInfoPanel", () => {
     // in Nebula's window column; the roster's own geometry is the correct one.
     expect(getComputedStyle(panel).width).toBe("320px");
     expect(getComputedStyle(panel).flex).toBe("0 0 auto");
+  });
+
+  it("lists what the server can do, in developer mode", async () => {
+    prefs.userMode = "developer";
+    // Starling: an epoch instead of a version, and the file service that comes
+    // with it rather than the plugin.
+    useAppStore.setState({
+      serverFancyVersion: null,
+      serverFancyProtocol: 1,
+      fileServerKind: "canon",
+      fileServerCapabilities: null,
+      liveDocPluginConfig: null,
+      pluginRegistry: [],
+      channelPersistence: {},
+    });
+
+    render(withNebulaTheme(<ServerInfoPanel onClose={() => {}} />));
+
+    // Closed until asked, like every other developer fold.
+    const fold = await screen.findByText("Server Features");
+    expect(screen.queryByText("Fancy extensions")).toBeNull();
+
+    fireEvent.click(fold);
+    expect(screen.getByText("Fancy extensions")).toBeTruthy();
+    expect(screen.getByText("Yes · epoch 1")).toBeTruthy();
+    expect(screen.getByText("Yes · built-in service")).toBeTruthy();
+    prefs.userMode = "normal";
   });
 });

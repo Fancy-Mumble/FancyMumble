@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useAppStore } from "@core/store";
 import { isOnboardingSupported } from "@core/features/onboarding/onboardingStore";
 import { PERM_MANAGE_EMOTES, PERM_WRITE } from "@core/utils/permissions";
-import { fancyVersionEncode } from "@core/utils/version";
+import { isAuditLogSupported } from "@core/features/server/serverFeatures";
 
 /**
  * What the connected server and this session allow.
@@ -12,40 +12,19 @@ import { fancyVersionEncode } from "@core/utils/version";
  * questions too - a page importing them from the screen that renders it is a
  * cycle, and one whose only symptom would be a temporal-dead-zone throw at some
  * future import order.
+ *
+ * The version gates are `@core/features/server/serverFeatures`'s own - Standard
+ * asks the same questions, and the Server Info panel lists them all - and are
+ * re-exported here so the pages importing them from this module keep working.
  */
 
-/** Minimum server version for the plugin admin API (0.4.0). */
-export const PLUGIN_ADMIN_MIN_FANCY_VERSION = fancyVersionEncode(0, 4, 0);
-
-export function isPluginAdminSupported(version: number | null | undefined): boolean {
-  return version != null && version >= PLUGIN_ADMIN_MIN_FANCY_VERSION;
-}
-
-/** Minimum server version for the audit-log protocol (0.4.2). */
-export const AUDIT_LOG_MIN_FANCY_VERSION = fancyVersionEncode(0, 4, 2);
-
-/** The wire epoch on which every Fancy service has its own outer type. */
-export const FANCY_PROTOCOL_EPOCH = 1;
-
-/**
- * Whether the connected server can answer an audit query.
- *
- * Two ways to be sure, because there are two kinds of server that can. An
- * epoch-0 server (the C++ fork) answers if its *product* version is new enough.
- * An epoch-1 server (Starling) announces the epoch and deliberately no version
- * at all - announcing one would invite clients to send epoch-0 natives it
- * cannot route - so speaking the epoch is itself the capability statement.
- *
- * Gating on the version alone hid the page from Starling for ever, and would
- * have gone on hiding it: no version is announced, and none ever will be.
- */
-export function isAuditLogSupported(
-  version: number | null | undefined,
-  fancyProtocol?: number | null,
-): boolean {
-  if (fancyProtocol === FANCY_PROTOCOL_EPOCH) return true;
-  return version != null && version >= AUDIT_LOG_MIN_FANCY_VERSION;
-}
+export {
+  AUDIT_LOG_MIN_FANCY_VERSION,
+  FANCY_PROTOCOL_EPOCH,
+  PLUGIN_ADMIN_MIN_FANCY_VERSION,
+  isPluginAdminSupported,
+} from "@core/features/server/serverFeatures";
+export { isAuditLogSupported };
 
 export type AdminPageId =
   | "users"
