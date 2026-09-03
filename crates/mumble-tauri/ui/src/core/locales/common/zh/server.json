@@ -157,6 +157,7 @@
     "accordionWelcome": "欢迎",
     "accordionActivityLog": "活动日志",
     "sectionDeveloper": "开发者",
+    "accordionFeatures": "服务器功能",
     "sectionPlugins": "插件",
     "plugins": {
       "description": "描述",
@@ -171,6 +172,21 @@
     "accordionConnectionState": "连接与状态",
     "accordionMessages": "消息",
     "accordionLatency": "网络延迟",
+    "latency": {
+      "unit": "毫秒",
+      "gradeGood": "良好",
+      "gradeFair": "一般",
+      "gradePoor": "较差",
+      "window": "最近 {{seconds}} 秒",
+      "spread": "最小 {{min}}，平均 {{avg}}，最大 {{max}} 毫秒",
+      "collecting": "正在采集数据…",
+      "failed": "无数据：{{error}}",
+      "axisNow": "现在",
+      "axisAgo": "{{seconds}} 秒前",
+      "reading": "{{value}} 毫秒",
+      "caption": "最近 {{seconds}} 秒的往返时延：当前 {{latest}} 毫秒，介于 {{min}} 与 {{max}} 毫秒之间，平均 {{avg}} 毫秒",
+      "captionEmpty": "往返时延：暂无数据"
+    },
     "accordionFileServer": "文件服务器",
     "accordionLiveDoc": "实时文档",
     "transportUdp": "UDP（加密）",
@@ -223,6 +239,36 @@
       "liveDocTitle": "标题",
       "liveDocSlug": "标识",
       "liveDocUrl": "WebSocket 地址"
+    },
+    "features": {
+      "value": "{{state}} · {{detail}}",
+      "state": {
+        "yes": "支持",
+        "partial": "有限",
+        "no": "不支持",
+        "unknown": "未知"
+      },
+      "names": {
+        "fancyExtensions": "Fancy 扩展",
+        "screenShare": "屏幕共享",
+        "fileSharing": "文件共享",
+        "customEmotes": "自定义表情",
+        "liveDocs": "实时文档",
+        "calendar": "日历",
+        "persistentChat": "持久聊天",
+        "htmlMessages": "HTML 消息",
+        "onboarding": "入门引导",
+        "accountSettings": "账户设置",
+        "pluginAdmin": "插件管理",
+        "auditLog": "审计日志"
+      },
+      "notes": {
+        "canonService": "内置服务",
+        "noRelay": "无 WebRTC 中继",
+        "noChannelEnabled": "没有频道启用",
+        "awaitingAnswer": "尚无响应",
+        "channelCount": "{{count}} 个频道"
+      }
     },
     "accordionCspViolations": "CSP 违规",
     "cspViolationCount": "{{count}} 条违规",

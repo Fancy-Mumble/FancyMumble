@@ -51,11 +51,10 @@
     "shareScreen": "Share your screen",
     "shareCamera": "Share your camera",
     "serverAdmin": "Server admin",
-    "latency": " · {{ms}} ms",
-    "groupShare": "SHARE",
-    "groupApp": "APP",
-    "groupChannelList": "CHANNEL LIST",
-    "groupServer": "SERVER"
+    "menuCaption": "Server & app options",
+    "hideEmptyHint": "Channels you can't post in stay collapsed",
+    "leaveServer": "Leave server",
+    "latency": " · {{ms}} ms"
   },
   "friends": {
     "search": "Search friends",

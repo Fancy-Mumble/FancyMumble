@@ -216,7 +216,8 @@
     "builtinEmojiPicker": "Emoji-Auswahl",
     "builtinEmojiHint": ": tippen, dann suchen",
     "builtinMentionPicker": "Erwähnungs-Auswahl",
-    "builtinMentionHint": "@ tippen, dann suchen"
+    "builtinMentionHint": "@ tippen, dann suchen",
+    "toggleGameOverlay": "Spiel-Overlay umschalten"
   },
   "userShortcuts": {
     "title": "Zu Benutzer springen (serverübergreifend)",
@@ -334,10 +335,10 @@
     "panelTitle": "Anpassen",
     "uiDesign": "Oberflächendesign",
     "beta": "Beta",
-    "uiDesignHint": "Standard oder eines der Design-Betas. Standard ist die Voreinstellung und hat den größten Funktionsumfang.",
+    "uiDesignHint": "Nebula ist die Voreinstellung. Standard ist die ältere Oberfläche und hat weiterhin den größten Funktionsumfang; Aurora ist ein Design-Beta.",
     "uiDesignStandard": "Standard",
     "uiDesignAurora": "Aurora (Beta)",
-    "uiDesignNebula": "Nebula (Beta)",
+    "uiDesignNebula": "Nebula",
     "uiDesignOverrideHint": "Die Oberfläche wird derzeit durch den Entwicklungs-URL-Parameter auf '{{design}}' festgelegt.",
     "theme": "Design",
     "themeHint": "Wähle das Erscheinungsbild der ganzen App.",

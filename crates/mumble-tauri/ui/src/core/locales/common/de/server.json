@@ -147,6 +147,7 @@
     "accordionWelcome": "Willkommen",
     "accordionActivityLog": "Aktivitätsprotokoll",
     "sectionDeveloper": "Entwickler",
+    "accordionFeatures": "Serverfunktionen",
     "sectionPlugins": "Plugins",
     "plugins": {
       "description": "Beschreibung",
@@ -161,6 +162,21 @@
     "accordionConnectionState": "Verbindung & Status",
     "accordionMessages": "Nachrichten",
     "accordionLatency": "Netzwerklatenz",
+    "latency": {
+      "unit": "ms",
+      "gradeGood": "Gut",
+      "gradeFair": "Mäßig",
+      "gradePoor": "Schlecht",
+      "window": "Letzte {{seconds}} Sekunden",
+      "spread": "min. {{min}}, Mittel {{avg}}, max. {{max}} ms",
+      "collecting": "Messwerte werden gesammelt…",
+      "failed": "Keine Messwerte: {{error}}",
+      "axisNow": "jetzt",
+      "axisAgo": "{{seconds}}s",
+      "reading": "{{value}} ms",
+      "caption": "Paketumlaufzeit der letzten {{seconds}} Sekunden: jetzt {{latest}} ms, zwischen {{min}} und {{max}} ms, im Mittel {{avg}} ms",
+      "captionEmpty": "Paketumlaufzeit: noch keine Messwerte"
+    },
     "accordionFileServer": "Dateiserver",
     "accordionLiveDoc": "Live Doc",
     "transportUdp": "UDP (verschlüsselt)",
@@ -213,6 +229,36 @@
       "liveDocTitle": "Titel",
       "liveDocSlug": "Slug",
       "liveDocUrl": "WebSocket-URL"
+    },
+    "features": {
+      "value": "{{state}} · {{detail}}",
+      "state": {
+        "yes": "Ja",
+        "partial": "Eingeschränkt",
+        "no": "Nein",
+        "unknown": "Unbekannt"
+      },
+      "names": {
+        "fancyExtensions": "Fancy-Erweiterungen",
+        "screenShare": "Bildschirmfreigabe",
+        "fileSharing": "Dateifreigabe",
+        "customEmotes": "Eigene Emotes",
+        "liveDocs": "Live-Dokumente",
+        "calendar": "Kalender",
+        "persistentChat": "Dauerhafter Chat",
+        "htmlMessages": "HTML-Nachrichten",
+        "onboarding": "Onboarding",
+        "accountSettings": "Kontoeinstellungen",
+        "pluginAdmin": "Plugin-Verwaltung",
+        "auditLog": "Audit-Log"
+      },
+      "notes": {
+        "canonService": "integrierter Dienst",
+        "noRelay": "kein WebRTC-Relay",
+        "noChannelEnabled": "von keinem Kanal genutzt",
+        "awaitingAnswer": "noch keine Antwort",
+        "channelCount": "{{count}} Kanäle"
+      }
     },
     "accordionCspViolations": "CSP-Verstöße",
     "cspViolationCount": "{{count}} Verstöße",

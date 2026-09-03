@@ -147,6 +147,7 @@
     "accordionWelcome": "Bienvenue",
     "accordionActivityLog": "Journal d'activité",
     "sectionDeveloper": "Développeur",
+    "accordionFeatures": "Fonctionnalités du serveur",
     "sectionPlugins": "Plugins",
     "plugins": {
       "description": "Description",
@@ -161,6 +162,21 @@
     "accordionConnectionState": "Connexion & état",
     "accordionMessages": "Messages",
     "accordionLatency": "Latence réseau",
+    "latency": {
+      "unit": "ms",
+      "gradeGood": "Bon",
+      "gradeFair": "Moyen",
+      "gradePoor": "Mauvais",
+      "window": "{{seconds}} dernières secondes",
+      "spread": "min {{min}}, moy {{avg}}, max {{max}} ms",
+      "collecting": "Collecte des mesures…",
+      "failed": "Aucune mesure : {{error}}",
+      "axisNow": "maintenant",
+      "axisAgo": "{{seconds}} s",
+      "reading": "{{value}} ms",
+      "caption": "Aller-retour sur les {{seconds}} dernières secondes : {{latest}} ms actuellement, entre {{min}} et {{max}} ms, {{avg}} ms en moyenne",
+      "captionEmpty": "Aller-retour : aucune mesure"
+    },
     "accordionFileServer": "Serveur de fichiers",
     "accordionLiveDoc": "Live Doc",
     "transportUdp": "UDP (chiffré)",
@@ -213,6 +229,36 @@
       "liveDocTitle": "Titre",
       "liveDocSlug": "Slug",
       "liveDocUrl": "URL WebSocket"
+    },
+    "features": {
+      "value": "{{state}} · {{detail}}",
+      "state": {
+        "yes": "Oui",
+        "partial": "Limité",
+        "no": "Non",
+        "unknown": "Inconnu"
+      },
+      "names": {
+        "fancyExtensions": "Extensions Fancy",
+        "screenShare": "Partage d'écran",
+        "fileSharing": "Partage de fichiers",
+        "customEmotes": "Émotes personnalisées",
+        "liveDocs": "Documents collaboratifs",
+        "calendar": "Calendrier",
+        "persistentChat": "Chat persistant",
+        "htmlMessages": "Messages HTML",
+        "onboarding": "Onboarding",
+        "accountSettings": "Paramètres du compte",
+        "pluginAdmin": "Gestion des plugins",
+        "auditLog": "Journal d'audit"
+      },
+      "notes": {
+        "canonService": "service intégré",
+        "noRelay": "pas de relais WebRTC",
+        "noChannelEnabled": "aucun canal ne l'utilise",
+        "awaitingAnswer": "pas encore de réponse",
+        "channelCount": "{{count}} canal/canaux"
+      }
     },
     "accordionCspViolations": "Violations CSP",
     "cspViolationCount": "{{count}} violation(s)",

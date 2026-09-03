@@ -8,24 +8,62 @@
  */
 
 import { vi } from "vitest";
-import enChat from "./src/core/locales/en/chat.json";
-import enCommon from "./src/core/locales/en/common.json";
-import enServer from "./src/core/locales/en/server.json";
-import enSettings from "./src/core/locales/en/settings.json";
-import enSidebar from "./src/core/locales/en/sidebar.json";
-// Nebula keeps its own strings in their own namespaces, so a page of its
-// settings reads nothing but bare keys without this one registered too.
-import enNebulaSettings from "./src/core/locales/nebula/en/settings.json";
+// The shared namespaces moved into `locales/common/` and the packs took their
+// own strings with them. Both layouts are read, newer over older, because the
+// move is still in flight and a key that has not been carried across yet is
+// still the string the user sees.
+import legacyChat from "./src/core/locales/en/chat.json";
+import legacyCommon from "./src/core/locales/en/common.json";
+import legacyServer from "./src/core/locales/en/server.json";
+import legacySettings from "./src/core/locales/en/settings.json";
+import legacySidebar from "./src/core/locales/en/sidebar.json";
+import enChat from "./src/core/locales/common/en/chat.json";
+import enCommon from "./src/core/locales/common/en/common.json";
+import enServer from "./src/core/locales/common/en/server.json";
+import enSettings from "./src/core/locales/common/en/settings.json";
+import enSidebar from "./src/core/locales/common/en/sidebar.json";
+import nebulaCommon from "./src/core/locales/nebula/en/common.json";
+import nebulaChrome from "./src/core/locales/nebula/en/chrome.json";
+import nebulaSidebar from "./src/core/locales/nebula/en/sidebar.json";
+import nebulaChat from "./src/core/locales/nebula/en/chat.json";
+import nebulaConnect from "./src/core/locales/nebula/en/connect.json";
+import nebulaUser from "./src/core/locales/nebula/en/user.json";
+import nebulaServer from "./src/core/locales/nebula/en/server.json";
+import nebulaSettings from "./src/core/locales/nebula/en/settings.json";
 
 type NestedRecord = { [key: string]: unknown };
 
+/** Later bundles win, key by key, all the way down. */
+function merge(...bundles: NestedRecord[]): NestedRecord {
+  const out: NestedRecord = {};
+  for (const bundle of bundles)
+    for (const [key, value] of Object.entries(bundle)) {
+      const mine = out[key];
+      out[key] =
+        value && typeof value === "object" && !Array.isArray(value)
+          ? merge(
+              (mine && typeof mine === "object" ? mine : {}) as NestedRecord,
+              value as NestedRecord,
+            )
+          : value;
+    }
+  return out;
+}
+
 const NAMESPACES: Record<string, NestedRecord> = {
-  chat: enChat as NestedRecord,
-  common: enCommon as NestedRecord,
-  server: enServer as NestedRecord,
-  settings: enSettings as NestedRecord,
-  sidebar: enSidebar as NestedRecord,
-  nebulaSettings: enNebulaSettings as NestedRecord,
+  chat: merge(legacyChat as NestedRecord, enChat as NestedRecord),
+  common: merge(legacyCommon as NestedRecord, enCommon as NestedRecord),
+  server: merge(legacyServer as NestedRecord, enServer as NestedRecord),
+  settings: merge(legacySettings as NestedRecord, enSettings as NestedRecord),
+  sidebar: merge(legacySidebar as NestedRecord, enSidebar as NestedRecord),
+  nebulaCommon: nebulaCommon as NestedRecord,
+  nebulaChrome: nebulaChrome as NestedRecord,
+  nebulaSidebar: nebulaSidebar as NestedRecord,
+  nebulaChat: nebulaChat as NestedRecord,
+  nebulaConnect: nebulaConnect as NestedRecord,
+  nebulaUser: nebulaUser as NestedRecord,
+  nebulaServer: nebulaServer as NestedRecord,
+  nebulaSettings: nebulaSettings as NestedRecord,
 };
 
 function resolveKey(data: NestedRecord, key: string): unknown {

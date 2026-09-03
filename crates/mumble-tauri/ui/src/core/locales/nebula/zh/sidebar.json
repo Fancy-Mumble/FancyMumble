@@ -51,11 +51,10 @@
     "shareScreen": "共享你的屏幕",
     "shareCamera": "共享你的摄像头",
     "serverAdmin": "服务器管理",
-    "latency": " · {{ms}} 毫秒",
-    "groupShare": "共享",
-    "groupApp": "应用",
-    "groupChannelList": "频道列表",
-    "groupServer": "服务器"
+    "menuCaption": "服务器与应用选项",
+    "hideEmptyHint": "你无法发言的频道保持折叠",
+    "leaveServer": "退出服务器",
+    "latency": " · {{ms}} 毫秒"
   },
   "friends": {
     "search": "搜索好友",

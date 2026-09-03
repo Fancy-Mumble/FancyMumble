@@ -157,6 +157,7 @@
     "accordionWelcome": "Welcome",
     "accordionActivityLog": "Activity Log",
     "sectionDeveloper": "Developer",
+    "accordionFeatures": "Server Features",
     "sectionPlugins": "Plugins",
     "plugins": {
       "description": "Description",
@@ -171,6 +172,21 @@
     "accordionConnectionState": "Connection & State",
     "accordionMessages": "Messages",
     "accordionLatency": "Network Latency",
+    "latency": {
+      "unit": "ms",
+      "gradeGood": "Good",
+      "gradeFair": "Fair",
+      "gradePoor": "Poor",
+      "window": "Last {{seconds}} seconds",
+      "spread": "min {{min}}, avg {{avg}}, max {{max}} ms",
+      "collecting": "Collecting readings…",
+      "failed": "No readings: {{error}}",
+      "axisNow": "now",
+      "axisAgo": "{{seconds}}s",
+      "reading": "{{value}} ms",
+      "caption": "Round trip over the last {{seconds}} seconds: {{latest}} ms now, between {{min}} and {{max}} ms, {{avg}} ms on average",
+      "captionEmpty": "Round trip: no readings yet"
+    },
     "accordionFileServer": "File Server",
     "accordionLiveDoc": "Live Doc",
     "transportUdp": "UDP (encrypted)",
@@ -223,6 +239,36 @@
       "liveDocTitle": "Title",
       "liveDocSlug": "Slug",
       "liveDocUrl": "WebSocket URL"
+    },
+    "features": {
+      "value": "{{state}} · {{detail}}",
+      "state": {
+        "yes": "Yes",
+        "partial": "Limited",
+        "no": "No",
+        "unknown": "Unknown"
+      },
+      "names": {
+        "fancyExtensions": "Fancy extensions",
+        "screenShare": "Screen sharing",
+        "fileSharing": "File sharing",
+        "customEmotes": "Custom emotes",
+        "liveDocs": "Live documents",
+        "calendar": "Calendar",
+        "persistentChat": "Persistent chat",
+        "htmlMessages": "HTML messages",
+        "onboarding": "Onboarding",
+        "accountSettings": "Account settings",
+        "pluginAdmin": "Plugin administration",
+        "auditLog": "Audit log"
+      },
+      "notes": {
+        "canonService": "built-in service",
+        "noRelay": "no WebRTC relay",
+        "noChannelEnabled": "no channel enables it",
+        "awaitingAnswer": "no answer yet",
+        "channelCount": "{{count}} channel(s)"
+      }
     },
     "accordionCspViolations": "CSP Violations",
     "cspViolationCount": "{{count}} violation(s)",

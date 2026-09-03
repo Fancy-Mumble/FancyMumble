@@ -15,5 +15,9 @@
     "headingServer": "Serveurs",
     "results_one": "{{count}} résultat",
     "results_other": "{{count}} résultats"
+  },
+  "gameOverlay": {
+    "you": "VOUS",
+    "more": "+{{count}} de plus"
   }
 }
