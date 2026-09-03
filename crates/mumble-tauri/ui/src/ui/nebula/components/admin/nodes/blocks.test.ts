@@ -40,6 +40,9 @@ suite("block browser", () => {
       it("summarises exactly the ports the node it makes turns out to have", () => {
         for (const block of spec.blocks) {
           const node = block.create(0, 0) as GraphNode & never;
+          // A block whose ports are its own data cannot enumerate them here,
+          // and says so with `dynamicPorts` rather than by being wrong.
+          if (block.dynamicPorts) continue;
           expect({
             block: block.id,
             in: block.inputs.length,
@@ -77,6 +80,7 @@ suite("block browser", () => {
       // Only where the block names one at all: a node with a single output
       // calls it nothing, and the card prints just what it carries.
       for (const block of welcomeSpec.blocks) {
+        if (block.dynamicPorts) continue;
         const node = block.create(0, 0);
         const ports = welcomeSpec.inputs(node);
         block.inputs.forEach((summary, index) => {

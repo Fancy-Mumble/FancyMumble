@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import type { GraphNode, NodeGraph, PortId, Wiring } from "./graph";
+import type { TemplateGallery } from "./templates";
 
 /**
  * What one dialect of the node editor has to say about itself.
@@ -68,6 +69,18 @@ export interface BlockDef<N extends GraphNode> {
   create(x: number, y: number): N;
   readonly inputs: readonly PortSummary[];
   readonly outputs: readonly PortSummary[];
+  /**
+   * Whether this block's node has ports that depend on what is written in it.
+   *
+   * True for exactly one kind of thing so far - a design block, whose input
+   * ports *are* its declared signature - and it exists so the browser card can
+   * say "one per input the design declares" honestly, instead of naming ports
+   * that do not exist until somebody adds an input.
+   *
+   * Every other block promises the card and the node agree exactly, which is
+   * what the block tests hold them to.
+   */
+  readonly dynamicPorts?: boolean;
 }
 
 /** The chrome's own words, so the editor itself needs no translation table. */
@@ -95,6 +108,14 @@ export interface NodeSpec<N extends GraphNode> extends Wiring<N> {
   readonly id: string;
   /** What an operator may add, in the order the browser lists it. */
   readonly blocks: readonly BlockDef<N>[];
+  /**
+   * Finished drawings to start from, in the order the gallery lists them.
+   *
+   * Absent where a dialect has none, and the gallery button is then not
+   * offered at all - an empty gallery behind a button is worse than no button,
+   * because it costs a click to learn there is nothing there.
+   */
+  readonly templates?: TemplateGallery<N>;
   /** The header caption of a node: short and shouted. */
   label(node: N): string;
   /** How wide this node sits. Fixed per kind, so the canvas reads as a grid. */
@@ -106,6 +127,27 @@ export interface NodeSpec<N extends GraphNode> extends Wiring<N> {
    * scanning a full canvas is looking for a kind of question, not an instance.
    */
   tone(node: Pick<N, "kind">): Tone;
+  /**
+   * Whether this node may be dragged bigger, and how small it may go.
+   *
+   * Per node rather than per dialect, because within one dialect it differs:
+   * a node holding a document somebody is writing wants to be as wide as the
+   * writing, and an AND gate has one dropdown on it and nothing a wider box
+   * would show. A dialect that says nothing has no resizing at all, which is
+   * the right answer for an editor whose nodes are all one field.
+   */
+  resizable?(node: N): boolean;
+  /** The smallest this node may be dragged. Only asked of a resizable one. */
+  minSize?(node: N): { w: number; h: number };
+  /**
+   * Whether this dialect keeps an annotation layer.
+   *
+   * Off unless the dialect can *store* one: offering titles and notes on a
+   * canvas whose document has nowhere to put them means an operator writes
+   * documentation and loses it on the next save, which is worse than not
+   * offering it.
+   */
+  readonly annotate?: boolean;
   /**
    * Where a port sits on its node, in pixels from the node's top - or a CSS
    * length, for the many nodes whose one port sits in the middle.
