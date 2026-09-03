@@ -47,9 +47,29 @@ impl Drop for TalkingGuard {
             if let (Some(app), Some(session)) = (&self.app, self.session) {
                 use tauri::Emitter;
                 let _ = app.emit("user-talking", (session, false));
+                set_local_talking(app, false);
             }
         }
     }
+}
+
+/// Mirror the local talking edge into [`AppState`].
+///
+/// One relaxed atomic store on the edges that already emit the event, so the
+/// audio loop pays a few nanoseconds once per utterance and never a lock.
+fn set_local_talking(app: &tauri::AppHandle, talking: bool) {
+    use std::sync::atomic::Ordering;
+    use tauri::Manager;
+    let Some(state) = app.try_state::<super::AppState>() else {
+        return;
+    };
+    state.local_talking.store(talking, Ordering::Relaxed);
+    // Stamped on both edges: a poller that only ever sees "not talking now"
+    // still has to be able to tell a moment ago from a minute ago.
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
+    state.local_talking_at.store(now_ms, Ordering::Relaxed);
 }
 
 /// Background task that reads from the microphone, encodes, and queues
@@ -175,6 +195,7 @@ fn process_outbound_tick(
                 guard.is_talking = true;
                 if let (Some(app), Some(session)) = (app, own_session) {
                     let _ = app.emit("user-talking", (session, true));
+                    set_local_talking(app, true);
                 }
             }
             if stats.packets == 1 || stats.packets.is_multiple_of(500) {
@@ -203,6 +224,7 @@ fn process_outbound_tick(
                 guard.is_talking = false;
                 if let (Some(app), Some(session)) = (app, own_session) {
                     let _ = app.emit("user-talking", (session, false));
+                    set_local_talking(app, false);
                 }
             }
             debug!(

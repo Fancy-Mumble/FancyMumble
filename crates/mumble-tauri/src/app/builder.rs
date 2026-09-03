@@ -60,7 +60,11 @@ pub(crate) fn create_base_builder() -> tauri::Builder<tauri::Wry> {
             )
             // Don't track the updater window - it has a fixed size set
             // in window.rs that must not be overridden by stale state.
-            .with_denylist(&[crate::updater::UPDATER_WINDOW_LABEL])
+            .with_denylist(&[
+                crate::updater::UPDATER_WINDOW_LABEL,
+                crate::commands::draw_overlay::DRAW_OVERLAY_LABEL,
+                crate::commands::game_overlay::GAME_OVERLAY_LABEL,
+            ])
             .build(),
     );
 

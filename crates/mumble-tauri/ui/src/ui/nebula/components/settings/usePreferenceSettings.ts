@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getPreferences, updatePreferences } from "@core/preferencesStorage";
 import { setKlipyApiKey } from "@core/features/chat/gif/klipyConfig";
+import { applyGameOverlaySettings } from "@core/features/overlay/gameOverlay";
 import { useAppStore } from "@core/store";
-import type { UserPreferences } from "@core/types";
+import type { GameOverlaySettings, UserPreferences } from "@core/types";
 
 /**
  * The values these pages assume are always present.
@@ -16,6 +17,18 @@ import type { UserPreferences } from "@core/types";
  * is. Naming the fallbacks once here settles it for the whole surface, and
  * `ResolvedPreferences` hands the pages a type that matches what they get.
  */
+/** Typed apart from the table below, so `ResolvedPreferences` carries
+ *  `GameOverlaySettings` rather than the literal types an inline object
+ *  literal would infer (`mode: "off"`, `hideFromCapture: true`). */
+const GAME_OVERLAY_DEFAULTS: GameOverlaySettings = {
+  mode: "off",
+  corner: "topRight",
+  showLastMessage: true,
+  hideFromCapture: true,
+  rules: {},
+  asked: [],
+};
+
 const PAGE_DEFAULTS = {
   klipyApiKey: "",
   dateFormat: "auto",
@@ -39,6 +52,7 @@ const PAGE_DEFAULTS = {
   persistDms: false,
   showDisconnectWarning: true,
   welcomeMessageDisplay: "once",
+  gameOverlay: GAME_OVERLAY_DEFAULTS,
 } satisfies Partial<UserPreferences>;
 
 /** `UserPreferences`, with the keys above narrowed to non-optional. */
@@ -140,6 +154,12 @@ const EFFECTS: {
   },
   autoZipLogs: (enabled) => {
     void invoke("set_auto_zip_logs", { enabled }).catch(() => undefined);
+  },
+  // The detector task's lifetime follows the mode, so a change that only
+  // reached the preferences file would leave the overlay behaving as it did
+  // before until the next launch.
+  gameOverlay: (settings) => {
+    void applyGameOverlaySettings(settings);
   },
 };
 

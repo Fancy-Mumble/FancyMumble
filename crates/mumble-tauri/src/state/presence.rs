@@ -155,6 +155,31 @@ impl PresenceManager {
         }
     }
 
+    /// Process ids currently advertising that they are playing something.
+    ///
+    /// The game overlay's strongest single signal: a process that tells
+    /// Discord it is playing a game has classified itself, which is what
+    /// Discord's own detection increasingly relies on in place of its
+    /// executable list. Activity type 0 is "playing"; an absent type means the
+    /// same thing, since that is the protocol's default.
+    ///
+    /// Returns nothing at all when the presence listener is off, which is its
+    /// default - so this signal is a bonus, never a requirement.
+    pub(crate) async fn playing_pids(&self) -> Vec<u32> {
+        let Ok(slot) = self.shared.service.try_lock() else {
+            return Vec::new();
+        };
+        let Some(service) = slot.as_ref() else {
+            return Vec::new();
+        };
+        service
+            .snapshot()
+            .into_iter()
+            .filter(|entry| entry.activity.activity_type.is_none_or(|kind| kind == 0))
+            .filter_map(|entry| entry.pid)
+            .collect()
+    }
+
     /// Best-effort cleanup from the process-exit handler, which runs on the
     /// main thread and must not block on the async runtime.
     pub(crate) fn release_slot_files(&self) {

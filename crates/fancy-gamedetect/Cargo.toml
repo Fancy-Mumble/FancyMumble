@@ -1,0 +1,32 @@
+[package]
+name = "fancy-gamedetect"
+version = "0.1.0"
+edition = "2021"
+# Internal workspace crate - never published to crates.io (this also lets
+# cargo-deny's wildcard gate exempt the path dependencies).
+publish = false
+license = "MIT"
+description = "Decides whether the foreground window is a game worth putting a voice overlay over"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+
+[target.'cfg(windows)'.dependencies]
+# Foreground-window facts. Only user32/kernel32 query calls - no hooks, no
+# process memory. See `probe::windows` for the full list.
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Shell",
+] }
+# Installed-game index: every launcher but Steam and Epic records its install
+# directories in the registry. Already in the tree via the Tauri stack.
+winreg = "0.55"
+
+[lints]
+workspace = true

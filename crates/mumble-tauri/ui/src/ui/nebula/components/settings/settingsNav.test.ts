@@ -21,6 +21,7 @@ describe("visibleSettingsPages", () => {
       "privacy",
       "localization",
       "shortcuts",
+      "overlay",
       "identities",
       "advanced",
     ]);

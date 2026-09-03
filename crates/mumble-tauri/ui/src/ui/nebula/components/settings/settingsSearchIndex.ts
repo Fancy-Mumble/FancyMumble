@@ -316,6 +316,44 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
     keywords: ["loudness", "sound volume"],
   },
 
+  // -- Overlay ------------------------------------------------------
+  {
+    page: "overlay",
+    title: "Game overlay",
+    titleKey: "nebulaSettings:overlay.title",
+    keywords: ["overlay", "game", "in-game", "hud", "on top", "always on top"],
+  },
+  {
+    page: "overlay",
+    title: "Show the overlay",
+    titleKey: "nebulaSettings:overlay.mode",
+    keywords: ["overlay", "while talking", "in any game"],
+  },
+  {
+    page: "overlay",
+    title: "Position",
+    titleKey: "nebulaSettings:overlay.corner",
+    keywords: ["overlay", "corner", "placement"],
+  },
+  {
+    page: "overlay",
+    title: "Show the last message",
+    titleKey: "nebulaSettings:overlay.lastMessage",
+    keywords: ["overlay", "chat", "message"],
+  },
+  {
+    page: "overlay",
+    title: "Hide from screen capture",
+    titleKey: "nebulaSettings:overlay.hideFromCapture",
+    keywords: ["overlay", "stream", "obs", "recording", "capture"],
+  },
+  {
+    page: "overlay",
+    title: "What it sees",
+    titleKey: "nebulaSettings:overlay.diagnostics",
+    keywords: ["overlay", "detection", "diagnostics", "why", "game detection"],
+  },
+
   // -- Privacy ------------------------------------------------------
   {
     page: "privacy",

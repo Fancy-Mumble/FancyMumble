@@ -1,0 +1,13 @@
+{
+  "identifier": "game-overlay",
+  "description": "Permissions for the game overlay window: a click-through, non-focusable card that shows who is talking and the last message over a game. It renders and listens; visibility, placement and teardown are decided in Rust, so the window is granted no window-management permissions of its own. `store:default` is required because every window boots through UiRoot, which reads the chosen UI pack out of preferences - without it the design never resolves and the window renders nothing at all.",
+  "windows": [
+    "game-overlay"
+  ],
+  "permissions": [
+    "core:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "store:default"
+  ]
+}

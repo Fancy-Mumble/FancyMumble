@@ -57,6 +57,11 @@ export function ShortcutsPanel({ shortcuts, onChangeShortcut, isExpert }: Props)
           value={shortcuts.voicePriority}
           onChange={(v) => onChangeShortcut("voicePriority", v)}
         />
+        <ShortcutRecorder
+          label={t("shortcuts.toggleGameOverlay")}
+          value={shortcuts.toggleGameOverlay}
+          onChange={(v) => onChangeShortcut("toggleGameOverlay", v)}
+        />
       </ShortcutGroup>
 
       <ShortcutGroup title={t("shortcuts.groupVoiceApp")}>
