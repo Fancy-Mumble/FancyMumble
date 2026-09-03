@@ -8,12 +8,17 @@ import {
   BASE_WINDOW,
   GROW_THRESHOLD_PX,
   grownTailCount,
+  settledTailCount,
+  SETTLE_SHRINK_MS,
   tailCountAfterAppend,
   tailCountToInclude,
 } from "@core/features/chat/chatWindowing";
 import { useMessageOffload } from "@core/features/chat/useMessageOffload";
 import { isHeavyContent, type MessageScope } from "@core/messageOffload";
 import { groupMessagesByDay } from "../../selectors";
+
+/** One shared empty list, so an empty remainder never re-keys the offloader. */
+const EMPTY_MESSAGES: readonly ChatMessage[] = [];
 import { DEFAULT_CHAT_DISPLAY, type ChatDisplay } from "../../useChatDisplay";
 import { CHAT_COLUMN_INSET_PX, CHAT_COLUMN_MAX_WIDTH, radius } from "../../tokens";
 
@@ -125,23 +130,6 @@ export function MessageList({
   /** The column the rows are mounted in - the observer's subtree. */
   const columnRef = useRef<HTMLDivElement>(null);
 
-  /**
-   * Cold storage for the heavy bodies in this river.
-   *
-   * The window above unmounts the *row*; this releases the *content*, which is
-   * the part that costs megabytes - a channel where people paste screenshots
-   * holds the lot in memory otherwise, whether or not any of it is on screen.
-   * The rows below carry the two attributes it watches for.
-   */
-  const { restoringKeys } = useMessageOffload({
-    containerRef: scrollRef,
-    innerRef: columnRef,
-    currentScope,
-    // Nebula's rows already carry their id for the jump-to logic; there is no
-    // sense in labelling them twice with two names that must agree.
-    idAttribute: "data-message-id",
-  });
-
   // Publish what the scrollbar costs, once. It is a property of the platform
   // rather than of the conversation, so nothing here re-measures it; a browser
   // that reserves nothing simply publishes zero.
@@ -151,6 +139,9 @@ export function MessageList({
     document.documentElement.style.setProperty(GUTTER_VAR, `${node.offsetWidth - node.clientWidth}px`);
   }, []);
   const pinnedToBottom = useRef(true);
+  /** Pending "the reader has come to rest at the bottom" shrink. */
+  const settleTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(settleTimer.current), []);
 
   /**
    * How many of the newest messages are actually mounted.
@@ -177,6 +168,31 @@ export function MessageList({
     () => (messages.length <= tailCount ? messages : messages.slice(messages.length - tailCount)),
     [messages, tailCount],
   );
+  // What the window leaves out - the offloader puts its heavy bodies away
+  // without waiting for a row that is not going to be mounted.
+  const unmounted = useMemo(
+    () => (messages.length <= tailCount ? EMPTY_MESSAGES : messages.slice(0, messages.length - tailCount)),
+    [messages, tailCount],
+  );
+
+  /**
+   * Cold storage for the heavy bodies in this river.
+   *
+   * The window above unmounts the *row*; this releases the *content*, which is
+   * the part that costs megabytes - a channel where people paste screenshots
+   * holds the lot in memory otherwise, whether or not any of it is on screen.
+   * The rows below carry the two attributes it watches for, and the messages
+   * the window leaves out are handed over directly.
+   */
+  const { restoringKeys } = useMessageOffload({
+    containerRef: scrollRef,
+    innerRef: columnRef,
+    currentScope,
+    unmounted,
+    // Nebula's rows already carry their id for the jump-to logic; there is no
+    // sense in labelling them twice with two names that must agree.
+    idAttribute: "data-message-id",
+  });
 
   // Arrivals grow the window while the reader is scrolled up, so the rows
   // above the viewport keep their place instead of being unmounted from under
@@ -258,6 +274,16 @@ export function MessageList({
         pinnedToBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 60;
         if (node.scrollTop < GROW_THRESHOLD_PX) {
           setTailCount((prev) => grownTailCount(prev, messages.length));
+        }
+        // Growing is one-way otherwise: a reader who climbed through a busy
+        // channel and came back down keeps every row they passed. Settling at
+        // the bottom releases them, and the rows released are all above the
+        // viewport, so nothing the reader is looking at moves.
+        clearTimeout(settleTimer.current);
+        if (pinnedToBottom.current) {
+          settleTimer.current = setTimeout(() => {
+            if (pinnedToBottom.current) setTailCount(settledTailCount);
+          }, SETTLE_SHRINK_MS);
         }
       }}
       sx={{
