@@ -1,12 +1,19 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+﻿import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { PublicServer, ServerPingResult } from "@core/types";
-import { fuzzyMatch } from "@core/utils/fuzzy";
+import type { ServerPingResult } from "@core/types";
+import {
+  countryFlag,
+  serverKey,
+  usePublicServers,
+  type PublicServerSortKey,
+} from "@core/features/server/usePublicServers";
 import styles from "./PublicServerList.module.css";
 
-type SortKey = "country" | "name" | "users" | "ping" | "version";
-type SortDir = "asc" | "desc";
+// Fetching, pinging, filtering and sorting are shared with Nebula, which
+// draws the same list as a MUI table - see `usePublicServers`. Re-exported
+// because this module was where callers (and the tests) already reached for
+// the throttle reset.
+export { clearPingCache } from "@core/features/server/usePublicServers";
 
 interface Props {
   onConnect: (host: string, port: number) => void;
@@ -14,139 +21,16 @@ interface Props {
   disabled?: boolean;
 }
 
-/** Module-level cache: "host:port" -> last ping epoch-ms. */
-const publicPingCache = new Map<string, number>();
-
-/** Clear throttle cache (for testing). */
-export function clearPingCache() {
-  publicPingCache.clear();
-}
-
-/** Country code to flag emoji. */
-function countryFlag(code: string): string {
-  if (code.length !== 2) return "";
-  const offset = 0x1f1e6 - 65; // 'A' = 65
-  return String.fromCodePoint((code.codePointAt(0) ?? 65) + offset, (code.codePointAt(1) ?? 65) + offset);
-}
-
 export default function PublicServerList({ onConnect, onBack, disabled }: Readonly<Props>) {
   const { t } = useTranslation("server");
   const [consented, setConsented] = useState(false);
-  const [servers, setServers] = useState<PublicServer[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [pings, setPings] = useState<Record<string, ServerPingResult>>({});
+  const { servers, pings, loading, error, search, setSearch, sortKey, sortDir, handleSort, displayed } =
+    usePublicServers(consented);
 
-  // Fetch list once consent is given
-  useEffect(() => {
-    if (!consented) return;
-    setLoading(true);
-    setError(null);
-
-    invoke<PublicServer[]>("fetch_public_servers")
-      .then((list) => {
-        console.log(`[PublicServerList] Fetched ${list.length} servers`);
-        setServers(list);
-      })
-      .catch((e) => {
-        console.error("[PublicServerList] fetch failed:", e);
-        setError(String(e));
-      })
-      .finally(() => setLoading(false));
-  }, [consented]);
-
-  // Ping visible servers (throttled)
-  const pingServers = useCallback((list: PublicServer[]) => {
-    const THROTTLE_MS = 60_000;
-    const now = Date.now();
-
-    for (const s of list) {
-      const key = `${s.ip}:${s.port}`;
-      const last = publicPingCache.get(key);
-      if (last !== undefined && now - last < THROTTLE_MS) continue;
-      publicPingCache.set(key, now);
-
-      invoke<ServerPingResult>("ping_server", { host: s.ip, port: s.port })
-        .then((result) => setPings((prev) => ({ ...prev, [key]: result })))
-        .catch(() =>
-          setPings((prev) => ({
-            ...prev,
-            [key]: {
-              online: false,
-              latency_ms: null,
-              user_count: null,
-              max_user_count: null,
-              server_version: null,
-            },
-          })),
-        );
-    }
-  }, []);
-
-  // Ping after fetch completes
-  useEffect(() => {
-    if (servers.length > 0) pingServers(servers);
-  }, [servers, pingServers]);
-
-  // Sorting toggle
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  };
-
-  const sortIndicator = (key: SortKey) => {
+  const sortIndicator = (key: PublicServerSortKey) => {
     if (sortKey !== key) return null;
-    return <span className={styles.sortIndicator}>{sortDir === "asc" ? "\u25B2" : "\u25BC"}</span>;
+    return <span className={styles.sortIndicator}>{sortDir === "asc" ? "▲" : "▼"}</span>;
   };
-
-  // Filter + sort
-  const displayed = useMemo(() => {
-    const query = search.toLowerCase().trim();
-    let list = servers;
-
-    if (query) {
-      list = list.filter(
-        (s) =>
-          fuzzyMatch(query, s.name) ||
-          fuzzyMatch(query, s.country) ||
-          fuzzyMatch(query, s.region) ||
-          fuzzyMatch(query, s.ip) ||
-          fuzzyMatch(query, pings[`${s.ip}:${s.port}`]?.server_version ?? ""),
-      );
-    }
-
-    const sorted = [...list];
-    sorted.sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === "country") {
-        cmp = a.country.localeCompare(b.country);
-      } else if (sortKey === "name") {
-        cmp = a.name.localeCompare(b.name);
-      } else if (sortKey === "users") {
-        const ua = pings[`${a.ip}:${a.port}`]?.user_count ?? -1;
-        const ub = pings[`${b.ip}:${b.port}`]?.user_count ?? -1;
-        cmp = ua - ub;
-      } else if (sortKey === "ping") {
-        const pa = pings[`${a.ip}:${a.port}`]?.latency_ms ?? 9999;
-        const pb = pings[`${b.ip}:${b.port}`]?.latency_ms ?? 9999;
-        cmp = pa - pb;
-      } else if (sortKey === "version") {
-        const va = pings[`${a.ip}:${a.port}`]?.server_version ?? "";
-        const vb = pings[`${b.ip}:${b.port}`]?.server_version ?? "";
-        cmp = va.localeCompare(vb, undefined, { numeric: true });
-      }
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-
-    return sorted;
-  }, [servers, search, sortKey, sortDir, pings]);
 
   // -- Consent gate ----------------------------------------------
   if (!consented) {
@@ -233,7 +117,7 @@ export default function PublicServerList({ onConnect, onBack, disabled }: Readon
             </thead>
             <tbody>
               {displayed.map((s) => {
-                const key = `${s.ip}:${s.port}`;
+                const key = serverKey(s);
                 const ping = pings[key];
                 return (
                   <tr key={key} onClick={() => !disabled && onConnect(s.ip, s.port)}>
@@ -245,7 +129,7 @@ export default function PublicServerList({ onConnect, onBack, disabled }: Readon
                     </td>
                     <td title={s.name}>{s.name}</td>
                     <td className={styles.usersCell}>
-                      <UsersCell ping={pings[`${s.ip}:${s.port}`]} />
+                      <UsersCell ping={pings[serverKey(s)]} />
                     </td>
                     <td>
                       <PingCell ping={ping} />
