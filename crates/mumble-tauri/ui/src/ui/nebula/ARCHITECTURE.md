@@ -477,9 +477,10 @@ before, because a feature landed and its line was never struck.
 
 **Screen sharing**
 
-- The strip starts, stops, watches, configures quality and shows statistics.
-  There is no focused single-stream view and no annotation overlay, and the
-  stream popout window exists but nothing here opens it.
+- The strip starts, stops, watches, configures quality, shows statistics,
+  annotates the picture and pops a feed out. What it has no separate surface
+  for is Standard's focused single-stream view - the stage is where a feed
+  gets large here, and the filmstrip is how you change which one.
 
 **Elsewhere**
 
@@ -1014,6 +1015,39 @@ grid spanning the whole footer is unusable however wide the window is. The GIF
 browser is a panel on the composer's own inset rather than a centred modal:
 9a asks for popovers, not dialogs, and explicitly for no scrim over the
 conversation.
+
+## Annotating a share
+
+Drawing on someone's screen is a *protocol*, not a look: strokes are
+normalised into the source's own coordinate space and relayed to every Fancy
+client in the channel, and two packs that drew them differently would disagree
+about where a circle went. So the canvas, the wire format, the rate limiting
+and the cross-window stroke store are all Standard's `DrawingOverlay`,
+mounted here unchanged. What Nebula draws is the palette, in the stage's own
+glass, handed down through `renderToolbar` - the tools' *state* stays in the
+overlay, because the pointer handlers read it and a colour living in two
+places is a colour that can disagree with the ink.
+
+The one piece of real work is geometry. Standard's viewport is a single
+contain-fitted picture the size of the canvas over it, so it can compute where
+the source is; Nebula's stage lets the viewer scale it three ways, and in two
+of them that assumption is wrong - `Fill` crops the source outward past the
+canvas edges, `1:1` leaves it wherever the scroller has pushed it. So the
+stage says which (`mediaFit`), and the overlay measures the rect off the
+element instead of guessing at it. A stroke drawn in `Fill` therefore lands
+where the pointer was, and still arrives correct for a viewer watching the
+same share at `Fit`.
+
+Two surfaces, one canvas: the toggle beside the stream controls draws *on the
+picture*, and the broadcaster's menu additionally offers **Show desktop
+overlay** - the same annotations pinned over their real desktop in a
+click-through, capture-excluded window the Rust side places on whatever is
+being shared. Only the broadcaster is offered it, because only their machine
+has that source to sit on top of. Both are stored in the shared app store
+rather than in the stage, because the overlay window and the stream popout are
+separate webviews reading the same flags, and `useScreenShare` clears them
+when the broadcast they belonged to ends.
+
 
 ## The hover menu
 
