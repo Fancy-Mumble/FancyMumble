@@ -1,6 +1,13 @@
-/* "My shared files" bar - a user's own uploaded files, styled like the admin
-   file table but scoped to a chat-splitting panel (fills the resizable
-   wrapper, scrolls internally). */
+/* "My shared files" bar - a user's own uploaded files, styled like the other
+   chat-splitting panels (Downloads / Pinned).  Every surface, hairline and
+   badge is drawn from the theme's own tokens, so a light theme gets a light
+   panel instead of the hardcoded dark chips this used to paint.
+
+   The table is fixed-layout with named columns: the name column absorbs the
+   slack and the rest keep their width, so nothing is pushed out of view.  A
+   container query on the scroll box drops the lowest-value columns as the
+   split gets narrower (their content stays reachable from the name cell's
+   tooltip), which is what keeps the actions visible without scrolling. */
 
 .panel {
   background: var(--color-bg-secondary);
@@ -27,16 +34,18 @@
   gap: 7px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--color-text-primary, #f5f6f8);
+  color: var(--color-text-primary);
 }
 
 .count {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   padding: 1px 7px;
-  border-radius: 9px;
-  background: var(--color-surface-elevated, #262a33);
-  color: var(--color-text-secondary, #9aa3ad);
+  min-width: 18px;
+  text-align: center;
+  border-radius: 10px;
+  background: var(--color-glass-hover);
+  color: var(--color-text-secondary);
 }
 
 .headerActions {
@@ -50,16 +59,19 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  padding: 5px 10px;
-  border: 1px solid var(--color-border, #2c313a);
-  border-radius: 7px;
-  background: var(--color-surface-elevated, #262a33);
-  color: var(--color-text-secondary, #9aa3ad);
+  padding: 5px 9px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
   cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 .refreshBtn:hover:not(:disabled) {
-  color: var(--color-text-primary, #f5f6f8);
-  background: var(--color-surface-hover, #2f343d);
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
 }
 .refreshBtn:disabled {
   opacity: 0.5;
@@ -70,17 +82,22 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  /* Columns react to the panel's own width, not the viewport: this is a
+     resizable split inside the chat column, so the two disagree. */
+  container-type: inline-size;
 }
 
 .empty {
   padding: 28px 16px;
   text-align: center;
   font-size: 13px;
-  color: var(--color-text-secondary, #9aa3ad);
+  color: var(--color-text-secondary);
 }
 
 .table {
   width: 100%;
+  min-width: 874px;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -93,51 +110,109 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--color-text-secondary, #9aa3ad);
+  white-space: nowrap;
+  color: var(--color-text-secondary);
   background: var(--color-bg-secondary);
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--color-border, #2c313a);
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--color-glass-border);
 }
 .table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--color-border, #2c313a);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-glass-border);
   vertical-align: middle;
-  color: var(--color-text-primary, #f5f6f8);
+  color: var(--color-text-primary);
 }
-.table tr:hover td {
-  background: var(--color-surface-hover, rgba(255, 255, 255, 0.03));
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+.table tbody tr:hover td {
+  background: var(--color-glass);
 }
 
-.nameCell {
-  max-width: 260px;
+/* -- Columns ---------------------------------------------------------------
+   Widths live on the shared column classes (fixed layout reads them off the
+   header row); the unsized name column takes whatever is left over. */
+.colThumb {
+  width: 56px;
 }
-.fileName {
-  display: inline-block;
-  max-width: 240px;
+.colType {
+  width: 92px;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+.colType span {
+  vertical-align: middle;
+}
+.colSize {
+  width: 72px;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+.colAccess {
+  width: 82px;
+}
+.colChannel {
+  width: 128px;
+}
+.colUploaded {
+  width: 118px;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+.colExpires {
+  width: 82px;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+.colActions {
+  width: 104px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* One line, ellipsised - a wrapping channel name used to blow a row up to
+   five lines and shove the actions off the edge. */
+.ellipsis {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  vertical-align: middle;
 }
-.typeCell {
-  white-space: nowrap;
-  color: var(--color-text-secondary, #9aa3ad);
+.colChannel .ellipsis {
+  color: var(--color-text-secondary);
 }
-.typeCell span {
-  vertical-align: middle;
-}
-.num {
-  text-align: right;
-  white-space: nowrap;
-  color: var(--color-text-secondary, #9aa3ad);
-}
-.dateCell {
-  white-space: nowrap;
-  color: var(--color-text-secondary, #9aa3ad);
-}
+
 .noExpiry {
-  color: var(--color-text-secondary, #9aa3ad);
+  color: var(--color-text-secondary);
   opacity: 0.7;
+}
+
+/* Shed the least valuable column at each step, and shrink the table's floor
+   with it so the remaining columns still fit without a sideways scroll. */
+@container (max-width: 873px) {
+  .colChannel {
+    display: none;
+  }
+  .table {
+    min-width: 746px;
+  }
+}
+@container (max-width: 745px) {
+  .colType {
+    display: none;
+  }
+  .table {
+    min-width: 654px;
+  }
+}
+@container (max-width: 653px) {
+  .colUploaded {
+    display: none;
+  }
+  .table {
+    min-width: 536px;
+  }
 }
 
 .accessBadge {
@@ -149,44 +224,43 @@
   text-transform: capitalize;
 }
 .access_public {
-  background: rgba(56, 178, 122, 0.18);
-  color: #4cc78d;
+  background: var(--color-online-medium);
+  color: var(--color-online);
 }
 .access_password {
-  background: rgba(224, 137, 47, 0.18);
-  color: #e0a85f;
+  background: var(--color-warning-bright-medium);
+  color: var(--color-warning-text);
 }
 .access_session {
-  background: rgba(138, 92, 246, 0.18);
-  color: #a585f5;
+  background: var(--color-accent-medium);
+  color: var(--color-accent);
 }
 
-.actionsCell {
-  text-align: right;
-  white-space: nowrap;
-}
 .iconBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid var(--color-border, #2c313a);
-  border-radius: 7px;
-  background: var(--color-surface-elevated, #262a33);
-  color: var(--color-text-secondary, #9aa3ad);
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
   cursor: pointer;
-  margin-left: 6px;
+  margin-left: 4px;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 .iconBtn:hover:not(:disabled) {
-  color: var(--color-text-primary, #f5f6f8);
-  background: var(--color-surface-hover, #2f343d);
+  color: var(--color-text-primary);
+  background: var(--color-glass-hover);
 }
 .iconBtn:disabled {
   opacity: 0.4;
   cursor: default;
 }
 .deleteBtn:hover:not(:disabled) {
-  color: #f0746a;
-  border-color: rgba(224, 83, 60, 0.5);
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
 }

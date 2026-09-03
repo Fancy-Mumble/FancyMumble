@@ -7,10 +7,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--color-border, #2c313a);
+  border: 1px solid var(--color-glass-border);
   border-radius: 8px;
-  background: var(--color-surface, #1e2128);
-  color: var(--color-text-secondary, #9aa3ad);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
   cursor: pointer;
   overflow: hidden;
   padding: 0;
@@ -29,8 +29,8 @@
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 4px;
-  background: rgba(224, 137, 47, 0.18);
-  color: #e0a85f;
+  background: var(--color-warning-bright-medium);
+  color: var(--color-warning-text);
   white-space: nowrap;
 }
 /* TTL more than a month away - reassuring "plenty of time" colour. */
@@ -39,8 +39,8 @@
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 4px;
-  background: rgba(63, 185, 80, 0.16);
-  color: #4ac26b;
+  background: var(--color-online-medium);
+  color: var(--color-online);
   white-space: nowrap;
 }
 /* TTL within the next hour - heightened urgency. */
@@ -49,8 +49,8 @@
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 4px;
-  background: rgba(224, 83, 60, 0.16);
-  color: #e0892f;
+  background: var(--color-warning-amber-subtle);
+  color: var(--color-warning-amber);
   white-space: nowrap;
 }
 /* TTL already elapsed - the file is (or is about to be) gone. */
@@ -59,8 +59,8 @@
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 4px;
-  background: rgba(224, 83, 60, 0.22);
-  color: #e0533c;
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
   white-space: nowrap;
 }
 
@@ -68,7 +68,7 @@
 .previewBackdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--color-overlay-dark);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -80,8 +80,8 @@
   flex-direction: column;
   max-width: min(900px, 92vw);
   max-height: 88vh;
-  background: var(--color-surface, #1e2128);
-  border: 1px solid var(--color-border, #2c313a);
+  background: var(--color-surface);
+  border: 1px solid var(--color-glass-border);
   border-radius: 12px;
   overflow: hidden;
 }
@@ -90,19 +90,19 @@
   align-items: center;
   gap: 12px;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--color-border, #2c313a);
+  border-bottom: 1px solid var(--color-glass-border);
 }
 .previewName {
   flex: 1;
   font-weight: 600;
-  color: var(--color-text-primary, #f5f6f8);
+  color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .previewSize {
   font-size: 12px;
-  color: var(--color-text-secondary, #9aa3ad);
+  color: var(--color-text-secondary);
 }
 .previewBody {
   display: flex;
@@ -136,12 +136,12 @@
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-word;
-  color: var(--color-text-primary, #f5f6f8);
-  background: var(--color-surface-elevated, #262a33);
+  color: var(--color-text-primary);
+  background: var(--color-glass);
   border-radius: 6px;
 }
 .previewMsg {
-  color: var(--color-text-secondary, #9aa3ad);
+  color: var(--color-text-secondary);
   padding: 32px;
   text-align: center;
 }
@@ -153,13 +153,13 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid var(--color-border, #2c313a);
+  border: 1px solid var(--color-glass-border);
   border-radius: 7px;
-  background: var(--color-surface-elevated, #262a33);
-  color: var(--color-text-secondary, #9aa3ad);
+  background: var(--color-glass);
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 .closeBtn:hover {
-  color: var(--color-text-primary, #f5f6f8);
-  background: var(--color-surface-hover, #2f343d);
+  color: var(--color-text-primary);
+  background: var(--color-glass-hover);
 }
