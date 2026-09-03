@@ -96,20 +96,22 @@ export function useMessageOffload({
   const scope = currentScope();
   const scopeKey = scope ? `${scope.scope}:${scope.scopeId}` : null;
 
-  // The heavy bodies with no row, as one string: the caller's array is a
-  // fresh slice on most renders, and a body is only worth revisiting when
-  // the set of them changes.
-  const unmountedHeavyKey = useMemo(
+  const unmountedHeavy = useMemo(
     () =>
       (unmounted ?? [])
         .filter((message) => message.message_id && isHeavyContent(message.body))
-        .map((message) => message.message_id)
-        .join("\n"),
+        .map((message) => message.message_id as string),
     [unmounted],
   );
 
+  // Deliberately unguarded by a dependency list. The obvious key - the ids,
+  // joined - is wrong: a body restored by scrolling back over it becomes
+  // heavy again under the *same* id, so the key would not change and the
+  // body would never be put away a second time. `scheduleOffload` already
+  // ignores an id it is holding or has written out, so running this on every
+  // render is idempotent and costs a walk of the list.
   useEffect(() => {
-    if (!unmountedHeavyKey) return;
+    if (unmountedHeavy.length === 0) return;
     const target = scopeRef.current();
     if (!target) return;
     const refresh = () => {
@@ -124,10 +126,10 @@ export function useMessageOffload({
     // to grow over these must not find them half-written. A body that gets a
     // row after all is handled by the observer from then on - cancelled if
     // the row is in view, scheduled again if it is not.
-    for (const id of unmountedHeavyKey.split("\n")) {
+    for (const id of unmountedHeavy) {
       offloadManager.scheduleOffload(id, target, refresh);
     }
-  }, [unmountedHeavyKey, scopeKey]);
+  });
 
   useEffect(() => {
     const inner = innerRef.current;
