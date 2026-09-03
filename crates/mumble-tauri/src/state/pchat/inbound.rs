@@ -227,6 +227,10 @@ fn insert_or_replace_message(
 
     let bucket = state.msgs.by_channel.entry(channel_id).or_default();
     crate::state::push_capped(bucket, chat_msg);
+
+    // Same as a plain text message: a picture landing in a channel that is
+    // not on screen goes to cold storage straight away.
+    crate::state::offload_ops::offload_newest_if_idle(state, channel_id);
 }
 
 // -- Fetch response ---------------------------------------------------

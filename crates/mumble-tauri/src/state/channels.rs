@@ -27,9 +27,16 @@ impl AppState {
         let handle = {
             let __session = self.inner.snapshot();
             let mut state = __session.lock().map_err(|e| e.to_string())?;
-            state.selected_channel = Some(channel_id);
+            let previous = state.selected_channel.replace(channel_id);
             state.msgs.selected_dm_user = None;
             let _ = state.msgs.channel_unread.remove(&channel_id);
+            // The channel just left has no rows any more; its heavy bodies
+            // go to cold storage now instead of staying in memory for the
+            // rest of the session. They come back the moment it is reopened
+            // and a row asks for them.
+            if previous != Some(channel_id) {
+                let _ = crate::state::offload_ops::offload_idle_channels(&mut state, Some(channel_id));
+            }
             state.conn.client_handle.clone()
         };
         self.emit_unreads();
