@@ -18,6 +18,7 @@ pub(crate) mod dm;
 pub(crate) mod draw_overlay;
 pub(crate) mod files;
 pub(crate) mod forum;
+pub(crate) mod game_overlay;
 pub(crate) mod image;
 pub(crate) mod keyshare;
 pub(crate) mod livery_admin;

@@ -6,10 +6,11 @@ import type { ServerId } from "./server";
 /** Whether the user prefers a simplified or full-featured UI. */
 export type UserMode = "normal" | "expert" | "developer";
 
-/** Selects which React UI design pack loads. The `standard` pack is the
- * mature, feature-complete default; `aurora` is an opt-in design beta. The
- * two ship side by side. Color themes remain a separate preference and are
- * expected to work with every UI design. */
+/** Selects which React UI design pack loads. `nebula` is the pack a new
+ * profile starts in; `standard` is the older UI and still has the broadest
+ * feature coverage; `aurora` is a design beta. All three ship side by side.
+ * Color themes remain a separate preference and are expected to work with
+ * every UI design. */
 export type UiDesignId = "standard" | "aurora" | "nebula";
 
 /** Preferred time display format. */
@@ -171,6 +172,43 @@ export interface UserPreferences {
    *  for an internationalised name. Empty by default: nothing is trusted until
    *  the user says so. */
   trustedLinkHosts?: string[];
+  /** The game overlay: a small always-on-top card showing who is talking and
+   *  the last message, drawn over a detected game. Off by default. */
+  gameOverlay?: GameOverlaySettings;
+}
+
+/** When the game overlay may appear over a detected game. */
+export type GameOverlayMode =
+  /** Never; no overlay window is created at all. */
+  | "off"
+  /** While someone is talking or a message is fresh. A hidden window costs the
+   *  game nothing, so this is the default once the overlay is enabled. */
+  | "whileActive"
+  /** Whenever a game is in the foreground. */
+  | "always";
+
+/** Which corner of the game's monitor the overlay sits in. */
+export type GameOverlayCorner = "topLeft" | "topRight" | "bottomLeft" | "bottomRight";
+
+/** What the user has decided about one executable, which outranks the
+ *  detector's heuristics in both directions. */
+export type GameOverlayRule = "allow" | "deny";
+
+/** The game overlay's settings. */
+export interface GameOverlaySettings {
+  /** When the overlay may appear. */
+  mode: GameOverlayMode;
+  /** Which corner of the game's monitor it sits in. */
+  corner: GameOverlayCorner;
+  /** Show the last channel message under the roster. */
+  showLastMessage: boolean;
+  /** Keep the overlay out of screen captures, recordings and streams. */
+  hideFromCapture: boolean;
+  /** Per-executable decisions, keyed by lowercased full path. */
+  rules: Record<string, GameOverlayRule>;
+  /** Executables the user has already been asked about, so the one-time
+   *  prompt is never repeated for them. */
+  asked: string[];
 }
 
 /** Controls when the server welcome message modal appears on connect. */

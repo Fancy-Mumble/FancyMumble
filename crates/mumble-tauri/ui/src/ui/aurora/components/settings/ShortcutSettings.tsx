@@ -15,6 +15,7 @@ const LABELS: Record<keyof ShortcutBindings, { label: string; group: string }> =
   toggleMute: { label: "Toggle mute", group: "Global voice" },
   toggleDeafen: { label: "Toggle deafen", group: "Global voice" },
   voicePriority: { label: "Priority voice", group: "Global voice" },
+  toggleGameOverlay: { label: "Toggle game overlay", group: "Global voice" },
   toggleActivationMode: { label: "Toggle activation mode", group: "In-app voice" },
   moveChannelUp: { label: "Previous channel", group: "Navigation" },
   moveChannelDown: { label: "Next channel", group: "Navigation" },

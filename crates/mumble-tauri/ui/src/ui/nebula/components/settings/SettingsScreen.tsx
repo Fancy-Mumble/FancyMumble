@@ -30,6 +30,7 @@ const PersonalizeSettings = lazy(() =>
   import("./PersonalizeSettings").then((m) => ({ default: m.PersonalizeSettings })),
 );
 const PrivacySettings = lazy(() => import("./PrivacySettings").then((m) => ({ default: m.PrivacySettings })));
+const OverlaySettings = lazy(() => import("./OverlaySettings").then((m) => ({ default: m.OverlaySettings })));
 const PluginsSettings = lazy(() => import("./PluginsSettings").then((m) => ({ default: m.PluginsSettings })));
 const ProfileSettings = lazy(() => import("./ProfileSettings").then((m) => ({ default: m.ProfileSettings })));
 const ShortcutsSettings = lazy(() =>
@@ -178,6 +179,7 @@ export function SettingsScreen({
         {page === "personalize" && <PersonalizeSettings />}
         {page === "notifications" && <NotificationsSettings />}
         {page === "privacy" && <PrivacySettings />}
+        {page === "overlay" && <OverlaySettings />}
         {page === "localization" && <LocalizationSettings />}
         {page === "shortcuts" && <ShortcutsSettings />}
         {page === "identities" && (

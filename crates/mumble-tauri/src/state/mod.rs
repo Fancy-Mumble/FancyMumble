@@ -41,6 +41,7 @@ mod messaging;
 pub mod offload;
 mod offload_ops;
 mod onboarding;
+mod overlay_query;
 pub(crate) mod pchat;
 mod plugin_admin;
 /// Discord Rich Presence listener. Desktop only: it hosts the Discord IPC
@@ -331,6 +332,26 @@ pub struct AppState {
     /// Discord Rich Presence listener, idle until the user enables it.
     #[cfg(not(target_os = "android"))]
     pub(crate) presence: presence::PresenceManager,
+    /// Game-overlay configuration, detector task and last verdict. Inert
+    /// until the user turns the overlay on.
+    pub(crate) game_overlay: crate::commands::game_overlay::GameOverlayState,
+    /// Whether the local microphone is transmitting right now.
+    ///
+    /// `SharedState::audio::talking_sessions` holds only *remote* speakers -
+    /// the local user's talking is emitted straight to the frontend and never
+    /// recorded - so anything in Rust that asks "is anyone talking" has to ask
+    /// here as well. An atomic rather than a field on `SharedState` because
+    /// the writer is the outbound audio loop, and taking that lock on an
+    /// utterance edge is how the mixer ends up dropping samples.
+    pub(crate) local_talking: std::sync::atomic::AtomicBool,
+    /// Unix epoch milliseconds of the most recent moment the local microphone
+    /// was transmitting.
+    ///
+    /// The bool alone is not enough for anything that polls: "yes" is true only
+    /// while a packet is in flight, and a two-word reply is over long before a
+    /// half-second tick comes round to look. This is the edge that cannot be
+    /// missed, so pollers ask how long ago rather than whether right now.
+    pub(crate) local_talking_at: std::sync::atomic::AtomicU64,
 }
 
 impl AppState {
@@ -363,6 +384,9 @@ impl AppState {
             draw_overlay_tracker: Mutex::new(None),
             #[cfg(not(target_os = "android"))]
             presence: presence::PresenceManager::default(),
+            game_overlay: crate::commands::game_overlay::GameOverlayState::default(),
+            local_talking: std::sync::atomic::AtomicBool::new(false),
+            local_talking_at: std::sync::atomic::AtomicU64::new(0),
         }
     }
 
