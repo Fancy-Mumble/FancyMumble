@@ -20,6 +20,22 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
  * | `Home` | Fit everything on screen |
  * | `+` / `-` | Zoom about the centre |
  *
+ * A touchscreen has none of those - no wheel, no middle button, no right
+ * button - so it gets the gestures every map and canvas on a phone already
+ * uses, and they are not a translation of the mouse bindings:
+ *
+ * | Gesture | Does |
+ * |---|---|
+ * | One finger on empty canvas | Pan |
+ * | Two fingers | Pinch to zoom, and pan with the midpoint |
+ * | One finger on a node's header | Drag the node, as a mouse does |
+ * | Long press on empty canvas | The add menu |
+ *
+ * One finger panning is the part worth stating: with a mouse, a left drag on
+ * empty canvas is a rubber-band selection, and on a touchscreen it is a pan.
+ * Sweeping to select is a mouse idiom, and a finger that panned only once it
+ * found a second finger would make the canvas feel stuck.
+ *
  * This hook owns the viewport and nothing else. It does not know what is being
  * drawn, so the same hook serves any dialect the editor grows.
  */
@@ -69,6 +85,14 @@ export interface CanvasView {
   toWorld: (clientX: number, clientY: number) => Point;
   /** Frame `bounds` in the viewport. */
   fit: (bounds: Bounds) => void;
+  /**
+   * Start panning from this press, whatever button or finger made it.
+   *
+   * For the canvas to call when a press landed somewhere it has decided means
+   * "move the view" - a finger on empty canvas. What was under the pointer is
+   * a judgement this hook cannot make, so it takes the instruction instead.
+   */
+  beginPan: (event: React.PointerEvent) => void;
   /** Back to 1:1 at the origin. */
   reset: () => void;
   /** Spread onto the viewport element. */
@@ -158,6 +182,16 @@ export function useCanvasView(
     [viewport, view.tx, view.ty, view.scale],
   );
 
+  /**
+   * The fingers currently down, so a pinch can be measured between two of them.
+   *
+   * A ref rather than state: it changes on every pointer event of a gesture and
+   * nothing renders from it - the view does, and that is set separately.
+   */
+  const touches = useRef(new Map<number, Point>());
+  /** The span the fingers had at the last frame, which a pinch is measured against. */
+  const pinch = useRef<Span | null>(null);
+
   const zoomAt = useCallback((screenX: number, screenY: number, factor: number) => {
     setView((current) => zoomAbout(current, screenX, screenY, factor));
   }, []);
@@ -230,15 +264,35 @@ export function useCanvasView(
   /** Middle or right button: the two KiCad pans. Left is the editor's. */
   const isPanButton = (button: number) => button === 1 || button === 2;
 
-  const onPointerDown = useCallback((event: React.PointerEvent) => {
-    if (!isPanButton(event.button)) return;
+  const beginPan = useCallback((event: React.PointerEvent) => {
     event.preventDefault();
     pan.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
     setPanning(true);
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
   }, []);
 
-  const onPointerMove = useCallback((event: React.PointerEvent) => {
+  const onPointerDown = useCallback(
+    (event: React.PointerEvent) => {
+      if (event.pointerType === "touch") {
+        touches.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        // The second finger takes over from whatever the first was doing. A
+        // pinch that had to begin with both fingers landing in the same frame
+        // is a pinch nobody can perform.
+        if (touches.current.size === 2) {
+          pan.current = null;
+          setPanning(false);
+          pinch.current = spanOf(touches.current);
+          event.preventDefault();
+        }
+        return;
+      }
+      if (!isPanButton(event.button)) return;
+      beginPan(event);
+    },
+    [beginPan],
+  );
+
+  const movePan = useCallback((event: React.PointerEvent) => {
     const held = pan.current;
     if (!held || held.id !== event.pointerId) return;
     const dx = event.clientX - held.x;
@@ -249,7 +303,51 @@ export function useCanvasView(
     setView((current) => ({ ...current, tx: current.tx + dx, ty: current.ty + dy }));
   }, []);
 
+  const onPointerMove = useCallback(
+    (event: React.PointerEvent) => {
+      if (event.pointerType !== "touch" || !touches.current.has(event.pointerId)) {
+        movePan(event);
+        return;
+      }
+      touches.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      const held = pinch.current;
+      if (touches.current.size < 2 || !held || held.distance === 0) {
+        movePan(event);
+        return;
+      }
+
+      const box = viewport.current?.getBoundingClientRect();
+      if (!box) return;
+      const now = spanOf(touches.current);
+      event.preventDefault();
+      setView((current) => {
+        // Zoom about the midpoint the fingers had, so whatever is between them
+        // stays between them, then carry the view by however far that midpoint
+        // travelled - which is what makes a pinch pan as well as zoom.
+        const zoomed = zoomAbout(
+          current,
+          held.centre.x - box.left,
+          held.centre.y - box.top,
+          now.distance / held.distance,
+        );
+        return {
+          ...zoomed,
+          tx: zoomed.tx + (now.centre.x - held.centre.x),
+          ty: zoomed.ty + (now.centre.y - held.centre.y),
+        };
+      });
+      pinch.current = now;
+    },
+    [movePan, viewport],
+  );
+
   const onPointerUp = useCallback((event: React.PointerEvent) => {
+    if (touches.current.delete(event.pointerId) && touches.current.size < 2) {
+      // Lifting one of two fingers ends the pinch rather than continuing it
+      // from a span of one: the remaining finger is a pan, and re-measuring
+      // would make the view jump the moment somebody let go.
+      pinch.current = null;
+    }
     if (pan.current?.id !== event.pointerId) return;
     pan.current = null;
     setPanning(false);
@@ -267,7 +365,30 @@ export function useCanvasView(
     toWorld,
     fit,
     reset,
+    beginPan,
     handlers: { onPointerDown, onPointerMove, onPointerUp, onContextMenu },
+  };
+}
+
+/** How far apart two fingers are, and where their midpoint is. */
+interface Span {
+  distance: number;
+  centre: Point;
+}
+
+/**
+ * The span of the first two fingers down.
+ *
+ * The first two, deliberately, and not all of them: a third finger landing
+ * mid-pinch would otherwise move the midpoint and jump the view, and nobody
+ * putting a third finger on the glass meant to zoom somewhere else.
+ */
+function spanOf(touches: ReadonlyMap<number, Point>): Span {
+  const [a, b] = [...touches.values()];
+  if (!a || !b) return { distance: 0, centre: a ?? { x: 0, y: 0 } };
+  return {
+    distance: Math.hypot(b.x - a.x, b.y - a.y),
+    centre: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
   };
 }
 

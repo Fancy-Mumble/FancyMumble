@@ -7,8 +7,19 @@ import {
   type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Box, Menu, MenuItem } from "@mui/material";
+import { Box, Divider, ListSubheader, Menu, MenuItem } from "@mui/material";
 import { NodeCard } from "./NodeCard";
+import { AnnotationLayer, minimumOf } from "./AnnotationLayer";
+import {
+  addAnnotation,
+  annotationsOf,
+  makeAnnotation,
+  patchAnnotation,
+  removeAnnotation,
+  type Annotation,
+  type AnnotationKind,
+} from "./annotate";
+import { copyOut, decodeClipping, encodeClipping, pasteInto, type Clipping } from "./clipboard";
 import {
   connect,
   disconnect,
@@ -21,8 +32,17 @@ import {
   type PortId,
 } from "./graph";
 import { NODE_FOOTPRINT, type BlockDef, type NodeSpec, type PortSide } from "./spec";
+import { insertFragment, type CanvasInsert, type Fragment } from "./templates";
 import { boundsOf, useCanvasView } from "./useCanvasView";
 import type { CanvasDrop } from "./useBlockCarry";
+
+/** The annotation kinds, in the order the add menu offers them. */
+const ANNOTATION_LABELS: readonly (readonly [AnnotationKind, string])[] = [
+  ["title", "Title"],
+  ["note", "Note"],
+  ["frame", "Frame around a region"],
+  ["label", "Small label"],
+];
 
 /** Where a port sits, in world coordinates. */
 interface Point {
@@ -44,6 +64,11 @@ const EMPTY_SELECTION: ReadonlySet<NodeId> = new Set();
 /** Breathing room past the furthest node, so there is always somewhere to drag to. */
 const CANVAS_MARGIN = 420;
 
+/** How long a finger has to rest on empty canvas before the add menu opens. */
+const LONG_PRESS_MS = 480;
+/** How far it may drift while resting. Below this, a finger is holding still. */
+const LONG_PRESS_SLOP = 10;
+
 /**
  * Where the pointer sits on a block it carried in, in world units.
  *
@@ -52,6 +77,19 @@ const CANVAS_MARGIN = 420;
  * was being carried, not hanging off to one side of it.
  */
 const GRAB = { x: 24, y: 14 };
+
+/** Which way each arrow key moves a selection. */
+const NUDGES: Readonly<Record<string, { x: number; y: number } | undefined>> = {
+  ArrowUp: { x: 0, y: -1 },
+  ArrowDown: { x: 0, y: 1 },
+  ArrowLeft: { x: -1, y: 0 },
+  ArrowRight: { x: 1, y: 0 },
+};
+
+/** One press: a pixel, for lining two nodes up exactly. */
+const NUDGE_STEP = 1;
+/** With Shift: far enough to be a move rather than an adjustment. */
+const NUDGE_FAR = 20;
 
 interface NodeCanvasProps<N extends GraphNode> {
   readonly graph: NodeGraph<N>;
@@ -63,6 +101,17 @@ interface NodeCanvasProps<N extends GraphNode> {
    * over the prose view land nowhere instead of somewhere invisible.
    */
   readonly dropRef?: MutableRefObject<CanvasDrop<N> | null>;
+  /**
+   * Filled in with what it takes to lay a template down here.
+   *
+   * Same arrangement as `dropRef`, for the same reason: putting nodes onto a
+   * canvas is this component's business, because it owns the view the operator
+   * is looking through and the selection the new nodes arrive in.
+   */
+  readonly insertRef?: MutableRefObject<CanvasInsert<N> | null>;
+  /** Bound to Ctrl+Z and Ctrl+Shift+Z, where the page keeps a history. */
+  readonly onUndo?: () => void;
+  readonly onRedo?: () => void;
 }
 
 /**
@@ -79,7 +128,15 @@ interface NodeCanvasProps<N extends GraphNode> {
  * wherever the nodes happen to end, which is what makes panning into empty
  * space read as canvas rather than as falling off the edge.
  */
-export function NodeCanvas<N extends GraphNode>({ graph, spec, onChange, dropRef }: NodeCanvasProps<N>) {
+export function NodeCanvas<N extends GraphNode>({
+  graph,
+  spec,
+  onChange,
+  dropRef,
+  insertRef,
+  onUndo,
+  onRedo,
+}: NodeCanvasProps<N>) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   // Asked at the moment Home is pressed, so a graph that grew since mount
@@ -116,8 +173,36 @@ export function NodeCanvas<N extends GraphNode>({ graph, spec, onChange, dropRef
     /** Measured once, at the start: nodes do not move under a band. */
     boxes: readonly NodeBox[];
   } | null>(null);
+  /**
+   * A resize in flight, of a node or of an annotation.
+   *
+   * Anchored to where the thing started and where the pointer started, for the
+   * same reason a node drag is: a running delta accumulates a rounding error
+   * over a long drag, and a box that grew by 401px when the pointer moved 400
+   * is a box nobody can set to a round number.
+   */
+  const [resizing, setResizing] = useState<{
+    id: NodeId;
+    layer: "node" | "annotation";
+    origin: Point;
+    from: { w: number; h: number };
+    min: { w: number; h: number };
+  } | null>(null);
+  /** An annotation being dragged, and where it started. */
+  const [movingNote, setMovingNote] = useState<{ id: NodeId; origin: Point; from: Point } | null>(null);
   /** Where the pointer last was, so `A` can add a node under it. */
   const pointer = useRef<Point>({ x: 0, y: 0 });
+  /** A finger held still on empty canvas, on its way to the add menu. */
+  const longPress = useRef<{ start: Point; timer: number }>({ start: { x: 0, y: 0 }, timer: 0 });
+  /**
+   * The last thing copied here.
+   *
+   * Kept alongside the system clipboard rather than instead of it: reading the
+   * system clipboard can be refused, and a paste that silently did nothing
+   * because a permission was declined would be indistinguishable from a bug.
+   * The system copy is what makes a paste into a *second* window work.
+   */
+  const clipboard = useRef<Clipping<N> | null>(null);
   const [addAt, setAddAt] = useState<{ left: number; top: number; world: Point } | null>(null);
 
   const registerPort = useCallback((node: NodeId, side: PortSide, port: PortId, el: HTMLElement | null) => {
@@ -201,6 +286,37 @@ export function NodeCanvas<N extends GraphNode>({ graph, spec, onChange, dropRef
     };
   });
 
+  /**
+   * A template laid onto this canvas.
+   *
+   * Rebuilt every render for the same reason the drop is: it closes over the
+   * current graph, and a stale one would add the template to the graph as it
+   * was when the gallery opened, quietly discarding everything drawn since.
+   *
+   * The view is refitted afterwards. A template lands clear of what is already
+   * drawn, which on a full canvas is off-screen to the right - and a gallery
+   * button that appears to do nothing is one nobody presses twice.
+   */
+  useEffect(() => {
+    if (!insertRef) return;
+    insertRef.current = {
+      insert: (fragment: Fragment<N>, replace: boolean) => {
+        const laid = insertFragment(graph, fragment, { replace, width: (node) => spec.width(node) });
+        onChange(laid.graph);
+        setSelection(new Set(laid.added));
+        view.fit(
+          boundsOf(laid.graph.nodes, (node) => ({
+            width: spec.width(node as N),
+            height: NODE_FOOTPRINT,
+          })),
+        );
+      },
+    };
+    return () => {
+      insertRef.current = null;
+    };
+  });
+
   const startNodeDrag = (node: N, event: ReactPointerEvent) => {
     event.preventDefault();
     const additive = event.shiftKey || event.ctrlKey;
@@ -220,6 +336,38 @@ export function NodeCanvas<N extends GraphNode>({ graph, spec, onChange, dropRef
     }
     setDragging({ origin: toWorld(event.clientX, event.clientY), started });
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  };
+
+  const startResize = (
+    id: NodeId,
+    layer: "node" | "annotation",
+    from: { w: number; h: number },
+    min: { w: number; h: number },
+    event: ReactPointerEvent,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setResizing({ id, layer, origin: toWorld(event.clientX, event.clientY), from, min });
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  };
+
+  const startNoteDrag = (note: Annotation, event: ReactPointerEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelection(new Set([note.id]));
+    setMovingNote({
+      id: note.id,
+      origin: toWorld(event.clientX, event.clientY),
+      from: { x: note.x, y: note.y },
+    });
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  };
+
+  /** Drop a fresh annotation, selected, where the add menu was opened. */
+  const addNote = (kind: AnnotationKind, at: Point) => {
+    const made = makeAnnotation(kind, Math.max(0, Math.round(at.x)), Math.max(0, Math.round(at.y)));
+    onChange(addAnnotation(graph, made));
+    setSelection(new Set([made.id]));
   };
 
   const startWire = (node: NodeId, side: PortSide, port: PortId, event: ReactPointerEvent) => {
@@ -243,6 +391,34 @@ export function NodeCanvas<N extends GraphNode>({ graph, spec, onChange, dropRef
   const onPointerMove = (event: ReactPointerEvent) => {
     const at = toWorld(event.clientX, event.clientY);
     pointer.current = at;
+    if (longPress.current.timer !== 0) {
+      const travelled = Math.hypot(
+        event.clientX - longPress.current.start.x,
+        event.clientY - longPress.current.start.y,
+      );
+      if (travelled > LONG_PRESS_SLOP) cancelLongPress();
+    }
+    if (resizing) {
+      const w = Math.max(resizing.min.w, Math.round(resizing.from.w + (at.x - resizing.origin.x)));
+      const h = Math.max(resizing.min.h, Math.round(resizing.from.h + (at.y - resizing.origin.y)));
+      onChange(
+        resizing.layer === "node"
+          ? patchNode(graph, resizing.id, { w, h } as Partial<N>)
+          : patchAnnotation(graph, resizing.id, { w, h }),
+      );
+      return;
+    }
+    if (movingNote) {
+      const dx = at.x - movingNote.origin.x;
+      const dy = at.y - movingNote.origin.y;
+      onChange(
+        patchAnnotation(graph, movingNote.id, {
+          x: Math.max(0, Math.round(movingNote.from.x + dx)),
+          y: Math.max(0, Math.round(movingNote.from.y + dy)),
+        }),
+      );
+      return;
+    }
     if (dragging) {
       const dx = at.x - dragging.origin.x;
       const dy = at.y - dragging.origin.y;
@@ -262,6 +438,9 @@ export function NodeCanvas<N extends GraphNode>({ graph, spec, onChange, dropRef
   };
 
   const onPointerUp = (event: ReactPointerEvent) => {
+    cancelLongPress();
+    if (resizing) setResizing(null);
+    if (movingNote) setMovingNote(null);
     if (dragging) setDragging(null);
     if (band) {
       setSelection(band.add ? new Set([...selection, ...catching]) : catching);
@@ -292,8 +471,22 @@ export function NodeCanvas<N extends GraphNode>({ graph, spec, onChange, dropRef
    */
   const catching = band ? caughtBy(band, band.boxes) : EMPTY_SELECTION;
 
-  /** Left button on empty canvas starts a rubber band. */
+  /**
+   * A press on empty canvas.
+   *
+   * With a mouse, a rubber band. With a finger, a pan - sweeping to select is
+   * a mouse idiom, and a canvas whose one-finger drag selected instead of
+   * moving would feel stuck to anyone who has used a map. The long press is
+   * the finger's version of the `A` key, which a touchscreen also does not
+   * have.
+   */
   const startBand = (event: ReactPointerEvent) => {
+    if (event.pointerType === "touch") {
+      setSelection(new Set());
+      armLongPress(event);
+      view.beginPan(event);
+      return;
+    }
     if (event.button !== 0) return;
     const at = toWorld(event.clientX, event.clientY);
     setBand({
@@ -306,12 +499,148 @@ export function NodeCanvas<N extends GraphNode>({ graph, spec, onChange, dropRef
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
   };
 
+  /**
+   * Open the add menu if this finger stays put.
+   *
+   * Cancelled by any movement past a few pixels, because a pan starts as a
+   * press that has not travelled yet, and a menu that opened mid-pan would
+   * fire on almost every gesture.
+   */
+  const armLongPress = (event: ReactPointerEvent) => {
+    const start = { x: event.clientX, y: event.clientY };
+    const world = toWorld(event.clientX, event.clientY);
+    clearTimeout(longPress.current.timer);
+    longPress.current = {
+      start,
+      timer: window.setTimeout(() => {
+        setAddAt({ left: start.x, top: start.y, world });
+      }, LONG_PRESS_MS),
+    };
+  };
+
+  const cancelLongPress = () => {
+    clearTimeout(longPress.current.timer);
+    longPress.current.timer = 0;
+  };
+
+  /** What the selection would be copied as, or null when it is empty. */
+  const copySelection = (): Clipping<N> | null => {
+    const clip = copyOut(graph, selection);
+    if (!clip) return null;
+    clipboard.current = clip;
+    // Best effort, and never awaited: the in-memory copy above is what makes
+    // the paste work, and this is only so a copy can leave the window.
+    void navigator.clipboard?.writeText?.(encodeClipping(clip)).catch(() => undefined);
+    return clip;
+  };
+
+  /** Put down whatever was copied, under the pointer. */
+  const paste = (clip: Clipping<N> | null) => {
+    if (!clip || (clip.nodes.length === 0 && clip.annotations.length === 0)) return;
+    const laid = pasteInto(graph, clip, pointer.current);
+    onChange(laid.graph);
+    // Selected on arrival, so it can be dragged into place, or deleted, without
+    // hunting for which of the two identical clusters is the new one.
+    setSelection(new Set(laid.added));
+  };
+
+  /**
+   * Move the selection by `step` pixels, both layers together.
+   *
+   * The arrows are how a node is placed exactly - dragging is fast and lands
+   * a pixel out, and two nodes a pixel apart read as crooked on a canvas whose
+   * whole point is being readable. Shift makes the step a coarse one, which is
+   * the same pair of gestures every editor with a canvas has.
+   */
+  const nudge = (by: { x: number; y: number }, step: number) => {
+    const dx = by.x * step;
+    const dy = by.y * step;
+    const moved = [...selection].reduce((acc, id) => {
+      const node = acc.nodes.find((candidate) => candidate.id === id);
+      if (node) {
+        return patchNode(acc, id, {
+          x: Math.max(0, node.x + dx),
+          y: Math.max(0, node.y + dy),
+        } as Partial<N>);
+      }
+      const note = annotationsOf(acc).find((candidate) => candidate.id === id);
+      if (!note || !spec.annotate) return acc;
+      return patchAnnotation(acc, id, { x: Math.max(0, note.x + dx), y: Math.max(0, note.y + dy) });
+    }, graph);
+    onChange(moved);
+  };
+
   const onKeyDown = (event: React.KeyboardEvent) => {
     // A node body holds real fields - the greeting is a textarea - so a
-    // bare letter has to mean "add a node" only when nobody is typing.
+    // bare letter has to mean "add a node" only when nobody is typing. The
+    // same guard is what leaves Ctrl+C and Ctrl+V to the field somebody is
+    // typing in, where they mean the text and not the nodes.
     const target = event.target as HTMLElement;
     if (target.isContentEditable || /^(input|textarea|select)$/i.test(target.tagName)) return;
 
+    const chord = event.ctrlKey || event.metaKey;
+    if (chord) {
+      const key = event.key.toLowerCase();
+      if (key === "c") {
+        event.preventDefault();
+        copySelection();
+        return;
+      }
+      if (key === "x") {
+        event.preventDefault();
+        if (copySelection()) {
+          onChange([...selection].reduce((acc, id) => removeAnnotation(removeNode(acc, id), id), graph));
+          setSelection(new Set());
+        }
+        return;
+      }
+      if (key === "v") {
+        event.preventDefault();
+        // The system clipboard first, so a copy made in another window wins
+        // over one made here an hour ago; the in-memory copy is the fallback
+        // for every case where reading is refused or holds something else.
+        const held = clipboard.current;
+        void (async () => {
+          const text = await navigator.clipboard?.readText?.().catch(() => "");
+          paste(decodeClipping<N>(text ?? "") ?? held);
+        })();
+        return;
+      }
+      if (key === "d") {
+        event.preventDefault();
+        // Duplicate: a copy and a paste in one press, and the only one of
+        // these that does not touch the clipboard - somebody duplicating a
+        // node has not asked to lose what they copied earlier.
+        const clip = copyOut(graph, selection);
+        if (clip) {
+          const laid = pasteInto(graph, clip, { x: pointer.current.x, y: pointer.current.y });
+          onChange(laid.graph);
+          setSelection(new Set(laid.added));
+        }
+        return;
+      }
+      if (key === "a") {
+        event.preventDefault();
+        setSelection(
+          new Set([
+            ...graph.nodes.map((node) => node.id),
+            ...(spec.annotate ? annotationsOf(graph).map((note) => note.id) : []),
+          ]),
+        );
+        return;
+      }
+      if (key === "z" || key === "y") {
+        event.preventDefault();
+        // Ctrl+Y and Ctrl+Shift+Z are the same gesture on two platforms, and
+        // an editor that knew only one of them is broken on the other.
+        if (key === "y" || event.shiftKey) onRedo?.();
+        else onUndo?.();
+        return;
+      }
+      return;
+    }
+
+    const arrow = NUDGES[event.key];
     if (event.key === "a" && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
       const box = viewportRef.current?.getBoundingClientRect();
@@ -325,20 +654,33 @@ export function NodeCanvas<N extends GraphNode>({ graph, spec, onChange, dropRef
       });
     } else if (event.key === "Escape") {
       setSelection(new Set());
-    } else if (event.key === "Delete" && selection.size > 0) {
+    } else if ((event.key === "Delete" || event.key === "Backspace") && selection.size > 0) {
       event.preventDefault();
-      onChange([...selection].reduce((acc, id) => removeNode(acc, id), graph));
+      // Backspace as well as Delete: a laptop keyboard often has only the one
+      // key, and on a Mac it is the delete key - an editor that knew only the
+      // other is an editor you cannot delete anything in.
+      //
+      // Both layers: the selection is one set, and an operator who selected a
+      // note and pressed Delete meant the note.
+      onChange([...selection].reduce((acc, id) => removeAnnotation(removeNode(acc, id), id), graph));
       setSelection(new Set());
+    } else if (arrow && selection.size > 0) {
+      event.preventDefault();
+      nudge(arrow, event.shiftKey ? NUDGE_FAR : NUDGE_STEP);
     }
   };
 
-  const extent = graph.nodes.reduce(
-    (acc, node) => ({
-      w: Math.max(acc.w, node.x + spec.width(node)),
-      h: Math.max(acc.h, node.y + NODE_FOOTPRINT),
-    }),
-    { w: 0, h: 0 },
-  );
+  const notes = spec.annotate ? annotationsOf(graph) : [];
+
+  // Over both layers: a frame drawn past the last node still has to have
+  // canvas under it, or the thing an operator just drew is off the edge.
+  const extent = [
+    ...graph.nodes.map((node) => ({
+      w: node.x + spec.width(node),
+      h: node.y + NODE_FOOTPRINT,
+    })),
+    ...notes.map((note) => ({ w: note.x + note.w, h: note.y + note.h })),
+  ].reduce((acc, box) => ({ w: Math.max(acc.w, box.w), h: Math.max(acc.h, box.h) }), { w: 0, h: 0 });
 
   return (
     <Box
@@ -360,6 +702,9 @@ export function NodeCanvas<N extends GraphNode>({ graph, spec, onChange, dropRef
       onPointerLeave={() => {
         setDragging(null);
         setPending(null);
+        setResizing(null);
+        setMovingNote(null);
+        cancelLongPress();
       }}
       sx={(theme) => ({
         flex: 1,
@@ -411,6 +756,22 @@ export function NodeCanvas<N extends GraphNode>({ graph, spec, onChange, dropRef
           transformOrigin: "0 0",
         }}
       >
+        {/* Behind the wires and the nodes, always: an annotation is
+            furniture, and furniture that covered a node would make the node
+            unclickable for the sake of a caption. */}
+        {notes.length > 0 && (
+          <AnnotationLayer
+            annotations={notes}
+            selection={selection}
+            onPatch={(id, patch) => onChange(patchAnnotation(graph, id, patch))}
+            onRemove={(id) => onChange(removeAnnotation(graph, id))}
+            onDragStart={startNoteDrag}
+            onResizeStart={(note, event) =>
+              startResize(note.id, "annotation", { w: note.w, h: note.h }, minimumOf(note), event)
+            }
+          />
+        )}
+
         <Box
           component="svg"
           sx={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
@@ -455,6 +816,18 @@ export function NodeCanvas<N extends GraphNode>({ graph, spec, onChange, dropRef
             onPatch={(patch) => onChange(patchNode(graph, node.id, patch))}
             onRemove={() => onChange(removeNode(graph, node.id))}
             onDragStart={(event) => startNodeDrag(node, event)}
+            onResizeStart={
+              spec.resizable?.(node)
+                ? (event) =>
+                    startResize(
+                      node.id,
+                      "node",
+                      { w: spec.width(node), h: node.h ?? 0 },
+                      spec.minSize?.(node) ?? { w: 120, h: 0 },
+                      event,
+                    )
+                : undefined
+            }
             registerPort={registerPort}
             onPortDown={startWire}
           />
@@ -483,6 +856,26 @@ export function NodeCanvas<N extends GraphNode>({ graph, spec, onChange, dropRef
             {block.label}
           </MenuItem>
         ))}
+
+        {/* The annotation layer's own section. Here rather than in the block
+            browser because these are not blocks: they wire to nothing, and
+            where one goes is the whole of what an operator is deciding - which
+            is exactly what this menu, anchored under the pointer, answers. */}
+        {spec.annotate && <Divider />}
+        {spec.annotate && <ListSubheader sx={{ lineHeight: "28px" }}>Annotate</ListSubheader>}
+        {spec.annotate &&
+          ANNOTATION_LABELS.map(([kind, label]) => (
+            <MenuItem
+              key={kind}
+              onClick={() => {
+                if (!addAt) return;
+                addNote(kind, addAt.world);
+                setAddAt(null);
+              }}
+            >
+              {label}
+            </MenuItem>
+          ))}
       </Menu>
     </Box>
   );
