@@ -347,6 +347,54 @@ describe("the wallpaper shelf", () => {
   });
 });
 
+describe("the focus point", () => {
+  it("is offered only once there is a picture to frame", async () => {
+    await renderPage();
+    expect(screen.queryByRole("group", { name: "Focus point" })).toBeNull();
+  });
+
+  it("nudges with the arrow keys, and remembers the framing on the shelf", async () => {
+    await savePersonalization({
+      ...PERSONALIZATION_DEFAULTS,
+      chatBgOriginal: "bgstore:image-a.jpg",
+      chatBgRecents: [still("image-a.jpg")],
+    });
+    writes.length = 0;
+
+    await renderPage();
+    const picker = screen.getByRole("group", { name: "Focus point" });
+    // A pointer is the quick way; jsdom has no layout to click into, and the
+    // keys are what anyone without a pointer has anyway.
+    fireEvent.keyDown(picker, { key: "ArrowUp" });
+
+    await waitFor(() => expect(writes.length).toBe(1));
+    const last = writes.at(-1) as Record<string, unknown>;
+    expect(last.chatBgFocusY).toBeCloseTo(0.48);
+    expect(last.chatBgFocusX).toBe(0.5);
+    // On the shelf too: where a face sits is a fact about the picture, so it
+    // has to survive a trip to another wallpaper and back.
+    expect((last.chatBgRecents as { focusY: number }[])[0].focusY).toBeCloseTo(0.48);
+  });
+
+  it("stops at the edge of the picture", async () => {
+    await savePersonalization({
+      ...PERSONALIZATION_DEFAULTS,
+      chatBgOriginal: "bgstore:image-a.jpg",
+      chatBgFocusY: 0.01,
+      chatBgRecents: [still("image-a.jpg")],
+    });
+    writes.length = 0;
+
+    await renderPage();
+    fireEvent.keyDown(screen.getByRole("group", { name: "Focus point" }), { key: "ArrowUp" });
+
+    await waitFor(() => expect(writes.length).toBe(1));
+    // Not -0.01: a focus point outside the picture has no meaning, and CSS
+    // would happily take it.
+    expect((writes.at(-1) as Record<string, unknown>).chatBgFocusY).toBe(0);
+  });
+});
+
 describe("slider commits over an animated wallpaper", () => {
   it("re-bake with the committed parameters", async () => {
     await savePersonalization({
