@@ -15,5 +15,9 @@
     "headingServer": "Server",
     "results_one": "{{count}} Treffer",
     "results_other": "{{count}} Treffer"
+  },
+  "gameOverlay": {
+    "you": "DU",
+    "more": "+{{count}} weitere"
   }
 }
