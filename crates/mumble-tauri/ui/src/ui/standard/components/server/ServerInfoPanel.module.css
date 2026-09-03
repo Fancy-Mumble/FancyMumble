@@ -244,13 +244,45 @@
   word-break: break-all;
 }
 
-/* -- Latency graph ---------------------------------------------- */
+/* -- Server features --------------------------------------------- */
 
-.latencyGraph {
-  width: 100%;
-  height: 100px;
-  border-radius: 4px;
-  background: var(--color-overlay-light);
+.featureValue {
+  display: flex;
+  /* A value long enough to wrap keeps its dot beside the first line rather
+     than floating to the middle of the block. */
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--color-text-primary);
+  word-break: break-word;
+}
+
+.featureDot {
+  flex-shrink: 0;
+  margin-top: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+
+.supportYes {
+  background: var(--color-online);
+}
+
+.supportPartial {
+  background: var(--color-warning);
+}
+
+/* Absent is not broken: a feature the server simply does not have gets the
+   muted dot, and only a half-working one is allowed to look like a warning. */
+.supportNo {
+  background: var(--color-text-muted);
+  opacity: 0.5;
+}
+
+.supportUnknown {
+  background: transparent;
+  border: 1px solid var(--color-text-muted);
 }
 
 /* When rendered inside a MobileBottomSheet, fill the available width. */
