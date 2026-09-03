@@ -1,15 +1,17 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Box, Menu, MenuItem, Switch, Tooltip, Typography } from "@mui/material";
+import { Box, Divider, Menu, MenuItem, Switch, Tooltip, Typography } from "@mui/material";
 import type { Theme } from "@mui/material/styles";
 import { useAppStore } from "@core/store";
 import { selectMicLive, selectSelfDeafened } from "@core/store/voiceSelectors";
 import { stopOwnBroadcast } from "@standard/components/chat/stream/useScreenShare";
 import { captureHolders, useCaptureError } from "@standard/hooks/useCaptureError";
 import {
+  ChevronRightIcon,
   HeadphonesIcon,
   HeadphonesOffIcon,
   KebabMenuIcon,
+  LogOutIcon,
   MicIcon,
   MicOffIcon,
   ScreenShareIcon,
@@ -18,12 +20,15 @@ import {
   UserXIcon,
   WebcamIcon,
 } from "@ui/icons";
-import { SectionLabel, Stack, UserAvatar } from "../primitives";
+import { Stack, UserAvatar } from "../primitives";
 import { chamferedSurface } from "../../theme";
 import { radius } from "../../tokens";
 
 /** The dock sits on the composer's inset; they are one strip. */
 const DOCK_INSET = "10px";
+
+/** Ties the filter row to the line explaining it. */
+const HIDE_EMPTY_HINT_ID = "nebula-dock-hide-empty-hint";
 
 interface VoiceDockProps {
   name: string;
@@ -42,7 +47,10 @@ interface VoiceDockProps {
   onContextMenuProfile?: (event: React.MouseEvent) => void;
   /** Open server administration; absent without write access to the root channel. */
   onOpenAdmin?: () => void;
+  /** The server the menu belongs to, named at its head. */
+  serverName?: string;
   /** Leave the server entirely; absent when there is nothing to leave. */
+  onLeaveServer?: () => void;
   /** Ask for the screen picker; absent where there is nothing to share into. */
   onShareScreen?: () => void;
   /** Ask for the picker in camera-only mode, from the overflow menu. */
@@ -75,6 +83,8 @@ export function VoiceDock({
   onOpenProfile,
   onContextMenuProfile,
   onOpenAdmin,
+  serverName,
+  onLeaveServer,
   onShareScreen,
   onShareCamera,
 }: Readonly<VoiceDockProps>) {
@@ -245,7 +255,9 @@ export function VoiceDock({
           },
         }}
       >
-        {onShareCamera && <Group first>{t("nebulaSidebar:dock.groupShare")}</Group>}
+        {serverName && <MenuHeader name={serverName} caption={t("nebulaSidebar:dock.menuCaption")} />}
+        {serverName && <MenuRule />}
+
         {onShareCamera && (
           <MenuItem
             onClick={() => {
@@ -259,33 +271,33 @@ export function VoiceDock({
             {t("nebulaSidebar:dock.shareCamera")}
           </MenuItem>
         )}
+        {onShareCamera && <MenuRule />}
 
-        <Group first={!onShareCamera}>{t("nebulaSidebar:dock.groupApp")}</Group>
-        <MenuItem
-          onClick={() => {
-            setOpen(false);
-            onOpenSettings();
-          }}
-        >
-          <MenuGlyph>
-            <SettingsIcon width={15} height={15} />
-          </MenuGlyph>
-          {t("common:minimal.settings")}
-        </MenuItem>
-
-        <Group>{t("nebulaSidebar:dock.groupChannelList")}</Group>
         <MenuItem
           role="menuitemcheckbox"
           aria-checked={hideEmpty}
+          // Named by the label alone: the line under it says what the filter
+          // does, which is a description rather than part of what to call it.
+          aria-label={t("sidebar:channelSidebar.hideEmptyChannels")}
+          aria-describedby={HIDE_EMPTY_HINT_ID}
           onClick={() => {
             setOpen(false);
             onToggleHideEmpty();
           }}
+          sx={{ alignItems: "flex-start" }}
         >
-          <MenuGlyph>
+          <MenuGlyph inset>
             <UserXIcon width={15} height={15} />
           </MenuGlyph>
-          {t("sidebar:channelSidebar.hideEmptyChannels")}
+          <Stack gap="1px" sx={{ minWidth: 0 }}>
+            {t("sidebar:channelSidebar.hideEmptyChannels")}
+            <Typography
+              id={HIDE_EMPTY_HINT_ID}
+              sx={(theme) => ({ fontSize: 11, lineHeight: 1.35, color: theme.palette.nebula.muted })}
+            >
+              {t("nebulaSidebar:dock.hideEmptyHint")}
+            </Typography>
+          </Stack>
           {/* The row is the control; the switch only shows its state, so it is
               kept out of the tab order and off the accessibility tree. */}
           <Switch
@@ -297,7 +309,19 @@ export function VoiceDock({
           />
         </MenuItem>
 
-        {onOpenAdmin && <Group>{t("nebulaSidebar:dock.groupServer")}</Group>}
+        <MenuItem
+          onClick={() => {
+            setOpen(false);
+            onOpenSettings();
+          }}
+        >
+          <MenuGlyph>
+            <SettingsIcon width={15} height={15} />
+          </MenuGlyph>
+          {t("common:minimal.settings")}
+          <MenuChevron />
+        </MenuItem>
+
         {onOpenAdmin && (
           <MenuItem
             onClick={() => {
@@ -309,6 +333,25 @@ export function VoiceDock({
               <ShieldIcon width={15} height={15} />
             </MenuGlyph>
             {t("nebulaSidebar:dock.serverAdmin")}
+            <MenuChevron />
+          </MenuItem>
+        )}
+
+        {onLeaveServer && <MenuRule />}
+        {onLeaveServer && (
+          <MenuItem
+            onClick={() => {
+              setOpen(false);
+              onLeaveServer();
+            }}
+            // The one row here that ends a session rather than opening
+            // something, and the only one worth marking as such.
+            sx={(theme) => ({ color: theme.palette.nebula.bad })}
+          >
+            <MenuGlyph tone="inherit">
+              <LogOutIcon width={15} height={15} />
+            </MenuGlyph>
+            {t("nebulaSidebar:dock.leaveServer")}
           </MenuItem>
         )}
       </Menu>
@@ -413,14 +456,78 @@ function DockButton({
  * A group heading in the sheet. The mock separates groups with air rather
  * than rules, so every heading but the first carries the gap above it.
  */
-function Group({ first = false, children }: Readonly<{ first?: boolean; children: React.ReactNode }>) {
-  return <SectionLabel sx={{ p: first ? "4px 12px 4px" : "14px 12px 4px" }}>{children}</SectionLabel>;
+function MenuHeader({ name, caption }: Readonly<{ name: string; caption: string }>) {
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: "10px", p: "6px 12px 8px" }}>
+      <Box
+        aria-hidden
+        sx={(theme) => ({
+          flex: "none",
+          width: 32,
+          height: 32,
+          display: "grid",
+          placeItems: "center",
+          borderRadius: radius("md"),
+          background: theme.palette.nebula.accentSoft,
+          color: theme.palette.nebula.accent,
+          fontSize: 13,
+          fontWeight: 600,
+        })}
+      >
+        {/* Spread, not `charAt`: a name starting outside the basic plane would
+            otherwise be cut in half and drawn as a broken glyph. */}
+        {[...name.trim()][0]?.toUpperCase() ?? ""}
+      </Box>
+      <Stack gap="1px" sx={{ minWidth: 0 }}>
+        <Typography sx={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.25 }} noWrap>
+          {name}
+        </Typography>
+        <Typography
+          sx={(theme) => ({ fontSize: 11, lineHeight: 1.35, color: theme.palette.nebula.muted })}
+          noWrap
+        >
+          {caption}
+        </Typography>
+      </Stack>
+    </Box>
+  );
+}
+
+/** The line between one cluster of rows and the next. */
+function MenuRule() {
+  return <Divider sx={(theme) => ({ my: "6px", borderColor: theme.palette.nebula.line })} />;
+}
+
+/** Marks a row that opens somewhere else rather than acting where it stands. */
+function MenuChevron() {
+  return (
+    <Box
+      aria-hidden
+      sx={(theme) => ({ display: "flex", ml: "auto", pl: "8px", color: theme.palette.nebula.dim })}
+    >
+      <ChevronRightIcon width={14} height={14} />
+    </Box>
+  );
 }
 
 /** The muted glyph a menu row leads with, as the canvas draws its menus. */
-function MenuGlyph({ children }: Readonly<{ children: React.ReactNode }>) {
+function MenuGlyph({
+  children,
+  inset = false,
+  tone = "muted",
+}: Readonly<{ children: React.ReactNode; inset?: boolean; tone?: "muted" | "inherit" }>) {
   return (
-    <Box aria-hidden sx={(theme) => ({ display: "flex", flex: "none", color: theme.palette.nebula.muted })}>
+    <Box
+      aria-hidden
+      sx={(theme) => ({
+        display: "flex",
+        flex: "none",
+        // A row that runs to two lines still leads with its glyph on the
+        // first one, beside the label rather than centred on the pair.
+        mt: inset ? "1px" : 0,
+        color: tone === "muted" ? theme.palette.nebula.muted : "inherit",
+      })}
+    >
       {children}
     </Box>
   );
