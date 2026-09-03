@@ -1,5 +1,14 @@
 import type { ReactNode } from "react";
-import { Box, Typography } from "@mui/material";
+import {
+  Box,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
+} from "@mui/material";
 import { Stack } from "../primitives";
 import { radius } from "../../tokens";
 
@@ -178,13 +187,27 @@ export interface Column<T> {
  * Its own horizontal scroller: an admin table can be wider than the window and
  * the page body must never scroll sideways, or the sidebar goes with it.
  *
- * `stickyHeader` pins the header row while the rows scroll under it. It also
- * makes this box the vertical scroller, which is not optional: `overflow-x`
- * already computes `overflow-y` to `auto`, so this box is a scroll container
- * either way, and sticky resolves against the nearest one - left unbounded it
- * never scrolls, and the header would sit in a box that cannot move while the
- * page scrolled away beneath it. Bounding it needs the height the parent
- * hands down, so the page above must be an `AdminPage` with `fill`.
+ * `stickyHeader` is MUI's own, which switches the table to
+ * `border-collapse: separate` so the header cells keep their borders while
+ * they float. What it does not do is bound the scroller: sticky resolves
+ * against the nearest one, and `TableContainer` is one either way (`overflow-x`
+ * computes `overflow-y` to `auto`), so left unbounded it never scrolls and the
+ * header sits in a box that cannot move while the page scrolls away beneath
+ * it. Bounding it needs the height the parent hands down, so the page above
+ * must be an `AdminPage` with `fill`.
+ *
+ * `flush` drops the card chrome - the radius, the hairline, the fill - for a
+ * host that is already a surface. A dialog paper draws all three itself, so a
+ * table nested inside one with no padding between them showed two rounded
+ * borders a pixel apart. Flush, the table *is* the dialog, and the paper's
+ * own radius does the cornering.
+ *
+ * `layout="fixed"` hands the column widths to `table-layout: fixed`, which is
+ * what makes a `width` binding rather than a suggestion: under the default
+ * auto layout a long filename widens its column until the columns past it are
+ * pushed out of the viewport, and no cell can ellipsise because none of them
+ * has a definite width to ellipsise against. The unsized column takes up the
+ * slack.
  */
 export function DataTable<T>({
   columns,
@@ -195,6 +218,9 @@ export function DataTable<T>({
   selectedKey,
   rowAttrs,
   stickyHeader,
+  flush,
+  layout = "auto",
+  minWidth,
 }: Readonly<{
   columns: readonly Column<T>[];
   rows: readonly T[];
@@ -206,6 +232,13 @@ export function DataTable<T>({
   rowAttrs?: (row: T) => Record<string, string | undefined>;
   /** Pin the header row and scroll the rows inside the table. */
   stickyHeader?: boolean;
+  /** Drop the card chrome so an enclosing surface (a dialog paper) is the card. */
+  flush?: boolean;
+  /** `fixed` makes `Column.width` binding and lets cells ellipsise. */
+  layout?: "auto" | "fixed";
+  /** Floor for the table's width: narrower than this it scrolls sideways in
+   *  its own box rather than squeezing every column past legibility. */
+  minWidth?: number | string;
 }>) {
   if (rows.length === 0) {
     return (
@@ -214,10 +247,14 @@ export function DataTable<T>({
           px: "16px",
           py: "28px",
           textAlign: "center",
-          borderRadius: radius("lg"),
-          border: `1px dashed ${theme.palette.nebula.line2}`,
           color: theme.palette.nebula.muted,
           fontSize: 12,
+          ...(flush
+            ? {}
+            : {
+                borderRadius: radius("lg"),
+                border: `1px dashed ${theme.palette.nebula.line2}`,
+              }),
         })}
       >
         {empty}
@@ -225,30 +262,43 @@ export function DataTable<T>({
     );
   }
   return (
-    <Box
+    <TableContainer
       sx={(theme) => ({
-        overflowX: "auto",
         // `0 1 auto`, not `1 1 auto`: a short table keeps its natural height
         // rather than stretching an empty card down the pane; only a table
         // taller than the space left over shrinks into a scroller.
         ...(stickyHeader && { overflowY: "auto", flex: "0 1 auto", minHeight: 0 }),
-        borderRadius: radius("lg"),
-        background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        ...(flush
+          ? {}
+          : {
+              borderRadius: radius("lg"),
+              background: theme.palette.nebula.card,
+              border: `1px solid ${theme.palette.nebula.line}`,
+            }),
       })}
     >
-      <Box component="table" sx={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-        <Box component="thead">
-          <Box component="tr">
+      <Table
+        stickyHeader={stickyHeader}
+        size="small"
+        sx={{
+          minWidth,
+          tableLayout: layout,
+          fontSize: 12,
+          // Sticky mode is `border-collapse: separate`, which brings a default
+          // `border-spacing` with it and gaps every cell.
+          borderSpacing: 0,
+        }}
+      >
+        <TableHead>
+          <TableRow>
             {columns.map((column) => (
-              <Box
-                component="th"
+              <TableCell
                 key={column.key}
+                align={column.align ?? "left"}
                 sx={(theme) => ({
                   px: "12px",
                   py: "9px",
                   width: column.width,
-                  textAlign: column.align ?? "left",
                   fontSize: 10.5,
                   fontWeight: 600,
                   letterSpacing: "0.08em",
@@ -256,66 +306,59 @@ export function DataTable<T>({
                   color: theme.palette.nebula.dim,
                   borderBottom: `1px solid ${theme.palette.nebula.line2}`,
                   whiteSpace: "nowrap",
-                  ...(stickyHeader && {
-                    position: "sticky",
-                    top: 0,
-                    zIndex: 1,
-                    // `card` is translucent, so rows would read straight
-                    // through the pinned strip. `bg0` is the window's own
-                    // surface and opaque, the colour AuditAdmin pins with.
-                    background: theme.palette.nebula.bg0,
-                    // `border-collapse: collapse` hands the cell borders over
-                    // to the table, which leaves them behind when the header
-                    // sticks; an inset shadow travels with the cell.
-                    borderBottom: "none",
-                    boxShadow: `inset 0 -1px 0 ${theme.palette.nebula.line2}`,
-                  }),
+                  // `card` is translucent, so rows would read straight through
+                  // the pinned strip. `bg0` is the window's own surface and
+                  // opaque - MUI pins with `background.default`, which this
+                  // pack leaves transparent.
+                  ...(stickyHeader && { background: theme.palette.nebula.bg0 }),
                 })}
               >
                 {column.header}
-              </Box>
+              </TableCell>
             ))}
-          </Box>
-        </Box>
-        <Box component="tbody">
+          </TableRow>
+        </TableHead>
+        <TableBody>
           {rows.map((row) => {
             const key = rowKey(row);
             const selected = selectedKey != null && selectedKey === key;
             return (
-              <Box
-                component="tr"
+              <TableRow
                 key={key}
+                selected={selected}
                 {...rowAttrs?.(row)}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 sx={(theme) => ({
                   cursor: onRowClick ? "pointer" : "default",
-                  background: selected ? theme.palette.nebula.accentSoft : "transparent",
-                  "&:hover": onRowClick
-                    ? { background: selected ? theme.palette.nebula.accentSoft : theme.palette.nebula.hover }
-                    : undefined,
+                  "&.Mui-selected, &.Mui-selected:hover": {
+                    background: theme.palette.nebula.accentSoft,
+                  },
+                  "&:hover": onRowClick ? { background: theme.palette.nebula.hover } : undefined,
                 })}
               >
                 {columns.map((column) => (
-                  <Box
-                    component="td"
+                  <TableCell
                     key={column.key}
+                    align={column.align ?? "left"}
                     sx={(theme) => ({
                       px: "12px",
                       py: "9px",
-                      textAlign: column.align ?? "left",
+                      // The rule between rows is drawn on top, not bottom, so
+                      // the last row ends on the surface rather than on a line.
                       borderTop: `1px solid ${theme.palette.nebula.line}`,
+                      borderBottom: "none",
                       color: theme.palette.nebula.text,
                       verticalAlign: "middle",
                     })}
                   >
                     {column.cell(row)}
-                  </Box>
+                  </TableCell>
                 ))}
-              </Box>
+              </TableRow>
             );
           })}
-        </Box>
-      </Box>
-    </Box>
+        </TableBody>
+      </Table>
+    </TableContainer>
   );
 }

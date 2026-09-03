@@ -44,6 +44,18 @@ describe("VoiceDock", () => {
     expect(handlers.onToggleHideEmpty).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the filter's description out of what the row is called", () => {
+    renderDock();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+
+    // The hint is on screen, but the row is still named by its label alone -
+    // a menu item called "Hide empty channels Channels you can't post in stay
+    // collapsed" is a sentence, not a name.
+    const item = screen.getByRole("menuitemcheckbox", { name: "Hide empty channels" });
+    expect(screen.getByText(/stay collapsed/i)).toBeTruthy();
+    expect(item.getAttribute("aria-describedby")).toBeTruthy();
+  });
+
   it("shows the filter ticked once it is on", () => {
     renderDock({ hideEmpty: true });
     fireEvent.click(screen.getByRole("button", { name: "More" }));
@@ -51,5 +63,49 @@ describe("VoiceDock", () => {
     const item = screen.getByRole("menuitemcheckbox", { name: "Hide empty channels" });
     expect(item.getAttribute("aria-checked")).toBe("true");
     expect(item.querySelector<HTMLInputElement>("input[type=checkbox]")?.checked).toBe(true);
+  });
+});
+
+describe("the menu sheet", () => {
+  afterEach(cleanup);
+
+  it("says which server it belongs to", () => {
+    renderDock({ serverName: "Riverbend" });
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+
+    expect(screen.getByText("Riverbend")).toBeTruthy();
+    expect(screen.getByText("Server & app options")).toBeTruthy();
+  });
+
+  it("leaves the head off when there is no server to name", () => {
+    renderDock();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+
+    expect(screen.queryByText("Server & app options")).toBeNull();
+  });
+
+  it("leaves the server from the last row", () => {
+    const onLeaveServer = vi.fn();
+    renderDock({ onLeaveServer });
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Leave server" }));
+    expect(onLeaveServer).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers no way out when there is nothing to leave", () => {
+    renderDock();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+
+    expect(screen.queryByRole("menuitem", { name: "Leave server" })).toBeNull();
+  });
+
+  it("hides administration from anyone who cannot administer", () => {
+    renderDock();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+
+    expect(screen.queryByRole("menuitem", { name: "Server admin" })).toBeNull();
+    // Settings is everyone's, and stays.
+    expect(screen.getByRole("menuitem", { name: "Settings" })).toBeTruthy();
   });
 });

@@ -46,7 +46,7 @@ import type { ChatMessage } from "@core/types";
 import type { StagedAttachment, UploadPlaceholder } from "@core/features/chat/useFileUpload";
 import { formatBytes } from "@core/utils/format";
 import { composerHtml, plainText } from "../../selectors";
-import { glassChrome } from "../../theme";
+import { chamferedSurface, glassChrome } from "../../theme";
 import { CHAT_COLUMN_INSET_PX, CHAT_COLUMN_MAX_WIDTH, NEBULA_MONO, radius } from "../../tokens";
 
 /** What the paperclip asks the picker for. */
@@ -110,12 +110,18 @@ interface ComposerProps {
 /**
  * The design's own geometry, kept as its own constants.
  *
- * These are the numbers the artboard repeats - a 24px panel, 16px tiles, a
- * blur heavy enough to separate by light rather than by shadow - and they sit
- * outside the pack's radius scale on purpose: the scale tops out at 20 and
- * this surface is drawn to a different one. Colour still comes from the theme,
- * so the composer follows the user's scheme and accent rather than pinning the
+ * These are the numbers the artboard repeats - a 24px panel, a blur heavy
+ * enough to separate by light rather than by shadow - and they sit outside
+ * the pack's radius scale on purpose: the scale tops out at 20 and this
+ * surface is drawn to a different one. Colour still comes from the theme, so
+ * the composer follows the user's scheme and accent rather than pinning the
  * artboard's two.
+ *
+ * The corner is the exception, and moved onto the scale - see
+ * [`PANEL_RADIUS`]. The artboard is one skin's drawing of the composer, and a
+ * radius is the one number here that other skins re-draw: several square every
+ * control they have, and one cuts its corners off instead. A literal 16px made
+ * the composer the single surface in the room that ignored them.
  */
 /** The inset that lets the wallpaper show around all four sides. */
 const PANEL_INSET_PX = CHAT_COLUMN_INSET_PX;
@@ -133,7 +139,16 @@ type PopoverKind = "emoji" | "gif" | "poll" | "notice";
 
 /** A panel that only has a sentence to say is narrower than one you act in. */
 const NOTICE_POPOVER_WIDTH = 300;
-const PANEL_RADIUS = "16px";
+/**
+ * The panel's corner, taken from the skin rather than fixed at 16px.
+ *
+ * It was a literal, which meant the composer stayed a rounded box on the
+ * skins that square every other control - the one surface in the room
+ * still wearing the default shape. `lg` is the step the scale names for
+ * panels and message bubbles, so the composer now matches the river it
+ * sits under.
+ */
+const PANEL_RADIUS = radius("lg");
 const PANEL_BLUR = "blur(32px) saturate(160%)";
 
 const POPUP = {
@@ -631,18 +646,27 @@ export function Composer({
           // step is a lift in both schemes - the light scheme's tinted card is
           // *darker* than its wash, and lighting a surface by darkening it
           // reads as the panel going away.
-          background: lit
-            ? `linear-gradient(0deg,${alpha(theme.palette.nebula.accent, 0.09)},${alpha(
-                theme.palette.nebula.accent,
-                0.09,
-              )}),${theme.palette.nebula.input}`
-            : theme.palette.nebula.input,
-          // Stronger than `accentLine`, which is the weight a *resting* accent
-          // edge is drawn at - a selected card, a hovered row. This edge is
-          // saying where the keyboard is pointed, and over a light scheme's
-          // near-white wash a resting weight barely separates from the
-          // hairline it replaces.
-          border: `1px solid ${lit ? alpha(theme.palette.nebula.accent, 0.6) : theme.palette.nebula.line2}`,
+          //
+          // Fill and edge go on together, because a skin may cut the panel's
+          // corners and a real `border` is sliced off at the diagonal, leaving
+          // the cut unstroked. Drawn instead as an edge-coloured ground with
+          // the fill inset 1px over it, which is the same 1px border on the
+          // skins that cut nothing - so the lit edge below survives either.
+          ...chamferedSurface(
+            theme,
+            lit
+              ? `linear-gradient(0deg,${alpha(theme.palette.nebula.accent, 0.09)},${alpha(
+                  theme.palette.nebula.accent,
+                  0.09,
+                )}),${theme.palette.nebula.input}`
+              : theme.palette.nebula.input,
+            // Stronger than `accentLine`, which is the weight a *resting*
+            // accent edge is drawn at - a selected card, a hovered row. This
+            // edge is saying where the keyboard is pointed, and over a light
+            // scheme's near-white wash a resting weight barely separates from
+            // the hairline it replaces.
+            lit ? alpha(theme.palette.nebula.accent, 0.6) : theme.palette.nebula.line2,
+          ),
           // Enough to lift the panel off the river behind it without the long
           // throw a floating menu gets - it is docked, not floating.
           boxShadow: lit
