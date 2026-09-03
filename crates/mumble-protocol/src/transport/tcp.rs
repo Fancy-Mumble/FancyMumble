@@ -75,6 +75,16 @@ impl TcpTransport {
             Err(_) => return Err(Error::Other(format!("connection to {addr} timed out"))),
         };
 
+        // TCP_NODELAY, as murmur and Starling set on their end. A tunnelled
+        // voice frame is one small write every 20 ms, and with Nagle on each
+        // one waits for the server to acknowledge the previous one - an extra
+        // round trip per frame, plus the peer's delayed-ACK timer whenever
+        // that fires. Best effort: a socket that refuses the option still
+        // carries audio, only later.
+        if let Err(e) = tcp_stream.set_nodelay(true) {
+            debug!("could not set TCP_NODELAY: {e}");
+        }
+
         let tls_config = build_tls_config(
             config.accept_invalid_certs,
             config.client_cert_pem.as_deref(),
