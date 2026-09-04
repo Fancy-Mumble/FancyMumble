@@ -86,6 +86,12 @@ pub struct ClientConfig {
     pub force_tcp: bool,
 }
 
+/// How often the client re-proves its UDP path to the server.
+///
+/// Five seconds is what Starling's never-bound report assumes and roughly what
+/// stock clients do; the previous behaviour rode the 15 s TCP ping.
+const UDP_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
+
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
@@ -315,6 +321,14 @@ async fn event_loop<H: EventHandler>(
     let mut stored_crypto: Option<StoredCrypto> = None;
     let mut force_tcp = *force_tcp_rx.borrow();
 
+    // The UDP path is re-proved on its own timer rather than riding the 15 s
+    // TCP ping. A listener who is not talking sends nothing, so after any event
+    // that unbinds its address (a tunnelled frame, a re-key) it stayed on the
+    // tunnel for up to fifteen seconds; now it is seconds. Stock clients ping
+    // UDP every few seconds and Starling's never-bound report assumes five.
+    let mut udp_keepalive = tokio::time::interval(UDP_KEEPALIVE_INTERVAL);
+    udp_keepalive.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
     info!("entering main event loop");
     let mut tcp_reader_alive = true;
     let mut outbound_audio_count: u64 = 0;
@@ -353,6 +367,14 @@ async fn event_loop<H: EventHandler>(
                 tcp_reader_alive = false;
                 warn!("TCP reader ended unexpectedly: {result:?}");
                 Some(WorkItem::Shutdown)
+            }
+            _ = udp_keepalive.tick() => {
+                send_udp_keepalive(
+                    &mut udp_sender,
+                    state.connection.supports_protobuf_audio(),
+                )
+                .await;
+                None
             }
         };
 
@@ -576,12 +598,6 @@ impl<H: EventHandler> EventLoopCtx<'_, H> {
                         );
                     }
 
-                    // Piggyback a UDP ping on every TCP Ping response to
-                    // keep the NAT mapping alive.
-                    if matches!(ctrl, ControlMessage::Ping(_)) {
-                        self.send_udp_ping().await;
-                    }
-
                     if matches!(ctrl, ControlMessage::Reject(_)) {
                         info!("server rejected connection, exiting event loop");
                         self.handler.on_disconnected();
@@ -621,18 +637,6 @@ impl<H: EventHandler> EventLoopCtx<'_, H> {
             return LoopAction::Break;
         }
         LoopAction::Continue
-    }
-
-    /// Send a UDP ping to keep the NAT mapping alive.
-    async fn send_udp_ping(&mut self) {
-        let protobuf_audio = self.state.connection.supports_protobuf_audio();
-        if let Some(sender) = &mut self.udp_sender {
-            let payload =
-                crate::transport::udp::encode_udp_message_for(&udp_ping_message(), protobuf_audio);
-            if let Err(e) = sender.send_raw(&payload).await {
-                warn!("UDP ping send failed: {e}");
-            }
-        }
     }
 
     /// Send outbound UDP audio, preferring real UDP with TCP tunnel fallback.
@@ -767,6 +771,21 @@ impl UdpSender {
 /// Non-blocking drain of all pending outbound audio packets.
 ///
 /// Called at the top of every event-loop iteration so audio is sent
+/// Re-prove the UDP path so the server keeps this peer's address bound.
+///
+/// A no-op while UDP is down (`force_tcp`, or before `CryptSetup`): there is
+/// nothing to keep alive, and the tunnel needs no keepalive of its own.
+async fn send_udp_keepalive(udp_sender: &mut Option<UdpSender>, protobuf_audio: bool) {
+    let Some(sender) = udp_sender.as_mut() else {
+        return;
+    };
+    let payload =
+        crate::transport::udp::encode_udp_message_for(&udp_ping_message(), protobuf_audio);
+    if let Err(e) = sender.send_raw(&payload).await {
+        warn!("UDP keepalive ping failed: {e}");
+    }
+}
+
 /// Send a single outbound audio packet via UDP (preferred) or TCP tunnel
 /// (fallback).  Fully non-blocking -- uses `try_send_raw` on the UDP
 /// socket and `try_send` on the TCP channel, so this function **never
@@ -790,24 +809,38 @@ fn send_one_audio_packet(
         );
     }
 
-    let sent_udp = if let Some(sender) = udp_sender.as_mut() {
+    // Outcome of the UDP attempt: `Sent` needs nothing more, `Dropped` must
+    // NOT fall through to the tunnel, `NoPath` means tunnelling is the only
+    // way to deliver this frame.
+    enum UdpOutcome {
+        Sent,
+        Dropped,
+        NoPath,
+    }
+
+    let outcome = if let Some(sender) = udp_sender.as_mut() {
         let payload = crate::transport::udp::encode_udp_message_for(msg, protobuf_audio);
         match sender.try_send_raw(&payload) {
-            Ok(true) => true,
+            Ok(true) => UdpOutcome::Sent,
+            // A full socket buffer is a momentary condition. Tunnelling this
+            // one frame instead would make both Starling and murmur unbind the
+            // peer's UDP address, putting every later frame on the tunnel until
+            // the next ping re-proves the path. A dropped frame costs 20 ms of
+            // audio; the tunnel fallback costs the path.
             Ok(false) => {
-                trace!("UDP send would block, falling back to TCP tunnel");
-                false
+                trace!("UDP send would block, dropping this frame to keep the UDP binding");
+                UdpOutcome::Dropped
             }
             Err(e) => {
                 warn!("UDP audio send failed: {e}");
-                false
+                UdpOutcome::NoPath
             }
         }
     } else {
-        false
+        UdpOutcome::NoPath
     };
 
-    if !sent_udp {
+    if matches!(outcome, UdpOutcome::NoPath) {
         let tunnel_data = crate::transport::audio_codec::encode_tunnel_audio(audio, protobuf_audio);
         let tunnel = ControlMessage::UdpTunnel(tunnel_data);
         if outbound_tx.try_send(tunnel).is_err() {

@@ -10,7 +10,6 @@
 //! state-management glue that wires it into the rest of the Tauri
 //! audio module.
 
-use std::collections::VecDeque;
 use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -20,7 +19,8 @@ use tracing::{debug, warn};
 
 use mumble_protocol::audio::capture::AudioCapture;
 use mumble_protocol::audio::filter::FilterChain;
-use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes};
+use mumble_protocol::audio::mixer::{JitterConfig, SpeakerBuffer, SpeakerBuffers, SpeakerVolumes};
+use mumble_protocol::audio::sample::AudioFormat;
 
 use crate::audio::{AudioDeviceFactory, MixingPlayback, PlatformAudioFactory};
 
@@ -119,7 +119,10 @@ async fn record(
     // Drop a placeholder entry so the mixing callback owns a buffer
     // before playback begins; this avoids a first-frame underrun pop.
     if let Ok(mut bufs) = ctx.speaker_buffers.lock() {
-        let _ = bufs.insert(VOICE_REPLAY_SESSION_KEY, VecDeque::new());
+        let _ = bufs.insert(
+            VOICE_REPLAY_SESSION_KEY,
+            SpeakerBuffer::new(AudioFormat::MONO_48KHZ_F32, JitterConfig::default()),
+        );
     }
 
     let start = Instant::now();
@@ -171,8 +174,12 @@ async fn playback(
     let total_ms = (buffer.len() as u64 * 1000 / VOICE_REPLAY_SAMPLE_RATE as u64) as u32;
 
     if let Ok(mut bufs) = ctx.speaker_buffers.lock() {
-        let entry = bufs.entry(VOICE_REPLAY_SESSION_KEY).or_default();
-        entry.extend(buffer.iter().copied());
+        let entry = bufs.entry(VOICE_REPLAY_SESSION_KEY).or_insert_with(|| {
+            SpeakerBuffer::new(AudioFormat::MONO_48KHZ_F32, JitterConfig::default())
+        });
+        // The whole recording is here at once, so there is nothing to wait
+        // for: hand it over as a finished talkspurt.
+        entry.push_complete(&buffer);
     }
 
     let playback_start = Instant::now();
@@ -190,7 +197,7 @@ async fn playback(
             .speaker_buffers
             .lock()
             .ok()
-            .and_then(|bufs| bufs.get(&VOICE_REPLAY_SESSION_KEY).map(VecDeque::len))
+            .and_then(|bufs| bufs.get(&VOICE_REPLAY_SESSION_KEY).map(SpeakerBuffer::len))
             .unwrap_or(0);
 
         let elapsed = elapsed_ms(playback_start).min(total_ms);

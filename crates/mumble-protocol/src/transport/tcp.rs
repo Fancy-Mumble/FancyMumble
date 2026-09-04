@@ -10,7 +10,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_rustls::client::TlsStream;
 use tokio_rustls::TlsConnector;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 use crate::error::{Error, Result};
 use crate::message::ControlMessage;
@@ -74,6 +74,14 @@ impl TcpTransport {
             Ok(res) => res?,
             Err(_) => return Err(Error::Other(format!("connection to {addr} timed out"))),
         };
+
+        // Tunnelled audio is a 20 ms frame per write. Without this, Nagle holds a
+        // frame until the server ACKs the previous one, which on a LAN is the
+        // difference between 20 ms and a round trip. Both Starling and murmur set
+        // it on their side; the client never did.
+        if let Err(e) = tcp_stream.set_nodelay(true) {
+            warn!(error = %e, "could not disable Nagle on the control stream");
+        }
 
         let tls_config = build_tls_config(
             config.accept_invalid_certs,
