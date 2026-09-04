@@ -527,6 +527,7 @@ impl Drop for PwMixingPlayback {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mumble_protocol::audio::mixer::{JitterConfig, SpeakerBuffer};
 
     /// Hardware diagnostic - run manually:
     /// `cargo test -p mumble-tauri pipewire_hw -- --ignored --nocapture`
@@ -615,14 +616,17 @@ mod tests {
         let volumes: SpeakerVolumes =
             Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
         // Two seconds of 440 Hz at a level nothing downstream will gate.
-        let tone: std::collections::VecDeque<f32> = (0..96_000)
+        let tone: Vec<f32> = (0..96_000)
             .map(|i| {
                 let t = f64::from(i) / f64::from(RATE);
                 (0.4 * (2.0 * std::f64::consts::PI * 440.0 * t).sin()) as f32
             })
             .collect();
         if let Ok(mut b) = buffers.lock() {
-            let _ = b.insert(1_u32, tone);
+            let mut buf = SpeakerBuffer::new(AudioFormat::MONO_48KHZ_F32, JitterConfig::default());
+            // A finished talkspurt: the whole tone is here, so play it.
+            buf.push_complete(&tone);
+            let _ = b.insert(1_u32, buf);
         }
 
         let vol = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
