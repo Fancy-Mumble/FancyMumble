@@ -768,9 +768,6 @@ impl UdpSender {
     }
 }
 
-/// Non-blocking drain of all pending outbound audio packets.
-///
-/// Called at the top of every event-loop iteration so audio is sent
 /// Re-prove the UDP path so the server keeps this peer's address bound.
 ///
 /// A no-op while UDP is down (`force_tcp`, or before `CryptSetup`): there is

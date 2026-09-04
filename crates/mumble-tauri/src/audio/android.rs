@@ -16,6 +16,7 @@ use oboe::{
 use tracing::{error, warn};
 
 use mumble_protocol::audio::capture::AudioCapture;
+use mumble_protocol::audio::mixer::SpeakerBuffer;
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use mumble_protocol::error::{Error, Result};
 
@@ -221,19 +222,29 @@ struct MixingPlaybackCallback {
     buffers: mumble_protocol::audio::mixer::SpeakerBuffers,
     volume: Arc<AtomicU32>,
     last_sample: f32,
+    /// Scratch for one callback's mix, so the callback allocates nothing
+    /// after the first one.
+    mixed: Vec<f32>,
 }
 
 impl MixingPlaybackCallback {
-    fn mix_buffers(map: &mut std::collections::HashMap<u32, VecDeque<f32>>) -> Option<f32> {
-        let mut sum = 0.0f32;
-        let mut count = 0u32;
+    /// Mix every speaker that is ready to play into `mixed`, returning how
+    /// many of its samples are valid.
+    ///
+    /// Priming is per speaker inside
+    /// [`SpeakerBuffer::drain_into`](mumble_protocol::audio::mixer::SpeakerBuffer::drain_into):
+    /// one still filling to its jitter target contributes nothing this
+    /// callback, and one whose talkspurt has ended plays out what it has.
+    fn mix_buffers(
+        map: &mut std::collections::HashMap<u32, SpeakerBuffer>,
+        mixed: &mut [f32],
+    ) -> usize {
+        mixed.fill(0.0);
+        let mut valid = 0;
         for buf in map.values_mut() {
-            if let Some(s) = buf.pop_front() {
-                sum += s;
-                count += 1;
-            }
+            valid = valid.max(buf.drain_into(mixed, 1.0));
         }
-        (count > 0).then_some(sum)
+        valid
     }
 
     fn next_sample(last_sample: &mut f32, mixed: Option<f32>, vol: f32) -> f32 {
@@ -264,14 +275,21 @@ impl AudioOutputCallback for MixingPlaybackCallback {
     ) -> DataCallbackResult {
         let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
 
-        if let Ok(mut bufs) = self.buffers.lock() {
-            for sample in frames.iter_mut() {
-                *sample =
-                    Self::next_sample(&mut self.last_sample, Self::mix_buffers(&mut bufs), vol);
-            }
-            bufs.retain(|_, b| !b.is_empty());
-        } else {
+        self.mixed.clear();
+        self.mixed.resize(frames.len(), 0.0);
+        let Ok(mut bufs) = self.buffers.lock() else {
             frames.fill(0.0);
+            return DataCallbackResult::Continue;
+        };
+        // Emptied buffers are left alone: `AudioMixer::remove_inactive_speakers`
+        // frees them, and dropping one here would throw away the jitter target
+        // it had learned.
+        let valid = Self::mix_buffers(&mut bufs, &mut self.mixed);
+        drop(bufs);
+
+        for (i, out) in frames.iter_mut().enumerate() {
+            let mixed = (i < valid).then(|| self.mixed[i]);
+            *out = Self::next_sample(&mut self.last_sample, mixed, vol);
         }
 
         DataCallbackResult::Continue
@@ -315,6 +333,7 @@ impl super::MixingPlayback for OboeMixingPlayback {
             buffers: self.buffers.clone(),
             volume: self.volume.clone(),
             last_sample: 0.0,
+            mixed: Vec::new(),
         };
 
         let mut stream = AudioStreamBuilder::default()

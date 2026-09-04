@@ -794,7 +794,8 @@ impl super::MixingPlayback for RodioMixingPlayback {
                         // Some devices refuse a period this short. Falling back
                         // costs 40 ms of latency but is better than no audio.
                         warn!(
-                            "rodio playback: device refused a {frames}-frame (10 ms) output buffer                              ({e}), falling back to rodio's 50 ms default"
+                            "rodio playback: device refused a {frames}-frame (10 ms) output \
+                             buffer ({e}), falling back to rodio's 50 ms default"
                         );
                         make_builder()?
                             .open_stream()

@@ -68,8 +68,12 @@ const JITTER_GROW_MS: u32 = 20;
 /// Relax the target by this much after a talkspurt that never ran dry.
 /// Smaller than [`JITTER_GROW_MS`] so recovery is slower than reaction.
 const JITTER_RELAX_MS: u32 = 10;
-/// How long a depth has to go unused before it is skipped out.
-const JITTER_SHRINK_WINDOW: Duration = Duration::from_secs(2);
+/// How much audio has to play before depth that went unused is skipped out.
+///
+/// Counted in drained samples rather than wall-clock time: the output clock
+/// is what the depth is measured against, and a `Duration` here would make
+/// the rule untestable without sleeping through it.
+const JITTER_SHRINK_WINDOW_MS: u32 = 2000;
 /// Most that one shrink may remove.
 const JITTER_SHRINK_MAX_MS: u32 = 20;
 /// Crossfade across the seam a shrink leaves behind.
@@ -97,9 +101,10 @@ pub struct SpeakerBuffer {
     live: bool,
     /// This talkspurt has run dry at least once.
     underrun: bool,
-    /// Shallowest depth seen since `window_start`.
+    /// Shallowest depth the output found on arrival this window.
     window_min: usize,
-    window_start: Instant,
+    /// Samples handed to the output since the window opened.
+    window_drained: usize,
     /// Last sample handed to the output, for the shrink crossfade.
     last_out: f32,
 }
@@ -118,7 +123,7 @@ impl SpeakerBuffer {
             live: false,
             underrun: false,
             window_min: usize::MAX,
-            window_start: Instant::now(),
+            window_drained: 0,
             last_out: 0.0,
         };
         buf.target = buf.ms_to_samples(cfg.floor_ms);
@@ -145,6 +150,15 @@ impl SpeakerBuffer {
     /// Current target depth in milliseconds. Diagnostics and tests.
     pub fn target_ms(&self) -> u32 {
         (self.target / self.per_ms.max(1)) as u32
+    }
+
+    /// Start from a target this speaker had already learned, clamped into
+    /// the configured range. Used when a buffer is rebuilt for a speaker
+    /// whose previous one was dropped between talkspurts.
+    fn set_target_ms(&mut self, ms: u32) {
+        let floor = self.ms_to_samples(self.cfg.floor_ms);
+        let ceiling = self.ms_to_samples(self.cfg.ceiling_ms.max(self.cfg.floor_ms));
+        self.target = self.ms_to_samples(ms).clamp(floor, ceiling);
     }
 
     /// Buffered sample count.
@@ -179,7 +193,7 @@ impl SpeakerBuffer {
         self.live = false;
         self.underrun = false;
         self.window_min = usize::MAX;
-        self.window_start = Instant::now();
+        self.window_drained = 0;
         self.last_out = 0.0;
     }
 
@@ -238,11 +252,16 @@ impl SpeakerBuffer {
             let ready =
                 self.samples.len() >= self.target || (!self.live && !self.samples.is_empty());
             if !ready {
-                self.observe_depth();
                 return 0;
             }
             self.playing = true;
         }
+
+        // What the output finds on arrival is the depth that matters: this
+        // is measured before the drain, not after it. Measured after, the
+        // shallowest depth in any steady stream is zero, and the shrink
+        // below would skim away the whole target every window.
+        self.window_min = self.window_min.min(self.samples.len());
 
         let n = self.samples.len().min(out.len());
         let (a, b) = self.samples.as_slices();
@@ -259,6 +278,7 @@ impl SpeakerBuffer {
             self.last_out = self.samples[n - 1];
         }
         let _ = self.samples.drain(..n);
+        self.window_drained += n;
 
         if n < out.len() {
             // Either the talkspurt finished and drained, or it ran dry with
@@ -273,27 +293,33 @@ impl SpeakerBuffer {
             self.playing = false;
         }
 
-        self.observe_depth();
+        self.shrink_if_unused();
         n
     }
 
-    /// Track the shallowest depth over the window, and skip out depth that
-    /// the window proved was never needed.
-    fn observe_depth(&mut self) {
-        self.window_min = self.window_min.min(self.samples.len());
-        if self.window_start.elapsed() < JITTER_SHRINK_WINDOW {
+    /// Skip out depth the window proved was never needed.
+    ///
+    /// `window_min` is the shallowest depth the output ever arrived to find,
+    /// so whatever it held *above the target* on even its emptiest visit is
+    /// latency nobody used. The target itself stays: it is the margin the
+    /// arrival spread is absorbed by, and skimming into it only buys an
+    /// underrun, a grown target and a hole, one window later.
+    fn shrink_if_unused(&mut self) {
+        if self.window_drained < self.ms_to_samples(JITTER_SHRINK_WINDOW_MS) {
             return;
         }
-        let unused = self.window_min;
+        let shallowest = self.window_min;
         self.window_min = usize::MAX;
-        self.window_start = Instant::now();
+        self.window_drained = 0;
 
         // Only shrink a stream that is actually playing: a buffer that spent
         // the window empty because nobody spoke has proved nothing.
-        if !self.playing || unused == 0 || unused == usize::MAX {
+        if !self.playing || shallowest == usize::MAX {
             return;
         }
-        let skip = unused.min(self.ms_to_samples(JITTER_SHRINK_MAX_MS));
+        let skip = shallowest
+            .saturating_sub(self.target)
+            .min(self.ms_to_samples(JITTER_SHRINK_MAX_MS));
         if skip == 0 {
             return;
         }
@@ -397,6 +423,15 @@ pub struct AudioMixer {
     buffers: SpeakerBuffers,
     format: AudioFormat,
     jitter: JitterConfig,
+    /// Target depth, in milliseconds, that each speaker's buffer had learned
+    /// when it was last dropped.
+    ///
+    /// [`remove_inactive_speakers`](Self::remove_inactive_speakers) runs on
+    /// every terminator from anybody, so in a two-way conversation a
+    /// speaker's buffer is dropped and rebuilt every few seconds. Without
+    /// this the adaptation restarts at the floor after every exchange and
+    /// the network never gets to teach it anything.
+    learned_targets: HashMap<u32, u32>,
 }
 
 impl std::fmt::Debug for AudioMixer {
@@ -416,6 +451,7 @@ impl AudioMixer {
             buffers,
             format,
             jitter: JitterConfig::default(),
+            learned_targets: HashMap::new(),
         }
     }
 
@@ -489,6 +525,7 @@ impl AudioMixer {
                     gap_units,
                     self.format,
                     self.jitter,
+                    self.learned_targets.get(&session).copied(),
                 )?;
             } else {
                 // Long gap: a discontinuity, not something to paper over.
@@ -540,7 +577,14 @@ impl AudioMixer {
         // For continuous decode, do NOT track prev_last_sample - we
         // want the crossfade dormant until the next discontinuity.
         speaker.prev_last_sample = None;
-        push_samples(&self.buffers, session, &frame, self.format, self.jitter);
+        push_samples(
+            &self.buffers,
+            session,
+            &frame,
+            self.format,
+            self.jitter,
+            self.learned_targets.get(&session).copied(),
+        );
         Ok(())
     }
 
@@ -549,6 +593,7 @@ impl AudioMixer {
     pub fn feed_lost(&mut self, session: u32) -> Result<u64> {
         let format = self.format;
         let jitter = self.jitter;
+        let learned = self.learned_targets.get(&session).copied();
         let speaker = self
             .speakers
             .get_mut(&session)
@@ -557,7 +602,7 @@ impl AudioMixer {
         let mut frame = speaker.decoder.decode_lost()?;
         apply_boundary_crossfade(&mut frame, &mut speaker.prev_last_sample);
         let units = frame_seq_units(&frame, format);
-        push_samples(&self.buffers, session, &frame, format, jitter);
+        push_samples(&self.buffers, session, &frame, format, jitter, learned);
         Ok(units)
     }
 
@@ -584,6 +629,7 @@ impl AudioMixer {
     /// sample buffer - there is no further stream to drain.
     pub fn remove_speaker(&mut self, session: u32) {
         drop(self.speakers.remove(&session));
+        let _ = self.learned_targets.remove(&session);
         if let Ok(mut bufs) = self.buffers.lock() {
             let _ = bufs.remove(&session);
         }
@@ -610,6 +656,9 @@ impl AudioMixer {
             .collect();
         for id in &stale {
             let _ = self.speakers.remove(id);
+            // Idle this long is not a pause in a conversation; whatever the
+            // network taught this buffer is as stale as the speaker.
+            let _ = self.learned_targets.remove(id);
         }
         if let Ok(mut bufs) = self.buffers.lock() {
             for id in &stale {
@@ -617,13 +666,25 @@ impl AudioMixer {
             }
             // Drop drained buffers of ended streams.  Non-empty buffers
             // are still being drained by the playback callback and stay.
-            bufs.retain(|id, buf| !buf.is_empty() || self.speakers.contains_key(id));
+            //
+            // Dropping the buffer must not drop what it learned: this runs on
+            // every terminator, and the speaker is usually mid-conversation.
+            let speakers = &self.speakers;
+            let learned = &mut self.learned_targets;
+            bufs.retain(|id, buf| {
+                if !buf.is_empty() || speakers.contains_key(id) {
+                    return true;
+                }
+                let _ = learned.insert(*id, buf.target_ms());
+                false
+            });
         }
     }
 
     /// Reset all state (all speakers removed).
     pub fn reset(&mut self) {
         self.speakers.clear();
+        self.learned_targets.clear();
         if let Ok(mut bufs) = self.buffers.lock() {
             bufs.clear();
         }
@@ -678,6 +739,7 @@ fn conceal_gap(
     units: u64,
     format: AudioFormat,
     jitter: JitterConfig,
+    learned: Option<u32>,
 ) -> Result<()> {
     let Some(speaker) = speakers.get_mut(&session) else {
         return Ok(());
@@ -687,7 +749,7 @@ fn conceal_gap(
         let mut frame = speaker.decoder.decode_lost()?;
         apply_boundary_crossfade(&mut frame, &mut speaker.prev_last_sample);
         let produced = frame_seq_units(&frame, format);
-        push_samples(buffers, session, &frame, format, jitter);
+        push_samples(buffers, session, &frame, format, jitter, learned);
         covered += produced;
         // A decoder that returns nothing measurable would spin here.
         if produced == 0 {
@@ -726,14 +788,21 @@ fn push_samples(
     frame: &crate::audio::sample::AudioFrame,
     format: AudioFormat,
     jitter: JitterConfig,
+    learned: Option<u32>,
 ) {
     let samples = frame.as_f32_samples();
     notify_decoded(session, samples);
     if let Ok(mut bufs) = buffers.lock() {
         let before = bufs.get(&session).map_or(0, SpeakerBuffer::len);
-        let buf = bufs
-            .entry(session)
-            .or_insert_with(|| SpeakerBuffer::new(format, jitter));
+        let buf = bufs.entry(session).or_insert_with(|| {
+            let mut buf = SpeakerBuffer::new(format, jitter);
+            // A speaker who was talking a moment ago resumes at the depth the
+            // network last taught them, not back at the floor.
+            if let Some(ms) = learned {
+                buf.set_target_ms(ms);
+            }
+            buf
+        });
         buf.push(samples);
         // The cap is last-resort overflow behaviour for decoded audio
         // arriving faster than playback drains it (e.g. Android backgrounded);
@@ -901,6 +970,7 @@ mod tests {
             &frame,
             AudioFormat::MONO_48KHZ_F32,
             JitterConfig::default(),
+            None,
         );
         push_samples(
             &bufs,
@@ -908,6 +978,7 @@ mod tests {
             &silence,
             AudioFormat::MONO_48KHZ_F32,
             JitterConfig::default(),
+            None,
         );
 
         let (len, silent) = ours(&rx, SESSION).expect("the decoded frame was not observed");
@@ -1084,6 +1155,47 @@ mod tests {
                 "session {session} was not retuned"
             );
         }
+    }
+
+    #[test]
+    fn a_steady_stream_is_not_skimmed_into_its_target() {
+        // One frame out, one frame in: the output always arrives to find
+        // exactly the 40 ms target. Measuring the depth *after* the drain
+        // instead made that minimum zero, so the shrink skimmed the whole
+        // target away every window and the next late packet was an underrun.
+        let mut buf = jitter_buffer(JitterConfig::default());
+        let mut out = vec![0.0; 960];
+        buf.push(&vec![0.5; 1920]);
+
+        // Five seconds of audio, well past the two-second shrink window.
+        for _ in 0..250 {
+            assert_eq!(buf.drain_into(&mut out, 1.0), 960, "must never run dry");
+            buf.push(&vec![0.5; 960]);
+        }
+
+        assert_eq!(buf.target_ms(), 40, "a stream that never ran dry stays put");
+        assert_eq!(buf.len(), 1920, "and keeps the target depth it plays on");
+    }
+
+    #[test]
+    fn depth_the_output_never_needed_is_skimmed_off() {
+        // Same stream, running 20 ms deeper than the target: the output finds
+        // that 20 ms untouched every time it comes, so it is pure latency.
+        let mut buf = jitter_buffer(JitterConfig::default());
+        let mut out = vec![0.0; 960];
+        buf.push(&vec![0.5; 2880]);
+
+        for _ in 0..250 {
+            assert_eq!(buf.drain_into(&mut out, 1.0), 960, "must never run dry");
+            buf.push(&vec![0.5; 960]);
+        }
+
+        assert_eq!(buf.target_ms(), 40, "skimming is not an underrun");
+        assert_eq!(
+            buf.len(),
+            1920,
+            "the unused 20 ms goes, the 40 ms target stays"
+        );
     }
 
     #[test]
@@ -1300,6 +1412,68 @@ mod tests {
         mixer.reset();
         assert_eq!(mixer.speakers.len(), 0);
         assert!(bufs.lock().unwrap().is_empty());
+    }
+
+    #[cfg(feature = "opus-codec")]
+    #[test]
+    fn a_speaker_resumes_at_the_target_it_had_learned() {
+        // `remove_inactive_speakers` runs on every terminator from anybody, so
+        // in a conversation a speaker's buffer is dropped and rebuilt every few
+        // seconds. It used to take the learned target with it, and the
+        // adaptation started again from the floor after every exchange.
+        let bufs = make_buffers();
+        let mut mixer = AudioMixer::new(bufs.clone(), AudioFormat::MONO_48KHZ_F32);
+
+        use crate::audio::encoder::{AudioEncoder, OpusEncoder, OpusEncoderConfig};
+        let config = OpusEncoderConfig::default();
+        let frame_size = config.frame_size;
+        let mut enc = OpusEncoder::new(config, AudioFormat::MONO_48KHZ_F32).unwrap();
+        let silent = crate::audio::sample::AudioFrame {
+            data: vec![0u8; frame_size * 4],
+            format: AudioFormat::MONO_48KHZ_F32,
+            sequence: 0,
+            is_silent: false,
+        };
+        let packet = enc.encode(&silent).unwrap();
+
+        // Two 20 ms packets: enough to meet the 40 ms target and start.
+        let next = EncodedPacket {
+            data: packet.data.clone(),
+            sequence: 2,
+            frame_samples: packet.frame_samples,
+        };
+
+        // A talkspurt that runs dry: the target grows to 60 ms.
+        mixer.feed(3, &packet).unwrap();
+        mixer.feed(3, &next).unwrap();
+        {
+            let mut locked = bufs.lock().unwrap();
+            let buf = locked.get_mut(&3).expect("the speaker has a buffer");
+            let mut out = vec![0.0; 960];
+            while buf.drain_into(&mut out, 1.0) > 0 {}
+            assert_eq!(buf.target_ms(), 60, "running dry grows the target");
+            assert!(buf.is_empty(), "and the buffer is drained");
+        }
+
+        // The terminator, then the free pass it triggers.
+        mixer.reset_speaker(3);
+        mixer.remove_inactive_speakers();
+        assert!(
+            !bufs.lock().unwrap().contains_key(&3),
+            "a drained buffer with no decoder is freed"
+        );
+
+        // The same speaker starts talking again.
+        mixer.feed(3, &packet).unwrap();
+        assert_eq!(
+            bufs.lock().unwrap()[&3].target_ms(),
+            60,
+            "the rebuilt buffer must resume at the learned target, not the floor"
+        );
+
+        // A speaker who leaves takes their learned target with them.
+        mixer.remove_speaker(3);
+        assert!(!mixer.learned_targets.contains_key(&3));
     }
 
     #[cfg(feature = "opus-codec")]
@@ -1664,6 +1838,7 @@ mod tests {
             &frame,
             AudioFormat::MONO_48KHZ_F32,
             JitterConfig::default(),
+            None,
         );
 
         let locked = bufs.lock().unwrap();
@@ -1787,6 +1962,7 @@ mod tests {
             &frame,
             AudioFormat::MONO_48KHZ_F32,
             JitterConfig::default(),
+            None,
         );
         let before = bufs.lock().unwrap()[&1].len();
 
