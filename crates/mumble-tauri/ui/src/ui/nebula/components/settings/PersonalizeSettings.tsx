@@ -79,11 +79,16 @@ const SERVER_SWITCHERS = [
 /**
  * The two layouts Nebula's channel column actually draws.
  *
- * Standard offers a third, "classic", which is its tree with no occupants
- * under it at all - a shape Nebula's rows are not built for. Offering it here
- * would be offering a choice this design cannot honour, so the picker stops at
- * what it can do, and `nebulaChannelViewer` reads a record Standard left
- * behind as the nearer of these two.
+ * Standard offers a third, "classic": its traditional Mumble tree, whose own
+ * shape is the collapsing folder: chevrons that fold a branch away, and the
+ * current channel held at the top. Nebula's column does not collapse, so
+ * offering the choice here would be offering one this design cannot honour and
+ * the picker stops at what it can do.
+ *
+ * That leaves a profile that chose classic in Standard holding a record Nebula
+ * reads as "flat". The picker used to simply show "Flat" selected, which told
+ * the user they had chosen something they had not; it now says whose choice it
+ * is showing. See `useChannelViewer`.
  */
 const CHANNEL_VIEWERS = [
   { id: "flat", labelKey: "settings:personalize.channelViewerFlat" },
@@ -766,7 +771,22 @@ export function PersonalizeSettings() {
         onChange={(id) => set({ serverSwitcher: id })}
       />
 
-      <GroupTitle>{t("nebulaSettings:personalize.channelViewer")}</GroupTitle>
+      <GroupTitle
+        hint={
+          // Named, not merely "something else": the hint says which style is
+          // stored, so it may only be shown for the one style it can name.
+          // Every other record is either drawn as chosen or is junk this pack
+          // should not narrate.
+          data.channelViewerStyle === "classic"
+            ? t("nebulaSettings:personalize.channelViewerSubstituted", {
+                stored: t("settings:personalize.channelViewerClassic"),
+                shown: t("settings:personalize.channelViewerFlat"),
+              })
+            : undefined
+        }
+      >
+        {t("nebulaSettings:personalize.channelViewer")}
+      </GroupTitle>
       <SegmentedGroup
         ariaLabel={t("nebulaSettings:personalize.channelViewer")}
         options={CHANNEL_VIEWERS.map((option) => ({ id: option.id, label: t(option.labelKey) }))}

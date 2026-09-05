@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { withNebulaTheme } from "@nebula/testTheme";
 
 /** Every store write the page makes, newest last. */
@@ -459,3 +459,34 @@ describe("failure honesty", () => {
     expect(writes.length).toBe(0);
   });
 });
+
+describe("a channel viewer this pack does not draw", () => {
+  it("says whose choice it is showing when Standard left \"classic\" behind", async () => {
+    await savePersonalization({ ...PERSONALIZATION_DEFAULTS, channelViewerStyle: "classic" });
+    await renderPage();
+    // Not "Flat, as you chose" - the user chose Classic, and the page has to
+    // own the substitution rather than present it as their own selection.
+    expect(await screen.findByText(/Standard's "Classic" saved/i)).toBeTruthy();
+    expect(screen.getByText(/no collapsing folders/i)).toBeTruthy();
+  });
+
+  it("still selects the style it actually draws", async () => {
+    await savePersonalization({ ...PERSONALIZATION_DEFAULTS, channelViewerStyle: "classic" });
+    await renderPage();
+    // Scoped to this group: "Flat" is a label other pickers on the page use too.
+    const group = screen.getByRole("radiogroup", { name: "Channel viewer" });
+    const flat = within(group).getByRole("radio", { name: "Flat" });
+    expect(flat.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("explains nothing when the stored style is one it draws", async () => {
+    for (const style of ["flat", "modern"] as const) {
+      await savePersonalization({ ...PERSONALIZATION_DEFAULTS, channelViewerStyle: style });
+      const { unmount } = render(withNebulaTheme(<PersonalizeSettings />));
+      await screen.findByText(/Chat background/i);
+      expect(screen.queryByText(/Standard's "Classic" saved/i)).toBeNull();
+      unmount();
+    }
+  });
+});
+

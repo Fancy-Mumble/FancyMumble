@@ -8,9 +8,17 @@ export type UserMode = "normal" | "expert" | "developer";
 
 /** Selects which React UI design pack loads. `nebula` is the pack a new
  * profile starts in; `standard` is the older UI and still has the broadest
- * feature coverage; `aurora` is a design beta. All three ship side by side.
+ * feature coverage.
+ *
+ * `aurora` is **deprecated** and is to be deleted before the next release.
+ * The value stays in the union until then so a profile that already holds it
+ * still loads rather than falling over, and so the picker can offer it as the
+ * thing to move off. Do not build against it, and do not add a fourth pack by
+ * copying it.
+ *
  * Color themes remain a separate preference and are expected to work with
- * every UI design. */
+ * every UI design - the `aurora` *theme* is unrelated to the pack of the same
+ * name and is not going anywhere. */
 export type UiDesignId = "standard" | "aurora" | "nebula";
 
 /** Preferred time display format. */
@@ -81,6 +89,15 @@ export interface UserPreferences {
    * server is connected, so it could not name a tile that survives a restart.
    */
   serverRailOrder?: string[];
+  /**
+   * The order of the identity rows on the connect screen, by saved-server id.
+   *
+   * One flat list for every server rather than one per address: the rows are
+   * only ever ranked against their own group, so a single record is enough and
+   * there is no per-server bookkeeping to keep in step as servers come and go.
+   * Ids the user has never dragged are absent, and sort behind those that are.
+   */
+  serverIdentityOrder?: string[];
   /**
    * Where the list of servers lives: the rail down the left, the title bar, or
    * both at once.

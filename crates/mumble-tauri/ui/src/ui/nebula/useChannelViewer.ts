@@ -7,10 +7,16 @@
  *
  * Nebula answers two of the three values. "Flat" lists occupants by name under
  * their channel; "modern" stacks their faces on the channel row itself, which
- * is the compact reading of a long server. Standard's third value, "classic",
- * describes a tree with no occupants drawn at all - a layout Nebula's rows are
- * not built for, and one its own picker does not offer - so a record left
- * behind by Standard reads as "flat" rather than as a blank list.
+ * is the compact reading of a long server.
+ *
+ * Standard's third value, "classic", is its traditional Mumble tree: folders
+ * that expand and collapse behind a chevron, the current channel held at the
+ * top, and stacked avatars on each entry. The avatars are the part Nebula
+ * already draws - that is "modern" - so what actually separates classic is the
+ * collapsing, which Nebula's column has none of: every channel it is allowed
+ * to see is on screen. A stored "classic" therefore reads as "flat" here, and
+ * `PersonalizeSettings` says so rather than letting the picker present it as
+ * the user's own choice.
  */
 import { useEffect, useState } from "react";
 import {
