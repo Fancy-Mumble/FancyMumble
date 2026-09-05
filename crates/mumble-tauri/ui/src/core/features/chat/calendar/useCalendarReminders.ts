@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import i18n from "../../../i18n";
 import { useAppStore } from "../../../store";
 import { PLUGIN_NAME_CALENDAR } from "../../../constants/pluginData";
 import { loadCalendarFromStore, publishCalendar, useCalendarStore } from "./calendarStore";
@@ -48,9 +49,18 @@ export function useCalendarReminders(): void {
           if (remindAt <= now && occ.start > now && !fired.has(key)) {
             fired.add(key);
             globalThis.dispatchEvent(new CustomEvent("fancy:calendar-reminder"));
+            // The reminder is an OS notification, drawn by the desktop rather
+            // than by a component, so its two strings are asked of the
+            // catalogue directly instead of through `useTranslation`.
+            const time = shortTime(occ.start);
             showDesktopNotification(
-              event.title || "Meeting",
-              `Starts at ${shortTime(occ.start)}${event.location ? ` · ${event.location}` : ""}`,
+              event.title || i18n.t("chat:calendar.reminderNotification.untitledEvent"),
+              event.location
+                ? i18n.t("chat:calendar.reminderNotification.bodyWithLocation", {
+                    time,
+                    location: event.location,
+                  })
+                : i18n.t("chat:calendar.reminderNotification.body", { time }),
             );
           }
         }

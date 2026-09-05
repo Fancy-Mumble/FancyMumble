@@ -165,10 +165,17 @@ mod tests {
 
     #[test]
     fn exe_stem_drops_the_directory_and_extension() {
+        // `Path` splits on the host's separator, and the paths this reads came
+        // from the host in the first place - so the directory here has to be
+        // one the host recognises. Asserting a Windows path on Linux asserts
+        // that `Path` is broken, which is why this failed everywhere it ran.
+        #[cfg(windows)]
         assert_eq!(
             exe_stem("c:\\games\\elden ring\\eldenring.exe"),
             "eldenring"
         );
+        #[cfg(not(windows))]
+        assert_eq!(exe_stem("/games/elden ring/eldenring.exe"), "eldenring");
         assert_eq!(exe_stem("eldenring.exe"), "eldenring");
     }
 
