@@ -1,3 +1,12 @@
+/**
+ * @deprecated Aurora is on its way out and is to be deleted before the next
+ * release. Standard and Nebula are the two packs that ship after that.
+ *
+ * Nothing here is worth extending. It never adopted i18n - 131 components and
+ * not one `t()` call - so choosing Aurora silently turns the client
+ * English-only whatever the language setting says, which is reason enough on
+ * its own not to send anyone here. Fixes belong in `standard` or `nebula`.
+ */
 import { lazy, Suspense, useState, type ReactNode } from "react";
 import AuroraClientApp from "./AuroraClientApp";
 import { DesignSheet } from "./components/designsheet/DesignSheet";

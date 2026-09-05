@@ -18,6 +18,9 @@ export interface UiPackModule {
  * application or another pack. */
 export const UI_PACK_LOADERS: Record<UiDesignId, () => Promise<UiPackModule>> = {
   standard: () => import("@standard/index"),
+  // Deprecated, and the only import of the pack outside itself: deleting
+  // Aurora is this line, the `UiDesignId` member, the picker's option and the
+  // directory. See `ui/README.md`.
   aurora: () => import("@aurora/index"),
   nebula: () => import("@nebula/index"),
 };

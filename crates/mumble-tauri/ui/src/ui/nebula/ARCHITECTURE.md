@@ -399,6 +399,8 @@ it does _not_ render. Kept current - if you add a screen, move its line.
 
 - The auxiliary windows - updater, chat/DM/stream popouts, drawing overlay -
   render correctly when opened, though nothing in Nebula's chrome opens them.
+- A Live Doc is Standard's panel. `LiveDocDock` decides where it sits above the
+  conversation and what its handle drags; the document itself is not redrawn.
 
 Settings and administration used to be here. They are not any more: every page
 is drawn in Nebula, and the "All settings…" and "Server admin…" escape hatches
@@ -452,14 +454,16 @@ and a second one would be a second set of numbers to keep honest.
 ### Absent
 
 Kept honest by reading the code, not by memory: entries here have been false
-before, because a feature landed and its line was never struck.
+before, because a feature landed and its line was never struck. Last read
+against the code on 2026-09-05; every line below was checked against it that
+day, and the ones that had gone stale were struck.
 
 **Composing**
 
-- No custom server emotes beyond what the body already carries.
-- No scheduled messages, calendar/meeting composer, or LiveDoc. Note that the
-  runtime already runs `useCalendarReminders`, so calendar reminders fire with
-  no calendar to open them in.
+- No scheduled messages, and no calendar or meeting composer. Note that the
+  runtime already runs `useCalendarReminders` and `requestJoinMeeting`, so a
+  reminder fires and a meeting invite arrives with no calendar to open either
+  in.
 
 **Reading**
 
@@ -471,9 +475,15 @@ before, because a feature landed and its line was never struck.
 
 - No drag-and-drop: channels cannot be reordered by dragging and users cannot
   be dragged between channels. Reordering is the channel editor's `position`
-  field, and moving a user is on their menu.
+  field, and moving a user is on their menu. `dragOrder.ts` is the server
+  rail's own, and reorders servers only.
 - No blocking, ignoring or user notes. Existing relations are still honoured
-  when filtering messages; they just cannot be edited here.
+  when filtering messages; they just cannot be edited here. Nor in Standard:
+  the only editor is Aurora's, and Aurora is being deleted, so this stops being
+  a gap in Nebula and becomes a feature the client no longer has.
+- Two of Standard's three channel viewer styles. A stored "classic" reads as
+  "flat"; `useChannelViewer.ts` says why, and the Personalize page says so on
+  screen rather than presenting "flat" as the user's own choice.
 
 **Screen sharing**
 
@@ -484,10 +494,7 @@ before, because a feature landed and its line was never struck.
 
 **Elsewhere**
 
-- No watch-together host controls. An active session's card renders; starting
-  one does not.
-- No first-run onboarding wizard, shared-files panel, rich-presence panel,
-  saved-server editor or channel recording.
+- No channel recording.
 - No mobile layout. Nebula assumes a desktop window.
 
 
