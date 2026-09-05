@@ -44,10 +44,14 @@ pub(crate) fn set_window_aspect_ratio(
 /// reads the length it was promised, so a wrong one is a crash and not a
 /// wrong picture.
 ///
-/// Windows and Linux take the icon.  macOS draws its from the app bundle
-/// and ignores this, and mobile has no window icon at all; both answer
-/// `Ok`, because a themed icon is decoration and there is nothing a caller
-/// could do about a platform that has no such concept.
+/// Windows takes the window icon.  Linux is given it too, but a GNOME
+/// session shows the icon its `.desktop` entry names and never the
+/// window's, so on Linux the pixels also go into the user's icon theme -
+/// see [`crate::platform::install_themed_icon`], which is best-effort and
+/// only ever logs.  macOS draws its icon from the app bundle and ignores
+/// this, and mobile has no window icon at all; both answer `Ok`, because a
+/// themed icon is decoration and there is nothing a caller could do about a
+/// platform that has no such concept.
 #[tauri::command]
 pub(crate) fn set_window_icon(
     window: tauri::WebviewWindow,
@@ -67,6 +71,7 @@ pub(crate) fn set_window_icon(
             rgba.len()
         ));
     }
+    crate::platform::install_themed_icon(&rgba, width, height);
     window
         .set_icon(tauri::image::Image::new_owned(rgba, width, height))
         .map_err(|e| e.to_string())

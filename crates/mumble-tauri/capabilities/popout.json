@@ -1,12 +1,13 @@
 {
   "identifier": "popout",
-  "description": "Permissions for image popout windows (frameless, always-on-top, single image viewer).",
+  "description": "Permissions for image popout windows (frameless, always-on-top, single image viewer). `store:default` is required because every window boots through UiRoot, which reads the chosen UI pack out of preferences - without it the design never resolves and the window renders nothing at all.",
   "windows": ["popout-*"],
   "permissions": [
     "core:default",
     "core:window:allow-close",
     "core:window:allow-start-dragging",
     "core:window:allow-set-always-on-top",
-    "core:window:allow-set-size"
+    "core:window:allow-set-size",
+    "store:default"
   ]
 }

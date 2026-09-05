@@ -48,23 +48,14 @@ pub(crate) fn create_base_builder() -> tauri::Builder<tauri::Wry> {
             .build(),
     );
 
+    // The plugin only writes its cache on a clean exit; `window_state` also
+    // persists it as the geometry changes, so a `tauri dev` restart or a crash
+    // doesn't resurrect the geometry from the last graceful shutdown.
     #[cfg(not(target_os = "android"))]
     let builder = builder.plugin(
         tauri_plugin_window_state::Builder::new()
-            // Restore size/position/maximised state, but NEVER restore
-            // visibility. The updater module decides whether the main
-            // window should appear on launch.
-            .with_state_flags(
-                tauri_plugin_window_state::StateFlags::all()
-                    & !tauri_plugin_window_state::StateFlags::VISIBLE,
-            )
-            // Don't track the updater window - it has a fixed size set
-            // in window.rs that must not be overridden by stale state.
-            .with_denylist(&[
-                crate::updater::UPDATER_WINDOW_LABEL,
-                crate::commands::draw_overlay::DRAW_OVERLAY_LABEL,
-                crate::commands::game_overlay::GAME_OVERLAY_LABEL,
-            ])
+            .with_state_flags(crate::app::window_state::state_flags())
+            .with_denylist(&crate::app::window_state::DENYLIST)
             .build(),
     );
 

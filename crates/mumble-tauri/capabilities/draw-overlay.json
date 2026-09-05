@@ -1,11 +1,12 @@
 {
   "identifier": "draw-overlay",
-  "description": "Permissions for the desktop drawing overlay window (transparent, click-through, capture-excluded canvas).",
+  "description": "Permissions for the desktop drawing overlay window (transparent, click-through, capture-excluded canvas). `store:default` is required because every window boots through UiRoot, which reads the chosen UI pack out of preferences - without it the design never resolves and the window renders nothing at all.",
   "windows": ["draw-overlay"],
   "permissions": [
     "core:default",
     "core:window:allow-close",
     "core:event:allow-listen",
-    "core:event:allow-unlisten"
+    "core:event:allow-unlisten",
+    "store:default"
   ]
 }

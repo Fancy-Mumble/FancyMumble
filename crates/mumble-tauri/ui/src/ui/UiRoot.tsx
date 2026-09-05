@@ -10,9 +10,18 @@ export default function UiRoot() {
   useEffect(() => {
     if (override) return;
     let active = true;
-    void getSelectedUiDesign().then((selected) => {
-      if (active) setDesign(selected);
-    });
+    void getSelectedUiDesign()
+      .catch((e) => {
+        // A window that cannot read preferences still has to render. The read
+        // goes through the store plugin, which is per-window ACL'd, so a window
+        // whose capability forgets `store:default` used to sit here forever and
+        // paint an empty page - a blank overlay with no error anywhere.
+        console.warn("UiRoot: preferences unreadable, falling back to the default design", e);
+        return resolveUiDesign(globalThis.location.search);
+      })
+      .then((selected) => {
+        if (active) setDesign(selected);
+      });
     return () => {
       active = false;
     };
