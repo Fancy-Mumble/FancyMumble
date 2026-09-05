@@ -148,7 +148,8 @@ export function SegmentedGroup<T extends string>({
   onChange,
   ariaLabel,
 }: Readonly<{
-  options: readonly { id: T; label: string }[];
+  /** `testId` is optional: only the halves an e2e suite navigates carry one. */
+  options: readonly { id: T; label: string; testId?: string }[];
   value: T;
   onChange: (id: T) => void;
   ariaLabel: string;
@@ -174,6 +175,7 @@ export function SegmentedGroup<T extends string>({
             key={option.id}
             component="button"
             role="radio"
+            data-testid={option.testId}
             aria-checked={active}
             onClick={() => onChange(option.id)}
             sx={(theme) => ({

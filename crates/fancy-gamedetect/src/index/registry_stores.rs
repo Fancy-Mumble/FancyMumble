@@ -8,13 +8,21 @@
 //! vendor-owned path; nothing is written, and a missing or unreadable key
 //! simply contributes nothing.
 
-use super::{normalise_dir, InstalledGame, Store};
+use super::InstalledGame;
+// The registry is a Windows notion, so everything that reads one is gated -
+// but the table below is still worth checking on the machine the tests run
+// on, which is why it and its `Store` come in for a test build too.
+#[cfg(windows)]
+use super::normalise_dir;
+#[cfg(any(windows, test))]
+use super::Store;
 
 /// Registry locations that hold one subkey per installed game.
 ///
 /// `(store, root path, value holding the directory, value holding the name)`.
 /// The 32-bit view (`WOW6432Node`) is where all four of these write on a
 /// 64-bit Windows, because their launchers are 32-bit.
+#[cfg(any(windows, test))]
 const GAME_KEYS: &[(Store, &str, &str, &str)] = &[
     (
         Store::Gog,

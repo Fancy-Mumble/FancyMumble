@@ -241,9 +241,21 @@ export function AuditAdmin() {
               value={page}
               onChange={setPage}
               options={[
-                { id: "dashboard", label: t("audit.pageDashboard", { defaultValue: "Dashboard" }) },
-                { id: "results", label: t("audit.pageResults", { defaultValue: "Results" }) },
-                { id: "config", label: t("audit.halfConfig", { defaultValue: "Configuration" }) },
+                {
+                  id: "dashboard",
+                  label: t("audit.pageDashboard", { defaultValue: "Dashboard" }),
+                  testId: TID.auditDashboardTab,
+                },
+                {
+                  id: "results",
+                  label: t("audit.pageResults", { defaultValue: "Results" }),
+                  testId: TID.auditResultsTab,
+                },
+                {
+                  id: "config",
+                  label: t("audit.halfConfig", { defaultValue: "Configuration" }),
+                  testId: TID.auditConfigHalf,
+                },
               ]}
             />
           </Box>

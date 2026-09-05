@@ -158,19 +158,6 @@ oboe = "0.6.1"
 # Native WASAPI capture with exclusive-mode support (the "take the device"
 # path used by the exclusive-input setting), shared with the Qt client.
 fancy-audio-device = { path = "../fancy-audio-device" }
-# DeepFilterNet3 on Windows, on top of the features the desktop block above
-# already asks for - cargo unions the two, so this adds the backend rather
-# than replacing the set.
-#
-# Windows only, deliberately. It costs ~5 MiB of embedded ONNX model plus the
-# `tract` runtime in the binary, and this is the platform where the shipped
-# builds have the headroom for it. `NoiseSuppressionAlgorithm::is_available`
-# already reports per-build availability and the UI dropdown is populated from
-# it, so a platform without the feature offers RNNoise and never shows a
-# choice it cannot honour.
-mumble-protocol = { path = "../mumble-protocol", features = [
-    "deepfilternet-denoiser",
-] }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Dwm",
@@ -185,6 +172,22 @@ windows-sys = { version = "0.61", features = [
 # tauri/wry pull in so the COM interface types are identical.
 webview2-com = "0.38"
 windows-core = "0.61"
+
+# DeepFilterNet3, on top of the features the desktop block above already asks
+# for - cargo unions the matching target tables, so this adds the backend
+# rather than replacing the set.
+#
+# The desktops only, and deliberately: it costs ~5 MiB of embedded ONNX model
+# plus the `tract` runtime in the binary, which Android has no headroom for.
+# `NoiseSuppressionAlgorithm::is_available` reports per-build availability and
+# the UI dropdown is populated from it, so a build without the feature offers
+# RNNoise and never shows a choice it cannot honour - which is exactly what a
+# Linux build did until now, and what `denoiser-deepfilternet.multiclient` in
+# the e2e suite was failing on.
+[target.'cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))'.dependencies]
+mumble-protocol = { path = "../mumble-protocol", features = [
+    "deepfilternet-denoiser",
+] }
 
 # macOS-only: NSWindow.setContentAspectRatio: for native aspect-ratio
 # constraints (see crates/mumble-tauri/src/platform/window/macos.rs).
