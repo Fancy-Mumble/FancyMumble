@@ -1026,6 +1026,7 @@ export function useScreenShare(): ScreenShareHook {
           serverId: activeServerId,
           maxDimension: settings.maxDimension,
           maxFps: settings.maxFps,
+          shareAudio: settings.shareAudio === true,
           reusePortalSource: opts?.reuseDisplay === true,
         });
       } catch (e) {
@@ -1060,7 +1061,8 @@ export function useScreenShare(): ScreenShareHook {
       if (!broadcasterSources) return;
       if (
         settings.maxDimension === broadcasterSettings.maxDimension &&
-        settings.maxFps === broadcasterSettings.maxFps
+        settings.maxFps === broadcasterSettings.maxFps &&
+        settings.shareAudio === broadcasterSettings.shareAudio
       ) {
         return;
       }

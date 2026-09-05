@@ -147,11 +147,20 @@ export function StreamConfigItems({
 
       <div className={styles.separator} role="separator" />
 
-      <div className={`${styles.item} ${styles.itemDisabled}`} aria-disabled="true">
+      <button
+        type="button"
+        className={styles.item}
+        role="menuitemcheckbox"
+        aria-checked={settings.shareAudio === true}
+        onClick={() => onSetSettings({ ...settings, shareAudio: !settings.shareAudio })}
+        data-testid={TID.streamShareAudioToggle}
+      >
         <VolumeIcon width={15} height={15} />
         <span>{t("screenShare.config.shareAudio")}</span>
-        <span className={styles.itemValue}>{t("screenShare.config.comingSoon")}</span>
-      </div>
+        <span className={styles.check}>
+          {settings.shareAudio === true && <CheckIcon width={14} height={14} />}
+        </span>
+      </button>
     </div>
   );
 }

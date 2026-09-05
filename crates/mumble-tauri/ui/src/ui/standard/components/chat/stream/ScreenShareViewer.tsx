@@ -126,6 +126,10 @@ interface StreamControlsProps {
   readonly containerRef: React.RefObject<HTMLDivElement | null>;
   /** Whether this is the own preview (volume/pause disabled). */
   readonly isOwnPreview?: boolean;
+  /** Broadcaster session whose shared desktop audio the volume control
+   *  drives. Only the native family needs it: there the audio is decoded and
+   *  mixed in Rust, with no `<video>` element to set `.volume` on. */
+  readonly audioSession?: number;
   /** When provided, render the "draw on screen" toggle button. The button
    *  toggles `drawingActiveChannels` for this channel in the global store,
    *  which controls the colour/width/clear toolbar in `DrawingOverlay`. */
@@ -199,6 +203,7 @@ function StreamControls({
   videoRef,
   containerRef,
   isOwnPreview,
+  audioSession,
   drawChannelId,
   desktopOverlayOn,
   onToggleDesktopOverlay,
@@ -235,18 +240,42 @@ function StreamControls({
     }
   }, [videoRef]);
 
+  /** Volume of the native family's stream audio, which the voice mixer
+   *  plays out; `pct` is the slider's 0-100. */
+  const applyNativeVolume = useCallback(
+    (pct: number) => {
+      if (audioSession === undefined) return;
+      void invoke("set_native_stream_audio_volume", {
+        session: audioSession,
+        volume: pct / 100,
+      }).catch(() => {});
+    },
+    [audioSession],
+  );
+
   const toggleMute = useCallback(() => {
     const video = videoRef.current;
-    if (!(video instanceof HTMLVideoElement)) return;
-    video.muted = !video.muted;
-    setMuted(video.muted);
-  }, [videoRef]);
+    if (video instanceof HTMLVideoElement) {
+      video.muted = !video.muted;
+      setMuted(video.muted);
+      return;
+    }
+    setMuted((wasMuted) => {
+      applyNativeVolume(wasMuted ? volume : 0);
+      return !wasMuted;
+    });
+  }, [videoRef, applyNativeVolume, volume]);
 
   const handleVolumeChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const video = videoRef.current;
-      if (!(video instanceof HTMLVideoElement)) return;
       const val = Number(e.target.value);
+      const video = videoRef.current;
+      if (!(video instanceof HTMLVideoElement)) {
+        setVolume(val);
+        applyNativeVolume(val);
+        setMuted(val === 0);
+        return;
+      }
       setVolume(val);
       video.volume = val / 100;
       if (val === 0) {
@@ -257,7 +286,7 @@ function StreamControls({
         setMuted(false);
       }
     },
-    [videoRef],
+    [videoRef, applyNativeVolume],
   );
 
   const toggleFullscreen = useCallback(() => {
@@ -605,7 +634,7 @@ function OwnBroadcastPreview({
       {statsOn && (
         <StreamStatsPanel
           sampler={statsSampler}
-          videoRef={nativeSurface ? undefined : videoRef}
+          videoRef={nativeSurface ? displayCanvasRef : videoRef}
           contentByMid={getTrackContentMap(ownSession)}
           onClose={() => setStatsOn(false)}
         />
@@ -718,6 +747,7 @@ function RemoteViewer({
         <StreamControls
           videoRef={mediaRef}
           containerRef={containerRef}
+          audioSession={session}
           drawChannelId={channelId}
           // The popout window still builds a webview viewer PC; give it a
           // native path before offering the button under this strategy.
@@ -732,7 +762,7 @@ function RemoteViewer({
       {statsOn && (
         <StreamStatsPanel
           sampler={statsSampler}
-          videoRef={nativeSurface ? undefined : videoRef}
+          videoRef={nativeSurface ? displayCanvasRef : videoRef}
           contentByMid={getTrackContentMap(session)}
           onClose={() => setStatsOn(false)}
         />

@@ -261,6 +261,7 @@ mod voice_pipeline {
             };
             let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
             crate::e2e_stats::register_speaker_buffers(&speaker_buffers);
+            crate::audio::stream_audio::register(&speaker_buffers, &speaker_volumes);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
                 output_vol.clone(),
@@ -443,6 +444,7 @@ mod voice_pipeline {
             };
             let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
             crate::e2e_stats::register_speaker_buffers(&speaker_buffers);
+            crate::audio::stream_audio::register(&speaker_buffers, &speaker_volumes);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
                 output_vol.clone(),
@@ -576,6 +578,7 @@ mod voice_pipeline {
             };
             let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
             crate::e2e_stats::register_speaker_buffers(&speaker_buffers);
+            crate::audio::stream_audio::register(&speaker_buffers, &speaker_volumes);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
                 output_vol.clone(),

@@ -121,6 +121,11 @@ struct NativeViewerSink {
     server_id: Option<String>,
     /// The broadcaster being watched; offers are targeted at this session.
     session: u32,
+    /// Whether this view is the broadcaster's own loopback preview. Its
+    /// audio must NOT be played out: the capture is the machine's own
+    /// speaker output, so playing it back would feed it into the next
+    /// capture and build a howl-round on the sharer's machine.
+    own_preview: bool,
     /// Payload kind this view streams (drives the header's format flag).
     mode: DeliveryMode,
     on_frame: Channel<InvokeResponseBody>,
@@ -314,6 +319,13 @@ impl ViewerSink for NativeViewerSink {
         self.append_record(record, frame.keyframe, false);
     }
 
+    fn on_audio(&self, _mid: &str, pcm: &[f32]) {
+        if self.own_preview {
+            return; // see `own_preview`: playing our own capture back loops it
+        }
+        crate::audio::stream_audio::push(self.session, pcm);
+    }
+
     fn on_state(&self, state: ViewerState) {
         let (name, message) = match state {
             ViewerState::Connecting => ("connecting", None),
@@ -394,10 +406,12 @@ pub(crate) async fn start_native_stream_view(
     on_frame: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
     let mode = mode.unwrap_or(DeliveryMode::Jpeg);
+    let own_preview = app.state::<AppState>().get_own_session() == Some(session);
     let sink = std::sync::Arc::new(NativeViewerSink {
         app,
         server_id,
         session,
+        own_preview,
         mode,
         on_frame,
         batch: Mutex::new(FrameBatch::default()),
@@ -500,11 +514,46 @@ pub(crate) async fn request_stream_keyframe(_session: u32) -> Result<(), String>
     Ok(())
 }
 
+/// Playout state of a watched broadcast's desktop audio, for the stats
+/// panel. `None` when that broadcast carries no audio (or voice is off, so
+/// there is nothing playing it out).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct StreamAudioPlayout {
+    /// Depth the jitter buffer is currently aiming for, milliseconds.
+    target_ms: u32,
+    /// Depth it relaxes back down to on a clean network, milliseconds.
+    floor_ms: u32,
+    /// What is queued right now, milliseconds.
+    buffered_ms: u32,
+}
+
+/// Read the playout state of one watched broadcast's audio.
+#[tauri::command]
+pub(crate) async fn native_stream_audio_playout(session: u32) -> Option<StreamAudioPlayout> {
+    crate::audio::stream_audio::playout(session).map(|(target_ms, floor_ms, buffered_ms)| {
+        StreamAudioPlayout {
+            target_ms,
+            floor_ms,
+            buffered_ms,
+        }
+    })
+}
+
+/// Set the playback volume of one watched broadcast's desktop audio, where
+/// 1.0 leaves it as sent. The viewer's volume slider drives this on the
+/// native path, where there is no `<video>` element to set `.volume` on.
+#[tauri::command]
+pub(crate) async fn set_native_stream_audio_volume(session: u32, volume: f32) {
+    crate::audio::stream_audio::set_volume(session, volume);
+}
+
 /// Stop and drop the native viewer for one broadcaster session (no-op when
 /// none is running).
 #[cfg(native_stream_viewer)]
 #[tauri::command]
 pub(crate) async fn stop_native_stream_view(session: u32) -> Result<(), String> {
+    crate::audio::stream_audio::stop(session);
     let old = {
         let mut map = viewers().lock().map_err(|_| "viewer registry poisoned")?;
         map.remove(&session)

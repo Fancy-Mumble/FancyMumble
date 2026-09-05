@@ -31,7 +31,7 @@ use std::time::{Duration, Instant, SystemTime};
 use bytes::Bytes;
 use tokio::runtime::Runtime;
 use webrtc::api::interceptor_registry::register_default_interceptors;
-use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264};
+use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264, MIME_TYPE_OPUS};
 use webrtc::api::setting_engine::SettingEngine;
 use webrtc::api::APIBuilder;
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
@@ -48,6 +48,7 @@ use webrtc::rtcp::reception_report::ReceptionReport;
 use webrtc::rtp::codecs::h264::H264Payloader;
 use webrtc::rtp::header::Header;
 use webrtc::rtp::packet::Packet;
+use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
 use webrtc::rtp::packetizer::Payloader;
 use webrtc::rtp::sequence::{new_random_sequencer, Sequencer};
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
@@ -117,6 +118,20 @@ pub trait SignalSink: Send + Sync + 'static {
     fn on_state(&self, state: BroadcastState);
 }
 
+/// Public STUN so a broadcaster behind NAT finds its reflexive address.
+fn ice_config() -> RTCConfiguration {
+    RTCConfiguration {
+        ice_servers: vec![RTCIceServer {
+            urls: vec![
+                "stun:stun.l.google.com:19302".to_owned(),
+                "stun:stun1.l.google.com:19302".to_owned(),
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
 /// One source in a broadcast (what to capture).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BroadcastSource {
@@ -140,6 +155,9 @@ pub struct ScreenBroadcaster {
     controller: Arc<Mutex<CongestionController>>,
     /// Splits that estimate across the tracks.
     allocator: Arc<BitrateAllocator>,
+    /// m-sections our SDP offer carried: the video slots plus any audio
+    /// track. Not the source count once desktop audio is on.
+    offered_sections: usize,
 }
 
 impl std::fmt::Debug for ScreenBroadcaster {
@@ -159,9 +177,13 @@ impl ScreenBroadcaster {
     /// assigned in list order). Sends the SDP offer through `sink` before
     /// returning; the embedder must route the server's answer back via
     /// [`Self::accept_answer`].
+    /// `share_audio` adds the desktop's audio (what the default output
+    /// plays) as an Opus track. Unavailable capture is logged and the share
+    /// goes on without it rather than failing.
     pub fn start(
         sources: Vec<BroadcastSource>,
         settings: EncodeSettings,
+        share_audio: bool,
         sink: Arc<dyn SignalSink>,
     ) -> Result<Self, String> {
         if sources.is_empty() {
@@ -202,7 +224,11 @@ impl ScreenBroadcaster {
         let stop = Arc::new(AtomicBool::new(false));
         let awaiting_answer = Arc::new(AtomicBool::new(false));
 
-        let (pc, tracks) = runtime.block_on(Self::build_peer(&sink, &stop, sources.len()))?;
+        let (pc, tracks, audio_track) =
+            runtime.block_on(Self::build_peer(&sink, &stop, sources.len(), share_audio))?;
+        // What lets the embedder recognise the answer to THIS offer among
+        // every answer the SFU sends this client (see `offered_sections`).
+        let offered_sections = tracks.len() + usize::from(audio_track.is_some());
 
         // Trickle the offer out.
         let offer_sdp = runtime.block_on(async {
@@ -252,7 +278,7 @@ impl ScreenBroadcaster {
             Self::spawn_feedback_listener(&runtime, &pc, sources.len(), &controller);
         Self::spawn_budget_ticker(&runtime, &controller, &allocator, &stop);
 
-        let capture_threads = sources
+        let mut capture_threads: Vec<std::thread::JoinHandle<()>> = sources
             .iter()
             .zip(tracks)
             .zip(keyframe_flags)
@@ -288,6 +314,8 @@ impl ScreenBroadcaster {
             })
             .collect();
 
+        Self::attach_audio(audio_track, &runtime, &stop, &mut capture_threads);
+
         Ok(Self {
             runtime: Some(runtime),
             pc,
@@ -298,6 +326,7 @@ impl ScreenBroadcaster {
             sources,
             controller,
             allocator,
+            offered_sections,
         })
     }
 
@@ -327,7 +356,13 @@ impl ScreenBroadcaster {
         &self.sources
     }
 
-    /// Number of video tracks (= SDP m-sections) this broadcast offers.
+    /// m-sections our SDP offer carried. Its answer has exactly this many,
+    /// which is how the embedder tells it from a viewer's answer.
+    pub fn offered_sections(&self) -> usize {
+        self.offered_sections
+    }
+
+    /// Number of capture sources, one video track each.
     pub fn track_count(&self) -> usize {
         self.sources.len()
     }
@@ -414,11 +449,77 @@ impl ScreenBroadcaster {
 
     /// Build the peer connection with `track_count` H.264 sample tracks and
     /// wire ICE / connection-state callbacks to the sink.
+    /// Start the desktop-audio thread for `track`, if there is one. Capture
+    /// that cannot start is logged; the share goes on without audio.
+    fn attach_audio(
+        track: Option<Arc<TrackLocalStaticSample>>,
+        runtime: &Runtime,
+        stop: &Arc<AtomicBool>,
+        threads: &mut Vec<std::thread::JoinHandle<()>>,
+    ) {
+        let Some(track) = track else { return };
+        match crate::audio_share::spawn_audio_thread(track, runtime.handle().clone(), Arc::clone(stop))
+        {
+            Ok(thread) => threads.push(thread),
+            Err(e) => {
+                tracing::warn!("screenshare: desktop audio unavailable ({e}); sharing video only");
+            }
+        }
+    }
+
+    /// One sendonly Opus track on `pc`, for the desktop audio.
+    async fn add_audio_track(pc: &RTCPeerConnection) -> Result<Arc<TrackLocalStaticSample>, String> {
+        let track = Arc::new(TrackLocalStaticSample::new(
+            RTCRtpCodecCapability {
+                mime_type: MIME_TYPE_OPUS.to_owned(),
+                clock_rate: crate::audio_share::SAMPLE_RATE,
+                channels: 2,
+                sdp_fmtp_line: "minptime=10;useinbandfec=1".to_owned(),
+                ..Default::default()
+            },
+            "audio0".to_owned(),
+            "fancy-screenshare".to_owned(),
+        ));
+        let _transceiver = pc
+            .add_transceiver_from_track(
+                Arc::clone(&track) as Arc<_>,
+                Some(RTCRtpTransceiverInit {
+                    direction: RTCRtpTransceiverDirection::Sendonly,
+                    send_encodings: vec![],
+                }),
+            )
+            .await
+            .map_err(|e| format!("add_transceiver_from_track (audio): {e}"))?;
+        Ok(track)
+    }
+
+    /// Offer `track_count` sendonly H.264 tracks and, with `share_audio`, one
+    /// sendonly Opus track behind them.
+    ///
+    /// The SFU forwards by mid, and viewers offer video, video, audio - so
+    /// the audio track must sit at mid 2 to land on a viewer's audio
+    /// m-line. A single-source share with audio therefore offers a second,
+    /// idle video track; nothing ever flows on it and nobody is told about
+    /// it.
     async fn build_peer(
         sink: &Arc<dyn SignalSink>,
         stop: &Arc<AtomicBool>,
         track_count: usize,
-    ) -> Result<(Arc<RTCPeerConnection>, Vec<Arc<TrackLocalStaticRTP>>), String> {
+        share_audio: bool,
+    ) -> Result<
+        (
+            Arc<RTCPeerConnection>,
+            Vec<Arc<TrackLocalStaticRTP>>,
+            Option<Arc<TrackLocalStaticSample>>,
+        ),
+        String,
+    > {
+        const VIEWER_VIDEO_SLOTS: usize = 2;
+        let video_slots = if share_audio {
+            track_count.max(VIEWER_VIDEO_SLOTS)
+        } else {
+            track_count
+        };
         let mut media = MediaEngine::default();
         media
             .register_default_codecs()
@@ -441,16 +542,7 @@ impl ScreenBroadcaster {
             .build();
 
         // Same STUN set the web frontend used; the SFU itself is ICE-lite.
-        let config = RTCConfiguration {
-            ice_servers: vec![RTCIceServer {
-                urls: vec![
-                    "stun:stun.l.google.com:19302".to_owned(),
-                    "stun:stun1.l.google.com:19302".to_owned(),
-                ],
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
+        let config = ice_config();
         let pc = Arc::new(
             api.new_peer_connection(config)
                 .await
@@ -460,8 +552,8 @@ impl ScreenBroadcaster {
         // One H.264 track per source. Transceivers are added in source order,
         // which is what assigns the SDP mids "0", "1", ... - the contract the
         // SFU's mid-based forwarding and the viewers' track labeling rely on.
-        let mut tracks = Vec::with_capacity(track_count);
-        for i in 0..track_count {
+        let mut tracks = Vec::with_capacity(video_slots);
+        for i in 0..video_slots {
             let track = Arc::new(TrackLocalStaticRTP::new(
                 RTCRtpCodecCapability {
                     mime_type: MIME_TYPE_H264.to_owned(),
@@ -503,6 +595,11 @@ impl ScreenBroadcaster {
                 .map_err(|e| format!("add_transceiver_from_track: {e}"))?;
             tracks.push(track);
         }
+        let audio_track = if share_audio {
+            Some(Self::add_audio_track(&pc).await?)
+        } else {
+            None
+        };
 
         let ice_sink = Arc::clone(sink);
         pc.on_ice_candidate(Box::new(move |candidate| {
@@ -539,7 +636,7 @@ impl ScreenBroadcaster {
             })
         }));
 
-        Ok((pc, tracks))
+        Ok((pc, tracks, audio_track))
     }
 
     /// Listen for RTCP from the SFU: flag keyframe requests (PLI/FIR) and
@@ -1064,7 +1161,11 @@ fn capture_loop(task: &CaptureTask) {
     // content (where `next_frame` returns real frames well before it), and the
     // repeat only fires when it genuinely returns None (a true idle gap), so
     // there is no double-submit into a busy encoder.
-    const IDLE_REPEAT: Duration = Duration::from_millis(90);
+    // 30 repeats a second: the receiver's decoder shows a frame only once a
+    // couple more have arrived behind it, so on a still screen the repeat
+    // cadence IS the latency of the next real change. At 90 ms that hold was
+    // ~180 ms; a repeat is a near-empty P-frame, so 33 ms costs nothing.
+    const IDLE_REPEAT: Duration = Duration::from_millis(33);
     let mut last_emit = Instant::now();
     let mut stall = StallWatch::new(source.kind);
     // Bitrate currently programmed into the encoder; 0 = never set.

@@ -35,6 +35,7 @@
 //! mode the embedder forwards its decoder's errors via
 //! [`StreamViewer::request_keyframe`].
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
@@ -121,8 +122,9 @@ impl std::fmt::Debug for ViewerFrame {
 }
 
 /// Receive-side counters of one video track, for the embedder's stats UI.
-/// webrtc-rs exposes no receive-side loss/jitter, so this is what exists:
-/// packet/byte counters plus the recovery-request tallies.
+/// Packets, bytes and the recovery-request tallies come from webrtc-rs; it
+/// exposes no receive-side loss or jitter, so those are counted here from
+/// the packets themselves ([`RxState`]).
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ViewerTrackStats {
@@ -134,11 +136,86 @@ pub struct ViewerTrackStats {
     pub packets_received: u64,
     /// Cumulative payload bytes received.
     pub bytes_received: u64,
+    /// Cumulative packets lost (RFC 3550 expected - received; retransmitted
+    /// ones count as received once they arrive).
+    pub packets_lost: u64,
+    /// Interarrival jitter, milliseconds (RFC 3550 A.8, per frame rather
+    /// than per packet - the packets of one frame leave back to back).
+    pub jitter_ms: Option<f64>,
     /// NACKs we sent (loss recovery).
     pub nack_count: u64,
     /// PLIs we sent (keyframe recovery).
     pub pli_count: u64,
 }
+
+/// RFC 3550 receiver bookkeeping for one track: extended sequence numbers
+/// for the loss count, interarrival jitter for the jitter estimate.
+#[derive(Debug, Default)]
+pub(crate) struct RxState {
+    started: bool,
+    base_seq: u32,
+    max_seq: u16,
+    cycles: u32,
+    received: u64,
+    last_ts: u32,
+    transit: i64,
+    /// Jitter in RTP clock units (90 kHz).
+    jitter: f64,
+}
+
+impl RxState {
+    /// Account for one packet. `arrival` is its arrival time in RTP clock
+    /// units (90 kHz) on any monotonic origin.
+    fn observe(&mut self, seq: u16, ts: u32, arrival: i64) {
+        self.received += 1;
+        if !self.started {
+            self.started = true;
+            self.base_seq = u32::from(seq);
+            self.max_seq = seq;
+            self.last_ts = ts;
+            self.transit = arrival - i64::from(ts);
+            return;
+        }
+        // Sequence extension (A.1, without the probation the spec uses for
+        // sources that may be spoofed: the SFU is authenticated).
+        let delta = seq.wrapping_sub(self.max_seq);
+        if delta < 0x8000 {
+            if seq < self.max_seq {
+                self.cycles += 1 << 16;
+            }
+            self.max_seq = seq;
+        }
+        // Jitter on the first packet of each frame only.
+        if ts != self.last_ts {
+            self.last_ts = ts;
+            let transit = arrival - i64::from(ts);
+            let d = (transit - self.transit).abs();
+            self.transit = transit;
+            #[allow(clippy::cast_precision_loss, reason = "a jitter estimate, not an exact count")]
+            {
+                self.jitter += (d as f64 - self.jitter) / 16.0;
+            }
+        }
+    }
+
+    /// Packets expected but never received, saturating at zero when
+    /// duplicates or retransmissions push `received` past `expected`.
+    fn lost(&self) -> u64 {
+        if !self.started {
+            return 0;
+        }
+        let expected = u64::from(self.cycles + u32::from(self.max_seq) - self.base_seq + 1);
+        expected.saturating_sub(self.received)
+    }
+
+    fn jitter_ms(&self) -> Option<f64> {
+        self.started.then_some(self.jitter / 90.0)
+    }
+}
+
+/// Per-track receiver bookkeeping, keyed by mid, shared between the track
+/// tasks that fill it and the stats probe that reads it.
+type RxRegistry = Arc<Mutex<HashMap<String, Arc<Mutex<RxState>>>>>;
 
 /// Snapshot of the viewer peer for the embedder's stats UI.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -152,6 +229,18 @@ pub struct ViewerStats {
     pub ice_path: Option<String>,
     /// One entry per inbound video track.
     pub videos: Vec<ViewerTrackStats>,
+    /// The desktop-audio track, once its packets flow.
+    pub audio: Option<ViewerAudioStats>,
+}
+
+/// Receive-side counters of the desktop-audio track.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ViewerAudioStats {
+    /// Cumulative RTP packets received.
+    pub packets_received: u64,
+    /// Cumulative payload bytes received.
+    pub bytes_received: u64,
 }
 
 /// Viewer lifecycle, mirroring [`crate::BroadcastState`].
@@ -180,6 +269,10 @@ pub trait ViewerSink: Send + Sync {
     fn on_decoder_config(&self, mid: &str, avcc: Vec<u8>);
     /// A video payload of one track, ready to decode/display.
     fn on_frame(&self, frame: ViewerFrame);
+    /// Decoded desktop audio of the broadcast: 20 ms of interleaved stereo
+    /// f32 at 48 kHz. Delivered on the viewer's runtime; play it out, do not
+    /// block. Default: dropped.
+    fn on_audio(&self, _mid: &str, _pcm: &[f32]) {}
     /// Lifecycle change.
     fn on_state(&self, state: ViewerState);
 }
@@ -193,6 +286,7 @@ pub struct StreamViewer {
     sink: Arc<dyn ViewerSink>,
     /// SSRCs of the video tracks seen so far, for embedder-driven PLIs.
     video_ssrcs: Arc<Mutex<Vec<u32>>>,
+    rx: RxRegistry,
     /// Last embedder-driven PLI burst (rate limit across tracks).
     last_pli: Mutex<Instant>,
 }
@@ -222,8 +316,9 @@ impl StreamViewer {
         let stop = Arc::new(AtomicBool::new(false));
         let awaiting_answer = Arc::new(AtomicBool::new(false));
         let video_ssrcs = Arc::new(Mutex::new(Vec::new()));
+        let rx: RxRegistry = Arc::new(Mutex::new(HashMap::new()));
 
-        let pc = runtime.block_on(Self::build_peer(&sink, &stop, &video_ssrcs, mode))?;
+        let pc = runtime.block_on(Self::build_peer(&sink, &stop, &video_ssrcs, &rx, mode))?;
 
         let offer_sdp = runtime.block_on(async {
             let offer = pc
@@ -263,6 +358,7 @@ impl StreamViewer {
             awaiting_answer,
             sink,
             video_ssrcs,
+            rx,
             last_pli: Mutex::new(Instant::now() - PLI_INTERVAL),
         })
     }
@@ -330,6 +426,7 @@ impl StreamViewer {
         Some(ViewerStatsProbe {
             handle: rt.handle().clone(),
             pc: Arc::clone(&self.pc),
+            rx: Arc::clone(&self.rx),
         })
     }
 
@@ -364,6 +461,7 @@ impl Drop for StreamViewer {
 pub struct ViewerStatsProbe {
     handle: tokio::runtime::Handle,
     pc: Arc<RTCPeerConnection>,
+    rx: RxRegistry,
 }
 
 impl std::fmt::Debug for ViewerStatsProbe {
@@ -388,18 +486,35 @@ impl ViewerStatsProbe {
         })?;
 
         let mut videos = Vec::new();
+        let mut audio = None;
         let mut rtt_ms = None;
         let mut pair_ids: Option<(String, String)> = None;
         for entry in report.reports.values() {
             match entry {
                 StatsReportType::InboundRTP(s) if s.kind == "video" => {
+                    let mid = s.mid.to_string();
+                    let (packets_lost, jitter_ms) = self
+                        .rx
+                        .lock()
+                        .ok()
+                        .and_then(|map| map.get(&mid).cloned())
+                        .and_then(|state| state.lock().ok().map(|st| (st.lost(), st.jitter_ms())))
+                        .unwrap_or((0, None));
                     videos.push(ViewerTrackStats {
-                        mid: s.mid.to_string(),
+                        mid,
                         ssrc: s.ssrc,
                         packets_received: s.packets_received,
                         bytes_received: s.bytes_received,
+                        packets_lost,
+                        jitter_ms,
                         nack_count: s.nack_count,
                         pli_count: s.pli_count.unwrap_or(0),
+                    });
+                }
+                StatsReportType::InboundRTP(s) if s.kind == "audio" && s.packets_received > 0 => {
+                    audio = Some(ViewerAudioStats {
+                        packets_received: s.packets_received,
+                        bytes_received: s.bytes_received,
                     });
                 }
                 StatsReportType::CandidatePair(p)
@@ -443,6 +558,7 @@ impl ViewerStatsProbe {
             rtt_ms,
             ice_path,
             videos,
+            audio,
         })
     }
 }
@@ -456,6 +572,7 @@ impl StreamViewer {
         sink: &Arc<dyn ViewerSink>,
         stop: &Arc<AtomicBool>,
         video_ssrcs: &Arc<Mutex<Vec<u32>>>,
+        rx: &RxRegistry,
         mode: DeliveryMode,
     ) -> Result<Arc<RTCPeerConnection>, String> {
         let mut media = MediaEngine::default();
@@ -474,16 +591,7 @@ impl StreamViewer {
             .with_setting_engine(settings)
             .build();
 
-        let config = RTCConfiguration {
-            ice_servers: vec![RTCIceServer {
-                urls: vec![
-                    "stun:stun.l.google.com:19302".to_owned(),
-                    "stun:stun1.l.google.com:19302".to_owned(),
-                ],
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
+        let config = ice_config();
         let pc = Arc::new(
             api.new_peer_connection(config)
                 .await
@@ -510,18 +618,19 @@ impl StreamViewer {
         let track_sink = Arc::clone(sink);
         let track_stop = Arc::clone(stop);
         let track_ssrcs = Arc::clone(video_ssrcs);
+        let track_rx = Arc::clone(rx);
         let pc_weak = Arc::downgrade(&pc);
         pc.on_track(Box::new(move |track, _receiver, transceiver| {
             let sink = Arc::clone(&track_sink);
             let stop = Arc::clone(&track_stop);
             let ssrcs = Arc::clone(&track_ssrcs);
+            let registry = Arc::clone(&track_rx);
             let pc_weak = Weak::clone(&pc_weak);
             Box::pin(async move {
                 let mid = transceiver.mid().map(|m| m.to_string()).unwrap_or_default();
                 if track.kind() != RTPCodecType::Video {
-                    // No broadcast carries audio today; drain defensively so
-                    // an SFU that does send some never backs the session up.
-                    let _detached = tokio::spawn(drain_track(track));
+                    tracing::info!(%mid, ssrc = track.ssrc(), "screenshare: native viewer audio track started");
+                    let _detached = tokio::spawn(consume_audio_track(track, mid, sink, stop));
                     return;
                 }
                 if let Ok(mut list) = ssrcs.lock() {
@@ -533,8 +642,12 @@ impl StreamViewer {
                     ?mode,
                     "screenshare: native viewer video track started"
                 );
+                let rx = Arc::new(Mutex::new(RxState::default()));
+                if let Ok(mut map) = registry.lock() {
+                    let _replaced = map.insert(mid.clone(), Arc::clone(&rx));
+                }
                 let _detached =
-                    tokio::spawn(consume_video_track(track, mid, pc_weak, sink, stop, mode));
+                    tokio::spawn(consume_video_track(track, mid, pc_weak, sink, stop, mode, rx));
             })
         }));
 
@@ -563,6 +676,80 @@ impl StreamViewer {
 }
 
 /// Read-and-discard loop for tracks we never render (audio).
+/// Public STUN so a viewer behind NAT finds its reflexive address.
+fn ice_config() -> RTCConfiguration {
+    RTCConfiguration {
+        ice_servers: vec![RTCIceServer {
+            urls: vec![
+                "stun:stun.l.google.com:19302".to_owned(),
+                "stun:stun1.l.google.com:19302".to_owned(),
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
+/// Packet-loss concealment for `missing` lost frames: the decoder
+/// extrapolates from what it last heard, so the playout buffer keeps time.
+fn conceal(
+    decoder: &mut opus::Decoder,
+    sink: &Arc<dyn ViewerSink>,
+    mid: &str,
+    pcm: &mut [f32],
+    missing: u16,
+) {
+    for _ in 0..missing {
+        if let Ok(n) = decoder.decode_float(&[], pcm, false) {
+            sink.on_audio(mid, &pcm[..n * crate::audio_share::CHANNELS]);
+        }
+    }
+}
+
+/// Decode the broadcast's Opus audio and hand 20 ms stereo frames to the
+/// sink. A short run of lost packets is concealed by the decoder (PLC) so
+/// the playout buffer keeps its timing; a longer gap just resumes.
+async fn consume_audio_track(
+    track: Arc<TrackRemote>,
+    mid: String,
+    sink: Arc<dyn ViewerSink>,
+    stop: Arc<AtomicBool>,
+) {
+    const MAX_CONCEALED: u16 = 5;
+    let mut decoder = match opus::Decoder::new(crate::audio_share::SAMPLE_RATE, opus::Channels::Stereo) {
+        Ok(d) => d,
+        Err(e) => {
+            tracing::warn!("screenshare: opus decoder unavailable ({e}); audio dropped");
+            return drain_track(track).await;
+        }
+    };
+    let mut buf = vec![0u8; 1600];
+    // 120 ms is the longest Opus frame; room for it even though we send 20.
+    let mut pcm = vec![0f32; 5760 * crate::audio_share::CHANNELS];
+    let mut expected_seq: Option<u16> = None;
+    loop {
+        if stop.load(Ordering::SeqCst) {
+            break;
+        }
+        let Ok((packet, _)) = track.read(&mut buf).await else {
+            break;
+        };
+        let seq = packet.header.sequence_number;
+        let missing = expected_seq.map_or(0, |expected| seq.wrapping_sub(expected));
+        if (1..=MAX_CONCEALED).contains(&missing) {
+            conceal(&mut decoder, &sink, &mid, &mut pcm, missing);
+        }
+        expected_seq = Some(seq.wrapping_add(1));
+        if packet.payload.is_empty() {
+            continue;
+        }
+        match decoder.decode_float(&packet.payload, &mut pcm, false) {
+            Ok(n) => sink.on_audio(&mid, &pcm[..n * crate::audio_share::CHANNELS]),
+            Err(e) => tracing::debug!(%mid, "screenshare: opus decode failed: {e}"),
+        }
+    }
+}
+
 async fn drain_track(track: Arc<TrackRemote>) {
     let mut buf = vec![0u8; 1600];
     while track.read(&mut buf).await.is_ok() {}
@@ -856,7 +1043,9 @@ async fn consume_video_track(
     sink: Arc<dyn ViewerSink>,
     stop: Arc<AtomicBool>,
     mode: DeliveryMode,
+    rx: Arc<Mutex<RxState>>,
 ) {
+    let rx_origin = Instant::now();
     // Rate-limited keyframe requests back to the SFU: the initial "we joined
     // mid-stream" request, plus decode failures in JPEG mode. (H.264-mode
     // decode failures arrive from the embedder via `request_keyframe`.)
@@ -930,6 +1119,11 @@ async fn consume_video_track(
         let Ok((packet, _)) = track.read(&mut buf).await else {
             break; // peer closed or track ended
         };
+        if let Ok(mut state) = rx.lock() {
+            #[allow(clippy::cast_possible_truncation, reason = "90 kHz ticks since track start fit i64 for centuries")]
+            let arrival = (rx_origin.elapsed().as_secs_f64() * 90_000.0) as i64;
+            state.observe(packet.header.sequence_number, packet.header.timestamp, arrival);
+        }
         samples.push(packet);
         let mut popped = false;
         while let Some(sample) = samples.pop() {
@@ -1074,6 +1268,28 @@ fn downscale_rgb<'a>(
 
 #[cfg(test)]
 mod tests {
+    use super::RxState;
+
+    #[test]
+    fn rx_state_counts_loss_and_jitter_per_rfc3550() {
+        let mut rx = RxState::default();
+        // Three packets of frame 1 (ts 0), the middle one lost, then frame 2
+        // (ts 3000 = 33 ms) arriving 33 ms + 9 ms late, then frame 3 on time.
+        rx.observe(65534, 0, 0);
+        rx.observe(0, 0, 10); // 65535 never arrives; 0 wraps the cycle
+        assert_eq!(rx.lost(), 1);
+        rx.observe(1, 3000, 3000 + 810);
+        rx.observe(2, 6000, 6000 + 810);
+        assert_eq!(rx.lost(), 1);
+        // One 810-tick (9 ms) transit change smoothed by 1/16, then decayed
+        // by another 1/16 when the next frame arrives on time.
+        let jitter = rx.jitter_ms().expect("started");
+        let expected = (810.0 / 16.0) * (15.0 / 16.0) / 90.0;
+        assert!((jitter - expected).abs() < 0.001, "{jitter} vs {expected}");
+        // A retransmission of the lost packet clears the loss.
+        rx.observe(65535, 0, 6100);
+        assert_eq!(rx.lost(), 0);
+    }
     use super::*;
 
     /// A keyframe AU (SPS + PPS + IDR, mixed start-code lengths) must yield

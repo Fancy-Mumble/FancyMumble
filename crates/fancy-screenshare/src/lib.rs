@@ -20,6 +20,7 @@
 //! connection) is the embedder's concern - this crate never touches the
 //! Mumble protocol.
 
+pub(crate) mod audio_share;
 pub mod broadcast;
 mod camera;
 #[cfg(windows)]

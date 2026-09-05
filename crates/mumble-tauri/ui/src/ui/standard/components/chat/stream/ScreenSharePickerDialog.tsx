@@ -575,11 +575,20 @@ function StreamModeButton({
 
           <div className={styles.modeSeparator} role="separator" />
 
-          <div className={`${styles.modeRow} ${styles.modeDisabled}`} aria-disabled="true">
+          <button
+            type="button"
+            className={styles.modeRow}
+            role="menuitemcheckbox"
+            aria-checked={settings.shareAudio === true}
+            onClick={() => onChange({ ...settings, shareAudio: !settings.shareAudio })}
+            data-testid={TID.streamShareAudioToggle}
+          >
             <VolumeOffIcon width={15} height={15} />
-            <span className={styles.modeRowName}>{t("screenShare.mode.muteAudio")}</span>
-            <span className={styles.modeRowValue}>{t("screenShare.config.comingSoon")}</span>
-          </div>
+            <span className={styles.modeRowName}>{t("screenShare.config.shareAudio")}</span>
+            <span className={styles.check}>
+              {settings.shareAudio === true && <CheckIcon width={14} height={14} />}
+            </span>
+          </button>
         </div>
       )}
     </div>
