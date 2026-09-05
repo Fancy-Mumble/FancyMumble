@@ -151,6 +151,21 @@ pub fn teardown() {
     <Active as PlatformHooks>::teardown();
 }
 
+/// Installs the mark the frontend drew into the desktop's icon theme.
+///
+/// Only Linux has anywhere to put it, and only Linux needs it: GNOME draws the
+/// icon named by the app's `.desktop` entry and ignores the one the window
+/// sets, so on that desktop this is the only route a themed icon has. Windows
+/// and macOS take the window icon itself, and get a no-op here.
+pub fn install_themed_icon(rgba: &[u8], width: u32, height: u32) {
+    #[cfg(target_os = "linux")]
+    if let Err(e) = linux::desktop::install_themed_icon(rgba, width, height) {
+        tracing::warn!("Could not install the themed app icon: {e}");
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (rgba, width, height);
+}
+
 /// Strips the system-drawn corner rounding, border and shadow from an
 /// undecorated, transparent window.
 ///

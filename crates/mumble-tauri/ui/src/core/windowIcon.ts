@@ -1,8 +1,8 @@
 /**
  * The window icon, drawn to match the theme.
  *
- * The icon Windows shows in the taskbar, in Alt-Tab and in the title bar is a
- * PNG shipped with the build: a rounded cyan tile with a letter on it. It is
+ * The icon the desktop shows in the taskbar, in Alt-Tab and in the title bar is
+ * a PNG shipped with the build: a rounded cyan tile with a letter on it. It is
  * the one piece of the app's own chrome that never moved with the user's
  * theme, so a squared, acid-yellow skin still sat behind a rounded cyan tile -
  * and on a taskbar the icon is most of what the app looks like.
@@ -25,6 +25,10 @@ import { invoke } from "@tauri-apps/api/core";
  * everywhere the icon is actually looked at, and an eighth of the bytes of a
  * 256 - which matters because the pixels cross the IPC boundary as JSON, so
  * the buffer is paid for in serialisation rather than in memory.
+ *
+ * It is also a size the hicolor icon theme declares, which the Linux side
+ * needs: it installs these pixels as the icon file GNOME resolves, and a
+ * directory hicolor does not declare is never searched.
  */
 const ICON_SIZE = 128;
 
@@ -186,6 +190,11 @@ export function drawWindowIcon(mark: WindowMark, size = ICON_SIZE): Uint8Clamped
  * window down, and there is nothing a caller could usefully do about a
  * platform that draws its icon from an app bundle (macOS) or has no window
  * icon at all (mobile) - both of which reach here and answer `Ok`.
+ *
+ * On Linux this is the app's icon rather than this window's: GNOME shows what
+ * the `.desktop` entry names and ignores the icon a window sets, so the pixels
+ * are installed into the icon theme instead. Windows in different themes
+ * therefore share one taskbar icon, wearing whichever drew last.
  */
 export async function applyWindowIcon(mark: WindowMark, size = ICON_SIZE): Promise<void> {
   const rgba = drawWindowIcon(mark, size);

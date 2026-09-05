@@ -4,7 +4,8 @@
  * Nebula draws a mark in the title bar - a tile in the accent with the app's
  * monogram on it - and the taskbar icon beside it was a PNG shipped with the
  * build that never changed. This redraws the icon from the live theme so the
- * two agree.
+ * two agree, on Linux by way of the icon theme rather than the window; see
+ * `applyWindowIcon`.
  */
 import { useEffect } from "react";
 import type { Theme } from "@mui/material/styles";

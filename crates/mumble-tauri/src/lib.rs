@@ -158,6 +158,8 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            #[cfg(not(target_os = "android"))]
+            app::window_state::on_window_event(window, event);
             if let tauri::WindowEvent::Focused(focused) = event {
                 if let Some(state) = window.try_state::<AppState>() {
                     if let Ok(mut s) = state.inner.snapshot().lock() {
