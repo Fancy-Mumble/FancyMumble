@@ -5,8 +5,9 @@ import { Stack } from "../../primitives";
 import { MiniSwitch, SearchField } from "./controls";
 import { BrowsePanel } from "./BrowsePanel";
 import { TemplatePanel } from "./TemplatePanel";
-import { NodeCanvas } from "./NodeCanvas";
+import { NodeCanvas, type CanvasAdd } from "./NodeCanvas";
 import { useFavorites } from "./useFavorites";
+import { useHistoryKeys } from "./useHistoryKeys";
 import { useBlockCarry, type CanvasDrop, type Carry } from "./useBlockCarry";
 import { insertFragment, type CanvasInsert, type GraphTemplate } from "./templates";
 import type { History } from "./useGraphHistory";
@@ -78,6 +79,17 @@ export function NodeEditor<N extends GraphNode>({
   const [drawer, setDrawer] = useState<"blocks" | "templates" | null>(null);
   const browsing = drawer === "blocks";
   const [query, setQuery] = useState("");
+  /**
+   * The search in the bar, so opening a drawer can put the caret in it.
+   *
+   * Opening the browser is almost always the first half of "find me the
+   * block that does X" - the panel holds two dozen cards - so the second half
+   * should not need a second gesture aimed at a field that is already on
+   * screen.
+   */
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  /** The canvas's add menu, for the `A` key bound page-wide below. */
+  const addRef = useRef<CanvasAdd | null>(null);
   const [starredOnly, setStarredOnly] = useState(false);
   const { favorites, toggle } = useFavorites(spec.id, suggested);
   // Filled in by whichever canvas is on screen, and null while the page is
@@ -87,6 +99,9 @@ export function NodeEditor<N extends GraphNode>({
   // makes a template loaded from the prose view land without a view to fit.
   const insertRef = useRef<CanvasInsert<N> | null>(null);
   const { carry, start } = useBlockCarry(dropRef);
+  // Page-wide, so the chords work wherever the operator's focus happens to be
+  // - including on the Undo button they just pressed.
+  useHistoryKeys(history?.undo, history?.redo);
   // Enabled says what the operator asked for; liveness says whether the drawing
   // can do anything at all. Both have to hold before the badge claims LIVE.
   const live = (spec.liveness?.(graph) ?? "live") === "live" && graph.enabled;
@@ -97,6 +112,37 @@ export function NodeEditor<N extends GraphNode>({
     const x = graph.nodes.reduce((max, node) => Math.max(max, node.x), 0) + 40;
     const y = 34 + (graph.nodes.length % 5) * 34;
     onChange({ ...graph, nodes: [...graph.nodes, block.create(x, y)] });
+  };
+
+  /**
+   * Open or close one of the drawers, and go straight to the search.
+   *
+   * Focused after the drawer is asked for rather than inside the panel: the
+   * field lives in the bar and stays put whichever drawer is open, so there
+   * is nothing to wait for.
+   */
+  const toggleDrawer = (which: "blocks" | "templates") => {
+    setDrawer((open) => (open === which ? null : which));
+    if (drawer !== which) searchRef.current?.focus();
+  };
+
+  /**
+   * The `A` key, from anywhere in the editor.
+   *
+   * The canvas answers it too, and better - it knows where the pointer is -
+   * but only while it holds focus, which it does not when the operator's last
+   * press was on the toolbar. `defaultPrevented` is how the canvas says it has
+   * already dealt with this one.
+   *
+   * Fields are excluded whole: inside the search, `a` is a letter.
+   */
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+    const from = event.target as HTMLElement;
+    if (from.isContentEditable || /^(input|textarea|select)$/i.test(from.tagName)) return;
+    if (event.key !== "a") return;
+    event.preventDefault();
+    addRef.current?.openAdd();
   };
 
   /**
@@ -115,7 +161,7 @@ export function NodeEditor<N extends GraphNode>({
   };
 
   return (
-    <Stack sx={{ flex: 1, minHeight: 0 }}>
+    <Stack onKeyDown={onKeyDown} sx={{ flex: 1, minHeight: 0 }}>
       <Stack direction="row" alignItems="center" gap={1.5} sx={{ flex: "none", px: "14px", py: "11px" }}>
         {leading}
         {/* Searching is the way most operators reach a block, so the field is
@@ -124,6 +170,7 @@ export function NodeEditor<N extends GraphNode>({
         <SearchField
           value={query}
           placeholder={spec.strings.search}
+          inputRef={searchRef}
           onChange={(next) => {
             setQuery(next);
             // Typing searches whichever drawer is open, and opens the blocks
@@ -139,13 +186,13 @@ export function NodeEditor<N extends GraphNode>({
           <DrawerButton
             label={spec.templates.strings.open}
             open={drawer === "templates"}
-            onClick={() => setDrawer((open) => (open === "templates" ? null : "templates"))}
+            onClick={() => toggleDrawer("templates")}
           />
         )}
         <DrawerButton
           label={spec.strings.browse}
           open={browsing}
-          onClick={() => setDrawer((open) => (open === "blocks" ? null : "blocks"))}
+          onClick={() => toggleDrawer("blocks")}
         />
 
         <Tooltip
@@ -231,8 +278,7 @@ export function NodeEditor<N extends GraphNode>({
             onChange={onChange}
             dropRef={dropRef}
             insertRef={insertRef}
-            onUndo={history?.undo}
-            onRedo={history?.redo}
+            addRef={addRef}
           />
         )}
       </Box>

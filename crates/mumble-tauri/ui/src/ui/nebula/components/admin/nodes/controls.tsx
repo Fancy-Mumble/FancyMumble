@@ -444,7 +444,23 @@ export function SearchField({
   value,
   placeholder,
   onChange,
-}: Readonly<{ value: string; placeholder: string; onChange: (next: string) => void }>) {
+  autoFocus,
+  inputRef,
+  onKeyDown,
+}: Readonly<{
+  value: string;
+  placeholder: string;
+  onChange: (next: string) => void;
+  /** For a field that opens with something: the add menu's own search. */
+  autoFocus?: boolean;
+  /**
+   * The input itself, for a caller that focuses it later than mount - opening
+   * the block browser, where the field was already on screen and `autoFocus`
+   * has nothing to fire on.
+   */
+  inputRef?: React.Ref<HTMLInputElement>;
+  onKeyDown?: (event: React.KeyboardEvent) => void;
+}>) {
   return (
     <Stack
       direction="row"
@@ -472,9 +488,12 @@ export function SearchField({
       </Box>
       <Box
         component="input"
+        ref={inputRef}
         value={value}
         placeholder={placeholder}
         aria-label={placeholder}
+        autoFocus={autoFocus}
+        onKeyDown={onKeyDown}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
         sx={(theme) => ({
           flex: 1,

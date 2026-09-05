@@ -13,6 +13,7 @@ import {
   type NodeBodyProps,
   type NodeSpec,
   type PortId,
+  type PortInfo,
   type PortSide,
   type PortSummary,
   type Tone,
@@ -110,11 +111,25 @@ function portTop(node: OnboardingNode, port: PortId, _index: number, _side: Port
   }
 }
 
-/** The wire's colour is what it carries: the spine, a choice, or a place. */
-function wireTone(port: PortId): Tone {
-  if (port === "flow") return "accent";
-  if (port === "in") return "ok";
-  return "muted";
+/**
+ * What each socket carries, and the word drawn beside it.
+ *
+ * Three types, and they are what this dialect is about: the **flow** is the
+ * spine the interview runs along, a **choice** is one answer branching off a
+ * question, and a **place** is somewhere an answer puts the member. Each reads
+ * in its own colour on the socket, on the word beside it and on the wire, so a
+ * canvas can be followed without tracing any single strand.
+ *
+ * The ports are named on both sides here, unlike the welcome dialect's, so the
+ * label is the port's own name throughout: `then` leaving a question and
+ * `flow` arriving at the next one are two ends of one step, and calling them
+ * both "FLOW" would lose which end you were looking at.
+ */
+function portInfo(_node: OnboardingNode, port: PortId): PortInfo {
+  const label = port.toUpperCase();
+  if (port === "flow" || port === "then") return { label, type: "flow", tone: "accent" };
+  if (port === "in" || port === "place" || port === "grants") return { label, type: "place", tone: "ok" };
+  return { label, type: "choice", tone: "muted" };
 }
 
 /* -- Bodies ---------------------------------------------------------------- */
@@ -388,7 +403,7 @@ export function onboardingSpec(t: TFn): NodeSpec<OnboardingNode> {
     width: (node) => WIDTHS[node.kind],
     tone: (node) => TONES[node.kind],
     portTop,
-    wireTone,
+    portInfo,
     body: OnboardingBody,
     attachment: QuestionPreview,
     emphasise: (node) => node.kind === "start",
