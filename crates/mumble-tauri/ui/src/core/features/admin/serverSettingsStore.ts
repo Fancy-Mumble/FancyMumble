@@ -70,6 +70,9 @@ export const useServerSettingsStore = create<ServerSettingsStoreState>((set) => 
   clear: () => set({ snapshot: null, busy: false, error: null }),
 
   load: async () => {
+    // Cleared up front: a failure from a previous connection outliving the
+    // screen is how an admin reads a stale reason for a fresh silence.
+    set({ error: null });
     try {
       const cached = await invoke<ServerSettingsSnapshot | null>("get_server_settings");
       if (cached) {

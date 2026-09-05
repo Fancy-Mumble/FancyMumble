@@ -67,6 +67,10 @@ export function AdminScreen({
 }>) {
   const entry = ADMIN_PAGES.find((candidate) => candidate.id === page);
   const allowed = entry?.available(capabilities) ?? false;
+  // Server settings points at the Welcome message editor from its welcome
+  // text; only when this operator can actually open that page.
+  const welcomeAvailable =
+    ADMIN_PAGES.find((candidate) => candidate.id === "welcome")?.available(capabilities) ?? false;
   // The role a user's chip was clicked from, so Users can hand off to Roles
   // with that role already open rather than dropping the reader at the list.
   const [initialRole, setInitialRole] = useState<string | null>(null);
@@ -124,7 +128,15 @@ export function AdminScreen({
         content = <FileServerAdmin />;
         break;
       case "serverSettings":
-        content = <ServerSettingsAdmin />;
+        content = (
+          <ServerSettingsAdmin
+            onOpenWelcomeEditor={
+              // Both pages want `canAdminister` today, so this is the same
+              // check twice - and it stays honest if one of them ever moves.
+              welcomeAvailable ? () => onNavigate("welcome") : undefined
+            }
+          />
+        );
         break;
       case "livery":
         content = <LiveryAdmin />;

@@ -242,6 +242,14 @@ pub enum TcpMessageType {
     FancyFileManaged = 185,
     /// Fancy Mumble: client asks for one stored file to be removed.
     FancyFileForget = 186,
+    /// Fancy Mumble: admin asks which settings this server may be told to
+    /// change at run time.
+    ///
+    /// Epoch-0 pushed the schema unasked to whoever held root Write, so it
+    /// never needed a question and has no wire form for one; this is a local
+    /// tag that never reaches a wire. The canon carries it inside outer type
+    /// 1013, the same envelope as `FancyServerSettingsUpdate`.
+    FancyServerSettingsQuery = 187,
     /// Fancy Mumble: generic plugin envelope (bidirectional).
     PluginMessage = 200,
     /// Fancy Mumble: server enumerates loaded plugins after `ServerSync`.
@@ -439,6 +447,8 @@ pub enum ControlMessage {
     FancyServerSettings(mumble_tcp::FancyServerSettings),
     /// Fancy: admin submits changed server settings.
     FancyServerSettingsUpdate(mumble_tcp::FancyServerSettingsUpdate),
+    /// Fancy: admin asks for the editable server-settings schema.
+    FancyServerSettingsQuery(fancy::domain::ConfigQuery),
     /// Fancy: server snapshot of the own registered account's settings.
     FancyAccountSettings(mumble_tcp::FancyAccountSettings),
     /// Fancy: user submits a self-service account operation.
@@ -583,7 +593,7 @@ message_type_mapping! {
     FancyPluginAdminListRequest, FancyPluginAdminList,
     FancyPluginAdminSetEnabled, FancyPluginAdminInstall,
     FancyPluginAdminUninstall, FancyPluginAdminAck,
-    FancyServerSettings, FancyServerSettingsUpdate,
+    FancyServerSettings, FancyServerSettingsUpdate, FancyServerSettingsQuery,
     FancyAccountSettings, FancyAccountSettingsUpdate, FancyAccountAck,
     FancyForumPost, FancyForumFetch, FancyForumFetchResponse, FancyForumDelete,
     FancyScheduledMessage, FancyScheduledMessageList,

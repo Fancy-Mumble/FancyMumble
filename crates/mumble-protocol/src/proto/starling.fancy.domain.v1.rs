@@ -614,11 +614,18 @@ pub mod setting {
     #[repr(i32)]
     pub enum Kind {
         String = 0,
-        /// Multi-line: the welcome text is a paragraph, not a field.
+        /// Multi-line, and plain: a paragraph somebody types, shown as typed.
         Text = 1,
         Bool = 2,
         Int = 3,
         Choice = 4,
+        /// The value is markup, and whatever renders it renders it as markup -- the
+        /// welcome text, which every client puts through an allow-list on the way to
+        /// the screen. Stated by the server rather than guessed at from the key,
+        /// because a client that guesses shows a formatting toolbar over a setting
+        /// that is not HTML, or raw tags to an operator writing prose, and which of
+        /// those it does depends on what the setting happens to be called.
+        Html = 5,
     }
     impl Kind {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -632,6 +639,7 @@ pub mod setting {
                 Self::Bool => "BOOL",
                 Self::Int => "INT",
                 Self::Choice => "CHOICE",
+                Self::Html => "HTML",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -642,6 +650,7 @@ pub mod setting {
                 "BOOL" => Some(Self::Bool),
                 "INT" => Some(Self::Int),
                 "CHOICE" => Some(Self::Choice),
+                "HTML" => Some(Self::Html),
                 _ => None,
             }
         }

@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import * as Flags from "country-flag-icons/react/3x2";
 import { useServerSettingsStore } from "@core/features/admin/serverSettingsStore";
-import { isRichTextSetting } from "@core/features/admin/serverSettingKinds";
+import { isRichTextSetting, isWelcomeSetting } from "@core/features/admin/serverSettingKinds";
 import { COUNTRIES, countryName } from "@core/utils/countries";
 import type { ServerSetting, ServerSettingsEvent } from "@core/types";
 import { NEBULA_MONO, radius } from "../../tokens";
@@ -378,6 +378,38 @@ function fieldFor(setting: ServerSetting): FieldComponent {
 }
 
 /**
+ * The way out of this box, for a greeting that wants to be more than one text.
+ *
+ * This field is one string, sent to everybody who connects. The Welcome message
+ * editor draws greetings that turn on who is arriving - client version, whether
+ * they have an account, how long they have had one - and lays them out as a
+ * screen rather than a paragraph; whenever one of those matches, it is sent
+ * *instead* of this text, which is the half an operator cannot guess from here.
+ *
+ * It is said next to the field rather than left to the sidebar because this is
+ * where somebody who wants a better welcome message goes looking, and a page
+ * they never open cannot tell them it exists.
+ */
+function WelcomeEditorHint({ onOpen }: Readonly<{ onOpen: () => void }>) {
+  const { t } = useTranslation("settings");
+  return (
+    <Banner tone="info" title={t("serverSettings.welcomeEditorTitle")}>
+      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" gap={1}>
+        <Box sx={{ minWidth: 0 }}>{t("serverSettings.welcomeEditorHint")}</Box>
+        <Button
+          size="small"
+          variant="text"
+          onClick={onOpen}
+          sx={{ flex: "0 0 auto", fontSize: 11.5, whiteSpace: "nowrap" }}
+        >
+          {t("serverSettings.welcomeEditorOpen")}
+        </Button>
+      </Stack>
+    </Banner>
+  );
+}
+
+/**
  * Server settings.
  *
  * The form is built from the schema the server advertises rather than written
@@ -388,13 +420,22 @@ function fieldFor(setting: ServerSetting): FieldComponent {
  * server never sends back - treating a blank box as a new value would clear
  * every password on the page on the first save.
  */
-export function ServerSettingsAdmin() {
+export function ServerSettingsAdmin({
+  /**
+   * Opens the Welcome message editor, when this operator has that page.
+   *
+   * Absent rather than disabled where they do not: a pointer to a page that
+   * would bounce them back to Users is worse than no pointer at all.
+   */
+  onOpenWelcomeEditor,
+}: Readonly<{ onOpenWelcomeEditor?: () => void }> = {}) {
   const { t } = useTranslation("settings");
   const snapshot = useServerSettingsStore((state) => state.snapshot);
   const busy = useServerSettingsStore((state) => state.busy);
   const save = useServerSettingsStore((state) => state.save);
   const load = useServerSettingsStore((state) => state.load);
   const setSnapshot = useServerSettingsStore((state) => state.setSnapshot);
+  const loadError = useServerSettingsStore((state) => state.error);
 
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -450,6 +491,7 @@ export function ServerSettingsAdmin() {
   if (!snapshot) {
     return (
       <AdminPage title={t("adminTabs.serverSettings", { defaultValue: "Server settings" })}>
+        {loaded && loadError && <Banner tone="danger">{loadError}</Banner>}
         <EmptyState>
           {loaded
             ? t("serverSettings.unavailable", {
@@ -534,6 +576,9 @@ export function ServerSettingsAdmin() {
                       value={edits[setting.key] ?? originalValue(setting)}
                       onChange={(value) => setEdits((prev) => ({ ...prev, [setting.key]: value }))}
                     />
+                    {onOpenWelcomeEditor && isWelcomeSetting(setting) && (
+                      <WelcomeEditorHint onOpen={onOpenWelcomeEditor} />
+                    )}
                   </Box>
                 </Stack>
               );
