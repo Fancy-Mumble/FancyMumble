@@ -207,12 +207,13 @@ pub(crate) fn try_intercept_answer(signal_type: i32, payload: &str) -> bool {
         tracing::debug!(m_sections, "screenshare: answer not claimed (not awaiting)");
         return false;
     }
-    // The broadcaster's offer carries one video m-section per shared source,
-    // all sendonly, so its answer has exactly that many m-sections and no
-    // sendonly at all - a viewer's answer (video+video+audio, sendonly from
-    // the SFU's side) never matches, even while an audio m-line says
-    // "recvonly".
-    if m_sections != broadcaster.track_count()
+    // The broadcaster's offer is all sendonly, so its answer has exactly as
+    // many m-sections as the offer had and no sendonly at all - a viewer's
+    // answer (sendonly from the SFU's side) never matches, even while an
+    // audio m-line says "recvonly". This counts the OFFER's sections, not
+    // the sources: sharing desktop audio adds an audio section, plus the
+    // padding video slot that puts it on the mid viewers expect.
+    if m_sections != broadcaster.offered_sections()
         || !payload.contains("a=recvonly")
         || payload.contains("a=sendonly")
     {
@@ -309,6 +310,7 @@ pub(crate) async fn start_screen_broadcast(
     max_dimension: Option<u32>,
     max_fps: Option<f32>,
     reuse_portal_source: Option<bool>,
+    share_audio: Option<bool>,
 ) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     fancy_screenshare::set_restore_last_pick(reuse_portal_source.unwrap_or(false));
@@ -369,7 +371,12 @@ pub(crate) async fn start_screen_broadcast(
             let mut slot = broadcaster_slot()
                 .lock()
                 .map_err(|_| "broadcaster mutex poisoned")?;
-            let broadcaster = ScreenBroadcaster::start(broadcast_sources, settings, sink)?;
+            let broadcaster = ScreenBroadcaster::start(
+                broadcast_sources,
+                settings,
+                share_audio.unwrap_or(false),
+                sink,
+            )?;
             let _ = slot.replace(broadcaster);
         }
         Ok::<(), String>(())

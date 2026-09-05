@@ -11,6 +11,11 @@ export interface StreamSettings {
   readonly maxDimension: number;
   /** Maximum frames per second. */
   readonly maxFps: number;
+  /** Send the desktop's audio (what the speakers are playing) alongside the
+   *  picture. Absent means off. Deliberately outside the quality presets and
+   *  {@link presetOf}'s comparison: it is a content choice, not a quality
+   *  one, and turning it on must not stop the chip reading "HD". */
+  readonly shareAudio?: boolean;
 }
 
 /** Quick-toggle presets shown as the SD / HD / Source segmented control. */

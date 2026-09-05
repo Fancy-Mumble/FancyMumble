@@ -9,6 +9,9 @@ license = "MIT"
 description = "Frontend-agnostic screen sharing core: source enumeration, capture, encode, WebRTC broadcast"
 
 [dependencies]
+# Desktop-audio share: Opus encode on the broadcaster, decode on the viewer
+# (the same C libopus the voice path uses).
+opus = "0.3"
 # Screen / window enumeration + frame capture (Windows, macOS, Linux).
 xcap = "0.6"
 # Thumbnail JPEG encoding (xcap already returns image::RgbaImage).

@@ -2151,6 +2151,7 @@ dependencies = [
  "nokhwa",
  "openh264",
  "openh264-sys2",
+ "opus",
  "pipewire",
  "rand 0.10.2",
  "serde",

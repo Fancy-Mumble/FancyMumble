@@ -46,6 +46,8 @@ pub(crate) mod pipewire;
 mod rodio_desktop;
 
 #[cfg(not(target_os = "android"))]
+pub(crate) mod stream_audio;
+
 mod shared_capture;
 
 #[cfg(not(target_os = "android"))]

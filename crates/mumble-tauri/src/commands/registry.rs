@@ -316,6 +316,8 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::stream_view::start_native_stream_view,
         super::stream_view::stop_native_stream_view,
         super::stream_view::request_stream_keyframe,
+        super::stream_view::native_stream_audio_playout,
+        super::stream_view::set_native_stream_audio_volume,
         super::stream_view::native_stream_view_stats,
         // -- discord rich presence (desktop only) ----------------------
         #[cfg(not(target_os = "android"))]
