@@ -18,6 +18,17 @@
     "detail": "{{state}} · tentative {{attempt}}",
     "retryNow": "Réessayer maintenant"
   },
+  "dropped": {
+    "eyebrow": "CONNEXION TERMINÉE",
+    "eyebrowConnecting": "CONNEXION",
+    "title": "Déconnecté",
+    "titleFailed": "Échec de la connexion",
+    "titleReconnecting": "Reconnexion…",
+    "titleConnecting": "Connexion…",
+    "reasonLabel": "MOTIF",
+    "reconnect": "Se reconnecter",
+    "chooseServer": "Choisir un autre serveur"
+  },
   "quickConnect": {
     "sectionOpenAsNewTab": "OUVRIR DANS UN NOUVEL ONGLET",
     "noneSaved": "Aucun serveur enregistré pour l’instant.",
@@ -59,6 +70,7 @@
     "joinAs": "REJOINDRE EN TANT QUE",
     "newIdentity": "+ Nouvelle identité",
     "editIdentity": "Modifier les informations enregistrées pour {{username}}",
+    "reorderIdentity": "Réordonner {{username}} - faites glisser, ou utilisez les touches fléchées",
     "certificate": "certificat · {{label}}",
     "noCertificate": "aucun certificat",
     "connecting": "Connexion…",

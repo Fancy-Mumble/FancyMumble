@@ -42,7 +42,11 @@
     "connecting_state": "connecting",
     "tileLabel": "{{server}}, {{state}}",
     "tileLabelUnread_one": "{{server}}, {{state}}, {{count}} unread",
-    "tileLabelUnread_other": "{{server}}, {{state}}, {{count}} unread"
+    "tileLabelUnread_other": "{{server}}, {{state}}, {{count}} unread",
+    "copyAddress": "Copy address",
+    "forgetTitle": "Remove this server?",
+    "forgetBody_one": "{{server}} and its saved identity will be removed from the list. An open session stays until you leave it.",
+    "forgetBody_other": "{{server}} and its {{count}} saved identities will be removed from the list. An open session stays until you leave it."
   },
   "dock": {
     "profile": "Your profile",

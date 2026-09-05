@@ -159,6 +159,11 @@
       "minutes": "{{count}} 分钟前",
       "hours": "{{count}} 小时前",
       "days": "{{count}} 天前"
+    },
+    "reminderNotification": {
+      "untitledEvent": "会议",
+      "body": "{{time}} 开始",
+      "bodyWithLocation": "{{time}} 开始 · {{location}}"
     }
   },
   "contextMenu": {

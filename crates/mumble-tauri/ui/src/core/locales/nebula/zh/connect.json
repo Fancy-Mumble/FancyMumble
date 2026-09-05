@@ -18,6 +18,17 @@
     "detail": "{{state}} · 第 {{attempt}} 次尝试",
     "retryNow": "立即重试"
   },
+  "dropped": {
+    "eyebrow": "连接已结束",
+    "eyebrowConnecting": "正在连接",
+    "title": "已断开连接",
+    "titleFailed": "连接失败",
+    "titleReconnecting": "正在重新连接…",
+    "titleConnecting": "正在连接…",
+    "reasonLabel": "原因",
+    "reconnect": "重新连接",
+    "chooseServer": "选择其他服务器"
+  },
   "quickConnect": {
     "sectionOpenAsNewTab": "在新标签页中打开",
     "noneSaved": "尚未保存任何服务器。",
@@ -59,6 +70,7 @@
     "joinAs": "以此身份加入",
     "newIdentity": "+ 新身份",
     "editIdentity": "编辑 {{username}} 的已保存信息",
+    "reorderIdentity": "重新排序 {{username}} — 拖动，或使用方向键",
     "certificate": "证书 · {{label}}",
     "noCertificate": "无证书",
     "connecting": "连接中…",

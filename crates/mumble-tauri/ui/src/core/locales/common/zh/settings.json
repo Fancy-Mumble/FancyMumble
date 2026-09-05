@@ -335,9 +335,9 @@
     "panelTitle": "个性化",
     "uiDesign": "界面设计",
     "beta": "测试版",
-    "uiDesignHint": "Nebula 是默认选项。标准是较早的界面，功能覆盖仍然最广；Aurora 是设计测试版。",
+    "uiDesignHint": "Nebula 是默认选项。标准是较早的界面，功能覆盖仍然最广。Aurora 已弃用，将在下个版本中移除，请不要再使用。",
     "uiDesignStandard": "标准",
-    "uiDesignAurora": "Aurora（测试版）",
+    "uiDesignAurora": "Aurora（已弃用）",
     "uiDesignNebula": "Nebula",
     "uiDesignOverrideHint": "开发 URL 参数当前将界面强制设为“{{design}}”。",
     "theme": "主题",
@@ -765,7 +765,10 @@
     "saved": "已保存",
     "modeRich": "富文本",
     "modeSource": "HTML",
-    "richTextLossy": "这段欢迎文本使用了可视化编辑器无法保留的标记 — 表格布局，或它没有对应控件的样式。在那里编辑会重写它无法显示的部分，因此改为以 HTML 方式编辑。"
+    "richTextLossy": "这段欢迎文本使用了可视化编辑器无法保留的标记 — 表格布局，或它没有对应控件的样式。在那里编辑会重写它无法显示的部分，因此改为以 HTML 方式编辑。",
+    "welcomeEditorTitle": "想要不止一条欢迎消息？",
+    "welcomeEditorHint": "这段文本发给所有人。欢迎消息编辑器可以根据来访者的情况（客户端版本、是否有账号）编写欢迎语，并将其排布成一个页面。匹配到的欢迎语会代替这段文本发送。",
+    "welcomeEditorOpen": "打开编辑器"
   },
   "fileServer": {
     "title": "文件服务器存储",

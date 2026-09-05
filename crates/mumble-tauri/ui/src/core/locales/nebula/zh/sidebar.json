@@ -42,7 +42,11 @@
     "connecting_state": "连接中",
     "tileLabel": "{{server}}，{{state}}",
     "tileLabelUnread_one": "{{server}}，{{state}}，{{count}} 条未读",
-    "tileLabelUnread_other": "{{server}}，{{state}}，{{count}} 条未读"
+    "tileLabelUnread_other": "{{server}}，{{state}}，{{count}} 条未读",
+    "copyAddress": "复制地址",
+    "forgetTitle": "移除此服务器？",
+    "forgetBody_one": "{{server}} 及其已保存的身份将从列表中移除。已打开的会话会保留到你离开为止。",
+    "forgetBody_other": "{{server}} 及其 {{count}} 个已保存的身份将从列表中移除。已打开的会话会保留到你离开为止。"
   },
   "dock": {
     "profile": "你的个人资料",

@@ -335,9 +335,9 @@
     "panelTitle": "Personnaliser",
     "uiDesign": "Design de l’interface",
     "beta": "Bêta",
-    "uiDesignHint": "Nebula est la valeur par défaut. Standard est l’interface historique et couvre toujours le plus de fonctionnalités ; Aurora est une bêta de design.",
+    "uiDesignHint": "Nebula est la valeur par défaut. Standard est l’interface historique et couvre toujours le plus de fonctionnalités. Aurora est obsolète et sera supprimée dans la prochaine version ; ne commencez pas à l’utiliser.",
     "uiDesignStandard": "Standard",
-    "uiDesignAurora": "Aurora (bêta)",
+    "uiDesignAurora": "Aurora (obsolète)",
     "uiDesignNebula": "Nebula",
     "uiDesignOverrideHint": "L’interface est actuellement forcée sur « {{design}} » par le paramètre d’URL de développement.",
     "theme": "Thème",
@@ -1325,7 +1325,10 @@
     "saved": "Enregistré",
     "modeRich": "Texte enrichi",
     "modeSource": "HTML",
-    "richTextLossy": "Ce texte d’accueil utilise un balisage que l’éditeur visuel ne peut pas conserver — une mise en page en tableau, ou un style pour lequel il n’a pas de contrôle. L’y modifier réécrirait les parties qu’il ne peut pas afficher, il est donc édité en HTML."
+    "richTextLossy": "Ce texte d’accueil utilise un balisage que l’éditeur visuel ne peut pas conserver — une mise en page en tableau, ou un style pour lequel il n’a pas de contrôle. L’y modifier réécrirait les parties qu’il ne peut pas afficher, il est donc édité en HTML.",
+    "welcomeEditorTitle": "Envie de plus d'un message d'accueil ?",
+    "welcomeEditorHint": "Ce texte est envoyé à tout le monde. L'éditeur de message d'accueil compose des accueils qui dépendent de qui arrive — version du client, présence d'un compte — et les met en page comme un écran. Un accueil qui correspond est envoyé à la place de ce texte.",
+    "welcomeEditorOpen": "Ouvrir l'éditeur"
   },
   "fileServer": {
     "title": "Stockage du serveur de fichiers",
