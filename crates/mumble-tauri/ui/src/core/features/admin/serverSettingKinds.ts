@@ -38,3 +38,18 @@ export function isRichTextSetting(setting: Readonly<ServerSetting>): boolean {
   if (setting.type !== "text") return false;
   return RICH_TEXT_SETTING.test(`${setting.key} ${setting.label}`);
 }
+
+/**
+ * Keys naming the one plain welcome text a server sends on connect.
+ *
+ * `welcome_text` is what Starling advertises; `welcometext` is the epoch-0
+ * fork's spelling of the same setting. Matched on the key alone - a plugin
+ * labelling its own field "Welcome" is not this setting, and pointing its
+ * editor at the greeting graph would be a lie.
+ */
+const WELCOME_SETTING = /^welcome_?text$/i;
+
+/** Whether `setting` is the server's plain welcome text. */
+export function isWelcomeSetting(setting: Readonly<ServerSetting>): boolean {
+  return WELCOME_SETTING.test(setting.key);
+}

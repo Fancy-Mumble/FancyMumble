@@ -219,6 +219,7 @@ export function ServerSettingsTab({ setFooter }: Readonly<ServerSettingsTabProps
   const save = useServerSettingsStore((s) => s.save);
   const load = useServerSettingsStore((s) => s.load);
   const setSnapshot = useServerSettingsStore((s) => s.setSnapshot);
+  const loadError = useServerSettingsStore((s) => s.error);
 
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -311,6 +312,10 @@ export function ServerSettingsTab({ setFooter }: Readonly<ServerSettingsTabProps
   if (!snapshot) {
     return (
       <div className={styles.empty}>
+        {/* A load that *failed* says so. The line below it is a guess at why
+            nothing arrived, and printing a guess over a known cause is how a
+            missing command read as "you are not an admin" for a release. */}
+        {loaded && loadError && <div className={styles.error}>{loadError}</div>}
         {loaded
           ? t("serverSettings.unavailable", {
               defaultValue:

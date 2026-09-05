@@ -47,13 +47,13 @@ function setting(over: Partial<ServerSetting> = {}): ServerSetting {
 
 const snapshot = (settings: ServerSetting[]): ServerSettingsSnapshot => ({ revision: 1, settings });
 
-async function show(settings: ServerSetting[]) {
+async function show(settings: ServerSetting[], onOpenWelcomeEditor?: () => void) {
   // Through the cache the backend already holds, which is the path a screen
   // opened on an epoch-0 server takes; the query path has its own tests.
   invoke.mockImplementation((command: string) =>
     Promise.resolve(command === "get_server_settings" ? snapshot(settings) : null),
   );
-  render(withNebulaTheme(<ServerSettingsAdmin />));
+  render(withNebulaTheme(<ServerSettingsAdmin onOpenWelcomeEditor={onOpenWelcomeEditor} />));
   await waitFor(() => expect(screen.getByText("Welcome text")).toBeTruthy());
 }
 
@@ -161,6 +161,30 @@ describe("ServerSettingsAdmin", () => {
     expect(preview.textContent).toContain("safe");
     expect(preview.querySelector("script")).toBeNull();
     expect(preview.querySelector("p")?.getAttribute("onclick")).toBeNull();
+  });
+
+  it("points the welcome text at the editor that can do more than one of them", async () => {
+    // The field is one string sent to everybody, and a graph that matches is
+    // sent instead of it - neither of which is visible from this box.
+    const open = vi.fn();
+    await show([setting()], open);
+
+    expect(screen.getByText("Want more than one welcome message?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open the editor" }));
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the pointer off other markup settings, and off an operator without the page", async () => {
+    // A plugin free to call its own field "MOTD" gets the same editor, but its
+    // value is not what the greeting graph replaces.
+    await show([setting(), setting({ key: "plugin_motd", label: "MOTD", type: "text" })], () => {});
+    expect(screen.getAllByRole("button", { name: "Open the editor" })).toHaveLength(1);
+
+    cleanup();
+    useServerSettingsStore.getState().clear();
+    // No page to send them to: nothing said, rather than a link that bounces.
+    await show([setting()]);
+    expect(screen.queryByRole("button", { name: "Open the editor" })).toBeNull();
   });
 
   it("sends what was written, and nothing that was not touched", async () => {

@@ -226,6 +226,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::audit::query_audit_log,
         super::audit::save_audit_config,
         super::server_settings::get_server_settings,
+        super::server_settings::request_server_settings,
         super::server_settings::save_server_settings,
         // -- account (self-service) ------------------------------------
         super::account::get_account_settings,

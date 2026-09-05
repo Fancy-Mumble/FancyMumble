@@ -1,6 +1,8 @@
 //! Editable server-settings methods on `AppState`.
 //!
 //! - `get_server_settings` snapshots the cached schema for the active session.
+//! - `request_server_settings` asks the server for it, for the epoch-1 server
+//!   that answers a question rather than broadcasting after `ServerSync`.
 //! - `save_server_settings` (admin) sends changed settings to the server, which
 //!   validates root-channel Write permission, applies them at runtime, and
 //!   re-broadcasts the updated snapshot.
@@ -17,6 +19,28 @@ impl AppState {
         let snapshot = self.inner.snapshot();
         let guard = snapshot.lock().ok()?;
         guard.server_settings.clone()
+    }
+
+    /// Ask the server for the settings an operator may change at run time.
+    ///
+    /// Answered asynchronously on the `server-settings` Tauri event, which is
+    /// the same path the epoch-0 broadcast arrives on: a caller waits for the
+    /// event rather than for this future, which resolves once the frame is
+    /// queued. A server that will not answer - no such feature, or a session
+    /// without root `Write` - answers with silence.
+    pub async fn request_server_settings(&self) -> Result<(), String> {
+        let handle = {
+            let session = self.inner.snapshot();
+            let state = session.lock().map_err(|e| e.to_string())?;
+            state.conn.client_handle.clone()
+        };
+        let handle = handle.ok_or("Not connected")?;
+
+        handle
+            .send(command::RequestServerSettings)
+            .await
+            .map_err(|e| format!("Failed to request server settings: {e}"))?;
+        Ok(())
     }
 
     /// Admin path: send changed settings to the server to apply at runtime.
