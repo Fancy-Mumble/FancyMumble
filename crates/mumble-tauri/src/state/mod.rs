@@ -271,6 +271,40 @@ pub(super) struct SharedState {
     pub starling_files: starling_files::StarlingFiles,
 }
 
+impl SharedState {
+    /// Drop everything that described the server we were just talking to.
+    ///
+    /// Both ends a session can stop at run through here: the kick, which
+    /// arrives as a `UserRemove` naming our own session, and the socket simply
+    /// closing under us. The second one used to clear the connection and the
+    /// audio and stop there, leaving the roster, the tree, the messages and
+    /// `own_session` in place, so a client whose link dropped went on
+    /// answering `get_state` with the population of a server it was no longer
+    /// attached to. The frontend resets itself on the same event and hides
+    /// that, right up until something re-reads the backend - a tab switch, a
+    /// reload, a debounced `state-changed` - and the dead server comes back
+    /// half-populated.
+    pub(super) fn clear_session_data(&mut self) {
+        self.users.clear();
+        self.channels.clear();
+        self.registered_user_textures.clear();
+        self.msgs.by_channel.clear();
+        self.msgs.channel_unread.clear();
+        self.permanently_listened.clear();
+        self.selected_channel = None;
+        self.current_channel = None;
+        self.conn.own_session = None;
+        self.conn.synced = false;
+        self.server.config = ServerConfig::default();
+        self.server.fancy_version = None;
+        self.server.version_info = ServerVersionInfo::default();
+        self.server.max_users = None;
+        self.server.max_bandwidth = None;
+        self.server.opus = false;
+        self.server.root_permissions = None;
+    }
+}
+
 // --- Tauri-managed application state ------------------------------
 
 /// Central state managed by Tauri and shared across all commands.

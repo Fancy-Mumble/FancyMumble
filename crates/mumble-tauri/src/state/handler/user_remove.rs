@@ -36,22 +36,8 @@ fn handle_self_kicked(msg: &mumble_tcp::UserRemove, ctx: &HandlerContext) {
         // "Connection to server was lost." reason that would clobber the
         // kick reason we emit below.
         state.conn.user_initiated_disconnect = true;
-        state.users.clear();
-        state.channels.clear();
-        state.msgs.by_channel.clear();
-        state.conn.own_session = None;
-        state.conn.synced = false;
-        state.permanently_listened.clear();
-        state.selected_channel = None;
-        state.current_channel = None;
-        state.msgs.channel_unread.clear();
-        state.server.config = ServerConfig::default();
+        state.clear_session_data();
         state.audio.voice_state = VoiceState::Inactive;
-        state.server.fancy_version = None;
-        state.server.version_info = ServerVersionInfo::default();
-        state.server.max_users = None;
-        state.server.max_bandwidth = None;
-        state.server.opus = false;
         // Stop audio pipelines (desktop only).
         #[cfg(not(target_os = "android"))]
         stop_audio_pipelines(&mut state);

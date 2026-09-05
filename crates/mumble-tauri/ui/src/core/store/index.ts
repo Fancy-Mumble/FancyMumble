@@ -8,7 +8,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { reconnectDelayMs } from "../utils/reconnectBackoff";
+import { reconnectDelayMs, shouldAutoReconnect } from "../utils/reconnectBackoff";
 import {
   isPermissionGranted,
   requestPermission,
@@ -172,6 +172,16 @@ let lastAttemptedPassword: string | null = null;
  *  set so it does not surface a "Connection lost" overlay for what the
  *  user just initiated themselves.  Entries are removed once handled. */
 const intentionallyClosingSessions = new Set<string>();
+/** Set by the `connection-rejected` listener when the server itself ended the
+ *  session - a kick, a ban, a full server, or the same account signing in
+ *  somewhere else.  Read and cleared by the `server-disconnected` listener
+ *  that follows it, which then does not schedule an auto-reconnect.
+ *
+ *  Retrying a refusal is at best rude and at worst a loop: two devices sharing
+ *  one identity evict each other forever, each one's reconnect kicking the
+ *  other, and neither user can keep a connection.  The server said no; the
+ *  retry is the user's to ask for. */
+let serverRejectedConnection = false;
 /** Module-level handle to react-router's `navigate`.  Set by
  *  `initEventListeners`; used by store actions that need to redirect
  *  (e.g. `disconnectSession` falling back to the connect page). */
@@ -643,6 +653,12 @@ export interface AppState
   /** Snapshot of every backend session currently registered.  Survives
    *  disconnects of individual sessions; only cleared by `refreshSessions`. */
   sessions: import("../types").SessionMeta[];
+  /** Whether `sessions` / `activeServerId` have been read from the backend
+   *  yet.  Until they have, an empty list means "not asked", not "nothing
+   *  connected" - and the two are opposite answers to "should this client
+   *  dial the auto-connect server?" on a page that boots while the backend
+   *  is already on it. */
+  sessionsLoaded: boolean;
   /** Backend's currently-active session id (the one frontend commands
    *  without an explicit serverId target).  `null` when no sessions. */
   activeServerId: import("../types").ServerId | null;
@@ -1047,6 +1063,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
 
   // Multi-server (Phase C): outside INITIAL so it survives single-session disconnects.
   sessions: [],
+  sessionsLoaded: false,
   activeServerId: null,
   sessionUnreadTotals: {},
   sessionErrors: {},
@@ -1076,6 +1093,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
           activeMeta?.status === "connected" ? null : (nextErrors[activeServerId ?? ""] ?? prev.error);
         return {
           sessions,
+          sessionsLoaded: true,
           activeServerId,
           sessionUnreadTotals: next,
           sessionErrors: nextErrors,
@@ -1207,6 +1225,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
 
   connect: async (host, port, username, certLabel, password, totp) => {
     manualDisconnectRequested = false;
+    serverRejectedConnection = false;
     clearAutoReconnectTimer();
     // Remembered so a follow-up TOTP prompt can re-send the same password.
     lastAttemptedPassword = password ?? null;
@@ -2994,9 +3013,17 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
         // If a password prompt is already pending, keep the rejection error
         // instead of overwriting it with a generic disconnect message.
         const reason = pwRequired ? currentError : (eventReason ?? currentError);
-        // Will we auto-reconnect? Only when enabled and this wasn't a
-        // user-initiated disconnect or a password rejection.
-        const willReconnect = !manualDisconnectRequested && !pwRequired && !!pending && autoReconnectEnabled;
+        // Will we auto-reconnect?  `serverRejectedConnection` is read and
+        // cleared here: it describes this disconnect and no later one.
+        const rejected = serverRejectedConnection;
+        serverRejectedConnection = false;
+        const willReconnect = shouldAutoReconnect({
+          manualDisconnect: manualDisconnectRequested,
+          serverRejected: rejected,
+          passwordRequired: pwRequired,
+          hasTarget: !!pending,
+          enabled: autoReconnectEnabled,
+        });
         // Preserve the downtime clock and attempt count across a reconnect
         // *sequence* (multiple failures) so they accumulate rather than
         // resetting on every failed attempt; a fresh loss starts the clock.
@@ -3018,7 +3045,7 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
           navigate("/chat");
         }
 
-        if (willReconnect) {
+        if (willReconnect && pending !== null) {
           scheduleAutoReconnect(pending);
         }
       },
@@ -3257,14 +3284,16 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
           }
           return;
         }
+        // The server refused or ended this session on purpose.  The
+        // `server-disconnected` event that follows reads this and skips the
+        // auto-reconnect: dialling straight back into a kick re-kicks whoever
+        // took our place, and dialling back into a ban just hammers it.
+        serverRejectedConnection = true;
         useAppStore.setState({
           status: "disconnected",
           error: event.payload.reason,
-          // Keep `pendingConnect` so the auto-reconnect loop (driven by the
-          // matching `server-disconnected` event) still has a target and its
-          // attempt counter / backoff are not reset. A user-initiated
-          // disconnect suppresses reconnect via `manualDisconnectRequested`,
-          // and the next `connect()` overwrites this value.
+          // Keep `pendingConnect` so a manual retry (and the reconnect overlay)
+          // still has a target and the attempt counter / backoff are not reset.
           bootstrapStage: null,
         });
         // Stay on /chat when other tabs remain so the reconnect overlay
@@ -3619,4 +3648,24 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
   await registerScheduledEvents(unlisteners);
 
   return unlisteners;
+}
+
+// --- Hot module replacement ----------------------------------------
+
+if (import.meta.hot) {
+  // `create()` runs once per execution of this module, and a hot update
+  // executes it again: the app ends up with two stores.  Fast Refresh keeps
+  // the React tree alive, so the components that re-render read the *new*,
+  // empty one while every listener `initEventListeners` registered - along
+  // with the module-scope flags beside it - goes on writing to the old.  What
+  // that looks like is an app that is still connected and cannot be told so:
+  // no channels, no users, `status` stuck at "disconnected", and no Leave
+  // control, because each pack only draws one while connected.
+  //
+  // Self-accepting stops the update propagating into those component
+  // boundaries; reloading is what puts the app back on one store.  It costs
+  // nothing here - `initEventListeners` restores the live session from the
+  // backend on boot, which is exactly the path a Vite full reload already
+  // took.
+  import.meta.hot.accept(() => globalThis.location.reload());
 }
