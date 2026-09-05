@@ -24,6 +24,7 @@ export { Composer } from "./chat/Composer";
 export { ConnectScreen } from "./connect/ConnectScreen";
 export { QuickConnect } from "./connect/QuickConnect";
 export { LeaveServerDialog } from "./connect/LeaveServerDialog";
+export { ForgetServerDialog } from "./connect/ForgetServerDialog";
 export {
   SettingsNav,
   useSettingsNavContext,
@@ -46,3 +47,4 @@ export { UserInfoDialog } from "./user/UserInfoDialog";
 export { UserMenu, type UserMenuTarget } from "./user/UserMenu";
 export { NebulaRuntime } from "./runtime/NebulaRuntime";
 export { ConnectionOverlays } from "./runtime/ConnectionOverlays";
+export { SessionStatus } from "./runtime/SessionStatus";

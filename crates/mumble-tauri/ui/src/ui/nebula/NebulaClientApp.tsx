@@ -7,11 +7,18 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAppStore } from "@core/store";
 import { getPreferences, isFirstRun, updatePreferences } from "@core/preferencesStorage";
-import { getSavedServers, getServerPassword, markServerJoined, updateServer } from "@core/serverStorage";
+import {
+  getSavedServers,
+  getServerPassword,
+  markServerJoined,
+  removeServer,
+  updateServer,
+} from "@core/serverStorage";
 import { getUserRelations, userRelationIdentity, type UserRelation } from "@core/userRelationsStorage";
 import { openDmPopout } from "@core/features/chat/dmPopout";
 import { meetingRooms } from "@core/utils/channelVisibility";
 import { isE2E } from "@core/utils/e2e";
+import { TID } from "@core/testids";
 import { PERM_WRITE } from "@core/utils/permissions";
 import { applyMentionsToHtml, type MentionResolver } from "@core/utils/mentions";
 import { isSpentWatchMarker } from "@core/features/chat/watch/watchMarker";
@@ -23,6 +30,7 @@ import { myFilesAvailable } from "@standard/components/fileserver/fileServerMe";
 import TypingIndicator from "./components/chat/TypingIndicator";
 import PublicServersSurface from "./components/connect/PublicServersSurface";
 import { PinnedPanel } from "./components/chat/pinned/PinnedPanel";
+import { useWelcomePin } from "./components/chat/pinned/useWelcomePin";
 import { LiveDocDock } from "./components/chat/livedoc/LiveDocDock";
 import { useNebulaLiveDoc } from "./components/chat/livedoc/useNebulaLiveDoc";
 import { Lightbox, type LightboxHandle } from "@standard/components/elements/Lightbox";
@@ -46,6 +54,7 @@ import {
   Composer,
   ConnectScreen,
   ConnectionOverlays,
+  SessionStatus,
   FriendsPanel,
   MemberPanel,
   RichPresencePanel,
@@ -55,6 +64,7 @@ import {
   MoveUsersDialog,
   NebulaRuntime,
   GlobalSearch,
+  ForgetServerDialog,
   LeaveServerDialog,
   PurgeHistoryDialog,
   ProfileCard,
@@ -144,6 +154,8 @@ import {
 } from "./selectors";
 import { useRegisteredMembers } from "@core/features/roster/registeredMembers";
 import { useAclGroups } from "@ui/standard/hooks/useAclGroups";
+import { rolesForUser } from "@core/features/roster/roles";
+import { usePublishOwnRoles } from "@core/features/chat/selfMention";
 import { dmChannelLabel } from "./friends";
 import { useSavedFriends } from "./useFriends";
 import { shortcutLabel, useNebulaShortcuts } from "./shortcuts";
@@ -242,6 +254,7 @@ export default function NebulaClientApp() {
     "nebulaSettings",
     "settings",
     "sidebar",
+    "chat",
     "common",
   ]);
   // A second handle on the catalogue for the pure selectors: they say what
@@ -249,6 +262,7 @@ export default function NebulaClientApp() {
   const { t: tSelectors } = useTranslation("nebulaCommon");
   const status = useAppStore((state) => state.status);
   const sessions = useAppStore((state) => state.sessions);
+  const sessionsLoaded = useAppStore((state) => state.sessionsLoaded);
   const sessionUnreadTotals = useAppStore((state) => state.sessionUnreadTotals);
   const activeServerId = useAppStore((state) => state.activeServerId);
 
@@ -355,6 +369,8 @@ export default function NebulaClientApp() {
   const [addServerOpen, setAddServerOpen] = useState(false);
   /** The saved identity the dialog is open on, when it is editing one. */
   const [editingServer, setEditingServer] = useState<SavedServer | null>(null);
+  /** The server whose removal is awaiting confirmation. */
+  const [forgetting, setForgetting] = useState<ServerGroup | null>(null);
   const [quickConnectAnchor, setQuickConnectAnchor] = useState<HTMLElement | null>(null);
   const [railExpanded, setRailExpanded] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -398,18 +414,39 @@ export default function NebulaClientApp() {
     void applyStoredGameOverlaySettings();
   }, []);
 
-  // With nothing saved there is no conversation to show, so the connect screen
+  // With nothing open there is no conversation to show, so the connect screen
   // is the client rather than a detour from it.
+  //
+  // Only when nothing is open. A session that exists but is not connected is
+  // the status surface's case, and sending that one here instead threw away
+  // the thing the user most needs - which server ended, and why - by replacing
+  // it with a list of servers to pick from.
   useEffect(() => {
-    if (status !== "connected" && savedServers !== null) openScreen("connect");
-  }, [openScreen, savedServers, status]);
+    if (status !== "connected" && savedServers !== null && sessions.length === 0) openScreen("connect");
+  }, [openScreen, savedServers, sessions.length, status]);
+
+  // And its counterpart, which the event stream cannot supply on its own.
+  //
+  // The backend outlives the page: a reload - Vite's, or the one a store hot
+  // update now forces - boots onto a session that is already connected, so the
+  // `server-connected` event that routes to the conversation has long since
+  // fired. Without this the client spends the moment before the session list
+  // arrives being sent to the connect screen by the effect above, and then
+  // stays there, connected, with no way back but a click.
+  useEffect(() => {
+    if (status === "connected") openScreen("chat");
+  }, [openScreen, status]);
 
   // Auto-connect, once, at launch. Guarded by a ref rather than by `status` so
   // that disconnecting on purpose does not immediately reconnect the user.
   const autoConnected = useRef(false);
   useEffect(() => {
-    if (autoConnected.current || savedServers === null || status === "connected") return;
+    if (autoConnected.current || savedServers === null || !sessionsLoaded || status === "connected") return;
     autoConnected.current = true;
+    // A session the backend already holds is this launch's answer: dialling
+    // the auto-connect server on top of it opens a second one under the same
+    // identity, which the server resolves by evicting the first.
+    if (sessions.length > 0) return;
     void getPreferences()
       .then((preferences) => {
         const target = savedServers.find((server) => server.id === preferences.autoConnectServerId);
@@ -418,9 +455,26 @@ export default function NebulaClientApp() {
       .catch(() => undefined);
     // The ref, not the dependency list, is what makes this run once: `status`
     // and `savedServers` both change while the connection is being made.
-  }, [savedServers, status]);
+    // `sessionsLoaded` has to be in it all the same - a backend with nothing
+    // open flips it on its own, moving neither of the other two, and the run
+    // that finally has an answer would never happen.
+  }, [savedServers, sessions.length, sessionsLoaded, status]);
 
   const activeSession = sessions.find((session) => session.id === activeServerId);
+  /**
+   * Whether the open session is in no state to show a conversation.
+   *
+   * Standard gates its whole chat page on exactly this and Aurora returns a
+   * status screen; Nebula had only the effect above nudging `screen` towards
+   * "connect", which anything that later opened the chat screen undid. The
+   * result was the connected chrome drawn around a session that had ended -
+   * an empty channel list, a voice dock for a finished call, a composer that
+   * could not send - and no word of what had happened. `bootstrapStage` is in
+   * here for the same reason it is in Standard's: the backend reports
+   * `connected` before `ServerSync` lands, and the window in between looks
+   * exactly like the broken state it is not.
+   */
+  const sessionNotReady = (status !== "connected" || bootstrapStage !== null) && sessions.length > 0;
   const canAdminister = ((channels.find((channel) => channel.id === 0)?.permissions ?? 0) & PERM_WRITE) !== 0;
   const activeChannel = channels.find((channel) => channel.id === selectedChannel) ?? null;
   const joinedChannel = channels.find((channel) => channel.id === currentChannel) ?? null;
@@ -564,7 +618,13 @@ export default function NebulaClientApp() {
 
   // The sidebar chooses a server; the connect screen chooses which of that
   // server's identities to arrive as.
-  const serverGroups = useMemo(() => groupSavedServers(savedServers, sessions), [savedServers, sessions]);
+  // How the connect screen's "join as" rows are arranged, by saved-server id,
+  // loaded with the rail's order below and written back on every drop.
+  const [identityOrder, setIdentityOrder] = useState<readonly string[]>([]);
+  const serverGroups = useMemo(
+    () => groupSavedServers(savedServers, sessions, identityOrder),
+    [savedServers, sessions, identityOrder],
+  );
   // The rail order is the user arrangement, loaded once and written back on
   // every drop so a restart finds the tiles where they were left.
   const [railOrder, setRailOrder] = useState<readonly string[]>([]);
@@ -582,6 +642,7 @@ export default function NebulaClientApp() {
           // change, and the first drag writes both records for good.
           const stored = preferences.serverRailOrder ?? [];
           setRailOrder(stored.length > 0 ? stored : tabOrderAsAddresses(preferences.serverTabOrder ?? []));
+          setIdentityOrder(preferences.serverIdentityOrder ?? []);
           setServerSwitcher(preferences.serverSwitcher ?? "rail");
         })
         .catch(() => undefined);
@@ -631,6 +692,24 @@ export default function NebulaClientApp() {
       void updatePreferences({ serverRailOrder: [...keys], serverTabOrder: tabOrder });
     },
     [sessions],
+  );
+
+  /**
+   * Remember the order one server's identities were dragged into.
+   *
+   * The record is one flat list for every server, so the ids just moved are
+   * lifted out of it and appended in their new order: ranks are only ever
+   * compared inside a group, and what other servers put between two of these
+   * ids cannot change how they sit against each other.
+   */
+  const reorderIdentitiesFor = useCallback(
+    (ids: readonly string[]) => {
+      const moved = new Set(ids);
+      const next = [...identityOrder.filter((id) => !moved.has(id)), ...ids];
+      setIdentityOrder(next);
+      void updatePreferences({ serverIdentityOrder: next });
+    },
+    [identityOrder],
   );
 
   const railEntries = useMemo(
@@ -748,6 +827,19 @@ export default function NebulaClientApp() {
     [reloadServers],
   );
 
+  const forgetServer = useCallback(
+    (group: ServerGroup) => {
+      setForgetting(null);
+      // The screen it was selected on has nothing to show once the record is
+      // gone, unless a session is still holding it open.
+      setSelectedServerKey((current) => (current === group.key && !group.sessionId ? null : current));
+      void Promise.all(group.identities.map((identity) => removeServer(identity.id)))
+        .catch((reason) => console.error("Nebula forget server failed:", reason))
+        .then(reloadServers);
+    },
+    [reloadServers],
+  );
+
   // The registration table is only asked for while the panel is open with
   // offline people switched on: on a server with thousands registered it is
   // not a small answer.
@@ -757,6 +849,16 @@ export default function NebulaClientApp() {
   // channel's ACL. Reading it needs Write there, so on an ordinary account it
   // comes back empty and the list falls back to one "Members" group.
   const roles = useAclGroups();
+
+  // The same ACL answers "am I in the group this message mentioned?". Kept off
+  // `users` so the set holds its identity through talking-state churn: it is a
+  // memo dependency in every row.
+  const ownUserId = useMemo(
+    () => users.find((user) => user.session === ownSession)?.user_id ?? null,
+    [users, ownSession],
+  );
+  const ownRoles = useMemo(() => rolesForUser(roles, ownUserId), [roles, ownUserId]);
+  usePublishOwnRoles(ownRoles);
 
   // Alphabetical within each group. Sorting talkers to the top made the panel
   // jump on every push-to-talk tap; the talking bars mark the speaker in place.
@@ -856,6 +958,9 @@ export default function NebulaClientApp() {
    * still say which ones they were.
    */
   const [pinsNewOnOpen, setPinsNewOnOpen] = useState<ReadonlySet<string>>(EMPTY_IDS);
+  // The server's greeting, shown at the top of the pinned list: it is the one
+  // message written to be read again, and it used to vanish with its modal.
+  const welcomePin = useWelcomePin();
   const openPinned = useCallback(() => {
     setPinsNewOnOpen(unseenPins);
     if (selectedChannel !== null) clearUnseenPins(selectedChannel);
@@ -1411,6 +1516,14 @@ export default function NebulaClientApp() {
                 }}
                 onToggleFavorite={toggleFavorite}
                 onDisconnect={status === "connected" ? () => leave.request(activeSession) : undefined}
+                onLeaveServer={(entry) =>
+                  leave.request(sessions.find((session) => session.id === entry.session?.id))
+                }
+                onEditServer={(identity) => {
+                  setEditingServer(identity);
+                  setAddServerOpen(true);
+                }}
+                onForgetServer={setForgetting}
                 /* Only when the strip is off: with tabs up top, Friends is up
                    there beside them. */
                 friends={
@@ -1425,7 +1538,7 @@ export default function NebulaClientApp() {
                 onReorder={reorderRail}
               />
             )}
-            {screen === "chat" && channelSidebarOpen && (
+            {screen === "chat" && channelSidebarOpen && !sessionNotReady && (
               <SidebarShell
                 search={
                   <SearchBox
@@ -1507,6 +1620,7 @@ export default function NebulaClientApp() {
                 title={t("nebulaSidebar:servers.title")}
                 action={{
                   label: t("nebulaCommon:app.addServer"),
+                  testId: TID.addServer,
                   onClick: () => {
                     setAddServerFor(null);
                     setAddServerOpen(true);
@@ -1539,7 +1653,11 @@ export default function NebulaClientApp() {
 
             {screen === "settings" && (
               <SidebarShell
-                back={{ label: t("nebulaCommon:app.back"), onClick: () => openScreen("chat") }}
+                back={{
+                  label: t("nebulaCommon:app.back"),
+                  testId: TID.adminBack,
+                  onClick: () => openScreen("chat"),
+                }}
                 search={
                   <SettingsSearch
                     pages={visibleSettingsPages(settingsNavContext).map((entry) => ({
@@ -1627,7 +1745,10 @@ export default function NebulaClientApp() {
                     setEditingServer(identity);
                     setAddServerOpen(true);
                   }}
+                  onReorderIdentities={reorderIdentitiesFor}
                 />
+              ) : sessionNotReady ? (
+                <SessionStatus onOpenServers={() => openScreen("connect")} />
               ) : (
                 <>
                   <ChatHeader
@@ -1720,6 +1841,7 @@ export default function NebulaClientApp() {
                   {surface === "pinned" && (
                     <PinnedPanel
                       messages={visibleMessages}
+                      welcome={welcomePin}
                       unseenIds={pinsNewOnOpen}
                       time={timeDisplay}
                       onClose={() => setSurface(null)}
@@ -1873,7 +1995,9 @@ export default function NebulaClientApp() {
                           border: `1px solid ${muiTheme.palette.nebula.line}`,
                         })}
                       >
-                        <Typography sx={{ fontSize: 12 }}>{selection.selected.size} selected</Typography>
+                        <Typography sx={{ fontSize: 12 }}>
+                          {t("chat:selection.count", { count: selection.selected.size })}
+                        </Typography>
                         <Button
                           size="small"
                           color="error"
@@ -2245,6 +2369,12 @@ export default function NebulaClientApp() {
             onNeverAskChange={leave.setNeverAsk}
             onConfirm={() => void leave.confirm()}
             onCancel={leave.cancel}
+          />
+
+          <ForgetServerDialog
+            group={forgetting}
+            onConfirm={() => forgetting && forgetServer(forgetting)}
+            onCancel={() => setForgetting(null)}
           />
 
           {/* Key verification and the custodian prompt: modal decisions about

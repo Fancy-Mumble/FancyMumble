@@ -3,49 +3,19 @@ import { useTranslation } from "react-i18next";
 import { Box, Portal, Tooltip } from "@mui/material";
 import { ChevronRightIcon, LogOutIcon, PlusIcon, UsersGroupIcon } from "@ui/icons";
 import { reorderServerRail, serverTint, type ServerGroup, type ServerRailEntry } from "../../selectors";
+import { dropTarget, measureSlots, type DragSlot } from "../../dragOrder";
 import { UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
-import type { ServerPingResult } from "@core/types";
+import type { SavedServer, ServerPingResult } from "@core/types";
 import { ServerRailPanel, ServerRailRowGhost, type RailFriends } from "./ServerRailPanel";
 import { ServerRailCard, type RailCardOccupant } from "./ServerRailCard";
+import { ServerMenu, type ServerMenuTarget } from "./ServerMenu";
 
 /** Every tile, and the two buttons that bracket them, are one square. */
 const TILE = 40;
 
 /** How far the pointer travels before a press becomes a drag. */
 const DRAG_SLACK = 4;
-
-/** Where one tile sat when the drag began. */
-interface TileSlot {
-  key: string;
-  top: number;
-  bottom: number;
-}
-
-/** The tiles as they stand, top to bottom, before anything moves. */
-function measureSlots(tiles: ReadonlyMap<string, HTMLElement>): TileSlot[] {
-  return [...tiles.entries()]
-    .map(([key, element]) => {
-      const box = element.getBoundingClientRect();
-      return { key, top: box.top, bottom: box.bottom };
-    })
-    .sort((left, right) => left.top - right.top);
-}
-
-/**
- * The tile the carried one would land in front of, or null for the end.
- *
- * Measured against where the tiles were when the drag started rather than
- * where they are now, so the indicator cannot chase itself: drawing it must
- * never change the answer to where it should be drawn.
- */
-function dropTarget(drag: { key: string; y: number; slots: readonly TileSlot[] }): string | null {
-  for (const slot of drag.slots) {
-    if (slot.key === drag.key) continue;
-    if (drag.y < (slot.top + slot.bottom) / 2) return slot.key;
-  }
-  return null;
-}
 
 interface ServerRailProps {
   entries: readonly ServerRailEntry[];
@@ -84,6 +54,12 @@ interface ServerRailProps {
   onToggleFavorite?: (group: ServerGroup) => void;
   /** Absent while nothing is connected - there is then nothing to leave. */
   onDisconnect?: () => void;
+  /** Leave the session a particular tile reports on, from its menu. */
+  onLeaveServer?: (entry: ServerRailEntry) => void;
+  /** Change a saved server's details, from its menu. */
+  onEditServer?: (identity: SavedServer) => void;
+  /** Drop every identity saved on an address, from its menu. */
+  onForgetServer?: (group: ServerGroup) => void;
   /** Friends, when the title bar is not carrying it. */
   friends?: RailFriends;
   /** The new order, by host:port, after a tile is dropped. */
@@ -103,6 +79,7 @@ function RailTile({
   active,
   icon,
   onSelect,
+  onContextMenu,
   onHover,
   onLeave,
   dragging,
@@ -113,6 +90,7 @@ function RailTile({
   active: boolean;
   icon?: string;
   onSelect: () => void;
+  onContextMenu: (x: number, y: number) => void;
   onHover: (top: number) => void;
   onLeave: () => void;
   /** True for the tile currently being carried; the ghost stands in for it. */
@@ -142,6 +120,11 @@ function RailTile({
           : t("servers.tileLabel", { server: group.label, state: detail })
       }
       onClick={onSelect}
+      onContextMenu={(event: React.MouseEvent<HTMLElement>) => {
+        // The webview's own menu is about the page, not the server.
+        event.preventDefault();
+        onContextMenu(event.clientX, event.clientY);
+      }}
       onMouseEnter={(event: { currentTarget: HTMLElement }) => onHover(event.currentTarget.offsetTop)}
       onMouseLeave={onLeave}
       ref={registerRef}
@@ -355,6 +338,9 @@ export function ServerRail({
   onAddServer,
   onToggleFavorite,
   onDisconnect,
+  onLeaveServer,
+  onEditServer,
+  onForgetServer,
   friends,
   onReorder,
 }: Readonly<ServerRailProps>) {
@@ -366,6 +352,9 @@ export function ServerRail({
   // travelling towards it, which is the only reason the close is delayed.
   const [hovered, setHovered] = useState<{ key: string; top: number } | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The right-click menu; the hover card gives way to it, since both would
+  // otherwise be open beside the same tile.
+  const [menu, setMenu] = useState<ServerMenuTarget | null>(null);
 
   const holdOpen = useCallback(() => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -395,7 +384,7 @@ export function ServerRail({
     left: number;
     width: number;
     height: number;
-    slots: TileSlot[];
+    slots: DragSlot[];
   } | null>(null);
 
   const beginGesture = useCallback(
@@ -404,6 +393,17 @@ export function ServerRail({
       gesture.current = { key, startY: event.clientY, moved: false };
     },
     [],
+  );
+
+  /** A press that turned into a drag is not a request for a menu. */
+  const openMenu = useCallback(
+    (entry: ServerRailEntry, x: number, y: number) => {
+      if (gesture.current?.moved) return;
+      holdOpen();
+      setHovered(null);
+      setMenu({ entry, active: entry.group.key === activeKey, x, y });
+    },
+    [activeKey, holdOpen],
   );
 
   useEffect(() => {
@@ -511,8 +511,21 @@ export function ServerRail({
       onClose={pinned ? undefined : onToggleExpanded}
       friends={friends}
       onSelect={onSelect}
+      onContextMenu={openMenu}
       onAddServer={onAddServer}
       onToggleFavorite={onToggleFavorite}
+    />
+  );
+
+  const serverMenu = (
+    <ServerMenu
+      target={menu}
+      onOpen={onSelect}
+      onToggleFavorite={onToggleFavorite}
+      onEdit={onEditServer}
+      onDisconnect={onLeaveServer}
+      onForget={onForgetServer}
+      onClose={() => setMenu(null)}
     />
   );
 
@@ -524,6 +537,7 @@ export function ServerRail({
       <>
         {ghost}
         {panel}
+        {serverMenu}
       </>
     );
 
@@ -588,6 +602,7 @@ export function ServerRail({
               if (gesture.current?.moved || dragKey) return;
               onSelect(entry);
             }}
+            onContextMenu={(x, y) => openMenu(entry, x, y)}
             onHover={(top) => {
               if (dragKey) return;
               holdOpen();
@@ -614,7 +629,7 @@ export function ServerRail({
 
       {/* The pinned panel says everything the card would, so the two never
           show together. */}
-      {!open && hoveredEntry && hovered && (
+      {!open && !menu && hoveredEntry && hovered && (
         <ServerRailCard
           entry={hoveredEntry}
           icon={icons?.get(hoveredEntry.group.key)}
@@ -635,6 +650,7 @@ export function ServerRail({
       )}
 
       {expanded && panel}
+      {serverMenu}
     </Box>
   );
 }

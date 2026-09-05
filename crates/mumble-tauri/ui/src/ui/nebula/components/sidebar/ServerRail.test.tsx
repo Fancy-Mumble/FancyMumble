@@ -111,6 +111,21 @@ describe("ServerRail", () => {
     expect(screen.getByRole("button", { name: /magical.rocks/ })).toBeTruthy();
   });
 
+  it("opens its own menu on a right-click instead of the webview's", () => {
+    rail();
+    const tile = screen.getByRole("button", { name: /voice.kumo.gg/ });
+    // fireEvent answers false when the handler called preventDefault - which
+    // is what keeps the webview's own Back/Reload/Inspect menu away.
+    expect(fireEvent.contextMenu(tile, { clientX: 30, clientY: 80 })).toBe(false);
+    expect(screen.getByRole("menuitem", { name: "Connect to voice.kumo.gg" })).toBeTruthy();
+  });
+
+  it("offers the menu on the pinned rows too", () => {
+    rail({ pinned: true });
+    fireEvent.contextMenu(screen.getByRole("button", { name: /voice.kumo.gg/ }));
+    expect(screen.getByRole("menuitem", { name: "Copy address" })).toBeTruthy();
+  });
+
   it("treats a press that never moved as a click, not a drag", () => {
     const onReorder = vi.fn();
     const onSelect = vi.fn();

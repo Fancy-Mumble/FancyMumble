@@ -1,4 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { Box, Button, CircularProgress, IconButton, Switch, Tooltip, Typography } from "@mui/material";
@@ -21,8 +30,9 @@ import {
   type LiveryStatus,
   type ProbeState,
 } from "../../liveryStatus";
-import { EditIcon } from "@ui/icons";
-import { serverTint } from "../../selectors";
+import { EditIcon, GripVerticalIcon } from "@ui/icons";
+import { dropTarget, measureSlots, type DragSlot } from "../../dragOrder";
+import { reorderIdentities, serverTint } from "../../selectors";
 import { UserAvatar, Stack } from "../primitives";
 import { SectionLabel, StatChip } from "../primitives";
 import { radius } from "../../tokens";
@@ -112,6 +122,22 @@ function LiveryDot({ status }: Readonly<{ status: LiveryStatus }>) {
   );
 }
 
+/** Where the carried identity would land, drawn between two rows. */
+function DropLine() {
+  return (
+    <Box
+      aria-hidden
+      sx={(theme) => ({
+        height: 2,
+        my: "-1px",
+        flex: "none",
+        borderRadius: "1px",
+        background: theme.palette.nebula.accent,
+      })}
+    />
+  );
+}
+
 interface ConnectScreenProps {
   server: SavedServer | null;
   /**
@@ -138,7 +164,17 @@ interface ConnectScreenProps {
    * stored on one of these.
    */
   onEditIdentity?: (identity: SavedServer) => void;
+  /**
+   * Put this server's identities in the order given, by id.
+   *
+   * Absent, the rows carry no grip and cannot be dragged: a screen with nobody
+   * to remember the arrangement should not offer to rearrange anything.
+   */
+  onReorderIdentities?: (ids: readonly string[]) => void;
 }
+
+/** How far the pointer travels before a press on the grip becomes a drag. */
+const DRAG_SLACK = 4;
 
 /**
  * The server landing page.
@@ -157,6 +193,7 @@ export function ConnectScreen({
   onConnect,
   onAddIdentity,
   onEditIdentity,
+  onReorderIdentities,
 }: Readonly<ConnectScreenProps>) {
   const { t } = useTranslation(["nebulaConnect", "server"]);
   const [ping, setPing] = useState<ServerPingResult | null>(null);
@@ -169,6 +206,98 @@ export function ConnectScreen({
   const [selected, setSelected] = useState<string | null>(null);
   /** Saved-server id the client connects to at launch, or null for none. */
   const [autoConnectId, setAutoConnectId] = useState<string | null>(null);
+
+  /*
+    Rearranging the rows runs its own pointer gesture rather than the browser's
+    HTML5 drag, for the reason the server rail does: a drag started inside the
+    webview never fires reliably, and it gives no way to keep the carried row
+    in the list it came from. Only the grip starts one - a press anywhere else
+    on a row still just picks that identity to arrive as.
+  */
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const gesture = useRef<{ key: string; startY: number; moved: boolean } | null>(null);
+  const [drag, setDrag] = useState<{ key: string; y: number; slots: DragSlot[] } | null>(null);
+  // One identity is an order already. Nothing to grip, and no room for the
+  // grip's column to push the row's contents across for no reason.
+  const canReorder = Boolean(onReorderIdentities) && identities.length > 1;
+
+  const beginGesture = useCallback(
+    (key: string) => (event: ReactPointerEvent<HTMLElement>) => {
+      if (event.button !== 0) return;
+      // Stops the browser starting a text selection or its own drag from the
+      // row, either of which cancels the pointer stream mid-gesture.
+      event.preventDefault();
+      gesture.current = { key, startY: event.clientY, moved: false };
+    },
+    [],
+  );
+
+  /** The rows as the user sees them, keyed by the id each one carries. */
+  const measureRows = useCallback(() => {
+    const rows = new Map<string, HTMLElement>();
+    for (const row of listRef.current?.querySelectorAll<HTMLElement>("[data-identity-id]") ?? []) {
+      const id = row.dataset.identityId;
+      if (id) rows.set(id, row);
+    }
+    return rows;
+  }, []);
+
+  useEffect(() => {
+    if (!canReorder) return;
+
+    const move = (event: PointerEvent) => {
+      const held = gesture.current;
+      if (!held) return;
+      // A few pixels of slack, so a click on the grip is still a click.
+      if (!held.moved && Math.abs(event.clientY - held.startY) < DRAG_SLACK) return;
+      if (!held.moved) {
+        held.moved = true;
+        // Measured once, as the drag starts: the indicator is drawn without
+        // moving anything, so the rows the pointer is judged against stay
+        // where they were and the drop target cannot chase itself.
+        setDrag({ key: held.key, y: event.clientY, slots: measureSlots(measureRows()) });
+        return;
+      }
+      setDrag((current) => (current ? { ...current, y: event.clientY } : current));
+    };
+
+    const end = () => {
+      const held = gesture.current;
+      gesture.current = null;
+      if (!held?.moved) return;
+      setDrag((current) => {
+        if (current) onReorderIdentities?.(reorderIdentities(identities, current.key, dropTarget(current)));
+        return null;
+      });
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+    };
+  }, [canReorder, identities, measureRows, onReorderIdentities]);
+
+  /**
+   * Move one identity a single place, for the keyboard.
+   *
+   * Phrased as the drop is - "land in front of that row" - rather than as a
+   * pair of indices, so both paths end in the same call and there is only one
+   * piece of list arithmetic to get right.
+   */
+  const nudge = useCallback(
+    (id: string, delta: -1 | 1) => {
+      const ids = identities.map((entry) => entry.id);
+      const from = ids.indexOf(id);
+      const to = from + delta;
+      if (from === -1 || to < 0 || to >= ids.length) return;
+      onReorderIdentities?.(reorderIdentities(identities, id, delta < 0 ? ids[to] : (ids[to + 1] ?? null)));
+    },
+    [identities, onReorderIdentities],
+  );
 
   useEffect(() => {
     let active = true;
@@ -285,6 +414,8 @@ export function ConnectScreen({
     );
 
   const identity = identities.find((entry) => entry.id === selected) ?? server;
+  // The row the carried one would land in front of, or null for the end.
+  const dropBefore = drag ? dropTarget(drag) : null;
   // Everything below draws whatever survived resolution - live from an open
   // connection, remembered from a previous visit, or nothing at all. Which of
   // those it was is the indicator's job to say, not this page's.
@@ -555,71 +686,122 @@ export function ConnectScreen({
           </Box>
         </Stack>
 
-        <Stack gap={0.875} sx={{ width: "100%" }}>
+        <Box ref={listRef} sx={{ width: "100%", display: "flex", flexDirection: "column", gap: "7px" }}>
           {identities.map((entry) => {
             const active = entry.id === identity.id;
+            const carried = drag?.key === entry.id;
             return (
-              <Stack
-                key={entry.id}
-                direction="row"
-                alignItems="center"
-                gap={1.375}
-                onClick={() => setSelected(entry.id)}
-                sx={(theme) => ({
-                  px: "12px",
-                  py: "10px",
-                  borderRadius: radius("lg"),
-                  cursor: "pointer",
-                  textAlign: "left",
-                  background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.card,
-                  border: `1px solid ${active ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
-                })}
-              >
-                <UserAvatar name={entry.username} size={34} />
-                <Box sx={{ minWidth: 0, flex: 1 }}>
-                  <Typography sx={{ fontSize: 12.5, fontWeight: active ? 600 : 500 }} noWrap>
-                    {entry.username}
-                  </Typography>
-                  <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.muted })}>
-                    {entry.cert_label
-                      ? t("screen.certificate", { label: entry.cert_label })
-                      : t("screen.noCertificate")}
-                  </Typography>
-                </Box>
-                {onEditIdentity && (
-                  <Tooltip title={t("server:edit.title")}>
-                    <IconButton
-                      aria-label={t("nebulaConnect:screen.editIdentity", { username: entry.username })}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onEditIdentity(entry);
-                      }}
-                      sx={{ flex: "none" }}
-                    >
-                      <EditIcon width={13} height={13} />
-                    </IconButton>
-                  </Tooltip>
-                )}
-                <Box
+              <Fragment key={entry.id}>
+                {dropBefore === entry.id && <DropLine />}
+                <Stack
+                  data-identity-id={entry.id}
+                  direction="row"
+                  alignItems="center"
+                  gap={1.375}
+                  onClick={() => setSelected(entry.id)}
                   sx={(theme) => ({
-                    width: 16,
-                    height: 16,
-                    borderRadius: "50%",
-                    flex: "none",
-                    border: `${active ? 5 : 1.5}px solid ${
-                      active ? theme.palette.nebula.accent : theme.palette.nebula.line2
-                    }`,
+                    px: "12px",
+                    py: "10px",
+                    borderRadius: radius("lg"),
+                    cursor: "pointer",
+                    textAlign: "left",
+                    // The row stays in place while it is carried; what moves is
+                    // the line saying where it would land.
+                    opacity: carried ? 0.4 : 1,
+                    background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.card,
+                    border: `1px solid ${active ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
                   })}
-                />
-              </Stack>
+                >
+                  {canReorder && (
+                    <Box
+                      component="button"
+                      type="button"
+                      data-testid={TID.connectIdentityHandle}
+                      aria-label={t("nebulaConnect:screen.reorderIdentity", { username: entry.username })}
+                      onPointerDown={beginGesture(entry.id)}
+                      // A press on the grip is not a press on the row: picking
+                      // an identity up is not the same as picking it.
+                      onClick={(event: ReactMouseEvent) => event.stopPropagation()}
+                      onKeyDown={(event: ReactKeyboardEvent) => {
+                        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+                        // Without this the list scrolls under the row being
+                        // moved, which is the one thing the user is watching.
+                        event.preventDefault();
+                        nudge(entry.id, event.key === "ArrowUp" ? -1 : 1);
+                      }}
+                      sx={(theme) => ({
+                        all: "unset",
+                        flex: "none",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: 16,
+                        alignSelf: "stretch",
+                        ml: "-4px",
+                        cursor: drag ? "grabbing" : "grab",
+                        color: theme.palette.nebula.dim,
+                        // A touch drag must move the row, not scroll the page.
+                        touchAction: "none",
+                        opacity: 0.75,
+                        "&:hover, &:focus-visible": { opacity: 1, color: theme.palette.nebula.muted },
+                        "&:focus-visible": {
+                          outline: `2px solid ${theme.palette.nebula.accent}`,
+                          outlineOffset: 1,
+                          borderRadius: radius("sm"),
+                        },
+                      })}
+                    >
+                      <GripVerticalIcon width={14} height={14} />
+                    </Box>
+                  )}
+                  <UserAvatar name={entry.username} size={34} />
+                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                    <Typography sx={{ fontSize: 12.5, fontWeight: active ? 600 : 500 }} noWrap>
+                      {entry.username}
+                    </Typography>
+                    <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.muted })}>
+                      {entry.cert_label
+                        ? t("screen.certificate", { label: entry.cert_label })
+                        : t("screen.noCertificate")}
+                    </Typography>
+                  </Box>
+                  {onEditIdentity && (
+                    <Tooltip title={t("server:edit.title")}>
+                      <IconButton
+                        aria-label={t("nebulaConnect:screen.editIdentity", { username: entry.username })}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onEditIdentity(entry);
+                        }}
+                        sx={{ flex: "none" }}
+                      >
+                        <EditIcon width={13} height={13} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  <Box
+                    sx={(theme) => ({
+                      width: 16,
+                      height: 16,
+                      borderRadius: "50%",
+                      flex: "none",
+                      border: `${active ? 5 : 1.5}px solid ${
+                        active ? theme.palette.nebula.accent : theme.palette.nebula.line2
+                      }`,
+                    })}
+                  />
+                </Stack>
+              </Fragment>
             );
           })}
-        </Stack>
+          {drag && dropBefore === null && <DropLine />}
+        </Box>
 
         <Stack direction="row" alignItems="center" gap={1.5} sx={{ width: "100%", mt: "18px" }}>
           <Button
             variant="contained"
             disabled={connecting}
+            data-testid={TID.quickConnect}
             onClick={() => onConnect(identity)}
             sx={{ flex: 1, height: 42, borderRadius: radius("lg"), fontSize: 13, fontWeight: 600 }}
           >
