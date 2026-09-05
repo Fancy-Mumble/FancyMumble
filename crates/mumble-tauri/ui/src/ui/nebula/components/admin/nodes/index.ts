@@ -21,7 +21,7 @@ export {
 } from "./templates";
 export { useFavorites } from "./useFavorites";
 export { useScrollGuard } from "./useScrollGuard";
-export { boundsOf, useCanvasView, type CanvasView } from "./useCanvasView";
+export { ZOOM_STEP, boundsOf, useCanvasView, type CanvasView } from "./useCanvasView";
 export { useGraphHistory, type History } from "./useGraphHistory";
 export { copyOut, decodeClipping, encodeClipping, pasteInto, type Clipping } from "./clipboard";
 export {
@@ -36,7 +36,7 @@ export {
   type AnnotationKind,
 } from "./annotate";
 export { useBlockCarry, type CanvasDrop, type Carry } from "./useBlockCarry";
-export { NodeCanvas } from "./NodeCanvas";
+export { NodeCanvas, type CanvasAdd } from "./NodeCanvas";
 export { NodeCard } from "./NodeCard";
 export {
   AddChip,
@@ -86,6 +86,7 @@ export {
   type NodeAttachmentProps,
   type NodeBodyProps,
   type NodeSpec,
+  type PortInfo,
   type PortSide,
   type PortSummary,
   type Tone,

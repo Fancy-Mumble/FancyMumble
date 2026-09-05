@@ -142,6 +142,65 @@ export function canConnect<N extends GraphNode>(graph: NodeGraph<N>, wiring: Wir
   return !dependsOn(graph, link.from, link.to);
 }
 
+/** Nothing feeds this one. Shared, so a source node allocates no array. */
+const FEEDS_ON_NOTHING: readonly NodeId[] = [];
+
+/**
+ * For every node, everything that feeds it - directly or through other nodes.
+ *
+ * The wiring alone decides this, which is why it takes the edges rather than
+ * the graph: a canvas can settle it once when a wire is drawn and keep the
+ * answer across every edit that only changes what is *written* in a node.
+ *
+ * What it is for is knowing when a node can be left alone. A card draws itself
+ * from its own fields, from its wiring, and from what reaches it along the
+ * wires - so if none of those changed, what is on screen for that node cannot
+ * have changed either, however much the rest of the canvas moved. On a canvas
+ * of any size that is the difference between redrawing one node per keystroke
+ * and redrawing all of them.
+ *
+ * A cycle cannot be drawn - `canConnect` refuses one - but a stored document
+ * written by something else can hold one, and a half-walked loop would answer
+ * with a closure that is missing nodes. Rather than cache a wrong answer, a
+ * graph with a loop in it answers `null`, which a caller has to read as
+ * "assume anything may have changed". A node simply absent from the map is a
+ * different answer, and a definite one: nothing feeds it.
+ */
+export function upstreamClosures(edges: readonly Edge[]): ReadonlyMap<NodeId, readonly NodeId[]> | null {
+  const feeders = new Map<NodeId, NodeId[]>();
+  for (const edge of edges) {
+    const held = feeders.get(edge.to);
+    if (held) held.push(edge.from);
+    else feeders.set(edge.to, [edge.from]);
+  }
+
+  const closures = new Map<NodeId, readonly NodeId[]>();
+  let looped = false;
+  const walk = (id: NodeId, open: Set<NodeId>): readonly NodeId[] => {
+    const settled = closures.get(id);
+    if (settled) return settled;
+    if (open.has(id)) {
+      looped = true;
+      return FEEDS_ON_NOTHING;
+    }
+    const direct = feeders.get(id);
+    if (!direct) return FEEDS_ON_NOTHING;
+    open.add(id);
+    const reached = new Set<NodeId>();
+    for (const from of direct) {
+      reached.add(from);
+      for (const further of walk(from, open)) reached.add(further);
+    }
+    open.delete(id);
+    const found = [...reached];
+    closures.set(id, found);
+    return found;
+  };
+
+  for (const id of feeders.keys()) walk(id, new Set());
+  return looped ? null : closures;
+}
+
 /** Whether `node` already draws on `target`, directly or through other nodes. */
 export function dependsOn<N extends GraphNode>(graph: NodeGraph<N>, node: NodeId, target: NodeId): boolean {
   const seen = new Set<NodeId>();

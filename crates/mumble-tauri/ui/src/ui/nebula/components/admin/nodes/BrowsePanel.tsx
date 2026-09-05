@@ -4,6 +4,7 @@ import { radius } from "../../../tokens";
 import { Stack } from "../../primitives";
 import { PaletteChip, StarGlyph, Star } from "./controls";
 import type { GraphNode } from "./graph";
+import { blockMatches } from "./spec";
 import type { BlockDef, EditorStrings, PortSummary } from "./spec";
 
 /**
@@ -49,10 +50,10 @@ export function BrowsePanel<N extends GraphNode>({
     const needle = query.trim().toLowerCase();
     return blocks.filter((block) => {
       if (starredOnly && !favorites.has(block.id)) return false;
-      if (needle === "") return true;
-      // The description is searched too: an operator looking for "unknown"
-      // wants the filter, and nothing in its name says so.
-      return `${block.label} ${block.description} ${block.category}`.toLowerCase().includes(needle);
+      // The description and the id are searched too: an operator looking for
+      // "unknown" wants the filter and nothing in its name says so, and one
+      // looking for "gate" wants the seven whose ids begin with it.
+      return blockMatches(block, needle);
     });
   }, [blocks, query, starredOnly, favorites]);
 

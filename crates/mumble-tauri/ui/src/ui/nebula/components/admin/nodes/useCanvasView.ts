@@ -66,7 +66,7 @@ export const MIN_SCALE = 0.35;
 export const MAX_SCALE = 3;
 
 /** Wheel notches are coarse; this is the per-notch zoom factor. */
-const ZOOM_STEP = 1.15;
+export const ZOOM_STEP = 1.15;
 /** How far a modified wheel notch pans, in screen pixels. */
 const PAN_STEP = 90;
 /** Space left around the drawing when fitting it to the viewport. */
@@ -95,6 +95,13 @@ export interface CanvasView {
   beginPan: (event: React.PointerEvent) => void;
   /** Back to 1:1 at the origin. */
   reset: () => void;
+  /**
+   * Zoom by `factor` about a point in the viewport's own pixels.
+   *
+   * The wheel and the pinch both go through this; a zoom *control* needs it
+   * too, and aims at the middle of the viewport rather than at a pointer.
+   */
+  zoomAt: (screenX: number, screenY: number, factor: number) => void;
   /** Spread onto the viewport element. */
   handlers: {
     onPointerDown: (event: React.PointerEvent) => void;
@@ -237,6 +244,17 @@ export function useCanvasView(
 
   const reset = useCallback(() => setView({ scale: 1, tx: 0, ty: 0 }), []);
 
+  /**
+   * What `Home` frames, read at the moment it is pressed.
+   *
+   * Through a ref so that the listener below is bound once. A caller computes
+   * the bounds from its graph, so the callback is a new function whenever the
+   * graph changes - which is every keystroke in a node body, and re-binding a
+   * native listener that often is work nobody asked for.
+   */
+  const boundsRef = useRef(getBounds);
+  boundsRef.current = getBounds;
+
   // Keys are bound on the viewport rather than the window: a canvas is one
   // surface among several on the page, and Home belongs to whichever the
   // pointer is over, not to whatever happens to have focus.
@@ -247,7 +265,7 @@ export function useCanvasView(
       const box = element.getBoundingClientRect();
       if (event.key === "Home") {
         event.preventDefault();
-        const bounds = getBounds?.();
+        const bounds = boundsRef.current?.();
         if (bounds) setView(fitView(box.width, box.height, bounds));
       } else if (event.key === "+" || event.key === "=") {
         event.preventDefault();
@@ -259,7 +277,7 @@ export function useCanvasView(
     };
     element.addEventListener("keydown", onKey);
     return () => element.removeEventListener("keydown", onKey);
-  }, [viewport, zoomAt, getBounds]);
+  }, [viewport, zoomAt]);
 
   /** Middle or right button: the two KiCad pans. Left is the editor's. */
   const isPanButton = (button: number) => button === 1 || button === 2;
@@ -365,6 +383,7 @@ export function useCanvasView(
     toWorld,
     fit,
     reset,
+    zoomAt,
     beginPan,
     handlers: { onPointerDown, onPointerMove, onPointerUp, onContextMenu },
   };

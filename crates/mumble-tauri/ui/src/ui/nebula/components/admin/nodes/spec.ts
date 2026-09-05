@@ -41,6 +41,33 @@ export interface NodeAttachmentProps<N extends GraphNode> {
   readonly graph: NodeGraph<N>;
 }
 
+/**
+ * What one socket on a node carries, and what to call it.
+ *
+ * Every socket has one, and that is the point: a canvas where some ports are
+ * named and others are bare dots asks the operator to remember which is which,
+ * and the answer is never in front of them at the moment they are dragging a
+ * wire towards it.
+ *
+ * The `tone` is the type's own colour, and it is used in all three places a
+ * type shows up - the socket, the word beside it, and the wire that lands on
+ * it - so that "these two ends match" is something you can see across a canvas
+ * without reading anything.
+ */
+export interface PortInfo {
+  /** The word drawn beside the socket. Never empty. */
+  readonly label: string;
+  /**
+   * What travels on it.
+   *
+   * A name rather than a colour, because it is also what the dialect's own
+   * wiring rules talk about: two ends of a wire agree when their types do.
+   */
+  readonly type: string;
+  /** The palette key that type reads in, wherever it is drawn. */
+  readonly tone: Tone;
+}
+
 /** One end of a wire, as the browser prints it: "A · condition". */
 export interface PortSummary {
   /** The port's own name, where it has one. A single port usually does not. */
@@ -83,6 +110,27 @@ export interface BlockDef<N extends GraphNode> {
   readonly dynamicPorts?: boolean;
 }
 
+/**
+ * Whether a block answers to what somebody typed.
+ *
+ * One rule, used by the block browser and by the add menu, so the two cannot
+ * drift into finding different things for the same word.
+ *
+ * The **id** is searched as well as the words, and that is not padding: the
+ * seven logic gates are labelled AND, OR, XOR and so on, and not one of them
+ * has "gate" anywhere in its label, description or section. Typing the name of
+ * the thing you are looking for found a filter, because the filter's
+ * description mentions gates. Their ids are `gate:and` and the rest, so the id
+ * is where that word actually lives.
+ */
+export function blockMatches<N extends GraphNode>(block: BlockDef<N>, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (needle === "") return true;
+  return `${block.id} ${block.label} ${block.description} ${block.category}`
+    .toLowerCase()
+    .includes(needle);
+}
+
 /** The chrome's own words, so the editor itself needs no translation table. */
 export interface EditorStrings {
   /** The action on a block's card. */
@@ -103,6 +151,30 @@ export interface EditorStrings {
   readonly enabled: string;
 }
 
+/**
+ * A dialect: what its nodes are, how each draws itself, and what a graph of
+ * them means.
+ *
+ * ## What a node may read
+ *
+ * Everything here that draws a node - `body`, `attachment`, `badge`, `label`,
+ * `tone`, `warnPort` - is handed the whole graph, and may read from it only:
+ *
+ * * the node itself,
+ * * the wiring, and
+ * * the nodes **upstream** of it, however far back.
+ *
+ * That is the contract every node editor rests on anyway - a node means what
+ * reaches it along its wires - and the canvas relies on it to leave untouched
+ * nodes alone rather than redrawing all of them after every keystroke. A body
+ * that reached sideways, to some node it is not wired to, would draw correctly
+ * once and then quietly stop keeping up.
+ *
+ * Two things that look like exceptions and are not: counting the wires that
+ * *leave* a node is fine, because the wiring is compared whole, and numbering a
+ * node against its siblings is fine, because that only moves when one is added
+ * or removed.
+ */
 export interface NodeSpec<N extends GraphNode> extends Wiring<N> {
   /** Which dialect this is. Keys the operator's starred blocks. */
   readonly id: string;
@@ -156,8 +228,19 @@ export interface NodeSpec<N extends GraphNode> extends Wiring<N> {
    * guessing which wire they are about to replace.
    */
   portTop(node: N, port: PortId, index: number, side: PortSide): number | string;
-  /** What a wire landing on `port` carries, which is what colours it. */
-  wireTone(port: PortId): Tone;
+  /**
+   * What this socket carries and what it is called.
+   *
+   * Asked of the node rather than of the port alone, because a port's meaning
+   * can be the *node's*: a design declares its own inputs, so `in:rules` is
+   * prose and `in:shown` is a condition, and only the node it belongs to knows
+   * which.
+   *
+   * This is the one place a type is decided. The socket, the word beside it
+   * and the wire that lands on it all read their colour from here, so a
+   * dialect cannot end up saying one thing with a dot and another with a wire.
+   */
+  portInfo(node: N, port: PortId, side: PortSide): PortInfo;
   body: ComponentType<NodeBodyProps<N>>;
   /** The small count in a node's header - how many wires use it, and so on. */
   badge?(graph: NodeGraph<N>, node: N): string | null;
