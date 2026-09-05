@@ -19,7 +19,7 @@ beforeEach(() => {
   viewer = "flat";
 });
 
-const channel = (id: number, name: string): ChannelEntry =>
+const channel = (id: number, name: string, extra: Partial<ChannelEntry> = {}): ChannelEntry =>
   ({
     id,
     name,
@@ -29,6 +29,7 @@ const channel = (id: number, name: string): ChannelEntry =>
     permissions: null,
     attributes: 0,
     is_enter_restricted: false,
+    ...extra,
   }) as unknown as ChannelEntry;
 
 const member = (session: number, name: string, state: Partial<UserEntry> = {}): UserEntry =>
@@ -190,5 +191,66 @@ describe("ChannelList viewer style", () => {
     showTree();
     expect(screen.queryByText("enot")).toBeNull();
     expect(screen.getByLabelText("enot")).toBeTruthy();
+  });
+});
+
+/** Two rooms whose persistence protocols differ, plus one that keeps nothing. */
+function showProtocols() {
+  render(
+    withNebulaTheme(
+      <ChannelList
+        channels={[
+          { channel: channel(2, "Archive", { pchat_protocol: "fancy_v1_full_archive" }), depth: 0 },
+          { channel: channel(3, "Private", { pchat_protocol: "signal_v1" }), depth: 0 },
+          { channel: channel(4, "Lobby", { pchat_protocol: "none" }), depth: 0 },
+        ]}
+        users={[]}
+        selectedChannel={2}
+        currentChannel={null}
+        talkingSessions={new Set()}
+        unreadCounts={{}}
+        ownSession={9}
+        onSelect={vi.fn()}
+        onJoin={vi.fn()}
+        onContextMenu={vi.fn()}
+        onSelectUser={vi.fn()}
+        onHoverUser={vi.fn()}
+        onLeaveUser={vi.fn()}
+      />,
+    ),
+  );
+}
+
+describe("ChannelList persistence badge", () => {
+  it("names the protocol a room keeps its history under", () => {
+    showProtocols();
+    expect(screen.getByText("Fancy")).toBeTruthy();
+    expect(screen.getByText("Signal")).toBeTruthy();
+  });
+
+  it("puts the badge on the room it belongs to", () => {
+    showProtocols();
+    const rows = screen.getAllByTestId("channel-item");
+    const badgeOf = (name: string) =>
+      rows
+        .find((row) => row.getAttribute("data-channel-name") === name)
+        ?.querySelector("[data-pchat-protocol]")
+        ?.getAttribute("data-pchat-protocol") ?? null;
+    expect(badgeOf("Archive")).toBe("fancy_v1_full_archive");
+    expect(badgeOf("Private")).toBe("signal_v1");
+  });
+
+  it("leaves a room that keeps nothing unbadged", () => {
+    showProtocols();
+    const lobby = screen
+      .getAllByTestId("channel-item")
+      .find((row) => row.getAttribute("data-channel-name") === "Lobby");
+    expect(lobby?.querySelector("[data-pchat-protocol]")).toBeNull();
+  });
+
+  it("says the long form on hover, so the label need not carry it", () => {
+    showProtocols();
+    expect(screen.getByText("Fancy").getAttribute("title")).toBe("Fancy E2EE (full archive)");
+    expect(screen.getByText("Signal").getAttribute("title")).toBe("Signal Protocol encryption");
   });
 });

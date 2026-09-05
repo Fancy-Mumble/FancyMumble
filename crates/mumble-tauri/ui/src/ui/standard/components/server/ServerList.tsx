@@ -329,7 +329,13 @@ export default function ServerList({
       {/* Header row */}
       <div className={styles.header}>
         <span className={styles.heading}>{t("list.heading")}</span>
-        <button className={styles.addLink} onClick={onAddNew} disabled={disabled} type="button">
+        <button
+          className={styles.addLink}
+          data-testid={TID.addServer}
+          onClick={onAddNew}
+          disabled={disabled}
+          type="button"
+        >
           {t("list.addServer")}
         </button>
       </div>

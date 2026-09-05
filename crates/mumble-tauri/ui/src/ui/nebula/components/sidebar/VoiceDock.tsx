@@ -4,6 +4,7 @@ import { Box, Divider, Menu, MenuItem, Switch, Tooltip, Typography } from "@mui/
 import type { Theme } from "@mui/material/styles";
 import { useAppStore } from "@core/store";
 import { selectMicLive, selectSelfDeafened } from "@core/store/voiceSelectors";
+import { TID } from "@core/testids";
 import { stopOwnBroadcast } from "@standard/components/chat/stream/useScreenShare";
 import { captureHolders, useCaptureError } from "@standard/hooks/useCaptureError";
 import {
@@ -175,7 +176,13 @@ export function VoiceDock({
           </Typography>
         </Stack>
 
-        <DockButton label={t("common:actions.more")} active={open} width={28} onClick={() => setOpen(true)}>
+        <DockButton
+          label={t("common:actions.more")}
+          active={open}
+          width={28}
+          testId={TID.selfDockMenu}
+          onClick={() => setOpen(true)}
+        >
           <KebabMenuIcon width={15} height={15} />
         </DockButton>
       </Stack>
@@ -194,6 +201,7 @@ export function VoiceDock({
           active={micBusy || !micLive}
           alert={!micBusy}
           warn={micBusy}
+          testId={TID.toggleMute}
           onClick={() =>
             void (voiceState === "inactive"
               ? useAppStore.getState().enableVoice()
@@ -207,6 +215,7 @@ export function VoiceDock({
           label={deafened ? t("chat:callControls.undeafen") : t("chat:callControls.deafen")}
           active={deafened}
           alert
+          testId={TID.toggleDeafen}
           onClick={() => void useAppStore.getState().toggleDeafen()}
         >
           {deafened ? (
@@ -222,6 +231,10 @@ export function VoiceDock({
             active={sharing}
             accent
             trailing
+            /* Only while it is the *start* control: once a share is up, the
+               stage draws the stop button and carries this id, and two
+               elements answering to it would make the handle ambiguous. */
+            testId={sharing ? undefined : TID.screenShareToggle}
             onClick={() => (sharing ? stopOwnBroadcast() : onShareScreen())}
           >
             <ScreenShareIcon width={15} height={15} />
@@ -324,6 +337,7 @@ export function VoiceDock({
 
         {onOpenAdmin && (
           <MenuItem
+            data-testid={TID.adminPanel}
             onClick={() => {
               setOpen(false);
               onOpenAdmin();
@@ -340,6 +354,7 @@ export function VoiceDock({
         {onLeaveServer && <MenuRule />}
         {onLeaveServer && (
           <MenuItem
+            data-testid={TID.disconnectServer}
             onClick={() => {
               setOpen(false);
               onLeaveServer();
@@ -402,6 +417,7 @@ function DockButton({
   warn = false,
   width = 30,
   trailing = false,
+  testId,
   onClick,
   children,
 }: Readonly<{
@@ -413,6 +429,8 @@ function DockButton({
   width?: number;
   /** Pushes the button to the end of the row. */
   trailing?: boolean;
+  /** e2e handle; the dock's own buttons carry the shared registry's ids. */
+  testId?: string;
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
   children: React.ReactNode;
 }>) {
@@ -421,6 +439,7 @@ function DockButton({
       <Box
         component="button"
         type="button"
+        data-testid={testId}
         aria-label={label}
         aria-pressed={active}
         onClick={onClick}

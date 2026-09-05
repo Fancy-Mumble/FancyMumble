@@ -3,6 +3,7 @@ import { Tooltip } from "@mui/material";
 import type { KeyTrustLevel } from "@core/types";
 import { DatabaseIcon, LockIcon, ShieldCheckIcon, ShieldIcon, WarningIcon } from "@ui/icons";
 import { StatChip, type StatChipTone } from "../primitives";
+import { TID } from "@core/testids";
 
 /**
  * What the header says about a channel's key, at each level of trust.
@@ -77,7 +78,11 @@ export function KeyTrustBadge({ encrypted, level, onVerify }: Readonly<KeyTrustB
 
   return (
     <Tooltip title={onVerify ? t("nebulaChat:trust.clickToCompare", { hint }) : hint}>
-      <StatChip tone={trust?.tone ?? "neutral"} {...action}>
+      <StatChip
+        tone={trust?.tone ?? "neutral"}
+        {...(encrypted ? { "data-testid": TID.chatE2EBadge } : {})}
+        {...action}
+      >
         <Icon width={12} height={12} aria-hidden="true" />
         {label}
       </StatChip>

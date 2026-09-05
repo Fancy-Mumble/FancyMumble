@@ -15,6 +15,7 @@ import {
 } from "@mui/material";
 import { getSavedServers, setServerPassword } from "@core/serverStorage";
 import { useAppStore } from "@core/store";
+import { TID } from "@core/testids";
 import { usePasswordPrompt } from "@standard/hooks/usePasswordPrompt";
 import { SectionLabel, Stack } from "../primitives";
 import { radius } from "../../tokens";
@@ -138,6 +139,7 @@ function ConnectionChallenge() {
                 }
                 slotProps={{
                   htmlInput: {
+                    "data-testid": isTotp ? TID.connectTotpInput : TID.connectPasswordInput,
                     inputMode: isTotp ? "numeric" : undefined,
                     autoComplete: isTotp ? "one-time-code" : "current-password",
                   },
@@ -191,6 +193,7 @@ function ConnectionChallenge() {
           <Button
             variant="contained"
             type="submit"
+            data-testid={isTotp ? TID.connectTotpSubmit : TID.connectPasswordSubmit}
             disabled={
               editingUsername
                 ? !trimmedUsername || trimmedUsername === pending.username

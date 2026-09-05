@@ -9,6 +9,7 @@ import {
   Typography,
 } from "@mui/material";
 import type { SessionMeta } from "@core/types";
+import { TID } from "@core/testids";
 
 interface LeaveServerDialogProps {
   /** The session about to be left, or null when the dialog is closed. */
@@ -64,6 +65,7 @@ export function LeaveServerDialog({
           {t("common:actions.cancel")}
         </Button>
         <Button
+          data-testid={TID.disconnectConfirm}
           onClick={onConfirm}
           disabled={leaving}
           variant="contained"

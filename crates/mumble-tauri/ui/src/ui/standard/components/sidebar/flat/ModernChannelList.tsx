@@ -420,6 +420,7 @@ function ModernChannelListImpl({
                 data-testid={TID.channelItem}
                 data-channel-id={channel.id}
                 data-channel-name={channel.name || t("channelList.root")}
+                data-joined={isCurrent ? "true" : undefined}
                 onClick={() => onSelectChannel(channel.id)}
                 onDoubleClick={() => onJoinChannel(channel.id)}
                 onContextMenu={(e) => onContextMenu(e, channel.id)}

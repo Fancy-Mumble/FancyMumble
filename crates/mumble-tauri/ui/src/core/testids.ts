@@ -33,15 +33,60 @@ export const TID = {
   /** The dot on the address chip reporting where this page's livery came from.
    *  Its `data-livery-status` carries the exact state. */
   connectLiveryStatus: "connect-livery-status",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  connectIdentityHandle: "connect-identity-handle",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  sessionStatus: "session-status",
 
   // -- Saved-server list ----------------------------------------------------
   /** One card per saved server; carries `data-server-id`. */
   serverCard: "server-card",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  addServer: "add-server",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  connectCertificate: "connect-certificate",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  adminPanel: "admin-panel",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  adminBack: "admin-back",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  disconnectServer: "disconnect-server",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  disconnectConfirm: "disconnect-confirm",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  selfDockMenu: "self-dock-menu",
 
   // -- Chat composer --------------------------------------------------------
   /** Wrapper around the (contenteditable) markdown input. */
   chatComposerInput: "chat-composer-input",
   chatSend: "chat-send",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  chatAttachMenu: "chat-attach-menu",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  chatCreatePoll: "chat-create-poll",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  pollQuestionInput: "poll-question-input",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  pollOptionInput: "poll-option-input",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  pollMultiple: "poll-multiple",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  pollSubmit: "poll-submit",
   /**
    * The sender-name label on a rendered message (the first message in a
    * consecutive same-sender group). Carries `data-sender-name` so a message's
@@ -67,6 +112,12 @@ export const TID = {
   /** The shared password-entry dialog (channel-join / file-download). Its
    *  presence means a password is being demanded. */
   passwordPromptDialog: "password-prompt-dialog",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  connectPasswordInput: "connect-password-input",
+  /** Recovered from the built bundle after a disk-full truncation;
+   *  the name and value are exact, the description is not. */
+  connectPasswordSubmit: "connect-password-submit",
   /** The chat header's end-to-end-encrypted badge. Present only when the open
    *  chat is E2E (a signal/fancy persisted channel) - e.g. a friend chat that
    *  upgraded to its detached signal channel. */
@@ -257,6 +308,7 @@ export const TID = {
   /** Config-menu switch hiding this app's windows from screen capture
    *  (checked = hidden, i.e. the client cannot be screenshotted). */
   streamHideSelfToggle: "stream-hide-self-toggle",
+  streamShareAudioToggle: "stream-share-audio-toggle",
   /** Gear button in the source picker opening the "Stream Mode" popover
    *  (presets + screen-resolution / frame-rate submenus). */
   screenShareSettings: "screen-share-settings",
@@ -407,6 +459,16 @@ export const SERVER_ID_ATTR = "data-server-id";
 export const CALENDAR_EVENT_TITLE_ATTR = "data-event-title";
 /** Data attribute key used alongside {@link TID.calendarViewButton}. */
 export const CALENDAR_VIEW_ATTR = "data-view";
+/** Data attribute key marking the channel the client is currently in, used
+ *  alongside {@link TID.channelItem}. Recovered from the markup that emits
+ *  it after a disk-full truncation: the value is exact. */
+export const CHANNEL_JOINED_ATTR = "data-joined";
+/** Data attribute key marking a registered (non-guest) member, used
+ *  alongside {@link TID.memberRow}. Recovered the same way. */
+export const MEMBER_REGISTERED_ATTR = "data-registered";
+/** Data attribute key carrying a settings tab's stable id. Recovered from
+ *  the built bundle after a disk-full truncation: the value is exact. */
+export const TAB_ID_ATTR = "data-tab-id";
 /** Data attribute key carrying a capture source's window/screen title,
  *  used alongside {@link TID.screenShareSource}. */
 export const STREAM_SOURCE_TITLE_ATTR = "data-source-title";

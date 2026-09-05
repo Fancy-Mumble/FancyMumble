@@ -876,6 +876,7 @@ export default function ChannelSidebar({
               {isAdmin && (
                 <button
                   className={styles.adminBtn}
+                  data-testid={TID.adminPanel}
                   onClick={() => navigate("/admin")}
                   title={t("channelSidebar.adminPanel")}
                   aria-label={t("channelSidebar.adminPanel")}
@@ -895,6 +896,7 @@ export default function ChannelSidebar({
               )}
               <button
                 className={styles.disconnectBtn}
+                data-testid={TID.disconnectServer}
                 onClick={disconnect}
                 title={t("channelSidebar.disconnect")}
               >

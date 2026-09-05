@@ -45,6 +45,7 @@ import MarkdownInput, { type MarkdownInputApi } from "@standard/components/chat/
 import type { ChatMessage } from "@core/types";
 import type { StagedAttachment, UploadPlaceholder } from "@core/features/chat/useFileUpload";
 import { formatBytes } from "@core/utils/format";
+import { TID } from "@core/testids";
 import { composerHtml, plainText } from "../../selectors";
 import { chamferedSurface, glassChrome } from "../../theme";
 import { CHAT_COLUMN_INSET_PX, CHAT_COLUMN_MAX_WIDTH, NEBULA_MONO, radius } from "../../tokens";
@@ -788,6 +789,7 @@ export function Composer({
           {hasAttachMenu && (
             <BareButton
               label={t("nebulaChat:composer.moreWaysToAttach")}
+              testId={TID.chatAttachMenu}
               disabled={disabled}
               active={!!attachMenu}
               size={16}
@@ -861,6 +863,7 @@ export function Composer({
             )}
             {onCreatePoll && (
               <MenuItem
+                data-testid={TID.chatCreatePoll}
                 onClick={() => {
                   setAttachMenu(null);
                   openPopoverFrom("poll", attachButton.current, POLL_POPOVER_WIDTH);
@@ -914,6 +917,9 @@ export function Composer({
            * or the caret drifts off the text, so both are zeroed together.
            */}
           <Box
+            // The e2e handle Standard puts on its own composer wrapper: the
+            // suite locates this, then the `textarea` inside it.
+            data-testid={TID.chatComposerInput}
             // Focus and blur are taken here rather than on the textarea: they
             // are the DOM's bubbling pair, so the one listener covers the
             // field however deep the editor puts it.
@@ -997,6 +1003,7 @@ export function Composer({
             <span>
               <IconButton
                 aria-label={t("settings:shortcuts.builtinSendMessage")}
+                data-testid={TID.chatSend}
                 disabled={disabled || !sendable || uploading}
                 onClick={submit}
                 sx={(theme) => ({
@@ -1295,6 +1302,7 @@ function BareButton({
   size = 28,
   sx,
   buttonRef,
+  testId,
   children,
 }: Readonly<{
   label: string;
@@ -1309,6 +1317,8 @@ function BareButton({
   sx?: SxProps<Theme>;
   /** The element, for a popover that has to find the button unpressed. */
   buttonRef?: React.Ref<HTMLButtonElement>;
+  /** e2e handle; only the buttons a suite drives carry one. */
+  testId?: string;
   children: React.ReactNode;
 }>) {
   return (
@@ -1317,6 +1327,7 @@ function BareButton({
         ref={buttonRef}
         component="button"
         type="button"
+        data-testid={testId}
         aria-label={label}
         aria-expanded={active || undefined}
         disabled={disabled}

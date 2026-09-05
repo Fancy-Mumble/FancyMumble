@@ -129,7 +129,15 @@ export function StreamSurface({ feed, primary, style, testId, mediaRef }: Readon
   // Identifying attributes go on the tagged (stage) surface only, so a feed
   // that also mirrors into the filmstrip is still one element per stream.
   const identity = testId
-    ? { "data-testid": testId, "data-own": feed.own ? "true" : "false", "data-session": feed.session }
+    ? {
+        "data-testid": testId,
+        "data-own": feed.own ? "true" : "false",
+        "data-session": feed.session,
+        // Who this stream is of. The stage is the only place a viewer sees a
+        // remote broadcast in this pack - there is no "X is sharing" banner to
+        // carry the name instead - so it has to be readable here.
+        "data-broadcaster-name": feed.name,
+      }
     : {};
 
   if (native) return <canvas ref={attachCanvas} {...identity} style={style} />;

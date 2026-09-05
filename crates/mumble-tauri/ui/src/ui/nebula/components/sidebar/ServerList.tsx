@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Box, IconButton, Tooltip, Typography } from "@mui/material";
 import type { ServerPingResult } from "@core/types";
 import { StarIcon } from "@ui/icons";
+import { TID } from "@core/testids";
 import { serverTint, type ServerGroup } from "../../selectors";
 import { UserAvatar, Stack } from "../primitives";
 import { radius } from "../../tokens";
@@ -65,6 +66,8 @@ export function ServerList({
           <Stack
             component="li"
             key={group.key}
+            data-testid={TID.serverCard}
+            data-server-id={group.key}
             direction="row"
             alignItems="center"
             gap={1.5}

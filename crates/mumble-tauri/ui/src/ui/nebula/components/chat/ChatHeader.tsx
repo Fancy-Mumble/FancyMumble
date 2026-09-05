@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, IconButton, Menu, MenuItem, Tooltip, Typography } from "@mui/material";
 import type { KeyTrustLevel } from "@core/types";
+import { TID } from "@core/testids";
 import {
   ChevronDownIcon,
   DownloadIcon,
@@ -177,7 +178,7 @@ export function ChatHeader({
         })}
       >
         <Stack direction="row" alignItems="center" gap={0.5}>
-          <Typography sx={{ fontWeight: 600, fontSize: 14 }} noWrap>
+          <Typography data-testid={TID.chatHeaderTitle} sx={{ fontWeight: 600, fontSize: 14 }} noWrap>
             {title}
           </Typography>
           {named && (
@@ -255,6 +256,7 @@ export function ChatHeader({
         </Tooltip>
         <Tooltip title={t("common:actions.more")}>
           <IconButton
+            data-testid={TID.chatHeaderKebab}
             aria-label={
               hasNewDownloads ? t("nebulaChat:header.channelMenuNew") : t("nebulaChat:header.channelMenu")
             }

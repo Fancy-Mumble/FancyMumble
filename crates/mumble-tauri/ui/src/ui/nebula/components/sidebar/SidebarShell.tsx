@@ -5,8 +5,8 @@ import { Box, Typography } from "@mui/material";
 interface SidebarShellProps {
   /** Column heading; omitted on the chat screen, which leads with search. */
   title?: string;
-  action?: { label: string; onClick: () => void };
-  back?: { label: string; onClick: () => void };
+  action?: { label: string; onClick: () => void; testId?: string };
+  back?: { label: string; onClick: () => void; testId?: string };
   search?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
@@ -28,6 +28,7 @@ export function SidebarShell({ title, action, back, search, children, footer }: 
       {back && (
         <Box
           component="button"
+          data-testid={back.testId}
           onClick={back.onClick}
           sx={(theme) => ({
             all: "unset",
@@ -49,6 +50,7 @@ export function SidebarShell({ title, action, back, search, children, footer }: 
           {action && (
             <Box
               component="button"
+              data-testid={action.testId}
               onClick={action.onClick}
               sx={(theme) => ({
                 all: "unset",

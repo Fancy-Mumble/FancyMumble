@@ -340,6 +340,7 @@ export const UserListItem = memo(function UserListItem({
         className={`${styles.userItem} ${active ? styles.userItemActive : ""} ${isSelf ? styles.selfUser : ""} ${isSelf && isTalking ? styles.selfTalking : ""} ${offline ? styles.userItemOffline : ""}`}
         data-testid={TID.memberItem}
         data-user-name={user.name}
+        data-registered={isRegistered ? "true" : undefined}
         data-offline={offline ? "true" : undefined}
         data-talking={isTalking ? "true" : undefined}
         data-muted={isMuted ? "true" : undefined}

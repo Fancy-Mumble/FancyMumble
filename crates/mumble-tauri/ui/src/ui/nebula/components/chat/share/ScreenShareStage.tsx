@@ -683,6 +683,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
         <Suspense fallback={null}>
           <StreamStatsPanel
             sampler={statsSampler}
+            videoRef={media}
             contentByMid={getTrackContentMap(focused.session)}
             onClose={() => setStatsOpen(false)}
           />
@@ -786,6 +787,7 @@ function FilmstripTile({
       onClick={onSelect}
       data-testid={TID.streamWatchTile}
       data-session={feed.session}
+      data-broadcaster-name={feed.name}
       sx={(theme) => ({
         position: "relative",
         flex: "none",
