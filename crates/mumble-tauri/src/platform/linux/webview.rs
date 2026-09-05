@@ -204,6 +204,7 @@ pub fn pre_init() {
     if std::env::var_os("GDK_BACKEND").is_none() {
         std::env::set_var("GDK_BACKEND", "x11");
     }
+    apply_stream_decoder_preference();
 
     // Re-exec with host-first LD_LIBRARY_PATH before any AppImage libs load.
     let Some(env) = AppImageEnv::detect() else {
@@ -217,6 +218,33 @@ pub fn pre_init() {
         std::env::set_var("LD_LIBRARY_PATH", new_ld);
         reexec_self();
     }
+}
+
+/// `FANCY_STREAM_DECODER` picks the H.264 decoder `WebKitGTK`'s `WebCodecs`
+/// uses for stream viewing. `GStreamer` ranks hardware first and the rank
+/// table is the only lever from outside `WebKit`, so it has to be set here,
+/// before the web processes inherit the environment.
+///
+/// Measured 2026-09 (1080p, 20 fps, glass-to-glass p50): `nvh264dec` holds
+/// three frames before it outputs one (its display-delay pipelining, which
+/// only a live pipeline switches off - and `WebKit`'s is not) at ~315 ms;
+/// `vah264dec` holds one at ~220 ms; ffmpeg's `avdec_h264` holds none at
+/// ~160 ms. The default stays hardware; `vaapi` demotes NVDEC, `software`
+/// demotes every GPU decoder. It applies to everything `GStreamer` decodes
+/// in the webview, the video wallpaper included.
+fn apply_stream_decoder_preference() {
+    if std::env::var_os("GST_PLUGIN_FEATURE_RANK").is_some() {
+        return; // the user's own rank table wins
+    }
+    let Ok(preference) = std::env::var("FANCY_STREAM_DECODER") else {
+        return;
+    };
+    let ranks = match preference.trim().to_ascii_lowercase().as_str() {
+        "software" | "cpu" => "nvh264dec:NONE,vah264dec:NONE,vaapih264dec:NONE,vulkanh264dec:NONE",
+        "vaapi" | "va" => "nvh264dec:NONE",
+        _ => return, // "hardware", or a typo: GStreamer's own ranking
+    };
+    std::env::set_var("GST_PLUGIN_FEATURE_RANK", ranks);
 }
 
 /// Early platform init (before GTK/Tauri starts): sets GTK identifiers

@@ -19,7 +19,9 @@
 
 use std::time::{Duration, Instant};
 
-use crate::encode::{EncodeSettings, EncodedFrame, H264Encoder, VideoEncoder};
+use crate::encode::{EncodeSettings, EncodedFrame};
+#[cfg(not(all(target_os = "linux", feature = "gpu")))]
+use crate::encode::{H264Encoder, VideoEncoder};
 use crate::sources::{self, SourceKind};
 
 /// Consecutive capture failures tolerated before a pipeline declares the
@@ -165,15 +167,33 @@ pub(crate) fn create_pipeline(
     CpuPipeline::new(kind, source_id, settings).map(|p| Box::new(p) as Box<dyn EncodePipeline>)
 }
 
-/// The portable software pipeline: xcap capture (change-driven recorder for
+/// The encoder behind xcap capture. On Linux it is the same ladder the portal
+/// pipeline walks (NVENC / VA-API / openh264): the GPU tiers take RGBA from
+/// CPU memory, so how the pixels were captured is no reason to encode them
+/// in software. Elsewhere it is openh264.
+#[cfg(all(target_os = "linux", feature = "gpu"))]
+type CaptureEncoder = crate::linux::LinuxEncoder;
+#[cfg(not(all(target_os = "linux", feature = "gpu")))]
+type CaptureEncoder = H264Encoder;
+
+#[cfg(all(target_os = "linux", feature = "gpu"))]
+fn capture_pipeline_name(encoder: &CaptureEncoder) -> &'static str {
+    encoder.xcap_pipeline_name()
+}
+#[cfg(not(all(target_os = "linux", feature = "gpu")))]
+fn capture_pipeline_name(_encoder: &CaptureEncoder) -> &'static str {
+    "cpu"
+}
+
+/// The portable capture pipeline: xcap capture (change-driven recorder for
 /// whole screens where the OS provides one, polled otherwise), SIMD
-/// downscale, threaded I420 conversion, openh264 encode.
+/// downscale, then [`CaptureEncoder`].
 pub(crate) struct CpuPipeline {
     kind: SourceKind,
     source_id: u32,
     target: sources::CaptureTarget,
     recorder: Option<sources::ScreenRecorder>,
-    encoder: H264Encoder,
+    encoder: CaptureEncoder,
     scaler: FrameScaler,
     /// Last encode-sized frame, re-encoded when a keyframe is due while the
     /// source is static (late joiners need IDRs even on a still screen).
@@ -228,7 +248,7 @@ impl CpuPipeline {
             source_id,
             target,
             recorder,
-            encoder: H264Encoder::new(settings),
+            encoder: CaptureEncoder::new(settings),
             scaler: FrameScaler::new(settings.max_dimension),
             last_scaled: None,
             failures: 0,
@@ -239,7 +259,7 @@ impl CpuPipeline {
 
 impl EncodePipeline for CpuPipeline {
     fn name(&self) -> &'static str {
-        "cpu"
+        capture_pipeline_name(&self.encoder)
     }
 
     fn set_bitrate(&mut self, bps: u32) {
@@ -331,7 +351,8 @@ impl EncodePipeline for CpuPipeline {
         if encoded.is_some() {
             self.timings.frames += 1;
         }
-        self.timings.maybe_log("cpu", img.width(), img.height());
+        let name = capture_pipeline_name(&self.encoder);
+        self.timings.maybe_log(name, img.width(), img.height());
         Ok(encoded)
     }
 

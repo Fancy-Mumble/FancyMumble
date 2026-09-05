@@ -33,6 +33,7 @@
 
 pub mod camera_portal;
 mod egl_import;
+pub(crate) mod audio_capture;
 mod egl_modifiers;
 mod nvenc;
 mod pipewire_stream;
@@ -100,6 +101,155 @@ enum EncoderTier {
     Nvenc(nvenc::NvencEncoder),
     Cpu(Box<H264Encoder>),
 }
+
+/// The Linux encoder ladder behind one capture source, however the pixels
+/// arrive (PipeWire or xcap). Hardware encode does not depend on how a frame
+/// was captured, so a session without a portal (bare X11, the e2e rig) gets
+/// the same NVENC / VA-API tiers as the portal pipeline instead of paying
+/// for software encode because of where its pixels came from.
+///
+/// Inherent methods rather than [`VideoEncoder`]: the VA-API tier is not
+/// `Send`, and neither pipeline needs it to be.
+pub(crate) struct LinuxEncoder {
+    tier: EncoderTier,
+    settings: EncodeSettings,
+    /// Dimensions of the last frame handed in, for [`Self::content_bitrate`].
+    last_dims: Option<(u32, u32)>,
+}
+
+impl LinuxEncoder {
+    /// Walk the ladder from wherever [`EncoderPreference`] says it starts.
+    pub(crate) fn new(settings: EncodeSettings) -> Self {
+        Self {
+            tier: probe_encoder(settings, EncoderPreference::from_env()),
+            settings,
+            last_dims: None,
+        }
+    }
+
+    /// The tier in use: "vaapi", "nvenc" or "cpu".
+    pub(crate) fn tier_name(&self) -> &'static str {
+        match self.tier {
+            EncoderTier::Vaapi(_) => "vaapi",
+            EncoderTier::Nvenc(_) => "nvenc",
+            EncoderTier::Cpu(_) => "cpu",
+        }
+    }
+
+    /// Pipeline name for the xcap capture path, for logs and stats.
+    pub(crate) fn xcap_pipeline_name(&self) -> &'static str {
+        match self.tier {
+            EncoderTier::Vaapi(_) => "xcap-vaapi",
+            EncoderTier::Nvenc(_) => "xcap-nvenc",
+            EncoderTier::Cpu(_) => "cpu",
+        }
+    }
+
+    /// The bitrate curve at the dimensions last encoded (see
+    /// [`scaled_bitrate`]); `None` before the first frame.
+    pub(crate) fn content_bitrate(&self) -> Option<u32> {
+        let (w, h) = self.last_dims?;
+        Some(scaled_bitrate(&self.settings, w & !1, h & !1))
+    }
+
+    /// Encode with the current tier; a GPU-tier failure mid-stream demotes
+    /// to openh264 permanently (with a fresh IDR so viewers re-sync).
+    pub(crate) fn encode_rgba(
+        &mut self,
+        w: u32,
+        h: u32,
+        rgba: &[u8],
+        force_keyframe: bool,
+    ) -> Result<Option<EncodedFrame>, String> {
+        self.last_dims = Some((w, h));
+        let gpu_error = match &mut self.tier {
+            EncoderTier::Vaapi(vaapi) => match vaapi.encode_rgba(w, h, rgba, force_keyframe) {
+                Ok(encoded) => return Ok(encoded),
+                Err(e) => format!("VA-API: {e}"),
+            },
+            EncoderTier::Nvenc(nvenc) => match nvenc.encode_rgba(w, h, rgba, force_keyframe) {
+                Ok(encoded) => return Ok(encoded),
+                Err(e) => format!("NVENC: {e}"),
+            },
+            EncoderTier::Cpu(cpu) => return cpu.encode_rgba(w, h, rgba, force_keyframe),
+        };
+        tracing::warn!(
+            "screenshare: GPU encode failed mid-stream ({gpu_error}); demoting to openh264"
+        );
+        let mut cpu = H264Encoder::new(self.settings);
+        let encoded = cpu.encode_rgba(w, h, rgba, true);
+        self.tier = EncoderTier::Cpu(Box::new(cpu));
+        encoded
+    }
+
+    /// Retarget the live tier's rate control, in bits per second.
+    pub(crate) fn set_bitrate(&mut self, bps: u32) {
+        match &mut self.tier {
+            EncoderTier::Vaapi(vaapi) => vaapi.set_bitrate(bps),
+            EncoderTier::Nvenc(nvenc) => nvenc.set_bitrate(bps),
+            EncoderTier::Cpu(cpu) => cpu.set_bitrate(bps),
+        }
+    }
+}
+
+/// Walk the encoder ladder from `preference` down, ending at openh264.
+///
+/// A tier the preference skips is not probed at all, which is the point:
+/// on the dual-GPU machines this exists for, probing VA-API is exactly
+/// what goes wrong, so declining to ask is the only answer.
+fn probe_encoder(settings: EncodeSettings, preference: EncoderPreference) -> EncoderTier {
+    // Why each tier above the one chosen was passed over, so a single log
+    // line explains the result instead of the reader inferring it from an
+    // absence.
+    let mut passed_over: Vec<String> = Vec::new();
+
+    // On a machine whose displays hang off an NVIDIA card, NVENC is the
+    // right tier and VA-API is a trap: NVIDIA's VA driver is a decode-only
+    // shim, so the VA-API probe walks past it to whatever OTHER GPU can
+    // encode - typically an unused iGPU. Capture then happens on one GPU
+    // and encode on another, which is silent, slow, and (with a compositor
+    // that hands out tiled NVIDIA buffers) a source of corrupt frames.
+    // Only the DEFAULT order is affected; an explicit preference is still
+    // obeyed, so `FANCY_SCREENSHARE_ENCODER=vaapi` can still force it.
+    if preference == EncoderPreference::Vaapi
+        && display_gpu_driver().as_deref() == Some("nvidia")
+    {
+        match nvenc::NvencEncoder::probe(settings) {
+            Ok(nvenc) => {
+                tracing::info!("screenshare: using NVENC (the displays are on the NVIDIA GPU)");
+                return EncoderTier::Nvenc(nvenc);
+            }
+            Err(err) => passed_over.push(format!("NVENC (display GPU): {err}")),
+        }
+    }
+
+    if preference == EncoderPreference::Vaapi {
+        match vaapi::VaapiEncoder::probe(settings) {
+            Ok(vaapi) => return EncoderTier::Vaapi(vaapi),
+            Err(err) => passed_over.push(format!("VA-API: {err}")),
+        }
+    } else {
+        passed_over.push(format!("VA-API: skipped ({ENCODER_ENV})"));
+    }
+
+    if preference == EncoderPreference::Cpu {
+        passed_over.push(format!("NVENC: skipped ({ENCODER_ENV})"));
+    } else {
+        match nvenc::NvencEncoder::probe(settings) {
+            Ok(nvenc) => {
+                let why = passed_over.join("; ");
+                tracing::info!("screenshare: using NVENC ({why})");
+                return EncoderTier::Nvenc(nvenc);
+            }
+            Err(err) => passed_over.push(format!("NVENC: {err}")),
+        }
+    }
+
+    let why = passed_over.join("; ");
+    tracing::info!("screenshare: no GPU encoder ({why}); encoding with openh264 instead");
+    EncoderTier::Cpu(Box::new(H264Encoder::new(settings)))
+}
+
 
 /// Driver name of a GPU that drives a connected display (`nvidia`, `amdgpu`,
 /// `i915`, ...), or `None` when nothing is connected or sysfs is unreadable.
@@ -212,7 +362,7 @@ pub(crate) struct GpuPipelineLinux {
     /// Held for its lifetime: dropping it closes the cast.
     portal: portal::PortalSession,
     stream: pipewire_stream::PwCaptureStream,
-    encoder: EncoderTier,
+    encoder: LinuxEncoder,
     settings: EncodeSettings,
     scaler: FrameScaler,
     /// Last encode-sized frame, re-encoded when a keyframe is due while the
@@ -244,7 +394,7 @@ impl GpuPipelineLinux {
             .ok_or_else(|| "portal fd already taken".to_owned())?;
         let stream = pipewire_stream::PwCaptureStream::start(fd, portal.node_id)?;
 
-        let encoder = Self::probe_encoder(settings, EncoderPreference::from_env());
+        let encoder = LinuxEncoder::new(settings);
 
         Ok(Self {
             portal,
@@ -257,105 +407,19 @@ impl GpuPipelineLinux {
         })
     }
 
-    /// Walk the encoder ladder from `preference` down, ending at openh264.
-    ///
-    /// A tier the preference skips is not probed at all, which is the point:
-    /// on the dual-GPU machines this exists for, probing VA-API is exactly
-    /// what goes wrong, so declining to ask is the only answer.
-    fn probe_encoder(settings: EncodeSettings, preference: EncoderPreference) -> EncoderTier {
-        // Why each tier above the one chosen was passed over, so a single log
-        // line explains the result instead of the reader inferring it from an
-        // absence.
-        let mut passed_over: Vec<String> = Vec::new();
-
-        // On a machine whose displays hang off an NVIDIA card, NVENC is the
-        // right tier and VA-API is a trap: NVIDIA's VA driver is a decode-only
-        // shim, so the VA-API probe walks past it to whatever OTHER GPU can
-        // encode - typically an unused iGPU. Capture then happens on one GPU
-        // and encode on another, which is silent, slow, and (with a compositor
-        // that hands out tiled NVIDIA buffers) a source of corrupt frames.
-        // Only the DEFAULT order is affected; an explicit preference is still
-        // obeyed, so `FANCY_SCREENSHARE_ENCODER=vaapi` can still force it.
-        if preference == EncoderPreference::Vaapi
-            && display_gpu_driver().as_deref() == Some("nvidia")
-        {
-            match nvenc::NvencEncoder::probe(settings) {
-                Ok(nvenc) => {
-                    tracing::info!("screenshare: using NVENC (the displays are on the NVIDIA GPU)");
-                    return EncoderTier::Nvenc(nvenc);
-                }
-                Err(err) => passed_over.push(format!("NVENC (display GPU): {err}")),
-            }
-        }
-
-        if preference == EncoderPreference::Vaapi {
-            match vaapi::VaapiEncoder::probe(settings) {
-                Ok(vaapi) => return EncoderTier::Vaapi(vaapi),
-                Err(err) => passed_over.push(format!("VA-API: {err}")),
-            }
-        } else {
-            passed_over.push(format!("VA-API: skipped ({ENCODER_ENV})"));
-        }
-
-        if preference == EncoderPreference::Cpu {
-            passed_over.push(format!("NVENC: skipped ({ENCODER_ENV})"));
-        } else {
-            match nvenc::NvencEncoder::probe(settings) {
-                Ok(nvenc) => {
-                    let why = passed_over.join("; ");
-                    tracing::info!("screenshare: using NVENC ({why})");
-                    return EncoderTier::Nvenc(nvenc);
-                }
-                Err(err) => passed_over.push(format!("NVENC: {err}")),
-            }
-        }
-
-        let why = passed_over.join("; ");
-        tracing::info!("screenshare: no GPU encoder ({why}); encoding with openh264 instead");
-        EncoderTier::Cpu(Box::new(H264Encoder::new(settings)))
-    }
-
-    /// Encode with the current tier; a GPU-tier failure mid-stream demotes
-    /// to openh264 permanently (with a fresh IDR so viewers re-sync).
+    /// Encode the last scaled frame on the ladder (see [`LinuxEncoder`]).
     fn encode(&mut self, force_keyframe: bool) -> Result<Option<EncodedFrame>, String> {
         let Some(img) = self.last_scaled.as_ref() else {
             return Ok(None); // nothing captured yet
         };
-        let (w, h) = (img.width(), img.height());
-        let gpu_error = match &mut self.encoder {
-            EncoderTier::Vaapi(vaapi) => {
-                match vaapi.encode_rgba(w, h, img.as_raw(), force_keyframe) {
-                    Ok(encoded) => return Ok(encoded),
-                    Err(e) => format!("VA-API: {e}"),
-                }
-            }
-            EncoderTier::Nvenc(nvenc) => {
-                match nvenc.encode_rgba(w, h, img.as_raw(), force_keyframe) {
-                    Ok(encoded) => return Ok(encoded),
-                    Err(e) => format!("NVENC: {e}"),
-                }
-            }
-            EncoderTier::Cpu(cpu) => {
-                return cpu.encode_rgba(w, h, img.as_raw(), force_keyframe);
-            }
-        };
-        tracing::warn!(
-            "screenshare: GPU encode failed mid-stream ({gpu_error}); demoting to openh264"
-        );
-        let mut cpu = H264Encoder::new(self.settings);
-        let encoded = cpu.encode_rgba(w, h, img.as_raw(), true);
-        self.encoder = EncoderTier::Cpu(Box::new(cpu));
-        encoded
+        self.encoder
+            .encode_rgba(img.width(), img.height(), img.as_raw(), force_keyframe)
     }
 }
 
 impl EncodePipeline for GpuPipelineLinux {
     fn set_bitrate(&mut self, bps: u32) {
-        match &mut self.encoder {
-            EncoderTier::Vaapi(vaapi) => vaapi.set_bitrate(bps),
-            EncoderTier::Nvenc(nvenc) => nvenc.set_bitrate(bps),
-            EncoderTier::Cpu(cpu) => cpu.set_bitrate(bps),
-        }
+        self.encoder.set_bitrate(bps);
     }
 
     fn content_bitrate(&self) -> Option<u32> {
@@ -370,10 +434,10 @@ impl EncodePipeline for GpuPipelineLinux {
     }
 
     fn name(&self) -> &'static str {
-        match self.encoder {
-            EncoderTier::Vaapi(_) => "linux-pipewire-vaapi",
-            EncoderTier::Nvenc(_) => "linux-pipewire-nvenc",
-            EncoderTier::Cpu(_) => "linux-pipewire-cpu",
+        match self.encoder.tier_name() {
+            "vaapi" => "linux-pipewire-vaapi",
+            "nvenc" => "linux-pipewire-nvenc",
+            _ => "linux-pipewire-cpu",
         }
     }
 
@@ -585,6 +649,66 @@ mod perf_probe {
         let avg = times.iter().sum::<f64>() / times.len() as f64;
         let max = times.iter().copied().fold(0.0f64, f64::max);
         println!("{label}: avg={avg:.2}ms max={max:.2}ms n={}", times.len());
+    }
+
+    /// The SPS a tier really emits, as the receiver's decoder will read it.
+    fn describe_sps(data: &[u8]) -> String {
+        use cros_codecs::codec::h264::nalu::Nalu;
+        use cros_codecs::codec::h264::parser::{NaluHeader, NaluType, Parser};
+        let mut cursor = std::io::Cursor::new(data);
+        let mut parser = Parser::default();
+        while let Ok(nalu) = Nalu::<NaluHeader>::next(&mut cursor) {
+            if !matches!(nalu.header.type_, NaluType::Sps) {
+                continue;
+            }
+            let sps = parser.parse_sps(&nalu).expect("sps parses");
+            let v = &sps.vui_parameters;
+            return format!(
+                "profile={} level={:?} poc_type={} ref_frames={} vui={} restriction={} reorder={} dec_frame_buffering={}",
+                sps.profile_idc, sps.level_idc, sps.pic_order_cnt_type, sps.max_num_ref_frames,
+                sps.vui_parameters_present_flag, v.bitstream_restriction_flag,
+                v.max_num_reorder_frames, v.max_dec_frame_buffering
+            );
+        }
+        "no SPS".to_owned()
+    }
+
+    fn first_frame(mut encode: impl FnMut(bool) -> Result<Option<EncodedFrame>, String>) -> EncodedFrame {
+        for i in 0..5 {
+            if let Some(f) = encode(i == 0).expect("encode") {
+                return f;
+            }
+        }
+        panic!("no frame in 5 attempts");
+    }
+
+    #[test]
+    fn dump_openh264_sps() {
+        let mut enc = H264Encoder::new(EncodeSettings::default());
+        let (w, h) = (640u32, 360u32);
+        let rgba = vec![0x40u8; (w * h * 4) as usize];
+        let f = first_frame(|k| enc.encode_rgba(w, h, &rgba, k));
+        println!("OPENH264: keyframe={} bytes={} {}", f.keyframe, f.data.len(), describe_sps(&f.data));
+    }
+
+    #[test]
+    #[ignore = "needs NVENC"]
+    fn dump_nvenc_sps() {
+        let mut enc = nvenc::NvencEncoder::probe(EncodeSettings::default()).expect("nvenc");
+        let (w, h) = (640u32, 360u32);
+        let rgba = vec![0x40u8; (w * h * 4) as usize];
+        let f = first_frame(|k| enc.encode_rgba(w, h, &rgba, k));
+        println!("NVENC: keyframe={} bytes={} {}", f.keyframe, f.data.len(), describe_sps(&f.data));
+    }
+
+    #[test]
+    #[ignore = "needs a VA-API H.264 encode device"]
+    fn dump_vaapi_sps() {
+        let mut enc = vaapi::VaapiEncoder::probe(EncodeSettings::default()).expect("vaapi");
+        let (w, h) = (640u32, 360u32);
+        let rgba = vec![0x40u8; (w * h * 4) as usize];
+        let f = first_frame(|k| enc.encode_rgba(w, h, &rgba, k));
+        println!("VAAPI: keyframe={} bytes={} {}", f.keyframe, f.data.len(), describe_sps(&f.data));
     }
 
     #[test]
