@@ -79,7 +79,12 @@ struct ViewerStateEvent {
 /// message (a timer task enforces the bound, so latency never exceeds it
 /// regardless of when - or whether - the next frame arrives).
 #[cfg(native_stream_viewer)]
-const BATCH_FLUSH_AGE: std::time::Duration = std::time::Duration::from_millis(50);
+const BATCH_FLUSH_AGE: std::time::Duration = std::time::Duration::from_millis(20);
+
+/// How often the timed flusher looks; it bounds how long a batch waits past
+/// [`BATCH_FLUSH_AGE`].
+#[cfg(native_stream_viewer)]
+const BATCH_FLUSH_TICK: std::time::Duration = std::time::Duration::from_millis(4);
 
 /// Flush early once a batch holds this many payload bytes (keyframes).
 #[cfg(native_stream_viewer)]
@@ -99,6 +104,10 @@ struct FrameBatch {
     keyframes: u64,
     /// When the OLDEST buffered record was appended.
     started: Option<std::time::Instant>,
+    /// When the previous batch left. A record arriving a whole flush age
+    /// after it is not part of a burst, so holding it back would coalesce
+    /// nothing - it goes out at once.
+    last_flush: Option<std::time::Instant>,
     /// Overflow recovery: drop everything until a keyframe record arrives.
     dropping_until_key: bool,
 }
@@ -186,13 +195,22 @@ impl NativeViewerSink {
                     return;
                 }
             }
+            let now = std::time::Instant::now();
             if batch.buf.is_empty() {
-                batch.started = Some(std::time::Instant::now());
+                batch.started = Some(now);
             }
             batch.buf.extend_from_slice(&record);
             batch.records += 1;
             batch.keyframes += u64::from(keyframe);
-            let due = force || batch.buf.len() >= BATCH_FLUSH_BYTES;
+            // Batching exists so a 60 fps stream costs the webview's main
+            // thread a few IPC messages per second, not sixty. A stream at
+            // or below the flush cadence gains nothing from it and would
+            // only pay the wait, so a record that follows a quiet spell is
+            // delivered immediately; only a burst is coalesced.
+            let quiet = batch
+                .last_flush
+                .is_none_or(|t| now.duration_since(t) >= BATCH_FLUSH_AGE);
+            let due = force || quiet || batch.buf.len() >= BATCH_FLUSH_BYTES;
             if !due {
                 return;
             }
@@ -255,6 +273,7 @@ fn take_batch(batch: &mut FrameBatch) -> (Vec<u8>, u64, u64) {
     let records = std::mem::take(&mut batch.records);
     let keyframes = std::mem::take(&mut batch.keyframes);
     batch.started = None;
+    batch.last_flush = Some(std::time::Instant::now());
     (buf, records, keyframes)
 }
 
@@ -392,7 +411,7 @@ pub(crate) async fn start_native_stream_view(
     let weak_sink = std::sync::Arc::downgrade(&sink);
     let _detached = tauri::async_runtime::spawn(async move {
         loop {
-            tokio::time::sleep(BATCH_FLUSH_AGE / 2).await;
+            tokio::time::sleep(BATCH_FLUSH_TICK).await;
             let Some(sink) = weak_sink.upgrade() else {
                 break;
             };

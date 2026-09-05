@@ -464,6 +464,7 @@ impl VaapiEncoder {
             return Ok(None);
         }
         patch_zero_nal_headers(&mut data, fresh);
+        ensure_reorder_hint(&mut data);
         let keyframe = contains_idr(&data);
         if fresh && !keyframe {
             // Undecodable stream; the error demotes the broadcast to the
@@ -486,6 +487,79 @@ impl VaapiEncoder {
 /// wrote an SPS, which cros-codecs does exactly on IDRs - else type 1
 /// (non-IDR slice), both as reference pictures. Headers the driver filled in
 /// are left alone, so this is a no-op on drivers without the bug.
+/// Whether an SPS NAL sits somewhere in the Annex B stream.
+fn has_sps(data: &[u8]) -> bool {
+    data.windows(4).any(|w| w[..3] == [0, 0, 1] && w[3] & 0x1f == 7)
+}
+
+/// Give every SPS in `data` a VUI bitstream restriction saying
+/// `max_num_reorder_frames = 0`.
+///
+/// cros-codecs writes no VUI, and a Main-profile stream without one leaves
+/// the receiver's decoder to take the level's whole DPB as possible reorder
+/// depth (up to 16 frames at level 5.1). GStreamer's H.264 base class - the
+/// one behind `vah264dec` and `nvh264dec`, which is what `WebKitGTK`'s
+/// `WebCodecs` decodes with - then holds that many frames before showing the
+/// first.
+/// Measured on the NVENC tier before it got the same hint: ~5 frames held
+/// instead of ~2, 290 ms of decoder latency at 20 fps, and on a slow-changing
+/// desktop share that scales into seconds. The stream never reorders (no
+/// B-frames), so the hint is simply the truth.
+fn ensure_reorder_hint(data: &mut Vec<u8>) {
+    use cros_codecs::codec::h264::nalu::Nalu;
+    use cros_codecs::codec::h264::parser::NaluHeader;
+
+    if !has_sps(data) {
+        return;
+    }
+    let mut out = Vec::with_capacity(data.len() + 16);
+    let mut cursor = std::io::Cursor::new(data.as_slice());
+    let mut rewrote = false;
+    while let Ok(nalu) = Nalu::<NaluHeader>::next(&mut cursor) {
+        match hinted_sps(&nalu) {
+            Some(sps) => {
+                out.extend_from_slice(&sps);
+                rewrote = true;
+            }
+            None => out.extend_from_slice(&nalu.data),
+        }
+    }
+    if rewrote {
+        *data = out;
+    }
+}
+
+/// `nalu` re-serialised with the reorder hint, or `None` when it is not an
+/// SPS, already carries the hint, or cannot be parsed and written back.
+fn hinted_sps(
+    nalu: &cros_codecs::codec::h264::nalu::Nalu<'_, cros_codecs::codec::h264::parser::NaluHeader>,
+) -> Option<Vec<u8>> {
+    use cros_codecs::codec::h264::parser::{NaluType, Parser, Sps};
+    use cros_codecs::codec::h264::synthesizer::Synthesizer;
+    use std::rc::Rc;
+
+    if !matches!(nalu.header.type_, NaluType::Sps) {
+        return None;
+    }
+    // The parser keeps the SPS behind an `Rc` and `Sps` is not `Clone`;
+    // dropping the parser leaves this the only reference, so it unwraps.
+    let mut parser = Parser::default();
+    let sps = Rc::clone(parser.parse_sps(nalu).ok()?);
+    drop(parser);
+    let mut sps = Rc::try_unwrap(sps).ok()?;
+    if sps.vui_parameters_present_flag && sps.vui_parameters.bitstream_restriction_flag {
+        return None;
+    }
+    sps.vui_parameters_present_flag = true;
+    sps.vui_parameters.bitstream_restriction_flag = true;
+    sps.vui_parameters.max_num_reorder_frames = 0;
+    sps.vui_parameters.max_dec_frame_buffering = u32::from(sps.max_num_ref_frames.max(1));
+    let mut out = Vec::with_capacity(nalu.data.len() + 8);
+    Synthesizer::<'_, Sps, &mut Vec<u8>>::synthesize(nalu.header.ref_idc, &sps, &mut out, true)
+        .ok()?;
+    Some(out)
+}
+
 fn patch_zero_nal_headers(data: &mut [u8], forced_idr: bool) {
     let mut idr = forced_idr;
     let mut i = 0;
@@ -774,6 +848,51 @@ fn convert_band(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn an_sps_without_vui_gets_the_no_reorder_hint() {
+        use super::ensure_reorder_hint;
+        use cros_codecs::codec::h264::nalu::Nalu;
+        use cros_codecs::codec::h264::parser::{NaluHeader, Parser, Sps};
+        use cros_codecs::codec::h264::synthesizer::Synthesizer;
+
+        let sps = Sps {
+            profile_idc: 77,
+            level_idc: cros_codecs::codec::h264::parser::Level::L4_1,
+            max_num_ref_frames: 2,
+            pic_width_in_mbs_minus1: 119,
+            pic_height_in_map_units_minus1: 67,
+            log2_max_frame_num_minus4: 4,
+            log2_max_pic_order_cnt_lsb_minus4: 4,
+            ..Sps::default()
+        };
+        let mut stream = Vec::new();
+        Synthesizer::<'_, Sps, &mut Vec<u8>>::synthesize(3, &sps, &mut stream, true).unwrap();
+        // A slice behind it, so the rewrite has to keep unrelated NALs intact
+        // (ending in the stop bit, as a real one does - the NAL reader strips
+        // trailing zero bytes).
+        stream.extend_from_slice(&[0, 0, 0, 1, 0x65, 0x88, 0x84, 0x80]);
+
+        let before = stream.clone();
+        ensure_reorder_hint(&mut stream);
+        assert_ne!(stream, before, "the SPS should have been rewritten");
+        assert!(stream.ends_with(&[0x65, 0x88, 0x84, 0x80]), "the slice must survive untouched");
+
+        let mut cursor = std::io::Cursor::new(stream.as_slice());
+        let nalu = Nalu::<NaluHeader>::next(&mut cursor).unwrap();
+        let mut parser = Parser::default();
+        let parsed = parser.parse_sps(&nalu).unwrap();
+        assert!(parsed.vui_parameters_present_flag);
+        assert!(parsed.vui_parameters.bitstream_restriction_flag);
+        assert_eq!(parsed.vui_parameters.max_num_reorder_frames, 0);
+        assert_eq!(parsed.vui_parameters.max_dec_frame_buffering, 2);
+        assert_eq!(parsed.max_num_ref_frames, 2);
+
+        // Idempotent: a hinted SPS is left alone.
+        let hinted = stream.clone();
+        ensure_reorder_hint(&mut stream);
+        assert_eq!(stream, hinted);
+    }
+
     #[test]
     fn idr_scan_finds_type5_after_long_and_short_start_codes() {
         // SPS (7), PPS (8), then IDR (5) behind a 3-byte start code.

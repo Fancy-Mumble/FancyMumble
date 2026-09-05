@@ -140,6 +140,11 @@ mod cfg_off {
     pub(super) const RC_MODE: usize = 44;
     pub(super) const AVERAGE_BITRATE: usize = 60;
     pub(super) const MAX_BITRATE: usize = 64;
+    /// `encodeCodecConfig.h264Config.h264VUIParameters.bitstreamRestrictionFlag`
+    /// (encodeCodecConfig 168, h264VUIParameters +72, the flag +48).
+    pub(super) const VUI_BITSTREAM_RESTRICTION: usize = 288;
+    /// `encodeCodecConfig.h264Config.maxNumRefFrames` (the DPB size).
+    pub(super) const MAX_NUM_REF_FRAMES: usize = 228;
 }
 
 /// `NV_ENC_PRESET_CONFIG`.
@@ -827,6 +832,22 @@ impl NvencEncoder {
         poke_u32(cfg, cfg_off::GOP_LENGTH, NVENC_INFINITE_GOPLENGTH);
         poke_u32(cfg, cfg_off::FRAME_INTERVAL_P, 1);
         poke_u32(cfg, cfg_off::RC_MODE, NV_ENC_PARAMS_RC_CBR);
+        // Write the VUI bitstream restriction: with no B-frames it says
+        // max_num_reorder_frames = 0. Without it a Main-profile stream leaves
+        // the receiver's decoder to assume the level's full DPB may be
+        // reorder depth (up to 16 frames at level 5.1), and hardware decoders
+        // (GStreamer's h264 base class behind vah264dec / nvh264dec) hold that
+        // many frames before showing the first - seconds of latency on a
+        // slow-changing desktop share.
+        poke_u32(cfg, cfg_off::VUI_BITSTREAM_RESTRICTION, 1);
+        // One reference frame, so the SPS advertises a one-picture DPB.
+        // The receiver's decoder (GStreamer's H.264 base class) holds
+        // `max_dec_frame_buffering` pictures before it outputs one, even
+        // with reordering declared off: measured 5 frames held with the
+        // default 3-picture DPB against 3 with a single one. Screen
+        // content gains little from more references, and the software and
+        // VA-API tiers already run with one.
+        poke_u32(cfg, cfg_off::MAX_NUM_REF_FRAMES, 1);
         poke_rate_control(cfg, bitrate);
 
         let fps = self.settings.max_fps.clamp(1.0, 240.0).round() as u32;
