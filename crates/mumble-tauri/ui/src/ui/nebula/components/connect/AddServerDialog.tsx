@@ -13,7 +13,11 @@ import {
 } from "@mui/material";
 import { addServer, getServerPassword, setServerPassword, updateServer } from "@core/serverStorage";
 import type { SavedServer } from "@core/types";
+import { TID } from "@core/testids";
 import { SectionLabel, Stack } from "../primitives";
+
+/** The certificate the client generates for a fresh profile. */
+const DEFAULT_CERT = "default";
 
 interface AddServerDialogProps {
   open: boolean;
@@ -76,7 +80,21 @@ export function AddServerDialog({
     setPassword("");
     setError(null);
     void invoke<string[]>("list_certificates")
-      .then(setCertificates)
+      .then((names) => {
+        setCertificates(names);
+        // A new server arrives under an identity, not anonymously. Standard's
+        // wizard has always opened on `default` (ConnectPage's `certLabel`
+        // useState), and opening on "Anonymous" here meant a Nebula user could
+        // not be registered by an admin - the server refuses a registration
+        // with no certificate - and had no identity for persistent chat or
+        // signal, which key off the same hash. Nothing said so: the field just
+        // read "Anonymous". Editing an existing server keeps what it stored,
+        // including a deliberate anonymous one.
+        if (editing) return;
+        setCertLabel((current) =>
+          current || (names.includes(DEFAULT_CERT) ? DEFAULT_CERT : (names[0] ?? "")),
+        );
+      })
       .catch(() => setCertificates([]));
     // Whether there is one, not what it is: the box stays empty so saving
     // without touching it leaves the stored password alone.
@@ -151,6 +169,7 @@ export function AddServerDialog({
               label={t("nebulaConnect:addServer.address")}
               sx={{ flex: 2 }}
               disabled={!!preset}
+              slotProps={{ htmlInput: { "data-testid": TID.connectHostInput } }}
               value={host}
               onChange={(event) => setHost(event.target.value)}
             />
@@ -159,6 +178,7 @@ export function AddServerDialog({
               label={t("server:edit.portField")}
               sx={{ flex: 1 }}
               disabled={!!preset}
+              slotProps={{ htmlInput: { "data-testid": TID.connectPortInput } }}
               value={port}
               onChange={(event) => setPort(event.target.value.replace(/\D/g, ""))}
             />
@@ -166,6 +186,7 @@ export function AddServerDialog({
           <TextField
             size="small"
             label={t("server:edit.usernameField")}
+            slotProps={{ htmlInput: { "data-testid": TID.connectUsernameInput } }}
             value={username}
             onChange={(event) => setUsername(event.target.value)}
           />
@@ -176,10 +197,15 @@ export function AddServerDialog({
             value={certLabel}
             onChange={(event) => setCertLabel(event.target.value)}
             helperText={t("nebulaConnect:addServer.certificateHelp")}
+            // On the wrapper rather than on the Select: MUI types the select
+            // slot props as `SelectProps`, which has no data-* member.
+            data-testid={TID.connectCertificate}
           >
-            <MenuItem value="">{t("nebulaConnect:addServer.anonymous")}</MenuItem>
+            <MenuItem value="" data-cert-label="">
+              {t("nebulaConnect:addServer.anonymous")}
+            </MenuItem>
             {certificates.map((name) => (
-              <MenuItem key={name} value={name}>
+              <MenuItem key={name} value={name} data-cert-label={name}>
                 {name}
               </MenuItem>
             ))}
@@ -211,7 +237,12 @@ export function AddServerDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{t("common:actions.cancel")}</Button>
-        <Button variant="contained" disabled={saving} onClick={() => void save()}>
+        <Button
+          variant="contained"
+          disabled={saving}
+          data-testid={TID.connectAndSave}
+          onClick={() => void save()}
+        >
           {t("server:edit.save")}
         </Button>
       </DialogActions>

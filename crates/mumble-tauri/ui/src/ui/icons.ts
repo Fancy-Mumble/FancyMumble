@@ -32,6 +32,7 @@ export {
   ExternalLink as ExternalLinkIcon,
   FileText as FileTextIcon,
   Globe as GlobeIcon,
+  GripVertical as GripVerticalIcon,
   Hash as HashIcon,
   Headphones as HeadphonesIcon,
   HeadphoneOff as HeadphonesOffIcon,

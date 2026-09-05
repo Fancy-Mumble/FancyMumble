@@ -2,6 +2,7 @@ import { Fragment, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, IconButton, Tooltip, Typography } from "@mui/material";
 import type { ServerPingResult } from "@core/types";
+import { TID } from "@core/testids";
 import { CloseIcon, PlusIcon, StarIcon, UsersGroupIcon } from "@ui/icons";
 import { serverTint, type ServerGroup, type ServerRailEntry } from "../../selectors";
 import { UserAvatar } from "../primitives";
@@ -63,6 +64,8 @@ interface ServerRailPanelProps {
    */
   friends?: RailFriends;
   onSelect: (entry: ServerRailEntry) => void;
+  /** A right-click on a row, with where it landed; the rail owns the menu. */
+  onContextMenu?: (entry: ServerRailEntry, x: number, y: number) => void;
   onAddServer: () => void;
   /** Absent where favouriting is not offered; the star is then not drawn. */
   onToggleFavorite?: (group: ServerGroup) => void;
@@ -405,6 +408,7 @@ export function ServerRailPanel({
   friends,
   onSelect,
   onAddServer,
+  onContextMenu,
   onToggleFavorite,
 }: Readonly<ServerRailPanelProps>) {
   const { t } = useTranslation(PANEL_NS);
@@ -482,6 +486,7 @@ export function ServerRailPanel({
         <Box
           component="button"
           type="button"
+          data-testid={TID.addServer}
           onClick={onAddServer}
           sx={(theme) => ({
             all: "unset",
@@ -512,7 +517,17 @@ export function ServerRailPanel({
         {entries.map((entry) => (
           <Fragment key={entry.group.key}>
             {dropBefore === entry.group.key && <DropLine />}
-            <Box sx={{ position: "relative", "&:hover .nebula-fav": { opacity: 1 } }}>
+            <Box
+              sx={{ position: "relative", "&:hover .nebula-fav": { opacity: 1 } }}
+              onContextMenu={
+                onContextMenu
+                  ? (event) => {
+                      event.preventDefault();
+                      onContextMenu(entry, event.clientX, event.clientY);
+                    }
+                  : undefined
+              }
+            >
               <PanelRow
                 entry={entry}
                 active={entry.group.key === activeKey}
@@ -546,6 +561,7 @@ export function ServerRailPanel({
         <Box
           component="button"
           type="button"
+          data-testid={TID.addServer}
           onClick={onAddServer}
           sx={(theme) => ({
             all: "unset",

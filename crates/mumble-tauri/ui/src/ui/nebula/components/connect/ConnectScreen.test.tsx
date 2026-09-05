@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { alpha } from "@mui/material/styles";
 import { TID } from "@core/testids";
@@ -290,5 +290,84 @@ describe("the address chip stays readable over any banner", () => {
   ])("clears AA on %s", (_what, banner) => {
     const ground = throughScrim(banner as [number, number, number]);
     expect(contrast(ink(ground), ground)).toBeGreaterThanOrEqual(FLOOR);
+  });
+});
+
+describe("ConnectScreen identity order", () => {
+  const SECOND: SavedServer = { ...SERVER, id: "s2", username: "Zewi" };
+
+  function renderIdentities(
+    identities: readonly SavedServer[],
+    onReorderIdentities?: (ids: readonly string[]) => void,
+  ) {
+    invokeMock.mockResolvedValue({ online: false } as never);
+    return render(
+      withNebulaTheme(
+        <ConnectScreen
+          server={SERVER}
+          identities={identities}
+          connecting={false}
+          error={null}
+          onConnect={vi.fn()}
+          onAddIdentity={vi.fn()}
+          onReorderIdentities={onReorderIdentities}
+        />,
+      ),
+    );
+  }
+
+  it("gives every row a grip when there is an order to change", () => {
+    renderIdentities([SERVER, SECOND], vi.fn());
+    expect(screen.getAllByTestId(TID.connectIdentityHandle)).toHaveLength(2);
+  });
+
+  it("draws no grip on a lone identity", () => {
+    // One row is an order already, and the grip's column would push the row's
+    // contents across for a gesture that could not do anything.
+    renderIdentities([SERVER], vi.fn());
+    expect(screen.queryByTestId(TID.connectIdentityHandle)).toBeNull();
+  });
+
+  it("draws no grip when nobody is there to remember the arrangement", () => {
+    renderIdentities([SERVER, SECOND]);
+    expect(screen.queryByTestId(TID.connectIdentityHandle)).toBeNull();
+  });
+
+  it("moves an identity with the arrow keys, for a pointer nobody is holding", () => {
+    const onReorder = vi.fn();
+    renderIdentities([SERVER, SECOND], onReorder);
+
+    const grips = screen.getAllByTestId(TID.connectIdentityHandle);
+    fireEvent.keyDown(grips[1], { key: "ArrowUp" });
+    expect(onReorder).toHaveBeenCalledWith(["s2", "s1"]);
+
+    onReorder.mockClear();
+    fireEvent.keyDown(grips[0], { key: "ArrowDown" });
+    expect(onReorder).toHaveBeenCalledWith(["s2", "s1"]);
+  });
+
+  it("stays put at the ends of the list", () => {
+    const onReorder = vi.fn();
+    renderIdentities([SERVER, SECOND], onReorder);
+
+    const grips = screen.getAllByTestId(TID.connectIdentityHandle);
+    fireEvent.keyDown(grips[0], { key: "ArrowUp" });
+    fireEvent.keyDown(grips[1], { key: "ArrowDown" });
+    expect(onReorder).not.toHaveBeenCalled();
+  });
+
+  it("does not pick the identity whose grip was clicked", async () => {
+    // Picking a row up is not the same as picking it: the connect button must
+    // still name whoever was selected before the drag started.
+    renderIdentities([SERVER, SECOND], vi.fn());
+    await waitFor(() => expect(screen.getByText("Connect as MumbleUser")).toBeTruthy());
+
+    fireEvent.click(screen.getAllByTestId(TID.connectIdentityHandle)[1]);
+    expect(screen.getByText("Connect as MumbleUser")).toBeTruthy();
+
+    // The row around it still picks, or the guard above would be proving
+    // nothing more than that the click never landed.
+    fireEvent.click(screen.getByText("Zewi"));
+    expect(screen.getByText("Connect as Zewi")).toBeTruthy();
   });
 });

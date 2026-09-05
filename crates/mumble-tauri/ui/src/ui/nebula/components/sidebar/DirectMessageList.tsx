@@ -1,9 +1,22 @@
 import { Box, Typography } from "@mui/material";
 import type { UserEntry } from "@core/types";
-import type { DirectConversation } from "../../selectors";
 import { formatTime } from "../../selectors";
 import { UserAvatar, Stack } from "../primitives";
 import { radius } from "../../tokens";
+
+/**
+ * One row of the Messages list.
+ *
+ * Declared here rather than in the selectors: the selector that used to build
+ * these went with the Nebula redesign, and nothing feeds this list today.
+ */
+interface DirectConversation {
+  user: UserEntry;
+  /** Rendered preview of the most recent message, or null when there is none. */
+  preview: string | null;
+  timestamp: number | null;
+  unread: number;
+}
 
 interface DirectMessageListProps {
   conversations: readonly DirectConversation[];

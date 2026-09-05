@@ -48,6 +48,7 @@ const DEFAULTS: UserPreferences = {
   calibrationSignature: null,
   serverTabOrder: [],
   serverRailOrder: [],
+  serverIdentityOrder: [],
   serverSwitcher: "rail",
   disableTypingIndicators: false,
   disableOsmMaps: false,
