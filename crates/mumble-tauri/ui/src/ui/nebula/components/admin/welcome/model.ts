@@ -18,6 +18,7 @@ import {
   connect as wire,
   mayBeUnknown as undecidedAt,
   nextId,
+  patchNode,
   type NodeGraph,
   type NodeId,
   type Wiring,
@@ -34,7 +35,9 @@ import {
   type Section,
 } from "./layout";
 import { legacyMarkupOfScreen } from "./qtHtml";
-import { designProblems, type Design } from "./design";
+import { designProblems, removeInput, renameInput, type Design } from "./design";
+import { assemble, compileTarget } from "./compile";
+import type { Variant } from "./design";
 
 /**
  * The identity, the wire and the graph are the engine's, not this file's.
@@ -234,6 +237,30 @@ export type MessageNode = Extract<WelcomeNode, { kind: "text" | "greeting" }>;
 /** The one that can be a whole welcome screen. Bands live only here. */
 export type GreetingNode = Extract<WelcomeNode, { kind: "greeting" }>;
 
+/** What a greeting reaching everybody reads as, in the status bar and the node. */
+export const EVERYONE = "everyone who arrives";
+
+/**
+ * Whether this node is the "everybody" condition.
+ *
+ * A filter with nothing wired to it and `unknown` settling to yes. That is not
+ * a trick played on the evaluator - it is what both evaluators already say: an
+ * empty input is `unknown`, and this filter turns `unknown` into `yes`, on the
+ * client (`verdictAt`) and on the server (`truth` in
+ * `starling/crates/runtime/src/greeting.rs`) alike.
+ *
+ * Worth having a name for, because it is the simplest useful greeting there
+ * is - "show this to everyone" - and until it had one the editor called it an
+ * unfinished filter and refused to save the graph.
+ */
+export function isEveryone(graph: WelcomeGraph, node: WelcomeNode): boolean {
+  return (
+    node.kind === "filter" &&
+    node.unknownAs === "yes" &&
+    !graph.edges.some((edge) => edge.to === node.id && edge.port === "a")
+  );
+}
+
 export function isMessage(node: WelcomeNode): node is MessageNode {
   return node.kind === "text" || node.kind === "greeting";
 }
@@ -325,6 +352,72 @@ export function inputsOf(node: WelcomeNode): readonly PortId[] {
   ];
 }
 
+/**
+ * Which of a design's inputs actually have a wire on them.
+ *
+ * The design declares a signature; the canvas fills it. Nothing inside the
+ * design records what is wired, deliberately - that is an edge, and a copy of
+ * it in the document would be a second place for the same fact to be wrong.
+ */
+export function wiredInputsOf(graph: WelcomeGraph, node: NodeId): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const edge of graph.edges) {
+    if (edge.to !== node) continue;
+    const name = inputOfPort(edge.port);
+    if (name !== null) names.add(name);
+  }
+  return names;
+}
+
+/**
+ * Rename one of a design's inputs, everywhere the name is a binding.
+ *
+ * Three places, and missing any one of them breaks something silently: the
+ * design's own list, the blocks that name it, and **the wire on the canvas** -
+ * whose port is the name. The design editor cannot reach that third one, which
+ * is why renaming is a graph operation rather than a design one.
+ */
+export function renameDesignInput(
+  graph: WelcomeGraph,
+  node: NodeId,
+  id: string,
+  raw: string,
+): WelcomeGraph {
+  const target = graph.nodes.find((entry) => entry.id === node);
+  if (target?.kind !== "greeting" || !target.design) return graph;
+  const was = [...target.design.slots, ...target.design.conditions].find((entry) => entry.id === id);
+  if (!was) return graph;
+
+  const { design, name } = renameInput(target.design, id, raw);
+  if (name === was.name) return graph;
+  return {
+    ...patchNode(graph, node, { design } as Partial<WelcomeNode>),
+    edges: graph.edges.map((edge) =>
+      edge.to === node && edge.port === inputPort(was.name) ? { ...edge, port: inputPort(name) } : edge,
+    ),
+  };
+}
+
+/**
+ * Undeclare an input, and drop the wire that fed it.
+ *
+ * The wire goes because the port goes: an edge onto a port that no longer
+ * exists is drawn nowhere and can never be removed by the operator who can see
+ * it least - the one who cannot see it at all.
+ */
+export function removeDesignInput(graph: WelcomeGraph, node: NodeId, id: string): WelcomeGraph {
+  const target = graph.nodes.find((entry) => entry.id === node);
+  if (target?.kind !== "greeting" || !target.design) return graph;
+  const gone = [...target.design.slots, ...target.design.conditions].find((entry) => entry.id === id);
+  if (!gone) return graph;
+
+  const design = removeInput(target.design, id);
+  return {
+    ...patchNode(graph, node, { design } as Partial<WelcomeNode>),
+    edges: graph.edges.filter((edge) => !(edge.to === node && edge.port === inputPort(gone.name))),
+  };
+}
+
 /** Whether this greeting is built in the design editor. */
 export function isDesign(node: WelcomeNode): boolean {
   return node.kind === "greeting" && node.view === "design" && node.design !== undefined;
@@ -362,13 +455,22 @@ export const welcomeWiring: Wiring<WelcomeNode> = {
   accepts: (source, target, port) => {
     const isText = source.kind === "text";
 
-    // A design's own ports, which are typed: a slot takes prose and a
-    // condition takes a settled yes or no. Same rule as a gate's inputs, and
-    // for the same reason - an undecided answer driving a visibility toggle
-    // hides a block for reasons nobody can see.
+    // A design's own ports, which are typed: a slot takes prose, a toggle takes
+    // a condition.
+    //
+    // A toggle takes the same sources the greeting's own WHEN does - any
+    // condition, a gate, a filter. It used to demand a gate or a filter, on the
+    // argument that an undecided answer driving a visibility toggle hides a
+    // block for reasons nobody can see. True, but it made the *less*
+    // consequential port the stricter one: WHEN decides whether anybody gets
+    // the greeting at all and accepts a bare condition, while a toggle deciding
+    // one block refused every node on the WHO palette - so an operator with a
+    // canvas full of conditions could wire none of them in, and nothing on
+    // screen said why. The undecided case is worth flagging, not forbidding,
+    // and `warnPort` already flags it where it arises.
     const input = inputKindOf(target, port);
     if (input === "text") return isText;
-    if (input === "bool") return source.kind === "gate" || source.kind === "filter";
+    if (input === "bool") return !isText;
     // A wire onto an input the design no longer declares lands nowhere.
     if (inputOfPort(port) !== null) return false;
 
@@ -533,7 +635,9 @@ function expressionOf(graph: WelcomeGraph, id: NodeId): string | null {
   if (!node) return null;
   if (node.kind === "filter") {
     const inner = expressionAt(graph, node.id, "a");
-    if (!inner) return null;
+    // Nothing wired in, and unknown counts as yes: that is true of every
+    // arrival, which is how this canvas says "everybody". See `isEveryone`.
+    if (!inner) return node.unknownAs === "yes" ? EVERYONE : null;
     // Only the surprising setting is spelled out. Every condition has to
     // pass through a filter to reach a gate, so `no` is what the sentence
     // already reads as - "country in DE" excludes anyone whose country
@@ -643,7 +747,7 @@ export function graphStatus(graph: WelcomeGraph): GraphStatus {
     return { complete: false, problems };
   }
   if (greeting.kind === "greeting" && greeting.design && greeting.view === "design") {
-    problems.push(...designProblems(greeting.design));
+    problems.push(...designProblems(greeting.design, wiredInputsOf(graph, greeting.id)));
   } else if (greeting.kind === "greeting" && isScreen(greeting)) {
     // A screen of nothing but dividers has a body - the generated markup is a
     // row of rules - so "is the body empty" is the wrong question to ask of it.
@@ -669,6 +773,9 @@ export function graphStatus(graph: WelcomeGraph): GraphStatus {
       // A design's inputs are named in the design's own problems, with more to
       // say than "empty input" - which of them, and what uses it.
       if (inputOfPort(port) !== null) continue;
+      // A filter left open on purpose is the "everyone" condition, not an
+      // unfinished one - see `isEveryone`.
+      if (isEveryone(graph, node)) continue;
       if (!graph.edges.some((e) => e.to === node.id && e.port === port)) {
         problems.push(`${labelOf(node)} has an empty ${port.toUpperCase()} input.`);
       }
@@ -768,6 +875,55 @@ function partsOf(graph: WelcomeGraph, greeting?: NodeId): MessageNode[] {
  * carries - one body, assembled server-side - and a preview that composed them
  * some other way would be showing something nobody will ever receive.
  */
+/**
+ * A design greeting, assembled the way the server assembles it.
+ *
+ * The prose previews read a node's `body` and `html`; a design has neither -
+ * its content is a sheet of blocks - so they came back empty and the preview
+ * drew an ellipsis. This runs the same two steps the server runs: compile the
+ * design for the target the server will actually send, then walk the parts,
+ * dropping the ones whose condition is off and substituting the wired snippet
+ * into each slot.
+ *
+ * Which target: the markup one when the server sends markup, the plain one when
+ * `allow_html` is off. Previewing the HTML on a server that will send text
+ * would be showing a document nobody receives.
+ */
+export function previewDesign(
+  graph: WelcomeGraph,
+  subject: PreviewSubject,
+  greeting?: NodeId,
+): { body: string; target: Variant } | null {
+  const id = greeting ?? greetingOf(graph)?.id;
+  const node = graph.nodes.find((candidate) => candidate.id === id);
+  if (!node || node.kind !== "greeting" || !node.design) return null;
+
+  const target: Variant = subject.allowHtml ? "html" : "plain";
+  const design = node.design;
+
+  return {
+    target,
+    body: assemble(compileTarget(design, target), target, {
+      // What the sheet assumes while it is being drawn. The server evaluates
+      // the wire against a real visitor; a preview has no visitor, so it shows
+      // the operator's own toggle - the same one the design editor draws with.
+      condition: (name) => design.conditions.find((input) => input.name === name)?.on !== false,
+      slot: (name) => wiredSnippet(graph, node.id, name, target),
+    }),
+  };
+}
+
+/** What the node wired to one of a design's slots actually says. */
+function wiredSnippet(graph: WelcomeGraph, greeting: NodeId, name: string, target: Variant): string {
+  for (const edge of graph.edges) {
+    if (edge.to !== greeting || inputOfPort(edge.port) !== name) continue;
+    const from = graph.nodes.find((node) => node.id === edge.from);
+    if (from?.kind !== "text") continue;
+    return target === "plain" ? from.body : markupOf(from) || paragraphsOf(from.body);
+  }
+  return "";
+}
+
 export function previewText(graph: WelcomeGraph, subject: PreviewSubject, greeting?: NodeId): string {
   return fill(composePlain(partsOf(graph, greeting).map((node) => node.body)), subject, false);
 }

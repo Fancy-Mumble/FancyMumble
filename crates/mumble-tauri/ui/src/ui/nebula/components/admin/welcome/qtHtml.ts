@@ -116,36 +116,64 @@ const QT_EQUIVALENT: Record<string, { tag: string; style?: string }> = {
  */
 const QT_CSS = new Set([
   "background-color",
-  "background",
+  "background-image",
   "color",
   "font-family",
   "font-size",
   "font-style",
   "font-weight",
+  "font-kerning",
+  "font-variant",
   "text-decoration",
-  "text-align",
   "text-indent",
+  "text-transform",
+  "word-spacing",
+  "line-height",
   "vertical-align",
   "white-space",
-  "margin",
+  "float",
   "margin-top",
   "margin-right",
   "margin-bottom",
   "margin-left",
-  "padding",
   "padding-top",
   "padding-right",
   "padding-bottom",
   "padding-left",
-  "border",
-  "border-color",
-  "border-width",
-  "border-style",
   "border-collapse",
-  "list-style-type",
-  "width",
-  "height",
+  "border-color",
+  "border-top-color",
+  "border-right-color",
+  "border-bottom-color",
+  "border-left-color",
+  "border-style",
+  "border-top-style",
+  "border-right-style",
+  "border-bottom-style",
+  "border-left-style",
+  "border-width",
+  "border-top-width",
+  "border-right-width",
+  "border-bottom-width",
+  "border-left-width",
+  "page-break-before",
+  "page-break-after",
 ]);
+
+/**
+ * `text-align` is not on that list, and moving it is worth doing rather than
+ * dropping it.
+ *
+ * Qt aligns with the **attribute** - `align` on a paragraph, a heading, a div
+ * or a cell - and ignores the CSS property entirely. The WYSIWYG writes the
+ * property, because that is what every other surface in this client reads, so
+ * a centred heading arrived on Qt flush left with nothing to say why. These are
+ * the tags that take the attribute instead.
+ */
+const TAKES_ALIGN = new Set(["P", "DIV", "H1", "H2", "H3", "H4", "H5", "H6", "TD", "TH"]);
+
+/** The four values Qt's `align` attribute knows. */
+const ALIGNMENTS = new Set(["left", "right", "center", "justify"]);
 
 /** The attributes worth keeping, by tag. Everything else goes. */
 const QT_ATTRS = new Set([
@@ -207,11 +235,30 @@ function clean(parent: Element): void {
     }
     const style = child.getAttribute("style");
     if (style !== null) {
+      // Rescued before the property is dropped: Qt reads alignment off the
+      // attribute and nothing else, so this is the difference between a
+      // centred heading staying centred and quietly going flush left.
+      const aligned = alignmentIn(style);
+      if (aligned && TAKES_ALIGN.has(child.tagName) && !child.hasAttribute("align")) {
+        child.setAttribute("align", aligned);
+      }
       const kept = qtStyle(style);
       if (kept) child.setAttribute("style", kept);
       else child.removeAttribute("style");
     }
   }
+}
+
+/** The `text-align` in a style attribute, if it names one Qt understands. */
+function alignmentIn(style: string): string | null {
+  for (const declaration of style.split(";")) {
+    const colon = declaration.indexOf(":");
+    if (colon === -1) continue;
+    if (declaration.slice(0, colon).trim().toLowerCase() !== "text-align") continue;
+    const value = declaration.slice(colon + 1).trim().toLowerCase();
+    if (ALIGNMENTS.has(value)) return value;
+  }
+  return null;
 }
 
 /**

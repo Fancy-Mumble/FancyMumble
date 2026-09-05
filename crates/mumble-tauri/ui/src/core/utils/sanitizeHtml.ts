@@ -123,6 +123,11 @@ const SAFE_CSS_PROPS = new Set([
   "font-style",
   "font-family",
   "text-decoration",
+  // Inert for the same reason `box-shadow` is: lengths and a colour, nothing
+  // fetched and nothing run. A lift under a display line on a busy background
+  // is the one thing that makes it readable there, and there was no way to ask
+  // for it.
+  "text-shadow",
   "text-decoration-line",
   "text-decoration-color",
   "text-align",
@@ -155,7 +160,75 @@ const SAFE_CSS_PROPS = new Set([
   "border-radius",
   "border-collapse",
   "border-spacing",
+  // Purely visual, and inert: a shadow is lengths, a colour and `inset`. It
+  // cannot fetch anything or run anything, and `DANGEROUS_CSS_VALUE_RE` below
+  // rejects any value that tries.
+  //
+  // It is on the list because it is how depth is drawn now - a 1px spread ring
+  // instead of a border, an inset highlight along a panel's top edge - and
+  // without it a design has no way to say either. What it *can* do is paint
+  // outside its own box, so every surface that renders this markup clips its
+  // container; see `WelcomeMarkup`.
+  "box-shadow",
+  // -- Filters and fitting ----------------------------------------------
+  // `filter` and `backdrop-filter` take an SVG filter by `url()`, which is the
+  // one thing that could fetch - and `DANGEROUS_CSS_VALUE_RE` below rejects any
+  // value containing one, so what is left is blur, brightness, saturate and
+  // their siblings. Frosted glass is a `backdrop-filter: blur()` over a
+  // translucent fill and there was no way to say it at all.
+  //
+  // The WebKit prefix is not redundant: the client renders in WebKitGTK on
+  // Linux, which still wants it.
+  "filter",
+  "backdrop-filter",
+  "-webkit-backdrop-filter",
+  // How a picture sits in the box it was given - the difference between a
+  // photograph cropped to a band and one squashed into it.
+  "object-fit",
+  "object-position",
+  "aspect-ratio",
+  // The background layer's geometry. `background-image` is safe for the same
+  // reason `background` already is: a gradient is a value, and a `url()` is
+  // refused before it reaches here.
+  "background-image",
+  "background-size",
+  "background-position",
+  "background-repeat",
+  // What a rounded box does with what is inside it. A `border-radius` clips the
+  // element's own background and border, and nothing else - a picture or a
+  // child sitting in the corner pokes straight through it. Clipping is the
+  // other half of the property, and it is as inert as the first: geometry, no
+  // fetching, no execution.
+  "overflow",
+  "overflow-x",
+  "overflow-y",
   "display",
+  // -- Flex layout ------------------------------------------------------
+  // Inert, like every other property here: geometry, no fetching and no
+  // execution. `display` alone was already allowed and is useless without the
+  // rest - a `display:flex` whose `gap` and `flex-grow` are stripped is a row
+  // of things huddled at the left, which is what a design asking for a pair of
+  // full-width buttons used to get.
+  //
+  // `box-sizing` belongs with them: without it a `width:100%` element measures
+  // its padding and its rule *on top of* the hundred percent and overflows
+  // whatever it is inside.
+  "box-sizing",
+  "flex",
+  "flex-basis",
+  "flex-direction",
+  "flex-flow",
+  "flex-grow",
+  "flex-shrink",
+  "flex-wrap",
+  "gap",
+  "row-gap",
+  "column-gap",
+  "justify-content",
+  "align-items",
+  "align-content",
+  "align-self",
+  "order",
   "list-style",
   "list-style-type",
   "width",

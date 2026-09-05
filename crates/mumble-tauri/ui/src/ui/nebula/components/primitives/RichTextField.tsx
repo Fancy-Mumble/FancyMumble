@@ -140,6 +140,18 @@ export interface RichTextFieldProps {
   maxHeight?: number;
   /** Names the field for a screen reader, and for the tests. */
   ariaLabel: string;
+  /**
+   * Put the toolbar on a bar above the field rather than attached to its top.
+   *
+   * For editing something in place, where the field *is* the thing being laid
+   * out: an attached toolbar would push the rest of the page down by 30px the
+   * moment somebody clicked into a paragraph, and what they are editing would
+   * no longer be where they clicked. Floated, the field keeps its own size and
+   * the toolbar hangs over whatever is above it.
+   */
+  floating?: boolean;
+  /** Extra controls at the end of the toolbar, for what a caller adds. */
+  extras?: React.ReactNode;
 }
 
 export function RichTextField({
@@ -154,6 +166,8 @@ export function RichTextField({
   minHeight = singleLine ? 0 : 76,
   maxHeight = singleLine ? 0 : 220,
   ariaLabel,
+  floating = false,
+  extras,
 }: Readonly<RichTextFieldProps>) {
   const { t } = useTranslation(["nebulaCommon", "nebulaChat", "chat"]);
   const { nebula } = useTheme().palette;
@@ -225,19 +239,36 @@ export function RichTextField({
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) onCommit?.();
       }}
       sx={{
-        borderRadius: radius("md"),
-        background: nebula.card,
-        border: `1px solid ${nebula.line2}`,
+        position: floating ? "relative" : "static",
+        borderRadius: floating ? radius("sm") : radius("md"),
+        background: floating ? "transparent" : nebula.card,
+        border: `1px solid ${floating ? nebula.accent : nebula.line2}`,
         overflow: "visible",
         transition: "border-color 140ms ease",
-        "&:focus-within": { borderColor: nebula.accentLine },
+        "&:focus-within": { borderColor: floating ? nebula.accent : nebula.accentLine },
       }}
     >
       <Stack
         direction="row"
         alignItems="center"
         gap={0.25}
-        sx={{ px: "6px", py: "4px", borderBottom: `1px solid ${nebula.line}` }}
+        sx={
+          floating
+            ? {
+                position: "absolute",
+                zIndex: 35,
+                top: "-38px",
+                left: 0,
+                px: "4px",
+                py: "4px",
+                whiteSpace: "nowrap",
+                borderRadius: radius("md"),
+                background: nebula.card,
+                border: `1px solid ${nebula.line2}`,
+                boxShadow: nebula.shadow,
+              }
+            : { px: "6px", py: "4px", borderBottom: `1px solid ${nebula.line}` }
+        }
       >
         {shown.has("bold") && (
           <ToolButton
@@ -388,6 +419,7 @@ export function RichTextField({
             </ToolButton>
           </>
         )}
+        {extras}
       </Stack>
 
       <Box

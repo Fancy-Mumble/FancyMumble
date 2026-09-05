@@ -9,6 +9,7 @@ import { WelcomeScreen } from "./WelcomeScreen";
 import {
   describeGreeting,
   isLegacy,
+  previewDesign,
   previewMarkup,
   previewText,
   sectionsOf,
@@ -52,8 +53,12 @@ export function GreetingPreview({
   const node = graph.nodes.find((candidate) => candidate.id === greeting);
 
   const condition = describeGreeting(graph, greeting);
-  const plain = previewText(graph, subject, greeting);
-  const markup = previewMarkup(graph, subject, greeting);
+  // A design carries a sheet of blocks rather than a body, so it is compiled
+  // and assembled the way the server does it; the prose halves stay for every
+  // other greeting.
+  const compiled = previewDesign(graph, subject, greeting);
+  const plain = compiled?.target === "plain" ? compiled.body : previewText(graph, subject, greeting);
+  const markup = compiled ? (compiled.target === "plain" ? null : compiled.body) : previewMarkup(graph, subject, greeting);
   // Only when the server will actually send the markup half. A server with
   // `allow_html` off hands a client tags it renders literally, so it sends the
   // plain form instead - and a preview showing headings on such a server would
@@ -158,8 +163,15 @@ export function GreetingPreview({
                   borderTop: `1px solid ${theme.palette.nebula.line2}`,
                   margin: "0.7em 0",
                 },
-                "& table": { borderCollapse: "collapse", margin: "0.5em 0" },
-                "& td, & th": { border: `1px solid ${theme.palette.nebula.line2}`, padding: "3px 6px" },
+                // Ruled cells are for a table somebody *wrote*. A compiled
+                // design is laid out in tables too - that is the only layout
+                // primitive that survives the trip - so these rules drew a box
+                // around every row of it. The design carries its own borders in
+                // `style`, where it wants them.
+                "& table": { borderCollapse: "collapse", margin: compiled ? 0 : "0.5em 0" },
+                ...(compiled
+                  ? {}
+                  : { "& td, & th": { border: `1px solid ${theme.palette.nebula.line2}`, padding: "3px 6px" } }),
                 "& a": { color: theme.palette.nebula.accent, textDecoration: "underline" },
                 "& img": { maxWidth: "100%" },
               })}

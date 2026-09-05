@@ -1,6 +1,5 @@
-import { useMemo } from "react";
 import { Box, Button, Typography, alpha } from "@mui/material";
-import { sanitizeHtml } from "@core/utils/sanitizeHtml";
+import { WelcomeMarkup } from "../../welcome/WelcomeMarkup";
 import { radius, type NebulaTokens } from "../../../tokens";
 import { LinkGuard, Stack } from "../../primitives";
 import { isWebUrl, type Align, type BandTone, type Section } from "./layout";
@@ -382,10 +381,10 @@ function Cards({ section }: Readonly<{ section: Section }>) {
  * a server, and a server is not this editor.
  */
 function Prose({ html, align }: Readonly<{ html: string; align: "left" | "center" }>) {
-  const clean = useMemo(() => sanitizeHtml(html), [html]);
-  if (!clean.trim()) return null;
+  if (!html.trim()) return null;
   return (
-    <Box
+    <WelcomeMarkup
+      html={html}
       sx={(theme) => ({
         // The band's alignment is the floor, not the ceiling: a paragraph that
         // set its own inside the WYSIWYG keeps it, because that was a
@@ -403,7 +402,6 @@ function Prose({ html, align }: Readonly<{ html: string; align: "left" | "center
         "& a": { color: theme.palette.nebula.accent },
         "& img": { maxWidth: "100%" },
       })}
-      dangerouslySetInnerHTML={{ __html: clean }}
     />
   );
 }

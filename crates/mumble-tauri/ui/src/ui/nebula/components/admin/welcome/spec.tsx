@@ -15,6 +15,7 @@ import {
   type NodeSpec,
   type PortSummary,
   type PortId,
+  type PortInfo,
   type PortSide,
   type Tone,
 } from "../nodes";
@@ -33,8 +34,11 @@ import {
   OS_CHOICES,
   TENURE_WINDOWS,
   graphStatus,
+  inputKindOf,
+  inputOfPort,
   inputsOf,
   isDesign,
+  isEveryone,
   isLegacy,
   isMessage,
   labelOf,
@@ -156,6 +160,24 @@ const condition = (kind: WelcomeNode["kind"], label: string, description: string
 });
 
 const BLOCKS: readonly BlockDef<WelcomeNode>[] = [
+  {
+    id: "everyone",
+    label: "Everyone",
+    description:
+      "True of every arrival. Wire it straight into a greeting to show that greeting to everybody - the simplest rule there is.",
+    category: WHO,
+    tone: "ok",
+    // A filter that settles `unknown` to yes, with nothing wired into it. Both
+    // evaluators already read that as true of everybody, so this needs nothing
+    // the server does not already understand.
+    create: (x, y) => ({ ...(makeNode("filter", x, y) as WelcomeNode & { kind: "filter" }), unknownAs: "yes" }),
+    // It is a filter underneath, so it has a filter's input - and leaving that
+    // input empty is precisely what makes it mean everybody. Wire something
+    // into it and it stops being "everyone" and starts being that condition,
+    // which is a useful thing to be able to do and a dishonest thing to hide.
+    inputs: [{ name: "A", type: "condition" }],
+    outputs: [CONDITION],
+  },
   condition("country", "Country", "True when the member connects from one of the picked countries."),
   condition("tenure", "On server since", "Compares how long the account has existed on this server."),
   condition("clientVersion", "Client version", "Matches the Mumble version the client announces."),
@@ -270,7 +292,7 @@ const BLOCKS: readonly BlockDef<WelcomeNode>[] = [
   },
   {
     id: "greeting:legacy",
-    label: "Welcome screen for Mumble 1.5 and older",
+    label: "Welcome screen for Classic Mumble",
     description:
       "The same bands compiled for Qt: tables, inline colour, no rounded corners. Wire it behind a client version condition; the modern one collapses on those clients.",
     category: MESSAGE,
@@ -410,6 +432,51 @@ function portTop(node: WelcomeNode, port: PortId, index: number, side: PortSide)
 }
 
 /**
+ * The two things a wire can carry here, and the colour each reads in.
+ *
+ * A condition is an answer about the person arriving; text is prose that ends
+ * up in what they read. Everything on this canvas is one or the other, and the
+ * colour is the type's rather than the wire's role: a condition reads in the
+ * accent whether it is feeding a gate or a greeting, because what matters when
+ * you are dragging one is whether the far end takes the same thing.
+ */
+const CONDITION_TONE = "accent" as const;
+const TEXT_TONE = "ok" as const;
+
+/**
+ * What each socket carries, and the word drawn beside it.
+ *
+ * Outputs are labelled with their *type* and inputs with their *name*, which
+ * is the split every node editor settles on: a node has one output and the
+ * only useful thing to say about it is what comes out, while an input is one
+ * of several and the useful thing is which one.
+ */
+function portInfo(node: WelcomeNode, port: PortId, side: PortSide): PortInfo {
+  if (side === "out") {
+    return node.kind === "text"
+      ? { label: "TEXT", type: "text", tone: TEXT_TONE }
+      : { label: "CONDITION", type: "condition", tone: CONDITION_TONE };
+  }
+  if (port === "when") return { label: "WHEN", type: "condition", tone: CONDITION_TONE };
+  if (port === "plus") return { label: "PLUS", type: "text", tone: TEXT_TONE };
+
+  // A design's own inputs are named by the design and typed by which list it
+  // declared them in.
+  const named = inputOfPort(port);
+  if (named !== null) {
+    const kind = inputKindOf(node, port);
+    if (kind === "text") return { label: named, type: "text", tone: TEXT_TONE };
+    if (kind === "bool") return { label: named, type: "condition", tone: CONDITION_TONE };
+    // A port left behind by an input the design no longer declares. Drawn
+    // quiet because nothing wired here reaches anything.
+    return { label: named, type: "gone", tone: "muted" };
+  }
+
+  // A gate's or a filter's inputs, which are named on the node as A and B.
+  return { label: port.toUpperCase(), type: "condition", tone: CONDITION_TONE };
+}
+
+/**
  * The welcome editor's dialect.
  *
  * A constant rather than a factory: this page is not translated, and everything
@@ -432,7 +499,7 @@ export const welcomeSpec: NodeSpec<WelcomeNode> = {
   },
   label: (node) => {
     if (isDesign(node)) return "SHOW THIS GREETING";
-    return isLegacy(node) ? "GREETING · QT" : labelOf(node);
+    return isLegacy(node) ? "GREETING · CLASSIC" : labelOf(node);
   },
   width: widthOf,
   resizable,
@@ -442,14 +509,14 @@ export const welcomeSpec: NodeSpec<WelcomeNode> = {
   annotate: true,
   tone: toneOf,
   portTop,
-  // A wire is coloured by what it *feeds*, not by where it comes from: one into
-  // the greeting's WHEN is the condition and reads in the accent, one into PLUS
-  // TEXT is prose and reads green, and everything upstream of a gate is quiet.
-  wireTone: (port) => (port === "plus" ? "ok" : port === "when" ? "accent" : "muted"),
+  portInfo,
   body: WelcomeBody,
   attachment: WelcomeAttachment,
   emphasise: (node) => node.kind === "greeting",
   badge: (graph, node) => {
+    // The filter that means "everybody" says so, rather than reading as a
+    // filter somebody forgot to wire up.
+    if (isEveryone(graph, node)) return "EVERYONE";
     if (node.kind === "text") return `${usesOf(graph, node.id)}×`;
     // Which greeting this is in the order the server tries them, but only once
     // there is more than one - the order is what decides who sees which, and
@@ -623,17 +690,13 @@ function WelcomeBody({ node, graph, onPatch }: NodeBodyProps<WelcomeNode>) {
 
     case "gate":
       return (
-        <Stack gap={0.75}>
-          {/* The input rows stay first: the ports on the left edge are
-              placed against them, and a control above would shift every
-              wire off the word it belongs to. */}
-          <Stack gap={0.25}>
-            {inputsOf(node).map((port) => (
-              <Typography key={port} sx={(theme) => ({ fontSize: 11, color: theme.palette.nebula.muted })}>
-                {port.toUpperCase()}
-              </Typography>
-            ))}
-          </Stack>
+        // The inputs are named on the edge beside their own sockets, so the
+        // body no longer writes A and B out itself - it did, and it was the
+        // one place on the canvas where the same word was drawn twice, twenty
+        // pixels apart. What it keeps is the height: the ports are spaced down
+        // the left edge, and a card shorter than they are would hang the lower
+        // one off its own bottom corner.
+        <Stack gap={0.75} sx={{ minHeight: 44, justifyContent: "flex-end" }}>
           <PillSelect
             value={node.gate}
             options={[...GATE_KINDS]}
@@ -686,7 +749,9 @@ function GreetingBody({
   // editable - so the node shows its signature and a way in, and the design
   // itself opens in the editor.
   if (node.view === "design" && node.design) {
-    return <DesignBody design={node.design} onOpen={() => openDesign(node.id)} />;
+    return (
+      <DesignBody design={node.design} onOpen={() => openDesign(node.id)} />
+    );
   }
 
   return (

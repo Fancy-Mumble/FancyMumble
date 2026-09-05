@@ -141,10 +141,58 @@ export function pinTime(message: ChatMessage): number {
  * A pin with no message id is dropped rather than drawn: jumping to it is the
  * row's whole purpose, and the id is what a jump aims at.
  */
-export function pinnedMessages(messages: readonly ChatMessage[]): ChatMessage[] {
-  return messages
+export function pinnedMessages(
+  messages: readonly ChatMessage[],
+  welcome?: WelcomePin,
+): ChatMessage[] {
+  const pins = messages
     .filter((message) => message.pinned && !!message.message_id)
     .sort((left, right) => pinTime(right) - pinTime(left));
+  const greeting = welcomePin(welcome);
+  return greeting ? [greeting, ...pins] : pins;
+}
+
+/** The id the welcome pin carries, so nothing else can collide with it. */
+export const WELCOME_PIN_ID = "server-welcome";
+
+export interface WelcomePin {
+  /** The server's welcome message, as markup. Empty means there is none. */
+  readonly body: string;
+  /** Whose greeting it is, for the line above it. */
+  readonly server: string;
+}
+
+/**
+ * The server's welcome message, as a pin.
+ *
+ * A greeting is the one message on a server that is *meant* to be read again -
+ * it carries the rules, the schedule, where to ask for help - and until now it
+ * was shown once, in a modal, and then gone. It was never a chat message, so
+ * there was nothing to pin: this makes one, client-side, so the thing an
+ * operator wrote to be read is somewhere it can be re-read.
+ *
+ * First in the list rather than sorted in by time. It is not a message
+ * somebody wrote at a moment; it is what the server says about itself, and it
+ * stays true while the rest of the list turns over.
+ *
+ * Marked `is_own: false` and given no session: nobody sent it, and a pin
+ * offering to jump to a message that is not in the conversation would be a
+ * dead end - which is why the panel checks for this id before it offers to.
+ */
+export function welcomePin(welcome: WelcomePin | undefined): ChatMessage | null {
+  if (!welcome || welcome.body.trim() === "") return null;
+  return {
+    sender_session: null,
+    sender_name: welcome.server,
+    body: welcome.body,
+    channel_id: -1,
+    is_own: false,
+    message_id: WELCOME_PIN_ID,
+    timestamp: null,
+    pinned: true,
+    pinned_by: null,
+    pinned_at: null,
+  };
 }
 
 /** Local midnight of the day a stamp falls in. */

@@ -158,3 +158,59 @@ suite("resizing", () => {
     expect(landed.guides).toEqual([]);
   });
 });
+
+suite("the guide a snap draws", () => {
+  it("spans both blocks it lined up, rather than stopping at their tops", () => {
+    // The bug this fixes: with no measured heights a block counted as zero
+    // tall, so the guide ran from the top of one to the top of the other and
+    // ended in mid-air, having visibly lined up with nothing.
+    const other = block("other", { x: 60, y: 40 });
+    const moving = block("moving", { x: 63, y: 300 });
+    const heights = new Map([
+      ["other", 80],
+      ["moving", 50],
+    ]);
+
+    const landed = snapTo(moving, 63, 300, [other], SHEET, true, 0, heights);
+    const guide = landed.guides.find((entry) => entry.axis === "x");
+
+    expect(guide).toBeDefined();
+    expect(guide?.from).toBe(40);
+    // The bottom of the lower block, not its top.
+    expect(guide?.to).toBe(350);
+  });
+
+  it("falls back to the top edge alone for a block nothing has measured", () => {
+    const other = block("other", { x: 60, y: 40 });
+    const moving = block("moving", { x: 63, y: 300 });
+    const guide = snapTo(moving, 63, 300, [other], SHEET, true).guides.find(
+      (entry) => entry.axis === "x",
+    );
+    expect(guide?.from).toBe(40);
+    expect(guide?.to).toBe(300);
+  });
+
+  it("offers a measured block's middle and bottom as lines to snap to", () => {
+    // Without measurement all three of a block's horizontals collapsed onto its
+    // top, so a block could only ever be aligned top-to-top.
+    const other = block("other", { x: 60, y: 40 });
+    const heights = new Map([["other", 100]]);
+    const moving = block("moving", { x: 60, y: 138 });
+
+    // 140 is the other block's bottom edge; the drag lands two pixels off it.
+    const landed = snapTo(moving, 60, 138, [other], SHEET, true, 0, heights);
+    expect(landed.y).toBe(140);
+  });
+
+  it("draws a width guide down past the block being resized", () => {
+    const other = block("other", { x: 60, y: 40, w: 200 });
+    const moving = block("moving", { x: 60, y: 300, w: 197 });
+    const heights = new Map([
+      ["other", 80],
+      ["moving", 60],
+    ]);
+    const landed = snapWidth(moving, 197, [other], SHEET, true, heights);
+    expect(landed.w).toBe(200);
+    expect(landed.guides[0]?.to).toBe(360);
+  });
+});

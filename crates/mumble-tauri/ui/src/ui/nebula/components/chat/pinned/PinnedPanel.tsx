@@ -22,7 +22,7 @@ import { NEBULA_MONO, radius } from "../../../tokens";
 import type { TimeDisplay } from "../../../selectors";
 import { Stack, UserAvatar } from "../../primitives";
 import { PopoverScrim } from "../popover/PopoverPanel";
-import { pinAge, pinnedMessages, pinPreview } from "./pinnedModel";
+import { WELCOME_PIN_ID, pinAge, pinnedMessages, pinPreview, type WelcomePin } from "./pinnedModel";
 
 /** The conversation header's height, which the panel hangs under. */
 const HEADER_HEIGHT = 66;
@@ -30,6 +30,12 @@ const HEADER_HEIGHT = 66;
 interface PinnedPanelProps {
   /** The open conversation; the pinned ones are picked out of it here. */
   readonly messages: readonly ChatMessage[];
+  /**
+   * The server's welcome message, shown at the top of the list.
+   *
+   * Absent where there is none, or where the caller has no way to fetch it.
+   */
+  readonly welcome?: WelcomePin;
   /** Which pins were new when the panel was opened. */
   readonly unseenIds: ReadonlySet<string>;
   readonly time: TimeDisplay;
@@ -43,6 +49,7 @@ interface PinnedPanelProps {
 
 export function PinnedPanel({
   messages,
+  welcome,
   unseenIds,
   time,
   onClose,
@@ -53,7 +60,7 @@ export function PinnedPanel({
   const { t } = useTranslation(["nebulaChat", "chat", "common"]);
   // The whole conversation arrives here, so the filter and the sort are worth
   // holding across the renders a hover or a mark-read causes.
-  const pins = useMemo(() => pinnedMessages(messages), [messages]);
+  const pins = useMemo(() => pinnedMessages(messages, welcome), [messages, welcome]);
   const unread = pins.filter((message) => unseenIds.has(message.message_id ?? "")).length;
 
   // Escape closes it, as it does every floating surface in the pack. The
@@ -171,16 +178,22 @@ export function PinnedPanel({
           </Stack>
         ) : (
           <Box sx={{ p: "6px", overflowY: "auto", maxHeight: "min(46vh, 420px)" }}>
-            {pins.map((message) => (
-              <PinRow
-                key={message.message_id}
-                message={message}
-                unseen={unseenIds.has(message.message_id ?? "")}
-                time={time}
-                onJump={onJump}
-                onUnpin={onUnpin}
-              />
-            ))}
+            {pins.map((message) => {
+              // The welcome pin is not in the conversation, so there is
+              // nowhere to jump to and nothing to unpin: it is the server's,
+              // not a member's, and offering either would be a dead end.
+              const greeting = message.message_id === WELCOME_PIN_ID;
+              return (
+                <PinRow
+                  key={message.message_id}
+                  message={message}
+                  unseen={unseenIds.has(message.message_id ?? "")}
+                  time={time}
+                  onJump={greeting ? undefined : onJump}
+                  onUnpin={greeting ? undefined : onUnpin}
+                />
+              );
+            })}
           </Box>
         )}
 
@@ -207,7 +220,8 @@ interface PinRowProps {
   readonly message: ChatMessage;
   readonly unseen: boolean;
   readonly time: TimeDisplay;
-  readonly onJump: (messageId: string) => void;
+  /** Absent for a pin that is not in the conversation - the server's welcome. */
+  readonly onJump?: (messageId: string) => void;
   readonly onUnpin?: (message: ChatMessage) => void;
 }
 
@@ -250,14 +264,16 @@ function PinRow({ message, unseen, time, onJump, onUnpin }: Readonly<PinRowProps
       <Box
         component="button"
         type="button"
-        onClick={() => onJump(id)}
+        onClick={() => onJump?.(id)}
         sx={(theme) => ({
           all: "unset",
           boxSizing: "border-box",
           display: "flex",
           gap: "11px",
           width: "100%",
-          cursor: "pointer",
+          // A pin with nowhere to jump is still worth reading, so it is still
+          // a row - it just does not pretend to be a link to somewhere.
+          cursor: onJump ? "pointer" : "default",
           p: "11px 12px",
           borderRadius: radius("md"),
           "&:hover": { background: theme.palette.nebula.hover },
