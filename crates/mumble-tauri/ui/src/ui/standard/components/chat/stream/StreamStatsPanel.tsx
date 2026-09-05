@@ -71,6 +71,23 @@ export interface VideoTrackStats {
  *  connection-level fields (bytes, RTT, ICE path, audio) are shared; the
  *  per-track video counters live in {@link videos}. The top-level video
  *  fields mirror the FIRST video track for backward compatibility. */
+/** A viewer's playout buffer, when it can be read directly rather than
+ *  through the spec's cumulative counters. */
+export type PlayoutState =
+  | {
+      readonly kind: "buffer";
+      /** Depth the buffer is aiming for right now. */
+      readonly targetMs: number;
+      /** Depth it relaxes back to on a clean network. */
+      readonly floorMs: number;
+      /** What is queued at this instant. */
+      readonly bufferedMs: number;
+    }
+  /** This viewer holds no playout buffer at all (the native video path
+   *  paints on arrival), so there is no delay to report - which is a
+   *  different statement from "zero milliseconds of it". */
+  | { readonly kind: "none" };
+
 export interface StatsSample {
   timestampMs: number;
   frameWidth: number | null;
@@ -104,6 +121,14 @@ export interface StatsSample {
   videoCodec: string | null;
   audioCodec: string | null;
   rttMs: number | null;
+  /** Set when {@link rttMs} is not an ICE-pair measurement, so the panel can
+   *  say where the number came from instead of implying one. */
+  rttSource?: "server-ping" | null;
+  /** Read directly from the viewer; absent means "derive it from the
+   *  jitter-buffer counters below", which is what the webview path does. */
+  playout?: PlayoutState | null;
+  /** Inbound audio packets, or `null` when this viewer has no audio track. */
+  audioPacketsReceived?: number | null;
   /** Selected ICE candidate types, "local / remote" (e.g. "host / srflx"). */
   icePath: string | null;
   /** One entry per inbound video track (screen and/or camera). */
@@ -327,6 +352,26 @@ export function deriveIntervalStats(prev: StatsSample | null, curr: StatsSample)
 // Scrolling bar graph (YouTube-style)
 // ---------------------------------------------------------------------------
 
+/**
+ * The playout-delay row.
+ *
+ * A viewer that knows its own buffer reports it outright; otherwise the
+ * numbers come from the spec's cumulative counters, as before. "n/a" is
+ * deliberate for a viewer that holds no buffer: printing "0 ms" there reads
+ * as a measurement, and nothing distinguishes it from a stat that broke.
+ */
+function playoutValue(sample: StatsSample, interval: IntervalStats): string {
+  const playout = sample.playout;
+  if (playout?.kind === "buffer") {
+    return (
+      `target ${fmt(playout.targetMs)} ms · floor ${fmt(playout.floorMs)} ms` +
+      ` · queued ${fmt(playout.bufferedMs)} ms`
+    );
+  }
+  if (playout?.kind === "none") return "n/a - this viewer holds no playout buffer";
+  return `target ${fmt(interval.bufferTargetMs)} ms · floor ${fmt(interval.bufferMinimumMs)} ms`;
+}
+
 /** Samples kept per graph (one per second - a one-minute window). */
 const HISTORY_LEN = 60;
 
@@ -398,11 +443,21 @@ interface VideoElementInfo {
   totalFrames: number | null;
 }
 
-function describeVideoElement(video: HTMLVideoElement | null, mutedLabel: string): VideoElementInfo {
-  if (!video) {
+function describeVideoElement(
+  media: HTMLVideoElement | HTMLCanvasElement | null,
+  mutedLabel: string,
+): VideoElementInfo {
+  if (!media) {
     return { viewport: "–", volume: "–", droppedFrames: null, totalFrames: null };
   }
-  const viewport = video.clientWidth > 0 ? `${video.clientWidth}×${video.clientHeight}` : "–";
+  const viewport = media.clientWidth > 0 ? `${media.clientWidth}×${media.clientHeight}` : "–";
+  if (!(media instanceof HTMLVideoElement)) {
+    // The native family paints a <canvas>: no audio and no render-quality
+    // counters on it. Drops come from the sample (the decode pipeline's
+    // own count) via the null fallback.
+    return { viewport, volume: "–", droppedFrames: null, totalFrames: null };
+  }
+  const video = media;
   const volume = video.muted ? `0% (${mutedLabel})` : `${Math.round(video.volume * 100)}%`;
   const quality = video.getVideoPlaybackQuality?.();
   return {
@@ -481,7 +536,9 @@ interface StreamStatsPanelProps {
   readonly sampler: StatsSampler;
   /** The video element, for viewport size and volume rows (webview family;
    *  the native canvas viewport has none). */
-  readonly videoRef?: React.RefObject<HTMLVideoElement | null>;
+  /** The media surface, whichever family drew it: a `<video>` gives
+   *  viewport, volume and render-drop counters; a `<canvas>` its viewport. */
+  readonly videoRef?: React.RefObject<HTMLVideoElement | HTMLCanvasElement | null>;
   /** SDP-mid -> content, so each inbound video track is labelled screen /
    *  camera in a screen+camera share. */
   readonly contentByMid?: Readonly<Record<string, "screen" | "camera">>;
@@ -624,12 +681,12 @@ export default function StreamStatsPanel({
         // that climbs and never returns means the sender's RTP timestamps
         // stopped matching its real cadence.
         label: "Playout delay",
-        value: `target ${fmt(interval.bufferTargetMs)} ms · floor ${fmt(interval.bufferMinimumMs)} ms`,
+        value: playoutValue(sample, interval),
       },
       {
         key: "latency",
         label: t("screenShare.stats.latency"),
-        value: `${fmt(sample.rttMs)} ms`,
+        value: `${fmt(sample.rttMs)} ms${sample.rttSource === "server-ping" ? " (server ping)" : ""}`,
         graph: hist.rtt,
         color: "#ff9f43",
       },
