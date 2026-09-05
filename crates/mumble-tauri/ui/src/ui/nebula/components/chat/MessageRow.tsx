@@ -14,6 +14,8 @@ import { getPoll } from "@core/features/chat/poll/model";
 import { useWatchStart } from "@core/features/chat/watch/useWatchStart";
 import { readWatchMarker } from "@core/features/chat/watch/watchMarker";
 import { MENTION_CHIP_SELECTOR, readMentionChip } from "@core/utils/mentions";
+import { useSelfMention } from "@core/features/chat/selfMention";
+import { TID } from "@core/testids";
 import {
   CheckIcon,
   CopyIcon,
@@ -38,7 +40,6 @@ import {
   editableText,
   formatTime,
   messageContent,
-  plainText,
   splitBodyImages,
   type TimeDisplay,
 } from "../../selectors";
@@ -49,6 +50,7 @@ import { LinkGuard, UserAvatar, Stack } from "../primitives";
 import { chamferedSurface, floatingSurface } from "../../theme";
 import { NEBULA_MONO, radius } from "../../tokens";
 import type { HoverEvent } from "../../clientState";
+import { bodyToCopyText } from "@core/features/chat/bodyText";
 
 /** The schemes a link in a message may point at; standard's renderer allows
  *  exactly these, and anything else loses its `href` rather than its text. */
@@ -320,6 +322,8 @@ export function MessageRow({
   /** The mention chip whose member list is open, or null while none is. */
   const [mention, setMention] = useState<MentionTarget | null>(null);
   const ownSession = useAppStore((state) => state.ownSession);
+  // `@here` and `@everyone` only reach you in the room they were said in.
+  const currentChannel = useAppStore((state) => state.currentChannel);
   const users = useAppStore((state) => state.users);
   const embeds = useLinkPreviews(message.message_id, message.body);
   // The card carries its own "Watch together" where it has one, so the hover
@@ -457,7 +461,27 @@ export function MessageRow({
   const openReactionPicker = (event: React.MouseEvent) => setPicker({ x: event.clientX, y: event.clientY });
 
   const selecting = selected !== null;
+
+  /**
+   * Being mentioned marks the row and rings once.
+   *
+   * Nebula drew mention chips but never asked whether one pointed at the
+   * reader, so a ping arrived with no highlight and - though the runtime
+   * mounts the listener that plays it - no sound. The decision and the ping
+   * are core's; what is Nebula's is the bar down the edge below.
+   */
+  const selfMention = useSelfMention(message, { ownSession, currentChannel });
+
   const rowHandlers = {
+    // The two handles every message assertion hangs off, on the row root so
+    // they are there whoever wrote it - an own bubble draws no author name to
+    // put them on. Standard carries the same pair on its row and its label.
+    "data-msg-id": message.message_id ?? undefined,
+    "data-sender-name": message.sender_name,
+    // The third handle, for the same reason as the other two: the highlight
+    // is an emotion class, which neither a unit test nor an e2e run can read
+    // back off the element.
+    "data-self-mention": selfMention ? "1" : undefined,
     onMouseEnter: () => setHovered(true),
     onMouseLeave: () => setHovered(false),
     onContextMenu: (event: React.MouseEvent) => {
@@ -470,14 +494,31 @@ export function MessageRow({
     // In selection mode the whole row is the checkbox: aiming at a small box
     // beside a wall of text is the slowest way to pick several things.
     onClick: selecting && message.message_id ? () => onToggleSelected?.(message.message_id!) : undefined,
-    sx: selecting
-      ? {
-          cursor: "pointer",
-          borderRadius: radius("md"),
-          outline: selected ? "2px solid" : "none",
-          outlineColor: "nebula.accent",
-        }
-      : undefined,
+    sx: {
+      // A bar down the leading edge rather than a filled row: the river is
+      // already coloured by bubbles and livery, and one more tinted block in
+      // it reads as another kind of message rather than as "this one is for
+      // you". Standard fills; the mock's vocabulary for "attend to this" is
+      // the edge marker.
+      ...(selfMention
+        ? {
+            borderInlineStart: "2px solid",
+            borderColor: "nebula.accent",
+            borderRadius: radius("sm"),
+            pl: "8px",
+            ml: "-10px",
+            background: (theme: Theme) => theme.palette.nebula.accentSoft,
+          }
+        : {}),
+      ...(selecting
+        ? {
+            cursor: "pointer",
+            borderRadius: radius("md"),
+            outline: selected ? "2px solid" : "none",
+            outlineColor: "nebula.accent",
+          }
+        : {}),
+    },
   };
 
   /**
@@ -676,6 +717,8 @@ export function MessageRow({
   const authorName = (
     <Typography
       component="button"
+      data-testid={TID.chatMessageSender}
+      data-sender-name={message.sender_name}
       onClick={(event) => message.sender_session != null && onOpenProfile(message.sender_session, event)}
       {...authorHandlers}
       sx={{ all: "unset", cursor: "pointer", fontWeight: 600, fontSize: 13 }}
@@ -1043,7 +1086,7 @@ function RowActions({
       {onEdit && <PillButton label={t("nebulaChat:row.editMessage")} onClick={onEdit} icon={EditIcon} />}
       <PillButton
         label={t("chat:inlineActions.copy")}
-        onClick={() => void navigator.clipboard?.writeText(plainText(message.body))}
+        onClick={() => void navigator.clipboard?.writeText(bodyToCopyText(message.body))}
         icon={CopyIcon}
       />
       {message.message_id && (

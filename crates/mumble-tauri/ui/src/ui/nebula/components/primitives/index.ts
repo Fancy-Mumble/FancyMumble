@@ -12,6 +12,7 @@ export { PriorityBadge, VoiceStateBadges, speakerState } from "./SpeakerBadges";
 export { StatChip, type StatChipTone } from "./StatChip";
 export { RoleChip, type RoleChipProps } from "./RoleChip";
 export { OfficialBadge } from "./OfficialBadge";
+export { PchatBadge } from "./PchatBadge";
 export { LinkGuard } from "./LinkGuard";
 export { LinkWarningDialog } from "./LinkWarningDialog";
 export { InfoCard, InfoCaps, InfoFact } from "./InfoCard";

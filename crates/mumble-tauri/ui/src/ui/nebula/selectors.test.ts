@@ -1,13 +1,7 @@
 ﻿import { describe, expect, it } from "vitest";
 import { useTranslation } from "react-i18next";
 import { hexToHsl } from "@core/utils/colorUtils";
-import type {
-  AclGroup,
-  ChannelEntry,
-  ConnectionStatus,
-  SearchResult,
-  UserEntry,
-} from "@core/types";
+import type { AclGroup, ChannelEntry, ConnectionStatus, SearchResult, UserEntry } from "@core/types";
 import {
   channelOccupants,
   channelPresence,
@@ -22,6 +16,7 @@ import {
   presenceLabel,
   quickConnectTargets,
   quickSwitchTargets,
+  reorderIdentities,
   reorderServerRail,
   rosterGroups,
   serverRailEntries,
@@ -145,7 +140,10 @@ function role(name: string, add: number[], color: string | null = null): AclGrou
 
 describe("rosterGroups", () => {
   const rooms = [channel({ id: 4, name: "Gaming" }), channel({ id: 5, name: "Lounge" })];
-  const here = [{ ...user(1, "Zoe", 4), user_id: 20 }, { ...user(2, "Adam", 4), user_id: 10 }];
+  const here = [
+    { ...user(1, "Zoe", 4), user_id: 20 },
+    { ...user(2, "Adam", 4), user_id: 10 },
+  ];
   const elsewhere = [{ ...user(3, "enot", 5), user_id: 30 }];
   const absent = [{ ...user(-12, "Lyroit", 0), user_id: 11 }];
   const roles = [role("admin", [10], "#41b4f9"), role("mods", [20, 11])];
@@ -224,9 +222,9 @@ describe("rosterGroups", () => {
 
   it("searches every group, offline members included", () => {
     const groups = input({ query: "ly" });
-    expect(groups.map((group) => [group.label, group.members.map((member) => member.user.name)])).toEqual(
-      [["mods", ["Lyroit"]]],
-    );
+    expect(groups.map((group) => [group.label, group.members.map((member) => member.user.name)])).toEqual([
+      ["mods", ["Lyroit"]],
+    ]);
   });
 });
 
@@ -342,6 +340,51 @@ describe("groupSavedServers", () => {
     // Otherwise the sidebar would call a dead tab "connected" and switching to
     // it would land the user in a session that is not there.
     expect(groups[0].sessionId).toBeNull();
+  });
+
+  it("puts the identities the user arranged in that order, and the rest behind", () => {
+    const groups = groupSavedServers(
+      [
+        saved("a", "magical.rocks", "Aaron"),
+        saved("b", "magical.rocks", "Zewi"),
+        saved("c", "magical.rocks", "Never dragged"),
+      ],
+      [],
+      ["b", "a"],
+    );
+    // "Never dragged" has no rank, so it falls in behind the two that do -
+    // where it would sit if the arrangement had never been made.
+    expect(groups[0].identities.map((identity) => identity.username)).toEqual([
+      "Zewi",
+      "Aaron",
+      "Never dragged",
+    ]);
+  });
+
+  it("lets an arrangement outrank a favourite", () => {
+    const groups = groupSavedServers(
+      [saved("a", "magical.rocks", "Sebi"), saved("b", "magical.rocks", "Zewi", true)],
+      [],
+      ["a", "b"],
+    );
+    // A favourite floats an unarranged list; once the user has said where the
+    // rows go, what they said wins.
+    expect(groups[0].identities.map((identity) => identity.username)).toEqual(["Sebi", "Zewi"]);
+  });
+
+  it("ranks identities only against their own server", () => {
+    const groups = groupSavedServers(
+      [
+        saved("a", "magical.rocks", "Aaron"),
+        saved("b", "voice.kumo.gg", "Bea"),
+        saved("c", "magical.rocks", "Cara"),
+      ],
+      [],
+      // The other server's id sits between the two that share an address, and
+      // must make no difference to how they sort against each other.
+      ["c", "b", "a"],
+    );
+    expect(groups[0].identities.map((identity) => identity.username)).toEqual(["Cara", "Aaron"]);
   });
 
   it("attaches the live session to the address that is connected", () => {
@@ -884,6 +927,23 @@ describe("reorderServerRail", () => {
     // A tile can leave the rail mid-drag - the server it stood for was removed
     // in another window - and the drop must not invent an entry for it.
     expect(reorderServerRail(rail("a", "b"), "gone", "a")).toEqual(["a", "b"]);
+  });
+});
+
+describe("reorderIdentities", () => {
+  const ids = (...names: string[]) =>
+    names.map((id) => ({ id })) as never as Parameters<typeof reorderIdentities>[0];
+
+  it("drops an identity in front of the one it was released over", () => {
+    expect(reorderIdentities(ids("a", "b", "c"), "c", "a")).toEqual(["c", "a", "b"]);
+  });
+
+  it("drops an identity at the end when it was released past the last row", () => {
+    expect(reorderIdentities(ids("a", "b", "c"), "a", null)).toEqual(["b", "c", "a"]);
+  });
+
+  it("names only this server's identities, so the record stays mergeable", () => {
+    expect(reorderIdentities(ids("a", "b"), "b", "a")).toEqual(["b", "a"]);
   });
 });
 

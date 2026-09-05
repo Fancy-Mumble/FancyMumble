@@ -1,4 +1,4 @@
-﻿import { memo, useState, useCallback, useRef, useMemo, useEffect } from "react";
+﻿import { memo, useState, useCallback, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { marked } from "marked";
@@ -13,7 +13,7 @@ import { isMobile } from "@core/utils/platform";
 import { formatTimestamp, colorFor } from "@core/utils/format";
 import { extractOffloadInfo, offloadSkeletonHeight } from "@core/messageOffload";
 import { useLinkPreviews } from "@core/features/chat/useLinkPreviews";
-import { containsSelfMention } from "@core/utils/mentions";
+import { useSelfMention } from "@core/features/chat/selfMention";
 import { TID } from "@core/testids";
 import PollCard, { getPoll } from "../poll/PollCard";
 import MediaPreview from "../media/MediaPreview";
@@ -40,29 +40,6 @@ const WATCH_RE = /<!-- FANCY_WATCH:(.+?) -->/;
 /** Approximate height of the profile hover card, used for viewport clamping. */
 const HOVER_CARD_H = 340;
 const HOVER_CARD_MARGIN = 10;
-
-/**
- * Set of message IDs we have already processed for self-mention
- * notifications.  Module-scope so it survives unmount/remount cycles
- * (e.g. when scrolling messages out of view) and prevents duplicate
- * sound triggers when the same message re-renders.
- */
-const NOTIFIED_SELF_MENTIONS = new Set<string>();
-
-/**
- * Cap to keep memory bounded for long-running sessions.  When the set
- * grows past this many entries, drop the oldest insertion (Set
- * iteration order is insertion order).
- */
-const NOTIFIED_SELF_MENTIONS_CAP = 2000;
-
-function markSelfMentionNotified(id: string) {
-  if (NOTIFIED_SELF_MENTIONS.size >= NOTIFIED_SELF_MENTIONS_CAP) {
-    const oldest = NOTIFIED_SELF_MENTIONS.values().next().value;
-    if (oldest !== undefined) NOTIFIED_SELF_MENTIONS.delete(oldest);
-  }
-  NOTIFIED_SELF_MENTIONS.add(id);
-}
 
 // --- Exported group avatar component ------------------------------
 
@@ -246,31 +223,9 @@ export default memo(function MessageItem({
     watchSessionId ? s.watchSessions.has(watchSessionId) : false,
   );
 
-  // Detect whether the receiver is mentioned by this message.  Pure
-  // memoised function over the body and own session.
-  const selfMention = useMemo(() => {
-    if (msg.is_own || ownSession == null) return false;
-    return containsSelfMention(msg.body, {
-      ownSession,
-      isInMessageChannel: msg.channel_id != null && currentChannel === msg.channel_id,
-    });
-  }, [msg.body, msg.is_own, msg.channel_id, ownSession, currentChannel]);
-
-  // Fire the mention notification once per message id.
-  useEffect(() => {
-    if (!selfMention) return;
-    const key = msg.message_id ?? `${msg.sender_session ?? "?"}-${msg.timestamp ?? 0}`;
-    if (NOTIFIED_SELF_MENTIONS.has(key)) return;
-    // Only notify for recent arrivals (within 30s) to avoid replaying
-    // historical notifications when scrolling old messages.
-    const ts = msg.timestamp ?? 0;
-    if (ts > 0 && Date.now() - ts > 30_000) {
-      markSelfMentionNotified(key);
-      return;
-    }
-    markSelfMentionNotified(key);
-    globalThis.dispatchEvent(new CustomEvent("fancy:self-mention"));
-  }, [selfMention, msg.message_id, msg.sender_session, msg.timestamp]);
+  // Detecting the mention and firing its ping are core's: Nebula draws the
+  // same decision, and two copies would be two chances to lose one.
+  const selfMention = useSelfMention(msg, { ownSession, currentChannel });
 
   // Always resolve a displayable timestamp: prefer server-side, fall back to local time.
   const displayTimestamp = msg.timestamp ?? Date.now();

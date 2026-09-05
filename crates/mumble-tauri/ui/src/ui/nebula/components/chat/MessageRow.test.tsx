@@ -7,6 +7,7 @@ import { encodeFileAttachmentMarker } from "@core/features/chat/fileAttachments"
 import type { ChatMessage, UserEntry } from "@core/types";
 import { withNebulaTheme } from "../../testTheme";
 import { MessageRow } from "./MessageRow";
+import { resetSelfMentionNotifications } from "@core/features/chat/selfMention";
 
 function user(session: number, name: string, channel_id = 1): UserEntry {
   return { session, name, channel_id, texture_size: null } as UserEntry;
@@ -609,3 +610,48 @@ describe("MessageRow", () => {
     );
   });
 });
+
+describe("MessageRow self-mention", () => {
+  /** A chip aimed at whoever is session 42, the way the sender writes one. */
+  const AT_ME = '<span class="mention" data-mention-session="42">@Ada</span> ready?';
+
+  beforeEach(() => {
+    resetSelfMentionNotifications();
+    useAppStore.setState({ ownSession: 42, currentChannel: 1, users: [user(42, "Ada"), user(7, "Lorelando")] });
+  });
+
+  /** Times the mention ping fired while `run` mounted rows. */
+  function pings(run: () => void): number {
+    let count = 0;
+    const listen = () => { count += 1; };
+    globalThis.addEventListener("fancy:self-mention", listen);
+    run();
+    globalThis.removeEventListener("fancy:self-mention", listen);
+    return count;
+  }
+
+  it("rings the mention sound Nebula mounts the listener for", () => {
+    // The bug: Nebula rendered the chip and never dispatched, so the sound
+    // the runtime is listening for could not fire.
+    expect(pings(() => draw(message({ body: AT_ME, timestamp: Date.now() })))).toBe(1);
+  });
+
+  it("stays silent when the mention is for somebody else", () => {
+    useAppStore.setState({ ownSession: 7 });
+    expect(pings(() => draw(message({ body: AT_ME, timestamp: Date.now() })))).toBe(0);
+  });
+
+  it("marks the row so a mention can be found by eye", () => {
+    const { container } = draw(message({ body: AT_ME, timestamp: Date.now() }));
+    const row = container.querySelector('[data-msg-id="m1"]') as HTMLElement | null;
+    expect(row).not.toBeNull();
+    expect(row!.getAttribute("data-self-mention")).toBe("1");
+  });
+
+  it("leaves an ordinary message unmarked", () => {
+    const { container } = draw(message({ body: "just talking", timestamp: Date.now() }));
+    const row = container.querySelector('[data-msg-id="m1"]') as HTMLElement | null;
+    expect(row!.getAttribute("data-self-mention")).toBeNull();
+  });
+});
+

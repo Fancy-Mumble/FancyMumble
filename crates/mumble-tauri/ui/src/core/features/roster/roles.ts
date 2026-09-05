@@ -52,3 +52,29 @@ export function primaryRoles(groups: readonly AclGroup[]): PrimaryRoles {
 
   return { roleOf, order, colors };
 }
+
+/**
+ * Every role a user is in, not just the one a roster files them under.
+ *
+ * `primaryRoles` answers "where does this person go in a list", which is one
+ * heading each. Being @-mentioned is the other question - a mention of any
+ * group you are in is a mention of you - so it needs the whole set.
+ *
+ * Membership is read the same way in both: `add` plus what was inherited,
+ * minus anyone the group explicitly removes. `~` groups are kept here, unlike
+ * in the roster: they are Mumble's own bookkeeping and make poor section
+ * headings, but a server that mentions one still means the people in it.
+ */
+export function rolesForUser(
+  groups: readonly AclGroup[],
+  userId: number | null | undefined,
+): ReadonlySet<string> {
+  const mine = new Set<string>();
+  if (userId == null) return mine;
+  for (const group of groups) {
+    if (group.remove.includes(userId)) continue;
+    if (group.add.includes(userId) || group.inherited_members.includes(userId)) mine.add(group.name);
+  }
+  return mine;
+}
+

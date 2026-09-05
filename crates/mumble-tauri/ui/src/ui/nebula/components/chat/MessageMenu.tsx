@@ -10,9 +10,9 @@ import { findPopOutImageSrc, imagePopoutCaption } from "@core/features/chat/imag
 import { useWatchStart } from "@core/features/chat/watch/useWatchStart";
 import { canDeleteMessages } from "@standard/components/sidebar/channel/ChannelEditorDialog";
 import { EmojiPlusIcon } from "@ui/icons";
-import { plainText } from "../../selectors";
 import { Stack, UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
+import { bodyToCopyText } from "@core/features/chat/bodyText";
 
 export interface MessageMenuTarget {
   message: ChatMessage;
@@ -233,7 +233,7 @@ export function MessageMenu({
             : t("nebulaChat:menu.pinToChannel")}
         </MenuItem>
       )}
-      <MenuItem sx={ITEM} onClick={run(() => void navigator.clipboard?.writeText(plainText(message.body)))}>
+      <MenuItem sx={ITEM} onClick={run(() => void navigator.clipboard?.writeText(bodyToCopyText(message.body)))}>
         {t("chat:contextMenu.copyText")}
       </MenuItem>
       {popOutSrc && (

@@ -5,6 +5,7 @@ import { canDeleteMessages } from "../../sidebar/channel/ChannelEditorDialog";
 import type { MessageContextMenuState } from "./MessageContextMenu";
 import type { ToastData } from "../../elements/Toast";
 import styles from "../ChatView.module.css";
+import { bodyToCopyText } from "@core/features/chat/bodyText";
 
 interface UseMessageSelectionOptions {
   selectedChannel: number | null;
@@ -148,15 +149,15 @@ export function useMessageSelection({
     [setPendingQuotes],
   );
 
-  /** Copy message text to clipboard from kebab menu. */
+  /** Copy message text to clipboard from kebab menu.
+   *
+   *  This stripped tags with a regex, which welded adjacent blocks together -
+   *  a two-paragraph message pasted as one run-on word - and decoded only the
+   *  three entities someone thought of, leaving `&quot;` and `&#39;` in the
+   *  paste. `bodyToCopyText` parses instead, so the entities come back as
+   *  characters and the lines come back as lines. */
   const handleCopyText = useCallback((msg: ChatMessage) => {
-    const plain = msg.body
-      .replaceAll(/<[^>]*>/g, "")
-      .replaceAll("&lt;", "<")
-      .replaceAll("&gt;", ">")
-      .replaceAll("&amp;", "&")
-      .trim();
-    navigator.clipboard.writeText(plain).catch(() => {
+    navigator.clipboard.writeText(bodyToCopyText(msg.body)).catch(() => {
       /* clipboard write may fail silently */
     });
   }, []);

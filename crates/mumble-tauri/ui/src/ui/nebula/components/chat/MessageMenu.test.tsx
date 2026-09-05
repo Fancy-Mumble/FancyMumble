@@ -238,3 +238,38 @@ describe("MessageMenu", () => {
     expect(screen.queryByText("Delete")).toBeNull();
   });
 });
+
+describe("MessageMenu copy", () => {
+  /** The clipboard, swapped for something that remembers. */
+  function stubClipboard() {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+      writable: true,
+    });
+    return writeText;
+  }
+
+  it("copies the lines the reader saw, not one welded-together word", () => {
+    const writeText = stubClipboard();
+    open(message({ body: "<p>Hello</p><p>World</p>" }));
+    fireEvent.click(screen.getByText("Copy text"));
+    expect(writeText).toHaveBeenCalledWith("Hello\n\nWorld");
+  });
+
+  it("keeps a line break as a line break", () => {
+    const writeText = stubClipboard();
+    open(message({ body: "Hello<br>World" }));
+    fireEvent.click(screen.getByText("Copy text"));
+    expect(writeText).toHaveBeenCalledWith("Hello\nWorld");
+  });
+
+  it("pastes entities as the characters they stand for", () => {
+    const writeText = stubClipboard();
+    open(message({ body: "<p>a &amp; b &quot;c&quot;</p>" }));
+    fireEvent.click(screen.getByText("Copy text"));
+    expect(writeText).toHaveBeenCalledWith('a & b "c"');
+  });
+});
+
