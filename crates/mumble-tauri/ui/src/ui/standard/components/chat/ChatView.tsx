@@ -83,6 +83,9 @@ import { newDocSlug } from "@core/features/chat/livedoc/newDocSlug";
 import ActiveWatchBanner from "./watch/ActiveWatchBanner";
 import styles from "./ChatView.module.css";
 import { Lightbox, type LightboxHandle } from "../elements/Lightbox";
+import { useAclGroups } from "../../hooks/useAclGroups";
+import { rolesForUser } from "@core/features/roster/roles";
+import { usePublishOwnRoles } from "@core/features/chat/selfMention";
 
 const PollCreator = lazy(() => import("./poll/PollCreator"));
 const EmojiPicker = lazy(() => import("../elements/EmojiPicker"));
@@ -139,6 +142,15 @@ export default function ChatView({
   const messages = useAppStore((s) => s.messages);
   const joinChannel = useAppStore((s) => s.joinChannel);
   const ownSession = useAppStore((s) => s.ownSession);
+
+  // Which of the server's roles the reader is in, so a mention of one reaches
+  // them. Reading the root ACL needs Write there, so on an ordinary account
+  // this is empty and role mentions stay silent - the same limit the role
+  // chips and the mention colours already live with.
+  const aclGroups = useAclGroups();
+  const ownRolesUserId = useAppStore((s) => s.users.find((u) => u.session === s.ownSession)?.user_id ?? null);
+  const ownRoles = useMemo(() => rolesForUser(aclGroups, ownRolesUserId), [aclGroups, ownRolesUserId]);
+  usePublishOwnRoles(ownRoles);
   const selectUser = useAppStore((s) => s.selectUser);
   const toggleSilenceChannel = useAppStore((s) => s.toggleSilenceChannel);
   const silencedChannels = useAppStore((s) => s.silencedChannels);

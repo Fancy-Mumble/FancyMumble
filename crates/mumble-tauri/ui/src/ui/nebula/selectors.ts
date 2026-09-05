@@ -12,8 +12,10 @@ import { htmlToMarkdown, markdownToHtml } from "@standard/components/chat/markdo
 import { bodyToHtml } from "@standard/components/chat/markdown/bodyHtml";
 import { hslToHex } from "@core/utils/colorUtils";
 import { formatTimestamp } from "@core/utils/format";
+import { bodyToPlainText } from "@core/features/chat/bodyText";
 import { hueFromKey } from "@shared/profilecard/tint";
 import { primaryRoles } from "@core/features/roster/roles";
+import { reorderKeys } from "./dragOrder";
 import type {
   AclGroup,
   ChannelEntry,
@@ -478,11 +480,17 @@ export function groupMessagesByDay<T extends { timestamp?: number | null }>(
   return sections;
 }
 
-/** Message bodies are HTML; sidebar previews want one line of text. */
+/**
+ * Message bodies are HTML; previews and the channel search want one line of
+ * text.
+ *
+ * This read `textContent`, which welds adjacent blocks together: a two-
+ * paragraph message previewed as `HelloWorld`, and a search for "hello world"
+ * that could not find the message showing exactly that. The walk that fixes it
+ * is core's, because Standard's copy had the same hole by a different route.
+ */
 export function plainText(body: string): string {
-  if (typeof DOMParser === "undefined") return body;
-  const text = new DOMParser().parseFromString(body, "text/html").body.textContent ?? "";
-  return text.replace(/\s+/g, " ").trim();
+  return bodyToPlainText(body);
 }
 
 /**
@@ -698,7 +706,13 @@ function isLive(session: GroupableSession): boolean {
 export function groupSavedServers(
   savedServers: readonly SavedServer[] | null,
   sessions: readonly GroupableSession[] = [],
+  identityOrder: readonly string[] = [],
 ): ServerGroup[] {
+  // The arrangement the user dragged the connect screen's rows into, by saved
+  // server id. One flat record covers every server: ranks are only ever
+  // compared inside a group, so what other addresses put between two of these
+  // ids cannot change their relative order.
+  const rank = new Map(identityOrder.map((id, index) => [id, index]));
   const groups = new Map<string, ServerGroup>();
 
   for (const server of savedServers ?? []) {
@@ -725,7 +739,11 @@ export function groupSavedServers(
   for (const group of groups.values()) {
     group.identities.sort(
       (left, right) =>
-        Number(!!right.favorite) - Number(!!left.favorite) || left.username.localeCompare(right.username),
+        // An arranged identity keeps its place; the ones the user has never
+        // moved fall in behind them, favourites first and then by name.
+        (rank.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(right.id) ?? Number.MAX_SAFE_INTEGER) ||
+        Number(!!right.favorite) - Number(!!left.favorite) ||
+        left.username.localeCompare(right.username),
     );
     const live = sessions.find(
       (session) => `${session.host}:${session.port}`.toLocaleLowerCase() === group.key && isLive(session),
@@ -829,14 +847,31 @@ export function reorderServerRail(
   movedKey: string,
   beforeKey: string | null,
 ): string[] {
-  const keys = entries.map((entry) => entry.group.key);
-  // Dropping a tile on itself is a no-op, not a move to the end.
-  if (movedKey === beforeKey || !keys.includes(movedKey)) return keys;
+  return reorderKeys(
+    entries.map((entry) => entry.group.key),
+    movedKey,
+    beforeKey,
+  );
+}
 
-  const rest = keys.filter((key) => key !== movedKey);
-  const at = beforeKey === null ? -1 : rest.indexOf(beforeKey);
-  rest.splice(at === -1 ? rest.length : at, 0, movedKey);
-  return rest;
+/**
+ * The identity order to persist after one is dropped on the connect screen.
+ *
+ * The same arithmetic as the rail's, over saved-server ids rather than
+ * addresses: the rows being dragged are one server's logins, so what comes
+ * back names them and nothing else. Merging that into the record kept for
+ * every server is the caller's job - see `NebulaClientApp`.
+ */
+export function reorderIdentities(
+  identities: readonly SavedServer[],
+  movedId: string,
+  beforeId: string | null,
+): string[] {
+  return reorderKeys(
+    identities.map((identity) => identity.id),
+    movedId,
+    beforeId,
+  );
 }
 
 export { userTint, type UserTint } from "@shared/profilecard/tint";
