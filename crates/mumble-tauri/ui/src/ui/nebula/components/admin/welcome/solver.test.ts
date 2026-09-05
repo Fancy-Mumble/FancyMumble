@@ -1,5 +1,14 @@
 import { describe as suite, expect, it } from "vitest";
-import { conflictsIn, describeVisitor, matchesWhen, verdictAt, versionOf, type Facts } from "./solver";
+import {
+  conflictKey,
+  conflictsIn,
+  describeVisitor,
+  matchesWhen,
+  sameConflictKey,
+  verdictAt,
+  versionOf,
+  type Facts,
+} from "./solver";
 import { makeNode, type Edge, type WelcomeGraph, type WelcomeNode } from "./model";
 import { seedGraph } from "./seed";
 
@@ -263,5 +272,70 @@ suite("describing who is affected", () => {
 
   it("says so when the visitor is anybody at all", () => {
     expect(describeVisitor({})).toBe("anybody at all");
+  });
+});
+
+/* -- What the answer actually depends on ---------------------------------- */
+
+/**
+ * The page keeps the solver's answer until this key changes, so the key has to
+ * move for everything the search reads and stay put for everything it does
+ * not. Getting the first half wrong shows an operator a stale verdict about
+ * who reaches whom; getting the second half wrong is the performance bug this
+ * exists to fix, where writing a greeting re-ran a search over thousands of
+ * visitors between every two letters.
+ */
+suite("what the conflict search depends on", () => {
+  const built = rule(at("country", { codes: ["DE"] }));
+  const graph = graphOf(built.nodes, built.edges);
+
+  const rewrite = (id: string, fields: Partial<WelcomeNode>): WelcomeGraph => ({
+    ...graph,
+    nodes: graph.nodes.map((node) => (node.id === id ? ({ ...node, ...fields } as WelcomeNode) : node)),
+  });
+
+  it("does not move when a greeting's prose is rewritten", () => {
+    const typed = rewrite(built.greeting.id, { body: "something else entirely" });
+    expect(sameConflictKey(conflictKey(graph), conflictKey(typed))).toBe(true);
+  });
+
+  it("does not move when a greeting's markup is rewritten", () => {
+    const typed = rewrite(built.greeting.id, { html: "<p>house rules</p>" });
+    expect(sameConflictKey(conflictKey(graph), conflictKey(typed))).toBe(true);
+  });
+
+  it("does not move when a node is merely dragged somewhere else", () => {
+    const moved = rewrite(built.greeting.id, { x: 900, y: 400 });
+    expect(sameConflictKey(conflictKey(graph), conflictKey(moved))).toBe(true);
+  });
+
+  it("moves when a condition changes", () => {
+    const country = graph.nodes.find((node) => node.kind === "country");
+    const widened = rewrite(country?.id ?? "", { codes: ["DE", "AT"] } as Partial<WelcomeNode>);
+    expect(sameConflictKey(conflictKey(graph), conflictKey(widened))).toBe(false);
+  });
+
+  it("moves when a filter's answer to unknown changes", () => {
+    const filter = graph.nodes.find((node) => node.kind === "filter");
+    const flipped = rewrite(filter?.id ?? "", { unknownAs: "yes" } as Partial<WelcomeNode>);
+    expect(sameConflictKey(conflictKey(graph), conflictKey(flipped))).toBe(false);
+  });
+
+  it("moves when a wire is drawn or cut", () => {
+    const cut = { ...graph, edges: graph.edges.slice(1) };
+    expect(sameConflictKey(conflictKey(graph), conflictKey(cut))).toBe(false);
+  });
+
+  it("moves when a greeting is added, which is what decides the order", () => {
+    const second = at("greeting", { body: "second", html: "", view: "plain" });
+    const grown = { ...graph, nodes: [...graph.nodes, second] };
+    expect(sameConflictKey(conflictKey(graph), conflictKey(grown))).toBe(false);
+  });
+
+  it("agrees with the search itself: a key that held means the answer held", () => {
+    // The claim the memo rests on, checked against the thing being memoised.
+    const typed = rewrite(built.greeting.id, { body: "rewritten", html: "<p>and formatted</p>" });
+    expect(sameConflictKey(conflictKey(graph), conflictKey(typed))).toBe(true);
+    expect(conflictsIn(typed)).toEqual(conflictsIn(graph));
   });
 });

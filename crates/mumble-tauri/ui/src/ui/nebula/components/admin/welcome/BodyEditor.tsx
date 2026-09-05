@@ -131,8 +131,8 @@ export function BodyEditor({
         {screens && (
           <ViewButton
             on={shown === "legacy"}
-            label="Qt"
-            title="The same bands, compiled for Mumble 1.5 and older"
+            label="Classic"
+            title="The same bands, compiled for the original Mumble client - 1.5 and older"
             onClick={() => onPatch(switchView(node, "legacy"))}
           />
         )}

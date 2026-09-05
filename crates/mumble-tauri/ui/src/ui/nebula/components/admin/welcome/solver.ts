@@ -40,6 +40,7 @@ import {
   ACCOUNT_STATES,
   OS_CHOICES,
   greetingsOf,
+  isMessage,
   type OsChoice,
   type TenureWindow,
   type WelcomeGraph,
@@ -540,6 +541,30 @@ export interface Conflicts {
 
 /** Nothing found, and nothing to find: the answer for a graph with no greeting. */
 export const SETTLED: Conflicts = { shadowed: [], overlaps: [], decided: true };
+
+/**
+ * What `conflictsIn` would read, as something cheap to compare.
+ *
+ * Settling a canvas is a search over every visitor its conditions can tell
+ * apart, which on a canvas with a few greetings and a handful of conditions is
+ * thousands of evaluations. Running that on every keystroke is what made
+ * writing a greeting feel heavy - and it is pure waste, because **prose cannot
+ * change the answer**: who a greeting reaches is decided by the wires and the
+ * conditions, never by what it says.
+ *
+ * So a message node contributes only its identity here. That is not an
+ * optimisation to be sanity-checked against `conflictsIn` - it is the same
+ * fact `conflictsIn` already relies on, which reads a greeting for its id and
+ * its WHEN wire and nothing else.
+ */
+export function conflictKey(graph: WelcomeGraph): readonly unknown[] {
+  return [graph.edges, ...graph.nodes.map((node) => (isMessage(node) ? node.id : node))];
+}
+
+/** Whether two of those describe the same question. */
+export function sameConflictKey(a: readonly unknown[], b: readonly unknown[]): boolean {
+  return a.length === b.length && a.every((held, at) => held === b[at]);
+}
 
 /**
  * Which greetings conflict, and which reach nobody.

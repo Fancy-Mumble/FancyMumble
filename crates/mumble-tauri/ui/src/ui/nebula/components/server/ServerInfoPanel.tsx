@@ -19,8 +19,8 @@ import {
   Typography,
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
-import { sanitizeHtml } from "@core/utils/sanitizeHtml";
 import { formatBandwidth, formatDuration } from "@core/utils/format";
+import { WelcomeMarkup } from "../welcome/WelcomeMarkup";
 import { maskSensitive } from "@core/utils/maskSensitive";
 import { isOfficialPlugin } from "@core/plugins/tier1/official";
 import { useAppStore } from "@core/store";
@@ -262,11 +262,11 @@ function ServerFeatures() {
  * server's link and there is no way back.
  */
 function WelcomeText({ html }: Readonly<{ html: string }>) {
-  const clean = useMemo(() => sanitizeHtml(html), [html]);
-  if (!clean) return null;
+  if (!html.trim()) return null;
   return (
     <LinkGuard>
-      <Box
+      <WelcomeMarkup
+        html={html}
         sx={(theme) => ({
           maxHeight: 200,
           overflowY: "auto",
@@ -277,7 +277,6 @@ function WelcomeText({ html }: Readonly<{ html: string }>) {
           "& a:hover": { textDecoration: "underline" },
           "& img": { maxWidth: "100%" },
         })}
-        dangerouslySetInnerHTML={{ __html: clean }}
       />
     </LinkGuard>
   );

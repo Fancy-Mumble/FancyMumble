@@ -2,19 +2,29 @@ import { describe as suite, expect, it } from "vitest";
 import {
   BLOCK_TYPES,
   addBlock,
+  addInput,
+  decodeBlock,
   designProblems,
   droppedOn,
   effective,
+  encodeBlock,
   flowOf,
   gateOpen,
   insertableOn,
   isFlat,
   overrideCount,
+  normaliseInputName,
   removeBlock,
+  removeInput,
+  renameInput,
   revertBlock,
   revertTarget,
   setField,
   snap,
+  TARGETS,
+  VARIANTS,
+  copyDesignTo,
+  droppedBy,
   type Block,
   type Design,
 } from "./design";
@@ -32,7 +42,7 @@ const block = (id: string, type: Block["type"], fields: Partial<Block> = {}): Bl
 function design(): Design {
   return {
     sheetW: 520,
-    slots: [{ id: "s1", name: "rules", wired: "rules" }],
+    slots: [{ id: "s1", name: "rules" }],
     conditions: [
       { id: "c1", name: "is_new_member", on: true },
       { id: "c2", name: "registration_closed", on: true },
@@ -67,9 +77,16 @@ suite("what each target can draw", () => {
     expect(droppedOn("text", "plain")).toBe(false);
   });
 
-  it("drops the picture where the artwork cannot be fetched", () => {
+  it("drops the picture only where it cannot be drawn at all", () => {
+    // Qt alone. Its rich text has no data URI, so an inlined picture is a
+    // broken-image icon there rather than a picture.
+    //
+    // `rich` used to be on this list because the artwork was the server's
+    // livery and the compiler could not fetch one. What a design carries is
+    // the picture itself, inlined, which needs nothing fetched - and is the
+    // only kind of `<img>` the sanitiser every reader renders through keeps.
     expect(droppedOn("image", "qt")).toBe(true);
-    expect(droppedOn("image", "rich")).toBe(true);
+    expect(droppedOn("image", "rich")).toBe(false);
     expect(droppedOn("image", "html")).toBe(false);
   });
 
@@ -223,7 +240,19 @@ suite("problems worth naming", () => {
   });
 
   it("is quiet about a design that is fine", () => {
-    expect(designProblems(design())).toEqual([]);
+    // Every declared input wired, which is the canvas's half of "fine".
+    const wired = new Set(["rules", "is_new_member", "registration_closed"]);
+    expect(designProblems(design(), wired)).toEqual([]);
+  });
+
+  it("names an input nothing feeds, in either list", () => {
+    // The check that was dead until now: it read a field on the design that
+    // nothing ever wrote, so it fired on every design forever.
+    const problems = designProblems(design(), new Set(["rules"]));
+    expect(problems).toEqual([
+      "The condition “is_new_member” has nothing wired to it.",
+      "The condition “registration_closed” has nothing wired to it.",
+    ]);
   });
 });
 
@@ -232,5 +261,228 @@ suite("the grid", () => {
     expect(snap(102)).toBe(104);
     expect(snap(101)).toBe(100);
     expect(snap(101.4, false)).toBe(101);
+  });
+});
+
+suite("carrying a block between windows", () => {
+  const callout = { ...block("c", "callout"), text: "Registration is closed.", gate: "shut" };
+
+  it("survives the round trip with everything that makes it that block", () => {
+    // The gate especially: a callout pasted without it is a callout everybody
+    // sees, which is the opposite of what was copied.
+    expect(decodeBlock(encodeBlock(callout))).toMatchObject({
+      type: "callout",
+      text: "Registration is closed.",
+      gate: "shut",
+    });
+  });
+
+  it("is not fooled by whatever else the clipboard is holding", () => {
+    // Which is most of the time: the operator copied a URL, or a paragraph out
+    // of the rules they are about to paste in.
+    expect(decodeBlock("https://example.org")).toBeNull();
+    expect(decodeBlock("")).toBeNull();
+    expect(decodeBlock(JSON.stringify({ block: callout }))).toBeNull();
+    expect(decodeBlock(JSON.stringify({ format: "fancy-mumble/design-block@1" }))).toBeNull();
+  });
+
+  it("refuses a block whose type this build does not draw", () => {
+    // From a newer editor. A block with no renderer is one nothing can select,
+    // move or delete once it is on the sheet.
+    const text = JSON.stringify({
+      format: "fancy-mumble/design-block@1",
+      block: { ...callout, type: "carousel" },
+    });
+    expect(decodeBlock(text)).toBeNull();
+  });
+
+  it("repairs a position that arrived as nonsense rather than dropping it", () => {
+    // A block at NaN is invisible and unselectable; a block at the origin is
+    // one the operator can see and drag.
+    const text = JSON.stringify({
+      format: "fancy-mumble/design-block@1",
+      block: { ...callout, x: Number.NaN, y: Number.NaN, w: 0 },
+    });
+    expect(decodeBlock(text)).toMatchObject({ x: 0, y: 0, w: 240 });
+  });
+});
+
+suite("declaring inputs", () => {
+  const held = (): Design => ({
+    sheetW: 520,
+    slots: [{ id: "s1", name: "rules" }],
+    conditions: [{ id: "c1", name: "is_new_member", on: true }],
+    blocks: [
+      { ...block("slot", "slot"), slot: "rules" },
+      { ...block("gated", "callout"), gate: "is_new_member" },
+    ],
+    overrides: { qt: { gated: { gate: "is_new_member" } } },
+  });
+
+  it("adds one that is named, because the name is the port", () => {
+    // A port called nothing is a port nobody can wire to, and it would appear
+    // on the node the moment this returns.
+    const design = addInput(held(), "slot");
+    expect(design.slots).toHaveLength(2);
+    expect(design.slots[1]?.name).toBe("text");
+    expect(design.slots[1]?.id).not.toBe(design.slots[0]?.id);
+  });
+
+  it("does not hand out a name that is already a port", () => {
+    // Both lists are one namespace: two ports with one name is a wire that
+    // lands on whichever the editor happened to draw first.
+    const one = addInput(held(), "slot");
+    const two = addInput(one, "slot");
+    const three = addInput(two, "condition");
+    expect(two.slots.map((input) => input.name)).toEqual(["rules", "text", "text_2"]);
+    expect(three.conditions.map((input) => input.name)).toEqual(["is_new_member", "toggle"]);
+  });
+
+  it("renames what points at it, including a target's override", () => {
+    // The override is the one that gets forgotten: a Qt tab that still gates
+    // on the old name is a block that shows to everybody on Qt and nobody
+    // anywhere else.
+    const { design, name } = renameInput(held(), "c1", "Is New Member");
+    expect(name).toBe("is_new_member");
+    const renamed = renameInput(design, "c1", "brand new").design;
+    expect(renamed.conditions[0]?.name).toBe("brand_new");
+    expect(renamed.blocks.find((b) => b.id === "gated")?.gate).toBe("brand_new");
+    expect(renamed.overrides.qt?.gated?.gate).toBe("brand_new");
+  });
+
+  it("keeps the name it had when the new one is empty or taken", () => {
+    // Somebody clearing the field to retype it passes through empty, and a
+    // field that renamed the port to nothing on the way would break the wire
+    // between two keystrokes.
+    expect(renameInput(held(), "s1", "").name).toBe("rules");
+    expect(renameInput(held(), "s1", "!!!").name).toBe("rules");
+    expect(renameInput(held(), "s1", "is_new_member").name).toBe("is_new_member_2");
+  });
+
+  it("unbinds what pointed at one that is removed", () => {
+    // A block naming an input that is gone reads as a broken design rather
+    // than as one somebody simplified.
+    const design = removeInput(removeInput(held(), "c1"), "s1");
+    expect(design.conditions).toEqual([]);
+    expect(design.blocks.find((b) => b.id === "gated")?.gate).toBeUndefined();
+    expect(design.blocks.find((b) => b.id === "slot")?.slot).toBeUndefined();
+    expect(design.overrides.qt?.gated?.gate).toBeUndefined();
+  });
+
+  it("says a slot block with nothing to bind to is a problem", () => {
+    // Which is the one case removal deliberately leaves behind: a hole in the
+    // greeting is somebody's decision to make, not this function's.
+    const design = removeInput(held(), "s1");
+    expect(designProblems(design, new Set())).toContain("A Text slot names no text input.");
+  });
+
+  it("normalises a name to something a port can be called", () => {
+    expect(normaliseInputName("House Rules")).toBe("house_rules");
+    expect(normaliseInputName("  new-member  ")).toBe("new_member");
+    expect(normaliseInputName("in:rules")).toBe("inrules");
+    expect(normaliseInputName("!!!")).toBe("");
+  });
+});
+
+/**
+ * The tabs an operator gets, against the documents every reader gets.
+ *
+ * These are two different lists and the difference is the point: Plain and
+ * HTML stopped being tabs, and neither stopped being *sent*.
+ */
+suite("what is editable and what is compiled", () => {
+  it("offers a tab only where there is something to decide", () => {
+    expect([...TARGETS]).toEqual(["base", "rich", "qt"]);
+  });
+
+  it("still compiles every variant a reader can be sent", () => {
+    // `target_for` on the server hands out all four. A variant that stopped
+    // being compiled would be a set of clients that stopped being greeted.
+    expect([...VARIANTS]).toEqual(["plain", "rich", "html", "qt"]);
+  });
+
+  it("keeps honouring an override a design already carries for a dropped tab", () => {
+    // Documents saved while Plain and HTML were tabs still hold their
+    // divergence, and losing it silently on the next open would be the editor
+    // rewriting somebody's design because its own UI changed.
+    const held: Design = {
+      ...design(),
+      blocks: [block("1", "heading", { text: "Base words" })],
+      overrides: { html: { "1": { text: "HTML words" } } },
+    };
+    expect(effective(held, "html", held.blocks[0]).text).toBe("HTML words");
+    expect(effective(held, "base", held.blocks[0]).text).toBe("Base words");
+  });
+});
+
+/**
+ * Copying one target's design onto another.
+ *
+ * For designing once and adapting, rather than laying the same greeting out
+ * twice from a blank sheet.
+ */
+suite("copying a design between targets", () => {
+  const sheet = (): Design => ({
+    ...design(),
+    blocks: [
+      block("1", "heading", { text: "Welcome", bg: "#1c2430" }),
+      block("2", "image", { y: 200 }),
+      block("3", "text", { y: 300, text: "<p>Words</p>" }),
+    ],
+    overrides: {},
+  });
+
+  it("carries everything the destination can hold, whole", () => {
+    const copied = copyDesignTo(sheet(), "base", "qt");
+    expect(copied.overrides.qt?.["1"]).toMatchObject({ text: "Welcome", bg: "#1c2430" });
+    expect(copied.overrides.qt?.["3"]).toMatchObject({ text: "<p>Words</p>" });
+  });
+
+  it("leaves behind what the destination cannot draw at all", () => {
+    // An override for a block that target drops is one nobody can see, edit
+    // or clear. Classic Mumble has no way to fetch the artwork.
+    const copied = copyDesignTo(sheet(), "base", "qt");
+    expect(copied.overrides.qt?.["2"]).toBeUndefined();
+    // And the block itself is untouched: it is still in the design, and still
+    // drawn everywhere that can hold it.
+    expect(copied.blocks.some((b) => b.id === "2")).toBe(true);
+  });
+
+  it("writes the blocks themselves when the destination is base", () => {
+    // There is nothing for the master to diverge from, so copying onto it is
+    // the one direction that changes the design rather than an override.
+    const from: Design = { ...sheet(), overrides: { qt: { "1": { text: "Qt words" } } } };
+    const copied = copyDesignTo(from, "qt", "base");
+    expect(copied.blocks.find((b) => b.id === "1")?.text).toBe("Qt words");
+    // That target's overrides went with it: they described a base that is gone.
+    expect(copied.overrides.qt).toBeUndefined();
+  });
+
+  it("copies what a target actually shows, not what base says", () => {
+    const from: Design = { ...sheet(), overrides: { qt: { "1": { text: "Qt words" } } } };
+    expect(copyDesignTo(from, "qt", "rich").overrides.rich?.["1"]).toMatchObject({ text: "Qt words" });
+  });
+
+  it("does nothing at all when both ends are the same target", () => {
+    const held = sheet();
+    expect(copyDesignTo(held, "qt", "qt")).toBe(held);
+  });
+});
+
+suite("warning about what a target leaves out", () => {
+  it("names the kinds this target will not draw", () => {
+    const held: Design = {
+      ...design(),
+      blocks: [block("1", "heading"), block("2", "image"), block("3", "video", { y: 200 })],
+      overrides: {},
+    };
+    expect(droppedBy(held, "qt").sort()).toEqual(["image"]);
+    expect(droppedBy(held, "rich").sort()).toEqual(["video"]);
+  });
+
+  it("says nothing when the target can draw all of it", () => {
+    const held: Design = { ...design(), blocks: [block("1", "heading")], overrides: {} };
+    expect(droppedBy(held, "qt")).toEqual([]);
+    expect(droppedBy(held, "base")).toEqual([]);
   });
 });

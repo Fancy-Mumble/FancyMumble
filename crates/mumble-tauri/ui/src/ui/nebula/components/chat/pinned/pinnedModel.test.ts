@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "@core/types";
 import { DEFAULT_TIME_DISPLAY } from "../../../selectors";
-import { pinAge, pinnedMessages, pinPreview, type PinnedT } from "./pinnedModel";
+import { pinAge, pinnedMessages, pinPreview, type PinnedT, WELCOME_PIN_ID } from "./pinnedModel";
 
 /** The panel's own `t`, stubbed: these functions decide, they do not translate. */
 const t = ((key: string, options?: Record<string, unknown>) =>
@@ -107,5 +107,53 @@ describe("pinAge", () => {
     const old = pinAge(t, daysBefore(60), DEFAULT_TIME_DISPLAY, now);
     expect(old).not.toContain("pinned.age");
     expect(old).toMatch(/\d/);
+  });
+});
+
+/**
+ * The server's greeting, in the list people go back to.
+ *
+ * It was shown once in a modal and then gone - which is the wrong shape for
+ * the one message on a server that carries the rules and the schedule.
+ */
+describe("the welcome message as a pin", () => {
+  const said = (body: string) => ({ body, server: "magical.rocks" });
+  const chat = (id: string, pinned: boolean): ChatMessage =>
+    ({
+      sender_session: 1,
+      sender_name: "Lyn",
+      body: "hello",
+      channel_id: 1,
+      is_own: false,
+      message_id: id,
+      timestamp: 1_700_000_000_000,
+      pinned,
+    }) as ChatMessage;
+
+  it("puts the greeting at the top, above the newest pin", () => {
+    const pins = pinnedMessages([chat("a", true)], said("<p>Welcome aboard</p>"));
+    expect(pins).toHaveLength(2);
+    expect(pins[0].message_id).toBe(WELCOME_PIN_ID);
+    expect(pins[0].body).toContain("Welcome aboard");
+  });
+
+  it("names the server as the sender, because nobody wrote it", () => {
+    const pins = pinnedMessages([], said("<p>Hi</p>"));
+    expect(pins[0].sender_name).toBe("magical.rocks");
+    expect(pins[0].is_own).toBe(false);
+    expect(pins[0].sender_session).toBeNull();
+  });
+
+  it("adds nothing when the server has no welcome message", () => {
+    expect(pinnedMessages([chat("a", true)])).toHaveLength(1);
+    expect(pinnedMessages([chat("a", true)], said(""))).toHaveLength(1);
+    expect(pinnedMessages([chat("a", true)], said("   "))).toHaveLength(1);
+  });
+
+  it("still leaves the real pins newest first, under the greeting", () => {
+    const older = { ...chat("old", true), timestamp: 1_700_000_000_000 } as ChatMessage;
+    const newer = { ...chat("new", true), timestamp: 1_700_000_900_000 } as ChatMessage;
+    const pins = pinnedMessages([older, newer], said("<p>Hi</p>"));
+    expect(pins.map((pin) => pin.message_id)).toEqual([WELCOME_PIN_ID, "new", "old"]);
   });
 });

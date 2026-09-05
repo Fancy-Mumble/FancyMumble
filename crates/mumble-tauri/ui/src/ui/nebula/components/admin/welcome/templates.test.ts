@@ -2,7 +2,8 @@ import { describe as suite, expect, it } from "vitest";
 import { sanitizeHtml } from "@core/utils/sanitizeHtml";
 import { richTextSurvives } from "../../primitives";
 import { insertFragment, type Fragment } from "../nodes";
-import { WELCOME_TEMPLATES } from "./templates";
+import { compileAll, compileTarget } from "./compile";
+import { DESIGN_TEMPLATES, WELCOME_TEMPLATES } from "./templates";
 import { MAX_BODY } from "./markup";
 import {
   describe,
@@ -12,6 +13,7 @@ import {
   isScreen,
   markupOf,
   qtViolations,
+  previewDesign,
   previewMarkup,
   previewText,
   type WelcomeGraph,
@@ -128,7 +130,15 @@ suite("the welcome template catalogue", () => {
       });
 
       it("previews as the markup it was written as", () => {
-        const markup = previewMarkup(laid(template.build()), SUBJECT);
+        const graph = laid(template.build());
+        const greeting = graph.nodes.find((node) => node.kind === "greeting");
+        // The same question the node's own preview asks, and in the same
+        // order: a designed greeting has no `html` to show, because a design
+        // compiles to a different document per target and is assembled per
+        // peer. Asking only the prose half called every designed template
+        // empty.
+        const markup =
+          previewDesign(graph, SUBJECT, greeting?.id)?.body ?? previewMarkup(graph, SUBJECT);
         expect(markup, template.id).not.toBeNull();
         // The card's thumbnail is the same markup, so what the gallery shows
         // is what the canvas will hold.
@@ -152,4 +162,59 @@ suite("the welcome template catalogue", () => {
       });
     });
   }
+});
+
+suite("the sheets the design editor can start from", () => {
+  it("offers each one as a design that compiles on every target", () => {
+    // Including Qt, which draws almost none of what the modern sheet is made
+    // of. What matters is that it *compiles* - a target that cannot draw a
+    // gradient has to end up with a flatter message, not a crash on the join
+    // path.
+    for (const entry of DESIGN_TEMPLATES) {
+      const sheet = entry.build();
+      expect(sheet.blocks.length, entry.id).toBeGreaterThan(0);
+      for (const target of ["plain", "rich", "html", "qt"] as const) {
+        expect(() => compileTarget(sheet, target), `${entry.id} on ${target}`).not.toThrow();
+      }
+    }
+  });
+
+  it("keeps every sheet it claims inside the cap the server pays on each join", () => {
+    // Only the targets a sheet claims. The modern one is gradients, inlined
+    // pictures and translucent rounded panels, none of which Classic can draw
+    // and all of which cost it a table per block - so it does not claim that
+    // target, and those readers get the greeting's written halves instead.
+    for (const entry of DESIGN_TEMPLATES) {
+      const sheet = entry.build();
+      for (const [target, parts] of Object.entries(compileAll(sheet))) {
+        const markup = parts.map((part) => part.literal ?? "").join("");
+        expect(markup.length, `${entry.id} on ${target}`).toBeLessThan(4096);
+      }
+    }
+  });
+
+  it("sends nothing on a target its sheet does not claim", () => {
+    const modern = DESIGN_TEMPLATES.find((entry) => entry.id === "modern")!.build();
+    expect(compileAll(modern).qt).toEqual([]);
+    expect(compileAll(modern).rich.length).toBeGreaterThan(0);
+  });
+
+  it("declares every input its own blocks gate on", () => {
+    // A block gated on a name the design does not declare is dropped by the
+    // server on every join, silently - so a template that shipped one would
+    // be a template with an invisible element.
+    for (const entry of DESIGN_TEMPLATES) {
+      const sheet = entry.build();
+      const names = new Set(sheet.conditions.map((input) => input.name));
+      for (const block of sheet.blocks) {
+        if (block.gate !== undefined) expect(names.has(block.gate), `${entry.id}/${block.gate}`).toBe(true);
+      }
+      const slots = new Set(sheet.slots.map((input) => input.name));
+      for (const block of sheet.blocks) {
+        if (block.type === "slot" && block.slot) {
+          expect(slots.has(block.slot), `${entry.id}/${block.slot}`).toBe(true);
+        }
+      }
+    }
+  });
 });

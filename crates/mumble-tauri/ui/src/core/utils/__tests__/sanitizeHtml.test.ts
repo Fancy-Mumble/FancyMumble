@@ -443,6 +443,80 @@ describe("CSS injection", () => {
     expect(out).toContain("margin");
   });
 
+  it("keeps a box shadow, which is how depth is drawn", () => {
+    // Inert: lengths, a colour and `inset`. It is on the list because a ring
+    // shadow and an inset top highlight are how a current design says "raised"
+    // and "grouped", and without it neither can be expressed at all.
+    const out = sanitizeHtml(
+      '<p style="box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 2px 4px rgba(0,0,0,.3)">x</p>',
+    );
+    expect(out).toContain("box-shadow");
+    expect(out).toContain("inset");
+  });
+
+  it("still refuses a shadow that tries to fetch something", () => {
+    // The value filter is what makes the property safe to allow, so it is
+    // worth pinning on the property that was added because of it.
+    const out = sanitizeHtml('<p style="box-shadow: 0 0 0 red url(https://x/track.png)">x</p>');
+    expect(out).not.toContain("box-shadow");
+  });
+
+  it("keeps a text shadow, for a line that has to read on a busy ground", () => {
+    const out = sanitizeHtml('<p style="text-shadow: 0 1px 2px rgba(0,0,0,.5)">x</p>');
+    expect(out).toContain("text-shadow");
+  });
+
+  it("keeps a flex row whole, rather than half of one", () => {
+    // `display` was allowed and everything that makes it mean anything was
+    // not, so a row of full-width buttons arrived as a row of huddled ones.
+    const out = sanitizeHtml(
+      '<span style="display:flex;gap:8px;align-items:center;justify-content:space-between">' +
+        '<a href="https://example.org" style="flex:1 1 0;box-sizing:border-box;width:100%">x</a></span>',
+    );
+    for (const kept of ["display:flex", "gap", "align-items", "justify-content", "flex:1 1 0", "box-sizing"]) {
+      expect(out, kept).toContain(kept);
+    }
+  });
+
+  it("keeps frosted glass, which is a blur over a translucent fill", () => {
+    const out = sanitizeHtml(
+      '<span style="backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); background-color: rgba(255,255,255,.06)">x</span>',
+    );
+    expect(out).toContain("backdrop-filter");
+    expect(out).toContain("blur(14px)");
+  });
+
+  it("keeps how a picture sits in its box", () => {
+    const out = sanitizeHtml(
+      '<span style="object-fit: contain; object-position: center; aspect-ratio: 16/9">x</span>',
+    );
+    for (const kept of ["object-fit", "object-position", "aspect-ratio"]) {
+      expect(out, kept).toContain(kept);
+    }
+  });
+
+  it("keeps a background layer's geometry but never a fetch", () => {
+    // The reason these are safe to allow: a filter or a background may name an
+    // SVG or an image by `url()`, and that is refused before it gets here.
+    const out = sanitizeHtml(
+      '<span style="background-size: cover; background-position: center; background-repeat: no-repeat">x</span>',
+    );
+    expect(out).toContain("background-size");
+    expect(sanitizeHtml('<span style="background-image: url(https://x/p.png)">x</span>')).not.toContain(
+      "background-image",
+    );
+    expect(sanitizeHtml('<span style="filter: url(#evil)">x</span>')).not.toContain("filter");
+  });
+
+  it("keeps clipping, which is what makes a radius mean anything", () => {
+    // A `border-radius` clips the element's own background and border and
+    // nothing else, so a picture in the corner pokes through it. Without this
+    // property a rounded image was a square image with rounded edges behind it.
+    const out = sanitizeHtml('<span style="border-radius: 12px; overflow: hidden">x</span>');
+    expect(out).toContain("overflow");
+    expect(out).toContain("border-radius");
+  });
+
   it("strips only dangerous properties and keeps safe ones", () => {
     const input = '<span style="color: red; position: absolute; font-size: 16px">mixed</span>';
     const out = sanitizeHtml(input);

@@ -1,5 +1,17 @@
 import { describe as suite, expect, it } from "vitest";
-import { MAX_BODY, composeMarkup, composePlain, escapeHtml, paragraphsOf, plainTextOf } from "./markup";
+import {
+  MAX_BODY,
+  composeMarkup,
+  composePlain,
+  escapeHtml,
+  inlineSlotsOf,
+  paragraphsOf,
+  plainTextOf,
+  renameInlineSlot,
+  setInlineSlotHidden,
+  splitInlineSlots,
+  withoutSlotTokens,
+} from "./markup";
 
 suite("the plain half of a formatted greeting", () => {
   it("turns structure into line breaks rather than running it together", () => {
@@ -86,5 +98,44 @@ suite("the cap", () => {
 suite("escaping", () => {
   it("handles the three characters that change how markup parses", () => {
     expect(escapeHtml("<a & b>")).toBe("&lt;a &amp; b&gt;");
+  });
+});
+
+suite("an input used inside a sentence", () => {
+  it("finds every token in reading order, hidden ones included", () => {
+    const found = inlineSlotsOf("Hi {{name}}, welcome to {{server|hidden}} today.");
+    expect(found).toEqual([
+      { name: "name", hidden: false, at: 0 },
+      { name: "server", hidden: true, at: 1 },
+    ]);
+  });
+
+  it("splits copy into the runs the compiler sends separately", () => {
+    expect(splitInlineSlots("Some words about {{rules}} in a sentence.")).toEqual([
+      { literal: "Some words about " },
+      { slot: "rules", hidden: false },
+      { literal: " in a sentence." },
+    ]);
+  });
+
+  it("hides one usage without touching the other of the same input", () => {
+    const next = setInlineSlotHidden("{{rules}} and {{rules}}", 1, true);
+    expect(next).toBe("{{rules}} and {{rules|hidden}}");
+  });
+
+  it("keeps a hidden usage's marker when it is renamed", () => {
+    // Hiding is meant to be reversible, so a rename must not quietly show it
+    // again - which is what dropping the flag would do.
+    expect(renameInlineSlot("{{rules|hidden}}", "rules", "house_rules")).toBe("{{house_rules|hidden}}");
+  });
+
+  it("reads a shown usage as its name and a hidden one as nothing", () => {
+    expect(withoutSlotTokens("A {{one}} and a {{two|hidden}} here")).toBe("A $one and a here");
+  });
+
+  it("leaves copy with no tokens exactly as it was", () => {
+    const body = "<p>Nothing dynamic about this.</p>";
+    expect(splitInlineSlots(body)).toEqual([{ literal: body }]);
+    expect(withoutSlotTokens(body)).toBe(body);
   });
 });

@@ -129,6 +129,25 @@ export function paragraphsOf(plain: string): string {
 }
 
 /**
+ * A text block's content as markup.
+ *
+ * The field holds what the WYSIWYG produced, which is HTML. Two things hold a
+ * bare string instead: a design drawn before the block had an editor, and a
+ * template whose copy is written as plain words in the source - and a bare
+ * string handed to a renderer loses the line breaks somebody typed and mangles
+ * an `&`. So anything with no tag in it is read as the plain text it is.
+ *
+ * The one case this gets wrong is legacy plain copy containing a literal `<`,
+ * which is read as markup and then dropped by the sanitiser. Nothing this
+ * editor has ever written looks like that: the field is escaped on the way out
+ * of Tiptap, so a `<` typed today arrives here as `&lt;`.
+ */
+export function richBody(text: string | undefined): string {
+  const body = text ?? "";
+  return body.includes("<") ? body : paragraphsOf(body);
+}
+
+/**
  * A greeting's parts assembled the way the server assembles them.
  *
  * The markup halves are joined with nothing between them, because each is a
@@ -148,4 +167,98 @@ export function composePlain(parts: readonly string[]): string {
     .map((part) => part.trim())
     .filter(Boolean)
     .join(" ");
+}
+
+/* -- Inline slots ---------------------------------------------------------- */
+
+/**
+ * A text input used *inside* a paragraph, written as `{{name}}`.
+ *
+ * A token in the copy rather than an element in the markup, and that is the
+ * whole decision here. A `<span data-slot>` would be the tidier document, and
+ * it would not survive the trip: the rich-text field parses through Tiptap,
+ * which drops nodes it has no extension for, and the sanitiser every renderer
+ * filters through is configured `ALLOW_DATA_ATTR: false`. A token is plain
+ * text, so it survives being typed, pasted, formatted, bolded and round-tripped
+ * through both - and it is how an operator would write one by hand anyway.
+ *
+ * A hidden usage keeps its token and gains a marker, because hiding is meant to
+ * be reversible: deleting the token would lose where it was.
+ */
+const SLOT_TOKEN = /\{\{\s*([a-z0-9_.]+)\s*(\|hidden)?\s*\}\}/gi;
+
+/** How an inline usage is written, for everything that has to produce one. */
+export function slotToken(name: string, hidden = false): string {
+  return hidden ? `{{${name}|hidden}}` : `{{${name}}}`;
+}
+
+/** One inline usage found in some copy. */
+export interface InlineSlot {
+  readonly name: string;
+  readonly hidden: boolean;
+  /** Which token this is in the text, counting from zero. */
+  readonly at: number;
+}
+
+/** Every inline usage in some copy, in reading order. */
+export function inlineSlotsOf(text: string | undefined): InlineSlot[] {
+  const body = text ?? "";
+  const found: InlineSlot[] = [];
+  for (const match of body.matchAll(SLOT_TOKEN)) {
+    found.push({ name: match[1].toLowerCase(), hidden: match[2] !== undefined, at: found.length });
+  }
+  return found;
+}
+
+/** The same copy with one usage hidden or shown again. */
+export function setInlineSlotHidden(text: string, at: number, hidden: boolean): string {
+  let seen = -1;
+  return text.replaceAll(SLOT_TOKEN, (whole, name: string) => {
+    seen += 1;
+    return seen === at ? slotToken(String(name).toLowerCase(), hidden) : whole;
+  });
+}
+
+/** The same copy with every usage of one input renamed. */
+export function renameInlineSlot(text: string, from: string, to: string): string {
+  return text.replaceAll(SLOT_TOKEN, (whole, name: string, flag: string | undefined) =>
+    String(name).toLowerCase() === from ? slotToken(to, flag !== undefined) : whole,
+  );
+}
+
+/** One run of copy: either literal markup, or an input to be substituted. */
+export type Piece = { readonly literal: string } | { readonly slot: string; readonly hidden: boolean };
+
+/**
+ * Copy split at its inline usages, so each run can be compiled on its own.
+ *
+ * The literal runs are markup and stay markup; each token becomes a part the
+ * server substitutes. Splitting rather than replacing is what lets one
+ * paragraph carry two different inputs and still arrive as one paragraph.
+ */
+export function splitInlineSlots(text: string): Piece[] {
+  const pieces: Piece[] = [];
+  let last = 0;
+  for (const match of text.matchAll(SLOT_TOKEN)) {
+    const at = match.index ?? 0;
+    if (at > last) pieces.push({ literal: text.slice(last, at) });
+    pieces.push({ slot: match[1].toLowerCase(), hidden: match[2] !== undefined });
+    last = at + match[0].length;
+  }
+  if (last < text.length) pieces.push({ literal: text.slice(last) });
+  return pieces;
+}
+
+/**
+ * Copy with every token taken out, for reading it as words.
+ *
+ * A hidden usage leaves nothing; a shown one leaves its name, because the
+ * layer list and the plain fallback both have to say *something* stands here.
+ */
+export function withoutSlotTokens(text: string, shown = (name: string) => `$${name}`): string {
+  return text
+    .replaceAll(SLOT_TOKEN, (_whole, name: string, flag: string | undefined) =>
+      flag === undefined ? shown(String(name).toLowerCase()) : "",
+    )
+    .replaceAll(/[ \t]{2,}/g, " ");
 }

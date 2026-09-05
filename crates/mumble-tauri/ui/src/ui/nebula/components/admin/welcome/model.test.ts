@@ -11,23 +11,108 @@ import {
   patchNode,
   previewMarkup,
   previewText,
+  removeDesignInput,
   removeNode,
+  renameDesignInput,
   snippetsOf,
   switchView,
   usesOf,
+  wiredInputsOf,
   writeMarkup,
   type MessageNode,
   type WelcomeGraph,
   type WelcomeNode,
 } from "./model";
-import { seedGraph } from "./seed";
+import { plainTextOf } from "./markup";
+
+/**
+ * A worked graph to ask questions of: four conditions, their filters, three
+ * gates and a formatted greeting with two snippets on it.
+ *
+ * Its own fixture rather than the page's scaffold. It *was* the scaffold -
+ * until the scaffold became the two-node "everyone, and what they read", which
+ * is the right thing to open a fresh server on and a useless thing to test
+ * gates and filters against. A test that reaches for whatever the product
+ * happens to open with is a test that breaks when somebody improves the
+ * opening, which is exactly what happened.
+ */
+const GREETING_HTML = [
+  '<h2 style="text-align: center">Willkommen, {name}!</h2>',
+  "<p>Deutschsprachige Runden laufen in {channel} - schreib gern auf Deutsch.</p>",
+].join("");
+
+function seedGraph(): WelcomeGraph {
+  const wire = (id: string, from: string, to: string, port: string) => ({ id, from, to, port });
+  return {
+    nodes: [
+      { id: "country", kind: "country", x: 30, y: 34, codes: ["DE", "AT", "CH"] },
+      { id: "tenure", kind: "tenure", x: 30, y: 172, op: "less", window: "1 month" },
+      { id: "version", kind: "clientVersion", x: 30, y: 310, op: "<", version: "1.5.0" },
+      { id: "account", kind: "account", x: 30, y: 448, state: "guest" },
+      { id: "fc", kind: "filter", x: 268, y: 34, unknownAs: "no" },
+      { id: "ft", kind: "filter", x: 268, y: 172, unknownAs: "no" },
+      { id: "fv", kind: "filter", x: 268, y: 310, unknownAs: "no" },
+      { id: "fa", kind: "filter", x: 268, y: 448, unknownAs: "no" },
+      { id: "and", kind: "gate", x: 486, y: 76, gate: "and" },
+      { id: "or", kind: "gate", x: 486, y: 352, gate: "or" },
+      { id: "xor", kind: "gate", x: 686, y: 208, gate: "xor" },
+      {
+        id: "rules",
+        kind: "text",
+        x: 686,
+        y: 430,
+        name: "rules",
+        body: "House rules are pinned in #Lounge - two minutes, worth it.",
+        html: "",
+        view: "plain",
+      },
+      {
+        id: "schedule",
+        kind: "text",
+        x: 686,
+        y: 560,
+        name: "schedule",
+        body: "Rotation nights: Tue & Fri, 20:00 CET.",
+        html: "",
+        view: "plain",
+      },
+      {
+        id: "greeting",
+        kind: "greeting",
+        x: 958,
+        y: 150,
+        once: true,
+        body: plainTextOf(GREETING_HTML),
+        html: GREETING_HTML,
+        view: "rich",
+        sections: [],
+      },
+    ],
+    edges: [
+      wire("c1", "country", "fc", "a"),
+      wire("c2", "tenure", "ft", "a"),
+      wire("c3", "version", "fv", "a"),
+      wire("c4", "account", "fa", "a"),
+      wire("e1", "fc", "and", "a"),
+      wire("e2", "ft", "and", "b"),
+      wire("e3", "fv", "or", "a"),
+      wire("e4", "fa", "or", "b"),
+      wire("e5", "and", "xor", "a"),
+      wire("e6", "or", "xor", "b"),
+      wire("e7", "xor", "greeting", "when"),
+      wire("e8", "rules", "greeting", "plus"),
+      wire("e9", "schedule", "greeting", "plus"),
+    ],
+    enabled: true,
+  } as unknown as WelcomeGraph;
+}
 
 const SUBJECT = { name: "Lyn", channel: "#Gaming", server: "magical.rocks", allowHtml: true };
 
-/** The seed's greeting, which is the formatted one. */
+/** The worked graph's greeting, which is the formatted one. */
 function greetingNode(graph: WelcomeGraph = seedGraph()): MessageNode {
   const node = graph.nodes.find((candidate) => candidate.kind === "greeting");
-  if (!node || node.kind !== "greeting") throw new Error("the seed has no greeting");
+  if (!node || node.kind !== "greeting") throw new Error("the worked graph has no greeting");
   return node;
 }
 
@@ -274,5 +359,63 @@ suite("welcome graph", () => {
       expect(previewMarkup(flat, SUBJECT)).toBeNull();
       expect(previewText(flat, SUBJECT)).toContain("House rules");
     });
+  });
+});
+
+suite("a design's inputs, which are its node's ports", () => {
+  /** A greeting built as a design, with a snippet wired into its one slot. */
+  function designed(): WelcomeGraph {
+    const greeting = { ...makeNode("greeting", 0, 0), id: "g" } as WelcomeNode & { kind: "greeting" };
+    const snippet = { ...makeNode("text", 0, 0), id: "t" };
+    return {
+      enabled: true,
+      nodes: [
+        {
+          ...greeting,
+          view: "design",
+          design: {
+            sheetW: 520,
+            slots: [{ id: "s1", name: "rules" }],
+            conditions: [{ id: "c1", name: "is_new_member", on: true }],
+            blocks: [{ id: "b1", type: "slot", x: 0, y: 0, w: 400, slot: "rules" }],
+            overrides: {},
+          },
+        },
+        snippet,
+      ],
+      edges: [{ id: "e1", from: "t", to: "g", port: "in:rules" }],
+      annotations: [],
+    };
+  }
+
+  it("reads which inputs have a wire from the canvas", () => {
+    expect([...wiredInputsOf(designed(), "g")]).toEqual(["rules"]);
+  });
+
+  it("carries the wire across a rename", () => {
+    // The whole reason renaming is a graph operation: the port *is* the name,
+    // so a rename that touched only the design would leave the snippet wired
+    // to a port that no longer exists - drawn nowhere, removable by nobody.
+    const graph = renameDesignInput(designed(), "g", "s1", "House Rules");
+    const node = graph.nodes.find((entry) => entry.id === "g");
+    expect(node?.kind === "greeting" && node.design?.slots[0]?.name).toBe("house_rules");
+    expect(graph.edges[0]?.port).toBe("in:house_rules");
+    expect([...wiredInputsOf(graph, "g")]).toEqual(["house_rules"]);
+  });
+
+  it("takes the wire with it when the input goes", () => {
+    const graph = removeDesignInput(designed(), "g", "s1");
+    expect(graph.edges).toEqual([]);
+    const node = graph.nodes.find((entry) => entry.id === "g");
+    expect(node?.kind === "greeting" && node.design?.slots).toEqual([]);
+    // And the block that named it is unbound rather than left pointing at a
+    // name nothing declares.
+    expect(node?.kind === "greeting" && node.design?.blocks[0]?.slot).toBeUndefined();
+  });
+
+  it("leaves a graph alone when the input is not one of its own", () => {
+    const graph = designed();
+    expect(renameDesignInput(graph, "g", "nope", "x")).toBe(graph);
+    expect(removeDesignInput(graph, "t", "s1")).toBe(graph);
   });
 });

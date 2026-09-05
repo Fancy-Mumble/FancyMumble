@@ -77,6 +77,7 @@ interface Block {
   x: number; y: number; w: number; h?: number;
   size?: number;
   align?: "left" | "center" | "right";
+  /** Words on most blocks; markup on `text`, which is written in the WYSIWYG. */
   text?: string;
   glyph?: string;                    // mark
   style?: "button" | "link";         // button
@@ -89,6 +90,27 @@ type BlockType =
   | "mark" | "heading" | "text" | "button" | "divider"
   | "image" | "callout" | "links" | "slot" | "theme";
 ```
+
+A `text` block holds **markup**, not words: its content is written in the same
+WYSIWYG the rest of Nebula writes bios and channel descriptions with, so a
+paragraph can carry bold, italics, colour and a list. Every other block that
+takes `text` — a heading, a button label, a callout — holds plain words, because
+each of those is a single run that the target draws in its own way.
+
+That markup is the *base*, and each target takes what it can: `html` and `rich`
+are sent it filtered through the client's own allow-list, `qt` through
+`qtSafe`, and `plain` gets `plainTextOf` — structure as line breaks, list items
+as bullets. The size stays a block property and rides on the layout cell, since
+a body that brings its own `<p>` has nowhere to put it: `div` is not on the
+allow-list and a `span` wrapped around a paragraph is closed by the parser at
+the first one.
+
+The toolbar deliberately offers less than the field can: no heading (that is
+its own block), no alignment (that is the block's, and two of them would
+fight), and no image (a data: URL is several times the body cap, paid on every
+join). Copy written before the block had an editor — and every template, whose
+words are plain strings in the source — is read as the plain text it is and
+wrapped a paragraph per line.
 
 `gate` names a condition rather than holding an expression. Anything more
 complicated belongs on the canvas, where it can be drawn, read back as a
@@ -143,12 +165,14 @@ it can honour, with field-level overrides where it needs to differ.
 
 `welcome/compile.ts`. Runs in the editor at save time, once, per target.
 
-Native clients are sent the design and lay it out themselves. Everything else
-gets markup, and the base design has absolute positions that none of those
-targets has: Qt has no `position` at all, and the sanitiser every HTML surface
-renders through allows no flexbox and no grid. **A table is the only layout
-primitive that survives the trip** — which is exactly what the hand-written
-welcome screens this replaces were built out of.
+Every client is sent markup: a greeting travels in `ServerSync.welcome_text`,
+which is a string, so there is nowhere for a design to arrive as itself and the
+fork reads the `rich` target like everyone else reads theirs. The base design
+has absolute positions that none of those targets has: Qt has no `position` at
+all, and the sanitiser every HTML surface renders through allows no flexbox and
+no grid. **A table is the only layout primitive that survives the trip** —
+which is exactly what the hand-written welcome screens this replaces were built
+out of.
 
 So positions become rows. Blocks whose tops line up within 16px are one row,
 ordered left to right; each row becomes a `<tr>` with a cell per block and
@@ -302,7 +326,13 @@ Server-side, refusing the write and naming the node:
 
 ## State of play
 
-Everything below the line is built, tested and green. The line is the handshake.
+Built, tested and green from the editor to the handshake, with one gap in the
+middle: **the client never puts a design on the wire.** `toWire` in
+`welcome/greetingStore.ts` carries a greeting's `body`, `html`, `sections` and
+`legacy` and no `design`, and `compileAll` has no caller outside its own tests,
+so a design lives only as long as the editor is open. Everything on both sides
+of that is done: the editor compiles, and the server stores and assembles what
+it is given.
 
 ### Done
 
@@ -315,26 +345,70 @@ Everything below the line is built, tested and green. The line is the handshake.
 | The design block node — dynamic ports, thumbnail | `welcome/spec.tsx`, `welcome/DesignBody.tsx` | in `nodes/blocks.test.ts` |
 | The editor — sheet, palette, layers, properties, target tabs, zoom/pan, snapping, shortcuts, context menu | `welcome/DesignEditor.tsx` | — |
 | Proto and validation — `GreetingDesign`, `DesignPart`, `GreetingEdge.input`, caps, digest | `serverconfig.proto`, `runtime/src/greeting.rs` | 61 |
+| Assembly at handshake — target choice, gates, slots | `runtime/src/greeting.rs`, `session-lifecycle/src/handshake.rs` | 13 |
+| The text block's WYSIWYG — markup per target, flattened on `plain` | `welcome/DesignEditor.tsx`, `welcome/compile.ts`, `welcome/markup.ts` | 7 |
+| Editing the signature — add, rename, remove an input, wire and all | `welcome/design.ts`, `welcome/model.ts`, `welcome/DesignEditor.tsx` | 15 |
+| Shortcuts — undo/redo in the panel, a block clipboard that leaves the window | `welcome/DesignEditor.tsx`, `welcome/design.ts` | 4 |
 
-### The one thing left before a design can be saved
+### Editing the signature
 
-**Assembly at handshake.** `greeting_for` in `session-lifecycle/src/handshake.rs` still calls
-`compose`, which only knows about `html` and `plain`. It needs to:
+The inputs pane in the editor's left rail adds, renames and removes them. Two
+of those three are **graph** operations rather than design ones, and that is the
+whole subtlety: a wire lands on `in:<name>`, so the name is the binding. A
+rename that touched only the design would leave the snippet wired to a port that
+no longer exists — drawn nowhere, and removable by nobody. `renameDesignInput`
+and `removeDesignInput` in `welcome/model.ts` move the design, the blocks that
+name it, every target's override of those blocks, and the edge, in one step.
 
-1. pick the target from `pending.mumble_version` and `config.allow_html` — the
-   version is already in hand there, so `qt` for 1.5-and-older needs no guessing;
-2. evaluate each condition input by walking the edge with
-   `port == GREETING_PORT_INPUT && input == <name>` and asking `truth` of what
-   feeds it;
-3. substitute each slot part from the snippet wired to that input, in that
-   target's dialect;
-4. concatenate the parts whose condition holds.
+The pane is in the left rail, which is where the panel's own width bug hid it:
+the panel opens at a fixed 1180px anchored to the right edge, so on any window
+narrower than that, its left third — Insert, Inputs and Layers — was simply off
+the screen, with no scrollbar to say so. It is clamped to the window now, and
+narrows with it.
 
-`assemble` in `welcome/compile.ts` is the same walk and is the reference — the
-client uses it for the preview, so the two can be checked against each other.
+Names are normalised to `[a-z0-9_]` and made unique across *both* lists, since
+both become ports on one node. The field commits on blur rather than per
+keystroke: normalising as you type would turn a space into an underscore
+mid-word and append a `_2` the next letter made nonsense of.
 
-Until that lands, a design **round-trips through the operator API and is stored**,
-but arriving peers still get the `html`/`plain` halves.
+`Input.wired` is gone. Nothing ever wrote it, so the check that read it —
+"this input has nothing wired to it" — fired on every design forever.
+`designProblems` now takes the wired names, which `graphStatus` reads off the
+edges.
+
+### Assembly at handshake
+
+`greeting_for` in `session-lifecycle/src/handshake.rs` calls `greeting::assemble`,
+which is the same walk as `assemble` in `welcome/compile.ts` — the client uses
+that one for the preview, so what an operator sees is what will be sent. It:
+
+1. picks the target from the peer's announced versions and `allow_html` —
+   `plain` where the server forbids markup, `rich` for the fork, `qt` for
+   Mumble 1.5 and older, `html` above that. A peer that announced no version is
+   read as old rather than new: `qt` renders in a client that understands more,
+   and the other way round leaves somebody reading tags;
+2. evaluates each condition input by walking the edge with
+   `port == INPUT && input == <name>` and asking `truth` of what feeds it. A
+   gate the server cannot settle hides its part;
+3. substitutes each slot from the snippet wired to that input — its text half
+   for `plain`, its markup half everywhere else. `qt` is sent the markup:
+   Qt keeps the words inside a tag it does not know, and doing better would
+   cost an HTML parser on the login path and a second copy of the editor's
+   sanitiser to keep in step with it;
+4. joins the parts whose condition holds, with that target's separator.
+
+A greeting with no design, and a design with nothing compiled for the target
+this peer needs, both fall back to `compose` — the `html` and `plain` halves the
+editor fills in anyway, which is what makes a half-migrated document safe to
+store.
+
+### The gap: nothing sends it
+
+`toWire` gains a `design` on the greeting node — `sheetW`, `slots`,
+`conditions`, the block tree as the JSON the proto already calls opaque, and
+`compileAll`'s output as `compiled` — and `fromWire` reads it back, opening the
+node in the design view when one is there. The server end of this is already
+written and tested; this is the client half that was never wired.
 
 ### Also outstanding
 
@@ -344,7 +418,7 @@ but arriving peers still get the `html`/`plain` halves.
 * `{name}` / `{channel}` / `{server}` are substituted by this editor's preview
   and by nothing else in the stack.
 
-## Order of work## Order of work
+## Order of work
 
 1. **Model and resolver** — `Design`, `Input`, `Block`, `Override`, `resolve`,
    with tests. No UI.

@@ -30,7 +30,9 @@
  * mouth by default.
  */
 
-import { makeNode, type WelcomeNode } from "./model";
+import { inputPort, makeNode, type WelcomeNode } from "./model";
+import { assemble, compileTarget } from "./compile";
+import type { Block, BlockType, Design } from "./design";
 import { plainTextOf } from "./markup";
 import { makeSection, markupOfScreen, plainOfScreen, type Section } from "./layout";
 import { legacyMarkupOfScreen } from "./qtHtml";
@@ -207,6 +209,394 @@ function settled(
     wires: [wire(condition, filter, "a")],
     out: filter,
   };
+}
+
+/* -- Designed greetings ---------------------------------------------------- */
+
+/**
+ * A greeting laid out in the design editor, rather than written as prose.
+ *
+ * The design *is* the message here: there is no `html` and no `body` on the
+ * node, because a design compiles to a different document per target and the
+ * server assembles it per peer. Everything else about the node is a greeting
+ * like any other, which is what lets one of these be gated and wired the same
+ * way the prose templates are.
+ */
+function designed(
+  x: number,
+  y: number,
+  design: Design,
+  fallback?: { html: string; body: string },
+): Extract<WelcomeNode, { kind: "greeting" }> {
+  return node("greeting", x, y, {
+    design,
+    view: "design",
+    once: true,
+    // What a reader on a target the sheet does not claim is sent. The server
+    // falls back to these halves when a design has nothing compiled for
+    // somebody, so a sheet that is deliberately only for the markup clients
+    // needs them written - or the old client gets a greeting of nothing at
+    // all, which is worse than the flattened one it was avoiding.
+    html: fallback?.html ?? "",
+    body: fallback?.body ?? "",
+    sections: [],
+  });
+}
+
+/** What the modern sheet says to a client that cannot draw a word of it. */
+const MODERN_FALLBACK_HTML =
+  "<p><strong>Welcome to Magical Rocks.</strong></p>" +
+  "<p>A small room for people who like the same things you do. " +
+  "Pick a channel, say hello, and shout if anything breaks.</p>" +
+  "<p>Push-to-talk is under Settings \u2192 Audio.</p>";
+const MODERN_FALLBACK_TEXT =
+  "Welcome to Magical Rocks.\n\n" +
+  "A small room for people who like the same things you do. " +
+  "Pick a channel, say hello, and shout if anything breaks.\n\n" +
+  "Push-to-talk is under Settings > Audio.";
+
+/** Ids unique within one catalogue build, which is all a block id has to be. */
+let block = 0;
+const at = (
+  type: BlockType,
+  x: number,
+  y: number,
+  w: number,
+  fields: Partial<Block> = {},
+): Block => {
+  block += 1;
+  return { id: `t${block.toString(36)}`, type, x, y, w, ...fields };
+};
+
+/**
+ * A designed front page: the blocks the old client can now draw too.
+ *
+ * Chosen to be exactly the set that used to be dropped or flattened on Qt - a
+ * card, a callout, a row of columns, a filled button, a footer - because the
+ * point of shipping this one is that an operator can press it, open the Qt tab
+ * and see that it survived.
+ */
+function designedFrontPage(): Design {
+  return {
+    sheetW: 520,
+    slots: [{ id: "s1", name: "rules" }],
+    conditions: [{ id: "c1", name: "is_new_member", on: true }],
+    blocks: [
+      at("mark", 216, 24, 88, { h: 72, glyph: "◆", align: "center" }),
+      at("heading", 40, 108, 440, { size: 30, align: "center", text: "Welcome aboard" }),
+      at("text", 40, 160, 440, {
+        size: 14,
+        align: "center",
+        text: "A small community, and glad you found it. Have a look around, and say hello.",
+      }),
+      at("divider", 40, 220, 440),
+      at("columns", 40, 244, 440, {
+        items: [
+          { kicker: "Browse", label: "Channel viewer", url: "https://example.org/channels" },
+          { kicker: "Live", label: "Server status", url: "https://example.org/status" },
+        ],
+      }),
+      at("notice", 40, 320, 440, {
+        tone: "info",
+        text: "<p>Push-to-talk is the default. You can change it in Settings &rarr; Audio.</p>",
+      }),
+      at("callout", 40, 392, 440, {
+        text: "The house rules are pinned in #Lounge. Two minutes, worth it.",
+        gate: "is_new_member",
+      }),
+      at("slot", 40, 460, 440, { slot: "rules", fallback: "<p>Be kind, and mind the channel topics.</p>" }),
+      at("button", 40, 524, 440, {
+        align: "center",
+        style: "button",
+        text: "Register your account",
+        url: "https://example.org/register",
+      }),
+      at("divider", 40, 570, 440),
+      at("footer", 40, 596, 440, { align: "center", text: "You will only see this once." }),
+    ],
+    overrides: {},
+  };
+}
+
+/**
+ * The line icons the modern template draws, inlined.
+ *
+ * A data URI because that is the only picture the sanitiser every reader
+ * renders through will keep: an `<img>` pointing anywhere else is dropped, so
+ * that a greeting cannot be used to log the address of everybody who joins.
+ *
+ * Hand-written and small, at the 1.5px stroke on a 24 grid that current icon
+ * sets are drawn to, because the whole compiled greeting is capped at 4096
+ * characters and each of these is about 300 of them.
+ */
+const ICON_HASH =
+  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOCIgaGVpZ2h0PSIxOCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOGE4Zjk4IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj48cGF0aCBkPSJNNSA3aDExTTQgMTJoMTFNOCAzbC0yIDEyTTE0IDNsLTIgMTIiLz48L3N2Zz4=";
+const ICON_MIC =
+  "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxOCIgaGVpZ2h0PSIxOCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOGE4Zjk4IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIj48cmVjdCB4PSI2LjUiIHk9IjIiIHdpZHRoPSI1IiBoZWlnaHQ9IjkiIHJ4PSIyLjUiLz48cGF0aCBkPSJNNCA4LjVhNSA1IDAgMCAwIDEwIDBNOSAxMy41VjE2Ii8+PC9zdmc+";
+
+/** One tile of the two-up: a hairline card holding an icon and two lines. */
+function tile(x: number, src: string, title: string, body: string): Block[] {
+  return [
+    at("group", x, 250, 240, {
+      h: 96,
+      bg: "rgba(255,255,255,.025)",
+      border: "rgba(255,255,255,.06)",
+      radius: 10,
+      pad: 15,
+      gap: 5,
+    }),
+    at("image", x + 8, 258, 18, { h: 18, src }),
+    at("text", x + 8, 282, 200, {
+      h: 20,
+      bare: true,
+      size: 13.5,
+      weight: 590,
+      fg: "#e8ebf2",
+      margin: "9px 0 3px",
+      text: title,
+    }),
+    at("text", x + 8, 306, 200, {
+      h: 30,
+      bare: true,
+      size: 12.5,
+      leading: 150,
+      fg: "#858d9a",
+      text: body,
+    }),
+  ];
+}
+
+/**
+ * A greeting that looks like it was made this decade.
+ *
+ * There have been three versions of this, and the first two were wrong in
+ * instructive ways. The first was honest about what the editor could do and
+ * that was the problem: square corners, six pixels of padding everywhere, one
+ * type size doing all the work. It read as 2003 because every one of those
+ * *was* 2003 - not a style choice but the absence of any control to make
+ * another one. The second had controls and used them the way 2010 did: a
+ * full-width saturated hero with white type centred on it, because a coloured
+ * slab was the only way the editor knew to say "these things belong together".
+ *
+ * This one was designed as a flat mock first, with no blocks in mind at all,
+ * and then rebuilt here until the compiled markup rendered pixel-for-pixel
+ * identical to it. Everything the rebuild could not express became a control -
+ * the group, the gradient, the inlined image, the lit top edge, the fitted
+ * box, free weights and fractional tracking - which is a better way to find
+ * out what a design system is missing than asking it.
+ *
+ * What makes it current, concretely, and each is a thing the editor could not
+ * do before:
+ *
+ * * **A group** holding everything, with a hairline rule, a lit top edge and a
+ *   wash of the accent over one corner at 11% - depth from light rather than
+ *   from a drop shadow, which is what dark interfaces do now and which no
+ *   sanitiser here would have passed as a shadow anyway.
+ * * **A live presence cluster**: real faces of the people actually on the
+ *   server, and a real count, drawn by the client that reads the greeting.
+ *   Not a number written at save time, which could never be true for whoever
+ *   is reading it.
+ * * **The display line at weight 510**, not 700 - the client ships Inter as a
+ *   variable font and the stops current interfaces use are between the named
+ *   ones - tracked at -0.022em, which is Inter's own metric for 32px.
+ * * **A two-up of hairline tiles**, each with a real line icon inlined.
+ * * **One accent moment**: the primary button, with a lighter top border
+ *   standing in for the inner highlight. The secondary is a ghost.
+ *
+ * It is for the markup clients only. Classic Mumble has no gradient, no data
+ * URI and no rounded corner, and this design is mostly those three things - so
+ * a server whose readers are on 1.5 wants one of the other templates rather
+ * than this one flattened into something it is not.
+ */
+function designedModern(): Design {
+  return {
+    sheetW: 560,
+    slots: [],
+    conditions: [{ id: "c1", name: "is_new_member", on: true }],
+    // The markup clients only. Classic Mumble has no gradient, no data URI and
+    // no rounded corner, and this sheet is mostly those three - flattened into
+    // its table markup it is both unrecognisable and over the 4096-character
+    // cap, because Qt needs a whole table around each block where a browser
+    // needs a span. Those readers get the greeting's written halves instead,
+    // which is what the fallback is for.
+    only: ["rich", "html"],
+    blocks: [
+      // The panel. Everything else is drawn inside this rectangle, which is
+      // how it becomes a child of it: the nesting is the geometry.
+      at("group", 0, 0, 560, {
+        h: 470,
+        grad: "radial-gradient(110% 80% at 0% 0%,rgba(110,139,255,.11),rgba(0,0,0,0) 62%)",
+        bg: "rgba(255,255,255,.02)",
+        border: "rgba(255,255,255,.07)",
+        borderTop: "rgba(255,255,255,.13)",
+        radius: 14,
+        pad: 30,
+      }),
+      // Who is on the server, drawn by the client that reads this. It was
+      // three hand-drawn circles and the words "+38 online" - a picture of a
+      // presence indicator rather than one - and no number written here could
+      // ever have been true for the person reading it.
+      at("presence", 10, 10, 320, { h: 34, faces: 3, text: "online", margin: "0 0 20px" }),
+      at("text", 10, 70, 500, {
+        h: 40,
+        bare: true,
+        size: 32,
+        weight: 510,
+        leading: 113,
+        tracking: -2.2,
+        fg: "#f7f8f8",
+        margin: "0 0 10px",
+        text: "Welcome to Magical Rocks",
+      }),
+      at("text", 10, 130, 500, {
+        h: 50,
+        bare: true,
+        size: 15,
+        leading: 160,
+        tracking: -1.1,
+        fg: "#aeb5c2",
+        measure: 430,
+        margin: "0 0 24px",
+        text:
+          "A small room for people who like the same things you do. " +
+          "Pick a channel, say hello, and shout if anything breaks.",
+      }),
+      at("group", 10, 240, 500, { h: 120, flow: "cells", margin: "0 0 22px" }),
+      ...tile(20, ICON_HASH, "Find a channel", "Nine of them. General is the loud one."),
+      ...tile(270, ICON_MIC, "Set push to talk", "Settings, then Audio. Ten seconds."),
+      at("group", 10, 380, 500, { h: 46, flow: "row" }),
+      at("button", 16, 388, 180, {
+        h: 34,
+        style: "button",
+        text: "Register your account",
+        url: "https://example.org/register",
+        bg: "#5e6ad2",
+        border: "#6e79e0",
+        borderTop: "#8b94ea",
+        fg: "#f7f8f8",
+        radius: 7,
+        padCss: "9px 17px",
+        size: 13.5,
+        weight: 510,
+        grow: true,
+        gate: "is_new_member",
+      }),
+      at("button", 210, 388, 120, {
+        h: 34,
+        style: "button",
+        text: "House rules",
+        url: "https://example.org/rules",
+        gap: 10,
+        bg: "rgba(255,255,255,.03)",
+        border: "rgba(255,255,255,.09)",
+        fg: "#b6bcc8",
+        radius: 7,
+        padCss: "9px 15px",
+        size: 13.5,
+        weight: 510,
+        grow: true,
+      }),
+    ],
+    overrides: {},
+  };
+}
+
+/**
+ * A designed notice: one card, a deadline and a way to act on it.
+ *
+ * The short one. A design does not have to be a front page, and an operator
+ * who only ever saw the busy template would reasonably conclude that it does.
+ */
+function designedNotice(): Design {
+  return {
+    sheetW: 520,
+    slots: [],
+    conditions: [{ id: "c1", name: "is_registered", on: true }],
+    blocks: [
+      at("heading", 40, 28, 440, { size: 22, text: "Maintenance this weekend" }),
+      at("card", 40, 76, 440, {
+        text:
+          "<p>The server moves to new hardware on Saturday morning. " +
+          "Expect a short outage, and nothing else to change.</p>",
+      }),
+      at("notice", 40, 176, 440, {
+        tone: "warning",
+        text: "<p>Voice will drop for about ten minutes while the move happens.</p>",
+      }),
+      at("countdown", 40, 248, 440, { text: "Planned for", until: "2026-10-03" }),
+      at("button", 40, 296, 440, {
+        style: "ghost",
+        text: "Read the details",
+        url: "https://example.org/status",
+        gate: "is_registered",
+      }),
+    ],
+    overrides: {},
+  };
+}
+
+/**
+ * The finished sheets an operator can start a design from.
+ *
+ * Separate from the graph gallery above, and reached from inside the design
+ * editor rather than from the canvas, because it answers a different question.
+ * The graph gallery is "what rule do I want"; this is "what should the message
+ * look like", and somebody who has already drawn the rule and opened the sheet
+ * should not have to go back out to the canvas and lose it to find out.
+ *
+ * Each one replaces the blocks and leaves the wiring alone - the inputs a
+ * design declares are what the canvas has edges to, and swapping the look of a
+ * message is not a reason to unplug it.
+ */
+export interface DesignTemplate {
+  readonly id: string;
+  readonly label: string;
+  /** One line: what this sheet is for, not what is on it. */
+  readonly description: string;
+  /** The targets it is worth using. A design of gradients is not worth Qt. */
+  readonly targets: string;
+  build(): Design;
+}
+
+export const DESIGN_TEMPLATES: readonly DesignTemplate[] = [
+  {
+    id: "modern",
+    label: "Modern welcome",
+    description:
+      "A hairline panel with a lit top edge, an avatar cluster, a display line set large and tight, two icon tiles and one accent button.",
+    targets: "Fancy Mumble only",
+    build: designedModern,
+  },
+  {
+    id: "front-page",
+    label: "Front page",
+    description:
+      "The busy one: a mark, a heading, a card, a callout, a row of link cards, a filled button and a footer. Everything the old client can draw too.",
+    targets: "Every target, Classic included",
+    build: designedFrontPage,
+  },
+  {
+    id: "notice",
+    label: "Short notice",
+    description:
+      "One card, a deadline and a way to act on it. A design does not have to be a front page.",
+    targets: "Every target, Classic included",
+    build: designedNotice,
+  },
+];
+
+/**
+ * What a designed template shows in the gallery.
+ *
+ * Compiled from the design itself rather than written beside it, for the
+ * reason the screen templates' previews are: a hand-copied preview is a second
+ * copy that stops matching the first the day either is edited.
+ */
+function designPreview(design: Design): string {
+  return assemble(compileTarget(design, "html"), "html", {
+    condition: (name) => design.conditions.find((input) => input.name === name)?.on !== false,
+    slot: () => "",
+  });
 }
 
 /* -- The catalogue -------------------------------------------------------- */
@@ -418,6 +808,90 @@ export const WELCOME_TEMPLATES: readonly GraphTemplate<WelcomeNode>[] = [
       return {
         nodes: [...account.nodes, greet],
         wires: [...account.wires, wire(account.out, greet, "when")],
+      };
+    },
+  },
+  {
+    id: "designed-modern",
+    label: "A modern welcome",
+    description:
+      "The one to start from: a display line set large and tight on the left, a small tinted badge above it, the rules in a hairline box, and one button in the reader's accent. Restrained rather than colourful, and it follows each reader's theme and their light or dark mode.",
+    category: ARRIVING,
+    tone: "accent",
+    shows: "Shown to accounts less than a month old, once.",
+    preview: designPreview(designedModern()),
+    build: (): Fragment<WelcomeNode> => {
+      const tenure = settled(node("tenure", 0, 40, { op: "less", window: "1 month" }));
+      const fresh = settled(node("tenure", 0, 300, { op: "less", window: "1 week" }));
+      const greet = designed(560, 0, designedModern(), {
+        html: MODERN_FALLBACK_HTML,
+        body: MODERN_FALLBACK_TEXT,
+      });
+      const rules = snippet(560, 460, "rules", RULES_HTML);
+      return {
+        nodes: [...tenure.nodes, ...fresh.nodes, greet, rules],
+        wires: [
+          ...tenure.wires,
+          ...fresh.wires,
+          wire(tenure.out, greet, "when"),
+          wire(rules, greet, inputPort("rules")),
+          wire(fresh.out, greet, inputPort("is_new_member")),
+        ],
+      };
+    },
+  },
+  {
+    id: "designed-front-page",
+    label: "A designed front page",
+    description:
+      "The same welcome, laid out in the design editor instead of written as prose: a badge, a heading, two link columns, a notice, your house rules in a slot, and one button. Every block on it is one the old Qt clients can draw too.",
+    category: ARRIVING,
+    tone: "accent",
+    shows: "Shown to accounts less than a month old, once.",
+    preview: designPreview(designedFrontPage()),
+    build: (): Fragment<WelcomeNode> => {
+      const design = designedFrontPage();
+      const tenure = settled(node("tenure", 0, 40, { op: "less", window: "1 month" }));
+      const fresh = settled(node("tenure", 0, 300, { op: "less", window: "1 week" }));
+      const greet = designed(560, 0, design);
+      const rules = snippet(560, 420, "rules", RULES_HTML);
+      return {
+        nodes: [...tenure.nodes, ...fresh.nodes, greet, rules],
+        wires: [
+          ...tenure.wires,
+          ...fresh.wires,
+          wire(tenure.out, greet, "when"),
+          // The design's own inputs: a snippet into the text slot, and a
+          // condition into the toggle that shows its notice. Wiring both is
+          // the whole point of shipping a designed template - a design block
+          // with nothing on its inputs looks like it does not have any.
+          wire(rules, greet, inputPort("rules")),
+          wire(fresh.out, greet, inputPort("is_new_member")),
+        ],
+      };
+    },
+  },
+  {
+    id: "designed-notice",
+    label: "A designed notice",
+    description:
+      "The short kind of design: a heading, a bordered card, the date it matters by, and a quiet button for the people with accounts. Start here when the front page is more than the occasion needs.",
+    category: OCCASION,
+    tone: "warn",
+    shows: "Shown to everyone with an account, once.",
+    preview: designPreview(designedNotice()),
+    build: (): Fragment<WelcomeNode> => {
+      const account = settled(node("account", 0, 40, { state: "registered" }));
+      const also = settled(node("account", 0, 300, { state: "registered" }));
+      const greet = designed(560, 0, designedNotice());
+      return {
+        nodes: [...account.nodes, ...also.nodes, greet],
+        wires: [
+          ...account.wires,
+          ...also.wires,
+          wire(account.out, greet, "when"),
+          wire(also.out, greet, inputPort("is_registered")),
+        ],
       };
     },
   },

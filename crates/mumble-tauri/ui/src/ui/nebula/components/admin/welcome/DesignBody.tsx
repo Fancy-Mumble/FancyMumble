@@ -1,7 +1,6 @@
 import { Box, Typography } from "@mui/material";
 import { radius } from "../../../tokens";
 import { Stack } from "../../primitives";
-import { SectionLabel } from "../nodes";
 import { compileTarget } from "./compile";
 import { flowOf, type Design } from "./design";
 
@@ -17,28 +16,28 @@ import { flowOf, type Design } from "./design";
  * The input names are drawn against the ports on the node's left edge, so an
  * operator reading a wire can see which input it lands on without tracing it.
  */
-export function DesignBody({ design, onOpen }: Readonly<{ design: Design; onOpen: () => void }>) {
+export function DesignBody({
+  design,
+  onOpen,
+}: Readonly<{
+  design: Design;
+  onOpen: () => void;
+}>) {
   const blocks = design.blocks.length;
   const slots = design.slots.length;
 
   return (
     <Stack gap={1}>
-      <SectionLabel>Theme inputs</SectionLabel>
-
+      {/* The declared inputs used to be listed here as well. They are the
+          node's sockets, and the sockets now name themselves in their own
+          band above - so this was the same list twice, once with a dot beside
+          it and once without. What each one carries is in the colour it is
+          drawn in, and whether anything is wired to it is in the dot. */}
       {design.slots.length === 0 && design.conditions.length === 0 && (
         <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })}>
-          none yet — a design declares these
+          no theme inputs yet — a design declares these
         </Typography>
       )}
-
-      {/* Ordered exactly as `inputsOf` orders the ports, so the names line up
-          with the sockets they belong to. */}
-      {design.slots.map((input) => (
-        <InputRow key={input.id} name={input.name} kind="TEXT" wired={Boolean(input.wired)} />
-      ))}
-      {design.conditions.map((input) => (
-        <InputRow key={input.id} name={input.name} kind="BOOL" wired />
-      ))}
 
       <Thumbnail design={design} />
 
@@ -71,38 +70,6 @@ export function DesignBody({ design, onOpen }: Readonly<{ design: Design; onOpen
   );
 }
 
-/** One declared input, beside the port it is wired to. */
-function InputRow({ name, kind, wired }: Readonly<{ name: string; kind: "TEXT" | "BOOL"; wired: boolean }>) {
-  return (
-    <Stack direction="row" alignItems="center" gap={0.75}>
-      <Typography
-        sx={(theme) => ({
-          flex: 1,
-          minWidth: 0,
-          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-          fontSize: 11,
-          color: wired ? theme.palette.nebula.accent : theme.palette.nebula.muted,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        })}
-      >
-        {name}
-      </Typography>
-      <Typography
-        sx={(theme) => ({
-          flex: "none",
-          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-          fontSize: 9,
-          letterSpacing: "0.12em",
-          color: theme.palette.nebula.dim,
-        })}
-      >
-        {kind}
-      </Typography>
-    </Stack>
-  );
-}
 
 /**
  * The design at a glance.

@@ -55,22 +55,31 @@ export interface Snapped {
 }
 
 /**
- * A block's height for the purpose of lining things up.
+ * What the editor measured each block to be, by id.
  *
- * Zero where it has none, which is most of them - their height is their
- * content's, and this module has no way to measure text. The consequence is
- * honest rather than wrong: a heightless block offers only its top edge as a
- * line, so blocks line up by their tops, which is what "aligned" means for a
- * column of text anyway.
+ * Most blocks have no height of their own - it is their content's - and this
+ * module cannot measure text. It used to treat those as zero tall, which was
+ * not a harmless simplification: a guide between two of them ran from the top
+ * of one to the top of the other and stopped there, passing *through* both
+ * blocks and ending in empty space, and their middles and bottoms were not
+ * offered as lines to snap to at all.
+ *
+ * So the measuring is done where it can be - the editor renders these and reads
+ * the heights back off the DOM - and passed in. An unmeasured block still falls
+ * back to its own height and then to zero, which is what a block that has not
+ * been drawn yet has to be.
  */
-const heightOf = (block: Block): number => block.h ?? 0;
+export type Heights = ReadonlyMap<string, number>;
+
+const heightOf = (block: Block, heights?: Heights): number =>
+  heights?.get(block.id) ?? block.h ?? 0;
 
 /** The three vertical lines a block presents. */
 const verticals = (block: Block): number[] => [block.x, block.x + block.w / 2, block.x + block.w];
 
 /** The three horizontal ones. */
-const horizontals = (block: Block): number[] => {
-  const h = heightOf(block);
+const horizontals = (block: Block, heights?: Heights): number[] => {
+  const h = heightOf(block, heights);
   return h === 0 ? [block.y] : [block.y, block.y + h / 2, block.y + h];
 };
 
@@ -104,6 +113,7 @@ export function snapTo(
   sheetW: number,
   grid: boolean,
   sheetH = 0,
+  heights?: Heights,
 ): Snapped {
   const at: Block = { ...moving, x, y };
   const guides: Guide[] = [];
@@ -115,10 +125,10 @@ export function snapTo(
   const sheetX = [0, sheetW / 2, sheetW];
   const sheetY = sheetH > 0 ? [0, sheetH / 2, sheetH] : [];
   const xCandidates = [...sheetX, ...others.flatMap(verticals)];
-  const yCandidates = [...sheetY, ...others.flatMap(horizontals)];
+  const yCandidates = [...sheetY, ...others.flatMap((block) => horizontals(block, heights))];
 
   const alongX = nearest(verticals(at), xCandidates);
-  const alongY = nearest(horizontals(at), yCandidates);
+  const alongY = nearest(horizontals(at, heights), yCandidates);
 
   const landedX = alongX ? Math.round(x + alongX.shift) : snap(x, grid);
   const landedY = alongY ? Math.round(y + alongY.shift) : snap(y, grid);
@@ -136,13 +146,16 @@ export function snapTo(
       sheet: onSheet,
       from: onSheet ? 0 : Math.min(landedY, ...touching.map((block) => block.y)),
       to: onSheet
-        ? Math.max(sheetH, landedY + heightOf(at))
-        : Math.max(landedY + heightOf(at), ...touching.map((block) => block.y + heightOf(block))),
+        ? Math.max(sheetH, landedY + heightOf(at, heights))
+        : Math.max(
+            landedY + heightOf(at, heights),
+            ...touching.map((block) => block.y + heightOf(block, heights)),
+          ),
     });
   }
   if (alongY) {
     const onSheet = sheetY.includes(alongY.at);
-    const touching = others.filter((block) => horizontals(block).includes(alongY.at));
+    const touching = others.filter((block) => horizontals(block, heights).includes(alongY.at));
     guides.push({
       axis: "y",
       at: alongY.at,
@@ -167,6 +180,7 @@ export function snapWidth(
   others: readonly Block[],
   sheetW: number,
   grid: boolean,
+  heights?: Heights,
 ): { w: number; guides: readonly Guide[] } {
   const right = moving.x + width;
   const candidates = [sheetW / 2, sheetW, ...others.flatMap(verticals)];
@@ -184,8 +198,12 @@ export function snapWidth(
         at,
         sheet: onSheet,
         from: onSheet ? 0 : Math.min(moving.y, ...touching.map((block) => block.y)),
-        to: Math.max(moving.y + heightOf(moving), ...touching.map((block) => block.y + heightOf(block))),
+        to: Math.max(
+          moving.y + heightOf(moving, heights),
+          ...touching.map((block) => block.y + heightOf(block, heights)),
+        ),
       },
     ],
   };
 }
+
