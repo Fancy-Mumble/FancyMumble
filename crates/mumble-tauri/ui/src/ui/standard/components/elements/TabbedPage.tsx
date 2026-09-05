@@ -2,6 +2,7 @@ import { ChevronLeftIcon } from "../../icons";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./TabbedPage.module.css";
+import { TAB_ID_ATTR, TID } from "@core/testids";
 
 export interface TabDef<T extends string> {
   id: T;
@@ -51,7 +52,12 @@ export function TabbedPage<T extends string>({
   return (
     <div className={styles.page}>
       <nav className={styles.sidebar}>
-        <button className={styles.backBtn} onClick={onBack} aria-label={t("tabbedPage.backAriaLabel")}>
+        <button
+          className={styles.backBtn}
+          data-testid={TID.adminBack}
+          onClick={onBack}
+          aria-label={t("tabbedPage.backAriaLabel")}
+        >
           {BackIcon}
           <span>{t("tabbedPage.back")}</span>
         </button>
@@ -65,6 +71,7 @@ export function TabbedPage<T extends string>({
             <li key={t.id}>
               <button
                 className={`${styles.tabBtn} ${activeTab === t.id ? styles.tabBtnActive : ""}`}
+                {...{ [TAB_ID_ATTR]: t.id }}
                 onClick={() => onTabChange(t.id)}
               >
                 <span className={styles.tabIcon}>{t.icon}</span>

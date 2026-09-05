@@ -5,10 +5,12 @@ import type { Theme } from "@mui/material/styles";
 import { parseChannelDescription } from "@core/channelProfile";
 import { useChannelDescription } from "@core/lazyBlobs";
 import type { ChannelEntry, UserEntry } from "@core/types";
+import { TID } from "@core/testids";
 import { LockIcon, VolumeIcon } from "@ui/icons";
 import { groupOccupants, type OrderedChannel } from "../../selectors";
 import { useChannelViewer, type NebulaChannelViewer } from "../../useChannelViewer";
 import {
+  PchatBadge,
   PriorityBadge,
   SectionLabel,
   StatusDot,
@@ -230,6 +232,10 @@ function ChannelRow({
         direction="row"
         alignItems="center"
         gap={1.125}
+        data-testid={TID.channelItem}
+        data-channel-id={channel.id}
+        data-channel-name={channel.name}
+        data-joined={joined ? "true" : undefined}
         onClick={() => onSelect(channel)}
         onDoubleClick={joined ? undefined : () => onJoin(channel)}
         onContextMenu={(event) => onContextMenu(channel, event)}
@@ -253,6 +259,10 @@ function ChannelRow({
         <Typography sx={{ fontSize: 12.5, fontWeight: joined ? 600 : 400 }} noWrap>
           {channel.name}
         </Typography>
+        {/* Whether a room keeps its history is a property of the room, so it
+            belongs on the row rather than only on the channel once opened:
+            picking which room to speak in is exactly when it matters. */}
+        <PchatBadge protocol={channel.pchat_protocol} />
         {stacked && <StackedOccupants occupants={occupants} talkingSessions={talkingSessions} />}
         {joined ? (
           <Stack
@@ -379,6 +389,8 @@ function OccupantRow({
       direction="row"
       alignItems="center"
       gap={1.125}
+      data-testid={TID.channelMember}
+      data-user-name={user.name}
       onClick={(event) => onSelect(user.session, event)}
       onMouseEnter={(event) => onHover(user.session, event)}
       onMouseLeave={onLeave}

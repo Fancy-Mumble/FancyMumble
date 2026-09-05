@@ -14,6 +14,7 @@ import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Modal } from "../../elements/Modal";
 import styles from "./PollCreator.module.css";
+import { TID } from "@core/testids";
 export type { PollPayload, PollVotePayload } from "@core/features/chat/poll/model";
 
 // --- Poll data format ---------------------------------------------
@@ -74,6 +75,7 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
           <label className={styles.label}>{t("poll.creator.questionLabel")}</label>
           <input
             className={styles.input}
+            data-testid={TID.pollQuestionInput}
             placeholder={t("poll.creator.questionPlaceholder")}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
@@ -90,6 +92,7 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
               </span>
               <input
                 className={styles.input}
+                data-testid={TID.pollOptionInput}
                 placeholder={t("poll.creator.optionPlaceholder", { n: i + 1 })}
                 value={opt}
                 onChange={(e) => updateOption(i, e.target.value)}
@@ -114,7 +117,12 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
 
           {/* Multiple choice toggle */}
           <label className={styles.checkboxLabel}>
-            <input type="checkbox" checked={multiple} onChange={(e) => setMultiple(e.target.checked)} />
+            <input
+              type="checkbox"
+              data-testid={TID.pollMultiple}
+              checked={multiple}
+              onChange={(e) => setMultiple(e.target.checked)}
+            />
             {t("poll.creator.allowMultiple")}
           </label>
         </div>
@@ -123,7 +131,12 @@ export default function PollCreator({ onSubmit, onClose }: Readonly<PollCreatorP
           <button className={styles.cancelBtn} onClick={onClose}>
             {t("common:actions.cancel")}
           </button>
-          <button className={styles.submitBtn} onClick={handleSubmit} disabled={!canSubmit}>
+          <button
+            className={styles.submitBtn}
+            data-testid={TID.pollSubmit}
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+          >
             {t("poll.creator.submit")}
           </button>
         </div>

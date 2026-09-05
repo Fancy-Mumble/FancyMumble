@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Box, IconButton, Typography } from "@mui/material";
 import type { UserEntry } from "@core/types";
+import { TID } from "@core/testids";
 import { CloseIcon, InfoIcon, MicIcon } from "@ui/icons";
 import {
   PriorityBadge,
@@ -90,6 +91,7 @@ export function MemberPanel({
   return (
     <Stack
       component="aside"
+      data-testid={TID.memberList}
       aria-label={t("sidebar:sidebarTabs.members")}
       sx={(theme) => ({
         width: 264,
@@ -268,6 +270,14 @@ function MemberRow({
       direction="row"
       alignItems="center"
       gap={1.125}
+      data-testid={TID.memberItem}
+      data-user-name={user.name}
+      data-registered={user.user_id != null && user.user_id > 0 ? "true" : undefined}
+      data-offline={offline ? "true" : undefined}
+      data-talking={talking ? "true" : undefined}
+      data-muted={user.mute || user.self_mute ? "true" : undefined}
+      data-deaf={user.deaf || user.self_deaf ? "true" : undefined}
+      data-clickable={own ? "true" : undefined}
       onClick={offline ? undefined : (event) => onSelect(user.session, event)}
       onMouseEnter={offline ? undefined : (event) => onHover(user.session, event)}
       onMouseLeave={offline ? undefined : onLeave}

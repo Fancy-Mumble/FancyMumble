@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, Button, Dialog, DialogActions, DialogContent, TextField, Typography } from "@mui/material";
 import type { ChannelEntry } from "@core/types";
+import { TID } from "@core/testids";
 import { Stack } from "../primitives";
 
 interface ChannelPasswordDialogProps {
@@ -44,6 +45,7 @@ export function ChannelPasswordDialog({
     <Dialog open onClose={onCancel} maxWidth="xs" fullWidth>
       <Box
         component="form"
+        data-testid={TID.passwordPromptDialog}
         onSubmit={(event: React.FormEvent) => {
           event.preventDefault();
           onConfirm(password);

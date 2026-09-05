@@ -4,6 +4,7 @@ import { Box, InputBase, Typography } from "@mui/material";
 import { CloseIcon } from "@ui/icons";
 import { Stack } from "../../primitives";
 import { PopoverPanel } from "./PopoverPanel";
+import { TID } from "@core/testids";
 
 /** The canvas's width for this panel. */
 export const POLL_POPOVER_WIDTH = 400;
@@ -56,7 +57,7 @@ export function PollPopover({
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
           placeholder={t("poll.questionPlaceholder")}
-          inputProps={{ "aria-label": t("poll.questionLabel") }}
+          inputProps={{ "aria-label": t("poll.questionLabel"), "data-testid": TID.pollQuestionInput }}
           sx={{
             width: "100%",
             fontSize: 19,
@@ -87,7 +88,10 @@ export function PollPopover({
               value={option}
               onChange={(event) => setOption(index, event.target.value)}
               placeholder={index >= 2 ? t("poll.optionPlaceholder") : t("poll.option")}
-              inputProps={{ "aria-label": t("poll.optionAria", { index: index + 1 }) }}
+              inputProps={{
+                "aria-label": t("poll.optionAria", { index: index + 1 }),
+                "data-testid": TID.pollOptionInput,
+              }}
               sx={{ flex: 1, fontSize: 14, "& .MuiInputBase-input": { padding: 0 } }}
             />
             {options.length > 2 && (
@@ -135,6 +139,7 @@ export function PollPopover({
                 key={mode}
                 component="button"
                 type="button"
+                data-testid={mode === "Multi" ? TID.pollMultiple : undefined}
                 aria-pressed={on}
                 onClick={() => setMultiple(mode === "Multi")}
                 sx={(theme) => ({
@@ -162,6 +167,7 @@ export function PollPopover({
         <Box
           component="button"
           type="button"
+          data-testid={TID.pollSubmit}
           disabled={!postable}
           onClick={() => onSubmit(question.trim(), filled, multiple)}
           sx={(theme) => ({

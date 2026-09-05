@@ -6,6 +6,7 @@ import { isAccountSettingsSupported } from "@core/features/settings/accountStore
 import { isOnboardingSupported } from "@core/features/onboarding/onboardingStore";
 import { SectionLabel, Stack } from "../primitives";
 import { radius } from "../../tokens";
+import { TAB_ID_ATTR } from "@core/testids";
 
 export type SettingsPageId =
   | "profile"
@@ -161,6 +162,7 @@ export function SettingsNav({
         {visibleSettingsPages(context).map((entry) => (
           <NavButton
             key={entry.id}
+            page={entry.id}
             label={t(entry.labelKey)}
             selected={admin?.active == null && entry.id === active}
             onClick={() => onSelect(entry.id)}
@@ -177,6 +179,7 @@ export function SettingsNav({
             {admin.entries.map((entry) => (
               <NavButton
                 key={entry.id}
+                page={entry.id}
                 label={entry.label}
                 selected={entry.id === admin.active}
                 onClick={() => onOpenAdmin(entry.id)}
@@ -190,13 +193,15 @@ export function SettingsNav({
 }
 
 function NavButton({
+  page,
   label,
   selected,
   onClick,
-}: Readonly<{ label: string; selected: boolean; onClick: () => void }>) {
+}: Readonly<{ page: string; label: string; selected: boolean; onClick: () => void }>) {
   return (
     <Box
       component="button"
+      {...{ [TAB_ID_ATTR]: page }}
       aria-current={selected}
       onClick={onClick}
       sx={(theme) => ({

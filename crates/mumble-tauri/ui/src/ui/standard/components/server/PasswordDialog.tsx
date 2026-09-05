@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Modal } from "../elements/Modal";
 import styles from "./PasswordDialog.module.css";
 import { TextField } from "../elements/TextField";
+import { TID } from "@core/testids";
 
 interface PasswordDialogProps {
   readonly open: boolean;
@@ -145,6 +146,7 @@ export default function PasswordDialog({
               label={t("password.passwordLabel")}
               ref={inputRef}
               id="pw-dialog-input"
+              data-testid={TID.connectPasswordInput}
               inputClassName={styles.input}
               type="password"
               value={password}
@@ -173,7 +175,12 @@ export default function PasswordDialog({
               <button className={styles.cancelBtn} type="button" onClick={onCancel}>
                 {t("common:actions.cancel")}
               </button>
-              <button className={styles.connectBtn} type="submit" disabled={!password}>
+              <button
+                className={styles.connectBtn}
+                type="submit"
+                data-testid={TID.connectPasswordSubmit}
+                disabled={!password}
+              >
                 {t("password.connect")}
               </button>
             </div>
