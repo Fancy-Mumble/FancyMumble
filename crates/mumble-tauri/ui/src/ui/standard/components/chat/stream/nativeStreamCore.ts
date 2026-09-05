@@ -58,6 +58,14 @@ export interface SlotMetrics {
   /** Paint gaps far above the running average (visible stutter). */
   readonly freezeCount: number;
   readonly freezeDurationS: number;
+  /** Frames discarded before paint: chunks dropped while waiting for a
+   *  keyframe or behind a decode backlog, decoded frames skipped as stall
+   *  backlog, JPEGs overtaken by a newer one. */
+  readonly dropped: number;
+  /** Cumulative seconds between a frame arriving on the channel and its
+   *  paint - the native path's analogue of the webview's jitter-buffer
+   *  delay (decode queue + decoder hold), summed over painted frames. */
+  readonly paintDelayS: number;
 }
 
 /** An all-zero metrics value (before the first worker snapshot). */
@@ -72,6 +80,8 @@ export const EMPTY_SLOT_METRICS: SlotMetrics = {
   fedKeyframes: 0,
   freezeCount: 0,
   freezeDurationS: 0,
+  dropped: 0,
+  paintDelayS: 0,
 };
 
 /** Either thread's 2D context; the drawing surface behind it resizes to
@@ -126,6 +136,12 @@ export function makeSlot(
   let avgGapMs = 0;
   let freezeCount = 0;
   let freezeDurationS = 0;
+  let dropped = 0;
+  let paintDelayS = 0;
+  /** Channel-arrival time per fed chunk, keyed by media timestamp, so a
+   *  painted frame can be charged its full in-page delay. */
+  const arrivals = new Map<number, number>();
+  const ARRIVALS_CAP = 512;
 
   const markPaint = (width: number, height: number) => {
     const now = performance.now();
@@ -164,8 +180,11 @@ export function makeSlot(
     }
     // Stall backlog: skip to fresh frames instead of replaying it (the
     // decoder still consumed the chunk, so its reference chain is intact).
+    const arrivedMs = arrivals.get(frame.timestamp);
+    arrivals.delete(frame.timestamp);
     if (frame.timestamp + STALE_FRAME_US < newestFedTsUs) {
       frame.close();
+      dropped += 1;
       markContent();
       return;
     }
@@ -175,8 +194,12 @@ export function makeSlot(
     frame.close();
     // No canvas yet = the slot's tile mounts on first-content state (the
     // camera PiP); flip the state and drop the frame so it appears.
-    if (ctx) markPaint(displayWidth, displayHeight);
-    else markContent();
+    if (ctx) {
+      if (arrivedMs !== undefined) paintDelayS += (performance.now() - arrivedMs) / 1000;
+      markPaint(displayWidth, displayHeight);
+    } else {
+      markContent();
+    }
   };
 
   const newDecoder = (): VideoDecoder | null => {
@@ -224,6 +247,7 @@ export function makeSlot(
     if (decoder === null) {
       // No parameter sets yet (joined before the config message): ask for
       // an IDR, whose access unit carries them.
+      dropped += 1;
       requestKeyframe();
       return;
     }
@@ -239,12 +263,17 @@ export function makeSlot(
       dropUntilKey = true;
     }
     if ((needKey || dropUntilKey) && !key) {
+      dropped += 1;
       requestKeyframe();
       return;
     }
     needKey = false;
     dropUntilKey = false;
     newestFedTsUs = Math.max(newestFedTsUs, timestampUs);
+    // Bounded: a frame the decoder never returns (error, reset) would
+    // otherwise leave its entry behind forever.
+    if (arrivals.size >= ARRIVALS_CAP) arrivals.clear();
+    arrivals.set(timestampUs, performance.now());
     try {
       decoder.decode(
         new EncodedVideoChunk({
@@ -272,7 +301,10 @@ export function makeSlot(
         // long before the newest one is stall backlog - skip it.
         if (disposed || seq <= jpegPainted || newestFedAtMs - fedAtMs > STALE_JPEG_MS) {
           bitmap.close();
-          if (!disposed) markContent();
+          if (!disposed) {
+            dropped += 1;
+            markContent();
+          }
           return;
         }
         jpegPainted = seq;
@@ -280,8 +312,12 @@ export function makeSlot(
         ctx?.drawImage(bitmap, 0, 0);
         const { width, height } = bitmap;
         bitmap.close();
-        if (ctx) markPaint(width, height);
-        else markContent();
+        if (ctx) {
+          paintDelayS += (performance.now() - fedAtMs) / 1000;
+          markPaint(width, height);
+        } else {
+          markContent();
+        }
       })
       .catch(() => {});
   };
@@ -324,6 +360,8 @@ export function makeSlot(
         fedKeyframes,
         freezeCount,
         freezeDurationS,
+        dropped,
+        paintDelayS,
       };
     },
     dispose() {

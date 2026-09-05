@@ -38,8 +38,9 @@
  * native backend in the advanced settings.
  *
  * Channel wire format: each message is a BATCH of records (Rust coalesces
- * ~50 ms per message so the GTK main thread pays one eval/fetch per batch,
- * not per frame). Each record: `[recordLen u32 LE]`, then a 14-byte header
+ * frames that arrive within ~20 ms of each other so a 60 fps stream costs
+ * the GTK main thread a few evals/fetches per second, not sixty; a frame
+ * after a quiet spell is delivered at once). Each record: `[recordLen u32 LE]`, then a 14-byte header
  * `[midIndex u8, flags u8, width u16 LE, height u16 LE, timestampUs u64 LE]`
  * and the payload (recordLen spans header + payload). flags bit 0 =
  * keyframe, bit 1 = H.264 (else JPEG), bit 2 = decoder config (payload is
@@ -60,7 +61,8 @@ import {
 } from "./nativeStreamCore";
 import type { StreamWorkerEvent, StreamWorkerRequest } from "./nativeStreamViewWorker";
 import StreamViewWorker from "./nativeStreamViewWorker?worker";
-import type { StatsSample, VideoTrackStats } from "./StreamStatsPanel";
+import type { PlayoutState, StatsSample, VideoTrackStats } from "./StreamStatsPanel";
+import { lastServerPingMs } from "./serverPing";
 import { registerStreamViewerStrategy, StreamViewerStrategyId, type StatsSampler } from "./viewerStrategy";
 
 // Singleton state (running viewers keyed per session, live IPC channels,
@@ -454,11 +456,17 @@ interface NativeViewerRustStats {
   readonly connectionState: string;
   readonly rttMs: number | null;
   readonly icePath: string | null;
+  readonly audio: {
+    readonly packetsReceived: number;
+    readonly bytesReceived: number;
+  } | null;
   readonly videos: readonly {
     readonly mid: string;
     readonly ssrc: number;
     readonly packetsReceived: number;
     readonly bytesReceived: number;
+    readonly packetsLost: number;
+    readonly jitterMs: number | null;
     readonly nackCount: number;
     readonly pliCount: number;
   }[];
@@ -466,6 +474,13 @@ interface NativeViewerRustStats {
 
 /** Stats sampler over the native peer + the viewport's decode metrics
  *  (factory product of the native strategy; per open panel). */
+/** The RTT to report, and where it came from (see `serverPing`). */
+function rtt(iceRttMs: number | null): { rttMs: number | null; rttSource: "server-ping" | null } {
+  if (iceRttMs !== null && iceRttMs > 0) return { rttMs: iceRttMs, rttSource: null };
+  const ping = lastServerPingMs();
+  return ping === null ? { rttMs: null, rttSource: null } : { rttMs: ping, rttSource: "server-ping" };
+}
+
 function createNativeStatsSampler(session: number): StatsSampler {
   return {
     async sample() {
@@ -477,6 +492,21 @@ function createNativeStatsSampler(session: number): StatsSampler {
       }
       const metrics = sessionMetrics.get(session)?.();
       if (!rust && !metrics) return null;
+
+      // What the shared desktop audio is doing, if the broadcast carries
+      // any: the voice mixer plays it out, so it has a real jitter buffer
+      // to report where the video path has none.
+      let playout: PlayoutState = { kind: "none" };
+      try {
+        const audio = await invoke<{
+          targetMs: number;
+          floorMs: number;
+          bufferedMs: number;
+        } | null>("native_stream_audio_playout", { session });
+        if (audio) playout = { kind: "buffer", ...audio };
+      } catch {
+        /* the command is Linux-only; "none" is the right answer elsewhere */
+      }
 
       const contentMap = getTrackContentMap(session);
       const codecLabel = WEBVIEW_HAS_WEBCODECS ? "H264 (WebCodecs)" : "H264 → JPEG (Rust)";
@@ -492,12 +522,12 @@ function createNativeStatsSampler(session: number): StatsSampler {
           frameHeight: m && m.height > 0 ? m.height : null,
           framesPerSecond: m?.fps ?? null,
           framesDecoded: m?.painted ?? 0,
-          framesDropped: 0,
+          framesDropped: m?.dropped ?? 0,
           freezeCount: m?.freezeCount ?? 0,
           totalFreezesDurationS: m?.freezeDurationS ?? 0,
           packetsReceived: v.packetsReceived,
-          packetsLost: 0, // webrtc-rs exposes no receive-side loss counter
-          jitterMs: null,
+          packetsLost: v.packetsLost,
+          jitterMs: v.jitterMs,
           videoCodec: codecLabel,
           decoderImplementation:
             `${WEBVIEW_HAS_WEBCODECS ? "VideoDecoder" : "ImageBitmap"}` +
@@ -516,24 +546,29 @@ function createNativeStatsSampler(session: number): StatsSampler {
         frameHeight: first?.frameHeight ?? null,
         framesPerSecond: first?.framesPerSecond ?? null,
         framesDecoded: first?.framesDecoded ?? 0,
-        framesDropped: 0,
+        framesDropped: videos.reduce((sum, v) => sum + v.framesDropped, 0),
         freezeCount: first?.freezeCount ?? 0,
         totalFreezesDurationS: first?.totalFreezesDurationS ?? 0,
         // Prefer the wire truth (RTP bytes); fall back to channel bytes.
         bytesReceived: rustBytes > 0 ? rustBytes : jsBytes,
         packetsReceived: videos.reduce((sum, v) => sum + v.packetsReceived, 0),
-        packetsLost: 0,
-        jitterMs: null,
-        jitterBufferDelay: 0,
-        jitterBufferEmittedCount: 0,
-        // The native Rust viewer has no jitter buffer at all - it decodes on
-        // arrival - so there is no playout delay to report.
+        packetsLost: videos.reduce((sum, v) => sum + v.packetsLost, 0),
+        jitterMs: first?.jitterMs ?? null,
+        // The native Rust viewer has no jitter buffer; what stands in its
+        // place is the in-page delay from channel arrival to paint (decode
+        // queue + the decoder's own hold), summed over painted frames the
+        // way the spec counter is. Target and floor stay 0: nothing here
+        // asks for delay, so the panel's "floor" reads as the truth.
+        jitterBufferDelay: metrics ? metrics.display.paintDelayS + metrics.camera.paintDelayS : 0,
+        jitterBufferEmittedCount: metrics ? metrics.display.painted + metrics.camera.painted : 0,
         jitterBufferTargetDelay: 0,
         jitterBufferMinimumDelay: 0,
         videoCodec: first?.videoCodec ?? codecLabel,
         audioCodec: null,
-        rttMs: rust?.rttMs ?? null,
+        ...rtt(rust?.rttMs ?? null),
         icePath: rust?.icePath ?? null,
+        playout,
+        audioPacketsReceived: rust?.audio?.packetsReceived ?? null,
         videos,
       };
       return { sample, connectionState: rust?.connectionState ?? "unknown" };
