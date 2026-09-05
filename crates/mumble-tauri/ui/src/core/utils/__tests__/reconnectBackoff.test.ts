@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { reconnectDelayMs, RECONNECT_BACKOFF_CAP_MS } from "../reconnectBackoff";
+import { reconnectDelayMs, shouldAutoReconnect, RECONNECT_BACKOFF_CAP_MS } from "../reconnectBackoff";
+
+/** A lost link on a server we have somewhere to go back to. */
+const DROPPED = {
+  manualDisconnect: false,
+  serverRejected: false,
+  passwordRequired: false,
+  hasTarget: true,
+  enabled: true,
+};
 
 describe("reconnectDelayMs", () => {
   it("follows a Fibonacci-seconds sequence for the first attempts", () => {
@@ -27,5 +36,31 @@ describe("reconnectDelayMs", () => {
       expect(d).toBeLessThanOrEqual(RECONNECT_BACKOFF_CAP_MS);
       prev = d;
     }
+  });
+});
+
+describe("shouldAutoReconnect", () => {
+  it("retries a link that simply dropped", () => {
+    expect(shouldAutoReconnect(DROPPED)).toBe(true);
+  });
+
+  it("does not retry what the server refused", () => {
+    // The case this was written for: being evicted because the same account
+    // signed in from another device. Reconnecting kicks that device, which
+    // reconnects and kicks this one, and neither user keeps a connection.
+    expect(shouldAutoReconnect({ ...DROPPED, serverRejected: true })).toBe(false);
+  });
+
+  it("does not retry a disconnect the user asked for", () => {
+    expect(shouldAutoReconnect({ ...DROPPED, manualDisconnect: true })).toBe(false);
+  });
+
+  it("waits for the user while a credential prompt is open", () => {
+    expect(shouldAutoReconnect({ ...DROPPED, passwordRequired: true })).toBe(false);
+  });
+
+  it("needs somewhere to go and a preference that allows it", () => {
+    expect(shouldAutoReconnect({ ...DROPPED, hasTarget: false })).toBe(false);
+    expect(shouldAutoReconnect({ ...DROPPED, enabled: false })).toBe(false);
   });
 });

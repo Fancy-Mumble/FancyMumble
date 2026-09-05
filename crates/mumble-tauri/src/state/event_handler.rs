@@ -300,12 +300,10 @@ impl EventHandler for TauriEventHandler {
             state.audio.mixer = None;
             state.audio.voice_state = VoiceState::Inactive;
             state.audio.talking_sessions.clear();
-            state.server.fancy_version = None;
-            state.server.version_info = ServerVersionInfo::default();
-            state.server.max_users = None;
-            state.server.max_bandwidth = None;
-            state.server.opus = false;
-            state.server.root_permissions = None;
+            // The roster, the tree and the messages go too. A link that drops
+            // is the common way a session ends, and leaving that half standing
+            // is what made a lost connection look like a server still there.
+            state.clear_session_data();
             // Save signal state before dropping pchat.
             if let Some(ref pchat) = state.pchat_ctx.pchat {
                 pchat.save_signal_state();
