@@ -335,9 +335,9 @@
     "panelTitle": "Anpassen",
     "uiDesign": "Oberflächendesign",
     "beta": "Beta",
-    "uiDesignHint": "Nebula ist die Voreinstellung. Standard ist die ältere Oberfläche und hat weiterhin den größten Funktionsumfang; Aurora ist ein Design-Beta.",
+    "uiDesignHint": "Nebula ist die Voreinstellung. Standard ist die ältere Oberfläche und hat weiterhin den größten Funktionsumfang. Aurora ist veraltet und wird in der nächsten Version entfernt - bitte nicht mehr verwenden.",
     "uiDesignStandard": "Standard",
-    "uiDesignAurora": "Aurora (Beta)",
+    "uiDesignAurora": "Aurora (veraltet)",
     "uiDesignNebula": "Nebula",
     "uiDesignOverrideHint": "Die Oberfläche wird derzeit durch den Entwicklungs-URL-Parameter auf '{{design}}' festgelegt.",
     "theme": "Design",
@@ -1325,7 +1325,10 @@
     "saved": "Gespeichert",
     "modeRich": "Rich Text",
     "modeSource": "HTML",
-    "richTextLossy": "Dieser Willkommenstext nutzt Markup, das der visuelle Editor nicht halten kann — ein Tabellenlayout oder Styling, für das er keine Bedienelemente hat. Ihn dort zu bearbeiten würde die Teile umschreiben, die er nicht zeigen kann, deshalb wird er als HTML bearbeitet."
+    "richTextLossy": "Dieser Willkommenstext nutzt Markup, das der visuelle Editor nicht halten kann — ein Tabellenlayout oder Styling, für das er keine Bedienelemente hat. Ihn dort zu bearbeiten würde die Teile umschreiben, die er nicht zeigen kann, deshalb wird er als HTML bearbeitet.",
+    "welcomeEditorTitle": "Mehr als eine Begrüßung?",
+    "welcomeEditorHint": "Dieser Text geht an alle. Der Begrüßungsnachrichten-Editor baut Begrüßungen, die davon abhängen, wer ankommt — Client-Version, ob ein Konto vorhanden ist — und legt sie als Seite an. Passt eine davon, wird sie statt dieses Textes gesendet.",
+    "welcomeEditorOpen": "Editor öffnen"
   },
   "fileServer": {
     "title": "Dateiserver-Speicher",

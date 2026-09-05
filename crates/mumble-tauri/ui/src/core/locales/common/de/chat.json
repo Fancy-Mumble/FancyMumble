@@ -159,6 +159,11 @@
       "minutes": "{{count}} Minuten vorher",
       "hours": "{{count}} Stunden vorher",
       "days": "{{count}} Tage vorher"
+    },
+    "reminderNotification": {
+      "untitledEvent": "Besprechung",
+      "body": "Beginnt um {{time}}",
+      "bodyWithLocation": "Beginnt um {{time}} · {{location}}"
     }
   },
   "contextMenu": {

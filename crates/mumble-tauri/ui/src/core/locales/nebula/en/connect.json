@@ -18,6 +18,17 @@
     "detail": "{{state}} · attempt {{attempt}}",
     "retryNow": "Retry now"
   },
+  "dropped": {
+    "eyebrow": "CONNECTION ENDED",
+    "eyebrowConnecting": "CONNECTING",
+    "title": "Disconnected",
+    "titleFailed": "Connection failed",
+    "titleReconnecting": "Reconnecting…",
+    "titleConnecting": "Connecting…",
+    "reasonLabel": "REASON",
+    "reconnect": "Reconnect",
+    "chooseServer": "Choose another server"
+  },
   "quickConnect": {
     "sectionOpenAsNewTab": "OPEN AS NEW TAB",
     "noneSaved": "No servers saved yet.",
@@ -59,6 +70,7 @@
     "joinAs": "JOIN AS",
     "newIdentity": "+ New identity",
     "editIdentity": "Edit the saved details for {{username}}",
+    "reorderIdentity": "Reorder {{username}} - drag, or use the arrow keys",
     "certificate": "certificate · {{label}}",
     "noCertificate": "no certificate",
     "connecting": "Connecting…",
