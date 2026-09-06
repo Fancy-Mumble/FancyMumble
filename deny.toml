@@ -37,6 +37,12 @@ ignore = [
     { id = "RUSTSEC-2025-0080", reason = "unic-* (unmaintained): via urlpattern in tauri deep-link" },
     { id = "RUSTSEC-2025-0081", reason = "unic-* (unmaintained): via urlpattern in tauri deep-link" },
     { id = "RUSTSEC-2025-0098", reason = "unic-* (unmaintained): via urlpattern in tauri deep-link" },
+    # tract-nnef's NNEF parser overflows on attacker-controlled tensor
+    # dimensions. Unreachable here: the only graph loaded is
+    # `DfParams::default()`, the DeepFilterNet weights embedded in the binary,
+    # and nothing accepts a model file from a user or a peer. Clears when
+    # deep_filter's pinned revision moves past it.
+    { id = "RUSTSEC-2026-0217", reason = "tract-nnef: only the embedded DeepFilterNet model is ever parsed" },
     { id = "RUSTSEC-2025-0100", reason = "unic-* (unmaintained): via urlpattern in tauri deep-link" },
     { id = "RUSTSEC-2025-0134", reason = "rustls-pemfile (unmaintained): direct dep; migrate to rustls-pki-types pem API" },
     { id = "RUSTSEC-2025-0141", reason = "bincode (unmaintained): via webrtc-dtls in the screenshare stack" },
@@ -101,4 +107,9 @@ allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 # fancy-denoiser-deepfilter pins an exact rev, so the source is reproducible.
 # (signal-bridge's libsignal git dependency lives in its own AGPL-isolated
 # workspace and is not part of this graph.)
-allow-git = ["https://github.com/Rikorose/DeepFilterNet.git"]
+# cros-libva has no release that builds against libva 2.23 (Ubuntu 26.04);
+# the fork is that one fix on top of 0.0.12, pinned to a branch we own.
+allow-git = [
+    "https://github.com/Rikorose/DeepFilterNet.git",
+    "https://github.com/Fancy-Mumble/cros-libva",
+]
