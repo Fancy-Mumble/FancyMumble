@@ -939,7 +939,7 @@ struct H264PassThrough {
     /// Set when a new decoder configuration has been emitted and no keyframe
     /// has been forwarded since. A freshly configured `VideoDecoder` holds no
     /// reference frames, so a delta chunk fed to it decodes against nothing.
-    /// WebKit does not reject that - it segfaults, taking the whole web
+    /// `WebKit` does not reject that - it segfaults, taking the whole web
     /// process (and with it the entire UI) down.
     ///
     /// This used to be unreachable: parameter sets only ever accompanied an

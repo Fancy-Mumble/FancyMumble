@@ -21,6 +21,7 @@ use image as _;
 use nokhwa as _;
 use openh264 as _;
 use openh264_sys2 as _;
+use opus as _;
 use rand as _;
 use serde as _;
 use serde_json as _;

@@ -125,9 +125,10 @@ fn entry(store: Store, name: String, install: &str) -> Option<InstalledGame> {
 /// The install directory's own name, for the stores that record no title.
 /// It is what the user picked in the installer, so it reads like the game.
 fn fallback_name(install: &str) -> String {
-    std::path::Path::new(install)
-        .file_name()
-        .map_or_else(|| install.to_owned(), |name| name.to_string_lossy().into_owned())
+    std::path::Path::new(install).file_name().map_or_else(
+        || install.to_owned(),
+        |name| name.to_string_lossy().into_owned(),
+    )
 }
 
 #[cfg(test)]

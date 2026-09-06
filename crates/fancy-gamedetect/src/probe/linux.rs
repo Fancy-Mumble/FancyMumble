@@ -412,9 +412,10 @@ fn is_wine_loader(path: &str) -> bool {
         .file_name()
         .and_then(|name| name.to_str())
         .is_some_and(|name| {
-            matches!(name, "wine" | "wine64") || name.strip_suffix("-preloader").is_some_and(
-                |stem| matches!(stem, "wine" | "wine64"),
-            )
+            matches!(name, "wine" | "wine64")
+                || name
+                    .strip_suffix("-preloader")
+                    .is_some_and(|stem| matches!(stem, "wine" | "wine64"))
         })
 }
 
@@ -459,7 +460,11 @@ fn wine_prefix(pid: u32) -> Option<String> {
         .split(|byte| *byte == 0)
         .filter_map(|entry| std::str::from_utf8(entry).ok())
         .find_map(|entry| entry.strip_prefix("WINEPREFIX=").map(str::to_owned))
-        .or_else(|| std::env::var("HOME").ok().map(|home| format!("{home}/.wine")))
+        .or_else(|| {
+            std::env::var("HOME")
+                .ok()
+                .map(|home| format!("{home}/.wine"))
+        })
 }
 
 #[cfg(test)]

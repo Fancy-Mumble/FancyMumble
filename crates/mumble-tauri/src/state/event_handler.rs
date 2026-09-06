@@ -114,12 +114,15 @@ pub(crate) fn show_desktop_notification(
         let _ = app;
         let title = title.to_owned();
         let body = body.to_owned();
-        let _ = tauri::async_runtime::spawn_blocking(move || {
+        // Dropped, not awaited: `spawn_blocking` runs the closure to
+        // completion whether or not anyone holds the handle, and nothing here
+        // has a use for its result.
+        drop(tauri::async_runtime::spawn_blocking(move || {
             let _ = notify_rust::Notification::new()
                 .summary(&title)
                 .body(&body)
                 .show();
-        });
+        }));
     }
     #[cfg(not(target_os = "linux"))]
     {
