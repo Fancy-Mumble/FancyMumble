@@ -259,6 +259,10 @@ pub(crate) fn read_chat_background(
         return Err(format!("no stored background named {file_name}"));
     };
     let bytes = std::fs::read(&path).map_err(|e| format!("read {file_name}: {e}"))?;
+    // The store keeps whatever it was given; what the webview gets is a copy
+    // it can play - see [`crate::media::wallpaper_clip`] for the two ways an
+    // ordinary MP4 fails there.
+    let bytes = crate::media::wallpaper_clip::prepare(&bytes).unwrap_or(bytes);
     Ok(tauri::ipc::Response::new(bytes))
 }
 

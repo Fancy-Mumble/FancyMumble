@@ -288,6 +288,15 @@ export default function SettingsPage() {
   const [outputDevices, setOutputDevices] = useState<AudioDevice[]>([]);
   const [audioSettings, setAudioSettings] = useState<AudioSettings>(DEFAULT_AUDIO);
   const initialLoadDone = useRef(false);
+  /**
+   * Whether the personalization record was actually read.
+   *
+   * The auto-save below writes the whole record, so a read that fell over must
+   * not be followed by one: the state is still the defaults, and saving those
+   * would throw away the chat wallpaper (and every other setting) the moment
+   * the user touched anything on this page.
+   */
+  const personalizationLoaded = useRef(false);
 
   // Preferences
   const [userMode, setUserMode] = useState<UserMode>("normal");
@@ -307,6 +316,7 @@ export default function SettingsPage() {
   const richPresenceStatus = useAppStore((state) => state.richPresenceStatus);
   const [autoReconnect, setAutoReconnect] = useState(false);
   const [autoUpdateOnStartup, setAutoUpdateOnStartup] = useState(false);
+  const [betaUpdates, setBetaUpdates] = useState(false);
   const [persistDms, setPersistDms] = useState(false);
   const [showDisconnectWarning, setShowDisconnectWarning] = useState(true);
   const [logLevel, setLogLevel] = useState<string>("info");
@@ -385,6 +395,7 @@ export default function SettingsPage() {
         setRichPresenceArtwork(prefs.richPresenceArtwork ?? true);
         setAutoReconnect(prefs.autoReconnect ?? false);
         setAutoUpdateOnStartup(prefs.autoUpdateOnStartup ?? false);
+        setBetaUpdates(prefs.betaUpdates ?? false);
         setPersistDms(prefs.persistDms ?? false);
         setShowDisconnectWarning(prefs.showDisconnectWarning ?? true);
         setLogLevel(prefs.logLevel ?? (prefs.debugLogging ? "debug" : "info"));
@@ -441,8 +452,9 @@ export default function SettingsPage() {
       try {
         const pz = await loadPersonalization();
         setPersonalization(pz);
+        personalizationLoaded.current = true;
       } catch {
-        /* keep defaults */
+        /* keep defaults, and do not write them back - see the ref */
       }
 
       try {
@@ -500,7 +512,7 @@ export default function SettingsPage() {
   // -- Auto-save personalization (debounced) -----------------------
 
   useEffect(() => {
-    if (!initialLoadDone.current) return;
+    if (!initialLoadDone.current || !personalizationLoaded.current) return;
     const timer = setTimeout(async () => {
       try {
         await savePersonalization(personalization);
@@ -750,6 +762,15 @@ export default function SettingsPage() {
       const next = !prev;
       updatePreferences({ autoUpdateOnStartup: next });
       invoke("updater_set_auto_install", { enabled: next }).catch(() => undefined);
+      return next;
+    });
+  }, []);
+
+  const handleToggleBetaUpdates = useCallback(() => {
+    setBetaUpdates((prev) => {
+      const next = !prev;
+      updatePreferences({ betaUpdates: next });
+      invoke("updater_set_beta_channel", { enabled: next }).catch(() => undefined);
       return next;
     });
   }, []);
@@ -1037,6 +1058,7 @@ export default function SettingsPage() {
             autoZipLogs={autoZipLogs}
             autoReconnect={autoReconnect}
             autoUpdateOnStartup={autoUpdateOnStartup}
+            betaUpdates={betaUpdates}
             persistDms={persistDms}
             showDisconnectWarning={showDisconnectWarning}
             onToggleMode={handleToggleMode}
@@ -1047,6 +1069,7 @@ export default function SettingsPage() {
             onToggleAutoZipLogs={handleToggleAutoZipLogs}
             onToggleAutoReconnect={handleToggleAutoReconnect}
             onToggleAutoUpdate={handleToggleAutoUpdate}
+            onToggleBetaUpdates={handleToggleBetaUpdates}
             onTogglePersistDms={handleTogglePersistDms}
             onToggleDisconnectWarning={handleToggleDisconnectWarning}
             onToggleDeveloperMode={handleToggleDeveloperMode}

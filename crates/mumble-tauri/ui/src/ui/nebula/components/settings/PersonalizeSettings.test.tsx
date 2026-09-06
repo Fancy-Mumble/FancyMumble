@@ -347,6 +347,63 @@ describe("the wallpaper shelf", () => {
   });
 });
 
+describe("a setting changed while a wallpaper is set", () => {
+  /** A clip whose bake is stale, which is what has the page repair it on open. */
+  const withStaleClip = () =>
+    savePersonalization({
+      ...PERSONALIZATION_DEFAULTS,
+      chatBgOriginal: "bgstore:image-poster.jpg",
+      chatBgVideo: "video-a.mp4",
+      chatBgRecents: [
+        {
+          original: "bgstore:image-poster.jpg",
+          blurred: null,
+          video: "video-a.mp4",
+          videoBaked: null,
+          videoBakedSigma: 0,
+          videoBakedDim: 0,
+        },
+      ],
+    });
+
+  it("leaves the wallpaper alone when the page's repair cannot even start", async () => {
+    await withStaleClip();
+    writes.length = 0;
+    // The repair runs on open for exactly this record; whatever it does, the
+    // wallpaper it was repairing must still be there afterwards.
+    bakeBackgroundVideo.mockRejectedValue(new Error("not H.264"));
+
+    await renderPage();
+    fireEvent.click(screen.getAllByRole("radio")[1]);
+
+    await waitFor(() => expect(writes.length).toBe(1));
+    const last = writes.at(-1) as Record<string, unknown>;
+    expect(last.chatBgOriginal).toBe("bgstore:image-poster.jpg");
+    expect(last.chatBgVideo).toBe("video-a.mp4");
+    expect(shelfOf(last)).toEqual(["bgstore:image-poster.jpg"]);
+  });
+
+  it("keeps the files a finished bake put on the record", async () => {
+    await withStaleClip();
+    writes.length = 0;
+    bakeBackgroundVideo.mockResolvedValue("video-baked-new.mp4");
+    processBackgroundImage.mockResolvedValue("processed-new.jpg");
+
+    await renderPage();
+    // The bake lands while the page is open, and its prune deletes the files
+    // the record named before it - so a later write must not name those again.
+    await waitFor(() => expect(writes.length).toBe(1));
+    expect((writes.at(-1) as Record<string, unknown>).chatBgVideoBaked).toBe("video-baked-new.mp4");
+
+    fireEvent.click(screen.getAllByRole("radio")[1]);
+
+    await waitFor(() => expect(writes.length).toBe(2));
+    const last = writes.at(-1) as Record<string, unknown>;
+    expect(last.chatBgVideoBaked).toBe("video-baked-new.mp4");
+    expect(last.chatBgBlurred).toBe("bgstore:processed-new.jpg");
+  });
+});
+
 describe("the focus point", () => {
   it("is offered only once there is a picture to frame", async () => {
     await renderPage();
@@ -461,7 +518,7 @@ describe("failure honesty", () => {
 });
 
 describe("a channel viewer this pack does not draw", () => {
-  it("says whose choice it is showing when Standard left \"classic\" behind", async () => {
+  it('says whose choice it is showing when Standard left "classic" behind', async () => {
     await savePersonalization({ ...PERSONALIZATION_DEFAULTS, channelViewerStyle: "classic" });
     await renderPage();
     // Not "Flat, as you chose" - the user chose Classic, and the page has to
@@ -489,4 +546,3 @@ describe("a channel viewer this pack does not draw", () => {
     }
   });
 });
-
