@@ -131,6 +131,26 @@ impl ClientHandle {
         })
     }
 
+    /// A handle attached to no event loop.
+    ///
+    /// Test instrumentation for code that submits audio: commands go
+    /// nowhere, and whatever [`send_audio`](Self::send_audio) submits lands
+    /// on the returned receiver instead of a socket.
+    #[doc(hidden)]
+    pub fn detached() -> (Self, mpsc::Receiver<UdpMessage>) {
+        let (cmd_tx, _) = mpsc::channel(1);
+        let (force_tcp_tx, _) = watch::channel(false);
+        let (audio_out_tx, audio_out_rx) = mpsc::channel(256);
+        (
+            Self {
+                cmd_tx,
+                force_tcp_tx,
+                audio_out_tx,
+            },
+            audio_out_rx,
+        )
+    }
+
     /// Toggle force-TCP mode at runtime.
     ///
     /// When set to `true`, any active UDP transport is torn down and audio

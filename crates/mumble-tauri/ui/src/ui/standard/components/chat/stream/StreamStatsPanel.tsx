@@ -76,12 +76,11 @@ export interface VideoTrackStats {
 export type PlayoutState =
   | {
       readonly kind: "buffer";
-      /** Depth the buffer is aiming for right now. */
-      readonly targetMs: number;
-      /** Depth it relaxes back to on a clean network. */
-      readonly floorMs: number;
       /** What is queued at this instant. */
       readonly bufferedMs: number;
+      /** The depth the buffer is capped at; past it the oldest audio is
+       *  dropped rather than played late. */
+      readonly capMs: number;
     }
   /** This viewer holds no playout buffer at all (the native video path
    *  paints on arrival), so there is no delay to report - which is a
@@ -364,8 +363,7 @@ function playoutValue(sample: StatsSample, interval: IntervalStats): string {
   const playout = sample.playout;
   if (playout?.kind === "buffer") {
     return (
-      `target ${fmt(playout.targetMs)} ms · floor ${fmt(playout.floorMs)} ms` +
-      ` · queued ${fmt(playout.bufferedMs)} ms`
+      `queued ${fmt(playout.bufferedMs)} ms · cap ${fmt(playout.capMs)} ms`
     );
   }
   if (playout?.kind === "none") return "n/a - this viewer holds no playout buffer";

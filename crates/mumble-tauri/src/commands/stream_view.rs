@@ -520,23 +520,19 @@ pub(crate) async fn request_stream_keyframe(_session: u32) -> Result<(), String>
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct StreamAudioPlayout {
-    /// Depth the jitter buffer is currently aiming for, milliseconds.
-    target_ms: u32,
-    /// Depth it relaxes back down to on a clean network, milliseconds.
-    floor_ms: u32,
     /// What is queued right now, milliseconds.
     buffered_ms: u32,
+    /// The depth the buffer is capped at, milliseconds. Past it the mixer
+    /// drops the oldest samples rather than let playout drift.
+    cap_ms: u32,
 }
 
 /// Read the playout state of one watched broadcast's audio.
 #[tauri::command]
 pub(crate) async fn native_stream_audio_playout(session: u32) -> Option<StreamAudioPlayout> {
-    crate::audio::stream_audio::playout(session).map(|(target_ms, floor_ms, buffered_ms)| {
-        StreamAudioPlayout {
-            target_ms,
-            floor_ms,
-            buffered_ms,
-        }
+    crate::audio::stream_audio::playout(session).map(|(buffered_ms, cap_ms)| StreamAudioPlayout {
+        buffered_ms,
+        cap_ms,
     })
 }
 

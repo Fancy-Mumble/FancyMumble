@@ -494,14 +494,13 @@ function createNativeStatsSampler(session: number): StatsSampler {
       if (!rust && !metrics) return null;
 
       // What the shared desktop audio is doing, if the broadcast carries
-      // any: the voice mixer plays it out, so it has a real jitter buffer
+      // any: the voice mixer plays it out, so it has a real playout buffer
       // to report where the video path has none.
       let playout: PlayoutState = { kind: "none" };
       try {
         const audio = await invoke<{
-          targetMs: number;
-          floorMs: number;
           bufferedMs: number;
+          capMs: number;
         } | null>("native_stream_audio_playout", { session });
         if (audio) playout = { kind: "buffer", ...audio };
       } catch {
