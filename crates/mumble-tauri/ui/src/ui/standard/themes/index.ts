@@ -10,7 +10,8 @@ export type ThemeId =
   | "midnight-pretenders"
   | "ply"
   | "guardbase"
-  | "aurora";
+  | "aurora"
+  | "nimbus";
 
 export interface ThemeOption {
   readonly id: ThemeId;
@@ -35,6 +36,7 @@ export const THEMES: readonly ThemeOption[] = [
   { id: "ply", label: "Ply", swatches: ["#F2F2F2", "#0D0D0D", "#93ABBF", "#F20505"] },
   { id: "guardbase", label: "Guardbase", swatches: ["#0E1826", "#012340", "#2E4959", "#687E8C"] },
   { id: "aurora", label: "Aurora", swatches: ["#0a0f1c", "#1c2740", "#7fb0ff", "#b795ff"] },
+  { id: "nimbus", label: "Nimbus", swatches: ["#eaf2f9", "#1b2f4a", "#0d86ec", "#ffd53d"] },
 ];
 
 export const DEFAULT_THEME: ThemeId = "dark";
