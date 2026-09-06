@@ -285,6 +285,7 @@
     "expired": "Ce lien de téléchargement a expiré et n'est plus disponible.",
     "expiredPrefix": "expiré le",
     "expiresPrefix": "expire le",
+    "expiresIn": "{{duration}} restantes",
     "saving": "Enregistrement…",
     "saved": "Enregistré",
     "save": "Enregistrer",
@@ -292,7 +293,8 @@
     "downloadTooltip": "Télécharger sur le disque",
     "open": "Ouvrir",
     "openTooltip": "Ouvrir dans le navigateur",
-    "viewInLightbox": "Voir {{filename}} en lightbox"
+    "viewInLightbox": "Voir {{filename}} en lightbox",
+    "playClip": "Lire {{filename}}"
   },
   "fileShare": {
     "title": "Partager le fichier",
@@ -443,6 +445,11 @@
     "drawOn": "Dessiner à l'écran",
     "drawOff": "Arrêter de dessiner",
     "showOverlayTooltip": "Afficher la surcouche sur le bureau (clics traversants, exclue de la capture)",
+    "showOverlayTooltipCaptured": "Afficher la superposition (traverse les clics ; elle apparaît dans votre partage d'écran)",
+    "overlayUnsupportedWayland": "Ce compositeur Wayland ne peut pas fixer une superposition à un écran. Lancez l'application avec GDK_BACKEND=x11 pour l'utiliser.",
+    "overlayUnsupportedWaylandWindow": "Wayland n'indique pas où se trouve une fenêtre partagée. Partagez un écran entier pour utiliser la superposition.",
+    "overlayUnsupportedPlatform": "La superposition de bureau n'est pas disponible sur cette plateforme.",
+    "overlayUnavailable": "La superposition de bureau n'est pas disponible pour le moment.",
     "showOverlay": "Afficher la surcouche sur le bureau",
     "hideOverlay": "Masquer la surcouche",
     "popout": "Ouvrir dans une fenêtre séparée",
@@ -1157,5 +1164,8 @@
     "statusDelivered": "Livré",
     "statusCancelled": "Annulé",
     "statusRejected": "Rejeté"
+  },
+  "media": {
+    "showAll": "Afficher les {{count}} éléments"
   }
 }
