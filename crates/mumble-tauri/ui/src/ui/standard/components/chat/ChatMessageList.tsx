@@ -1,5 +1,5 @@
 import { CheckIcon, CopyIcon, QuoteIcon } from "../../icons";
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatMessage, TimeFormat, UserEntry } from "@core/types";
 import MessageItem, { MessageAvatar } from "./message/MessageItem";
@@ -13,6 +13,10 @@ import { rememberGalleryRefs, getGalleryRef, stripGalleryMarker } from "@core/ut
 import type { PollPayload } from "./poll/PollCreator";
 import { isMobile } from "@core/utils/platform";
 import styles from "./ChatView.module.css";
+
+/** How many tiles a batch of photographs draws before the rest go behind
+ *  a "+n". Four is a block the eye takes in at once. */
+const GALLERY_TILE_CAP = 4;
 
 interface ChatMessageListProps {
   /** The messages to mount - the tail-anchored render window, not
@@ -112,6 +116,11 @@ export default function ChatMessageList({
   alwaysShowMessageActions = false,
 }: ChatMessageListProps) {
   const { t } = useTranslation("chat");
+  /** Batches whose "+n" tile has been clicked, by gallery id. */
+  const [expandedGalleries, setExpandedGalleries] = useState<ReadonlySet<string>>(() => new Set());
+  const showWholeGallery = useCallback((groupId: string) => {
+    setExpandedGalleries((open) => new Set(open).add(groupId));
+  }, []);
   // Resolve own cert hash for hash-based reaction tracking.
   const ownHash = ownSession !== null ? userBySession.get(ownSession)?.hash : undefined;
 
@@ -346,39 +355,66 @@ export default function ChatMessageList({
               // `total`, with placeholders for images that haven't arrived yet
               // (prevents layout shift as the batch uploads). Odd totals give
               // the first image a full-width banner so the grid stays balanced.
+              //
+              // A block stops at four. Nine photographs sent together used to
+              // be nine tiles - most of a screen of somebody else's afternoon
+              // between two lines of conversation - and the ninth is one click
+              // away instead. The cap is off the *drawn* count, so a batch
+              // still uploading shows what it has and grows into the same
+              // four slots rather than reflowing when the fifth lands.
               const { total } = getGalleryRef(run[0].message_id)!;
               const byIndex = new Map<number, ChatMessage>();
               for (const m of run) {
                 const r = getGalleryRef(m.message_id);
                 if (r) byIndex.set(r.index, m);
               }
+              const open = expandedGalleries.has(ref.groupId);
+              const drawn = open ? total : Math.min(total, GALLERY_TILE_CAP);
+              const behind = total - drawn;
               const tiles: React.ReactNode[] = [];
-              for (let i = 0; i < total; i += 1) {
+              for (let i = 0; i < drawn; i += 1) {
                 const m = byIndex.get(i);
+                const tile = m ? (
+                  renderMessage(
+                    m,
+                    startIdx + runStart + i,
+                    runStart + i,
+                    group,
+                    senderUser,
+                    senderAvatar,
+                    true,
+                  )
+                ) : (
+                  <div
+                    key={`ph-${ref.groupId}-${i}`}
+                    className={styles.galleryTilePlaceholder}
+                    aria-hidden="true"
+                  />
+                );
+                // The last drawn tile says how much it is standing in for,
+                // and hands over the rest when it is clicked.
                 tiles.push(
-                  m ? (
-                    renderMessage(
-                      m,
-                      startIdx + runStart + i,
-                      runStart + i,
-                      group,
-                      senderUser,
-                      senderAvatar,
-                      true,
-                    )
+                  behind > 0 && i === drawn - 1 ? (
+                    <div key={`more-${ref.groupId}-${i}`} className={styles.galleryOverflowTile}>
+                      {tile}
+                      <button
+                        type="button"
+                        className={styles.galleryOverflowScrim}
+                        onClick={() => showWholeGallery(ref.groupId)}
+                        aria-label={t("media.showAll", { count: total })}
+                      >
+                        +{behind}
+                      </button>
+                    </div>
                   ) : (
-                    <div
-                      key={`ph-${ref.groupId}-${i}`}
-                      className={styles.galleryTilePlaceholder}
-                      aria-hidden="true"
-                    />
+                    tile
                   ),
                 );
               }
               nodes.push(
                 <div
                   key={`gal-${ref.groupId}-${runStart}`}
-                  className={`${styles.galleryGrid} ${total % 2 === 1 ? styles.galleryGridOdd : ""}`}
+                  className={`${styles.galleryGrid} ${drawn % 2 === 1 ? styles.galleryGridOdd : ""}`}
                 >
                   {tiles}
                 </div>,

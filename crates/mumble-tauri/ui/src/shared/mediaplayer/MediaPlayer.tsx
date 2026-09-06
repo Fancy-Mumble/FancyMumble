@@ -13,7 +13,7 @@
  * file is usually the whole fix, because the link it was reading has aged out
  * rather than the file having gone.
  */
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import styles from "./MediaPlayer.module.css";
 
 export interface MediaPlayerProps {
@@ -25,6 +25,22 @@ export interface MediaPlayerProps {
   /** Asked for a fresh source when a load fails. Without one, Retry reloads. */
   readonly onRetry?: () => void;
   readonly className?: string;
+  /**
+   * The name to show on the picture, video only.
+   *
+   * What a clip is called used to live in a row underneath it, which meant a
+   * message carrying one was a picture plus a strip of grey the same width -
+   * and six of them was six strips. Given here it rides a scrim across the top
+   * of the frame instead, appearing with the transport and leaving on the same
+   * beat, so a clip at rest is only the clip.
+   */
+  readonly title?: string;
+  /** Chips beside the title - size, reach, expiry. Video only. */
+  readonly meta?: ReactNode;
+  /** Buttons at the right of that scrim, typically Save. Video only. */
+  readonly actions?: ReactNode;
+  /** Start playing as soon as the element can. Used when a poster was clicked. */
+  readonly autoPlay?: boolean;
 }
 
 /** The speeds the rate button steps through. */
@@ -47,7 +63,17 @@ export function fractionAt(clientX: number, rail: DOMRect): number {
   return Math.min(1, Math.max(0, (clientX - rail.left) / rail.width));
 }
 
-export default function MediaPlayer({ src, kind, label, onRetry, className }: MediaPlayerProps) {
+export default function MediaPlayer({
+  src,
+  kind,
+  label,
+  onRetry,
+  className,
+  title,
+  meta,
+  actions,
+  autoPlay = false,
+}: MediaPlayerProps) {
   const media = useRef<HTMLVideoElement & HTMLAudioElement>(null);
   const scrubber = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -59,18 +85,18 @@ export default function MediaPlayer({ src, kind, label, onRetry, className }: Me
   const [rate, setRate] = useState(1);
   const [failed, setFailed] = useState(false);
   /** True until the first frame is worth showing a play button over. */
-  const [untouched, setUntouched] = useState(true);
+  const [untouched, setUntouched] = useState(!autoPlay);
   const titleId = useId();
 
   // A new source is a new attempt: whatever failed last time is no longer
   // what this player is showing.
   useEffect(() => {
     setFailed(false);
-    setUntouched(true);
+    setUntouched(!autoPlay);
     setCurrent(0);
     setDuration(0);
     setBuffered(0);
-  }, [src]);
+  }, [src, autoPlay]);
 
   const withMedia = useCallback((act: (element: HTMLMediaElement) => void) => {
     const element = media.current;
@@ -266,6 +292,25 @@ export default function MediaPlayer({ src, kind, label, onRetry, className }: Me
     </div>
   );
 
+  /**
+   * The scrim across the top: what this clip is called, what it costs, and
+   * what can be done with it. Drawn only when the caller gave it something to
+   * say, and it comes and goes with the transport below so the two read as one
+   * set of controls laid over the picture rather than two strips of chrome.
+   */
+  const hasTopBar = kind === "video" && (title != null || meta != null || actions != null);
+  const topBar = hasTopBar ? (
+    <div className={`${styles.topBar} ${playing ? "" : styles.controlsPinned}`}>
+      {title != null && (
+        <span className={styles.titleChip} title={title}>
+          {title}
+        </span>
+      )}
+      {meta}
+      {actions != null && <div className={styles.topActions}>{actions}</div>}
+    </div>
+  ) : null;
+
   const failure = (
     <div className={`${styles.failure} ${kind === "audio" ? styles.failureInline : ""}`}>
       <span className={styles.failureText}>
@@ -289,13 +334,24 @@ export default function MediaPlayer({ src, kind, label, onRetry, className }: Me
           src={src}
           preload="metadata"
           playsInline
+          autoPlay={autoPlay}
           onClick={togglePlay}
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
           onTimeUpdate={onTimeUpdate}
           onProgress={onTimeUpdate}
           onDurationChange={() => withMedia((element) => setDuration(element.duration || 0))}
-          onLoadedMetadata={() => withMedia((element) => setDuration(element.duration || 0))}
+          onLoadedMetadata={() =>
+            withMedia((element) => {
+              setDuration(element.duration || 0);
+              // Metadata alone leaves the element a black rectangle. Seeking a
+              // hair in decodes a frame, so a player whose autoplay the
+              // platform declined still shows the clip rather than a void.
+              if (element.currentTime === 0 && Number.isFinite(element.duration)) {
+                element.currentTime = Math.min(0.1, element.duration / 2);
+              }
+            })
+          }
           onError={() => setFailed(true)}
         >
           <track kind="captions" />
@@ -326,6 +382,7 @@ export default function MediaPlayer({ src, kind, label, onRetry, className }: Me
           </span>
         </button>
       )}
+      {kind === "video" && !failed && topBar}
       {kind === "video" && !failed && bar}
       {kind === "video" && failed && failure}
     </div>

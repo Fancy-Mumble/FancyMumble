@@ -790,7 +790,7 @@
 .galleryGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 3px;
+  gap: 4px;
   width: min(420px, 70vw);
   max-width: 100%;
   /* `visible` (not `hidden`) so a tile's hover action bar / reaction picker can
@@ -806,8 +806,42 @@
 
 /* Odd total: the first image spans the full width so the rest tile evenly. */
 .galleryGridOdd > .galleryTileWrap:first-child,
+.galleryGridOdd > .galleryOverflowTile:first-child,
 .galleryGridOdd > .galleryTilePlaceholder:first-child {
   grid-column: 1 / -1;
+}
+
+/* ---- The tile standing in for the rest of a batch ----
+   A block stops at four; the fourth says how many more there are and hands
+   them over when it is clicked. */
+
+.galleryOverflowTile {
+  position: relative;
+  min-width: 0;
+}
+
+/* The count is the whole tile, so it is as easy to hit as its neighbours
+   rather than being a target in one corner of one of them. */
+.galleryOverflowScrim {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: rgba(9, 11, 17, 0.6);
+  color: #f2f4f9;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.galleryOverflowScrim:hover {
+  background: rgba(9, 11, 17, 0.72);
 }
 
 .galleryTileWrap {
@@ -830,6 +864,8 @@
 .galleryTileWrap .bubble {
   width: 100%;
   padding: 0;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 /* Placeholder tiles for images still uploading - keep the grid from

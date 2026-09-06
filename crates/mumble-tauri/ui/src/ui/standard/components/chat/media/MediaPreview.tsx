@@ -72,6 +72,9 @@ const frozenFrames = new Map<string, string>();
  */
 const revealedSpoilers = new Set<string>();
 
+/** How many tiles a gallery draws before the rest go behind a "+n". */
+const GALLERY_TILE_CAP = 4;
+
 // --- Helpers ------------------------------------------------------
 
 // --- HTML Sanitiser (whitelist-based) ------------------------------
@@ -518,6 +521,16 @@ function ImageThumb({
   );
 }
 
+/** `m:ss` (or `h:mm:ss`), for how long a clip runs. */
+function clipLength(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "";
+  const whole = Math.floor(seconds);
+  const s = String(whole % 60).padStart(2, "0");
+  const m = Math.floor(whole / 60) % 60;
+  const h = Math.floor(whole / 3600);
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+}
+
 function VideoThumb({
   item,
   id,
@@ -531,6 +544,7 @@ function VideoThumb({
 }>) {
   const { t } = useTranslation("chat");
   const [revealed, setRevealed] = useState(() => revealedSpoilers.has(id));
+  const [seconds, setSeconds] = useState<number | null>(null);
   const blurred = item.spoiler && !revealed;
   const handleClick = useCallback(() => {
     if (blurred) {
@@ -540,6 +554,7 @@ function VideoThumb({
     }
     onOpen();
   }, [blurred, id, onOpen]);
+  const length = blurred || seconds == null ? "" : clipLength(seconds);
   return (
     <button
       type="button"
@@ -552,9 +567,34 @@ function VideoThumb({
         src={item.src}
         muted
         preload="metadata"
+        onLoadedMetadata={(event) => {
+          const element = event.currentTarget;
+          setSeconds(element.duration);
+          // Metadata alone leaves the element a black rectangle on every
+          // engine we ship on - the frame the thumbnail is *of* is only
+          // decoded once something seeks to it.
+          if (element.currentTime === 0 && Number.isFinite(element.duration)) {
+            element.currentTime = Math.min(0.1, element.duration / 2);
+          }
+        }}
       />
-      {blurred ? <SpoilerBadge /> : <span className={styles.playBadge}>&#x25B6;</span>}
-      {timeLabel && <span className={styles.timeChip}>{timeLabel}</span>}
+      {/* A clip reads as a clip from the disc in the middle of it, the way it
+          does everywhere else. The small corner triangle it used to wear was
+          the same size and weight as the timestamp opposite, so a video and a
+          still were the same object until one of them was clicked. */}
+      {blurred ? (
+        <SpoilerBadge />
+      ) : (
+        <span className={styles.playDisc} aria-hidden="true">
+          &#x25B6;
+        </span>
+      )}
+      {length && <span className={styles.lengthChip}>{length}</span>}
+      {/* Bottom-right belongs to the clip's length; the message clock steps
+          aside to the other corner rather than sitting on top of it. */}
+      {timeLabel && (
+        <span className={`${styles.timeChip} ${length ? styles.timeChipLeft : ""}`}>{timeLabel}</span>
+      )}
     </button>
   );
 }
@@ -644,7 +684,19 @@ export default function MediaPreview({
   // Memoised: extractMedia parses + sanitises the HTML, so re-running it on
   // every render (e.g. hover/timestamp state changes) wasted CPU per message.
   const { cleaned, media } = useMemo(() => extractMedia(html), [html]);
+  const { t } = useTranslation("chat");
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  /**
+   * How many tiles a block shows before it stops.
+   *
+   * Nine photographs used to be nine tiles, which is most of a screen of
+   * somebody else's afternoon between two lines of conversation. Four is a
+   * block the eye takes in at once, and the ninth is one click away.
+   */
+  const [expanded, setExpanded] = useState(false);
+  const capped = !tile && !expanded && media.length > GALLERY_TILE_CAP;
+  const shown = capped ? media.slice(0, GALLERY_TILE_CAP) : media;
+  const hidden = capped ? media.length - GALLERY_TILE_CAP : 0;
   const contentRef = useRef<HTMLSpanElement>(null);
   // Render (and lazy-load) KaTeX for any math in the mounted message body.
   useEffect(() => {
@@ -673,47 +725,68 @@ export default function MediaPreview({
         </ExternalLinkGuard>
       )}
 
-      {/* Media thumbnails. Two or more become a tiled gallery grid. */}
+      {/* Media thumbnails. Two or more become a tiled gallery grid, four of
+          them at most until the viewer asks for the rest. */}
       {media.length > 0 && (
         <div
           className={[
             compact ? styles.mediaGridCompact : styles.mediaGrid,
             tile ? styles.tileSingle : "",
             !tile && media.length >= 2 ? styles.gallery : "",
-            !tile && media.length === 3 ? styles.galleryCount3 : "",
+            !tile && shown.length === 3 ? styles.galleryCount3 : "",
           ]
             .filter(Boolean)
             .join(" ")}
         >
-          {media.map((item, i) => {
+          {shown.map((item, i) => {
             const key = `${messageId}-${i}`;
             // Show the timestamp chip only once per message: on the last tile
             // of a gallery (or the sole tile of a single-media message).
-            const itemTimeLabel = i === media.length - 1 ? timeLabel : undefined;
-            switch (item.kind) {
-              case "gif":
-                return <GifThumb key={key} item={item} id={key} timeLabel={itemTimeLabel} />;
-              case "image":
-                return (
-                  <ImageThumb
-                    key={key}
-                    id={key}
-                    item={item}
-                    onOpen={() => openLightbox(i)}
-                    timeLabel={itemTimeLabel}
-                  />
-                );
-              case "video":
-                return (
-                  <VideoThumb
-                    key={key}
-                    id={key}
-                    item={item}
-                    onOpen={() => openLightbox(i)}
-                    timeLabel={itemTimeLabel}
-                  />
-                );
+            const itemTimeLabel = i === shown.length - 1 ? timeLabel : undefined;
+            const thumb = (() => {
+              switch (item.kind) {
+                case "gif":
+                  return <GifThumb key={key} item={item} id={key} timeLabel={itemTimeLabel} />;
+                case "image":
+                  return (
+                    <ImageThumb
+                      key={key}
+                      id={key}
+                      item={item}
+                      onOpen={() => openLightbox(i)}
+                      timeLabel={itemTimeLabel}
+                    />
+                  );
+                case "video":
+                  return (
+                    <VideoThumb
+                      key={key}
+                      id={key}
+                      item={item}
+                      onOpen={() => openLightbox(i)}
+                      timeLabel={itemTimeLabel}
+                    />
+                  );
+              }
+            })();
+            // The last of a truncated block says how much it is standing in
+            // for, and clicking it hands over the rest.
+            if (hidden > 0 && i === shown.length - 1) {
+              return (
+                <div key={key} className={styles.overflowTile}>
+                  {thumb}
+                  <button
+                    type="button"
+                    className={styles.overflowScrim}
+                    onClick={() => setExpanded(true)}
+                    aria-label={t("media.showAll", { count: media.length })}
+                  >
+                    +{hidden}
+                  </button>
+                </div>
+              );
             }
+            return thumb;
           })}
         </div>
       )}

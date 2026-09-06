@@ -60,11 +60,69 @@
   line-height: 1;
 }
 
+/* ---- The scrim across the top ----
+ *
+ * Name, facts and Save. These used to be a row underneath the picture, which
+ * made every clip a picture plus a strip of grey the same width - and a
+ * message carrying six of them six strips. Here they ride the frame and fade
+ * with the transport, so a clip at rest is only the clip. */
+
+.topBar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  /* Tall enough to carry the chips clear of a bright first frame, matching
+     the transport's scrim at the other edge. */
+  padding: 0.5rem 0.625rem 1.5rem;
+  background: linear-gradient(
+    to bottom,
+    rgba(4, 6, 11, 0.9) 0%,
+    rgba(4, 6, 11, 0.75) 45%,
+    rgba(4, 6, 11, 0) 100%
+  );
+  opacity: 0;
+  transition: opacity 140ms ease;
+  line-height: 1.4;
+  /* The scrim itself is decoration; only the chips and buttons on it take
+     the pointer, so clicking the picture still plays or pauses it. */
+  pointer-events: none;
+}
+
+.topBar > * {
+  pointer-events: auto;
+}
+
+.titleChip {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 60%;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid rgba(238, 242, 248, 0.14);
+  border-radius: 0.5rem;
+  background: rgba(10, 13, 20, 0.6);
+  color: var(--mp-on-surface);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 /* Shown on hover, and whenever nothing is playing: a paused video with no
    visible controls looks like a still image, and there is no hover at all on
    a touch screen. */
 .player:hover .controls,
 .player:focus-within .controls,
+.player:hover .topBar,
+.player:focus-within .topBar,
 .controlsPinned {
   opacity: 1;
 }
@@ -315,6 +373,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .controls,
+  .topBar,
   .rail,
   .knob,
   .volumeRail {

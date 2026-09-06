@@ -212,12 +212,15 @@ describe("MessageRow", () => {
 
     // Every picture arrives, the caption stays prose, and every tile keeps its
     // own flag - the flag is the button that copies that file's link, and the
-    // links differ per file even when the reach was chosen once.
+    // links differ per file even when the reach was chosen once. On a tile the
+    // flag is the button alone: the block says "public link" once above them,
+    // so three copies of the words would be clutter and no information.
     expect(
       screen.getAllByRole("img").filter((img) => img.getAttribute("alt")?.endsWith(".jpg")),
     ).toHaveLength(3);
     expect(screen.getByText("the ferry ones")).toBeTruthy();
-    expect(screen.getAllByText("Public link")).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: "Copy link" })).toHaveLength(3);
+    expect(screen.queryByText("Public link")).toBeNull();
   });
 
   it("opens the lightbox on an image in the body", () => {
