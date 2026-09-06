@@ -10,8 +10,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::state::types::{PluginDataPayload, PluginRegistryEntryPayload};
 use crate::state::AppState;
+use crate::state::types::{PluginDataPayload, PluginRegistryEntryPayload};
 
 const DEFAULT_MARKETPLACE_BASE: &str = "https://plugins.fancy-mumble.com/api/v1";
 
@@ -195,10 +195,10 @@ fn resolve_marketplace_base(override_url: Option<&str>) -> String {
     // marketplace base is fixed (env var or the hard-coded default) so a
     // caller cannot redirect marketplace traffic to an arbitrary host.
     #[cfg(debug_assertions)]
-    if let Some(base) = override_url {
-        if !base.is_empty() {
-            return base.trim_end_matches('/').to_owned();
-        }
+    if let Some(base) = override_url
+        && !base.is_empty()
+    {
+        return base.trim_end_matches('/').to_owned();
     }
     #[cfg(not(debug_assertions))]
     let _ = override_url;

@@ -22,8 +22,8 @@
 
 use tracing::debug;
 
-use super::noise_gate::NoiseGate;
 use super::AudioFilter;
+use super::noise_gate::NoiseGate;
 use crate::audio::sample::AudioFrame;
 use crate::error::Result;
 
@@ -133,8 +133,8 @@ impl AudioFilter for GatedDenoiser {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
     use crate::audio::filter::noise_gate::NoiseGateConfig;
@@ -192,7 +192,10 @@ mod tests {
             calls: Arc::clone(&calls),
             enabled: true,
         };
-        (GatedDenoiser::new(Box::new(denoiser), gate(hold_frames)), calls)
+        (
+            GatedDenoiser::new(Box::new(denoiser), gate(hold_frames)),
+            calls,
+        )
     }
 
     #[test]

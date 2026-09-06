@@ -450,10 +450,10 @@ impl ServerState {
             }
         }
 
-        if let (Some(channel_id), Some(perms)) = (pq.channel_id, pq.permissions) {
-            if let Some(ch) = self.channels.get_mut(&channel_id) {
-                ch.permissions = Some(perms);
-            }
+        if let (Some(channel_id), Some(perms)) = (pq.channel_id, pq.permissions)
+            && let Some(ch) = self.channels.get_mut(&channel_id)
+        {
+            ch.permissions = Some(perms);
         }
     }
 
@@ -494,10 +494,10 @@ impl ServerState {
 
         // `ServerSync.permissions` contains the permission bitmask for the
         // root channel (channel 0).  Store it on the channel if known.
-        if let Some(perms) = sync.permissions {
-            if let Some(ch) = self.channels.get_mut(&0) {
-                ch.permissions = Some(perms as u32);
-            }
+        if let Some(perms) = sync.permissions
+            && let Some(ch) = self.channels.get_mut(&0)
+        {
+            ch.permissions = Some(perms as u32);
         }
     }
 

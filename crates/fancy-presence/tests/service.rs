@@ -37,7 +37,7 @@ use std::time::Duration;
 use fancy_presence::codec::{self, IpcFrame, Opcode};
 use fancy_presence::transport::{self, Listener};
 use fancy_presence::{BridgeState, PresenceConfig, PresenceEvent, PresenceService};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::time::timeout;
 
 /// Serialises tests: `XDG_RUNTIME_DIR` and the slots beneath it are global.
@@ -211,7 +211,16 @@ async fn await_bridge_state(service: &PresenceService, expected: BridgeState) {
 /// Redirect the IPC directory at a fresh temporary directory.
 fn redirect_runtime_dir() -> tempfile::TempDir {
     let dir = tempfile::tempdir().expect("tempdir");
-    std::env::set_var("XDG_RUNTIME_DIR", dir.path());
+    // Unsafe since Rust 2024. Every caller holds `TEST_LOCK`, so no other test
+    // is reading the environment while this writes it.
+    #[allow(
+        unsafe_code,
+        reason = "std::env::set_var is unsafe in Rust 2024; TEST_LOCK serialises \
+                  every test that touches the environment"
+    )]
+    unsafe {
+        std::env::set_var("XDG_RUNTIME_DIR", dir.path())
+    };
     dir
 }
 

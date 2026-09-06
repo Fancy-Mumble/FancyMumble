@@ -26,7 +26,7 @@ use cros_codecs::libva;
 use cros_codecs::video_frame::{ReadMapping, VideoFrame, WriteMapping};
 use cros_codecs::{BlockingMode, Fourcc, FrameLayout, PlaneLayout, Resolution};
 
-use crate::encode::{scaled_bitrate, EncodeSettings, EncodedFrame};
+use crate::encode::{EncodeSettings, EncodedFrame, scaled_bitrate};
 
 /// H.264 level with enough MB/s + frame-size headroom for the stream.
 fn pick_level(width: u32, height: u32, fps: f32) -> Level {
@@ -489,7 +489,8 @@ impl VaapiEncoder {
 /// are left alone, so this is a no-op on drivers without the bug.
 /// Whether an SPS NAL sits somewhere in the Annex B stream.
 fn has_sps(data: &[u8]) -> bool {
-    data.windows(4).any(|w| w[..3] == [0, 0, 1] && w[3] & 0x1f == 7)
+    data.windows(4)
+        .any(|w| w[..3] == [0, 0, 1] && w[3] & 0x1f == 7)
 }
 
 /// Give every SPS in `data` a VUI bitstream restriction saying
@@ -875,7 +876,10 @@ mod tests {
         let before = stream.clone();
         ensure_reorder_hint(&mut stream);
         assert_ne!(stream, before, "the SPS should have been rewritten");
-        assert!(stream.ends_with(&[0x65, 0x88, 0x84, 0x80]), "the slice must survive untouched");
+        assert!(
+            stream.ends_with(&[0x65, 0x88, 0x84, 0x80]),
+            "the slice must survive untouched"
+        );
 
         let mut cursor = std::io::Cursor::new(stream.as_slice());
         let nalu = Nalu::<NaluHeader>::next(&mut cursor).unwrap();

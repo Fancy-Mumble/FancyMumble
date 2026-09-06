@@ -17,7 +17,7 @@ mod files;
 mod forum;
 mod link_preview;
 mod livery;
-pub(crate) use livery::{data_uri, to_snapshot, LiverySnapshot};
+pub(crate) use livery::{LiverySnapshot, data_uri, to_snapshot};
 mod onboarding;
 mod operator_ticket;
 mod pchat;

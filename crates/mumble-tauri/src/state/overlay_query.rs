@@ -5,8 +5,8 @@
 //! webview with no store behind it, so it asks once when it opens and then
 //! follows the same events every other window gets.
 
-use super::types::{OverlayMessage, OverlayOccupant, OverlaySnapshot, VoiceState, VoiceStateLabel};
 use super::AppState;
+use super::types::{OverlayMessage, OverlayOccupant, OverlaySnapshot, VoiceState, VoiceStateLabel};
 
 /// How long a message stays "the last message" as far as the overlay's
 /// activity policy is concerned. Longer than the fade in the page itself, so
@@ -86,10 +86,9 @@ impl AppState {
                 if self
                     .local_talking
                     .load(std::sync::atomic::Ordering::Relaxed)
+                    && let Some(own) = own_session
                 {
-                    if let Some(own) = own_session {
-                        talking.push(own);
-                    }
+                    talking.push(own);
                 }
                 talking
             },

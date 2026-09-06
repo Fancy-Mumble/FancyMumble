@@ -129,10 +129,10 @@
     reason = "concise failure reporting in tests"
 )]
 
+use mumble_protocol::audio::filter::AudioFilter;
 use mumble_protocol::audio::filter::denoiser::{
     DenoiserConfig, DenoiserParams, NoiseSuppressionAlgorithm, SpectralDenoiser,
 };
-use mumble_protocol::audio::filter::AudioFilter;
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 
 const SAMPLE: &str = "tests/samples/811749__bethanyw__memories-poem-2.mp3";

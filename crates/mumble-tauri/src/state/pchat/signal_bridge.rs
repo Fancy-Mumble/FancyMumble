@@ -10,11 +10,11 @@ use mumble_protocol::command;
 use mumble_protocol::persistent::protocol::signal_v1::SignalBridge;
 use mumble_protocol::persistent::wire::{MessageEnvelope, WireCodec};
 
-use crate::state::local_cache::CachedMessage;
 use crate::state::SharedState;
+use crate::state::local_cache::CachedMessage;
 
-use super::persistence::load_signal_state;
 use super::PchatState;
+use super::persistence::load_signal_state;
 
 // -- Bridge loading ---------------------------------------------------
 
@@ -269,7 +269,7 @@ pub(crate) fn send_signal_distribution(shared: &Arc<Mutex<SharedState>>, channel
     let Some(handle) = handle else { return };
 
     let _dist_task = tokio::spawn(async move {
-        if let Err(e) = handle
+        match handle
             .send(command::SendPchatSenderKeyDistribution {
                 channel_id,
                 distribution,
@@ -277,9 +277,12 @@ pub(crate) fn send_signal_distribution(shared: &Arc<Mutex<SharedState>>, channel
             })
             .await
         {
-            warn!(channel_id, "failed to send signal distribution: {e}");
-        } else {
-            debug!(channel_id, "sent signal sender key distribution");
+            Err(e) => {
+                warn!(channel_id, "failed to send signal distribution: {e}");
+            }
+            _ => {
+                debug!(channel_id, "sent signal sender key distribution");
+            }
         }
     });
 }
@@ -376,15 +379,14 @@ fn retry_stashed_signal_envelopes(
     let mut replaced_count = 0usize;
     for (message_id, channel_id, sender_name, body) in &decoded {
         let mid: &str = message_id;
-        if let Some(msgs) = state.msgs.by_channel.get_mut(channel_id) {
-            if let Some(msg) = msgs
+        if let Some(msgs) = state.msgs.by_channel.get_mut(channel_id)
+            && let Some(msg) = msgs
                 .iter_mut()
                 .find(|m| m.message_id.as_deref() == Some(mid))
-            {
-                msg.body.clone_from(body);
-                msg.sender_name.clone_from(sender_name);
-                replaced_count += 1;
-            }
+        {
+            msg.body.clone_from(body);
+            msg.sender_name.clone_from(sender_name);
+            replaced_count += 1;
         }
     }
 

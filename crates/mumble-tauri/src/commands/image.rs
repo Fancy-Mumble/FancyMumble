@@ -11,7 +11,7 @@
 #[tauri::command]
 pub(crate) async fn blur_image(image_base64: String, sigma: f32) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
-        use base64::{engine::general_purpose::STANDARD, Engine};
+        use base64::{Engine, engine::general_purpose::STANDARD};
         use fancy_utils::image_filter::{BlurFilter, ImageFilter};
 
         let image_bytes = STANDARD
@@ -47,8 +47,8 @@ pub(crate) async fn process_background(
     dim: f32,
 ) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
-        use base64::{engine::general_purpose::STANDARD, Engine};
-        use fancy_utils::image_filter::{process_pipeline, BlurFilter, DimFilter, ImageTransform};
+        use base64::{Engine, engine::general_purpose::STANDARD};
+        use fancy_utils::image_filter::{BlurFilter, DimFilter, ImageTransform, process_pipeline};
 
         let image_bytes = STANDARD
             .decode(&image_base64)
@@ -96,7 +96,7 @@ pub(crate) async fn write_attachment_bytes(
     data_base64: String,
     mime_type: String,
 ) -> Result<String, String> {
-    use base64::{engine::general_purpose::STANDARD, Engine};
+    use base64::{Engine, engine::general_purpose::STANDARD};
 
     let bytes = STANDARD
         .decode(&data_base64)

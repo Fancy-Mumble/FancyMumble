@@ -6,8 +6,8 @@ use std::time::Instant;
 use x25519_dalek::PublicKey as X25519PublicKey;
 use zeroize::ZeroizeOnDrop;
 
-use crate::persistent::encryption::epoch_fingerprint;
 use crate::persistent::PchatProtocol;
+use crate::persistent::encryption::epoch_fingerprint;
 
 // ---- Constants ------------------------------------------------------
 

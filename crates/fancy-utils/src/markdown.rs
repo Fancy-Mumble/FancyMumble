@@ -137,14 +137,14 @@ fn inline_span_at(b: &[u8], i: usize) -> Option<Span> {
     }
 
     // `inline code`
-    if b[i] == b'`' {
-        if let Some(end) = find_byte(b, b'`', i + 1) {
-            return Some(Span {
-                start: i,
-                len: end + 1 - i,
-                flags: flags::CODE,
-            });
-        }
+    if b[i] == b'`'
+        && let Some(end) = find_byte(b, b'`', i + 1)
+    {
+        return Some(Span {
+            start: i,
+            len: end + 1 - i,
+            flags: flags::CODE,
+        });
     }
 
     // The paired two-byte delimiters, each closed by the same two bytes.
@@ -154,28 +154,30 @@ fn inline_span_at(b: &[u8], i: usize) -> Option<Span> {
         (b"__", flags::UNDERLINE),
         (b"~~", flags::STRIKE),
     ] {
-        if b[i] == delim[0] && i + 1 < b.len() && b[i + 1] == delim[1] {
-            if let Some(end) = find_sub(b, delim, i + 2) {
-                return Some(Span {
-                    start: i,
-                    len: end + 2 - i,
-                    flags: flag,
-                });
-            }
+        if b[i] == delim[0]
+            && i + 1 < b.len()
+            && b[i + 1] == delim[1]
+            && let Some(end) = find_sub(b, delim, i + 2)
+        {
+            return Some(Span {
+                start: i,
+                len: end + 2 - i,
+                flags: flag,
+            });
         }
     }
 
     // *italic*, a single star - and its closer must not be a `**` either.
-    if b[i] == b'*' && (i + 1 >= b.len() || b[i + 1] != b'*') {
-        if let Some(end) = find_byte(b, b'*', i + 1) {
-            if end + 1 >= b.len() || b[end + 1] != b'*' {
-                return Some(Span {
-                    start: i,
-                    len: end + 1 - i,
-                    flags: flags::ITALIC,
-                });
-            }
-        }
+    if b[i] == b'*'
+        && (i + 1 >= b.len() || b[i + 1] != b'*')
+        && let Some(end) = find_byte(b, b'*', i + 1)
+        && (end + 1 >= b.len() || b[end + 1] != b'*')
+    {
+        return Some(Span {
+            start: i,
+            len: end + 1 - i,
+            flags: flags::ITALIC,
+        });
     }
 
     None
@@ -311,17 +313,18 @@ fn extract_fences(text: &str, stash: &mut Vec<String>) -> String {
             {
                 k += 1;
             }
-            if k < b.len() && b[k] == b'\n' {
-                if let Some(close) = find_sub(b, b"```", k + 1) {
-                    let lang = &text[i + 3..k];
-                    let body = text[k + 1..close]
-                        .strip_suffix('\n')
-                        .unwrap_or(&text[k + 1..close]);
-                    stash.push(fence_html(lang, body));
-                    out.push_str(&format!("\u{0}FENCE{}\u{0}", stash.len() - 1));
-                    i = close + 3;
-                    continue;
-                }
+            if k < b.len()
+                && b[k] == b'\n'
+                && let Some(close) = find_sub(b, b"```", k + 1)
+            {
+                let lang = &text[i + 3..k];
+                let body = text[k + 1..close]
+                    .strip_suffix('\n')
+                    .unwrap_or(&text[k + 1..close]);
+                stash.push(fence_html(lang, body));
+                out.push_str(&format!("\u{0}FENCE{}\u{0}", stash.len() - 1));
+                i = close + 3;
+                continue;
             }
         }
         push_next_char(&mut out, text, &mut i);
@@ -345,15 +348,14 @@ fn stash_inline_code(text: &str, stash: &mut Vec<String>) -> String {
     let mut out = String::with_capacity(text.len());
     let mut i = 0usize;
     while i < b.len() {
-        if b[i] == b'`' {
-            if let Some(end) = find_byte(b, b'`', i + 1) {
-                if end > i + 1 {
-                    stash.push(format!("<code>{}</code>", &text[i + 1..end]));
-                    out.push_str(&format!("\u{0}ICODE{}\u{0}", stash.len() - 1));
-                    i = end + 1;
-                    continue;
-                }
-            }
+        if b[i] == b'`'
+            && let Some(end) = find_byte(b, b'`', i + 1)
+            && end > i + 1
+        {
+            stash.push(format!("<code>{}</code>", &text[i + 1..end]));
+            out.push_str(&format!("\u{0}ICODE{}\u{0}", stash.len() - 1));
+            i = end + 1;
+            continue;
         }
         push_next_char(&mut out, text, &mut i);
     }
@@ -366,15 +368,16 @@ fn stash_display_math(text: &str, stash: &mut Vec<String>) -> String {
     let mut out = String::with_capacity(text.len());
     let mut i = 0usize;
     while i < b.len() {
-        if b[i] == b'$' && i + 1 < b.len() && b[i + 1] == b'$' {
-            if let Some(end) = find_sub(b, b"$$", i + 2) {
-                if end > i + 2 {
-                    stash.push(text[i + 2..end].trim().to_owned());
-                    out.push_str(&format!("\u{0}MATH_BLOCK{}\u{0}", stash.len() - 1));
-                    i = end + 2;
-                    continue;
-                }
-            }
+        if b[i] == b'$'
+            && i + 1 < b.len()
+            && b[i + 1] == b'$'
+            && let Some(end) = find_sub(b, b"$$", i + 2)
+            && end > i + 2
+        {
+            stash.push(text[i + 2..end].trim().to_owned());
+            out.push_str(&format!("\u{0}MATH_BLOCK{}\u{0}", stash.len() - 1));
+            i = end + 2;
+            continue;
         }
         push_next_char(&mut out, text, &mut i);
     }
@@ -444,16 +447,16 @@ fn replace_pair(text: &str, delim: &str, open: &str, close: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut i = 0usize;
     while i < b.len() {
-        if text[i..].starts_with(delim) {
-            if let Some(end) = find_sub(b, d, i + d.len()) {
-                let inner = &text[i + d.len()..end];
-                if !inner.is_empty() && !inner.contains('\n') {
-                    out.push_str(open);
-                    out.push_str(inner);
-                    out.push_str(close);
-                    i = end + d.len();
-                    continue;
-                }
+        if text[i..].starts_with(delim)
+            && let Some(end) = find_sub(b, d, i + d.len())
+        {
+            let inner = &text[i + d.len()..end];
+            if !inner.is_empty() && !inner.contains('\n') {
+                out.push_str(open);
+                out.push_str(inner);
+                out.push_str(close);
+                i = end + d.len();
+                continue;
             }
         }
         push_next_char(&mut out, text, &mut i);
@@ -598,13 +601,14 @@ fn replace_pre_code(text: &str) -> String {
                 lang = &text[lang_start..k];
                 k += 1;
             }
-            if k < b.len() && b[k] == b'>' {
-                if let Some(close) = find_ci(text, "</code></pre>", k + 1) {
-                    let body = &text[k + 1..close];
-                    out.push_str(&format!("```{lang}\n{body}\n```"));
-                    i = close + "</code></pre>".len();
-                    continue;
-                }
+            if k < b.len()
+                && b[k] == b'>'
+                && let Some(close) = find_ci(text, "</code></pre>", k + 1)
+            {
+                let body = &text[k + 1..close];
+                out.push_str(&format!("```{lang}\n{body}\n```"));
+                i = close + "</code></pre>".len();
+                continue;
             }
         }
         push_next_char(&mut out, text, &mut i);
@@ -656,14 +660,14 @@ fn replace_simple_tag(text: &str, tag: &str, open: &str, close: &str) -> String 
     while i < b.len() {
         if starts_with_ci(text, i, &open_tag) {
             let inner_start = i + open_tag.len();
-            if let Some(lt) = find_byte(b, b'<', inner_start) {
-                if starts_with_ci(text, lt, &close_tag) {
-                    out.push_str(open);
-                    out.push_str(&text[inner_start..lt]);
-                    out.push_str(close);
-                    i = lt + close_tag.len();
-                    continue;
-                }
+            if let Some(lt) = find_byte(b, b'<', inner_start)
+                && starts_with_ci(text, lt, &close_tag)
+            {
+                out.push_str(open);
+                out.push_str(&text[inner_start..lt]);
+                out.push_str(close);
+                i = lt + close_tag.len();
+                continue;
             }
         }
         push_next_char(&mut out, text, &mut i);
@@ -723,11 +727,11 @@ fn strip_comments(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut i = 0usize;
     while i < text.len() {
-        if text[i..].starts_with("<!--") {
-            if let Some(end) = text[i + 4..].find("-->") {
-                i += 4 + end + 3;
-                continue;
-            }
+        if text[i..].starts_with("<!--")
+            && let Some(end) = text[i + 4..].find("-->")
+        {
+            i += 4 + end + 3;
+            continue;
         }
         push_next_char(&mut out, text, &mut i);
     }

@@ -24,10 +24,10 @@
 //! currently-selected backend at runtime so callers never need `cfg`
 //! gates or backend checks.
 
+use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 #[cfg(not(target_os = "android"))]
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 use mumble_protocol::audio::capture::AudioCapture;
 use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes};
@@ -306,8 +306,8 @@ mod tests {
     #[cfg(not(target_os = "android"))]
     fn double_capture_hw_shares_one_device() {
         use mumble_protocol::audio::capture::AudioCapture;
-        use std::sync::atomic::AtomicU32;
         use std::sync::Arc;
+        use std::sync::atomic::AtomicU32;
 
         let v1 = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
         let v2 = Arc::new(AtomicU32::new(1.0_f32.to_bits()));

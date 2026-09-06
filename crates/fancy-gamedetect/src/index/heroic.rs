@@ -10,7 +10,7 @@
 //! Windows has none of this: there the Epic launcher's own manifests are
 //! authoritative and `epic.rs` reads them instead.
 
-use super::{normalise_dir, InstalledGame, Store};
+use super::{InstalledGame, Store, normalise_dir};
 
 /// Add every Heroic-installed game on this machine.
 pub(super) fn collect(out: &mut Vec<InstalledGame>) {

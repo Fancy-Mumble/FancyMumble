@@ -438,10 +438,10 @@ impl SignalBridge {
 
 impl Drop for SignalBridge {
     fn drop(&mut self) {
-        if let Ok(ctx) = self.ctx.lock() {
-            if !(*ctx).is_null() {
-                unsafe { (self.syms.destroy)(*ctx) };
-            }
+        if let Ok(ctx) = self.ctx.lock()
+            && !(*ctx).is_null()
+        {
+            unsafe { (self.syms.destroy)(*ctx) };
         }
     }
 }

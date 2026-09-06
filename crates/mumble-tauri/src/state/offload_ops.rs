@@ -21,10 +21,10 @@ impl AppState {
     }
 
     pub(super) fn offload_base_dir(&self) -> Result<std::path::PathBuf, String> {
-        if let Some(app) = self.app_handle() {
-            if let Ok(cache) = app.path().cache_dir() {
-                return Ok(cache);
-            }
+        if let Some(app) = self.app_handle()
+            && let Ok(cache) = app.path().cache_dir()
+        {
+            return Ok(cache);
         }
         Ok(std::env::temp_dir())
     }
@@ -117,18 +117,18 @@ impl AppState {
     }
 
     pub fn clear_offloaded(&self) {
-        if let Ok(mut state) = self.inner.snapshot().lock() {
-            if let Some(store) = state.offload_store.as_mut() {
-                store.clear();
-            }
+        if let Ok(mut state) = self.inner.snapshot().lock()
+            && let Some(store) = state.offload_store.as_mut()
+        {
+            store.clear();
         }
     }
 
     pub fn shutdown_offload_store(&self) {
-        if let Ok(mut state) = self.inner.snapshot().lock() {
-            if let Some(store) = state.offload_store.as_mut() {
-                store.cleanup_dir();
-            }
+        if let Ok(mut state) = self.inner.snapshot().lock()
+            && let Some(store) = state.offload_store.as_mut()
+        {
+            store.cleanup_dir();
         }
     }
 }
@@ -275,13 +275,12 @@ pub(super) fn set_message_body(
         }
         _ => None,
     };
-    if let Some(messages) = messages {
-        if let Some(msg) = messages
+    if let Some(messages) = messages
+        && let Some(msg) = messages
             .iter_mut()
             .find(|m| m.message_id.as_deref() == Some(message_id))
-        {
-            msg.body = body;
-        }
+    {
+        msg.body = body;
     }
 }
 
@@ -395,9 +394,11 @@ mod tests {
         // it was dealt with when *it* arrived.
         state.selected_channel = Some(9);
         offload_newest_if_idle(&mut state, 4);
-        assert!(state.msgs.by_channel[&4][1]
-            .body
-            .starts_with("<!-- OFFLOADED:new:"));
+        assert!(
+            state.msgs.by_channel[&4][1]
+                .body
+                .starts_with("<!-- OFFLOADED:new:")
+        );
         assert_eq!(state.msgs.by_channel[&4][0].body, heavy);
     }
 
@@ -419,9 +420,11 @@ mod tests {
             .insert(2, vec![message("opened", &heavy)]);
 
         assert_eq!(offload_idle_channels(&mut state, Some(2)), 1);
-        assert!(state.msgs.by_channel[&1][0]
-            .body
-            .starts_with("<!-- OFFLOADED:left:"));
+        assert!(
+            state.msgs.by_channel[&1][0]
+                .body
+                .starts_with("<!-- OFFLOADED:left:")
+        );
         assert_eq!(state.msgs.by_channel[&2][0].body, heavy);
     }
 

@@ -337,11 +337,11 @@ impl Connection {
             self.suppress_ready = false;
             return true;
         }
-        if let Some(nonce) = self.suppress_nonce.as_deref() {
-            if value.get("nonce").and_then(serde_json::Value::as_str) == Some(nonce) {
-                self.suppress_nonce = None;
-                return true;
-            }
+        if let Some(nonce) = self.suppress_nonce.as_deref()
+            && value.get("nonce").and_then(serde_json::Value::as_str) == Some(nonce)
+        {
+            self.suppress_nonce = None;
+            return true;
         }
         false
     }

@@ -14,10 +14,10 @@ impl HandleMessage for mumble_tcp::PermissionDenied {
         );
 
         if let Some(ch_id) = self.channel_id {
-            if let Ok(mut state) = ctx.shared.lock() {
-                if state.permanently_listened.remove(&ch_id) {
-                    info!(ch_id, "reverted permanent listen due to permission denied");
-                }
+            if let Ok(mut state) = ctx.shared.lock()
+                && state.permanently_listened.remove(&ch_id)
+            {
+                info!(ch_id, "reverted permanent listen due to permission denied");
             }
             ctx.emit("listen-denied", ListenDeniedPayload { channel_id: ch_id });
             ctx.emit("channel-denied", ChannelDeniedPayload { channel_id: ch_id });

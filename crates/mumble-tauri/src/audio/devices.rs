@@ -379,10 +379,10 @@ mod linux_alsa {
         }
         raw.into_iter()
             .map(|mut r| {
-                if counts.get(&r.name).copied().unwrap_or(0) > 1 {
-                    if let Some((_, card, _)) = r.driver.as_deref().and_then(parse) {
-                        r.name = format!("{} ({card})", r.name);
-                    }
+                if counts.get(&r.name).copied().unwrap_or(0) > 1
+                    && let Some((_, card, _)) = r.driver.as_deref().and_then(parse)
+                {
+                    r.name = format!("{} ({card})", r.name);
                 }
                 r
             })

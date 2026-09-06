@@ -4,8 +4,8 @@ use std::collections::HashMap;
 
 use tauri::Emitter;
 
-use crate::state::types::{DmUnreadPayload, UnreadPayload};
 use crate::state::AppState;
+use crate::state::types::{DmUnreadPayload, UnreadPayload};
 
 impl AppState {
     pub fn unread_counts(&self) -> HashMap<u32, u32> {

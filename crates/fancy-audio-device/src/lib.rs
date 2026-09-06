@@ -18,12 +18,12 @@ mod playback;
 pub mod wasapi;
 
 pub use capture::CpalCapture;
-pub use playback::{batch_drain_speakers, CpalMixingPlayback};
+pub use playback::{CpalMixingPlayback, batch_drain_speakers};
 #[cfg(target_os = "windows")]
-pub use wasapi::{capture_device_users, WasapiCapture};
+pub use wasapi::{WasapiCapture, capture_device_users};
 
 // The `MixingPlayback` trait and `soft_clip` helper live in `mumble-protocol`
 // (no cpal dependency) so every backend - cpal, rodio, oboe - shares one
 // interface.  Re-exported here for convenience so callers that only pull in
 // this crate still have them in scope.
-pub use mumble_protocol::audio::playback::{soft_clip, MixingPlayback};
+pub use mumble_protocol::audio::playback::{MixingPlayback, soft_clip};

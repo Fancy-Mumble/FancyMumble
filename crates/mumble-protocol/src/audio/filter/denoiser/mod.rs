@@ -41,7 +41,7 @@ mod spectral_subtraction;
 #[cfg(feature = "deepfilternet-denoiser")]
 use self::deepfilter::DeepFilterBackend;
 use self::omlsa::OmlsaBackend;
-pub use self::params::{algorithm_param_specs, DenoiserParamSpec, DenoiserParams};
+pub use self::params::{DenoiserParamSpec, DenoiserParams, algorithm_param_specs};
 #[cfg(feature = "rnnoise-denoiser")]
 use self::rnnoise::RnnoiseBackend;
 use self::spectral_subtraction::SpectralSubtractionBackend;

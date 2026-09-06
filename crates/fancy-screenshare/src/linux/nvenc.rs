@@ -30,10 +30,10 @@
               layout contract pinned by compile-time size assertions"
 )]
 
-use std::ffi::{c_char, c_void, CStr};
+use std::ffi::{CStr, c_char, c_void};
 use std::sync::OnceLock;
 
-use crate::encode::{scaled_bitrate, EncodeSettings, EncodedFrame};
+use crate::encode::{EncodeSettings, EncodedFrame, scaled_bitrate};
 
 // ─── constants (nvEncodeAPI.h, SDK 12.1) ───────────────────────────────────
 
@@ -434,7 +434,7 @@ fn load_libs() -> Result<NvLibs, String> {
     /// Resolve one symbol and copy the function pointer out (the library
     /// handle outlives it inside `NvLibs`).
     macro_rules! sym {
-        ($lib:expr, $name:literal, $ty:ty) => {{
+        ($lib:expr_2021, $name:literal, $ty:ty) => {{
             // SAFETY: the symbol's C signature matches `$ty` per the
             // driver headers this module transcribes.
             let s: libloading::Symbol<'_, $ty> = unsafe { $lib.get($name) }

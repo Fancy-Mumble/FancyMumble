@@ -6,7 +6,7 @@
 //! holds it. Both are Valve's `KeyValues` text format, of which we need only
 //! the "a quoted key followed by a quoted value" case.
 
-use super::{normalise_dir, InstalledGame, Store};
+use super::{InstalledGame, Store, normalise_dir};
 
 /// Add every Steam game on this machine.
 pub(super) fn collect(out: &mut Vec<InstalledGame>) {
@@ -19,8 +19,8 @@ pub(super) fn collect(out: &mut Vec<InstalledGame>) {
 /// Where Steam itself is installed.
 #[cfg(windows)]
 fn steam_root() -> Option<String> {
-    use winreg::enums::HKEY_CURRENT_USER;
     use winreg::RegKey;
+    use winreg::enums::HKEY_CURRENT_USER;
 
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let key = hkcu.open_subkey("Software\\Valve\\Steam").ok()?;

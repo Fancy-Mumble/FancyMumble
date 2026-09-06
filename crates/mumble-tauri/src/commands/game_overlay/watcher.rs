@@ -18,7 +18,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use fancy_gamedetect::{Detector, ProbeNote, Verdict};
 use tauri::{AppHandle, Emitter, Manager};
 
-use super::{window, GameOverlayEvent, HiddenReason, OverlayMode, WindowRect};
+use super::{GameOverlayEvent, HiddenReason, OverlayMode, WindowRect, window};
 use crate::state::AppState;
 
 /// How often the foreground window is probed. Fast enough that the overlay
@@ -135,18 +135,19 @@ async fn tick(app: &AppHandle, detector: &mut Detector, lp: &mut Loop, own_pid: 
     };
 
     // Ask once about anything that looks like a game but did not clear the bar.
-    if let Some(a) = &assessment {
-        if a.verdict == Verdict::Probably && !lp.asked.contains(&a.exe_path) {
-            let _inserted = lp.asked.insert(a.exe_path.clone());
-            let _ = app.emit(
-                super::ASK_EVENT,
-                super::GameOverlayAsk {
-                    exe_path: a.exe_path.clone(),
-                    name: a.title.clone().unwrap_or_else(|| a.exe_stem.clone()),
-                    score: a.score,
-                },
-            );
-        }
+    if let Some(a) = &assessment
+        && a.verdict == Verdict::Probably
+        && !lp.asked.contains(&a.exe_path)
+    {
+        let _inserted = lp.asked.insert(a.exe_path.clone());
+        let _ = app.emit(
+            super::ASK_EVENT,
+            super::GameOverlayAsk {
+                exe_path: a.exe_path.clone(),
+                name: a.title.clone().unwrap_or_else(|| a.exe_stem.clone()),
+                score: a.score,
+            },
+        );
     }
 
     let now_ms = SystemTime::now()

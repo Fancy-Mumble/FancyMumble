@@ -6,8 +6,8 @@ use mumble_protocol::command;
 use mumble_protocol::proto::mumble_tcp;
 use serde::Deserialize;
 
-use super::types::DeleteAckResult;
 use super::AppState;
+use super::types::DeleteAckResult;
 
 /// Parameters for a single drawing-stroke packet sent to the server.
 ///

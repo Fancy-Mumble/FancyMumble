@@ -8,8 +8,8 @@ use crate::error::{Error, Result};
 use crate::persistent::encryption;
 use crate::persistent::wire::PchatKeyAnnounce;
 
-use super::types::{PeerKeyRecord, ALGORITHM_VERSION};
 use super::KeyManager;
+use super::types::{ALGORITHM_VERSION, PeerKeyRecord};
 
 impl KeyManager {
     // ---- Peer key management ----------------------------------------
@@ -70,10 +70,10 @@ impl KeyManager {
             })?;
 
         // Anti-rollback check
-        if let Some(existing) = self.peer_keys.get(&announce.cert_hash) {
-            if announce.timestamp <= existing.highest_announce_ts {
-                return Ok(false); // silently discard stale announcement
-            }
+        if let Some(existing) = self.peer_keys.get(&announce.cert_hash)
+            && announce.timestamp <= existing.highest_announce_ts
+        {
+            return Ok(false); // silently discard stale announcement
         }
 
         let dh_bytes: [u8; 32] = announce.identity_public[..32]
@@ -129,9 +129,9 @@ impl KeyManager {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
+    use super::super::KeyManager;
     use super::super::identity::SeedIdentity;
     use super::super::types::ALGORITHM_VERSION;
-    use super::super::KeyManager;
 
     fn make_key_manager() -> KeyManager {
         let identity = SeedIdentity::from_seed(&[0xAA; 32]).unwrap();

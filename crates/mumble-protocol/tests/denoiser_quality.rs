@@ -86,10 +86,10 @@
     reason = "concise failure reporting in tests"
 )]
 
+use mumble_protocol::audio::filter::AudioFilter;
 use mumble_protocol::audio::filter::denoiser::{
     DenoiserConfig, DenoiserParams, NoiseSuppressionAlgorithm, SpectralDenoiser,
 };
-use mumble_protocol::audio::filter::AudioFilter;
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 
 /// Recorded speech: a spoken poem, already in the tree for the Opus

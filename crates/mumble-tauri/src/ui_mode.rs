@@ -50,10 +50,10 @@ impl UiMode {
 /// resolves the platform config dir for [`APP_IDENTIFIER`] the same way
 /// Tauri's `app_config_dir()` does.
 fn config_dir() -> Option<PathBuf> {
-    if let Ok(dir) = std::env::var(ENV_E2E_DATA_DIR) {
-        if !dir.trim().is_empty() {
-            return Some(PathBuf::from(dir));
-        }
+    if let Ok(dir) = std::env::var(ENV_E2E_DATA_DIR)
+        && !dir.trim().is_empty()
+    {
+        return Some(PathBuf::from(dir));
     }
     #[cfg(target_os = "windows")]
     {

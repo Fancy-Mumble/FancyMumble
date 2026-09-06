@@ -1,11 +1,11 @@
 //! Message encryption and decryption for persistent chat.
 
 use crate::error::{Error, Result};
-use crate::persistent::encryption;
 use crate::persistent::PchatProtocol;
+use crate::persistent::encryption;
 
-use super::types::EncryptedPayload;
 use super::KeyManager;
+use super::types::EncryptedPayload;
 
 impl KeyManager {
     // ---- Encryption / Decryption ------------------------------------
@@ -114,8 +114,8 @@ impl KeyManager {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
-    use super::super::identity::SeedIdentity;
     use super::super::KeyManager;
+    use super::super::identity::SeedIdentity;
     use crate::persistent::{KeyTrustLevel, PchatProtocol};
 
     fn make_key_manager() -> KeyManager {

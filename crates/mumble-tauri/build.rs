@@ -168,7 +168,17 @@ fn build_tauri() {
     // empty `resources` leaves nothing to glob.
     if std::env::var_os("SKIP_SIGNAL_BRIDGE").is_some() {
         println!("cargo:rerun-if-env-changed=SKIP_SIGNAL_BRIDGE");
-        std::env::set_var("TAURI_CONFIG", r#"{"bundle":{"resources":[]}}"#);
+        // Unsafe since Rust 2024: `set_var` races any other thread reading the
+        // environment. Nothing here has spawned one, and cargo reads
+        // `TAURI_CONFIG` only after this script exits.
+        #[allow(
+            unsafe_code,
+            reason = "std::env::set_var is unsafe in Rust 2024; this build script is \
+                      single-threaded and sets it before anything reads it"
+        )]
+        unsafe {
+            std::env::set_var("TAURI_CONFIG", r#"{"bundle":{"resources":[]}}"#);
+        }
     }
 
     let self_updater = std::env::var_os("CARGO_FEATURE_SELF_UPDATER").is_some();
@@ -212,7 +222,9 @@ fn qt6ui_prerequisites() -> Option<(String, String, std::path::PathBuf)> {
         .output()
         .is_ok_and(|o| o.status.success());
     if !has_gnu {
-        println!("cargo:warning=qt6ui skipped: stable-x86_64-pc-windows-gnu toolchain not installed (rustup toolchain install stable-x86_64-pc-windows-gnu)");
+        println!(
+            "cargo:warning=qt6ui skipped: stable-x86_64-pc-windows-gnu toolchain not installed (rustup toolchain install stable-x86_64-pc-windows-gnu)"
+        );
         return None;
     }
     Some((qt, mingw, qmake))
@@ -227,10 +239,10 @@ fn qt6ui_prerequisites() -> Option<(String, String, std::path::PathBuf)> {
 /// endless rebuild loop.
 fn copy_if_changed(src: &std::path::Path, dest: &std::path::Path) -> std::io::Result<bool> {
     let src_bytes = std::fs::read(src)?;
-    if let Ok(existing) = std::fs::read(dest) {
-        if existing == src_bytes {
-            return Ok(false);
-        }
+    if let Ok(existing) = std::fs::read(dest)
+        && existing == src_bytes
+    {
+        return Ok(false);
     }
     std::fs::write(dest, src_bytes)?;
     Ok(true)

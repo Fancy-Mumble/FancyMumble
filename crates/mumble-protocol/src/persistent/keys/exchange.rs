@@ -7,12 +7,12 @@ use ed25519_dalek::Verifier;
 use x25519_dalek::PublicKey as X25519PublicKey;
 
 use crate::error::{Error, Result};
+use crate::persistent::PchatProtocol;
 use crate::persistent::encryption::{self, build_key_exchange_signed_data, epoch_fingerprint};
 use crate::persistent::wire::{PchatKeyExchange, PchatKeyRequest};
-use crate::persistent::PchatProtocol;
 
-use super::types::{ChannelKey, ConsensusCollector, ALGORITHM_VERSION, KEY_EXCHANGE_FRESHNESS_MS};
 use super::KeyManager;
+use super::types::{ALGORITHM_VERSION, ChannelKey, ConsensusCollector, KEY_EXCHANGE_FRESHNESS_MS};
 use crate::persistent::KeyTrustLevel;
 
 fn validate_timestamp_freshness(
@@ -167,7 +167,7 @@ impl KeyManager {
     }
 
     fn check_inline_countersignature(&mut self, exchange: &PchatKeyExchange) {
-        if let (Some(ref countersig), Some(ref countersigner)) =
+        if let (Some(countersig), Some(countersigner)) =
             (&exchange.countersignature, &exchange.countersigner_hash)
         {
             let parent_fp = exchange.parent_fingerprint.as_deref().unwrap_or(&[0u8; 8]);

@@ -11,8 +11,8 @@
 /// Every executable Windows remembers as a game, lowercased.
 #[cfg(windows)]
 pub(super) fn remembered_executables() -> Vec<String> {
-    use winreg::enums::HKEY_CURRENT_USER;
     use winreg::RegKey;
+    use winreg::enums::HKEY_CURRENT_USER;
 
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let Ok(children) = hkcu.open_subkey("System\\GameConfigStore\\Children") else {

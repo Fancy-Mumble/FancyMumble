@@ -48,8 +48,8 @@
 //! pipewire-pulse) [`available`] reports false and the caller keeps the
 //! existing cpal backends.
 
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use alsa::pcm::{Access, Format, HwParams, PCM};
 use alsa::{Direction, ValueOr};

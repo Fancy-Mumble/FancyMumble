@@ -26,15 +26,15 @@
 //! and never cross a thread boundary - so neither trait carries a `Send` bound.
 
 use image::RgbaImage;
+use nokhwa::Camera;
 use nokhwa::pixel_format::RgbAFormat;
 use nokhwa::utils::{
     ApiBackend, CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType,
     Resolution,
 };
-use nokhwa::Camera;
 
 use crate::encode::{EncodeSettings, EncodedFrame, H264Encoder, VideoEncoder};
-use crate::pipeline::{EncodePipeline, FrameScaler, StageTimings, MAX_CAPTURE_FAILURES};
+use crate::pipeline::{EncodePipeline, FrameScaler, MAX_CAPTURE_FAILURES, StageTimings};
 use crate::sources::{CaptureSource, SourceKind};
 
 /// A live webcam frame source: opened once on the capture thread (the OS

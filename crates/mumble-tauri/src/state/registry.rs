@@ -18,8 +18,8 @@ use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 
-use super::sessions::{ServerId, SessionMeta};
 use super::SharedState;
+use super::sessions::{ServerId, SessionMeta};
 
 /// Result of a cross-server user lookup by certificate hash.
 #[derive(Clone, Debug, Serialize)]

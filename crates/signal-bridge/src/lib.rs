@@ -350,7 +350,11 @@ fn validate_ctx_and_out(
     ctx: *mut SignalBridgeCtx,
     out: *mut *mut u8,
     out_len: *mut u32,
-) -> Option<(&'static mut SignalBridgeCtx, &'static mut *mut u8, &'static mut u32)> {
+) -> Option<(
+    &'static mut SignalBridgeCtx,
+    &'static mut *mut u8,
+    &'static mut u32,
+)> {
     if ctx.is_null() || out.is_null() || out_len.is_null() {
         return None;
     }
@@ -361,7 +365,10 @@ fn cstr_to_string(ptr: *const c_char) -> Option<String> {
     if ptr.is_null() {
         return None;
     }
-    unsafe { CStr::from_ptr(ptr) }.to_str().ok().map(String::from)
+    unsafe { CStr::from_ptr(ptr) }
+        .to_str()
+        .ok()
+        .map(String::from)
 }
 
 fn safe_slice(ptr: *const u8, len: u32) -> Option<&'static [u8]> {

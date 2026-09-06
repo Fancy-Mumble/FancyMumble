@@ -1,9 +1,9 @@
 //! Read-only query methods: status, users, channels, messages, server
 //! info, debug stats, and welcome text.
 
+use super::AppState;
 use super::offload::OffloadStore;
 use super::types::*;
-use super::AppState;
 
 impl AppState {
     pub fn status(&self) -> ConnectionStatus {

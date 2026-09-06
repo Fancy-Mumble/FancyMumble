@@ -7,9 +7,9 @@
 
 use std::collections::VecDeque;
 use std::num::NonZero;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, SyncSender, TryRecvError};
-use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
 
@@ -409,12 +409,12 @@ impl RateWatch {
             self.streak.clear();
             return None;
         }
-        if let Some(&first) = self.streak.first() {
-            if ((measured / first) - 1.0).abs() > RATE_CONSISTENCY {
-                // Deviating, but not the same deviation as before:
-                // transient noise, start over with this one.
-                self.streak.clear();
-            }
+        if let Some(&first) = self.streak.first()
+            && ((measured / first) - 1.0).abs() > RATE_CONSISTENCY
+        {
+            // Deviating, but not the same deviation as before:
+            // transient noise, start over with this one.
+            self.streak.clear();
         }
         self.streak.push(measured);
         if self.streak.len() < RATE_STREAK {

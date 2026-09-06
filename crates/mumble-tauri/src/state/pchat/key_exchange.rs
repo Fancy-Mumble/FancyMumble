@@ -9,8 +9,8 @@ use mumble_protocol::command;
 use mumble_protocol::persistent::PchatProtocol;
 use mumble_protocol::proto::mumble_tcp;
 
-use crate::state::types;
 use crate::state::SharedState;
+use crate::state::types;
 
 use super::conversion::{
     proto_to_wire_key_announce, proto_to_wire_key_exchange, proto_to_wire_key_request,
@@ -329,7 +329,7 @@ fn try_accept_key_exchange(
                 .record_key_holder(channel_id, wire_exchange.sender_hash.clone());
 
             if protocol == PchatProtocol::FancyV1FullArchive {
-                if let Some(ref rid) = request_id {
+                if let Some(rid) = request_id {
                     match pchat.key_manager.evaluate_consensus(rid, channel_id, &[]) {
                         Ok((trust, Some(_key))) => {
                             debug!(channel_id, ?trust, "accepted archive key via consensus");
@@ -471,10 +471,13 @@ fn retry_decrypt_pending_messages(
                 limit: Some(50),
                 after_id: None,
             };
-            if let Err(e) = handle.send(command::SendPchatFetch { fetch }).await {
-                warn!(channel_id, "re-fetch after key exchange failed: {e}");
-            } else {
-                debug!(channel_id, "sent pchat re-fetch after key exchange");
+            match handle.send(command::SendPchatFetch { fetch }).await {
+                Err(e) => {
+                    warn!(channel_id, "re-fetch after key exchange failed: {e}");
+                }
+                _ => {
+                    debug!(channel_id, "sent pchat re-fetch after key exchange");
+                }
             }
         });
     }

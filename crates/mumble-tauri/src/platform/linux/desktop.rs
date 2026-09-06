@@ -236,11 +236,11 @@ fn write_icon(data_home: &Path, size: u32, png: &[u8]) {
         return;
     }
 
-    if let Some(dir) = dest.parent() {
-        if let Err(e) = std::fs::create_dir_all(dir) {
-            warn!("Failed to create {}: {e}", dir.display());
-            return;
-        }
+    if let Some(dir) = dest.parent()
+        && let Err(e) = std::fs::create_dir_all(dir)
+    {
+        warn!("Failed to create {}: {e}", dir.display());
+        return;
     }
     match std::fs::write(&dest, png) {
         Ok(()) => info!("Installed app icon: {}", dest.display()),
@@ -332,7 +332,7 @@ pub fn set_gtk_identifiers() {
     )]
     {
         use std::ffi::CString;
-        extern "C" {
+        unsafe extern "C" {
             fn g_set_prgname(prgname: *const std::ffi::c_char);
             fn g_set_application_name(name: *const std::ffi::c_char);
         }

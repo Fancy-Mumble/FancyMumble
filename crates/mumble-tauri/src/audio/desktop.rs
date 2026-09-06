@@ -204,7 +204,9 @@ impl AudioCapture for CpalCapture {
             sample_rate: hw_rate,
             buffer_size: cpal::BufferSize::Default,
         };
-        warn!("cpal capture: opening input at native {hw_rate} Hz, {hw_channels} ch (resampling to 48 kHz)");
+        warn!(
+            "cpal capture: opening input at native {hw_rate} Hz, {hw_channels} ch (resampling to 48 kHz)"
+        );
 
         let mut resampler = StreamResampler::new(f64::from(hw_rate), 48_000.0)
             .map_err(|e| Error::InvalidState(format!("resampler init: {e}")))?;

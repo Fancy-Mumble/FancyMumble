@@ -1,4 +1,4 @@
-﻿//! Fully decoupled audio processing pipeline.
+//! Fully decoupled audio processing pipeline.
 //!
 //! # Architecture
 //!

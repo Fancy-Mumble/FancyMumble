@@ -44,9 +44,14 @@ pub(crate) fn configure_runtime_env() {
     }
 }
 
+#[allow(
+    unsafe_code,
+    reason = "`std::env::set_var` is unsafe in Rust 2024; this runs from `main` \
+              during start-up, before any thread that reads the environment exists"
+)]
 fn set_env_if_unset(key: &str, value: &str) {
     if std::env::var_os(key).is_none() {
-        std::env::set_var(key, value);
+        unsafe { std::env::set_var(key, value) };
     }
 }
 

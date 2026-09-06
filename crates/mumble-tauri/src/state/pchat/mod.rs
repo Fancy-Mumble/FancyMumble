@@ -40,7 +40,7 @@ pub(crate) use persistence::{
 };
 
 // Outbound
-pub(crate) use outbound::{send_fetch, OutboundMessage};
+pub(crate) use outbound::{OutboundMessage, send_fetch};
 
 // Inbound
 pub(crate) use inbound::{
@@ -74,14 +74,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tracing::warn;
 
+use mumble_protocol::persistent::PchatProtocol;
 use mumble_protocol::persistent::keys::{EncryptedPayload, KeyManager, SeedIdentity};
 use mumble_protocol::persistent::protocol::signal_v1::SignalBridge;
 use mumble_protocol::persistent::wire::{MessageEnvelope, MsgPackCodec, WireCodec};
-use mumble_protocol::persistent::PchatProtocol;
 
+use super::SharedState;
 use super::local_cache::{CachedMessage, LocalMessageCache};
 use super::types::{PchatHistoryLoadingPayload, SignalBridgeErrorPayload};
-use super::SharedState;
 
 use settings::MAX_STASHED_ENVELOPES;
 

@@ -178,12 +178,12 @@ impl AudioCapture for SharedCaptureHandle {
         if !self.started {
             return Err(Error::InvalidState("shared capture not started".into()));
         }
-        if let Ok(dead) = self.inner.dead.lock() {
-            if let Some(reason) = dead.as_ref() {
-                return Err(Error::InvalidState(format!(
-                    "capture device lost: {reason}"
-                )));
-            }
+        if let Ok(dead) = self.inner.dead.lock()
+            && let Some(reason) = dead.as_ref()
+        {
+            return Err(Error::InvalidState(format!(
+                "capture device lost: {reason}"
+            )));
         }
         let mut buf = self
             .inner

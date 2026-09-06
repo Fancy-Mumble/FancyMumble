@@ -15,7 +15,7 @@
 use std::collections::VecDeque;
 use std::sync::{Mutex, OnceLock};
 
-use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes, MAX_SPEAKER_BUFFER_SAMPLES};
+use mumble_protocol::audio::mixer::{MAX_SPEAKER_BUFFER_SAMPLES, SpeakerBuffers, SpeakerVolumes};
 
 /// Stream speakers live above every real Mumble session id (the server hands
 /// those out from 0 upward), so a broadcast can never collide with a person.
@@ -94,15 +94,15 @@ pub(crate) fn push(session: u32, stereo: &[f32]) {
 /// Drop `session`'s stream audio (the viewer stopped). Anything still queued
 /// is discarded rather than played out after the picture is gone.
 pub(crate) fn stop(session: u32) {
-    if let Some(buffers) = live_buffers() {
-        if let Ok(mut map) = buffers.lock() {
-            let _removed = map.remove(&speaker_id(session));
-        }
+    if let Some(buffers) = live_buffers()
+        && let Ok(mut map) = buffers.lock()
+    {
+        let _removed = map.remove(&speaker_id(session));
     }
-    if let Some(volumes) = live_volumes() {
-        if let Ok(mut map) = volumes.lock() {
-            let _removed = map.remove(&speaker_id(session));
-        }
+    if let Some(volumes) = live_volumes()
+        && let Ok(mut map) = volumes.lock()
+    {
+        let _removed = map.remove(&speaker_id(session));
     }
 }
 
@@ -129,7 +129,7 @@ pub(crate) fn set_volume(session: u32, volume: f32) {
 
 #[cfg(test)]
 mod tests {
-    use super::{speaker_id, STREAM_SPEAKER_BASE};
+    use super::{STREAM_SPEAKER_BASE, speaker_id};
 
     #[test]
     fn stream_speakers_never_collide_with_real_sessions() {

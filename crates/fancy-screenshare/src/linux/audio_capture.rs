@@ -26,7 +26,8 @@ pub(crate) struct DesktopAudioCapture {
 
 impl std::fmt::Debug for DesktopAudioCapture {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DesktopAudioCapture").finish_non_exhaustive()
+        f.debug_struct("DesktopAudioCapture")
+            .finish_non_exhaustive()
     }
 }
 
@@ -97,7 +98,9 @@ fn run_loop(
     pw::init();
     let mainloop = pw::main_loop::MainLoop::new(None).map_err(|e| format!("pw mainloop: {e}"))?;
     let context = pw::context::Context::new(&mainloop).map_err(|e| format!("pw context: {e}"))?;
-    let core = context.connect(None).map_err(|e| format!("pw connect: {e}"))?;
+    let core = context
+        .connect(None)
+        .map_err(|e| format!("pw connect: {e}"))?;
 
     let loop_weak = mainloop.downgrade();
     let _quit_guard = quit_rx.attach(mainloop.loop_(), move |()| {
@@ -187,13 +190,19 @@ fn register_listener(
             }
         })
         .process(|stream, user| {
-            let Some(mut buffer) = stream.dequeue_buffer() else { return };
+            let Some(mut buffer) = stream.dequeue_buffer() else {
+                return;
+            };
             let datas = buffer.datas_mut();
-            let Some(data) = datas.first_mut() else { return };
+            let Some(data) = datas.first_mut() else {
+                return;
+            };
             let chunk = data.chunk();
             let (offset, size) = (chunk.offset() as usize, chunk.size() as usize);
             let Some(bytes) = data.data() else { return };
-            let Some(bytes) = bytes.get(offset..offset + size) else { return };
+            let Some(bytes) = bytes.get(offset..offset + size) else {
+                return;
+            };
             let channels = (user.format.channels() as usize).max(1);
             let block = to_stereo(bytes, channels);
             if user.tx.try_send(block).is_err() {
@@ -287,7 +296,10 @@ mod tests {
         let _ = player.kill();
         let _ = player.wait();
         assert!(blocks > 0, "the monitor delivered no audio at all");
-        assert!(peak > 0.02, "the monitor stayed silent through the tone (peak {peak})");
+        assert!(
+            peak > 0.02,
+            "the monitor stayed silent through the tone (peak {peak})"
+        );
     }
 
     #[test]
@@ -295,6 +307,9 @@ mod tests {
         let f = |v: &[f32]| v.iter().flat_map(|s| s.to_le_bytes()).collect::<Vec<u8>>();
         assert_eq!(to_stereo(&f(&[0.5, -0.5]), 2), vec![0.5, -0.5]);
         assert_eq!(to_stereo(&f(&[0.25]), 1), vec![0.25, 0.25]);
-        assert_eq!(to_stereo(&f(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]), 6), vec![1.0, 2.0]);
+        assert_eq!(
+            to_stereo(&f(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]), 6),
+            vec![1.0, 2.0]
+        );
     }
 }

@@ -31,9 +31,9 @@
 //!   as [`pipewire_stream::StreamFrame::Dead`] and cleanly ends the
 //!   broadcast.
 
+pub(crate) mod audio_capture;
 pub mod camera_portal;
 mod egl_import;
-pub(crate) mod audio_capture;
 mod egl_modifiers;
 mod nvenc;
 mod pipewire_stream;
@@ -42,9 +42,9 @@ mod vaapi;
 
 use std::time::Instant;
 
-pub use portal::{active_portal_source, set_restore_last_pick, PortalSource};
+pub use portal::{PortalSource, active_portal_source, set_restore_last_pick};
 
-use crate::encode::{scaled_bitrate, EncodeSettings, EncodedFrame, H264Encoder, VideoEncoder};
+use crate::encode::{EncodeSettings, EncodedFrame, H264Encoder, VideoEncoder, scaled_bitrate};
 use crate::pipeline::{EncodePipeline, FrameScaler, StageTimings};
 use crate::sources::SourceKind;
 
@@ -211,9 +211,7 @@ fn probe_encoder(settings: EncodeSettings, preference: EncoderPreference) -> Enc
     // that hands out tiled NVIDIA buffers) a source of corrupt frames.
     // Only the DEFAULT order is affected; an explicit preference is still
     // obeyed, so `FANCY_SCREENSHARE_ENCODER=vaapi` can still force it.
-    if preference == EncoderPreference::Vaapi
-        && display_gpu_driver().as_deref() == Some("nvidia")
-    {
+    if preference == EncoderPreference::Vaapi && display_gpu_driver().as_deref() == Some("nvidia") {
         match nvenc::NvencEncoder::probe(settings) {
             Ok(nvenc) => {
                 tracing::info!("screenshare: using NVENC (the displays are on the NVIDIA GPU)");
@@ -250,7 +248,6 @@ fn probe_encoder(settings: EncodeSettings, preference: EncoderPreference) -> Enc
     EncoderTier::Cpu(Box::new(H264Encoder::new(settings)))
 }
 
-
 /// Driver name of a GPU that drives a connected display (`nvidia`, `amdgpu`,
 /// `i915`, ...), or `None` when nothing is connected or sysfs is unreadable.
 ///
@@ -274,10 +271,10 @@ fn display_gpu_driver() -> Option<String> {
         if !connected {
             continue;
         }
-        if let Ok(driver) = std::fs::canonicalize(drm.join(card).join("device").join("driver")) {
-            if let Some(base) = driver.file_name().and_then(|n| n.to_str()) {
-                return Some(base.to_owned());
-            }
+        if let Ok(driver) = std::fs::canonicalize(drm.join(card).join("device").join("driver"))
+            && let Some(base) = driver.file_name().and_then(|n| n.to_str())
+        {
+            return Some(base.to_owned());
         }
     }
     None
@@ -665,15 +662,22 @@ mod perf_probe {
             let v = &sps.vui_parameters;
             return format!(
                 "profile={} level={:?} poc_type={} ref_frames={} vui={} restriction={} reorder={} dec_frame_buffering={}",
-                sps.profile_idc, sps.level_idc, sps.pic_order_cnt_type, sps.max_num_ref_frames,
-                sps.vui_parameters_present_flag, v.bitstream_restriction_flag,
-                v.max_num_reorder_frames, v.max_dec_frame_buffering
+                sps.profile_idc,
+                sps.level_idc,
+                sps.pic_order_cnt_type,
+                sps.max_num_ref_frames,
+                sps.vui_parameters_present_flag,
+                v.bitstream_restriction_flag,
+                v.max_num_reorder_frames,
+                v.max_dec_frame_buffering
             );
         }
         "no SPS".to_owned()
     }
 
-    fn first_frame(mut encode: impl FnMut(bool) -> Result<Option<EncodedFrame>, String>) -> EncodedFrame {
+    fn first_frame(
+        mut encode: impl FnMut(bool) -> Result<Option<EncodedFrame>, String>,
+    ) -> EncodedFrame {
         for i in 0..5 {
             if let Some(f) = encode(i == 0).expect("encode") {
                 return f;
@@ -688,7 +692,12 @@ mod perf_probe {
         let (w, h) = (640u32, 360u32);
         let rgba = vec![0x40u8; (w * h * 4) as usize];
         let f = first_frame(|k| enc.encode_rgba(w, h, &rgba, k));
-        println!("OPENH264: keyframe={} bytes={} {}", f.keyframe, f.data.len(), describe_sps(&f.data));
+        println!(
+            "OPENH264: keyframe={} bytes={} {}",
+            f.keyframe,
+            f.data.len(),
+            describe_sps(&f.data)
+        );
     }
 
     #[test]
@@ -698,7 +707,12 @@ mod perf_probe {
         let (w, h) = (640u32, 360u32);
         let rgba = vec![0x40u8; (w * h * 4) as usize];
         let f = first_frame(|k| enc.encode_rgba(w, h, &rgba, k));
-        println!("NVENC: keyframe={} bytes={} {}", f.keyframe, f.data.len(), describe_sps(&f.data));
+        println!(
+            "NVENC: keyframe={} bytes={} {}",
+            f.keyframe,
+            f.data.len(),
+            describe_sps(&f.data)
+        );
     }
 
     #[test]
@@ -708,7 +722,12 @@ mod perf_probe {
         let (w, h) = (640u32, 360u32);
         let rgba = vec![0x40u8; (w * h * 4) as usize];
         let f = first_frame(|k| enc.encode_rgba(w, h, &rgba, k));
-        println!("VAAPI: keyframe={} bytes={} {}", f.keyframe, f.data.len(), describe_sps(&f.data));
+        println!(
+            "VAAPI: keyframe={} bytes={} {}",
+            f.keyframe,
+            f.data.len(),
+            describe_sps(&f.data)
+        );
     }
 
     #[test]

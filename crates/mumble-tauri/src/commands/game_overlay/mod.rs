@@ -26,8 +26,8 @@ use std::sync::Mutex;
 use fancy_gamedetect::{ProbeNote, Reason, Rule, Rules, ShellState, Verdict};
 use serde::{Deserialize, Serialize};
 
-use crate::state::types::OverlaySnapshot;
 use crate::state::AppState;
+use crate::state::types::OverlaySnapshot;
 
 #[cfg(not(target_os = "android"))]
 pub(crate) use window::GAME_OVERLAY_LABEL;

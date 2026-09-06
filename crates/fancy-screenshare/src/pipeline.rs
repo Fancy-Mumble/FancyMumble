@@ -564,7 +564,9 @@ mod tests {
         println!(
             "frames={frames} ({repeats} repeats) over 20s = {:.1} fps | gap p50={}ms p95={}ms p99={}ms max={}ms | gaps>150ms: {over150} >200ms: {over200} | frame size avg={avg_size}B max={max_size}B",
             f64::from(frames) / 20.0,
-            p(0.5), p(0.95), p(0.99),
+            p(0.5),
+            p(0.95),
+            p(0.99),
             gaps_ms.last().copied().unwrap_or(0),
         );
     }

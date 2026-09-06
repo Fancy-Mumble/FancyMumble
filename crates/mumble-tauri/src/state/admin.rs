@@ -3,8 +3,8 @@
 
 use mumble_protocol::command;
 
-use super::types::{AclInput, BanEntryInput, RegisteredUserUpdate};
 use super::AppState;
+use super::types::{AclInput, BanEntryInput, RegisteredUserUpdate};
 
 impl AppState {
     pub async fn kick_user(&self, session: u32, reason: Option<String>) -> Result<(), String> {

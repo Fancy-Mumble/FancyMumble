@@ -15,7 +15,6 @@
 
 use std::ffi::c_void;
 
-use windows_sys::core::BOOL;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, POINT, RECT};
 use windows_sys::Win32::Graphics::Gdi::ClientToScreen;
 use windows_sys::Win32::System::Threading::GetCurrentProcessId;
@@ -23,6 +22,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClientRect, GetForegroundWindow, GetWindowThreadProcessId, IsWindow,
     IsWindowVisible,
 };
+use windows_sys::core::BOOL;
 
 /// Pixel rect of a window's client area in screen coordinates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

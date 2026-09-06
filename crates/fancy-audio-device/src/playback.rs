@@ -1,14 +1,14 @@
 //! Cpal-based multi-speaker mixing playback implementing [`MixingPlayback`].
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use tracing::{error, warn};
 
 use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes};
-use mumble_protocol::audio::playback::{soft_clip, MixingPlayback};
+use mumble_protocol::audio::playback::{MixingPlayback, soft_clip};
 use mumble_protocol::error::{Error, Result};
 
 /// Batch-drain up to `mono_needed` samples from every active speaker

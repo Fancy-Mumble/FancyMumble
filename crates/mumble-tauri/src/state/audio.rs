@@ -7,8 +7,8 @@
 
 use tauri::Emitter;
 
-use super::types::VoiceState;
 use super::AppState;
+use super::types::VoiceState;
 
 // -- Capture-error surfacing ---------------------------------------
 
@@ -194,13 +194,13 @@ impl AppState {
         if volume.is_nan() {
             return;
         }
-        if let Ok(state) = self.inner.snapshot().lock() {
-            if let Ok(mut sv) = state.audio.speaker_volumes.lock() {
-                if (volume - 1.0).abs() < f32::EPSILON {
-                    let _ = sv.remove(&session);
-                } else {
-                    let _ = sv.insert(session, volume.clamp(0.0, 2.0));
-                }
+        if let Ok(state) = self.inner.snapshot().lock()
+            && let Ok(mut sv) = state.audio.speaker_volumes.lock()
+        {
+            if (volume - 1.0).abs() < f32::EPSILON {
+                let _ = sv.remove(&session);
+            } else {
+                let _ = sv.insert(session, volume.clamp(0.0, 2.0));
             }
         }
     }
@@ -209,19 +209,19 @@ impl AppState {
 // -- Voice pipeline (all platforms) ---------------------------------
 
 mod voice_pipeline {
-    use std::sync::atomic::AtomicU32;
     use std::sync::Arc;
+    use std::sync::atomic::AtomicU32;
     use std::time::Duration;
 
     use tauri::Emitter;
     use tracing::info;
 
     use mumble_protocol::audio::encoder::{OpusEncoder, OpusEncoderConfig};
+    use mumble_protocol::audio::filter::FilterChain;
     use mumble_protocol::audio::filter::automatic_gain::{AgcConfig, AutomaticGainControl};
     use mumble_protocol::audio::filter::denoiser::{DenoiserConfig, SpectralDenoiser};
     use mumble_protocol::audio::filter::gated_denoiser::GatedDenoiser;
     use mumble_protocol::audio::filter::noise_gate::{NoiseGate, NoiseGateConfig};
-    use mumble_protocol::audio::filter::FilterChain;
     use mumble_protocol::audio::mixer::{AudioMixer, SpeakerBuffers};
     use mumble_protocol::audio::pipeline::OutboundPipeline;
     use mumble_protocol::audio::sample::AudioFormat;
@@ -230,8 +230,8 @@ mod voice_pipeline {
 
     use crate::audio::{AudioDeviceFactory, PlatformAudioFactory};
 
-    use crate::state::types::{AudioSettings, VoiceState};
     use crate::state::AppState;
+    use crate::state::types::{AudioSettings, VoiceState};
 
     impl AppState {
         /// Enable voice calling: unmute + undeaf, start audio pipelines.
@@ -340,40 +340,41 @@ mod voice_pipeline {
             &self,
             arc: &Arc<std::sync::Mutex<crate::state::SharedState>>,
         ) {
-            let stopped_sessions: Vec<(u32, tauri::AppHandle)> = if let Ok(mut state) = arc.lock() {
-                state.audio.stop_outbound();
-                if let Some(handle) = state.audio.mic_test_handle.take() {
-                    handle.abort();
-                }
-                if let Some(handle) = state.audio.latency_test_handle.take() {
-                    handle.abort();
-                }
-                if let Some(mut playback) = state.audio.mixing_playback.take() {
-                    let _ = playback.stop();
-                }
-                state.audio.mixer = None;
-                state.audio.input_volume_handle = None;
-                state.audio.output_volume_handle = None;
+            let stopped_sessions: Vec<(u32, tauri::AppHandle)> = match arc.lock() {
+                Ok(mut state) => {
+                    state.audio.stop_outbound();
+                    if let Some(handle) = state.audio.mic_test_handle.take() {
+                        handle.abort();
+                    }
+                    if let Some(handle) = state.audio.latency_test_handle.take() {
+                        handle.abort();
+                    }
+                    if let Some(mut playback) = state.audio.mixing_playback.take() {
+                        let _ = playback.stop();
+                    }
+                    state.audio.mixer = None;
+                    state.audio.input_volume_handle = None;
+                    state.audio.output_volume_handle = None;
 
-                // Collect sessions to notify OUTSIDE the lock.
-                let sessions: Vec<(u32, tauri::AppHandle)> = state
-                    .conn
-                    .tauri_app_handle
-                    .as_ref()
-                    .filter(|_| !state.audio.talking_sessions.is_empty())
-                    .map(|app| {
-                        state
-                            .audio
-                            .talking_sessions
-                            .iter()
-                            .map(|&s| (s, app.clone()))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                state.audio.talking_sessions.clear();
-                sessions
-            } else {
-                Vec::new()
+                    // Collect sessions to notify OUTSIDE the lock.
+                    let sessions: Vec<(u32, tauri::AppHandle)> = state
+                        .conn
+                        .tauri_app_handle
+                        .as_ref()
+                        .filter(|_| !state.audio.talking_sessions.is_empty())
+                        .map(|app| {
+                            state
+                                .audio
+                                .talking_sessions
+                                .iter()
+                                .map(|&s| (s, app.clone()))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    state.audio.talking_sessions.clear();
+                    sessions
+                }
+                _ => Vec::new(),
             };
 
             // Emit outside the lock to avoid deadlock with Tauri IPC.
@@ -534,7 +535,7 @@ mod voice_pipeline {
             // loop is ready to consume them, avoiding buffer overflow on
             // startup.
 
-            let outbound_handle = if let Some(ref client) = client_handle {
+            let outbound_handle = if let Some(client) = client_handle {
                 let client = client.clone();
                 let app = app.clone();
                 Some(tokio::spawn(async move {
@@ -550,7 +551,9 @@ mod voice_pipeline {
             match outbound_handle {
                 Some(handle) => {
                     if !state.audio.install_outbound(generation, handle) {
-                        info!("start_outbound_pipeline: overtaken by a newer start or a stop, not installed");
+                        info!(
+                            "start_outbound_pipeline: overtaken by a newer start or a stop, not installed"
+                        );
                     }
                 }
                 None => state.audio.stop_outbound(),
@@ -863,10 +866,10 @@ mod voice_pipeline {
 
         /// Stop the mic test.
         pub fn stop_mic_test(&self) {
-            if let Ok(mut state) = self.inner.snapshot().lock() {
-                if let Some(handle) = state.audio.mic_test_handle.take() {
-                    handle.abort();
-                }
+            if let Ok(mut state) = self.inner.snapshot().lock()
+                && let Some(handle) = state.audio.mic_test_handle.take()
+            {
+                handle.abort();
             }
         }
 
@@ -1010,10 +1013,10 @@ mod voice_pipeline {
 
         /// Stop the latency test.
         pub fn stop_latency_test(&self) {
-            if let Ok(mut state) = self.inner.snapshot().lock() {
-                if let Some(handle) = state.audio.latency_test_handle.take() {
-                    handle.abort();
-                }
+            if let Ok(mut state) = self.inner.snapshot().lock()
+                && let Some(handle) = state.audio.latency_test_handle.take()
+            {
+                handle.abort();
             }
         }
 
@@ -1029,7 +1032,7 @@ mod voice_pipeline {
         /// [`super::super::calibration`]) so a user who pauses during
         /// calibration no longer collapses the noise floor.
         pub async fn calibrate_voice_threshold(&self) -> Result<f32, String> {
-            use super::super::calibration::{frame_rms, Calibrator, AUTO_CALIBRATION_WINDOW};
+            use super::super::calibration::{AUTO_CALIBRATION_WINDOW, Calibrator, frame_rms};
 
             let audio_settings = {
                 let __session = self.inner.snapshot();
@@ -1088,22 +1091,27 @@ mod voice_pipeline {
 
             info!(
                 "calibrate_voice_threshold: open={:.5}, close_ratio={:.3}, hold_frames={}, max_gain_db={:.1}",
-                calibration.vad_threshold, calibration.noise_gate_close_ratio, calibration.hold_frames, calibration.max_gain_db,
+                calibration.vad_threshold,
+                calibration.noise_gate_close_ratio,
+                calibration.hold_frames,
+                calibration.max_gain_db,
             );
 
-            let payload = if let Ok(mut state) = self.inner.snapshot().lock() {
-                state.audio.settings.vad_threshold = calibration.vad_threshold;
-                state.audio.settings.noise_gate_close_ratio = calibration.noise_gate_close_ratio;
-                state.audio.settings.hold_frames = calibration.hold_frames;
-                state.audio.settings.max_gain_db = calibration.max_gain_db;
-                Some(super::super::types::VoiceActivationCalibrationPayload {
-                    vad_threshold: calibration.vad_threshold,
-                    noise_gate_close_ratio: calibration.noise_gate_close_ratio,
-                    hold_frames: calibration.hold_frames,
-                    max_gain_db: calibration.max_gain_db,
-                })
-            } else {
-                None
+            let payload = match self.inner.snapshot().lock() {
+                Ok(mut state) => {
+                    state.audio.settings.vad_threshold = calibration.vad_threshold;
+                    state.audio.settings.noise_gate_close_ratio =
+                        calibration.noise_gate_close_ratio;
+                    state.audio.settings.hold_frames = calibration.hold_frames;
+                    state.audio.settings.max_gain_db = calibration.max_gain_db;
+                    Some(super::super::types::VoiceActivationCalibrationPayload {
+                        vad_threshold: calibration.vad_threshold,
+                        noise_gate_close_ratio: calibration.noise_gate_close_ratio,
+                        hold_frames: calibration.hold_frames,
+                        max_gain_db: calibration.max_gain_db,
+                    })
+                }
+                _ => None,
             };
 
             if let (Some(app), Some(payload)) = (self.app_handle(), payload) {
@@ -1224,6 +1232,11 @@ mod voice_pipeline {
 
     #[cfg(test)]
     mod tests {
+        #![allow(
+            unsafe_code,
+            reason = "`std::env::set_var` is unsafe in Rust 2024; this sets the \
+                      virtual-mic hook before the audio loop starts"
+        )]
         use super::*;
         use mumble_protocol::audio::sample::AudioFormat;
 
@@ -1273,7 +1286,7 @@ mod voice_pipeline {
         /// packets on the wire, and every listener hears that as crackling.
         #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
         async fn overlapping_starts_leave_one_outbound_loop() {
-            std::env::set_var("FANCY_E2E_VIRTUAL_MIC", "sine:48000:440");
+            unsafe { std::env::set_var("FANCY_E2E_VIRTUAL_MIC", "sine:48000:440") };
             let state = AppState::new();
             let (client, mut audio_rx) = ClientHandle::detached();
             let settings = {

@@ -193,7 +193,7 @@ struct Blit {
 }
 
 macro_rules! load {
-    ($rt:expr, $name:literal, $ty:ty) => {{
+    ($rt:expr_2021, $name:literal, $ty:ty) => {{
         // SAFETY: the entry point's C signature matches `$ty` per the
         // EGL/GLES2 specs and extension registry.
         let f: $ty = unsafe {

@@ -4,8 +4,8 @@
 //! the listener actually does and why it is careful around a running Discord
 //! client.
 
-use crate::state::presence::{PresenceSnapshot, PresenceStatus};
 use crate::state::AppState;
+use crate::state::presence::{PresenceSnapshot, PresenceStatus};
 
 /// Start or stop the Rich Presence listener.
 ///

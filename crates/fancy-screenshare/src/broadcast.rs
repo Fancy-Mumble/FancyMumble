@@ -30,17 +30,17 @@ use std::time::{Duration, Instant, SystemTime};
 
 use bytes::Bytes;
 use tokio::runtime::Runtime;
-use webrtc::api::interceptor_registry::register_default_interceptors;
-use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264, MIME_TYPE_OPUS};
-use webrtc::api::setting_engine::SettingEngine;
 use webrtc::api::APIBuilder;
+use webrtc::api::interceptor_registry::register_default_interceptors;
+use webrtc::api::media_engine::{MIME_TYPE_H264, MIME_TYPE_OPUS, MediaEngine};
+use webrtc::api::setting_engine::SettingEngine;
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
 use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::interceptor::registry::Registry;
+use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
-use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtcp::payload_feedbacks::full_intra_request::FullIntraRequest;
 use webrtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication;
 use webrtc::rtcp::receiver_report::ReceiverReport;
@@ -48,20 +48,20 @@ use webrtc::rtcp::reception_report::ReceptionReport;
 use webrtc::rtp::codecs::h264::H264Payloader;
 use webrtc::rtp::header::Header;
 use webrtc::rtp::packet::Packet;
-use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
 use webrtc::rtp::packetizer::Payloader;
-use webrtc::rtp::sequence::{new_random_sequencer, Sequencer};
+use webrtc::rtp::sequence::{Sequencer, new_random_sequencer};
+use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::rtp_transceiver::rtp_sender::RTCRtpSender;
 use webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection;
-use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
+use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
 
 use crate::congestion::{
     BitrateAllocator, CongestionController, CongestionSnapshot, FeedbackSample, TrackBudget,
 };
 use crate::encode::{EncodeSettings, EncodedFrame};
-use crate::pipeline::{create_pipeline, EncodePipeline};
+use crate::pipeline::{EncodePipeline, create_pipeline};
 use crate::sources::{self, SourceKind};
 
 /// Interval between unsolicited keyframes. This is ONLY a safety net against
@@ -458,8 +458,11 @@ impl ScreenBroadcaster {
         threads: &mut Vec<std::thread::JoinHandle<()>>,
     ) {
         let Some(track) = track else { return };
-        match crate::audio_share::spawn_audio_thread(track, runtime.handle().clone(), Arc::clone(stop))
-        {
+        match crate::audio_share::spawn_audio_thread(
+            track,
+            runtime.handle().clone(),
+            Arc::clone(stop),
+        ) {
             Ok(thread) => threads.push(thread),
             Err(e) => {
                 tracing::warn!("screenshare: desktop audio unavailable ({e}); sharing video only");
@@ -468,7 +471,9 @@ impl ScreenBroadcaster {
     }
 
     /// One sendonly Opus track on `pc`, for the desktop audio.
-    async fn add_audio_track(pc: &RTCPeerConnection) -> Result<Arc<TrackLocalStaticSample>, String> {
+    async fn add_audio_track(
+        pc: &RTCPeerConnection,
+    ) -> Result<Arc<TrackLocalStaticSample>, String> {
         let track = Arc::new(TrackLocalStaticSample::new(
             RTCRtpCodecCapability {
                 mime_type: MIME_TYPE_OPUS.to_owned(),
@@ -1312,7 +1317,7 @@ impl StallWatch {
 
 #[cfg(test)]
 mod tests {
-    use super::{moved_materially, ntp_middle_32, rtt_from_report, RtpStamper, RTP_PAYLOAD_MTU};
+    use super::{RTP_PAYLOAD_MTU, RtpStamper, moved_materially, ntp_middle_32, rtt_from_report};
     use std::time::{Duration, Instant, SystemTime};
     use webrtc::rtcp::reception_report::ReceptionReport;
 

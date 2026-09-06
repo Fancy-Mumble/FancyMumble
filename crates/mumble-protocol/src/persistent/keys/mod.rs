@@ -24,8 +24,8 @@ use crate::persistent::{KeyTrustLevel, PchatProtocol};
 // Re-export public items for external consumers.
 pub use identity::{CryptoIdentity, SeedIdentity};
 pub use types::{
-    channel_key_fingerprint, ChannelKey, CustodianPinState, EncryptedPayload, EpochCandidate,
-    EpochKey, PeerKeyRecord,
+    ChannelKey, CustodianPinState, EncryptedPayload, EpochCandidate, EpochKey, PeerKeyRecord,
+    channel_key_fingerprint,
 };
 
 use types::{ChannelKey as CK, ConsensusCollector, CustodianPinState as CPS, DEFAULT_MAX_REQUESTS};
@@ -265,8 +265,8 @@ mod tests {
         clippy::expect_used,
         reason = "unwrap/expect acceptable in test code"
     )]
-    use super::identity::SeedIdentity;
     use super::KeyManager;
+    use super::identity::SeedIdentity;
 
     fn make_key_manager() -> KeyManager {
         let identity = SeedIdentity::from_seed(&[0xAA; 32]).unwrap();

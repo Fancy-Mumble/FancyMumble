@@ -1,10 +1,10 @@
 //! Proto <-> Wire type conversions for persistent chat messages.
 
+use mumble_protocol::persistent::PchatProtocol;
 use mumble_protocol::persistent::wire::{
     PchatKeyAnnounce as WireKeyAnnounce, PchatKeyExchange as WireKeyExchange,
     PchatKeyRequest as WireKeyRequest,
 };
-use mumble_protocol::persistent::PchatProtocol;
 use mumble_protocol::proto::mumble_tcp;
 
 // -- Protocol enum conversion -----------------------------------------

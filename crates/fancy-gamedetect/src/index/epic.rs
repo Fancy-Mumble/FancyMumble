@@ -5,7 +5,7 @@
 //! location and the display name. This is the same directory Playnite reads,
 //! and it needs no launcher process to be running.
 
-use super::{normalise_dir, InstalledGame, Store};
+use super::{InstalledGame, Store, normalise_dir};
 
 /// Add every Epic game on this machine.
 pub(super) fn collect(out: &mut Vec<InstalledGame>) {

@@ -58,7 +58,7 @@ pub(crate) fn get_livery(
 pub(crate) async fn ping_server(host: String, port: u16) -> PingResult {
     use std::time::Instant;
     use tokio::net::TcpStream;
-    use tokio::time::{timeout, Duration};
+    use tokio::time::{Duration, timeout};
 
     let addr = format!("{host}:{port}");
     let start = Instant::now();
@@ -123,7 +123,7 @@ type PingInfo = (Option<u32>, Option<u32>, Option<String>, Option<String>);
 async fn udp_ping_server_info(addr: &str) -> Result<PingInfo, ()> {
     use prost::Message;
     use tokio::net::UdpSocket;
-    use tokio::time::{timeout, Duration};
+    use tokio::time::{Duration, timeout};
 
     let sock = UdpSocket::bind("0.0.0.0:0").await.map_err(|_| ())?;
     sock.connect(addr).await.map_err(|_| ())?;
@@ -155,26 +155,26 @@ async fn udp_ping_server_info(addr: &str) -> Result<PingInfo, ()> {
     if let Ok(Ok(n)) = timeout(Duration::from_secs(2), sock.recv(&mut recv_buf)).await {
         if n > 1 && recv_buf[0] == PROTOBUF_PING {
             // Protobuf response
-            if let Ok(resp) = mumble_protocol::proto::mumble_udp::Ping::decode(&recv_buf[1..n]) {
-                if resp.user_count > 0 || resp.max_user_count > 0 || resp.server_version_v2 > 0 {
-                    let version = format_version_v2(resp.server_version_v2);
-                    // Always `Some` on this path, empty when the server set no
-                    // livery: a Fancy server saying "none" has to clear a
-                    // cached one, and a plain Mumble server saying nothing must
-                    // not.
-                    let digest = Some(
-                        resp.livery_digest
-                            .iter()
-                            .map(|byte| format!("{byte:02x}"))
-                            .collect::<String>(),
-                    );
-                    return Ok((
-                        Some(resp.user_count),
-                        Some(resp.max_user_count),
-                        version,
-                        digest,
-                    ));
-                }
+            if let Ok(resp) = mumble_protocol::proto::mumble_udp::Ping::decode(&recv_buf[1..n])
+                && (resp.user_count > 0 || resp.max_user_count > 0 || resp.server_version_v2 > 0)
+            {
+                let version = format_version_v2(resp.server_version_v2);
+                // Always `Some` on this path, empty when the server set no
+                // livery: a Fancy server saying "none" has to clear a
+                // cached one, and a plain Mumble server saying nothing must
+                // not.
+                let digest = Some(
+                    resp.livery_digest
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect::<String>(),
+                );
+                return Ok((
+                    Some(resp.user_count),
+                    Some(resp.max_user_count),
+                    version,
+                    digest,
+                ));
             }
         }
         // Legacy 24-byte response: 6 x u32 big-endian
@@ -202,23 +202,22 @@ async fn udp_ping_server_info(addr: &str) -> Result<PingInfo, ()> {
     legacy[4..12].copy_from_slice(&ts.to_be_bytes());
     let _ = sock.send(&legacy).await;
 
-    if let Ok(Ok(n)) = timeout(Duration::from_secs(2), sock.recv(&mut recv_buf)).await {
-        if n >= 24 {
-            let ver = u32::from_be_bytes([recv_buf[0], recv_buf[1], recv_buf[2], recv_buf[3]]);
-            let users =
-                u32::from_be_bytes([recv_buf[12], recv_buf[13], recv_buf[14], recv_buf[15]]);
-            let max_users =
-                u32::from_be_bytes([recv_buf[16], recv_buf[17], recv_buf[18], recv_buf[19]]);
-            // The legacy reply is six fixed big-endian u32s with no extension
-            // point, so a client that falls back this far stays unbranded until
-            // it connects.
-            return Ok((
-                Some(users),
-                Some(max_users),
-                format_version_legacy(ver),
-                None,
-            ));
-        }
+    if let Ok(Ok(n)) = timeout(Duration::from_secs(2), sock.recv(&mut recv_buf)).await
+        && n >= 24
+    {
+        let ver = u32::from_be_bytes([recv_buf[0], recv_buf[1], recv_buf[2], recv_buf[3]]);
+        let users = u32::from_be_bytes([recv_buf[12], recv_buf[13], recv_buf[14], recv_buf[15]]);
+        let max_users =
+            u32::from_be_bytes([recv_buf[16], recv_buf[17], recv_buf[18], recv_buf[19]]);
+        // The legacy reply is six fixed big-endian u32s with no extension
+        // point, so a client that falls back this far stays unbranded until
+        // it connects.
+        return Ok((
+            Some(users),
+            Some(max_users),
+            format_version_legacy(ver),
+            None,
+        ));
     }
 
     Ok((None, None, None, None))

@@ -1714,10 +1714,10 @@ async fn wait_for_user_in_channel(
     timeout: Duration,
 ) -> bool {
     // Check if already in channel.
-    if let Some(u) = state.users.get(&target_session) {
-        if u.channel_id == target_channel {
-            return true;
-        }
+    if let Some(u) = state.users.get(&target_session)
+        && u.channel_id == target_channel
+    {
+        return true;
     }
     let deadline = tokio::time::Instant::now() + timeout;
     while tokio::time::Instant::now() < deadline {

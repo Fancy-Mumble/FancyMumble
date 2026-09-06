@@ -20,7 +20,7 @@
 [package]
 name = "signal-bridge"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 license = "AGPL-3.0-only"
 description = "Dynamic library bridge wrapping libsignal-protocol Sender Keys for Fancy Mumble E2EE"
 publish = false

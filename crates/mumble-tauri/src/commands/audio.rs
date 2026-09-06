@@ -112,8 +112,8 @@ pub(crate) fn get_denoiser_param_specs(
 /// List the noise-suppression algorithms whose backends are actually
 /// compiled into this build.
 #[tauri::command]
-pub(crate) fn get_available_denoiser_algorithms(
-) -> Vec<mumble_protocol::audio::filter::denoiser::NoiseSuppressionAlgorithm> {
+pub(crate) fn get_available_denoiser_algorithms()
+-> Vec<mumble_protocol::audio::filter::denoiser::NoiseSuppressionAlgorithm> {
     mumble_protocol::audio::filter::denoiser::NoiseSuppressionAlgorithm::available()
 }
 
@@ -140,12 +140,11 @@ pub(crate) async fn set_audio_settings(
     if needs_inbound {
         state.restart_inbound()?;
     }
-    if force_tcp_changed {
-        if let Ok(inner) = state.inner.snapshot().lock() {
-            if let Some(ref handle) = inner.conn.client_handle {
-                handle.set_force_tcp(force_tcp);
-            }
-        }
+    if force_tcp_changed
+        && let Ok(inner) = state.inner.snapshot().lock()
+        && let Some(ref handle) = inner.conn.client_handle
+    {
+        handle.set_force_tcp(force_tcp);
     }
 
     Ok(())

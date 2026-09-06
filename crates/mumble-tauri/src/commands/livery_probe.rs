@@ -28,12 +28,12 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use mumble_protocol::client::{version_announcement, MumbleVersion};
+use mumble_protocol::client::{MumbleVersion, version_announcement};
 use mumble_protocol::message::ControlMessage;
 use mumble_protocol::proto::fancy;
 use mumble_protocol::transport::tcp::{TcpConfig, TcpTransport};
 
-use crate::state::{data_uri, to_snapshot, LiverySnapshot};
+use crate::state::{LiverySnapshot, data_uri, to_snapshot};
 
 /// The whole exchange, TLS handshake included.
 ///

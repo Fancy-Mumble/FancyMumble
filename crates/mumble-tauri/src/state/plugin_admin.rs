@@ -8,8 +8,8 @@
 
 use mumble_protocol::command;
 
-use super::types::{PluginDataPayload, PluginRegistryEntryPayload};
 use super::AppState;
+use super::types::{PluginDataPayload, PluginRegistryEntryPayload};
 
 impl AppState {
     /// Snapshot the cached `PluginRegistry` for the active session.

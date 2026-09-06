@@ -1,7 +1,7 @@
 //! Onboarding-workflow Tauri commands.
 
-use crate::state::types::{OnboardingConfig, OnboardingResponse};
 use crate::state::AppState;
+use crate::state::types::{OnboardingConfig, OnboardingResponse};
 
 /// Read the cached onboarding config (or `None` if the server has not
 /// announced one yet).

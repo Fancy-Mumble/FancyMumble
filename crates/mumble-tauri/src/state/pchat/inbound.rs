@@ -10,14 +10,14 @@ use mumble_protocol::command;
 use mumble_protocol::persistent::PchatProtocol;
 use mumble_protocol::proto::mumble_tcp;
 
+use crate::state::SharedState;
 use crate::state::local_cache::CachedMessage;
 use crate::state::types::ChatMessage;
-use crate::state::SharedState;
 
-use super::conversion::proto_to_protocol;
-use super::settings::PLACEHOLDER_BODY;
 use super::PchatState;
 use super::PendingSignalEnvelope;
+use super::conversion::proto_to_protocol;
+use super::settings::PLACEHOLDER_BODY;
 
 // -- Message delivery -------------------------------------------------
 
@@ -167,62 +167,59 @@ fn insert_or_replace_message(
     replaces_id: Option<&str>,
     mut chat_msg: ChatMessage,
 ) {
-    if let Some(replaces_id) = replaces_id {
-        if let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id) {
-            if let Some(pos) = msgs
-                .iter()
-                .position(|m| m.message_id.as_deref() == Some(replaces_id))
-            {
-                // Only the original author may replace their message. The
-                // server can't vouch for replaces_id on protocols without
-                // server-side storage (SignalV1), so an unmatched sender here
-                // is a forged edit - keep the original and fall through to a
-                // plain insert of the new message instead.
-                if msgs[pos].sender_hash == chat_msg.sender_hash {
-                    chat_msg.edited_at = Some(chat_msg.timestamp.unwrap_or(0));
-                    msgs[pos] = chat_msg;
-                    return;
-                }
-                warn!(
-                    channel_id,
-                    message_id = %message_id,
-                    replaces_id = %replaces_id,
-                    "rejected cross-sender replaces_id (forged edit); inserting as new message"
-                );
-            }
-        }
-    }
-
-    if let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id) {
-        if let Some(pos) = msgs
+    if let Some(replaces_id) = replaces_id
+        && let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id)
+        && let Some(pos) = msgs
             .iter()
-            .position(|m| m.message_id.as_deref() == Some(message_id))
-        {
-            // A Fancy sender sends both halves of the dual path under **one**
-            // id: a plaintext `TextMessage` (the "[Encrypted message]"
-            // placeholder, for a server or peer that cannot read the real
-            // thing) and the encrypted `PchatMessage`. The receiver is meant
-            // to drop the plaintext half on sight, but that test reads the
-            // sender's advertised `FeaturePchatE2ee`, and no shipped client
-            // sets it - so the placeholder is accepted as a legacy message and
-            // whichever half lands first wins this dedup.
-            //
-            // The decrypted copy is the authoritative one and takes the slot.
-            // Left as a plain first-wins, a channel rendered "[Encrypted
-            // message]" forever whenever the text service beat the pchat
-            // service to the client, which is the usual order - the plaintext
-            // is sent first and stores less on the way through.
-            //
-            // Only ever this direction: a placeholder arriving after the real
-            // message is dropped, never written over it.
-            if msgs[pos].is_legacy && !chat_msg.is_legacy {
-                chat_msg.pinned = msgs[pos].pinned;
-                chat_msg.pinned_by = msgs[pos].pinned_by.clone();
-                chat_msg.pinned_at = msgs[pos].pinned_at;
-                msgs[pos] = chat_msg;
-            }
+            .position(|m| m.message_id.as_deref() == Some(replaces_id))
+    {
+        // Only the original author may replace their message. The
+        // server can't vouch for replaces_id on protocols without
+        // server-side storage (SignalV1), so an unmatched sender here
+        // is a forged edit - keep the original and fall through to a
+        // plain insert of the new message instead.
+        if msgs[pos].sender_hash == chat_msg.sender_hash {
+            chat_msg.edited_at = Some(chat_msg.timestamp.unwrap_or(0));
+            msgs[pos] = chat_msg;
             return;
         }
+        warn!(
+            channel_id,
+            message_id = %message_id,
+            replaces_id = %replaces_id,
+            "rejected cross-sender replaces_id (forged edit); inserting as new message"
+        );
+    }
+
+    if let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id)
+        && let Some(pos) = msgs
+            .iter()
+            .position(|m| m.message_id.as_deref() == Some(message_id))
+    {
+        // A Fancy sender sends both halves of the dual path under **one**
+        // id: a plaintext `TextMessage` (the "[Encrypted message]"
+        // placeholder, for a server or peer that cannot read the real
+        // thing) and the encrypted `PchatMessage`. The receiver is meant
+        // to drop the plaintext half on sight, but that test reads the
+        // sender's advertised `FeaturePchatE2ee`, and no shipped client
+        // sets it - so the placeholder is accepted as a legacy message and
+        // whichever half lands first wins this dedup.
+        //
+        // The decrypted copy is the authoritative one and takes the slot.
+        // Left as a plain first-wins, a channel rendered "[Encrypted
+        // message]" forever whenever the text service beat the pchat
+        // service to the client, which is the usual order - the plaintext
+        // is sent first and stores less on the way through.
+        //
+        // Only ever this direction: a placeholder arriving after the real
+        // message is dropped, never written over it.
+        if msgs[pos].is_legacy && !chat_msg.is_legacy {
+            chat_msg.pinned = msgs[pos].pinned;
+            chat_msg.pinned_by = msgs[pos].pinned_by.clone();
+            chat_msg.pinned_at = msgs[pos].pinned_at;
+            msgs[pos] = chat_msg;
+        }
+        return;
     }
 
     let bucket = state.msgs.by_channel.entry(channel_id).or_default();
@@ -524,26 +521,25 @@ pub(crate) fn handle_proto_delete_messages(
     let sender_hash = msg.sender_hash.as_deref();
 
     messages.retain(|m| {
-        if !ids.is_empty() {
-            if let Some(ref mid) = m.message_id {
-                if ids.iter().any(|id| id == mid) {
-                    return false;
-                }
-            }
+        if !ids.is_empty()
+            && let Some(ref mid) = m.message_id
+            && ids.iter().any(|id| id == mid)
+        {
+            return false;
         }
-        if let Some(range) = time_range {
-            if let Some(ts) = m.timestamp {
-                let after_from = range.from.is_none_or(|f| ts >= f);
-                let before_to = range.to.is_none_or(|t| ts <= t);
-                if after_from && before_to {
-                    return false;
-                }
-            }
-        }
-        if let Some(hash) = sender_hash {
-            if m.sender_name == hash {
+        if let Some(range) = time_range
+            && let Some(ts) = m.timestamp
+        {
+            let after_from = range.from.is_none_or(|f| ts >= f);
+            let before_to = range.to.is_none_or(|t| ts <= t);
+            if after_from && before_to {
                 return false;
             }
+        }
+        if let Some(hash) = sender_hash
+            && m.sender_name == hash
+        {
+            return false;
         }
         true
     });
@@ -693,14 +689,13 @@ fn insert_offline_messages(
     let mut acked_ids: Vec<String> = Vec::with_capacity(decrypted.len());
 
     for dm in decrypted {
-        if let Some(msgs) = state.msgs.by_channel.get(&channel_id) {
-            if msgs
+        if let Some(msgs) = state.msgs.by_channel.get(&channel_id)
+            && msgs
                 .iter()
                 .any(|m| m.message_id.as_deref() == Some(&dm.message_id))
-            {
-                acked_ids.push(dm.message_id.clone());
-                continue;
-            }
+        {
+            acked_ids.push(dm.message_id.clone());
+            continue;
         }
 
         let sender_session = state
@@ -749,14 +744,17 @@ fn send_offline_queue_ack(state: &SharedState, channel_id: u32, acked_ids: Vec<S
         channel_id: Some(channel_id),
     };
     let _ack_task = tokio::spawn(async move {
-        if let Err(e) = handle.send(command::SendPchatAck { ack }).await {
-            warn!(channel_id, "failed to send offline queue ack: {e}");
-        } else {
-            debug!(
-                channel_id,
-                count = acked_ids.len(),
-                "sent offline queue ack"
-            );
+        match handle.send(command::SendPchatAck { ack }).await {
+            Err(e) => {
+                warn!(channel_id, "failed to send offline queue ack: {e}");
+            }
+            _ => {
+                debug!(
+                    channel_id,
+                    count = acked_ids.len(),
+                    "sent offline queue ack"
+                );
+            }
         }
     });
 }

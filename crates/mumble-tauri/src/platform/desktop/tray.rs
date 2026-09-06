@@ -86,11 +86,10 @@ pub fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
                 button: MouseButton::Left,
                 ..
             } = event
+                && let Some(w) = tray.app_handle().get_webview_window("main")
             {
-                if let Some(w) = tray.app_handle().get_webview_window("main") {
-                    let _ = w.show();
-                    let _ = w.set_focus();
-                }
+                let _ = w.show();
+                let _ = w.set_focus();
             }
         })
         .build(app)?;

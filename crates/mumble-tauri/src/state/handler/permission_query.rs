@@ -16,13 +16,13 @@ impl HandleMessage for mumble_tcp::PermissionQuery {
         );
 
         // If flush is set, clear all cached permissions first.
-        if self.flush() {
-            if let Ok(mut state) = ctx.shared.lock() {
-                for ch in state.channels.values_mut() {
-                    ch.permissions = None;
-                }
-                state.push_subscribed_channels.clear();
+        if self.flush()
+            && let Ok(mut state) = ctx.shared.lock()
+        {
+            for ch in state.channels.values_mut() {
+                ch.permissions = None;
             }
+            state.push_subscribed_channels.clear();
         }
 
         // Store the permission bitmask on the channel entry.

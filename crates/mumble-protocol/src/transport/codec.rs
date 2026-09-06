@@ -1059,7 +1059,7 @@ mod tests {
         let mut buf = BytesMut::new();
         buf.put_u16(3); // Ping type
         buf.put_u32(100); // payload_len = 100
-                          // No payload bytes
+        // No payload bytes
         assert!(decode(&mut buf)?.is_none());
         Ok(())
     }

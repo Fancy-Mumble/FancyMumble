@@ -1,7 +1,7 @@
 //! Editable server-settings Tauri commands.
 
-use crate::state::types::{ServerSetting, ServerSettingsSnapshot};
 use crate::state::AppState;
+use crate::state::types::{ServerSetting, ServerSettingsSnapshot};
 
 /// Read the cached editable server-settings snapshot (or `None` if the server
 /// has not advertised one - e.g. the user is not an admin, or a legacy server).

@@ -11,8 +11,8 @@
 use mumble_protocol::command;
 use mumble_protocol::proto::mumble_tcp;
 
-use super::types::{AuditConfigSnapshot, AuditQueryArgs, ServerSetting};
 use super::AppState;
+use super::types::{AuditConfigSnapshot, AuditQueryArgs, ServerSetting};
 
 impl AppState {
     /// Snapshot the cached audit configuration, if any.

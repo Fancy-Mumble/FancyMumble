@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use crate::error::{Error, Result};
 use crate::persistent::KeyTrustLevel;
 
-use super::types::ChannelKey;
 use super::KeyManager;
+use super::types::ChannelKey;
 
 impl KeyManager {
     // ---- Consensus evaluation ---------------------------------------
@@ -200,9 +200,9 @@ mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
     use std::time::Instant;
 
+    use super::super::KeyManager;
     use super::super::identity::SeedIdentity;
     use super::super::types::{EpochCandidate, EpochKey};
-    use super::super::KeyManager;
     use super::compute_consensus_threshold;
     use crate::persistent::encryption::epoch_fingerprint;
 

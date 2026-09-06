@@ -6,7 +6,7 @@
 //! something never has to say it twice.
 
 use crate::denylist::{self, Veto};
-use crate::evidence::{engine_for_class, Evidence, Reason};
+use crate::evidence::{Evidence, Reason, engine_for_class};
 use crate::index::GameIndex;
 use crate::probe::{ForegroundFacts, ShellState};
 use crate::{Rule, Rules};

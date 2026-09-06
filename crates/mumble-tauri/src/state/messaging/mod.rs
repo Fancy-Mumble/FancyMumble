@@ -8,7 +8,7 @@ use mumble_protocol::command;
 use mumble_protocol::persistent::PchatProtocol;
 
 use super::types::ChatMessage;
-use super::{pchat, AppState, SharedState};
+use super::{AppState, SharedState, pchat};
 
 struct OwnMessageData {
     channel_id: u32,
@@ -166,13 +166,12 @@ impl AppState {
             .await
             .map_err(|e| format!("Failed to send message: {e}"))?;
 
-        if let Some((proto_msg, client)) = prebuilt_pchat {
-            if let Err(e) = client
+        if let Some((proto_msg, client)) = prebuilt_pchat
+            && let Err(e) = client
                 .send(command::SendPchatMessage { message: proto_msg })
                 .await
-            {
-                tracing::warn!("send pchat-msg failed: {e}");
-            }
+        {
+            tracing::warn!("send pchat-msg failed: {e}");
         }
 
         self.store_own_message(OwnMessageData {
@@ -206,7 +205,7 @@ impl AppState {
         let Some(protocol) = pchat_protocol.filter(PchatProtocol::is_encrypted) else {
             return Ok(None);
         };
-        let Some(ref msg_id) = message_id else {
+        let Some(msg_id) = message_id else {
             return Ok(None);
         };
         let __session = self.inner.snapshot();
@@ -450,16 +449,14 @@ impl AppState {
             .await
             .map_err(|e| format!("Failed to send edit: {e}"))?;
 
-        if let Ok(mut state) = self.inner.snapshot().lock() {
-            if let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id) {
-                if let Some(msg) = msgs
-                    .iter_mut()
-                    .find(|m| m.message_id.as_deref() == Some(&message_id))
-                {
-                    msg.body = new_body;
-                    msg.edited_at = Some(now_ms);
-                }
-            }
+        if let Ok(mut state) = self.inner.snapshot().lock()
+            && let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id)
+            && let Some(msg) = msgs
+                .iter_mut()
+                .find(|m| m.message_id.as_deref() == Some(&message_id))
+        {
+            msg.body = new_body;
+            msg.edited_at = Some(now_ms);
         }
 
         Ok(())
@@ -479,23 +476,24 @@ impl AppState {
         let __session = self.inner.snapshot();
         let mut state = __session.lock().map_err(|e| e.to_string())?;
         let client = state.conn.client_handle.clone();
-        if let (Some(ref mut pchat_state), Some(client)) = (&mut state.pchat_ctx.pchat, client) {
-            if outbound.protocol == PchatProtocol::SignalV1
-                && pchat_state.signal_bridge.is_none()
-                && !pchat_state.signal_bridge_load_failed
-            {
-                tracing::info!("send_message: lazy-loading signal bridge");
-                let _ = pchat_state.ensure_signal_bridge();
-            }
-            match pchat_state.build_encrypted_message(outbound) {
-                Ok(proto_msg) => Ok(Some((proto_msg, client))),
-                Err(e) => {
-                    tracing::warn!("pchat encrypt failed: {e}");
-                    Err(format!("Encryption failed: {e}"))
+        match (&mut state.pchat_ctx.pchat, client) {
+            (Some(pchat_state), Some(client)) => {
+                if outbound.protocol == PchatProtocol::SignalV1
+                    && pchat_state.signal_bridge.is_none()
+                    && !pchat_state.signal_bridge_load_failed
+                {
+                    tracing::info!("send_message: lazy-loading signal bridge");
+                    let _ = pchat_state.ensure_signal_bridge();
+                }
+                match pchat_state.build_encrypted_message(outbound) {
+                    Ok(proto_msg) => Ok(Some((proto_msg, client))),
+                    Err(e) => {
+                        tracing::warn!("pchat encrypt failed: {e}");
+                        Err(format!("Encryption failed: {e}"))
+                    }
                 }
             }
-        } else {
-            Ok(None)
+            _ => Ok(None),
         }
     }
 }

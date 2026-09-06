@@ -26,10 +26,10 @@ use mumble_protocol::audio::decoder::{AudioDecoder, OpusDecoder};
 use mumble_protocol::audio::encoder::{
     AudioEncoder, OpusApplication, OpusEncoder, OpusEncoderConfig,
 };
+use mumble_protocol::audio::filter::AudioFilter;
 use mumble_protocol::audio::filter::automatic_gain::AgcConfig;
 use mumble_protocol::audio::filter::automatic_gain::AutomaticGainControl;
 use mumble_protocol::audio::filter::noise_gate::{NoiseGate, NoiseGateConfig};
-use mumble_protocol::audio::filter::AudioFilter;
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 
 const SAMPLE_RATE: u32 = 48_000;

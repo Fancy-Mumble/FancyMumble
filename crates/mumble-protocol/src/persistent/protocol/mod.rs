@@ -19,8 +19,8 @@
 //! 3. Update `KeyManager` to accept a `Box<dyn E2EEProtocol>`.
 
 use crate::error::Result;
-use crate::persistent::wire;
 use crate::persistent::PchatProtocol;
+use crate::persistent::wire;
 
 pub mod fancy_v1;
 pub mod signal_v1;
@@ -100,7 +100,7 @@ pub trait E2EEProtocol: Send + Sync {
 
     /// Build a key announcement message advertising our public keys.
     fn build_key_announce(&self, cert_hash: &str, timestamp: u64)
-        -> Result<wire::PchatKeyAnnounce>;
+    -> Result<wire::PchatKeyAnnounce>;
 
     /// Validate and record a peer's key announcement.
     ///
@@ -195,7 +195,7 @@ pub trait E2EEProtocol: Send + Sync {
 
     /// Compute HMAC proof of archive key possession.
     fn compute_challenge_proof(&self, archive_key: &[u8; 32], challenge: &[u8])
-        -> Result<[u8; 32]>;
+    -> Result<[u8; 32]>;
 }
 
 // ---- Protocol output types ------------------------------------------

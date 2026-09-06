@@ -257,16 +257,16 @@ impl NativeViewerSink {
         }
         let sent = self.sent.fetch_add(records, Ordering::Relaxed) + records;
         let sent_key = self.sent_key.fetch_add(keyframes, Ordering::Relaxed) + keyframes;
-        if let Ok(mut last) = self.last_log.lock() {
-            if last.elapsed() >= std::time::Duration::from_secs(5) {
-                *last = std::time::Instant::now();
-                tracing::info!(
-                    session = self.session,
-                    sent,
-                    keyframes = sent_key,
-                    "stream-view: payloads delivered to webview channel"
-                );
-            }
+        if let Ok(mut last) = self.last_log.lock()
+            && last.elapsed() >= std::time::Duration::from_secs(5)
+        {
+            *last = std::time::Instant::now();
+            tracing::info!(
+                session = self.session,
+                sent,
+                keyframes = sent_key,
+                "stream-view: payloads delivered to webview channel"
+            );
         }
     }
 }

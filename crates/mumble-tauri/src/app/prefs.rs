@@ -87,10 +87,10 @@ pub(crate) fn hydrate_persisted_prefs(app: &tauri::AppHandle, state: &AppState) 
                     }
                 })
         });
-    if let Some(level) = log_level {
-        if logging::set_log_level(&level).is_ok() {
-            tracing::info!("hydrate_persisted_prefs: log level = {level}");
-        }
+    if let Some(level) = log_level
+        && logging::set_log_level(&level).is_ok()
+    {
+        tracing::info!("hydrate_persisted_prefs: log level = {level}");
     }
 
     // Developer log tooling settings. Apply terminal/auto-zip flags
@@ -102,10 +102,10 @@ pub(crate) fn hydrate_persisted_prefs(app: &tauri::AppHandle, state: &AppState) 
     if let Some(auto_zip) = bool_pref("autoZipLogs") {
         logging::set_auto_zip(auto_zip);
     }
-    if bool_pref("logToFile").unwrap_or(false) {
-        if let Err(e) = logging::set_file_logging(true) {
-            tracing::warn!("hydrate_persisted_prefs: enable file logging failed: {e}");
-        }
+    if bool_pref("logToFile").unwrap_or(false)
+        && let Err(e) = logging::set_file_logging(true)
+    {
+        tracing::warn!("hydrate_persisted_prefs: enable file logging failed: {e}");
     }
 
     // Rich Presence has to come up at launch rather than when the settings

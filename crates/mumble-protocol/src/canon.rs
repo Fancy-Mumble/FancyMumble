@@ -993,14 +993,12 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 Some(fancy::domain::server_config_envelope::Body::TicketReply(reply)) => {
                     Some(ControlMessage::FancyOperatorTicketReply(reply))
                 }
-                Some(fancy::domain::server_config_envelope::Body::Values(values)) => {
-                    Some(ControlMessage::FancyServerSettings(
-                        mumble_tcp::FancyServerSettings {
-                            settings: values.settings.iter().map(setting_from_canon).collect(),
-                            revision: Some(values.version),
-                        },
-                    ))
-                }
+                Some(fancy::domain::server_config_envelope::Body::Values(values)) => Some(
+                    ControlMessage::FancyServerSettings(mumble_tcp::FancyServerSettings {
+                        settings: values.settings.iter().map(setting_from_canon).collect(),
+                        revision: Some(values.version),
+                    }),
+                ),
                 // The client->server bodies, which a client only sends.
                 _ => None,
             })
@@ -1558,7 +1556,10 @@ mod tests {
             panic!("a save must become a ConfigUpdate");
         };
         assert_eq!(update.values.len(), 2);
-        assert_eq!(update.values.get("welcometext").map(String::as_str), Some("hi"));
+        assert_eq!(
+            update.values.get("welcometext").map(String::as_str),
+            Some("hi")
+        );
         // A cleared value is a write of "", not a row to skip.
         assert_eq!(update.values.get("users").map(String::as_str), Some(""));
     }
@@ -2257,9 +2258,11 @@ mod tests {
                 },
             )),
         };
-        assert!(from_canon(FILES, &request.encode_to_vec())
-            .unwrap()
-            .is_none());
+        assert!(
+            from_canon(FILES, &request.encode_to_vec())
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
@@ -2657,11 +2660,13 @@ mod tests {
         // The verb has to survive: the table shows it, and a row that says
         // "audit.ban" without "issued" has lost what happened.
         assert_eq!(entry.reason.as_deref(), Some("issued"));
-        assert!(entry
-            .detail_json
-            .as_deref()
-            .unwrap_or_default()
-            .contains("spam"));
+        assert!(
+            entry
+                .detail_json
+                .as_deref()
+                .unwrap_or_default()
+                .contains("spam")
+        );
     }
 
     #[test]
@@ -2717,11 +2722,13 @@ mod tests {
         // Starling has no SQL sandbox; offering the editor would be offering a
         // mode every use of which is refused.
         assert_eq!(config.advanced_sql_available, Some(false));
-        assert!(config
-            .settings
-            .iter()
-            .any(|s| s.key.as_deref() == Some("audit.retention_days")
-                && s.value.as_deref() == Some("30")));
+        assert!(
+            config
+                .settings
+                .iter()
+                .any(|s| s.key.as_deref() == Some("audit.retention_days")
+                    && s.value.as_deref() == Some("30"))
+        );
     }
 
     #[test]

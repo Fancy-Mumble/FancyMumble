@@ -1,7 +1,7 @@
 [package]
 name = "fancy-gamedetect"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 # Internal workspace crate - never published to crates.io (this also lets
 # cargo-deny's wildcard gate exempt the path dependencies).
 publish = false

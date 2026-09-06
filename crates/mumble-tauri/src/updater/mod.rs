@@ -29,7 +29,7 @@ mod window;
 
 #[cfg(feature = "self-updater")]
 pub(crate) use manager::UpdaterState;
-pub(crate) use window::{show_main_window, MAIN_WINDOW_LABEL, UPDATER_WINDOW_LABEL};
+pub(crate) use window::{MAIN_WINDOW_LABEL, UPDATER_WINDOW_LABEL, show_main_window};
 
 #[cfg(feature = "self-updater")]
 use tauri::Manager;

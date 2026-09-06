@@ -20,7 +20,7 @@ use mumble_protocol::message::{ControlMessage, UdpMessage};
 use mumble_protocol::proto::mumble_tcp;
 use mumble_protocol::state::{Channel, ServerState};
 
-use crate::app::{ui_emit_chat, ui_set_channels, ui_set_self_channel, ui_set_status, Shared};
+use crate::app::{Shared, ui_emit_chat, ui_set_channels, ui_set_self_channel, ui_set_status};
 use crate::bridge::qobject::Backend;
 
 /// Samples represented by one inbound Opus packet (20 ms @ 48 kHz).
@@ -158,23 +158,25 @@ impl QtEventHandler {
     /// file URLs, and clear the byte payloads from the protocol state (the
     /// hard RAM budget forbids holding a blob per connected user).
     fn absorb_user_blobs(&mut self, session: u32) {
-        let Some(user) = self.state.users.get_mut(&session) else { return };
+        let Some(user) = self.state.users.get_mut(&session) else {
+            return;
+        };
 
         if !user.texture.is_empty() {
             let texture = std::mem::take(&mut user.texture);
-            if let Some(spilled) = crate::media::spill_texture(&texture) {
-                if let Some(thumb) = spilled["thumb"].as_str() {
-                    self.avatars.insert(session, thumb.to_owned());
-                }
+            if let Some(spilled) = crate::media::spill_texture(&texture)
+                && let Some(thumb) = spilled["thumb"].as_str()
+            {
+                self.avatars.insert(session, thumb.to_owned());
             }
         }
 
         if !user.comment.is_empty() {
             let comment = std::mem::take(&mut user.comment);
-            if Some(session) == self.own_session {
-                if let Ok(mut sh) = self.shared.lock() {
-                    sh.own_comment = comment.clone();
-                }
+            if Some(session) == self.own_session
+                && let Ok(mut sh) = self.shared.lock()
+            {
+                sh.own_comment = comment.clone();
             }
             let profile = crate::profile::parse_comment(&comment);
             let (bio_html, bio_srcs) = crate::media::extract_images(&profile.bio_html);
@@ -226,9 +228,17 @@ impl QtEventHandler {
     /// root channel so they stay visible instead of vanishing into a channel
     /// that is never drawn.
     fn push_channels(&self) {
-        let mut channels: Vec<&Channel> =
-            self.state.channels.values().filter(|c| !c.detached()).collect();
-        channels.sort_by(|a, b| a.position.cmp(&b.position).then(a.channel_id.cmp(&b.channel_id)));
+        let mut channels: Vec<&Channel> = self
+            .state
+            .channels
+            .values()
+            .filter(|c| !c.detached())
+            .collect();
+        channels.sort_by(|a, b| {
+            a.position
+                .cmp(&b.position)
+                .then(a.channel_id.cmp(&b.channel_id))
+        });
 
         let dm_rooms: std::collections::HashSet<u32> = self
             .state
@@ -245,32 +255,39 @@ impl QtEventHandler {
         let mut members: HashMap<u32, Vec<serde_json::Value>> = HashMap::new();
         for user in self.state.users.values() {
             let profile = self.profiles.get(&user.session).unwrap_or(&default_profile);
-            let channel_id = if dm_rooms.contains(&user.channel_id) { 0 } else { user.channel_id };
-            members.entry(channel_id).or_default().push(serde_json::json!({
-                "name": user.name,
-                "session": user.session,
-                "me": Some(user.session) == self.own_session,
-                "registered": user.user_id.is_some_and(|id| id > 0),
-                "muted": user.self_mute || user.mute,
-                "deafened": user.self_deaf || user.deaf,
-                "status": profile.status,
-                "bio": profile.bio_text,
-                "bioImages": profile.bio_images,
-                "bannerColor": profile.banner_color,
-                "bannerImage": profile.banner_image,
-                "bannerImageFull": profile.banner_image_full,
-                "avatar": self.avatars.get(&user.session).cloned().unwrap_or_default(),
-                "nameColor": profile.name_color,
-                "nameBold": profile.name_bold,
-                "nameItalic": profile.name_italic,
-                "nameGradient": profile.name_gradient,
-                "nameGlowColor": profile.name_glow_color,
-                "nameGlowSize": profile.name_glow_size,
-                "themeColors": profile.theme_colors,
-                "cardGlass": profile.card_glass,
-                "cardBackground": profile.card_background,
-                "cardBackgroundCustom": profile.card_background_custom,
-            }));
+            let channel_id = if dm_rooms.contains(&user.channel_id) {
+                0
+            } else {
+                user.channel_id
+            };
+            members
+                .entry(channel_id)
+                .or_default()
+                .push(serde_json::json!({
+                    "name": user.name,
+                    "session": user.session,
+                    "me": Some(user.session) == self.own_session,
+                    "registered": user.user_id.is_some_and(|id| id > 0),
+                    "muted": user.self_mute || user.mute,
+                    "deafened": user.self_deaf || user.deaf,
+                    "status": profile.status,
+                    "bio": profile.bio_text,
+                    "bioImages": profile.bio_images,
+                    "bannerColor": profile.banner_color,
+                    "bannerImage": profile.banner_image,
+                    "bannerImageFull": profile.banner_image_full,
+                    "avatar": self.avatars.get(&user.session).cloned().unwrap_or_default(),
+                    "nameColor": profile.name_color,
+                    "nameBold": profile.name_bold,
+                    "nameItalic": profile.name_italic,
+                    "nameGradient": profile.name_gradient,
+                    "nameGlowColor": profile.name_glow_color,
+                    "nameGlowSize": profile.name_glow_size,
+                    "themeColors": profile.theme_colors,
+                    "cardGlass": profile.card_glass,
+                    "cardBackground": profile.card_background,
+                    "cardBackgroundCustom": profile.card_background_custom,
+                }));
         }
 
         let json: Vec<serde_json::Value> = channels
@@ -278,9 +295,9 @@ impl QtEventHandler {
             .map(|ch| {
                 let mut users = members.get(&ch.channel_id).cloned().unwrap_or_default();
                 users.sort_by(|a, b| {
-                    a.get("name").and_then(serde_json::Value::as_str).cmp(
-                        &b.get("name").and_then(serde_json::Value::as_str),
-                    )
+                    a.get("name")
+                        .and_then(serde_json::Value::as_str)
+                        .cmp(&b.get("name").and_then(serde_json::Value::as_str))
                 });
                 serde_json::json!({
                     "id": ch.channel_id,
@@ -296,7 +313,9 @@ impl QtEventHandler {
 
     /// If our own channel changed, record it (chat target) and update the UI.
     fn update_own_channel(&mut self) {
-        let Some(session) = self.own_session else { return };
+        let Some(session) = self.own_session else {
+            return;
+        };
         let Some(channel_id) = self.state.users.get(&session).map(|u| u.channel_id) else {
             return;
         };
@@ -399,7 +418,10 @@ impl EventHandler for QtEventHandler {
             }
             ControlMessage::Version(v) => self.state.apply_version(v),
             ControlMessage::Reject(r) => {
-                let reason = r.reason.clone().unwrap_or_else(|| "connection rejected".to_owned());
+                let reason = r
+                    .reason
+                    .clone()
+                    .unwrap_or_else(|| "connection rejected".to_owned());
                 ui_set_status(&self.ui, format!("rejected: {reason}"));
             }
             _ => {}
@@ -407,7 +429,9 @@ impl EventHandler for QtEventHandler {
     }
 
     fn on_udp_message(&mut self, msg: &UdpMessage) {
-        let UdpMessage::Audio(audio) = msg else { return };
+        let UdpMessage::Audio(audio) = msg else {
+            return;
+        };
         if audio.opus_data.is_empty() {
             return;
         }

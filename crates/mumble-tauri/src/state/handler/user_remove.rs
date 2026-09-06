@@ -73,8 +73,8 @@ fn handle_user_departed(msg: &mumble_tcp::UserRemove, ctx: &HandlerContext) {
         .and_then(|s| s.users.get(&msg.session).map(|u| u.name.clone()));
 
     let mut was_talking = false;
-    let deferred_share_events: Vec<(u32, Vec<PendingKeyShare>)> =
-        if let Ok(mut state) = ctx.shared.lock() {
+    let deferred_share_events: Vec<(u32, Vec<PendingKeyShare>)> = match ctx.shared.lock() {
+        Ok(mut state) => {
             // Look up the departing user's cert hash before removing them.
             let cert_hash = state.users.get(&msg.session).and_then(|u| u.hash.clone());
 
@@ -111,9 +111,9 @@ fn handle_user_departed(msg: &mumble_tcp::UserRemove, ctx: &HandlerContext) {
             } else {
                 Vec::new()
             }
-        } else {
-            Vec::new()
-        };
+        }
+        _ => Vec::new(),
+    };
 
     // Emit outside the lock to avoid deadlock with Tauri IPC.
     if was_talking {
@@ -130,13 +130,13 @@ fn handle_user_departed(msg: &mumble_tcp::UserRemove, ctx: &HandlerContext) {
     }
     ctx.emit_empty("state-changed");
 
-    if let Some(name) = departing_name {
-        if !name.is_empty() {
-            ctx.emit(
-                "server-log",
-                ServerLogEntry::now(format!("{name} disconnected")),
-            );
-        }
+    if let Some(name) = departing_name
+        && !name.is_empty()
+    {
+        ctx.emit(
+            "server-log",
+            ServerLogEntry::now(format!("{name} disconnected")),
+        );
     }
 }
 
