@@ -141,6 +141,15 @@ impl AppState {
             }
         }
 
+        // The jitter floor is applied live too: it retunes every speaker that
+        // is already buffering, so a change is audible without a reconnect.
+        if settings.jitter_floor_ms != old_settings.jitter_floor_ms
+            && let Ok(mut state) = self.inner.snapshot().lock()
+            && let Some(ref mut mixer) = state.audio.mixer
+        {
+            mixer.set_jitter(settings.jitter_config());
+        }
+
         if let Ok(mut state) = self.inner.snapshot().lock() {
             state.audio.settings = settings;
         }
@@ -259,7 +268,8 @@ mod voice_pipeline {
                 let state = __session.lock().map_err(|e| e.to_string())?;
                 state.audio.speaker_volumes.clone()
             };
-            let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
+            let mut mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
+            mixer.set_jitter(audio_settings.jitter_config());
             crate::e2e_stats::register_speaker_buffers(&speaker_buffers);
             crate::audio::stream_audio::register(&speaker_buffers, &speaker_volumes);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
@@ -441,7 +451,8 @@ mod voice_pipeline {
                 let state = __session.lock().map_err(|e| e.to_string())?;
                 state.audio.speaker_volumes.clone()
             };
-            let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
+            let mut mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
+            mixer.set_jitter(audio_settings.jitter_config());
             crate::e2e_stats::register_speaker_buffers(&speaker_buffers);
             crate::audio::stream_audio::register(&speaker_buffers, &speaker_volumes);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
@@ -587,7 +598,8 @@ mod voice_pipeline {
                 let state = __session.lock().map_err(|e| e.to_string())?;
                 state.audio.speaker_volumes.clone()
             };
-            let mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
+            let mut mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
+            mixer.set_jitter(audio_settings.jitter_config());
             crate::e2e_stats::register_speaker_buffers(&speaker_buffers);
             crate::audio::stream_audio::register(&speaker_buffers, &speaker_volumes);
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(

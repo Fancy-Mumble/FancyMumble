@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 
 use mumble_protocol::audio::filter::denoiser::NoiseSuppressionAlgorithm;
+use mumble_protocol::audio::mixer::JitterConfig;
 
 /// Microphone amplitude payload emitted during mic test.
 #[derive(Clone, Serialize)]
@@ -201,6 +202,15 @@ pub struct AudioSettings {
     /// Ignored on non-Windows platforms.
     #[serde(default)]
     pub exclusive_input: bool,
+    /// Shallowest depth the per-speaker jitter buffer plays out at, in
+    /// milliseconds (expert, default 40).
+    ///
+    /// This is latency the client adds on purpose: the buffer primes to it
+    /// before a talkspurt starts, and relaxes back to it after one that never
+    /// ran dry. Lower is closer to the wire and less forgiving of an uneven
+    /// network. It is applied live - no pipeline restart.
+    #[serde(default = "AudioSettings::default_jitter_floor_ms")]
+    pub jitter_floor_ms: u32,
 }
 
 impl AudioSettings {
@@ -224,6 +234,31 @@ impl AudioSettings {
     }
     pub(crate) fn default_volume() -> f32 {
         1.0
+    }
+    pub(crate) fn default_jitter_floor_ms() -> u32 {
+        40
+    }
+
+    /// The jitter-buffer bounds these settings ask for.
+    ///
+    /// `FANCY_JITTER_FLOOR_MS` overrides the stored floor, so a measurement
+    /// run can sweep it without touching the settings file. The floor is held
+    /// to the config's ceiling: a floor above it would pin the target there.
+    pub fn jitter_config(&self) -> JitterConfig {
+        self.jitter_config_with(std::env::var("FANCY_JITTER_FLOOR_MS").ok().as_deref())
+    }
+
+    /// [`Self::jitter_config`] with the override read for it, so the parsing
+    /// and the clamp are testable without touching the process environment.
+    fn jitter_config_with(&self, override_floor: Option<&str>) -> JitterConfig {
+        let asked = override_floor
+            .and_then(|v| v.trim().parse::<u32>().ok())
+            .unwrap_or(self.jitter_floor_ms);
+        let defaults = JitterConfig::default();
+        JitterConfig {
+            floor_ms: asked.min(defaults.ceiling_ms),
+            ..defaults
+        }
     }
 
     /// Convert an Opus packet duration in ms to samples-per-channel at
@@ -285,6 +320,7 @@ impl Default for AudioSettings {
             auto_input_sensitivity: false,
             force_tcp_audio: false,
             exclusive_input: false,
+            jitter_floor_ms: Self::default_jitter_floor_ms(),
         }
     }
 }
@@ -300,4 +336,36 @@ pub enum VoiceState {
     Active,
     /// User is muted (mic off) but can still hear others.
     Muted,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AudioSettings;
+
+    #[test]
+    fn the_default_jitter_floor_is_the_buffer_default() {
+        let cfg = AudioSettings::default().jitter_config_with(None);
+        assert_eq!(cfg.floor_ms, AudioSettings::default_jitter_floor_ms());
+        assert_eq!(cfg.ceiling_ms, 200);
+    }
+
+    #[test]
+    fn the_env_override_wins_and_garbage_in_it_does_not() {
+        let settings = AudioSettings::default();
+        assert_eq!(settings.jitter_config_with(Some(" 20 ")).floor_ms, 20);
+        assert_eq!(
+            settings.jitter_config_with(Some("soon")).floor_ms,
+            settings.jitter_floor_ms
+        );
+    }
+
+    #[test]
+    fn a_floor_above_the_ceiling_is_held_to_it() {
+        let settings = AudioSettings {
+            jitter_floor_ms: 5_000,
+            ..AudioSettings::default()
+        };
+        let cfg = settings.jitter_config_with(None);
+        assert_eq!(cfg.floor_ms, cfg.ceiling_ms);
+    }
 }

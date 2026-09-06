@@ -47,6 +47,9 @@ export interface AudioSettings {
   force_tcp_audio: boolean;
   /** Open the microphone in WASAPI exclusive mode (Windows only). */
   exclusive_input?: boolean;
+  /** Shallowest depth the jitter buffer plays out at, in ms (expert).
+   *  Latency the client adds on purpose; applied live. */
+  jitter_floor_ms?: number;
 }
 
 export type VoiceState = "inactive" | "active" | "muted";
