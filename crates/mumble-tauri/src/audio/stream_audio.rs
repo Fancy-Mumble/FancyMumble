@@ -8,14 +8,17 @@
 //! ducks nothing, and follows the same output-device choice.
 //!
 //! The mixer is mono 48 kHz f32 (voice is), so stereo desktop audio is
-//! downmixed on the way in. The buffer is the same per-speaker ring voice
-//! uses - capped at [`MAX_SPEAKER_BUFFER_SAMPLES`], oldest samples dropped
-//! on overflow - which is what the stats panel's playout row reports.
+//! downmixed on the way in. The buffer is the same per-speaker jitter buffer
+//! voice uses - it primes to the floor, adapts to the arrival spread, and is
+//! capped at [`MAX_SPEAKER_BUFFER_SAMPLES`] with the oldest samples dropped on
+//! overflow - which is what the stats panel's playout row reports.
 
-use std::collections::VecDeque;
 use std::sync::{Mutex, OnceLock};
 
-use mumble_protocol::audio::mixer::{MAX_SPEAKER_BUFFER_SAMPLES, SpeakerBuffers, SpeakerVolumes};
+use mumble_protocol::audio::mixer::{
+    JitterConfig, MAX_SPEAKER_BUFFER_SAMPLES, SpeakerBuffer, SpeakerBuffers, SpeakerVolumes,
+};
+use mumble_protocol::audio::sample::AudioFormat;
 
 /// Stream speakers live above every real Mumble session id (the server hands
 /// those out from 0 upward), so a broadcast can never collide with a person.
@@ -79,16 +82,19 @@ pub(crate) fn push(session: u32, stereo: &[f32]) {
         return;
     };
     let Ok(mut map) = buffers.lock() else { return };
-    let buffer = map
-        .entry(speaker_id(session))
-        .or_insert_with(|| VecDeque::with_capacity(MAX_SPEAKER_BUFFER_SAMPLES));
-    buffer.extend(stereo.chunks_exact(2).map(|f| (f[0] + f[1]) * 0.5));
-    // The same last-resort overflow rule the voice path applies: when playout
-    // falls behind, drop the oldest samples rather than grow without bound.
-    if buffer.len() > MAX_SPEAKER_BUFFER_SAMPLES {
-        let excess = buffer.len() - MAX_SPEAKER_BUFFER_SAMPLES;
-        let _ = buffer.drain(..excess);
-    }
+    let buffer = map.entry(speaker_id(session)).or_insert_with(|| {
+        SpeakerBuffer::new(AudioFormat::MONO_48KHZ_F32, JitterConfig::default())
+    });
+    // Downmix into a scratch buffer: `push` takes a slice, and frames arrive
+    // 20 ms at a time, so this is one small allocation per frame.
+    let mono: Vec<f32> = stereo
+        .chunks_exact(2)
+        .map(|f| (f[0] + f[1]) * 0.5)
+        .collect();
+    // `push`, not `push_complete`: a stream never sends a terminator, so this
+    // primes to the jitter floor and then adapts exactly like a voice speaker.
+    // It also applies the cap - the oldest samples go when playout falls behind.
+    buffer.push(&mono);
 }
 
 /// Drop `session`'s stream audio (the viewer stopped). Anything still queued
@@ -129,7 +135,31 @@ pub(crate) fn set_volume(session: u32, volume: f32) {
 
 #[cfg(test)]
 mod tests {
-    use super::{STREAM_SPEAKER_BASE, speaker_id};
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+
+    use mumble_protocol::audio::mixer::MAX_SPEAKER_BUFFER_SAMPLES;
+
+    use super::{STREAM_SPEAKER_BASE, SpeakerBuffers, SpeakerVolumes, push, register, speaker_id};
+
+    /// `frames` 20 ms stereo frames of (left, right) = (1.0, 0.0).
+    fn stereo_frames(frames: usize) -> Vec<f32> {
+        (0..frames * 960 * 2)
+            .map(|i| if i % 2 == 0 { 1.0 } else { 0.0 })
+            .collect()
+    }
+
+    /// `register` publishes into one process-wide registry, so tests that
+    /// install their own buffers have to take turns.
+    static REGISTRY_TURN: Mutex<()> = Mutex::new(());
+
+    fn live_registry() -> (MutexGuard<'static, ()>, SpeakerBuffers, SpeakerVolumes) {
+        let turn = REGISTRY_TURN.lock().unwrap_or_else(PoisonError::into_inner);
+        let buffers: SpeakerBuffers = Arc::new(Mutex::new(HashMap::new()));
+        let volumes: SpeakerVolumes = Arc::new(Mutex::new(HashMap::new()));
+        register(&buffers, &volumes);
+        (turn, buffers, volumes)
+    }
 
     #[test]
     fn stream_speakers_never_collide_with_real_sessions() {
@@ -137,5 +167,33 @@ mod tests {
         assert_ne!(speaker_id(1), speaker_id(2));
         // A server would have to hand out 268 million sessions to reach here.
         assert!(speaker_id(7) > 1_000_000_000);
+    }
+
+    #[test]
+    fn push_downmixes_stereo_into_one_speaker_buffer() {
+        let (_turn, buffers, _volumes) = live_registry();
+
+        push(11, &stereo_frames(2));
+
+        let map = buffers.lock().expect("buffers");
+        let buffer = map.get(&speaker_id(11)).expect("stream speaker");
+        // Two 20 ms stereo frames downmix to 1920 mono samples...
+        assert_eq!(buffer.len(), 1920);
+        // ...each the mean of its channels.
+        assert!(buffer.iter().all(|s| (s - 0.5).abs() < f32::EPSILON));
+    }
+
+    #[test]
+    fn push_holds_the_buffer_to_the_cap() {
+        let (_turn, buffers, _volumes) = live_registry();
+
+        // Well past the cap: 25 frames is 24_000 mono samples.
+        for _ in 0..25 {
+            push(12, &stereo_frames(1));
+        }
+
+        let map = buffers.lock().expect("buffers");
+        let buffer = map.get(&speaker_id(12)).expect("stream speaker");
+        assert_eq!(buffer.len(), MAX_SPEAKER_BUFFER_SAMPLES);
     }
 }
