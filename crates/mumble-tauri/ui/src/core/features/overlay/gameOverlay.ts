@@ -27,6 +27,15 @@ export type GameOverlayHiddenReason =
   | "waitingForActivity"
   | "manuallyHidden";
 
+/**
+ * What the platform's probe could see.
+ *
+ * A detector that finds nothing looks exactly like a machine with no games on
+ * it; this is the difference. `waylandSurface` is the common one on Linux: a
+ * native Wayland window is focused, and no client may learn which one it is.
+ */
+export type GameOverlayProbeNote = "ok" | "unsupported" | "noDisplay" | "waylandSurface" | "failed";
+
 /** What the shell reported about the foreground application. */
 export type GameOverlayShell = "normal" | "busy" | "exclusiveFullscreen" | "presenting" | "unknown";
 
@@ -59,6 +68,8 @@ export interface GameOverlayState {
   /** Where the window actually is, in physical pixels. */
   placement?: { x: number; y: number; w: number; h: number };
   verdict: GameOverlayVerdict | null;
+  /** What the foreground probe could see on this reading. */
+  probeNote: GameOverlayProbeNote;
   score: number;
   exePath: string | null;
   exeStem: string | null;

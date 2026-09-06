@@ -192,12 +192,13 @@ function Diagnostics({
       defaultValue: "A game in exclusive fullscreen - nothing can be drawn over it",
     }),
   }[state.verdict ?? "notGame"];
+  const probe = probeLine(t, state);
 
   return (
     <Box
       sx={(theme) => ({
         borderRadius: radius("md"),
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         background: theme.palette.nebula.card2,
         px: "14px",
         py: "12px",
@@ -221,6 +222,15 @@ function Diagnostics({
       >
         {verdictLabel}
       </Typography>
+
+      {/* Why the detector saw nothing, when it saw nothing. Without this the
+          panel reads the same on a machine with no game running as on one
+          whose window system will not say what is in front. */}
+      {probe && (
+        <Typography sx={(theme) => ({ mt: "4px", fontSize: 11.5, color: theme.palette.nebula.muted })}>
+          {probe}
+        </Typography>
+      )}
 
       {/* The window's own answer, not the policy's intention: without this a
           panel cannot tell "showing" from "tried to show and failed". */}
@@ -271,6 +281,43 @@ function Diagnostics({
       )}
     </Box>
   );
+}
+
+/**
+ * What the foreground probe could see, when that is the reason for a blank
+ * verdict.
+ *
+ * Silent while it can see normally: the verdict and its evidence say
+ * everything then, and a line explaining the window system on every reading
+ * would just be noise.
+ */
+function probeLine(
+  t: ReturnType<typeof useTranslation<"nebulaSettings">>["t"],
+  state: NonNullable<ReturnType<typeof useGameOverlayState>>,
+): string | null {
+  switch (state.probeNote) {
+    case "unsupported":
+      return t("overlay.probeUnsupported", {
+        defaultValue:
+          "This system cannot say which window is in front, so only the shortcut can show the overlay.",
+      });
+    case "noDisplay":
+      return t("overlay.probeNoDisplay", {
+        defaultValue:
+          "There is no window system to ask, so no game can be seen. The shortcut still shows the overlay.",
+      });
+    case "waylandSurface":
+      return t("overlay.probeWaylandSurface", {
+        defaultValue:
+          "Wayland does not tell any app which window is in front. Games running through XWayland - Proton, Wine and most native ones - are still detected.",
+      });
+    case "failed":
+      return t("overlay.probeFailed", {
+        defaultValue: "The window system did not answer; the log has the detail.",
+      });
+    default:
+      return null;
+  }
 }
 
 /** What the overlay window is actually painting, and where it is. */

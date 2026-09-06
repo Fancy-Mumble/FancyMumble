@@ -27,7 +27,36 @@ fn steam_root() -> Option<String> {
     key.get_value::<String, _>("SteamPath").ok()
 }
 
-#[cfg(not(windows))]
+/// Steam keeps no registry on Linux, so the root is wherever it unpacked
+/// itself. `~/.steam/steam` is the symlink Steam maintains for exactly this
+/// question; the rest are where the native, Flatpak and Snap builds land when
+/// that symlink is missing. Only the first one that exists is used - every
+/// other library folder comes from `libraryfolders.vdf` anyway.
+#[cfg(target_os = "linux")]
+fn steam_root() -> Option<String> {
+    const ROOTS: &[&str] = &[
+        ".steam/steam",
+        ".steam/root",
+        ".local/share/Steam",
+        ".var/app/com.valvesoftware.Steam/data/Steam",
+        "snap/steam/common/.local/share/Steam",
+    ];
+
+    let home = std::env::var("HOME").ok()?;
+    let root = ROOTS
+        .iter()
+        .map(|root| format!("{home}/{root}"))
+        .find(|root| std::path::Path::new(root).join("steamapps").is_dir())?;
+    // `.steam/steam` is a symlink, and the path a game is matched against
+    // comes from `/proc/<pid>/exe`, which the kernel has already resolved. An
+    // unresolved root here would never prefix-match anything.
+    Some(
+        std::fs::canonicalize(&root)
+            .map_or(root, |resolved| resolved.to_string_lossy().into_owned()),
+    )
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 fn steam_root() -> Option<String> {
     None
 }

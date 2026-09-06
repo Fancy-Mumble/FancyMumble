@@ -2,16 +2,18 @@
 //!
 //! This is the local replacement for Discord's server-side list of ten
 //! thousand executables. Every launcher already records what it installed and
-//! where - Steam in its `appmanifest` files, Epic in JSON manifests, the rest
-//! in the registry - so the same question ("did a game store put this
-//! executable here?") is answerable from disk, with no network call, no
-//! central list to maintain, and no dependence on an undocumented endpoint.
+//! where - Steam in its `appmanifest` files, Epic in JSON manifests, Heroic in
+//! its own on Linux, the rest in the registry - so the same question ("did a
+//! game store put this executable here?") is answerable from disk, with no
+//! network call, no central list to maintain, and no dependence on an
+//! undocumented endpoint.
 //!
 //! Windows also keeps its own list: `GameConfigStore` holds the executables
 //! Game Bar and Fullscreen Optimizations have classified as games, which is
 //! where "Remember this is a game" writes to.
 
 mod epic;
+mod heroic;
 mod registry_stores;
 mod steam;
 mod windows_games;
@@ -86,6 +88,7 @@ impl GameIndex {
         let mut games = Vec::new();
         steam::collect(&mut games);
         epic::collect(&mut games);
+        heroic::collect(&mut games);
         registry_stores::collect(&mut games);
 
         // Longest first, so a game installed inside another store's directory
