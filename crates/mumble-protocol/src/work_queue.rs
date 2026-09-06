@@ -31,6 +31,36 @@ pub enum WorkItem {
     Shutdown,
 }
 
+/// Where inbound audio goes instead of the event loop.
+///
+/// Decoding on the event loop puts every Opus frame behind whatever control
+/// message or user command is being handled at the time - the loop already
+/// warns when that passes 50 ms. An embedder that hands over a sink takes
+/// audio off the loop entirely; the packet reaches the sink straight from the
+/// socket-reading task.
+///
+/// The sink returns the message when it could not take it, and that goes to
+/// the work queue as before, so a sink that has gone away degrades rather
+/// than loses audio.
+#[derive(Clone)]
+pub struct AudioSink(std::sync::Arc<dyn Fn(UdpMessage) -> Option<UdpMessage> + Send + Sync>);
+
+impl std::fmt::Debug for AudioSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("AudioSink(..)")
+    }
+}
+
+impl AudioSink {
+    /// Wrap `deliver`, which takes a packet and hands back any it refused.
+    ///
+    /// It runs on the task reading the socket, so it must not block: the
+    /// point of the sink is that nothing on the audio path waits.
+    pub fn new(deliver: impl Fn(UdpMessage) -> Option<UdpMessage> + Send + Sync + 'static) -> Self {
+        Self(std::sync::Arc::new(deliver))
+    }
+}
+
 /// Sender-side handle for injecting work items.
 ///
 /// Cloneable - hand one to the UI thread, one to each transport task, etc.
@@ -40,12 +70,32 @@ pub struct WorkQueueSender {
     tcp_tx: mpsc::Sender<ControlMessage>,
     cmd_tx: mpsc::Sender<BoxedCommand>,
     audio_out_tx: mpsc::Sender<UdpMessage>,
+    audio_sink: Option<AudioSink>,
 }
 
 impl WorkQueueSender {
     /// Submit an inbound UDP message (audio / ping). Non-blocking.
     pub async fn send_udp(&self, msg: UdpMessage) -> Result<()> {
-        self.udp_tx.send(msg).await.map_err(|_| Error::QueueClosed)
+        match self.route_audio(msg) {
+            Some(msg) => self.udp_tx.send(msg).await.map_err(|_| Error::QueueClosed),
+            None => Ok(()),
+        }
+    }
+
+    /// Offer `msg` to the audio sink, returning it if the queue must carry it.
+    ///
+    /// Everything that is not audio comes straight back, as does everything
+    /// when no sink is installed. Also public because tunnelled audio reaches
+    /// the event loop as a control message and takes the same turn-off here.
+    #[must_use]
+    pub fn route_audio(&self, msg: UdpMessage) -> Option<UdpMessage> {
+        let Some(sink) = self.audio_sink.as_ref() else {
+            return Some(msg);
+        };
+        if !matches!(msg, UdpMessage::Audio(_)) {
+            return Some(msg);
+        }
+        (sink.0)(msg)
     }
 
     /// Submit an inbound TCP control message. Non-blocking.
@@ -121,7 +171,9 @@ const AUDIO_OUT_CHANNEL_SIZE: usize = 128;
 /// The outbound audio receiver is returned independently so the event
 /// loop can poll it at the top level of its `select!`, preventing
 /// starvation by constant inbound UDP traffic.
-pub fn create() -> (
+pub fn create(
+    audio_sink: Option<AudioSink>,
+) -> (
     WorkQueueSender,
     WorkQueueReceiver,
     mpsc::Receiver<UdpMessage>,
@@ -137,6 +189,7 @@ pub fn create() -> (
             tcp_tx,
             cmd_tx,
             audio_out_tx,
+            audio_sink,
         },
         WorkQueueReceiver {
             udp_rx,
@@ -156,7 +209,7 @@ mod tests {
 
     #[tokio::test]
     async fn send_and_receive_tcp_message() {
-        let (sender, mut receiver, _audio_out_rx) = create();
+        let (sender, mut receiver, _audio_out_rx) = create(None);
         let ping = ControlMessage::Ping(mumble_tcp::Ping {
             timestamp: Some(123),
             ..Default::default()
@@ -174,7 +227,7 @@ mod tests {
 
     #[tokio::test]
     async fn send_and_receive_udp_message() {
-        let (sender, mut receiver, _audio_out_rx) = create();
+        let (sender, mut receiver, _audio_out_rx) = create(None);
         let udp_ping = UdpMessage::Ping(mumble_udp::Ping {
             timestamp: 456,
             ..Default::default()
@@ -192,7 +245,7 @@ mod tests {
 
     #[tokio::test]
     async fn send_and_receive_command() {
-        let (sender, mut receiver, _audio_out_rx) = create();
+        let (sender, mut receiver, _audio_out_rx) = create(None);
         let cmd: BoxedCommand = Box::new(Disconnect);
         sender.send_command(cmd).await.unwrap();
 
@@ -205,7 +258,7 @@ mod tests {
 
     #[tokio::test]
     async fn udp_has_priority_over_tcp() {
-        let (sender, mut receiver, _audio_out_rx) = create();
+        let (sender, mut receiver, _audio_out_rx) = create(None);
 
         // Send TCP first, then UDP
         let tcp_msg = ControlMessage::Ping(mumble_tcp::Ping {
@@ -241,9 +294,53 @@ mod tests {
         }
     }
 
+    #[test]
+    fn without_a_sink_every_message_goes_to_the_queue() {
+        let (sender, _receiver, _audio_out_rx) = create(None);
+        let audio = UdpMessage::Audio(mumble_udp::Audio::default());
+        assert!(sender.route_audio(audio).is_some());
+    }
+
+    #[test]
+    fn a_sink_takes_audio_and_leaves_everything_else() {
+        let taken = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = std::sync::Arc::clone(&taken);
+        let sink = AudioSink::new(move |_msg| {
+            let _ = counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            None
+        });
+        let (sender, _receiver, _audio_out_rx) = create(Some(sink));
+
+        assert!(
+            sender
+                .route_audio(UdpMessage::Audio(mumble_udp::Audio::default()))
+                .is_none(),
+            "audio should go to the sink"
+        );
+        assert!(
+            sender
+                .route_audio(UdpMessage::Ping(mumble_udp::Ping::default()))
+                .is_some(),
+            "a ping is not audio and belongs on the event loop"
+        );
+        assert_eq!(taken.load(std::sync::atomic::Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn a_sink_that_refuses_hands_the_packet_back() {
+        let sink = AudioSink::new(Some);
+        let (sender, _receiver, _audio_out_rx) = create(Some(sink));
+        assert!(
+            sender
+                .route_audio(UdpMessage::Audio(mumble_udp::Audio::default()))
+                .is_some(),
+            "a refused packet still has to reach the queue"
+        );
+    }
+
     #[tokio::test]
     async fn shutdown_when_all_senders_dropped() {
-        let (sender, mut receiver, _audio_out_rx) = create();
+        let (sender, mut receiver, _audio_out_rx) = create(None);
         drop(sender);
 
         let item = receiver.recv().await;
@@ -252,7 +349,7 @@ mod tests {
 
     #[tokio::test]
     async fn sender_is_cloneable() {
-        let (sender, mut receiver, _audio_out_rx) = create();
+        let (sender, mut receiver, _audio_out_rx) = create(None);
         let sender2 = sender.clone();
 
         sender
@@ -277,7 +374,7 @@ mod tests {
 
     #[tokio::test]
     async fn send_fails_when_receiver_dropped() {
-        let (sender, receiver, _audio_out_rx) = create();
+        let (sender, receiver, _audio_out_rx) = create(None);
         drop(receiver);
 
         let result = sender
