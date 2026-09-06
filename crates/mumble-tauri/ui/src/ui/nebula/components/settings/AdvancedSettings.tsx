@@ -285,6 +285,12 @@ export function AdvancedSettings() {
         onChange={() => toggle("autoUpdateOnStartup")}
       />
       <ToggleRow
+        title={t("advanced.betaUpdates")}
+        hint={t("advanced.betaUpdatesHint")}
+        checked={prefs.betaUpdates}
+        onChange={() => toggle("betaUpdates")}
+      />
+      <ToggleRow
         title={t("advanced.persistDms")}
         hint={t("advanced.persistDmsHint")}
         checked={prefs.persistDms}

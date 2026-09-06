@@ -225,6 +225,7 @@
     "busyTitle": "Update läuft...",
     "skipActive": "✓ v{{version}} überspringen - klicken zum Rückgängig machen",
     "skipInactive": "v{{version}} überspringen",
+    "betaPill": "Beta",
     "closeBtn": "Schließen",
     "laterBtn": "Später",
     "retryBtn": "Erneut versuchen",

@@ -225,6 +225,7 @@
     "busyTitle": "正在更新…",
     "skipActive": "✓ 已跳过 v{{version}}，点击撤销",
     "skipInactive": "跳过 v{{version}}",
+    "betaPill": "Beta",
     "closeBtn": "关闭",
     "laterBtn": "稍后",
     "retryBtn": "重试",

@@ -73,6 +73,9 @@ function NebulaRuntimeInner({ onOpenMarketplace }: { onOpenMarketplace: (pluginI
       void invoke("updater_set_skipped_version", { version: preferences.skippedUpdateVersion ?? null }).catch(
         () => undefined,
       );
+      void invoke("updater_set_beta_channel", { enabled: preferences.betaUpdates ?? false }).catch(
+        () => undefined,
+      );
     });
     void getNotificationSounds().then((settings) => {
       if (settings) setNotificationSounds(settings);

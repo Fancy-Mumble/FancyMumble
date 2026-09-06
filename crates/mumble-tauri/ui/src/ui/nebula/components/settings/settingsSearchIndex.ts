@@ -571,6 +571,12 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
   },
   {
     page: "advanced",
+    title: "Beta updates",
+    titleKey: "advanced.betaUpdates",
+    keywords: ["beta", "prerelease", "pre-release", "channel", "update"],
+  },
+  {
+    page: "advanced",
     title: "Persist DM history",
     titleKey: "advanced.persistDms",
     keywords: ["direct messages", "history"],

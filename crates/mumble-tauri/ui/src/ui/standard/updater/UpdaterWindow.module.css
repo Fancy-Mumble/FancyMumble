@@ -114,6 +114,17 @@
   color: var(--updater-accent);
 }
 
+/* Marks a pre-release build, so nobody installs a beta thinking it is the
+   stable release. Amber rather than the accent blue, to read as a caution. */
+.versionPill.beta {
+  background: rgba(240, 173, 78, 0.16);
+  border-color: rgba(240, 173, 78, 0.5);
+  color: #f0ad4e;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+}
+
 .notes {
   width: 100%;
   min-height: 280px;

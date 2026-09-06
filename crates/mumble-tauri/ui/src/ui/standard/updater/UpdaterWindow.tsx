@@ -167,6 +167,9 @@ export default function UpdaterWindow() {
             <span className={styles.versionPill}>v{info.current_version}</span>
             <span aria-hidden="true">&rarr;</span>
             <span className={`${styles.versionPill} ${styles.next}`}>v{info.version}</span>
+            {info.beta && (
+              <span className={`${styles.versionPill} ${styles.beta}`}>{t("updater.betaPill")}</span>
+            )}
           </div>
         )}
 

@@ -106,8 +106,8 @@ See [ANDROID_DEV.md](ANDROID_DEV.md) for complete Android development setup inst
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/Fancy-Mumble/FancyMumbleNext.git
-   cd FancyMumbleNext
+   git clone https://github.com/Fancy-Mumble/FancyMumble.git
+   cd FancyMumble
    ```
 
 2. **Install frontend dependencies**
@@ -157,6 +157,54 @@ cargo tauri android dev
 Or use the helper script (Windows):
 ```powershell
 .\scripts\android-dev.ps1 -Run
+```
+
+### Releases and update channels
+
+Releases are cut by CI from a branch, never by hand. The version in
+`crates/mumble-tauri/tauri.conf.json` is the source of truth for the tag, and
+`ui/package.json` plus `crates/mumble-protocol/Cargo.toml` must agree with it
+or the build fails before anything is published.
+
+| Branch | Publishes | Visible to |
+| --- | --- | --- |
+| `main` | `vX.Y.Z`, flagged latest | everyone |
+| `beta` | `vX.Y.Z-beta.N`, flagged pre-release | users who opted in |
+
+A pre-release is listed on the Releases tab with GitHub's "Pre-release" marker,
+but it is excluded from `releases/latest`, which is where every stable client
+looks. Beta clients read a separate manifest, `beta.json`, which CI publishes on
+the orphan `updater` branch after the release itself exists. It is served from
+`raw.githubusercontent.com` and can lag a release by a few minutes of CDN cache.
+
+**Cutting a beta.** Branch `beta` off `develop`, set all three version files to
+the *next* stable version (e.g. `0.4.0` while `0.3.0` is released), and push. CI
+appends `-beta.<run number>`, so successive pushes give `0.4.0-beta.1`,
+`0.4.0-beta.2` and so on. Pushing a `beta` branch whose version is not above the
+latest stable release fails the build on purpose: such a build would sort below
+what testers already have and reach nobody.
+
+**Opting in.** Settings -> Advanced -> Beta updates. The updater then checks both
+manifests and offers whichever version is higher, so a tester moves onto the
+stable `0.4.0` on their own the moment it ships. Turning the setting back off
+does not roll an installed beta back; the client simply waits until a stable
+release overtakes it. For the same reason a tester on `0.4.0-beta.3` is not
+offered a `0.3.1` stable hotfix.
+
+**What beta builds contain.** Windows NSIS installer, Linux AppImage, and the
+Android APK. No MSI (the bundler rejects a non-numeric pre-release identifier)
+and no `.deb` (dpkg reads `-beta.N` as a Debian revision and sorts it *above* the
+final `0.4.0`, which would block the upgrade to stable). The auto-updater only
+ever uses the NSIS installer and the AppImage. Every beta of a version shares one
+Android `versionCode`, so betas can be sideloaded over each other but could not
+be uploaded to a store alongside the stable build.
+
+To exercise the channel logic locally without publishing anything, serve a
+manifest and point a debug build at it:
+
+```bash
+python3 -m http.server 8787          # serving a directory containing beta.json
+FANCY_UPDATER_BETA_URL=http://127.0.0.1:8787/beta.json cargo tauri dev
 ```
 
 ---
@@ -261,6 +309,6 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 **Built with ❤️ by the Fancy Mumble Team**
 
-[Report Bug](https://github.com/Fancy-Mumble/FancyMumbleNext/issues) • [Request Feature](https://github.com/Fancy-Mumble/FancyMumbleNext/issues) • [Join Discussion](https://github.com/Fancy-Mumble/FancyMumbleNext/discussions)
+[Report Bug](https://github.com/Fancy-Mumble/FancyMumble/issues) • [Request Feature](https://github.com/Fancy-Mumble/FancyMumble/issues) • [Join Discussion](https://github.com/Fancy-Mumble/FancyMumble/discussions)
 
 </div>

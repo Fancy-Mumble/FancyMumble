@@ -91,6 +91,11 @@ export const settingRows: PreferenceRow[] = [
     detail: "Download and install client updates on startup.",
   },
   {
+    key: "betaUpdates",
+    title: "Beta updates",
+    detail: "Receive pre-release builds before they reach everyone.",
+  },
+  {
     key: "enableDualPath",
     title: "Encrypted dual-path messages",
     detail: "Send encrypted content together with a compatible placeholder.",
@@ -130,7 +135,13 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
 
 /** Which boolean preference rows appear in each section, in display order. */
 export const sectionPreferenceKeys: Record<SettingsSectionId, Array<keyof UserPreferences>> = {
-  general: ["autoReconnect", "hideEmptyChannels", "showDisconnectWarning", "autoUpdateOnStartup"],
+  general: [
+    "autoReconnect",
+    "hideEmptyChannels",
+    "showDisconnectWarning",
+    "autoUpdateOnStartup",
+    "betaUpdates",
+  ],
   profile: [],
   identities: [],
   voice: [],

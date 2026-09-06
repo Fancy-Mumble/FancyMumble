@@ -170,6 +170,8 @@
     "autoReconnectHint": "Automatically retry connecting if the server connection drops unexpectedly. Manual disconnects never trigger auto-reconnect.",
     "autoUpdate": "Auto-update on startup",
     "autoUpdateHint": "When enabled, available updates are downloaded and installed automatically when Fancy Mumble starts. A small progress window appears during the download. When disabled, you will be asked before each update.",
+    "betaUpdates": "Beta updates",
+    "betaUpdatesHint": "Receive pre-release builds before they reach everyone. Betas are offered only while they are newer than the stable release. Turning this off does not undo an installed beta: the client stays on it until a stable release overtakes it.",
     "persistDms": "Persist DM history",
     "persistDmsHint": "Direct messages exchanged with friends are saved on this device, encrypted with AES-GCM. Turn off to keep DMs in memory only; existing history is removed when you disable this.",
     "dangerZone": "Danger Zone",
