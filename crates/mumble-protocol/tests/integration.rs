@@ -898,9 +898,13 @@ fn base64_encode(data: &[u8]) -> String {
 /// the key material it sends. This walks that whole path against a live server -
 /// announce 0.4.0, read `CryptSetup`, and key the cipher from what arrived.
 ///
-/// Everything here passes against an OCB2 server too, except the one assertion
-/// that matters, so a run against stock murmur reports honestly rather than
-/// silently proving nothing.
+/// The cipher axis only exists against a Fancy server: stock murmur always keys
+/// OCB2-AES128, correctly. So this reads the server's own `Version` first and
+/// skips loudly when it announces no Fancy version, rather than asserting
+/// something the peer was never able to satisfy - the same shape as
+/// `ensure_server_available` above. `docker-compose.test.yml` starts stock
+/// murmur, so that is the CI path today; point `MUMBLE_TEST_PORT` at a Starling
+/// to actually exercise it.
 #[tokio::test]
 async fn test_fancy_client_is_keyed_for_modern_voice_crypto() {
     if !ensure_server_available().await {
@@ -930,17 +934,34 @@ async fn test_fancy_client_is_keyed_for_modern_voice_crypto() {
         transport.send(msg).await.unwrap();
     }
 
-    // `CryptSetup` arrives after `ServerSync`, so read until it does.
+    // `CryptSetup` arrives after `ServerSync`, so read until it does. The
+    // server's own `Version` comes first, unprompted, and carries the Fancy
+    // version that decides whether the cipher axis exists at all.
     let deadline = tokio::time::Instant::now() + TIMEOUT;
     let mut crypt_setup = None;
+    let mut server_fancy: Option<u64> = None;
     while crypt_setup.is_none() && tokio::time::Instant::now() < deadline {
         let Ok(Ok(msg)) = tokio::time::timeout(Duration::from_secs(5), transport.recv()).await
         else {
             break;
         };
-        if let ControlMessage::CryptSetup(cs) = msg {
-            crypt_setup = Some(cs);
+        match msg {
+            ControlMessage::Version(v) => server_fancy = v.fancy_version,
+            ControlMessage::CryptSetup(cs) => crypt_setup = Some(cs),
+            _ => {}
         }
+    }
+
+    if server_fancy.unwrap_or(0) == 0 {
+        eprintln!(
+            "WARNING: the server at {HOST}:{} announced no Fancy version, so it can only \
+             key OCB2-AES128 and there is no cipher choice to assert. Skipping. \
+             `docker-compose.test.yml` starts stock murmur; run this against a Fancy \
+             server with:\n  MUMBLE_TEST_PORT=<starling port> cargo test -p mumble-protocol \
+             --test integration",
+            port()
+        );
+        return;
     }
 
     let cs = crypt_setup.expect(
