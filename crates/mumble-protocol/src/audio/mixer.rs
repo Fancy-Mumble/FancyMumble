@@ -32,7 +32,7 @@ const SPEAKER_TIMEOUT_SECS: u64 = 30;
 /// (19 200 samples at 48 kHz mono) to prevent buffer bloat when
 /// the playback callback falls behind (e.g. Android app
 /// backgrounded).  Old samples are dropped from the front.
-const MAX_SPEAKER_BUFFER_SAMPLES: usize = 19_200;
+pub const MAX_SPEAKER_BUFFER_SAMPLES: usize = 19_200;
 
 /// Shared per-speaker sample buffers.
 ///

@@ -8,13 +8,14 @@
 //! ducks nothing, and follows the same output-device choice.
 //!
 //! The mixer is mono 48 kHz f32 (voice is), so stereo desktop audio is
-//! downmixed on the way in. The buffer is the same adaptive jitter buffer
-//! voice uses, which is what the stats panel's playout row reports.
+//! downmixed on the way in. The buffer is the same per-speaker ring voice
+//! uses - capped at [`MAX_SPEAKER_BUFFER_SAMPLES`], oldest samples dropped
+//! on overflow - which is what the stats panel's playout row reports.
 
+use std::collections::VecDeque;
 use std::sync::{Mutex, OnceLock};
 
-use mumble_protocol::audio::mixer::{JitterConfig, SpeakerBuffer, SpeakerBuffers, SpeakerVolumes};
-use mumble_protocol::audio::sample::AudioFormat;
+use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes, MAX_SPEAKER_BUFFER_SAMPLES};
 
 /// Stream speakers live above every real Mumble session id (the server hands
 /// those out from 0 upward), so a broadcast can never collide with a person.
@@ -22,6 +23,15 @@ const STREAM_SPEAKER_BASE: u32 = 0xF000_0000;
 
 /// Mono samples per millisecond at the mixer's rate.
 const SAMPLES_PER_MS: usize = 48;
+
+/// `samples` as milliseconds of playout at the mixer's rate.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "a buffer is capped at 400 ms; the cast cannot overflow"
+)]
+fn as_ms(samples: usize) -> u32 {
+    (samples / SAMPLES_PER_MS) as u32
+}
 
 /// The mixer buffer id carrying `session`'s shared desktop audio.
 pub(crate) fn speaker_id(session: u32) -> u32 {
@@ -65,14 +75,20 @@ fn live_volumes() -> Option<SpeakerVolumes> {
 /// Silently does nothing while voice is disabled: there is no output stream
 /// to mix into, and buffering audio nobody will drain only grows memory.
 pub(crate) fn push(session: u32, stereo: &[f32]) {
-    let Some(buffers) = live_buffers() else { return };
+    let Some(buffers) = live_buffers() else {
+        return;
+    };
     let Ok(mut map) = buffers.lock() else { return };
-    let mono: Vec<f32> = stereo.chunks_exact(2).map(|f| (f[0] + f[1]) * 0.5).collect();
-    map.entry(speaker_id(session))
-        .or_insert_with(|| {
-            SpeakerBuffer::new(AudioFormat::MONO_48KHZ_F32, JitterConfig::default())
-        })
-        .push(&mono);
+    let buffer = map
+        .entry(speaker_id(session))
+        .or_insert_with(|| VecDeque::with_capacity(MAX_SPEAKER_BUFFER_SAMPLES));
+    buffer.extend(stereo.chunks_exact(2).map(|f| (f[0] + f[1]) * 0.5));
+    // The same last-resort overflow rule the voice path applies: when playout
+    // falls behind, drop the oldest samples rather than grow without bound.
+    if buffer.len() > MAX_SPEAKER_BUFFER_SAMPLES {
+        let excess = buffer.len() - MAX_SPEAKER_BUFFER_SAMPLES;
+        let _ = buffer.drain(..excess);
+    }
 }
 
 /// Drop `session`'s stream audio (the viewer stopped). Anything still queued
@@ -91,27 +107,20 @@ pub(crate) fn stop(session: u32) {
 }
 
 /// Playout state of `session`'s stream audio, or `None` when it carries no
-/// audio: the buffer's current target depth, the floor it relaxes back to,
-/// and how much is queued right now - all in milliseconds.
-pub(crate) fn playout(session: u32) -> Option<(u32, u32, u32)> {
+/// audio: how much is queued right now and the cap the buffer is held to,
+/// both in milliseconds.
+pub(crate) fn playout(session: u32) -> Option<(u32, u32)> {
     let buffers = live_buffers()?;
     let map = buffers.lock().ok()?;
     let buffer = map.get(&speaker_id(session))?;
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "a buffer is capped at 400 ms; the cast cannot overflow"
-    )]
-    let buffered_ms = (buffer.len() / SAMPLES_PER_MS) as u32;
-    Some((
-        buffer.target_ms(),
-        JitterConfig::default().floor_ms,
-        buffered_ms,
-    ))
+    Some((as_ms(buffer.len()), as_ms(MAX_SPEAKER_BUFFER_SAMPLES)))
 }
 
 /// Set the playback volume of `session`'s stream audio (1.0 = unchanged).
 pub(crate) fn set_volume(session: u32, volume: f32) {
-    let Some(volumes) = live_volumes() else { return };
+    let Some(volumes) = live_volumes() else {
+        return;
+    };
     // `let ... else` rather than `if let`: on this edition the lock guard's
     // temporary would outlive `volumes` inside an `if let` body.
     let Ok(mut map) = volumes.lock() else { return };
