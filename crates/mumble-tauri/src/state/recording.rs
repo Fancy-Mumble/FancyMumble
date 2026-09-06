@@ -16,7 +16,7 @@ use std::time::Duration;
 use hound::{SampleFormat as HoundSampleFormat, WavSpec, WavWriter};
 use tracing::{debug, info, warn};
 
-use mumble_protocol::audio::mixer::{AudioMixer, SpeakerBuffers};
+use mumble_protocol::audio::mixer::SpeakerBuffers;
 
 use super::AppState;
 
@@ -98,9 +98,8 @@ impl AppState {
                 .unwrap_or_default();
             let buffers = state
                 .audio
-                .mixer
-                .as_ref()
-                .map(AudioMixer::buffers)
+                .speaker_buffers
+                .clone()
                 .ok_or("Voice is not active - cannot record")?;
             (host, user, channel, buffers)
         };
