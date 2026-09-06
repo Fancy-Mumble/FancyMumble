@@ -81,6 +81,20 @@ impl AppState {
                 .map(|s| s.audio.settings.force_tcp_audio)
                 .unwrap_or(false);
 
+            // Take inbound decoding off the protocol event loop: the socket
+            // reader hands audio straight to this thread through the sink.
+            let epoch = inner.lock().map(|s| s.conn.epoch).unwrap_or(0);
+            let audio_sink =
+                match super::voice_decode::start(inner.clone(), app_handle.clone(), epoch) {
+                    Some((decode, sink)) => {
+                        if let Ok(mut state) = inner.lock() {
+                            state.audio.decode = Some(decode);
+                        }
+                        Some(sink)
+                    }
+                    None => None,
+                };
+
             let config = ClientConfig {
                 tcp: TcpConfig {
                     server_host: host.clone(),
@@ -94,10 +108,10 @@ impl AppState {
                     server_port: port,
                 },
                 force_tcp,
+                audio_sink,
                 ..ClientConfig::default()
             };
 
-            let epoch = inner.lock().map(|s| s.conn.epoch).unwrap_or(0);
             let handler = TauriEventHandler {
                 shared: inner.clone(),
                 app: app_handle.clone(),

@@ -85,9 +85,7 @@ fn handle_user_departed(msg: &mumble_tcp::UserRemove, ctx: &HandlerContext) {
             // Session IDs are reused by the server, so a stale volume
             // override would otherwise apply to the next user assigned this
             // session.
-            if let Some(ref mut mixer) = state.audio.mixer {
-                mixer.remove_speaker(msg.session);
-            }
+            state.audio.remove_speaker(msg.session);
             if let Ok(mut volumes) = state.audio.speaker_volumes.lock() {
                 let _ = volumes.remove(&msg.session);
             }
@@ -146,7 +144,7 @@ fn stop_audio_pipelines(state: &mut crate::state::SharedState) {
     if let Some(mut playback) = state.audio.mixing_playback.take() {
         let _ = playback.stop();
     }
-    state.audio.mixer = None;
+    state.audio.uninstall_mixer();
 }
 
 fn collect_affected_channels(

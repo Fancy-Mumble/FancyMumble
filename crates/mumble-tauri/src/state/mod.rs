@@ -60,6 +60,7 @@ mod sessions;
 mod shared_handle;
 pub(crate) mod starling_files;
 pub mod types;
+mod voice_decode;
 
 // Re-export everything that lib.rs needs.
 pub(crate) use event_handler::show_desktop_notification;
@@ -80,7 +81,7 @@ use tokio_util::sync::CancellationToken;
 
 use offload::OffloadStore;
 
-use mumble_protocol::audio::mixer::{AudioMixer, SpeakerVolumes};
+use mumble_protocol::audio::mixer::{AudioMixer, JitterConfig, SpeakerBuffers, SpeakerVolumes};
 use mumble_protocol::client::ClientHandle;
 use mumble_protocol::persistent::PchatProtocol;
 
@@ -103,7 +104,15 @@ pub(crate) fn parse_pchat_protocol_str(s: &str) -> PchatProtocol {
 pub(super) struct AudioPipelineState {
     pub settings: AudioSettings,
     pub voice_state: VoiceState,
+    /// The decoder thread of the live connection, when there is one.
+    ///
+    /// It holds the mixer while it runs; `mixer` below is the fallback for a
+    /// connection that has no sink installed (see [`voice_decode::start`]).
+    pub decode: Option<voice_decode::DecodeHandle>,
     pub mixer: Option<AudioMixer>,
+    /// The buffers the mixer feeds, kept here because a recording drains them
+    /// and cannot reach into the decoder thread to ask.
+    pub speaker_buffers: Option<SpeakerBuffers>,
     pub mixing_playback: Option<Box<dyn crate::audio::MixingPlayback>>,
     pub outbound_task_handle: Option<tokio::task::JoinHandle<()>>,
     /// Bumped by every start and stop of the outbound loop. A start records
@@ -122,6 +131,47 @@ pub(super) struct AudioPipelineState {
 }
 
 impl AudioPipelineState {
+    /// Start decoding into `mixer`, wherever the decoding happens.
+    pub(super) fn install_mixer(&mut self, mixer: AudioMixer, buffers: SpeakerBuffers) {
+        self.speaker_buffers = Some(buffers);
+        match self.decode {
+            Some(ref decode) => {
+                decode.install(mixer);
+                self.mixer = None;
+            }
+            None => self.mixer = Some(mixer),
+        }
+    }
+
+    /// Stop decoding and release the mixer.
+    pub(super) fn uninstall_mixer(&mut self) {
+        self.mixer = None;
+        self.speaker_buffers = None;
+        if let Some(ref decode) = self.decode {
+            decode.uninstall();
+        }
+    }
+
+    /// Free a departed user's decoder and sample buffer.
+    pub(super) fn remove_speaker(&mut self, session: u32) {
+        if let Some(ref mut mixer) = self.mixer {
+            mixer.remove_speaker(session);
+        }
+        if let Some(ref decode) = self.decode {
+            decode.remove_speaker(session);
+        }
+    }
+
+    /// Retune every speaker's jitter buffer.
+    pub(super) fn set_jitter(&mut self, cfg: JitterConfig) {
+        if let Some(ref mut mixer) = self.mixer {
+            mixer.set_jitter(cfg);
+        }
+        if let Some(ref decode) = self.decode {
+            decode.set_jitter(cfg);
+        }
+    }
+
     /// Stop the outbound loop and retire any start still building one.
     pub(super) fn stop_outbound(&mut self) {
         self.outbound_generation += 1;

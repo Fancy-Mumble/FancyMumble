@@ -298,7 +298,8 @@ impl EventHandler for TauriEventHandler {
             if let Some(mut playback) = state.audio.mixing_playback.take() {
                 let _ = playback.stop();
             }
-            state.audio.mixer = None;
+            state.audio.uninstall_mixer();
+            state.audio.decode = None;
             state.audio.voice_state = VoiceState::Inactive;
             state.audio.talking_sessions.clear();
             // The roster, the tree and the messages go too. A link that drops

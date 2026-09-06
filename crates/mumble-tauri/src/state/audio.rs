@@ -145,9 +145,8 @@ impl AppState {
         // is already buffering, so a change is audible without a reconnect.
         if settings.jitter_floor_ms != old_settings.jitter_floor_ms
             && let Ok(mut state) = self.inner.snapshot().lock()
-            && let Some(ref mut mixer) = state.audio.mixer
         {
-            mixer.set_jitter(settings.jitter_config());
+            state.audio.set_jitter(settings.jitter_config());
         }
 
         if let Ok(mut state) = self.inner.snapshot().lock() {
@@ -272,6 +271,7 @@ mod voice_pipeline {
             mixer.set_jitter(audio_settings.jitter_config());
             crate::e2e_stats::register_speaker_buffers(&speaker_buffers);
             crate::audio::stream_audio::register(&speaker_buffers, &speaker_volumes);
+            let speaker_buffers_for_state = speaker_buffers.clone();
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
                 output_vol.clone(),
@@ -285,7 +285,7 @@ mod voice_pipeline {
             {
                 let __session = self.inner.snapshot();
                 let mut state = __session.lock().map_err(|e| e.to_string())?;
-                state.audio.mixer = Some(mixer);
+                state.audio.install_mixer(mixer, speaker_buffers_for_state);
                 state.audio.mixing_playback = Some(mixing_playback);
                 state.audio.input_volume_handle = Some(input_vol);
                 state.audio.output_volume_handle = Some(output_vol);
@@ -362,7 +362,7 @@ mod voice_pipeline {
                     if let Some(mut playback) = state.audio.mixing_playback.take() {
                         let _ = playback.stop();
                     }
-                    state.audio.mixer = None;
+                    state.audio.uninstall_mixer();
                     state.audio.input_volume_handle = None;
                     state.audio.output_volume_handle = None;
 
@@ -433,7 +433,7 @@ mod voice_pipeline {
                 if let Some(mut playback) = state.audio.mixing_playback.take() {
                     let _ = playback.stop();
                 }
-                state.audio.mixer = None;
+                state.audio.uninstall_mixer();
             }
 
             let audio_settings = {
@@ -455,6 +455,7 @@ mod voice_pipeline {
             mixer.set_jitter(audio_settings.jitter_config());
             crate::e2e_stats::register_speaker_buffers(&speaker_buffers);
             crate::audio::stream_audio::register(&speaker_buffers, &speaker_volumes);
+            let speaker_buffers_for_state = speaker_buffers.clone();
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
                 output_vol.clone(),
@@ -468,7 +469,7 @@ mod voice_pipeline {
             let __session = self.inner.snapshot();
 
             let mut state = __session.lock().map_err(|e| e.to_string())?;
-            state.audio.mixer = Some(mixer);
+            state.audio.install_mixer(mixer, speaker_buffers_for_state);
             state.audio.mixing_playback = Some(mixing_playback);
             state.audio.output_volume_handle = Some(output_vol);
             Ok(())
@@ -602,6 +603,7 @@ mod voice_pipeline {
             mixer.set_jitter(audio_settings.jitter_config());
             crate::e2e_stats::register_speaker_buffers(&speaker_buffers);
             crate::audio::stream_audio::register(&speaker_buffers, &speaker_volumes);
+            let speaker_buffers_for_state = speaker_buffers.clone();
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
                 audio_settings.selected_output_device.as_deref(),
                 output_vol.clone(),
@@ -616,7 +618,7 @@ mod voice_pipeline {
                 let __session = self.inner.snapshot();
                 let mut state = __session.lock().map_err(|e| e.to_string())?;
                 state.audio.voice_state = VoiceState::Muted;
-                state.audio.mixer = Some(mixer);
+                state.audio.install_mixer(mixer, speaker_buffers_for_state);
                 state.audio.mixing_playback = Some(mixing_playback);
                 state.audio.output_volume_handle = Some(output_vol);
             }
