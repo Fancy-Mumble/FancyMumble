@@ -1,11 +1,11 @@
 //! Windows-only helpers that locate the top-level window currently
-//! being shared (matched by client-area dimensions) and follow it as
-//! the user drags / resizes it, so the desktop drawing overlay stays
-//! pinned over the actual shared content.
+//! being shared (matched by client-area dimensions) and report where it
+//! is, so the desktop drawing overlay stays pinned over the actual
+//! shared content.
 //!
-//! The tracker runs as a Tokio task at a low polling rate (100 ms) -
-//! cheaper than installing `WinEvent` hooks, and quite responsive on
-//! every modern Windows version.
+//! The polling loop that consumes these lives in [`super::tracker`] and
+//! is shared with Linux; what is Windows-specific is only the Win32 way
+//! of asking "does this window still exist, and where is it".
 
 #![allow(
     unsafe_code,
@@ -14,10 +14,7 @@
 )]
 
 use std::ffi::c_void;
-use std::time::Duration;
 
-use tauri::{AppHandle, Manager};
-use tokio::time::sleep;
 use windows_sys::core::BOOL;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, POINT, RECT};
 use windows_sys::Win32::Graphics::Gdi::ClientToScreen;
@@ -26,8 +23,6 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetClientRect, GetForegroundWindow, GetWindowThreadProcessId, IsWindow,
     IsWindowVisible,
 };
-
-use super::DRAW_OVERLAY_LABEL;
 
 /// Pixel rect of a window's client area in screen coordinates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,8 +62,19 @@ pub(super) fn find_window_by_client_size(width: u32, height: u32) -> Option<isiz
     Some(ctx.candidates[0])
 }
 
+/// Whether `hwnd` still refers to a live window.
+///
+/// Paired with [`screen_rect_of`], which cannot tell "destroyed" from
+/// "minimized" on its own: both leave no usable client rect, but only the
+/// first means the share is over.
+pub(super) fn is_window(hwnd: isize) -> bool {
+    // SAFETY: IsWindow accepts any HWND (even invalid) and returns 0 in that case.
+    unsafe { IsWindow(hwnd as HWND) != 0 }
+}
+
 /// Read the screen rect of `hwnd`'s client area, or `None` if the
-/// window has been destroyed or has zero size.
+/// window has been destroyed or has zero size (which is what a
+/// minimized window reports).
 pub(super) fn screen_rect_of(hwnd: isize) -> Option<ScreenRect> {
     let h = hwnd as HWND;
     // SAFETY: IsWindow accepts any HWND (even invalid) and returns 0 in that case.
@@ -100,35 +106,6 @@ pub(super) fn screen_rect_of(hwnd: isize) -> Option<ScreenRect> {
         y: origin.y,
         w,
         h: bh,
-    })
-}
-
-/// Spawn a background task that polls `hwnd`'s screen rect and keeps
-/// the overlay window pinned over it.  The task exits (and closes the
-/// overlay) when the source window disappears or the overlay window is
-/// closed externally.
-pub(super) fn spawn_tracker(app: AppHandle, hwnd: isize) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        let mut last: Option<ScreenRect> = None;
-        loop {
-            sleep(Duration::from_millis(100)).await;
-            let Some(window) = app.get_webview_window(DRAW_OVERLAY_LABEL) else {
-                return;
-            };
-            let Some(rect) = screen_rect_of(hwnd) else {
-                let _ = window.close();
-                return;
-            };
-            if Some(rect) == last {
-                continue;
-            }
-            last = Some(rect);
-            let _ = window.set_position(tauri::PhysicalPosition::new(rect.x, rect.y));
-            let _ = window.set_size(tauri::PhysicalSize::new(
-                rect.w.max(1) as u32,
-                rect.h.max(1) as u32,
-            ));
-        }
     })
 }
 

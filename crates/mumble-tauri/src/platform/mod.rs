@@ -13,7 +13,7 @@ pub(crate) mod badge;
 #[cfg(not(target_os = "android"))]
 pub(crate) mod desktop;
 #[cfg(target_os = "linux")]
-mod linux;
+pub(crate) mod linux;
 pub(crate) mod window;
 #[cfg(target_os = "windows")]
 mod windows;
@@ -71,6 +71,9 @@ impl PlatformHooks for LinuxPlatform {
     }
 
     fn setup(handle: tauri::AppHandle) {
+        // Runs on the main thread with GTK up, which is the only place the
+        // display can be asked what it is.
+        linux::display::detect_on_main_thread();
         linux::desktop::install_desktop_entry();
         linux::desktop::start_action_listener(handle);
     }

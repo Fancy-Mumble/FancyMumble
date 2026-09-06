@@ -264,6 +264,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::draw_overlay::open_drawing_overlay,
         super::draw_overlay::close_drawing_overlay,
         super::draw_overlay::take_drawing_overlay_context,
+        super::draw_overlay::drawing_overlay_support,
         super::game_overlay::game_overlay_configure,
         super::game_overlay::game_overlay_toggle,
         super::game_overlay::game_overlay_set_rule,
@@ -335,6 +336,8 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         crate::updater::commands::updater_dismiss,
         #[cfg(all(not(target_os = "android"), feature = "self-updater"))]
         crate::updater::commands::updater_set_auto_install,
+        #[cfg(all(not(target_os = "android"), feature = "self-updater"))]
+        crate::updater::commands::updater_set_beta_channel,
         #[cfg(all(not(target_os = "android"), feature = "self-updater"))]
         crate::updater::commands::updater_set_skipped_version,
     ])

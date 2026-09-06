@@ -60,6 +60,100 @@ static LAST_RESTORE_TOKEN: Mutex<Option<String>> = Mutex::new(None);
 /// per broadcast start by the embedder, consumed by [`PortalSession::open`]).
 static RESTORE_LAST_PICK: AtomicBool = AtomicBool::new(false);
 
+/// What the COMPOSITOR is actually streaming, as reported by the portal.
+///
+/// The in-app picker's source id is advisory on this path - the compositor's
+/// own dialog makes the real choice and never tells us which xcap monitor or
+/// window it corresponds to. This is everything the portal does say about it,
+/// and it is the only way an embedder can locate the shared content on screen
+/// (the drawing overlay pins itself over exactly this rect).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PortalSource {
+    /// Monitor or window, as classified by the portal itself.
+    pub kind: SourceKind,
+    /// Top-left in the compositor's LOGICAL coordinate space. Monitor
+    /// streams only - the portal never reports where a shared window is
+    /// (xdg-desktop-portal#571).
+    pub logical_position: Option<(i32, i32)>,
+    /// Extent in the compositor's logical coordinate space, monitor streams
+    /// only. Advisory: [`Self::stream_size`] is the authoritative pixel size.
+    pub logical_size: Option<(i32, i32)>,
+    /// Negotiated PipeWire frame size in pixels, once the format is known.
+    /// Set by [`note_stream_size`] and updated on every renegotiation, so it
+    /// follows a source that is resized mid-share.
+    pub stream_size: Option<(u32, u32)>,
+}
+
+/// The source of the running portal cast, or `None` when no portal capture
+/// is active. Written by [`PortalSession::open`] / [`note_stream_size`] and
+/// cleared when the session drops.
+static ACTIVE_PORTAL_SOURCE: Mutex<Option<PortalSource>> = Mutex::new(None);
+
+/// What the compositor is streaming right now, if a portal cast is running.
+///
+/// Overriding env var for the e2e harness: `FANCY_E2E_PORTAL_SOURCE` accepts
+/// `screen:<x>,<y>,<w>,<h>` or `window:<w>x<h>`, standing in for a pick no
+/// `WebDriver` can make (the compositor's dialog is out of reach).
+pub fn active_portal_source() -> Option<PortalSource> {
+    if let Some(seeded) = seeded_portal_source() {
+        return Some(seeded);
+    }
+    ACTIVE_PORTAL_SOURCE.lock().ok().and_then(|s| *s)
+}
+
+/// Parse `FANCY_E2E_PORTAL_SOURCE`; see [`active_portal_source`].
+fn seeded_portal_source() -> Option<PortalSource> {
+    parse_seeded_source(&std::env::var("FANCY_E2E_PORTAL_SOURCE").ok()?)
+}
+
+/// Split out from [`seeded_portal_source`] so it is testable without env vars.
+fn parse_seeded_source(spec: &str) -> Option<PortalSource> {
+    let (kind, rest) = spec.split_once(':')?;
+    match kind.trim() {
+        "screen" => {
+            let mut parts = rest.split(',').map(|p| p.trim().parse::<i32>().ok());
+            let (x, y, w, h) = (
+                parts.next()??,
+                parts.next()??,
+                parts.next()??,
+                parts.next()??,
+            );
+            Some(PortalSource {
+                kind: SourceKind::Screen,
+                logical_position: Some((x, y)),
+                logical_size: Some((w, h)),
+                stream_size: Some((w.max(1) as u32, h.max(1) as u32)),
+            })
+        }
+        "window" => {
+            let (w, h) = rest.trim().split_once('x')?;
+            Some(PortalSource {
+                kind: SourceKind::Window,
+                logical_position: None,
+                logical_size: None,
+                stream_size: Some((w.trim().parse().ok()?, h.trim().parse().ok()?)),
+            })
+        }
+        _ => None,
+    }
+}
+
+/// Record the negotiated PipeWire frame size on the active portal source.
+///
+/// Called from the capture loop on every format negotiation: the portal's own
+/// `size` is logical and advisory, while this is the pixel geometry the
+/// receiver actually sees, so it is what an overlay must be sized against.
+pub(crate) fn note_stream_size(width: u32, height: u32) {
+    if width == 0 || height == 0 {
+        return;
+    }
+    if let Ok(mut slot) = ACTIVE_PORTAL_SOURCE.lock() {
+        if let Some(source) = slot.as_mut() {
+            source.stream_size = Some((width, height));
+        }
+    }
+}
+
 /// Allow the NEXT portal open to silently reuse the previously picked source
 /// (via the screencast restore token) instead of showing the compositor's
 /// dialog again. The embedder sets this for broadcast *replaces* that keep
@@ -134,7 +228,7 @@ impl PortalSession {
             PersistMode::DoNot
         };
 
-        let (session, node_id, size, fd, new_token) = rt
+        let (session, node_id, picked, fd, new_token) = rt
             .block_on(async move {
                 let proxy = tokio::time::timeout(PORTAL_SETUP_TIMEOUT, Screencast::new())
                     .await
@@ -174,13 +268,23 @@ impl PortalSession {
                 let fd = proxy
                     .open_pipe_wire_remote(&session, OpenPipeWireRemoteOptions::default())
                     .await?;
-                Ok::<_, ashpd::Error>((
-                    session,
-                    stream.pipe_wire_node_id(),
-                    stream.size(),
-                    fd,
-                    new_token,
-                ))
+                // Everything the portal will say about WHAT it picked. The
+                // compositor's dialog, not our picker, made this choice, so
+                // this is the only description of the shared content that is
+                // actually true (see `PortalSource`).
+                let picked = PortalSource {
+                    kind: match stream.source_type() {
+                        Some(SourceType::Window) => SourceKind::Window,
+                        // Monitor, Virtual, or a portal too old to say: a
+                        // full output is the safe reading, and it is what
+                        // every "share my screen" pick is.
+                        _ => SourceKind::Screen,
+                    },
+                    logical_position: stream.position(),
+                    logical_size: stream.size(),
+                    stream_size: None,
+                };
+                Ok::<_, ashpd::Error>((session, stream.pipe_wire_node_id(), picked, fd, new_token))
             })
             .map_err(|e| match e {
                 // Distinguishable marker: the frontend ends the pending
@@ -196,9 +300,21 @@ impl PortalSession {
             *slot = new_token;
         }
 
-        // `size` is advisory (the negotiated PipeWire format is authoritative
-        // and follows resizes); log it for bring-up diagnostics only.
-        tracing::info!(node_id, ?size, "screenshare: portal source picked");
+        if let Ok(mut slot) = ACTIVE_PORTAL_SOURCE.lock() {
+            *slot = Some(picked);
+        }
+
+        // The logical rect is advisory (the negotiated PipeWire format is
+        // authoritative for pixels and follows resizes), but it names the
+        // output the compositor picked - which is how the drawing overlay
+        // finds the right monitor on a multi-head desktop.
+        tracing::info!(
+            node_id,
+            kind = ?picked.kind,
+            position = ?picked.logical_position,
+            size = ?picked.logical_size,
+            "screenshare: portal source picked"
+        );
         Ok(Self {
             session: Some(session),
             node_id,
@@ -214,6 +330,12 @@ impl PortalSession {
 
 impl Drop for PortalSession {
     fn drop(&mut self) {
+        // Nothing is being cast any more, so nothing may still claim to know
+        // where the shared content is: a stale rect would pin the next
+        // overlay over the previous share's monitor.
+        if let Ok(mut slot) = ACTIVE_PORTAL_SOURCE.lock() {
+            *slot = None;
+        }
         // Explicitly close so the compositor tears the cast down (and drops
         // its "screen is being shared" chrome) promptly. Detached AND
         // bounded: this drop runs on the capture thread, which `stop()`
@@ -240,5 +362,45 @@ async fn close_session(session: Session<Screencast>) {
         .is_err()
     {
         tracing::warn!("screenshare: portal session close timed out; abandoning it");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn seeded_screen_source_carries_the_whole_rect() {
+        let parsed = parse_seeded_source("screen:2560,0,1920,1200").expect("parses");
+        assert_eq!(parsed.kind, SourceKind::Screen);
+        assert_eq!(parsed.logical_position, Some((2560, 0)));
+        assert_eq!(parsed.logical_size, Some((1920, 1200)));
+        assert_eq!(parsed.stream_size, Some((1920, 1200)));
+    }
+
+    #[test]
+    fn seeded_window_source_has_a_size_but_no_position() {
+        let parsed = parse_seeded_source("window:1280x720").expect("parses");
+        assert_eq!(parsed.kind, SourceKind::Window);
+        assert_eq!(parsed.logical_position, None);
+        assert_eq!(parsed.stream_size, Some((1280, 720)));
+    }
+
+    #[test]
+    fn malformed_seeds_are_ignored_rather_than_guessed_at() {
+        for spec in [
+            "",
+            "screen",
+            "screen:1,2,3",
+            "screen:a,b,c,d",
+            "window:1280",
+            "window:axb",
+            "monitor:0,0,1,1",
+        ] {
+            assert!(
+                parse_seeded_source(spec).is_none(),
+                "{spec:?} should not parse"
+            );
+        }
     }
 }
