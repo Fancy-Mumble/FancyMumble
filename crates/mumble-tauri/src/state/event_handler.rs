@@ -19,9 +19,9 @@ use mumble_protocol::audio::encoder::EncodedPacket;
 use mumble_protocol::event::EventHandler;
 use mumble_protocol::message::{ControlMessage, UdpMessage};
 
+use super::SharedState;
 use super::handler::{self, EventEmitter, HandlerContext};
 use super::types::*;
-use super::SharedState;
 
 /// Tauri-backed event emitter forwarding to `AppHandle::emit`.
 ///

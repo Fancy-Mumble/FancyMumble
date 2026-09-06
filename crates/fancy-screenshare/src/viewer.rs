@@ -40,23 +40,23 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
+use webrtc::api::APIBuilder;
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::MediaEngine;
 use webrtc::api::setting_engine::SettingEngine;
-use webrtc::api::APIBuilder;
 use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::interceptor::registry::Registry;
-use webrtc::media::io::sample_builder::SampleBuilder;
 use webrtc::media::Sample;
+use webrtc::media::io::sample_builder::SampleBuilder;
+use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
-use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication;
 use webrtc::rtp::codecs::h264::H264Packet;
+use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
 use webrtc::rtp_transceiver::rtp_codec::RTPCodecType;
 use webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection;
-use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
 use webrtc::track::track_remote::TrackRemote;
 
 /// Longest edge of emitted JPEG frames (JPEG mode only); decoded frames
@@ -191,7 +191,10 @@ impl RxState {
             let transit = arrival - i64::from(ts);
             let d = (transit - self.transit).abs();
             self.transit = transit;
-            #[allow(clippy::cast_precision_loss, reason = "a jitter estimate, not an exact count")]
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "a jitter estimate, not an exact count"
+            )]
             {
                 self.jitter += (d as f64 - self.jitter) / 16.0;
             }
@@ -716,13 +719,14 @@ async fn consume_audio_track(
     stop: Arc<AtomicBool>,
 ) {
     const MAX_CONCEALED: u16 = 5;
-    let mut decoder = match opus::Decoder::new(crate::audio_share::SAMPLE_RATE, opus::Channels::Stereo) {
-        Ok(d) => d,
-        Err(e) => {
-            tracing::warn!("screenshare: opus decoder unavailable ({e}); audio dropped");
-            return drain_track(track).await;
-        }
-    };
+    let mut decoder =
+        match opus::Decoder::new(crate::audio_share::SAMPLE_RATE, opus::Channels::Stereo) {
+            Ok(d) => d,
+            Err(e) => {
+                tracing::warn!("screenshare: opus decoder unavailable ({e}); audio dropped");
+                return drain_track(track).await;
+            }
+        };
     let mut buf = vec![0u8; 1600];
     // 120 ms is the longest Opus frame; room for it even though we send 20.
     let mut pcm = vec![0f32; 5760 * crate::audio_share::CHANNELS];
@@ -1120,9 +1124,16 @@ async fn consume_video_track(
             break; // peer closed or track ended
         };
         if let Ok(mut state) = rx.lock() {
-            #[allow(clippy::cast_possible_truncation, reason = "90 kHz ticks since track start fit i64 for centuries")]
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "90 kHz ticks since track start fit i64 for centuries"
+            )]
             let arrival = (rx_origin.elapsed().as_secs_f64() * 90_000.0) as i64;
-            state.observe(packet.header.sequence_number, packet.header.timestamp, arrival);
+            state.observe(
+                packet.header.sequence_number,
+                packet.header.timestamp,
+                arrival,
+            );
         }
         samples.push(packet);
         let mut popped = false;

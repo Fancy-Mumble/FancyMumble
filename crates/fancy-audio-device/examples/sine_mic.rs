@@ -17,8 +17,8 @@
 //! full cable loop (player -> driver -> capture) can be proven from one
 //! terminal.
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 // Examples inherit the crate's dependencies; acknowledge the ones this

@@ -21,7 +21,7 @@
 
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
 
-use super::{OverlayCorner, DEFAULT_HEIGHT, DEFAULT_WIDTH};
+use super::{DEFAULT_HEIGHT, DEFAULT_WIDTH, OverlayCorner};
 use crate::platform::window::WindowExt;
 
 /// Stable label for the (single) game-overlay window.
@@ -66,10 +66,8 @@ pub(super) fn ensure(app: &AppHandle, hide_from_capture: bool) -> Result<Webview
     if let Err(e) = window.set_ignore_cursor_events(true) {
         tracing::warn!("game-overlay: set_ignore_cursor_events failed: {e}");
     }
-    if hide_from_capture {
-        if let Err(e) = window.set_excluded_from_capture(true) {
-            tracing::info!("game-overlay: capture exclusion not applied: {e}");
-        }
+    if hide_from_capture && let Err(e) = window.set_excluded_from_capture(true) {
+        tracing::info!("game-overlay: capture exclusion not applied: {e}");
     }
     crate::platform::strip_system_chrome(&window);
     warn_if_wayland();

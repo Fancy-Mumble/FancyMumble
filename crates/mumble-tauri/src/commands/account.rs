@@ -1,7 +1,7 @@
 //! Self-service account settings Tauri commands.
 
-use crate::state::types::AccountSettings;
 use crate::state::AppState;
+use crate::state::types::AccountSettings;
 
 /// Read the cached own-account snapshot (or `None` if the server has not
 /// answered an account query yet - e.g. unregistered, or a legacy server).

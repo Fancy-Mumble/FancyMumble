@@ -27,8 +27,8 @@
 //! off hard (loss is already damage) and recovers slowly (a screen share that
 //! oscillates looks worse than one that settles low).
 
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::sources::SourceKind;
@@ -230,11 +230,7 @@ fn smooth_rtt(current: Duration, sample: Duration) -> Duration {
 /// fraction of what a desktop needs; giving it an equal share would starve the
 /// screen track that the share actually exists for.
 fn weight_of(kind: SourceKind) -> u32 {
-    if kind == SourceKind::Device {
-        1
-    } else {
-        4
-    }
+    if kind == SourceKind::Device { 1 } else { 4 }
 }
 
 /// Absolute cap on what a camera track may take, whatever the weights say.

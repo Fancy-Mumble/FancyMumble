@@ -15,7 +15,7 @@
 
 use std::path::PathBuf;
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::constants::{APP_IDENTIFIER, ENV_E2E_DATA_DIR};
 
@@ -26,10 +26,10 @@ const PASSWORDS_FILE: &str = "passwords.json";
 /// Shared config dir (same contract as the full client): honours the e2e
 /// data-dir override, otherwise the platform config dir for the app id.
 pub fn config_dir() -> Option<PathBuf> {
-    if let Ok(dir) = std::env::var(ENV_E2E_DATA_DIR) {
-        if !dir.trim().is_empty() {
-            return Some(PathBuf::from(dir));
-        }
+    if let Ok(dir) = std::env::var(ENV_E2E_DATA_DIR)
+        && !dir.trim().is_empty()
+    {
+        return Some(PathBuf::from(dir));
     }
     #[cfg(target_os = "windows")]
     {
@@ -55,7 +55,9 @@ pub fn config_dir() -> Option<PathBuf> {
 /// Read a store file into a JSON object (`{}` when absent or invalid).
 /// BOM-safe: the web toolchain saves these files with a UTF-8 BOM.
 fn read_store(file: &str) -> Value {
-    let Some(dir) = config_dir() else { return json!({}) };
+    let Some(dir) = config_dir() else {
+        return json!({});
+    };
     match std::fs::read_to_string(dir.join(file)) {
         Ok(raw) => serde_json::from_str(raw.trim_start_matches('\u{feff}')).unwrap_or_else(|e| {
             tracing::warn!("store {file} is not valid JSON ({e}); treating as empty");
@@ -89,7 +91,9 @@ pub fn hide_empty_channels() -> bool {
 /// lock so overlapping toggles cannot interleave and corrupt the file.
 pub fn set_hide_empty_channels(enabled: bool) {
     static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    let _guard = LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _guard = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut store = read_store(PREFERENCES_FILE);
     if !store["preferences"].is_object() {
         store["preferences"] = json!({});
@@ -149,10 +153,10 @@ pub fn add_server(
     store["servers"] = Value::Array(list);
     write_store(SERVERS_FILE, &store)?;
 
-    if let Some(pw) = password {
-        if !pw.is_empty() {
-            set_server_password(&id, pw)?;
-        }
+    if let Some(pw) = password
+        && !pw.is_empty()
+    {
+        set_server_password(&id, pw)?;
     }
     Ok(id)
 }

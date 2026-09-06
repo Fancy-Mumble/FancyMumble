@@ -9,8 +9,8 @@ use tracing::{debug, warn};
 use fancy_utils::hex::{bytes_to_hex, hex_decode};
 use mumble_protocol::persistent::protocol::signal_v1::SignalBridge;
 
-use super::settings::*;
 use super::PchatState;
+use super::settings::*;
 
 // -- Archive key persistence ------------------------------------------
 

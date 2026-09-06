@@ -15,17 +15,17 @@ impl HandleMessage for mumble_tcp::UserList {
         // "Loading..." forever waiting for a "user-list" that never came.
         if self.users.len() == 1 {
             let u = &self.users[0];
-            if u.name.is_none() {
-                if let Some(comment) = u.comment.as_deref().filter(|c| !c.is_empty()) {
-                    ctx.emit(
-                        "user-comment",
-                        UserCommentPayload {
-                            user_id: u.user_id,
-                            comment: comment.to_owned(),
-                        },
-                    );
-                    return;
-                }
+            if u.name.is_none()
+                && let Some(comment) = u.comment.as_deref().filter(|c| !c.is_empty())
+            {
+                ctx.emit(
+                    "user-comment",
+                    UserCommentPayload {
+                        user_id: u.user_id,
+                        comment: comment.to_owned(),
+                    },
+                );
+                return;
             }
         }
 

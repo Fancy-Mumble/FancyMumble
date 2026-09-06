@@ -28,8 +28,8 @@
 //! the compositor removes its "sharing" chrome promptly.
 
 use std::os::fd::OwnedFd;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use ashpd::desktop::screencast::{
@@ -147,10 +147,10 @@ pub(crate) fn note_stream_size(width: u32, height: u32) {
     if width == 0 || height == 0 {
         return;
     }
-    if let Ok(mut slot) = ACTIVE_PORTAL_SOURCE.lock() {
-        if let Some(source) = slot.as_mut() {
-            source.stream_size = Some((width, height));
-        }
+    if let Ok(mut slot) = ACTIVE_PORTAL_SOURCE.lock()
+        && let Some(source) = slot.as_mut()
+    {
+        source.stream_size = Some((width, height));
     }
 }
 

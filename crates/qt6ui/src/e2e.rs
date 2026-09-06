@@ -33,7 +33,9 @@ pub const ENV_CONTROL_PORT: &str = "FANCY_QT6UI_E2E_PORT";
 /// Called once from the `Backend`'s `e2e_start` invokable (QML
 /// `Component.onCompleted`), which supplies the Qt-thread handle.
 pub fn maybe_start(thread: CxxQtThread<Backend>) {
-    let Ok(raw) = std::env::var(ENV_CONTROL_PORT) else { return };
+    let Ok(raw) = std::env::var(ENV_CONTROL_PORT) else {
+        return;
+    };
     let port: u16 = match raw.trim().parse() {
         Ok(p) => p,
         Err(_) => {
@@ -66,7 +68,9 @@ fn serve(port: u16, thread: &CxxQtThread<Backend>) -> std::io::Result<()> {
 
 /// Serve one controller connection: read command lines, write reply lines.
 fn handle_controller(stream: TcpStream, thread: &CxxQtThread<Backend>) {
-    let Ok(mut writer) = stream.try_clone() else { return };
+    let Ok(mut writer) = stream.try_clone() else {
+        return;
+    };
     let reader = BufReader::new(stream);
     for line in reader.lines() {
         let Ok(line) = line else { break };
@@ -75,7 +79,10 @@ fn handle_controller(stream: TcpStream, thread: &CxxQtThread<Backend>) {
             continue;
         }
         let reply = dispatch(line, thread);
-        if writeln!(writer, "{reply}").and_then(|()| writer.flush()).is_err() {
+        if writeln!(writer, "{reply}")
+            .and_then(|()| writer.flush())
+            .is_err()
+        {
             break;
         }
     }

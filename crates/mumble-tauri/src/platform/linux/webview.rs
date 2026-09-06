@@ -1,5 +1,15 @@
 //! Linux-specific `WebKitGTK` / `AppImage` environment workarounds.
 
+// `std::env::set_var`/`remove_var` are unsafe in Rust 2024: they race any other
+// thread reading the environment. Everything here runs from `main` before GTK is
+// initialised and before any thread is spawned - that ordering is the whole
+// point of the module, since GTK reads these once on start-up.
+#![allow(
+    unsafe_code,
+    reason = "environment mutation before GTK start-up, on the main thread, \
+              before any other thread exists"
+)]
+
 use super::desktop;
 
 /// Captures the `AppImage` runtime environment at detection time.
@@ -21,13 +31,13 @@ impl AppImageEnv {
 
     /// Applies all environment variable workarounds before `GTK` starts.
     fn apply_workarounds(&self) {
-        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        unsafe { std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1") };
         // AppImage-specific workaround for blank windows on some NVIDIA setups.
         if std::env::var_os("__NV_DISABLE_EXPLICIT_SYNC").is_none() {
-            std::env::set_var("__NV_DISABLE_EXPLICIT_SYNC", "1");
+            unsafe { std::env::set_var("__NV_DISABLE_EXPLICIT_SYNC", "1") };
         }
         if let Some(new_ld) = self.host_first_library_path() {
-            std::env::set_var("LD_LIBRARY_PATH", new_ld);
+            unsafe { std::env::set_var("LD_LIBRARY_PATH", new_ld) };
         }
         self.set_webkit_exec_path();
         self.set_wayland_backend();
@@ -97,7 +107,7 @@ impl AppImageEnv {
     /// the `AppImage` keeps the `XWayland` default, where it just works.
     fn set_wayland_backend(&self) {
         if std::env::var_os("WAYLAND_DISPLAY").is_some() {
-            std::env::set_var("GDK_BACKEND", "wayland");
+            unsafe { std::env::set_var("GDK_BACKEND", "wayland") };
         }
     }
 
@@ -122,7 +132,7 @@ impl AppImageEnv {
                 .join("WebKitNetworkProcess")
                 .exists()
             {
-                std::env::set_var("WEBKIT_EXEC_PATH", candidate);
+                unsafe { std::env::set_var("WEBKIT_EXEC_PATH", candidate) };
                 tracing::info!("AppImage: WebKit helpers redirected to system path: {candidate}");
                 return;
             }
@@ -151,7 +161,7 @@ impl AppImageEnv {
                 Ok(current) if !current.is_empty() => format!("{current}:{extra}"),
                 _ => extra.clone(),
             };
-            std::env::set_var(var, &merged);
+            unsafe { std::env::set_var(var, &merged) };
         }
     }
 }
@@ -207,10 +217,10 @@ pub fn pre_init() {
     // Temporary Linux workaround: disable WebKit compositing and default to
     // X11 before GTK init, unless the caller already provided overrides.
     if std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
-        std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+        unsafe { std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1") };
     }
     if std::env::var_os("GDK_BACKEND").is_none() {
-        std::env::set_var("GDK_BACKEND", "x11");
+        unsafe { std::env::set_var("GDK_BACKEND", "x11") };
     }
     apply_stream_decoder_preference();
 
@@ -222,8 +232,8 @@ pub fn pre_init() {
         return;
     }
     if let Some(new_ld) = env.host_first_library_path() {
-        std::env::set_var("_FANCY_REEXEC", "1");
-        std::env::set_var("LD_LIBRARY_PATH", new_ld);
+        unsafe { std::env::set_var("_FANCY_REEXEC", "1") };
+        unsafe { std::env::set_var("LD_LIBRARY_PATH", new_ld) };
         reexec_self();
     }
 }
@@ -252,7 +262,7 @@ fn apply_stream_decoder_preference() {
         "vaapi" | "va" => "nvh264dec:NONE",
         _ => return, // "hardware", or a typo: GStreamer's own ranking
     };
-    std::env::set_var("GST_PLUGIN_FEATURE_RANK", ranks);
+    unsafe { std::env::set_var("GST_PLUGIN_FEATURE_RANK", ranks) };
 }
 
 /// Early platform init (before GTK/Tauri starts): sets GTK identifiers
@@ -303,29 +313,29 @@ mod tests {
     #[test]
     fn appimage_detection_requires_appimage_or_appdir_var() {
         let _g = lock();
-        std::env::remove_var("APPIMAGE");
-        std::env::remove_var("APPDIR");
+        unsafe { std::env::remove_var("APPIMAGE") };
+        unsafe { std::env::remove_var("APPDIR") };
         assert!(AppImageEnv::detect().is_none());
     }
 
     #[test]
     fn appimage_detection_true_when_appimage_set() {
         let _g = lock();
-        std::env::remove_var("APPIMAGE");
-        std::env::remove_var("APPDIR");
-        std::env::set_var("APPIMAGE", "/opt/apps/FancyMumble.AppImage");
+        unsafe { std::env::remove_var("APPIMAGE") };
+        unsafe { std::env::remove_var("APPDIR") };
+        unsafe { std::env::set_var("APPIMAGE", "/opt/apps/FancyMumble.AppImage") };
         assert!(AppImageEnv::detect().is_some());
-        std::env::remove_var("APPIMAGE");
+        unsafe { std::env::remove_var("APPIMAGE") };
     }
 
     #[test]
     fn appimage_detection_true_when_appdir_set() {
         let _g = lock();
-        std::env::remove_var("APPIMAGE");
-        std::env::remove_var("APPDIR");
-        std::env::set_var("APPDIR", "/tmp/FancyMumble.AppDir");
+        unsafe { std::env::remove_var("APPIMAGE") };
+        unsafe { std::env::remove_var("APPDIR") };
+        unsafe { std::env::set_var("APPDIR", "/tmp/FancyMumble.AppDir") };
         assert!(AppImageEnv::detect().is_some());
-        std::env::remove_var("APPDIR");
+        unsafe { std::env::remove_var("APPDIR") };
     }
 
     // -- host_first_library_path ---------------------------------------------
@@ -333,14 +343,14 @@ mod tests {
     #[test]
     fn ld_path_reorder_none_when_ld_library_path_absent() {
         let _g = lock();
-        std::env::remove_var("LD_LIBRARY_PATH");
+        unsafe { std::env::remove_var("LD_LIBRARY_PATH") };
         assert!(env("/tmp/app.AppDir").host_first_library_path().is_none());
     }
 
     #[test]
     fn ld_path_reorder_none_when_appdir_absent() {
         let _g = lock();
-        std::env::set_var("LD_LIBRARY_PATH", "/tmp/app.AppDir/usr/lib:/usr/lib");
+        unsafe { std::env::set_var("LD_LIBRARY_PATH", "/tmp/app.AppDir/usr/lib:/usr/lib") };
         // An empty appdir still produces Some - entries just aren't partitioned.
         let Some(result) = env("").host_first_library_path() else {
             panic!("Some expected when LD_LIBRARY_PATH is set");
@@ -349,16 +359,18 @@ mod tests {
             result.contains("/usr/lib"),
             "entries must be preserved when appdir is empty"
         );
-        std::env::remove_var("LD_LIBRARY_PATH");
+        unsafe { std::env::remove_var("LD_LIBRARY_PATH") };
     }
 
     #[test]
     fn ld_path_reorder_host_dirs_precede_appdir_dirs() {
         let _g = lock();
-        std::env::set_var(
-            "LD_LIBRARY_PATH",
-            "/tmp/app.AppDir/usr/lib:/tmp/app.AppDir/lib:/usr/lib",
-        );
+        unsafe {
+            std::env::set_var(
+                "LD_LIBRARY_PATH",
+                "/tmp/app.AppDir/usr/lib:/tmp/app.AppDir/lib:/usr/lib",
+            )
+        };
 
         let Some(result) = env("/tmp/app.AppDir").host_first_library_path() else {
             panic!("host_first_library_path should return Some");
@@ -376,16 +388,18 @@ mod tests {
             "host dir must precede appdir: {result}"
         );
 
-        std::env::remove_var("LD_LIBRARY_PATH");
+        unsafe { std::env::remove_var("LD_LIBRARY_PATH") };
     }
 
     #[test]
     fn ld_path_reorder_preserves_all_original_entries() {
         let _g = lock();
-        std::env::set_var(
-            "LD_LIBRARY_PATH",
-            "/mnt/appdir/usr/lib:/opt/custom/lib:/usr/lib",
-        );
+        unsafe {
+            std::env::set_var(
+                "LD_LIBRARY_PATH",
+                "/mnt/appdir/usr/lib:/opt/custom/lib:/usr/lib",
+            )
+        };
 
         let Some(result) = env("/mnt/appdir").host_first_library_path() else {
             panic!("host_first_library_path should return Some");
@@ -400,13 +414,13 @@ mod tests {
         );
         assert!(result.contains("/usr/lib"), "host entry must be preserved");
 
-        std::env::remove_var("LD_LIBRARY_PATH");
+        unsafe { std::env::remove_var("LD_LIBRARY_PATH") };
     }
 
     #[test]
     fn ld_path_reorder_skips_empty_colon_segments() {
         let _g = lock();
-        std::env::set_var("LD_LIBRARY_PATH", "/tmp/a/lib::/usr/lib::");
+        unsafe { std::env::set_var("LD_LIBRARY_PATH", "/tmp/a/lib::/usr/lib::") };
 
         let Some(result) = env("/tmp/a").host_first_library_path() else {
             panic!("host_first_library_path should return Some");
@@ -416,7 +430,7 @@ mod tests {
             "empty segments must not appear in output: {result}"
         );
 
-        std::env::remove_var("LD_LIBRARY_PATH");
+        unsafe { std::env::remove_var("LD_LIBRARY_PATH") };
     }
 
     // -- set_wayland_backend -------------------------------------------------
@@ -424,8 +438,8 @@ mod tests {
     #[test]
     fn wayland_backend_set_when_wayland_display_present() {
         let _g = lock();
-        std::env::set_var("WAYLAND_DISPLAY", "wayland-1");
-        std::env::remove_var("GDK_BACKEND");
+        unsafe { std::env::set_var("WAYLAND_DISPLAY", "wayland-1") };
+        unsafe { std::env::remove_var("GDK_BACKEND") };
 
         env("/tmp/a").set_wayland_backend();
 
@@ -435,15 +449,15 @@ mod tests {
             "GDK_BACKEND must be set to wayland when WAYLAND_DISPLAY is present"
         );
 
-        std::env::remove_var("WAYLAND_DISPLAY");
-        std::env::remove_var("GDK_BACKEND");
+        unsafe { std::env::remove_var("WAYLAND_DISPLAY") };
+        unsafe { std::env::remove_var("GDK_BACKEND") };
     }
 
     #[test]
     fn wayland_backend_not_set_without_wayland_display() {
         let _g = lock();
-        std::env::remove_var("WAYLAND_DISPLAY");
-        std::env::set_var("GDK_BACKEND", "x11");
+        unsafe { std::env::remove_var("WAYLAND_DISPLAY") };
+        unsafe { std::env::set_var("GDK_BACKEND", "x11") };
 
         env("/tmp/a").set_wayland_backend();
 
@@ -453,15 +467,15 @@ mod tests {
             "GDK_BACKEND must not be changed when WAYLAND_DISPLAY is absent"
         );
 
-        std::env::remove_var("GDK_BACKEND");
+        unsafe { std::env::remove_var("GDK_BACKEND") };
     }
 
     #[test]
     fn apply_appimage_workarounds_sets_wayland_backend_on_wayland_session() {
         let _g = lock();
-        std::env::set_var("WAYLAND_DISPLAY", "wayland-1");
-        std::env::remove_var("GDK_BACKEND");
-        std::env::remove_var("LD_LIBRARY_PATH");
+        unsafe { std::env::set_var("WAYLAND_DISPLAY", "wayland-1") };
+        unsafe { std::env::remove_var("GDK_BACKEND") };
+        unsafe { std::env::remove_var("LD_LIBRARY_PATH") };
 
         env("/tmp/a").apply_workarounds();
 
@@ -471,10 +485,10 @@ mod tests {
             "apply_workarounds must call set_wayland_backend"
         );
 
-        std::env::remove_var("WAYLAND_DISPLAY");
-        std::env::remove_var("GDK_BACKEND");
-        std::env::remove_var("WEBKIT_DISABLE_DMABUF_RENDERER");
-        std::env::remove_var("WEBKIT_EXEC_PATH");
+        unsafe { std::env::remove_var("WAYLAND_DISPLAY") };
+        unsafe { std::env::remove_var("GDK_BACKEND") };
+        unsafe { std::env::remove_var("WEBKIT_DISABLE_DMABUF_RENDERER") };
+        unsafe { std::env::remove_var("WEBKIT_EXEC_PATH") };
     }
 
     // -- pre_init sentinel ---------------------------------------------------
@@ -482,17 +496,17 @@ mod tests {
     #[test]
     fn pre_init_does_not_reexec_when_sentinel_is_set() {
         let _g = lock();
-        std::env::set_var("APPIMAGE", "/fake/app.AppImage");
-        std::env::set_var("APPDIR", "/fake/app.AppDir");
-        std::env::set_var("_FANCY_REEXEC", "1");
+        unsafe { std::env::set_var("APPIMAGE", "/fake/app.AppImage") };
+        unsafe { std::env::set_var("APPDIR", "/fake/app.AppDir") };
+        unsafe { std::env::set_var("_FANCY_REEXEC", "1") };
 
         // Must return without calling reexec_self (which would either crash or
         // replace the process image).
         pre_init();
 
-        std::env::remove_var("APPIMAGE");
-        std::env::remove_var("APPDIR");
-        std::env::remove_var("_FANCY_REEXEC");
+        unsafe { std::env::remove_var("APPIMAGE") };
+        unsafe { std::env::remove_var("APPDIR") };
+        unsafe { std::env::remove_var("_FANCY_REEXEC") };
     }
 
     // -- check_dependencies --------------------------------------------------
@@ -511,12 +525,14 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("create temp dir: {e}"));
         std::fs::write(dir.join("libgstautodetect.so"), b"")
             .unwrap_or_else(|e| panic!("write fake plugin: {e}"));
-        std::env::set_var(
-            "GST_PLUGIN_SYSTEM_PATH_1_0",
-            dir.to_str().unwrap_or_else(|| panic!("non-UTF-8 path")),
-        );
+        unsafe {
+            std::env::set_var(
+                "GST_PLUGIN_SYSTEM_PATH_1_0",
+                dir.to_str().unwrap_or_else(|| panic!("non-UTF-8 path")),
+            )
+        };
         let found = autodetect_plugin_available();
-        std::env::remove_var("GST_PLUGIN_SYSTEM_PATH_1_0");
+        unsafe { std::env::remove_var("GST_PLUGIN_SYSTEM_PATH_1_0") };
         let _ = std::fs::remove_dir_all(&dir);
         assert!(
             found,
@@ -529,7 +545,7 @@ mod tests {
     #[test]
     fn webkit_exec_path_not_overwritten_when_already_set() {
         let _g = lock();
-        std::env::set_var("WEBKIT_EXEC_PATH", "/my/custom/webkit");
+        unsafe { std::env::set_var("WEBKIT_EXEC_PATH", "/my/custom/webkit") };
 
         env("/tmp/a").set_webkit_exec_path();
 
@@ -539,6 +555,6 @@ mod tests {
             "a user-supplied WEBKIT_EXEC_PATH must not be replaced"
         );
 
-        std::env::remove_var("WEBKIT_EXEC_PATH");
+        unsafe { std::env::remove_var("WEBKIT_EXEC_PATH") };
     }
 }

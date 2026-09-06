@@ -6,7 +6,7 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::{debug, info};
 
 use super::{HandleMessage, HandlerContext};
-use crate::state::{types::ChannelEntry, SharedState};
+use crate::state::{SharedState, types::ChannelEntry};
 
 impl HandleMessage for mumble_tcp::ChannelState {
     fn handle(&self, ctx: &HandlerContext) {
@@ -307,10 +307,10 @@ async fn pchat_key_gen_and_fetch(shared: Arc<Mutex<SharedState>>, id: u32) {
 
     if should_fetch {
         debug!(channel_id = id, "pchat: sending fetch after mode change");
-        if let Ok(mut s) = shared.lock() {
-            if let Some(ref mut p) = s.pchat_ctx.pchat {
-                let _ = p.fetched_channels.insert(id);
-            }
+        if let Ok(mut s) = shared.lock()
+            && let Some(ref mut p) = s.pchat_ctx.pchat
+        {
+            let _ = p.fetched_channels.insert(id);
         }
         let fetch = mumble_tcp::PchatFetch {
             channel_id: Some(id),

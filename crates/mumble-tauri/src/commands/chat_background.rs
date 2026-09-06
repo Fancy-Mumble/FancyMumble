@@ -280,7 +280,7 @@ pub(crate) async fn process_chat_background_image(
     let dir = background_dir(&app_handle)?;
 
     tokio::task::spawn_blocking(move || -> Result<String, String> {
-        use fancy_utils::image_filter::{process_pipeline, BlurFilter, DimFilter, ImageTransform};
+        use fancy_utils::image_filter::{BlurFilter, DimFilter, ImageTransform, process_pipeline};
 
         let bytes = std::fs::read(&path).map_err(|e| format!("read {file_name}: {e}"))?;
         let blur = BlurFilter::new(sigma);
@@ -336,7 +336,7 @@ pub(crate) async fn store_chat_background_poster(
     app_handle: tauri::AppHandle,
     image_base64: String,
 ) -> Result<String, String> {
-    use base64::{engine::general_purpose::STANDARD, Engine};
+    use base64::{Engine, engine::general_purpose::STANDARD};
     let bytes = STANDARD
         .decode(&image_base64)
         .map_err(|e| format!("decode poster: {e}"))?;

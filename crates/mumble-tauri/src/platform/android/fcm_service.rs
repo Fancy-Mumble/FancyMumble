@@ -1,7 +1,7 @@
 //! Bridge to the Android `FcmPlugin` for FCM device token retrieval.
 
-use tauri::plugin::PluginHandle;
 use tauri::Wry;
+use tauri::plugin::PluginHandle;
 
 /// Managed state holding the Tauri mobile plugin handle for
 /// `FcmPlugin` (Kotlin).

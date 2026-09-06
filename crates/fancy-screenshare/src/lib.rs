@@ -62,5 +62,5 @@ pub use sources::{CaptureSource, SourceKind};
 /// resolve the advisory id a portal share carries.
 #[cfg(all(target_os = "linux", feature = "gpu"))]
 pub use linux::{
-    active_portal_source, camera_portal, native_portal_picker, set_restore_last_pick, PortalSource,
+    PortalSource, active_portal_source, camera_portal, native_portal_picker, set_restore_last_pick,
 };

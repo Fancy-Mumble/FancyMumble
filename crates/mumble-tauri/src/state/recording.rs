@@ -9,8 +9,8 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use hound::{SampleFormat as HoundSampleFormat, WavSpec, WavWriter};
@@ -79,10 +79,10 @@ impl AppState {
         format: RecordingFormat,
     ) -> Result<String, String> {
         // Only one recording at a time.
-        if let Ok(state) = self.inner.snapshot().lock() {
-            if state.audio.recording_handle.is_some() {
-                return Err("Recording already in progress".into());
-            }
+        if let Ok(state) = self.inner.snapshot().lock()
+            && state.audio.recording_handle.is_some()
+        {
+            return Err("Recording already in progress".into());
         }
 
         // Gather template context.

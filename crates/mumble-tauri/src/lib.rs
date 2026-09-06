@@ -74,10 +74,10 @@ use tauri::Manager;
 /// isolation for the e2e suite requires this explicit hook. Production runs
 /// (no env var set) behave exactly as before.
 pub(crate) fn e2e_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
-    if let Ok(dir) = std::env::var(constants::ENV_E2E_DATA_DIR) {
-        if !dir.trim().is_empty() {
-            return Ok(std::path::PathBuf::from(dir));
-        }
+    if let Ok(dir) = std::env::var(constants::ENV_E2E_DATA_DIR)
+        && !dir.trim().is_empty()
+    {
+        return Ok(std::path::PathBuf::from(dir));
     }
     app.path().app_data_dir().map_err(|e| e.to_string())
 }
@@ -160,12 +160,11 @@ pub fn run() {
         .on_window_event(|window, event| {
             #[cfg(not(target_os = "android"))]
             app::window_state::on_window_event(window, event);
-            if let tauri::WindowEvent::Focused(focused) = event {
-                if let Some(state) = window.try_state::<AppState>() {
-                    if let Ok(mut s) = state.inner.snapshot().lock() {
-                        s.prefs.app_focused = *focused;
-                    }
-                }
+            if let tauri::WindowEvent::Focused(focused) = event
+                && let Some(state) = window.try_state::<AppState>()
+                && let Ok(mut s) = state.inner.snapshot().lock()
+            {
+                s.prefs.app_focused = *focused;
             }
             #[cfg(target_os = "windows")]
             app::webview::update_webview_memory_target(window, event);

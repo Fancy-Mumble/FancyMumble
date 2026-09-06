@@ -10,8 +10,8 @@
 use mumble_protocol::command;
 use mumble_protocol::proto::mumble_tcp;
 
-use super::types::{OnboardingConfig, OnboardingResponse};
 use super::AppState;
+use super::types::{OnboardingConfig, OnboardingResponse};
 
 impl AppState {
     /// Snapshot the current onboarding config for the active session.

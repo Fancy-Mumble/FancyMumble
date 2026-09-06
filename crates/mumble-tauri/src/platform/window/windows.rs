@@ -28,10 +28,10 @@ use tauri::WebviewWindow;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows_sys::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GetClientRect, GetWindowRect, SetWindowDisplayAffinity, SetWindowPos, SWP_NOACTIVATE,
-    SWP_NOMOVE, SWP_NOZORDER, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WMSZ_BOTTOM, WMSZ_BOTTOMLEFT,
-    WMSZ_BOTTOMRIGHT, WMSZ_LEFT, WMSZ_RIGHT, WMSZ_TOP, WMSZ_TOPLEFT, WMSZ_TOPRIGHT, WM_NCDESTROY,
-    WM_SIZING,
+    GetClientRect, GetWindowRect, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER,
+    SetWindowDisplayAffinity, SetWindowPos, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WM_NCDESTROY,
+    WM_SIZING, WMSZ_BOTTOM, WMSZ_BOTTOMLEFT, WMSZ_BOTTOMRIGHT, WMSZ_LEFT, WMSZ_RIGHT, WMSZ_TOP,
+    WMSZ_TOPLEFT, WMSZ_TOPRIGHT,
 };
 
 use super::{AspectRatioConstraint, WindowExtError};

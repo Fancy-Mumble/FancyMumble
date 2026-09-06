@@ -294,11 +294,11 @@ impl DefaultHashNameResolver {
     }
 
     fn save_to_file(path: &PathBuf, mappings: &HashMap<String, String>) {
-        if let Some(parent) = path.parent() {
-            if let Err(e) = fs::create_dir_all(parent) {
-                warn!("failed to create hash_names directory: {e}");
-                return;
-            }
+        if let Some(parent) = path.parent()
+            && let Err(e) = fs::create_dir_all(parent)
+        {
+            warn!("failed to create hash_names directory: {e}");
+            return;
         }
         match serde_json::to_string_pretty(mappings) {
             Ok(json) => {

@@ -63,7 +63,10 @@ pub fn split_comment(comment: &str) -> (Option<serde_json::Value>, String) {
         return (None, comment.to_owned());
     };
     let bio = &rest[end + FANCY_SUFFIX.len()..];
-    (Some(value), bio.strip_prefix('\n').unwrap_or(bio).to_owned())
+    (
+        Some(value),
+        bio.strip_prefix('\n').unwrap_or(bio).to_owned(),
+    )
 }
 
 /// Build a comment string from a FANCY profile JSON + bio HTML
@@ -99,7 +102,10 @@ pub fn parse_comment(comment: &str) -> CardProfile {
         return out;
     };
     let str_at = |v: &serde_json::Value, key: &str| {
-        v.get(key).and_then(|s| s.as_str()).unwrap_or_default().to_owned()
+        v.get(key)
+            .and_then(|s| s.as_str())
+            .unwrap_or_default()
+            .to_owned()
     };
     out.status = str_at(&value, "status");
     if let Some(banner) = value.get("banner") {
@@ -108,18 +114,28 @@ pub fn parse_comment(comment: &str) -> CardProfile {
     }
     if let Some(name_style) = value.get("nameStyle") {
         out.name_color = str_at(name_style, "color");
-        out.name_bold = name_style.get("bold").and_then(serde_json::Value::as_bool).unwrap_or(false);
-        out.name_italic =
-            name_style.get("italic").and_then(serde_json::Value::as_bool).unwrap_or(false);
+        out.name_bold = name_style
+            .get("bold")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        out.name_italic = name_style
+            .get("italic")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
         out.name_gradient = str_list(name_style.get("gradient"));
         if let Some(glow) = name_style.get("glow") {
             out.name_glow_color = str_at(glow, "color");
-            out.name_glow_size =
-                glow.get("size").and_then(serde_json::Value::as_f64).unwrap_or(0.0);
+            out.name_glow_size = glow
+                .get("size")
+                .and_then(serde_json::Value::as_f64)
+                .unwrap_or(0.0);
         }
     }
     out.theme_colors = str_list(value.get("themeColors"));
-    out.card_glass = value.get("cardGlass").and_then(serde_json::Value::as_bool).unwrap_or(false);
+    out.card_glass = value
+        .get("cardGlass")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
     out.card_background = str_at(&value, "cardBackground");
     out.card_background_custom = str_at(&value, "cardBackgroundCustom");
     out
@@ -129,7 +145,11 @@ pub fn parse_comment(comment: &str) -> CardProfile {
 fn str_list(value: Option<&serde_json::Value>) -> Vec<String> {
     value
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|s| s.as_str().map(ToOwned::to_owned)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|s| s.as_str().map(ToOwned::to_owned))
+                .collect()
+        })
         .unwrap_or_default()
 }
 

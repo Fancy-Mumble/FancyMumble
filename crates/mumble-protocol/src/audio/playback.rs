@@ -1,4 +1,4 @@
-﻿//! Audio playback abstraction (pipeline output stage).
+//! Audio playback abstraction (pipeline output stage).
 //!
 //! Implement [`AudioPlayback`] to send decoded PCM audio to any
 //! hardware or virtual output device.

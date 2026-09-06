@@ -9,8 +9,8 @@ use crate::error::{Error, Result};
 use crate::persistent::encryption::build_countersig_data;
 use crate::persistent::{KeyTrustLevel, PchatProtocol, StoredMessage};
 
-use super::types::{CustodianPinState, EncryptedPayload, COUNTERSIG_FRESHNESS_MS};
 use super::KeyManager;
+use super::types::{COUNTERSIG_FRESHNESS_MS, CustodianPinState, EncryptedPayload};
 
 impl KeyManager {
     // ---- Trust authority checks -------------------------------------
@@ -97,10 +97,10 @@ impl KeyManager {
         }
 
         // Promote epoch key to Verified
-        if let Some(epochs) = self.epoch_keys.get_mut(&channel_id) {
-            if let Some((_key, trust)) = epochs.get_mut(&epoch) {
-                *trust = KeyTrustLevel::Verified;
-            }
+        if let Some(epochs) = self.epoch_keys.get_mut(&channel_id)
+            && let Some((_key, trust)) = epochs.get_mut(&epoch)
+        {
+            *trust = KeyTrustLevel::Verified;
         }
 
         Ok(KeyTrustLevel::Verified)
@@ -277,8 +277,8 @@ impl KeyManager {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
-    use super::super::identity::SeedIdentity;
     use super::super::KeyManager;
+    use super::super::identity::SeedIdentity;
     use crate::persistent::{KeyTrustLevel, PchatProtocol};
 
     fn make_key_manager() -> KeyManager {
@@ -289,9 +289,10 @@ mod tests {
     #[test]
     fn trust_level_query() {
         let mut km = make_key_manager();
-        assert!(km
-            .trust_level(1, PchatProtocol::FancyV1FullArchive)
-            .is_none());
+        assert!(
+            km.trust_level(1, PchatProtocol::FancyV1FullArchive)
+                .is_none()
+        );
 
         km.store_archive_key(1, [0; 32], KeyTrustLevel::Unverified);
         assert_eq!(

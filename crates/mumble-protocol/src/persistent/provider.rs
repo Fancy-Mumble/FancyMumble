@@ -95,13 +95,13 @@ impl MessageProvider for VolatileMessageProvider {
         replaces_id: &str,
         replacement: StoredMessage,
     ) -> Result<bool> {
-        if let Some(msgs) = self.messages.get_mut(&channel_id) {
-            if let Some(pos) = msgs.iter().position(|m| {
+        if let Some(msgs) = self.messages.get_mut(&channel_id)
+            && let Some(pos) = msgs.iter().position(|m| {
                 m.message_id == replaces_id && m.sender_hash == replacement.sender_hash
-            }) {
-                msgs[pos] = replacement;
-                return Ok(true);
-            }
+            })
+        {
+            msgs[pos] = replacement;
+            return Ok(true);
         }
         Ok(false)
     }
@@ -193,13 +193,13 @@ impl PersistentProviderBackend for InMemoryPersistentBackend {
         replaces_id: &str,
         replacement: StoredMessage,
     ) -> Result<bool> {
-        if let Some(msgs) = self.cache.get_mut(&channel_id) {
-            if let Some(pos) = msgs.iter().position(|m| {
+        if let Some(msgs) = self.cache.get_mut(&channel_id)
+            && let Some(pos) = msgs.iter().position(|m| {
                 m.message_id == replaces_id && m.sender_hash == replacement.sender_hash
-            }) {
-                msgs[pos] = replacement;
-                return Ok(true);
-            }
+            })
+        {
+            msgs[pos] = replacement;
+            return Ok(true);
         }
         Ok(false)
     }
@@ -506,10 +506,11 @@ mod tests {
         vp.store_message(1, make_message("a", 1, "alice")).unwrap();
         vp.store_message(2, make_message("b", 2, "bob")).unwrap();
         vp.clear_channel(1);
-        assert!(vp
-            .get_messages(1, &MessageRange::Latest(10))
-            .unwrap()
-            .is_empty());
+        assert!(
+            vp.get_messages(1, &MessageRange::Latest(10))
+                .unwrap()
+                .is_empty()
+        );
         assert_eq!(
             vp.get_messages(2, &MessageRange::Latest(10)).unwrap().len(),
             1
@@ -649,11 +650,13 @@ mod tests {
         assert_eq!(msgs.len(), 1);
 
         // Verify volatile is empty
-        assert!(composite
-            .volatile()
-            .get_messages(1, &MessageRange::Latest(10))
-            .unwrap()
-            .is_empty());
+        assert!(
+            composite
+                .volatile()
+                .get_messages(1, &MessageRange::Latest(10))
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

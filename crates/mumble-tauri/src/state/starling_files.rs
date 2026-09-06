@@ -32,8 +32,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD;
 use futures_util::StreamExt as _;
 use mumble_protocol::client::ClientHandle;
 use mumble_protocol::command;
@@ -280,10 +280,10 @@ impl AppState {
         // Registered before the bytes move, so an upload the user cancels
         // mid-transfer actually stops.
         let cancel = CancellationToken::new();
-        if !upload_id.is_empty() {
-            if let Ok(mut map) = self.upload_cancels.lock() {
-                let _ = map.insert(upload_id.clone(), cancel.clone());
-            }
+        if !upload_id.is_empty()
+            && let Ok(mut map) = self.upload_cancels.lock()
+        {
+            let _ = map.insert(upload_id.clone(), cancel.clone());
         }
 
         let body = reqwest::Body::wrap_stream(super::file_server::build_progress_stream(
@@ -303,10 +303,10 @@ impl AppState {
             result = send => result.map_err(|e| format!("upload request failed: {e}"))?,
             () = cancel.cancelled() => return Err("upload cancelled".to_owned()),
         };
-        if !upload_id.is_empty() {
-            if let Ok(mut map) = self.upload_cancels.lock() {
-                let _ = map.remove(&upload_id);
-            }
+        if !upload_id.is_empty()
+            && let Ok(mut map) = self.upload_cancels.lock()
+        {
+            let _ = map.remove(&upload_id);
         }
 
         if !response.status().is_success() {
@@ -698,10 +698,10 @@ impl AppState {
     /// proved the service is there.
     fn note_files_unanswered(&self) {
         let session = self.inner.snapshot();
-        if let Ok(mut state) = session.lock() {
-            if state.starling_files.available().is_none() {
-                state.starling_files.set_available(false);
-            }
+        if let Ok(mut state) = session.lock()
+            && state.starling_files.available().is_none()
+        {
+            state.starling_files.set_available(false);
         };
     }
 

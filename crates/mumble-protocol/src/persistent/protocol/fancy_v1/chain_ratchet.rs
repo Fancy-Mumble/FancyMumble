@@ -152,8 +152,10 @@ mod tests {
         // At the bound is still allowed; just past it is rejected without
         // attempting the (would-be multi-billion) iteration.
         assert!(derive_key_at_index(&deriver, &epoch_key, MAX_RATCHET_ADVANCE + 1).is_err());
-        assert!(HkdfChainRatchet
-            .derive_key_at_index(&epoch_key, u32::MAX)
-            .is_err());
+        assert!(
+            HkdfChainRatchet
+                .derive_key_at_index(&epoch_key, u32::MAX)
+                .is_err()
+        );
     }
 }

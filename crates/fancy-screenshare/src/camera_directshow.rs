@@ -53,21 +53,21 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use image::RgbaImage;
-use windows::core::{implement, interface, w, IUnknown, IUnknown_Vtbl, Interface, GUID, HRESULT};
 use windows::Win32::Foundation::S_OK;
 use windows::Win32::Media::DirectShow::{
-    IBaseFilter, ICreateDevEnum, IGraphBuilder, IMediaControl, IMediaFilter, IPin, PINDIR_INPUT,
-    PINDIR_OUTPUT, PIN_DIRECTION,
+    IBaseFilter, ICreateDevEnum, IGraphBuilder, IMediaControl, IMediaFilter, IPin, PIN_DIRECTION,
+    PINDIR_INPUT, PINDIR_OUTPUT,
 };
 use windows::Win32::Media::MediaFoundation::{AM_MEDIA_TYPE, VIDEOINFOHEADER};
 use windows::Win32::System::Com::StructuredStorage::IPropertyBag;
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, IEnumMoniker, IMoniker,
-    CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
+    CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoTaskMemFree,
+    CoUninitialize, IEnumMoniker, IMoniker,
 };
-use windows::Win32::System::Variant::{VariantClear, VARIANT};
+use windows::Win32::System::Variant::{VARIANT, VariantClear};
+use windows::core::{GUID, HRESULT, IUnknown, IUnknown_Vtbl, Interface, implement, interface, w};
 
-use crate::camera::{CameraBackend, FrameSource, DSHOW_ID_BASE};
+use crate::camera::{CameraBackend, DSHOW_ID_BASE, FrameSource};
 use crate::sources::{CaptureSource, SourceKind};
 
 // DirectShow class/interface GUIDs that the `windows` crate does not ship
@@ -281,11 +281,7 @@ unsafe fn friendly_name(moniker: &IMoniker) -> Option<String> {
     // FriendlyName is a BSTR (VT_BSTR); read it out before clearing the variant.
     let name = unsafe { var.Anonymous.Anonymous.Anonymous.bstrVal.to_string() };
     let _ = unsafe { VariantClear(&mut var) };
-    if name.is_empty() {
-        None
-    } else {
-        Some(name)
-    }
+    if name.is_empty() { None } else { Some(name) }
 }
 
 /// The pixel layout negotiated on the grabber's input pin, with everything a

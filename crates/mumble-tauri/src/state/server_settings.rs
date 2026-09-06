@@ -10,8 +10,8 @@
 use mumble_protocol::command;
 use mumble_protocol::proto::mumble_tcp;
 
-use super::types::{ServerSetting, ServerSettingsSnapshot};
 use super::AppState;
+use super::types::{ServerSetting, ServerSettingsSnapshot};
 
 impl AppState {
     /// Snapshot the cached editable server settings, if any.

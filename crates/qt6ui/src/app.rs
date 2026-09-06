@@ -20,13 +20,15 @@ use tokio::task::JoinHandle;
 use tokio::time::MissedTickBehavior;
 
 use mumble_protocol::audio::encoder::{EncodedPacket, OpusEncoder, OpusEncoderConfig};
-use mumble_protocol::audio::filter::noise_gate::{NoiseGate, NoiseGateConfig};
 use mumble_protocol::audio::filter::FilterChain;
+use mumble_protocol::audio::filter::noise_gate::{NoiseGate, NoiseGateConfig};
 use mumble_protocol::audio::mixer::{AudioMixer, SpeakerBuffers, SpeakerVolumes};
 use mumble_protocol::audio::pipeline::{OutboundPipeline, OutboundTick};
 use mumble_protocol::audio::sample::AudioFormat;
 use mumble_protocol::client::{self, ClientConfig, ClientHandle};
-use mumble_protocol::command::{Authenticate, Disconnect, JoinChannel, SendTextMessage, SetSelfMute};
+use mumble_protocol::command::{
+    Authenticate, Disconnect, JoinChannel, SendTextMessage, SetSelfMute,
+};
 use mumble_protocol::message::UdpMessage;
 use mumble_protocol::proto::mumble_udp;
 use mumble_protocol::transport::tcp::TcpConfig;
@@ -126,7 +128,8 @@ impl AppCore {
 
         let core = Arc::clone(&self);
         let task = self.rt.spawn(async move {
-            core.run_session(ui, host, port, username, password, cert_pems).await;
+            core.run_session(ui, host, port, username, password, cert_pems)
+                .await;
         });
         self.lock().connect_task = Some(task);
     }
@@ -170,14 +173,22 @@ impl AppCore {
                 client_cert_pem,
                 client_key_pem,
             },
-            udp: UdpConfig { server_host: host, server_port: port },
+            udp: UdpConfig {
+                server_host: host,
+                server_port: port,
+            },
             ..ClientConfig::default()
         };
 
         match client::run(config, handler).await {
             Ok((client, join)) => {
                 let _ = client
-                    .send(Authenticate { username, password, tokens: vec![], totp: None })
+                    .send(Authenticate {
+                        username,
+                        password,
+                        tokens: vec![],
+                        totp: None,
+                    })
                     .await;
                 // Start muted (don't transmit) but NOT deafened, so the user
                 // hears others immediately.  Enabling voice unmutes.
@@ -208,11 +219,13 @@ impl AppCore {
         if let Some(client) = client {
             self.rt.spawn(async move {
                 let _ = client.send(Disconnect).await;
-                if let Some(mut join) = event_loop {
-                    if tokio::time::timeout(Duration::from_secs(3), &mut join).await.is_err() {
-                        tracing::warn!("event loop did not exit after Disconnect; aborting it");
-                        join.abort();
-                    }
+                if let Some(mut join) = event_loop
+                    && tokio::time::timeout(Duration::from_secs(3), &mut join)
+                        .await
+                        .is_err()
+                {
+                    tracing::warn!("event loop did not exit after Disconnect; aborting it");
+                    join.abort();
                 }
             });
         } else if let Some(join) = event_loop {
@@ -227,9 +240,13 @@ impl AppCore {
     /// Abort tasks, stop the mic + speaker streams, and clear session state.
     fn teardown(&self) {
         let mut sh = self.lock();
-        for task in [sh.connect_task.take(), sh.event_loop.take(), sh.outbound_task.take()]
-            .into_iter()
-            .flatten()
+        for task in [
+            sh.connect_task.take(),
+            sh.event_loop.take(),
+            sh.outbound_task.take(),
+        ]
+        .into_iter()
+        .flatten()
         {
             task.abort();
         }
@@ -248,7 +265,12 @@ impl AppCore {
     pub fn send_message(&self, text: String) {
         let (client, channel, ui, own_name) = {
             let sh = self.lock();
-            (sh.client.clone(), sh.current_channel, sh.ui.clone(), sh.own_name.clone())
+            (
+                sh.client.clone(),
+                sh.current_channel,
+                sh.ui.clone(),
+                sh.own_name.clone(),
+            )
         };
         let Some(client) = client else { return };
         let channel = channel.unwrap_or(0);
@@ -300,18 +322,20 @@ impl AppCore {
         let channel = channel.unwrap_or(0);
 
         let dropped = paths.len().saturating_sub(crate::media::MAX_GALLERY_IMAGES);
-        let paths: Vec<String> =
-            paths.into_iter().take(crate::media::MAX_GALLERY_IMAGES).collect();
-        if dropped > 0 {
-            if let Some(ui) = &ui {
-                ui_log(
-                    ui,
-                    format!(
-                        "Only the first {} images were sent.",
-                        crate::media::MAX_GALLERY_IMAGES
-                    ),
-                );
-            }
+        let paths: Vec<String> = paths
+            .into_iter()
+            .take(crate::media::MAX_GALLERY_IMAGES)
+            .collect();
+        if dropped > 0
+            && let Some(ui) = &ui
+        {
+            ui_log(
+                ui,
+                format!(
+                    "Only the first {} images were sent.",
+                    crate::media::MAX_GALLERY_IMAGES
+                ),
+            );
         }
 
         // 0 means "no special image limit" -> fall back to message_length
@@ -323,7 +347,11 @@ impl AppCore {
         } else {
             131_072
         };
-        let per_image = if compressed { (max_bytes / 3).max(60_000) } else { max_bytes };
+        let per_image = if compressed {
+            (max_bytes / 3).max(60_000)
+        } else {
+            max_bytes
+        };
 
         let caption = caption.trim().to_owned();
         let caption_html = if caption.is_empty() {
@@ -337,7 +365,11 @@ impl AppCore {
         std::thread::spawn(move || {
             let single = paths.len() == 1;
             let total = paths.len();
-            let group = if single { String::new() } else { crate::media::new_gallery_id() };
+            let group = if single {
+                String::new()
+            } else {
+                crate::media::new_gallery_id()
+            };
             let mut bodies: Vec<String> = Vec::with_capacity(total + 1);
 
             // For a gallery the caption is its own leading message so every
@@ -371,12 +403,22 @@ impl AppCore {
                         let cap = if single { caption_html.as_str() } else { "" };
                         bodies.push(format!("{marker}{cap}{img_html}"));
                         if let Some(ui) = &ui {
-                            let text = if single { caption_text.clone() } else { String::new() };
+                            let text = if single {
+                                caption_text.clone()
+                            } else {
+                                String::new()
+                            };
                             // Echo through the disk spill too - the model
                             // must never retain the base64 payload.
                             let spilled = crate::media::spill_images(vec![data_url]);
                             let images_json = serde_json::json!(spilled).to_string();
-                            ui_emit_chat(ui, channel.to_string(), own_name.clone(), text, images_json);
+                            ui_emit_chat(
+                                ui,
+                                channel.to_string(),
+                                own_name.clone(),
+                                text,
+                                images_json,
+                            );
                         }
                     }
                     Err(e) => {
@@ -412,7 +454,12 @@ impl AppCore {
         let client = self.lock().client.clone();
         let Some(client) = client else { return };
         self.rt.spawn(async move {
-            let _ = client.send(JoinChannel { channel_id, password: None }).await;
+            let _ = client
+                .send(JoinChannel {
+                    channel_id,
+                    password: None,
+                })
+                .await;
         });
     }
 
@@ -431,7 +478,11 @@ impl AppCore {
             let texture = if path.is_empty() {
                 Vec::new() // clears the avatar
             } else {
-                let budget = if max_image > 0 { max_image as usize } else { 131_072 };
+                let budget = if max_image > 0 {
+                    max_image as usize
+                } else {
+                    131_072
+                };
                 match crate::media::fit_image_file_bytes(&path, budget) {
                     Ok(bytes) => bytes,
                     Err(e) => {
@@ -443,7 +494,9 @@ impl AppCore {
                 }
             };
             rt.spawn(async move {
-                let _ = client.send(mumble_protocol::command::SetTexture { texture }).await;
+                let _ = client
+                    .send(mumble_protocol::command::SetTexture { texture })
+                    .await;
             });
         });
     }
@@ -502,12 +555,17 @@ impl AppCore {
             }
 
             let bio = bio_markdown.trim();
-            let bio_html =
-                if bio.is_empty() { String::new() } else { fancy_utils::markdown::markdown_to_html(bio) };
+            let bio_html = if bio.is_empty() {
+                String::new()
+            } else {
+                fancy_utils::markdown::markdown_to_html(bio)
+            };
             let comment = crate::profile::build_comment(&profile, &bio_html);
 
             rt.spawn(async move {
-                let _ = client.send(mumble_protocol::command::SetComment { comment }).await;
+                let _ = client
+                    .send(mumble_protocol::command::SetComment { comment })
+                    .await;
             });
         });
     }
@@ -518,7 +576,9 @@ impl AppCore {
         let client = self.lock().client.clone();
         let Some(client) = client else { return };
         self.rt.spawn(async move {
-            let _ = client.send(mumble_protocol::command::RequestUserStats { session }).await;
+            let _ = client
+                .send(mumble_protocol::command::RequestUserStats { session })
+                .await;
         });
     }
 
@@ -575,7 +635,11 @@ fn build_outbound(input_volume: Arc<AtomicU32>) -> Result<OutboundPipeline, Stri
         .map_err(|e| e.to_string())?;
     let mut filters = FilterChain::new();
     filters.push(Box::new(NoiseGate::new(NoiseGateConfig::default())));
-    Ok(OutboundPipeline::new(Box::new(capture), filters, Box::new(encoder)))
+    Ok(OutboundPipeline::new(
+        Box::new(capture),
+        filters,
+        Box::new(encoder),
+    ))
 }
 
 /// Drive the outbound pipeline: read mic frames, encode, and send to the
@@ -627,7 +691,8 @@ pub(crate) fn ui_set_status(ui: &CxxQtThread<Backend>, status: String) {
 
 /// Replace the `channelsJson` property on the Qt thread.
 pub(crate) fn ui_set_channels(ui: &CxxQtThread<Backend>, json: String) {
-    let _ = ui.queue(move |mut o: Pin<&mut Backend>| o.as_mut().set_channels_json(QString::from(&json)));
+    let _ = ui
+        .queue(move |mut o: Pin<&mut Backend>| o.as_mut().set_channels_json(QString::from(&json)));
 }
 
 /// Update the `selfChannel` property on the Qt thread.

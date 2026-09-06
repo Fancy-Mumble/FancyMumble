@@ -6,9 +6,9 @@
 //! baseline), chosen because it compiles from vendored C sources with `cc`
 //! on both MSVC and MinGW toolchains.
 
+use openh264::OpenH264API;
 use openh264::encoder::{Encoder, EncoderConfig};
 use openh264::formats::YUVSource;
-use openh264::OpenH264API;
 
 /// One encoded video access unit.
 #[derive(Debug)]
@@ -205,7 +205,7 @@ mod openh264_retune {
     )]
 
     use openh264::encoder::Encoder;
-    use openh264_sys2::{SBitrateInfo, ENCODER_OPTION_BITRATE, SPATIAL_LAYER_ALL};
+    use openh264_sys2::{ENCODER_OPTION_BITRATE, SBitrateInfo, SPATIAL_LAYER_ALL};
 
     /// Apply `bps` to a live encoder. Returns the C return code on failure.
     pub(super) fn set_bitrate(encoder: &mut Encoder, bps: u32) -> Result<(), i32> {
@@ -221,11 +221,7 @@ mod openh264_retune {
                 .raw_api()
                 .set_option(ENCODER_OPTION_BITRATE, std::ptr::addr_of_mut!(info).cast())
         };
-        if rc == 0 {
-            Ok(())
-        } else {
-            Err(rc)
-        }
+        if rc == 0 { Ok(()) } else { Err(rc) }
     }
 }
 

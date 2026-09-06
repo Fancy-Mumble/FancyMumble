@@ -3,8 +3,8 @@
 use mumble_protocol::command;
 
 use super::own_session_hash;
-use crate::state::types::ChatMessage;
 use crate::state::AppState;
+use crate::state::types::ChatMessage;
 
 impl AppState {
     pub async fn send_dm(&self, target_session: u32, body: String) -> Result<(), String> {

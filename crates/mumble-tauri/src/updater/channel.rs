@@ -41,11 +41,11 @@ const BETA_URL_ENV: &str = "FANCY_UPDATER_BETA_URL";
 pub(crate) fn beta_manifest_url() -> String {
     #[cfg(debug_assertions)]
     {
-        if let Ok(url) = std::env::var(BETA_URL_ENV) {
-            if !url.is_empty() {
-                tracing::info!("Updater: beta endpoint overridden by {BETA_URL_ENV}: {url}");
-                return url;
-            }
+        if let Ok(url) = std::env::var(BETA_URL_ENV)
+            && !url.is_empty()
+        {
+            tracing::info!("Updater: beta endpoint overridden by {BETA_URL_ENV}: {url}");
+            return url;
         }
     }
     BETA_MANIFEST_URL.to_string()

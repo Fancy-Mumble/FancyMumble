@@ -173,9 +173,11 @@ mod tests {
     #[test]
     fn slot_addresses_use_the_names_clients_scan_for() {
         let address = slot_address(3);
-        assert!(address
-            .to_string_lossy()
-            .ends_with(&format!("{SLOT_PREFIX}3")));
+        assert!(
+            address
+                .to_string_lossy()
+                .ends_with(&format!("{SLOT_PREFIX}3"))
+        );
     }
 
     #[test]
@@ -189,9 +191,11 @@ mod tests {
     fn mirrors_target_the_sandbox_runtime_directories() {
         let mirrors = mirror_addresses(0);
         assert_eq!(mirrors.len(), SANDBOX_SUBDIRS.len());
-        assert!(mirrors
-            .iter()
-            .any(|p| p.to_string_lossy().contains("com.discordapp.Discord")));
+        assert!(
+            mirrors
+                .iter()
+                .any(|p| p.to_string_lossy().contains("com.discordapp.Discord"))
+        );
     }
 
     #[cfg(not(windows))]

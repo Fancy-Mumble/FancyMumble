@@ -3,8 +3,8 @@ use mumble_protocol::persistent::PchatProtocol;
 use mumble_protocol::proto::mumble_tcp;
 
 use super::{HandleMessage, HandlerContext};
-use crate::state::types::*;
 use crate::state::SharedState;
+use crate::state::types::*;
 
 // -- Message classification ----------------------------------------
 

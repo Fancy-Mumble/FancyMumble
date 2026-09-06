@@ -39,7 +39,7 @@ use windows_core as _;
 #[cfg(all(target_os = "linux", feature = "gpu"))]
 use {ashpd as _, cros_codecs as _, libloading as _, pipewire as _};
 
-use fancy_screenshare::{sources, SourceKind};
+use fancy_screenshare::{SourceKind, sources};
 
 fn main() -> Result<(), String> {
     let list = sources::list_sources()?;

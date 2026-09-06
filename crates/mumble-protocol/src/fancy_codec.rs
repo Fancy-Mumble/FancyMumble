@@ -9,7 +9,7 @@ use std::fmt::Debug;
 
 use tracing::{debug, warn};
 
-use crate::fancy_message_support::{message_support, FallbackPolicy, MessageSupport};
+use crate::fancy_message_support::{FallbackPolicy, MessageSupport, message_support};
 use crate::message::ControlMessage;
 use crate::proto::mumble_tcp;
 use crate::state::ServerState;

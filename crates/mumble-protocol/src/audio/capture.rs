@@ -1,4 +1,4 @@
-﻿//! Audio capture abstraction (pipeline input stage).
+//! Audio capture abstraction (pipeline input stage).
 //!
 //! Implement [`AudioCapture`] to feed PCM audio from any hardware or
 //! virtual source into the outbound pipeline.

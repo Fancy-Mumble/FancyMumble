@@ -239,7 +239,7 @@ impl IdentityStore {
 
     /// Export an identity to a JSON bundle at the given `dest` path.
     pub fn export(&self, label: &str, dest: &Path) -> Result<(), String> {
-        use serde_json::{json, Map, Value};
+        use serde_json::{Map, Value, json};
 
         let dir = self.identity_dir(label);
         if !dir.exists() {

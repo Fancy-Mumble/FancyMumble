@@ -45,19 +45,19 @@ mod probe {
     use mumble_protocol as _;
     use tracing as _;
 
-    use windows::core::PCWSTR;
     use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
     use windows::Win32::Foundation::HANDLE;
     use windows::Win32::Media::Audio::{
-        eCapture, eConsole, IAudioClient, IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator,
         AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-        WAVEFORMATEX, WAVE_FORMAT_PCM,
+        IAudioClient, IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator, WAVE_FORMAT_PCM,
+        WAVEFORMATEX, eCapture, eConsole,
     };
     use windows::Win32::System::Com::StructuredStorage::PropVariantClear;
     use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CoTaskMemFree, CLSCTX_ALL, COINIT_MULTITHREADED,
+        CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoTaskMemFree,
         STGM_READ,
     };
+    use windows::core::PCWSTR;
 
     pub(crate) fn main() {
         let want = std::env::args().nth(1);
@@ -217,8 +217,8 @@ mod probe {
                     let _ = client.SetEventHandle(HANDLE(ev.0));
                     let started = client.Start();
                     println!(
-                    "WASAPI EXCLUSIVE {rate}Hz/{ch}ch/{bits}bit: OK (start: {started:?})  <== this is how to 'take' the device",
-                );
+                        "WASAPI EXCLUSIVE {rate}Hz/{ch}ch/{bits}bit: OK (start: {started:?})  <== this is how to 'take' the device",
+                    );
                     let _ = client.Stop();
                     break;
                 }
@@ -252,28 +252,33 @@ mod probe {
                 cbSize: 0,
             };
             match client.Initialize(
-            AUDCLNT_SHAREMODE_EXCLUSIVE,
-            AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-            want_period,
-            want_period,
-            &wfe,
-            None,
-        ) {
-            Ok(()) => {
-                let ev = windows::Win32::System::Threading::CreateEventW(None, false, false, PCWSTR::null())?;
-                let _ = client.SetEventHandle(HANDLE(ev.0));
-                let started = client.Start();
-                println!(
-                    "MUMBLE-EXACT EXCLUSIVE 48000Hz/{channels}ch/16bit (period {want_period}): OK (start: {started:?})"
-                );
-                let _ = client.Stop();
-                break;
+                AUDCLNT_SHAREMODE_EXCLUSIVE,
+                AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+                want_period,
+                want_period,
+                &wfe,
+                None,
+            ) {
+                Ok(()) => {
+                    let ev = windows::Win32::System::Threading::CreateEventW(
+                        None,
+                        false,
+                        false,
+                        PCWSTR::null(),
+                    )?;
+                    let _ = client.SetEventHandle(HANDLE(ev.0));
+                    let started = client.Start();
+                    println!(
+                        "MUMBLE-EXACT EXCLUSIVE 48000Hz/{channels}ch/16bit (period {want_period}): OK (start: {started:?})"
+                    );
+                    let _ = client.Stop();
+                    break;
+                }
+                Err(e) => println!(
+                    "MUMBLE-EXACT EXCLUSIVE 48000Hz/{channels}ch/16bit (period {want_period}): FAILED hr=0x{:08X}",
+                    e.code().0,
+                ),
             }
-            Err(e) => println!(
-                "MUMBLE-EXACT EXCLUSIVE 48000Hz/{channels}ch/16bit (period {want_period}): FAILED hr=0x{:08X}",
-                e.code().0,
-            ),
-        }
         }
         Ok(())
     }
@@ -283,10 +288,6 @@ mod probe {
         let mut prop = store.GetValue(&PKEY_Device_FriendlyName).ok()?;
         let s = prop.to_string();
         let _ = PropVariantClear(&mut prop);
-        if s.is_empty() {
-            None
-        } else {
-            Some(s)
-        }
+        if s.is_empty() { None } else { Some(s) }
     }
 }

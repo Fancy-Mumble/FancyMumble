@@ -9,7 +9,7 @@
 //! misspelling can only be a typo — one whose symptom would otherwise be a
 //! screen that did not change.
 
-use mumble_protocol::proto::fancy::domain::{livery_doc, LiveryDoc};
+use mumble_protocol::proto::fancy::domain::{LiveryDoc, livery_doc};
 
 /// Read a patch into `(fields, values)`.
 ///

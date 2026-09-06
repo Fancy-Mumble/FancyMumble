@@ -11,8 +11,8 @@ use mumble_protocol::proto::mumble_tcp;
 
 use mumble_protocol::persistent::PchatProtocol;
 
-use crate::state::types;
 use crate::state::SharedState;
+use crate::state::types;
 
 use super::persistence::delete_persisted_archive_key;
 
@@ -107,13 +107,16 @@ pub(crate) async fn send_key_announce(shared: &Arc<Mutex<SharedState>>, channel_
     };
 
     if let (Some(proto), Some(cert), Some(handle)) = (announce_proto, cert, handle) {
-        if let Err(e) = handle
+        match handle
             .send(command::SendPchatKeyAnnounce { announce: proto })
             .await
         {
-            warn!("failed to send key-announce: {e}");
-        } else {
-            info!(cert_hash = %cert, "sent pchat key-announce");
+            Err(e) => {
+                warn!("failed to send key-announce: {e}");
+            }
+            _ => {
+                info!(cert_hash = %cert, "sent pchat key-announce");
+            }
         }
     }
 }
@@ -347,25 +350,24 @@ fn prepare_key_holder_report(
         let mode = s
             .as_ref()
             .and_then(|s| s.channels.get(&channel_id).and_then(|c| c.pchat_protocol));
-        if let (Some(ref s), Some(mode)) = (&s, mode) {
-            if let Some(ref pchat) = s.pchat_ctx.pchat {
-                if !pchat.key_manager.has_key(channel_id, mode) {
-                    warn!(
-                        channel_id,
-                        ?mode,
-                        "not reporting as key holder: no usable key"
-                    );
-                    return None;
-                }
-            }
+        if let (Some(s), Some(mode)) = (&s, mode)
+            && let Some(ref pchat) = s.pchat_ctx.pchat
+            && !pchat.key_manager.has_key(channel_id, mode)
+        {
+            warn!(
+                channel_id,
+                ?mode,
+                "not reporting as key holder: no usable key"
+            );
+            return None;
         }
 
-        if let (Some(ref mut s), Some(ref hash)) = (&mut s, &hash) {
-            if let Some(ref mut pchat) = s.pchat_ctx.pchat {
-                pchat
-                    .key_manager
-                    .record_key_holder(channel_id, hash.clone());
-            }
+        if let (Some(s), Some(hash)) = (&mut s, &hash)
+            && let Some(ref mut pchat) = s.pchat_ctx.pchat
+        {
+            pchat
+                .key_manager
+                .record_key_holder(channel_id, hash.clone());
         }
         (h, hash)
     };
@@ -388,13 +390,16 @@ pub(crate) async fn send_key_holder_report_async(
     channel_id: u32,
 ) {
     if let Some((handle, report)) = prepare_key_holder_report(shared, channel_id) {
-        if let Err(e) = handle
+        match handle
             .send(command::SendPchatKeyHolderReport { report })
             .await
         {
-            warn!(channel_id, "failed to report key holder: {e}");
-        } else {
-            debug!(channel_id, "reported self as key holder");
+            Err(e) => {
+                warn!(channel_id, "failed to report key holder: {e}");
+            }
+            _ => {
+                debug!(channel_id, "reported self as key holder");
+            }
         }
     }
 }
@@ -403,13 +408,16 @@ pub(crate) async fn send_key_holder_report_async(
 pub(crate) fn send_key_holder_report(shared: &Arc<Mutex<SharedState>>, channel_id: u32) {
     if let Some((handle, report)) = prepare_key_holder_report(shared, channel_id) {
         let _key_holder_report_task = tokio::spawn(async move {
-            if let Err(e) = handle
+            match handle
                 .send(command::SendPchatKeyHolderReport { report })
                 .await
             {
-                warn!(channel_id, "failed to report key holder: {e}");
-            } else {
-                debug!(channel_id, "reported self as key holder");
+                Err(e) => {
+                    warn!(channel_id, "failed to report key holder: {e}");
+                }
+                _ => {
+                    debug!(channel_id, "reported self as key holder");
+                }
             }
         });
     }
@@ -437,25 +445,25 @@ pub(crate) fn send_key_takeover(
         let app = s.as_ref().and_then(|s| s.conn.tauri_app_handle.clone());
         let mut hash = None;
         let mut persist_info = None;
-        if let Some(ref mut s) = s {
-            if let Some(ref mut p) = s.pchat_ctx.pchat {
-                hash = Some(p.own_cert_hash.clone());
-                if !p
-                    .key_manager
-                    .has_key(channel_id, PchatProtocol::FancyV1FullArchive)
-                {
-                    let key = mumble_protocol::persistent::encryption::derive_archive_key(
-                        &p.seed, channel_id,
-                    );
-                    p.key_manager.store_archive_key(
-                        channel_id,
-                        key,
-                        mumble_protocol::persistent::KeyTrustLevel::Verified,
-                    );
-                    p.key_manager
-                        .set_channel_originator(channel_id, p.own_cert_hash.clone());
-                    persist_info = p.identity_dir.clone().map(|dir| (dir, key));
-                }
+        if let Some(ref mut s) = s
+            && let Some(ref mut p) = s.pchat_ctx.pchat
+        {
+            hash = Some(p.own_cert_hash.clone());
+            if !p
+                .key_manager
+                .has_key(channel_id, PchatProtocol::FancyV1FullArchive)
+            {
+                let key = mumble_protocol::persistent::encryption::derive_archive_key(
+                    &p.seed, channel_id,
+                );
+                p.key_manager.store_archive_key(
+                    channel_id,
+                    key,
+                    mumble_protocol::persistent::KeyTrustLevel::Verified,
+                );
+                p.key_manager
+                    .set_channel_originator(channel_id, p.own_cert_hash.clone());
+                persist_info = p.identity_dir.clone().map(|dir| (dir, key));
             }
         }
         (h, hash, app, persist_info)
@@ -483,13 +491,16 @@ pub(crate) fn send_key_takeover(
     };
 
     let _task = tokio::spawn(async move {
-        if let Err(e) = handle
+        match handle
             .send(command::SendPchatKeyHolderReport { report })
             .await
         {
-            warn!(channel_id, "failed to send key takeover: {e}");
-        } else {
-            debug!(channel_id, "sent key takeover");
+            Err(e) => {
+                warn!(channel_id, "failed to send key takeover: {e}");
+            }
+            _ => {
+                debug!(channel_id, "sent key takeover");
+            }
         }
     });
 }

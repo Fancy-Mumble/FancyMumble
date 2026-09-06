@@ -303,7 +303,7 @@ pub(crate) fn write_translation_files(
 /// bytes back over IPC is the same detour [`upload_bytes`] takes.
 #[tauri::command]
 pub(crate) async fn read_file_base64(path: String) -> Result<String, String> {
-    use base64::{engine::general_purpose::STANDARD, Engine};
+    use base64::{Engine, engine::general_purpose::STANDARD};
 
     let bytes = tokio::fs::read(&path)
         .await

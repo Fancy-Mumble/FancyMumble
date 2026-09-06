@@ -31,7 +31,7 @@ pub use file_server::{
     UploadBytesRequest, UploadRequest, UploadResponse,
 };
 mod handler;
-pub(crate) use handler::{data_uri, to_snapshot, LiverySnapshot};
+pub(crate) use handler::{LiverySnapshot, data_uri, to_snapshot};
 mod account;
 mod audit;
 pub(crate) mod hash_names;
@@ -575,11 +575,11 @@ impl AppState {
     /// Cancel an in-progress upload by its `upload_id`.
     /// Returns `true` if a matching upload was found and cancelled.
     pub fn cancel_upload(&self, upload_id: &str) -> bool {
-        if let Ok(mut map) = self.upload_cancels.lock() {
-            if let Some(token) = map.remove(upload_id) {
-                token.cancel();
-                return true;
-            }
+        if let Ok(mut map) = self.upload_cancels.lock()
+            && let Some(token) = map.remove(upload_id)
+        {
+            token.cancel();
+            return true;
         }
         false
     }

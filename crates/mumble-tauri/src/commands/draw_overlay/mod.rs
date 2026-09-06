@@ -604,25 +604,24 @@ fn pick_target_monitor(
         .available_monitors()
         .map_err(|e| format!("available_monitors failed: {e}"))?;
 
-    if let (Some(w), Some(h)) = (capture_width, capture_height) {
-        if let Some(m) = monitors
+    if let (Some(w), Some(h)) = (capture_width, capture_height)
+        && let Some(m) = monitors
             .iter()
             .find(|m| m.size().width == w && m.size().height == h)
-        {
-            return Ok(m.clone());
-        }
+    {
+        return Ok(m.clone());
     }
 
-    if let Ok(pos) = app.cursor_position() {
-        if let Some(m) = monitors.iter().find(|m| {
+    if let Ok(pos) = app.cursor_position()
+        && let Some(m) = monitors.iter().find(|m| {
             let mp = m.position();
             let ms = m.size();
             let x = pos.x as i32;
             let y = pos.y as i32;
             x >= mp.x && y >= mp.y && x < mp.x + ms.width as i32 && y < mp.y + ms.height as i32
-        }) {
-            return Ok(m.clone());
-        }
+        })
+    {
+        return Ok(m.clone());
     }
 
     app.primary_monitor()
@@ -658,10 +657,10 @@ fn spawn_tracker_if_supported(_app: &tauri::AppHandle, _state: &tauri::State<'_,
 
 #[cfg(not(target_os = "android"))]
 fn abort_tracker(state: &tauri::State<'_, AppState>) {
-    if let Ok(mut slot) = state.draw_overlay_tracker.lock() {
-        if let Some(handle) = slot.take() {
-            handle.abort();
-        }
+    if let Ok(mut slot) = state.draw_overlay_tracker.lock()
+        && let Some(handle) = slot.take()
+    {
+        handle.abort();
     }
 }
 

@@ -8,10 +8,10 @@ use tracing::info;
 
 use super::{HandleMessage, HandlerContext};
 use crate::state::types::{
-    blob_marker, CurrentChannelPayload, ServerLogEntry, UserEntry, VoiceState,
-    PRESENCE_HIDDEN_CHANNEL,
+    CurrentChannelPayload, PRESENCE_HIDDEN_CHANNEL, ServerLogEntry, UserEntry, VoiceState,
+    blob_marker,
 };
-use crate::state::{pchat, SharedState};
+use crate::state::{SharedState, pchat};
 
 impl HandleMessage for mumble_tcp::UserState {
     fn handle(&self, ctx: &HandlerContext) {
@@ -48,10 +48,10 @@ impl HandleMessage for mumble_tcp::UserState {
             }
         }
 
-        if outcome.own_channel_changed {
-            if let Some(ch) = self.channel_id {
-                handle_own_channel_change(ctx, ch);
-            }
+        if outcome.own_channel_changed
+            && let Some(ch) = self.channel_id
+        {
+            handle_own_channel_change(ctx, ch);
         }
 
         if outcome.is_synced {
@@ -116,7 +116,7 @@ fn compute_user_state_update(
         user.self_mute = true;
     }
 
-    if let (Some(ref hash), name) = (&user.hash, &user.name) {
+    if let (Some(hash), name) = (&user.hash, &user.name) {
         maybe_record_name(&resolver, hash, name);
     }
 
@@ -349,7 +349,7 @@ fn maybe_record_name(
     if hash.is_empty() || name.is_empty() {
         return;
     }
-    if let Some(ref r) = resolver {
+    if let Some(r) = resolver {
         r.record(hash, name);
     }
 }
@@ -641,12 +641,15 @@ async fn send_join_pchat_fetch(shared: &Arc<Mutex<SharedState>>, ch: u32) {
             limit: Some(50),
             after_id: None,
         };
-        if let Err(e) = handle.send(command::SendPchatFetch { fetch }).await {
-            tracing::warn!("send pchat-fetch failed: {e}");
-            false
-        } else {
-            info!(channel_id = ch, "sent pchat-fetch on join");
-            true
+        match handle.send(command::SendPchatFetch { fetch }).await {
+            Err(e) => {
+                tracing::warn!("send pchat-fetch failed: {e}");
+                false
+            }
+            _ => {
+                info!(channel_id = ch, "sent pchat-fetch on join");
+                true
+            }
         }
     } else {
         false

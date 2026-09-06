@@ -19,7 +19,11 @@ pub const MAX_GALLERY_IMAGES: usize = 10;
 /// MIME types for the image extensions both clients accept (the image subset
 /// of `EXT_TO_MIME` in media.ts).
 fn mime_for_path(path: &str) -> &'static str {
-    let ext = path.rsplit('.').next().unwrap_or_default().to_ascii_lowercase();
+    let ext = path
+        .rsplit('.')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     match ext.as_str() {
         "jpg" | "jpeg" => "image/jpeg",
         "gif" => "image/gif",
@@ -35,7 +39,10 @@ fn mime_for_path(path: &str) -> &'static str {
 /// Escape a string for use inside a double-quoted HTML attribute
 /// (media.ts `escapeAttr`).
 pub fn escape_attr(s: &str) -> String {
-    s.replace('&', "&amp;").replace('"', "&quot;").replace('<', "&lt;").replace('>', "&gt;")
+    s.replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 /// The marker placed at the start of each gallery image message
@@ -51,16 +58,20 @@ pub fn new_gallery_id() -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
-    let mixed = now
-        .as_secs()
-        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+    let mixed = now.as_secs().wrapping_mul(0x9E37_79B9_7F4A_7C15)
         ^ u64::from(now.subsec_nanos()).wrapping_mul(0x2545_F491_4F6C_DD1D)
         ^ u64::from(std::process::id());
     format!("{:08x}", (mixed >> 32) as u32 ^ mixed as u32)
 }
 
 /// Encode `img` (optionally scaled by `scale`) as a JPEG data URL.
-fn encode_jpeg(img: &QImage, src_w: i32, src_h: i32, scale: f64, quality: i32) -> Result<String, String> {
+fn encode_jpeg(
+    img: &QImage,
+    src_w: i32,
+    src_h: i32,
+    scale: f64,
+    quality: i32,
+) -> Result<String, String> {
     let w = (f64::from(src_w) * scale).round().max(1.0) as i32;
     let h = (f64::from(src_h) * scale).round().max(1.0) as i32;
     let scaled;
@@ -70,7 +81,12 @@ fn encode_jpeg(img: &QImage, src_w: i32, src_h: i32, scale: f64, quality: i32) -
         // Width and height derive from one scale factor, so the aspect ratio
         // is preserved despite IgnoreAspectRatio (which just skips Qt's own
         // fitting logic).
-        scaled = img.scaled(w, h, AspectRatioMode::IgnoreAspectRatio, TransformationMode::SmoothTransformation);
+        scaled = img.scaled(
+            w,
+            h,
+            AspectRatioMode::IgnoreAspectRatio,
+            TransformationMode::SmoothTransformation,
+        );
         &scaled
     };
     let b64 = image_to_jpeg_base64(target, quality).to_string();
@@ -242,7 +258,11 @@ pub fn spill_texture(bytes: &[u8]) -> Option<serde_json::Value> {
     if bytes.is_empty() {
         return None;
     }
-    let mime = if bytes.starts_with(&[0xff, 0xd8]) { "image/jpeg" } else { "image/png" };
+    let mime = if bytes.starts_with(&[0xff, 0xd8]) {
+        "image/jpeg"
+    } else {
+        "image/png"
+    };
     let data_url = format!("data:{mime};base64,{}", bytes_to_base64(bytes));
     spill_images(vec![data_url]).into_iter().next()
 }
@@ -258,7 +278,11 @@ fn spill_thumbnail(full_path: &str) -> Option<String> {
     if img.width() <= THUMB_MAX_W && img.height() <= THUMB_MAX_H {
         return None;
     }
-    let ext = if img.has_alpha_channel() { "png" } else { "jpg" };
+    let ext = if img.has_alpha_channel() {
+        "png"
+    } else {
+        "jpg"
+    };
     let thumb_path = format!("{full_path}.thumb.{ext}");
     if !std::path::Path::new(&thumb_path).exists() {
         let scaled = img.scaled(
@@ -280,7 +304,9 @@ fn spill_thumbnail(full_path: &str) -> Option<String> {
 pub fn sweep_stale_spill() {
     let root = std::env::temp_dir().join("qt6ui-chat-images");
     let cutoff = std::time::SystemTime::now() - std::time::Duration::from_secs(24 * 3600);
-    let Ok(entries) = std::fs::read_dir(root) else { return };
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return;
+    };
     for entry in entries.flatten() {
         let stale = entry
             .metadata()
@@ -308,22 +334,23 @@ pub fn extract_images(html: &str) -> (String, Vec<String>) {
             let rest = &html[i + 1..];
             let is_img = rest.len() >= 4
                 && rest[..3].eq_ignore_ascii_case("img")
-                && matches!(rest.as_bytes()[3], b' ' | b'\t' | b'\n' | b'\r' | b'/' | b'>');
-            if is_img {
-                if let Some(gt) = html[i..].find('>') {
-                    let tag = &html[i + 1..i + gt];
-                    if let Some(src) = attr_value(tag, "src") {
-                        let lower = src.to_ascii_lowercase();
-                        if lower.starts_with("data:image/")
-                            || lower.starts_with("http://")
-                            || lower.starts_with("https://")
-                        {
-                            images.push(src.to_owned());
-                        }
+                && matches!(
+                    rest.as_bytes()[3],
+                    b' ' | b'\t' | b'\n' | b'\r' | b'/' | b'>'
+                );
+            if is_img && let Some(gt) = html[i..].find('>') {
+                let tag = &html[i + 1..i + gt];
+                if let Some(src) = attr_value(tag, "src") {
+                    let lower = src.to_ascii_lowercase();
+                    if lower.starts_with("data:image/")
+                        || lower.starts_with("http://")
+                        || lower.starts_with("https://")
+                    {
+                        images.push(src.to_owned());
                     }
-                    i += gt + 1;
-                    continue;
                 }
+                i += gt + 1;
+                continue;
             }
         }
         // Copy the (possibly multi-byte) char and advance.
@@ -350,8 +377,9 @@ mod tests {
 
     #[test]
     fn extract_keeps_text_and_pulls_data_images() {
-        let (html, images) =
-            extract_images("hello <b>world</b> <img src=\"data:image/png;base64,AAAA\" alt=\"x\" /> bye");
+        let (html, images) = extract_images(
+            "hello <b>world</b> <img src=\"data:image/png;base64,AAAA\" alt=\"x\" /> bye",
+        );
         assert_eq!(html, "hello <b>world</b>  bye");
         assert_eq!(images, vec!["data:image/png;base64,AAAA".to_owned()]);
     }
@@ -374,7 +402,10 @@ mod tests {
 
     #[test]
     fn gallery_marker_matches_web_format() {
-        assert_eq!(gallery_marker("abc123", 1, 4), "<!-- FANCY_GALLERY:abc123:1:4 -->");
+        assert_eq!(
+            gallery_marker("abc123", 1, 4),
+            "<!-- FANCY_GALLERY:abc123:1:4 -->"
+        );
         assert_eq!(new_gallery_id().len(), 8);
     }
 
@@ -430,13 +461,21 @@ mod tests {
         let small = dir.join("qt6ui-fit-small.bmp");
         write_bmp(&small, 16, 16, false);
         let url = fit_image_file(small.to_str().unwrap(), 131_072).expect("small fit");
-        assert!(url.starts_with("data:image/bmp;base64,"), "got {}", &url[..40]);
+        assert!(
+            url.starts_with("data:image/bmp;base64,"),
+            "got {}",
+            &url[..40]
+        );
 
         // Incompressible noise far over the budget -> JPEG within budget.
         let large = dir.join("qt6ui-fit-large.bmp");
         write_bmp(&large, 800, 600, true);
         let url = fit_image_file(large.to_str().unwrap(), 131_072).expect("large fit");
-        assert!(url.starts_with("data:image/jpeg;base64,"), "got {}", &url[..40]);
+        assert!(
+            url.starts_with("data:image/jpeg;base64,"),
+            "got {}",
+            &url[..40]
+        );
         assert!(url.len() <= 131_072, "data URL too big: {}", url.len());
 
         // Spill: data URLs land on disk (RAM offload) with a separate
@@ -448,11 +487,17 @@ mod tests {
             spilled[0]["full"].as_str().unwrap(),
         );
         assert!(full.starts_with("file:///"), "got {full}");
-        assert!(std::path::Path::new(&full["file:///".len()..]).is_file(), "missing {full}");
+        assert!(
+            std::path::Path::new(&full["file:///".len()..]).is_file(),
+            "missing {full}"
+        );
         // 800x600 exceeds the 640x480 thumb box -> distinct thumbnail file.
         assert_ne!(thumb, full);
         assert!(thumb.ends_with(".thumb.jpg"), "got {thumb}");
-        assert!(std::path::Path::new(&thumb["file:///".len()..]).is_file(), "missing {thumb}");
+        assert!(
+            std::path::Path::new(&thumb["file:///".len()..]).is_file(),
+            "missing {thumb}"
+        );
         assert_eq!(spilled[1]["thumb"], "https://example.com/x.gif");
         assert_eq!(spilled[1]["full"], "https://example.com/x.gif");
 

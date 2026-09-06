@@ -7,13 +7,13 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::{debug, info, warn};
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::SharedState;
 use crate::state::local_cache::CachedReaction;
 use crate::state::pchat::{self, PchatState};
 use crate::state::types::{
     ChatMessage, ConnectionStatus, CurrentChannelPayload, ReactionFetchResponsePayload,
     StoredReactionPayload,
 };
-use crate::state::SharedState;
 
 /// How much of a channel to ask for when probing for the file service.
 ///
@@ -559,10 +559,10 @@ impl HandlerContext {
             let (ch, mode) = resolve_initial_channel(&shared);
             debug!(channel = ?ch, mode = ?mode, "pchat: initial channel/mode resolved");
 
-            if let (Some(ch), Some(mode)) = (ch, mode) {
-                if mode.is_encrypted() {
-                    init_encrypted_channel(&shared, ch, mode).await;
-                }
+            if let (Some(ch), Some(mode)) = (ch, mode)
+                && mode.is_encrypted()
+            {
+                init_encrypted_channel(&shared, ch, mode).await;
             }
         });
     }
@@ -685,20 +685,19 @@ async fn ensure_protocol_key(
             // peer's key never had anything left to decide -- the key already
             // existed, and it was the wrong one.
             let mint = pchat::should_mint_archive_key(&s, ch);
-            if let Some(ref mut p) = s.pchat_ctx.pchat {
-                if mint {
-                    let cert = p.own_cert_hash.clone();
-                    let key =
-                        mumble_protocol::persistent::encryption::derive_archive_key(&p.seed, ch);
-                    p.key_manager
-                        .store_archive_key(ch, key, KeyTrustLevel::Verified);
-                    p.key_manager.set_channel_originator(ch, cert.clone());
-                    info!(
-                        channel_id = ch,
-                        cert_hash = %cert,
-                        "derived archive key immediately (no wait needed)"
-                    );
-                }
+            if let Some(ref mut p) = s.pchat_ctx.pchat
+                && mint
+            {
+                let cert = p.own_cert_hash.clone();
+                let key = mumble_protocol::persistent::encryption::derive_archive_key(&p.seed, ch);
+                p.key_manager
+                    .store_archive_key(ch, key, KeyTrustLevel::Verified);
+                p.key_manager.set_channel_originator(ch, cert.clone());
+                info!(
+                    channel_id = ch,
+                    cert_hash = %cert,
+                    "derived archive key immediately (no wait needed)"
+                );
             }
         }
         pchat::send_key_holder_report_async(shared, ch).await;
@@ -829,21 +828,21 @@ async fn fetch_channel_history(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: 
     debug!(channel_id = ch, "pchat: about to send pchat-fetch");
     {
         let s = shared.lock().ok();
-        if let Some(ref s) = s {
-            if let Some(ref p) = s.pchat_ctx.pchat {
-                let has = p.key_manager.has_key(ch, mode);
-                debug!(
-                    channel_id = ch,
-                    has_key = has,
-                    "pchat: key state before fetch"
-                );
-            }
+        if let Some(ref s) = s
+            && let Some(ref p) = s.pchat_ctx.pchat
+        {
+            let has = p.key_manager.has_key(ch, mode);
+            debug!(
+                channel_id = ch,
+                has_key = has,
+                "pchat: key state before fetch"
+            );
         }
     }
-    if let Ok(mut s) = shared.lock() {
-        if let Some(ref mut p) = s.pchat_ctx.pchat {
-            let _ = p.fetched_channels.insert(ch);
-        }
+    if let Ok(mut s) = shared.lock()
+        && let Some(ref mut p) = s.pchat_ctx.pchat
+    {
+        let _ = p.fetched_channels.insert(ch);
     }
     let fetch = mumble_tcp::PchatFetch {
         channel_id: Some(ch),

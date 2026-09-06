@@ -208,10 +208,9 @@ impl HandleMessage for mumble_tcp::PchatAck {
 
         // If a delete request is pending, resolve its oneshot channel.
         if is_deleted || is_rejected {
-            let senders = if let Ok(mut state) = ctx.shared.lock() {
-                std::mem::take(&mut state.pchat_ctx.pending_delete_acks)
-            } else {
-                Vec::new()
+            let senders = match ctx.shared.lock() {
+                Ok(mut state) => std::mem::take(&mut state.pchat_ctx.pending_delete_acks),
+                _ => Vec::new(),
             };
             for tx in senders {
                 let _ = tx.send(crate::state::types::DeleteAckResult {
@@ -444,21 +443,21 @@ impl HandleMessage for mumble_tcp::PchatReactionDeliver {
                 .map(|u| u.name.clone())
                 .unwrap_or_else(|| sender_name.clone());
 
-            if let Some(ref mut pchat_state) = state.pchat_ctx.pchat {
-                if let Some(ref mut cache) = pchat_state.local_cache {
-                    upsert_cached_reaction(
-                        cache,
-                        channel_id,
-                        action_str,
-                        CachedReaction {
-                            message_id: message_id.clone(),
-                            emoji: emoji.clone(),
-                            sender_hash: sender_hash.clone(),
-                            sender_name: resolved_name,
-                            timestamp,
-                        },
-                    );
-                }
+            if let Some(ref mut pchat_state) = state.pchat_ctx.pchat
+                && let Some(ref mut cache) = pchat_state.local_cache
+            {
+                upsert_cached_reaction(
+                    cache,
+                    channel_id,
+                    action_str,
+                    CachedReaction {
+                        message_id: message_id.clone(),
+                        emoji: emoji.clone(),
+                        sender_hash: sender_hash.clone(),
+                        sender_name: resolved_name,
+                        timestamp,
+                    },
+                );
             }
         }
 
@@ -518,10 +517,10 @@ impl HandleMessage for mumble_tcp::PchatReactionFetchResponse {
                 .filter_map(|u| u.hash.clone().map(|h| (h, u.name.clone())))
                 .collect();
 
-            if let Some(ref mut pchat_state) = state.pchat_ctx.pchat {
-                if let Some(ref mut cache) = pchat_state.local_cache {
-                    bulk_insert_cached_reactions(cache, channel_id, &reactions, &name_by_hash);
-                }
+            if let Some(ref mut pchat_state) = state.pchat_ctx.pchat
+                && let Some(ref mut cache) = pchat_state.local_cache
+            {
+                bulk_insert_cached_reactions(cache, channel_id, &reactions, &name_by_hash);
             }
         }
 

@@ -108,10 +108,10 @@ impl PwCaptureStream {
                     Ok(()) => "pipewire stream ended".to_owned(),
                     Err(e) => e,
                 };
-                if let Ok(mut slot) = thread_shared.slot.lock() {
-                    if slot.dead.is_none() {
-                        slot.dead = Some(reason);
-                    }
+                if let Ok(mut slot) = thread_shared.slot.lock()
+                    && slot.dead.is_none()
+                {
+                    slot.dead = Some(reason);
                 }
                 thread_shared.cond.notify_all();
             })
@@ -301,10 +301,10 @@ fn on_state_changed(
         _ => None,
     };
     let Some(reason) = died else { return };
-    if let Ok(mut slot) = state.shared.slot.lock() {
-        if slot.dead.is_none() {
-            slot.dead = Some(reason);
-        }
+    if let Ok(mut slot) = state.shared.slot.lock()
+        && slot.dead.is_none()
+    {
+        slot.dead = Some(reason);
     }
     state.shared.cond.notify_all();
     if let Some(mainloop) = loop_weak.upgrade() {
@@ -800,7 +800,7 @@ fn negotiate_dmabuf_step(
 /// value plus whether it is still an unfixated choice (needing our
 /// fixation answer) or already final.
 fn modifier_prop(param: &pw::spa::pod::Pod) -> Option<(u64, bool)> {
-    use pw::spa::pod::{deserialize::PodDeserializer, ChoiceValue, Value};
+    use pw::spa::pod::{ChoiceValue, Value, deserialize::PodDeserializer};
     let (_, value) = PodDeserializer::deserialize_from::<Value>(param.as_bytes()).ok()?;
     let Value::Object(obj) = value else {
         return None;

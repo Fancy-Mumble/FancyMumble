@@ -14,9 +14,8 @@ use crate::store::config_dir;
 
 /// Persist `full` so the next FancyMumble start stays in the full interface.
 fn write_full_marker() -> std::io::Result<()> {
-    let dir = config_dir().ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::NotFound, "no config dir")
-    })?;
+    let dir = config_dir()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no config dir"))?;
     std::fs::create_dir_all(&dir)?;
     std::fs::write(dir.join(UI_MODE_MARKER_FILE), "full")
 }

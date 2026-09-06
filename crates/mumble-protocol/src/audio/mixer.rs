@@ -159,16 +159,16 @@ impl AudioMixer {
         // than the last seen, the sender started a new voice stream.
         // Drop the stale decoder so Opus state from the old stream does
         // not contaminate the new one (handles lost terminators).
-        if let Some(speaker) = self.speakers.get(&session) {
-            if let Some(prev) = speaker.last_seq {
-                if prev > packet.sequence && prev - packet.sequence > 10 {
-                    tracing::debug!(
-                        "stream restart detected: session {session} seq {prev} -> {}, resetting decoder",
-                        packet.sequence,
-                    );
-                    drop(self.speakers.remove(&session));
-                }
-            }
+        if let Some(speaker) = self.speakers.get(&session)
+            && let Some(prev) = speaker.last_seq
+            && prev > packet.sequence
+            && prev - packet.sequence > 10
+        {
+            tracing::debug!(
+                "stream restart detected: session {session} seq {prev} -> {}, resetting decoder",
+                packet.sequence,
+            );
+            drop(self.speakers.remove(&session));
         }
 
         let speaker = match self.speakers.entry(session) {

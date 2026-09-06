@@ -4,12 +4,12 @@ use tracing::debug;
 
 use mumble_protocol::client::ClientHandle;
 use mumble_protocol::command;
-use mumble_protocol::persistent::wire::{MessageEnvelope, WireCodec};
 use mumble_protocol::persistent::PchatProtocol;
+use mumble_protocol::persistent::wire::{MessageEnvelope, WireCodec};
 use mumble_protocol::proto::mumble_tcp;
 
-use super::conversion::protocol_to_proto;
 use super::PchatState;
+use super::conversion::protocol_to_proto;
 
 // -- Encrypt and build ------------------------------------------------
 

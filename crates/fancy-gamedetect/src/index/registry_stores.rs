@@ -12,10 +12,10 @@ use super::InstalledGame;
 // The registry is a Windows notion, so everything that reads one is gated -
 // but the table below is still worth checking on the machine the tests run
 // on, which is why it and its `Store` come in for a test build too.
-#[cfg(windows)]
-use super::normalise_dir;
 #[cfg(any(windows, test))]
 use super::Store;
+#[cfg(windows)]
+use super::normalise_dir;
 
 /// Registry locations that hold one subkey per installed game.
 ///
@@ -59,8 +59,8 @@ const GAME_KEYS: &[(Store, &str, &str, &str)] = &[
 /// Add every game the registry-backed launchers know about.
 #[cfg(windows)]
 pub(super) fn collect(out: &mut Vec<InstalledGame>) {
-    use winreg::enums::HKEY_LOCAL_MACHINE;
     use winreg::RegKey;
+    use winreg::enums::HKEY_LOCAL_MACHINE;
 
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
     for (store, root, dir_value, name_value) in GAME_KEYS {

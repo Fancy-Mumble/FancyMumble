@@ -9,8 +9,8 @@
 use mumble_protocol::command;
 use mumble_protocol::proto::mumble_tcp::fancy_account_settings_update::Action;
 
-use super::types::AccountSettings;
 use super::AppState;
+use super::types::AccountSettings;
 
 impl AppState {
     /// Snapshot the cached own-account settings, if any.

@@ -3,8 +3,8 @@
 //! issuing another network request.
 
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 use tauri_plugin_updater::Update;
 

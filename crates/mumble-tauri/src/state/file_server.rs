@@ -15,11 +15,11 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use futures_util::StreamExt as _;
-use reqwest::multipart::{Form, Part};
 use reqwest::Client;
+use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tokio::io::AsyncWriteExt;
@@ -495,10 +495,10 @@ impl AppState {
             .len();
 
         let cancel_token = CancellationToken::new();
-        if !req.upload_id.is_empty() {
-            if let Ok(mut map) = self.upload_cancels.lock() {
-                let _ = map.insert(req.upload_id.clone(), cancel_token.clone());
-            }
+        if !req.upload_id.is_empty()
+            && let Ok(mut map) = self.upload_cancels.lock()
+        {
+            let _ = map.insert(req.upload_id.clone(), cancel_token.clone());
         }
 
         let body = reqwest::Body::wrap_stream(build_progress_stream(
@@ -530,10 +530,10 @@ impl AppState {
             }
         };
 
-        if !req.upload_id.is_empty() {
-            if let Ok(mut map) = self.upload_cancels.lock() {
-                let _ = map.remove(&req.upload_id);
-            }
+        if !req.upload_id.is_empty()
+            && let Ok(mut map) = self.upload_cancels.lock()
+        {
+            let _ = map.remove(&req.upload_id);
         }
 
         if !resp.status().is_success() {

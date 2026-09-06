@@ -39,7 +39,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::{reload, EnvFilter, Registry};
+use tracing_subscriber::{EnvFilter, Registry, reload};
 
 /// Reload handle for the global level filter (shared by both sinks).
 static LEVEL_RELOAD: OnceLock<reload::Handle<EnvFilter, Registry>> = OnceLock::new();
@@ -117,18 +117,18 @@ struct FileSink {
 
 impl Write for FileSink {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if let Ok(mut guard) = self.file.lock() {
-            if let Some(file) = guard.as_mut() {
-                return file.write(buf);
-            }
+        if let Ok(mut guard) = self.file.lock()
+            && let Some(file) = guard.as_mut()
+        {
+            return file.write(buf);
         }
         Ok(buf.len())
     }
     fn flush(&mut self) -> io::Result<()> {
-        if let Ok(mut guard) = self.file.lock() {
-            if let Some(file) = guard.as_mut() {
-                return file.flush();
-            }
+        if let Ok(mut guard) = self.file.lock()
+            && let Some(file) = guard.as_mut()
+        {
+            return file.flush();
         }
         Ok(())
     }
@@ -292,10 +292,10 @@ pub(crate) fn set_file_logging(enabled: bool) -> Result<(), String> {
         .ok_or_else(|| "log directory not configured yet".to_string())?;
     std::fs::create_dir_all(dir).map_err(|e| format!("create log dir: {e}"))?;
 
-    if AUTO_ZIP.load(Ordering::Relaxed) {
-        if let Err(e) = compress_old_logs(dir) {
-            tracing::warn!("auto-compression of old logs failed: {e}");
-        }
+    if AUTO_ZIP.load(Ordering::Relaxed)
+        && let Err(e) = compress_old_logs(dir)
+    {
+        tracing::warn!("auto-compression of old logs failed: {e}");
     }
 
     let path = current_log_path(dir);
@@ -379,12 +379,11 @@ pub(crate) fn export_logs(dest: &Path) -> Result<(), String> {
     let dir = dir.as_path();
 
     // Flush the live file so in-progress lines make it into the export.
-    if let Some(handle) = FILE_HANDLE.get() {
-        if let Ok(mut guard) = handle.lock() {
-            if let Some(file) = guard.as_mut() {
-                let _ = file.flush();
-            }
-        }
+    if let Some(handle) = FILE_HANDLE.get()
+        && let Ok(mut guard) = handle.lock()
+        && let Some(file) = guard.as_mut()
+    {
+        let _ = file.flush();
     }
 
     // Collect sources sorted by name so days come out in order.

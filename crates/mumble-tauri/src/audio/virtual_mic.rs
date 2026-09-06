@@ -53,8 +53,8 @@
 //! and cannot run in CI.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Instant;
 
 use mumble_protocol::audio::capture::AudioCapture;
@@ -325,13 +325,13 @@ impl VirtualCapture {
 /// means the common case needs no suffix.
 fn split_file_spec(rest: &str) -> std::result::Result<(&str, f64), String> {
     // Nested rather than a let-chain: this crate is not on edition 2024.
-    if let Some((path, tail)) = rest.rsplit_once(':') {
-        if let Ok(rate) = tail.parse::<f64>() {
-            if rate <= 0.0 {
-                return Err(format!("file rate {rate} must be positive"));
-            }
-            return Ok((path, rate));
+    if let Some((path, tail)) = rest.rsplit_once(':')
+        && let Ok(rate) = tail.parse::<f64>()
+    {
+        if rate <= 0.0 {
+            return Err(format!("file rate {rate} must be positive"));
         }
+        return Ok((path, rate));
     }
     Ok((rest, 48_000.0))
 }

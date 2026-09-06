@@ -14,8 +14,8 @@
 
 use std::sync::{Arc, Mutex};
 
-use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 use aes::Aes128;
+use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
 
 use super::udp::CryptState;
 use crate::error::{Error, Result};

@@ -11,8 +11,8 @@
 //! audio module.
 
 use std::collections::VecDeque;
-use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 use std::time::{Duration, Instant};
 
 use tauri::Emitter;

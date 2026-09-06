@@ -127,12 +127,12 @@ pub(crate) async fn approve_key_share(
 
     // Record the peer as a key holder locally so we don't prompt consent
     // for them again on subsequent channel moves.
-    if let Ok(mut shared) = state.inner.snapshot().lock() {
-        if let Some(ref mut pchat) = shared.pchat_ctx.pchat {
-            pchat
-                .key_manager
-                .record_key_holder(channel_id, peer_cert_hash.clone());
-        }
+    if let Ok(mut shared) = state.inner.snapshot().lock()
+        && let Some(ref mut pchat) = shared.pchat_ctx.pchat
+    {
+        pchat
+            .key_manager
+            .record_key_holder(channel_id, peer_cert_hash.clone());
     }
 
     // Report to the server that the peer now holds the key.

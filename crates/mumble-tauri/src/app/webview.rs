@@ -52,8 +52,8 @@ fn set_webview_memory_target(window: &tauri::Window, low: bool) {
     };
     let result = webview.with_webview(move |platform_webview| {
         use webview2_com::Microsoft::Web::WebView2::Win32::{
-            ICoreWebView2_19, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
-            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL,
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW,
+            COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL, ICoreWebView2_19,
         };
         use windows_core::Interface;
 

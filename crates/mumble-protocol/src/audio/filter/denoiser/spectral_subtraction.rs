@@ -32,7 +32,7 @@ use std::sync::Arc;
 use realfft::num_complex::Complex32;
 use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
 
-use super::params::{algorithm_param_specs, read_param, DenoiserParams};
+use super::params::{DenoiserParams, algorithm_param_specs, read_param};
 use super::{DenoiserBackend, NoiseSuppressionAlgorithm};
 
 const FFT_SIZE: usize = 512;

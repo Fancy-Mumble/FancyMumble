@@ -558,7 +558,7 @@ impl<H: EventHandler> EventLoopCtx<'_, H> {
                 ) {
                     trace!(type_id = ctrl.type_id(), "inbound control message");
                 }
-                if let ControlMessage::UdpTunnel(ref data) = ctrl {
+                if let ControlMessage::UdpTunnel(data) = ctrl {
                     trace!("handle_server_message: UdpTunnel ({} bytes)", data.len());
                     match crate::transport::audio_codec::decode_tunnel_audio(data) {
                         Ok(audio) => self.handler.on_udp_message(&UdpMessage::Audio(audio)),
@@ -666,11 +666,12 @@ impl<H: EventHandler> EventLoopCtx<'_, H> {
             let use_tunnel = if let Some(sender) = &mut self.udp_sender {
                 let payload =
                     crate::transport::udp::encode_udp_message_for(udp_msg, protobuf_audio);
-                if let Err(e) = sender.send_raw(&payload).await {
-                    warn!("UDP send failed, falling back to TCP tunnel: {e}");
-                    true
-                } else {
-                    false
+                match sender.send_raw(&payload).await {
+                    Err(e) => {
+                        warn!("UDP send failed, falling back to TCP tunnel: {e}");
+                        true
+                    }
+                    _ => false,
                 }
             } else {
                 true
@@ -969,7 +970,9 @@ async fn handle_force_tcp_change<H: EventHandler>(
             )
             .await;
         } else {
-            debug!("force_tcp disabled but no CryptSetup received yet; UDP will start when server sends keys");
+            debug!(
+                "force_tcp disabled but no CryptSetup received yet; UDP will start when server sends keys"
+            );
         }
     }
 }
@@ -1066,10 +1069,13 @@ async fn start_udp<H: EventHandler>(
     if let Some(sender) = udp_sender.as_mut() {
         let payload =
             crate::transport::udp::encode_udp_message_for(&udp_ping_message(), protobuf_audio);
-        if let Err(e) = sender.send_raw(&payload).await {
-            warn!("failed to send initial UDP ping: {e}");
-        } else {
-            debug!("sent initial UDP ping for NAT traversal");
+        match sender.send_raw(&payload).await {
+            Err(e) => {
+                warn!("failed to send initial UDP ping: {e}");
+            }
+            _ => {
+                debug!("sent initial UDP ping for NAT traversal");
+            }
         }
     }
 

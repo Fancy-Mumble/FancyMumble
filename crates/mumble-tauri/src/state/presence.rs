@@ -183,10 +183,10 @@ impl PresenceManager {
     /// Best-effort cleanup from the process-exit handler, which runs on the
     /// main thread and must not block on the async runtime.
     pub(crate) fn release_slot_files(&self) {
-        if let Ok(slot) = self.shared.service.try_lock() {
-            if let Some(service) = slot.as_ref() {
-                service.release_slot_files();
-            }
+        if let Ok(slot) = self.shared.service.try_lock()
+            && let Some(service) = slot.as_ref()
+        {
+            service.release_slot_files();
         }
     }
 

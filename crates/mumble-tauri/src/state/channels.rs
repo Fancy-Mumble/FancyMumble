@@ -4,8 +4,8 @@ use mumble_protocol::command;
 use mumble_protocol::persistent::PchatProtocol;
 use tracing::debug;
 
-use super::parse_pchat_protocol_str;
 use super::AppState;
+use super::parse_pchat_protocol_str;
 
 /// Maps raw `ChannelAttribute` discriminants sent by the frontend onto the proto
 /// enum, dropping any value the current protocol does not define.

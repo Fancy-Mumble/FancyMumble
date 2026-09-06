@@ -39,7 +39,7 @@ use http_body_util::Full;
 use hyper::body::{Bytes, Incoming};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
-use hyper::{header, Method, Request, Response, StatusCode};
+use hyper::{Method, Request, Response, StatusCode, header};
 use hyper_util::rt::TokioIo;
 use tauri::Manager as _;
 use tokio::net::TcpListener;
@@ -207,7 +207,7 @@ async fn serve<F, Fut>(
 ) -> Response<Full<Bytes>>
 where
     F: FnOnce(String, Option<String>) -> Fut,
-    Fut: std::future::Future<Output = Result<FetchedSpan, String>>,
+    Fut: Future<Output = Result<FetchedSpan, String>>,
 {
     if method != Method::GET && method != Method::HEAD {
         return refuse(StatusCode::METHOD_NOT_ALLOWED);

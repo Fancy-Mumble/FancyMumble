@@ -16,11 +16,11 @@ use mumble_protocol::command;
 use mumble_protocol::message::UdpMessage;
 use mumble_protocol::proto::mumble_udp;
 
+use super::SharedState;
 use super::calibration::{
-    frame_peak, frame_rms, CalibrationResult, Calibrator, AUTO_CALIBRATION_WINDOW,
+    AUTO_CALIBRATION_WINDOW, CalibrationResult, Calibrator, frame_peak, frame_rms,
 };
 use super::types::{MicAmplitudePayload, VoiceActivationCalibrationPayload};
-use super::SharedState;
 
 // -----------------------------------------------------------------------
 //  Outbound audio
@@ -43,12 +43,12 @@ struct TalkingGuard {
 
 impl Drop for TalkingGuard {
     fn drop(&mut self) {
-        if self.is_talking {
-            if let (Some(app), Some(session)) = (&self.app, self.session) {
-                use tauri::Emitter;
-                let _ = app.emit("user-talking", (session, false));
-                set_local_talking(app, false);
-            }
+        if self.is_talking
+            && let (Some(app), Some(session)) = (&self.app, self.session)
+        {
+            use tauri::Emitter;
+            let _ = app.emit("user-talking", (session, false));
+            set_local_talking(app, false);
         }
     }
 }

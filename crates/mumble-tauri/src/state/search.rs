@@ -2,10 +2,10 @@
 
 use fancy_utils::fuzzy;
 
+use super::AppState;
 use super::types::{
     ChatMessage, MessageContext, PhotoEntry, SearchCategory, SearchFilter, SearchResult,
 };
-use super::AppState;
 
 /// Maximum number of results to return per category.
 const MAX_PER_CATEGORY: usize = 10;
@@ -255,10 +255,10 @@ fn extract_img_srcs(html: &str) -> Vec<String> {
             None => break,
         };
         let tag = &html[abs_pos..=tag_end];
-        if let Some(src) = extract_attr(tag, "src") {
-            if !src.is_empty() {
-                srcs.push(src);
-            }
+        if let Some(src) = extract_attr(tag, "src")
+            && !src.is_empty()
+        {
+            srcs.push(src);
         }
         search_from = tag_end + 1;
     }

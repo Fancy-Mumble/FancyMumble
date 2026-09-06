@@ -215,12 +215,7 @@ pub mod qobject {
         /// A user's server stats (seconds; -1 = unknown), answering
         /// `request_user_stats`.
         #[qsignal]
-        fn user_stats(
-            self: Pin<&mut Backend>,
-            session: i32,
-            onlinesecs: i32,
-            idlesecs: i32,
-        );
+        fn user_stats(self: Pin<&mut Backend>, session: i32, onlinesecs: i32, idlesecs: i32);
     }
 
     impl cxx_qt::Threading for Backend {}
@@ -264,7 +259,11 @@ impl qobject::Backend {
     ) {
         let thread = self.qt_thread();
         let password = password.to_string();
-        let password = if password.is_empty() { None } else { Some(password) };
+        let password = if password.is_empty() {
+            None
+        } else {
+            Some(password)
+        };
         self.core.clone().connect(
             thread,
             host.to_string(),
@@ -298,10 +297,11 @@ impl qobject::Backend {
         caption: &QString,
         compressed: bool,
     ) {
-        let paths: Vec<String> =
-            serde_json::from_str(&paths_json.to_string()).unwrap_or_default();
+        let paths: Vec<String> = serde_json::from_str(&paths_json.to_string()).unwrap_or_default();
         if !paths.is_empty() {
-            self.core.clone().send_images(paths, caption.to_string(), compressed);
+            self.core
+                .clone()
+                .send_images(paths, caption.to_string(), compressed);
         }
     }
 
@@ -367,7 +367,9 @@ impl qobject::Backend {
             .as_str()
             .and_then(crate::store::identity_pems);
         let thread = self.qt_thread();
-        self.core.clone().connect(thread, host, port, username, password, cert_pems);
+        self.core
+            .clone()
+            .connect(thread, host, port, username, password, cert_pems);
     }
 
     fn save_server(
@@ -437,11 +439,7 @@ impl qobject::Backend {
 
 /// Parse a line of markdown and convert the byte-offset spans from
 /// `fancy_utils::markdown` into UTF-16 offsets for `QString::setFormat`.
-pub fn md_line_spans(
-    line: &str,
-    in_fence: bool,
-    out_fence: &mut bool,
-) -> Vec<qobject::MdSpan> {
+pub fn md_line_spans(line: &str, in_fence: bool, out_fence: &mut bool) -> Vec<qobject::MdSpan> {
     let (spans, next_fence) = fancy_utils::markdown::line_spans(line, in_fence);
     *out_fence = next_fence;
     spans

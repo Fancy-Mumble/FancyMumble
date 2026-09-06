@@ -1,7 +1,7 @@
 //! Audit-log Tauri commands (admin "Audit Log" panel).
 
-use crate::state::types::{AuditConfigSnapshot, AuditQueryArgs, ServerSetting};
 use crate::state::AppState;
+use crate::state::types::{AuditConfigSnapshot, AuditQueryArgs, ServerSetting};
 
 /// Read the cached audit configuration snapshot (or `None` if the server has
 /// not advertised one - e.g. no audit plugin, or the user lacks the
