@@ -115,7 +115,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
@@ -172,6 +172,13 @@ jobs:
         run: npm test
 
       # -- Rust ----------------------------------------------------
+      # Style before correctness: a formatting failure is one command to fix,
+      # and reading a clippy diff through unformatted code wastes the reviewer.
+      # `rustfmt.toml` pins the style edition so this cannot disagree between a
+      # developer's toolchain and the runner's.
+      - name: Formatting
+        run: cargo fmt --all -- --check
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
