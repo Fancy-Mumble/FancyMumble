@@ -12,9 +12,15 @@
 //! The branded bootstrapper UI lives in `ui/src/updater/` and is loaded
 //! into a dedicated [`tauri::WebviewWindow`] with the label
 //! [`UPDATER_WINDOW_LABEL`].
+//!
+//! Updates come from one of two channels - see the `channel` module for how
+//! they are ordered against each other. Stable is the default, and is all a
+//! client ever sees unless the user opts into betas.
 
 #![cfg(not(target_os = "android"))]
 
+#[cfg(feature = "self-updater")]
+pub(crate) mod channel;
 #[cfg(feature = "self-updater")]
 pub(crate) mod commands;
 #[cfg(feature = "self-updater")]
@@ -78,16 +84,11 @@ fn load_persisted_prefs(app: &tauri::AppHandle) {
     let Some(state) = app.try_state::<UpdaterState>() else {
         return;
     };
-    let Ok(config_dir) = app.path().app_config_dir() else {
-        return;
-    };
-    let path = config_dir.join("preferences.json");
-    let Ok(bytes) = std::fs::read(&path) else {
-        tracing::debug!("Updater: no persisted preferences at {}", path.display());
+    let Some((path, bytes)) = read_preferences_file(app) else {
         return;
     };
     let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
-        tracing::warn!("Updater: preferences.json is not valid JSON");
+        tracing::warn!("Updater: {} is not valid JSON", path.display());
         return;
     };
     let prefs = json.get("preferences").unwrap_or(&json);
@@ -101,6 +102,39 @@ fn load_persisted_prefs(app: &tauri::AppHandle) {
     if let Some(v) = prefs.get("skippedUpdateVersion").and_then(|v| v.as_str()) {
         state.set_skipped_version(Some(v.to_string()));
     }
+    if let Some(b) = prefs
+        .get("betaUpdates")
+        .and_then(serde_json::Value::as_bool)
+    {
+        state.set_beta_channel(b);
+        tracing::info!("Updater: beta channel = {b}");
+    }
+}
+
+/// Locate and read the preferences file `@tauri-apps/plugin-store` writes.
+///
+/// The plugin resolves a relative store path against `BaseDirectory::AppData`
+/// (`tauri-plugin-store`'s `resolve_store_path`), which on Linux is
+/// `~/.local/share/<identifier>` - *not* the config dir. Reading only the
+/// config dir meant this hydration silently found nothing on Linux, and the
+/// startup check fell back to whatever the webview managed to push in its
+/// first 300 ms. The config dir stays as a fallback: on Windows and macOS the
+/// two resolve to the same place, and an install that somehow has the file
+/// there should still be honoured.
+#[cfg(feature = "self-updater")]
+fn read_preferences_file(app: &tauri::AppHandle) -> Option<(std::path::PathBuf, Vec<u8>)> {
+    let candidates = [
+        app.path().app_data_dir().ok(),
+        app.path().app_config_dir().ok(),
+    ];
+    for dir in candidates.into_iter().flatten() {
+        let path = dir.join("preferences.json");
+        match std::fs::read(&path) {
+            Ok(bytes) => return Some((path, bytes)),
+            Err(e) => tracing::debug!("Updater: no preferences at {}: {e}", path.display()),
+        }
+    }
+    None
 }
 
 /// Spawn an async task that checks for updates shortly after launch.

@@ -230,6 +230,10 @@ function MainApp() {
       invoke("updater_set_skipped_version", { version: prefs.skippedUpdateVersion ?? null }).catch(
         () => undefined,
       );
+      // Inform the Rust updater which release channel to check.
+      invoke("updater_set_beta_channel", { enabled: prefs.betaUpdates ?? false }).catch(
+        () => undefined,
+      );
     });
     getNotificationSounds().then((ns) => {
       if (ns) setNotifSounds(ns);

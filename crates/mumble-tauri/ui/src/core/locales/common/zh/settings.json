@@ -170,6 +170,8 @@
     "autoReconnectHint": "当服务器连接意外断开时自动重连。手动断开不会触发自动重连。",
     "autoUpdate": "启动时自动更新",
     "autoUpdateHint": "开启后，Fancy Mumble 启动时会自动下载并安装可用更新。下载过程中会出现一个小的进度窗口。关闭后，每次更新都会先询问你。",
+    "betaUpdates": "Beta 更新",
+    "betaUpdatesHint": "抢先获得预发布版本。仅当 Beta 版本比稳定版更新时才会提供。关闭此选项不会回退已安装的 Beta 版：客户端会保留它，直到稳定版超过它为止。",
     "persistDms": "保存私信记录",
     "persistDmsHint": "与好友交换的私信使用 AES-GCM 加密后保存在本设备。关闭后私信只保留在内存中；关闭时既有的历史记录会被删除。",
     "disconnectWarning": "断开确认",

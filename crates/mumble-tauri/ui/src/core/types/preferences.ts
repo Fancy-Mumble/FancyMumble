@@ -162,6 +162,11 @@ export interface UserPreferences {
   /** Version string the user chose to skip in the updater bootstrapper.
    *  Updates matching this version are silently ignored on startup. */
   skippedUpdateVersion?: string | null;
+  /** When true, the updater also consults the beta manifest and offers
+   *  pre-release builds. Because channels are compared by version, turning
+   *  this off does not roll a beta build back - the client simply waits until
+   *  a stable release overtakes the beta it is running. */
+  betaUpdates?: boolean;
   /** Last active sidebar tab - restored after reconnect. */
   sidebarActiveTab?: "channels" | "members";
   /** Whether voice (mic on/can-hear) was enabled when last disconnected.

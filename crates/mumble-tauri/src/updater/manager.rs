@@ -18,6 +18,10 @@ pub(crate) struct UpdaterState {
     /// Version string the user chose to skip. Updates matching this
     /// version are silently ignored on the next startup check.
     pub(crate) skipped_version: Mutex<Option<String>>,
+    /// When true the user has opted into pre-release builds, and a check
+    /// consults the beta manifest alongside the stable one. Off by default,
+    /// so a client that never touches the setting behaves exactly as before.
+    pub(crate) beta_channel: AtomicBool,
 }
 
 impl UpdaterState {
@@ -55,6 +59,14 @@ impl UpdaterState {
     pub(crate) fn skipped_version(&self) -> Option<String> {
         self.skipped_version.lock().ok().and_then(|g| g.clone())
     }
+
+    pub(crate) fn set_beta_channel(&self, enabled: bool) {
+        self.beta_channel.store(enabled, Ordering::Relaxed);
+    }
+
+    pub(crate) fn beta_channel(&self) -> bool {
+        self.beta_channel.load(Ordering::Relaxed)
+    }
 }
 
 /// Lightweight, serialisable snapshot of an [`Update`] for the frontend.
@@ -64,6 +76,10 @@ pub(crate) struct UpdateInfo {
     pub current_version: String,
     pub date: Option<String>,
     pub body: Option<String>,
+    /// True when the offered version is a pre-release, so the bootstrapper
+    /// can say so. Derived from the version string rather than from which
+    /// manifest answered, because that is what the user will see.
+    pub beta: bool,
 }
 
 impl From<&Update> for UpdateInfo {
@@ -73,6 +89,7 @@ impl From<&Update> for UpdateInfo {
             current_version: u.current_version.clone(),
             date: u.date.map(|d| d.to_string()),
             body: u.body.clone(),
+            beta: super::channel::is_prerelease(&u.version),
         }
     }
 }

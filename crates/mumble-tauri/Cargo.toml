@@ -1,6 +1,6 @@
 [package]
 name = "mumble-tauri"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 # Internal workspace crate - never published to crates.io (this also lets
 # cargo-deny's wildcard gate exempt the path dependencies).
@@ -35,7 +35,7 @@ default = ["self-updater"]
 # `process:` permissions are not referenced. What stays is the window plumbing
 # in `updater/window.rs` (`MAIN_WINDOW_LABEL`, `show_main_window`), which the
 # rest of the app uses to reveal the main window on launch.
-self-updater = ["dep:tauri-plugin-updater", "dep:tauri-plugin-process"]
+self-updater = ["dep:tauri-plugin-updater", "dep:tauri-plugin-process", "dep:semver"]
 deepfilternet-denoiser = ["mumble-protocol/deepfilternet-denoiser"]
 # Production asset mode: serve the embedded `ui/dist` via the custom Tauri
 # protocol instead of loading `devUrl` (localhost:1420). The Tauri CLI enables
@@ -143,6 +143,11 @@ tauri-plugin-window-state = "2"
 # is gated by the same feature.
 tauri-plugin-updater = { version = "2", optional = true }
 tauri-plugin-process = { version = "2", optional = true }
+# Version ordering for the release channels: the updater compares a stable and
+# a beta manifest itself (see `updater/channel.rs`), so it needs the same
+# semver semantics the plugin uses internally. Optional for the same reason the
+# plugins are - a build without `self-updater` never compares anything.
+semver = { version = "1", optional = true }
 # Android: mumble-protocol with Opus codec + oboe for native audio I/O.
 [target.'cfg(target_os = "android")'.dependencies]
 mumble-protocol = { path = "../mumble-protocol", features = [
@@ -209,6 +214,10 @@ gtk = { version = "0.18", default-features = false }
 # Same crate/version line wry uses; v2_38 gates the set_enable_webrtc binding.
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = { version = "2.0.1", features = ["v2_38"] }
+# dlopen for libgtk-layer-shell (see platform/linux/layer_shell.rs). Loaded at
+# runtime, never linked: the library is an optional distro package, and its
+# absence has to degrade to "unsupported", not to a binary that will not start.
+libloading = "0.8"
 # Same version the notification plugin uses; see event_handler.rs for why
 # Linux notifications bypass the plugin.
 notify-rust = "4"

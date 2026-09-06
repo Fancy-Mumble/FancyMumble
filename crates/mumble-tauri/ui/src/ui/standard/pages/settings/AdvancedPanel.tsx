@@ -21,6 +21,7 @@ registerSettings("advanced")
   .add("advanced.translationHelper")
   .add("advanced.autoReconnect", ["reconnect"])
   .add("advanced.autoUpdate", ["update", "auto update"])
+  .add("advanced.betaUpdates", ["beta", "prerelease", "pre-release", "channel", "update"])
   .add("advanced.persistDms", ["direct messages", "history"])
   .add("advanced.disconnectWarning", ["disconnect", "confirmation"])
   .add("advanced.dangerZone", ["reset", "delete"]);
@@ -34,6 +35,7 @@ export function AdvancedPanel({
   autoZipLogs,
   autoReconnect,
   autoUpdateOnStartup,
+  betaUpdates,
   persistDms,
   showDisconnectWarning,
   onToggleMode,
@@ -44,6 +46,7 @@ export function AdvancedPanel({
   onToggleAutoZipLogs,
   onToggleAutoReconnect,
   onToggleAutoUpdate,
+  onToggleBetaUpdates,
   onTogglePersistDms,
   onToggleDisconnectWarning,
   onToggleDeveloperMode,
@@ -57,6 +60,7 @@ export function AdvancedPanel({
   autoZipLogs: boolean;
   autoReconnect: boolean;
   autoUpdateOnStartup: boolean;
+  betaUpdates: boolean;
   persistDms: boolean;
   showDisconnectWarning: boolean;
   onToggleMode: () => void;
@@ -67,6 +71,7 @@ export function AdvancedPanel({
   onToggleAutoZipLogs: () => void;
   onToggleAutoReconnect: () => void;
   onToggleAutoUpdate: () => void;
+  onToggleBetaUpdates: () => void;
   onTogglePersistDms: () => void;
   onToggleDisconnectWarning: () => void;
   onToggleDeveloperMode: () => void;
@@ -332,6 +337,16 @@ export function AdvancedPanel({
             <p className={styles.fieldHint}>{t("advanced.autoUpdateHint")}</p>
           </div>
           <Toggle checked={autoUpdateOnStartup} onChange={onToggleAutoUpdate} />
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.toggleRow}>
+          <div className={styles.toggleInfo}>
+            <h3 className={styles.sectionTitle}>{t("advanced.betaUpdates")}</h3>
+            <p className={styles.fieldHint}>{t("advanced.betaUpdatesHint")}</p>
+          </div>
+          <Toggle checked={betaUpdates} onChange={onToggleBetaUpdates} />
         </div>
       </section>
 

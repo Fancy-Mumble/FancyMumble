@@ -375,7 +375,8 @@ steps before declaring the task done:
 ### General
 - MIT license
 - CI: GitHub Actions (`.github/workflows/ci.yml`) - lint, test, build,
-  Android APK build, auto-release on `main`
+  Android APK build, auto-release on `main`, and beta pre-releases on `beta`
+  (see "Releases and update channels" in `README.md`)
 - Workspace managed with `cargo` (Rust) and `npm` (frontend, in `crates/mumble-tauri/ui`)
 - **No non-ASCII characters in code comments** (Rust `//`/`/* */`, TypeScript `//`/`/* */`).
   Box-drawing characters and other Unicode glyphs (e.g. `┌──┐`, `│`, `└──┘`, `▼`, `─`)

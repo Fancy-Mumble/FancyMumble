@@ -15,6 +15,8 @@ export type UpdateInfo = {
   current_version: string;
   date: string | null;
   body: string | null;
+  /** True when the offered version is a pre-release from the beta channel. */
+  beta: boolean;
 };
 
 export type ProgressEvent =

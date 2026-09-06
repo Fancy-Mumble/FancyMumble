@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, beta]
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, beta]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -20,9 +20,21 @@ jobs:
   # 0. Version consistency guard
   # ----------------------------------------------------------------
 
+  # Also the single place that decides what this run publishes and where.
+  # `main` releases the version in the config files as-is; `beta` releases it
+  # with a `-beta.<run number>` pre-release suffix, which semver orders below
+  # the eventual stable release and above the last one:
+  #
+  #   0.3.0  <  0.4.0-beta.1  <  0.4.0-beta.2  <  0.4.0
+  #
+  # so an opted-in client rolls onto stable by itself when it ships.
   version-check:
     name: Version consistency
     runs-on: ubuntu-latest
+    outputs:
+      is_beta: ${{ steps.channel.outputs.is_beta }}
+      version: ${{ steps.channel.outputs.version }}
+      tag: ${{ steps.channel.outputs.tag }}
     steps:
       - uses: actions/checkout@v6
 
@@ -40,6 +52,49 @@ jobs:
             echo "::error::Version mismatch - tauri.conf.json/ui/package.json/mumble-protocol Cargo.toml must all agree."
             exit 1
           fi
+
+      - name: Resolve release channel and version
+        id: channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=$(jq -r '.version' crates/mumble-tauri/tauri.conf.json)
+          if [ "${{ github.ref }}" = "refs/heads/beta" ] && [ "${{ github.event_name }}" = "push" ]; then
+            IS_BETA=true
+          else
+            IS_BETA=false
+          fi
+
+          if [ "$IS_BETA" = "true" ]; then
+            # The beta branch must carry the *next* stable version. If it
+            # carried the released one, every beta would sort below the stable
+            # release already installed and reach nobody - a silent no-op that
+            # is much harder to spot than a failed build.
+            case "$BASE" in
+              *-*)
+                echo "::error::tauri.conf.json version ($BASE) already has a pre-release part; the beta branch must carry a plain X.Y.Z."
+                exit 1
+                ;;
+            esac
+            LATEST=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name 2>/dev/null | sed 's/^v//' || echo "")
+            if [ -n "$LATEST" ]; then
+              NEWEST=$(printf '%s\n%s\n' "$BASE" "$LATEST" | sort -V | tail -n1)
+              if [ "$BASE" = "$LATEST" ] || [ "$NEWEST" != "$BASE" ]; then
+                echo "::error::Beta base version ($BASE) must be greater than the latest stable release ($LATEST). Bump tauri.conf.json, ui/package.json and mumble-protocol/Cargo.toml to the next version."
+                exit 1
+              fi
+            fi
+            VERSION="$BASE-beta.${{ github.run_number }}"
+          else
+            VERSION="$BASE"
+          fi
+
+          echo "is_beta=$IS_BETA" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Channel: $([ "$IS_BETA" = true ] && echo beta || echo stable); publishing v$VERSION"
 
   # ----------------------------------------------------------------
   # 1. Lint & test (runs on every push / PR)
@@ -223,17 +278,25 @@ jobs:
 
   build:
     name: Build (${{ matrix.target.name }})
+    needs: [version-check]
     runs-on: ${{ matrix.target.os }}
     strategy:
       fail-fast: false
       matrix:
         target:
+          # `beta-bundles` is what a pre-release build is limited to. The MSI
+          # bundler rejects a non-numeric pre-release identifier outright
+          # ("must be numeric-only ... for msi target"), and a .deb versioned
+          # 0.4.0-beta.N sorts *above* the eventual 0.4.0 for dpkg (the suffix
+          # parses as a Debian revision), which would leave beta testers
+          # unable to install the stable release over it. The updater only
+          # ever consumes the NSIS installer and the AppImage anyway.
           - name: Linux
             os: ubuntu-latest
-            bundle-ext: "deb,appimage"
+            beta-bundles: "appimage"
           - name: Windows
             os: windows-latest
-            bundle-ext: "msi,nsis"
+            beta-bundles: "nsis"
 
     steps:
       - uses: actions/checkout@v6
@@ -311,8 +374,24 @@ jobs:
           # client bundles only signal-bridge (not qt6ui), so there is
           # nothing for this build to gain from it.
           SKIP_QT6UI: "1"
+          IS_BETA: ${{ needs.version-check.outputs.is_beta }}
+          RELEASE_VERSION: ${{ needs.version-check.outputs.version }}
+          BETA_BUNDLES: ${{ matrix.target.beta-bundles }}
         shell: bash
         run: |
+          ARGS=()
+
+          # A beta build carries the pre-release version the release job will
+          # publish under. `--config` reaches the compiled binary too (Tauri
+          # passes it as TAURI_CONFIG, which tauri-build prefers over
+          # CARGO_PKG_VERSION), so the updater compares the right version at
+          # runtime. It also forces a rebuild of the mumble-tauri crate on
+          # every run; its dependencies stay cached.
+          if [ "$IS_BETA" = "true" ]; then
+            ARGS+=(--config "{\"version\":\"$RELEASE_VERSION\"}")
+            ARGS+=(--bundles "$BETA_BUNDLES")
+          fi
+
           # createUpdaterArtifacts is enabled in tauri.conf.json, so Tauri
           # signs the bundles for the auto-updater. That needs a valid
           # TAURI_SIGNING_PRIVATE_KEY. On fork builds the repo secrets are not
@@ -321,12 +400,12 @@ jobs:
           # When no key is present, disable updater-artifact signing so the
           # bundle still builds; signed release artifacts are produced only on
           # the upstream repo where the secret is available.
-          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            cargo tauri build
-          else
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
             echo "::warning::No TAURI_SIGNING_PRIVATE_KEY (fork build); building without signed updater artifacts."
-            cargo tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
+            ARGS+=(--config '{"bundle":{"createUpdaterArtifacts":false}}')
           fi
+
+          cargo tauri build "${ARGS[@]}"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -348,6 +427,7 @@ jobs:
 
   build-android:
     name: Build (Android)
+    needs: [version-check]
     runs-on: ubuntu-latest
     env:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -463,7 +543,20 @@ jobs:
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
           ANDROID_KEYSTORE_PATH: ${{ steps.android_signing.outputs.keystore_path }}
           ANDROID_KEY_PASSWORD: ${{ env.ANDROID_KEY_PASSWORD_EFFECTIVE }}
-        run: cargo tauri android build --apk
+          IS_BETA: ${{ needs.version-check.outputs.is_beta }}
+          RELEASE_VERSION: ${{ needs.version-check.outputs.version }}
+        shell: bash
+        run: |
+          # versionName carries the full "0.4.0-beta.N"; versionCode is derived
+          # from major/minor/patch only, so every beta of a version and the
+          # stable release itself share one code. Android allows a reinstall at
+          # the same code, so sideloading between them works - but the store
+          # would not accept two uploads at the same code.
+          if [ "$IS_BETA" = "true" ]; then
+            cargo tauri android build --apk --config "{\"version\":\"$RELEASE_VERSION\"}"
+          else
+            cargo tauri android build --apk
+          fi
 
       - name: Verify Android .so (no unresolved C++ symbols)
         env:
@@ -618,13 +711,25 @@ jobs:
           if-no-files-found: error
 
   # ----------------------------------------------------------------
-  # 3. Release (only on push to main)
+  # 3. Release. Two channels, one job:
+  #
+  #   main -> stable. Published as a normal release, flagged latest, and
+  #           served to every client through
+  #           releases/latest/download/latest.json.
+  #   beta -> pre-release. Flagged `prerelease`, so GitHub keeps it out of
+  #           releases/latest and off the sidebar while still listing it on
+  #           the Releases tab. Its manifest is copied to beta.json on the
+  #           orphan `updater` branch, which is the only thing a client
+  #           opted into betas fetches - GitHub publishes no "latest
+  #           pre-release" download alias.
   # ----------------------------------------------------------------
 
   release:
     name: Release
     needs: [version-check, build, build-android, build-minimal]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -632,12 +737,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Read version from tauri.conf.json
+      - name: Resolve version
         id: version
+        env:
+          IS_BETA: ${{ needs.version-check.outputs.is_beta }}
         run: |
-          VERSION=$(jq -r '.version' crates/mumble-tauri/tauri.conf.json)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version=${{ needs.version-check.outputs.version }}" >> "$GITHUB_OUTPUT"
+          echo "tag=${{ needs.version-check.outputs.tag }}" >> "$GITHUB_OUTPUT"
+          echo "is_beta=$IS_BETA" >> "$GITHUB_OUTPUT"
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
@@ -651,44 +758,26 @@ jobs:
         id: latest_json
         run: |
           set -euo pipefail
-          VERSION="${{ steps.version.outputs.version }}"
-          BASE="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}"
-          PUB_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-          read_sig() { [ -f "$1" ] && cat "$1" || echo ""; }
-          find_one() { find artifacts -type f -name "$1" | head -n1; }
-
-          WIN_NSIS=$(find_one "*-setup.exe" || true)
-          WIN_NSIS_SIG=$(find_one "*-setup.exe.sig" || true)
-          LINUX_APPIMAGE=$(find_one "*.AppImage" || true)
-          LINUX_APPIMAGE_SIG=$(find_one "*.AppImage.sig" || true)
-
-          jq -n \
-            --arg version "$VERSION" \
-            --arg pub_date "$PUB_DATE" \
-            --arg win_url   "$BASE/$(basename "${WIN_NSIS:-missing}")" \
-            --arg win_sig   "$(read_sig "${WIN_NSIS_SIG:-/dev/null}")" \
-            --arg lin_url   "$BASE/$(basename "${LINUX_APPIMAGE:-missing}")" \
-            --arg lin_sig   "$(read_sig "${LINUX_APPIMAGE_SIG:-/dev/null}")" \
-            '{
-              version: $version,
-              notes: "See release notes on GitHub.",
-              pub_date: $pub_date,
-              platforms: (
-                (if $win_sig != "" then {"windows-x86_64": {signature: $win_sig, url: $win_url}} else {} end)
-                + (if $lin_sig != "" then {"linux-x86_64":   {signature: $lin_sig, url: $lin_url}} else {} end)
-              )
-            }' > latest.json
+          TAG="${{ steps.version.outputs.tag }}"
+          BASE="https://github.com/${{ github.repository }}/releases/download/$TAG"
+          NOTES="https://github.com/${{ github.repository }}/releases/tag/$TAG"
+          chmod +x scripts/make-update-manifest.sh
+          ./scripts/make-update-manifest.sh \
+            "${{ steps.version.outputs.version }}" "$BASE" artifacts "$NOTES" > latest.json
           cat latest.json
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: Fancy Mumble ${{ steps.version.outputs.tag }}
+          name: Fancy Mumble ${{ steps.version.outputs.tag }}${{ steps.version.outputs.is_beta == 'true' && ' (beta)' || '' }}
           generate_release_notes: true
           draft: false
-          prerelease: false
+          # A pre-release is listed on the Releases tab with GitHub's
+          # "Pre-release" marker but is excluded from releases/latest, which
+          # is exactly what keeps stable clients from ever seeing it.
+          prerelease: ${{ steps.version.outputs.is_beta == 'true' }}
+          make_latest: ${{ steps.version.outputs.is_beta != 'true' }}
           files: |
             artifacts/**/*.deb
             artifacts/**/*.AppImage
@@ -703,3 +792,31 @@ jobs:
             artifacts/**/fancy-mumble-minimal-*.zip
             artifacts/**/fancy-mumble-minimal-*.tar.gz
             latest.json
+
+      # Runs only after the release exists, so the URLs inside beta.json are
+      # live by the time any client can read it. The `updater` branch holds
+      # nothing but this file and is not in the workflow's trigger list, so
+      # pushing to it starts no CI.
+      - name: Publish beta manifest to the updater branch
+        if: steps.version.outputs.is_beta == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git fetch origin updater; then
+            git worktree add updater-branch FETCH_HEAD
+            git -C updater-branch checkout -B updater
+          else
+            echo "No updater branch yet; creating it."
+            git worktree add --orphan -b updater updater-branch
+          fi
+          cp latest.json updater-branch/beta.json
+          git -C updater-branch add beta.json
+          if git -C updater-branch diff --cached --quiet; then
+            echo "beta.json unchanged; nothing to push."
+          else
+            git -C updater-branch commit -m "beta.json for $TAG"
+            git -C updater-branch push origin updater
+          fi

@@ -60,6 +60,7 @@ const DEFAULTS: UserPreferences = {
   autoReconnect: false,
   autoUpdateOnStartup: false,
   skippedUpdateVersion: null,
+  betaUpdates: false,
   persistDms: false,
   hideEmptyChannels: false,
   showOfflineMembers: true,

@@ -225,6 +225,7 @@
     "busyTitle": "Mise à jour en cours...",
     "skipActive": "✓ Ignorer v{{version}} - cliquer pour annuler",
     "skipInactive": "Ignorer v{{version}}",
+    "betaPill": "Bêta",
     "closeBtn": "Fermer",
     "laterBtn": "Plus tard",
     "retryBtn": "Réessayer",

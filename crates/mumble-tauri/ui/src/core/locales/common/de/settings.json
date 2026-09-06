@@ -170,6 +170,8 @@
     "autoReconnectHint": "Stellt die Verbindung automatisch wieder her, wenn sie unerwartet abbricht. Bei manuellen Trennungen wird nicht automatisch neu verbunden.",
     "autoUpdate": "Beim Start automatisch aktualisieren",
     "autoUpdateHint": "Wenn aktiviert, werden verfügbare Updates beim Start von Fancy Mumble automatisch heruntergeladen und installiert. Während des Downloads erscheint ein kleines Fortschrittsfenster. Wenn deaktiviert, wirst du vor jedem Update gefragt.",
+    "betaUpdates": "Beta-Updates",
+    "betaUpdatesHint": "Erhalte Vorabversionen, bevor sie alle erreichen. Betas werden nur angeboten, solange sie neuer sind als die stabile Version. Das Deaktivieren macht eine installierte Beta nicht rückgängig: Der Client bleibt darauf, bis eine stabile Version sie überholt.",
     "dangerZone": "Gefahrenzone",
     "dangerZoneHint": "Löscht alle gespeicherten Daten - Server, Einstellungen und Zertifikate - und führt zurück zum Willkommensbildschirm.",
     "dangerConfirmText": "Bist du sicher? Das kann nicht rückgängig gemacht werden.",

@@ -225,6 +225,7 @@
     "busyTitle": "Update in progress...",
     "skipActive": "✓ Skipping v{{version}} - click to undo",
     "skipInactive": "Skip v{{version}}",
+    "betaPill": "Beta",
     "closeBtn": "Close",
     "laterBtn": "Later",
     "retryBtn": "Retry",

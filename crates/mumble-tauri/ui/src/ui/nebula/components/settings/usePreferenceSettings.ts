@@ -49,6 +49,7 @@ const PAGE_DEFAULTS = {
   richPresenceArtwork: true,
   autoReconnect: false,
   autoUpdateOnStartup: false,
+  betaUpdates: false,
   persistDms: false,
   showDisconnectWarning: true,
   welcomeMessageDisplay: "once",
@@ -138,6 +139,9 @@ const EFFECTS: {
   klipyApiKey: (key) => setKlipyApiKey(key),
   autoUpdateOnStartup: (on) => {
     void invoke("updater_set_auto_install", { enabled: on }).catch(() => undefined);
+  },
+  betaUpdates: (on) => {
+    void invoke("updater_set_beta_channel", { enabled: on }).catch(() => undefined);
   },
   persistDms: (on) => {
     // Turning persistence off is also a request to forget what was kept.
