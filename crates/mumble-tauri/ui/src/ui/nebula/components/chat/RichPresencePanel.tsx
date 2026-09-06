@@ -103,7 +103,7 @@ function PresenceRow({
         padding: "11px 13px",
         borderRadius: radius("lg"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
       })}
     >
       <Artwork entry={entry} />
@@ -143,12 +143,12 @@ function PresenceRow({
                     sx={(theme) => ({
                       fontSize: 11.5,
                       padding: "3px 9px",
-                      borderRadius: 999,
+                      borderRadius: radius("pill"),
                       cursor: "pointer",
                       textDecoration: "none",
                       color: theme.palette.nebula.accent,
                       background: theme.palette.nebula.accentSoft,
-                      border: `1px solid ${theme.palette.nebula.accentLine}`,
+                      border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accentLine}`,
                     })}
                   >
                     {button.label}
@@ -162,10 +162,10 @@ function PresenceRow({
                     sx={(theme) => ({
                       fontSize: 11.5,
                       padding: "3px 9px",
-                      borderRadius: 999,
+                      borderRadius: radius("pill"),
                       color: theme.palette.nebula.dim,
                       background: theme.palette.nebula.card2,
-                      border: `1px solid ${theme.palette.nebula.line}`,
+                      border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
                     })}
                   >
                     {button.label}
@@ -203,7 +203,7 @@ function Artwork({ entry }: Readonly<{ entry: PresenceEntry }>) {
             height: 52,
             objectFit: "cover",
             borderRadius: radius("md"),
-            border: `1px solid ${theme.palette.nebula.line}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
           })}
         />
       ) : (
@@ -219,7 +219,7 @@ function Artwork({ entry }: Readonly<{ entry: PresenceEntry }>) {
             borderRadius: radius("md"),
             color: theme.palette.nebula.muted,
             background: theme.palette.nebula.card2,
-            border: `1px solid ${theme.palette.nebula.line}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
           })}
         >
           {initialOf(entry.displayName)}

@@ -519,7 +519,7 @@ export function ConnectScreen({
             // be the same gamble in the other direction.
             background: `rgba(${ADDRESS_CHIP.scrim.join(",")},${ADDRESS_CHIP.scrimAlpha})`,
             backdropFilter: "blur(7px)",
-            border: "1px solid rgba(255,255,255,.16)",
+            border: "var(--nebula-line-width, 1px) solid rgba(255,255,255,.16)",
             color: `rgba(${ADDRESS_CHIP.ink.join(",")},${ADDRESS_CHIP.inkAlpha})`,
             // A busy photo defeats a flat scrim at small sizes; this is what
             // holds the glyph edges apart from the bokeh behind them.
@@ -529,7 +529,7 @@ export function ConnectScreen({
             "@media (forced-colors: active)": {
               background: "Canvas",
               color: "CanvasText",
-              border: "1px solid CanvasText",
+              border: "var(--nebula-line-width, 1px) solid CanvasText",
               backdropFilter: "none",
               textShadow: "none",
             },
@@ -655,7 +655,7 @@ export function ConnectScreen({
               py: "11px",
               borderRadius: radius("lg"),
               background: theme.palette.nebula.card,
-              border: `1px solid ${theme.palette.nebula.line2}`,
+              border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
               fontSize: 12,
               lineHeight: 1.55,
               textAlign: "left",
@@ -709,7 +709,7 @@ export function ConnectScreen({
                     // the line saying where it would land.
                     opacity: carried ? 0.4 : 1,
                     background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.card,
-                    border: `1px solid ${active ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
+                    border: `var(--nebula-line-width, 1px) solid ${active ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
                   })}
                 >
                   {canReorder && (

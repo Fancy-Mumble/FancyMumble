@@ -71,7 +71,7 @@ export function DirectMessageList({
               borderRadius: radius("lg"),
               cursor: "pointer",
               background: active ? theme.palette.nebula.card : "transparent",
-              border: `1px solid ${active ? theme.palette.nebula.line : "transparent"}`,
+              border: `var(--nebula-line-width, 1px) solid ${active ? theme.palette.nebula.line : "transparent"}`,
               "&:hover": { background: active ? theme.palette.nebula.card : theme.palette.nebula.hover },
             })}
           >

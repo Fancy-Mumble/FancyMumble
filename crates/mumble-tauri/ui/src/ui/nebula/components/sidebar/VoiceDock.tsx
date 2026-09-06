@@ -393,7 +393,7 @@ function dockButtonBase(theme: Theme) {
     justifyContent: "center",
     gap: "5px",
     borderRadius: radius("md"),
-    border: "1px solid transparent",
+    border: "var(--nebula-line-width, 1px) solid transparent",
     color: theme.palette.nebula.muted,
     background: "transparent",
     transition: "background 120ms ease, color 120ms ease",
@@ -447,13 +447,13 @@ function DockButton({
           const { nebula } = theme.palette;
           const align = trailing ? { marginLeft: "auto" } : {};
           const fill = warn
-            ? { background: `${nebula.warn}29`, border: `1px solid ${nebula.warn}57`, color: nebula.warn }
+            ? { background: `${nebula.warn}29`, border: `var(--nebula-line-width, 1px) solid ${nebula.warn}57`, color: nebula.warn }
             : alert
-              ? { background: `${nebula.bad}29`, border: `1px solid ${nebula.bad}57`, color: nebula.bad }
+              ? { background: `${nebula.bad}29`, border: `var(--nebula-line-width, 1px) solid ${nebula.bad}57`, color: nebula.bad }
               : accent
                 ? {
                     background: nebula.accentSoft,
-                    border: `1px solid ${nebula.accentLine}`,
+                    border: `var(--nebula-line-width, 1px) solid ${nebula.accentLine}`,
                     color: nebula.accent,
                   }
                 : { background: nebula.card2, color: nebula.text };

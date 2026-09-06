@@ -4,6 +4,7 @@ import { HtmlSourceField, RichTextField, richTextSurvives, Stack, type RichTextT
 import { PlainInput, useScrollGuard } from "../nodes";
 import { MAX_BODY, switchView, writeMarkup, writeSections, type BodyView, type MessageNode } from "./model";
 import { ScreenEditor } from "./ScreenEditor";
+import { radius } from "../../../tokens";
 
 /**
  * A message node's body, in the three ways a message gets written.
@@ -252,14 +253,14 @@ function ViewButton({
         px: "7px",
         py: "2px",
         cursor: disabled ? "not-allowed" : "pointer",
-        borderRadius: "999px",
+        borderRadius: radius("pill"),
         fontSize: 10,
         fontWeight: on ? 700 : 500,
         letterSpacing: "0.04em",
         opacity: disabled ? 0.45 : 1,
         color: on ? theme.palette.nebula.accent : theme.palette.nebula.dim,
         background: on ? theme.palette.nebula.accentSoft : "transparent",
-        border: `1px solid ${on ? theme.palette.nebula.accentLine : "transparent"}`,
+        border: `var(--nebula-line-width, 1px) solid ${on ? theme.palette.nebula.accentLine : "transparent"}`,
         "&:hover": disabled ? {} : { color: on ? theme.palette.nebula.accent : theme.palette.nebula.text },
       })}
     >

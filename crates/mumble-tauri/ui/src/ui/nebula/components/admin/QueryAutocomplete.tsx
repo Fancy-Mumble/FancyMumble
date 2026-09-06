@@ -212,7 +212,7 @@ export function QueryAutocomplete({
             overflowY: "auto",
             borderRadius: radius("md"),
             background: theme.palette.nebula.card,
-            border: `1px solid ${theme.palette.nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
             boxShadow: theme.palette.nebula.shadow,
           })}
         >

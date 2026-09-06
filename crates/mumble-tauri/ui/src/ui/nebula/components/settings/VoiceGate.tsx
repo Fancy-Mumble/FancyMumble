@@ -125,7 +125,7 @@ function AutoGate({ settings, gate }: Readonly<{ settings: AudioSettings; gate: 
           py: "11px",
           borderRadius: radius("md"),
           background: theme.palette.nebula.card,
-          border: `1px solid ${theme.palette.nebula.line}`,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         })}
       >
         <Box sx={{ minWidth: 0 }}>
@@ -153,7 +153,7 @@ function AutoGate({ settings, gate }: Readonly<{ settings: AudioSettings; gate: 
             sx={(theme) => ({
               mt: "10px",
               height: 4,
-              borderRadius: "999px",
+              borderRadius: radius("pill"),
               background: theme.palette.nebula.card2,
             })}
           >
@@ -161,7 +161,7 @@ function AutoGate({ settings, gate }: Readonly<{ settings: AudioSettings; gate: 
               sx={(theme) => ({
                 width: `${gate.speechProgress * 100}%`,
                 height: "100%",
-                borderRadius: "999px",
+                borderRadius: radius("pill"),
                 background: theme.palette.nebula.accent,
                 transition: "width 120ms linear",
               })}
@@ -227,7 +227,7 @@ function ManualGate({
         py: "13px",
         borderRadius: radius("md"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
       })}
     >
       <Typography sx={(theme) => ({ fontSize: 11, lineHeight: 1.5, color: theme.palette.nebula.muted })}>
@@ -300,7 +300,7 @@ function HearYourself({ gate }: Readonly<{ gate: Gate }>) {
         py: "13px",
         borderRadius: radius("md"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
       })}
     >
       <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{t("gate.hearYourself")}</Typography>

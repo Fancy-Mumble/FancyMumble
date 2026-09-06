@@ -418,7 +418,7 @@ export function AccountSettings() {
                 sx={(theme) => ({
                   mt: "14px",
                   pt: "12px",
-                  borderTop: `1px solid ${theme.palette.nebula.line}`,
+                  borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
                 })}
               >
                 {totpFallback === "qr" ? (

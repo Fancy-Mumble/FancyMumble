@@ -214,7 +214,7 @@ function NavButton({
         fontWeight: selected ? 600 : 400,
         color: selected ? theme.palette.nebula.text : theme.palette.nebula.muted,
         background: selected ? theme.palette.nebula.accentSoft : "transparent",
-        border: `1px solid ${selected ? theme.palette.nebula.accentLine : "transparent"}`,
+        border: `var(--nebula-line-width, 1px) solid ${selected ? theme.palette.nebula.accentLine : "transparent"}`,
         "&:hover": {
           background: selected ? theme.palette.nebula.accentSoft : theme.palette.nebula.hover,
         },

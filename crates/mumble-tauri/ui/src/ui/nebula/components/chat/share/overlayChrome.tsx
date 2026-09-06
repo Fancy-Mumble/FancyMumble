@@ -16,7 +16,7 @@ import { radius } from "../../../tokens";
 export const WELL_BG = "#05070c";
 export const GLASS_BG = "rgba(12,16,24,.55)";
 export const GLASS_BG_HOVER = "rgba(20,26,38,.8)";
-export const GLASS_LINE = "1px solid rgba(255,255,255,.09)";
+export const GLASS_LINE = "var(--nebula-line-width, 1px) solid rgba(255,255,255,.09)";
 export const GLASS_BLUR = "blur(10px)";
 export const OVERLAY_TEXT = "#cfd5e0";
 

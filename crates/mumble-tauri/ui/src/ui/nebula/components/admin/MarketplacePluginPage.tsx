@@ -283,7 +283,7 @@ export function MarketplacePluginPage({
                       sx={(theme) => ({
                         px: "7px",
                         py: "1px",
-                        borderRadius: "999px",
+                        borderRadius: radius("pill"),
                         fontSize: 10,
                         fontWeight: 600,
                         color: theme.palette.nebula.accent,
@@ -497,7 +497,7 @@ export function MarketplacePluginPage({
                               sx={(theme) => ({
                                 flex: 1,
                                 height: 5,
-                                borderRadius: "999px",
+                                borderRadius: radius("pill"),
                                 overflow: "hidden",
                                 background: theme.palette.nebula.card2,
                               })}
@@ -656,7 +656,7 @@ function Pill({ children }: Readonly<{ children: React.ReactNode }>) {
       sx={(theme) => ({
         px: "8px",
         py: "3px",
-        borderRadius: "999px",
+        borderRadius: radius("pill"),
         fontSize: 10.5,
         background: theme.palette.nebula.card2,
         color: theme.palette.nebula.muted,

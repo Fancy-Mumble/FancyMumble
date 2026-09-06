@@ -59,7 +59,7 @@ function Section({
     <Box
       sx={(theme) => ({
         py: "14px",
-        borderTop: `1px solid ${theme.palette.nebula.line}`,
+        borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         "&:first-of-type": { borderTop: "none", pt: "4px" },
       })}
     >
@@ -145,7 +145,7 @@ function Fold({
       expanded={open}
       onChange={(_event, next) => setOpen(next)}
       sx={(theme) => ({
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         borderRadius: radius("md"),
         overflow: "hidden",
         "&::before": { display: "none" },
@@ -170,7 +170,7 @@ function Fold({
         sx={(theme) => ({
           px: "12px",
           py: "10px",
-          borderTop: `1px solid ${theme.palette.nebula.line}`,
+          borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         })}
       >
         {open && children}
@@ -218,7 +218,7 @@ function ServerFeatures() {
     yes: { background: nebula.ok, border: "none" },
     partial: { background: nebula.warn, border: "none" },
     no: { background: alpha(nebula.dim, 0.5), border: "none" },
-    unknown: { background: "transparent", border: `1px solid ${nebula.dim}` },
+    unknown: { background: "transparent", border: `var(--nebula-line-width, 1px) solid ${nebula.dim}` },
   };
 
   return (
@@ -386,7 +386,7 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
         width: 320,
         flex: "none",
         minHeight: 0,
-        borderLeft: `1px solid ${theme.palette.nebula.line}`,
+        borderLeft: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         background: theme.palette.nebula.panel,
       })}
     >
@@ -794,7 +794,7 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
                         key={violation.id}
                         sx={(theme) => ({
                           py: "4px",
-                          borderTop: `1px solid ${theme.palette.nebula.line}`,
+                          borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
                         })}
                       >
                         <Facts mono>

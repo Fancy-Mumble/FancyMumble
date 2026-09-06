@@ -37,7 +37,7 @@ export function OffloadedBody({
           minHeight: offloadSkeletonHeight(contentLength),
           borderRadius: radius("lg"),
           background: theme.palette.nebula.card2,
-          border: `1px solid ${theme.palette.nebula.line}`,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
           // Only while it is actually being fetched: a body that is simply
           // away is at rest, and a river of pulsing blocks would read as a
           // page that never finished loading.

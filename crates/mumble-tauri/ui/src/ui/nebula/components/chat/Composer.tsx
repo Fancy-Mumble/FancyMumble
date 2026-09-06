@@ -667,6 +667,9 @@ export function Composer({
             // scheme's near-white wash a resting weight barely separates from
             // the hairline it replaces.
             lit ? alpha(theme.palette.nebula.accent, 0.6) : theme.palette.nebula.line2,
+            // The composer is a control, not a bubble: it takes the skin's
+            // plate silhouette rather than the bubble's cut corner.
+            "var(--nebula-clip-plate, none)",
           ),
           // Enough to lift the panel off the river behind it without the long
           // throw a floating menu gets - it is docked, not floating.
@@ -1010,7 +1013,8 @@ export function Composer({
                   flex: "none",
                   width: 32,
                   height: 32,
-                  borderRadius: "999px",
+                  borderRadius: radius("pill"),
+                  clipPath: "var(--nebula-clip-plate, none)",
                   background: theme.palette.nebula.accent,
                   color: theme.palette.nebula.onAccent,
                   // The one lit element on the panel, and the canvas lights it
@@ -1124,7 +1128,7 @@ function Tray({ children }: Readonly<{ children: React.ReactNode }>) {
         flex: "none",
         px: "11px",
         py: "5px",
-        borderBottom: `1px solid ${theme.palette.nebula.washLine}`,
+        borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.washLine}`,
       })}
     >
       {children}
@@ -1184,7 +1188,7 @@ function UploadRow({ upload, onCancel }: Readonly<{ upload: UploadPlaceholder; o
           placeItems: "center",
           overflow: "hidden",
           borderRadius: radius("md"),
-          border: `1px solid ${theme.palette.nebula.line}`,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
           background: theme.palette.nebula.tile,
           fontFamily: NEBULA_MONO,
           fontSize: 9,

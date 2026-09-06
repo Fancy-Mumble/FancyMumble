@@ -21,7 +21,7 @@ export function SidebarShell({ title, action, back, search, children, footer }: 
         width: 290,
         flex: "none",
         minHeight: 0,
-        borderRight: `1px solid ${theme.palette.nebula.line}`,
+        borderRight: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         background: theme.palette.nebula.panel,
       })}
     >

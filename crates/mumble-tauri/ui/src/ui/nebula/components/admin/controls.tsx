@@ -103,7 +103,7 @@ export function SplitView({
           p: "6px",
           borderRadius: radius("lg"),
           background: theme.palette.nebula.card,
-          border: `1px solid ${theme.palette.nebula.line}`,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         })}
       >
         {list}
@@ -135,7 +135,7 @@ export function ListRow({
         py: "8px",
         borderRadius: radius("md"),
         background: selected ? theme.palette.nebula.accentSoft : "transparent",
-        border: `1px solid ${selected ? theme.palette.nebula.accentLine : "transparent"}`,
+        border: `var(--nebula-line-width, 1px) solid ${selected ? theme.palette.nebula.accentLine : "transparent"}`,
         "&:hover": { background: selected ? theme.palette.nebula.accentSoft : theme.palette.nebula.hover },
       })}
     >
@@ -273,7 +273,7 @@ export function DataTable<T>({
           : {
               borderRadius: radius("lg"),
               background: theme.palette.nebula.card,
-              border: `1px solid ${theme.palette.nebula.line}`,
+              border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
             }),
       })}
     >
@@ -304,7 +304,7 @@ export function DataTable<T>({
                   letterSpacing: "0.08em",
                   textTransform: "uppercase",
                   color: theme.palette.nebula.dim,
-                  borderBottom: `1px solid ${theme.palette.nebula.line2}`,
+                  borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
                   whiteSpace: "nowrap",
                   // `card` is translucent, so rows would read straight through
                   // the pinned strip. `bg0` is the window's own surface and
@@ -345,7 +345,7 @@ export function DataTable<T>({
                       py: "9px",
                       // The rule between rows is drawn on top, not bottom, so
                       // the last row ends on the surface rather than on a line.
-                      borderTop: `1px solid ${theme.palette.nebula.line}`,
+                      borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
                       borderBottom: "none",
                       color: theme.palette.nebula.text,
                       verticalAlign: "middle",

@@ -100,7 +100,7 @@ export function GreetingPreview({
           // Opaque for the same reason the node above it is: the preview hangs
           // over the canvas and other nodes pass behind it.
           background: opaque(theme.palette.nebula.card, theme.palette.nebula.bg0),
-          border: `1px solid ${shadow ? theme.palette.nebula.warn : theme.palette.nebula.line2}`,
+          border: `var(--nebula-line-width, 1px) solid ${shadow ? theme.palette.nebula.warn : theme.palette.nebula.line2}`,
           // A greeting nobody will see is drawn as the draft it effectively is.
           opacity: shadow ? 0.6 : 1,
         })}
@@ -113,7 +113,7 @@ export function GreetingPreview({
               flex: "none",
               borderRadius: radius("sm"),
               background: theme.palette.nebula.accentSoft,
-              border: `1px solid ${theme.palette.nebula.accentLine}`,
+              border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accentLine}`,
             })}
           />
           <Box sx={{ minWidth: 0 }}>
@@ -160,7 +160,7 @@ export function GreetingPreview({
                 },
                 "& hr": {
                   border: 0,
-                  borderTop: `1px solid ${theme.palette.nebula.line2}`,
+                  borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
                   margin: "0.7em 0",
                 },
                 // Ruled cells are for a table somebody *wrote*. A compiled
@@ -171,7 +171,7 @@ export function GreetingPreview({
                 "& table": { borderCollapse: "collapse", margin: compiled ? 0 : "0.5em 0" },
                 ...(compiled
                   ? {}
-                  : { "& td, & th": { border: `1px solid ${theme.palette.nebula.line2}`, padding: "3px 6px" } }),
+                  : { "& td, & th": { border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`, padding: "3px 6px" } }),
                 "& a": { color: theme.palette.nebula.accent, textDecoration: "underline" },
                 "& img": { maxWidth: "100%" },
               })}

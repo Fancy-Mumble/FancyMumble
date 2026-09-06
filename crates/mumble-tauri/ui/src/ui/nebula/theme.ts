@@ -209,6 +209,9 @@ export function createNebulaTheme(
             "--nebula-radius-xl": skin.radiusXl,
             "--nebula-radius-rail": skin.radiusRail,
             "--nebula-radius-avatar": skin.radiusAvatar,
+            "--nebula-radius-pill": skin.radiusPill,
+            "--nebula-line-width": skin.lineWidth,
+            "--nebula-clip-plate": skin.clipPlate,
             // The theme's own face, for the "system default" font setting to
             // fall through to. See `applyFont`.
             "--nebula-font": skin.font,
@@ -250,7 +253,7 @@ export function createNebulaTheme(
           [`input:where(:not(${UNSTYLED_INPUT_TYPES})), textarea:where(:not([class*="Mui"])), select`]: {
             padding: "8px 12px",
             borderRadius: radius("sm"),
-            border: `1px solid ${nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${nebula.line2}`,
             background: nebula.input,
             color: nebula.text,
             fontFamily: "inherit",
@@ -343,7 +346,7 @@ export function createNebulaTheme(
             height: "auto",
             borderRadius: radius("lg"),
             backgroundColor: nebula.card,
-            border: `1px solid ${nebula.line}`,
+            border: `var(--nebula-line-width, 1px) solid ${nebula.line}`,
             fontSize: 11,
             fontWeight: 500,
           },
@@ -362,7 +365,7 @@ export function createNebulaTheme(
             "&:hover": { backgroundColor: nebula.hover },
             "&.Mui-selected": {
               backgroundColor: nebula.card,
-              border: `1px solid ${nebula.line}`,
+              border: `var(--nebula-line-width, 1px) solid ${nebula.line}`,
               color: nebula.text,
               "&:hover": { backgroundColor: nebula.card },
             },
@@ -376,7 +379,7 @@ export function createNebulaTheme(
             borderRadius: radius("lg"),
             padding: 5,
             background: `${nebula.tint},${nebula.bg0}`,
-            border: `1px solid ${nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${nebula.line2}`,
             boxShadow: nebula.shadow,
             backdropFilter: "blur(16px)",
           },
@@ -400,7 +403,7 @@ export function createNebulaTheme(
           paper: {
             borderRadius: radius("xl"),
             background: `${nebula.tint},${nebula.bg0}`,
-            border: `1px solid ${nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${nebula.line2}`,
             boxShadow: nebula.shadow,
           },
         },
@@ -409,7 +412,7 @@ export function createNebulaTheme(
         styleOverrides: {
           tooltip: {
             backgroundColor: nebula.bg0,
-            border: `1px solid ${nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${nebula.line2}`,
             color: nebula.text,
             fontSize: 11,
             borderRadius: radius("md"),
@@ -454,7 +457,7 @@ export function createNebulaTheme(
             "&.Mui-checked + .MuiSwitch-track": { backgroundColor: nebula.accent, opacity: 1 },
           },
           thumb: { width: 14, height: 14, boxShadow: "none" },
-          track: { borderRadius: "999px", backgroundColor: nebula.card2, opacity: 1 },
+          track: { borderRadius: skin.radiusPill, backgroundColor: nebula.card2, opacity: 1 },
         },
       },
       MuiSlider: {
@@ -513,24 +516,37 @@ export function createNebulaTheme(
  * over a line-coloured ground is a 1px border - so there is one path rather
  * than a chamfered branch and a bordered one.
  */
-export function chamferedSurface(theme: Theme, fill: string, line: string) {
+export function chamferedSurface(
+  theme: Theme,
+  fill: string,
+  line: string,
+  /**
+   * Which of the skin's silhouettes to cut with.
+   *
+   * Bubbles take the bubble cut, which is the default because that is what
+   * this helper was written for. The composer is a control rather than a
+   * bubble, so it asks for the plate instead - `none` on every theme that
+   * shapes neither, which is what keeps this one code path.
+   */
+  clip = "var(--nebula-clip-bubble, none)",
+) {
   const { nebula } = theme.palette;
   return {
     position: "relative",
     // Keeps the negative z-index below inside this card rather than letting it
     // fall behind whatever the card is sitting on.
     isolation: "isolate",
-    clipPath: "var(--nebula-clip-bubble, none)",
+    clipPath: clip,
     background: line || nebula.line2,
     border: "none",
     "&::before": {
       content: '""',
       position: "absolute",
-      inset: "1px",
+      inset: "var(--nebula-line-width, 1px)",
       zIndex: -1,
       background: fill,
       borderRadius: "inherit",
-      clipPath: "var(--nebula-clip-bubble, none)",
+      clipPath: clip,
     },
   } as const;
 }
@@ -564,7 +580,7 @@ export function washPanel(theme: Theme) {
     background: nebula.wash,
     WebkitBackdropFilter: "blur(36px) saturate(160%)",
     backdropFilter: "blur(36px) saturate(160%)",
-    border: `1px solid ${nebula.washLine}`,
+    border: `var(--nebula-line-width, 1px) solid ${nebula.washLine}`,
   } as const;
 }
 
@@ -573,7 +589,7 @@ export function floatingSurface(theme: Theme) {
   const { nebula } = theme.palette;
   return {
     background: `${nebula.tint},${nebula.bg0}`,
-    border: `1px solid ${nebula.line2}`,
+    border: `var(--nebula-line-width, 1px) solid ${nebula.line2}`,
     boxShadow: nebula.shadow,
   } as const;
 }

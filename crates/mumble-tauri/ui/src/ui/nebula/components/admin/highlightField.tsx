@@ -77,7 +77,7 @@ export function HighlightFieldShell({ children }: Readonly<{ children: ReactNode
         width: "100%",
         borderRadius: radius("md"),
         background: theme.palette.nebula.card2,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         "&:focus-within": { borderColor: theme.palette.nebula.accent },
       })}
     >

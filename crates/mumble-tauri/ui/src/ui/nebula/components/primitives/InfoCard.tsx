@@ -27,7 +27,7 @@ export function InfoCard({
         p: "14px 16px",
         borderRadius: radius("lg"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
       })}
     >
       <Stack direction="row" alignItems="center" gap={1.25} sx={{ mb: "10px" }}>

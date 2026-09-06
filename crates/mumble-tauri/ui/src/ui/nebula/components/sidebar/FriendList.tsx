@@ -172,7 +172,7 @@ function FriendRow({
         cursor: interactive ? "pointer" : "default",
         opacity: interactive ? 1 : 0.55,
         background: active ? theme.palette.nebula.card : "transparent",
-        border: `1px solid ${active ? theme.palette.nebula.line : "transparent"}`,
+        border: `var(--nebula-line-width, 1px) solid ${active ? theme.palette.nebula.line : "transparent"}`,
         "&:hover": {
           background: active ? theme.palette.nebula.card : theme.palette.nebula.hover,
         },

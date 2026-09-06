@@ -5,6 +5,7 @@ import { CloseIcon } from "@ui/icons";
 import { Stack } from "../../primitives";
 import { PopoverPanel } from "./PopoverPanel";
 import { TID } from "@core/testids";
+import { radius } from "../../../tokens";
 
 /** The canvas's width for this panel. */
 export const POLL_POPOVER_WIDTH = 400;
@@ -78,7 +79,7 @@ export function PollPopover({
             sx={(theme) => ({
               height: 42,
               flex: "none",
-              borderBottom: index === options.length - 1 ? "none" : `1px solid ${theme.palette.nebula.line}`,
+              borderBottom: index === options.length - 1 ? "none" : `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
             })}
           >
             <Typography sx={(theme) => ({ width: 14, fontSize: 12, color: theme.palette.nebula.dim })}>
@@ -124,13 +125,13 @@ export function PollPopover({
           px: "14px",
           py: "12px",
           flex: "none",
-          borderTop: `1px solid ${theme.palette.nebula.washLine}`,
+          borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.washLine}`,
         })}
       >
         <Stack
           direction="row"
           gap="2px"
-          sx={(theme) => ({ p: "2px", borderRadius: "999px", background: theme.palette.nebula.card2 })}
+          sx={(theme) => ({ p: "2px", borderRadius: radius("pill"), background: theme.palette.nebula.card2 })}
         >
           {(["Single", "Multi"] as const).map((mode) => {
             const on = (mode === "Multi") === multiple;
@@ -149,7 +150,7 @@ export function PollPopover({
                   placeItems: "center",
                   height: 28,
                   px: "14px",
-                  borderRadius: "999px",
+                  borderRadius: radius("pill"),
                   fontSize: 13,
                   fontWeight: on ? 600 : 400,
                   color: on ? theme.palette.nebula.text : theme.palette.nebula.muted,
@@ -177,7 +178,7 @@ export function PollPopover({
             placeItems: "center",
             height: 32,
             px: "18px",
-            borderRadius: "999px",
+            borderRadius: radius("pill"),
             fontSize: 13,
             fontWeight: 600,
             // The one filled thing on this surface, as on every other.

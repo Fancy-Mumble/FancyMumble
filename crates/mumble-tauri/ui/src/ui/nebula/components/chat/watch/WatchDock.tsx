@@ -102,7 +102,7 @@ function Dock({ sessionId }: Readonly<{ sessionId: string }>) {
           borderRadius: radius("lg"),
           cursor: "pointer",
           color: theme.palette.nebula.text,
-          border: "1px solid " + theme.palette.nebula.line2,
+          border: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line2,
           background: theme.palette.nebula.tint + "," + theme.palette.nebula.bg0,
           boxShadow: theme.palette.nebula.shadow,
         })}
@@ -282,7 +282,7 @@ function PlayerSurface({
                 p: "2px 7px 2px 5px",
                 borderRadius: "6px",
                 background: "rgba(52,168,235,.22)",
-                border: "1px solid rgba(52,168,235,.4)",
+                border: "var(--nebula-line-width, 1px) solid rgba(52,168,235,.4)",
                 color: "#a9d8f5",
                 fontSize: 9.5,
                 fontWeight: 600,
@@ -413,7 +413,7 @@ function SyncChip({ card }: Readonly<{ card: WatchCardView }>) {
         fontWeight: 600,
         color: followHost ? "#a9d8f5" : "#f0c69a",
         background: "rgba(10,12,24,.6)",
-        border: "1px solid " + (followHost ? "rgba(52,168,235,.4)" : "rgba(236,186,85,.45)"),
+        border: "var(--nebula-line-width, 1px) solid " + (followHost ? "rgba(52,168,235,.4)" : "rgba(236,186,85,.45)"),
         backdropFilter: "blur(8px)",
         "&:hover": { opacity: 0.85 },
       }}
@@ -593,7 +593,7 @@ function Transport({
                   fontWeight: 500,
                   color: "#f0b0b0",
                   background: "rgba(217,87,87,.2)",
-                  border: "1px solid rgba(217,87,87,.42)",
+                  border: "var(--nebula-line-width, 1px) solid rgba(217,87,87,.42)",
                   backdropFilter: "blur(10px)",
                   "&:hover": { background: "rgba(217,87,87,.3)" },
                 }
@@ -607,7 +607,7 @@ function Transport({
                   cursor: "pointer",
                   fontSize: 11,
                   color: theme.palette.nebula.bad,
-                  border: "1px solid " + theme.palette.nebula.line2,
+                  border: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line2,
                   "&:hover": { background: theme.palette.nebula.card2 },
                 })
           }
@@ -647,7 +647,7 @@ function MiniPanel({
         borderRadius: radius("lg"),
         overflow: "hidden",
         color: theme.palette.nebula.text,
-        border: "1px solid " + theme.palette.nebula.line2,
+        border: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line2,
         background: theme.palette.nebula.tint + "," + theme.palette.nebula.bg0,
         boxShadow: theme.palette.nebula.shadow,
         backdropFilter: "blur(20px) saturate(1.2)",
@@ -659,7 +659,7 @@ function MiniPanel({
         gap="7px"
         sx={(theme) => ({
           p: "9px 10px 9px 12px",
-          borderBottom: "1px solid " + theme.palette.nebula.line,
+          borderBottom: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line,
         })}
       >
         {isHost && (
@@ -669,7 +669,7 @@ function MiniPanel({
               p: "1px 6px",
               borderRadius: "5px",
               background: theme.palette.nebula.accentSoft,
-              border: "1px solid " + theme.palette.nebula.accentLine,
+              border: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.accentLine,
               color: theme.palette.nebula.accent,
               fontSize: 9,
               fontWeight: 700,
@@ -845,7 +845,7 @@ function TheaterPanel({
           maxWidth: 1000,
           p: "6px",
           borderRadius: radius("lg"),
-          border: "1px solid " + theme.palette.nebula.line2,
+          border: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line2,
           background: "rgba(110,165,255,.05)",
           backdropFilter: "blur(18px)",
           display: "grid",

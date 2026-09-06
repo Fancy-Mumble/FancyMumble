@@ -330,7 +330,7 @@ export function MarketplaceAdmin({ onOpenPlugin }: Readonly<{ onOpenPlugin?: (id
                           sx={(theme) => ({
                             px: "6px",
                             py: "1px",
-                            borderRadius: "999px",
+                            borderRadius: radius("pill"),
                             fontSize: 9.5,
                             fontWeight: 600,
                             color: theme.palette.nebula.accent,
@@ -401,7 +401,7 @@ export function MarketplaceAdmin({ onOpenPlugin }: Readonly<{ onOpenPlugin?: (id
                         sx={(theme) => ({
                           px: "7px",
                           py: "2px",
-                          borderRadius: "999px",
+                          borderRadius: radius("pill"),
                           fontSize: 10,
                           background: theme.palette.nebula.card2,
                           color: theme.palette.nebula.muted,

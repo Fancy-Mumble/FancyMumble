@@ -116,7 +116,7 @@ function Band({
         py: "8px",
         borderRadius: radius("sm"),
         background: theme.palette.nebula.card2,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
       })}
     >
       <Stack

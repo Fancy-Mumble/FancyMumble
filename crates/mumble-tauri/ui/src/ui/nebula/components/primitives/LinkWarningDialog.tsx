@@ -61,7 +61,7 @@ export function LinkWarningDialog({
             justifyContent: "center",
             color: theme.palette.nebula.warn,
             background: alpha(theme.palette.nebula.warn, 0.14),
-            border: `1px solid ${alpha(theme.palette.nebula.warn, 0.3)}`,
+            border: `var(--nebula-line-width, 1px) solid ${alpha(theme.palette.nebula.warn, 0.3)}`,
           })}
         >
           <WarningIcon width={16} height={16} aria-hidden="true" />
@@ -94,7 +94,7 @@ export function LinkWarningDialog({
           borderRadius: radius("md"),
           color: theme.palette.nebula.muted,
           background: theme.palette.nebula.card,
-          border: `1px solid ${theme.palette.nebula.line}`,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         })}
       >
         <GlobeIcon width={13} height={13} aria-hidden="true" style={{ flex: "none" }} />
@@ -141,7 +141,7 @@ export function LinkWarningDialog({
         sx={(theme) => ({
           mt: "14px",
           p: "14px 18px 16px",
-          borderTop: `1px solid ${theme.palette.nebula.line}`,
+          borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         })}
       >
         {/* Nothing to key trust on when the URL did not parse, so nothing is offered. */}

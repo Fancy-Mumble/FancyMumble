@@ -354,7 +354,7 @@ export function SpeedMenu({
         p: "4px",
         zIndex: 5,
         background: glass ? "rgba(14,18,28,.92)" : theme.palette.nebula.tint + "," + theme.palette.nebula.bg0,
-        border: "1px solid " + (glass ? "rgba(255,255,255,.1)" : theme.palette.nebula.line2),
+        border: "var(--nebula-line-width, 1px) solid " + (glass ? "rgba(255,255,255,.1)" : theme.palette.nebula.line2),
         boxShadow: glass ? "0 16px 40px rgba(0,0,0,.45)" : theme.palette.nebula.shadow,
         backdropFilter: "blur(18px)",
       })}

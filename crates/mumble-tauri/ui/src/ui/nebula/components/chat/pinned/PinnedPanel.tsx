@@ -103,7 +103,7 @@ export function PinnedPanel({
             flex: "none",
             px: "14px",
             color: theme.palette.nebula.text,
-            borderBottom: `1px solid ${theme.palette.nebula.washLine}`,
+            borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.washLine}`,
           })}
         >
           <Box sx={{ display: "flex" }}>
@@ -119,7 +119,7 @@ export function PinnedPanel({
                 minWidth: 18,
                 height: 18,
                 px: "5px",
-                borderRadius: "999px",
+                borderRadius: radius("pill"),
                 background: theme.palette.nebula.card2,
                 color: theme.palette.nebula.muted,
                 fontSize: 10.5,
@@ -204,7 +204,7 @@ export function PinnedPanel({
             flex: "none",
             minHeight: 38,
             px: "14px",
-            borderTop: `1px solid ${theme.palette.nebula.washLine}`,
+            borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.washLine}`,
             fontSize: 11,
             color: theme.palette.nebula.muted,
           })}
@@ -288,7 +288,7 @@ function PinRow({ message, unseen, time, onJump, onUnpin }: Readonly<PinRowProps
             flex: "none",
             alignSelf: "stretch",
             width: 3,
-            borderRadius: "999px",
+            borderRadius: radius("pill"),
             background: unseen ? theme.palette.nebula.accent : "transparent",
           })}
         />

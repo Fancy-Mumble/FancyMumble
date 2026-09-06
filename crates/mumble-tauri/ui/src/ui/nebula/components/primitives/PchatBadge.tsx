@@ -49,7 +49,7 @@ export function PchatBadge({ protocol }: Readonly<{ protocol: PchatProtocol | un
           letterSpacing: "0.04em",
           color: fancy ? nebula.accent : nebula.ok,
           background: fancy ? nebula.accentSoft : `${nebula.ok}24`,
-          border: `1px solid ${fancy ? nebula.accentLine : `${nebula.ok}55`}`,
+          border: `var(--nebula-line-width, 1px) solid ${fancy ? nebula.accentLine : `${nebula.ok}55`}`,
         };
       }}
     >

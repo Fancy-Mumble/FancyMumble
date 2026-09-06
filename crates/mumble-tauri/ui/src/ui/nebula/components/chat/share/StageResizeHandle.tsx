@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Box } from "@mui/material";
 import { TID } from "@core/testids";
 import { STAGE_HEIGHT_DEFAULT, STAGE_HEIGHT_MIN, STAGE_HEIGHT_STEP } from "./stageHeight";
+import { radius } from "../../../tokens";
 
 export interface StageResizeHandleProps {
   readonly height: number;
@@ -130,7 +131,7 @@ export function StageResizeHandle({
           content: '""',
           width: 36,
           height: 4,
-          borderRadius: 999,
+          borderRadius: radius("pill"),
           background: dragging ? theme.palette.nebula.accent : theme.palette.nebula.dim,
           transition: "background .15s, width .15s",
         },

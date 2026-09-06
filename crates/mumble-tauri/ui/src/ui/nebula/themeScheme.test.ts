@@ -55,9 +55,9 @@ function ratio(one: string, other: string): number {
 const MODES: NebulaMode[] = ["light", "dark"];
 
 describe("the design sheet's catalog", () => {
-  it("draws twelve skins", () => {
-    expect(NEBULA_THEMES).toHaveLength(12);
-    expect(new Set(NEBULA_THEMES.map((theme) => theme.id)).size).toBe(12);
+  it("draws thirteen skins", () => {
+    expect(NEBULA_THEMES).toHaveLength(13);
+    expect(new Set(NEBULA_THEMES.map((theme) => theme.id)).size).toBe(13);
   });
 
   it("covers every colour theme Standard offers", () => {

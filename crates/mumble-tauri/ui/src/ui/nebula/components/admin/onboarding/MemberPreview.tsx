@@ -64,7 +64,7 @@ export function MemberPreview({
         sx={(theme) => ({
           p: "18px",
           borderRadius: radius("xl"),
-          border: `1px solid ${theme.palette.nebula.line2}`,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
           background: `${theme.palette.nebula.tint},${theme.palette.nebula.bg0}`,
           boxShadow: theme.palette.nebula.shadow,
           backdropFilter: "blur(16px)",
@@ -109,7 +109,7 @@ export function MemberPreview({
                   fontWeight: picked ? 500 : 400,
                   color: picked ? theme.palette.nebula.text : theme.palette.nebula.muted,
                   background: picked ? theme.palette.nebula.accentSoft : theme.palette.nebula.card,
-                  border: `1px solid ${picked ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
+                  border: `var(--nebula-line-width, 1px) solid ${picked ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
                 })}
               >
                 <Box component="span" sx={{ minWidth: 0 }}>

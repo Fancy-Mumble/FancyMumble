@@ -97,7 +97,7 @@ export function MemberPanel({
         width: 264,
         flex: "none",
         minHeight: 0,
-        borderLeft: `1px solid ${theme.palette.nebula.line}`,
+        borderLeft: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         background: theme.palette.nebula.panel,
       })}
     >

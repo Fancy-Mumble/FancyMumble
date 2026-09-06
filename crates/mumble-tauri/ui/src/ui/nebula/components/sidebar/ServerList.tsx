@@ -78,7 +78,7 @@ export function ServerList({
               borderRadius: radius("lg"),
               cursor: "pointer",
               background: active ? theme.palette.nebula.accentSoft : "transparent",
-              border: `1px solid ${active ? theme.palette.nebula.accentLine : "transparent"}`,
+              border: `var(--nebula-line-width, 1px) solid ${active ? theme.palette.nebula.accentLine : "transparent"}`,
               "&:hover": {
                 background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.hover,
               },

@@ -110,7 +110,7 @@ function Kbd({ children }: Readonly<{ children: ReactNode }>) {
         fontSize: 10.5,
         fontWeight: 600,
         background: theme.palette.nebula.card2,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
       })}
     >
       {children}

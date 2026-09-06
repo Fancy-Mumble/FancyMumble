@@ -54,7 +54,7 @@ export function MiniMode({
         alignItems="center"
         gap={1.125}
         data-tauri-drag-region
-        sx={(theme) => ({ px: "13px", py: "11px", borderBottom: `1px solid ${theme.palette.nebula.line}` })}
+        sx={(theme) => ({ px: "13px", py: "11px", borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}` })}
       >
         <Box
           aria-hidden

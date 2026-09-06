@@ -11,6 +11,7 @@ import {
 } from "@core/features/onboarding/onboardingStore";
 import type { OnboardingAnswer, OnboardingQuestion, OnboardingSelection } from "@core/types";
 import { Stack } from "../primitives";
+import { radius } from "../../tokens";
 
 /**
  * The questions a server asks a new member on first connect.
@@ -220,7 +221,7 @@ function ProgressRail({ stepCount, stepIndex }: Readonly<{ stepCount: number; st
           sx={(theme) => ({
             height: 3,
             flex: 1,
-            borderRadius: 999,
+            borderRadius: radius("pill"),
             background: index <= stepIndex ? theme.palette.nebula.accent : theme.palette.nebula.line2,
           })}
         />
@@ -269,7 +270,7 @@ function AnswerRow({
         font: "inherit",
         color: "inherit",
         background: selected ? theme.palette.nebula.accentSoft : theme.palette.nebula.card,
-        border: `1px solid ${selected ? theme.palette.nebula.accentLine : theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${selected ? theme.palette.nebula.accentLine : theme.palette.nebula.line2}`,
         "&:hover": { borderColor: theme.palette.nebula.accentLine },
       })}
     >
@@ -328,9 +329,9 @@ function DefaultChannels({
             sx={(theme) => ({
               fontSize: 12.5,
               padding: "4px 10px",
-              borderRadius: 999,
+              borderRadius: radius("pill"),
               background: theme.palette.nebula.card2,
-              border: `1px solid ${theme.palette.nebula.line2}`,
+              border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
             })}
           >
             {`#${channelNames.get(id) ?? id}`}

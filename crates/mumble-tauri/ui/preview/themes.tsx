@@ -1,5 +1,5 @@
 /**
- * The twelve skins, both schemes, painted from the pack's own resolved tokens.
+ * Every skin, both schemes, painted from the pack's own resolved tokens.
  *
  * Deliberately the same anatomy as the design sheet's artboards - 880x590,
  * a 52px rail, a 236px channel column, the same twelve channels - so a render
@@ -312,13 +312,20 @@ function Window({ scheme }: { scheme: NebulaScheme }) {
                       padding: "6px 9px",
                       borderRadius: s.radiusMd,
                       background: solid ? t.accent : selected ? t.accentSoft : "transparent",
-                      boxShadow: selected
-                        ? s.selectionGlow
-                          ? `0 0 14px ${t.accentLine}`
-                          : s.selectionBar
-                            ? `inset 3px 0 0 ${t.accent}`
-                            : "none"
-                        : "none",
+                      // The same composed rule the pack's own ChannelList uses:
+                      // glow and bar stack, and on a solid fill the bar takes
+                      // the second hue so it is not accent-on-accent.
+                      boxShadow:
+                        (selected
+                          ? [
+                              s.selectionGlow ? `0 0 14px ${t.accentLine}` : "",
+                              s.selectionBar
+                                ? `inset ${solid ? 10 : 3}px 0 0 ${solid ? t.accent2 : t.accent}`
+                                : "",
+                            ]
+                              .filter(Boolean)
+                              .join(",")
+                          : "") || "none",
                       clipPath: selected ? s.clipSelection : "none",
                     }}
                   >
@@ -647,6 +654,15 @@ function ThemeRow({ def }: { def: NebulaThemeDef }) {
   );
 }
 
+/**
+ * `?theme=nimbus` paints one row.
+ *
+ * Thirteen themes in two schemes is a tall page to shoot; a filter keeps a
+ * screenshot of one skin to one viewport.
+ */
+const only = new URLSearchParams(location.search).get("theme");
+const shown = only ? NEBULA_THEMES.filter((def) => def.id === only) : NEBULA_THEMES;
+
 createRoot(document.getElementById("root")!).render(
   <div
     style={{
@@ -659,7 +675,7 @@ createRoot(document.getElementById("root")!).render(
       minHeight: "100vh",
     }}
   >
-    {NEBULA_THEMES.map((def) => (
+    {shown.map((def) => (
       <ThemeRow key={def.id} def={def} />
     ))}
   </div>,

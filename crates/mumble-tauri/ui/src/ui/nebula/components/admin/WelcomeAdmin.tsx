@@ -386,8 +386,8 @@ function BlocksView({ graph }: Readonly<{ graph: WelcomeGraph }>) {
         minHeight: 0,
         overflowY: "auto",
         p: "18px",
-        borderTop: `1px solid ${theme.palette.nebula.line}`,
-        borderBottom: `1px solid ${theme.palette.nebula.line}`,
+        borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
+        borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         background: `${theme.palette.nebula.tint},${theme.palette.nebula.bg0}`,
       })}
     >

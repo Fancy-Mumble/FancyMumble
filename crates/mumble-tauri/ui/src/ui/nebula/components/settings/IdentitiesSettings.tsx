@@ -8,6 +8,7 @@ import { useAppStore } from "@core/store";
 import { Stack } from "../primitives";
 import { Banner, EmptyState, GroupRule, GroupTitle, PageTitle, SettingsCard } from "./controls";
 import { usePreferenceSettings } from "./usePreferenceSettings";
+import { radius } from "../../tokens";
 
 /**
  * The Identities page.
@@ -126,7 +127,7 @@ export function IdentitiesSettings({ onEditProfile }: Readonly<{ onEditProfile?:
                           flex: "none",
                           px: "7px",
                           py: "2px",
-                          borderRadius: "999px",
+                          borderRadius: radius("pill"),
                           fontSize: 10,
                           fontWeight: 600,
                           color: theme.palette.nebula.accent,
