@@ -72,10 +72,35 @@ pub(super) fn ensure(app: &AppHandle, hide_from_capture: bool) -> Result<Webview
         }
     }
     crate::platform::strip_system_chrome(&window);
+    warn_if_wayland();
 
     tracing::info!("game-overlay: window created");
     Ok(window)
 }
+
+/// Say so when the window cannot honour the placement it is about to be given.
+///
+/// A Wayland client may not position its own windows or assert a z-order, and
+/// GTK's calls for both are silent no-ops there - so the widget lands wherever
+/// the compositor puts it and sits below the game. Detection still works
+/// (games are `XWayland` clients), which makes this the one part of the
+/// overlay a Wayland session breaks, and the only fix is running the client
+/// itself under `XWayland`.
+#[cfg(target_os = "linux")]
+fn warn_if_wayland() {
+    let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some();
+    let forced_x11 = std::env::var("GDK_BACKEND").is_ok_and(|backend| backend.starts_with("x11"));
+    if wayland && !forced_x11 {
+        tracing::warn!(
+            "game-overlay: on a Wayland session the compositor owns window placement and \
+             z-order, so the overlay cannot put itself in a corner or stay above the game; \
+             run the client with GDK_BACKEND=x11 for that"
+        );
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn warn_if_wayland() {}
 
 /// Put the widget in its corner of `monitor`, at the size the page asked for.
 ///

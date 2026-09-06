@@ -2124,6 +2124,7 @@ dependencies = [
  "tracing",
  "windows-sys 0.61.2",
  "winreg",
+ "x11rb",
 ]
 
 [[package]]
@@ -4222,7 +4223,7 @@ dependencies = [
 
 [[package]]
 name = "mumble-tauri"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "alsa",
  "arc-swap",
@@ -4244,6 +4245,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "image",
+ "libloading 0.8.9",
  "mimalloc",
  "mp4",
  "mumble-protocol",
@@ -4262,6 +4264,7 @@ dependencies = [
  "ring",
  "rodio",
  "rustls",
+ "semver",
  "serde",
  "serde_json",
  "sha2",

@@ -176,6 +176,74 @@ const DENY_STEMS: &[&str] = &[
     "playnite.fullscreenapp",
     "heroic",
     "lutris",
+    // Linux desktop software. The same programs as above where they share a
+    // name, and the ones that only exist here: the GNOME and KDE shells (which
+    // own a fullscreen window whenever the overview or a screensaver is up),
+    // the file managers, and the terminals that are not on the Windows list.
+    "gnome-shell",
+    "plasmashell",
+    "kwin_wayland",
+    "kwin_x11",
+    "mutter",
+    "xfdesktop",
+    "xwayland",
+    "nautilus",
+    "dolphin",
+    "thunar",
+    "nemo",
+    "gnome-control-center",
+    "gnome-software",
+    "gnome-system-monitor",
+    "gnome-terminal-server",
+    "konsole",
+    "kitty",
+    "foot",
+    "ptyxis",
+    "xterm",
+    "tilix",
+    "terminator",
+    "google-chrome",
+    "google-chrome-stable",
+    "brave-browser",
+    "microsoft-edge",
+    "epiphany",
+    "falkon",
+    "codium",
+    "vscodium",
+    "gedit",
+    "gnome-text-editor",
+    "kate",
+    "nvim",
+    "vim",
+    "emacs",
+    // JetBrains ships unsuffixed launchers here; the `jetbrains` prefix only
+    // catches the toolbox's own directory layout.
+    "idea",
+    "pycharm",
+    "clion",
+    "rider",
+    "webstorm",
+    "goland",
+    "rustrover",
+    "celluloid",
+    "totem",
+    "darktable",
+    "audacity",
+    "kdenlive",
+    "obs",
+    "signal-desktop",
+    "telegram-desktop",
+    "element-desktop",
+    // Ourselves, under the name the Linux bundle installs.
+    "mumble-tauri",
+    "fancymumble",
+    // Launchers and the wrappers games are started through. `gamescope` and
+    // `steamtinkerlaunch` own the window a game is nested inside, so vetoing
+    // them costs nothing: the game's own window is the foreground one.
+    "bottles",
+    "protontricks",
+    "steamtinkerlaunch",
+    "gamescope",
 ];
 
 /// Stems whose *prefix* is enough, for families that version their binaries.
@@ -280,6 +348,19 @@ mod tests {
     fn productivity_software_is_vetoed() {
         for stem in ["explorer", "acad", "code", "winword", "blender", "chrome"] {
             assert!(veto(stem, "SomeClass").is_some(), "{stem} should be vetoed");
+        }
+    }
+
+    #[test]
+    fn linux_desktop_software_is_vetoed_too() {
+        // The Linux entries are matched against a unix path, which the helper
+        // above cannot produce - and a path is what the launcher rule reads.
+        for stem in ["gnome-shell", "nautilus", "konsole", "google-chrome", "obs"] {
+            assert_eq!(
+                veto_for(&format!("/usr/bin/{stem}"), stem, "X"),
+                Some(Veto::Executable),
+                "{stem} should be vetoed"
+            );
         }
     }
 

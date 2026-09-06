@@ -6,7 +6,10 @@
 //!
 //! - It never opens a game process for anything but
 //!   `PROCESS_QUERY_LIMITED_INFORMATION`, which is what every anti-cheat
-//!   permits and what the client already does to name an audio endpoint.
+//!   permits and what the client already does to name an audio endpoint. On
+//!   Linux the equivalent is reading `/proc/<pid>/exe` and, for a Wine or
+//!   Proton game, its `cmdline` - the same three files `ps` reads, with no
+//!   `ptrace` and no handle of any kind.
 //! - It never reads another process's memory, never enumerates its modules,
 //!   and never installs a hook of any kind.
 //! - It looks at the **foreground** window only, once every poll tick, rather
@@ -33,7 +36,7 @@ use std::time::{Duration, Instant};
 pub use classify::{Assessment, Verdict};
 pub use evidence::{Evidence, Reason};
 pub use index::{GameIndex, InstalledGame, Store};
-pub use probe::{ForegroundFacts, Rect, ShellState};
+pub use probe::{ForegroundFacts, ProbeNote, Rect, ShellState};
 
 /// What the user has decided about one executable, which outranks every
 /// heuristic in both directions.
@@ -106,6 +109,16 @@ impl Detector {
     #[must_use]
     pub fn indexed_games(&self) -> usize {
         self.index.len()
+    }
+
+    /// What the platform probe could see on the last [`Detector::assess`].
+    ///
+    /// `assess` returning `None` says only "nothing to judge"; this says
+    /// whether that is because the desktop is focused, because the window
+    /// system tells us nothing, or because this platform has no probe.
+    #[must_use]
+    pub fn probe_note(&self) -> ProbeNote {
+        probe::note()
     }
 
     /// Probe the foreground window and classify it.

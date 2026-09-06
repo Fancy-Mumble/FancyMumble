@@ -23,7 +23,7 @@ mod window;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use fancy_gamedetect::{Reason, Rule, Rules, ShellState, Verdict};
+use fancy_gamedetect::{ProbeNote, Reason, Rule, Rules, ShellState, Verdict};
 use serde::{Deserialize, Serialize};
 
 use crate::state::types::OverlaySnapshot;
@@ -202,6 +202,9 @@ pub(crate) struct GameOverlayEvent {
     /// What the detector concluded, or `None` when there is no foreground
     /// window worth judging.
     pub verdict: Option<Verdict>,
+    /// What the platform's probe could see, which is the difference between
+    /// "nothing is running" and "this window system tells us nothing".
+    pub probe_note: ProbeNote,
     /// Total evidence weight.
     pub score: i32,
     /// Foreground executable, lowercased.

@@ -15,7 +15,7 @@
 use std::collections::HashSet;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use fancy_gamedetect::{Detector, Verdict};
+use fancy_gamedetect::{Detector, ProbeNote, Verdict};
 use tauri::{AppHandle, Emitter, Manager};
 
 use super::{window, GameOverlayEvent, HiddenReason, OverlayMode, WindowRect};
@@ -107,6 +107,7 @@ async fn tick(app: &AppHandle, detector: &mut Detector, lp: &mut Loop, own_pid: 
             None,
             HiddenReason::ModeOff,
             config.mode,
+            ProbeNote::Ok,
         );
         return Some(());
     }
@@ -184,6 +185,7 @@ async fn tick(app: &AppHandle, detector: &mut Detector, lp: &mut Loop, own_pid: 
         assessment.as_ref(),
         reason,
         config.mode,
+        detector.probe_note(),
     );
     Some(())
 }
@@ -327,6 +329,7 @@ fn emit_state(
     assessment: Option<&fancy_gamedetect::Assessment>,
     hidden_reason: HiddenReason,
     mode: OverlayMode,
+    probe_note: ProbeNote,
 ) {
     // Asked of the window, not of the policy: the whole point of the panel is
     // to distinguish "showing" from "meant to be showing".
@@ -344,6 +347,7 @@ fn emit_state(
         page_status: super::page_status(app_state),
         placement: placement_of(app),
         verdict: assessment.map(|a| a.verdict),
+        probe_note,
         score: assessment.map_or(0, |a| a.score),
         exe_path: assessment.map(|a| a.exe_path.clone()),
         exe_stem: assessment.map(|a| a.exe_stem.clone()),
