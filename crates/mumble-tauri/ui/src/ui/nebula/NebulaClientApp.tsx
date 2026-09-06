@@ -1458,7 +1458,7 @@ export default function NebulaClientApp() {
             // Themes that cut their corners into a HUD outline say so here; the
             // rest leave it `none` and the radius above is the whole shape.
             clipPath: "var(--nebula-clip-window, none)",
-            border: `1px solid ${muiTheme.palette.nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${muiTheme.palette.nebula.line2}`,
             // The window's own mesh, over the window colour. Most skins paint a
             // gradient here; the flat ones resolve to a gradient of one colour
             // so this layer stack stays valid either way.
@@ -1479,6 +1479,11 @@ export default function NebulaClientApp() {
             onDisconnect={status === "connected" ? () => leave.request(activeSession) : undefined}
             entries={railEntries}
             icons={railIcons}
+            banners={railBanners}
+            pings={pings}
+            activeChannelName={joinedChannel?.name ?? null}
+            ownName={activeSession?.username ?? null}
+            occupants={railOccupants}
             activeKey={selectedGroup?.key ?? null}
             onSelectServer={openServer}
             tabs={serverSwitcher !== "rail"}
@@ -1992,7 +1997,7 @@ export default function NebulaClientApp() {
                           py: "8px",
                           borderRadius: radius("md"),
                           background: muiTheme.palette.nebula.card,
-                          border: `1px solid ${muiTheme.palette.nebula.line}`,
+                          border: `var(--nebula-line-width, 1px) solid ${muiTheme.palette.nebula.line}`,
                         })}
                       >
                         <Typography sx={{ fontSize: 12 }}>

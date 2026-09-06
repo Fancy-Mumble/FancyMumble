@@ -8,7 +8,7 @@ import { UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
 import type { SavedServer, ServerPingResult } from "@core/types";
 import { ServerRailPanel, ServerRailRowGhost, type RailFriends } from "./ServerRailPanel";
-import { ServerRailCard, type RailCardOccupant } from "./ServerRailCard";
+import { ServerRailCard, useRailCardHover, type RailCardOccupant } from "./ServerRailCard";
 import { ServerMenu, type ServerMenuTarget } from "./ServerMenu";
 
 /** Every tile, and the two buttons that bracket them, are one square. */
@@ -253,7 +253,7 @@ function FriendsTile({ active, unread, onOpen }: Readonly<RailFriends>) {
           // server tile is artwork edge to edge, so an outline round a small
           // glyph read as a lighter thing than its neighbours rather than as
           // one of them - the fill is what makes it weigh the same.
-          border: "1px solid " + (active ? theme.palette.nebula.accentLine : theme.palette.nebula.line2),
+          border: "var(--nebula-line-width, 1px) solid " + (active ? theme.palette.nebula.accentLine : theme.palette.nebula.line2),
           background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.card2,
           color: active ? theme.palette.nebula.accent : theme.palette.nebula.muted,
           outline: active ? "2px solid " + theme.palette.nebula.accent : "none",
@@ -348,23 +348,12 @@ export function ServerRail({
   // Pinned, the list is simply always open; there is no tile column left to
   // collapse back into.
   const open = expanded || pinned;
-  // Hovering a tile opens its card; the card stays open while the pointer is
-  // travelling towards it, which is the only reason the close is delayed.
-  const [hovered, setHovered] = useState<{ key: string; top: number } | null>(null);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Hovering a tile opens its card, a distance down the rail; `at` is that
+  // distance.
+  const { hovered, show, dismiss, holdOpen, closeSoon } = useRailCardHover<number>();
   // The right-click menu; the hover card gives way to it, since both would
   // otherwise be open beside the same tile.
   const [menu, setMenu] = useState<ServerMenuTarget | null>(null);
-
-  const holdOpen = useCallback(() => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    closeTimer.current = null;
-  }, []);
-
-  const closeSoon = useCallback(() => {
-    holdOpen();
-    closeTimer.current = setTimeout(() => setHovered(null), 120);
-  }, [holdOpen]);
 
   const hoveredEntry = entries.find((candidate) => candidate.group.key === hovered?.key) ?? null;
 
@@ -399,11 +388,10 @@ export function ServerRail({
   const openMenu = useCallback(
     (entry: ServerRailEntry, x: number, y: number) => {
       if (gesture.current?.moved) return;
-      holdOpen();
-      setHovered(null);
+      dismiss();
       setMenu({ entry, active: entry.group.key === activeKey, x, y });
     },
-    [activeKey, holdOpen],
+    [activeKey, dismiss],
   );
 
   useEffect(() => {
@@ -414,7 +402,7 @@ export function ServerRail({
       if (!held.moved && Math.abs(event.clientY - held.startY) < DRAG_SLACK) return;
       if (!held.moved) {
         held.moved = true;
-        setHovered(null);
+        dismiss();
         // The slots are measured once, at the moment the drag starts: the
         // indicator is drawn without moving anything, so the tiles the
         // pointer is judged against stay where they were.
@@ -454,7 +442,7 @@ export function ServerRail({
       window.removeEventListener("pointerup", end);
       window.removeEventListener("pointercancel", end);
     };
-  }, [entries, open, onReorder]);
+  }, [entries, open, onReorder, dismiss]);
 
   const dragKey = drag?.key ?? null;
   const dropBefore = drag ? dropTarget(drag) : null;
@@ -559,7 +547,7 @@ export function ServerRail({
         // cannot lift itself above the sidebar from in here - the rail as a
         // whole has to sit above it instead.
         zIndex: 45,
-        borderRight: "1px solid " + theme.palette.nebula.line,
+        borderRight: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line,
         background: theme.palette.nebula.rail,
         backdropFilter: "blur(14px)",
       })}
@@ -605,8 +593,7 @@ export function ServerRail({
             onContextMenu={(x, y) => openMenu(entry, x, y)}
             onHover={(top) => {
               if (dragKey) return;
-              holdOpen();
-              setHovered({ key: entry.group.key, top });
+              show(entry.group.key, top);
             }}
             onLeave={closeSoon}
             onDragPointerDown={beginGesture(entry.group.key)}
@@ -638,9 +625,9 @@ export function ServerRail({
           channelName={hoveredEntry.group.key === activeKey ? activeChannelName : null}
           ownName={ownName}
           occupants={hoveredEntry.group.key === activeKey ? occupants : []}
-          top={hovered.top}
+          top={hovered.at}
           onOpen={() => {
-            setHovered(null);
+            dismiss();
             onSelect(hoveredEntry);
           }}
           onCancel={onCancelConnect ? () => onCancelConnect(hoveredEntry) : undefined}
@@ -760,7 +747,7 @@ function RailButton({
           placeItems: "center",
           cursor: "pointer",
           borderRadius: radius("rail"),
-          border: dashed ? "1px dashed " + theme.palette.nebula.line2 : "1px solid transparent",
+          border: dashed ? "1px dashed " + theme.palette.nebula.line2 : "var(--nebula-line-width, 1px) solid transparent",
           color: tone === "bad" ? theme.palette.nebula.bad : theme.palette.nebula.railDim,
           "&:hover": {
             background: dashed ? "transparent" : theme.palette.nebula.hover,

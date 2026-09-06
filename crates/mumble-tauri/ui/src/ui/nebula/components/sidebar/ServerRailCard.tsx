@@ -1,9 +1,53 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Box, Typography } from "@mui/material";
+import { Box, Portal, Typography } from "@mui/material";
 import type { ServerPingResult } from "@core/types";
 import { serverTint, type ServerRailEntry } from "../../selectors";
 import { UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
+
+/** How wide the card is, for whoever has to keep it on the screen. */
+export const RAIL_CARD_WIDTH = 272;
+
+/**
+ * When the card opens and closes, for whatever hosts it.
+ *
+ * Hovering opens the card at once; leaving closes it after a beat, which is
+ * only there so the pointer can cross the gap between the thing that opened
+ * the card and the card itself. `at` is wherever the host needs to place the
+ * card - a distance down a rail, or a spot in the window under a tab.
+ */
+export function useRailCardHover<At>() {
+  const [hovered, setHovered] = useState<{ key: string; at: At } | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const holdOpen = useCallback(() => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  }, []);
+
+  const closeSoon = useCallback(() => {
+    holdOpen();
+    closeTimer.current = setTimeout(() => setHovered(null), 120);
+  }, [holdOpen]);
+
+  const show = useCallback(
+    (key: string, at: At) => {
+      holdOpen();
+      setHovered({ key, at });
+    },
+    [holdOpen],
+  );
+
+  const dismiss = useCallback(() => {
+    holdOpen();
+    setHovered(null);
+  }, [holdOpen]);
+
+  useEffect(() => holdOpen, [holdOpen]);
+
+  return { hovered, show, dismiss, holdOpen, closeSoon };
+}
 
 /** One person in the channel you are in, as the card needs them. */
 export interface RailCardOccupant {
@@ -23,8 +67,19 @@ export interface ServerRailCardProps {
   /** The name you arrived as. */
   ownName?: string | null;
   occupants?: readonly RailCardOccupant[];
-  /** Distance from the top of the rail to the tile this card belongs to. */
+  /** Where the card goes: down from the rail's top, or, fixed, down the window. */
   top: number;
+  /** Across from the rail's left edge, or, fixed, from the window's. */
+  left?: number;
+  /**
+   * Place the card in the window rather than in its host.
+   *
+   * The rail is a column the card can sit inside. The title bar is not: its
+   * strip scrolls, which would clip the card, and it blurs what is behind it,
+   * which makes it the containing block for anything fixed inside it. So the
+   * card leaves the bar altogether and is laid over the window.
+   */
+  fixed?: boolean;
   onOpen: () => void;
   onCancel?: () => void;
   onPointerEnter: () => void;
@@ -48,18 +103,18 @@ function Chip({
         ...(tone === "ok"
           ? {
               background: "rgba(60,216,142,.14)",
-              border: "1px solid rgba(60,216,142,.3)",
+              border: "var(--nebula-line-width, 1px) solid rgba(60,216,142,.3)",
               color: theme.palette.nebula.ok,
             }
           : tone === "warn"
             ? {
                 background: theme.palette.nebula.card,
-                border: "1px solid " + theme.palette.nebula.line2,
+                border: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line2,
                 color: theme.palette.nebula.warn,
               }
             : {
                 background: theme.palette.nebula.card,
-                border: "1px solid " + theme.palette.nebula.line2,
+                border: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line2,
                 color: theme.palette.nebula.muted,
               }),
       })}
@@ -131,7 +186,7 @@ function CardAction({
         fontSize: 12,
         fontWeight: 600,
         ...(quiet
-          ? { border: "1px solid " + theme.palette.nebula.line2, color: theme.palette.nebula.muted }
+          ? { border: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line2, color: theme.palette.nebula.muted }
           : { background: theme.palette.nebula.accent, color: theme.palette.nebula.onAccent }),
         "&:hover": quiet ? { background: theme.palette.nebula.hover } : {},
         "&:focus-visible": { outline: "2px solid " + theme.palette.nebula.accent, outlineOffset: 2 },
@@ -158,6 +213,8 @@ export function ServerRailCard({
   ownName,
   occupants = [],
   top,
+  left = 64,
+  fixed = false,
   onOpen,
   onCancel,
   onPointerEnter,
@@ -167,7 +224,7 @@ export function ServerRailCard({
   const { group, status, unread } = entry;
   const here = status === "connected" && Boolean(channelName);
 
-  return (
+  const card = (
     <Box
       role="dialog"
       aria-label={group.label}
@@ -175,15 +232,17 @@ export function ServerRailCard({
       onMouseEnter={onPointerEnter}
       onMouseLeave={onPointerLeave}
       sx={(theme) => ({
-        position: "absolute",
-        left: 64,
+        position: fixed ? "fixed" : "absolute",
+        left,
         top,
-        width: 272,
-        zIndex: 40,
+        width: RAIL_CARD_WIDTH,
+        // Over the window, the card has to clear the rail and its pinned panel
+        // as well as the bar it hangs from.
+        zIndex: fixed ? 60 : 40,
         borderRadius: radius("xl"),
         overflow: "hidden",
         background: theme.palette.nebula.tint + "," + theme.palette.nebula.bg0,
-        border: "1px solid " + theme.palette.nebula.line2,
+        border: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line2,
         boxShadow: theme.palette.nebula.shadow,
         backdropFilter: "blur(22px) saturate(1.2)",
       })}
@@ -277,6 +336,7 @@ export function ServerRailCard({
       </Box>
     </Box>
   );
+  return fixed ? <Portal>{card}</Portal> : card;
 }
 /** The part of the card that differs by what the server is doing. */
 function CardBody({
