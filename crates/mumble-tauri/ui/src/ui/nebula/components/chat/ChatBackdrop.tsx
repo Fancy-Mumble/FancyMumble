@@ -7,7 +7,7 @@ import {
   type PersonalizationData,
 } from "@standard/personalizationStorage";
 import { useBakedStill } from "./stillBake";
-import { useTheme } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
 import { useMemo } from "react";
 import { useAppStore } from "@core/store";
 
@@ -402,6 +402,50 @@ export function ChatBackdrop() {
           >
             {wordmark}
           </Box>
+          {/* The second ring is dashed and sits inside the first: two weights
+              of the same arc, which is what keeps the corner from reading as
+              one thick circle. */}
+          <Box
+            aria-hidden
+            sx={(theme) => ({
+              position: "absolute",
+              top: -60,
+              right: -100,
+              width: 520,
+              height: 520,
+              borderRadius: "50%",
+              border: `3px dashed ${theme.palette.nebula.line2}`,
+              opacity: 0.34,
+            })}
+          />
+          {/* The conversation stands on ground rather than floating on a flat
+              wash: the canvas deepens toward the bottom and a hatched rule
+              runs across it, just above where the composer sits. */}
+          <Box
+            aria-hidden
+            sx={(theme) => ({
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 190,
+              background: `linear-gradient(180deg, ${alpha(theme.palette.nebula.tile, 0)}, ${
+                theme.palette.nebula.tile
+              })`,
+            })}
+          />
+          <Box
+            aria-hidden
+            sx={(theme) => ({
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 84,
+              height: 10,
+              background: `repeating-linear-gradient(115deg, ${theme.palette.nebula.line2} 0 12px, transparent 12px 24px)`,
+              opacity: 0.7,
+            })}
+          />
         </>
       )}
       {playing ? (

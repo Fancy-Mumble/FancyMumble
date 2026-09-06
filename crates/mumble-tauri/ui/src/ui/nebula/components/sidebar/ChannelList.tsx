@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, Tooltip, Typography } from "@mui/material";
 import { useTheme, type Theme } from "@mui/material/styles";
+import { chamferedSurface } from "../../theme";
 import { parseChannelDescription } from "@core/channelProfile";
 import { useChannelDescription } from "@core/lazyBlobs";
 import type { ChannelEntry, UserEntry } from "@core/types";
@@ -157,6 +158,20 @@ function GroupLabel({ children }: Readonly<{ children: React.ReactNode }>) {
 function selectionStyle(theme: Theme, selected: boolean) {
   const { nebula, nebulaSkin } = theme.palette;
   if (!selected) {
+    // A drawn skin stands every row on a plate, selected or not: the mock's
+    // unselected channels are white cards, and only the fill and the leading
+    // bar say which one is open. Every other skin leaves the row bare.
+    if (nebulaSkin.chrome === "stencil") {
+      return {
+        color: nebula.text,
+        ...chamferedSurface(
+          theme,
+          nebula.card,
+          nebula.line,
+          nebulaSkin.clipSelection === "none" ? "none" : nebulaSkin.clipSelection,
+        ),
+      } as const;
+    }
     return { color: nebula.muted, background: "transparent", border: "var(--nebula-line-width, 1px) solid transparent" } as const;
   }
   const solid = nebulaSkin.selection === "solid";
@@ -280,6 +295,11 @@ function ChannelRow({
                 py: "10px",
                 borderRadius: radius("md"),
                 cursor: "pointer",
+                // A plated row is a card, and the artboard's cards are taller
+                // than the pack's bare rows: 44px against roughly 35.
+                ...(theme.palette.nebulaSkin.chrome === "stencil"
+                  ? { px: "16px", minHeight: 49, boxSizing: "border-box" }
+                  : {}),
                 // How a theme marks the selected row is one of the four levers
                 // the design sheet pushes: a wash of the accent, a solid fill,
                 // a glow, or a bar down the leading edge. The skin says which.

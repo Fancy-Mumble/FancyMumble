@@ -101,7 +101,9 @@
     "etaSeconds": "还剩 {{seconds}} 秒",
     "percent": "{{value}}%",
     "blockedNote": "{{reason}}。",
-    "createPoll": "创建投票"
+    "createPoll": "创建投票",
+    "newlineHint": "Shift+Enter = 换行",
+    "send": "发送"
   },
   "trust": {
     "verifiedHint": "此频道的密钥与你此前见到的一致。",

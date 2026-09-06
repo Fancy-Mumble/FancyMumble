@@ -1,11 +1,13 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, Portal, Tooltip } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { ChevronRightIcon, LogOutIcon, PlusIcon, UsersGroupIcon } from "@ui/icons";
 import { reorderServerRail, serverTint, type ServerGroup, type ServerRailEntry } from "../../selectors";
 import { dropTarget, measureSlots, type DragSlot } from "../../dragOrder";
 import { UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
+import { BRAND_WORDMARK } from "../../brand";
 import type { SavedServer, ServerPingResult } from "@core/types";
 import { ServerRailPanel, ServerRailRowGhost, type RailFriends } from "./ServerRailPanel";
 import { ServerRailCard, useRailCardHover, type RailCardOccupant } from "./ServerRailCard";
@@ -345,6 +347,7 @@ export function ServerRail({
   onReorder,
 }: Readonly<ServerRailProps>) {
   const { t } = useTranslation("nebulaSidebar");
+  const stencil = useTheme().palette.nebulaSkin.chrome === "stencil";
   // Pinned, the list is simply always open; there is no tile column left to
   // collapse back into.
   const open = expanded || pinned;
@@ -535,7 +538,7 @@ export function ServerRail({
       aria-label={t("servers.title")}
       data-testid="nebula-server-rail"
       sx={(theme) => ({
-        width: 56,
+        width: theme.palette.nebulaSkin.railWidth,
         flex: "none",
         display: "flex",
         flexDirection: "column",
@@ -608,8 +611,35 @@ export function ServerRail({
         <PlusIcon width={15} height={15} />
       </RailButton>
 
+      {stencil && (
+        <Box
+          aria-hidden
+          sx={(theme) => ({
+            mt: "auto",
+            mb: "4px",
+            writingMode: "vertical-rl",
+            fontStyle: "italic",
+            fontWeight: 700,
+            fontSize: 10,
+            letterSpacing: ".26em",
+            textTransform: "uppercase",
+            whiteSpace: "nowrap",
+            color: theme.palette.nebula.railDim,
+          })}
+        >
+          {BRAND_WORDMARK}
+        </Box>
+      )}
+
       {onDisconnect && (
-        <RailButton label={t("servers.disconnect")} onClick={onDisconnect} tone="bad" atBottom>
+        <RailButton
+          label={t("servers.disconnect")}
+          onClick={onDisconnect}
+          tone="bad"
+          // The label above already took the slack; a second `auto` margin
+          // here would split it and leave the two floating apart.
+          atBottom={!stencil}
+        >
           <LogOutIcon width={15} height={15} />
         </RailButton>
       )}

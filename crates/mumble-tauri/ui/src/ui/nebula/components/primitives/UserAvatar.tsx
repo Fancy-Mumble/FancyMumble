@@ -74,9 +74,13 @@ export function UserAvatar({
           // other avatar takes the avatar step, which is a circle in most skins
           // and a hard 0px in the ones that square everything off.
           borderRadius: square ? radius("rail") : radius("avatar"),
+          // The stencil ring is the artboard's: every face is outlined in the
+          // window's own navy, and speaking still overrides it.
           boxShadow: talking
             ? `0 0 0 2px ${theme.palette.nebula.ok},0 0 14px ${theme.palette.nebula.ok}55`
-            : "none",
+            : stencil
+              ? `0 0 0 2px ${theme.palette.nebula.railLine}`
+              : "none",
           transition: "box-shadow 120ms ease",
         })}
       >
@@ -84,8 +88,10 @@ export function UserAvatar({
       </Avatar>
       {/* A stencil skin rings each avatar: an ellipse floating just above the
           head, which is the mark that skin is built around. Drawn here rather
-          than per caller so every face in the pack gets one. */}
-      {stencil && (
+          than per caller so every face in the pack gets one - but only a face:
+          `square` is the server tile on the rail, and a halo over a server
+          reads as a bug rather than as the mark. */}
+      {stencil && !square && (
         <Box
           aria-hidden
           sx={(theme) => ({

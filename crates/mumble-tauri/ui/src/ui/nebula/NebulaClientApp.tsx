@@ -87,6 +87,9 @@ import {
 import type { SettingsPageId, SettingsSearchTarget } from "./components";
 import type { SettingsHighlight } from "./components/settings/SettingsScreen";
 import { useAdminCapabilities, useAdminNavEntries, type AdminPageId } from "./components/admin";
+import { BRAND_WORDMARK } from "./brand";
+import { WindowControls } from "./components/chrome/WindowControls";
+import { FriendsButton, QuickConnectButton } from "./components/chrome/ChromeNav";
 /**
  * The two surfaces the client is not, loaded when they are asked for.
  *
@@ -273,6 +276,9 @@ export default function NebulaClientApp() {
   // that is not open, and so has said nothing at all.
   const liveries = useServerLiveries();
   const theme = useNebulaTheme(liveries[activeServerId ?? ""] ?? null);
+  // Where this skin wants each piece of window chrome; the band reads the
+  // same slots and renders whichever it kept.
+  const chromeSlots = theme.palette.nebulaSkin.chromeSlots;
   // The taskbar icon is chrome too, and it is the only piece that was a
   // shipped picture rather than a drawing of the theme. Called here rather
   // than in a provider branch below: there are three of them - loading,
@@ -1489,6 +1495,12 @@ export default function NebulaClientApp() {
             tabs={serverSwitcher !== "rail"}
           />
 
+          {chromeSlots.windowControls === "corner" && (
+            <Box sx={{ position: "absolute", top: 0, right: 0, zIndex: 60, display: "flex" }}>
+              <WindowControls variant="corner" label={activeServerName} />
+            </Box>
+          )}
+
           <Stack direction="row" sx={{ flex: 1, minHeight: 0 }}>
             {serverSwitcher !== "titlebar" && (
               <ServerRail
@@ -1545,6 +1557,8 @@ export default function NebulaClientApp() {
             )}
             {screen === "chat" && channelSidebarOpen && !sessionNotReady && (
               <SidebarShell
+                brand={BRAND_WORDMARK}
+                heading={{ label: activeServerName, count: orderedChannels.length }}
                 search={
                   <SearchBox
                     value={search.channelQuery}
@@ -1813,6 +1827,21 @@ export default function NebulaClientApp() {
                     /* Hidden while the listener is off: the entry would open a
                        panel whose only content is "presence is off", and the
                        switch that fixes it is in Settings, not here. */
+                    trailing={
+                      chromeSlots.navigation === "chatHeader" ? (
+                        <Stack direction="row" alignItems="center" gap={0.5} sx={{ flex: "none" }}>
+                          <FriendsButton
+                            active={screen === "messages"}
+                            unread={friendsUnread}
+                            onOpen={() => openScreen("messages")}
+                          />
+                          <QuickConnectButton
+                            open={quickConnectAnchor !== null}
+                            onOpen={setQuickConnectAnchor}
+                          />
+                        </Stack>
+                      ) : undefined
+                    }
                     onShowPresence={richPresenceOn ? () => setSurface("presence") : undefined}
                     onPopOutDm={
                       activeDmUser

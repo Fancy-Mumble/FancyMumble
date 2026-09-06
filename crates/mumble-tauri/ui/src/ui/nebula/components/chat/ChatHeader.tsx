@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, IconButton, Menu, MenuItem, Tooltip, Typography } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import type { KeyTrustLevel } from "@core/types";
 import { TID } from "@core/testids";
 import {
@@ -19,7 +20,7 @@ import {
   UsersGroupIcon,
   VolumeIcon,
 } from "@ui/icons";
-import { glassChrome } from "../../theme";
+import { chamferedSurface, glassChrome } from "../../theme";
 import { radius } from "../../tokens";
 import { UserAvatar, Stack } from "../primitives";
 import { HistoryBadge, KeyTrustBadge } from "./KeyTrustBadge";
@@ -67,6 +68,11 @@ interface ChatHeaderProps {
   /** Show what the applications on this machine are publishing. Absent while
    *  rich presence is switched off, so the entry appears with the feature. */
   onShowPresence?: () => void;
+  /**
+   * Window chrome the skin sent here rather than to the top band - see
+   * `chromeSlots`. Rendered at the end of the row, before the controls.
+   */
+  trailing?: React.ReactNode;
 }
 
 /**
@@ -111,8 +117,10 @@ export function ChatHeader({
   onPopOutDm,
   onShowMyFiles,
   onShowPresence,
+  trailing,
 }: Readonly<ChatHeaderProps>) {
   const { t } = useTranslation(["nebulaChat", "common", "chat", "server"]);
+  const stencil = useTheme().palette.nebulaSkin.chrome === "stencil";
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const closeMenu = () => setMenuAnchor(null);
   const run = (action: () => void) => () => {
@@ -132,7 +140,7 @@ export function ChatHeader({
       alignItems="center"
       gap={1.5}
       sx={(theme) => ({
-        height: 66,
+        height: theme.palette.nebulaSkin.headerHeight,
         flex: "none",
         px: "26px",
         borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
@@ -145,6 +153,17 @@ export function ChatHeader({
           session={partner.session}
           textureSize={partner.textureSize}
           size={28}
+        />
+      ) : stencil ? (
+        <Box
+          aria-hidden
+          sx={(theme) => ({
+            flex: "none",
+            width: 8,
+            height: 34,
+            transform: "skewX(-12deg)",
+            background: theme.palette.nebula.accent,
+          })}
         />
       ) : (
         <Box sx={(theme) => ({ display: "flex", color: theme.palette.nebula.dim })}>
@@ -187,16 +206,39 @@ export function ChatHeader({
             </Box>
           )}
         </Stack>
-        <Typography
-          sx={(theme) => ({
-            fontSize: 11,
-            color: theme.palette.nebula.muted,
-            textAlign: "left",
-          })}
-          noWrap
-        >
-          {subtitle}
-        </Typography>
+        <Stack direction="row" alignItems="center" gap={0.75} sx={{ minWidth: 0 }}>
+          {stencil && (
+            <Box
+              aria-hidden
+              sx={(theme) => ({
+                flex: "none",
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: theme.palette.nebula.ok,
+              })}
+            />
+          )}
+          <Typography
+            sx={(theme) => ({
+              fontSize: 11,
+              color: theme.palette.nebula.muted,
+              textAlign: "left",
+              ...(stencil
+                ? {
+                    fontStyle: "italic",
+                    fontWeight: 700,
+                    fontSize: 10,
+                    letterSpacing: ".18em",
+                    textTransform: "uppercase",
+                  }
+                : {}),
+            })}
+            noWrap
+          >
+            {subtitle}
+          </Typography>
+        </Stack>
       </Box>
 
       <Stack direction="row" alignItems="center" gap={0.75} sx={{ flex: "none" }}>
@@ -204,10 +246,46 @@ export function ChatHeader({
         {persisted && <HistoryBadge />}
       </Stack>
 
-      <Stack direction="row" alignItems="center" gap={0.375} sx={{ ml: "auto" }}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        gap={stencil ? 1.25 : 0.375}
+        sx={(theme) => ({
+          ml: "auto",
+          // Said once over the row rather than on each button: a stencil skin
+          // stands every header action on its own bordered plate.
+          ...(stencil
+            ? {
+                // The artboard fills exactly one of these - the roster count -
+                // and leaves the rest white.
+                "& .MuiIconButton-root[data-accent]": {
+                  color: theme.palette.nebula.accent,
+                  "&::before": { background: theme.palette.nebula.card2 },
+                },
+                "& .MuiIconButton-root": {
+                  borderRadius: 0,
+                  height: 38,
+                  minWidth: 38,
+                  color: theme.palette.nebula.dim,
+                  // An opaque ground, not `accentSoft`: that token is the
+                  // accent at 20%, and a chamfered surface paints the fill
+                  // over the *edge* colour, so anything translucent comes out
+                  // as a wash of the edge instead of the pale plate drawn.
+                  ...chamferedSurface(
+                    theme,
+                    theme.palette.nebula.card,
+                    theme.palette.nebula.tile,
+                    "var(--nebula-clip-plate, none)",
+                  ),
+                },
+              }
+            : {}),
+        })}
+      >
         {memberCount !== undefined && (
           <Tooltip title={t("nebulaChat:header.members")}>
             <IconButton
+              data-accent={stencil ? "" : undefined}
               aria-label={t("nebulaChat:header.membersCount", { count: memberCount })}
               onClick={onShowMembers}
               sx={{ gap: "6px", px: "9px" }}
@@ -275,6 +353,8 @@ export function ChatHeader({
           </IconButton>
         </Tooltip>
       </Stack>
+
+      {trailing}
 
       <Menu
         anchorEl={menuAnchor}
