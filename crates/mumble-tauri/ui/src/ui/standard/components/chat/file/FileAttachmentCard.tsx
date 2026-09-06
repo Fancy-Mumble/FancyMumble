@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -60,6 +68,92 @@ interface FileAttachmentCardProps {
   readonly tile?: boolean;
 }
 
+/** Beyond this, an expiry is a date rather than a countdown: "expires 9/13"
+ *  is what a viewer can act on next week, "39h left" is not. */
+const COUNTDOWN_HORIZON_SECONDS = 48 * 3600;
+
+/** `23h`, `44m`, `2d` - the largest unit that still says something.
+ *
+ * `formatDuration` gives two of them, which reads as "22h 59m left" where the
+ * point being made is only "today". A countdown on a message is a glance, not
+ * a stopwatch. */
+function coarseCountdown(seconds: number): string {
+  // Rounded down, not to nearest: a deadline that says more time than is left
+  // is the one mistake this can make that costs somebody a file. Each branch
+  // is guarded by its own unit, so the floor is never zero.
+  if (seconds >= 86400) return `${Math.floor(seconds / 86400)}d`;
+  if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h`;
+  if (seconds >= 60) return `${Math.floor(seconds / 60)}m`;
+  return `${Math.max(1, Math.floor(seconds))}s`;
+}
+
+/** `9/13` - the day an expiry lands on, with no year and no clock. */
+function shortExpiryDate(epochSeconds: number): string {
+  return new Date(epochSeconds * 1000).toLocaleDateString(undefined, {
+    month: "numeric",
+    day: "numeric",
+  });
+}
+
+/** `m:ss`, for the length of a clip. */
+function clipLength(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "";
+  const whole = Math.floor(seconds);
+  const minutes = Math.floor(whole / 60);
+  return `${minutes}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+/** A solid triangle, for the disc a clip wears until it is asked to play. */
+function PlayGlyph({ size = 14 }: { readonly size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M8 5.14v13.72a1 1 0 0 0 1.54.84l10.3-6.86a1 1 0 0 0 0-1.68L9.54 4.3A1 1 0 0 0 8 5.14z" />
+    </svg>
+  );
+}
+
+/**
+ * What a file is, said once: size, then reach, then when it goes.
+ *
+ * These used to be a size, a pill and an italic `toLocaleString` timestamp -
+ * which is long enough that the line wrapped, and with the reach flag sitting
+ * on a row of its own above, one attachment was three rows of chrome around a
+ * filename. Fixed order, one line, and a date only when the countdown is too
+ * far out to mean anything.
+ */
+function FileFacts({
+  info,
+  expiresIn,
+  className,
+  extra,
+}: Readonly<{
+  info: FileAttachmentInfo;
+  /** Pre-formatted expiry, or null when the file does not expire. */
+  expiresIn: string | null;
+  className: string;
+  /** The reach flag, which rides the same line rather than a row of its own. */
+  extra?: ReactNode;
+}>) {
+  const parts = [formatBytes(info.sizeBytes), info.mode === "public" ? null : info.mode, expiresIn].filter(
+    (part): part is string => !!part,
+  );
+  return (
+    <div className={className}>
+      {parts.map((part, index) => (
+        <Fragment key={part}>
+          {index > 0 && (
+            <span aria-hidden="true" className={styles.factSeparator}>
+              ·
+            </span>
+          )}
+          <span>{part}</span>
+        </Fragment>
+      ))}
+      {extra}
+    </div>
+  );
+}
+
 /** HTML-comment marker used to embed a file attachment in a chat message
  *  body. Renderers detect the marker and render a {@link FileAttachmentCard}
  *  in place of the raw markdown link. Legacy clients see the inert comment. */
@@ -78,6 +172,11 @@ export default function FileAttachmentCard({
   const [saved, setSaved] = useState(false);
   const [savedPath, setSavedPath] = useState<string | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  /** A clip is a poster until it is asked for; this is that asking. */
+  const [clipOpen, setClipOpen] = useState(false);
+  /** The clip's own length and shape, read off the poster's metadata. */
+  const [clipSeconds, setClipSeconds] = useState<number | null>(null);
+  const [clipRatio, setClipRatio] = useState<number | null>(null);
   /** Bumped by Retry, to mount a player that has not already failed. */
   const [attempt, setAttempt] = useState(0);
   // Native password prompt (replaces window.prompt): the open flag drives the
@@ -133,6 +232,17 @@ export default function FileAttachmentCard({
   }, []);
 
   const closeLightbox = useCallback(() => setLightboxOpen(false), []);
+
+  /** A countdown while that still says something, a date once it does not. */
+  const expiresIn = (() => {
+    if (info.expiresAt == null || info.expiresAt <= 0) return null;
+    const secondsLeft = info.expiresAt - Date.now() / 1000;
+    if (secondsLeft <= 0) return null;
+    if (secondsLeft < COUNTDOWN_HORIZON_SECONDS) {
+      return t("fileAttachment.expiresIn", { duration: coarseCountdown(secondsLeft) });
+    }
+    return `${t("fileAttachment.expiresPrefix")} ${shortExpiryDate(info.expiresAt)}`;
+  })();
 
   // Switch to expired state automatically once the announced expiry
   // timestamp passes, without waiting for a network failure.
@@ -283,16 +393,16 @@ export default function FileAttachmentCard({
         </button>
       );
     }
-    if (kind === "audio" || kind === "video") {
+    if (kind === "audio") {
       // Our own controls rather than the platform's: see `MediaPlayer`. Retry
       // remounts the player on a fresh source, which for a canon attachment
       // means a freshly signed URL rather than the one that stopped working.
       return (
-        <div className={kind === "audio" ? styles.previewAudioWrap : undefined}>
+        <div className={styles.previewAudioWrap}>
           <MediaPlayer
             key={`${previewSrc}#${attempt}`}
             src={previewSrc}
-            kind={kind}
+            kind="audio"
             label={info.filename}
             onRetry={() => {
               handlePreviewError();
@@ -305,6 +415,31 @@ export default function FileAttachmentCard({
     return null;
   })();
 
+  /** Save and Open, as the strip that rides a picture or a clip. */
+  const frameActions = (
+    <>
+      <button
+        type="button"
+        className={styles.bareBtn}
+        onClick={onSave}
+        disabled={busy}
+        title={saved ? t("fileAttachment.savedTooltip") : t("fileAttachment.downloadTooltip")}
+      >
+        {busy ? t("fileAttachment.saving") : saved ? t("fileAttachment.saved") : t("fileAttachment.save")}
+      </button>
+      {canOpenInBrowser && (
+        <button
+          type="button"
+          className={styles.bareBtn}
+          onClick={handleOpenInBrowser}
+          title={t("fileAttachment.openTooltip")}
+        >
+          {t("fileAttachment.open")}
+        </button>
+      )}
+    </>
+  );
+
   // Only a still picture can carry the flag: a player already owns its own
   // bottom-left corner, and a card with no preview has no corner at all.
   const overlaysPreview = !!visibilityBadge && !!preview && kind === "image";
@@ -312,7 +447,6 @@ export default function FileAttachmentCard({
   if (expired) {
     return (
       <div className={`${styles.card} ${styles.expiredCard}`}>
-        {visibilityBadge && <div className={styles.badgeRow}>{visibilityBadge(false)}</div>}
         <div className={styles.cardRow}>
           <div className={`${styles.icon} ${styles.expiredIcon}`} aria-hidden="true">
             <svg
@@ -332,15 +466,16 @@ export default function FileAttachmentCard({
           <div className={styles.body}>
             <div className={styles.filename}>{info.filename}</div>
             <div className={styles.expiredMessage}>{t("fileAttachment.expired")}</div>
-            <div className={styles.meta}>
-              {formatBytes(info.sizeBytes)}
-              {info.mode !== "public" && <span className={styles.badge}>{info.mode}</span>}
-              {info.expiresAt != null && info.expiresAt > 0 && (
-                <span className={styles.expiry}>
-                  {t("fileAttachment.expiredPrefix")} {new Date(info.expiresAt * 1000).toLocaleString()}
-                </span>
-              )}
-            </div>
+            <FileFacts
+              info={info}
+              expiresIn={
+                info.expiresAt != null && info.expiresAt > 0
+                  ? `${t("fileAttachment.expiredPrefix")} ${shortExpiryDate(info.expiresAt)}`
+                  : null
+              }
+              className={styles.meta}
+              extra={visibilityBadge?.(false)}
+            />
           </div>
         </div>
       </div>
@@ -370,37 +505,123 @@ export default function FileAttachmentCard({
     </>
   );
 
+  /**
+   * A clip, drawn the way a photograph already is: itself, and nothing else.
+   *
+   * A video used to mount a full-width player the moment the message arrived,
+   * with a filename-and-size row bolted underneath - so a message carrying six
+   * of them was six players, six control bars and six grey rows, all loading
+   * at once. At rest it is now a poster the size of a picture tile, wearing
+   * its length and its facts and nothing more. Asking for it swaps the poster
+   * for the player in place, which is also the first moment anything past the
+   * first frame is fetched.
+   */
+  if (kind === "video" && previewSrc) {
+    const length = clipSeconds == null ? "" : clipLength(clipSeconds);
+    // Inside a block of tiles the clip gives up its own shape and its facts:
+    // the block states those once for the whole batch.
+    const shell = tile ? `${styles.bare} ${styles.tile}` : styles.bare;
+    const frame = tile
+      ? `${styles.previewWrap} ${styles.clipTile}`
+      : `${styles.previewWrap} ${clipOpen ? styles.clipOpen : styles.clipClosed}`;
+    return (
+      <div className={shell}>
+        <div className={frame}>
+          {clipOpen ? (
+            <MediaPlayer
+              key={`${previewSrc}#${attempt}`}
+              src={previewSrc}
+              kind="video"
+              label={info.filename}
+              title={info.filename}
+              meta={<FileFacts info={info} expiresIn={expiresIn} className={styles.clipPlayerFacts} />}
+              actions={frameActions}
+              autoPlay
+              onRetry={() => {
+                handlePreviewError();
+                setAttempt((count) => count + 1);
+              }}
+            />
+          ) : (
+            <>
+              <button
+                type="button"
+                className={tile ? `${styles.clipPoster} ${styles.clipPosterTile}` : styles.clipPoster}
+                style={
+                  clipRatio && !tile ? ({ "--clip-ratio": clipRatio } as CSSProperties) : undefined
+                }
+                onClick={() => setClipOpen(true)}
+                aria-label={t("fileAttachment.playClip", { filename: info.filename })}
+              >
+                <video
+                  className={styles.clipPosterFrame}
+                  src={previewSrc}
+                  preload="metadata"
+                  muted
+                  playsInline
+                  onLoadedMetadata={(event) => {
+                    const element = event.currentTarget;
+                    setClipSeconds(Number.isFinite(element.duration) ? element.duration : null);
+                    if (element.videoHeight > 0) setClipRatio(element.videoWidth / element.videoHeight);
+                    // Metadata alone leaves the element a black rectangle on
+                    // every engine we ship on. Seeking a hair into the clip is
+                    // what makes it decode the frame the poster is *of*.
+                    if (element.currentTime === 0 && Number.isFinite(element.duration)) {
+                      element.currentTime = Math.min(0.1, element.duration / 2);
+                    }
+                  }}
+                  onError={handlePreviewError}
+                >
+                  <track kind="captions" />
+                </video>
+                <span className={styles.clipDisc} aria-hidden="true">
+                  <PlayGlyph size={16} />
+                </span>
+                {length && <span className={styles.clipLength}>{length}</span>}
+              </button>
+              <div className={styles.previewOverlay}>
+                {tile ? (
+                  visibilityBadge?.(true)
+                ) : (
+                  <FileFacts
+                    info={info}
+                    expiresIn={expiresIn}
+                    className={styles.frameFacts}
+                    extra={visibilityBadge?.(true)}
+                  />
+                )}
+              </div>
+              {!tile && <div className={styles.bareActions}>{frameActions}</div>}
+            </>
+          )}
+        </div>
+        {error && <div className={styles.bareError}>{error}</div>}
+        {trailer}
+      </div>
+    );
+  }
+
   if (bare && preview && kind === "image") {
     return (
       <div className={tile ? `${styles.bare} ${styles.tile}` : styles.bare}>
         <div className={styles.previewWrap}>
           {preview}
-          {visibilityBadge && <div className={styles.previewOverlay}>{visibilityBadge(true)}</div>}
-          <div className={styles.bareActions}>
-            <button
-              type="button"
-              className={styles.bareBtn}
-              onClick={onSave}
-              disabled={busy}
-              title={saved ? t("fileAttachment.savedTooltip") : t("fileAttachment.downloadTooltip")}
-            >
-              {busy
-                ? t("fileAttachment.saving")
-                : saved
-                  ? t("fileAttachment.saved")
-                  : t("fileAttachment.save")}
-            </button>
-            {canOpenInBrowser && (
-              <button
-                type="button"
-                className={styles.bareBtn}
-                onClick={handleOpenInBrowser}
-                title={t("fileAttachment.openTooltip")}
-              >
-                {t("fileAttachment.open")}
-              </button>
+          {/* Facts ride the picture's bottom-left corner on their own scrim,
+              so nothing is stacked underneath it. On a gallery tile there is
+              no room for them and only the reach flag survives. */}
+          <div className={styles.previewOverlay}>
+            {tile ? (
+              visibilityBadge?.(true)
+            ) : (
+              <FileFacts
+                info={info}
+                expiresIn={expiresIn}
+                className={styles.frameFacts}
+                extra={visibilityBadge?.(true)}
+              />
             )}
           </div>
+          <div className={styles.bareActions}>{frameActions}</div>
         </div>
         {error && <div className={styles.bareError}>{error}</div>}
         {trailer}
@@ -416,10 +637,7 @@ export default function FileAttachmentCard({
           <div className={styles.previewOverlay}>{visibilityBadge?.(true)}</div>
         </div>
       ) : (
-        <>
-          {visibilityBadge && <div className={styles.badgeRow}>{visibilityBadge(false)}</div>}
-          {preview}
-        </>
+        preview
       )}
       <div className={styles.cardRow}>
         <div className={styles.icon} aria-hidden="true">
@@ -439,15 +657,15 @@ export default function FileAttachmentCard({
         </div>
         <div className={styles.body}>
           <div className={styles.filename}>{info.filename}</div>
-          <div className={styles.meta}>
-            {formatBytes(info.sizeBytes)}
-            {info.mode !== "public" && <span className={styles.badge}>{info.mode}</span>}
-            {info.expiresAt && (
-              <span className={styles.expiry}>
-                {t("fileAttachment.expiresPrefix")} {new Date(info.expiresAt * 1000).toLocaleString()}
-              </span>
-            )}
-          </div>
+          <FileFacts
+            info={info}
+            expiresIn={expiresIn}
+            className={styles.meta}
+            // The reach flag shares the facts line rather than taking a row of
+            // its own above the card - unless there is a picture for it to sit
+            // on, in which case it is already drawn there.
+            extra={overlaysPreview ? undefined : visibilityBadge?.(false)}
+          />
           {error && <div className={styles.error}>{error}</div>}
         </div>
         <button

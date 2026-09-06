@@ -28,15 +28,17 @@
   left: 0.5rem;
   bottom: 0.5rem;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  /* A narrow picture is a narrow corner: the chips wrap rather than running
+     off the side of it. */
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  max-width: calc(100% - 1rem);
 }
 
-/* Where a flag goes when there is no picture to sit inside of. */
-.badgeRow {
-  padding: 0.75rem 1rem 0;
-}
-
-/* A session-only file draws no flag at all - don't leave its padding behind. */
-.badgeRow:empty {
+/* A session-only file on a gallery tile has nothing to put here. */
+.previewOverlay:empty {
   display: none;
 }
 
@@ -103,27 +105,54 @@
   text-overflow: ellipsis;
 }
 
+/* Size, reach and expiry, in that order, on one line. An italic
+   `toLocaleString` timestamp used to wrap this onto a second row, with the
+   reach flag on a third above the card. */
 .meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.35rem;
   margin-top: 0.25rem;
   font-size: 0.8rem;
   color: var(--text-muted, rgba(255, 255, 255, 0.6));
 }
 
-.badge {
-  padding: 0.05rem 0.4rem;
-  border-radius: 0.5rem;
-  background: rgba(255, 255, 255, 0.08);
-  text-transform: uppercase;
-  font-size: 0.7rem;
-  letter-spacing: 0.05em;
+.factSeparator {
+  opacity: 0.55;
 }
 
-.expiry {
-  font-style: italic;
+/* The same facts where they ride a picture or a clip: one chip on its own
+   scrim, because what is behind it is somebody else's photograph. */
+.frameFacts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(10, 13, 20, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: #e6e8ee;
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+/* The same chip again, on the open player's top scrim beside the filename. */
+.clipPlayerFacts {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex: 0 0 auto;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid rgba(238, 242, 248, 0.14);
+  border-radius: 999px;
+  background: rgba(10, 13, 20, 0.6);
+  color: #e6e8ee;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .error {
@@ -323,4 +352,116 @@
    button: clipped, the half that copies the link is the half that goes. */
 .tile .previewOverlay {
   max-width: calc(100% - 1rem);
+}
+
+/* ---- A clip at rest ---------------------------------------------
+   The same object a photograph is: a tile the picture's size, wearing its
+   length and its facts. What used to be here was a full-width player mounted
+   the moment the message arrived, with a filename-and-size row underneath -
+   which made a message carrying six clips six players, six control bars and
+   six grey rows, every one of them fetching at once. */
+
+.clipClosed {
+  width: fit-content;
+}
+
+.clipPoster {
+  --clip-max-w: 320px;
+  --clip-max-h: 240px;
+  position: relative;
+  display: block;
+  padding: 0;
+  border: none;
+  background: #05070d;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  cursor: pointer;
+  line-height: 0;
+  /* Sized by width alone for the reason `.bareImage` is: a height cap shrinks
+     what is drawn without shrinking the box kept for it, which sets the
+     corner chips adrift. `--clip-ratio` is the clip's own shape, known once
+     its metadata has loaded; until then 16:9 is the better guess than none. */
+  width: min(var(--clip-max-w), calc(var(--clip-max-h) * var(--clip-ratio, 1.7778)));
+  max-width: 100%;
+  aspect-ratio: var(--clip-ratio, 1.7778);
+}
+
+.clipPosterFrame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.clipDisc {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 50%;
+  background: rgba(12, 15, 22, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: #fff;
+  pointer-events: none;
+}
+
+.clipPoster:hover .clipDisc {
+  background: rgba(12, 15, 22, 0.78);
+  border-color: rgba(255, 255, 255, 0.42);
+}
+
+.clipLength {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.35rem;
+  background: rgba(10, 13, 20, 0.78);
+  color: #f2f4f9;
+  font-size: 0.7rem;
+  line-height: 1.6;
+  pointer-events: none;
+}
+
+/* Asked for: the poster is replaced in place, at a width a conversation can
+   still be read around.
+ *
+ * A plain width, not `min(460px, 100%)`: the wrapper above is `fit-content`,
+ * against which a percentage is circular, and the player collapsed to its
+ * shrink-to-fit width instead. `max-width` does the narrow-pane job without
+ * entering the intrinsic size. */
+/* Specificity matched to `.bare .previewWrap` above, which is `fit-content`
+   and otherwise wins on source order - leaving the player at whatever the
+   decoded frame happened to make it, or at 300px when there was no frame. */
+.bare .clipOpen {
+  width: 460px;
+  max-width: 100%;
+}
+
+/* Without a hover there is no way to reach Save at all, so on a touch screen
+   the strip is simply always there. */
+@media (hover: none) {
+  .bareActions {
+    opacity: 1;
+  }
+}
+
+/* One clip as one tile of a block: it fills the cell it was handed and crops
+   to do it, the way a photograph does, and gives up its own facts row because
+   the block states those once for the whole batch. */
+.clipTile,
+.clipTile .clipPoster {
+  width: 100%;
+  height: 100%;
+}
+
+.clipPosterTile {
+  aspect-ratio: auto;
+  border-radius: 0;
 }

@@ -49,29 +49,31 @@
 .gallery {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 3px;
+  gap: 4px;
   width: min(420px, 70vw);
   max-width: 100%;
-  border-radius: 12px;
-  overflow: hidden;
 }
 
 /* Three images: the last one spans the full width as a wide banner. */
-.galleryCount3 .thumbWrap:last-child {
+.galleryCount3 .thumbWrap:last-child,
+.galleryCount3 .overflowTile:last-child {
   grid-column: 1 / -1;
   aspect-ratio: 16 / 9;
 }
 
-/* In gallery mode tiles fill their grid cell uniformly (square), with no
-   per-tile border/radius since the grid container is the rounded frame. */
-.gallery .thumbWrap {
+/* In gallery mode tiles fill their grid cell uniformly (square). The block
+   used to be one clipped frame with square tiles inside it; each tile now
+   carries its own 8px corner, which is the radius the rest of the thread is
+   drawn on and survives a tile being lifted out of the block on hover. */
+.gallery .thumbWrap,
+.gallery .overflowTile {
   width: 100%;
   height: 100%;
   max-width: none;
   max-height: none;
   aspect-ratio: 1;
   border: none;
-  border-radius: 0;
+  border-radius: 8px;
 }
 
 .gallery .thumb,
@@ -81,7 +83,43 @@
   max-width: none;
   max-height: none;
   object-fit: cover;
-  border-radius: 0;
+  border-radius: 8px;
+}
+
+/* ---- The tile that stands in for the rest ---------------------- */
+
+.overflowTile {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.overflowTile .thumbWrap {
+  width: 100%;
+  height: 100%;
+}
+
+/* The count is the button: the whole tile, so it is as easy to hit as the
+   tiles either side of it rather than being a target in one corner. */
+.overflowScrim {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: inherit;
+  background: rgba(9, 11, 17, 0.6);
+  color: #f2f4f9;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.overflowScrim:hover {
+  background: rgba(9, 11, 17, 0.72);
 }
 
 .thumbWrap {
@@ -174,6 +212,44 @@
   background: rgba(0, 0, 0, 0.55);
 }
 
+/* A clip says so from the middle of itself. The corner triangle this replaced
+   was the same weight as the clock in the opposite corner, so a video and a
+   still read as the same object until one of them was clicked. */
+.playDisc {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 50%;
+  background: rgba(12, 15, 22, 0.6);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* How long the clip runs, in the corner a clip's length lives in. */
+.lengthChip {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(10, 13, 20, 0.78);
+  color: #f2f4f9;
+  font-size: 11px;
+  line-height: 1.6;
+  pointer-events: none;
+}
+
 /* --- Spoiler cover (blur until revealed) ------------------------ */
 
 /* Heavy blur; scaled up so the blur's soft transparent edge is pushed
@@ -221,6 +297,13 @@
   letter-spacing: 0.3px;
   pointer-events: none;
   line-height: 1.4;
+}
+
+/* Bottom-right belongs to a clip's length, so the clock takes the other
+   corner rather than sitting on top of it. */
+.timeChipLeft {
+  right: auto;
+  left: 6px;
 }
 
 /* --- Lightbox overlay ------------------------------------------- */

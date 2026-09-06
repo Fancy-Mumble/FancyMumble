@@ -46,13 +46,20 @@ describe("AttachmentVisibilityBadge", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("shows how long a public link has left", () => {
+  it("leaves the countdown to the card's facts line rather than saying it twice", () => {
     const futureEpochSeconds = Math.floor(Date.now() / 1000) + 6 * 86400;
     render(
       withNebulaTheme(
         <AttachmentVisibilityBadge info={info({ mode: "public", expiresAt: futureEpochSeconds })} />,
       ),
     );
-    expect(screen.getByText(/left/)).toBeTruthy();
+    expect(screen.getByText("Public link")).toBeTruthy();
+    expect(screen.queryByText(/left/)).toBeNull();
+  });
+
+  it("keeps the copy button but drops the words on one tile of a block", () => {
+    render(withNebulaTheme(<AttachmentVisibilityBadge info={info({ mode: "public" })} compact />));
+    expect(screen.queryByText("Public link")).toBeNull();
+    expect(screen.getByRole("button")).toBeTruthy();
   });
 });
