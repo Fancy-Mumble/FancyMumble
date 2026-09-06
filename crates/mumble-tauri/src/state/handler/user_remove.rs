@@ -142,9 +142,7 @@ fn handle_user_departed(msg: &mumble_tcp::UserRemove, ctx: &HandlerContext) {
 
 #[cfg(not(target_os = "android"))]
 fn stop_audio_pipelines(state: &mut crate::state::SharedState) {
-    if let Some(handle) = state.audio.outbound_task_handle.take() {
-        handle.abort();
-    }
+    state.audio.stop_outbound();
     if let Some(mut playback) = state.audio.mixing_playback.take() {
         let _ = playback.stop();
     }

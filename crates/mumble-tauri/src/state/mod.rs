@@ -106,6 +106,10 @@ pub(super) struct AudioPipelineState {
     pub mixer: Option<AudioMixer>,
     pub mixing_playback: Option<Box<dyn crate::audio::MixingPlayback>>,
     pub outbound_task_handle: Option<tokio::task::JoinHandle<()>>,
+    /// Bumped by every start and stop of the outbound loop. A start records
+    /// it before building the pipeline and installs the loop only if nothing
+    /// moved it on since - see [`AudioPipelineState::install_outbound`].
+    outbound_generation: u64,
     pub input_volume_handle: Option<Arc<AtomicU32>>,
     pub output_volume_handle: Option<Arc<AtomicU32>>,
     pub speaker_volumes: SpeakerVolumes,
@@ -115,6 +119,47 @@ pub(super) struct AudioPipelineState {
     pub voice_replay_stop: Option<tokio::sync::watch::Sender<bool>>,
     pub recording_handle: Option<recording::RecordingHandle>,
     pub talking_sessions: HashSet<u32>,
+}
+
+impl AudioPipelineState {
+    /// Stop the outbound loop and retire any start still building one.
+    pub(super) fn stop_outbound(&mut self) {
+        self.outbound_generation += 1;
+        if let Some(handle) = self.outbound_task_handle.take() {
+            handle.abort();
+        }
+    }
+
+    /// Claim the right to install the next outbound loop. Building one can
+    /// take a while (a denoiser model loads in the order of a second), and
+    /// this happens outside the lock, so the claim is what a later start or
+    /// stop invalidates.
+    pub(super) fn begin_outbound(&mut self) -> u64 {
+        self.outbound_generation += 1;
+        self.outbound_generation
+    }
+
+    /// Install the loop a start claimed at `generation` produced.
+    ///
+    /// Whatever was stored before is aborted, so two loops never run at once:
+    /// two of them interleave their packets on the wire, which every listener
+    /// hears as crackling. If a newer start or a stop has moved the generation
+    /// on, this loop is the stale one: it is aborted instead and `false`
+    /// returned, so a mute cannot be undone by a restart it overtook.
+    pub(super) fn install_outbound(
+        &mut self,
+        generation: u64,
+        handle: tokio::task::JoinHandle<()>,
+    ) -> bool {
+        if generation != self.outbound_generation {
+            handle.abort();
+            return false;
+        }
+        if let Some(old) = self.outbound_task_handle.replace(handle) {
+            old.abort();
+        }
+        true
+    }
 }
 
 /// Server-reported metadata: version info, config limits, and connection details.
@@ -640,6 +685,34 @@ mod tests {
         state.switch_active_with_voice(id).await.expect("ok");
         let next = state.inner.snapshot();
         assert!(Arc::ptr_eq(&prev, &next));
+    }
+
+    /// A stop that lands while a start is still building its pipeline
+    /// retires that start: the loop it finally produces is aborted rather
+    /// than installed, so a mute cannot be undone by the restart it overtook.
+    #[tokio::test]
+    async fn a_stop_during_a_build_retires_the_start() {
+        let mut audio = AudioPipelineState::default();
+        let claim = audio.begin_outbound();
+        audio.stop_outbound();
+        let stale = tokio::spawn(std::future::pending::<()>());
+        assert!(!audio.install_outbound(claim, stale));
+        assert!(audio.outbound_task_handle.is_none());
+
+        // A fresh claim installs, and installing over a stored loop aborts it.
+        let claim = audio.begin_outbound();
+        let first = tokio::spawn(std::future::pending::<()>());
+        let first_abort = first.abort_handle();
+        assert!(audio.install_outbound(claim, first));
+        let claim = audio.begin_outbound();
+        assert!(audio.install_outbound(claim, tokio::spawn(std::future::pending::<()>())));
+        tokio::task::yield_now().await;
+        assert!(
+            first_abort.is_finished(),
+            "the replaced loop must be aborted"
+        );
+        audio.stop_outbound();
+        assert!(audio.outbound_task_handle.is_none());
     }
 
     #[tokio::test]
