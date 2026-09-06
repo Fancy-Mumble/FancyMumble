@@ -131,6 +131,18 @@ pub(super) struct AudioPipelineState {
 }
 
 impl AudioPipelineState {
+    /// Attach a connection's decoder thread, handing over a running mixer.
+    ///
+    /// Voice is normally enabled long after the thread exists, but a mixer
+    /// built before it would otherwise sit here while the thread decodes into
+    /// nothing - silence with no error anywhere.
+    pub(super) fn attach_decode(&mut self, decode: voice_decode::DecodeHandle) {
+        if let Some(mixer) = self.mixer.take() {
+            decode.install(mixer);
+        }
+        self.decode = Some(decode);
+    }
+
     /// Start decoding into `mixer`, wherever the decoding happens.
     pub(super) fn install_mixer(&mut self, mixer: AudioMixer, buffers: SpeakerBuffers) {
         self.speaker_buffers = Some(buffers);
