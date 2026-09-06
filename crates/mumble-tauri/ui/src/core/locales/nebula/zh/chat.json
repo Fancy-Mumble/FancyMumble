@@ -206,7 +206,11 @@
     "thisConversation": "此对话",
     "hours24": "24 小时",
     "days7": "7 天",
-    "expiresAt": "{{at}} 过期"
+    "expiresAt": "{{at}} 过期",
+    "showAll": "显示全部 {{count}} 项",
+    "itemCount": "{{count}} 项",
+    "saveAll": "全部保存",
+    "savingAll": "正在保存…"
   },
   "share": {
     "fit": "适应",

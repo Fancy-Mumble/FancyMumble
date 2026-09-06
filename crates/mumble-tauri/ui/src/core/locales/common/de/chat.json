@@ -285,6 +285,7 @@
     "expired": "Dieser Download-Link ist abgelaufen und nicht mehr verfügbar.",
     "expiredPrefix": "abgelaufen",
     "expiresPrefix": "läuft ab",
+    "expiresIn": "noch {{duration}}",
     "saving": "Speichern…",
     "saved": "Gespeichert",
     "save": "Speichern",
@@ -292,7 +293,8 @@
     "downloadTooltip": "Auf Festplatte speichern",
     "open": "Öffnen",
     "openTooltip": "Im Browser öffnen",
-    "viewInLightbox": "{{filename}} in der Lightbox anzeigen"
+    "viewInLightbox": "{{filename}} in der Lightbox anzeigen",
+    "playClip": "{{filename}} abspielen"
   },
   "fileShare": {
     "title": "Datei teilen",
@@ -443,6 +445,11 @@
     "drawOn": "Auf Bildschirm zeichnen",
     "drawOff": "Zeichnen beenden",
     "showOverlayTooltip": "Desktop-Overlay anzeigen (klickdurchlässig, nicht im Capture)",
+    "showOverlayTooltipCaptured": "Desktop-Overlay anzeigen (klickdurchlässig; es erscheint in deiner Bildschirmfreigabe)",
+    "overlayUnsupportedWayland": "Dieser Wayland-Compositor kann kein Overlay an einen Bildschirm heften. Starte die App mit GDK_BACKEND=x11, um es zu nutzen.",
+    "overlayUnsupportedWaylandWindow": "Wayland verrät nicht, wo ein geteiltes Fenster liegt. Teile einen ganzen Bildschirm, um das Overlay zu nutzen.",
+    "overlayUnsupportedPlatform": "Das Desktop-Overlay ist auf dieser Plattform nicht verfügbar.",
+    "overlayUnavailable": "Das Desktop-Overlay ist derzeit nicht verfügbar.",
     "showOverlay": "Desktop-Overlay anzeigen",
     "hideOverlay": "Desktop-Overlay ausblenden",
     "popout": "In separatem Fenster öffnen",
@@ -1157,5 +1164,8 @@
     "statusDelivered": "Zugestellt",
     "statusCancelled": "Abgebrochen",
     "statusRejected": "Abgelehnt"
+  },
+  "media": {
+    "showAll": "Alle {{count}} Elemente anzeigen"
   }
 }

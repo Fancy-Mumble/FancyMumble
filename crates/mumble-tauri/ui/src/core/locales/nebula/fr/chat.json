@@ -206,7 +206,11 @@
     "thisConversation": "Cette conversation",
     "hours24": "24 heures",
     "days7": "7 jours",
-    "expiresAt": "Expire le {{at}}"
+    "expiresAt": "Expire le {{at}}",
+    "showAll": "Afficher les {{count}} éléments",
+    "itemCount": "{{count}} éléments",
+    "saveAll": "Tout enregistrer",
+    "savingAll": "Enregistrement…"
   },
   "share": {
     "fit": "Ajuster",

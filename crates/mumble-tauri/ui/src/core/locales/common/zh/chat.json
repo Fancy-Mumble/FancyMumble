@@ -285,6 +285,7 @@
     "expired": "该下载链接已过期，无法继续使用。",
     "expiredPrefix": "已过期",
     "expiresPrefix": "将过期",
+    "expiresIn": "剩余 {{duration}}",
     "saving": "保存中…",
     "saved": "已保存",
     "save": "保存",
@@ -292,7 +293,8 @@
     "downloadTooltip": "下载到磁盘",
     "open": "打开",
     "openTooltip": "在浏览器中打开",
-    "viewInLightbox": "在灯箱中查看 {{filename}}"
+    "viewInLightbox": "在灯箱中查看 {{filename}}",
+    "playClip": "播放 {{filename}}"
   },
   "fileShare": {
     "title": "分享文件",
@@ -443,6 +445,11 @@
     "drawOn": "在屏幕上涂鸦",
     "drawOff": "停止涂鸦",
     "showOverlayTooltip": "显示桌面浮层（可穿透点击，录屏时不可见）",
+    "showOverlayTooltipCaptured": "显示桌面叠加层（可穿透点击；它会出现在你的屏幕共享中）",
+    "overlayUnsupportedWayland": "此 Wayland 合成器无法将叠加层固定到屏幕上。请使用 GDK_BACKEND=x11 启动应用以使用该功能。",
+    "overlayUnsupportedWaylandWindow": "Wayland 不会告知共享窗口的位置。请共享整个屏幕以使用叠加层。",
+    "overlayUnsupportedPlatform": "此平台不支持桌面叠加层。",
+    "overlayUnavailable": "桌面叠加层当前不可用。",
     "showOverlay": "显示桌面浮层",
     "hideOverlay": "隐藏桌面浮层",
     "popout": "在新窗口中打开",
@@ -1157,5 +1164,8 @@
     "statusDelivered": "已发送",
     "statusCancelled": "已取消",
     "statusRejected": "已拒绝"
+  },
+  "media": {
+    "showAll": "显示全部 {{count}} 项"
   }
 }

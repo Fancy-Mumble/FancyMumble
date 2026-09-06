@@ -302,6 +302,7 @@
     "expired": "This download link has expired and is no longer available.",
     "expiredPrefix": "expired",
     "expiresPrefix": "expires",
+    "expiresIn": "{{duration}} left",
     "saving": "Saving…",
     "saved": "Saved",
     "save": "Save",
@@ -309,7 +310,8 @@
     "downloadTooltip": "Download to disk",
     "open": "Open",
     "openTooltip": "Open in browser",
-    "viewInLightbox": "View {{filename}} in lightbox"
+    "viewInLightbox": "View {{filename}} in lightbox",
+    "playClip": "Play {{filename}}"
   },
   "fileShare": {
     "title": "Share file",
@@ -460,6 +462,11 @@
     "drawOn": "Draw on screen",
     "drawOff": "Stop drawing",
     "showOverlayTooltip": "Show desktop overlay (click-through, hidden from capture)",
+    "showOverlayTooltipCaptured": "Show desktop overlay (click-through; it appears in your screen share)",
+    "overlayUnsupportedWayland": "This Wayland compositor cannot pin an overlay to a screen. Start the app with GDK_BACKEND=x11 to use it.",
+    "overlayUnsupportedWaylandWindow": "Wayland does not report where a shared window is. Share a whole screen to use the overlay.",
+    "overlayUnsupportedPlatform": "The desktop overlay is not available on this platform.",
+    "overlayUnavailable": "The desktop overlay is not available right now.",
     "showOverlay": "Show desktop overlay",
     "hideOverlay": "Hide desktop overlay",
     "popout": "Open in separate window",
@@ -1157,5 +1164,8 @@
     "colAccess": "Access",
     "colUploaded": "Uploaded",
     "colExpires": "Expires"
+  },
+  "media": {
+    "showAll": "Show all {{count}} items"
   }
 }

@@ -206,7 +206,11 @@
     "thisConversation": "This conversation",
     "hours24": "24 hours",
     "days7": "7 days",
-    "expiresAt": "Expires {{at}}"
+    "expiresAt": "Expires {{at}}",
+    "showAll": "Show all {{count}} items",
+    "itemCount": "{{count}} items",
+    "saveAll": "Save all",
+    "savingAll": "Saving…"
   },
   "share": {
     "fit": "Fit",
