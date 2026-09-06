@@ -88,7 +88,7 @@ impl AppState {
                 match super::voice_decode::start(inner.clone(), app_handle.clone(), epoch) {
                     Some((decode, sink)) => {
                         if let Ok(mut state) = inner.lock() {
-                            state.audio.decode = Some(decode);
+                            state.audio.attach_decode(decode);
                         }
                         Some(sink)
                     }
