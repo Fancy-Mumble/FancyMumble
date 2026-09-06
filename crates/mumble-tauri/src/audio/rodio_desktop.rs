@@ -428,8 +428,14 @@ impl RateWatch {
 
 // -- Custom Source for Mumble audio mixing --------------------------
 
-/// Number of mono samples to mix per refill (20 ms at 48 kHz).
-const MIX_CHUNK_SIZE: usize = 960;
+/// Number of mono samples to mix per refill (5 ms at 48 kHz).
+///
+/// This is playout latency: a refill takes the samples out of the speaker
+/// buffers and the device then plays them one by one, so a sample waits half
+/// a chunk on average. 5 ms rather than a full 20 ms frame costs three more
+/// buffer locks per frame - the same rate the underrun back-off already
+/// allows for - and saves ~7.5 ms of mouth-to-ear on every platform.
+const MIX_CHUNK_SIZE: usize = 240;
 /// Refill back-off (in mono samples) when a refill returns no data.
 /// 5 ms keeps the speaker buffer mutex contention bounded (max
 /// ~200 lock attempts/s per source) while letting a transient jitter
@@ -441,7 +447,8 @@ const UNDERRUN_BACKOFF_SAMPLES: usize = 240;
 ///
 /// rodio's background output thread calls `Iterator::next()` to pull
 /// samples. Mixing is done in chunks of [`MIX_CHUNK_SIZE`] to avoid
-/// locking the speaker buffers on every single sample.
+/// locking the speaker buffers on every single sample, and the chunk is kept
+/// short because everything in it is already waiting to be heard.
 pub(super) struct MumbleMixerSource {
     buffers: SpeakerBuffers,
     speaker_volumes: SpeakerVolumes,
@@ -1180,8 +1187,10 @@ mod tests {
         }
         assert!(src.in_underrun, "should be in underrun state");
 
-        // Refill speaker buffer with new audio at a different level.
-        fill(&buffers, 1, MIX_CHUNK_SIZE, -0.3);
+        // Refill speaker buffer with new audio at a different level. It has to
+        // outlast the resume ramp (up to 480 samples), which is longer than a
+        // mix chunk.
+        fill(&buffers, 1, TEST_FILL_SAMPLES, -0.3);
 
         // Drain remaining cooldown - the source continues decay output
         // until the next refill attempt at the chunk boundary.  Each
