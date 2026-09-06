@@ -317,7 +317,10 @@ mod tests {
     }
 
     fn picture() -> String {
-        format!("look <img src=\"data:image/png;base64,{}\">", "A".repeat(5000))
+        format!(
+            "look <img src=\"data:image/png;base64,{}\">",
+            "A".repeat(5000)
+        )
     }
 
     fn store() -> (tempfile::TempDir, OffloadStore) {
@@ -392,7 +395,9 @@ mod tests {
         // it was dealt with when *it* arrived.
         state.selected_channel = Some(9);
         offload_newest_if_idle(&mut state, 4);
-        assert!(state.msgs.by_channel[&4][1].body.starts_with("<!-- OFFLOADED:new:"));
+        assert!(state.msgs.by_channel[&4][1]
+            .body
+            .starts_with("<!-- OFFLOADED:new:"));
         assert_eq!(state.msgs.by_channel[&4][0].body, heavy);
     }
 
@@ -404,11 +409,19 @@ mod tests {
             ..SharedState::default()
         };
         let heavy = picture();
-        let _ = state.msgs.by_channel.insert(1, vec![message("left", &heavy)]);
-        let _ = state.msgs.by_channel.insert(2, vec![message("opened", &heavy)]);
+        let _ = state
+            .msgs
+            .by_channel
+            .insert(1, vec![message("left", &heavy)]);
+        let _ = state
+            .msgs
+            .by_channel
+            .insert(2, vec![message("opened", &heavy)]);
 
         assert_eq!(offload_idle_channels(&mut state, Some(2)), 1);
-        assert!(state.msgs.by_channel[&1][0].body.starts_with("<!-- OFFLOADED:left:"));
+        assert!(state.msgs.by_channel[&1][0]
+            .body
+            .starts_with("<!-- OFFLOADED:left:"));
         assert_eq!(state.msgs.by_channel[&2][0].body, heavy);
     }
 

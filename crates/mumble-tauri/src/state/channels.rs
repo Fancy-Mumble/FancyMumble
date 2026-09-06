@@ -35,7 +35,8 @@ impl AppState {
             // rest of the session. They come back the moment it is reopened
             // and a row asks for them.
             if previous != Some(channel_id) {
-                let _ = crate::state::offload_ops::offload_idle_channels(&mut state, Some(channel_id));
+                let _ =
+                    crate::state::offload_ops::offload_idle_channels(&mut state, Some(channel_id));
             }
             state.conn.client_handle.clone()
         };
