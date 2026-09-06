@@ -1,5 +1,11 @@
 [workspace]
-resolver = "2"
+# A virtual manifest defaults to resolver v2 unless it opts in. v3 is the
+# edition-2024 default and is MSRV-aware: once a crate here carries a
+# `rust-version`, the resolver skips dependency versions that need a newer
+# compiler rather than picking one that fails to build. Nothing sets
+# `rust-version` yet, so today this only aligns the workspace with the crates'
+# own edition-2024 default and with Starling.
+resolver = "3"
 members = [
     "crates/fancy-utils",
     "crates/fancy-denoiser-deepfilter",
