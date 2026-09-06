@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-// Outer type 1000 - session-lifecycle's Fancy extensions.
+// Outer type 1000, session-lifecycle's Fancy extensions.
 //
 // The upstream handshake (0, 2, 3, 4, 5, 15, 21) stays flat and frozen; only
 // what Mumble has no message for lives here.
@@ -14,7 +14,59 @@ message SessionEnvelope {
     Throttled throttled = 4;
     VoiceEndpoint voice_endpoint = 5;
     LazySubscribe subscribe = 6;
+    GreetingOffer greeting_offer = 7;
+    GreetingWant greeting_want = 8;
+    GreetingBody greeting_body = 9;
   }
+}
+
+// The greeting this peer would be sent, named by its hash rather than sent.
+//
+// Mumble carries a welcome message as `ServerSync.welcome_text`, which is a
+// string - so a picture inside one has to be a `data:` URI, which is base64 and
+// costs a third more than the picture does, and it has to fit the four
+// kilobytes that string is capped at. The practical effect is that a designed
+// greeting can carry a line icon and nothing else.
+//
+// A Fancy client announced itself at `Hello`, so the server knows it can be
+// sent a message rather than a paragraph. This is that message's first half:
+// the greeting changes when an operator edits it, and a peer may join twenty
+// times a day, so what travels first is what *identifies* the document. A
+// client that recognises the hash already has the bytes and says nothing.
+message GreetingOffer {
+  // SHA-256 of the assembled markup and every asset, ids included.
+  bytes digest = 1;
+  // What the body would weigh, so a client on a metered link can decline it
+  // rather than discover the size once it is already arriving.
+  uint32 bytes = 2;
+}
+
+// "I do not have that one." Sent only on a cache miss.
+message GreetingWant {
+  // Echoed from the offer, so a reply that crosses an operator's edit is
+  // recognisably about the older document and can be dropped.
+  bytes digest = 1;
+}
+
+// The greeting itself.
+//
+// Not compressed here: the Fancy wire already zstd's a batch for any client
+// that announced `Hello.zstd`, so a payload compressed at this layer would be
+// compressed twice - and the second pass over already-compressed image bytes
+// spends CPU to make them very slightly bigger.
+message GreetingBody {
+  bytes digest = 1;
+  // The assembled markup, carrying `fm-a-<id>` markers where pictures go.
+  string markup = 2;
+  repeated GreetingAsset assets = 3;
+}
+
+// One picture, as bytes.
+message GreetingAsset {
+  string id = 1;
+  // `image/webp`, `image/jpeg`, `image/png`, `image/gif`, `image/avif`.
+  string mime = 2;
+  bytes data = 3;
 }
 
 // What a Fancy client announces beyond the Version message: the capabilities
@@ -28,7 +80,7 @@ message Hello {
 
 // Replay from a sequence number rather than take the full flood. Legacy
 // clients cannot do this, which is why staggered drain is required regardless
-// - docs/ARCHITECTURE.md §5.
+// docs/ARCHITECTURE.md §5.
 message ResumeRequest {
   string session_token = 1;
   uint64 last_seq = 2;
