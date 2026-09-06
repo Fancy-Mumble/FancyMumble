@@ -63,6 +63,12 @@ pub enum OpusApplication {
     /// artifacts with narrow-bandwidth microphone input.
     Audio,
     /// Lowest possible latency (at the cost of quality).
+    ///
+    /// CELT-only with the 4 ms Opus otherwise reserves for switching down to
+    /// SILK removed. **Not** a free 4 ms at the bitrates this client uses: at
+    /// 72 kbps fullband the encoder is in hybrid SILK+CELT mode (see
+    /// `low_delay_would_change_the_coding_mode`), so this would drop SILK's
+    /// speech modelling and its in-band FEC along with the delay.
     LowDelay,
 }
 
@@ -255,6 +261,33 @@ mod tests {
     use super::*;
     use crate::audio::sample::AudioFormat;
 
+    /// A 440 Hz tone: silence can encode to a degenerate packet, and the TOC
+    /// tests below need a packet the encoder actually made a mode decision for.
+    fn tone_frame(format: AudioFormat, frame_size: usize) -> AudioFrame {
+        let mut data = Vec::with_capacity(frame_size * 4);
+        for i in 0..frame_size {
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "a frame is at most 2880 samples"
+            )]
+            let t = i as f32 / 48_000.0;
+            let s = (std::f32::consts::TAU * 440.0 * t).sin() * 0.5;
+            data.extend_from_slice(&s.to_le_bytes());
+        }
+        AudioFrame {
+            data,
+            format,
+            sequence: 0,
+            is_silent: false,
+        }
+    }
+
+    /// The Opus mode a packet was encoded in, from its TOC byte: configs 0-11
+    /// are SILK-only, 12-15 hybrid, 16-31 CELT-only (RFC 6716 section 3.1).
+    fn is_celt_only(packet: &[u8]) -> bool {
+        packet.first().is_some_and(|toc| (toc >> 3) >= 16)
+    }
+
     fn silent_frame(format: AudioFormat, frame_size: usize) -> AudioFrame {
         let bytes = frame_size * format.channels as usize * format.sample_format.byte_width();
         AudioFrame {
@@ -333,6 +366,31 @@ mod tests {
         enc.reset();
         let p = enc.encode(&frame)?;
         assert_eq!(p.sequence, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn low_delay_would_change_the_coding_mode() -> Result<()> {
+        // The cheap-looking latency win of RESTRICTED_LOWDELAY rests on the
+        // stream already being CELT-only, and at this client's default bitrate
+        // it is not: 72 kbps fullband encodes as hybrid SILK+CELT. Switching
+        // would trade SILK and a live in-band FEC for 4 ms, which is a quality
+        // decision rather than a free one. This test is what says so.
+        let fmt = AudioFormat::MONO_48KHZ_F32;
+        let config = OpusEncoderConfig::default();
+        assert_eq!(config.bitrate, 72_000);
+        let frame_size = config.frame_size;
+        let mut enc = OpusEncoder::new(config, fmt)?;
+        // The first packets prime the encoder's mode decision.
+        let mut packet = enc.encode(&tone_frame(fmt, frame_size))?;
+        for _ in 0..4 {
+            packet = enc.encode(&tone_frame(fmt, frame_size))?;
+        }
+        assert!(
+            !is_celt_only(&packet.data),
+            "TOC {:#04x} is CELT-only; RESTRICTED_LOWDELAY may now be free              and worth revisiting",
+            packet.data[0]
+        );
         Ok(())
     }
 }
