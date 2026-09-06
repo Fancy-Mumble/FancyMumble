@@ -21,7 +21,7 @@ use crate::state::ServerState;
 use crate::transport::tcp::{TcpConfig, TcpTransport};
 use crate::transport::udp::{CryptState, UdpConfig, UdpTransport};
 use crate::transport::voice_crypt::VoiceCrypt;
-use crate::work_queue::{self, WorkItem, WorkQueueSender};
+use crate::work_queue::{self, AudioSink, WorkItem, WorkQueueSender};
 use fancy_utils::gate::Gate;
 
 /// The Mumble protocol version advertised to the server.
@@ -84,6 +84,11 @@ pub struct ClientConfig {
     pub version: MumbleVersion,
     /// When true, always send audio via TCP tunnel even if UDP is available.
     pub force_tcp: bool,
+    /// Where inbound audio goes instead of the event loop, if anywhere.
+    ///
+    /// See [`AudioSink`]: with one installed, decoding no longer queues behind
+    /// control messages and user commands on the event loop.
+    pub audio_sink: Option<AudioSink>,
 }
 
 /// How often the client re-proves its UDP path to the server.
@@ -100,6 +105,7 @@ impl Default for ClientConfig {
             ping_interval: Duration::from_secs(15),
             version: MumbleVersion::default(),
             force_tcp: false,
+            audio_sink: None,
         }
     }
 }
@@ -234,7 +240,7 @@ pub async fn run<H: EventHandler>(
     let (tcp_reader, tcp_writer) = tcp.split();
 
     // 2. Create work queue
-    let (wq_sender, wq_receiver, audio_out_rx) = work_queue::create();
+    let (wq_sender, wq_receiver, audio_out_rx) = work_queue::create(config.audio_sink.clone());
 
     // 3. Build client handle (for external command submission)
     let (ext_cmd_tx, ext_cmd_rx) = mpsc::channel::<BoxedCommand>(32);
@@ -563,6 +569,21 @@ impl<H: EventHandler> EventLoopCtx<'_, H> {
         action
     }
 
+    /// Decode one tunnelled audio packet and route it like audio off the
+    /// socket: to the decode sink when there is one, and only otherwise
+    /// decoded here, on the event loop.
+    fn handle_tunnel_audio(&mut self, data: &[u8]) {
+        trace!("handle_server_message: UdpTunnel ({} bytes)", data.len());
+        match crate::transport::audio_codec::decode_tunnel_audio(data) {
+            Ok(audio) => {
+                if let Some(msg) = self.wq_sender.route_audio(UdpMessage::Audio(audio)) {
+                    self.handler.on_udp_message(&msg);
+                }
+            }
+            Err(e) => warn!("UdpTunnel audio decode failed ({} bytes): {e}", data.len()),
+        }
+    }
+
     async fn handle_server_message(&mut self, server_msg: ServerMessage) -> LoopAction {
         // Decode: unwrap Fancy messages from PluginData on legacy servers.
         let server_msg = match server_msg {
@@ -581,13 +602,7 @@ impl<H: EventHandler> EventLoopCtx<'_, H> {
                     trace!(type_id = ctrl.type_id(), "inbound control message");
                 }
                 if let ControlMessage::UdpTunnel(data) = ctrl {
-                    trace!("handle_server_message: UdpTunnel ({} bytes)", data.len());
-                    match crate::transport::audio_codec::decode_tunnel_audio(data) {
-                        Ok(audio) => self.handler.on_udp_message(&UdpMessage::Audio(audio)),
-                        Err(e) => {
-                            warn!("UdpTunnel audio decode failed ({} bytes): {e}", data.len());
-                        }
-                    }
+                    self.handle_tunnel_audio(data);
                 } else {
                     if let ControlMessage::CryptSetup(cs) = ctrl {
                         handle_crypt_setup(
