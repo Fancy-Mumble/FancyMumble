@@ -12,10 +12,10 @@ use mumble_protocol::persistent::PchatProtocol;
 use mumble_protocol::proto::fancy;
 use mumble_protocol::proto::mumble_tcp;
 
-use super::{dispatch, EventEmitter, HandleMessage, HandlerContext};
+use super::{EventEmitter, HandleMessage, HandlerContext, dispatch};
+use crate::state::SharedState;
 use crate::state::hash_names::HashNameResolver;
 use crate::state::types::*;
-use crate::state::SharedState;
 
 // -- Test infrastructure -------------------------------------------
 
@@ -1369,14 +1369,15 @@ fn server_config_fancy_rest_api_url_set_and_cleared() {
     let (ctx, _) = make_ctx();
 
     // Default: no override.
-    assert!(ctx
-        .shared
-        .lock()
-        .unwrap()
-        .server
-        .config
-        .fancy_rest_api_url
-        .is_none());
+    assert!(
+        ctx.shared
+            .lock()
+            .unwrap()
+            .server
+            .config
+            .fancy_rest_api_url
+            .is_none()
+    );
 
     // Server advertises an override URL (whitespace gets trimmed).
     let sc = mumble_tcp::ServerConfig {
@@ -1401,14 +1402,15 @@ fn server_config_fancy_rest_api_url_set_and_cleared() {
         ..Default::default()
     };
     sc_clear.handle(&ctx);
-    assert!(ctx
-        .shared
-        .lock()
-        .unwrap()
-        .server
-        .config
-        .fancy_rest_api_url
-        .is_none());
+    assert!(
+        ctx.shared
+            .lock()
+            .unwrap()
+            .server
+            .config
+            .fancy_rest_api_url
+            .is_none()
+    );
 }
 
 // -- PermissionDenied ----------------------------------------------
@@ -1767,12 +1769,13 @@ fn permission_query_removes_subscribe_push_on_revoke() {
         ..Default::default()
     };
     grant.handle(&ctx);
-    assert!(ctx
-        .shared
-        .lock()
-        .unwrap()
-        .push_subscribed_channels
-        .contains(&1));
+    assert!(
+        ctx.shared
+            .lock()
+            .unwrap()
+            .push_subscribed_channels
+            .contains(&1)
+    );
 
     // Revoke SubscribePush (remove 0x2000 bit).
     let revoke = mumble_tcp::PermissionQuery {
@@ -1909,10 +1912,12 @@ fn a_denied_ticket_still_names_the_reason() {
     let events = emitter.events();
     let (_, payload) = events.last().expect("one event");
     assert_eq!(payload["ticket"]["token"], "");
-    assert!(payload["ticket"]["deniedReason"]
-        .as_str()
-        .unwrap()
-        .contains("permission"));
+    assert!(
+        payload["ticket"]["deniedReason"]
+            .as_str()
+            .unwrap()
+            .contains("permission")
+    );
 }
 
 // -- Dispatch ------------------------------------------------------
@@ -1944,9 +1949,11 @@ async fn dispatch_routes_server_sync() {
         ..Default::default()
     });
     dispatch(&msg, &ctx);
-    assert!(emitter
-        .event_names()
-        .contains(&"server-connected".to_string()));
+    assert!(
+        emitter
+            .event_names()
+            .contains(&"server-connected".to_string())
+    );
 }
 
 // -- TextMessage + pchat interaction ----------------------------------
@@ -2704,7 +2711,18 @@ fn check_emit_under_lock(path: &std::path::Path, contents: &str, violations: &mu
                 if rel.to_string_lossy().contains("tests") {
                     continue;
                 }
-                active_locks.push((line_num, brace_depth));
+                // The depth the guard's block body sits at. When the `{` is on
+                // this line, the brace pass above already counted it. In a
+                // let-chain the condition continues onto the next line and the
+                // `{` opens there, so the body is one deeper than this line -
+                // recording `brace_depth` would leave the scope open forever and
+                // flag every `emit()` in the rest of the function.
+                let body_depth = if line.contains('{') {
+                    brace_depth
+                } else {
+                    brace_depth + 1
+                };
+                active_locks.push((line_num, body_depth));
             }
         }
 
