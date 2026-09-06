@@ -263,7 +263,7 @@ fn dump() -> Vec<serde_json::Value> {
 ///
 /// `node` of `None` leaves the plugin on its default, which follows the
 /// graph's default device the way every other ALSA client does.
-fn open(kind: Kind, node: Option<&str>, channels: u32, period: u32) -> Result<PCM> {
+fn open(kind: Kind, node: Option<&str>, channels: u32, period: u32, periods: u32) -> Result<PCM> {
     let name = match node {
         Some(n) => format!("pipewire:NODE={n}"),
         None => "pipewire".to_owned(),
@@ -280,16 +280,17 @@ fn open(kind: Kind, node: Option<&str>, channels: u32, period: u32) -> Result<PC
         set(hwp.set_format(Format::float()), "format")?;
         set(hwp.set_channels(channels), "channels")?;
         set(hwp.set_rate(RATE, ValueOr::Nearest), "rate")?;
-        // A period is the granularity the plugin wakes us at; the buffer
-        // is four of them so a late thread does not underrun on the
-        // first miss.
+        // A period is the granularity the plugin wakes us at, and the ring is
+        // `periods` of them: the deeper it is, the more slack a late thread
+        // has before it underruns - and the longer every sample sits in it.
         set(
             hwp.set_period_size_near(i64::from(period), ValueOr::Nearest)
                 .map(|_| ()),
             "period size",
         )?;
         set(
-            hwp.set_buffer_size_near(i64::from(period) * 4).map(|_| ()),
+            hwp.set_buffer_size_near(i64::from(period) * i64::from(periods))
+                .map(|_| ()),
             "buffer size",
         )?;
         set(pcm.hw_params(&hwp), "apply hw params")?;
@@ -391,7 +392,16 @@ impl AudioCapture for PwCapture {
             return Ok(());
         }
         let period = u32::try_from(self.frame_size).unwrap_or(480);
-        let pcm = open(Kind::Source, self.node.as_deref(), 1, period)?;
+        // Capture keeps the deeper ring: `readi` blocks for a whole period
+        // either way, so the 960th sample of a 20 ms frame arrives at t=20 ms
+        // whatever the period is. A shallower one would only buy underruns.
+        let pcm = open(
+            Kind::Source,
+            self.node.as_deref(),
+            1,
+            period,
+            CAPTURE_PERIODS,
+        )?;
         pcm.start()
             .map_err(|e| Error::InvalidState(format!("capture start: {e}")))?;
         debug!(node = ?self.node, "PipeWire capture opened");
@@ -445,8 +455,20 @@ impl PwMixingPlayback {
     }
 }
 
-/// Samples written per `writei` call (10 ms at 48 kHz).
-const PLAYBACK_PERIOD: usize = 480;
+/// Periods in the capture ring.
+const CAPTURE_PERIODS: u32 = 4;
+
+/// Playback ring attempts as `(period, periods)`, shallowest first.
+///
+/// The ring is latency nobody hears anything through: a sample written into
+/// it waits for everything already queued. 5 ms x 3 is 15 ms rather than the
+/// 40 ms a 10 ms period four deep cost, and a device that will not run that
+/// shallow falls back along the ladder to exactly what it used to get.
+///
+/// ALSA's `_near` setters clamp rather than fail, so in practice the first
+/// rung wins with whatever the device rounded it to; the rest are there for
+/// a plugin that refuses outright. The debug line logs what was asked for.
+const PLAYBACK_LADDER: [(u32, u32); 3] = [(240, 3), (480, 2), (480, 4)];
 
 /// Recover from an underrun on `pcm`, or log why it could not.
 ///
@@ -465,12 +487,23 @@ impl super::MixingPlayback for PwMixingPlayback {
         if self.writer.is_some() {
             return Ok(());
         }
-        let pcm = open(
-            Kind::Sink,
-            self.node.as_deref(),
-            1,
-            u32::try_from(PLAYBACK_PERIOD).unwrap_or(480),
-        )?;
+        let (pcm, period) = PLAYBACK_LADDER
+            .into_iter()
+            .find_map(|(period, periods)| {
+                match open(Kind::Sink, self.node.as_deref(), 1, period, periods) {
+                    Ok(pcm) => {
+                        debug!(period, periods, "PipeWire playback ring requested");
+                        Some((pcm, usize::try_from(period).unwrap_or(480)))
+                    }
+                    Err(e) => {
+                        debug!(period, periods, "PipeWire playback ring refused: {e}");
+                        None
+                    }
+                }
+            })
+            .ok_or_else(|| {
+                Error::InvalidState("PipeWire playback: no ring the device accepts".to_owned())
+            })?;
         self.running.store(true, Ordering::Relaxed);
 
         let mut source = super::rodio_desktop::MumbleMixerSource::new(
@@ -484,7 +517,7 @@ impl super::MixingPlayback for PwMixingPlayback {
         let writer = std::thread::Builder::new()
             .name("pipewire-playback".into())
             .spawn(move || {
-                let mut buf = vec![0.0_f32; PLAYBACK_PERIOD];
+                let mut buf = vec![0.0_f32; period];
                 while running.load(Ordering::Relaxed) {
                     // The mixer never ends while `running` is set; a
                     // `None` means it observed the stop before we did.
