@@ -228,29 +228,51 @@ export function PersonalizeSettings() {
     [],
   );
 
+  /**
+   * Say that the clip could not be optimized.
+   *
+   * The wallpaper still plays and still looks right - what is lost is the
+   * cheap path, so this is a notice rather than an error.
+   *
+   * Declared up here, above the effects, because the mount effect below hands
+   * it to the bake: the page returns early while `data` is still null, so a
+   * `const` further down is never initialized in the render whose scope that
+   * effect closes over, and reading it there throws.
+   */
+  const reportBakeFailure = (reason: string) => {
+    setVideoNotice(t("nebulaSettings:personalize.bakeFailed", { reason }));
+  };
+
   useEffect(() => {
     let active = true;
-    void loadPersonalization()
-      .then((loaded) => {
-        if (!active) return;
-        setData(loaded);
-        // A wallpaper set before the bake could handle its codec - or while it
-        // was failing - is stuck on the live-filter path, which costs several
-        // times what the baked file does for as long as it is on screen.
-        // Nothing else ever revisits that decision, so opening this page is
-        // where it gets another go.
-        if (loaded.chatBgVideo && !isBakeCurrent(loaded))
-          queueVideoBake(
-            loaded.chatBgVideo,
-            isStoreRef(loaded.chatBgOriginal) ? storeRefName(loaded.chatBgOriginal) : null,
-            loaded.chatBgBlurSigma,
-            loaded.chatBgDim,
-            reportBakeFailure,
-          );
-      })
-      .catch(() => {
+    void (async () => {
+      let loaded: PersonalizationData;
+      try {
+        loaded = await loadPersonalization();
+      } catch {
+        // Only a failed *read* is grounds for the defaults. The repair below
+        // is not: this page writes `data` back whole on every change, so
+        // treating "the repair fell over" as "there is no personalization"
+        // hands the next click a blank record and throws the wallpaper away.
         if (active) setData({ ...PERSONALIZATION_DEFAULTS });
-      });
+        return;
+      }
+      if (!active) return;
+      setData(loaded);
+      // A wallpaper set before the bake could handle its codec - or while it
+      // was failing - is stuck on the live-filter path, which costs several
+      // times what the baked file does for as long as it is on screen.
+      // Nothing else ever revisits that decision, so opening this page is
+      // where it gets another go.
+      if (loaded.chatBgVideo && !isBakeCurrent(loaded))
+        queueVideoBake(
+          loaded.chatBgVideo,
+          isStoreRef(loaded.chatBgOriginal) ? storeRefName(loaded.chatBgOriginal) : null,
+          loaded.chatBgBlurSigma,
+          loaded.chatBgDim,
+          reportBakeFailure,
+        );
+    })();
     void getSelectedUiDesign()
       .then((selected) => {
         if (active) setDesign(selected);
@@ -273,15 +295,33 @@ export function PersonalizeSettings() {
       ? [shown, ...data.chatBgRecents]
       : data.chatBgRecents;
 
-  // Resolves once the record is on disk. A rejected write used to be dropped on
-  // the floor, which is what made a failed pick look like a pick that worked:
-  // the page kept the new value in state while nothing else in the app ever
-  // heard about it, because the change event is only fired after the store
-  // write succeeds.
-  const patch = async (changes: Partial<PersonalizationData>): Promise<PersonalizationData | null> => {
-    const next = { ...data, ...changes };
-    setData(next);
+  /**
+   * Write a change to the record.
+   *
+   * Merged onto the record as it currently stands rather than onto the copy
+   * this page loaded, because the page is not its only writer: a bake started
+   * here finishes behind it, renaming the wallpaper's derived files and
+   * deleting the ones it replaced. Writing the loaded copy back would name
+   * those dead files again, and a wallpaper whose files are gone renders as
+   * nothing at all - which is how changing a theme used to empty the chat
+   * background. `changes` may be a function of that record, for anything
+   * derived from what is already on it (the shelf, above all).
+   *
+   * Resolves once the record is on disk. A rejected write used to be dropped on
+   * the floor, which is what made a failed pick look like a pick that worked:
+   * the page kept the new value in state while nothing else in the app ever
+   * heard about it, because the change event is only fired after the store
+   * write succeeds.
+   */
+  const patch = async (
+    changes: Partial<PersonalizationData> | ((current: PersonalizationData) => Partial<PersonalizationData>),
+  ): Promise<PersonalizationData | null> => {
     try {
+      // Cached in memory and refreshed by every save, so this is a read of the
+      // live record rather than a round trip to disk.
+      const current = await loadPersonalization().catch(() => data);
+      const next = { ...current, ...(typeof changes === "function" ? changes(current) : changes) };
+      setData(next);
       await savePersonalization(next);
       return next;
     } catch (error) {
@@ -305,11 +345,11 @@ export function PersonalizeSettings() {
   const selectBackground = async (entry: ChatBackgroundEntry | null, remember = false) => {
     setVideoNotice(null);
     setBackgroundError(null);
-    const saved = await patch({
+    const saved = await patch((current) => ({
       ...showBackground(entry),
       chatBgRecents:
-        entry && remember ? rememberBackground(data.chatBgRecents, entry) : data.chatBgRecents,
-    });
+        entry && remember ? rememberBackground(current.chatBgRecents, entry) : current.chatBgRecents,
+    }));
     if (!saved) return null;
     await pruneChatBackgrounds(referencedFiles(saved)).catch(() => undefined);
     // A clip off the shelf carries the bake it was last seen under, which is
@@ -335,11 +375,10 @@ export function PersonalizeSettings() {
    * it" were the same state.
    */
   const forgetBackgroundEntry = async (entry: ChatBackgroundEntry) => {
-    const wasShown = isSameBackground(entry, activeBackground(data));
-    const saved = await patch({
-      ...(wasShown ? showBackground(null) : {}),
-      chatBgRecents: forgetBackground(data.chatBgRecents, entry),
-    });
+    const saved = await patch((current) => ({
+      ...(isSameBackground(entry, activeBackground(current)) ? showBackground(null) : {}),
+      chatBgRecents: forgetBackground(current.chatBgRecents, entry),
+    }));
     if (saved) await pruneChatBackgrounds(referencedFiles(saved)).catch(() => undefined);
   };
 
@@ -351,12 +390,14 @@ export function PersonalizeSettings() {
    * rather than be re-found every time it comes back off the shelf.
    */
   const commitFocus = async (focusX: number, focusY: number) => {
-    const shownNext = { ...data, chatBgFocusX: focusX, chatBgFocusY: focusY };
-    await patch({
+    await patch((current) => ({
       chatBgFocusX: focusX,
       chatBgFocusY: focusY,
-      chatBgRecents: updateBackground(data.chatBgRecents, activeBackground(shownNext)),
-    });
+      chatBgRecents: updateBackground(
+        current.chatBgRecents,
+        activeBackground({ ...current, chatBgFocusX: focusX, chatBgFocusY: focusY }),
+      ),
+    }));
   };
 
   /**
@@ -449,16 +490,6 @@ export function PersonalizeSettings() {
   };
 
   /**
-   * Say that the clip could not be optimized.
-   *
-   * The wallpaper still plays and still looks right - what is lost is the
-   * cheap path, so this is a notice rather than an error.
-   */
-  const reportBakeFailure = (reason: string) => {
-    setVideoNotice(t("nebulaSettings:personalize.bakeFailed", { reason }));
-  };
-
-  /**
    * Commit a blur/dim slider.
    *
    * For an animated background the committed value re-runs the backend bake;
@@ -466,26 +497,30 @@ export function PersonalizeSettings() {
    * the raw clip under the live CSS filter, so the look is current either way.
    */
   const commitEffectSlider = async (changes: Partial<PersonalizationData>) => {
-    const next = { ...data, ...changes };
-    if (next.chatBgVideo) {
-      const saved = await patch(changes);
-      if (saved) {
-        const poster = isStoreRef(next.chatBgOriginal) ? storeRefName(next.chatBgOriginal) : null;
-        queueVideoBake(next.chatBgVideo, poster, next.chatBgBlurSigma, next.chatBgDim, reportBakeFailure);
-      }
+    const saved = await patch((current) =>
+      current.chatBgVideo
+        ? changes
+        : // A still's bake is only right for the sliders it was computed under,
+          // and it carries no stamp saying which those were. Dropping it - off
+          // the record and off the shelf - is what has the backdrop bake a
+          // fresh one for the new values (`stillBake.ts`); until it lands the
+          // live filter shows them. The prune then takes the files nothing
+          // names any more.
+          {
+            ...changes,
+            chatBgBlurred: null,
+            chatBgRecents: current.chatBgRecents.map((entry) =>
+              entry.video ? entry : { ...entry, blurred: null },
+            ),
+          },
+    );
+    if (!saved) return;
+    if (saved.chatBgVideo) {
+      const poster = isStoreRef(saved.chatBgOriginal) ? storeRefName(saved.chatBgOriginal) : null;
+      queueVideoBake(saved.chatBgVideo, poster, saved.chatBgBlurSigma, saved.chatBgDim, reportBakeFailure);
       return;
     }
-    // A still's bake is only right for the sliders it was computed under, and
-    // it carries no stamp saying which those were. Dropping it - off the
-    // record and off the shelf - is what has the backdrop bake a fresh one for
-    // the new values (`stillBake.ts`); until it lands the live filter shows
-    // them. The prune then takes the files nothing names any more.
-    const saved = await patch({
-      ...changes,
-      chatBgBlurred: null,
-      chatBgRecents: data.chatBgRecents.map((entry) => (entry.video ? entry : { ...entry, blurred: null })),
-    });
-    if (saved) await pruneChatBackgrounds(referencedFiles(saved)).catch(() => undefined);
+    await pruneChatBackgrounds(referencedFiles(saved)).catch(() => undefined);
   };
 
   return (
@@ -528,7 +563,7 @@ export function PersonalizeSettings() {
                 p: "7px",
                 borderRadius: radius("md"),
                 background: active ? muiTheme.palette.nebula.accentSoft : muiTheme.palette.nebula.card,
-                border: `1px solid ${active ? muiTheme.palette.nebula.accentLine : muiTheme.palette.nebula.line}`,
+                border: `var(--nebula-line-width, 1px) solid ${active ? muiTheme.palette.nebula.accentLine : muiTheme.palette.nebula.line}`,
               })}
             >
               <Box
@@ -537,7 +572,7 @@ export function PersonalizeSettings() {
                   borderRadius: radius("md"),
                   overflow: "hidden",
                   display: "flex",
-                  border: "1px solid rgba(128,128,128,.2)",
+                  border: "var(--nebula-line-width, 1px) solid rgba(128,128,128,.2)",
                 }}
               >
                 {swatches.map((swatch, at) => (
@@ -896,7 +931,7 @@ function FocusPicker({
         overflow: "hidden",
         borderRadius: radius("md"),
         background: theme.palette.nebula.card2,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
       })}
     >
       <Box
@@ -1018,7 +1053,7 @@ function SavedBackgroundTile({
             ? `${(entry.focusX ?? 0.5) * 100}% ${(entry.focusY ?? 0.5) * 100}%/cover url(${preview})`
             : theme.palette.nebula.card2,
           boxShadow: active ? `0 0 0 2px ${theme.palette.nebula.accent}` : "none",
-          border: active ? "none" : `1px solid ${theme.palette.nebula.line}`,
+          border: active ? "none" : `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         })}
       />
     </BackgroundTile>

@@ -38,9 +38,8 @@ vi.mock("@core/features/settings/chatBackground", () => ({
 }));
 
 const { ChatBackdrop, BLUR_GRACE_MS } = await import("./ChatBackdrop");
-const { PERSONALIZATION_DEFAULTS, loadPersonalization, savePersonalization } = await import(
-  "@standard/personalizationStorage"
-);
+const { PERSONALIZATION_DEFAULTS, loadPersonalization, savePersonalization } =
+  await import("@standard/personalizationStorage");
 
 /** Seed a record and mount the backdrop over it. */
 async function mount(overrides: Record<string, unknown>) {
@@ -119,25 +118,78 @@ describe("Nebula animated chat background", () => {
     expect(video.getAttribute("poster")).toBe("blob:poster");
   });
 
-  it("drops to the poster when the webview cannot play the clip", async () => {
-    await mount({
-      chatBgVideo: "video-raw.mp4",
-      chatBgOriginal: "bgstore:image-poster.jpg",
-    });
+  it("drops to the poster once retrying the clip stops helping", async () => {
+    const load = vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    try {
+      await mount({
+        chatBgVideo: "video-raw.mp4",
+        chatBgOriginal: "bgstore:image-poster.jpg",
+      });
 
-    const video = await waitFor(() => {
-      const node = query<HTMLVideoElement>("video");
-      expect(node).not.toBeNull();
-      return node as HTMLVideoElement;
-    });
-    // A decode failure: the element carries a MediaError when `error` fires.
-    Object.defineProperty(video, "error", { value: { code: 4 } });
-    fireEvent.error(video);
+      const video = await waitFor(() => {
+        const node = query<HTMLVideoElement>("video");
+        expect(node).not.toBeNull();
+        return node as HTMLVideoElement;
+      });
+      // A decode failure: the element carries a MediaError when `error` fires.
+      Object.defineProperty(video, "error", { value: { code: 4 } });
 
-    await waitFor(() => {
-      expect(query("video")).toBeNull();
-      expect(query<HTMLImageElement>("img")?.getAttribute("src")).toBe("blob:poster");
-    });
+      // The first failures buy a fresh load each - a clip that played before
+      // is worth another go.
+      load.mockClear();
+      for (let attempt = 0; attempt < 3; attempt++) {
+        fireEvent.error(video);
+        expect(query("video")).toBe(video);
+      }
+      expect(load).toHaveBeenCalledTimes(3);
+
+      // Past the budget, the poster takes the column.
+      fireEvent.error(video);
+      await waitFor(() => {
+        expect(query("video")).toBeNull();
+        expect(query<HTMLImageElement>("img")?.getAttribute("src")).toBe("blob:poster");
+      });
+      expect(load).toHaveBeenCalledTimes(3);
+    } finally {
+      load.mockRestore();
+      play.mockRestore();
+    }
+  });
+
+  it("loads the element again when a seek never lands", async () => {
+    const load = vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => undefined);
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      await mount({
+        chatBgVideo: "video-raw.mp4",
+        chatBgOriginal: "bgstore:image-poster.jpg",
+      });
+
+      const video = await waitFor(() => {
+        const node = query<HTMLVideoElement>("video");
+        expect(node).not.toBeNull();
+        return node as HTMLVideoElement;
+      });
+      Object.defineProperty(video, "readyState", { value: HTMLMediaElement.HAVE_ENOUGH_DATA });
+      // The wrap-around at the end of a pass, wedged: seeking, and staying so.
+      Object.defineProperty(video, "seeking", { value: true });
+      load.mockClear();
+
+      // A seek is allowed to take a moment; seeking to 0 again would only ask
+      // the same stuck pipeline for another position.
+      vi.advanceTimersByTime(2000);
+      expect(load).not.toHaveBeenCalled();
+      expect(video.currentTime).toBe(0);
+
+      vi.advanceTimersByTime(1000);
+      expect(load).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+      load.mockRestore();
+      play.mockRestore();
+    }
   });
 
   it("keeps playing through an error the poster's loader dispatches", async () => {
@@ -248,6 +300,96 @@ describe("Nebula animated chat background", () => {
       vi.advanceTimersByTime(5000);
       expect(video.currentTime).toBe(12);
       expect(play).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      focused.mockRestore();
+      pause.mockRestore();
+      play.mockRestore();
+    }
+  });
+
+  /// Park the wallpaper the way losing focus does, and hand back the element.
+  async function parked() {
+    const video = await vi.waitFor(() => {
+      const node = query<HTMLVideoElement>("video");
+      expect(node).not.toBeNull();
+      return node as HTMLVideoElement;
+    });
+    Object.defineProperty(video, "readyState", { value: HTMLMediaElement.HAVE_ENOUGH_DATA });
+    Object.defineProperty(video, "seeking", { value: false });
+    vi.advanceTimersByTime(BLUR_GRACE_MS);
+    return video;
+  }
+
+  it("resumes on focus even while the window still says it is not focused", async () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
+    // This webview can still answer `false` at the moment the window comes
+    // forward, which is what used to leave the wallpaper stopped for good.
+    const focused = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    try {
+      await mount({ chatBgVideo: "video-raw.mp4", chatBgOriginal: "bgstore:image-poster.jpg" });
+      const video = await parked();
+      expect(pause).toHaveBeenCalled();
+      video.currentTime = 21;
+      play.mockClear();
+
+      fireEvent.focus(window);
+      expect(play).toHaveBeenCalledTimes(1);
+      // Picked up where it stopped, not restarted from the top.
+      expect(video.currentTime).toBe(21);
+    } finally {
+      vi.useRealTimers();
+      focused.mockRestore();
+      pause.mockRestore();
+      play.mockRestore();
+    }
+  });
+
+  it("ends a park whose reason has gone, with no event to say so", async () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
+    const focused = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    try {
+      await mount({ chatBgVideo: "video-raw.mp4", chatBgOriginal: "bgstore:image-poster.jpg" });
+      const video = await parked();
+      expect(pause).toHaveBeenCalled();
+      video.currentTime = 30;
+      play.mockClear();
+
+      // The window is back in front and nothing announced it. Parking is also
+      // what tells the watchdog to keep its hands off, so without this the
+      // wallpaper stays on one frame for the rest of the session.
+      focused.mockReturnValue(true);
+      vi.advanceTimersByTime(1000);
+      expect(play).toHaveBeenCalledTimes(1);
+      expect(video.currentTime).toBe(30);
+    } finally {
+      vi.useRealTimers();
+      focused.mockRestore();
+      pause.mockRestore();
+      play.mockRestore();
+    }
+  });
+
+  it("takes a pointer over the page as the last word on a park", async () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => undefined);
+    // Focus never comes back, by the window's account.
+    const focused = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    try {
+      await mount({ chatBgVideo: "video-raw.mp4", chatBgOriginal: "bgstore:image-poster.jpg" });
+      const video = await parked();
+      expect(pause).toHaveBeenCalled();
+      video.currentTime = 12;
+      play.mockClear();
+
+      document.dispatchEvent(new Event("pointermove"));
+      expect(play).toHaveBeenCalledTimes(1);
+      expect(video.currentTime).toBe(12);
     } finally {
       vi.useRealTimers();
       focused.mockRestore();

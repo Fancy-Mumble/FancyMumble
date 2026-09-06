@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Box } from "@mui/material";
 import { useResolvedBackgroundSource, useStoredBackgroundUrl } from "@core/features/settings/chatBackground";
 import {
@@ -7,11 +7,24 @@ import {
   type PersonalizationData,
 } from "@standard/personalizationStorage";
 import { useBakedStill } from "./stillBake";
+import { useTheme } from "@mui/material/styles";
+import { useMemo } from "react";
+import { useAppStore } from "@core/store";
 
 /** How often the watchdog samples the clip's position. */
 const WATCHDOG_INTERVAL_MS = 1000;
 /** Samples without progress before the clip is restarted. */
 const WATCHDOG_STUCK_TICKS = 2;
+/** Samples inside one seek before the element is loaded again. */
+const WATCHDOG_STUCK_SEEK_TICKS = 3;
+/**
+ * Reloads one source may cost before the poster takes over for good.
+ *
+ * A clip this webview simply cannot decode reports that immediately, so the
+ * budget is spent in a moment and costs nothing; a clip that failed once and
+ * plays on the second attempt is worth those attempts.
+ */
+const MAX_RELOADS = 3;
 /**
  * How long the window may sit unfocused before the wallpaper stops.
  *
@@ -61,6 +74,17 @@ function usePrefersReducedMotion(): boolean {
  */
 export function ChatBackdrop() {
   const [personalization, setPersonalization] = useState<PersonalizationData | null>(null);
+  const stencil = useTheme().palette.nebulaSkin.chrome === "stencil";
+  // The open room's name, broken onto two lines the way a poster would set it.
+  const channelName = useAppStore((state) =>
+    state.channels.find((channel) => channel.id === state.currentChannel)?.name ?? "",
+  );
+  const wordmark = useMemo(() => {
+    const words = channelName.replace(/[^\p{L}\p{N} ]/gu, " ").trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return "";
+    const half = Math.ceil(words.length / 2);
+    return [words.slice(0, half).join(" "), words.slice(half).join(" ")].filter(Boolean).join("\n").toUpperCase();
+  }, [channelName]);
 
   useEffect(() => {
     let active = true;
@@ -109,7 +133,26 @@ export function ChatBackdrop() {
   const image = useResolvedBackgroundSource(stillProcessed ? blurredRef : originalRef);
 
   const [videoFailed, setVideoFailed] = useState(false);
-  useEffect(() => setVideoFailed(false), [videoSrc]);
+  // Reloads already spent on the current source.
+  const reloads = useRef(0);
+  useEffect(() => {
+    reloads.current = 0;
+    setVideoFailed(false);
+  }, [videoSrc]);
+
+  // Start the whole pipeline over, and give up on the clip once the budget is
+  // spent. Used for both ways a clip dies mid-life - a decode error, and a
+  // seek that never completes - because neither leaves anything behind worth
+  // resuming; only a fresh load gets the frames moving again.
+  const recover = useCallback((node: HTMLVideoElement) => {
+    if (reloads.current >= MAX_RELOADS) {
+      setVideoFailed(true);
+      return;
+    }
+    reloads.current += 1;
+    node.load();
+    void node.play().catch(() => undefined);
+  }, []);
 
   const reducedMotion = usePrefersReducedMotion();
   const playing = videoSrc !== null && !videoFailed && !reducedMotion;
@@ -133,6 +176,19 @@ export function ChatBackdrop() {
   // restarted on `ended` (which `loop` should make unreachable), and a
   // watchdog restarts it when it has stopped advancing while claiming to
   // play - the stop the engine never announces, which no event can catch.
+  //
+  // A seek that never lands is the other half of that: the wrap-around at the
+  // end of a pass can fail outright, and the element then sits in `seeking` on
+  // its last frame with no event to follow. Seeking again would only ask the
+  // same wedged pipeline for another position, so the watchdog loads the
+  // element instead - see `recover`.
+  //
+  // And a park has to be as easy to leave as it was to enter. This webview
+  // reports `document.hasFocus()` false while the reader is plainly working in
+  // the window, so anything that checks it before resuming can strand the
+  // wallpaper on one frame for the rest of the session - which is what it did.
+  // Three ways out, then: the focus event on its own word, the watchdog when
+  // the window is demonstrably back, and any pointer or key over the page.
   const videoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     const node = videoRef.current;
@@ -159,6 +215,20 @@ export function ChatBackdrop() {
       parked = true;
       node.pause();
     };
+    // A park lasts exactly as long as its reason, and every path that ends one
+    // comes through here.
+    const unpark = () => {
+      cancelPark();
+      parked = false;
+      resume();
+    };
+    const parkAfterGrace = () => {
+      cancelPark();
+      blurTimer = setTimeout(() => {
+        blurTimer = undefined;
+        park();
+      }, BLUR_GRACE_MS);
+    };
     const sync = () => {
       cancelPark();
       if (document.hidden) {
@@ -166,26 +236,63 @@ export function ChatBackdrop() {
         return;
       }
       if (document.hasFocus()) {
-        parked = false;
-        resume();
+        unpark();
         return;
       }
-      blurTimer = setTimeout(() => {
-        blurTimer = undefined;
+      parkAfterGrace();
+    };
+    // Losing focus is a maybe - the window is usually still on screen - so the
+    // clip only stops once the grace has run out. Getting it back is not a
+    // maybe: the event itself is the answer. Asking `document.hasFocus()` here
+    // as well is what left the wallpaper stopped, because on this webview it
+    // can still say false at the moment the window comes forward, and then
+    // nothing else was ever going to ask again.
+    const onFocus = unpark;
+    const onBlur = () => {
+      if (document.hidden) {
+        cancelPark();
         park();
-      }, BLUR_GRACE_MS);
+        return;
+      }
+      parkAfterGrace();
+    };
+    // Whatever the window thinks, someone typing or moving a pointer over this
+    // page is looking at it. The last word on a park that should have ended
+    // and did not - and deliberately without re-arming the grace, because the
+    // focus this asks about is the reading we do not trust. The clip runs on
+    // until the next `blur`, which does arrive when the window really goes.
+    const activity = ["pointerdown", "pointermove", "keydown", "wheel"] as const;
+    const onActivity = () => {
+      if (!parked || document.hidden) return;
+      unpark();
     };
 
     let lastTime = -1;
     let stuckTicks = 0;
+    let seekTicks = 0;
     const watchdog = setInterval(() => {
-      // Not moving for a reason: parked, hidden, mid-seek, or still buffering.
-      if (
-        parked ||
-        document.hidden ||
-        node.seeking ||
-        node.readyState < HTMLMediaElement.HAVE_FUTURE_DATA
-      ) {
+      // Not moving for a reason: parked or hidden.
+      if (parked || document.hidden) {
+        stuckTicks = 0;
+        seekTicks = 0;
+        // Unless the reason has gone. A missed focus event used to strand the
+        // wallpaper on one frame for the rest of the session, because parking
+        // is also what tells this watchdog to keep its hands off.
+        if (parked && !document.hidden && document.hasFocus()) unpark();
+        return;
+      }
+      // A seek lands within a frame or two. One that outlives several samples
+      // is not a seek any more, it is the clip stuck at the end of a pass.
+      if (node.seeking) {
+        stuckTicks = 0;
+        if (++seekTicks < WATCHDOG_STUCK_SEEK_TICKS) return;
+        seekTicks = 0;
+        recover(node);
+        return;
+      }
+      seekTicks = 0;
+      // Still buffering: nothing to read into a frozen position.
+      if (node.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
         stuckTicks = 0;
         return;
       }
@@ -202,18 +309,20 @@ export function ChatBackdrop() {
 
     node.addEventListener("ended", restart);
     document.addEventListener("visibilitychange", sync);
-    globalThis.addEventListener("blur", sync);
-    globalThis.addEventListener("focus", sync);
+    globalThis.addEventListener("blur", onBlur);
+    globalThis.addEventListener("focus", onFocus);
+    for (const name of activity) document.addEventListener(name, onActivity, { passive: true });
     sync();
     return () => {
       cancelPark();
       clearInterval(watchdog);
       node.removeEventListener("ended", restart);
       document.removeEventListener("visibilitychange", sync);
-      globalThis.removeEventListener("blur", sync);
-      globalThis.removeEventListener("focus", sync);
+      globalThis.removeEventListener("blur", onBlur);
+      globalThis.removeEventListener("focus", onFocus);
+      for (const name of activity) document.removeEventListener(name, onActivity);
     };
-  }, [playing, videoSrc]);
+  }, [playing, videoSrc, recover]);
 
   // Rounded because the slider hands over floats: `1 - 0.7` prints as
   // `0.30000000000000004`, which is valid CSS but re-keys emotion's cache on
@@ -253,6 +362,48 @@ export function ChatBackdrop() {
         background: theme.palette.nebula.backdrop,
       })}
     >
+      {/* A stencil skin puts the room's name behind the conversation as an
+          outlined wordmark, and rings the far corner. Both are drawn, not
+          coloured, so no palette can express them - and both sit under the
+          wallpaper, which still wins when one is set. */}
+      {stencil && (
+        <>
+          <Box
+            aria-hidden
+            sx={(theme) => ({
+              position: "absolute",
+              top: -180,
+              right: -220,
+              width: 760,
+              height: 760,
+              borderRadius: "50%",
+              border: `3px solid ${theme.palette.nebula.line2}`,
+              opacity: 0.5,
+            })}
+          />
+          <Box
+            aria-hidden
+            sx={(theme) => ({
+              position: "absolute",
+              right: 60,
+              bottom: 110,
+              textAlign: "right",
+              fontFamily: theme.palette.nebulaSkin.font,
+              fontStyle: "italic",
+              fontWeight: 800,
+              fontSize: 150,
+              lineHeight: 0.86,
+              letterSpacing: "-.02em",
+              color: "transparent",
+              WebkitTextStroke: `2px ${theme.palette.nebula.line2}`,
+              userSelect: "none",
+              whiteSpace: "pre-line",
+            })}
+          >
+            {wordmark}
+          </Box>
+        </>
+      )}
       {playing ? (
         <Box
           component="video"
@@ -274,8 +425,13 @@ export function ChatBackdrop() {
           // poster's image loader dispatches its own `error` on this very
           // element, with `error` still null; treating that as a dead clip is
           // what left the wallpaper stuck on its still.
+          //
+          // Even a real one is worth a retry first: a clip that has been
+          // playing for minutes is plainly decodable, and an error at the
+          // wrap-around says the pipeline lost its footing, not that the file
+          // is unplayable.
           onError={(event) => {
-            if (event.currentTarget.error) setVideoFailed(true);
+            if (event.currentTarget.error) recover(event.currentTarget);
           }}
           sx={media}
         />
