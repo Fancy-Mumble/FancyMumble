@@ -92,7 +92,7 @@ const cardSx = (theme: Theme) => ({
   width: CARD_WIDTH,
   p: "5px",
   borderRadius: radius("lg"),
-  border: `1px solid ${theme.palette.nebula.line2}`,
+  border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
   // A plain dark alpha, and deliberately NOT the pack's `washPanel` glass.
   //
   // Every other floating surface in Nebula sits on the app's own dark window,

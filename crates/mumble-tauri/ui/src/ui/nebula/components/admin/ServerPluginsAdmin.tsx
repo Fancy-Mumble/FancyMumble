@@ -19,6 +19,7 @@ import { Stack } from "../primitives";
 import { Banner, EmptyState, SettingsCard } from "../settings/controls";
 import { AdminPage } from "./controls";
 import { isPluginAdminSupported } from "./capabilities";
+import { radius } from "../../tokens";
 
 const LOAD_TIMEOUT_MS = 10_000;
 
@@ -62,11 +63,11 @@ function Badge({ label, tone, title }: Readonly<{ label: string; tone?: "warn" |
           flex: "none",
           px: "7px",
           py: "2px",
-          borderRadius: "999px",
+          borderRadius: radius("pill"),
           fontSize: 10,
           fontWeight: 600,
           color,
-          border: `1px solid ${color}`,
+          border: `var(--nebula-line-width, 1px) solid ${color}`,
         };
       }}
     >

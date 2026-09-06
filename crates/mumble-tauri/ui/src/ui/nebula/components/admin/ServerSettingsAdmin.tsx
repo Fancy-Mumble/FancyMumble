@@ -209,7 +209,7 @@ function HtmlPreview({ html, label }: Readonly<{ html: string; label: string }>)
         p: "13px",
         borderRadius: radius("md"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         fontSize: 12.5,
         lineHeight: 1.5,
         wordBreak: "break-word",
@@ -550,7 +550,7 @@ export function ServerSettingsAdmin({
                   gap={2}
                   sx={(theme) => ({
                     py: "10px",
-                    borderBottom: `1px solid ${theme.palette.nebula.line}`,
+                    borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
                   })}
                 >
                   <Box sx={{ flex: "0 0 240px", minWidth: 0 }}>

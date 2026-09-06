@@ -36,8 +36,11 @@ export function SearchBox({
         px: "14px",
         py: "9px",
         borderRadius: radius("lg"),
+        // A skin may lean its controls instead of rounding them; `none` for
+        // every theme that draws plain rectangles.
+        clipPath: "var(--nebula-clip-plate, none)",
         background: theme.palette.nebula.input,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         color: theme.palette.nebula.dim,
       })}
     >

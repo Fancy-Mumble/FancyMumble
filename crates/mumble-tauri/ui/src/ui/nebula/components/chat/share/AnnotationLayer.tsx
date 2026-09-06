@@ -93,7 +93,7 @@ function AnnotationToolbar({ tools }: Readonly<{ tools: DrawingTools }>) {
               borderRadius: "50%",
               cursor: "pointer",
               background: tools.cssColor(argb),
-              border: chosen ? "2px solid #fff" : "1px solid rgba(255,255,255,.32)",
+              border: chosen ? "2px solid #fff" : "var(--nebula-line-width, 1px) solid rgba(255,255,255,.32)",
               transform: chosen ? "scale(1.14)" : "none",
               transition: "transform .1s ease, border-color .15s ease",
               "&:hover": { transform: "scale(1.2)" },

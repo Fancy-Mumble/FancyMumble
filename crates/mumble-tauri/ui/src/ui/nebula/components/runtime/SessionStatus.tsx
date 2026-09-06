@@ -106,7 +106,7 @@ export function SessionStatus({ onOpenServers }: SessionStatusProps) {
           p: "20px",
           borderRadius: radius("lg"),
           background: `${theme.palette.nebula.tint},${theme.palette.nebula.bg0}`,
-          border: `1px solid ${theme.palette.nebula.line2}`,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
           boxShadow: theme.palette.nebula.shadow,
         })}
       >
@@ -142,7 +142,7 @@ export function SessionStatus({ onOpenServers }: SessionStatusProps) {
               p: "10px 12px",
               borderRadius: radius("md"),
               background: theme.palette.nebula.card,
-              border: `1px solid ${theme.palette.nebula.line2}`,
+              border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
             })}
           >
             <SectionLabel>{t("nebulaConnect:dropped.reasonLabel")}</SectionLabel>

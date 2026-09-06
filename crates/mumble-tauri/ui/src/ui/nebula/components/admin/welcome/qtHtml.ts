@@ -496,7 +496,7 @@ function bandBody(section: Section): string {
           // A border on the cell rather than on a div: Qt draws borders on
           // table cells and ignores them almost everywhere else.
           return cell(
-            `width="${width}%" valign="top" style="border:1px solid ${RULE};padding:8px"`,
+            `width="${width}%" valign="top" style="border:var(--nebula-line-width, 1px) solid ${RULE};padding:8px"`,
             eyebrow + cardLink(card),
           );
         })

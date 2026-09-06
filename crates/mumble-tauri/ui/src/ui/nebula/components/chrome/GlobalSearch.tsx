@@ -183,7 +183,7 @@ export function GlobalSearch({
             width: 560,
             maxWidth: "calc(100vw - 32px)",
             borderRadius: radius("xl"),
-            border: `1px solid ${theme.palette.nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
             background: `${theme.palette.nebula.tint},${theme.palette.nebula.bg0}`,
             color: theme.palette.nebula.text,
             overflow: "hidden",
@@ -289,7 +289,7 @@ function SearchRow({ row, query, active, index, onActivate, onRun }: Readonly<Se
         borderRadius: radius("md"),
         // Transparent rather than absent, so gaining the accent outline does
         // not shift the row by a pixel.
-        border: `1px solid ${active ? theme.palette.nebula.accentLine : "transparent"}`,
+        border: `var(--nebula-line-width, 1px) solid ${active ? theme.palette.nebula.accentLine : "transparent"}`,
         background: active ? theme.palette.nebula.accentSoft : "transparent",
         "&:hover": { background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.hover },
       })}
@@ -412,7 +412,7 @@ function Footer({ count }: Readonly<{ count: number }>) {
         alignItems: "center",
         gap: "14px",
         p: "9px 16px",
-        borderTop: `1px solid ${theme.palette.nebula.line}`,
+        borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         fontSize: 10.5,
         color: theme.palette.nebula.dim,
       })}

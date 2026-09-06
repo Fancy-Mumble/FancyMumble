@@ -242,7 +242,7 @@ export function RichTextField({
         position: floating ? "relative" : "static",
         borderRadius: floating ? radius("sm") : radius("md"),
         background: floating ? "transparent" : nebula.card,
-        border: `1px solid ${floating ? nebula.accent : nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${floating ? nebula.accent : nebula.line2}`,
         overflow: "visible",
         transition: "border-color 140ms ease",
         "&:focus-within": { borderColor: floating ? nebula.accent : nebula.accentLine },
@@ -264,10 +264,10 @@ export function RichTextField({
                 whiteSpace: "nowrap",
                 borderRadius: radius("md"),
                 background: nebula.card,
-                border: `1px solid ${nebula.line2}`,
+                border: `var(--nebula-line-width, 1px) solid ${nebula.line2}`,
                 boxShadow: nebula.shadow,
               }
-            : { px: "6px", py: "4px", borderBottom: `1px solid ${nebula.line}` }
+            : { px: "6px", py: "4px", borderBottom: `var(--nebula-line-width, 1px) solid ${nebula.line}` }
         }
       >
         {shown.has("bold") && (
@@ -455,9 +455,9 @@ export function RichTextField({
             borderLeft: `2px solid ${nebula.line2}`,
             color: nebula.muted,
           },
-          "& hr": { border: 0, borderTop: `1px solid ${nebula.line2}`, margin: "0.8em 0" },
+          "& hr": { border: 0, borderTop: `var(--nebula-line-width, 1px) solid ${nebula.line2}`, margin: "0.8em 0" },
           "& table": { borderCollapse: "collapse", margin: "0.5em 0" },
-          "& td, & th": { border: `1px solid ${nebula.line2}`, padding: "3px 6px" },
+          "& td, & th": { border: `var(--nebula-line-width, 1px) solid ${nebula.line2}`, padding: "3px 6px" },
           "& pre": {
             margin: "0.5em 0",
             padding: "6px 8px",
@@ -551,7 +551,7 @@ function Swatches({ onPick, onClear }: Readonly<{ onPick: (colour: string) => vo
         p: "8px",
         borderRadius: radius("md"),
         background: theme.palette.nebula.bg0,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         boxShadow: theme.palette.nebula.shadow,
       })}
     >

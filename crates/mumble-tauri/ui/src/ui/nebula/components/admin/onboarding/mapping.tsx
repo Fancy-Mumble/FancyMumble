@@ -95,7 +95,7 @@ export function MappingPicker({
               borderRadius: radius("md"),
               fontSize: dense ? 11 : 12,
               background: dense ? "transparent" : theme.palette.nebula.card,
-              border: dense ? "none" : `1px solid ${theme.palette.nebula.line2}`,
+              border: dense ? "none" : `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
             },
           })}
         />

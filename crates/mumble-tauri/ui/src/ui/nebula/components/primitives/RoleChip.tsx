@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Box, alpha } from "@mui/material";
 import { textureToDataUrl } from "@core/profileFormat";
+import { radius } from "../../tokens";
 
 export interface RoleChipProps {
   /** Display name of the role. */
@@ -51,13 +52,13 @@ export function RoleChip({ name, color, icon, size = "medium", title, onClick }:
           overflow: "hidden",
           whiteSpace: "nowrap",
           cursor: onClick ? "pointer" : "default",
-          borderRadius: "999px",
+          borderRadius: radius("pill"),
           fontWeight: 600,
           lineHeight: 1.2,
           ...step,
           color: color ?? nebula.text,
           background: color ? alpha(color, 0.18) : nebula.card2,
-          border: `1px solid ${color ? alpha(color, 0.5) : "transparent"}`,
+          border: `var(--nebula-line-width, 1px) solid ${color ? alpha(color, 0.5) : "transparent"}`,
         };
       }}
     >
@@ -66,7 +67,7 @@ export function RoleChip({ name, color, icon, size = "medium", title, onClick }:
           component="img"
           src={iconSrc}
           alt=""
-          sx={{ width: "1em", height: "1em", borderRadius: "999px", objectFit: "cover", flex: "none" }}
+          sx={{ width: "1em", height: "1em", borderRadius: radius("pill"), objectFit: "cover", flex: "none" }}
         />
       ) : (
         <Box
@@ -75,7 +76,7 @@ export function RoleChip({ name, color, icon, size = "medium", title, onClick }:
           sx={{
             width: "0.55em",
             height: "0.55em",
-            borderRadius: "999px",
+            borderRadius: radius("pill"),
             flex: "none",
             background: "currentColor",
           }}

@@ -64,7 +64,7 @@ export default function PublicServersSurface({ onConnect, onBack, disabled }: Pr
             p: "12px 14px",
             borderRadius: radius("lg"),
             background: `${theme.palette.nebula.warn}18`,
-            border: `1px solid ${theme.palette.nebula.warn}55`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.warn}55`,
             color: theme.palette.nebula.text,
             fontSize: 12.5,
           })}

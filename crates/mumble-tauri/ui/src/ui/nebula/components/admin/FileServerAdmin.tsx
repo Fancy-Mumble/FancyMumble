@@ -35,6 +35,7 @@ import { NEBULA_MONO, NEBULA_RADIUS } from "../../tokens";
 import { SearchBox, Stack, StatusDot } from "../primitives";
 import { Banner, EmptyState, GroupTitle, SettingsCard } from "../settings/controls";
 import { AdminPage, DataTable, type Column } from "./controls";
+import { radius } from "../../tokens";
 
 const CATEGORIES: FileCategory[] = ["image", "video", "audio", "document", "archive", "other"];
 
@@ -501,11 +502,11 @@ export function FileServerAdmin() {
             return {
               px: "7px",
               py: "2px",
-              borderRadius: "999px",
+              borderRadius: radius("pill"),
               fontSize: 10,
               fontWeight: 600,
               color: tone,
-              border: `1px solid ${tone}`,
+              border: `var(--nebula-line-width, 1px) solid ${tone}`,
             };
           }}
         >
@@ -770,7 +771,7 @@ export function FileServerAdmin() {
         sx={(theme) => ({
           mt: "12px",
           height: 6,
-          borderRadius: "999px",
+          borderRadius: radius("pill"),
           overflow: "hidden",
           background: theme.palette.nebula.card2,
         })}

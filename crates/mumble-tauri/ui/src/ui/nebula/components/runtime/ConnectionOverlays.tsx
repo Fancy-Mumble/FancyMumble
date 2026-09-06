@@ -257,7 +257,7 @@ function ReconnectBanner() {
         py: "10px",
         borderRadius: radius("lg"),
         background: `${theme.palette.nebula.tint},${theme.palette.nebula.bg0}`,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         boxShadow: theme.palette.nebula.shadow,
       })}
     >

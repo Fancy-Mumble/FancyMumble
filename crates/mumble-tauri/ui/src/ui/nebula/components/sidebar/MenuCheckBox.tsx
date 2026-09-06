@@ -22,7 +22,7 @@ export function MenuCheckBox({ checked }: Readonly<{ checked: boolean }>) {
         flex: "none",
         color: "#fff",
         background: checked ? theme.palette.nebula.accent : theme.palette.nebula.card2,
-        border: `1px solid ${checked ? theme.palette.nebula.accent : theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${checked ? theme.palette.nebula.accent : theme.palette.nebula.line2}`,
       })}
     >
       {checked && <CheckIcon width={9} height={9} strokeWidth={3} />}

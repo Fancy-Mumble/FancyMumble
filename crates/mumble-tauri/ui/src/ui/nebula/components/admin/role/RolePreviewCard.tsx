@@ -32,7 +32,7 @@ export function RolePreviewCard({ name, color, icon, sampleUsername }: RolePrevi
         py: "14px",
         borderRadius: radius("lg"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
       })}
     >
       <Typography

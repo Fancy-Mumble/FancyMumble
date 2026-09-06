@@ -63,8 +63,8 @@ function Painted({ section, children }: Readonly<{ section: Section; children: R
         px: "18px",
         py: "12px",
         background: bandBackground(theme.palette.nebula, section.tone),
-        borderTop: `1px solid ${bandEdge(theme.palette.nebula, section.tone)}`,
-        borderBottom: `1px solid ${bandEdge(theme.palette.nebula, section.tone)}`,
+        borderTop: `var(--nebula-line-width, 1px) solid ${bandEdge(theme.palette.nebula, section.tone)}`,
+        borderBottom: `var(--nebula-line-width, 1px) solid ${bandEdge(theme.palette.nebula, section.tone)}`,
         // Runs of the same tone read as one band, not as stripes.
         "& + &": { borderTop: "none" },
       })}
@@ -338,7 +338,7 @@ function Cards({ section }: Readonly<{ section: Section }>) {
             textDecoration: "none",
             borderRadius: radius("md"),
             background: theme.palette.nebula.card,
-            border: `1px solid ${theme.palette.nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
             ...(isWebUrl(card.url) ? { "&:hover": { borderColor: theme.palette.nebula.accentLine } } : {}),
           })}
         >

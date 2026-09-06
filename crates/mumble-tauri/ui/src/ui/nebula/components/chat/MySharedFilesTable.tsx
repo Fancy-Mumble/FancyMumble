@@ -303,7 +303,7 @@ export default function MySharedFilesTable() {
           px: "14px",
           py: "10px",
           flexShrink: 0,
-          borderBottom: `1px solid ${theme.palette.nebula.line}`,
+          borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         })}
       >
         <UploadIcon width={14} height={14} />

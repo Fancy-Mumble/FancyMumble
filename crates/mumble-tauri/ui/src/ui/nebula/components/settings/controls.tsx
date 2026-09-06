@@ -130,7 +130,7 @@ export function PillGroup<T extends string>({
               fontWeight: active ? 600 : 400,
               color: active ? theme.palette.nebula.text : theme.palette.nebula.muted,
               background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.card,
-              border: `1px solid ${active ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
+              border: `var(--nebula-line-width, 1px) solid ${active ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
             })}
           >
             {option.label}
@@ -165,7 +165,7 @@ export function SegmentedGroup<T extends string>({
         p: "3px",
         borderRadius: radius("md"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
       })}
     >
       {options.map((option) => {
@@ -270,7 +270,7 @@ export function ChoiceCards<T extends string>({
               py: "12px",
               borderRadius: radius("md"),
               background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.card,
-              border: `1px solid ${active ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
+              border: `var(--nebula-line-width, 1px) solid ${active ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
               "&:hover": { borderColor: active ? undefined : theme.palette.nebula.line2 },
             })}
           >
@@ -335,7 +335,7 @@ export function ValueBox({ children, muted }: Readonly<{ children: ReactNode; mu
         py: "9px",
         borderRadius: radius("md"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         color: muted ? theme.palette.nebula.muted : theme.palette.nebula.text,
         fontSize: 12.5,
       })}
@@ -436,7 +436,7 @@ export function ToggleCard({
         py: "12px",
         borderRadius: radius("md"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         ...sx,
       })}
     >
@@ -646,7 +646,7 @@ export function TextRow({
  * conditional group cannot leave a rule hanging under nothing.
  */
 export function GroupRule() {
-  return <Box sx={(theme) => ({ my: "20px", borderTop: `1px solid ${theme.palette.nebula.line}` })} />;
+  return <Box sx={(theme) => ({ my: "20px", borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}` })} />;
 }
 
 /** What a list says when it has nothing in it. */
@@ -681,7 +681,7 @@ export function SettingsCard({
         p: "14px 16px",
         borderRadius: radius("lg"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         ...sx,
       })}
     >
@@ -738,7 +738,7 @@ export function OptionCardGrid<T extends string>({
               py: "10px",
               borderRadius: radius("md"),
               background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.card,
-              border: `1px solid ${active ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
+              border: `var(--nebula-line-width, 1px) solid ${active ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
               "&:hover": {
                 background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.hover,
               },
@@ -818,7 +818,7 @@ export function ShortcutRecorder({
             fontSize: 11.5,
             color: theme.palette.nebula.text,
             background: theme.palette.nebula.accentSoft,
-            border: `1px solid ${theme.palette.nebula.accentLine}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accentLine}`,
             outline: "none",
           })}
         />
@@ -840,7 +840,7 @@ export function ShortcutRecorder({
             fontSize: 11.5,
             color: value ? theme.palette.nebula.text : theme.palette.nebula.dim,
             background: theme.palette.nebula.card,
-            border: `1px solid ${theme.palette.nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
             "&:hover": { background: theme.palette.nebula.hover },
           })}
         >

@@ -223,7 +223,7 @@ export function RolesAdmin({ initialRole }: Readonly<{ initialRole?: string | nu
                 py: "11px",
                 borderRadius: radius("lg"),
                 background: theme.palette.nebula.card,
-                border: `1px solid ${theme.palette.nebula.line}`,
+                border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
                 "&:hover": { background: theme.palette.nebula.hover },
               })}
             >
@@ -541,7 +541,7 @@ function RoleMembers({
                 sx={(theme) => ({
                   px: "9px",
                   py: "3px",
-                  borderRadius: "999px",
+                  borderRadius: radius("pill"),
                   fontSize: 11,
                   background: theme.palette.nebula.card2,
                   color: theme.palette.nebula.muted,

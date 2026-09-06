@@ -1,4 +1,5 @@
 import { Box } from "@mui/material";
+import { radius } from "../../tokens";
 
 const HEIGHTS = [4, 9, 6];
 
@@ -29,7 +30,7 @@ export function TalkingBars({ talking }: { talking: boolean }) {
           sx={(theme) => ({
             width: 3,
             height,
-            borderRadius: "999px",
+            borderRadius: radius("pill"),
             background: theme.palette.nebula.ok,
           })}
         />

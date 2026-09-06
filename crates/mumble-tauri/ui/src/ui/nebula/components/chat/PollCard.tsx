@@ -82,7 +82,7 @@ export default function PollCard({ poll, ownSession, isOwn, onVote }: Readonly<P
         py: "12px",
         borderRadius: radius("md"),
         background: isOwn ? theme.palette.nebula.bg0 : theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
       })}
     >
       <Stack direction="row" alignItems="center" gap={0.75} sx={{ mb: "8px" }}>
@@ -148,7 +148,7 @@ export default function PollCard({ poll, ownSession, isOwn, onVote }: Readonly<P
                   fontSize: 13,
                   cursor: hasVoted ? "default" : "pointer",
                   color: nebula.text,
-                  border: `1px solid ${isSelected ? nebula.accentLine : nebula.line}`,
+                  border: `var(--nebula-line-width, 1px) solid ${isSelected ? nebula.accentLine : nebula.line}`,
                   background: isSelected && !hasVoted ? nebula.accentSoft : "transparent",
                   transition: "border-color 0.15s, background 0.15s",
                   "&:hover": hasVoted ? undefined : { borderColor: nebula.accentLine },

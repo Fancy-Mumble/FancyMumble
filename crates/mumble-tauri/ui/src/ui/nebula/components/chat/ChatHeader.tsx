@@ -135,7 +135,7 @@ export function ChatHeader({
         height: 66,
         flex: "none",
         px: "26px",
-        borderBottom: `1px solid ${theme.palette.nebula.line}`,
+        borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         ...glassChrome(theme),
       })}
     >

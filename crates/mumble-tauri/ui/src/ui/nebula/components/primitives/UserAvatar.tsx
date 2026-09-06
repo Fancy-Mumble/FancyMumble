@@ -2,6 +2,7 @@ import { Avatar, Box } from "@mui/material";
 import { useUserAvatar } from "@core/lazyBlobs";
 import { radius } from "../../tokens";
 import { StatusDot, type Status } from "./StatusDot";
+import { useTheme } from "@mui/material/styles";
 
 export function initials(name: string): string {
   return name
@@ -48,6 +49,8 @@ export function UserAvatar({
   square = false,
   gradient = null,
 }: Readonly<UserAvatarProps>) {
+  // A halo belongs to the theme, not the caller, so it is read here.
+  const stencil = useTheme().palette.nebulaSkin.chrome === "stencil";
   // `src` wins so message lists can resolve hundreds of avatars in one hook.
   const lazy = useUserAvatar(src === undefined ? session : null, src === undefined ? textureSize : null);
   const image = src ?? lazy;
@@ -79,6 +82,25 @@ export function UserAvatar({
       >
         {initials(name)}
       </Avatar>
+      {/* A stencil skin rings each avatar: an ellipse floating just above the
+          head, which is the mark that skin is built around. Drawn here rather
+          than per caller so every face in the pack gets one. */}
+      {stencil && (
+        <Box
+          aria-hidden
+          sx={(theme) => ({
+            position: "absolute",
+            left: "50%",
+            top: -Math.max(4, size * 0.19),
+            transform: "translateX(-50%)",
+            width: size * 0.85,
+            height: Math.max(6, size * 0.26),
+            borderRadius: "50%",
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accent2}`,
+            pointerEvents: "none",
+          })}
+        />
+      )}
       {status && (
         <Box
           sx={(theme) => ({

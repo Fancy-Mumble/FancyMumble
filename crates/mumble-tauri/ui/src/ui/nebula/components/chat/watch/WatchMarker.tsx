@@ -36,7 +36,7 @@ export function WatchMarker({ sessionId }: Readonly<{ sessionId: string }>) {
         px: "10px",
         height: 30,
         borderRadius: radius("md"),
-        border: "1px solid " + theme.palette.nebula.line,
+        border: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line,
         background: theme.palette.nebula.card2,
         color: theme.palette.nebula.muted,
       })}

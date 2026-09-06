@@ -5,6 +5,7 @@ import { fetchTrending, searchGifs, type KlipyGif } from "@standard/pages/settin
 import { SearchIcon } from "@ui/icons";
 import { Stack } from "../../primitives";
 import { PopoverPanel } from "./PopoverPanel";
+import { radius } from "../../../tokens";
 
 /** The canvas's width for this panel. */
 export const GIF_POPOVER_WIDTH = 400;
@@ -83,7 +84,7 @@ export function GifPopover({
             height: 44,
             flex: "none",
             px: "14px",
-            borderBottom: `1px solid ${theme.palette.nebula.washLine}`,
+            borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.washLine}`,
           })}
         >
           <Box aria-hidden sx={(theme) => ({ display: "flex", color: theme.palette.nebula.dim })}>
@@ -110,7 +111,7 @@ export function GifPopover({
             px: "12px",
             py: "8px",
             flex: "none",
-            borderBottom: `1px solid ${theme.palette.nebula.washLine}`,
+            borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.washLine}`,
           })}
         >
           {TABS.map((name) => (
@@ -127,7 +128,7 @@ export function GifPopover({
                 placeItems: "center",
                 height: 28,
                 px: "14px",
-                borderRadius: "999px",
+                borderRadius: radius("pill"),
                 fontSize: 13,
                 fontWeight: tab === name ? 600 : 400,
                 color: tab === name ? theme.palette.nebula.text : theme.palette.nebula.muted,

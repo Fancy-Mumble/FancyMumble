@@ -305,7 +305,7 @@ export function UserInfoSheet({
                   borderRadius: radius("md"),
                   overflow: "hidden",
                   background: `repeating-linear-gradient(-45deg,${nebula.line} 0 1px,transparent 1px 9px)`,
-                  border: `1px solid ${nebula.line}`,
+                  border: `var(--nebula-line-width, 1px) solid ${nebula.line}`,
                 }}
               >
                 {location.state === "located" ? (
@@ -456,7 +456,7 @@ export function UserInfoSheet({
             <Stack
               direction="row"
               gap={3}
-              sx={{ mt: "14px", pt: "12px", borderTop: `1px solid ${nebula.line}` }}
+              sx={{ mt: "14px", pt: "12px", borderTop: `var(--nebula-line-width, 1px) solid ${nebula.line}` }}
             >
               <Figure
                 label={t("sidebar:userInfo.bandwidth")}

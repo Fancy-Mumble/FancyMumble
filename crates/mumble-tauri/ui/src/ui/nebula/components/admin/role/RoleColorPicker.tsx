@@ -72,7 +72,7 @@ export function RoleColorPicker({
             flex: "none",
             cursor: disabled ? "default" : "pointer",
             borderRadius: radius("md"),
-            border: `1px solid ${theme.palette.nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
             background: current || EMPTY_HATCH,
           })}
         />
@@ -125,7 +125,7 @@ export function RoleColorPicker({
                 cursor: disabled ? "default" : "pointer",
                 borderRadius: radius("sm"),
                 background: preset,
-                border: `1px solid ${theme.palette.nebula.line2}`,
+                border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
                 outline: active ? `2px solid ${theme.palette.nebula.accent}` : undefined,
                 outlineOffset: 1,
               })}

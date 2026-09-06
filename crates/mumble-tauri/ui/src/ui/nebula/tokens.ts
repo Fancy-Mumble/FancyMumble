@@ -244,8 +244,9 @@ export const NEBULA_MONO = '"Geist Mono","Space Mono",ui-monospace,"Cascadia Mon
  * and components read the variable, never the number - which is what makes the
  * scale adjustable from one place.
  *
- * Circles (`50%`) and pills (`999px`) are shapes rather than radii, and stay
- * written out where they are used.
+ * Circles (`50%`) are a shape rather than a radius and stay written out where
+ * they are used. Pills are not: a fully squared skin wants its chips squared
+ * too, so `pill` is a step like any other and the theme decides what it means.
  */
 export const NEBULA_RADIUS = {
   /** Inset detail: code spans, colour swatches, flag thumbs, nested tiles. */
@@ -261,12 +262,12 @@ export const NEBULA_RADIUS = {
 /**
  * The steps a component may ask for.
  *
- * Four from the mock's own scale, plus the two the design sheet gives a theme
- * separate control of: rail tiles and avatars, which several skins shape
+ * Four from the mock's own scale, plus the three the design sheet gives a theme
+ * separate control of: rail tiles, avatars and pills, which several skins shape
  * differently from every other control (Mobel squares them, Rose rounds them
- * to a circle while its cards stay at 22px).
+ * to a circle while its cards stay at 22px, Nimbus squares its chips).
  */
-export type NebulaRadius = keyof typeof NEBULA_RADIUS | "rail" | "avatar";
+export type NebulaRadius = keyof typeof NEBULA_RADIUS | "rail" | "avatar" | "pill";
 
 /** `var(--nebula-radius-md)` - how components should spell a radius. */
 export function radius(step: NebulaRadius): string {

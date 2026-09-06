@@ -1047,8 +1047,8 @@ export function NodeCanvas<N extends GraphNode>({
         // the other has half the rule.
         "& input, & textarea, & [contenteditable='true']": { userSelect: "text" },
         cursor: view.panning ? "grabbing" : "default",
-        borderTop: `1px solid ${theme.palette.nebula.line}`,
-        borderBottom: `1px solid ${theme.palette.nebula.line}`,
+        borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
+        borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         // The window's own wash, not a flat fill: the canvas is a surface
         // in the room the rest of the client is in, and a solid slab here
         // reads as a panel dropped on top of it.

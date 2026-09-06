@@ -713,7 +713,7 @@ export function DesignEditor({
           display: "flex",
           flexDirection: "column",
           background: theme.palette.nebula.bg0,
-          borderLeft: `1px solid ${theme.palette.nebula.line2}`,
+          borderLeft: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
           boxShadow: "-18px 0 48px rgba(0,0,0,0.34)",
         })}
       >
@@ -754,7 +754,7 @@ export function DesignEditor({
             px: "14px",
             py: "8px",
             background: theme.palette.nebula.panel,
-            borderBottom: `1px solid ${theme.palette.nebula.line2}`,
+            borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
           })}
         >
           {/* The greeting's own mark, so the bar says *which* design this is
@@ -819,7 +819,7 @@ export function DesignEditor({
             px: "14px",
             py: "7px",
             background: theme.palette.nebula.accentSoft,
-            borderBottom: `1px solid ${theme.palette.nebula.accentLine}`,
+            borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accentLine}`,
           })}
         >
           <Box
@@ -907,7 +907,7 @@ export function DesignEditor({
               minHeight: 0,
               overflow: "hidden",
               background: theme.palette.nebula.panel,
-              borderRight: `1px solid ${theme.palette.nebula.line}`,
+              borderRight: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
             })}
           >
             <Stack sx={{ minWidth: 0, minHeight: 0, p: "14px 14px 0" }}>
@@ -927,7 +927,7 @@ export function DesignEditor({
                   px: "9px",
                   borderRadius: radius("sm"),
                   background: theme.palette.nebula.bg0,
-                  border: `1px solid ${theme.palette.nebula.line2}`,
+                  border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
                   "&:focus-within": { borderColor: theme.palette.nebula.accent },
                 })}
               >
@@ -998,7 +998,7 @@ export function DesignEditor({
                               fontSize: 11,
                               color: theme.palette.nebula.muted,
                               background: theme.palette.nebula.card,
-                              border: `1px solid ${theme.palette.nebula.line2}`,
+                              border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
                               borderRadius: radius("sm"),
                               "&:hover": {
                                 background: theme.palette.nebula.hover,
@@ -1043,7 +1043,7 @@ export function DesignEditor({
                 minHeight: 0,
                 maxHeight: "38vh",
                 p: "14px 8px 8px",
-                borderTop: `1px solid ${theme.palette.nebula.line}`,
+                borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
               })}
             >
               <Stack
@@ -1144,7 +1144,7 @@ export function DesignEditor({
                 height: "32px",
                 px: "18px",
                 background: theme.palette.nebula.panel,
-                borderBottom: `1px solid ${theme.palette.nebula.line}`,
+                borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
               })}
             >
               <Kicker>Artboard</Kicker>
@@ -1164,7 +1164,7 @@ export function DesignEditor({
                   p: "2px",
                   borderRadius: radius("sm"),
                   background: theme.palette.nebula.bg0,
-                  border: `1px solid ${theme.palette.nebula.line2}`,
+                  border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
                 })}
               >
                 <Step label="Zoom out" onClick={() => zoomBy(1 / ZOOM_STEP)}>
@@ -1263,7 +1263,7 @@ export function DesignEditor({
                     width: design.sheetW,
                     minHeight: sheetHeight(design),
                     background: theme.palette.nebula.bg0,
-                    border: `1px solid ${theme.palette.nebula.line2}`,
+                    border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
                     borderRadius: radius("md"),
                     boxShadow: theme.palette.nebula.shadow,
                     // The grid is on the sheet rather than behind it, so what an
@@ -1357,7 +1357,7 @@ export function DesignEditor({
                           // you cannot see is one you cannot select to change
                           // the gate on.
                           opacity: off && !preview ? 0.34 : 1,
-                          outline: on ? `1px solid ${theme.palette.nebula.accent}` : "none",
+                          outline: on ? `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accent}` : "none",
                           outlineOffset: 1,
                           // The fill and the ink the block asked for, on the
                           // wrapper - which is where the compiler puts them
@@ -1481,7 +1481,7 @@ export function DesignEditor({
                                 pointerEvents: "none",
                                 whiteSpace: "nowrap",
                                 borderRadius: radius("sm"),
-                                border: `1px solid ${theme.palette.nebula.ok}`,
+                                border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.ok}`,
                                 background: theme.palette.nebula.bg0,
                               })}
                             >
@@ -1532,7 +1532,7 @@ export function DesignEditor({
                                 component="span"
                                 sx={{
                                   px: "4px",
-                                  borderRadius: "999px",
+                                  borderRadius: radius("pill"),
                                   background: "rgba(255,255,255,0.25)",
                                   fontSize: 8,
                                 }}
@@ -1651,7 +1651,7 @@ export function DesignEditor({
                                 position: "absolute",
                                 inset: "-1px",
                                 pointerEvents: "none",
-                                border: `1px solid ${theme.palette.nebula.accent}`,
+                                border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accent}`,
                               })}
                             />
                             {HANDLES.map((handle) => {
@@ -1678,7 +1678,7 @@ export function DesignEditor({
                                     borderRadius: "2px",
                                     cursor: live ? handle.cursor : "default",
                                     background: theme.palette.nebula.bg0,
-                                    border: `1px solid ${theme.palette.nebula.accent}`,
+                                    border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accent}`,
                                     opacity: live || resizable(block) ? 1 : 0.5,
                                   })}
                                 />
@@ -1757,7 +1757,7 @@ export function DesignEditor({
                 position: "relative",
                 flex: "none",
                 background: theme.palette.nebula.panel,
-                borderTop: `1px solid ${theme.palette.nebula.line2}`,
+                borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
               })}
             >
               <Stack direction="row" alignItems="center" gap={1.25} sx={{ px: "18px", pt: "9px" }}>
@@ -1775,7 +1775,7 @@ export function DesignEditor({
                     p: "3px",
                     borderRadius: radius("sm"),
                     background: theme.palette.nebula.bg0,
-                    border: `1px solid ${theme.palette.nebula.line2}`,
+                    border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
                   })}
                 >
                   {(
@@ -1860,7 +1860,7 @@ export function DesignEditor({
                     p: "8px",
                     borderRadius: radius("md"),
                     background: theme.palette.nebula.card,
-                    border: `1px solid ${theme.palette.nebula.line2}`,
+                    border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
                   })}
                 >
                   <AddInput
@@ -1919,7 +1919,7 @@ export function DesignEditor({
                         p: "9px 10px",
                         borderRadius: radius("md"),
                         background: theme.palette.nebula.card,
-                        border: `1px solid ${theme.palette.nebula.line2}`,
+                        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
                       })}
                     >
                       <Stack direction="row" alignItems="center" gap={0.9} sx={{ mb: "6px" }}>
@@ -2088,7 +2088,7 @@ export function DesignEditor({
                 mb: "14px",
                 px: "14px",
                 height: "46px",
-                borderBottom: `1px solid ${theme.palette.nebula.line}`,
+                borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
               })}
             >
               <Stack direction="row" alignItems="center" gap={1.1} sx={{ flex: 1, minWidth: 0 }}>
@@ -2366,7 +2366,7 @@ export function DesignEditor({
             px: "14px",
             py: "8px",
             background: theme.palette.nebula.panel,
-            borderTop: `1px solid ${theme.palette.nebula.line2}`,
+            borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
           })}
         >
           {issues.length > 0 && <Dot tone="warn" />}
@@ -2662,7 +2662,7 @@ function InputCard({
         p: "9px 10px",
         borderRadius: radius("md"),
         background: marked ? theme.palette.nebula.accentSoft : theme.palette.nebula.card,
-        border: `1px solid ${marked ? theme.palette.nebula.accent : theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${marked ? theme.palette.nebula.accent : theme.palette.nebula.line2}`,
       })}
     >
       {/* Tethered upward at the thing that uses it, so the card belonging to
@@ -2678,8 +2678,8 @@ function InputCard({
             height: "9px",
             transform: "rotate(45deg)",
             background: theme.palette.nebula.accentSoft,
-            borderLeft: `1px solid ${theme.palette.nebula.accent}`,
-            borderTop: `1px solid ${theme.palette.nebula.accent}`,
+            borderLeft: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accent}`,
+            borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accent}`,
           })}
         />
       )}
@@ -2724,7 +2724,7 @@ function InputCard({
             fontSize: 11.5,
             color: theme.palette.nebula.text,
             background: "transparent",
-            border: "1px solid transparent",
+            border: "var(--nebula-line-width, 1px) solid transparent",
             borderRadius: radius("sm"),
             outline: "none",
             "&:hover": { borderColor: theme.palette.nebula.line2 },
@@ -2755,7 +2755,7 @@ function InputCard({
         sx={(theme) => ({
           mt: "7px",
           pt: "7px",
-          borderTop: `1px solid ${marked ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
+          borderTop: `var(--nebula-line-width, 1px) solid ${marked ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
         })}
       >
         <Stack direction="row" alignItems="center" gap={0.9}>
@@ -2951,7 +2951,7 @@ function UsagesPanel({
         flexDirection: "column",
         borderRadius: radius("md"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         boxShadow: theme.palette.nebula.shadow,
         overflow: "hidden",
       })}
@@ -2963,7 +2963,7 @@ function UsagesPanel({
         sx={(theme) => ({
           flex: "none",
           p: "9px 11px",
-          borderBottom: `1px solid ${theme.palette.nebula.line}`,
+          borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         })}
       >
         <Glyph>{kind === "slot" ? "Aa" : "◑"}</Glyph>
@@ -2995,7 +2995,7 @@ function UsagesPanel({
             px: "9px",
             borderRadius: radius("sm"),
             background: theme.palette.nebula.bg0,
-            border: `1px solid ${theme.palette.nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
             "&:focus-within": { borderColor: theme.palette.nebula.accent },
           })}
         >
@@ -3023,7 +3023,7 @@ function UsagesPanel({
         sx={(theme) => ({
           flex: "none",
           p: "8px 11px",
-          borderBottom: `1px solid ${theme.palette.nebula.line}`,
+          borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         })}
       >
         {(
@@ -3048,7 +3048,7 @@ function UsagesPanel({
               fontSize: 11,
               color: filter === id ? theme.palette.nebula.text : theme.palette.nebula.muted,
               background: filter === id ? theme.palette.nebula.card2 : "transparent",
-              border: `1px solid ${filter === id ? theme.palette.nebula.line2 : "transparent"}`,
+              border: `var(--nebula-line-width, 1px) solid ${filter === id ? theme.palette.nebula.line2 : "transparent"}`,
               "&:hover": { background: theme.palette.nebula.hover },
             })}
           >
@@ -3088,7 +3088,7 @@ function UsagesPanel({
                   px: "11px",
                   cursor: "pointer",
                   background: theme.palette.nebula.card2,
-                  borderBottom: `1px solid ${theme.palette.nebula.line}`,
+                  borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
                 })}
               >
                 <Box component="span" aria-hidden sx={(theme) => ({ fontSize: 10, color: theme.palette.nebula.dim })}>
@@ -3166,7 +3166,7 @@ function UsagesPanel({
         sx={(theme) => ({
           flex: "none",
           p: "9px 11px",
-          borderTop: `1px solid ${theme.palette.nebula.line}`,
+          borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
           background: theme.palette.nebula.panel,
         })}
       >
@@ -3243,7 +3243,7 @@ function PlaceholderPicker({
         flexDirection: "column",
         borderRadius: radius("md"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         boxShadow: theme.palette.nebula.shadow,
         overflow: "hidden",
       })}
@@ -3255,7 +3255,7 @@ function PlaceholderPicker({
         sx={(theme) => ({
           flex: "none",
           p: "9px 11px",
-          borderBottom: `1px solid ${theme.palette.nebula.line}`,
+          borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         })}
       >
         <Kicker>Insert placeholder</Kicker>
@@ -3269,7 +3269,7 @@ function PlaceholderPicker({
             px: "9px",
             borderRadius: radius("sm"),
             background: theme.palette.nebula.bg0,
-            border: `1px solid ${theme.palette.nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
             "&:focus-within": { borderColor: theme.palette.nebula.accent },
           })}
         >
@@ -3443,7 +3443,7 @@ function Pane({ children, left }: Readonly<{ children: React.ReactNode; left?: b
         // A surface of its own, so the sheet in the middle reads as the thing
         // being worked on and the rails read as the tools.
         background: theme.palette.nebula.panel,
-        [left ? "borderLeft" : "borderRight"]: `1px solid ${theme.palette.nebula.line}`,
+        [left ? "borderLeft" : "borderRight"]: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
       })}
     >
       {children}
@@ -3519,7 +3519,7 @@ function Chrome({
           : warn
             ? alpha(theme.palette.nebula.warn, 0.12)
             : theme.palette.nebula.card,
-        border: `1px solid ${
+        border: `var(--nebula-line-width, 1px) solid ${
           filled
             ? theme.palette.nebula.accent
             : warn
@@ -3577,7 +3577,7 @@ function Tabs({
         p: "3px",
         borderRadius: radius("md"),
         background: theme.palette.nebula.bg0,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
       })}
     >
       {options.map((option) => {
@@ -3719,7 +3719,7 @@ function Count({ tone, children }: Readonly<{ tone: "ok" | "accent" | "quiet"; c
           minWidth: "14px",
           height: "14px",
           px: "3px",
-          borderRadius: "999px",
+          borderRadius: radius("pill"),
           background: tone === "quiet" ? alpha(colour, 0.35) : colour,
           color: tone === "quiet" ? theme.palette.nebula.text : theme.palette.nebula.onAccent,
           fontFamily: NEBULA_MONO,
@@ -3824,7 +3824,7 @@ function Group({ label, children, aside }: Readonly<{ label: string; children: R
         p: "12px",
         borderRadius: radius("md"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
       })}
     >
       <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1} sx={{ mb: "9px" }}>
@@ -3883,7 +3883,7 @@ function PaletteMark({ item }: Readonly<{ item: PaletteItem }>) {
                 width: "8px",
                 height: "14px",
                 borderRadius: "2px",
-                border: `1px solid ${theme.palette.nebula.dim}`,
+                border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.dim}`,
               })}
             />
           ))}
@@ -3954,7 +3954,7 @@ function PaletteMark({ item }: Readonly<{ item: PaletteItem }>) {
             width: "20px",
             height: "14px",
             borderRadius: "3px",
-            border: `1px solid ${theme.palette.nebula.dim}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.dim}`,
             background: theme.palette.nebula.card2,
           })}
         />
@@ -3967,7 +3967,7 @@ function PaletteMark({ item }: Readonly<{ item: PaletteItem }>) {
             width: "20px",
             height: "14px",
             borderRadius: "2px",
-            border: `1px solid ${theme.palette.nebula.dim}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.dim}`,
           })}
         />
       );
@@ -3986,7 +3986,7 @@ function PaletteMark({ item }: Readonly<{ item: PaletteItem }>) {
             width: "20px",
             height: "11px",
             borderRadius: "3px",
-            border: `1px solid ${theme.palette.nebula.accent}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accent}`,
           })}
         />
       );
@@ -4105,7 +4105,7 @@ function Choice({
         p: "3px",
         borderRadius: radius("sm"),
         background: theme.palette.nebula.bg0,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
       })}
     >
       {options.map((option) => {
@@ -4207,7 +4207,7 @@ function Swatches({
         p: "5px",
         borderRadius: radius("sm"),
         background: theme.palette.nebula.bg0,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
       })}
     >
       <Box
@@ -4338,7 +4338,7 @@ function PresenceMark({
               ml: "-6px",
               borderRadius: "50%",
               background: theme.palette.nebula.card2,
-              border: `1px solid ${theme.palette.nebula.line2}`,
+              border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
             })}
           />
         ))}
@@ -4359,7 +4359,7 @@ function Boxed({ children }: Readonly<{ children: React.ReactNode }>) {
         px: "9px",
         py: "6px",
         background: theme.palette.nebula.bg0,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         borderRadius: radius("sm"),
         "&:focus-within": { borderColor: theme.palette.nebula.accent },
       })}
@@ -4449,7 +4449,7 @@ function Preview({
             justifyContent: "center",
             fontSize: (block.h ?? 88) / 2.4,
             color: theme.palette.nebula.accent,
-            border: `1px solid ${theme.palette.nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
           })}
         >
           {block.glyph}
@@ -4553,7 +4553,7 @@ function Preview({
             fontSize: size,
             textAlign: align,
             color: theme.palette.nebula.muted,
-            border: `1px solid ${theme.palette.nebula.accentLine}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accentLine}`,
             background: theme.palette.nebula.accentSoft,
           })}
         >
@@ -4597,7 +4597,7 @@ function Preview({
               sx={(theme) => ({
                 px: "9px",
                 py: "7px",
-                border: `1px solid ${theme.palette.nebula.line2}`,
+                border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
               })}
             >
               <Typography
@@ -4647,7 +4647,7 @@ function Preview({
             minHeight: "44px",
             px: "12px",
             borderRadius: radius("sm"),
-            border: `1px solid ${theme.palette.nebula.accentLine}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accentLine}`,
             background: theme.palette.nebula.accentSoft,
           })}
         >
@@ -4793,7 +4793,7 @@ function Preview({
                 px: "9px",
                 py: "7px",
                 borderRadius: radius("sm"),
-                border: `1px solid ${theme.palette.nebula.line2}`,
+                border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
               })}
             >
               <Typography
@@ -4810,14 +4810,14 @@ function Preview({
       );
     case "table":
       return (
-        <Box sx={(theme) => ({ border: `1px solid ${theme.palette.nebula.line2}`, borderRadius: radius("sm") })}>
+        <Box sx={(theme) => ({ border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`, borderRadius: radius("sm") })}>
           {(block.rows ?? []).map((cells, row) => (
             <Box
               key={row}
               sx={(theme) => ({
                 display: "grid",
                 gridTemplateColumns: `repeat(${Math.max(1, cells.length)}, minmax(0, 1fr))`,
-                borderTop: row === 0 ? "none" : `1px solid ${theme.palette.nebula.line}`,
+                borderTop: row === 0 ? "none" : `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
               })}
             >
               {cells.map((cell, column) => (
@@ -4829,7 +4829,7 @@ function Preview({
                     fontSize: size - 1,
                     fontWeight: row === 0 ? 700 : 400,
                     color: row === 0 ? theme.palette.nebula.text : theme.palette.nebula.muted,
-                    borderLeft: column === 0 ? "none" : `1px solid ${theme.palette.nebula.line}`,
+                    borderLeft: column === 0 ? "none" : `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
                   })}
                 >
                   {cell}
@@ -4846,7 +4846,7 @@ function Preview({
             px: "12px",
             py: "10px",
             borderRadius: radius("md"),
-            border: `1px solid ${theme.palette.nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
             background: theme.palette.nebula.card,
             fontSize: size,
             textAlign: align,
@@ -4872,7 +4872,7 @@ function Preview({
                 px: "9px",
                 py: "5px",
                 borderRadius: radius("sm"),
-                border: `1px solid ${theme.palette.nebula.line2}`,
+                border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
                 fontSize: size - 1,
                 color: theme.palette.nebula.accent,
               })}
@@ -4893,7 +4893,7 @@ function Preview({
             justifyContent: "center",
             gap: "6px",
             borderRadius: radius("sm"),
-            border: `1px solid ${theme.palette.nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
             background: theme.palette.nebula.card2,
             color: theme.palette.nebula.dim,
             fontSize: 10.5,
@@ -5168,7 +5168,7 @@ function Countdown({
                 py: "5px",
                 borderRadius: radius("sm"),
                 background: theme.palette.nebula.card2,
-                border: `1px solid ${theme.palette.nebula.line2}`,
+                border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
               })}
             >
               <Box
@@ -5236,7 +5236,7 @@ function QrMark({ block }: Readonly<{ block: Block }>) {
         gap: "1px",
         borderRadius: radius("sm"),
         background: theme.palette.nebula.card2,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
       })}
     >
       {Array.from({ length: cells * cells }, (_, index) => {
@@ -5423,7 +5423,7 @@ function Properties({
               sx={(theme) => ({
                 mt: "9px",
                 pt: "9px",
-                borderTop: `1px solid ${theme.palette.nebula.line}`,
+                borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
               })}
             >
               <Stack direction="row" alignItems="center" gap={0.9} sx={{ mb: "6px" }}>
@@ -6276,7 +6276,7 @@ function Properties({
                   borderRadius: radius("sm"),
                   fontSize: 11,
                   color: theme.palette.nebula.muted,
-                  border: `1px solid ${theme.palette.nebula.line2}`,
+                  border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
                   "&:hover": { color: theme.palette.nebula.text, background: theme.palette.nebula.hover },
                 })}
               >
@@ -6371,7 +6371,7 @@ function Num({
         px: "9px",
         borderRadius: radius("sm"),
         background: theme.palette.nebula.bg0,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         "&:focus-within": { borderColor: theme.palette.nebula.accent },
       })}
     >
@@ -6417,7 +6417,7 @@ function Note({ children }: Readonly<{ children: React.ReactNode }>) {
         p: "9px",
         borderRadius: radius("sm"),
         background: alpha(theme.palette.nebula.warn, 0.1),
-        border: `1px solid ${alpha(theme.palette.nebula.warn, 0.24)}`,
+        border: `var(--nebula-line-width, 1px) solid ${alpha(theme.palette.nebula.warn, 0.24)}`,
       })}
     >
       <Box
@@ -6475,7 +6475,7 @@ function Picker({
         fontSize: 11.5,
         color: theme.palette.nebula.text,
         background: theme.palette.nebula.bg0,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         borderRadius: radius("sm"),
         outline: "none",
         "&:focus": { borderColor: theme.palette.nebula.accent },

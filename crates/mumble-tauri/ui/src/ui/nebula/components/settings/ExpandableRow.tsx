@@ -42,8 +42,8 @@ export function ExpandableRow({
           px: "14px",
           py: "12px",
           background: theme.palette.nebula.card,
-          border: `1px solid ${theme.palette.nebula.line}`,
-          borderBottom: open ? "none" : `1px solid ${theme.palette.nebula.line}`,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
+          borderBottom: open ? "none" : `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
           borderRadius: open ? `${radius("lg")} ${radius("lg")} 0 0` : radius("lg"),
         })}
       >
@@ -66,7 +66,7 @@ export function ExpandableRow({
             flex: "none",
             px: "15px",
             py: "7px",
-            borderRadius: "999px",
+            borderRadius: radius("pill"),
             background: theme.palette.nebula.card2,
             fontSize: 11.5,
             fontWeight: 600,
@@ -83,7 +83,7 @@ export function ExpandableRow({
             pt: "16px",
             pb: "14px",
             background: theme.palette.nebula.card,
-            border: `1px solid ${theme.palette.nebula.line}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
             borderTop: "none",
             borderRadius: `0 0 ${radius("lg")} ${radius("lg")}`,
           })}

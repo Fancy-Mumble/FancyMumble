@@ -156,7 +156,7 @@ function PluginCard({ row }: Readonly<{ row: PluginRow }>) {
           sx={(theme) => ({
             mt: "12px",
             pt: "10px",
-            borderTop: `1px solid ${theme.palette.nebula.line}`,
+            borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
           })}
         >
           <Typography sx={{ fontSize: 12, fontWeight: 600, mb: "6px" }}>{panel.title}</Typography>

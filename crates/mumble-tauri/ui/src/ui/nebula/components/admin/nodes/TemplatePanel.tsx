@@ -70,8 +70,8 @@ export function TemplatePanel<N extends GraphNode>({
         pb: "14px",
         pt: "2px",
         background: theme.palette.nebula.panel,
-        borderTop: `1px solid ${theme.palette.nebula.line}`,
-        borderBottom: `1px solid ${theme.palette.nebula.line2}`,
+        borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
+        borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
       })}
     >
       {sections.length === 0 && (
@@ -143,7 +143,7 @@ function TemplateCard<N extends GraphNode>({
       sx={(theme) => ({
         borderRadius: radius("lg"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         "&:hover": { borderColor: theme.palette.nebula.accentLine },
       })}
     >
@@ -186,7 +186,7 @@ function TemplateCard<N extends GraphNode>({
             overflow: "hidden",
             borderRadius: radius("md"),
             background: theme.palette.nebula.bg0,
-            border: `1px solid ${theme.palette.nebula.line}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
             // Small, and legible at that size: this is a thumbnail of a
             // document, so its own structure has to survive the shrinking.
             fontSize: 10.5,
@@ -200,7 +200,7 @@ function TemplateCard<N extends GraphNode>({
             "& h1, & h2, & h3, & h4": { margin: "0.3em 0 0.2em", fontSize: "1.2em", lineHeight: 1.25 },
             "& ul, & ol": { margin: "0.2em 0", paddingLeft: "1.2em" },
             "& li": { margin: 0 },
-            "& hr": { border: 0, borderTop: `1px solid ${theme.palette.nebula.line2}`, margin: "0.5em 0" },
+            "& hr": { border: 0, borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`, margin: "0.5em 0" },
             "& a": { color: theme.palette.nebula.accent },
             "& img": { maxWidth: "100%" },
           })}
@@ -230,7 +230,7 @@ function TemplateCard<N extends GraphNode>({
           mt: "auto",
           px: "14px",
           py: "10px",
-          borderTop: `1px solid ${theme.palette.nebula.line}`,
+          borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         })}
       >
         <Action primary label={strings.add} onClick={() => onUse(false)} />
@@ -270,7 +270,7 @@ function Action({
         fontWeight: 600,
         color: primary ? theme.palette.nebula.accent : theme.palette.nebula.muted,
         background: primary ? theme.palette.nebula.accentSoft : "transparent",
-        border: `1px solid ${primary ? theme.palette.nebula.accentLine : theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${primary ? theme.palette.nebula.accentLine : theme.palette.nebula.line2}`,
         "&:hover": {
           background: primary ? theme.palette.nebula.accentSoft : theme.palette.nebula.hover,
           color: primary ? theme.palette.nebula.accent : theme.palette.nebula.text,

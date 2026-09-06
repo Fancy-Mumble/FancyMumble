@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, Tooltip, Typography } from "@mui/material";
-import type { Theme } from "@mui/material/styles";
+import { useTheme, type Theme } from "@mui/material/styles";
 import { parseChannelDescription } from "@core/channelProfile";
 import { useChannelDescription } from "@core/lazyBlobs";
 import type { ChannelEntry, UserEntry } from "@core/types";
@@ -146,29 +146,41 @@ function GroupLabel({ children }: Readonly<{ children: React.ReactNode }>) {
 /**
  * The selected channel row, in whichever way this theme marks one.
  *
- * The sheet gives four treatments across the twelve skins - a translucent wash
- * of the accent (most), a solid accent fill with its own ink (Mobel, Ply,
- * Midnight), a glow behind that fill (Midnight), and an inset bar down the
- * leading edge (Guardbase) - plus the notch Midnight cuts out of the row. All
- * four ride on `palette.nebulaSkin`, so a row never has to know which theme it
- * is in.
+ * The sheet gives four treatments across the skins - a translucent wash of the
+ * accent (most), a solid accent fill with its own ink (Mobel, Ply, Midnight,
+ * Nimbus), a glow behind that fill (Midnight, Nimbus), and an inset bar down
+ * the leading edge (Guardbase, Nimbus) - plus the notch Midnight and Nimbus
+ * cut out of the row. All four ride on `palette.nebulaSkin`, so a row never
+ * has to know which theme it is in, and they compose: Nimbus wears three at
+ * once.
  */
 function selectionStyle(theme: Theme, selected: boolean) {
   const { nebula, nebulaSkin } = theme.palette;
   if (!selected) {
-    return { color: nebula.muted, background: "transparent", border: "1px solid transparent" } as const;
+    return { color: nebula.muted, background: "transparent", border: "var(--nebula-line-width, 1px) solid transparent" } as const;
   }
   const solid = nebulaSkin.selection === "solid";
   return {
     color: solid ? nebula.onAccent : nebula.text,
     background: solid ? nebula.accent : nebula.accentSoft,
-    border: `1px solid ${solid ? "transparent" : nebula.accentLine}`,
+    border: `var(--nebula-line-width, 1px) solid ${solid ? "transparent" : nebula.accentLine}`,
     clipPath: nebulaSkin.clipSelection === "none" ? undefined : nebulaSkin.clipSelection,
-    boxShadow: nebulaSkin.selectionGlow
-      ? `0 0 14px ${nebula.accentLine}`
-      : nebulaSkin.selectionBar
-        ? `inset 3px 0 0 ${nebula.accent}`
-        : undefined,
+    // The two marks compose rather than exclude: Midnight glows, Guardbase
+    // bars, and Nimbus does both. On a solid fill the bar switches to the
+    // theme's second hue, because an accent bar on an accent row is invisible
+    // - which is also what Nimbus wants, a gold edge against the blue plate.
+    boxShadow:
+      [
+        nebulaSkin.selectionGlow ? `0 0 14px ${nebula.accentLine}` : "",
+        // Wider on a solid fill, because a skin that fills the row usually
+        // also cuts it (Nimbus), and a cut eats a hairline bar down to a
+        // sliver. Ten pixels survives the diagonal as a deliberate flash.
+        nebulaSkin.selectionBar
+          ? `inset ${solid ? 10 : 3}px 0 0 ${solid ? nebula.accent2 : nebula.accent}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(",") || undefined,
   } as const;
 }
 
@@ -210,6 +222,11 @@ function ChannelRow({
   onContextMenuUser,
 }: Readonly<ChannelRowProps>) {
   const { t } = useTranslation("nebulaSidebar");
+  // Whether this row is painted as a solid block of the accent, which is what
+  // decides if the glyph may be drawn in the accent too - on Mobel, Ply,
+  // Midnight and Nimbus that would be accent on accent, and invisible.
+  const skin = useTheme().palette.nebulaSkin;
+  const filled = selected && skin.selection === "solid";
   // The faces belong on the row itself, so a channel whose people are drawn
   // there has nothing left to nest underneath it.
   const stacked = viewer === "modern" && occupants.length > 0;
@@ -223,7 +240,7 @@ function ChannelRow({
           ? {
               borderRadius: radius("md"),
               background: theme.palette.nebula.card,
-              border: `1px solid ${theme.palette.nebula.line}`,
+              border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
             }
           : {}),
       })}
@@ -241,7 +258,23 @@ function ChannelRow({
         onContextMenu={(event) => onContextMenu(channel, event)}
         sx={(theme) =>
           joined
-            ? { px: "10px", py: "8px", cursor: "pointer" }
+            ? {
+                px: "10px",
+                py: "8px",
+                cursor: "pointer",
+                // The card says "you are here"; on its own it never says "you
+                // are reading this", so the selection mark used to disappear
+                // the moment the channel you were reading was also the one you
+                // were in - which is the ordinary case. The card's header row
+                // takes the theme's own mark instead, squared off at the
+                // bottom because the roster continues underneath it.
+                ...(selected
+                  ? {
+                      borderRadius: `${radius("md")} ${radius("md")} 0 0`,
+                      ...selectionStyle(theme, true),
+                    }
+                  : {}),
+              }
             : {
                 px: "12px",
                 py: "10px",
@@ -255,7 +288,7 @@ function ChannelRow({
               }
         }
       >
-        <ChannelGlyph channel={channel} active={joined || selected} />
+        <ChannelGlyph channel={channel} active={joined || selected} filled={filled} />
         <Typography sx={{ fontSize: 12.5, fontWeight: joined ? 600 : 400 }} noWrap>
           {channel.name}
         </Typography>
@@ -436,7 +469,11 @@ function OccupantRow({
   );
 }
 
-function ChannelGlyph({ channel, active }: Readonly<{ channel: ChannelEntry; active: boolean }>) {
+function ChannelGlyph({
+  channel,
+  active,
+  filled,
+}: Readonly<{ channel: ChannelEntry; active: boolean; filled: boolean }>) {
   const { t } = useTranslation("nebulaSidebar");
   // Only a channel that has a description costs a fetch here, and the blob is
   // cached: a tree of rooms that never set an icon asks the server nothing.
@@ -472,7 +509,14 @@ function ChannelGlyph({ channel, active }: Readonly<{ channel: ChannelEntry; act
       sx={(theme) => ({
         fontSize: 13,
         lineHeight: 1,
-        color: active ? theme.palette.nebula.accent : theme.palette.nebula.dim,
+        // On a filled row the ink is the row's own, stepped back so the glyph
+        // still reads as secondary to the name beside it.
+        color: filled
+          ? "currentColor"
+          : active
+            ? theme.palette.nebula.accent
+            : theme.palette.nebula.dim,
+        opacity: filled ? 0.65 : 1,
       })}
     >
       #

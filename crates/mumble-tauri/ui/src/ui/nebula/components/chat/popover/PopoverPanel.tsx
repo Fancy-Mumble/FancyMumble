@@ -68,7 +68,7 @@ export function PopoverPanel({
             height: 44,
             flex: "none",
             px: "14px",
-            borderBottom: `1px solid ${theme.palette.nebula.washLine}`,
+            borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.washLine}`,
           })}
         >
           <Typography
@@ -112,7 +112,7 @@ export function PopoverPanel({
             flex: "none",
             minHeight: 38,
             px: "14px",
-            borderTop: `1px solid ${theme.palette.nebula.washLine}`,
+            borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.washLine}`,
             fontSize: 11,
             color: theme.palette.nebula.muted,
           })}

@@ -326,7 +326,7 @@ export function MessageList({
                   py: "3px",
                   borderRadius: radius("lg"),
                   background: theme.palette.nebula.card,
-                  border: `1px solid ${theme.palette.nebula.line}`,
+                  border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
                   fontSize: 10.5,
                   color: theme.palette.nebula.muted,
                 })}

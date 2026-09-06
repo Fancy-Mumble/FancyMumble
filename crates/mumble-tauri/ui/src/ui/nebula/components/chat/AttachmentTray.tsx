@@ -189,7 +189,7 @@ export function AttachmentTray({
               fontWeight: 600,
               color: theme.palette.nebula.muted,
               background: theme.palette.nebula.card2,
-              border: `1px solid ${theme.palette.nebula.line}`,
+              border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
               "&:hover": {
                 background: theme.palette.nebula.hover,
                 color: theme.palette.nebula.text,
@@ -298,7 +298,7 @@ export function AttachmentTray({
                   px: "10px",
                   borderRadius: "9px",
                   background: theme.palette.nebula.card2,
-                  border: `1px solid ${theme.palette.nebula.accentLine}`,
+                  border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accentLine}`,
                   fontFamily: NEBULA_MONO,
                   fontSize: 12,
                   letterSpacing: "0.14em",
@@ -437,7 +437,7 @@ function OptionRow({
         pt: first ? "7px" : "6px",
         pb: "4px",
         mt: first ? "2px" : 0,
-        borderTop: first ? `1px solid ${theme.palette.nebula.line}` : "none",
+        borderTop: first ? `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}` : "none",
       })}
     >
       <Typography
@@ -504,7 +504,7 @@ function Chip({
         fontWeight: 600,
         whiteSpace: "nowrap",
         background: selected ? theme.palette.nebula.accentSoft : theme.palette.nebula.card2,
-        border: `1px solid ${selected ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${selected ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
         color: selected ? theme.palette.nebula.text : theme.palette.nebula.muted,
         "&:hover": { background: selected ? theme.palette.nebula.accentSoft : theme.palette.nebula.hover },
       })}
@@ -581,7 +581,7 @@ function AttachmentTile({ file, onRemove }: Readonly<{ file: StagedAttachment; o
           height: TILE_PX,
           borderRadius: radius("md"),
           overflow: "hidden",
-          border: `1px solid ${theme.palette.nebula.line}`,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         })}
       >
         <Box
@@ -610,7 +610,7 @@ function AttachmentTile({ file, onRemove }: Readonly<{ file: StagedAttachment; o
         pr: "30px",
         borderRadius: radius("md"),
         background: theme.palette.nebula.card2,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
       })}
     >
       <Box
@@ -623,7 +623,7 @@ function AttachmentTile({ file, onRemove }: Readonly<{ file: StagedAttachment; o
           placeItems: "center",
           borderRadius: radius("sm"),
           background: theme.palette.nebula.panel,
-          border: `1px solid ${theme.palette.nebula.line2}`,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
           fontFamily: NEBULA_MONO,
           fontSize: 8.5,
           fontWeight: 600,

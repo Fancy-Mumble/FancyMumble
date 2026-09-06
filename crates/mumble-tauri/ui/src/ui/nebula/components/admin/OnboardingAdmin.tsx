@@ -422,7 +422,7 @@ export function OnboardingAdmin() {
                       fontSize: 11,
                       opacity: remaining > 0 ? 1 : 0.5,
                       background: theme.palette.nebula.card,
-                      border: `1px solid ${theme.palette.nebula.line}`,
+                      border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
                       "&:hover": {
                         borderColor: remaining > 0 ? theme.palette.nebula.accentLine : undefined,
                       },
@@ -511,7 +511,7 @@ function Step({
                 // smaller than the numbers beside it at the same point size.
                 fontSize: 13,
                 background: nebula.accentSoft,
-                border: `1px solid ${nebula.accentLine}`,
+                border: `var(--nebula-line-width, 1px) solid ${nebula.accentLine}`,
                 color: nebula.accent,
               };
             if (tone === "add")
@@ -524,7 +524,7 @@ function Step({
             return {
               ...base,
               background: nebula.card2,
-              border: `1px solid ${nebula.line2}`,
+              border: `var(--nebula-line-width, 1px) solid ${nebula.line2}`,
               color: nebula.muted,
             };
           }}
@@ -567,7 +567,7 @@ function CollapsedQuestion({
         py: "11px",
         borderRadius: radius("lg"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         "&:hover": { borderColor: theme.palette.nebula.line2 },
       })}
     >
@@ -626,7 +626,7 @@ function QuestionCard({
         p: "14px",
         borderRadius: radius("lg"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
       })}
     >
       <Stack direction="row" alignItems="center" gap={1}>
@@ -750,7 +750,7 @@ function QuestionCard({
             py: "6px",
             borderRadius: radius("md"),
             background: theme.palette.nebula.panel,
-            border: `1px solid ${theme.palette.nebula.line}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
           })}
         >
           <CompactSwitch
@@ -833,7 +833,7 @@ function AnswerRow({
         py: "7px",
         borderRadius: radius("md"),
         background: theme.palette.nebula.panel,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
       })}
     >
       <Stack direction="row" alignItems="center" gap={1}>

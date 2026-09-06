@@ -31,7 +31,7 @@ export function OfficialBadge() {
         letterSpacing: "0.04em",
         color: theme.palette.nebula.accent,
         background: theme.palette.nebula.accentSoft,
-        border: `1px solid ${theme.palette.nebula.accentLine}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accentLine}`,
       })}
     >
       <ShieldCheckIcon width={11} height={11} />

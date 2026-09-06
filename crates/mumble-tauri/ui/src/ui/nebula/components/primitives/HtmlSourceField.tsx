@@ -75,7 +75,7 @@ export function HtmlSourceField({
         position: "relative",
         borderRadius: radius("md"),
         background: nebula.card,
-        border: `1px solid ${nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${nebula.line2}`,
         transition: "border-color 140ms ease",
         "&:focus-within": { borderColor: nebula.accentLine },
       }}

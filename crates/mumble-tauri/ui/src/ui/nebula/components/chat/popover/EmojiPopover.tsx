@@ -6,6 +6,7 @@ import { getServerCustomReactions } from "@core/features/chat/reaction/reactionS
 import { SearchIcon } from "@ui/icons";
 import { Stack } from "../../primitives";
 import { PopoverPanel } from "./PopoverPanel";
+import { radius } from "../../../tokens";
 
 /** The canvas's width for this panel. */
 export const EMOJI_POPOVER_WIDTH = 340;
@@ -68,7 +69,7 @@ export function EmojiPopover({
             height: 44,
             flex: "none",
             px: "14px",
-            borderBottom: `1px solid ${theme.palette.nebula.washLine}`,
+            borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.washLine}`,
           })}
         >
           <Box aria-hidden sx={(theme) => ({ display: "flex", color: theme.palette.nebula.dim })}>
@@ -98,7 +99,7 @@ export function EmojiPopover({
             px: "12px",
             py: "8px",
             flex: "none",
-            borderBottom: `1px solid ${theme.palette.nebula.washLine}`,
+            borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.washLine}`,
           })}
         >
           {CATEGORIES.map((category) => (
@@ -117,7 +118,7 @@ export function EmojiPopover({
                 width: 28,
                 height: 28,
                 fontSize: 15,
-                borderRadius: "999px",
+                borderRadius: radius("pill"),
                 // Only the active one is lit; the rest are bare.
                 background: category.id === active ? theme.palette.nebula.accentSoft : "transparent",
                 opacity: category.id === active ? 1 : 0.55,

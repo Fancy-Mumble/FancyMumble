@@ -95,7 +95,7 @@ function EmbedCard({
           mt: "6px",
           p: "10px",
           borderRadius: radius("lg"),
-          border: "1px solid " + theme.palette.nebula.line,
+          border: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line,
           background: theme.palette.nebula.card2,
         })}
       >
@@ -165,7 +165,7 @@ function EmbedCard({
                       placeItems: "center",
                       width: 32,
                       height: 32,
-                      borderRadius: "999px",
+                      borderRadius: radius("pill"),
                       color: "#fff",
                       background: "rgba(12,16,28,.72)",
                       backdropFilter: "blur(6px)",
@@ -323,11 +323,11 @@ function CardButton({
         gap: "6px",
         px: "10px",
         height: 26,
-        borderRadius: "999px",
+        borderRadius: radius("pill"),
         fontSize: 12,
         fontWeight: 600,
         color: theme.palette.nebula.text,
-        border: "1px solid " + theme.palette.nebula.line2,
+        border: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line2,
         background: theme.palette.nebula.card,
         "&:hover": {
           borderColor: theme.palette.nebula.accentLine,

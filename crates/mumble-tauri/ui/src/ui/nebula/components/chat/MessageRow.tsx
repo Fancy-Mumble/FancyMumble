@@ -165,7 +165,7 @@ function bodyMarkupSx(theme: Theme) {
       p: "8px 10px",
       borderRadius: radius("sm"),
       background: nebula.card2,
-      border: `1px solid ${nebula.line}`,
+      border: `var(--nebula-line-width, 1px) solid ${nebula.line}`,
       overflowX: "auto",
     },
     "& pre code": {
@@ -979,7 +979,7 @@ function BodyEditor({
           lineHeight: 1.55,
           borderRadius: radius("lg"),
           background: theme.palette.nebula.accentSoft,
-          border: `1px solid ${theme.palette.nebula.accent}`,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accent}`,
         })}
       />
       <Typography sx={(theme) => ({ fontSize: 10, color: theme.palette.nebula.dim })}>

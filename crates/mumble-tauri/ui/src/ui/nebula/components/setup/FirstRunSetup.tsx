@@ -136,7 +136,7 @@ export function FirstRunSetup({ onComplete }: Readonly<{ onComplete: () => void 
           padding: "26px 28px",
           borderRadius: radius("xl"),
           background: muiTheme.palette.nebula.card,
-          border: `1px solid ${muiTheme.palette.nebula.line2}`,
+          border: `var(--nebula-line-width, 1px) solid ${muiTheme.palette.nebula.line2}`,
         })}
       >
         <Stack gap={0.5}>
@@ -258,7 +258,7 @@ function StepRail({ stepIndex }: Readonly<{ stepIndex: number }>) {
           <Box
             sx={(muiTheme) => ({
               height: 3,
-              borderRadius: 999,
+              borderRadius: radius("pill"),
               background: index <= stepIndex ? muiTheme.palette.nebula.accent : muiTheme.palette.nebula.line2,
             })}
           />
@@ -306,7 +306,7 @@ function ChoiceCard({
         padding: "11px 13px",
         borderRadius: radius("md"),
         background: selected ? muiTheme.palette.nebula.accentSoft : muiTheme.palette.nebula.card2,
-        border: `1px solid ${selected ? muiTheme.palette.nebula.accentLine : muiTheme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${selected ? muiTheme.palette.nebula.accentLine : muiTheme.palette.nebula.line}`,
       })}
     >
       <Box
@@ -353,7 +353,7 @@ function ThemeSwatch({
         padding: "6px",
         borderRadius: radius("md"),
         background: selected ? muiTheme.palette.nebula.accentSoft : muiTheme.palette.nebula.card2,
-        border: `1px solid ${selected ? muiTheme.palette.nebula.accentLine : muiTheme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${selected ? muiTheme.palette.nebula.accentLine : muiTheme.palette.nebula.line}`,
       })}
     >
       <Box
@@ -363,7 +363,7 @@ function ThemeSwatch({
           display: "flex",
           overflow: "hidden",
           borderRadius: radius("sm"),
-          border: "1px solid rgba(128,128,128,.2)",
+          border: "var(--nebula-line-width, 1px) solid rgba(128,128,128,.2)",
         }}
       >
         {swatches.map((swatch) => (

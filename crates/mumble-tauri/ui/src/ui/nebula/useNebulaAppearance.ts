@@ -164,9 +164,18 @@ export function useNebulaTheme(livery?: ServerLivery | null): Theme {
         ? globalThis.matchMedia("(prefers-color-scheme: light)")
         : null;
     media?.addEventListener("change", sync);
+    // Dev only. `themeCatalog` is plain data, so Fast Refresh re-renders the
+    // components that import it while keeping this hook's state - which means
+    // an edit to a palette or a skin reloads the module and then never
+    // reaches the window, and the dev loop shows the previous theme. Re-read
+    // after every hot update so editing a theme is visible without a restart.
+    // Feature-checked rather than truth-checked: the test runner provides an
+    // `import.meta.hot` that carries neither half of this pair.
+    import.meta.hot?.on?.("vite:afterUpdate", sync);
     return () => {
       observer.disconnect();
       media?.removeEventListener("change", sync);
+      import.meta.hot?.off?.("vite:afterUpdate", sync);
     };
   }, []);
 

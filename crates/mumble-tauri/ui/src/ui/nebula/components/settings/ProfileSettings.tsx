@@ -226,7 +226,8 @@ export function ProfileSettings({
         if (payload.deny_type === DENY_TEXT_TOO_LONG || payload.reason)
           setDenial({ tooLarge: payload.deny_type === DENY_TEXT_TOO_LONG, reason: payload.reason });
       },
-    );
+      // No shell to listen to - a browser dev session or a test.
+    ).catch(() => () => undefined);
     return () => {
       void unlisten.then((stop) => stop());
     };
@@ -439,7 +440,7 @@ export function ProfileSettings({
                   background: profile.banner?.image
                     ? `center/cover url(${profile.banner.image})`
                     : (profile.banner?.color ?? theme.palette.nebula.card2),
-                  border: `1px solid ${theme.palette.nebula.line2}`,
+                  border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
                 })}
               />
               <TextButton
@@ -499,7 +500,7 @@ export function ProfileSettings({
                   colours.length > 0
                     ? resolveThemePalette(colours, profile.cardGlass ?? false).gradient
                     : theme.palette.nebula.card2,
-                border: `1px solid ${theme.palette.nebula.line2}`,
+                border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
               })}
             />
           }
@@ -730,7 +731,7 @@ export function ProfileSettings({
                     fontWeight: active ? 600 : 400,
                     color: plate.id === "none" ? theme.palette.nebula.muted : "#fff",
                     background: plate.id === "none" ? theme.palette.nebula.card : plate.bg,
-                    border: `1px solid ${plate.id === "none" ? theme.palette.nebula.line : "transparent"}`,
+                    border: `var(--nebula-line-width, 1px) solid ${plate.id === "none" ? theme.palette.nebula.line : "transparent"}`,
                     boxShadow: active ? `0 0 0 2px ${theme.palette.nebula.accentLine}` : "none",
                   })}
                 >
@@ -1038,7 +1039,7 @@ function IdentityBar({
                   fontWeight: active ? 600 : 400,
                   color: active ? theme.palette.nebula.text : theme.palette.nebula.muted,
                   background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.card,
-                  border: `1px solid ${active ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
+                  border: `var(--nebula-line-width, 1px) solid ${active ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
                 })}
               >
                 {name}
@@ -1122,7 +1123,7 @@ function ColourWell({
         height: 34,
         borderRadius: radius("md"),
         overflow: "hidden",
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         "&::-webkit-color-swatch-wrapper": { padding: 0 },
         "&::-webkit-color-swatch": { border: "none" },
       })}
@@ -1168,7 +1169,7 @@ function Swatch({
         display: "grid",
         placeItems: "center",
         background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.card,
-        border: `1px solid ${active ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${active ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
       })}
     >
       {children}

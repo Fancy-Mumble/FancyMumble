@@ -256,7 +256,7 @@ function PanelRow({
         borderRadius: radius("lg"),
         overflow: "hidden",
         background: active ? theme.palette.nebula.accentSoft : theme.palette.nebula.card,
-        border: "1px solid " + (active ? theme.palette.nebula.accentLine : theme.palette.nebula.line2),
+        border: "var(--nebula-line-width, 1px) solid " + (active ? theme.palette.nebula.accentLine : theme.palette.nebula.line2),
         "&:hover": { borderColor: theme.palette.nebula.accentLine },
         "&:focus-visible": { outline: "2px solid " + theme.palette.nebula.accent, outlineOffset: 2 },
         opacity: dragging ? 0.4 : 1,
@@ -434,7 +434,7 @@ export function ServerRailPanel({
         background: pinned
           ? theme.palette.nebula.panel
           : theme.palette.nebula.tint + "," + theme.palette.nebula.bg0,
-        borderRight: "1px solid " + (pinned ? theme.palette.nebula.line : theme.palette.nebula.line2),
+        borderRight: "var(--nebula-line-width, 1px) solid " + (pinned ? theme.palette.nebula.line : theme.palette.nebula.line2),
         // Nothing is underneath it to cast onto.
         boxShadow: pinned ? "none" : "34px 0 70px rgba(2,6,18,.5)",
       })}

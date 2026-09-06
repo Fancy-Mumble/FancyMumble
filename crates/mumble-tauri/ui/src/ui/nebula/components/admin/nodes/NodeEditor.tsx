@@ -210,7 +210,7 @@ export function NodeEditor<N extends GraphNode>({
                 fontSize: 11.5,
                 fontWeight: 500,
                 color: tone,
-                border: `1px solid ${tone}55`,
+                border: `var(--nebula-line-width, 1px) solid ${tone}55`,
                 background: `${tone}1f`,
               };
             }}
@@ -294,7 +294,7 @@ export function NodeEditor<N extends GraphNode>({
             fontWeight: 700,
             letterSpacing: "0.08em",
             color: live ? theme.palette.nebula.ok : theme.palette.nebula.dim,
-            border: `1px solid ${live ? theme.palette.nebula.ok : theme.palette.nebula.line2}55`,
+            border: `var(--nebula-line-width, 1px) solid ${live ? theme.palette.nebula.ok : theme.palette.nebula.line2}55`,
           })}
         >
           {live ? spec.strings.live : spec.strings.idle}
@@ -356,7 +356,7 @@ function DrawerButton({
         fontWeight: 600,
         color: theme.palette.nebula.accent,
         background: open ? theme.palette.nebula.accentSoft : "transparent",
-        border: `1px solid ${theme.palette.nebula.accentLine}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accentLine}`,
         "&:hover": { background: theme.palette.nebula.accentSoft },
       })}
     >
@@ -411,7 +411,7 @@ function Ghost<N extends GraphNode>({ carry }: Readonly<{ carry: Carry<N> }>) {
         opacity: carry.over ? 1 : 0.5,
         color: theme.palette.nebula.text,
         background: theme.palette.nebula.card,
-        border: `1px solid ${carry.over ? theme.palette.nebula.accent : theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${carry.over ? theme.palette.nebula.accent : theme.palette.nebula.line2}`,
         boxShadow: carry.over ? theme.palette.nebula.shadow : "none",
       })}
     >

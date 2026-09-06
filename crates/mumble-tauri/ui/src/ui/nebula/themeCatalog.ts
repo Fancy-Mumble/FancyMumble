@@ -1,5 +1,5 @@
 /**
- * The twelve skins, as the design sheet authored them.
+ * The thirteen skins, as the design sheet authored them.
  *
  * Transcribed from "Fancy Mumble Light Theme" (turn 4, one aesthetic per
  * audience). Each theme commits to an audience and pushes four levers at once -
@@ -11,13 +11,13 @@
  * # Two palettes per theme
  *
  * The names are brands, not modes. "Dark" is the everyday default and "Light"
- * is the enterprise skin, and each of the twelve is drawn in both a light and a
+ * is the enterprise skin, and each of them is drawn in both a light and a
  * dark scheme - which is why the pack needs a light/dark choice of its own,
  * separate from which theme is picked.
  *
  * # What is not transcribed verbatim
  *
- * - **Typefaces.** The sheet names twelve Google families; the app bundles
+ * - **Typefaces.** The sheet names a Google family per theme; the app bundles
  *   Inter, Roboto and Space Mono. Each stack below asks for the sheet's family
  *   first and falls back to a bundled face of the same voice, so a theme reads
  *   correctly today and reads exactly right the moment the font file ships.
@@ -26,7 +26,8 @@
  *   window. A theme that has an opinion states it (Ply reserves red).
  */
 
-/** The twelve. Eleven match the app's existing colour themes; Aurora is new. */
+/** The thirteen. Eleven match the app's existing colour themes; Aurora and
+ * Nimbus are the pack's own. */
 export type NebulaThemeId =
   | "dark"
   | "light"
@@ -39,7 +40,8 @@ export type NebulaThemeId =
   | "midnight-pretenders"
   | "ply"
   | "guardbase"
-  | "aurora";
+  | "aurora"
+  | "nimbus";
 
 /**
  * One scheme's colours.
@@ -141,6 +143,40 @@ export interface NebulaSkin {
   radiusRail: string;
   /** Avatars. `50%` unless the theme squares them off. */
   radiusAvatar: string;
+  /**
+   * Chips, badges and the send disc - anything drawn as a lozenge.
+   *
+   * `999px` for every theme the sheet drew, which is what those elements were
+   * hardcoded to before this was a lever. A skin that squares every other
+   * corner usually wants these squared too, and could not say so.
+   */
+  radiusPill: string;
+  /**
+   * Hairline weight. `1px` for every theme the sheet drew.
+   *
+   * A skin whose whole language is a hard outline - no shadow, no glass, a
+   * drawn edge on every surface - needs the edge to actually read, and 1px
+   * does not at the sizes this pack draws.
+   */
+  lineWidth: string;
+  /**
+   * The silhouette of a control: search field, composer, send button.
+   *
+   * A clip rather than a `skewX`, so the label inside stays upright and no
+   * component needs a counter-transform wrapper. `none` for every theme that
+   * draws plain rectangles.
+   */
+  clipPlate: string;
+  /**
+   * The chrome voice: what the theme draws *besides* colour and corners.
+   *
+   * `plain` is the pack as it was. `stencil` turns on the marks a drawn,
+   * poster-like skin needs and that no palette can express - a ring over each
+   * avatar, section headings set as tracked italic caps against a dashed
+   * rule, and an outlined wordmark behind the conversation. Gated because
+   * they are wrong on eleven of the twelve other skins.
+   */
+  chrome: "plain" | "stencil";
   /** A notched window outline, for the themes that cut their corners. */
   clipWindow: string;
   /** The same notch on a selected row. */
@@ -180,8 +216,8 @@ export interface NebulaThemeDef {
 }
 
 /**
- * The sheet's twelve families, each followed by a bundled face of the same
- * voice. Only Inter, Roboto and Space Mono ship with the app today.
+ * One family per theme, each followed by a bundled face of the same voice.
+ * Only Inter, Roboto and Space Mono ship with the app today.
  */
 const FONTS = {
   interTight: '"Inter Tight","Inter",system-ui,-apple-system,"Segoe UI",sans-serif',
@@ -196,6 +232,10 @@ const FONTS = {
   spaceGrotesk: '"Space Grotesk","Space Mono","Inter",system-ui,sans-serif',
   rajdhani: '"Rajdhani","Chakra Petch","Roboto Condensed","Roboto",system-ui,sans-serif',
   outfit: '"Outfit","Inter",system-ui,sans-serif',
+  // Two voices in one stack: a Japanese gothic for body copy, with the
+  // condensed italic grotesque behind it that the reference uses for every
+  // label and badge. Neither ships, so both fall through to Inter.
+  zenKaku: '"Zen Kaku Gothic New","Saira","Inter",system-ui,"Segoe UI",sans-serif',
 } as const;
 
 /**
@@ -215,6 +255,10 @@ export const DEFAULT_SKIN: NebulaSkin = {
   radiusXl: "20px",
   radiusRail: "10px",
   radiusAvatar: "50%",
+  radiusPill: "999px",
+  lineWidth: "1px",
+  clipPlate: "none",
+  chrome: "plain",
   clipWindow: "none",
   clipSelection: "none",
   clipBubble: "none",
@@ -237,6 +281,10 @@ function skin(over: Partial<NebulaSkin> & Pick<NebulaSkin, "font">): NebulaSkin 
     radiusXl: "14px",
     radiusRail: "10px",
     radiusAvatar: "50%",
+    radiusPill: "999px",
+    lineWidth: "1px",
+    clipPlate: "none",
+    chrome: "plain",
     clipWindow: "none",
     clipSelection: "none",
     clipBubble: "none",
@@ -1135,6 +1183,164 @@ export const NEBULA_THEMES: readonly NebulaThemeDef[] = [
       canvasA: "#16233c",
       canvasB: "#0b1120",
       wash: "linear-gradient(180deg, rgba(127,176,255,.09), rgba(4,7,14,.34) 45%, rgba(4,7,14,.48))",
+    },
+  },
+
+  /**
+   * A homage to the bright blue "academy tactical" look of a certain Japanese
+   * school-military mobile game, transcribed from a design-canvas artboard
+   * rather than guessed at.
+   *
+   * The four levers, in the order they read on screen:
+   *
+   * - **Parallelograms, not rounded rectangles.** Every corner is 0px and the
+   *   shape comes from the cut instead: the selected row is a true skewed
+   *   plate (`clipSelection`), which is this catalog's way of writing the
+   *   `skewX(-12deg)` the artboard puts on every chip, button and input.
+   * - **Blue and white at full brightness, over a dark navy rail and bar.**
+   *   The window is a pale sky wash with white chrome; the rail and the title
+   *   bar invert to navy, which is the one place the reference lets the dark
+   *   in. That is why this palette states `barFg`/`barDim` at all.
+   * - **The halo, in gold.** `accent2` is the ring gold, and it is also
+   *   `accentOnRail` and the bar down a selected row - a warm edge against
+   *   saturated blue is the reference's single most recognisable move.
+   * - **A dot grid, not a gradient.** The conversation's texture is a 22px
+   *   halftone lattice carried in `overlay`; the per-layer `0 0/22px 22px`
+   *   rides inside the value because `backdrop` is assigned to the
+   *   `background` shorthand, which takes a size per layer.
+   *
+   * Both schemes are transcribed from the artboard's own two boards ("day"
+   * and "night"); the dark half is not derived from the light one, which is
+   * why its greys are a colder, less saturated ladder than a tint of day
+   * would give.
+   *
+   * Nothing is transcribed from the source game: the artboard is the pack's
+   * own drawing and the colours are re-picked against this catalog's contrast
+   * floors, which is why the name is a halo and not a trademark.
+   */
+  {
+    id: "nimbus",
+    name: "Nimbus",
+    audience: "anime & gaming communities · bright tactical",
+    note: "0px skewed plates · Zen Kaku Gothic · sky blue on white, navy rail, gold halo, dot grid",
+    skin: skin({
+      font: FONTS.zenKaku,
+      track: ".01em",
+      weight: 500,
+      radiusSm: "0px",
+      radiusMd: "0px",
+      radiusLg: "0px",
+      radiusXl: "0px",
+      radiusRail: "0px",
+      // The one curve the reference keeps: halos are rings, so avatars stay
+      // circles even where every other corner is squared off. The chips are
+      // not curves: every badge on the artboard is a hard rectangle.
+      radiusAvatar: "50%",
+      radiusPill: "0px",
+      // The artboard draws every edge as a hard 2px rule and leans every
+      // control the same 12 degrees. Both are the skin's, so no component has
+      // to know which theme it is in.
+      lineWidth: "2px",
+      clipPlate: "polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%)",
+      chrome: "stencil",
+      // A parallelogram, which is what `skewX(-12deg)` resolves to on a row of
+      // this height - written as a clip so the row's text is not skewed with
+      // it and needs no counter-transform.
+      clipSelection: "polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%)",
+      // The artboard cuts the trailing bottom corner off a bubble; one shape
+      // serves both sides, because a bubble is not mirrored by the pack.
+      clipBubble: "polygon(0 0, 100% 0, 100% 100%, 16px 100%, 0 calc(100% - 16px))",
+      selection: "solid",
+      selectionGlow: true,
+      selectionBar: true,
+      // Opaque. The reference's panels are flat white with a hard 2px edge,
+      // and frosting them would put the dot grid under the channel column
+      // where the artboard keeps it strictly inside the conversation.
+      glass: 0,
+    }),
+    light: {
+      app: "#eaf2f9",
+      windowBg: "linear-gradient(160deg,#eff6fc,#e3edf6)",
+      overlay: "radial-gradient(rgba(195,218,238,1) 1.5px, transparent 1.6px) 0 0/22px 22px",
+      overlayOpacity: 0.5,
+      // Navy, against a white window: the artboard's title plate is the one
+      // piece of chrome that inverts, so the bar carries its own three rungs.
+      bar: "#24405f",
+      side: "#f6fafd",
+      surface: "#ffffff",
+      header: "#ffffff",
+      card: "#ffffff",
+      chip: "#eaf5ff",
+      input: "#ffffff",
+      tile: "#dce9f5",
+      border: "#cfe1f2",
+      text: "#24405f",
+      dim: "#5c7794",
+      faint: "#8fabc6",
+      barFg: "#e2eefa",
+      barDim: "#9fd4ff",
+      barFaint: "#7fa8d1",
+      rail: "#1b2f4a",
+      railFg: "#cfe9ff",
+      railDim: "#7fa8d1",
+      railTile: "#24405f",
+      railBorder: "#45658a",
+      // The artboard's #0f8ff5 lands a hair under this catalog's 3.5:1 floor
+      // for white ink on a filled accent; this is that blue, one step down.
+      accent: "#0d86ec",
+      accent2: "#ffd53d",
+      accentFg: "#0a6dc4",
+      accentOnRail: "#ffd53d",
+      onAccent: "#ffffff",
+      online: "#38e08a",
+      danger: "#e8547a",
+      warning: "#b58200",
+      gifBg: "#eaf5ff",
+      gifFg: "#0a6dc4",
+      canvasA: "#eef5fc",
+      canvasB: "#dceaf7",
+      // Thin, so the lattice above it still reads: the artboard's conversation
+      // is a texture with a fade at the bottom, not a veil over a gradient.
+      wash: "linear-gradient(180deg, rgba(13,134,236,.05), rgba(233,242,250,.30) 55%, rgba(220,234,247,.58))",
+    },
+    dark: {
+      app: "#0d161f",
+      windowBg: "linear-gradient(160deg,#101c27,#0a121a)",
+      overlay: "radial-gradient(rgba(32,52,74,1) 1.5px, transparent 1.6px) 0 0/22px 22px",
+      overlayOpacity: 0.5,
+      bar: "#0a1622",
+      side: "#111c26",
+      surface: "#16222f",
+      header: "#16222f",
+      card: "#16222f",
+      chip: "#12283c",
+      input: "#16222f",
+      tile: "#22334a",
+      border: "#24384c",
+      text: "#e8f2fc",
+      dim: "#93aec7",
+      faint: "#6f8aa4",
+      barFg: "#c8ddf0",
+      barDim: "#8fa9c0",
+      barFaint: "#6b88a6",
+      rail: "#0b1420",
+      railFg: "#cfe9ff",
+      railDim: "#6b88a6",
+      railTile: "#0a1622",
+      railBorder: "#2c4055",
+      accent: "#0d86ec",
+      accent2: "#ffd53d",
+      accentFg: "#7fc9ff",
+      accentOnRail: "#ffd53d",
+      onAccent: "#ffffff",
+      online: "#38e08a",
+      danger: "#ff5b7f",
+      warning: "#ffd53d",
+      gifBg: "#12283c",
+      gifFg: "#7fc9ff",
+      canvasA: "#0f1a24",
+      canvasB: "#0a121a",
+      wash: "linear-gradient(180deg, rgba(13,134,236,.05), rgba(15,26,36,.30) 55%, rgba(10,18,26,.58))",
     },
   },
 ];

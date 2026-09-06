@@ -16,6 +16,7 @@ import { useMemo } from "react";
 import { Box } from "@mui/material";
 import { useAppStore } from "@core/store";
 import { UserAvatar } from "../primitives";
+import { radius } from "../../tokens";
 
 /** How many faces to draw when the design does not say. */
 const FACES = 3;
@@ -114,9 +115,9 @@ export function OnlineNow({ label, faces = FACES, height = 34 }: Readonly<Online
           ml: `${-Math.round(size * OVERLAP)}px`,
           pl: `${Math.round(size * OVERLAP) + 10}px`,
           pr: "12px",
-          borderRadius: 999,
+          borderRadius: radius("pill"),
           background: theme.palette.nebula.card,
-          border: `1px solid ${theme.palette.nebula.line2}`,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
           color: theme.palette.nebula.muted,
           fontSize: Math.max(10, Math.round(size * 0.4)),
           fontWeight: 510,

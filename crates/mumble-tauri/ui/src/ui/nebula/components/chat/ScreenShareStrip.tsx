@@ -146,7 +146,7 @@ export function ScreenShareStrip({
             fontSize: 11.5,
             color: theme.palette.nebula.bad,
             background: `${theme.palette.nebula.bad}1f`,
-            border: `1px solid ${theme.palette.nebula.bad}55`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.bad}55`,
           })}
         >
           <span>{error}</span>

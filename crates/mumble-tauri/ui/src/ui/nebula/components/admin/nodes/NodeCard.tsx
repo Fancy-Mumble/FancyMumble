@@ -149,7 +149,7 @@ function DrawnNodeCard<N extends GraphNode>({
             // straight through - the greeting's text read through whatever was
             // dragged across it.
             background: emphasised ? nebula.bg0 : opaque(nebula.card, nebula.bg0),
-            border: `1px solid ${emphasised ? nebula.accentLine : nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${emphasised ? nebula.accentLine : nebula.line2}`,
             // A ring, not a border swap. The greeting node carries the accent
             // border permanently, so tinting the border made selecting *that*
             // node change nothing at all on screen; on the others it was one
@@ -187,7 +187,7 @@ function DrawnNodeCard<N extends GraphNode>({
             py: "7px",
             cursor: "grab",
             "&:active": { cursor: "grabbing" },
-            borderBottom: `1px solid ${theme.palette.nebula.line}`,
+            borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
           })}
         >
           <Box

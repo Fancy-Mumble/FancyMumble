@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { ReactionSummary } from "@core/features/chat/reaction/reactionStore";
 import { isMobile } from "@core/utils/platform";
 import { Stack } from "../primitives";
+import { radius } from "../../tokens";
 
 interface ReactionBarProps {
   readonly reactions: readonly ReactionSummary[];
@@ -24,7 +25,7 @@ const PILL = {
   cursor: "pointer",
   px: "9px",
   py: "2px",
-  borderRadius: "999px",
+  borderRadius: radius("pill"),
   lineHeight: 1.4,
   transition: "background 0.12s, border-color 0.12s",
 } as const;
@@ -77,7 +78,7 @@ export default function ReactionBar({ reactions, ownHash, isOwn, onToggle, onAdd
                   ...PILL,
                   color: active ? nebula.accent : nebula.text,
                   background: active ? nebula.accentSoft : nebula.card2,
-                  border: `1px solid ${active ? nebula.accentLine : nebula.line}`,
+                  border: `var(--nebula-line-width, 1px) solid ${active ? nebula.accentLine : nebula.line}`,
                   "&:hover": { borderColor: active ? nebula.accentLine : nebula.line2 },
                 };
               }}

@@ -64,7 +64,7 @@ export function PillMenu({
           textTransform: "none",
           color: chosen ? theme.palette.nebula.text : theme.palette.nebula.dim,
           background: theme.palette.nebula.card2,
-          border: `1px solid ${theme.palette.nebula.line2}`,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
           "&:hover": { background: theme.palette.nebula.hover },
           "& .MuiButton-endIcon": { flex: "none" },
         })}
@@ -194,7 +194,7 @@ export function TagChip({
           fontWeight: 500,
           color: colour,
           background: alpha(colour, 0.16),
-          border: `1px solid ${alpha(colour, 0.4)}`,
+          border: `var(--nebula-line-width, 1px) solid ${alpha(colour, 0.4)}`,
         };
       }}
     >
@@ -305,7 +305,7 @@ export function MiniSwitch({
         height: size === "md" ? 18 : 17,
         flex: "none",
         cursor: "pointer",
-        borderRadius: "999px",
+        borderRadius: radius("pill"),
         position: "relative",
         background: checked ? theme.palette.nebula.accent : theme.palette.nebula.card2,
         "&::after": {
@@ -357,7 +357,7 @@ export function Segmented({
         p: "2px",
         borderRadius: radius("md"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
       })}
     >
       {options.map((option) => {
@@ -423,7 +423,7 @@ export function PaletteChip({
         whiteSpace: "nowrap",
         color: theme.palette.nebula.text,
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         "&:hover": { background: theme.palette.nebula.hover },
       })}
     >
@@ -472,7 +472,7 @@ export function SearchField({
         py: "7px",
         borderRadius: radius("md"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         "&:focus-within": { borderColor: theme.palette.nebula.accentLine },
       })}
     >
@@ -541,7 +541,7 @@ export function Star({
               height: 30,
               borderRadius: radius("md"),
               background: on ? alpha(theme.palette.nebula.warn, 0.16) : theme.palette.nebula.card,
-              border: `1px solid ${on ? alpha(theme.palette.nebula.warn, 0.5) : theme.palette.nebula.line2}`,
+              border: `var(--nebula-line-width, 1px) solid ${on ? alpha(theme.palette.nebula.warn, 0.5) : theme.palette.nebula.line2}`,
             }),
       })}
     >

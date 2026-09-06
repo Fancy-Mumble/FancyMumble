@@ -274,7 +274,7 @@ export function AclAdmin({ initialChannel }: Readonly<{ initialChannel?: number 
               overflowY: "auto",
               borderRadius: radius("lg"),
               background: theme.palette.nebula.card,
-              border: `1px solid ${theme.palette.nebula.line}`,
+              border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
             })}
           >
             {tree.map((node) => (
@@ -687,7 +687,7 @@ function AclRules({ acl, onChange }: Readonly<{ acl: AclData; onChange: (next: A
                     sx={(theme) => ({
                       px: "12px",
                       pb: "12px",
-                      borderTop: `1px solid ${theme.palette.nebula.line}`,
+                      borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
                       pt: "10px",
                     })}
                   >
@@ -748,7 +748,7 @@ function AclRules({ acl, onChange }: Readonly<{ acl: AclData; onChange: (next: A
                           letterSpacing: "0.07em",
                           textTransform: "uppercase",
                           color: theme.palette.nebula.dim,
-                          borderBottom: `1px solid ${theme.palette.nebula.line}`,
+                          borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
                           pb: "5px",
                           mb: "3px",
                         },
@@ -929,7 +929,7 @@ function GroupCard({
             sx={(theme) => ({
               px: "8px",
               py: "3px",
-              borderRadius: "999px",
+              borderRadius: radius("pill"),
               fontSize: 11,
               background: theme.palette.nebula.card2,
             })}

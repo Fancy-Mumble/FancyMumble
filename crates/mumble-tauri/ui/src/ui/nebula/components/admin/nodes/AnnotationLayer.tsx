@@ -117,7 +117,7 @@ function AnnotationView({
                 }
               : note.kind === "note"
                 ? {
-                    border: `1px solid ${alpha(colour, 0.35)}`,
+                    border: `var(--nebula-line-width, 1px) solid ${alpha(colour, 0.35)}`,
                     background: alpha(colour, 0.08),
                   }
                 : {}),
@@ -147,7 +147,7 @@ function AnnotationView({
             "&:active": { cursor: "grabbing" },
             borderRadius: radius("sm"),
             background: theme.palette.nebula.bg0,
-            border: `1px solid ${alpha(toneColour(theme.palette.nebula, note.tone), 0.5)}`,
+            border: `var(--nebula-line-width, 1px) solid ${alpha(toneColour(theme.palette.nebula, note.tone), 0.5)}`,
           })}
         >
           <Text note={note} onPatch={onPatch} bare />

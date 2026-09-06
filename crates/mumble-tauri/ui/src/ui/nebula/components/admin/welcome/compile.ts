@@ -1066,7 +1066,7 @@ function htmlBlock(block: Block): string {
       return table(block);
     case "card":
       return `<table width="100%" style="border-collapse:collapse"><tr>${cell(
-        `style="border:1px solid ${QUIET};padding:10px"`,
+        `style="border:var(--nebula-line-width, 1px) solid ${QUIET};padding:10px"`,
         sanitizeHtml(richBody(block.text)),
       )}</tr></table>`;
     case "footer":
@@ -1319,7 +1319,7 @@ function table(block: Block, qt = false): string {
           cell(
             qt
               ? `valign="top"${head ? ` bgcolor="${PANEL_BG}"` : ""}`
-              : `style="vertical-align:top;padding:4px;border:1px solid ${QUIET}"`,
+              : `style="vertical-align:top;padding:4px;border:var(--nebula-line-width, 1px) solid ${QUIET}"`,
             qt && head
               ? `<font color="${PANEL_FG}"><b>${escapeHtml(text)}</b></font>`
               : `<${tag}>${escapeHtml(text)}</${tag}>`,

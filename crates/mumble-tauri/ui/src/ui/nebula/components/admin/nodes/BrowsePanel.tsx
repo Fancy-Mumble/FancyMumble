@@ -86,8 +86,8 @@ export function BrowsePanel<N extends GraphNode>({
         pb: "14px",
         pt: "2px",
         background: theme.palette.nebula.panel,
-        borderTop: `1px solid ${theme.palette.nebula.line}`,
-        borderBottom: `1px solid ${theme.palette.nebula.line2}`,
+        borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
+        borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
       })}
     >
       {query.trim() === "" && starred.length > 0 && (
@@ -217,7 +217,7 @@ function BlockCard<N extends GraphNode>({
         touchAction: "none",
         borderRadius: radius("lg"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line2}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         "&:hover": { borderColor: theme.palette.nebula.accentLine },
       })}
     >
@@ -273,7 +273,7 @@ function BlockCard<N extends GraphNode>({
         sx={(theme) => ({
           px: "14px",
           py: "10px",
-          borderTop: `1px solid ${theme.palette.nebula.line}`,
+          borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         })}
       >
         <Stack gap={0.5} sx={{ flex: 1, minWidth: 0, alignItems: "flex-start" }}>
@@ -324,12 +324,12 @@ function PortPill({
       sx={(theme) => ({
         px: "8px",
         py: "3px",
-        borderRadius: "999px",
+        borderRadius: radius("pill"),
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
         fontSize: 10.5,
         color: empty ? theme.palette.nebula.dim : theme.palette.nebula.text,
         background: empty ? "transparent" : alpha(theme.palette.nebula.accent, side === "out" ? 0.14 : 0.06),
-        border: `1px solid ${empty ? "transparent" : theme.palette.nebula[side === "out" ? "accentLine" : "line2"]}`,
+        border: `var(--nebula-line-width, 1px) solid ${empty ? "transparent" : theme.palette.nebula[side === "out" ? "accentLine" : "line2"]}`,
       })}
     >
       {side === "in" && dot}

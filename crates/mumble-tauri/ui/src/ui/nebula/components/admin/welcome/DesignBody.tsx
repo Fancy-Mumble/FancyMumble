@@ -60,7 +60,7 @@ export function DesignBody({
           fontWeight: 600,
           color: theme.palette.nebula.accent,
           background: theme.palette.nebula.accentSoft,
-          border: `1px solid ${theme.palette.nebula.accentLine}`,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accentLine}`,
           "&:hover": { background: theme.palette.nebula.hover },
         })}
       >
@@ -95,7 +95,7 @@ function Thumbnail({ design }: Readonly<{ design: Design }>) {
         paddingTop: `${Math.min(70, height * scale)}%`,
         borderRadius: radius("sm"),
         background: theme.palette.nebula.panel,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         overflow: "hidden",
       })}
     >

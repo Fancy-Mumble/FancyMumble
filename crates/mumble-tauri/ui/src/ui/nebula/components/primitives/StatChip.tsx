@@ -35,7 +35,7 @@ export function StatChip({ tone = "neutral", children, sx, ...props }: BoxProps 
             fontWeight: 500,
             color: tones.color,
             background: tones.background,
-            border: `1px solid ${tones.border}`,
+            border: `var(--nebula-line-width, 1px) solid ${tones.border}`,
           };
         },
         ...(Array.isArray(sx) ? sx : [sx]),

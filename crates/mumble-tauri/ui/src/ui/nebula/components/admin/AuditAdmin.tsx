@@ -733,11 +733,11 @@ function AuditBadge({ value, kind }: Readonly<{ value: string; kind: "severity" 
         return {
           px: "7px",
           py: "2px",
-          borderRadius: "999px",
+          borderRadius: radius("pill"),
           fontSize: 10,
           fontWeight: 600,
           color: colour,
-          border: `1px solid ${colour}`,
+          border: `var(--nebula-line-width, 1px) solid ${colour}`,
           whiteSpace: "nowrap",
         };
       }}
@@ -896,7 +896,7 @@ function AuditResults({
           overflow: "auto",
           borderRadius: radius("lg"),
           background: theme.palette.nebula.card,
-          border: `1px solid ${theme.palette.nebula.line}`,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         })}
       >
         <Table
@@ -920,7 +920,7 @@ function AuditResults({
                     whiteSpace: "nowrap",
                     color: theme.palette.nebula.dim,
                     background: theme.palette.nebula.bg0,
-                    borderBottom: `1px solid ${theme.palette.nebula.line2}`,
+                    borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
                   })}
                 >
                   {header}
@@ -1071,7 +1071,7 @@ function Cell({ children, sx }: Readonly<{ children: React.ReactNode; sx?: objec
         py: "7px",
         // The rule sits on top of each row, so the last one ends on the card
         // rather than on a line; MUI's own bottom border would double it.
-        borderTop: `1px solid ${theme.palette.nebula.line}`,
+        borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         borderBottom: "none",
         color: theme.palette.nebula.text,
         overflow: "hidden",
@@ -1120,7 +1120,7 @@ function AuditFilterRail({
         p: "8px",
         borderRadius: radius("lg"),
         background: theme.palette.nebula.card,
-        border: `1px solid ${theme.palette.nebula.line}`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
       })}
     >
       <Stack direction="row" alignItems="center" sx={{ mb: open ? "8px" : 0 }}>
@@ -1235,11 +1235,11 @@ function AuditFilterRail({
                       cursor: "pointer",
                       px: "7px",
                       py: "2px",
-                      borderRadius: "999px",
+                      borderRadius: radius("pill"),
                       fontSize: 9.5,
                       color: on ? theme.palette.nebula.text : theme.palette.nebula.dim,
                       background: on ? theme.palette.nebula.accentSoft : "transparent",
-                      border: `1px solid ${on ? theme.palette.nebula.accentLine : theme.palette.nebula.line2}`,
+                      border: `var(--nebula-line-width, 1px) solid ${on ? theme.palette.nebula.accentLine : theme.palette.nebula.line2}`,
                     })}
                   >
                     {category}
@@ -1249,7 +1249,7 @@ function AuditFilterRail({
             </Stack>
           </Box>
 
-          <Box sx={(theme) => ({ borderTop: `1px solid ${theme.palette.nebula.line}`, pt: "8px" })}>
+          <Box sx={(theme) => ({ borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`, pt: "8px" })}>
             <Typography sx={{ fontSize: 11, fontWeight: 600, mb: "4px" }}>
               {t("audit.resultsLabel", { defaultValue: "Results" })}
             </Typography>
@@ -1428,7 +1428,7 @@ function AuditConfig() {
                 direction="row"
                 alignItems="center"
                 gap={2}
-                sx={(theme) => ({ py: "8px", borderBottom: `1px solid ${theme.palette.nebula.line}` })}
+                sx={(theme) => ({ py: "8px", borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}` })}
               >
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>
