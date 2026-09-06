@@ -24,8 +24,8 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "dist-pinned",
+    outDir: "dist-titlebar",
     emptyOutDir: true,
-    rollupOptions: { input: fileURLToPath(new URL("./pinned.html", import.meta.url)) },
+    rollupOptions: { input: fileURLToPath(new URL("./titlebar.html", import.meta.url)) },
   },
 });

@@ -9,6 +9,17 @@ import { MARK_FILL, MARK_STROKE, MARK_TILE_PX } from "../../brandMark";
 import { radius } from "../../tokens";
 import { serverTint, type ServerRailEntry } from "../../selectors";
 import { UserAvatar } from "../primitives";
+import type { ServerPingResult } from "@core/types";
+import {
+  RAIL_CARD_WIDTH,
+  ServerRailCard,
+  useRailCardHover,
+  type RailCardOccupant,
+} from "../sidebar/ServerRailCard";
+
+/** How far below a tab its card hangs, and how close to the window's edge it may get. */
+const CARD_DROP = 6;
+const CARD_MARGIN = 8;
 
 interface TitleBarProps {
   /**
@@ -36,6 +47,15 @@ interface TitleBarProps {
   entries?: readonly ServerRailEntry[];
   /** Server artwork, keyed by host:port - the tab picture. */
   icons?: ReadonlyMap<string, string>;
+  /** The rest of what the hover card shows, keyed like `icons`; see `ServerRail`. */
+  banners?: ReadonlyMap<string, string>;
+  pings?: ReadonlyMap<string, ServerPingResult>;
+  /** Where you are on the server you are connected to. */
+  activeChannelName?: string | null;
+  /** The name you arrived as on the connected server. */
+  ownName?: string | null;
+  /** Who is in your channel, for the card of the server you are on. */
+  occupants?: readonly RailCardOccupant[];
   activeKey?: string | null;
   onSelectServer?: (entry: ServerRailEntry) => void;
   /**
@@ -68,11 +88,21 @@ export function TitleBar({
   onDisconnect,
   entries = [],
   icons,
+  banners,
+  pings,
+  activeChannelName,
+  ownName,
+  occupants,
   activeKey = null,
   onSelectServer,
   tabs = false,
 }: Readonly<TitleBarProps>) {
   const { t } = useTranslation(["nebulaCommon", "common", "server"]);
+  // Hovering a tab opens the same card the rail's tiles do, hung under the
+  // tab; `at` is the spot in the window it hangs from.
+  const { hovered, show, dismiss, holdOpen, closeSoon } = useRailCardHover<{ left: number; top: number }>();
+  const hoveredEntry = entries.find((candidate) => candidate.group.key === hovered?.key) ?? null;
+
   return (
     <Stack
       direction="row"
@@ -85,7 +115,7 @@ export function TitleBar({
         position: "relative",
         px: "14px",
         background: theme.palette.nebula.bar,
-        borderBottom: `1px solid ${theme.palette.nebula.line}`,
+        borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         backdropFilter: "blur(14px)",
       })}
     >
@@ -158,11 +188,47 @@ export function TitleBar({
               entry={entry}
               icon={icons?.get(entry.group.key)}
               active={entry.group.key === activeKey}
-              onSelect={() => onSelectServer?.(entry)}
+              onSelect={() => {
+                dismiss();
+                onSelectServer?.(entry);
+              }}
               onDisconnect={onDisconnect}
+              onHover={(tab) =>
+                show(entry.group.key, {
+                  // Under the tab's left edge, unless that would run the card
+                  // off the right of the window.
+                  left: Math.max(
+                    CARD_MARGIN,
+                    Math.min(tab.left, window.innerWidth - RAIL_CARD_WIDTH - CARD_MARGIN),
+                  ),
+                  top: tab.bottom + CARD_DROP,
+                })
+              }
+              onLeave={closeSoon}
             />
           ))}
         </Stack>
+      )}
+
+      {tabs && hoveredEntry && hovered && (
+        <ServerRailCard
+          fixed
+          entry={hoveredEntry}
+          icon={icons?.get(hoveredEntry.group.key)}
+          banner={banners?.get(hoveredEntry.group.key)}
+          ping={pings?.get(hoveredEntry.group.key)}
+          channelName={hoveredEntry.group.key === activeKey ? activeChannelName : null}
+          ownName={ownName}
+          occupants={hoveredEntry.group.key === activeKey ? occupants : []}
+          left={hovered.at.left}
+          top={hovered.at.top}
+          onOpen={() => {
+            dismiss();
+            onSelectServer?.(hoveredEntry);
+          }}
+          onPointerEnter={holdOpen}
+          onPointerLeave={closeSoon}
+        />
       )}
 
       {/* Without the strip the bar simply names the server you are on, centred
@@ -249,12 +315,17 @@ function ServerTab({
   active,
   onSelect,
   onDisconnect,
+  onHover,
+  onLeave,
 }: Readonly<{
   entry: ServerRailEntry;
   icon?: string;
   active: boolean;
   onSelect: () => void;
   onDisconnect?: () => void;
+  /** The tab's box in the window, so the card can hang from it. */
+  onHover: (tab: DOMRect) => void;
+  onLeave: () => void;
 }>) {
   const { t } = useTranslation("server");
   const { group, status, unread } = entry;
@@ -263,6 +334,11 @@ function ServerTab({
       direction="row"
       alignItems="center"
       gap={1}
+      data-testid="nebula-server-tab"
+      onMouseEnter={(event: React.MouseEvent<HTMLElement>) =>
+        onHover(event.currentTarget.getBoundingClientRect())
+      }
+      onMouseLeave={onLeave}
       sx={(theme) => ({
         px: "9px",
         py: "4px",

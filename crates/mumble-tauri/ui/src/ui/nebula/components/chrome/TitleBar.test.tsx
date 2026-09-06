@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { withNebulaTheme } from "../../testTheme";
 import type { ServerRailEntry } from "../../selectors";
 import { TitleBar } from "./TitleBar";
@@ -43,6 +43,67 @@ describe("the title bar with the server strip on", () => {
   it("offers to leave the server whose tab is current", () => {
     bar({ tabs: true, onDisconnect: () => {} });
     expect(screen.getByLabelText("Disconnect from Magical Rocks")).toBeTruthy();
+  });
+});
+
+describe("hovering a tab", () => {
+  // By the strip, not by the text: once the card is open the name is on it too.
+  const tabOf = (label: string) => {
+    const tab = screen.getAllByTestId("nebula-server-tab").find((el) => el.textContent?.includes(label));
+    if (!tab) throw new Error("no tab for " + label);
+    return tab;
+  };
+
+  it("opens the same card the rail's tiles do, offering the way in", () => {
+    bar({ tabs: true, onSelectServer: () => {} });
+    fireEvent.mouseEnter(tabOf("Kumo"));
+    const card = screen.getByTestId("nebula-server-rail-card");
+    expect(card.getAttribute("aria-label")).toBe("Kumo");
+    expect(screen.getByRole("button", { name: "Connect to Kumo" })).toBeTruthy();
+  });
+
+  it("says who is around you on the server you are on", () => {
+    bar({
+      tabs: true,
+      activeChannelName: "Gaming",
+      ownName: "Zewi",
+      occupants: [{ session: 1, name: "Sebi", talking: false, muted: false }],
+    });
+    fireEvent.mouseEnter(tabOf("Magical Rocks"));
+    expect(screen.getByText("YOU’RE IN #GAMING AS ZEWI")).toBeTruthy();
+    expect(screen.getByText("Sebi")).toBeTruthy();
+    // The channel is on this server, not on the other one.
+    fireEvent.mouseEnter(tabOf("Kumo"));
+    expect(screen.queryByText("Sebi")).toBeNull();
+  });
+
+  it("closes a beat after the pointer leaves, so it can be crossed to", () => {
+    vi.useFakeTimers();
+    try {
+      bar({ tabs: true });
+      fireEvent.mouseEnter(tabOf("Kumo"));
+      fireEvent.mouseLeave(tabOf("Kumo"));
+      expect(screen.getByTestId("nebula-server-rail-card")).toBeTruthy();
+      fireEvent.mouseEnter(screen.getByTestId("nebula-server-rail-card"));
+      act(() => vi.advanceTimersByTime(500));
+      expect(screen.getByTestId("nebula-server-rail-card")).toBeTruthy();
+      fireEvent.mouseLeave(screen.getByTestId("nebula-server-rail-card"));
+      act(() => vi.advanceTimersByTime(500));
+      expect(screen.queryByTestId("nebula-server-rail-card")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("picks the server from the card, and the card goes with it", () => {
+    const onSelectServer = vi.fn();
+    bar({ tabs: true, onSelectServer });
+    fireEvent.mouseEnter(tabOf("Kumo"));
+    fireEvent.click(screen.getByRole("button", { name: "Connect to Kumo" }));
+    expect(onSelectServer).toHaveBeenCalledWith(
+      expect.objectContaining({ group: expect.objectContaining({ label: "Kumo" }) }),
+    );
+    expect(screen.queryByTestId("nebula-server-rail-card")).toBeNull();
   });
 });
 
