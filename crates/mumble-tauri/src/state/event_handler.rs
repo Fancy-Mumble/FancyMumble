@@ -291,9 +291,7 @@ impl EventHandler for TauriEventHandler {
             state.conn.client_handle = None;
             state.conn.event_loop_handle = None;
             // Stop audio pipelines on disconnect.
-            if let Some(handle) = state.audio.outbound_task_handle.take() {
-                handle.abort();
-            }
+            state.audio.stop_outbound();
             if let Some(mut playback) = state.audio.mixing_playback.take() {
                 let _ = playback.stop();
             }

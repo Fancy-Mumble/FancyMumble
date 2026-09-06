@@ -341,9 +341,7 @@ mod voice_pipeline {
             arc: &Arc<std::sync::Mutex<crate::state::SharedState>>,
         ) {
             let stopped_sessions: Vec<(u32, tauri::AppHandle)> = if let Ok(mut state) = arc.lock() {
-                if let Some(handle) = state.audio.outbound_task_handle.take() {
-                    handle.abort();
-                }
+                state.audio.stop_outbound();
                 if let Some(handle) = state.audio.mic_test_handle.take() {
                     handle.abort();
                 }
@@ -387,19 +385,19 @@ mod voice_pipeline {
         /// Stop only the outbound (mic capture) pipeline.
         fn stop_outbound(&self) {
             if let Ok(mut state) = self.inner.snapshot().lock() {
-                if let Some(handle) = state.audio.outbound_task_handle.take() {
-                    handle.abort();
-                }
+                state.audio.stop_outbound();
             }
         }
 
         /// Restart the outbound pipeline with the current audio settings.
         ///
         /// Called when the input device (or other capture-relevant settings)
-        /// change while voice is active.
+        /// change while voice is active. The running loop is not stopped
+        /// first: it keeps sending while the new one is built (a denoiser
+        /// model can take a second to load), and installing the new loop
+        /// aborts it, so the swap costs the microphone a frame, not the build.
         pub fn restart_outbound(&self) -> Result<(), String> {
             info!("restart_outbound: restarting capture pipeline with new settings");
-            self.stop_outbound();
 
             let (audio_settings, client_handle) = {
                 let __session = self.inner.snapshot();
@@ -470,11 +468,14 @@ mod voice_pipeline {
             audio_settings: &AudioSettings,
             client_handle: &Option<ClientHandle>,
         ) -> Result<(), String> {
-            // Re-use existing input volume handle or create a new one.
-            let (input_vol, app, own_session, max_bandwidth) = {
+            // Re-use existing input volume handle or create a new one. The
+            // claim is taken here, before the build below: a stop or a newer
+            // start that lands while the pipeline is being built retires it.
+            let (generation, input_vol, app, own_session, max_bandwidth) = {
                 let __session = self.inner.snapshot();
-                let state = __session.lock().map_err(|e| e.to_string())?;
+                let mut state = __session.lock().map_err(|e| e.to_string())?;
                 (
+                    state.audio.begin_outbound(),
                     state.audio.input_volume_handle.clone(),
                     state.conn.tauri_app_handle.clone(),
                     state.conn.own_session,
@@ -546,7 +547,14 @@ mod voice_pipeline {
             let __session = self.inner.snapshot();
 
             let mut state = __session.lock().map_err(|e| e.to_string())?;
-            state.audio.outbound_task_handle = outbound_handle;
+            match outbound_handle {
+                Some(handle) => {
+                    if !state.audio.install_outbound(generation, handle) {
+                        info!("start_outbound_pipeline: overtaken by a newer start or a stop, not installed");
+                    }
+                }
+                None => state.audio.stop_outbound(),
+            }
             state.audio.input_volume_handle = Some(input_vol);
             Ok(())
         }
@@ -1257,6 +1265,44 @@ mod voice_pipeline {
             let (bitrate, frame_ms) = adjust_to_server_bandwidth(72_000, 20, Some(1_000));
             assert_eq!(bitrate, 8_000);
             assert_eq!(frame_ms, 60);
+        }
+
+        /// Two starts of the outbound loop that overlap - a settings save
+        /// landing while the previous restart is still building its denoiser -
+        /// must leave exactly one loop sending. Two of them interleave their
+        /// packets on the wire, and every listener hears that as crackling.
+        #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+        async fn overlapping_starts_leave_one_outbound_loop() {
+            std::env::set_var("FANCY_E2E_VIRTUAL_MIC", "sine:48000:440");
+            let state = AppState::new();
+            let (client, mut audio_rx) = ClientHandle::detached();
+            let settings = {
+                let arc = state.inner.snapshot();
+                let mut s = arc.lock().unwrap();
+                s.audio.settings.noise_suppression = false;
+                s.audio.settings.auto_gain = false;
+                s.conn.client_handle = Some(client.clone());
+                s.audio.voice_state = VoiceState::Active;
+                s.audio.settings.clone()
+            };
+            let handle = Some(client);
+            state.start_outbound_pipeline(&settings, &handle).unwrap();
+            state.start_outbound_pipeline(&settings, &handle).unwrap();
+
+            // Let both settle, then count one second of packets: a single
+            // loop sends 50 (20 ms frames), two send 100.
+            tokio::time::sleep(Duration::from_millis(600)).await;
+            while audio_rx.try_recv().is_ok() {}
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(1);
+            let mut packets = 0u32;
+            while let Ok(Some(_)) = tokio::time::timeout_at(deadline, audio_rx.recv()).await {
+                packets += 1;
+            }
+            state.stop_audio();
+            assert!(
+                (40..=60).contains(&packets),
+                "expected one loop's 50 packets/s, got {packets}"
+            );
         }
 
         #[test]
