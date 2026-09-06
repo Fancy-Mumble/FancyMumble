@@ -30,6 +30,12 @@ import { useRef, useEffect, useMemo, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "@core/store";
+import {
+  ASSUMED_OVERLAY_SUPPORT,
+  overlayReasonKey,
+  useDrawingOverlaySupport,
+  type DrawingOverlaySupport,
+} from "@core/features/chat/stream/drawingOverlaySupport";
 import { getBroadcastContent, getTrackContentMap, useRemoteStreams } from "./useScreenShare";
 import { isMobile } from "@core/utils/platform";
 import { TID } from "@core/testids";
@@ -139,6 +145,10 @@ interface StreamControlsProps {
    *  so the parent can manage the click-through overlay window lifecycle. */
   readonly desktopOverlayOn?: boolean;
   readonly onToggleDesktopOverlay?: () => void;
+  /** What the overlay can do here. Drives whether the toggle is offered at
+   *  all and what its tooltip promises - "hidden from capture" is a lie on
+   *  Linux, and on a GNOME Wayland session the window cannot be placed. */
+  readonly desktopOverlaySupport?: DrawingOverlaySupport;
   /** Which source kind the own broadcast is missing (broadcaster only).
    *  Renders an "add screen"/"add camera" shortcut that reopens the
    *  picker seeded with the live sources, so the share can be EXTENDED. */
@@ -207,6 +217,7 @@ function StreamControls({
   drawChannelId,
   desktopOverlayOn,
   onToggleDesktopOverlay,
+  desktopOverlaySupport,
   missingSourceKind,
   onAddSource,
   onPopout,
@@ -218,6 +229,16 @@ function StreamControls({
   const [volume, setVolume] = useState(100);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const { t } = useTranslation(["chat", "common"]);
+  const overlaySupport = desktopOverlaySupport ?? ASSUMED_OVERLAY_SUPPORT;
+  // Three different promises, depending on what this platform can keep:
+  // "it is on", "it will hide from your stream", and "it cannot be shown".
+  const overlayTitle = !overlaySupport.available
+    ? t(overlayReasonKey(overlaySupport.reason))
+    : desktopOverlayOn
+      ? t("screenShare.hideOverlay")
+      : overlaySupport.excludedFromCapture
+        ? t("screenShare.showOverlayTooltip")
+        : t("screenShare.showOverlayTooltipCaptured");
 
   // Sync fullscreen state.
   useEffect(() => {
@@ -358,7 +379,8 @@ function StreamControls({
           type="button"
           className={`${styles.controlBtn} ${desktopOverlayOn ? styles.controlBtnActive : ""}`}
           onClick={onToggleDesktopOverlay}
-          title={desktopOverlayOn ? t("screenShare.hideOverlay") : t("screenShare.showOverlayTooltip")}
+          disabled={overlaySupport.available === false}
+          title={overlayTitle}
           aria-label={desktopOverlayOn ? t("screenShare.hideOverlay") : t("screenShare.showOverlay")}
           aria-pressed={desktopOverlayOn}
         >
@@ -510,6 +532,9 @@ function OwnBroadcastPreview({
   // It is closed automatically by `stopBroadcasting()` in `useScreenShare`
   // when the broadcast actually ends.
   const desktopOverlayOn = useAppStore((s) => s.desktopDrawingOverlayOpen);
+  // Re-asked whenever the share changes: on Wayland the answer depends on
+  // whether a screen or a window is being shared.
+  const desktopOverlaySupport = useDrawingOverlaySupport([stream, nativeSurface]);
   const [statsOn, setStatsOn] = useState(false);
   // The own preview is served by the loopback viewer (keyed by our own
   // session), so the stats sampler probes it like any remote view.
@@ -625,6 +650,7 @@ function OwnBroadcastPreview({
         drawChannelId={channelId}
         desktopOverlayOn={desktopOverlayOn}
         onToggleDesktopOverlay={toggleDesktopOverlay}
+        desktopOverlaySupport={desktopOverlaySupport}
         missingSourceKind={missingSourceKind}
         onAddSource={onAddSource}
         statsOn={statsOn}

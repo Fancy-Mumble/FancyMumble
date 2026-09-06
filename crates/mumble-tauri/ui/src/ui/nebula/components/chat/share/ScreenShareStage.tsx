@@ -28,6 +28,10 @@ import { copyStreamFrame, type ScreenshotOutcome } from "./streamScreenshot";
 import { StageResizeHandle } from "./StageResizeHandle";
 import { CONVERSATION_MIN, clampStageHeight, readStageHeight, writeStageHeight } from "./stageHeight";
 import { AnnotationLayer } from "./AnnotationLayer";
+import {
+  overlayReasonKey,
+  useDrawingOverlaySupport,
+} from "@core/features/chat/stream/drawingOverlaySupport";
 import { GLASS_BG, GLASS_BLUR, GLASS_LINE, OverlayButton, WELL_BG } from "./overlayChrome";
 
 // Heavy and off screen at rest: the panel pulls in a chart.
@@ -289,6 +293,10 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
       .catch((e) => console.error("open_drawing_overlay failed:", e));
   }, [currentChannel, desktopOverlay, feeds, ownSession]);
 
+  // Re-asked as the share changes: on Wayland whether the overlay can be
+  // placed at all depends on what is being shared.
+  const overlaySupport = useDrawingOverlaySupport([feeds.length, currentChannel]);
+
   const statsSampler = useMemo(
     () => (statsOpen ? activeStreamViewerStrategy().createStatsSampler(focused.session) : null),
     [focused.session, statsOpen],
@@ -328,7 +336,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
               margin: "12px 20px 0",
               padding: "6px",
               borderRadius: radius("lg"),
-              border: `1px solid ${theme.palette.nebula.line2}`,
+              border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
               background: theme.palette.nebula.panel,
               backdropFilter: "blur(18px)",
             }),
@@ -349,7 +357,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
             position: "relative",
             borderRadius: radius("md"),
             background: WELL_BG,
-            border: `1px solid ${theme.palette.nebula.line2}`,
+            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
             overflow: "hidden",
           })}
         >
@@ -428,7 +436,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
                 padding: "2px 7px 2px 5px",
                 borderRadius: radius("sm"),
                 background: "rgba(217,87,87,.22)",
-                border: "1px solid rgba(217,87,87,.4)",
+                border: "var(--nebula-line-width, 1px) solid rgba(217,87,87,.4)",
                 color: "#f3adad",
                 fontSize: 9.5,
                 fontWeight: 600,
@@ -578,7 +586,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
                     flex: "none",
                     borderRadius: radius("md"),
                     background: "rgba(217,87,87,.2)",
-                    border: "1px solid rgba(217,87,87,.42)",
+                    border: "var(--nebula-line-width, 1px) solid rgba(217,87,87,.42)",
                     color: "#f0b0b0",
                     fontSize: 10.5,
                     fontWeight: 500,
@@ -608,7 +616,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
                   padding: "5px",
                   borderRadius: radius("lg"),
                   background: "rgba(14,18,28,.92)",
-                  border: "1px solid rgba(255,255,255,.1)",
+                  border: "var(--nebula-line-width, 1px) solid rgba(255,255,255,.1)",
                   boxShadow: "0 16px 40px rgba(0,0,0,.45)",
                   backdropFilter: "blur(20px)",
                 }}
@@ -644,6 +652,12 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
                       label={t("chat:screenShare.showOverlay")}
                       value={desktopOverlay ? t("share.on") : t("share.off")}
                       onClick={toggleDesktopOverlay}
+                      disabled={!overlaySupport.available}
+                      title={
+                        overlaySupport.available
+                          ? undefined
+                          : t(`chat:${overlayReasonKey(overlaySupport.reason)}` as const)
+                      }
                     />
                   </>
                 )}
@@ -744,12 +758,25 @@ function StreamMenuItem({
   label,
   value,
   onClick,
-}: Readonly<{ label: string; value?: string; onClick: () => void }>) {
+  disabled,
+  title,
+}: Readonly<{
+  label: string;
+  value?: string;
+  onClick: () => void;
+  /** Offered but not possible here - the row stays visible and explains
+   *  itself in `title` rather than vanishing, so the feature is still
+   *  discoverable on a machine that cannot run it. */
+  disabled?: boolean;
+  title?: string;
+}>) {
   return (
     <Box
       component="button"
       type="button"
       onClick={onClick}
+      disabled={disabled}
+      title={title}
       sx={{
         display: "flex",
         alignItems: "center",
@@ -765,6 +792,7 @@ function StreamMenuItem({
         textAlign: "left",
         cursor: "pointer",
         "&:hover": { background: "rgba(255,255,255,.07)" },
+        "&:disabled": { cursor: "not-allowed", opacity: 0.45 },
       }}
     >
       {label}
@@ -798,7 +826,7 @@ function FilmstripTile({
         cursor: "pointer",
         border: focused
           ? `1.5px solid ${theme.palette.nebula.accent}`
-          : `1px solid ${theme.palette.nebula.line2}`,
+          : `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
       })}
     >
       {/* The focused feed is on the stage, so its tile is a copy of it - see
@@ -816,7 +844,7 @@ function FilmstripTile({
           bottom: 4,
           maxWidth: "calc(100% - 34px)",
           padding: "1px 6px",
-          borderRadius: "999px",
+          borderRadius: radius("pill"),
           background: "rgba(8,11,18,.75)",
           backdropFilter: "blur(8px)",
           fontSize: 9,

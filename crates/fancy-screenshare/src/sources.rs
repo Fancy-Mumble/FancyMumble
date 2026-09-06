@@ -173,6 +173,113 @@ pub fn source_rect(kind: SourceKind, id: u32) -> Option<(i32, i32, u32, u32)> {
     }
 }
 
+/// A shared window followed by its live on-screen rectangle.
+///
+/// The portal never says where a window it streams sits on screen
+/// (xdg-desktop-portal#571), so an overlay pinned over a window share has to
+/// find the window itself. On X11 - which under a Wayland session still means
+/// every `XWayland` client, and games are `XWayland` clients - the window can
+/// be matched by the size the stream negotiated and then followed: each
+/// accessor below is one `GetGeometry` + `TranslateCoordinates` round trip,
+/// cheap enough to poll, unlike the `Window::all()` walk that resolves it.
+///
+/// Linux-only: Windows follows the source by `HWND` in the embedder, and
+/// macOS has no window-share overlay.
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+pub struct SharedWindow {
+    window: Window,
+}
+
+#[cfg(target_os = "linux")]
+impl SharedWindow {
+    /// Find the top-level window whose current size best matches
+    /// `width` x `height`, ignoring this process's own windows and anything
+    /// minimized. `None` when nothing is close enough, which is the normal
+    /// answer under a native Wayland session (no window is enumerable).
+    pub fn find_by_size(width: u32, height: u32) -> Option<Self> {
+        if width == 0 || height == 0 {
+            return None;
+        }
+        let own_pid = std::process::id();
+        // Stacking order, bottom-most first (`_NET_CLIENT_LIST_STACKING`).
+        let candidates: Vec<Window> = Window::all()
+            .ok()?
+            .into_iter()
+            .filter(|w| w.pid().is_ok_and(|pid| pid != own_pid))
+            .filter(|w| !w.is_minimized().unwrap_or(false))
+            .collect();
+        let sizes: Vec<(u32, u32)> = candidates
+            .iter()
+            .map(|w| (w.width().unwrap_or(0), w.height().unwrap_or(0)))
+            .collect();
+        let index = best_size_match(&sizes, (width, height))?;
+        candidates
+            .into_iter()
+            .nth(index)
+            .map(|window| Self { window })
+    }
+
+    /// Take hold of an already-known window by its X11 id, for following a
+    /// share that did NOT go through the portal (a bare X11 session, where
+    /// the in-app picker's id is the real one).
+    pub fn resolve(id: u32) -> Option<Self> {
+        Window::all()
+            .ok()?
+            .into_iter()
+            .find(|w| w.id().is_ok_and(|window_id| window_id == id))
+            .map(|window| Self { window })
+    }
+
+    /// Physical-pixel rect `(x, y, w, h)` right now, or `None` once the
+    /// window is gone.
+    pub fn rect(&self) -> Option<(i32, i32, u32, u32)> {
+        Some((
+            self.window.x().ok()?,
+            self.window.y().ok()?,
+            self.window.width().ok()?.max(1),
+            self.window.height().ok()?.max(1),
+        ))
+    }
+
+    /// Whether the window is currently minimized (`_NET_WM_STATE_HIDDEN`).
+    /// A minimized window is not gone - the overlay hides and comes back
+    /// with it - so this is deliberately separate from [`Self::rect`].
+    pub fn is_minimized(&self) -> bool {
+        self.window.is_minimized().unwrap_or(false)
+    }
+}
+
+/// Index of the size in `sizes` closest to `want`, within
+/// [`SIZE_MATCH_TOLERANCE`] on both axes. Ties go to the LAST match, which
+/// in stacking order is the top-most window - the one the user was looking
+/// at when they picked it in the portal dialog.
+///
+/// The tolerance exists because a compositor may stream a window's content
+/// area while X reports its client geometry, and the two can disagree by a
+/// pixel or two on fractional-scaling setups.
+#[cfg(target_os = "linux")]
+fn best_size_match(sizes: &[(u32, u32)], want: (u32, u32)) -> Option<usize> {
+    let distance = |(w, h): (u32, u32)| {
+        let dw = w.abs_diff(want.0);
+        let dh = h.abs_diff(want.1);
+        (dw <= SIZE_MATCH_TOLERANCE && dh <= SIZE_MATCH_TOLERANCE).then_some(dw + dh)
+    };
+    sizes
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &size)| distance(size).map(|d| (i, d)))
+        // `min_by_key` keeps the FIRST minimum; reversing makes it the last.
+        .rev()
+        .min_by_key(|&(_, d)| d)
+        .map(|(i, _)| i)
+}
+
+/// How far a window's reported size may sit from the negotiated stream size
+/// and still be considered the shared window. See [`best_size_match`].
+#[cfg(target_os = "linux")]
+const SIZE_MATCH_TOLERANCE: u32 = 4;
+
 /// Capture one frame of the given source, scaled down to at most `max_dim`
 /// pixels on the longer edge, and return it as a `data:image/jpeg;base64,...`
 /// URL for direct use in an `<img>` / QML `Image`.
@@ -325,5 +432,41 @@ impl ScreenRecorder {
         if let Err(e) = self.recorder.stop() {
             tracing::debug!("screenshare: recorder stop: {e}");
         }
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    /// The follower is moved into a polling task, so it has to cross threads.
+    const _: () = {
+        const fn assert_send<T: Send>() {}
+        assert_send::<SharedWindow>();
+    };
+
+    #[test]
+    fn exact_size_wins_over_a_near_miss() {
+        let sizes = [(1280, 720), (1282, 722), (1920, 1080)];
+        assert_eq!(best_size_match(&sizes, (1280, 720)), Some(0));
+    }
+
+    #[test]
+    fn a_near_miss_still_matches_within_the_tolerance() {
+        let sizes = [(1920, 1080), (1278, 719)];
+        assert_eq!(best_size_match(&sizes, (1280, 720)), Some(1));
+    }
+
+    #[test]
+    fn equally_close_candidates_resolve_to_the_topmost() {
+        // Same distance, so stacking order decides: last is top-most.
+        let sizes = [(1280, 718), (1920, 1080), (1280, 722)];
+        assert_eq!(best_size_match(&sizes, (1280, 720)), Some(2));
+    }
+
+    #[test]
+    fn nothing_within_the_tolerance_matches_nothing() {
+        let sizes = [(1920, 1080), (800, 600)];
+        assert_eq!(best_size_match(&sizes, (1280, 720)), None);
     }
 }

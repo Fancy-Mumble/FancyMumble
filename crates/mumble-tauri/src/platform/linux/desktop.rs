@@ -45,7 +45,6 @@ fn is_dev_build(exec_path: &str) -> bool {
     exec_path.contains("/target/debug/") || exec_path.contains("/target/release/")
 }
 
-
 /// Render the `.desktop` file contents.
 ///
 /// `exec_path` is substituted into the `Exec` lines so that quick actions
@@ -581,7 +580,10 @@ mod tests {
             std::fs::read(icon_path(home.path(), 128)).expect("read"),
             b"new"
         );
-        assert!(!stale.exists(), "the 256x256 copy would outrank the new one");
+        assert!(
+            !stale.exists(),
+            "the 256x256 copy would outrank the new one"
+        );
     }
 
     #[test]

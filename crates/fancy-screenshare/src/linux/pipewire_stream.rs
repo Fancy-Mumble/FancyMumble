@@ -336,6 +336,10 @@ fn on_param_changed(
     }
     state.have_format = true;
     state.logged_data_type = false;
+    // The authoritative pixel size of the share, and it renegotiates when the
+    // source is resized - so an overlay pinned over the source can be sized
+    // against it rather than against the portal's advisory logical extent.
+    super::portal::note_stream_size(state.info.size().width, state.info.size().height);
     tracing::info!(
         format = ?state.info.format(),
         width = state.info.size().width,

@@ -42,7 +42,7 @@ mod vaapi;
 
 use std::time::Instant;
 
-pub use portal::set_restore_last_pick;
+pub use portal::{active_portal_source, set_restore_last_pick, PortalSource};
 
 use crate::encode::{scaled_bitrate, EncodeSettings, EncodedFrame, H264Encoder, VideoEncoder};
 use crate::pipeline::{EncodePipeline, FrameScaler, StageTimings};

@@ -87,6 +87,14 @@ impl AppImageEnv {
 
     /// In `AppImage` on Wayland, force `GDK_BACKEND=wayland` to override
     /// the `x11` default from `pre_init` / `linuxdeploy`.
+    ///
+    /// The trade-off this makes, recorded because it is not obvious: a
+    /// native-Wayland client cannot position its own windows or ask to stay
+    /// above others, so the drawing overlay can only be placed where the
+    /// compositor implements `wlr-layer-shell` (KDE, sway, Hyprland, COSMIC,
+    /// niri - not GNOME). On a GNOME `AppImage` the overlay therefore reports
+    /// itself unavailable and asks for `GDK_BACKEND=x11`. Everything outside
+    /// the `AppImage` keeps the `XWayland` default, where it just works.
     fn set_wayland_backend(&self) {
         if std::env::var_os("WAYLAND_DISPLAY").is_some() {
             std::env::set_var("GDK_BACKEND", "wayland");

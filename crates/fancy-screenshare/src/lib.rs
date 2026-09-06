@@ -55,5 +55,12 @@ pub use sources::{CaptureSource, SourceKind};
 /// [`linux::camera_portal`] runs the camera consent dialog, and
 /// [`linux::set_restore_last_pick`] lets broadcast replaces reuse the picked
 /// source without re-prompting.
+///
+/// Because that dialog - not our picker - chooses the source,
+/// [`linux::active_portal_source`] is the only truthful answer to "what is
+/// being shared, and where is it on screen"; [`sources::source_rect`] cannot
+/// resolve the advisory id a portal share carries.
 #[cfg(all(target_os = "linux", feature = "gpu"))]
-pub use linux::{camera_portal, native_portal_picker, set_restore_last_pick};
+pub use linux::{
+    active_portal_source, camera_portal, native_portal_picker, set_restore_last_pick, PortalSource,
+};
