@@ -101,7 +101,9 @@
     "etaSeconds": "noch {{seconds}} s",
     "percent": "{{value}} %",
     "blockedNote": "{{reason}}.",
-    "createPoll": "Umfrage erstellen"
+    "createPoll": "Umfrage erstellen",
+    "newlineHint": "Umschalt+Enter = Zeilenumbruch",
+    "send": "Senden"
   },
   "trust": {
     "verifiedHint": "Der Schlüssel dieses Kanals ist derselbe wie zuvor.",

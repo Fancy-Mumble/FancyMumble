@@ -1,25 +1,16 @@
 import { useTranslation } from "react-i18next";
-import { Box, IconButton, Tooltip, Typography } from "@mui/material";
+import { Box, Typography } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { Stack } from "../primitives";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { isDesktopPlatform } from "@core/utils/platform";
-import { CloseIcon, MinimizeIcon, PlusIcon, SquareIcon } from "@ui/icons";
 import { BrandGlyph } from "@ui/BrandGlyph";
 import { MARK_FILL, MARK_STROKE, MARK_TILE_PX } from "../../brandMark";
 import { radius } from "../../tokens";
-import { serverTint, type ServerRailEntry } from "../../selectors";
-import { UserAvatar } from "../primitives";
+import type { ServerRailEntry } from "../../selectors";
 import type { ServerPingResult } from "@core/types";
-import {
-  RAIL_CARD_WIDTH,
-  ServerRailCard,
-  useRailCardHover,
-  type RailCardOccupant,
-} from "../sidebar/ServerRailCard";
-
-/** How far below a tab its card hangs, and how close to the window's edge it may get. */
-const CARD_DROP = 6;
-const CARD_MARGIN = 8;
+import type { RailCardOccupant } from "../sidebar/ServerRailCard";
+import { ServerTabStrip } from "./ServerTabStrip";
+import { FriendsButton, QuickConnectButton } from "./ChromeNav";
+import { WindowControls } from "./WindowControls";
 
 interface TitleBarProps {
   /**
@@ -67,16 +58,13 @@ interface TitleBarProps {
   tabs?: boolean;
 }
 
-// Window operations resolve the window on click rather than at render so the
-// bar mounts safely outside a Tauri webview (tests, browser dev server).
-const minimize = () => void getCurrentWindow().minimize();
-const toggleMaximize = () => void getCurrentWindow().toggleMaximize();
-const close = () => void getCurrentWindow().close();
-
 /**
- * The 44px window chrome: brand mark, the two top-level destinations, and the
- * connected-server pill. The mock puts the server itself in the title bar - it
- * is the way back to the conversation from Friends or the connect screen.
+ * The band across the top, and nothing more.
+ *
+ * What it holds is the skin's decision, not this component's: `chromeSlots`
+ * says which of the four pieces belong here, and the shell renders the rest
+ * wherever the skin sent them. A skin that hides the band renders none of
+ * this at all - see `NebulaClientApp`, which reads the same slots.
  */
 export function TitleBar({
   serverLabel,
@@ -98,10 +86,8 @@ export function TitleBar({
   tabs = false,
 }: Readonly<TitleBarProps>) {
   const { t } = useTranslation(["nebulaCommon", "common", "server"]);
-  // Hovering a tab opens the same card the rail's tiles do, hung under the
-  // tab; `at` is the spot in the window it hangs from.
-  const { hovered, show, dismiss, holdOpen, closeSoon } = useRailCardHover<{ left: number; top: number }>();
-  const hoveredEntry = entries.find((candidate) => candidate.group.key === hovered?.key) ?? null;
+  const slots = useTheme().palette.nebulaSkin.chromeSlots;
+  if (slots.band === "hidden") return null;
 
   return (
     <Stack
@@ -124,110 +110,22 @@ export function TitleBar({
         {t("common:brand")}
       </Typography>
 
-      {/* Friends belongs to whichever surface is carrying the navigation. With
-          the strip gone the rail has it, and drawing it in both places would
-          leave the window with two of the same destination. */}
-      {tabs && (
-        <Box
-          component="button"
-          onClick={onOpenFriends}
-          sx={(theme) => ({
-            all: "unset",
-            position: "relative",
-            cursor: "pointer",
-            px: "11px",
-            py: "5px",
-            borderRadius: radius("md"),
-            fontSize: 12.5,
-            fontWeight: 500,
-            whiteSpace: "nowrap",
-            color: friendsActive ? theme.palette.nebula.barText : theme.palette.nebula.barDim,
-            background: friendsActive ? theme.palette.nebula.card2 : "transparent",
-            "&:hover": { background: theme.palette.nebula.hover },
-          })}
-        >
-          {t("server:tabsBar.friends")}
-          {friendsUnread > 0 && (
-            <Box
-              component="span"
-              aria-label={t("server:tabsBar.unreadCount", { count: friendsUnread })}
-              sx={(theme) => ({
-                ml: "6px",
-                px: "5px",
-                borderRadius: "8px",
-                fontSize: 9,
-                fontWeight: 700,
-                fontVariantNumeric: "tabular-nums",
-                background: theme.palette.nebula.bad,
-                color: theme.palette.nebula.bg0,
-              })}
-            >
-              {friendsUnread > 99 ? "99+" : friendsUnread}
-            </Box>
-          )}
-        </Box>
+      {tabs && slots.navigation === "band" && (
+        <FriendsButton active={friendsActive} unread={friendsUnread} onOpen={onOpenFriends} />
       )}
 
-      {/* The strip gives way before the window controls do: a dozen servers
-          must not push the close button off the bar. */}
-      {tabs && (
-        <Stack
-          direction="row"
-          alignItems="center"
-          gap={0.5}
-          sx={{
-            minWidth: 0,
-            overflowX: "auto",
-            scrollbarWidth: "none",
-            "&::-webkit-scrollbar": { display: "none" },
-          }}
-        >
-          {entries.map((entry) => (
-            <ServerTab
-              key={entry.group.key}
-              entry={entry}
-              icon={icons?.get(entry.group.key)}
-              active={entry.group.key === activeKey}
-              onSelect={() => {
-                dismiss();
-                onSelectServer?.(entry);
-              }}
-              onDisconnect={onDisconnect}
-              onHover={(tab) =>
-                show(entry.group.key, {
-                  // Under the tab's left edge, unless that would run the card
-                  // off the right of the window.
-                  left: Math.max(
-                    CARD_MARGIN,
-                    Math.min(tab.left, window.innerWidth - RAIL_CARD_WIDTH - CARD_MARGIN),
-                  ),
-                  top: tab.bottom + CARD_DROP,
-                })
-              }
-              onLeave={closeSoon}
-            />
-          ))}
-        </Stack>
-      )}
-
-      {tabs && hoveredEntry && hovered && (
-        <ServerRailCard
-          fixed
-          entry={hoveredEntry}
-          icon={icons?.get(hoveredEntry.group.key)}
-          banner={banners?.get(hoveredEntry.group.key)}
-          ping={pings?.get(hoveredEntry.group.key)}
-          channelName={hoveredEntry.group.key === activeKey ? activeChannelName : null}
+      {tabs && slots.servers === "band" && (
+        <ServerTabStrip
+          entries={entries}
+          icons={icons}
+          banners={banners}
+          pings={pings}
+          activeChannelName={activeChannelName}
           ownName={ownName}
-          occupants={hoveredEntry.group.key === activeKey ? occupants : []}
-          left={hovered.at.left}
-          top={hovered.at.top}
-          onOpen={() => {
-            dismiss();
-            onSelectServer?.(hoveredEntry);
-          }}
-          onPointerEnter={holdOpen}
-          onPointerLeave={closeSoon}
+          occupants={occupants}
+          activeKey={activeKey}
+          onSelectServer={onSelectServer}
+          onDisconnect={onDisconnect}
         />
       )}
 
@@ -261,185 +159,16 @@ export function TitleBar({
         </Typography>
       )}
 
-      {onQuickConnect && (
-        <Tooltip title={t("nebulaCommon:quickConnect")}>
-          <IconButton
-            size="small"
-            aria-label={t("nebulaCommon:quickConnect")}
-            aria-haspopup="menu"
-            aria-expanded={quickConnectOpen}
-            onClick={(event) => onQuickConnect(event.currentTarget)}
-            sx={(theme) => ({
-              color: quickConnectOpen ? theme.palette.nebula.text : undefined,
-              background: quickConnectOpen ? theme.palette.nebula.card2 : undefined,
-            })}
-          >
-            <PlusIcon width={14} height={14} />
-          </IconButton>
-        </Tooltip>
+      {onQuickConnect && slots.navigation === "band" && (
+        <QuickConnectButton open={quickConnectOpen} onOpen={onQuickConnect} />
       )}
 
       <Box sx={{ ml: "auto" }} />
-      {isDesktopPlatform() && (
-        <Stack direction="row" gap={0.5}>
-          <IconButton size="small" aria-label={t("common:actions.minimize")} onClick={minimize}>
-            <MinimizeIcon width={13} height={13} />
-          </IconButton>
-          <IconButton size="small" aria-label={t("common:actions.maximize")} onClick={toggleMaximize}>
-            <SquareIcon width={11} height={11} />
-          </IconButton>
-          <IconButton
-            size="small"
-            aria-label={t("common:actions.close")}
-            onClick={close}
-            sx={(theme) => ({ "&:hover": { background: `${theme.palette.nebula.bad}33` } })}
-          >
-            <CloseIcon width={13} height={13} />
-          </IconButton>
-        </Stack>
-      )}
+      {slots.windowControls === "band" && <WindowControls />}
     </Stack>
   );
 }
 
-/**
- * One server, up in the window chrome.
- *
- * The picture is the point: a browser tab is found by its favicon long before
- * its title is read, and a rail of servers works the same way. The label is
- * what confirms the choice, not what makes it.
- */
-function ServerTab({
-  entry,
-  icon,
-  active,
-  onSelect,
-  onDisconnect,
-  onHover,
-  onLeave,
-}: Readonly<{
-  entry: ServerRailEntry;
-  icon?: string;
-  active: boolean;
-  onSelect: () => void;
-  onDisconnect?: () => void;
-  /** The tab's box in the window, so the card can hang from it. */
-  onHover: (tab: DOMRect) => void;
-  onLeave: () => void;
-}>) {
-  const { t } = useTranslation("server");
-  const { group, status, unread } = entry;
-  return (
-    <Stack
-      direction="row"
-      alignItems="center"
-      gap={1}
-      data-testid="nebula-server-tab"
-      onMouseEnter={(event: React.MouseEvent<HTMLElement>) =>
-        onHover(event.currentTarget.getBoundingClientRect())
-      }
-      onMouseLeave={onLeave}
-      sx={(theme) => ({
-        px: "9px",
-        py: "4px",
-        borderRadius: radius("md"),
-        fontSize: 12.5,
-        fontWeight: 500,
-        maxWidth: 190,
-        background: active ? theme.palette.nebula.card2 : "transparent",
-        color: active ? theme.palette.nebula.text : theme.palette.nebula.muted,
-        "&:hover": { background: theme.palette.nebula.hover },
-      })}
-    >
-      <Box
-        component="button"
-        type="button"
-        onClick={onSelect}
-        aria-current={active ? "true" : undefined}
-        sx={{
-          all: "unset",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          gap: "7px",
-          minWidth: 0,
-        }}
-      >
-        <ServerFavicon entry={entry} icon={icon} />
-        <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {group.label}
-        </Box>
-        {status !== "connected" && (
-          <Box component="span" sx={(theme) => ({ fontSize: 10, color: theme.palette.nebula.dim })}>
-            {status === "connecting" ? "…" : ""}
-          </Box>
-        )}
-        {unread > 0 && (
-          <Box
-            component="span"
-            sx={(theme) => ({
-              minWidth: 15,
-              height: 15,
-              px: "4px",
-              borderRadius: "8px",
-              display: "grid",
-              placeItems: "center",
-              background: theme.palette.nebula.bad,
-              color: theme.palette.nebula.bg0,
-              fontSize: 9,
-              fontWeight: 700,
-            })}
-          >
-            {unread > 99 ? "99+" : unread}
-          </Box>
-        )}
-      </Box>
-      {active && onDisconnect && (
-        <Box
-          component="button"
-          type="button"
-          aria-label={t("tabsBar.disconnectFrom", { label: group.label })}
-          onClick={onDisconnect}
-          sx={(theme) => ({
-            all: "unset",
-            cursor: "pointer",
-            fontSize: 11,
-            lineHeight: 1,
-            color: theme.palette.nebula.dim,
-            "&:hover": { color: theme.palette.nebula.bad },
-          })}
-        >
-          ✕
-        </Box>
-      )}
-    </Stack>
-  );
-}
-
-/** The server picture, at the size a tab can spare. */
-function ServerFavicon({ entry, icon }: Readonly<{ entry: ServerRailEntry; icon?: string }>) {
-  return (
-    <Box sx={{ display: "flex", flex: "none", borderRadius: radius("sm"), overflow: "hidden" }}>
-      <UserAvatar
-        name={entry.group.label}
-        size={15}
-        square
-        src={icon}
-        gradient={serverTint(entry.group.key)}
-      />
-    </Box>
-  );
-}
-
-/**
- * The app's monogram, up in the chrome.
- *
- * The tile is Nebula's - the skin's accent, the skin's corner, and its cut
- * when the skin cuts - and the letter inside it is the shared outline, which
- * paints in `currentColor` and scales to the box it is given. The taskbar
- * icon is the same tile and the same outline drawn onto a canvas, so the two
- * are one mark rather than two that agree by hand.
- */
 function BrandMark() {
   return (
     <Box

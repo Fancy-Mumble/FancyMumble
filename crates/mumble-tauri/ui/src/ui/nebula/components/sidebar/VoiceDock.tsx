@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, Divider, Menu, MenuItem, Switch, Tooltip, Typography } from "@mui/material";
-import type { Theme } from "@mui/material/styles";
+import { useTheme, type Theme } from "@mui/material/styles";
 import { useAppStore } from "@core/store";
 import { selectMicLive, selectSelfDeafened } from "@core/store/voiceSelectors";
 import { TID } from "@core/testids";
@@ -27,6 +27,9 @@ import { radius } from "../../tokens";
 
 /** The dock sits on the composer's inset; they are one strip. */
 const DOCK_INSET = "10px";
+
+/** The artboard sets the dock further off the column's edges than the pack does. */
+const DOCK_INSET_STENCIL = "16px";
 
 /** Ties the filter row to the line explaining it. */
 const HIDE_EMPTY_HINT_ID = "nebula-dock-hide-empty-hint";
@@ -95,6 +98,7 @@ export function VoiceDock({
   const voiceState = useAppStore((state) => state.voiceState);
   const ownSession = useAppStore((state) => state.ownSession);
   const broadcastingOwnSession = useAppStore((state) => state.broadcastingOwnSession);
+  const stencil = useTheme().palette.nebulaSkin.chrome === "stencil";
   const [open, setOpen] = useState(false);
   const card = useRef<HTMLDivElement>(null);
 
@@ -120,8 +124,8 @@ export function VoiceDock({
       ref={card}
       sx={(theme) => ({
         flex: "none",
-        m: DOCK_INSET,
-        p: DOCK_INSET,
+        m: stencil ? DOCK_INSET_STENCIL : DOCK_INSET,
+        p: stencil ? "12px 14px" : DOCK_INSET,
         display: "grid",
         gridTemplateColumns: "auto 1fr",
         gridTemplateRows: "auto auto",
@@ -132,10 +136,21 @@ export function VoiceDock({
         // A card, so it takes the same chamfer the HUD skins cut into every
         // other surface - stroke included, which is what `chamferedSurface`
         // is for. `none` everywhere else leaves the radius above alone.
-        ...chamferedSurface(theme, theme.palette.nebula.card, theme.palette.nebula.line2),
+        ...chamferedSurface(
+          theme,
+          theme.palette.nebula.card,
+          // The artboard outlines the dock in the window's own navy, a good
+          // deal heavier than the hairline every other panel gets.
+          stencil ? theme.palette.nebula.railLine : theme.palette.nebula.line2,
+        ),
         backdropFilter: "blur(var(--nebula-blur, 12px))",
         WebkitBackdropFilter: "blur(var(--nebula-blur, 12px))",
-        boxShadow: "0 8px 28px rgba(0,0,0,.14)",
+        // A drawn skin has no light source to cast a soft shadow, so the panel
+        // sits on a hard offset plate instead of floating over a blur.
+        boxShadow:
+          theme.palette.nebulaSkin.chrome === "stencil"
+            ? `6px 6px 0 ${theme.palette.nebula.line2}`
+            : "0 8px 28px rgba(0,0,0,.14)",
       })}
     >
       <Box
@@ -160,11 +175,29 @@ export function VoiceDock({
           the top row and the controls get the one below. */}
       <Stack direction="row" alignItems="center" gap="8px" sx={{ minWidth: 0 }}>
         <Stack gap="1px" sx={{ flex: 1, minWidth: 0 }}>
-          <Typography sx={{ fontWeight: 600, fontSize: 13, lineHeight: 1.25 }} noWrap>
+          <Typography
+            sx={{ fontWeight: stencil ? 900 : 600, fontSize: stencil ? 16 : 13, lineHeight: 1.15 }}
+            noWrap
+          >
             {name}
           </Typography>
           <Typography
-            sx={(theme) => ({ fontSize: 10.5, lineHeight: 1.35, color: theme.palette.nebula.muted })}
+            sx={(theme) => ({
+              fontSize: 10.5,
+              lineHeight: 1.35,
+              color: theme.palette.nebula.muted,
+              // Voice being off is the one state the artboard raises its voice
+              // about: tracked caps in the alarm colour, not a quiet subtitle.
+              ...(stencil && voiceState === "inactive"
+                ? {
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: ".16em",
+                    textTransform: "uppercase",
+                    color: theme.palette.nebula.bad,
+                  }
+                : {}),
+            })}
             noWrap
           >
             {voiceState === "inactive"
@@ -187,8 +220,16 @@ export function VoiceDock({
         </DockButton>
       </Stack>
 
-      <Stack direction="row" alignItems="center" gap="4px">
+      <Stack
+        direction="row"
+        alignItems="center"
+        gap="8px"
+        // Plated, the row is the mock's bank of switches and runs the whole
+        // width of the panel rather than sitting in the column beside the face.
+        sx={stencil ? { gridColumn: "1 / -1" } : undefined}
+      >
         <DockButton
+          spread
           label={
             micBusy
               ? micBusyLabel
@@ -212,6 +253,7 @@ export function VoiceDock({
         </DockButton>
 
         <DockButton
+          spread
           label={deafened ? t("chat:callControls.undeafen") : t("chat:callControls.deafen")}
           active={deafened}
           alert
@@ -227,6 +269,7 @@ export function VoiceDock({
 
         {onShareScreen && (
           <DockButton
+            spread
             label={sharing ? t("chat:screenShare.stopScreenShare") : t("nebulaSidebar:dock.shareScreen")}
             active={sharing}
             accent
@@ -416,6 +459,7 @@ function DockButton({
   accent = false,
   warn = false,
   width = 30,
+  spread = false,
   trailing = false,
   testId,
   onClick,
@@ -427,6 +471,11 @@ function DockButton({
   accent?: boolean;
   warn?: boolean;
   width?: number;
+  /**
+   * One of the row of call controls, which a stencil skin draws as equal
+   * bordered plates rather than as small icons that only outline when active.
+   */
+  spread?: boolean;
   /** Pushes the button to the end of the row. */
   trailing?: boolean;
   /** e2e handle; the dock's own buttons carry the shared registry's ids. */
@@ -434,6 +483,8 @@ function DockButton({
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
   children: React.ReactNode;
 }>) {
+  const stencil = useTheme().palette.nebulaSkin.chrome === "stencil";
+  const plated = spread && stencil;
   return (
     <Tooltip title={label}>
       <Box
@@ -457,11 +508,38 @@ function DockButton({
                     color: nebula.accent,
                   }
                 : { background: nebula.card2, color: nebula.text };
+          // The same three tones as a pair a cut plate can be built from: a
+          // `border` would be sliced off at the diagonal.
+          const tone = warn
+            ? { fill: `${nebula.warn}29`, edge: `${nebula.warn}57`, ink: nebula.warn }
+            : alert
+              ? { fill: `${nebula.bad}29`, edge: `${nebula.bad}57`, ink: nebula.bad }
+              : accent
+                ? { fill: nebula.accentSoft, edge: nebula.accentLine, ink: nebula.accent }
+                : { fill: nebula.card2, edge: nebula.line2, ink: nebula.text };
+          // A plated control is lit at rest: the mock's row reads as three
+          // switches, and a switch that only outlines when thrown reads as
+          // nothing at all until you throw it.
+          const rest = plated
+            ? {
+                color: nebula.text,
+                // Squared, unlike the header's plates: the artboard leans the
+                // chrome above the conversation and leaves the switches below
+                // it upright.
+                background: nebula.card2,
+                border: `2px solid ${nebula.accentLine}`,
+                "&:hover": { filter: "brightness(.96)" },
+              }
+            : { "&:hover": { background: nebula.hover, color: nebula.text } };
           return {
             ...dockButtonBase(theme),
-            width,
+            ...(plated ? { flex: 1, width: "auto", height: 34 } : { width }),
             ...align,
-            ...(active ? fill : { "&:hover": { background: nebula.hover, color: nebula.text } }),
+            ...(active
+              ? plated
+                ? { color: tone.ink, background: tone.fill, border: `2px solid ${tone.edge}` }
+                : fill
+              : rest),
           };
         }}
       >

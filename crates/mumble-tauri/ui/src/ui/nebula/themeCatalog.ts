@@ -201,7 +201,46 @@ export interface NebulaSkin {
   glass: number;
   /** Backdrop blur behind the chrome, in pixels. */
   blurPx: number;
+  /**
+   * The three fixed measures of the shell, in px.
+   *
+   * The sheet's own skins never move these, so they carry the pack's long
+   * standing values. A drawn skin sets its own: at the pack's numbers the
+   * mock's marks are all present and the proportions still read as a
+   * different design.
+   */
+  railWidth: number;
+  columnWidth: number;
+  headerHeight: number;
+  /**
+   * Where each piece of window chrome lives.
+   *
+   * The pack has always drawn a band across the top and put all four pieces
+   * in it. A skin whose design has no such band does not have to lose them:
+   * each piece names a second home, so the controls can float over a corner,
+   * navigation can join the chat header, and the switcher can fall back to
+   * the rail - which already lists every server.
+   */
+  chromeSlots: NebulaChromeSlots;
 }
+
+export interface NebulaChromeSlots {
+  /** The band itself. Hiding it re-homes everything below. */
+  band: "shown" | "hidden";
+  /** Minimise, maximise, close. */
+  windowControls: "band" | "corner";
+  /** Friends and quick connect. */
+  navigation: "band" | "chatHeader";
+  /** The server switcher. `rail` leaves the rail as the only one. */
+  servers: "band" | "rail";
+}
+
+const BAND_SLOTS: NebulaChromeSlots = {
+  band: "shown",
+  windowControls: "band",
+  navigation: "band",
+  servers: "band",
+};
 
 export interface NebulaThemeDef {
   id: NebulaThemeId;
@@ -267,6 +306,10 @@ export const DEFAULT_SKIN: NebulaSkin = {
   selectionBar: false,
   glass: 0,
   blurPx: 18,
+  railWidth: 56,
+  columnWidth: 290,
+  headerHeight: 66,
+  chromeSlots: BAND_SLOTS,
 };
 
 /** The sheet's defaults, so each skin below states only what it changes. */
@@ -293,6 +336,10 @@ function skin(over: Partial<NebulaSkin> & Pick<NebulaSkin, "font">): NebulaSkin 
     selectionBar: false,
     glass: 0,
     blurPx: 18,
+    railWidth: 56,
+    columnWidth: 290,
+    headerHeight: 66,
+    chromeSlots: BAND_SLOTS,
     ...over,
   };
 }
@@ -1243,6 +1290,18 @@ export const NEBULA_THEMES: readonly NebulaThemeDef[] = [
       lineWidth: "2px",
       clipPlate: "polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%)",
       chrome: "stencil",
+      // Measured off the artboard: rail 77, column 317, header 90.
+      railWidth: 77,
+      columnWidth: 317,
+      headerHeight: 90,
+      // The artboard has no band: the controls float over the corner, the
+      // header carries navigation, and the rail is the only switcher.
+      chromeSlots: {
+        band: "hidden",
+        windowControls: "corner",
+        navigation: "chatHeader",
+        servers: "rail",
+      },
       // A parallelogram, which is what `skewX(-12deg)` resolves to on a row of
       // this height - written as a clip so the row's text is not skewed with
       // it and needs no counter-transform.

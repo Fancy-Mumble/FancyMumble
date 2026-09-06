@@ -101,7 +101,9 @@
     "etaSeconds": "{{seconds}} s restantes",
     "percent": "{{value}} %",
     "blockedNote": "{{reason}}.",
-    "createPoll": "Créer un sondage"
+    "createPoll": "Créer un sondage",
+    "newlineHint": "Maj+Entrée = nouvelle ligne",
+    "send": "Envoyer"
   },
   "trust": {
     "verifiedHint": "La clé de ce salon est celle que vous avez déjà vue.",

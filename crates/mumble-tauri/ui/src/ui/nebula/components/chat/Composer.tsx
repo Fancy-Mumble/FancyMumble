@@ -2,7 +2,8 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { useTranslation } from "react-i18next";
 import { Stack } from "../primitives";
 import { Box, IconButton, Menu, MenuItem, Tooltip, Typography } from "@mui/material";
-import { alpha, type SxProps, type Theme } from "@mui/material/styles";
+import { useTheme } from "@mui/material/styles";
+import { alpha, lighten, type SxProps, type Theme } from "@mui/material/styles";
 import { useTypingIndicator } from "@core/features/chat/typing/useTypingIndicator";
 import { sendPluginInteraction, useAppStore } from "@core/store";
 import { parseMentionTrigger, type MentionTrigger } from "@core/utils/mentions";
@@ -275,6 +276,7 @@ export function Composer({
   /** The same, for the button that was just pressed. */
   const openPopover = (kind: PopoverKind, event: React.MouseEvent<HTMLElement>, width: number) =>
     openPopoverFrom(kind, event.currentTarget, width);
+  const stencil = useTheme().palette.nebulaSkin.chrome === "stencil";
   const editor = useRef<MarkdownInputApi | null>(null);
   /** Where the caret is, as the editor last reported it. */
   const caret = useRef({ start: 0, end: 0 });
@@ -676,6 +678,22 @@ export function Composer({
           boxShadow: lit
             ? `0 0 0 1px ${alpha(theme.palette.nebula.accent, 0.2)}, 0 6px 24px rgba(0,0,0,.12)`
             : "0 6px 24px rgba(0,0,0,.12)",
+          // A drawn skin stands the clip, the field and Send on three plates
+          // of their own, with air between them - so the panel that carries
+          // all three stops being a surface and goes back to being ground.
+          ...(stencil
+            ? {
+                background: "none",
+                boxShadow: "none",
+                backdropFilter: "none",
+                WebkitBackdropFilter: "none",
+                clipPath: "none",
+                // The plates inside carry their own cut edges; a clipping
+                // parent would shave them off at the panel's own bounds.
+                overflow: "visible",
+                "&::before": { display: "none" },
+              }
+            : {}),
         })}
       >
         {/* Quotes are rows in one tray, not chips and not a tray each: two
@@ -761,13 +779,35 @@ export function Composer({
         <Stack
           direction="row"
           alignItems="center"
-          gap="9px"
-          sx={{ minHeight: 54, flex: "none", px: "15px", py: "11px" }}
+          gap={stencil ? "12px" : "9px"}
+          sx={{ minHeight: stencil ? 56 : 54, flex: "none", ...(stencil ? {} : { px: "15px", py: "11px" }) }}
         >
           {/* The paperclip is the picker. Pressed, it opens the file dialog
               and whatever comes back lands in the tray - no panel between
               the click and the file. The other ways in sit behind the
               chevron beside it and behind a right-click on the clip. */}
+          <Box
+            sx={(theme) => ({
+              flex: "none",
+              display: "flex",
+              alignItems: "center",
+              ...(stencil
+                ? {
+                    // One plate for the clip and its chevron. Two would put a
+                    // gap between them that the row's rhythm has no room for.
+                    alignSelf: "stretch",
+                    gap: "2px",
+                    px: "12px",
+                    ...chamferedSurface(
+                      theme,
+                      theme.palette.nebula.card,
+                      theme.palette.nebula.accentLine,
+                      "var(--nebula-clip-plate, none)",
+                    ),
+                  }
+                : { gap: "9px" }),
+            })}
+          >
           <BareButton
             label={attachBlocked ?? t("nebulaChat:composer.attachFiles")}
             disabled={disabled}
@@ -796,210 +836,272 @@ export function Composer({
               disabled={disabled}
               active={!!attachMenu}
               size={16}
-              sx={{ height: 28, ml: "-6px", borderRadius: radius("sm") }}
+              sx={{ height: 28, ml: stencil ? 0 : "-6px", borderRadius: radius("sm") }}
               onClick={(event) => setAttachMenu(event.currentTarget)}
             >
               <ChevronDownIcon width={10} height={10} strokeWidth={2.2} />
             </BareButton>
           )}
-          {/* A word, not a glyph: the canvas gives GIF a small chip of its own
-              because there is no picture of "GIF" anyone reads faster. */}
-          <Box
-            component="button"
-            type="button"
-            aria-label={t("nebulaChat:composer.insertGif")}
-            disabled={disabled}
-            onClick={(event) => openPopover("gif", event, GIF_POPOVER_WIDTH)}
-            sx={(theme) => ({
-              all: "unset",
-              cursor: "pointer",
-              flex: "none",
-              padding: "4px 8px",
-              borderRadius: radius("sm"),
-              fontSize: 10,
-              fontWeight: 600,
-              letterSpacing: "0.03em",
-              // The one badge several skins invert outright - Midnight runs cyan
-              // on a bottle-green chip, Mobel and Ply leave it as plain type.
-              background: theme.palette.nebula.gifBg,
-              color: theme.palette.nebula.gifText,
-              "&:hover": { background: theme.palette.nebula.hover, color: theme.palette.nebula.text },
-            })}
-          >
-            GIF
           </Box>
-
-          <Menu
-            anchorEl={attachMenu}
-            open={!!attachMenu}
-            onClose={() => setAttachMenu(null)}
-            anchorOrigin={{ vertical: "top", horizontal: "left" }}
-            transformOrigin={{ vertical: "bottom", horizontal: "left" }}
-            slotProps={{ paper: { sx: { width: 226 } } }}
-          >
-            {!attachBlocked && (
-              <MenuItem
-                onClick={() => {
-                  setAttachMenu(null);
-                  onAttach?.("any");
-                }}
-              >
-                <MenuGlyph>
-                  <AttachIcon width={14} height={14} />
-                </MenuGlyph>
-                {t("nebulaChat:composer.browseFiles")}
-                <MenuHint>{BROWSE_SHORTCUT}</MenuHint>
-              </MenuItem>
-            )}
-            {!attachBlocked && (
-              <MenuItem
-                onClick={() => {
-                  setAttachMenu(null);
-                  onAttach?.("media");
-                }}
-              >
-                <MenuGlyph>
-                  <ImageIcon width={14} height={14} />
-                </MenuGlyph>
-                {t("nebulaChat:composer.photoOrVideo")}
-              </MenuItem>
-            )}
-            {onCreatePoll && (
-              <MenuItem
-                data-testid={TID.chatCreatePoll}
-                onClick={() => {
-                  setAttachMenu(null);
-                  openPopoverFrom("poll", attachButton.current, POLL_POPOVER_WIDTH);
-                }}
-              >
-                <MenuGlyph>
-                  <PollIcon width={14} height={14} />
-                </MenuGlyph>
-                {t("nebulaChat:composer.createPoll")}
-              </MenuItem>
-            )}
-            {onOpenLiveDoc && (
-              <MenuItem
-                onClick={() => {
-                  setAttachMenu(null);
-                  onOpenLiveDoc();
-                }}
-              >
-                <MenuGlyph>
-                  <FileTextIcon width={14} height={14} />
-                </MenuGlyph>
-                {t("nebulaChat:composer.newDocument")}
-              </MenuItem>
-            )}
-            <Typography
-              sx={(theme) => ({
-                px: "10px",
-                pt: "7px",
-                pb: "4px",
-                fontSize: 10.5,
-                lineHeight: 1.4,
-                color: theme.palette.nebula.dim,
-              })}
-            >
-              {attachBlocked
-                ? t("nebulaChat:composer.blockedNote", { reason: attachBlocked })
-                : t("nebulaChat:composer.dragHint")}
-            </Typography>
-          </Menu>
-
-          {/* The text shares the row with the tools rather than taking one of
-              its own - the panel only grows for things that dock above it. */}
-          {/*
-           * The editor's own chrome is stripped here.
-           *
-           * `MarkdownInput` is Standard's composer field: its wrapper carries
-           * a border, a glass fill, a radius and a 40px floor because there it
-           * *is* the composer. Inside this panel that draws a second field
-           * boxed within the first - the exact thing the canvas set out to
-           * remove. The overlay and the textarea must keep identical padding
-           * or the caret drifts off the text, so both are zeroed together.
-           */}
+          {/* The field itself: on a stencil skin this is the white plate the
+              mock draws, with the clip outside it on the left and Send outside
+              it on the right. Every other skin leaves it an unstyled group and
+              keeps the panel as the field. */}
           <Box
-            // The e2e handle Standard puts on its own composer wrapper: the
-            // suite locates this, then the `textarea` inside it.
-            data-testid={TID.chatComposerInput}
-            // Focus and blur are taken here rather than on the textarea: they
-            // are the DOM's bubbling pair, so the one listener covers the
-            // field however deep the editor puts it.
-            onFocus={() => setFocused(true)}
-            // Leaving the editor puts the bar away. A textarea keeps its
-            // selection through a blur, so without this the bar would hang
-            // over a composer nobody is typing in. The bar's own buttons
-            // refuse focus, so pressing one is not leaving.
-            onBlur={() => {
-              setFocused(false);
-              setSelection(null);
-            }}
             sx={(theme) => ({
               flex: 1,
               minWidth: 0,
-              // The widget colours itself from Standard's custom properties,
-              // which only exist once Standard's appearance has been applied.
-              // Feeding it Nebula's palette makes it right here regardless -
-              // without them the placeholder inherits and comes out white.
-              "--color-text-primary": theme.palette.nebula.text,
-              // The placeholder comes up with the panel. Dim is the colour of
-              // a line nobody is writing; once the caret is in it, the words
-              // are about to be replaced and are worth reading first.
-              "--color-text-muted": lit ? theme.palette.nebula.muted : theme.palette.nebula.dim,
-              "--color-accent": theme.palette.nebula.accent,
-              // The editor draws its own caret, in the text's colour by
-              // default. In a panel that lights accent the caret is the
-              // smallest part of the same statement, so it lights too.
-              "--color-caret": theme.palette.nebula.accent,
-              // And so does the selection. The browser's own highlight is a
-              // flat slab of system blue that owes nothing to the scheme; the
-              // canvas marks the run the way it marks a code span instead - a
-              // wash of accent inside a hairline of it, rounded. The edge is
-              // what keeps it legible over glass, where a fill alone at this
-              // alpha is barely a change of shade.
-              "--color-selection": theme.palette.nebula.accentSoft,
-              "--selection-ring": `0 0 0 1px ${theme.palette.nebula.accentLine}`,
-              "--selection-radius": "3px",
-              "& > div": {
-                minHeight: 22,
-                maxHeight: 120,
-                background: "transparent",
-                border: "none",
-                borderRadius: 0,
-              },
-              "& > div > div, & > div > textarea": { padding: 0, fontSize: 14, lineHeight: 1.4 },
-              // The panel is the field, so the field inside it must not draw
-              // one of its own. Standard's global sheet writes
-              // `textarea:focus-visible` plainly, which outranks the editor's
-              // own `outline: none` - and the wrapper clips it into a boxed
-              // ring around the words. Said here at a weight that wins.
-              "& > div > textarea:focus, & > div > textarea:focus-visible": {
-                outline: "none",
-                boxShadow: "none",
-              },
+              display: "flex",
+              alignItems: "center",
+              gap: "9px",
+              ...(stencil
+                ? {
+                    alignSelf: "stretch",
+                    px: "16px",
+                    ...chamferedSurface(
+                      theme,
+                      theme.palette.nebula.card,
+                      theme.palette.nebula.accentLine,
+                      "var(--nebula-clip-plate, none)",
+                    ),
+                  }
+                : {}),
             })}
           >
-            <MarkdownInput
-              apiRef={editor}
-              value={draft}
+            {/* A word, not a glyph: the canvas gives GIF a small chip of its own
+              because there is no picture of "GIF" anyone reads faster. */}
+            <Box
+              component="button"
+              type="button"
+              aria-label={t("nebulaChat:composer.insertGif")}
               disabled={disabled}
-              placeholder={`Message ${target}`}
-              ariaLabel={`Message ${target}`}
-              keepPlaceholderOnFocus
-              onChange={(next) => {
-                draftRef.current = next;
-                setDraft(next);
-                notifyTyping();
+              onClick={(event) => openPopover("gif", event, GIF_POPOVER_WIDTH)}
+              sx={(theme) => ({
+                all: "unset",
+                cursor: "pointer",
+                flex: "none",
+                padding: "4px 8px",
+                borderRadius: radius("sm"),
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: "0.03em",
+                // The one badge several skins invert outright - Midnight runs cyan
+                // on a bottle-green chip, Mobel and Ply leave it as plain type.
+                background: theme.palette.nebula.gifBg,
+                color: theme.palette.nebula.gifText,
+                // A drawn skin outlines the word and leans it, the way the
+                // artboard sets every small label.
+                ...(stencil
+                  ? {
+                      padding: "3px 8px",
+                      borderRadius: 0,
+                      border: `2px solid ${theme.palette.nebula.accentLine}`,
+                      background: "transparent",
+                      fontStyle: "italic",
+                      fontWeight: 800,
+                      fontSize: 13,
+                      letterSpacing: ".1em",
+                    }
+                  : {}),
+                "&:hover": { background: theme.palette.nebula.hover, color: theme.palette.nebula.text },
+              })}
+            >
+              GIF
+            </Box>
+
+            <Menu
+              anchorEl={attachMenu}
+              open={!!attachMenu}
+              onClose={() => setAttachMenu(null)}
+              anchorOrigin={{ vertical: "top", horizontal: "left" }}
+              transformOrigin={{ vertical: "bottom", horizontal: "left" }}
+              slotProps={{ paper: { sx: { width: 226 } } }}
+            >
+              {!attachBlocked && (
+                <MenuItem
+                  onClick={() => {
+                    setAttachMenu(null);
+                    onAttach?.("any");
+                  }}
+                >
+                  <MenuGlyph>
+                    <AttachIcon width={14} height={14} />
+                  </MenuGlyph>
+                  {t("nebulaChat:composer.browseFiles")}
+                  <MenuHint>{BROWSE_SHORTCUT}</MenuHint>
+                </MenuItem>
+              )}
+              {!attachBlocked && (
+                <MenuItem
+                  onClick={() => {
+                    setAttachMenu(null);
+                    onAttach?.("media");
+                  }}
+                >
+                  <MenuGlyph>
+                    <ImageIcon width={14} height={14} />
+                  </MenuGlyph>
+                  {t("nebulaChat:composer.photoOrVideo")}
+                </MenuItem>
+              )}
+              {onCreatePoll && (
+                <MenuItem
+                  data-testid={TID.chatCreatePoll}
+                  onClick={() => {
+                    setAttachMenu(null);
+                    openPopoverFrom("poll", attachButton.current, POLL_POPOVER_WIDTH);
+                  }}
+                >
+                  <MenuGlyph>
+                    <PollIcon width={14} height={14} />
+                  </MenuGlyph>
+                  {t("nebulaChat:composer.createPoll")}
+                </MenuItem>
+              )}
+              {onOpenLiveDoc && (
+                <MenuItem
+                  onClick={() => {
+                    setAttachMenu(null);
+                    onOpenLiveDoc();
+                  }}
+                >
+                  <MenuGlyph>
+                    <FileTextIcon width={14} height={14} />
+                  </MenuGlyph>
+                  {t("nebulaChat:composer.newDocument")}
+                </MenuItem>
+              )}
+              <Typography
+                sx={(theme) => ({
+                  px: "10px",
+                  pt: "7px",
+                  pb: "4px",
+                  fontSize: 10.5,
+                  lineHeight: 1.4,
+                  color: theme.palette.nebula.dim,
+                })}
+              >
+                {attachBlocked
+                  ? t("nebulaChat:composer.blockedNote", { reason: attachBlocked })
+                  : t("nebulaChat:composer.dragHint")}
+              </Typography>
+            </Menu>
+
+            {/* The text shares the row with the tools rather than taking one of
+              its own - the panel only grows for things that dock above it. */}
+            {/*
+             * The editor's own chrome is stripped here.
+             *
+             * `MarkdownInput` is Standard's composer field: its wrapper carries
+             * a border, a glass fill, a radius and a 40px floor because there it
+             * *is* the composer. Inside this panel that draws a second field
+             * boxed within the first - the exact thing the canvas set out to
+             * remove. The overlay and the textarea must keep identical padding
+             * or the caret drifts off the text, so both are zeroed together.
+             */}
+            <Box
+              // The e2e handle Standard puts on its own composer wrapper: the
+              // suite locates this, then the `textarea` inside it.
+              data-testid={TID.chatComposerInput}
+              // Focus and blur are taken here rather than on the textarea: they
+              // are the DOM's bubbling pair, so the one listener covers the
+              // field however deep the editor puts it.
+              onFocus={() => setFocused(true)}
+              // Leaving the editor puts the bar away. A textarea keeps its
+              // selection through a blur, so without this the bar would hang
+              // over a composer nobody is typing in. The bar's own buttons
+              // refuse focus, so pressing one is not leaving.
+              onBlur={() => {
+                setFocused(false);
+                setSelection(null);
               }}
-              onSubmit={submit}
-              onSelectionChange={(start, end) => updateTrigger(draftRef.current, start, end)}
-              onKeyDownCapture={onKeyDownCapture}
-              onPaste={handlePaste}
-              mentionResolver={mentionName}
-            />
+              sx={(theme) => ({
+                flex: 1,
+                minWidth: 0,
+                // The widget colours itself from Standard's custom properties,
+                // which only exist once Standard's appearance has been applied.
+                // Feeding it Nebula's palette makes it right here regardless -
+                // without them the placeholder inherits and comes out white.
+                "--color-text-primary": theme.palette.nebula.text,
+                // The placeholder comes up with the panel. Dim is the colour of
+                // a line nobody is writing; once the caret is in it, the words
+                // are about to be replaced and are worth reading first.
+                "--color-text-muted": lit ? theme.palette.nebula.muted : theme.palette.nebula.dim,
+                "--color-accent": theme.palette.nebula.accent,
+                // The editor draws its own caret, in the text's colour by
+                // default. In a panel that lights accent the caret is the
+                // smallest part of the same statement, so it lights too.
+                "--color-caret": theme.palette.nebula.accent,
+                // And so does the selection. The browser's own highlight is a
+                // flat slab of system blue that owes nothing to the scheme; the
+                // canvas marks the run the way it marks a code span instead - a
+                // wash of accent inside a hairline of it, rounded. The edge is
+                // what keeps it legible over glass, where a fill alone at this
+                // alpha is barely a change of shade.
+                "--color-selection": theme.palette.nebula.accentSoft,
+                "--selection-ring": `0 0 0 1px ${theme.palette.nebula.accentLine}`,
+                "--selection-radius": "3px",
+                "& > div": {
+                  minHeight: 22,
+                  maxHeight: 120,
+                  background: "transparent",
+                  border: "none",
+                  borderRadius: 0,
+                },
+                "& > div > div, & > div > textarea": { padding: 0, fontSize: 14, lineHeight: 1.4 },
+                // The panel is the field, so the field inside it must not draw
+                // one of its own. Standard's global sheet writes
+                // `textarea:focus-visible` plainly, which outranks the editor's
+                // own `outline: none` - and the wrapper clips it into a boxed
+                // ring around the words. Said here at a weight that wins.
+                "& > div > textarea:focus, & > div > textarea:focus-visible": {
+                  outline: "none",
+                  boxShadow: "none",
+                },
+              })}
+            >
+              <MarkdownInput
+                apiRef={editor}
+                value={draft}
+                disabled={disabled}
+                placeholder={`Message ${target}`}
+                ariaLabel={`Message ${target}`}
+                keepPlaceholderOnFocus
+                onChange={(next) => {
+                  draftRef.current = next;
+                  setDraft(next);
+                  notifyTyping();
+                }}
+                onSubmit={submit}
+                onSelectionChange={(start, end) => updateTrigger(draftRef.current, start, end)}
+                onKeyDownCapture={onKeyDownCapture}
+                onPaste={handlePaste}
+                mentionResolver={mentionName}
+              />
+            </Box>
+
+            {/* A drawn skin names the newline key inside the field, on the
+              right, where the mock puts it. */}
+            {stencil && (
+              <Typography
+                component="div"
+                aria-hidden
+                sx={(theme) => ({
+                  flex: "none",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: ".14em",
+                  textTransform: "uppercase",
+                  whiteSpace: "nowrap",
+                  color: theme.palette.nebula.muted,
+                })}
+              >
+                {t("nebulaChat:composer.newlineHint")}
+              </Typography>
+            )}
           </Box>
 
+          {/* Send stands outside the field, on a plate of its own. */}
           <Tooltip
             title={uploading ? t("nebulaChat:composer.waitingForUpload") : t("chat:pendingAttachments.send")}
           >
@@ -1011,15 +1113,29 @@ export function Composer({
                 onClick={submit}
                 sx={(theme) => ({
                   flex: "none",
-                  width: 32,
-                  height: 32,
-                  borderRadius: radius("pill"),
+                  ...(stencil
+                    ? {
+                        width: "auto",
+                        height: 56,
+                        px: "26px",
+                        gap: "10px",
+                        borderRadius: 0,
+                      }
+                    : { width: 32, height: 32, borderRadius: radius("pill") }),
                   clipPath: "var(--nebula-clip-plate, none)",
-                  background: theme.palette.nebula.accent,
+                  background: stencil
+                    ? `linear-gradient(100deg, ${theme.palette.nebula.accent}, ${lighten(
+                        theme.palette.nebula.accent,
+                        0.22,
+                      )})`
+                    : theme.palette.nebula.accent,
                   color: theme.palette.nebula.onAccent,
+                  ...(stencil ? { border: `2px solid ${theme.palette.nebula.accentText}` } : {}),
                   // The one lit element on the panel, and the canvas lights it
                   // properly: a disc that throws its own accent underneath it.
-                  boxShadow: `0 4px 14px ${theme.palette.nebula.accent}66`,
+                  boxShadow: stencil
+                    ? `0 8px 20px ${alpha(theme.palette.nebula.accent, 0.35)}`
+                    : `0 4px 14px ${theme.palette.nebula.accent}66`,
                   "&:hover": { background: theme.palette.nebula.accent, filter: "brightness(1.08)" },
                   "&.Mui-disabled": {
                     background: theme.palette.nebula.card2,
@@ -1028,6 +1144,21 @@ export function Composer({
                   },
                 })}
               >
+                {stencil && (
+                  <Box
+                    component="span"
+                    sx={{
+                      fontStyle: "italic",
+                      fontWeight: 800,
+                      fontSize: 12.5,
+                      letterSpacing: ".12em",
+                      textTransform: "uppercase",
+                      lineHeight: 1,
+                    }}
+                  >
+                    {t("nebulaChat:composer.send")}
+                  </Box>
+                )}
                 <SendIcon width={14} height={14} />
               </IconButton>
             </span>
@@ -1303,6 +1434,7 @@ function BareButton({
   disabled = false,
   muted = false,
   active = false,
+  plated = false,
   size = 28,
   sx,
   buttonRef,
@@ -1317,6 +1449,9 @@ function BareButton({
   muted?: boolean;
   /** Holding something open - the fill stays while it is. */
   active?: boolean;
+  /** Stands on a bordered plate of its own, which is how a drawn skin
+   *  separates a tool from the field beside it. */
+  plated?: boolean;
   size?: number;
   sx?: SxProps<Theme>;
   /** The element, for a popover that has to find the button unpressed. */
@@ -1350,6 +1485,7 @@ function BareButton({
             background: active ? theme.palette.nebula.card2 : "transparent",
             color: active ? theme.palette.nebula.text : theme.palette.nebula.muted,
             opacity: disabled || muted ? 0.45 : 1,
+            ...(plated ? { color: theme.palette.nebula.accentText } : {}),
             "&:hover": disabled
               ? undefined
               : { background: theme.palette.nebula.hover, color: theme.palette.nebula.text },

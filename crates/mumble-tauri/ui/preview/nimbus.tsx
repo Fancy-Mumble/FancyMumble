@@ -9,14 +9,27 @@
  * renders. `?theme=` and `?mode=` pick the pair.
  */
 import { createRoot } from "react-dom/client";
+// Every other preview page boots these; this one mounts the real ChannelList,
+// ChatHeader, VoiceDock and TitleBar, all of which translate - without them
+// the page prints raw keys, and a key is not the length of the word it stands
+// for, so the layout it screenshots is not the layout the app draws.
+import i18n from "@core/i18n";
+import "@core/i18n/nebula";
 import { Box, CssBaseline } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
 import { useNebulaTheme } from "@nebula/useNebulaAppearance";
 import { ChannelList } from "@nebula/components/sidebar/ChannelList";
+import { ServerRail } from "@nebula/components/sidebar/ServerRail";
+import { TitleBar } from "@nebula/components/chrome/TitleBar";
+import { WindowControls } from "@nebula/components/chrome/WindowControls";
+import { SidebarShell } from "@nebula/components/sidebar/SidebarShell";
+import { VoiceDock } from "@nebula/components/sidebar/VoiceDock";
+import { BRAND_WORDMARK } from "@nebula/brand";
 import { SearchBox } from "@nebula/components/primitives/SearchBox";
 import { Composer } from "@nebula/components/chat/Composer";
 import { ChatHeader } from "@nebula/components/chat/ChatHeader";
 import { MessageRow } from "@nebula/components/chat/MessageRow";
+import { ChatBackdrop } from "@nebula/components/chat/ChatBackdrop";
 import { useAppStore } from "@core/store";
 import type { ChatMessage } from "@core/types";
 import { useEffect, useState } from "react";
@@ -24,6 +37,7 @@ import "@standard/theme.css";
 import { applyColorMode, applyTheme, type ThemeId } from "@standard/themes";
 
 const params = new URLSearchParams(location.search);
+void i18n.changeLanguage(params.get("lang") ?? "en");
 const THEME = (params.get("theme") ?? "nimbus") as ThemeId;
 const MODE = (params.get("mode") ?? "light") as "light" | "dark";
 
@@ -52,6 +66,9 @@ const USERS = [
 
 useAppStore.setState({
   ownSession: 1,
+  // The backdrop reads the open room's name off the store to set its wordmark.
+  channels: CHANNELS as never,
+  currentChannel: 1,
   users: USERS as never,
   polls: new Map(),
   linkEmbeds: new Map(),
@@ -85,6 +102,26 @@ const THREAD: ChatMessage[] = [
 
 const noop = () => {};
 
+const GROUP = {
+  key: "magical.rocks:64738",
+  label: "Magical Rocks",
+  host: "magical.rocks",
+  port: 64738,
+  identities: [],
+  favorite: true,
+  sessionId: "s1",
+};
+
+const RAIL_ENTRIES = [
+  { group: GROUP, session: { label: "Magical Rocks" }, status: "connected", unread: 0 },
+  {
+    group: { ...GROUP, key: "sd.example:64738", label: "Study Diary", sessionId: null },
+    session: null,
+    status: "idle",
+    unread: 0,
+  },
+];
+
 function Shell() {
   // Through `applyTheme`, which is what the picker calls - and after mount, so
   // nothing that restores a stored preference can land on top of it.
@@ -93,6 +130,23 @@ function Shell() {
     applyTheme(THEME);
     applyColorMode(MODE);
     setReady(true);
+    // `?draft=` types into the composer after mount, so a screenshot can show
+    // Send in its lit state rather than its empty-draft one.
+    const draft = params.get("draft");
+    if (draft) {
+      setTimeout(() => {
+        const field = document.querySelector<HTMLTextAreaElement>("[data-nebula-composer] textarea");
+        if (!field) return;
+        // React installs its own value setter on the element; going through
+        // the prototype's is what makes it see the change.
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLTextAreaElement.prototype,
+          "value",
+        )?.set;
+        setter?.call(field, draft);
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      }, 400);
+    }
   }, []);
   const theme = useNebulaTheme(null);
   if (!ready) return null;
@@ -101,52 +155,90 @@ function Shell() {
       <CssBaseline />
       <Box
         sx={{
-          width: 1240,
-          height: 720,
+          width: Number(params.get("w") ?? 1240),
+          height: Number(params.get("h") ?? 720),
           display: "flex",
           overflow: "hidden",
           background: theme.palette.nebula.bg0,
           backgroundImage: theme.palette.nebula.window,
           fontFamily: theme.palette.nebulaSkin.font,
           boxShadow: "0 24px 60px rgba(0,0,0,.5)",
+          flexDirection: "column",
+          position: "relative",
         }}
       >
-        <Box
-          sx={{
-            width: 300,
-            flex: "0 0 300px",
-            background: theme.palette.nebula.panel,
-            borderRight: `1px solid ${theme.palette.nebula.line2}`,
-            overflow: "auto",
-            p: "10px",
-          }}
-        >
-          <Box sx={{ pb: "10px" }}>
+        <TitleBar
+          serverLabel="Magical Rocks"
+          friendsActive={false}
+          onOpenFriends={noop}
+          quickConnectOpen={false}
+          entries={RAIL_ENTRIES as never}
+          activeKey={GROUP.key}
+          tabs
+        />
+        {theme.palette.nebulaSkin.chromeSlots.windowControls === "corner" && (
+          <Box sx={{ position: "absolute", top: 0, right: 0, zIndex: 60, display: "flex" }}>
+            <WindowControls variant="corner" label="Magical Rocks" />
+          </Box>
+        )}
+        <Box sx={{ flex: 1, minHeight: 0, display: "flex" }}>
+        <ServerRail
+          entries={RAIL_ENTRIES as never}
+          activeKey={GROUP.key}
+          expanded={false}
+          onToggleExpanded={noop}
+          onSelect={noop}
+          onAddServer={noop}
+          onDisconnect={noop}
+        />
+        <SidebarShell
+          brand={BRAND_WORDMARK}
+          heading={{ label: "Magical Rocks", count: CHANNELS.length }}
+          search={
             <Box data-probe="SearchBox-wrapper">
               <SearchBox value="" onChange={noop} placeholder="Search channels" hint="Ctrl+F" />
             </Box>
+          }
+          footer={
+            <VoiceDock
+              name="Sebi"
+              session={1}
+              textureSize={null}
+              channelName="[ 💚 ] Green is fucked"
+              latencyMs={18}
+              hideEmpty={false}
+              onToggleHideEmpty={noop}
+              onOpenSettings={noop}
+              onShareScreen={noop}
+              onOpenProfile={noop}
+              serverName="Magical Rocks"
+            />
+          }
+        >
+          <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+            <ChannelList
+              channels={CHANNELS.map((channel) => ({ channel, depth: 0 })) as never}
+              users={USERS as never}
+              selectedChannel={Number(params.get("sel") ?? 1)}
+              currentChannel={Number(params.get("cur") ?? 1)}
+              talkingSessions={new Set()}
+              unreadCounts={{ 3: 4 }}
+              ownSession={1}
+              onSelect={noop}
+              onJoin={noop}
+              onContextMenu={noop}
+              onSelectUser={noop}
+              onHoverUser={noop}
+              onLeaveUser={noop}
+            />
           </Box>
-          <ChannelList
-            channels={CHANNELS.map((channel) => ({ channel, depth: 0 })) as never}
-            users={USERS as never}
-            selectedChannel={Number(params.get("sel") ?? 1)}
-            currentChannel={Number(params.get("cur") ?? 1)}
-            talkingSessions={new Set()}
-            unreadCounts={{ 3: 4 }}
-            ownSession={1}
-            onSelect={noop}
-            onJoin={noop}
-            onContextMenu={noop}
-            onSelectUser={noop}
-            onHoverUser={noop}
-            onLeaveUser={noop}
-          />
-        </Box>
+        </SidebarShell>
         <Box sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
           <ChatHeader
-            channelName="[ 💚 ] Green is fucked"
-            voiceCount={2}
-            inVoice
+            title="[ 💚 ] Green is fucked"
+            subtitle="2 in voice / Opus 48kHz"
+            memberCount={2}
+            canJoinVoice
             onJoinVoice={noop}
             onToggleSearch={noop}
             onShowMembers={noop}
@@ -165,14 +257,21 @@ function Shell() {
               justifyContent: "flex-end",
               gap: "14px",
               p: "22px 26px",
-              background: theme.palette.nebula.backdrop,
+              // Same as the app's chat pane: `zIndex: 0` establishes the
+              // stacking context the backdrop's `zIndex: -1` sits inside.
+              // Without it the layer escapes to an ancestor and paints behind
+              // the whole window. The backdrop paints the wash itself, so this
+              // Box no longer carries one.
+              zIndex: 0,
             }}
           >
+            <ChatBackdrop />
             {THREAD.map((m) => (
               <MessageRow key={m.message_id} message={m} bubbleStyle="bubbles" />
             ))}
           </Box>
           <Composer target="#[ 💚 ] Green is fucked" onSend={noop} />
+        </Box>
         </Box>
       </Box>
     </ThemeProvider>

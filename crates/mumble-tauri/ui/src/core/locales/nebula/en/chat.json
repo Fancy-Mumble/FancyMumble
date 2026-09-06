@@ -47,7 +47,9 @@
     "etaSeconds": "{{seconds}}s left",
     "percent": "{{value}}%",
     "blockedNote": "{{reason}}.",
-    "createPoll": "Create a poll"
+    "createPoll": "Create a poll",
+    "newlineHint": "Shift+Enter = newline",
+    "send": "Send"
   },
   "trust": {
     "verifiedHint": "This channel's key is the one you have seen before.",
