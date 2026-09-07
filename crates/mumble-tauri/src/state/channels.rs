@@ -42,8 +42,12 @@ impl AppState {
         };
         self.emit_unreads();
 
-        if let Some(handle) = handle {
-            let _ = handle.send(command::PermissionQuery { channel_id }).await;
+        // Selecting the channel has already succeeded locally, so a failed
+        // permission query is logged rather than failing the selection.
+        if let Some(handle) = handle
+            && let Err(e) = handle.send(command::PermissionQuery { channel_id }).await
+        {
+            tracing::warn!(channel_id, "could not send the permission query: {e}");
         }
 
         Ok(())
@@ -70,16 +74,18 @@ impl AppState {
             state.conn.client_handle.clone()
         };
 
-        if let Some(handle) = handle {
-            let _ = handle
-                .send(command::JoinChannel {
-                    channel_id,
-                    password,
-                })
-                .await;
-        }
-
-        Ok(())
+        let Some(handle) = handle else {
+            return Err("Not connected".to_owned());
+        };
+        // Reporting success for a join that never left the client is how a
+        // dropped connection turns into a UI that shows the wrong channel.
+        handle
+            .send(command::JoinChannel {
+                channel_id,
+                password,
+            })
+            .await
+            .map_err(|e| format!("could not send the channel join: {e}"))
     }
 
     pub fn current_channel(&self) -> Option<u32> {
