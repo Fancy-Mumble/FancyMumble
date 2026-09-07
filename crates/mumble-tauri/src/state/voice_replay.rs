@@ -123,10 +123,18 @@ async fn record(
 
     // Drop a placeholder entry so the mixing callback owns a buffer
     // before playback begins; this avoids a first-frame underrun pop.
+    //
+    // Sized for the whole recording, because this is the entry playback finds:
+    // a default-sized one here would hold the replay to the 400 ms live cap no
+    // matter what playback asked for.
     if let Ok(mut bufs) = ctx.speaker_buffers.lock() {
         let _ = bufs.insert(
             VOICE_REPLAY_SESSION_KEY,
-            SpeakerBuffer::new(AudioFormat::MONO_48KHZ_F32, JitterConfig::default()),
+            SpeakerBuffer::with_cap(
+                AudioFormat::MONO_48KHZ_F32,
+                JitterConfig::default(),
+                replay_capacity_samples(),
+            ),
         );
     }
 
@@ -181,17 +189,17 @@ async fn playback(
     if let Ok(mut bufs) = ctx.speaker_buffers.lock() {
         // Sized for the whole recording, not the live-speaker cap: a replay is
         // complete before playout starts, so there is no latency to bound, and
-        // the 400 ms live cap would keep only the tail of it.
-        let entry = bufs.entry(VOICE_REPLAY_SESSION_KEY).or_insert_with(|| {
-            SpeakerBuffer::with_cap(
-                AudioFormat::MONO_48KHZ_F32,
-                JitterConfig::default(),
-                replay_capacity_samples(),
-            )
-        });
+        // the 400 ms live cap would keep only the tail of it. Installed rather
+        // than looked up, so the size cannot depend on who created the entry.
+        let mut entry = SpeakerBuffer::with_cap(
+            AudioFormat::MONO_48KHZ_F32,
+            JitterConfig::default(),
+            replay_capacity_samples(),
+        );
         // The whole recording is here at once, so there is nothing to wait
         // for: hand it over as a finished talkspurt.
         entry.push_complete(&buffer);
+        let _ = bufs.insert(VOICE_REPLAY_SESSION_KEY, entry);
     }
 
     let playback_start = Instant::now();
