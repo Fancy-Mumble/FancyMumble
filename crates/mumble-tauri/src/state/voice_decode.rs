@@ -34,6 +34,9 @@ use super::SharedState;
 /// playing, so the newest packet is dropped rather than queued behind them.
 const MAX_QUEUED_PACKETS: usize = 64;
 
+/// Set to `0` to keep decoding on the event loop (see [`start`]).
+const ENV_DECODE_THREAD: &str = "FANCY_VOICE_DECODE_THREAD";
+
 /// What the decoder thread is told to do.
 enum DecodeMsg {
     /// One inbound audio packet, straight off the socket.
@@ -104,6 +107,15 @@ pub(crate) fn start(
     app: AppHandle,
     epoch: u64,
 ) -> Option<(DecodeHandle, AudioSink)> {
+    // A kill switch for the whole thread: with it off, audio is decoded on the
+    // event loop exactly as it was before this existed. Worth keeping - when a
+    // report says "voice got worse", this is the one-line way to find out
+    // whether this thread is why, without a rebuild.
+    if std::env::var(ENV_DECODE_THREAD).is_ok_and(|v| v == "0") {
+        warn!("{ENV_DECODE_THREAD}=0: decoding stays on the event loop");
+        return None;
+    }
+
     let (tx, rx) = channel::<DecodeMsg>();
     let queued = Arc::new(AtomicUsize::new(0));
 
