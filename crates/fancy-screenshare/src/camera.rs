@@ -415,10 +415,14 @@ impl EncodePipeline for CameraPipeline {
         }
         self.timings.capture += tick_start.elapsed();
 
-        let had_fresh = fresh.is_some();
+        let mut had_fresh = fresh.is_some();
         if let Some(img) = fresh {
             let scale_start = std::time::Instant::now();
-            self.last_scaled = Some(self.scaler.downscale(img));
+            match self.scaler.downscale(img) {
+                Some(scaled) => self.last_scaled = Some(scaled),
+                // Keep the last good frame rather than encode a placeholder.
+                None => had_fresh = false,
+            }
             self.timings.scale += scale_start.elapsed();
         }
 

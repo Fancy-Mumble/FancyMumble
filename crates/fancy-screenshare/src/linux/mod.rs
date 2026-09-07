@@ -454,9 +454,12 @@ impl EncodePipeline for GpuPipelineLinux {
                 };
                 self.timings.capture += tick_start.elapsed();
                 let scale_start = Instant::now();
-                self.last_scaled = Some(self.scaler.downscale(img));
+                // Keep the last good frame rather than encode a placeholder.
+                if let Some(scaled) = self.scaler.downscale(img) {
+                    self.last_scaled = Some(scaled);
+                    had_fresh = true;
+                }
                 self.timings.scale += scale_start.elapsed();
-                had_fresh = true;
             }
             pipewire_stream::StreamFrame::Idle => {
                 self.timings.capture += tick_start.elapsed();
@@ -798,7 +801,7 @@ mod perf_probe {
         let mut scaler = FrameScaler::new(1920);
         let img = image::RgbaImage::from_raw(w, h, inputs[0].clone()).unwrap();
         let start = Instant::now();
-        let out = scaler.downscale(img);
+        let out = scaler.downscale(img).expect("scaler pass-through");
         println!(
             "scaler pass-through: {:.2}ms ({}x{})",
             start.elapsed().as_secs_f64() * 1e3,
