@@ -428,14 +428,65 @@ impl RateWatch {
 
 // -- Custom Source for Mumble audio mixing --------------------------
 
-/// Number of mono samples to mix per refill (5 ms at 48 kHz).
+/// Number of mono samples to mix per refill (20 ms at 48 kHz).
 ///
-/// This is playout latency: a refill takes the samples out of the speaker
-/// buffers and the device then plays them one by one, so a sample waits half
-/// a chunk on average. 5 ms rather than a full 20 ms frame costs three more
-/// buffer locks per frame - the same rate the underrun back-off already
-/// allows for - and saves ~7.5 ms of mouth-to-ear on every platform.
-const MIX_CHUNK_SIZE: usize = 240;
+/// This is playout latency - a refill lifts samples out of the speaker buffers
+/// and the device plays them one at a time, so a sample waits half a chunk on
+/// average - and 5 ms here did measurably cut it. It is nonetheless back at
+/// 20 ms, because the concealment around it is written in absolute samples:
+/// a micro-underrun sets a 240-sample back-off, and the resume ramp is
+/// `underrun_samples.clamp(48, 480)`. At a 240-sample chunk the ramp covers
+/// the *whole* chunk, so a shallow buffer never reaches unity gain before the
+/// next refill - continuous cosine amplitude modulation, heard as a metallic
+/// ring at talkspurt onset, and enough of a timing shift to break the
+/// reconnect mute-restore in `voice-state-sync`.
+///
+/// Reclaiming those 7.5 ms means decoupling the back-off and the ramp from the
+/// refill size first, with a test that can hear the difference: the playout
+/// tap of step 0, not the pre-playout decoded tap the fidelity suite compares.
+/// [`ENV_MIX_CHUNK_MS`] is what a listening test sweeps in the meantime.
+const MIX_CHUNK_SIZE: usize = 960;
+
+/// Milliseconds per refill, overriding [`MIX_CHUNK_SIZE`].
+///
+/// The chunk interacts with the underrun fade and the resume ramp, both of
+/// which are lengths in samples: a chunk near the ramp length means playout
+/// spends most of its time ramping. That is audible, so the size has to be
+/// something a listening test can sweep without a rebuild.
+const ENV_MIX_CHUNK_MS: &str = "FANCY_MIX_CHUNK_MS";
+
+/// The refill size to use, in samples: [`ENV_MIX_CHUNK_MS`] or the default.
+fn mix_chunk_size() -> usize {
+    mix_chunk_size_from(std::env::var(ENV_MIX_CHUNK_MS).ok().as_deref())
+}
+
+/// [`mix_chunk_size`] with the override read for it, so the parse is testable
+/// without mutating the environment of every other test in the process.
+fn mix_chunk_size_from(override_ms: Option<&str>) -> usize {
+    const SAMPLES_PER_MS: usize = 48;
+    override_ms
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .filter(|ms| (1..=60).contains(ms))
+        .map_or(MIX_CHUNK_SIZE, |ms| ms * SAMPLES_PER_MS)
+}
+/// Shortest resume ramp, in mono samples (~1 ms): recovery from brief jitter.
+const MIN_RAMP: usize = 48;
+/// Longest resume ramp, in mono samples (~10 ms): onset after a long silence,
+/// where an abrupt start is heard as a click at the ramp's own frequency.
+const MAX_RAMP: usize = 480;
+
+/// A refill has to outlast the concealment it can trigger.
+///
+/// The back-off and the resume ramp are absolute sample counts, so a refill
+/// shorter than them makes playout spend an entire chunk ramping: a shallow
+/// buffer never reaches unity gain between refills, and the continuous cosine
+/// amplitude modulation is heard as a metallic ring at talkspurt onset. It
+/// also shifted reconnect timing enough to break the mute restore in the
+/// `voice-state-sync` e2e. Shrinking [`MIX_CHUNK_SIZE`] means fixing that
+/// coupling first, so this fails the build rather than the listener.
+const _: () = assert!(MIX_CHUNK_SIZE > MAX_RAMP);
+const _: () = assert!(MIX_CHUNK_SIZE > UNDERRUN_BACKOFF_SAMPLES);
+
 /// Refill back-off (in mono samples) when a refill returns no data.
 /// 5 ms keeps the speaker buffer mutex contention bounded (max
 /// ~200 lock attempts/s per source) while letting a transient jitter
@@ -456,6 +507,8 @@ pub(super) struct MumbleMixerSource {
     mixed_chunk: Vec<f32>,
     chunk_pos: usize,
     chunk_valid: usize,
+    /// Samples per refill, from [`mix_chunk_size`] at construction.
+    chunk: usize,
     consecutive_empty: u32,
     running: Arc<AtomicBool>,
     last_sample: f32,
@@ -497,11 +550,13 @@ impl MumbleMixerSource {
         volume: Arc<AtomicU32>,
         running: Arc<AtomicBool>,
     ) -> Self {
+        let chunk = mix_chunk_size();
         Self {
             buffers,
             speaker_volumes,
             volume,
-            mixed_chunk: vec![0.0; MIX_CHUNK_SIZE],
+            mixed_chunk: vec![0.0; chunk],
+            chunk,
             chunk_pos: 0,
             chunk_valid: 0,
             consecutive_empty: 0,
@@ -543,12 +598,8 @@ impl MumbleMixerSource {
         let empty = std::collections::HashMap::new();
         let sv = sv_guard.as_deref().unwrap_or(&empty);
 
-        let (drained, valid_count, buf_depth) = super::desktop::batch_drain_speakers(
-            &mut bufs,
-            sv,
-            &mut self.mixed_chunk,
-            MIX_CHUNK_SIZE,
-        );
+        let (drained, valid_count, buf_depth) =
+            super::desktop::batch_drain_speakers(&mut bufs, sv, &mut self.mixed_chunk, self.chunk);
 
         self.diag.refills += 1;
         self.diag.max_buf_depth = self.diag.max_buf_depth.max(buf_depth);
@@ -562,7 +613,7 @@ impl MumbleMixerSource {
             self.chunk_valid = 0;
             self.underrun_cooldown = UNDERRUN_BACKOFF_SAMPLES;
         } else {
-            if valid_count < MIX_CHUNK_SIZE {
+            if valid_count < self.chunk {
                 self.diag.partial_refills += 1;
             }
             self.consecutive_empty = 0;
@@ -620,8 +671,6 @@ impl Iterator for MumbleMixerSource {
                 // for the first time) requires a much longer fade or
                 // the abrupt onset is heard as a click/pop at the
                 // ramp's fundamental frequency.
-                const MIN_RAMP: usize = 48; // ~1 ms - jitter recovery
-                const MAX_RAMP: usize = 480; // ~10 ms - speech onset
                 let ramp_len = self.underrun_samples.clamp(MIN_RAMP, MAX_RAMP);
                 self.ramp_pos += 1;
                 if self.ramp_pos >= ramp_len {
@@ -1187,10 +1236,8 @@ mod tests {
         }
         assert!(src.in_underrun, "should be in underrun state");
 
-        // Refill speaker buffer with new audio at a different level. It has to
-        // outlast the resume ramp (up to 480 samples), which is longer than a
-        // mix chunk.
-        fill(&buffers, 1, TEST_FILL_SAMPLES, -0.3);
+        // Refill speaker buffer with new audio at a different level.
+        fill(&buffers, 1, MIX_CHUNK_SIZE, -0.3);
 
         // Drain remaining cooldown - the source continues decay output
         // until the next refill attempt at the chunk boundary.  Each
@@ -1222,6 +1269,17 @@ mod tests {
             (settled - (-0.3)).abs() < 0.05,
             "after ramp ({expected_ramp} samples) should settle to -0.3, got {settled}"
         );
+    }
+
+    #[test]
+    fn the_mix_chunk_override_is_bounded_and_ignores_nonsense() {
+        // Sweeping this is how a listening test judges the trade-off, so the
+        // parse has to reject what would break the invariant above by accident.
+        assert_eq!(mix_chunk_size_from(Some(" 10 ")), 480);
+        assert_eq!(mix_chunk_size_from(None), MIX_CHUNK_SIZE);
+        assert_eq!(mix_chunk_size_from(Some("not-a-number")), MIX_CHUNK_SIZE);
+        assert_eq!(mix_chunk_size_from(Some("0")), MIX_CHUNK_SIZE);
+        assert_eq!(mix_chunk_size_from(Some("600")), MIX_CHUNK_SIZE);
     }
 
     #[test]
