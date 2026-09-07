@@ -2007,7 +2007,8 @@ fn test_key_exchange_overwrites_self_derived_key() {
     exchange.sender_hash = cert_hash_a.to_string();
 
     // B receives the key-exchange (should overwrite its self-derived key).
-    let result = km_b.receive_key_exchange(&exchange, None);
+    // Two-party channel: A is the only other member who could answer.
+    let result = km_b.receive_key_exchange(&exchange, None, 1);
     assert!(
         result.is_ok(),
         "B should accept A's key-exchange: {result:?}"
@@ -2109,7 +2110,7 @@ fn test_key_exchange_via_consensus_resolves_key() {
     exchange.sender_hash = cert_hash_a.to_string();
 
     // B receives the exchange (goes to pending_consensus).
-    let result = km_b.receive_key_exchange(&exchange, Some(now));
+    let result = km_b.receive_key_exchange(&exchange, Some(now), 1);
     assert!(
         result.is_ok(),
         "B should accept key-exchange with request_id"
@@ -2182,7 +2183,7 @@ fn assert_kex_processed_by_b(
     channel_id: u32,
     archive_key: &[u8],
 ) {
-    let recv_result = km_b.receive_key_exchange(wire_kex, Some(req_timestamp));
+    let recv_result = km_b.receive_key_exchange(wire_kex, Some(req_timestamp), 1);
     if let Err(ref e) = recv_result {
         eprintln!("B failed to process key-exchange: {e}");
         eprintln!(
@@ -2608,7 +2609,7 @@ fn test_handle_key_request_produces_valid_exchange() {
     assert_eq!(exchange.request_id.as_deref(), Some(request_id));
 
     // B receives and processes the exchange.
-    let recv_result = km_b.receive_key_exchange(&exchange, Some(now));
+    let recv_result = km_b.receive_key_exchange(&exchange, Some(now), 1);
     assert!(
         recv_result.is_ok(),
         "B should accept the exchange: {recv_result:?}"

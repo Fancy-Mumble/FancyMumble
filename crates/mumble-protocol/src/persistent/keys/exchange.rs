@@ -77,12 +77,18 @@ impl KeyManager {
     /// 2. Checks timestamp freshness.
     /// 3. Decrypts the key via DH shared secret.
     /// 4. Verifies `epoch_fingerprint` matches.
-    /// 5. For `POST_JOIN`: verifies `parent_fingerprint`, stores as candidate.
+    /// 5. Verifies an inline countersignature when one is present.
     /// 6. For `FULL_ARCHIVE`: adds to consensus collector.
+    ///
+    /// `observed_members` is how many channel members could have answered
+    /// the key request that this exchange responds to. It sets the
+    /// consensus threshold, so passing a count that is too low accepts a
+    /// key on fewer agreeing answers than the channel can supply.
     pub fn receive_key_exchange(
         &mut self,
         exchange: &PchatKeyExchange,
         request_timestamp: Option<u64>,
+        observed_members: u32,
     ) -> Result<()> {
         self.verify_key_exchange_signature(exchange)?;
         validate_timestamp_freshness(request_timestamp, exchange.timestamp)?;
@@ -94,10 +100,18 @@ impl KeyManager {
             return Err(Error::InvalidState("epoch_fingerprint mismatch".into()));
         }
 
+        // Before the key is stored: a bad countersignature rejects the
+        // exchange rather than leaving the key in the collector.
+        self.verify_inline_countersignature(exchange)?;
+
         let protocol = PchatProtocol::from_wire_str(&exchange.protocol);
-        self.store_exchanged_key(protocol, exchange, key_bytes, request_timestamp)?;
-        self.check_inline_countersignature(exchange);
-        Ok(())
+        self.store_exchanged_key(
+            protocol,
+            exchange,
+            key_bytes,
+            request_timestamp,
+            observed_members,
+        )
     }
 
     fn decrypt_exchanged_key(&self, exchange: &PchatKeyExchange) -> Result<[u8; 32]> {
@@ -136,6 +150,7 @@ impl KeyManager {
         exchange: &PchatKeyExchange,
         key_bytes: [u8; 32],
         request_timestamp: Option<u64>,
+        observed_members: u32,
     ) -> Result<()> {
         match protocol {
             PchatProtocol::FancyV1FullArchive => {
@@ -147,8 +162,11 @@ impl KeyManager {
                             window_start: Instant::now(),
                             responses: HashMap::new(),
                             request_timestamp: request_timestamp.unwrap_or(0),
-                            observed_members: 0,
+                            observed_members,
                         });
+                    // Later answers can reveal a larger channel than the
+                    // first one did; the threshold tracks the widest view.
+                    collector.observed_members = collector.observed_members.max(observed_members);
                     let _ = collector
                         .responses
                         .insert(exchange.sender_hash.clone(), key_bytes.to_vec());
@@ -166,22 +184,30 @@ impl KeyManager {
         }
     }
 
-    fn check_inline_countersignature(&mut self, exchange: &PchatKeyExchange) {
-        if let (Some(countersig), Some(countersigner)) =
+    /// Verify an inline countersignature, if the exchange carries one.
+    ///
+    /// A countersignature that is present but does not verify is a forgery
+    /// attempt, so it fails the whole exchange rather than being ignored.
+    /// An exchange with no countersignature is accepted unchanged; it just
+    /// does not gain the trust a valid countersignature would carry.
+    fn verify_inline_countersignature(&self, exchange: &PchatKeyExchange) -> Result<()> {
+        let (Some(countersig), Some(countersigner)) =
             (&exchange.countersignature, &exchange.countersigner_hash)
-        {
-            let parent_fp = exchange.parent_fingerprint.as_deref().unwrap_or(&[0u8; 8]);
-            let _ = self.verify_countersignature_internal(
-                exchange.channel_id,
-                exchange.epoch,
-                &exchange.epoch_fingerprint,
-                parent_fp,
-                countersigner,
-                &exchange.sender_hash,
-                exchange.timestamp,
-                countersig,
-            );
-        }
+        else {
+            return Ok(());
+        };
+
+        let parent_fp = exchange.parent_fingerprint.as_deref().unwrap_or(&[0u8; 8]);
+        self.verify_countersignature_internal(
+            exchange.channel_id,
+            exchange.epoch,
+            &exchange.epoch_fingerprint,
+            parent_fp,
+            countersigner,
+            &exchange.sender_hash,
+            exchange.timestamp,
+            countersig,
+        )
     }
 
     // ---- Key distribution -------------------------------------------
@@ -316,5 +342,118 @@ impl KeyManager {
 
         self.requests_processed += 1;
         Ok(Some(exchange))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
+
+    use super::super::KeyManager;
+    use super::super::identity::SeedIdentity;
+    use crate::persistent::wire::PchatKeyExchange;
+    use crate::persistent::{KeyTrustLevel, PchatProtocol};
+
+    const CHANNEL: u32 = 7;
+    const ARCHIVE_KEY: [u8; 32] = [0x5A; 32];
+
+    fn km(seed: u8) -> KeyManager {
+        KeyManager::new(Box::new(SeedIdentity::from_seed(&[seed; 32]).unwrap()))
+    }
+
+    /// A distributes the channel's archive key to B under `request_id`.
+    /// Returns the exchange and B's key manager, which already knows A.
+    fn distributed(request_id: Option<&str>) -> (PchatKeyExchange, KeyManager) {
+        let mut a = km(0xAA);
+        let mut b = km(0xBB);
+        a.store_archive_key(CHANNEL, ARCHIVE_KEY, KeyTrustLevel::Verified);
+
+        let announce_a = a.build_key_announce("a-cert", 1_000);
+        let announce_b = b.build_key_announce("b-cert", 1_000);
+        assert!(b.record_peer_key(&announce_a).unwrap());
+        assert!(a.record_peer_key(&announce_b).unwrap());
+
+        let b_dh = a.get_peer("b-cert").unwrap().dh_public;
+        let mut exchange = a
+            .distribute_key(
+                CHANNEL,
+                PchatProtocol::FancyV1FullArchive,
+                0,
+                "b-cert",
+                &b_dh,
+                request_id,
+                2_000,
+            )
+            .unwrap();
+        exchange.sender_hash = "a-cert".to_string();
+        (exchange, b)
+    }
+
+    #[test]
+    fn an_exchange_without_a_countersignature_is_accepted() {
+        let (exchange, mut b) = distributed(None);
+        assert!(b.receive_key_exchange(&exchange, None, 1).is_ok());
+        assert!(b.has_key(CHANNEL, PchatProtocol::FancyV1FullArchive));
+    }
+
+    /// The countersignature used to be verified and the verdict thrown
+    /// away, so a forged one was worth exactly as much as a real one.
+    #[test]
+    fn a_forged_countersignature_rejects_the_whole_exchange() {
+        let (mut exchange, mut b) = distributed(None);
+        exchange.countersigner_hash = Some("a-cert".to_string());
+        exchange.countersignature = Some(vec![0x11; 64]);
+
+        let err = b.receive_key_exchange(&exchange, None, 1).unwrap_err();
+        assert!(
+            format!("{err}").contains("countersignature"),
+            "expected a countersignature failure, got: {err}"
+        );
+        assert!(
+            !b.has_key(CHANNEL, PchatProtocol::FancyV1FullArchive),
+            "a rejected exchange must not leave the key behind"
+        );
+    }
+
+    #[test]
+    fn a_countersignature_from_an_unknown_signer_is_refused() {
+        let (mut exchange, mut b) = distributed(None);
+        exchange.countersigner_hash = Some("nobody".to_string());
+        exchange.countersignature = Some(vec![0x11; 64]);
+
+        assert!(b.receive_key_exchange(&exchange, None, 1).is_err());
+    }
+
+    /// `observed_members` used to be hard-wired to 0, which made the
+    /// threshold `clamp(0, 1, 5)` == 1: one answer was enough to call a
+    /// key Verified no matter how many members could have disagreed.
+    #[test]
+    fn one_answer_in_a_wide_channel_is_not_verified() {
+        let request_id = "req-1";
+        let (exchange, mut b) = distributed(Some(request_id));
+
+        // Eight other members could have answered; one did.
+        b.receive_key_exchange(&exchange, None, 8).unwrap();
+        let (trust, key) = b.evaluate_consensus(request_id, CHANNEL, &[]).unwrap();
+
+        assert_eq!(key, Some(ARCHIVE_KEY));
+        assert_eq!(
+            trust,
+            KeyTrustLevel::Unverified,
+            "one of eight possible answers must not reach Verified"
+        );
+    }
+
+    #[test]
+    fn one_answer_in_a_two_party_channel_is_verified() {
+        let request_id = "req-2";
+        let (exchange, mut b) = distributed(Some(request_id));
+
+        // A is the only other member, so its answer is the whole channel.
+        b.receive_key_exchange(&exchange, None, 1).unwrap();
+        let (trust, key) = b.evaluate_consensus(request_id, CHANNEL, &[]).unwrap();
+
+        assert_eq!(key, Some(ARCHIVE_KEY));
+        assert_eq!(trust, KeyTrustLevel::Verified);
     }
 }

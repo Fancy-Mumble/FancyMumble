@@ -303,6 +303,24 @@ pub(crate) fn handle_proto_key_exchange(
     }
 }
 
+/// How many members of `channel_id` could have answered our key request:
+/// everyone in the channel who announced end-to-end encryption, ourselves
+/// excluded, since we are the one asking.
+///
+/// This sets the consensus threshold, so undercounting accepts an archive
+/// key on fewer agreeing answers than the channel could have supplied.
+fn observed_key_capable_members(state: &SharedState, channel_id: u32) -> u32 {
+    let own_session = state.conn.own_session;
+    let count = state
+        .users
+        .values()
+        .filter(|u| {
+            u.channel_id == channel_id && Some(u.session) != own_session && u.has_pchat_e2ee()
+        })
+        .count();
+    u32::try_from(count).unwrap_or(u32::MAX)
+}
+
 /// Attempt to receive a key exchange and determine whether the key was
 /// accepted.  Returns `true` when the key manager has a usable key
 /// after processing.
@@ -312,12 +330,17 @@ fn try_accept_key_exchange(
     protocol: PchatProtocol,
     request_id: &Option<String>,
 ) -> bool {
+    let channel_id = wire_exchange.channel_id;
+    let observed_members = observed_key_capable_members(state, channel_id);
+
     let Some(ref mut pchat) = state.pchat_ctx.pchat else {
         return false;
     };
-    let channel_id = wire_exchange.channel_id;
 
-    match pchat.key_manager.receive_key_exchange(wire_exchange, None) {
+    match pchat
+        .key_manager
+        .receive_key_exchange(wire_exchange, None, observed_members)
+    {
         Ok(()) => {
             debug!(
                 channel_id,
