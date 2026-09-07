@@ -327,10 +327,14 @@ impl EncodePipeline for CpuPipeline {
         self.failures = 0;
         self.timings.capture += tick_start.elapsed();
 
-        let had_fresh = fresh.is_some();
+        let mut had_fresh = fresh.is_some();
         if let Some(img) = fresh {
             let scale_start = Instant::now();
-            self.last_scaled = Some(self.scaler.downscale(img));
+            match self.scaler.downscale(img) {
+                Some(scaled) => self.last_scaled = Some(scaled),
+                // Keep the last good frame rather than encode a placeholder.
+                None => had_fresh = false,
+            }
             self.timings.scale += scale_start.elapsed();
         }
 
@@ -431,14 +435,19 @@ impl FrameScaler {
     /// Downscale `img` so its longest edge is at most `max_dim` (0 = no cap);
     /// smaller frames pass through untouched. Box filter = proper area
     /// averaging, ideal for shrinking screen content.
-    pub(crate) fn downscale(&mut self, img: image::RgbaImage) -> image::RgbaImage {
+    ///
+    /// Returns `None` when the frame cannot be produced at all. Callers keep
+    /// the last good frame instead: a placeholder here reaches the encoder as
+    /// real content, and a 2x2 black frame mid-share resizes the stream and
+    /// shows the viewer a black flash rather than a dropped tick.
+    pub(crate) fn downscale(&mut self, img: image::RgbaImage) -> Option<image::RgbaImage> {
         if self.max_dim == 0 {
-            return img;
+            return Some(img);
         }
         let (w, h) = (img.width(), img.height());
         let longest = w.max(h);
         if longest <= self.max_dim {
-            return img;
+            return Some(img);
         }
         let scale = f64::from(self.max_dim) / f64::from(longest);
         // Even dimensions keep the encoder's I420 alignment exact.
@@ -452,7 +461,7 @@ impl FrameScaler {
             fast_image_resize::PixelType::U8x4,
         ) else {
             tracing::warn!("screenshare: scaler rejected source frame");
-            return image::RgbaImage::new(2, 2);
+            return None;
         };
         let mut dst =
             fast_image_resize::images::Image::new(nw, nh, fast_image_resize::PixelType::U8x4);
@@ -462,11 +471,9 @@ impl FrameScaler {
         if let Err(e) = self.resizer.resize(&src, &mut dst, &options) {
             tracing::warn!("screenshare: downscale failed: {e}");
             // Rebuild the original frame; encoding full-size beats dropping it.
-            return image::RgbaImage::from_raw(w, h, src.into_vec())
-                .unwrap_or_else(|| image::RgbaImage::new(2, 2));
+            return image::RgbaImage::from_raw(w, h, src.into_vec());
         }
         image::RgbaImage::from_raw(nw, nh, dst.into_vec())
-            .unwrap_or_else(|| image::RgbaImage::new(2, 2))
     }
 }
 
