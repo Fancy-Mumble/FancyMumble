@@ -68,7 +68,7 @@ use windows::Win32::System::WinRT::Direct3D11::{
 use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop;
 use windows::core::Interface;
 
-use crate::encode::{EncodeSettings, EncodedFrame};
+use crate::encode::{EncodeSettings, EncodedFrame, scaled_bitrate};
 
 /// Number of NV12 textures cycled between the video processor and the
 /// encoder. The encoder holds a texture only until it finished reading it;
@@ -491,9 +491,9 @@ impl crate::pipeline::EncodePipeline for GpuPipeline {
 
     fn set_bitrate(&mut self, bps: u32) {
         let effective = bps.min(scaled_bitrate(
+            &self.settings,
             self.out_width,
             self.out_height,
-            &self.settings,
         ));
         // The same live knob `submit` already uses for CODECAPI_AVEncVideoForceKeyFrame:
         // Media Foundation accepts a mean-bitrate change mid-stream without
@@ -514,9 +514,9 @@ impl crate::pipeline::EncodePipeline for GpuPipeline {
             return None;
         }
         Some(scaled_bitrate(
+            &self.settings,
             self.out_width,
             self.out_height,
-            &self.settings,
         ))
     }
 
@@ -793,7 +793,7 @@ fn create_hardware_encoder(
 
     // Output type FIRST (H.264), then input (NV12) - the MFT contract.
     let fps = settings.max_fps.clamp(1.0, 60.0) as u32;
-    let bitrate = scaled_bitrate(width, height, settings);
+    let bitrate = scaled_bitrate(settings, width, height);
     (|| -> windows::core::Result<()> {
         unsafe {
             let out_type = MFCreateMediaType()?;
@@ -854,14 +854,6 @@ fn create_hardware_encoder(
     .map_err(|e| format!("start streaming: {e}"))?;
 
     Ok((encoder, codec_api, events))
-}
-
-/// Same pixel-rate bitrate scaling the CPU encoder uses.
-fn scaled_bitrate(w: u32, h: u32, settings: &EncodeSettings) -> u32 {
-    let reference = 1920.0 * 1080.0 * 30.0;
-    let px_rate = f64::from(w) * f64::from(h) * f64::from(settings.max_fps.clamp(1.0, 60.0));
-    (f64::from(settings.bitrate_bps) * (px_rate / reference).max(0.25))
-        .clamp(1_000_000.0, 20_000_000.0) as u32
 }
 
 #[cfg(test)]
