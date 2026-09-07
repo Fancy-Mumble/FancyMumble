@@ -121,14 +121,20 @@ pub unsafe extern "C" fn signal_bridge_destroy(ctx: *mut SignalBridgeCtx) {
 /// `*out_len`. The caller must free the buffer with [`signal_bridge_free_buf`].
 ///
 /// `channel_id` is used to derive a deterministic distribution UUID.
+///
+/// # Safety
+/// Every pointer argument must satisfy the contract of the helper it is
+/// passed to: `ctx` comes from [`signal_bridge_create`] and is not yet
+/// destroyed, string arguments are NUL-terminated, byte arguments point to
+/// their stated length, and out-parameters are writable.
 #[unsafe(no_mangle)]
-pub extern "C" fn signal_bridge_create_distribution(
+pub unsafe extern "C" fn signal_bridge_create_distribution(
     ctx: *mut SignalBridgeCtx,
     channel_id: u32,
     out_msg: *mut *mut u8,
     out_len: *mut u32,
 ) -> i32 {
-    let (ctx, out_msg, out_len) = match validate_ctx_and_out(ctx, out_msg, out_len) {
+    let (ctx, out_msg, out_len) = match unsafe { validate_ctx_and_out(ctx, out_msg, out_len) } {
         Some(v) => v,
         None => return SIGNAL_ERR_NULL_PTR,
     };
@@ -145,23 +151,29 @@ pub extern "C" fn signal_bridge_create_distribution(
 ///
 /// After this call, messages from `sender_address` on `channel_id` can
 /// be decrypted.
+///
+/// # Safety
+/// Every pointer argument must satisfy the contract of the helper it is
+/// passed to: `ctx` comes from [`signal_bridge_create`] and is not yet
+/// destroyed, string arguments are NUL-terminated, byte arguments point to
+/// their stated length, and out-parameters are writable.
 #[unsafe(no_mangle)]
-pub extern "C" fn signal_bridge_process_distribution(
+pub unsafe extern "C" fn signal_bridge_process_distribution(
     ctx: *mut SignalBridgeCtx,
     sender_address: *const c_char,
     channel_id: u32,
     msg: *const u8,
     msg_len: u32,
 ) -> i32 {
-    let ctx = match validate_ctx(ctx) {
+    let ctx = match unsafe { validate_ctx(ctx) } {
         Some(c) => c,
         None => return SIGNAL_ERR_NULL_PTR,
     };
-    let sender = match cstr_to_string(sender_address) {
+    let sender = match unsafe { cstr_to_string(sender_address) } {
         Some(s) => s,
         None => return SIGNAL_ERR_INVALID_UTF8,
     };
-    let data = match safe_slice(msg, msg_len) {
+    let data = match unsafe { safe_slice(msg, msg_len) } {
         Some(s) => s,
         None => return SIGNAL_ERR_NULL_PTR,
     };
@@ -178,8 +190,14 @@ pub extern "C" fn signal_bridge_process_distribution(
 ///
 /// Output buffer written to `*out_ct` / `*out_ct_len`.
 /// Free with [`signal_bridge_free_buf`].
+///
+/// # Safety
+/// Every pointer argument must satisfy the contract of the helper it is
+/// passed to: `ctx` comes from [`signal_bridge_create`] and is not yet
+/// destroyed, string arguments are NUL-terminated, byte arguments point to
+/// their stated length, and out-parameters are writable.
 #[unsafe(no_mangle)]
-pub extern "C" fn signal_bridge_group_encrypt(
+pub unsafe extern "C" fn signal_bridge_group_encrypt(
     ctx: *mut SignalBridgeCtx,
     channel_id: u32,
     plaintext: *const u8,
@@ -187,11 +205,11 @@ pub extern "C" fn signal_bridge_group_encrypt(
     out_ct: *mut *mut u8,
     out_ct_len: *mut u32,
 ) -> i32 {
-    let (ctx, out_ct, out_ct_len) = match validate_ctx_and_out(ctx, out_ct, out_ct_len) {
+    let (ctx, out_ct, out_ct_len) = match unsafe { validate_ctx_and_out(ctx, out_ct, out_ct_len) } {
         Some(v) => v,
         None => return SIGNAL_ERR_NULL_PTR,
     };
-    let pt = match safe_slice(plaintext, plaintext_len) {
+    let pt = match unsafe { safe_slice(plaintext, plaintext_len) } {
         Some(s) => s,
         None => return SIGNAL_ERR_NULL_PTR,
     };
@@ -208,8 +226,14 @@ pub extern "C" fn signal_bridge_group_encrypt(
 ///
 /// Output buffer written to `*out_pt` / `*out_pt_len`.
 /// Free with [`signal_bridge_free_buf`].
+///
+/// # Safety
+/// Every pointer argument must satisfy the contract of the helper it is
+/// passed to: `ctx` comes from [`signal_bridge_create`] and is not yet
+/// destroyed, string arguments are NUL-terminated, byte arguments point to
+/// their stated length, and out-parameters are writable.
 #[unsafe(no_mangle)]
-pub extern "C" fn signal_bridge_group_decrypt(
+pub unsafe extern "C" fn signal_bridge_group_decrypt(
     ctx: *mut SignalBridgeCtx,
     sender_address: *const c_char,
     channel_id: u32,
@@ -218,15 +242,15 @@ pub extern "C" fn signal_bridge_group_decrypt(
     out_pt: *mut *mut u8,
     out_pt_len: *mut u32,
 ) -> i32 {
-    let (ctx, out_pt, out_pt_len) = match validate_ctx_and_out(ctx, out_pt, out_pt_len) {
+    let (ctx, out_pt, out_pt_len) = match unsafe { validate_ctx_and_out(ctx, out_pt, out_pt_len) } {
         Some(v) => v,
         None => return SIGNAL_ERR_NULL_PTR,
     };
-    let sender = match cstr_to_string(sender_address) {
+    let sender = match unsafe { cstr_to_string(sender_address) } {
         Some(s) => s,
         None => return SIGNAL_ERR_INVALID_UTF8,
     };
-    let ct = match safe_slice(ciphertext, ciphertext_len) {
+    let ct = match unsafe { safe_slice(ciphertext, ciphertext_len) } {
         Some(s) => s,
         None => return SIGNAL_ERR_NULL_PTR,
     };
@@ -242,17 +266,23 @@ pub extern "C" fn signal_bridge_group_decrypt(
 /// Check whether we have a sender key for a given peer on a channel.
 ///
 /// Returns 1 if the key exists, 0 if not, or a negative error code.
+///
+/// # Safety
+/// Every pointer argument must satisfy the contract of the helper it is
+/// passed to: `ctx` comes from [`signal_bridge_create`] and is not yet
+/// destroyed, string arguments are NUL-terminated, byte arguments point to
+/// their stated length, and out-parameters are writable.
 #[unsafe(no_mangle)]
-pub extern "C" fn signal_bridge_has_key(
+pub unsafe extern "C" fn signal_bridge_has_key(
     ctx: *mut SignalBridgeCtx,
     sender_address: *const c_char,
     channel_id: u32,
 ) -> i32 {
-    let ctx = match validate_ctx(ctx) {
+    let ctx = match unsafe { validate_ctx(ctx) } {
         Some(c) => c,
         None => return SIGNAL_ERR_NULL_PTR,
     };
-    let sender = match cstr_to_string(sender_address) {
+    let sender = match unsafe { cstr_to_string(sender_address) } {
         Some(s) => s,
         None => return SIGNAL_ERR_INVALID_UTF8,
     };
@@ -260,9 +290,15 @@ pub extern "C" fn signal_bridge_has_key(
 }
 
 /// Remove all sender key state for a channel.
+///
+/// # Safety
+/// Every pointer argument must satisfy the contract of the helper it is
+/// passed to: `ctx` comes from [`signal_bridge_create`] and is not yet
+/// destroyed, string arguments are NUL-terminated, byte arguments point to
+/// their stated length, and out-parameters are writable.
 #[unsafe(no_mangle)]
-pub extern "C" fn signal_bridge_remove_channel(ctx: *mut SignalBridgeCtx, channel_id: u32) -> i32 {
-    let ctx = match validate_ctx(ctx) {
+pub unsafe extern "C" fn signal_bridge_remove_channel(ctx: *mut SignalBridgeCtx, channel_id: u32) -> i32 {
+    let ctx = match unsafe { validate_ctx(ctx) } {
         Some(c) => c,
         None => return SIGNAL_ERR_NULL_PTR,
     };
@@ -278,13 +314,19 @@ pub extern "C" fn signal_bridge_remove_channel(ctx: *mut SignalBridgeCtx, channe
 ///
 /// Output buffer written to `*out_data` / `*out_len`.
 /// Free with [`signal_bridge_free_buf`].
+///
+/// # Safety
+/// Every pointer argument must satisfy the contract of the helper it is
+/// passed to: `ctx` comes from [`signal_bridge_create`] and is not yet
+/// destroyed, string arguments are NUL-terminated, byte arguments point to
+/// their stated length, and out-parameters are writable.
 #[unsafe(no_mangle)]
-pub extern "C" fn signal_bridge_export_state(
+pub unsafe extern "C" fn signal_bridge_export_state(
     ctx: *mut SignalBridgeCtx,
     out_data: *mut *mut u8,
     out_len: *mut u32,
 ) -> i32 {
-    let (ctx, out_data, out_len) = match validate_ctx_and_out(ctx, out_data, out_len) {
+    let (ctx, out_data, out_len) = match unsafe { validate_ctx_and_out(ctx, out_data, out_len) } {
         Some(v) => v,
         None => return SIGNAL_ERR_NULL_PTR,
     };
@@ -299,17 +341,23 @@ pub extern "C" fn signal_bridge_export_state(
 
 /// Import state from a JSON blob previously exported by
 /// [`signal_bridge_export_state`].
+///
+/// # Safety
+/// Every pointer argument must satisfy the contract of the helper it is
+/// passed to: `ctx` comes from [`signal_bridge_create`] and is not yet
+/// destroyed, string arguments are NUL-terminated, byte arguments point to
+/// their stated length, and out-parameters are writable.
 #[unsafe(no_mangle)]
-pub extern "C" fn signal_bridge_import_state(
+pub unsafe extern "C" fn signal_bridge_import_state(
     ctx: *mut SignalBridgeCtx,
     data: *const u8,
     data_len: u32,
 ) -> i32 {
-    let ctx = match validate_ctx(ctx) {
+    let ctx = match unsafe { validate_ctx(ctx) } {
         Some(c) => c,
         None => return SIGNAL_ERR_NULL_PTR,
     };
-    let blob = match safe_slice(data, data_len) {
+    let blob = match unsafe { safe_slice(data, data_len) } {
         Some(s) => s,
         None => return SIGNAL_ERR_NULL_PTR,
     };
@@ -339,42 +387,67 @@ pub unsafe extern "C" fn signal_bridge_free_buf(ptr: *mut u8, len: u32) {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-fn validate_ctx(ctx: *mut SignalBridgeCtx) -> Option<&'static mut SignalBridgeCtx> {
+/// # Safety
+/// `ctx` must be null, or a pointer returned by [`signal_bridge_create`]
+/// that has not been passed to [`signal_bridge_destroy`], and must not be
+/// aliased for the lifetime of the returned reference.
+unsafe fn validate_ctx<'a>(ctx: *mut SignalBridgeCtx) -> Option<&'a mut SignalBridgeCtx> {
     if ctx.is_null() {
         return None;
     }
+    // SAFETY: non-null, and the caller guarantees provenance and exclusivity.
     Some(unsafe { &mut *ctx })
 }
 
-fn validate_ctx_and_out(
+/// # Safety
+/// `ctx` carries the requirements of [`validate_ctx`]. `out` and `out_len`
+/// must be null, or writable and correctly aligned for the lifetime of the
+/// returned references.
+unsafe fn validate_ctx_and_out<'a>(
     ctx: *mut SignalBridgeCtx,
     out: *mut *mut u8,
     out_len: *mut u32,
-) -> Option<(
-    &'static mut SignalBridgeCtx,
-    &'static mut *mut u8,
-    &'static mut u32,
-)> {
+) -> Option<(&'a mut SignalBridgeCtx, &'a mut *mut u8, &'a mut u32)> {
     if ctx.is_null() || out.is_null() || out_len.is_null() {
         return None;
     }
+    // SAFETY: all three are non-null, and the caller guarantees provenance,
+    // alignment and exclusivity.
     Some(unsafe { (&mut *ctx, &mut *out, &mut *out_len) })
 }
 
-fn cstr_to_string(ptr: *const c_char) -> Option<String> {
+/// # Safety
+/// `ptr` must be null, or point to a NUL-terminated string that stays valid
+/// for the duration of the call.
+unsafe fn cstr_to_string(ptr: *const c_char) -> Option<String> {
     if ptr.is_null() {
         return None;
     }
+    // SAFETY: non-null, and the caller guarantees the NUL terminator.
     unsafe { CStr::from_ptr(ptr) }
         .to_str()
         .ok()
         .map(String::from)
 }
 
-fn safe_slice(ptr: *const u8, len: u32) -> Option<&'static [u8]> {
-    if ptr.is_null() || len == 0 {
+/// Borrow `len` bytes at `ptr`.
+///
+/// An empty payload is a valid payload: `len == 0` yields an empty slice
+/// rather than `None`, which callers would otherwise report to the C side
+/// as a null-pointer error.
+///
+/// # Safety
+/// When `len > 0`, `ptr` must be null, or point to `len` initialised bytes
+/// that stay valid for the lifetime of the returned slice.
+unsafe fn safe_slice<'a>(ptr: *const u8, len: u32) -> Option<&'a [u8]> {
+    if len == 0 {
+        return Some(&[]);
+    }
+    if ptr.is_null() {
         return None;
     }
+    // SAFETY: non-null and non-empty; the caller guarantees `len` readable
+    // bytes at `ptr`.
     Some(unsafe { slice::from_raw_parts(ptr, len as usize) })
 }
 
@@ -386,4 +459,34 @@ fn write_output(data: Vec<u8>, out: &mut *mut u8, out_len: &mut u32) -> i32 {
     *out_len = len;
     std::mem::forget(boxed);
     SIGNAL_OK
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An empty payload used to come back as `None`, which every caller
+    /// reported to the C side as `SIGNAL_ERR_NULL_PTR` - a valid empty
+    /// plaintext or ciphertext was indistinguishable from a null pointer.
+    #[test]
+    fn an_empty_payload_borrows_as_an_empty_slice() {
+        // SAFETY: len is 0, so the pointer is never read.
+        let empty = unsafe { safe_slice(std::ptr::null(), 0) };
+        assert_eq!(empty, Some(&[][..]));
+    }
+
+    #[test]
+    fn a_null_pointer_with_a_length_is_still_refused() {
+        // SAFETY: the null pointer is checked before any read.
+        let refused = unsafe { safe_slice(std::ptr::null(), 4) };
+        assert!(refused.is_none());
+    }
+
+    #[test]
+    fn a_real_payload_borrows_its_bytes() {
+        let data = [1u8, 2, 3, 4];
+        // SAFETY: `data` outlives the borrow and covers the stated length.
+        let borrowed = unsafe { safe_slice(data.as_ptr(), 4) };
+        assert_eq!(borrowed, Some(&data[..]));
+    }
 }
