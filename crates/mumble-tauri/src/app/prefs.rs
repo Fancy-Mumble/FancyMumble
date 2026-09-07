@@ -22,19 +22,15 @@ pub(crate) fn hydrate_persisted_prefs(app: &tauri::AppHandle, state: &AppState) 
         logging::set_log_dir(log_dir);
     }
 
-    let Ok(config_dir) = app.path().app_config_dir() else {
-        return;
-    };
-    let path = config_dir.join("preferences.json");
-    let Ok(bytes) = std::fs::read(&path) else {
-        tracing::debug!(
-            "hydrate_persisted_prefs: no preferences at {}",
-            path.display()
-        );
+    let Some((path, bytes)) = read_preferences_file(app) else {
+        tracing::debug!("hydrate_persisted_prefs: no preferences file found");
         return;
     };
     let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
-        tracing::warn!("hydrate_persisted_prefs: preferences.json is not valid JSON");
+        tracing::warn!(
+            "hydrate_persisted_prefs: {} is not valid JSON",
+            path.display()
+        );
         return;
     };
 
@@ -43,7 +39,14 @@ pub(crate) fn hydrate_persisted_prefs(app: &tauri::AppHandle, state: &AppState) 
             Ok(settings) => {
                 tracing::info!("hydrate_persisted_prefs: applying saved audio settings");
                 crate::audio::set_exclusive_input(settings.exclusive_input);
-                let _ = state.set_audio_settings(settings);
+                // `None` means the state lock was poisoned and nothing was
+                // applied, which otherwise looks exactly like a clean start
+                // on defaults.
+                if state.set_audio_settings(settings).is_none() {
+                    tracing::warn!(
+                        "hydrate_persisted_prefs: saved audio settings were not applied"
+                    );
+                }
             }
             Err(e) => {
                 tracing::warn!("hydrate_persisted_prefs: invalid audioSettings: {e}");
@@ -139,4 +142,30 @@ fn start_rich_presence(app: tauri::AppHandle, resolve_artwork: bool) {
             Err(e) => tracing::warn!("hydrate_persisted_prefs: rich presence failed to start: {e}"),
         }
     });
+}
+
+/// Locate and read the preferences file `@tauri-apps/plugin-store` writes.
+///
+/// The plugin resolves a relative store path against `BaseDirectory::AppData`
+/// (`tauri-plugin-store`'s `resolve_store_path`), which on Linux is
+/// `~/.local/share/<identifier>` - *not* the config dir. Reading only the
+/// config dir finds nothing there, so the app starts on its built-in
+/// defaults however long ago the user changed a setting. The config dir
+/// stays as a fallback: on Windows and macOS the two resolve to the same
+/// place, and an install that somehow has the file there is still honoured.
+pub(crate) fn read_preferences_file(
+    app: &tauri::AppHandle,
+) -> Option<(std::path::PathBuf, Vec<u8>)> {
+    let candidates = [
+        app.path().app_data_dir().ok(),
+        app.path().app_config_dir().ok(),
+    ];
+    for dir in candidates.into_iter().flatten() {
+        let path = dir.join("preferences.json");
+        match std::fs::read(&path) {
+            Ok(bytes) => return Some((path, bytes)),
+            Err(e) => tracing::debug!("no preferences at {}: {e}", path.display()),
+        }
+    }
+    None
 }

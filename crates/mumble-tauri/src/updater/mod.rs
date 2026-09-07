@@ -84,7 +84,7 @@ fn load_persisted_prefs(app: &tauri::AppHandle) {
     let Some(state) = app.try_state::<UpdaterState>() else {
         return;
     };
-    let Some((path, bytes)) = read_preferences_file(app) else {
+    let Some((path, bytes)) = crate::app::prefs::read_preferences_file(app) else {
         return;
     };
     let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
@@ -111,31 +111,6 @@ fn load_persisted_prefs(app: &tauri::AppHandle) {
     }
 }
 
-/// Locate and read the preferences file `@tauri-apps/plugin-store` writes.
-///
-/// The plugin resolves a relative store path against `BaseDirectory::AppData`
-/// (`tauri-plugin-store`'s `resolve_store_path`), which on Linux is
-/// `~/.local/share/<identifier>` - *not* the config dir. Reading only the
-/// config dir meant this hydration silently found nothing on Linux, and the
-/// startup check fell back to whatever the webview managed to push in its
-/// first 300 ms. The config dir stays as a fallback: on Windows and macOS the
-/// two resolve to the same place, and an install that somehow has the file
-/// there should still be honoured.
-#[cfg(feature = "self-updater")]
-fn read_preferences_file(app: &tauri::AppHandle) -> Option<(std::path::PathBuf, Vec<u8>)> {
-    let candidates = [
-        app.path().app_data_dir().ok(),
-        app.path().app_config_dir().ok(),
-    ];
-    for dir in candidates.into_iter().flatten() {
-        let path = dir.join("preferences.json");
-        match std::fs::read(&path) {
-            Ok(bytes) => return Some((path, bytes)),
-            Err(e) => tracing::debug!("Updater: no preferences at {}: {e}", path.display()),
-        }
-    }
-    None
-}
 
 /// Spawn an async task that checks for updates shortly after launch.
 ///
