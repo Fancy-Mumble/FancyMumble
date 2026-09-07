@@ -33,6 +33,7 @@ pub(crate) use conversion::{wire_key_announce_to_proto, wire_key_exchange_to_pro
 
 // Identity
 pub(crate) use identity::IdentityStore;
+pub(crate) use settings::{IDENTITIES_DIR, LEGACY_CERTS_DIR};
 
 // Persistence
 pub(crate) use persistence::{
