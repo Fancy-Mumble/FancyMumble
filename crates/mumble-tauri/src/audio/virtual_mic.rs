@@ -91,6 +91,13 @@ trait SampleSource: Send {
 
     /// What this source is, for the log line that says the mic is virtual.
     fn describe(&self) -> String;
+
+    /// Generation is about to start at `unix_us` on the wall clock.
+    ///
+    /// Sample `i` is therefore due at `unix_us + i / rate`, which is what makes
+    /// a generated event's "mouth" time knowable exactly rather than observed
+    /// late. Only the click source needs it.
+    fn on_start(&mut self, _unix_us: u128) {}
 }
 
 /// A sine tone, optionally with deterministic broadband noise under it.
@@ -144,6 +151,179 @@ impl SampleSource for SineSource {
 
     fn describe(&self) -> String {
         format!("{} Hz sine, noise {}", self.freq, self.noise_amp)
+    }
+}
+
+/// Env var: file to log each click's due wall-clock time to.
+pub const ENV_CLICK_LOG: &str = "FANCY_E2E_CLICK_LOG";
+
+/// Carrier frequency: the tone that holds the noise gate open between clicks.
+const CLICK_CARRIER_HZ: f64 = 440.0;
+/// Burst frequency: far enough from the carrier to be found by band energy.
+const CLICK_BURST_HZ: f64 = 2_000.0;
+/// Burst length, in seconds.
+const CLICK_BURST_SECS: f64 = 0.005;
+/// Carrier amplitude - loud enough for the gate, quiet against a burst.
+const CLICK_CARRIER_AMP: f64 = 0.3;
+/// Burst amplitude.
+const CLICK_BURST_AMP: f64 = 0.9;
+
+/// A click train: a quiet carrier with a loud short burst at a fixed period.
+///
+/// Built for measuring delay rather than fidelity. The carrier holds the noise
+/// gate open so that a burst is never the thing that opens it - a gate deciding
+/// to pass audio is itself a delay, and it would land in the measurement as if
+/// it were buffering. The burst is short and far from the carrier in frequency,
+/// so the far end can find its onset by band energy alone.
+///
+/// Each onset's *due* time is logged rather than the time it was generated:
+/// generation is paced against the wall clock in batches that may run early or
+/// late, while the due time is when a real microphone would have heard it.
+struct ClickSource {
+    rate: f64,
+    /// Samples between burst onsets.
+    period: u64,
+    /// Samples a burst lasts.
+    burst: u64,
+    /// Samples generated so far - the index a due time is computed from.
+    pos: u64,
+    carrier_phase: f64,
+    burst_phase: f64,
+    /// Wall clock at sample 0, from [`SampleSource::on_start`].
+    start_us: u128,
+    log: Option<std::path::PathBuf>,
+    /// Onsets recorded this batch, flushed after the sample loop - one file
+    /// write per click is fine, one inside the loop is not.
+    pending: Vec<u128>,
+}
+
+impl ClickSource {
+    /// Parse `click:<rate>:<period_ms>`.
+    fn parse(spec: &str) -> std::result::Result<(f64, Self), String> {
+        let mut parts = spec.split(':');
+        if parts.next() != Some("click") {
+            return Err(format!("not a click spec: {spec}"));
+        }
+        let rate: f64 = parts
+            .next()
+            .ok_or("click spec needs a rate")?
+            .parse()
+            .map_err(|_| "click rate must be a number".to_owned())?;
+        let period_ms: f64 = parts
+            .next()
+            .ok_or("click spec needs a period in ms")?
+            .parse()
+            .map_err(|_| "click period must be a number".to_owned())?;
+        if parts.next().is_some() {
+            return Err(format!("trailing field in click spec: {spec}"));
+        }
+        if !(rate.is_finite() && rate > 0.0) {
+            return Err(format!("click rate out of range: {rate}"));
+        }
+        // Below ~50 ms bursts start to overlap the receiver's refractory
+        // window, and pairing an arrival with the injection that caused it
+        // stops being unambiguous - the one thing this source exists to make
+        // easy.
+        if !(50.0..=10_000.0).contains(&period_ms) {
+            return Err(format!("click period must be 50-10000 ms, got {period_ms}"));
+        }
+        #[allow(
+            clippy::cast_sign_loss,
+            clippy::cast_possible_truncation,
+            reason = "both are positive and bounded by the checks above"
+        )]
+        let (period, burst) = (
+            (period_ms / 1000.0 * rate) as u64,
+            (CLICK_BURST_SECS * rate) as u64,
+        );
+        Ok((
+            rate,
+            Self {
+                rate,
+                period: period.max(1),
+                burst: burst.max(1),
+                pos: 0,
+                carrier_phase: 0.0,
+                burst_phase: 0.0,
+                start_us: 0,
+                log: std::env::var(ENV_CLICK_LOG).ok().map(Into::into),
+                pending: Vec::new(),
+            },
+        ))
+    }
+
+    /// The wall-clock microsecond at which sample `idx` is due.
+    fn due_us(&self, idx: u64) -> u128 {
+        #[allow(
+            clippy::cast_sign_loss,
+            clippy::cast_possible_truncation,
+            reason = "a positive number of microseconds, far inside u128"
+        )]
+        let offset = (idx as f64 / self.rate * 1_000_000.0) as u128;
+        self.start_us + offset
+    }
+
+    /// Append the onsets recorded this batch to the log file.
+    fn flush_log(&mut self) {
+        if self.pending.is_empty() {
+            return;
+        }
+        let Some(path) = self.log.clone() else {
+            self.pending.clear();
+            return;
+        };
+        use std::io::Write as _;
+        let lines: String = self.pending.drain(..).map(|us| format!("{us}\n")).collect();
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+        {
+            let _ = f.write_all(lines.as_bytes());
+        }
+    }
+}
+
+impl SampleSource for ClickSource {
+    fn fill(&mut self, out: &mut Vec<f32>, n: usize) {
+        let carrier_step = 2.0 * std::f64::consts::PI * CLICK_CARRIER_HZ / self.rate;
+        let burst_step = 2.0 * std::f64::consts::PI * CLICK_BURST_HZ / self.rate;
+        for _ in 0..n {
+            let phase_in_period = self.pos % self.period;
+            if phase_in_period == 0 {
+                self.pending.push(self.due_us(self.pos));
+                self.burst_phase = 0.0;
+            }
+            let mut s = self.carrier_phase.sin() * CLICK_CARRIER_AMP;
+            if phase_in_period < self.burst {
+                s += self.burst_phase.sin() * CLICK_BURST_AMP;
+                self.burst_phase += burst_step;
+            }
+            out.push(s as f32);
+            self.carrier_phase += carrier_step;
+            if self.carrier_phase > 2.0 * std::f64::consts::PI {
+                self.carrier_phase -= 2.0 * std::f64::consts::PI;
+            }
+            self.pos += 1;
+        }
+        self.flush_log();
+    }
+
+    fn rewind(&mut self) {
+        self.pos = 0;
+        self.carrier_phase = 0.0;
+        self.burst_phase = 0.0;
+    }
+
+    fn describe(&self) -> String {
+        format!(
+            "{CLICK_BURST_HZ} Hz click train, {} ms period",
+            self.period as f64 / self.rate * 1000.0
+        )
+    }
+
+    fn on_start(&mut self, unix_us: u128) {
+        self.start_us = unix_us;
     }
 }
 
@@ -277,6 +457,9 @@ impl VirtualCapture {
             if let Some(rest) = spec.strip_prefix("file:") {
                 let (path, rate) = split_file_spec(rest)?;
                 (rate, Box::new(FileSource::load(path)?))
+            } else if spec.starts_with("click:") {
+                let (rate, click) = ClickSource::parse(spec)?;
+                (rate, Box::new(click))
             } else {
                 let (rate, sine) = parse_sine(spec)?;
                 (rate, Box::new(sine))
@@ -416,6 +599,12 @@ impl AudioCapture for VirtualCapture {
         self.started = Some(Instant::now());
         self.generated = 0;
         self.source.rewind();
+        self.source.on_start(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_micros(),
+        );
         self.out.clear();
         Ok(())
     }
@@ -431,6 +620,81 @@ impl AudioCapture for VirtualCapture {
 mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
     use super::*;
+
+    #[test]
+    fn a_click_spec_is_parsed_and_nonsense_rejected() {
+        let vol = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
+        assert!(VirtualCapture::from_spec("click:48000:200", 480, vol.clone()).is_ok());
+        // A period short enough to make arrivals ambiguous is refused rather
+        // than silently measured wrong.
+        assert!(VirtualCapture::from_spec("click:48000:10", 480, vol.clone()).is_err());
+        assert!(VirtualCapture::from_spec("click:48000", 480, vol.clone()).is_err());
+        assert!(VirtualCapture::from_spec("click:48000:abc", 480, vol.clone()).is_err());
+        assert!(VirtualCapture::from_spec("click:0:200", 480, vol).is_err());
+    }
+
+    #[test]
+    fn a_click_lands_on_its_period_and_reports_the_time_it_was_due() {
+        let (rate, mut src) = ClickSource::parse("click:48000:100").expect("spec");
+        assert!((rate - 48_000.0).abs() < f64::EPSILON);
+        src.on_start(1_000_000);
+        // Through the log file, because that is what the measurement reads.
+        let log = std::env::temp_dir().join(format!("click-log-{}.txt", std::process::id()));
+        let _ = std::fs::remove_file(&log);
+        src.log = Some(log.clone());
+
+        // Three periods of 100 ms.
+        let mut out = Vec::new();
+        src.fill(&mut out, 48_000 * 3 / 10);
+
+        assert_eq!(out.len(), 14_400);
+        let logged: Vec<u128> = std::fs::read_to_string(&log)
+            .expect("click log")
+            .lines()
+            .map(|l| l.parse().expect("a microsecond stamp per line"))
+            .collect();
+        let _ = std::fs::remove_file(&log);
+        // One onset per period, each due exactly 100 ms after the last.
+        assert_eq!(logged.len(), 3, "one onset per 100 ms period");
+        assert_eq!(logged[0], 1_000_000, "the first is due at sample 0");
+        assert_eq!(logged[1], 1_100_000);
+        assert_eq!(logged[2], 1_200_000);
+
+        // The burst is where the onset says it is: the first 5 ms are much
+        // louder than the carrier alone, and a moment later they are not.
+        let burst_peak = out[..240].iter().fold(0.0_f32, |m, s| m.max(s.abs()));
+        let carrier_peak = out[2_000..4_000]
+            .iter()
+            .fold(0.0_f32, |m, s| m.max(s.abs()));
+        assert!(
+            burst_peak > 0.9,
+            "burst should stand well above the carrier, got {burst_peak}"
+        );
+        assert!(
+            carrier_peak < 0.45,
+            "between clicks only the carrier should sound, got {carrier_peak}"
+        );
+    }
+
+    #[test]
+    fn the_carrier_never_stops_so_the_gate_cannot_close_between_clicks() {
+        // If the gate shut between bursts, its reopening delay would be
+        // measured as though it were buffering.
+        let (_, mut src) = ClickSource::parse("click:48000:200").expect("spec");
+        src.on_start(0);
+        src.log = None;
+        let mut out: Vec<f32> = Vec::new();
+        src.fill(&mut out, 48_000 / 5);
+
+        let quietest_window = out
+            .chunks(480)
+            .map(|w| w.iter().fold(0.0_f32, |m, s| m.max(s.abs())))
+            .fold(f32::INFINITY, f32::min);
+        assert!(
+            quietest_window > 0.2,
+            "every 10 ms window should carry the carrier, quietest was {quietest_window}"
+        );
+    }
 
     #[test]
     fn parses_spec_and_rejects_garbage() {

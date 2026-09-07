@@ -509,6 +509,8 @@ pub(super) struct MumbleMixerSource {
     chunk_valid: usize,
     /// Samples per refill, from [`mix_chunk_size`] at construction.
     chunk: usize,
+    /// Pending samples for the playout tap; empty unless one is installed.
+    playout_batch: Vec<f32>,
     consecutive_empty: u32,
     running: Arc<AtomicBool>,
     last_sample: f32,
@@ -557,6 +559,7 @@ impl MumbleMixerSource {
             volume,
             mixed_chunk: vec![0.0; chunk],
             chunk,
+            playout_batch: Vec::new(),
             chunk_pos: 0,
             chunk_valid: 0,
             consecutive_empty: 0,
@@ -627,6 +630,41 @@ impl Iterator for MumbleMixerSource {
     type Item = f32;
 
     fn next(&mut self) -> Option<f32> {
+        let sample = self.next_sample();
+        if let Some(sample) = sample {
+            self.tap_playout(sample);
+        }
+        sample
+    }
+}
+
+impl MumbleMixerSource {
+    /// Samples buffered before handing a batch to the playout tap (10 ms).
+    ///
+    /// Batched because the tap is called from the device pull: one call per
+    /// sample would be 48 000 dynamic calls a second on the one thread that
+    /// must not stall.
+    const PLAYOUT_BATCH: usize = 480;
+
+    /// Record what was just handed to the device, when anything is listening.
+    ///
+    /// Costs an atomic load per sample when nothing is, which is every run
+    /// that is not measuring.
+    fn tap_playout(&mut self, sample: f32) {
+        if !mumble_protocol::audio::mixer::playout_tap_installed() {
+            return;
+        }
+        self.playout_batch.push(sample);
+        if self.playout_batch.len() >= Self::PLAYOUT_BATCH {
+            mumble_protocol::audio::mixer::notify_playout(&self.playout_batch);
+            self.playout_batch.clear();
+        }
+    }
+
+    /// The sample itself. Split from [`Iterator::next`] so the tap above sees
+    /// the value both of its return paths produce, with no third place to
+    /// forget.
+    fn next_sample(&mut self) -> Option<f32> {
         if !self.running.load(Ordering::Relaxed) {
             return None;
         }

@@ -270,6 +270,9 @@ mod voice_pipeline {
             let mut mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
             mixer.set_jitter(audio_settings.jitter_config());
             crate::e2e_stats::register_speaker_buffers(&speaker_buffers);
+            // Starts only under FANCY_E2E_PLAYOUT_DUMP_DIR; the tap it installs
+            // has to exist before the device starts pulling.
+            crate::e2e_stats::start_playout_dump();
             crate::audio::stream_audio::register(&speaker_buffers, &speaker_volumes);
             let speaker_buffers_for_state = speaker_buffers.clone();
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
@@ -454,6 +457,9 @@ mod voice_pipeline {
             let mut mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
             mixer.set_jitter(audio_settings.jitter_config());
             crate::e2e_stats::register_speaker_buffers(&speaker_buffers);
+            // Starts only under FANCY_E2E_PLAYOUT_DUMP_DIR; the tap it installs
+            // has to exist before the device starts pulling.
+            crate::e2e_stats::start_playout_dump();
             crate::audio::stream_audio::register(&speaker_buffers, &speaker_volumes);
             let speaker_buffers_for_state = speaker_buffers.clone();
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
@@ -602,6 +608,9 @@ mod voice_pipeline {
             let mut mixer = AudioMixer::new(speaker_buffers.clone(), AudioFormat::MONO_48KHZ_F32);
             mixer.set_jitter(audio_settings.jitter_config());
             crate::e2e_stats::register_speaker_buffers(&speaker_buffers);
+            // Starts only under FANCY_E2E_PLAYOUT_DUMP_DIR; the tap it installs
+            // has to exist before the device starts pulling.
+            crate::e2e_stats::start_playout_dump();
             crate::audio::stream_audio::register(&speaker_buffers, &speaker_volumes);
             let speaker_buffers_for_state = speaker_buffers.clone();
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
