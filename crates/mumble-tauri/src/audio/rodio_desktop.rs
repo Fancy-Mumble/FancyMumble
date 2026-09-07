@@ -630,11 +630,15 @@ impl Iterator for MumbleMixerSource {
     type Item = f32;
 
     fn next(&mut self) -> Option<f32> {
-        let sample = self.next_sample();
-        if let Some(sample) = sample {
-            self.tap_playout(sample);
-        }
-        sample
+        let sample = self.next_sample()?;
+        // Tapped before the volume control, which is a listener's preference
+        // rather than a stage of the pipeline: everything this measures - the
+        // jitter buffer, the underrun fade, the resume ramp - has already
+        // happened to this sample. It also means a measuring run can turn the
+        // speakers off without turning the recording off with them.
+        self.tap_playout(sample);
+        let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
+        Some(super::soft_clip(sample * vol))
     }
 }
 
@@ -661,9 +665,9 @@ impl MumbleMixerSource {
         }
     }
 
-    /// The sample itself. Split from [`Iterator::next`] so the tap above sees
-    /// the value both of its return paths produce, with no third place to
-    /// forget.
+    /// The mixed sample, before the volume control. Split from
+    /// [`Iterator::next`] so the tap above sees the value both of its return
+    /// paths produce, with no third place to forget.
     fn next_sample(&mut self) -> Option<f32> {
         if !self.running.load(Ordering::Relaxed) {
             return None;
@@ -674,8 +678,6 @@ impl MumbleMixerSource {
         } else if self.chunk_pos >= self.chunk_valid {
             self.refill_chunk();
         }
-
-        let vol = f32::from_bits(self.volume.load(Ordering::Relaxed));
 
         self.diag.samples_pulled += 1;
         // Log diagnostics every ~1 second (48000 samples at 48 kHz).
@@ -731,7 +733,7 @@ impl MumbleMixerSource {
 
             self.diag.peak = self.diag.peak.max(sample.abs());
             self.last_sample = sample;
-            Some(super::soft_clip(sample * vol))
+            Some(sample)
         } else {
             // Underrun strategy: cosine fade-out from the amplitude
             // we held at the moment underrun began (`fade_anchor`)
@@ -766,7 +768,7 @@ impl MumbleMixerSource {
                 let w = 0.5 + 0.5 * (std::f32::consts::PI * t).cos();
                 self.last_sample = self.fade_anchor * w;
             }
-            Some(super::soft_clip(self.last_sample * vol))
+            Some(self.last_sample)
         }
     }
 }

@@ -257,7 +257,9 @@ mod voice_pipeline {
 
             // Create shared volume handles for live updates.
             let input_vol = Arc::new(AtomicU32::new(audio_settings.input_volume.to_bits()));
-            let output_vol = Arc::new(AtomicU32::new(audio_settings.output_volume.to_bits()));
+            let output_vol = Arc::new(AtomicU32::new(
+                crate::e2e_stats::output_volume_or_muted(audio_settings.output_volume).to_bits(),
+            ));
 
             // Inbound: per-speaker decoders + mixing playback.
             let speaker_buffers: SpeakerBuffers =
@@ -445,7 +447,9 @@ mod voice_pipeline {
                 state.audio.settings.clone()
             };
 
-            let output_vol = Arc::new(AtomicU32::new(audio_settings.output_volume.to_bits()));
+            let output_vol = Arc::new(AtomicU32::new(
+                crate::e2e_stats::output_volume_or_muted(audio_settings.output_volume).to_bits(),
+            ));
 
             let speaker_buffers: SpeakerBuffers =
                 Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
@@ -596,7 +600,9 @@ mod voice_pipeline {
 
             info!("enable_voice_muted: starting inbound pipeline only");
 
-            let output_vol = Arc::new(AtomicU32::new(audio_settings.output_volume.to_bits()));
+            let output_vol = Arc::new(AtomicU32::new(
+                crate::e2e_stats::output_volume_or_muted(audio_settings.output_volume).to_bits(),
+            ));
 
             let speaker_buffers: SpeakerBuffers =
                 Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
@@ -951,7 +957,9 @@ mod voice_pipeline {
             };
 
             let input_vol = Arc::new(AtomicU32::new(audio_settings.input_volume.to_bits()));
-            let output_vol = Arc::new(AtomicU32::new(audio_settings.output_volume.to_bits()));
+            let output_vol = Arc::new(AtomicU32::new(
+                crate::e2e_stats::output_volume_or_muted(audio_settings.output_volume).to_bits(),
+            ));
 
             let capture = PlatformAudioFactory::create_capture(
                 audio_settings.selected_device.as_deref(),

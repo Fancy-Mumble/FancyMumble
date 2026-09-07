@@ -52,6 +52,26 @@ pub const ENV_DUMP_DIR: &str = "FANCY_E2E_AUDIO_DUMP_DIR";
 /// mouth-to-ear measurement needs.
 pub const ENV_PLAYOUT_DIR: &str = "FANCY_E2E_PLAYOUT_DUMP_DIR";
 
+/// Env var: set to `1` to hold the output volume at zero.
+///
+/// For measuring runs on a machine somebody is using. The playout tap is taken
+/// before the volume control, so the recording and every timing derived from it
+/// are unchanged - this silences the speakers, not the measurement.
+pub const ENV_MUTE_OUTPUT: &str = "FANCY_E2E_MUTE_OUTPUT";
+
+/// `volume`, or zero when [`ENV_MUTE_OUTPUT`] asks for silence.
+#[must_use]
+pub fn output_volume_or_muted(volume: f32) -> f32 {
+    static MUTED: OnceLock<bool> = OnceLock::new();
+    let muted = *MUTED.get_or_init(|| std::env::var(ENV_MUTE_OUTPUT).is_ok_and(|v| v == "1"));
+    if muted {
+        tracing::warn!("{ENV_MUTE_OUTPUT}=1: output muted, playout tap unaffected");
+        0.0
+    } else {
+        volume
+    }
+}
+
 /// Probe frequency for the tone detector, matching the virtual mic's
 /// default test tone.
 const TONE_HZ: f64 = 440.0;
