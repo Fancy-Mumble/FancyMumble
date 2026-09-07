@@ -107,15 +107,35 @@ pub struct SpeakerBuffer {
     window_drained: usize,
     /// Last sample handed to the output, for the shrink crossfade.
     last_out: f32,
+    /// Most samples this buffer will hold before dropping the oldest.
+    ///
+    /// Per buffer rather than global because the cap means two different
+    /// things. For a live speaker it bounds latency: audio arriving faster
+    /// than playout drains it is worth dropping, because it is already too
+    /// late. For audio that is complete before playout starts - a replay -
+    /// there is nothing to bound and dropping the oldest samples silently
+    /// truncates the recording to its tail.
+    cap: usize,
 }
 
 impl SpeakerBuffer {
-    /// Create a buffer for audio in `format`, tuned by `cfg`.
+    /// Create a buffer for a live speaker: [`MAX_SPEAKER_BUFFER_SAMPLES`] deep.
     pub fn new(format: AudioFormat, cfg: JitterConfig) -> Self {
+        Self::with_cap(format, cfg, MAX_SPEAKER_BUFFER_SAMPLES)
+    }
+
+    /// Create a buffer holding up to `cap` samples.
+    ///
+    /// For audio that is already complete when it is queued - a replay, a
+    /// recording played back through the mixer - pass its whole length. The
+    /// live-speaker cap is 400 ms, and a longer recording pushed into it keeps
+    /// only its last 400 ms.
+    pub fn with_cap(format: AudioFormat, cfg: JitterConfig, cap: usize) -> Self {
         let per_ms =
             ((format.sample_rate as usize / 1000) * format.channels.max(1) as usize).max(1);
         let mut buf = Self {
-            samples: VecDeque::with_capacity(MAX_SPEAKER_BUFFER_SAMPLES),
+            cap: cap.max(1),
+            samples: VecDeque::with_capacity(cap.min(MAX_SPEAKER_BUFFER_SAMPLES)),
             cfg,
             per_ms,
             target: 0,
@@ -213,8 +233,8 @@ impl SpeakerBuffer {
     }
 
     fn trim_to_cap(&mut self) {
-        if self.samples.len() > MAX_SPEAKER_BUFFER_SAMPLES {
-            let excess = self.samples.len() - MAX_SPEAKER_BUFFER_SAMPLES;
+        if self.samples.len() > self.cap {
+            let excess = self.samples.len() - self.cap;
             let _ = self.samples.drain(..excess);
         }
     }
@@ -1814,6 +1834,27 @@ mod tests {
         assert_eq!(len_100, len_200);
         assert_eq!(len_200, len_300);
         assert!(len_100 > 0);
+    }
+
+    #[test]
+    fn a_buffer_sized_for_a_recording_keeps_all_of_it() {
+        // Regression: "hear yourself" pushes up to 20 s of finished recording
+        // into a speaker buffer. Held to the live-speaker cap it played only
+        // the last 400 ms of what the user had just said. A live speaker's cap
+        // bounds latency; a replay has no latency left to bound.
+        let len = 20 * 48_000;
+        let mut buf =
+            SpeakerBuffer::with_cap(AudioFormat::MONO_48KHZ_F32, JitterConfig::default(), len);
+        let samples: Vec<f32> = (0..len).map(|i| if i == 0 { 0.5 } else { 0.1 }).collect();
+        buf.push_complete(&samples);
+
+        assert_eq!(buf.len(), len, "the whole recording should still be there");
+        assert!(
+            buf.iter()
+                .next()
+                .is_some_and(|s| (s - 0.5).abs() < f32::EPSILON),
+            "the start of the recording is what gets dropped when the cap bites"
+        );
     }
 
     #[test]

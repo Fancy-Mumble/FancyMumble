@@ -29,6 +29,11 @@ use super::types::{AudioSettings, VoiceReplayState};
 /// Maximum recording length for the voice replay feature, in seconds.
 pub(super) const VOICE_REPLAY_CAPACITY_SECS: u32 = 20;
 
+/// Samples a full-length replay occupies, which is what its buffer must hold.
+fn replay_capacity_samples() -> usize {
+    VOICE_REPLAY_CAPACITY_SECS as usize * VOICE_REPLAY_SAMPLE_RATE as usize
+}
+
 /// Reserved speaker-buffer key for replay playback.  Picked to be far
 /// outside any plausible Mumble session id so it cannot collide.
 const VOICE_REPLAY_SESSION_KEY: u32 = u32::MAX;
@@ -174,8 +179,15 @@ async fn playback(
     let total_ms = (buffer.len() as u64 * 1000 / VOICE_REPLAY_SAMPLE_RATE as u64) as u32;
 
     if let Ok(mut bufs) = ctx.speaker_buffers.lock() {
+        // Sized for the whole recording, not the live-speaker cap: a replay is
+        // complete before playout starts, so there is no latency to bound, and
+        // the 400 ms live cap would keep only the tail of it.
         let entry = bufs.entry(VOICE_REPLAY_SESSION_KEY).or_insert_with(|| {
-            SpeakerBuffer::new(AudioFormat::MONO_48KHZ_F32, JitterConfig::default())
+            SpeakerBuffer::with_cap(
+                AudioFormat::MONO_48KHZ_F32,
+                JitterConfig::default(),
+                replay_capacity_samples(),
+            )
         });
         // The whole recording is here at once, so there is nothing to wait
         // for: hand it over as a finished talkspurt.
