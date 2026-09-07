@@ -43,6 +43,15 @@ pub const ENV_STATS_FILE: &str = "FANCY_E2E_AUDIO_STATS_FILE";
 /// merely survived.
 pub const ENV_DUMP_DIR: &str = "FANCY_E2E_AUDIO_DUMP_DIR";
 
+/// Env var: directory to write the playout recording and its anchors into.
+///
+/// [`ENV_DUMP_DIR`] above records audio as it enters the speaker buffers, which
+/// answers "did the speech arrive" and cannot answer "when", "how much later
+/// than it was spoken", or "did playout add an artefact". This records what the
+/// output device was handed, with a wall clock beside it, which is what a
+/// mouth-to-ear measurement needs.
+pub const ENV_PLAYOUT_DIR: &str = "FANCY_E2E_PLAYOUT_DUMP_DIR";
+
 /// Probe frequency for the tone detector, matching the virtual mic's
 /// default test tone.
 const TONE_HZ: f64 = 440.0;
@@ -140,6 +149,130 @@ type DumpBuffers = Mutex<HashMap<u32, Vec<f32>>>;
 /// The outer `Option` is "dumping is off": set once, from the environment, so
 /// the hot path checks a pointer rather than re-reading a variable.
 static DUMP: OnceLock<Option<DumpBuffers>> = OnceLock::new();
+
+/// The playout recording: every sample handed to the device, plus a wall clock
+/// against the sample index at each hand-over.
+struct PlayoutDump {
+    samples: Vec<f32>,
+    /// `(unix_us, index of the last sample of that batch)`.
+    ///
+    /// The tap fires when a batch is complete, so the timestamp belongs to the
+    /// batch's final sample; earlier samples in it were pulled over the
+    /// preceding few milliseconds. A reader interpolates back from the nearest
+    /// enclosing anchor, which is accurate to well under the 10 ms batch.
+    anchors: Vec<(u128, usize)>,
+}
+
+static PLAYOUT: OnceLock<Option<Mutex<PlayoutDump>>> = OnceLock::new();
+
+fn playout_dir() -> Option<&'static str> {
+    static DIR: OnceLock<Option<String>> = OnceLock::new();
+    DIR.get_or_init(|| std::env::var(ENV_PLAYOUT_DIR).ok())
+        .as_deref()
+}
+
+/// Start recording playout, if [`ENV_PLAYOUT_DIR`] is set. Idempotent.
+///
+/// Held in memory and flushed once a second by the thread this spawns, for the
+/// same two reasons the decoded dump is: file I/O has no business on the device
+/// pull, and an e2e run kills the app rather than closing it politely, so a
+/// dump written only at shutdown would never exist.
+pub fn start_playout_dump() {
+    let Some(dir) = playout_dir() else { return };
+    if PLAYOUT
+        .set(Some(Mutex::new(PlayoutDump {
+            samples: Vec::new(),
+            anchors: Vec::new(),
+        })))
+        .is_err()
+    {
+        return; // already started
+    }
+    tracing::warn!("e2e playout dump enabled -> {dir}");
+
+    mumble_protocol::audio::mixer::set_playout_tap(Box::new(move |samples| {
+        let Some(Some(dump)) = PLAYOUT.get() else {
+            return;
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_micros();
+        if let Ok(mut dump) = dump.lock() {
+            dump.samples.extend_from_slice(samples);
+            let last = dump.samples.len().saturating_sub(1);
+            dump.anchors.push((now, last));
+        }
+    }));
+
+    let _ = std::thread::Builder::new()
+        .name("e2e-playout-dump".into())
+        .spawn(|| {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(1_000));
+                let _ = write_playout_dump();
+            }
+        });
+}
+
+/// Write `playout.wav` and `playout-anchors.csv` into [`ENV_PLAYOUT_DIR`].
+///
+/// Callable repeatedly; each call writes everything recorded so far.
+pub fn write_playout_dump() -> bool {
+    let (Some(dir), Some(Some(dump))) = (playout_dir(), PLAYOUT.get()) else {
+        return false;
+    };
+    let Ok(dump) = dump.lock() else {
+        return false;
+    };
+    if dump.samples.is_empty() {
+        return false;
+    }
+    if let Err(e) = std::fs::create_dir_all(dir) {
+        tracing::warn!("e2e playout dir {dir}: {e}");
+        return false;
+    }
+
+    let spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: 48_000,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let wav = std::path::Path::new(dir).join("playout.wav");
+    match hound::WavWriter::create(&wav, spec) {
+        Ok(mut writer) => {
+            for s in &dump.samples {
+                let clamped = s.clamp(-1.0, 1.0);
+                let _ = writer.write_sample((clamped * f32::from(i16::MAX)) as i16);
+            }
+            if writer.finalize().is_err() {
+                return false;
+            }
+        }
+        Err(e) => {
+            tracing::warn!("e2e playout dump {}: {e}", wav.display());
+            return false;
+        }
+    }
+
+    let mut csv = String::from(
+        "unix_us,sample_index
+",
+    );
+    for (us, idx) in &dump.anchors {
+        csv.push_str(&format!(
+            "{us},{idx}
+"
+        ));
+    }
+    let anchors = std::path::Path::new(dir).join("playout-anchors.csv");
+    if let Err(e) = std::fs::write(&anchors, csv) {
+        tracing::warn!("e2e playout anchors {}: {e}", anchors.display());
+        return false;
+    }
+    true
+}
 
 fn dump_dir() -> Option<&'static str> {
     static DIR: OnceLock<Option<String>> = OnceLock::new();

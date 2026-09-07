@@ -369,6 +369,40 @@ impl SpeakerBuffer {
 /// would show a clean stream where the real one had a gap.
 pub type DecodedTap = Box<dyn Fn(u32, &[f32]) + Send + Sync>;
 
+/// An observer of what the output device is actually given.
+///
+/// [`DecodedTap`] above sees audio as it enters the speaker buffers, which is
+/// *before* the jitter buffer decides when to play it and before the mixer's
+/// underrun fades and resume ramps. That is the right tap for "did the codec
+/// and the network deliver the speech", and the wrong one for anything about
+/// timing or playout artefacts: a ring produced by the resume ramp does not
+/// appear in it at all, and neither does a millisecond of delay.
+///
+/// This one is the last point in the process before the samples leave for the
+/// device, so a recording made here is what a listener would hear, and the
+/// wall clock at each call is when they would hear it.
+pub type PlayoutTap = Box<dyn Fn(&[f32]) + Send + Sync>;
+
+static PLAYOUT_TAP: std::sync::OnceLock<PlayoutTap> = std::sync::OnceLock::new();
+
+/// Install the playout observer. The first call wins; later ones are ignored.
+pub fn set_playout_tap(tap: PlayoutTap) {
+    let _ = PLAYOUT_TAP.set(tap);
+}
+
+/// Whether anything is listening - checked per sample, so it stays a load.
+#[must_use]
+pub fn playout_tap_installed() -> bool {
+    PLAYOUT_TAP.get().is_some()
+}
+
+/// Hand `samples` to the playout observer, if one is installed.
+pub fn notify_playout(samples: &[f32]) {
+    if let Some(tap) = PLAYOUT_TAP.get() {
+        tap(samples);
+    }
+}
+
 static DECODED_TAP: std::sync::OnceLock<DecodedTap> = std::sync::OnceLock::new();
 
 /// Install the observer. The first call wins; later ones are ignored.
