@@ -160,7 +160,7 @@ fn version_updates_state() {
         os_version: Some("5.15".into()),
         version_v1: Some(0x0001_0500),
         version_v2: Some(42),
-        fancy_version: Some(mumble_protocol::state::fancy_version_encode(0, 1, 0)),
+        fancy_version: Some(fancy_utils::version::fancy_version_encode(0, 1, 0)),
         fancy_protocol: None,
     };
     version.handle(&ctx);
@@ -168,7 +168,7 @@ fn version_updates_state() {
     let state = ctx.shared.lock().unwrap();
     assert_eq!(
         state.server.fancy_version,
-        Some(mumble_protocol::state::fancy_version_encode(0, 1, 0))
+        Some(fancy_utils::version::fancy_version_encode(0, 1, 0))
     );
     assert_eq!(
         state.server.version_info.release.as_deref(),
@@ -195,7 +195,7 @@ fn version_without_fancy_preserves_known_fancy_version() {
     // A Fancy server announces its extension version.
     let fancy = mumble_tcp::Version {
         release: Some("Fancy Mumble".into()),
-        fancy_version: Some(mumble_protocol::state::fancy_version_encode(0, 4, 0)),
+        fancy_version: Some(fancy_utils::version::fancy_version_encode(0, 4, 0)),
         ..Default::default()
     };
     fancy.handle(&ctx);
@@ -213,12 +213,12 @@ fn version_without_fancy_preserves_known_fancy_version() {
     let state = ctx.shared.lock().unwrap();
     assert_eq!(
         state.server.fancy_version,
-        Some(mumble_protocol::state::fancy_version_encode(0, 4, 0)),
+        Some(fancy_utils::version::fancy_version_encode(0, 4, 0)),
         "a later Version without fancy_version must not clobber a known value"
     );
     assert_eq!(
         state.server.version_info.fancy_version,
-        Some(mumble_protocol::state::fancy_version_encode(0, 4, 0))
+        Some(fancy_utils::version::fancy_version_encode(0, 4, 0))
     );
 }
 
