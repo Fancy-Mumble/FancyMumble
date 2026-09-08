@@ -5,14 +5,11 @@
 //! protobuf messages (`PchatMessage`, `PchatFetch`, etc.) defined in
 //! `Mumble.proto`.
 //!
-//! Core types: [`PchatProtocol`], [`StoredMessage`], [`MessageRange`].
-//! Provider trait: [`MessageProvider`] (in [`provider`]).
+//! Core types: [`PchatProtocol`], [`KeyTrustLevel`].
 
-pub mod config;
 pub mod encryption;
 pub mod keys;
 pub mod protocol;
-pub mod provider;
 pub mod wire;
 
 use serde::{Deserialize, Serialize};
@@ -50,53 +47,6 @@ impl PchatProtocol {
             _ => Self::None,
         }
     }
-}
-
-/// Range for message queries.
-#[derive(Debug, Clone)]
-pub enum MessageRange {
-    /// Latest N messages.
-    Latest(usize),
-    /// Messages before a cursor (pagination backwards).
-    Before {
-        /// Message ID cursor to paginate before.
-        message_id: String,
-        /// Maximum number of messages to return.
-        limit: usize,
-    },
-    /// Messages after a cursor (pagination forwards).
-    After {
-        /// Message ID cursor to paginate after.
-        message_id: String,
-        /// Maximum number of messages to return.
-        limit: usize,
-    },
-}
-
-/// A message as stored/retrieved by any [`MessageProvider`](provider::MessageProvider).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StoredMessage {
-    /// Unique message identifier (UUID v4).
-    pub message_id: String,
-    /// Target channel.
-    pub channel_id: u32,
-    /// Unix epoch milliseconds.
-    pub timestamp: u64,
-    /// Sender's TLS certificate hash (identity).
-    pub sender_hash: String,
-    /// Display name at send time.
-    pub sender_name: String,
-    /// Message body (HTML). Plaintext after decryption.
-    pub body: String,
-    /// Whether the body is still ciphertext (needs decryption).
-    pub encrypted: bool,
-    /// Epoch number (`POST_JOIN` only).
-    pub epoch: Option<u32>,
-    /// Chain ratchet index within the epoch (`POST_JOIN` only).
-    pub chain_index: Option<u32>,
-    /// If set, this message replaces a previous message with the
-    /// given ID (epoch fork re-send). See design doc section 6.2.
-    pub replaces_id: Option<String>,
 }
 
 /// Trust level for a received encryption key.

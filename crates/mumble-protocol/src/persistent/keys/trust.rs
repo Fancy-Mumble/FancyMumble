@@ -1,16 +1,14 @@
 //! Trust authority checks, custodian TOFU management, countersignature
 //! verification, dispute resolution, and trust level queries.
 
-use std::collections::HashSet;
-
 use ed25519_dalek::Verifier;
 
 use crate::error::{Error, Result};
 use crate::persistent::encryption::build_countersig_data;
-use crate::persistent::{KeyTrustLevel, PchatProtocol, StoredMessage};
+use crate::persistent::{KeyTrustLevel, PchatProtocol};
 
 use super::KeyManager;
-use super::types::{COUNTERSIG_FRESHNESS_MS, CustodianPinState, EncryptedPayload};
+use super::types::{COUNTERSIG_FRESHNESS_MS, CustodianPinState};
 
 impl KeyManager {
     // ---- Trust authority checks -------------------------------------
@@ -201,42 +199,6 @@ impl KeyManager {
     /// Get the current custodian pin state for a channel.
     pub fn get_custodian_pin(&self, channel_id: u32) -> Option<&CustodianPinState> {
         self.pinned_custodians.get(&channel_id)
-    }
-
-    // ---- Key trial decryption (supplementary check) -----------------
-
-    /// Attempt to verify a key by decrypting recent messages.
-    ///
-    /// Returns true if decryption succeeds for messages from 2+ distinct
-    /// senders. This is a diagnostic signal only and does NOT promote
-    /// trust level.
-    pub fn check_key_by_decryption(
-        &self,
-        channel_id: u32,
-        mode: PchatProtocol,
-        messages: &[StoredMessage],
-    ) -> bool {
-        let mut successful_senders = HashSet::new();
-
-        for msg in messages {
-            if !msg.encrypted {
-                continue;
-            }
-            let payload = EncryptedPayload {
-                ciphertext: msg.body.as_bytes().to_vec(),
-                epoch: msg.epoch,
-                chain_index: msg.chain_index,
-                epoch_fingerprint: [0; 8], // not checked here
-            };
-            if self
-                .decrypt(mode, channel_id, &msg.message_id, msg.timestamp, &payload)
-                .is_ok()
-            {
-                let _ = successful_senders.insert(&msg.sender_hash);
-            }
-        }
-
-        successful_senders.len() >= 2
     }
 
     // ---- Dispute resolution -----------------------------------------
