@@ -90,10 +90,6 @@ impl fmt::Display for PchatProtocol {
     }
 }
 
-// Re-export version utilities from fancy-utils so existing
-// `mumble_protocol::state::fancy_version_*` paths keep working.
-pub use fancy_utils::version::{fancy_version_decode, fancy_version_encode, fancy_version_string};
-
 /// Snapshot of a connected user.
 #[derive(Debug, Clone)]
 pub struct User {

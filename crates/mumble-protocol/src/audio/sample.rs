@@ -5,10 +5,6 @@
 //! stages decoupled: they only depend on this shared vocabulary, never on
 //! each other.
 
-// Re-export audio sample conversion utilities from fancy-utils so
-// existing `crate::audio::sample::i16_to_f32` paths keep working.
-pub use fancy_utils::audio::{f32_to_i16, i16_to_f32};
-
 /// PCM sample format used throughout the pipeline.
 ///
 /// Mumble/Opus operates on 16-bit signed integer PCM internally, but
@@ -202,7 +198,7 @@ mod tests {
     #[test]
     fn i16_f32_roundtrip() {
         let original: i16 = 16000;
-        let converted = f32_to_i16(i16_to_f32(original));
+        let converted = fancy_utils::audio::f32_to_i16(fancy_utils::audio::i16_to_f32(original));
         assert_eq!(original, converted);
     }
 }
