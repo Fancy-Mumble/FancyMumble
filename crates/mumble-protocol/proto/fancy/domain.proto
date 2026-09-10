@@ -10,6 +10,8 @@ syntax = "proto3";
 //   1001 permissions   1002 metadata   1003 userdata   1013 server-config
 package starling.fancy.domain.v1;
 
+import "fancy/wire.proto";
+
 // -- 1001 permissions -------------------------------------------------------
 
 message PermissionsEnvelope {
@@ -57,7 +59,7 @@ message MetadataEnvelope {
 }
 
 // Fancy channel properties that upstream's ChannelState has no field for.
-// Upstream owns 1–99 in every upstream message; these live out here instead of
+// Upstream owns 1-99 in every upstream message; these live out here instead of
 // squatting on upstream's next field number, docs/PROTOCOL-COMPATIBILITY.md §1.
 message ChannelExtras {
   uint32 channel = 1;
@@ -122,6 +124,11 @@ message UserdataEnvelope {
     SettingsQuery settings_query = 5;
     AccountQuery account_query = 6;
     AccountState account = 7;
+    RecordGet record_get = 8;
+    RecordPut record_put = 9;
+    RecordList record_list = 10;
+    Record record = 11;
+    RecordKeys record_keys = 12;
   }
 }
 
@@ -138,8 +145,8 @@ message AccountAction {
     // Not an action, and the zero value on purpose.
     //
     // proto3 cannot distinguish an unset enum from its first value, so with
-    // `SET_PASSWORD = 0` a default-constructed message - a client that forgot
-    // the field, a decode of the wrong bytes - *was* a request to set the
+    // `SET_PASSWORD = 0` a default-constructed message, a client that forgot
+    // the field, a decode of the wrong bytes, *was* a request to set the
     // password to the empty string. The dangerous default has to be the one
     // that means nothing.
     UNSPECIFIED = 0;
@@ -227,6 +234,73 @@ message AccountState {
   // Whether the certificate on *this* connection is that one. Clearing the
   // password is only allowed when it is, or the account locks its owner out.
   bool cert_matches_session = 8;
+}
+
+// The account's own record store: one value under one name, kept by the
+// server and readable back on any connection.
+//
+// **Not the settings map above**, and the difference is the point. `Settings`
+// is a map answered whole: every query and every update carries all of it,
+// which is right for a screenful of preferences and wrong for the things that
+// need this - a document library, a citation list, a calendar. Those are tens
+// of kilobytes that would then ride every toggle of every checkbox. A record
+// is fetched and written one key at a time and never appears in `Settings`.
+//
+// **Nothing here names an account**, by the same rule the rest of this
+// envelope follows: the server resolves the caller's own from the session, so
+// a client cannot read another person's records by asking differently.
+//
+// Registered accounts only. A guest has nowhere durable to put anything - the
+// account *is* the scope - so every arm answers one with a PERMISSION refusal
+// rather than with silence, which is what leaves a client's library spinning.
+message RecordGet {
+  string request_id = 1;
+  string key = 2;
+}
+
+// "Which of my records start with this?"
+//
+// The keys alone, never the values: a client asking what it has stored should
+// not have to receive megabytes to find out. An empty prefix means all of them.
+message RecordList {
+  string request_id = 1;
+  string prefix = 2;
+}
+
+// Store one value, or remove it.
+//
+// Answered with the `Record` as it now stands, not with an acknowledgement,
+// for the reason `SettingsUpdate` is: a client that derives the new state from
+// a bare ok is a client that guesses.
+message RecordPut {
+  string request_id = 1;
+  string key = 2;
+  bytes value = 3;
+  // Remove the record instead of writing it. `value` is ignored.
+  //
+  // Explicit rather than "an empty value means delete": a client storing an
+  // empty document would otherwise silently lose the key, and the difference
+  // between "stored, and empty" and "not stored" is one the caller decides.
+  bool remove = 4;
+}
+
+// One record, in answer to a get or a put.
+message Record {
+  string request_id = 1;
+  string key = 2;
+  bytes value = 3;
+  // False when there is no such record. `value` is empty then, which is not
+  // the same as a record whose value is empty - see `RecordPut.remove`.
+  bool found = 4;
+  uint64 updated_at_ms = 5;
+  // Set when the request was refused; `found` is false and `value` empty.
+  starling.fancy.wire.v1.Refusal refused = 6;
+}
+
+message RecordKeys {
+  string request_id = 1;
+  repeated string keys = 2;
+  starling.fancy.wire.v1.Refusal refused = 3;
 }
 
 // -- 1013 server-config -----------------------------------------------------

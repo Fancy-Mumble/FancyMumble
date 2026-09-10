@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-// Outer type 1009 - the control-plane half of bulk transfer: ask for a URL,
+// Outer type 1009, the control-plane half of bulk transfer: ask for a URL,
 // get a short-lived signed one, then move the bytes over HTTP.
 package starling.fancy.files.v1;
 
@@ -18,6 +18,10 @@ message FilesEnvelope {
     ManageRequest manage = 8;
     ManageListing managed = 9;
     ForgetRequest forget = 10;
+    EmoteUpload emote_upload = 11;
+    EmoteForget emote_forget = 12;
+    EmoteQuery emote_query = 13;
+    Emotes emotes = 14;
   }
 }
 
@@ -177,4 +181,52 @@ message Listing {
 message Refused {
   string request_id = 1;
   starling.fancy.wire.v1.Refusal refusal = 2;
+}
+
+// Custom server emotes, as objects the whole server can see.
+//
+// An emote is a *named* object in the server's own `s/emotes/` namespace: the
+// shortcode is the name, and replacing one keeps a single revision because the
+// history of an emoji is not worth a disk. They are stored public because an
+// `<img>` cannot sign a request - the same exposure the plugin's emotes always
+// had, said out loud.
+//
+// Writing needs `ManageEmotes` on the root, which is murmur's own bit for it.
+// Reading needs nothing beyond being here.
+message EmoteUpload {
+  string request_id = 1;
+  // The shortcode, without colons. Also the name the object is stored under.
+  string shortcode = 2;
+  string filename = 3;
+  string content_type = 4;
+  uint64 size = 5;
+  // The emoji this stands in for, shown where the image cannot be.
+  string alias_emoji = 6;
+  string description = 7;
+}
+
+message EmoteForget {
+  string request_id = 1;
+  string shortcode = 2;
+}
+
+// "Send me this server's emotes."
+message EmoteQuery {
+  string request_id = 1;
+}
+
+message Emote {
+  string shortcode = 1;
+  // Where to fetch the image, needing no signature.
+  string url = 2;
+  string alias_emoji = 3;
+  string description = 4;
+  uint64 created_at_ms = 5;
+}
+
+// Sent in answer to a query, and again to everyone whenever the set changes -
+// so a client that did not ask still stops showing an emote somebody deleted.
+message Emotes {
+  string request_id = 1;
+  repeated Emote emotes = 2;
 }

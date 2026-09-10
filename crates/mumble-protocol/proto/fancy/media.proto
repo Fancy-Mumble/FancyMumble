@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+// 1018 gifs: animated-media search, run by the server.
+//
+// The client used to hold the provider's API key itself, which means every
+// person on the server needs their own, most never get one, and the feature is
+// dead for them. Moving the key here makes it the operator's to obtain once.
+//
+// It also puts the *query* on the server, which is the part worth being
+// deliberate about: a search box in a chat client is a stream of things people
+// typed, and it now goes to the provider from one address with no session of
+// its own rather than from each member's machine.
+//
+// Discord arrived at the same split - its client calls Discord's own
+// `/gifs/*`, not the provider's - and stopped there: its picker still loads
+// every thumbnail straight from the provider's CDN, which hands that CDN each
+// viewer's address and a referer naming the channel they are in. That half is
+// this server's `gif_proxy_media`, off by default because it costs the
+// deployment real bandwidth, and on for operators who would rather pay it.
+package starling.fancy.media.v1;
+
+message GifsEnvelope {
+  oneof body {
+    GifQuery query = 1;
+    GifPage page = 2;
+    GifRefused refused = 3;
+  }
+}
+
+// "Search the provider for me."
+message GifQuery {
+  // Echoed on the answer. A picker with a search box has a request in flight
+  // whenever somebody is still typing, and without a correlation id the slower
+  // answer overwrites the newer one - the same reason `PreviewRequest` and
+  // `audit.Query` carry one.
+  string request_id = 1;
+  // Empty means trending, which is what a picker shows before anyone types.
+  // A separate `kind` enum would let a client ask for trending *and* pass a
+  // query, and there is no answer to that.
+  string query = 2;
+  // 1-based, as the provider counts. Zero is read as the first page rather
+  // than refused: it is what an uninitialised field looks like, and refusing
+  // the first page over it helps nobody.
+  uint32 page = 3;
+}
+
+// One result.
+//
+// Two sizes, because a picker draws a grid of small ones and sends a large
+// one. The URLs point at the provider's CDN, or at this server when
+// `gif_proxy_media` is on; a client renders whatever it is given and never
+// needs to know which, which is what keeps that an operator's decision rather
+// than a client release.
+message Gif {
+  string id = 1;
+  string title = 2;
+  // Full size, for sending.
+  string url = 3;
+  // Grid size, for drawing the picker.
+  string preview_url = 4;
+  uint32 width = 5;
+  uint32 height = 6;
+  uint32 preview_width = 7;
+  uint32 preview_height = 8;
+  // `image/webp`, `image/gif`. What `url` is, not what `preview_url` is; they
+  // are the same format in every provider shape seen so far.
+  string mime = 9;
+}
+
+message GifPage {
+  string request_id = 1;
+  repeated Gif results = 2;
+  // Which page this is, echoed so a client that changed its mind mid-scroll
+  // can tell an old answer from the one it is waiting for.
+  uint32 page = 3;
+  bool has_next = 4;
+  // Which provider answered ("klipy"). For attribution, which these APIs
+  // require in their terms, and so a client can say where results came from
+  // rather than implying the server wrote them.
+  string provider = 5;
+}
+
+message GifRefused {
+  string request_id = 1;
+  // In words a client can show.
+  string reason = 2;
+  // How long until a throttled caller may ask again. Zero when waiting is not
+  // what would help. murmur drops a throttled message in silence, which is how
+  // an SDP offer once disappeared with nothing in any log; a client told the
+  // number can say "in a moment" instead of appearing broken.
+  uint32 retry_after_ms = 3;
+  Reason kind = 4;
+
+  // Why, in a form a client can branch on.
+  //
+  // The distinction that matters is UNAVAILABLE against everything else: it is
+  // the only one that means *this server does not do this*, and so the only
+  // one on which a client should fall back to a key of its own. Falling back
+  // on THROTTLED would route around the rate limit with the user's own quota,
+  // which is precisely the abuse the limit exists to stop.
+  enum Reason {
+    // No key configured, or the operator has switched the service off.
+    UNAVAILABLE = 0;
+    // Asking too fast. `retry_after_ms` says how long.
+    THROTTLED = 1;
+    // The provider failed, timed out, or answered something unreadable.
+    UPSTREAM = 2;
+    // The query itself cannot be served - too long, or not valid UTF-8.
+    MALFORMED = 3;
+  }
+}

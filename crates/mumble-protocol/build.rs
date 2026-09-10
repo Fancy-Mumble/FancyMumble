@@ -27,6 +27,7 @@ const FANCY: &[&str] = &[
     "proto/fancy/social.proto",
     "proto/fancy/screenshare.proto",
     "proto/fancy/files.proto",
+    "proto/fancy/media.proto",
 ];
 
 fn main() -> Result<()> {

@@ -791,14 +791,14 @@ pub struct FlowUpdate {
     #[prost(message, optional, tag = "1")]
     pub flow: ::core::option::Option<Flow>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LinkPreviewEnvelope {
     #[prost(oneof = "link_preview_envelope::Body", tags = "1, 2, 3")]
     pub body: ::core::option::Option<link_preview_envelope::Body>,
 }
 /// Nested message and enum types in `LinkPreviewEnvelope`.
 pub mod link_preview_envelope {
-    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Body {
         #[prost(message, tag = "1")]
         Request(super::PreviewRequest),
@@ -835,7 +835,7 @@ pub struct PreviewRequest {
 /// exists to prevent. It is a thumbnail and not the original: a preview is a
 /// card in a chat log, and the megabyte behind an `og:image` buys nothing at
 /// that size while every recipient pays for it.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Preview {
     #[prost(string, tag = "1")]
     pub request_id: ::prost::alloc::string::String,
@@ -863,6 +863,178 @@ pub struct Preview {
     pub image_width: u32,
     #[prost(uint32, tag = "10")]
     pub image_height: u32,
+    #[prost(enumeration = "preview::Kind", tag = "11")]
+    pub kind: i32,
+    /// Who made it: a channel, a byline, an artist. Empty where the page named
+    /// nobody.
+    #[prost(string, tag = "12")]
+    pub author: ::prost::alloc::string::String,
+    /// Playing time, for `VIDEO` and `AUDIO`. Zero where the page named none.
+    ///
+    /// Seconds rather than a formatted string: "1:00:14" is a rendering, and the
+    /// client is the half of this that knows which locale it is drawing in.
+    #[prost(uint32, tag = "13")]
+    pub duration_seconds: u32,
+    /// What the *page* said its picture measures, before the server shrank it.
+    ///
+    /// `image_width`/`image_height` describe the bytes that travel, which are
+    /// capped at the thumbnail edge; these describe the original. A client lays
+    /// out a 360x253 thumbnail differently from a 3000x2000 photograph shrunk to
+    /// the same box - one may not be enlarged, the other may be cropped to a
+    /// band - and after the downscale that difference is no longer visible in
+    /// the bytes. Zero where the page did not say and the server did not fetch
+    /// the picture.
+    #[prost(uint32, tag = "14")]
+    pub source_width: u32,
+    #[prost(uint32, tag = "15")]
+    pub source_height: u32,
+    #[prost(message, optional, tag = "16")]
+    pub price: ::core::option::Option<preview::Price>,
+    #[prost(message, repeated, tag = "17")]
+    pub facts: ::prost::alloc::vec::Vec<preview::Fact>,
+    /// The site's own icon, fetched and shrunk here like the picture is, and for
+    /// the same reason: a client that loaded a favicon from the origin would
+    /// hand that origin one request per member of the channel, which is the
+    /// probe server-side previews exist to prevent. Empty where the page
+    /// declared none, where the fetch failed, or where the operator has switched
+    /// images off.
+    #[prost(bytes = "vec", tag = "18")]
+    pub icon: ::prost::alloc::vec::Vec<u8>,
+    /// The MIME type of `icon`, empty when `icon` is.
+    #[prost(string, tag = "19")]
+    pub icon_mime: ::prost::alloc::string::String,
+    /// When the page says it was published, as it wrote it - ISO-8601 on every
+    /// page that uses a vocabulary for it, and whatever a hand-written
+    /// `<meta name="date">` contained on the ones that do not. Not normalised
+    /// here: a date the server could not parse is still worth showing, and the
+    /// client is the half of this that knows the reader's locale.
+    #[prost(string, tag = "20")]
+    pub published_at: ::prost::alloc::string::String,
+    /// What the page says its content is: "safe", "general", "mature",
+    /// "explicit", "adult". Lowercased, otherwise as written - the vocabularies
+    /// disagree and no scale maps onto another, so this is a label to print and
+    /// a hint to blur behind, not a number to compare.
+    #[prost(string, tag = "21")]
+    pub content_rating: ::prost::alloc::string::String,
+}
+/// Nested message and enum types in `Preview`.
+pub mod preview {
+    /// What it costs, for `PRODUCT`.
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+    pub struct Price {
+        /// The number, as the page wrote it, normalised to a `.` decimal point.
+        /// A string rather than a number because a price is a decimal amount and
+        /// a float is not, and because the client only ever prints it.
+        #[prost(string, tag = "1")]
+        pub amount: ::prost::alloc::string::String,
+        /// ISO 4217 where the page named one ("EUR"), empty where it did not.
+        #[prost(string, tag = "2")]
+        pub currency: ::prost::alloc::string::String,
+        /// What it cost before, for a page that advertises a reduction. Empty
+        /// where the page named no earlier price.
+        #[prost(string, tag = "3")]
+        pub was: ::prost::alloc::string::String,
+        /// `og:availability` as the page wrote it: "instock", "oos",
+        /// "preorder". Empty where the page said nothing.
+        #[prost(string, tag = "4")]
+        pub availability: ::prost::alloc::string::String,
+    }
+    /// The labelled facts a page published about itself, in the order it gave
+    /// them.
+    ///
+    /// Pages state these in `twitter:label1`/`twitter:data1` pairs - a shop puts
+    /// the price and the stock there, a forum the reply count, a code host the
+    /// language - and the set is open, so this carries them as they came rather
+    /// than as a fixed list of fields nobody can extend. `key` is the crawler's
+    /// reading of `label` where it recognised one, so a client can draw the
+    /// handful it has a shape for (an arrow for a score, a bubble for a comment
+    /// count) and print the rest as they stand.
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+    pub struct Fact {
+        /// Canonical and lowercase - "score", "comments", "replies", "likes",
+        /// "views", "price", "availability", "shipping", "sellers", "rating" -
+        /// or empty where the label was not one the crawler knows.
+        #[prost(string, tag = "1")]
+        pub key: ::prost::alloc::string::String,
+        /// The label the page wrote ("Reply count").
+        #[prost(string, tag = "2")]
+        pub label: ::prost::alloc::string::String,
+        /// The value the page wrote ("206").
+        #[prost(string, tag = "3")]
+        pub value: ::prost::alloc::string::String,
+    }
+    /// What the crawler decided the link *is*.
+    ///
+    /// A card for a video, a shop listing and a forum thread are three different
+    /// drawings, and the client cannot tell them apart from a title and a
+    /// picture. The server has the page in front of it - `og:type`, the Twitter
+    /// card, the content type the host served - so it is the one that can say,
+    /// and saying it once here keeps every client from growing its own table of
+    /// hosts it recognises.
+    ///
+    /// `PAGE` is the honest "nothing in particular", not a failure: most links
+    /// are a page with a title and a picture, and that is a card too.
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration
+    )]
+    #[repr(i32)]
+    pub enum Kind {
+        Page = 0,
+        Article = 1,
+        Video = 2,
+        /// The link is a picture: either the URL served an image, or the page said
+        /// its subject was one. The `image` field is the work itself here rather
+        /// than a card the publisher drew for sharing, which is why a client may
+        /// show it whole instead of cropping it to a banner.
+        Image = 3,
+        Audio = 4,
+        /// Something for sale, so `price` is set.
+        Product = 5,
+        /// A thread rather than an article: a post somebody replied to.
+        Forum = 6,
+        /// A person or an account.
+        Profile = 7,
+    }
+    impl Kind {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::Page => "PAGE",
+                Self::Article => "ARTICLE",
+                Self::Video => "VIDEO",
+                Self::Image => "IMAGE",
+                Self::Audio => "AUDIO",
+                Self::Product => "PRODUCT",
+                Self::Forum => "FORUM",
+                Self::Profile => "PROFILE",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "PAGE" => Some(Self::Page),
+                "ARTICLE" => Some(Self::Article),
+                "VIDEO" => Some(Self::Video),
+                "IMAGE" => Some(Self::Image),
+                "AUDIO" => Some(Self::Audio),
+                "PRODUCT" => Some(Self::Product),
+                "FORUM" => Some(Self::Forum),
+                "PROFILE" => Some(Self::Profile),
+                _ => None,
+            }
+        }
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PreviewError {
