@@ -94,3 +94,103 @@ export function tailCountToInclude(prev: number, msgIdx: number, total: number):
   const needed = Math.min(total, total - msgIdx + CONTEXT_ABOVE);
   return Math.max(prev, needed);
 }
+
+/* ------------------------------------------------------------------ *
+ * Two-sided windowing
+ *
+ * Everything above anchors the window to the tail: it grows toward the top
+ * and the newest message is always mounted. That is the right model while
+ * the reader is near the bottom, and the wrong one as soon as they are not.
+ * A reader who has scrolled up through a long channel keeps every row
+ * between them and the present mounted, which is the cost the tail anchor
+ * was supposed to avoid, just moved to the other end.
+ *
+ * A two-sided window is a range `[start, end)` over the rows the host gave
+ * us. `end < total` means the newest rows are *not* mounted, which is what
+ * lets the DOM stay bounded no matter how far back somebody reads — and it
+ * is also why the reader has to be told: a message arriving below a window
+ * that does not reach the tail must not silently scroll them.
+ * ------------------------------------------------------------------ */
+
+/** A half-open range of row indices that are mounted. */
+export interface ThreadWindow {
+  /** First mounted row, inclusive. */
+  start: number;
+  /** One past the last mounted row. */
+  end: number;
+}
+
+/** The window a thread opens at: the tail, plus room for the unread divider. */
+export function initialWindow(total: number, pendingUnread: number): ThreadWindow {
+  const size = initialTailCount(pendingUnread);
+  return { start: Math.max(0, total - size), end: total };
+}
+
+/** Whether `window` reaches the newest row, and so should follow arrivals down. */
+export function isAtTail(window: ThreadWindow, total: number): boolean {
+  return window.end >= total;
+}
+
+/**
+ * Grow the window toward the top by one chunk.
+ *
+ * The far edge comes with it once the window is at its full size, so reading
+ * backwards costs a bounded number of mounted rows rather than an unbounded
+ * one. That trailing release is the whole difference from the tail-anchored
+ * model, and it is only safe because the rows released are below the viewport
+ * and can be fetched back.
+ */
+export function grownUp(window: ThreadWindow, total: number): ThreadWindow {
+  const start = Math.max(0, window.start - WINDOW_GROW_CHUNK);
+  const size = window.end - start;
+  const end = size > MAX_MOUNTED ? Math.min(total, start + MAX_MOUNTED) : window.end;
+  return { start, end };
+}
+
+/** Grow the window toward the bottom by one chunk, releasing the head to match. */
+export function grownDown(window: ThreadWindow, total: number): ThreadWindow {
+  const end = Math.min(total, window.end + WINDOW_GROW_CHUNK);
+  const size = end - window.start;
+  const start = size > MAX_MOUNTED ? Math.max(0, end - MAX_MOUNTED) : window.start;
+  return { start, end };
+}
+
+/**
+ * The most rows that may be mounted at once.
+ *
+ * Not a memory figure so much as a layout one: past a few hundred rows the
+ * browser's own layout and the offload observers cost more per scroll step
+ * than fetching a page back does.
+ */
+export const MAX_MOUNTED = 300;
+
+/**
+ * The window after rows have arrived at the tail, `total` counting them.
+ *
+ * Only follows them down when the window was already at the tail. Otherwise
+ * the range is left exactly where it is, because moving it would shift what
+ * the reader is looking at to show them something they have not asked to see;
+ * the caller shows a "new messages" affordance instead.
+ */
+export function windowAfterAppend(window: ThreadWindow, total: number, wasAtTail: boolean): ThreadWindow {
+  if (!wasAtTail) return window;
+  const end = total;
+  const start = Math.max(0, end - Math.max(BASE_WINDOW, window.end - window.start));
+  return { start, end };
+}
+
+/**
+ * The window after a page of `count` older rows is joined at the head.
+ *
+ * The indices of everything already mounted shift by `count`, so the window
+ * has to shift with them or it would appear to jump backwards by exactly the
+ * size of the page that just arrived.
+ */
+export function windowAfterPrepend(window: ThreadWindow, count: number): ThreadWindow {
+  return { start: window.start + count, end: window.end + count };
+}
+
+/** The window snapped back to the tail, for jump-to-bottom. */
+export function windowAtTail(total: number): ThreadWindow {
+  return { start: Math.max(0, total - BASE_WINDOW), end: total };
+}
