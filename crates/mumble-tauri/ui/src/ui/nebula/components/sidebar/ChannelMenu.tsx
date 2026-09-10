@@ -26,6 +26,7 @@ import {
   UsersGroupIcon,
 } from "@ui/icons";
 import { MenuCheckBox } from "./MenuCheckBox";
+import { contextMenuRootSlot } from "../contextMenuRoot";
 
 interface ChannelMenuProps {
   /** Right-click target and where the menu was opened, or null when closed. */
@@ -123,6 +124,8 @@ export function ChannelMenu({
       onClose={onClose}
       anchorReference="anchorPosition"
       anchorPosition={{ top: target.y, left: target.x }}
+      // A second right-click is still this menu's: see `contextMenuRootSlot`.
+      slotProps={{ root: contextMenuRootSlot(onClose) }}
     >
       {structural
         ? null

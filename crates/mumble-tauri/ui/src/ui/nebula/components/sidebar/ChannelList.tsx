@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Box, Tooltip, Typography } from "@mui/material";
 import { useTheme, type Theme } from "@mui/material/styles";
@@ -8,9 +9,13 @@ import { useChannelDescription } from "@core/lazyBlobs";
 import type { ChannelEntry, UserEntry } from "@core/types";
 import { TID } from "@core/testids";
 import { LockIcon, VolumeIcon } from "@ui/icons";
-import { groupOccupants, type OrderedChannel } from "../../selectors";
+import { isMobile } from "@core/utils/platform";
+import { PERM_MOVE } from "@core/utils/permissions";
+import { useCarryRoom, useCarryUser, useChannelDropTarget, type CarriedGhost } from "@ui/userCarry";
+import { byName, groupOccupants, type OrderedChannel } from "../../selectors";
 import { useChannelViewer, type NebulaChannelViewer } from "../../useChannelViewer";
 import {
+  MakeRoom,
   PchatBadge,
   PriorityBadge,
   SectionLabel,
@@ -79,6 +84,9 @@ export function ChannelList({
 }: Readonly<ChannelListProps>) {
   const { t } = useTranslation("nebulaSidebar");
   const occupantsByChannel = useMemo(() => groupOccupants(users), [users]);
+  // Ranked the way the lists themselves are, which is what says where somebody
+  // carried into a channel will sit once they are in it.
+  const roster = useMemo(() => [...users].sort(byName), [users]);
   const viewer = useChannelViewer();
 
   const row = (entry: OrderedChannel) => (
@@ -90,6 +98,7 @@ export function ChannelList({
       joined={entry.channel.id === currentChannel}
       selected={entry.channel.id === selectedChannel}
       occupants={occupantsByChannel.get(entry.channel.id) ?? []}
+      roster={roster}
       unread={unreadCounts[entry.channel.id] ?? 0}
       ownSession={ownSession}
       talkingSessions={talkingSessions}
@@ -175,27 +184,42 @@ function selectionStyle(theme: Theme, selected: boolean) {
     return { color: nebula.muted, background: "transparent", border: "var(--nebula-line-width, 1px) solid transparent" } as const;
   }
   const solid = nebulaSkin.selection === "solid";
+  const clip = nebulaSkin.clipSelection === "none" ? undefined : nebulaSkin.clipSelection;
   return {
     color: solid ? nebula.onAccent : nebula.text,
     background: solid ? nebula.accent : nebula.accentSoft,
     border: `var(--nebula-line-width, 1px) solid ${solid ? "transparent" : nebula.accentLine}`,
-    clipPath: nebulaSkin.clipSelection === "none" ? undefined : nebulaSkin.clipSelection,
+    clipPath: clip,
+    // The bar below is a plate of its own, and it is placed against this box.
+    position: "relative",
+    // Keeps that plate under the row's label rather than over it: a negative
+    // z-index paints after the background and before the content, but only
+    // inside a stacking context this row owns.
+    isolation: "isolate",
     // The two marks compose rather than exclude: Midnight glows, Guardbase
     // bars, and Nimbus does both. On a solid fill the bar switches to the
     // theme's second hue, because an accent bar on an accent row is invisible
     // - which is also what Nimbus wants, a gold edge against the blue plate.
-    boxShadow:
-      [
-        nebulaSkin.selectionGlow ? `0 0 14px ${nebula.accentLine}` : "",
-        // Wider on a solid fill, because a skin that fills the row usually
-        // also cuts it (Nimbus), and a cut eats a hairline bar down to a
-        // sliver. Ten pixels survives the diagonal as a deliberate flash.
-        nebulaSkin.selectionBar
-          ? `inset ${solid ? 10 : 3}px 0 0 ${solid ? nebula.accent2 : nebula.accent}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join(",") || undefined,
+    boxShadow: nebulaSkin.selectionGlow ? `0 0 14px ${nebula.accentLine}` : undefined,
+    // Drawn rather than shadowed. An inset shadow is upright, and a row that
+    // leans clips it into a wedge; a plate wearing the row's own silhouette
+    // leans with it, because the lean the polygon spends is stated in pixels
+    // and so survives being applied to a box of any width.
+    ...(nebulaSkin.selectionBar
+      ? {
+          "&::before": {
+            content: '""',
+            position: "absolute",
+            left: 0,
+            top: 0,
+            bottom: 0,
+            zIndex: -1,
+            width: `${nebulaSkin.selectionBarPx}px`,
+            background: solid ? nebula.accent2 : nebula.accent,
+            clipPath: clip,
+          },
+        }
+      : {}),
   } as const;
 }
 
@@ -206,6 +230,8 @@ interface ChannelRowProps {
   joined: boolean;
   selected: boolean;
   occupants: readonly UserEntry[];
+  /** Everyone on the server, in the order a channel would list them. */
+  roster: readonly UserEntry[];
   unread: number;
   ownSession: number | null;
   talkingSessions: ReadonlySet<number>;
@@ -225,6 +251,7 @@ function ChannelRow({
   joined,
   selected,
   occupants,
+  roster,
   unread,
   ownSession,
   talkingSessions,
@@ -242,16 +269,39 @@ function ChannelRow({
   // Midnight and Nimbus that would be accent on accent, and invisible.
   const skin = useTheme().palette.nebulaSkin;
   const filled = selected && skin.selection === "solid";
+  // A drawn skin stands every row on a plate of the same width, the one you
+  // are in included. Framing that row in a second card as well is what left
+  // the open channel looking indented against the list it belongs to - the
+  // plate started a border and a padding in from every other one.
+  const plated = skin.chrome === "stencil";
   // The faces belong on the row itself, so a channel whose people are drawn
   // there has nothing left to nest underneath it.
   const stacked = viewer === "modern" && occupants.length > 0;
+  // Somewhere a carried user can be dropped, and the seat that opens in the
+  // list below when the pointer is over it.
+  const drop = useChannelDropTarget(channel.id);
+  const { room, carrying, registerRow } = useCarryRoom(channel.id, occupants, roster);
+  // Carrying somebody else out of this channel is a moderator's move; your own
+  // row is yours to carry wherever you are allowed to go.
+  const canMove = ((channel.permissions ?? 0) & PERM_MOVE) !== 0;
 
   return (
     <Box
       component="li"
+      ref={drop.ref}
       sx={(theme) => ({
         ml: `${depth * 12}px`,
-        ...(joined
+        borderRadius: radius("md"),
+        // The channel a carried user would land in says so itself, rather than
+        // leaving the ghost under the pointer to be read as the answer.
+        ...(drop.active
+          ? {
+              outline: `2px dashed ${theme.palette.nebula.accent}`,
+              outlineOffset: 1,
+              background: theme.palette.nebula.accentSoft,
+            }
+          : {}),
+        ...(joined && !plated
           ? {
               borderRadius: radius("md"),
               background: theme.palette.nebula.card,
@@ -272,7 +322,7 @@ function ChannelRow({
         onDoubleClick={joined ? undefined : () => onJoin(channel)}
         onContextMenu={(event) => onContextMenu(channel, event)}
         sx={(theme) =>
-          joined
+          joined && !plated
             ? {
                 px: "10px",
                 py: "8px",
@@ -354,18 +404,36 @@ function ChannelRow({
       </Stack>
 
       {!stacked && occupants.length > 0 && (
-        <Stack sx={{ px: joined ? "8px" : "11px", pb: "8px", gap: "1px" }}>
+        <Stack
+          sx={{
+            px: joined ? "8px" : "11px",
+            pb: "8px",
+            gap: "1px",
+            // The rows that stepped down would otherwise hang out of the
+            // bottom of the channel; this is all the seat actually lays out.
+            mb: room ? `${room.step}px` : 0,
+            transition: carrying ? "margin-bottom 170ms cubic-bezier(.2,0,0,1)" : "none",
+            "@media (prefers-reduced-motion: reduce)": { transition: "none" },
+          }}
+        >
           {occupants.map((user) => (
-            <OccupantRow
+            <MakeRoom
               key={user.session}
-              user={user}
-              own={user.session === ownSession}
-              talking={talkingSessions.has(user.session)}
-              onSelect={onSelectUser}
-              onHover={onHoverUser}
-              onLeave={onLeaveUser}
-              onContextMenu={onContextMenuUser}
-            />
+              offset={room?.offsets.get(user.session)}
+              animate={carrying}
+            >
+              <OccupantRow
+                user={user}
+                own={user.session === ownSession}
+                talking={talkingSessions.has(user.session)}
+                canMove={canMove}
+                registerRow={registerRow}
+                onSelect={onSelectUser}
+                onHover={onHoverUser}
+                onLeave={onLeaveUser}
+                onContextMenu={onContextMenuUser}
+              />
+            </MakeRoom>
           ))}
         </Stack>
       )}
@@ -422,6 +490,9 @@ interface OccupantRowProps {
   user: UserEntry;
   own: boolean;
   talking: boolean;
+  /** Whether this channel's people may be moved out of it by hand. */
+  canMove: boolean;
+  registerRow: (session: number, element: HTMLElement | null) => void;
   onSelect: (session: number, event: React.MouseEvent) => void;
   onHover: (session: number, event: React.MouseEvent) => void;
   onLeave: () => void;
@@ -432,11 +503,17 @@ function OccupantRow({
   user,
   own,
   talking,
+  canMove,
+  registerRow,
   onSelect,
   onHover,
   onLeave,
   onContextMenu,
 }: Readonly<OccupantRowProps>) {
+  // Your own row goes wherever you may go; anyone else's needs the permission
+  // to move them. Touch has no cursor to carry anything with.
+  const carry = useCarryUser(user.session, isMobile || (!own && !canMove));
+
   return (
     <Stack
       direction="row"
@@ -444,19 +521,27 @@ function OccupantRow({
       gap={1.125}
       data-testid={TID.channelMember}
       data-user-name={user.name}
+      ref={(element: HTMLElement | null) => registerRow(user.session, element)}
       onClick={(event) => onSelect(user.session, event)}
       onMouseEnter={(event) => onHover(user.session, event)}
       onMouseLeave={onLeave}
       onContextMenu={onContextMenu ? (event) => onContextMenu(user, event) : undefined}
+      {...carry.handlers}
       sx={(theme) => ({
         px: "8px",
         py: "5px",
         borderRadius: radius("md"),
         cursor: "pointer",
         color: own ? theme.palette.nebula.muted : "inherit",
+        // The row owns the gesture, so the browser must not start a selection
+        // or a scroll from the same press - nor drag the avatar inside it.
+        userSelect: "none",
+        touchAction: "none",
+        "& img": { WebkitUserDrag: "none" },
         "&:hover": { background: theme.palette.nebula.hover },
       })}
     >
+      {carry.ghost && <CarriedUser ghost={carry.ghost} elRef={carry.ghostRef} user={user} />}
       <UserAvatar
         name={user.name}
         session={user.session}
@@ -543,3 +628,54 @@ function ChannelGlyph({
     </Box>
   );
 }
+
+/**
+ * Whoever is being carried, under the pointer.
+ *
+ * At the document root rather than in the list: the sidebar clips what
+ * overflows it, and the whole point of the ghost is that it leaves.
+ */
+function CarriedUser({
+  ghost,
+  elRef,
+  user,
+}: Readonly<{
+  ghost: CarriedGhost;
+  elRef: React.MutableRefObject<HTMLElement | null>;
+  user: UserEntry;
+}>) {
+  return createPortal(
+    <Box
+      aria-hidden
+      ref={elRef as React.MutableRefObject<HTMLDivElement | null>}
+      sx={(theme) => ({
+        position: "fixed",
+        left: 0,
+        top: 0,
+        width: ghost.width,
+        height: ghost.height,
+        transform: `translate(${ghost.left}px, ${ghost.top}px)`,
+        display: "flex",
+        alignItems: "center",
+        gap: "9px",
+        px: "8px",
+        boxSizing: "border-box",
+        pointerEvents: "none",
+        zIndex: 1400,
+        borderRadius: radius("md"),
+        // A ground of its own: the row it is drawn from is translucent, and
+        // carried over the tree it would otherwise read through.
+        background: theme.palette.nebula.bg0,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accentLine}`,
+        boxShadow: "0 10px 24px rgba(2,6,18,.5)",
+      })}
+    >
+      <UserAvatar name={user.name} session={user.session} textureSize={user.texture_size} size={20} />
+      <Typography sx={{ fontSize: 12.5 }} noWrap>
+        {user.name}
+      </Typography>
+    </Box>,
+    document.body,
+  );
+}
+

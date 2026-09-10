@@ -162,6 +162,34 @@ describe("GlobalSearch", () => {
     expect(screen.queryByText("Messages")).toBeNull();
   });
 
+  it("puts the caret in the field when it opens, however it was opened", async () => {
+    // The panel is opened from the keyboard and typed into straight away, so a
+    // field that is merely on screen is not open: the first word has to land in
+    // it rather than in whatever the shortcut was pressed over.
+    const props = {
+      channels: [channel(0, "Root"), channel(1, "Gaming", 3)],
+      users: [user(7, "ZewiWin")],
+      sessions: [],
+      ownSession: 7,
+      serverLabel: "magical.rocks",
+      onClose: vi.fn(),
+      onSelect: vi.fn(),
+    } as const;
+    const { rerender } = render(withNebulaTheme(<GlobalSearch open={false} {...props} />));
+    rerender(withNebulaTheme(<GlobalSearch open {...props} />));
+
+    // Something else still holding focus in the beat the panel opens is the
+    // real case: the shortcut is pressed over the composer, and an `autoFocus`
+    // that has already spoken for the one frame it gets does not speak again.
+    const elsewhere = document.createElement("input");
+    document.body.append(elsewhere);
+    elsewhere.focus();
+
+    const field = screen.getByLabelText("Search channels, people and messages");
+    await waitFor(() => expect(document.activeElement).toBe(field));
+    elsewhere.remove();
+  });
+
   it("closes once on escape, and on the close control", () => {
     const { onClose, field } = open();
     // Once, not twice: the dialog and the field must not both answer it.

@@ -80,6 +80,7 @@ export function GlobalSearch({
   const [results, setResults] = useState<readonly SearchResult[]>([]);
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const fieldRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Answers can land out of order, and the last one to arrive is not
   // necessarily the one for what is now in the field.
@@ -119,13 +120,23 @@ export function GlobalSearch({
 
   // Every opening starts on an empty query and the first row, so the panel
   // never reopens holding a search for a channel that has since gone.
+  //
+  // The field is focused here rather than left to `autoFocus`, which only
+  // speaks for the frame the input is created in: the dialog draws into a
+  // portal the modal fills in on its own schedule, and whatever the keystroke
+  // was typed into is still holding focus when it does. Losing that race is
+  // what leaves the panel standing open with the next word going into the
+  // composer behind it. Asking again on the frame after the commit costs a
+  // frame and is not a race at all.
   useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
     setQuery("");
     setResults([]);
     setActive(0);
     issuedRef.current += 1;
     settledRef.current = issuedRef.current;
+    const frame = requestAnimationFrame(() => fieldRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
   }, [open]);
 
   useEffect(
@@ -196,6 +207,7 @@ export function GlobalSearch({
         <SearchIcon width={14} height={14} />
         <InputBase
           autoFocus
+          inputRef={fieldRef}
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
           onKeyDown={onKeyDown}
