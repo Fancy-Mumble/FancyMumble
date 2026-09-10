@@ -27,6 +27,17 @@ pub enum PchatProtocol {
     /// Signal Protocol E2EE (Double Ratchet / Sender Keys via libsignal).
     /// Post-join visibility with per-sender forward secrecy.
     SignalV1,
+    /// Persisted by the server, which holds the key.
+    ///
+    /// **Not end-to-end encrypted, and the only mode here that is not.**
+    /// Messages travel under TLS and the server seals them at rest, so it can
+    /// serve the whole archive to a member who joins later.  That is what the
+    /// mode is for: no key exchange, no re-keying on every membership change,
+    /// and history that works on a new device immediately.
+    ///
+    /// The trade is stated where a user can see it, because it cannot be
+    /// inferred: the operator can read these messages.
+    ServerManaged,
 }
 
 impl PchatProtocol {
@@ -35,6 +46,7 @@ impl PchatProtocol {
     pub fn from_proto(value: i32) -> Self {
         match value {
             2 => Self::FancyV1FullArchive,
+            3 => Self::ServerManaged,
             4 => Self::SignalV1,
             _ => Self::None,
         }
@@ -46,6 +58,7 @@ impl PchatProtocol {
         match self {
             Self::None => 0,
             Self::FancyV1FullArchive => 2,
+            Self::ServerManaged => 3,
             Self::SignalV1 => 4,
         }
     }
@@ -63,9 +76,34 @@ impl PchatProtocol {
     }
 
     /// Whether this protocol uses client-side E2E encryption.
+    ///
+    /// False for [`Self::ServerManaged`], which is the point of that mode:
+    /// nothing here seals its messages, no key ladder runs for it, and the
+    /// banner a user sees must not claim otherwise.
     #[must_use]
     pub fn is_encrypted(&self) -> bool {
         matches!(self, Self::FancyV1FullArchive | Self::SignalV1)
+    }
+
+    /// Whether messages in this mode travel through the pchat service.
+    ///
+    /// Every mode but [`Self::None`], including the one that is not encrypted:
+    /// pchat is the transport for persistent chat, and being end-to-end is a
+    /// property of what rides it rather than of the ride.
+    #[must_use]
+    pub fn uses_pchat(&self) -> bool {
+        !matches!(self, Self::None)
+    }
+
+    /// Whether the server keeps a history this client can page through.
+    ///
+    /// True for every mode with a server-side archive, which is what decides
+    /// whether history is fetched at all.  [`Self::SignalV1`] is deliberately
+    /// absent: it keeps no server-side history by design, so a late joiner
+    /// cannot read what was said before they arrived.
+    #[must_use]
+    pub fn has_server_history(&self) -> bool {
+        matches!(self, Self::FancyV1FullArchive | Self::ServerManaged)
     }
 
     /// The E2EE algorithm version byte, or `None` if the protocol
@@ -75,7 +113,7 @@ impl PchatProtocol {
         match self {
             Self::FancyV1FullArchive => Some(1),
             Self::SignalV1 => Some(2),
-            Self::None => None,
+            Self::None | Self::ServerManaged => None,
         }
     }
 }
@@ -85,6 +123,7 @@ impl fmt::Display for PchatProtocol {
         match self {
             Self::None => write!(f, "None"),
             Self::FancyV1FullArchive => write!(f, "FancyV1FullArchive"),
+            Self::ServerManaged => write!(f, "ServerManaged"),
             Self::SignalV1 => write!(f, "SignalV1"),
         }
     }
@@ -943,5 +982,48 @@ mod tests {
         assert_eq!(ch.pchat_protocol, Some(PchatProtocol::SignalV1));
         assert_eq!(ch.pchat_max_history, Some(500));
         assert_eq!(ch.pchat_retention_days, Some(30));
+    }
+
+    #[test]
+    fn the_server_managed_mode_round_trips_the_wire_number() {
+        // 3 is the value the enum has carried in every .proto since epoch 1
+        // and that nothing implemented until now.
+        assert_eq!(PchatProtocol::from_proto(3), PchatProtocol::ServerManaged);
+        assert_eq!(PchatProtocol::ServerManaged.to_proto(), 3);
+    }
+
+    #[test]
+    fn a_mode_this_build_does_not_know_reads_as_none() {
+        // Unchanged, and worth pinning: a channel configured by a newer server
+        // must degrade to "no persistence" rather than to some other mode.
+        assert_eq!(PchatProtocol::from_proto(99), PchatProtocol::None);
+    }
+
+    #[test]
+    fn server_managed_is_not_end_to_end_encrypted() {
+        // The claim a user sees in the banner. If this ever returns true the
+        // UI will tell people their messages are private from the server, and
+        // they are not.
+        assert!(!PchatProtocol::ServerManaged.is_encrypted());
+        assert_eq!(PchatProtocol::ServerManaged.protocol_version(), None);
+    }
+
+    #[test]
+    fn server_managed_still_travels_by_pchat_and_still_has_history() {
+        // Being unencrypted is a property of the payload, not of the route:
+        // these messages use the same service and land in the same archive.
+        assert!(PchatProtocol::ServerManaged.uses_pchat());
+        assert!(PchatProtocol::ServerManaged.has_server_history());
+    }
+
+    #[test]
+    fn signal_has_no_server_history_and_none_has_no_pchat() {
+        // The two ends of the question the fetch path asks. Signal keeps no
+        // server-side history by design, so a late joiner cannot read what was
+        // said before it arrived.
+        assert!(!PchatProtocol::SignalV1.has_server_history());
+        assert!(PchatProtocol::SignalV1.uses_pchat());
+        assert!(!PchatProtocol::None.uses_pchat());
+        assert!(!PchatProtocol::None.has_server_history());
     }
 }
