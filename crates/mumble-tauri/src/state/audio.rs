@@ -275,6 +275,10 @@ mod voice_pipeline {
             // Starts only under FANCY_E2E_PLAYOUT_DUMP_DIR; the tap it installs
             // has to exist before the device starts pulling.
             crate::e2e_stats::start_playout_dump();
+            // Not on Android: `stream_audio` is the playout sink for a watched
+            // broadcast's desktop audio, and it is gated out of that build
+            // (`audio/mod.rs`) along with the rest of the desktop audio stack.
+            #[cfg(not(target_os = "android"))]
             crate::audio::stream_audio::register(&speaker_buffers, &speaker_volumes);
             let speaker_buffers_for_state = speaker_buffers.clone();
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
@@ -464,6 +468,10 @@ mod voice_pipeline {
             // Starts only under FANCY_E2E_PLAYOUT_DUMP_DIR; the tap it installs
             // has to exist before the device starts pulling.
             crate::e2e_stats::start_playout_dump();
+            // Not on Android: `stream_audio` is the playout sink for a watched
+            // broadcast's desktop audio, and it is gated out of that build
+            // (`audio/mod.rs`) along with the rest of the desktop audio stack.
+            #[cfg(not(target_os = "android"))]
             crate::audio::stream_audio::register(&speaker_buffers, &speaker_volumes);
             let speaker_buffers_for_state = speaker_buffers.clone();
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
@@ -617,6 +625,10 @@ mod voice_pipeline {
             // Starts only under FANCY_E2E_PLAYOUT_DUMP_DIR; the tap it installs
             // has to exist before the device starts pulling.
             crate::e2e_stats::start_playout_dump();
+            // Not on Android: `stream_audio` is the playout sink for a watched
+            // broadcast's desktop audio, and it is gated out of that build
+            // (`audio/mod.rs`) along with the rest of the desktop audio stack.
+            #[cfg(not(target_os = "android"))]
             crate::audio::stream_audio::register(&speaker_buffers, &speaker_volumes);
             let speaker_buffers_for_state = speaker_buffers.clone();
             let mut mixing_playback = PlatformAudioFactory::create_mixing_playback(
@@ -874,16 +886,25 @@ mod voice_pipeline {
             }
             super::clear_capture_error(app_for_err.as_ref());
 
-            // Same AGC config as the voice pipeline so the calibrator
-            // measures the post-gain signal the noise gate will see.
-            let agc_filter = build_agc_filter(&audio_settings);
+            // The same AGC and denoiser as the voice pipeline, so the meter
+            // and the calibrator measure the signal the noise gate will see.
+            let filters = build_calibration_filters(&audio_settings);
 
             let app = self.app_handle().ok_or("No app handle")?;
             let auto_sensitivity = audio_settings.auto_input_sensitivity;
+            let frame_size_ms = audio_settings.frame_size_ms;
             let inner = self.inner.clone_arc();
 
             let handle = tauri::async_runtime::spawn(async move {
-                mic_test_loop(capture, app, auto_sensitivity, inner, agc_filter).await;
+                mic_test_loop(
+                    capture,
+                    app,
+                    auto_sensitivity,
+                    inner,
+                    filters,
+                    frame_size_ms,
+                )
+                .await;
             });
 
             let __session = self.inner.snapshot();
@@ -1053,7 +1074,7 @@ mod voice_pipeline {
 
         /// One-shot voice activation calibration.
         ///
-        /// Opens the microphone, applies the same AGC filter chain as
+        /// Opens the microphone, applies the same AGC and denoiser as
         /// the voice pipeline, feeds ~3 seconds of audio into the
         /// shared [`Calibrator`], and writes the resulting open
         /// threshold, close ratio, and hold time back into
@@ -1082,7 +1103,7 @@ mod voice_pipeline {
                 .start()
                 .map_err(|e| format!("Calibration capture start: {e}"))?;
 
-            let mut agc_filter = build_agc_filter(&audio_settings);
+            let mut filters = build_calibration_filters(&audio_settings);
 
             let mut calibrator = Calibrator::new(AUTO_CALIBRATION_WINDOW);
             let mut interval = tokio::time::interval(Duration::from_millis(33));
@@ -1101,20 +1122,14 @@ mod voice_pipeline {
                     continue;
                 };
 
-                if let Some(ref mut agc) = agc_filter {
-                    use mumble_protocol::audio::filter::AudioFilter as _;
-                    let pre_agc_rms = frame_rms(&frame);
-                    let _ = agc.process(&mut frame);
-                    calibrator.push(frame_rms(&frame), pre_agc_rms);
-                } else {
-                    let rms = frame_rms(&frame);
-                    calibrator.push(rms, rms);
-                }
+                let raw_rms = frame_rms(&frame);
+                let _ = filters.process(&mut frame);
+                calibrator.push(frame_rms(&frame), raw_rms);
             }
 
             let _ = capture.stop();
 
-            let Some(calibration) = calibrator.compute() else {
+            let Some(calibration) = calibrator.compute(audio_settings.frame_size_ms) else {
                 return Err(
                     "Calibration failed: not enough audio captured.  Speak normally for a few seconds and try again.".into(),
                 );
@@ -1236,9 +1251,29 @@ mod voice_pipeline {
         filters
     }
 
-    /// Build the AGC filter used by the calibration paths.  Mirrors
-    /// the configuration applied by `start_outbound_pipeline` so the
-    /// calibrator sees the same post-gain signal the noise gate will.
+    /// Build the chain the calibration paths listen through: everything
+    /// the live pipeline puts in front of the noise gate, and nothing
+    /// else.  The gate judges the *denoised* frame, so a calibrator that
+    /// measured the raw one would place the threshold against levels the
+    /// gate never sees - `DeepFilterNet` takes the quietest tenth of
+    /// speech frames 12 dB or more down, and a threshold set on the raw
+    /// level lands inside the sentence tails.
+    pub(super) fn build_calibration_filters(settings: &AudioSettings) -> FilterChain {
+        let mut filters = FilterChain::new();
+        if let Some(agc) = build_agc_filter(settings) {
+            filters.push(Box::new(agc));
+        }
+        if settings.noise_suppression {
+            filters.push(Box::new(SpectralDenoiser::new(DenoiserConfig {
+                algorithm: settings.denoiser_algorithm,
+                params: settings.denoiser_params.clone(),
+                ..DenoiserConfig::default()
+            })));
+        }
+        filters
+    }
+
+    /// Build the AGC filter as `start_outbound_pipeline` configures it.
     fn build_agc_filter(settings: &AudioSettings) -> Option<AutomaticGainControl> {
         if !settings.auto_gain {
             return None;

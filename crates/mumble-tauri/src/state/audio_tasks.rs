@@ -9,7 +9,7 @@ use std::time::Duration;
 use tracing::{debug, warn};
 
 use mumble_protocol::audio::capture::AudioCapture;
-use mumble_protocol::audio::filter::automatic_gain::AutomaticGainControl;
+use mumble_protocol::audio::filter::FilterChain;
 use mumble_protocol::audio::pipeline::{OutboundPipeline, OutboundTick};
 use mumble_protocol::client::ClientHandle;
 use mumble_protocol::command;
@@ -306,19 +306,21 @@ async fn outbound_send_task(
 
 /// Background loop for the mic test.
 ///
-/// Reads frames from the capture device, computes RMS/peak, and
-/// emits `mic-amplitude` events to the frontend.  When
-/// `auto_sensitivity` is enabled, applies AGC to measure
-/// post-gain levels for noise floor estimation and writes the
-/// auto-computed `vad_threshold` back into `AudioSettings`.
+/// Reads frames from the capture device, runs them through `filters` -
+/// the AGC and denoiser the live pipeline puts in front of the noise
+/// gate - and emits the resulting RMS/peak as `mic-amplitude` events,
+/// so the meter shows the level the gate judges.  When
+/// `auto_sensitivity` is enabled, the same levels feed the calibrator
+/// and the auto-computed `vad_threshold` is written back into
+/// `AudioSettings`.
 pub(super) async fn mic_test_loop(
     mut capture: Box<dyn AudioCapture>,
     app: tauri::AppHandle,
     auto_sensitivity: bool,
     inner: Arc<std::sync::Mutex<SharedState>>,
-    mut agc_filter: Option<AutomaticGainControl>,
+    mut filters: FilterChain,
+    frame_size_ms: u32,
 ) {
-    use mumble_protocol::audio::filter::AudioFilter as _;
     use tauri::Emitter;
 
     let mut interval = tokio::time::interval(Duration::from_millis(33));
@@ -340,14 +342,8 @@ pub(super) async fn mic_test_loop(
             continue;
         };
 
-        let pre_agc_rms = frame_rms(&frame);
-
-        // Apply AGC so the emitted RMS/peak match what the noise gate
-        // sees in the live pipeline.  No-op when AGC is disabled.
-        if let Some(ref mut agc) = agc_filter {
-            let _ = agc.process(&mut frame);
-        }
-
+        let raw_rms = frame_rms(&frame);
+        let _ = filters.process(&mut frame);
         let rms = frame_rms(&frame);
         let peak = frame_peak(&frame);
 
@@ -361,7 +357,7 @@ pub(super) async fn mic_test_loop(
             continue;
         }
 
-        calibrator.push(rms, pre_agc_rms);
+        calibrator.push(rms, raw_rms);
         frames_since_emit += 1;
 
         if frames_since_emit < EMIT_INTERVAL_FRAMES {
@@ -369,7 +365,7 @@ pub(super) async fn mic_test_loop(
         }
         frames_since_emit = 0;
 
-        let Some(calibration) = calibrator.compute() else {
+        let Some(calibration) = calibrator.compute(frame_size_ms) else {
             continue;
         };
 
