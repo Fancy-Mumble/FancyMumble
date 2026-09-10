@@ -124,7 +124,7 @@ unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
     // SAFETY: lparam was set to `&mut SearchCtx as *mut c_void as isize`
     // in `find_window_by_client_size`; the pointer is valid for the
     // duration of EnumWindows.
-    let ctx = &mut *(lparam as *mut c_void as *mut SearchCtx);
+    let ctx = unsafe { &mut *(lparam as *mut c_void as *mut SearchCtx) };
 
     if unsafe { IsWindowVisible(hwnd) } == 0 {
         return 1;

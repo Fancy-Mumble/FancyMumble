@@ -72,7 +72,31 @@ pub(crate) fn set_window_icon(
         ));
     }
     crate::platform::install_themed_icon(&rgba, width, height);
+    apply_window_icon(&window, rgba, width, height)
+}
+
+/// Hand the pixels to the window manager.
+#[cfg(not(target_os = "android"))]
+fn apply_window_icon(
+    window: &tauri::WebviewWindow,
+    rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+) -> Result<(), String> {
     window
         .set_icon(tauri::image::Image::new_owned(rgba, width, height))
         .map_err(|e| e.to_string())
+}
+
+/// Android has no window icon, so Tauri gives `WebviewWindow` no `set_icon`
+/// there at all - this is the `Ok` the doc comment above promises mobile,
+/// not a stub standing in for something that could work.
+#[cfg(target_os = "android")]
+fn apply_window_icon(
+    _window: &tauri::WebviewWindow,
+    _rgba: Vec<u8>,
+    _width: u32,
+    _height: u32,
+) -> Result<(), String> {
+    Ok(())
 }

@@ -528,6 +528,7 @@ pub(crate) struct StreamAudioPlayout {
 }
 
 /// Read the playout state of one watched broadcast's audio.
+#[cfg(native_stream_viewer)]
 #[tauri::command]
 pub(crate) async fn native_stream_audio_playout(session: u32) -> Option<StreamAudioPlayout> {
     crate::audio::stream_audio::playout(session).map(|(buffered_ms, cap_ms)| StreamAudioPlayout {
@@ -536,13 +537,24 @@ pub(crate) async fn native_stream_audio_playout(session: u32) -> Option<StreamAu
     })
 }
 
+#[cfg(not(native_stream_viewer))]
+#[tauri::command]
+pub(crate) async fn native_stream_audio_playout(_session: u32) -> Option<StreamAudioPlayout> {
+    None
+}
+
 /// Set the playback volume of one watched broadcast's desktop audio, where
 /// 1.0 leaves it as sent. The viewer's volume slider drives this on the
 /// native path, where there is no `<video>` element to set `.volume` on.
+#[cfg(native_stream_viewer)]
 #[tauri::command]
 pub(crate) async fn set_native_stream_audio_volume(session: u32, volume: f32) {
     crate::audio::stream_audio::set_volume(session, volume);
 }
+
+#[cfg(not(native_stream_viewer))]
+#[tauri::command]
+pub(crate) async fn set_native_stream_audio_volume(_session: u32, _volume: f32) {}
 
 /// Stop and drop the native viewer for one broadcaster session (no-op when
 /// none is running).
