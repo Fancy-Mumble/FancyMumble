@@ -1,18 +1,40 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, Menu, MenuItem, Typography } from "@mui/material";
 import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { canOpenPrivately, openPrivatelyOrExplain } from "@core/features/elements/privateBrowsing";
 import { useAppStore } from "@core/store";
 import type { ChatMessage } from "@core/types";
 import { getCachedUserAvatar } from "@core/lazyBlobs";
 import { getReadersForMessage } from "@core/features/chat/readreceipt/readReceiptStore";
 import { findPopOutImageSrc, imagePopoutCaption } from "@core/features/chat/imagePopout";
+import { isRemoteImage } from "@core/features/chat/imageActions";
+import { useImageActions, type ImageActionKind } from "@core/features/chat/useImageActions";
 import { useWatchStart } from "@core/features/chat/watch/useWatchStart";
 import { canDeleteMessages } from "@standard/components/sidebar/channel/ChannelEditorDialog";
 import { EmojiPlusIcon } from "@ui/icons";
 import { Stack, UserAvatar } from "../primitives";
+import { contextMenuRootSlot } from "../contextMenuRoot";
 import { radius } from "../../tokens";
 import { bodyToCopyText } from "@core/features/chat/bodyText";
+
+/** One picture, as the row that was right-clicked knows it. */
+export interface MenuImage {
+  /** The `src` attribute as written, which is what every index here uses. */
+  readonly src: string;
+  readonly alt: string;
+  /**
+   * An address a browser could open this picture at, where it has one.
+   *
+   * Not always the `src`: a file sent as a public or password-protected link
+   * is drawn from a downloaded copy or from bytes this client fetched, so
+   * what is on screen is a local path while the thing worth sharing is the
+   * link it arrived as. Null where there is nothing anybody else could open -
+   * a pasted picture, or a file only this session can reach.
+   */
+  readonly link?: string | null;
+}
 
 export interface MessageMenuTarget {
   message: ChatMessage;
@@ -20,6 +42,30 @@ export interface MessageMenuTarget {
   y: number;
   /** True when the body is plain text, so editing would not eat a card marker. */
   editable: boolean;
+  /**
+   * The picture the pointer was over, or null where it was not over one.
+   *
+   * A message can carry four of them, so "the message's picture" is not a
+   * question the menu can answer for itself - the row reads which one was
+   * aimed at off the event and hands it over.
+   */
+  image?: MenuImage | null;
+  /**
+   * The external link the pointer was over, or null where it was not over one.
+   *
+   * Read off the event by the row for the same reason the picture is: a
+   * message can carry several links, and which one was aimed at is a question
+   * only the pointer can answer.
+   */
+  link?: string | null;
+  /**
+   * What the reader had highlighted when they opened the menu, or "".
+   *
+   * Read at right-click time by the row, because "copy" on a message the
+   * reader has half-selected means the part they picked - offering only the
+   * whole message is the answer to a question nobody asked.
+   */
+  selection: string;
 }
 
 interface MessageMenuProps {
@@ -49,6 +95,8 @@ interface MessageMenuProps {
  * that reorders itself under the pointer defeats that.
  */
 const QUICK_REACTIONS = ["👍", "🔥", "😂"] as const;
+/** How long a finished picture action stays on screen before the menu goes. */
+const IMAGE_ACTION_LINGER = 900;
 /**
  * Right-click actions on a message.
  *
@@ -127,6 +175,61 @@ export function MessageMenu({
     start: startWatch,
   } = useWatchStart(target?.message.body, target?.message.channel_id);
 
+  /**
+   * The picture the reader aimed at, and what can be done with it.
+   *
+   * Bound to the `src` rather than to the message: a block of four tiles is
+   * one message with four different answers to "copy this", and the row has
+   * already worked out which of them was clicked.
+   */
+  const image = target?.image ?? null;
+  /**
+   * The address to give somebody else, or null where there is none.
+   *
+   * A picture fetched over the network is its own link; one sent as a public
+   * or password-protected file carries the link separately, because what is
+   * drawn is a local copy of it. A picture pasted into the message is neither
+   * - there is nowhere to open it, and those two rows stay away.
+   */
+  const imageLink = image ? (image.link ?? (isRemoteImage(image.src) ? image.src : null)) : null;
+  /** The link the pointer was over, as the row read it off the event. */
+  const link = target?.link ?? null;
+  const imageActions = useImageActions(image?.src ?? null, imageLink);
+  const imageStatus = imageActions.status;
+
+  /**
+   * An action that has finished takes the menu with it.
+   *
+   * Long enough that "Copied" is read rather than glimpsed, and short enough
+   * that the menu is not still sitting there when the reader has moved on. A
+   * cancelled save reports nothing at all, so the menu simply stays open.
+   */
+  useEffect(() => {
+    if (!imageStatus || imageStatus.phase === "busy") return;
+    const timer = setTimeout(onClose, IMAGE_ACTION_LINGER);
+    return () => clearTimeout(timer);
+  }, [imageStatus, onClose]);
+
+  /**
+   * Whether this machine can open a private window at all.
+   *
+   * Asked on mount rather than when the menu opens, so the row is either there
+   * from the first frame or never - one appearing a moment late, under a
+   * pointer already moving towards Reply, is how the wrong thing gets clicked.
+   * The answer is cached in `canOpenPrivately` for the session, so this costs
+   * one call however many message rows mount.
+   */
+  const [canPrivate, setCanPrivate] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void canOpenPrivately().then((available) => {
+      if (live) setCanPrivate(available);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
   if (!target) return null;
 
   const { message } = target;
@@ -149,7 +252,32 @@ export function MessageMenu({
    * next - watching a diagram while typing about it is the point - so it is
    * offered only where there is actually a picture to put in it.
    */
-  const popOutSrc = findPopOutImageSrc(message.body);
+  const popOutSrc = image?.src ?? findPopOutImageSrc(message.body);
+
+  /**
+   * What a picture row says while it is working, and once it has.
+   *
+   * The row that was clicked is the only one that changes, so the menu still
+   * reads as itself: nothing moves, and the answer arrives where the question
+   * was asked.
+   */
+  const imageLabel = (kind: ImageActionKind, idle: string) => {
+    if (imageStatus?.kind !== kind) return idle;
+    if (imageStatus.phase === "busy") return t("chat:contextMenu.imageWorking");
+    if (imageStatus.phase === "failed") return t("chat:contextMenu.imageFailed");
+    return kind === "save" ? t("chat:contextMenu.imageSaved") : t("chat:contextMenu.imageCopied");
+  };
+  const imageBusy = imageStatus?.phase === "busy";
+  /**
+   * The link a private-window row would act on, or null where no such row
+   * belongs: either the pointer was not on a link, or this desktop's default
+   * browser has no private mode to open one in.
+   */
+  const privateLink = canPrivate ? link : null;
+  /** What is said when the browser refuses, once, rather than at each row. */
+  const privateFailure = t("chat:contextMenu.openLinkPrivateFailed");
+  /** The message's words, or "" where it is only pictures and markers. */
+  const copyText = bodyToCopyText(message.body);
 
   const popOutImage = (src: string) => {
     const sender = users.find((entry) => entry.session === message.sender_session);
@@ -176,6 +304,8 @@ export function MessageMenu({
       anchorReference="anchorPosition"
       anchorPosition={{ top: target.y, left: target.x }}
       slotProps={{
+        // A second right-click is still this menu's: see `contextMenuRootSlot`.
+        root: contextMenuRootSlot(onClose),
         list: { sx: { p: 0 } },
         paper: {
           sx: (theme) => ({
@@ -211,6 +341,53 @@ export function MessageMenu({
         </Box>
       )}
       {hasId && <Rule />}
+      {/* The picture first, and above everything about the message: a
+          right-click that landed on a photograph was aimed at the photograph,
+          and "Reply" is not what it was reaching for. What it was reaching
+          for is still all here - the message's own rows follow underneath. */}
+      {image && [
+        <MenuItem key="copy-image" sx={ITEM} disabled={imageBusy} onClick={imageActions.copyImage}>
+          {imageLabel("copy", t("chat:contextMenu.copyImage"))}
+        </MenuItem>,
+        <MenuItem key="save-image" sx={ITEM} disabled={imageBusy} onClick={imageActions.saveImage}>
+          {imageLabel("save", t("chat:contextMenu.saveImage"))}
+        </MenuItem>,
+        // A pasted picture has no address to copy and no page to open: it is
+        // carried in the message, and the only place it exists is here.
+        imageLink ? (
+          <MenuItem key="copy-image-link" sx={ITEM} disabled={imageBusy} onClick={imageActions.copyLink}>
+            {imageLabel("link", t("chat:contextMenu.copyImageLink"))}
+          </MenuItem>
+        ) : null,
+        <MenuItem key="pop-out-image" sx={ITEM} onClick={run(() => popOutImage(image.src))}>
+          {t("chat:contextMenu.popOutImage")}
+        </MenuItem>,
+        imageLink ? (
+          <MenuItem
+            key="open-image-externally"
+            sx={ITEM}
+            onClick={run(() => void openUrl(imageLink).catch(() => undefined))}
+          >
+            {t("chat:contextMenu.openImageExternally")}
+          </MenuItem>
+        ) : null,
+        <Rule key="image-rule" />,
+      ]}
+      {/* Under the picture rows and above the message's own: a link is a thing
+          in the message rather than the message, but a photograph the pointer
+          is actually on outranks it. Drawn only where the desktop can honour
+          it - see `canOpenPrivately` - because the alternative is a row whose
+          only outcome is an error dialog. */}
+      {privateLink && [
+        <MenuItem
+          key="open-link-private"
+          sx={ITEM}
+          onClick={run(() => void openPrivatelyOrExplain(privateLink, privateFailure))}
+        >
+          {t("chat:contextMenu.openLinkPrivate")}
+        </MenuItem>,
+        <Rule key="link-rule" />,
+      ]}
       {hasId && (
         <MenuItem sx={ITEM} onClick={run(() => onQuote(message))}>
           {t("nebulaChat:menu.reply")}
@@ -228,15 +405,27 @@ export function MessageMenu({
             useAppStore.getState().pinMessage(message.channel_id, message.message_id!, !!message.pinned),
           )}
         >
-          {message.pinned
-            ? t("nebulaChat:menu.unpinFromChannel")
-            : t("nebulaChat:menu.pinToChannel")}
+          {message.pinned ? t("nebulaChat:menu.unpinFromChannel") : t("nebulaChat:menu.pinToChannel")}
         </MenuItem>
       )}
-      <MenuItem sx={ITEM} onClick={run(() => void navigator.clipboard?.writeText(bodyToCopyText(message.body)))}>
-        {t("chat:contextMenu.copyText")}
-      </MenuItem>
-      {popOutSrc && (
+      {/* Above "Copy text" and only when there is one: the highlight is the
+          more specific answer, and it is what the reader was already reaching
+          for when they right-clicked it. */}
+      {target.selection && (
+        <MenuItem sx={ITEM} onClick={run(() => void navigator.clipboard?.writeText(target.selection))}>
+          {t("chat:contextMenu.copySelection")}
+        </MenuItem>
+      )}
+      {/* A message that is nothing but pictures has no text to copy, and a
+          row that puts an empty string on the clipboard is a row that looks
+          like it did nothing. */}
+      {copyText && (
+        <MenuItem sx={ITEM} onClick={run(() => void navigator.clipboard?.writeText(copyText))}>
+          {t("chat:contextMenu.copyText")}
+        </MenuItem>
+      )}
+      {/* Only where the picture group is not already offering it. */}
+      {!image && popOutSrc && (
         <MenuItem sx={ITEM} onClick={run(() => popOutImage(popOutSrc))}>
           {t("chat:contextMenu.popOutImage")}
         </MenuItem>

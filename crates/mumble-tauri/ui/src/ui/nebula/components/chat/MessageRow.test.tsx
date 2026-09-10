@@ -150,9 +150,84 @@ describe("MessageRow", () => {
 
     draw(message({ message_id: "preview-3", body: `<a href="${url}">${url}</a>` }));
 
-    expect(screen.getByText("A French acrobat and tightrope walker.")).toBeTruthy();
+    // The title rides on the picture; a poster whose ground is a picture does
+    // not also print the page's blurb, which is where the picture is.
+    expect(screen.getByText("Jean-Baptiste Auriol")).toBeTruthy();
     const picture = document.querySelector(`img[src="${dataUrl}"]`);
     expect(picture).toBeTruthy();
+  });
+
+  it("draws the preview inside the message that carried the link, not as a block after it", () => {
+    // A card standing under a bubble is a second block in the river, and
+    // whichever message it belongs to is a guess: it has the same left edge
+    // and the same width as the message below it. Inside the bubble the pair
+    // is what it always was - one message, and what its link turned out to be.
+    const url = "https://www.youtube.com/watch?v=zc36tWQcXY";
+    const title = "Unbreakable (Arknights Soundtrack)";
+
+    /** The nearest ancestor that is a bubble, by the padding only a plate has. */
+    const plate = (node: Element | null) => {
+      for (let el = node; el; el = el.parentElement) {
+        if (getComputedStyle(el).paddingLeft === "14px") return el;
+      }
+      return null;
+    };
+
+    for (const is_own of [true, false]) {
+      useAppStore.setState({
+        linkEmbeds: new Map([["preview-4", [{ url, type: "video" as const, title, site_name: "YouTube" }]]]),
+      });
+      const { container, unmount } = draw(
+        message({
+          message_id: "preview-4",
+          is_own,
+          body: `listen to this <a href="${url}">${url}</a>`,
+        }),
+        { bubbleStyle: "bubbles" },
+      );
+
+      // A sentence, so there is a plate around it - see the test below for
+      // the message that is nothing but its link, where the poster is the
+      // bubble and there is no padding left to find it by.
+      const bubble = plate(within(container).getByText(/listen to this/));
+      expect(bubble).toBeTruthy();
+      // The same plate holds both, which is the whole of "one message".
+      expect(bubble!.contains(within(container).getByText(title))).toBe(true);
+      unmount();
+    }
+  });
+
+  it("leaves the preview a card of its own where there is no bubble to put it in", () => {
+    // Flat and compact draw no plate, so there is nothing to attach to: the
+    // card keeps its own ground rather than becoming loose text under the
+    // message.
+    const url = "https://www.youtube.com/watch?v=zc36tWQcXY";
+    const title = "Unbreakable (Arknights Soundtrack)";
+    useAppStore.setState({
+      linkEmbeds: new Map([["preview-5", [{ url, type: "video" as const, title, site_name: "YouTube" }]]]),
+    });
+
+    const { container } = draw(message({ message_id: "preview-5", body: `<a href="${url}">${url}</a>` }), {
+      bubbleStyle: "flat",
+    });
+
+    // Walked rather than counted: the card is a poster now, and how many
+    // boxes sit between its title and its ground is the preview's business.
+    // What this row cares about is that there *is* a ground between the title
+    // and the message, whatever it is made of.
+    let ground: HTMLElement | null = null;
+    for (
+      let node: HTMLElement | null = within(container).getByText(title);
+      node && node !== container;
+      node = node.parentElement
+    ) {
+      const colour = getComputedStyle(node).backgroundColor;
+      if (colour && colour !== "rgba(0, 0, 0, 0)" && colour !== "transparent") {
+        ground = node;
+        break;
+      }
+    }
+    expect(ground).not.toBeNull();
   });
 
   it("asks for nothing when previews are switched off", () => {
@@ -620,13 +695,19 @@ describe("MessageRow self-mention", () => {
 
   beforeEach(() => {
     resetSelfMentionNotifications();
-    useAppStore.setState({ ownSession: 42, currentChannel: 1, users: [user(42, "Ada"), user(7, "Lorelando")] });
+    useAppStore.setState({
+      ownSession: 42,
+      currentChannel: 1,
+      users: [user(42, "Ada"), user(7, "Lorelando")],
+    });
   });
 
   /** Times the mention ping fired while `run` mounted rows. */
   function pings(run: () => void): number {
     let count = 0;
-    const listen = () => { count += 1; };
+    const listen = () => {
+      count += 1;
+    };
     globalThis.addEventListener("fancy:self-mention", listen);
     run();
     globalThis.removeEventListener("fancy:self-mention", listen);
@@ -656,5 +737,143 @@ describe("MessageRow self-mention", () => {
     const row = container.querySelector('[data-msg-id="m1"]') as HTMLElement | null;
     expect(row!.getAttribute("data-self-mention")).toBeNull();
   });
-});
+  it("keeps the sentence when somebody wrote one around the link", () => {
+    // Only a body that is *nothing but* links is the card over again. A
+    // sentence with a link in it is what somebody said, and dropping it would
+    // drop the message to keep the preview.
+    const url = "https://www.youtube.com/watch?v=zc36tWQcXY";
+    useAppStore.setState({
+      linkEmbeds: new Map([
+        ["preview-6", [{ url, type: "video" as const, title: "Unbreakable", site_name: "YouTube" }]],
+      ]),
+    });
 
+    const { container } = draw(
+      message({ message_id: "preview-6", body: `listen to this <a href="${url}">${url}</a>` }),
+      { bubbleStyle: "bubbles" },
+    );
+
+    expect(within(container).getByText(/listen to this/)).toBeTruthy();
+    expect(within(container).getByText("youtube.com/watch")).toBeTruthy();
+  });
+  it("lets the card be the message where the message is nothing but the link", () => {
+    // The card names the source, prints the title and opens the same page, so
+    // a URL above it is the same fact twice - and the bubble around the pair
+    // is a plate around a poster. Both go: the poster *is* the bubble.
+    const url = "https://www.youtube.com/watch?v=zc36tWQcXY";
+    const title = "Unbreakable (Arknights Soundtrack)";
+    useAppStore.setState({
+      linkEmbeds: new Map([["preview-7", [{ url, type: "video" as const, title, site_name: "YouTube" }]]]),
+    });
+
+    const { container } = draw(message({ message_id: "preview-7", body: `<a href="${url}">${url}</a>` }), {
+      bubbleStyle: "bubbles",
+    });
+
+    expect(within(container).queryByText("youtube.com/watch")).toBeNull();
+    expect(within(container).getByText(title)).toBeTruthy();
+    // Nothing between the poster and the bubble's edge.
+    for (let node = document.querySelector("[data-preview-shape]")?.parentElement; node;) {
+      const pad = getComputedStyle(node).paddingLeft;
+      expect(pad === "" || pad === "0px").toBe(true);
+      node = node === container ? null : node.parentElement;
+    }
+  });
+  it("leaves the body's text nodes alone when the pointer crosses the row", () => {
+    // The bug this pins: `dangerouslySetInnerHTML={{ __html: body }}` builds a
+    // new object every render, React compares that prop by reference, and so it
+    // re-assigned `innerHTML` whenever anything re-rendered the row - hovering
+    // it, for one. The rebuilt text nodes took the reader's selection with
+    // them, which is why chat text could not be copied: moving the pointer off
+    // the words you had just highlighted wiped the highlight.
+    const { container } = draw(message({ message_id: "sel-1", body: "a line worth copying" }));
+    const row = container.querySelector("[data-msg-id]")!;
+    const before = within(container).getByText("a line worth copying").firstChild;
+
+    fireEvent.mouseEnter(row);
+    fireEvent.mouseLeave(row);
+
+    expect(within(container).getByText("a line worth copying").firstChild).toBe(before);
+  });
+
+  it("hands the right-click menu whatever the reader had highlighted", () => {
+    // "Copy" that can only mean the whole message is no use to somebody who
+    // picked out one sentence of it.
+    const onContextMenu = vi.fn();
+    const { container } = draw(message({ message_id: "sel-2", body: "one sentence, then another" }), {
+      onContextMenu,
+    });
+    const row = container.querySelector("[data-msg-id]") as HTMLElement;
+    const text = within(container).getByText("one sentence, then another").firstChild!;
+
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, 12);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    fireEvent.contextMenu(row);
+
+    expect(onContextMenu).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ editable: true, selection: "one sentence" }),
+    );
+  });
+
+  it("offers no selection where the reader has highlighted something else", () => {
+    const onContextMenu = vi.fn();
+    const { container } = draw(message({ message_id: "sel-3", body: "nothing highlighted here" }), {
+      onContextMenu,
+    });
+    const outside = document.createElement("p");
+    outside.textContent = "somewhere else entirely";
+    document.body.append(outside);
+
+    const range = document.createRange();
+    range.selectNodeContents(outside);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    fireEvent.contextMenu(container.querySelector("[data-msg-id]") as HTMLElement);
+
+    expect(onContextMenu).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ editable: true, selection: "" }),
+    );
+    outside.remove();
+  });
+
+  it("reports which picture the right-click landed on", () => {
+    // The menu offers "copy this picture", and a block of two has two answers
+    // to that - so which tile was aimed at is read off the event, here.
+    const onContextMenu = vi.fn();
+    draw(message({ body: '<img src="a.jpg" alt="ferry"><img src="b.jpg" alt="skyline">' }), {
+      onContextMenu,
+    });
+
+    fireEvent.contextMenu(screen.getByAltText("skyline"));
+
+    expect(onContextMenu).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ image: { src: "b.jpg", alt: "skyline", link: null } }),
+    );
+  });
+
+  it("reports no picture for a right-click that missed one", () => {
+    const onContextMenu = vi.fn();
+    const { container } = draw(message({ body: "just words" }), { onContextMenu });
+
+    fireEvent.contextMenu(container.querySelector("[data-msg-id]") as HTMLElement);
+
+    expect(onContextMenu).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ image: null }),
+    );
+  });
+});
