@@ -21,6 +21,12 @@ use crate::state::types::{
 /// asking for a single entry would mean asking again immediately.
 const FILE_PROBE_LIMIT: u32 = 100;
 
+/// How often the flusher looks at the local message cache.
+///
+/// The cache's own interval is what decides whether a tick writes anything;
+/// this only has to be no coarser than that.
+const CACHE_FLUSH_TICK: std::time::Duration = std::time::Duration::from_secs(5);
+
 impl HandleMessage for mumble_tcp::ServerSync {
     fn handle(&self, ctx: &HandlerContext) {
         let Some((_sessions, initial_channel)) = ctx.apply_sync_state(self) else {
@@ -513,6 +519,46 @@ impl HandlerContext {
 
         self.emit_cached_reactions(cached_reactions);
         self.spawn_key_announce_and_channel_init();
+        self.spawn_cache_flusher();
+    }
+
+    /// Keep the local message cache written down while the session runs.
+    ///
+    /// A `SignalV1` channel has no server-side history, so its local cache is
+    /// the only copy of what was said; until this existed the only writers
+    /// were the disconnect paths, and an end that took neither of them - the
+    /// process killed, the machine losing power - took the whole session's
+    /// messages with it.
+    ///
+    /// A timer rather than a hook on the insert: a channel where one message
+    /// is sent and nothing follows is exactly the case that needs writing,
+    /// and it is the one an insert-driven flush never reaches.
+    fn spawn_cache_flusher(&self) {
+        let shared = Arc::clone(&self.shared);
+        // The connection this flusher belongs to.  A reconnect bumps the
+        // epoch and syncs again, which spawns a new one; without this the old
+        // task would keep ticking against the new session's cache forever.
+        let epoch = shared.lock().map(|s| s.conn.epoch).unwrap_or_default();
+        let _flush_task = tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(CACHE_FLUSH_TICK);
+            loop {
+                let _tick = ticker.tick().await;
+                let Ok(mut state) = shared.lock() else {
+                    continue;
+                };
+                if state.conn.epoch != epoch {
+                    return;
+                }
+                let Some(ref mut pchat) = state.pchat_ctx.pchat else {
+                    // The session ended and took pchat with it; those paths
+                    // save on the way out, so there is nothing left to do.
+                    return;
+                };
+                if let Some(ref mut cache) = pchat.local_cache {
+                    let _ = cache.save_if_due();
+                }
+            }
+        });
     }
 
     /// Emit `pchat-reaction-fetch-response` events for each channel so the
@@ -661,6 +707,15 @@ fn resolve_initial_channel(
 /// history from the server.
 async fn init_encrypted_channel(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: PchatProtocol) {
     pchat::emit_history_loading(shared, ch, true);
+
+    // A mode with no client-side key skips the ladder entirely. Without this
+    // guard a server-managed channel would wait two seconds for a peer's key
+    // that nobody will ever send, then mint one nothing reads, and only then
+    // fetch -- two seconds of an empty chat window, every time.
+    if !mode.is_encrypted() {
+        fetch_channel_history(shared, ch, mode).await;
+        return;
+    }
 
     if !ensure_protocol_key(shared, ch, mode).await {
         return;
@@ -817,10 +872,15 @@ async fn fetch_channel_history(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: 
     // the fetch handler does not distinguish "was already a member" from "just
     // joined". Skipping the request is the guarantee; nothing downstream
     // re-checks it once fetched.
-    if mode == PchatProtocol::SignalV1 {
+    //
+    // Asked as "does this mode have a server history" rather than "is this
+    // SignalV1", so a mode added later has to answer the question rather than
+    // inherit a fetch nobody considered.
+    if !mode.has_server_history() {
         debug!(
             channel_id = ch,
-            "pchat: skipping fetch for SignalV1 (no history by design)"
+            ?mode,
+            "pchat: skipping fetch for a mode the server keeps no history for"
         );
         pchat::emit_history_loading(shared, ch, false);
         return;

@@ -49,6 +49,24 @@ struct EmbedField {
     inline: bool,
 }
 
+/// What a shop listing costs, rebuilt from the `price.*` field rows.
+///
+/// The canon carries a typed price and the epoch-0 `Embed` has no field for
+/// one, so `canon.rs` sends it as four named rows and this reads them back.
+/// The names are the contract between the two, and they are spelled out at
+/// both ends; nothing else may be named `price.*`.
+#[derive(Serialize, Clone, Default)]
+struct EmbedPrice {
+    /// The amount, decimal point and all: "89.99".
+    amount: String,
+    /// ISO 4217 where the page named one, empty where it did not.
+    currency: String,
+    /// What it cost before, for a listing that advertises a reduction.
+    was: String,
+    /// "instock", "oos", "preorder" - as the page wrote it.
+    availability: String,
+}
+
 #[derive(Serialize, Clone)]
 struct LinkEmbed {
     url: Option<String>,
@@ -75,6 +93,7 @@ struct LinkEmbed {
     nsfw: Option<bool>,
     reading_time: Option<String>,
     fields: Vec<EmbedField>,
+    price: Option<EmbedPrice>,
     fetched_at: Option<String>,
 }
 
@@ -147,17 +166,57 @@ fn convert_embed(embed: &mumble_tcp::fancy_link_preview_response::Embed) -> Link
         media_duration: embed.media_duration.clone(),
         nsfw: embed.nsfw,
         reading_time: embed.reading_time.clone(),
+        // The price rows are the bridge, not something to print: they come
+        // back out as a typed price and are kept out of the fact list, or
+        // every shopping card would carry "price.currency: EUR" under it.
         fields: embed
             .fields
             .iter()
+            .filter(|f| !is_price_row(f))
             .map(|f| EmbedField {
                 name: f.name.clone().unwrap_or_default(),
                 value: f.value.clone().unwrap_or_default(),
                 inline: f.r#inline.unwrap_or(false),
             })
             .collect(),
+        price: convert_price(&embed.fields),
         fetched_at: embed.fetched_at.clone(),
     }
+}
+
+/// Whether a field row is one of the four the price travels in.
+fn is_price_row(field: &mumble_tcp::fancy_link_preview_response::embed::Field) -> bool {
+    field
+        .name
+        .as_deref()
+        .is_some_and(|name| name.starts_with("price."))
+}
+
+/// The typed price the `price.*` rows describe, or `None` where there are none.
+///
+/// The amount is what makes a price: a listing that names a currency and no
+/// number has not stated one, and a card drawing a lone "EUR" is worse than a
+/// card with no price on it.
+fn convert_price(
+    fields: &[mumble_tcp::fancy_link_preview_response::embed::Field],
+) -> Option<EmbedPrice> {
+    let row = |name: &str| {
+        fields
+            .iter()
+            .find(|field| field.name.as_deref() == Some(name))
+            .and_then(|field| field.value.clone())
+            .unwrap_or_default()
+    };
+    let amount = row("price.amount");
+    if amount.is_empty() {
+        return None;
+    }
+    Some(EmbedPrice {
+        amount,
+        currency: row("price.currency"),
+        was: row("price.was"),
+        availability: row("price.availability"),
+    })
 }
 
 /// Minimal RFC 4648 base64 encoder.  Avoids pulling in a new dependency for a

@@ -15,8 +15,10 @@ mod custom_reactions_config;
 mod draw_stroke;
 mod files;
 mod forum;
+mod gifs;
 mod link_preview;
 mod livery;
+mod records;
 pub(crate) use livery::{LiverySnapshot, data_uri, to_snapshot};
 mod onboarding;
 mod operator_ticket;
@@ -174,6 +176,9 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::PchatPinDeliver(m) => m.handle(ctx),
         ControlMessage::PchatPinFetchResponse(m) => m.handle(ctx),
         ControlMessage::FancyFileGrant(m) => m.handle(ctx),
+        ControlMessage::FancyEmotes(m) => m.handle(ctx),
+        ControlMessage::FancyAccountRecord(m) => m.handle(ctx),
+        ControlMessage::FancyAccountRecordKeys(m) => m.handle(ctx),
         ControlMessage::FancyFileShare(m) => m.handle(ctx),
         ControlMessage::FancyFileListing(m) => m.handle(ctx),
         ControlMessage::FancyFileRefused(m) => m.handle(ctx),
@@ -183,6 +188,8 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::FancyReadReceiptDeliver(m) => m.handle(ctx),
         ControlMessage::FancyTypingIndicator(m) => m.handle(ctx),
         ControlMessage::FancyLinkPreviewResponse(m) => m.handle(ctx),
+        ControlMessage::FancyGifPage(m) => m.handle(ctx),
+        ControlMessage::FancyGifRefused(m) => m.handle(ctx),
         ControlMessage::FancyWatchSync(m) => m.handle(ctx),
         ControlMessage::FancyDrawStroke(m) => m.handle(ctx),
         ControlMessage::FancyOnboardingConfig(m) => m.handle(ctx),

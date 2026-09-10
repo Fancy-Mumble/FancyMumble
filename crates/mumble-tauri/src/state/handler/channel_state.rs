@@ -270,7 +270,25 @@ async fn pchat_key_gen_and_fetch(shared: Arc<Mutex<SharedState>>, id: u32) {
     // the matching guards in `user_state.rs::pchat_init_task` and
     // `key_exchange.rs::retry_decrypt_pending_messages`. A mode change never
     // needs to backfill it either way.
+    //
+    // The *key* half still has to happen here, and used to not: our own sender
+    // key for a channel comes into existence inside `create_distribution`, and
+    // every other call site of it hangs off a channel move (`user_state`'s own
+    // join and remote-move paths, `server_sync`'s landing channel). A room that
+    // turned encrypted while we were already standing in it is never moved
+    // into, so the sender key was never created - and every send then failed
+    // inside the bridge with "missing sender key state for distribution ID
+    // ...", before `send_message` had sent anything at all. Reconnecting fixed
+    // it, because that is a join.
     if mode == PchatProtocol::SignalV1 {
+        if crate::state::pchat::ensure_signal_bridge_unlocked(&shared) {
+            crate::state::pchat::send_signal_distribution(&shared, id);
+        } else {
+            crate::state::pchat::emit_signal_bridge_error(
+                &shared,
+                "Signal bridge library could not be loaded. End-to-end encryption is unavailable.",
+            );
+        }
         return;
     }
 

@@ -69,13 +69,10 @@ fn cache_own_signal_message(state: &mut SharedState, msg: &ChatMessage, channel_
         .as_ref()
         .map(|ps| ps.own_cert_hash.clone())
         .unwrap_or_default();
-    if let Some(cache) = state
-        .pchat_ctx
-        .pchat
-        .as_mut()
-        .and_then(|ps| ps.local_cache.as_mut())
-    {
-        cache.insert(super::local_cache::CachedMessage {
+    if let Some(pchat) = state.pchat_ctx.pchat.as_mut() {
+        // Through the same helper the inbound path uses, so a message the
+        // user sent gets the same throttled write-out as one they received.
+        pchat.cache_signal_message(super::local_cache::CachedMessage {
             message_id: msg.message_id.clone().unwrap_or_default(),
             channel_id,
             timestamp: msg.timestamp.unwrap_or(0),
@@ -88,10 +85,26 @@ fn cache_own_signal_message(state: &mut SharedState, msg: &ChatMessage, channel_
 }
 
 impl AppState {
+    /// Ask the server for a page of history in either direction.
+    ///
+    /// `fetch_older_messages` keeps its name and its meaning for the callers
+    /// that only ever walk backwards; [`Self::fetch_message_page`] is the one
+    /// that takes a direction.
     pub async fn fetch_older_messages(
         &self,
         channel_id: u32,
         before_id: Option<String>,
+        limit: u32,
+    ) -> Result<(), String> {
+        let anchor = before_id.map_or(pchat::Anchor::Newest, pchat::Anchor::Before);
+        self.fetch_message_page(channel_id, anchor, limit).await
+    }
+
+    /// Ask the server for a page of history anchored where the caller says.
+    pub async fn fetch_message_page(
+        &self,
+        channel_id: u32,
+        anchor: pchat::Anchor,
         limit: u32,
     ) -> Result<(), String> {
         let handle = {
@@ -100,7 +113,7 @@ impl AppState {
             state.conn.client_handle.clone()
         };
         let handle = handle.ok_or("Not connected")?;
-        pchat::send_fetch(&handle, channel_id, before_id, limit).await
+        pchat::send_fetch(&handle, channel_id, anchor, limit).await
     }
 
     pub async fn send_message(&self, channel_id: u32, body: String) -> Result<(), String> {
@@ -202,12 +215,17 @@ impl AppState {
         )>,
         String,
     > {
-        let Some(protocol) = pchat_protocol.filter(PchatProtocol::is_encrypted) else {
+        // `uses_pchat`, not `is_encrypted`: a server-managed channel's messages
+        // ride the same service and land in the same archive, they are simply
+        // not sealed by this client on the way. Filtering on encryption here
+        // would leave that mode with no persisted history at all.
+        let Some(protocol) = pchat_protocol.filter(PchatProtocol::uses_pchat) else {
             return Ok(None);
         };
         let Some(msg_id) = message_id else {
             return Ok(None);
         };
+        self.ensure_signal_sender_key(protocol, channel_id);
         let __session = self.inner.snapshot();
         let session = __session
             .lock()
@@ -223,6 +241,44 @@ impl AppState {
             sender_session: session,
             timestamp: now_ms,
         })
+    }
+
+    /// Mint and hand out our `SignalV1` sender key for `channel_id` if sending
+    /// is the first thing that has needed it.
+    ///
+    /// Every other call site of `create_distribution` hangs off a channel
+    /// *move*, so a room we never moved into - one that turned encrypted under
+    /// us, or one being read without joining - reached the send path with no
+    /// sender key, and `group_encrypt` failed with "missing sender key state
+    /// for distribution ID ...". `send_message` returns that as an error before
+    /// it has sent anything, and a plain text body has no placeholder to fail
+    /// visibly, so the message simply vanished.
+    ///
+    /// Cheap and idempotent: after the first mint the flag is set and this is a
+    /// map lookup.
+    fn ensure_signal_sender_key(&self, protocol: PchatProtocol, channel_id: u32) {
+        if protocol != PchatProtocol::SignalV1 {
+            return;
+        }
+        let shared = self.inner.snapshot();
+        let minted = shared
+            .lock()
+            .ok()
+            .and_then(|s| {
+                s.pchat_ctx
+                    .pchat
+                    .as_ref()
+                    .map(|p| p.signal_distributed.contains(&channel_id))
+            })
+            .unwrap_or(false);
+        if minted {
+            return;
+        }
+        tracing::info!(
+            channel_id,
+            "pchat: no signal sender key for this channel yet, minting one for the send"
+        );
+        pchat::send_signal_distribution(&shared, channel_id);
     }
 
     fn store_own_message(&self, msg_data: OwnMessageData) {
