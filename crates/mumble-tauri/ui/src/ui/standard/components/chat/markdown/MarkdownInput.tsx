@@ -870,19 +870,75 @@ export default function MarkdownInput({
     }
   }, []);
 
-  // Auto-resize textarea and wrapper to content (up to max-height).
+  // Auto-resize the wrapper to the content, up to the ceiling the host sets.
+  //
+  // Only the wrapper is sized. The textarea keeps its stylesheet height of
+  // 100% so that it is always exactly as tall as the box it is clipped to,
+  // which is what makes it scroll its own overflow once the content passes the
+  // ceiling - and a textarea that scrolls is what drags the overlay along with
+  // it through `syncScroll`. Giving the textarea the content's height instead
+  // left it taller than a wrapper that clips: it never scrolled, so the
+  // overlay never moved off its first lines while the caret walked down into
+  // the clipped part. What that draws is a field showing the top of the text
+  // in the overlay's ink and the rest of it in the textarea's - transparent,
+  // spell-check underlines and all - with a selection you cannot see because
+  // the marks the overlay draws for it are out of view.
+  //
+  // The ceiling is read off the wrapper rather than fixed here: a host that
+  // restyles the wrapper (Nebula caps it shorter than Standard does) states it
+  // in CSS, and a number hardcoded here would only contradict it.
+  //
+  // Re-measured on width as well as on content, and that is not a nicety: how
+  // tall a run of words is depends on how wide the box is, and the first pass
+  // happens before the layout it is measuring has settled. On a window the
+  // field is wide at that moment and the answer is right by luck. At 390px it
+  // is not - the field starts at zero width, the placeholder in the overlay
+  // wraps to one word per line, and the pass clamps to the ceiling and stays
+  // there, because `value` never changed and nothing else asked again. What
+  // that draws is a composer four times its height with two words in it.
   useEffect(() => {
     const el = textareaRef.current;
     const wrapper = el?.parentElement;
+    const overlay = overlayRef.current;
     if (!el || !wrapper) return;
-    // Reset both heights before measuring so scrollHeight reflects actual content,
-    // not the previous explicit height (wrapper falls back to CSS min-height).
-    wrapper.style.height = "auto";
-    el.style.height = "auto";
-    const maxHeight = 200;
-    const clamped = Math.min(el.scrollHeight, maxHeight);
-    el.style.height = `${clamped}px`;
-    wrapper.style.height = `${clamped}px`;
+    const measure = () => {
+      const ceiling = parseFloat(getComputedStyle(wrapper).maxHeight);
+      const maxHeight = Number.isFinite(ceiling) ? ceiling : 200;
+      // Free the height before measuring so scrollHeight reflects the content,
+      // not the height left over from the last pass.
+      wrapper.style.height = "auto";
+      el.style.height = "auto";
+      // And measure with no scrollbar out. Collapsing the wrapper to measure
+      // makes the content overflow it by definition, so an `auto` gutter is
+      // always showing during the pass - and a gutter is width taken off the
+      // text. Measured that way a draft that fits comes back one line too tall:
+      // the field would size for a wrap that only happens while the bar it is
+      // being sized to get rid of is on screen.
+      el.style.overflowY = "hidden";
+      if (overlay) overlay.style.overflowY = "hidden";
+      // Both layers are measured and the taller one wins. They hold the same
+      // words at the same size and still disagree by a line often enough - the
+      // overlay breaks the text into spans and hangs the caret off the end of
+      // it, and a run that fits the textarea to the pixel takes one line more
+      // once it is cut up. Sizing to the textarea alone leaves the overlay's
+      // last line under the bottom edge with nothing scrolling to reach it,
+      // because the textarea, being exactly as tall as its own content, has
+      // nothing to scroll.
+      const content = Math.max(el.scrollHeight, overlay?.scrollHeight ?? 0);
+      const clamped = Math.min(content, maxHeight);
+      el.style.height = "";
+      el.style.overflowY = "";
+      if (overlay) overlay.style.overflowY = "";
+      wrapper.style.height = `${clamped}px`;
+    };
+    measure();
+    // `ResizeObserver` rather than a window listener: the field narrows when a
+    // panel opens beside it as well as when the window changes, and only the
+    // box itself knows about the first.
+    if (typeof ResizeObserver !== "function") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(wrapper);
+    return () => observer.disconnect();
   }, [value]);
 
   const handleKeyDown = useCallback(

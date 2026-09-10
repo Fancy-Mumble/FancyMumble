@@ -29,6 +29,7 @@ import { useStreamThumbnail } from "../../chat/stream/useStreamPreview";
 import SwipeableCard from "../../elements/SwipeableCard";
 import { isMobile } from "@core/utils/platform";
 import { useUserDrag, useChannelDropTarget } from "../../../utils/userMoveDnd";
+import { MemberSlots } from "../../../utils/userMoveRoom";
 import { PERM_MOVE, PERM_ENTER } from "@core/utils/permissions";
 import { useAppStore } from "@core/store";
 import { parseChannelDescription } from "@core/channelProfile";
@@ -434,22 +435,23 @@ function ChannelIconListImpl({
             </div>
 
             {!isCollapsed && hasUsers && (
-              <div className={styles.memberList} data-no-channel-drag="true">
-                {chUsers.map((u) => (
-                  <div
-                    key={u.session}
-                    className={u.session === highlightUserSession ? styles.highlighted : undefined}
-                  >
-                    <MemberRow
-                      user={u}
-                      isTalking={talkingSessions.has(u.session)}
-                      isBroadcasting={broadcastingSessions.has(u.session)}
-                      onContextMenu={onUserContextMenu}
-                      onClick={onUserClick}
-                    />
-                  </div>
-                ))}
-              </div>
+              <MemberSlots
+                channelId={channel.id}
+                members={chUsers}
+                order={users}
+                className={styles.memberList}
+                rowClassName={(u) => (u.session === highlightUserSession ? styles.highlighted : undefined)}
+              >
+                {(u) => (
+                  <MemberRow
+                    user={u}
+                    isTalking={talkingSessions.has(u.session)}
+                    isBroadcasting={broadcastingSessions.has(u.session)}
+                    onContextMenu={onUserContextMenu}
+                    onClick={onUserClick}
+                  />
+                )}
+              </MemberSlots>
             )}
           </div>
         </ChannelDropWrapper>

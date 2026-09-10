@@ -4,7 +4,8 @@
  * Layout (left -> right):
  *   1. Friends sidebar: scrollable list of saved friends.  Each entry shows
  *      an online indicator computed by asking the backend whether the
- *      friend (by TLS cert hash) is currently connected on any server.
+ *      friend (by TLS cert hash, narrowed to the account they were saved
+ *      as) is currently connected on any server.
  *   2. Self info row (below the friends list): when the local user is in
  *      a voice call on the active server, render the same `UserListItem`
  *      used by the channel sidebar, showing avatar, name, registered
@@ -54,16 +55,13 @@ import {
   updateFriendAvatar,
   updateFriendIdentity,
 } from "@core/friendsStorage";
+import { isFriendsOwnServer, resolveFriendMatch, type FriendMatch } from "@core/friendsPresence";
 import { bytesToAvatarUrl, revokeDisplayUrl } from "@core/utils/imageBlobs";
 import sidebarStyles from "../components/sidebar/channel/ChannelSidebar.module.css";
 import styles from "./FriendsPage.module.css";
 import { SidebarSearch } from "../components/elements/SearchFields";
 
-interface FriendsMatch {
-  serverId: string;
-  userSession: number;
-  userName: string;
-}
+type FriendsMatch = FriendMatch;
 
 const ONLINE_REFRESH_MS = 15000;
 
@@ -124,14 +122,11 @@ export default function FriendsPage() {
     const refresh = async () => {
       const next: Record<string, FriendsMatch> = {};
       for (const f of friends) {
-        if (!f.userHash) continue;
         try {
-          const match = await invoke<FriendsMatch | null>("find_user_by_hash", {
-            userHash: f.userHash,
-          });
+          const match = await resolveFriendMatch(f, sessions);
           if (match) next[f.id] = match;
         } catch (e) {
-          console.warn("find_user_by_hash failed", e);
+          console.warn("resolving a friend failed", e);
         }
       }
       if (!cancelled) setOnlineMap(next);
@@ -159,16 +154,20 @@ export default function FriendsPage() {
         const liveUser = users.find((u) => u.session === match.userSession);
         // Backfill the friend's registered uid + connection target while we can
         // see them live, so we can open their chat offline / reconnect later.
+        // Only from their own server: a registered id is that server's, and one
+        // certificate can be worn by several accounts.
         const sess = sessions.find((s) => s.id === match.serverId);
-        const identity: FriendIdentity = {};
-        if (liveUser?.user_id != null && liveUser.user_id >= 0) identity.userId = liveUser.user_id;
-        if (sess) {
-          identity.serverHost = sess.host;
-          identity.serverPort = sess.port;
-          identity.serverUsername = sess.username;
-          identity.serverCertLabel = sess.certLabel;
+        if (isFriendsOwnServer(f, sess)) {
+          const identity: FriendIdentity = {};
+          if (liveUser?.user_id != null && liveUser.user_id >= 0) identity.userId = liveUser.user_id;
+          if (sess) {
+            identity.serverHost = sess.host;
+            identity.serverPort = sess.port;
+            identity.serverUsername = sess.username;
+            identity.serverCertLabel = sess.certLabel;
+          }
+          void updateFriendIdentity(f.id, identity);
         }
-        void updateFriendIdentity(f.id, identity);
         if (!liveUser?.texture_size) continue;
         if (f.avatarSize === liveUser.texture_size && f.avatar != null) continue;
         try {

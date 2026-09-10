@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import { useState, useEffect, useCallback, useRef } from "react";
 import styles from "./GifPicker.module.css";
 import { getActiveApiKey } from "@core/features/chat/gif/klipyConfig";
+import { searchServerGifs, shouldFallBack, type ServerGif } from "@core/features/chat/gif/serverGifs";
 import { PickerSearch } from "../../elements/SearchFields";
 
 // --- Klipy API Types ----------------------------------------------
@@ -161,23 +162,49 @@ interface PagedResult {
   hasNext: boolean;
 }
 
-async function searchGifs(query: string, tab: TabId, page = 1): Promise<PagedResult> {
+/** The server's shape, in the one this picker draws. */
+function fromServer(results: ServerGif[]): KlipyGif[] {
+  return results.map((gif, index) => ({
+    id: index,
+    title: gif.title || "GIF",
+    url: gif.url,
+    preview: gif.preview,
+    width: gif.preview_width,
+    height: gif.preview_height,
+  }));
+}
+
+/**
+ * One page, from the server when it will and from a personal key when it will
+ * not.
+ *
+ * **Stickers stay on the personal key.** The canon carries a GIF search and
+ * nothing else, so routing a sticker tab through it would hand back GIFs for a
+ * tab that says stickers - which is worse than the tab needing a key.
+ */
+async function pageOfMedia(query: string, tab: TabId, page: number): Promise<PagedResult> {
+  if (tab !== "stickers") {
+    try {
+      const answer = await searchServerGifs(query, page);
+      return { items: fromServer(answer.items), hasNext: answer.hasNext };
+    } catch (error) {
+      if (!shouldFallBack(error)) throw error;
+    }
+  }
   const contentType = tab === "stickers" ? "/stickers" : "/gifs";
-  const data = await klipyFetch<KlipyPaginatedResponse>(`${contentType}/search`, {
-    q: query,
-    per_page: "30",
-    page: String(page),
-  });
+  const data = await klipyFetch<KlipyPaginatedResponse>(
+    `${contentType}/${query ? "search" : "trending"}`,
+    query ? { q: query, per_page: "30", page: String(page) } : { per_page: "30", page: String(page) },
+  );
   return { items: mapMediaItems(data.data.data), hasNext: data.data.has_next };
 }
 
+async function searchGifs(query: string, tab: TabId, page = 1): Promise<PagedResult> {
+  return await pageOfMedia(query, tab, page);
+}
+
 async function trendingGifs(tab: TabId, page = 1): Promise<PagedResult> {
-  const contentType = tab === "stickers" ? "/stickers" : "/gifs";
-  const data = await klipyFetch<KlipyPaginatedResponse>(`${contentType}/trending`, {
-    per_page: "30",
-    page: String(page),
-  });
-  return { items: mapMediaItems(data.data.data), hasNext: data.data.has_next };
+  return await pageOfMedia("", tab, page);
 }
 
 async function fetchCategories(tab: TabId): Promise<KlipyCategory[]> {

@@ -12,7 +12,12 @@ const ALLOWED_MIME = ["image/png", "image/jpeg", "image/gif", "image/webp", "ima
 export function CustomEmotesTab() {
   const emotes = useAppStore((s) => s.customServerEmotes);
   const { t } = useTranslation("settings");
-  const customEmotesSupported = useAppStore((s) => s.fileServerCapabilities?.features.custom_emotes ?? false);
+  // The plugin says so through its capability probe; a canon server keeps
+  // emotes as a matter of course and announces nothing, so its kind is the
+  // answer.
+  const customEmotesSupported = useAppStore(
+    (s) => s.fileServerKind === "canon" || (s.fileServerCapabilities?.features.custom_emotes ?? false),
+  );
   const rootChannelPerms = useAppStore((s) => s.channels.find((c) => c.id === 0)?.permissions ?? 0);
   const canManage = customEmotesSupported && (rootChannelPerms & PERM_MANAGE_EMOTES) !== 0;
   const addCustomEmote = useAppStore((s) => s.addCustomEmote);

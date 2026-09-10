@@ -13,12 +13,9 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useAppStore } from "@core/store";
 import { previewKindForFilename, type FileAttachmentInfo } from "@core/features/chat/fileAttachments";
-import {
-  isCanonAttachment,
-  saveCanonAttachment,
-  useCanonPreviewSrc,
-} from "@core/features/chat/starlingFiles";
+import { isCanonAttachment, saveCanonAttachment, useCanonPreview } from "@core/features/chat/starlingFiles";
 import { formatBytes } from "@core/utils/format";
+import { imageSizeFromSource, rememberImageSize } from "@core/utils/imageSize";
 import { MediaLightbox } from "../media/MediaPreview";
 import MediaPlayer from "@shared/mediaplayer/MediaPlayer";
 import { FilePasswordDialog } from "./FilePasswordDialog";
@@ -59,11 +56,14 @@ interface FileAttachmentCardProps {
    */
   readonly bare?: boolean;
   /**
-   * Fill the box this card was handed, cropping to do it.
+   * Fill the box this card was handed, whatever shape the picture is.
    *
    * What `bare` means inside a gallery: several photographs sent together are
    * one block of tiles, and a tile that kept its own proportions would leave
-   * the block ragged. Implies `bare`, and like it only applies to a picture.
+   * the block ragged. The picture is drawn whole and centred on a blurred copy
+   * of itself, the way a long single picture already is, so the cell is full
+   * without the subject being cropped out of it. Implies `bare`, and like it
+   * only applies to a picture.
    */
   readonly tile?: boolean;
 }
@@ -71,6 +71,20 @@ interface FileAttachmentCardProps {
 /** Beyond this, an expiry is a date rather than a countdown: "expires 9/13"
  *  is what a viewer can act on next week, "39h left" is not. */
 const COUNTDOWN_HORIZON_SECONDS = 48 * 3600;
+
+/**
+ * The shape a bare picture is given once it is longer than this.
+ *
+ * A bare picture is capped by height, which for anything long and thin takes
+ * the width with it: a 1:8 screenshot of a chat log came out forty pixels
+ * across - a thread of pixels, unreadable, and mostly hidden under the chips
+ * that ride its corner. Past this shape the picture stops being shrunk and is
+ * given a frame of exactly this shape instead: the whole picture, uncropped,
+ * centred on a blurred copy of itself that fills what it does not. Every long
+ * picture in the thread is then the same size as every other, which is the
+ * point - a column of them no longer reads as a row of splinters.
+ */
+const FRAME_RATIO = 3 / 4;
 
 /** `23h`, `44m`, `2d` - the largest unit that still says something.
  *
@@ -190,13 +204,13 @@ export default function FileAttachmentCard({
   const previewable = kind === "image" || kind === "audio" || kind === "video";
   // A file whose URL only the server can mint, one look at a time.
   const canon = isCanonAttachment(info);
-  const canonSrc = useCanonPreviewSrc(info);
+  const { src: canonSrc, pending: canonPending } = useCanonPreview(info);
 
   // Post-download: local asset URL (works for any access mode).
   // Pre-download: public files only - URL is a signed but open link. A canon
-  // attachment has no open link at all: a picture is bytes this client
-  // fetched, and sound or video is an address on the loopback origin that the
-  // player pulls a range at a time.
+  // attachment has no open link at all: what is drawn is an address on the
+  // loopback origin, which a player pulls a range at a time and an `<img>`
+  // loads lazily into the webview's cache.
   //
   // Saving does not move a canon player onto the saved copy: a webview's media
   // stack cannot load `asset:` at all (see `state/media_server.rs`), so the
@@ -212,6 +226,26 @@ export default function FileAttachmentCard({
           ? info.url
           : null;
 
+  /**
+   * The address a browser could open this file at, or null.
+   *
+   * Only the two reaches that are actually a link: public, which opens, and
+   * password, which opens the prompt. A session-scoped file has a URL too, but
+   * it is one only this client's session can follow, and an expired one is a
+   * page that says so - neither is worth offering as "open in browser".
+   *
+   * Being a canon share is not a reason to withhold it: a public canon share
+   * carries both a key and a URL (see `isCanonAttachment`), and the key only
+   * says how *this* client fetches it - which is why what is drawn is a
+   * loopback address off the session rather than the public one. The public
+   * address is still there, and it is the one thing worth handing to somebody
+   * else.
+   */
+  const openableLink =
+    !expired && (info.mode === "public" || info.mode === "password") && /^https?:/i.test(info.url ?? "")
+      ? info.url
+      : null;
+
   const handleOpenInBrowser = useCallback(() => {
     openUrl(info.url).catch(() => {
       // Fallback for non-Tauri environments (e.g. Vite dev server) or when
@@ -225,10 +259,33 @@ export default function FileAttachmentCard({
   }, [previewSrc]);
 
   /** The picture's own width/height, which is what caps its height when bare. */
-  const [ratio, setRatio] = useState<number | null>(null);
+  const [measured, setMeasured] = useState<number | null>(null);
+  /**
+   * The same number, known before the picture has decoded.
+   *
+   * A picture is remembered by its address the first time it is measured
+   * (`rememberImageSize`), and a canon picture's address holds for the run,
+   * so the second card to draw it - the row remounted after a scroll back -
+   * reserves its box instead of laying itself out at nothing and correcting
+   * itself a frame later. A picture nobody has measured yet still arrives the
+   * slow way, through `measure`.
+   */
+  const knownSize = previewSrc ? imageSizeFromSource(previewSrc) : null;
+  // What the picture measured always wins: a remembered size is a head start,
+  // not a fact about the picture now at that address.
+  const ratio = measured ?? (knownSize ? knownSize.width / knownSize.height : null);
+  /** Longer than its own shape is worth drawing: framed rather than shrunk. */
+  const framed = !!bare && !tile && ratio != null && ratio < FRAME_RATIO;
   const measure = useCallback((image: HTMLImageElement | null) => {
     if (!image?.naturalHeight) return;
-    setRatio(image.naturalWidth / image.naturalHeight);
+    const next = image.naturalWidth / image.naturalHeight;
+    // Worth keeping: a remote picture has no other way of being known, and
+    // the next card to draw it reserves its box instead of growing into it.
+    rememberImageSize(image.currentSrc || image.src, {
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+    });
+    setMeasured((current) => (current === next ? current : next));
   }, []);
 
   const closeLightbox = useCallback(() => setLightboxOpen(false), []);
@@ -371,23 +428,67 @@ export default function FileAttachmentCard({
       return (
         <button
           type="button"
-          className={styles.previewImageBtn}
+          className={framed ? `${styles.previewImageBtn} ${styles.frame}` : styles.previewImageBtn}
           onClick={handleImageClick}
           aria-label={t("fileAttachment.viewInLightbox", { filename: info.filename })}
+          style={framed ? ({ "--frame-ratio": FRAME_RATIO } as CSSProperties) : undefined}
         >
+          {/* The picture again, blurred, filling what the picture itself does
+              not reach. Hidden from assistive technology: it is the same
+              picture, and the one below already carries the name. A gallery
+              tile is the same idea at cell size - the block's cells decide the
+              shape, and the picture sits whole in the middle of one. */}
+          {(framed || tile) && (
+            <img
+              src={previewSrc}
+              alt=""
+              aria-hidden="true"
+              className={framed ? styles.frameBackdrop : styles.tileBackdrop}
+              loading="lazy"
+            />
+          )}
           <img
             src={previewSrc}
             alt={info.filename}
             // Bare drops the filename row, so the name lives on the picture.
             title={bare ? info.filename : undefined}
-            className={tile ? styles.tileImage : bare ? styles.bareImage : styles.previewImage}
+            // The handle a right-click finds a picture by: a sent photograph
+            // is as much a picture as a pasted one, and the same menu should
+            // come up on either.
+            data-picture=""
+            // ...and the address that picture also lives at, where it has one
+            // anybody can follow. A public link opens straight; a password
+            // link opens the file server's own prompt, which is the point of
+            // having sent it that way. What is drawn here is often neither -
+            // a downloaded copy on disk, or bytes this client fetched - so
+            // the link is carried separately rather than read off the `src`.
+            data-picture-link={openableLink ?? undefined}
+            className={
+              tile
+                ? styles.tileImage
+                : framed
+                  ? styles.framedImage
+                  : bare
+                    ? styles.bareImage
+                    : styles.previewImage
+            }
             // A cached picture can be complete before React ever sees a `load`,
             // so the ref measures it too rather than waiting for an event that
             // has already been and gone.
-            ref={bare ? measure : undefined}
-            style={bare && ratio ? ({ "--bare-ratio": ratio } as CSSProperties) : undefined}
+            ref={measure}
+            // The ratio is the box: as a width cap when bare (see
+            // `--bare-ratio` in the stylesheet), and as the shape the card's
+            // own preview holds open before the picture fills it. Never on a
+            // tile: there the block has already decided the box, and handing
+            // the picture's own shape to a cell that is not that shape is the
+            // one thing that makes a block ragged.
+            style={
+              ratio && !tile
+                ? ({ [bare ? "--bare-ratio" : "--preview-ratio"]: ratio } as CSSProperties)
+                : undefined
+            }
             loading="lazy"
-            onLoad={bare ? (event) => measure(event.currentTarget) : undefined}
+            onLoad={(event) => measure(event.currentTarget)}
             onError={handlePreviewError}
           />
         </button>
@@ -492,6 +593,7 @@ export default function FileAttachmentCard({
           <MediaLightbox
             item={{ kind: "image", src: previewSrc, alt: info.filename, spoiler: false }}
             onClose={closeLightbox}
+            link={openableLink}
           />,
           document.body,
         )}
@@ -547,9 +649,7 @@ export default function FileAttachmentCard({
               <button
                 type="button"
                 className={tile ? `${styles.clipPoster} ${styles.clipPosterTile}` : styles.clipPoster}
-                style={
-                  clipRatio && !tile ? ({ "--clip-ratio": clipRatio } as CSSProperties) : undefined
-                }
+                style={clipRatio && !tile ? ({ "--clip-ratio": clipRatio } as CSSProperties) : undefined}
                 onClick={() => setClipOpen(true)}
                 aria-label={t("fileAttachment.playClip", { filename: info.filename })}
               >
@@ -597,6 +697,26 @@ export default function FileAttachmentCard({
         </div>
         {error && <div className={styles.bareError}>{error}</div>}
         {trailer}
+      </div>
+    );
+  }
+
+  // A picture on its way, in a cell that already has its shape.
+  //
+  // The block's cells are sized by the grid, not by what lands in them, so
+  // there is a box here well before there is a photograph to put in it. What
+  // used to fill it was the ordinary card - an icon, a filename, a size and a
+  // Save button - crumpled into a square and replaced by a photograph a moment
+  // later, with the block's own chips sitting on top of it. A picture-shaped
+  // wait is the honest thing to draw, and it is the shape the picture arrives
+  // at.
+  if (tile && kind === "image" && canonPending && !previewSrc && !expired) {
+    return (
+      <div className={`${styles.bare} ${styles.tile}`}>
+        <div className={styles.previewWrap}>
+          <div className={styles.tileSkeleton} role="img" aria-label={info.filename} />
+          <div className={styles.previewOverlay}>{visibilityBadge?.(true)}</div>
+        </div>
       </div>
     );
   }

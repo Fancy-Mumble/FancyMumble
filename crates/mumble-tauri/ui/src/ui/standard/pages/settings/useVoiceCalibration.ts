@@ -52,6 +52,7 @@ function calibrationSignature(s: AudioSettings): string {
     autoGain: s.auto_gain,
     noiseSuppression: s.noise_suppression,
     denoiser: s.denoiser_algorithm,
+    denoiserParams: s.denoiser_params,
   });
 }
 
