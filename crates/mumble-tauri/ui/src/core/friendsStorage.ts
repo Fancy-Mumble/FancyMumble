@@ -1,12 +1,16 @@
 /**
- * Persistent friends list - Mumble-style, identified by TLS cert hash.
+ * Persistent friends list - Mumble-style, keyed by TLS cert hash.
  *
  * A friend is added from the user context menu in the channel sidebar and
- * appears on the global Friends tab.  Identification follows the same rule
- * as user shortcuts: a TLS certificate hash uniquely addresses the user
- * across every connected server.  The `serverId` / `serverLabel` fields are
- * kept only as a UI hint reminding the user which server they originally
- * added the friend from.
+ * appears on the global Friends tab.
+ *
+ * The certificate hash is how a friend is *found* across connected servers, but
+ * it does not by itself say who they are: a certificate is a login, and one
+ * login can be used by several accounts (a second identity, a test account).
+ * So the registered account (`userId`) and the server it belongs to
+ * (`serverHost`/`serverPort`) are saved beside the hash, and it is those that
+ * decide whether a user wearing that certificate really is this friend - see
+ * `@core/friendsPresence`, which every design resolves through.
  *
  * Friends without a certificate hash (anonymous users) are still saved so
  * they show up in the list, but cannot be auto-resolved across servers.
@@ -97,16 +101,28 @@ export async function hasFriend(opts: {
   userHash?: string;
   userName: string;
   serverId?: string;
+  userId?: number;
 }): Promise<boolean> {
   const friends = await getFriends();
   return friends.some((f) => isSameFriend(f, opts));
 }
 
+/**
+ * Whether two records describe the same person.
+ *
+ * The certificate is the first word, not the last: the same login can carry
+ * more than one registered account, and two accounts are two people even when
+ * they share a certificate - so when both sides name an account, that decides.
+ */
 function isSameFriend(
-  a: Pick<Friend, "userHash" | "userName" | "serverId">,
-  b: Pick<Friend, "userHash" | "userName" | "serverId">,
+  a: Pick<Friend, "userHash" | "userName" | "serverId" | "userId">,
+  b: Pick<Friend, "userHash" | "userName" | "serverId" | "userId">,
 ): boolean {
-  if (a.userHash && b.userHash) return a.userHash === b.userHash;
+  if (a.userHash && b.userHash) {
+    if (a.userHash !== b.userHash) return false;
+    if (a.userId != null && b.userId != null) return a.userId === b.userId;
+    return true;
+  }
   if (a.userHash || b.userHash) return false;
   return a.serverId === b.serverId && a.userName === b.userName;
 }
@@ -124,8 +140,18 @@ export interface FriendIdentity {
   serverCertLabel?: string | null;
 }
 
-/** Copy the defined {@link FriendIdentity} fields from `src` onto `dst`. */
-function applyIdentity(dst: Friend, src: FriendIdentity): boolean {
+/**
+ * Copy the defined {@link FriendIdentity} fields from `src` onto `dst`.
+ *
+ * `fill` mode writes only what is still unknown. Everything here is *identity* -
+ * which account this friend is, and which login of ours knows them - and a
+ * background resolver that overwrites it can only ever be guessing: it has
+ * found a live user it believes to be the friend, and if that belief is wrong
+ * (one certificate, two accounts) the record silently becomes a different
+ * person, with no way back short of deleting the friend. Only the user pointing
+ * at somebody and saying "this one" (`addFriend`) overwrites.
+ */
+function applyIdentity(dst: Friend, src: FriendIdentity, mode: "fill" | "overwrite"): boolean {
   let changed = false;
   const keys: (keyof FriendIdentity)[] = [
     "userId",
@@ -136,6 +162,7 @@ function applyIdentity(dst: Friend, src: FriendIdentity): boolean {
   ];
   for (const k of keys) {
     const v = src[k];
+    if (mode === "fill" && dst[k] !== undefined) continue;
     if (v !== undefined && dst[k] !== v) {
       (dst as unknown as Record<string, unknown>)[k] = v;
       changed = true;
@@ -155,8 +182,9 @@ export async function addFriend(
   const friends = await getFriends();
   const existing = friends.find((f) => isSameFriend(f, input));
   if (existing) {
-    // Already saved - opportunistically backfill any newly-known identity bits.
-    if (applyIdentity(existing, input)) await saveFriends([...friends]);
+    // Already saved - the user is pointing at this person right now, so what
+    // they are looking at wins over what was captured last time.
+    if (applyIdentity(existing, input, "overwrite")) await saveFriends([...friends]);
     return existing;
   }
   const friend: Friend = {
@@ -167,7 +195,7 @@ export async function addFriend(
     serverLabel: input.serverLabel,
     addedAt: Date.now(),
   };
-  applyIdentity(friend, input);
+  applyIdentity(friend, input, "overwrite");
   await saveFriends([...friends, friend]);
   return friend;
 }
@@ -177,12 +205,17 @@ export async function addFriend(
  * changes or the friend was removed).  Called when a friend is resolved online,
  * so older entries gain the `userId` + connection target needed to open their
  * chat while offline or to (re)connect to their server.
+ *
+ * Backfill only: a field that is already known is left alone, because this runs
+ * off a live match that may not be the friend at all.  Call it only for a match
+ * on the friend's own server (`isFriendsOwnServer`) - a registered id from
+ * anywhere else is a different account's.
  */
 export async function updateFriendIdentity(id: string, identity: FriendIdentity): Promise<void> {
   const friends = await getFriends();
   const friend = friends.find((f) => f.id === id);
   if (!friend) return;
-  if (applyIdentity(friend, identity)) await saveFriends([...friends]);
+  if (applyIdentity(friend, identity, "fill")) await saveFriends([...friends]);
 }
 
 export async function removeFriend(id: string): Promise<void> {
