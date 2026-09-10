@@ -234,7 +234,7 @@ describe("what a canon attachment is previewed from", () => {
 
     await waitFor(() => expect(result.current).toBe(ORIGIN));
     expect(invoke).toHaveBeenCalledWith("starling_media_url", { key: "7/01890a/clip.mp4" });
-    expect(invoke).not.toHaveBeenCalledWith("starling_download_to_base64", expect.anything());
+    expect(invoke).toHaveBeenCalledTimes(1);
   });
 
   it("streams a video however big it is", async () => {
@@ -266,15 +266,53 @@ describe("what a canon attachment is previewed from", () => {
     expect(result.current).toBeNull();
   });
 
-  it("still fetches a picture whole, because that is how one is decoded", async () => {
-    const { renderHook } = await import("@testing-library/react");
-    invoke.mockResolvedValue("");
-    renderHook(() =>
+  it("draws a picture from an address too, rather than fetching it whole", async () => {
+    // A picture used to come over IPC as base64 - a third bigger than the
+    // file, and fetched again on every mount, so scrolling back through a
+    // channel of screenshots downloaded each of them again. An address is a
+    // few bytes, and the webview's cache keeps what the `<img>` loads.
+    const { renderHook, waitFor } = await import("@testing-library/react");
+    const PICTURE = "http://127.0.0.1:41234/tok/7%2Fcat.png";
+    invoke.mockResolvedValue(PICTURE);
+    const { result } = renderHook(() =>
       useCanonPreviewSrc({ url: "", key: "7/cat.png", filename: "cat.png", sizeBytes: 2048, mode: "session" }),
     );
 
-    expect(invoke).toHaveBeenCalledWith("starling_download_to_base64", { key: "7/cat.png" });
-    expect(invoke).not.toHaveBeenCalledWith("starling_media_url", expect.anything());
+    await waitFor(() => expect(result.current).toBe(PICTURE));
+    expect(invoke).toHaveBeenCalledWith("starling_media_url", { key: "7/cat.png" });
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not show a picture past the cap on sight", async () => {
+    // A courtesy that spends eighty megabytes of somebody's connection unasked
+    // is not one: the card names the file and offers to save it instead.
+    const { renderHook } = await import("@testing-library/react");
+    const { result } = renderHook(() =>
+      useCanonPreviewSrc({
+        url: "",
+        key: "7/scan.png",
+        filename: "scan.png",
+        sizeBytes: 80 * 1024 * 1024,
+        mode: "session",
+      }),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(result.current).toBeNull();
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("treats a picture of unknown size as one past the cap", async () => {
+    // The cap cannot be checked against a size the marker did not state, and
+    // a Save button is the cheaper of the two mistakes.
+    const { renderHook } = await import("@testing-library/react");
+    const { result } = renderHook(() =>
+      useCanonPreviewSrc({ url: "", key: "7/scan.png", filename: "scan.png", mode: "session" }),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(result.current).toBeNull();
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   it("leaves a plugin attachment alone - it already has a URL of its own", async () => {
