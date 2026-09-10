@@ -135,10 +135,10 @@ fn enable_debug_layer_if_requested() {
         return;
     }
     let mut dbg: Option<windows::Win32::Graphics::Direct3D12::ID3D12Debug> = None;
-    if unsafe { windows::Win32::Graphics::Direct3D12::D3D12GetDebugInterface(&mut dbg) }.is_ok() {
-        if let Some(d) = dbg {
-            unsafe { d.EnableDebugLayer() };
-        }
+    if unsafe { windows::Win32::Graphics::Direct3D12::D3D12GetDebugInterface(&mut dbg) }.is_ok()
+        && let Some(d) = dbg
+    {
+        unsafe { d.EnableDebugLayer() };
     }
 }
 
