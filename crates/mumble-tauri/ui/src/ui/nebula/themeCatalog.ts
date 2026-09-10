@@ -71,6 +71,16 @@ export interface NebulaPalette {
   /** Avatar placeholder. */
   tile: string;
   border: string;
+  /**
+   * The window's own outline, where `border` is the wrong colour at that edge.
+   *
+   * `border` is drawn for surfaces sitting *on* the window, so it only reads as
+   * an outline where the window colour reaches the window's own edge. A palette
+   * that runs an inverted panel out to it - Midnight's black bar across the top,
+   * its black rail down the left - gets a pale strip glued to that panel
+   * instead, and states the edge it actually wants here. `"none"` draws none.
+   */
+  edge?: string;
   text: string;
   /** Second text rung: captions, section labels. */
   dim: string;
@@ -125,6 +135,16 @@ export type NebulaSelection = "wash" | "solid";
 export interface NebulaSkin {
   /** Font stack: the sheet's family, then a bundled face of the same voice. */
   font: string;
+  /**
+   * The poster voice: display type set large enough that the shapes are the
+   * subject rather than the words.
+   *
+   * A UI sans is drawn to disappear at 14px, and blown up to 150px and hollowed
+   * out to an outline it reads as a placeholder - which is what the stencil
+   * wordmark was. Only a skin that draws such a mark needs this; everything
+   * else falls back to `font`, which is what a theme means by leaving it unset.
+   */
+  display?: string;
   /** Tracking, as a CSS length. */
   track: string;
   /** Whether the theme shouts. */
@@ -190,10 +210,33 @@ export interface NebulaSkin {
    */
   clipBubble: string;
   selection: NebulaSelection;
+  /**
+   * How a theme draws a message you sent.
+   *
+   * The same two treatments the selected row gets, and for the same
+   * reason: a skin that fills its selection with the accent fills your own
+   * bubble with it too, and one that washes the row washes the bubble.
+   * `wash` is the pack as it was - a 20% accent over the canvas under a
+   * 40% accent edge, which on a light scheme composites to a flat steel
+   * blue the body text has to fight.
+   */
+  bubbleOwn: NebulaSelection;
   /** A glow behind the selected row. */
   selectionGlow: boolean;
-  /** An inset bar down the selected row's leading edge. */
+  /** A bar down the selected row's leading edge. */
   selectionBar: boolean;
+  /**
+   * That bar's width, counted across the row rather than along it.
+   *
+   * The bar is drawn as its own plate wearing `clipSelection`, so on a
+   * skin that cuts the row it leans with the plate instead of standing
+   * upright inside it - an upright bar under a diagonal clip comes out a
+   * wedge, four pixels wide at the top of the row and ten at the bottom.
+   * Which is why this measure is the flash *plus* the lean: the clip
+   * spends the lean off the plate's leading edge, so Nimbus asks for 18
+   * and gets the 10px gold tab the artboard draws.
+   */
+  selectionBarPx: number;
   /**
    * How much of the background the chrome lets through: 0 opaque, .12 a light
    * veil, .28 frosted, .45 and up heavy glass.
@@ -213,6 +256,34 @@ export interface NebulaSkin {
   columnWidth: number;
   headerHeight: number;
   /**
+   * The air between one person's messages and the next's, in px.
+   *
+   * A property of the skin because it is a property of the *plate*: a bubble
+   * with a soft corner and a wash behind it ends where its colour ends, and
+   * 26px of air is plenty to separate two of them. A skin that squares its
+   * corners and draws a hard rule around every plate has no such fade, so at
+   * the same 26px the column reads as one stack of tiles rather than as a
+   * conversation, and it asks for more.
+   *
+   * The reader's compact setting overrides it: that is somebody asking for
+   * more conversation per screen, which outranks the skin's taste for air.
+   */
+  messageGapPx: number;
+  /**
+   * The air between two messages from the *same* person, in px.
+   *
+   * Closed up almost to touching on the pack's own skins, because spacing is
+   * the only thing left saying that six plates are one person talking once
+   * the repeated name and clock have gone. A skin that rules every plate has
+   * that said for it by the rule, so it can afford to let the run breathe
+   * without the run coming apart - and at the pack's 4px its hard-edged tiles
+   * read as one block of masonry rather than as six things somebody said.
+   *
+   * Always the smaller of the two: a run that is spaced like a change of
+   * speaker is not a run any more. Compact overrides this one too.
+   */
+  messageRunGapPx: number;
+  /**
    * Where each piece of window chrome lives.
    *
    * The pack has always drawn a band across the top and put all four pieces
@@ -229,8 +300,8 @@ export interface NebulaChromeSlots {
   band: "shown" | "hidden";
   /** Minimise, maximise, close. */
   windowControls: "band" | "corner";
-  /** Friends and quick connect. */
-  navigation: "band" | "chatHeader";
+  /** Friends and quick connect. `rail` leaves the rail to carry both. */
+  navigation: "band" | "rail";
   /** The server switcher. `rail` leaves the rail as the only one. */
   servers: "band" | "rail";
 }
@@ -271,10 +342,13 @@ const FONTS = {
   spaceGrotesk: '"Space Grotesk","Space Mono","Inter",system-ui,sans-serif',
   rajdhani: '"Rajdhani","Chakra Petch","Roboto Condensed","Roboto",system-ui,sans-serif',
   outfit: '"Outfit","Inter",system-ui,sans-serif',
-  // Two voices in one stack: a Japanese gothic for body copy, with the
-  // condensed italic grotesque behind it that the reference uses for every
-  // label and badge. Neither ships, so both fall through to Inter.
-  zenKaku: '"Zen Kaku Gothic New","Saira","Inter",system-ui,"Segoe UI",sans-serif',
+  // Body copy: a Japanese gothic that does not ship, so it falls through to
+  // Inter. Saira is deliberately *not* in this stack - it does ship, and a
+  // fallback family is a whole-UI substitution, not the per-element one the
+  // reference makes. It is named as the `display` voice instead.
+  zenKaku: '"Zen Kaku Gothic New","Inter",system-ui,"Segoe UI",sans-serif',
+  // The condensed italic grotesque the reference sets its poster type in.
+  saira: '"Saira","Archivo","Inter",system-ui,sans-serif',
 } as const;
 
 /**
@@ -302,13 +376,17 @@ export const DEFAULT_SKIN: NebulaSkin = {
   clipSelection: "none",
   clipBubble: "none",
   selection: "wash",
+  bubbleOwn: "wash",
   selectionGlow: false,
   selectionBar: false,
+  selectionBarPx: 3,
   glass: 0,
   blurPx: 18,
   railWidth: 56,
   columnWidth: 290,
   headerHeight: 66,
+  messageGapPx: 26,
+  messageRunGapPx: 4,
   chromeSlots: BAND_SLOTS,
 };
 
@@ -332,13 +410,17 @@ function skin(over: Partial<NebulaSkin> & Pick<NebulaSkin, "font">): NebulaSkin 
     clipSelection: "none",
     clipBubble: "none",
     selection: "wash",
+    bubbleOwn: "wash",
     selectionGlow: false,
     selectionBar: false,
+    selectionBarPx: 3,
     glass: 0,
     blurPx: 18,
     railWidth: 56,
     columnWidth: 290,
     headerHeight: 66,
+    messageGapPx: 26,
+    messageRunGapPx: 4,
     chromeSlots: BAND_SLOTS,
     ...over,
   };
@@ -949,15 +1031,28 @@ export const NEBULA_THEMES: readonly NebulaThemeDef[] = [
       input: "#e6e8e1",
       tile: "#bcbfb6",
       border: "#b4b7ad",
+      // The bar and the rail are near-black against a bone window, so the pale
+      // border would read as a light strip glued to them rather than as the
+      // window's outline. The rail's own black is the edge: it disappears into
+      // the two sides that are already inverted and draws a hard HUD outline
+      // along the two that are not.
+      edge: "#0b0c0a",
       text: "#0d0f0c",
       dim: "#4a4e46",
-      faint: "#75796f",
+      // The third rung, one step darker than the sheet drew it: at #75796f the
+      // tracked-out section headings this rung sets - SETTINGS, SERVER ADMIN -
+      // sat at 3.4:1 on the settings column and under 3:1 on a chip.
+      faint: "#5f6359",
       barFg: "#f0f2ec",
-      barDim: "#9aa093",
-      barFaint: "#6f746a",
+      // The bar and the rail are drawn at 78% (the skin's `glass`), which in
+      // light mode mixes a bone window into them and lifts them from near-black
+      // to charcoal - so the inverted rungs below are set against the charcoal
+      // they actually land on, not against the black the palette names.
+      barDim: "#aab0a3",
+      barFaint: "#8b9086",
       rail: "#0b0c0a",
       railFg: "#e8e400",
-      railDim: "#5d6055",
+      railDim: "#8a8f84",
       railTile: "#181a16",
       railBorder: "#000000",
       accent: "#b8ad00",
@@ -1272,6 +1367,7 @@ export const NEBULA_THEMES: readonly NebulaThemeDef[] = [
     note: "0px skewed plates · Zen Kaku Gothic · sky blue on white, navy rail, gold halo, dot grid",
     skin: skin({
       font: FONTS.zenKaku,
+      display: FONTS.saira,
       track: ".01em",
       weight: 500,
       radiusSm: "0px",
@@ -1294,12 +1390,20 @@ export const NEBULA_THEMES: readonly NebulaThemeDef[] = [
       railWidth: 77,
       columnWidth: 317,
       headerHeight: 90,
-      // The artboard has no band: the controls float over the corner, the
-      // header carries navigation, and the rail is the only switcher.
+      // Every plate here is a hard-edged parallelogram with a 2px rule around
+      // it, so nothing fades into the canvas the way a washed bubble does and
+      // the pack's 26px leaves the column looking stacked rather than spoken.
+      messageGapPx: 38,
+      // The rule around every plate already says where one message ends, so
+      // the run can breathe without coming apart as a run.
+      messageRunGapPx: 12,
+      // The artboard has no band: the controls float over the corner, and the
+      // rail is both the switcher and where navigation lives - a second plus
+      // in the conversation header would only duplicate the rail's own.
       chromeSlots: {
         band: "hidden",
         windowControls: "corner",
-        navigation: "chatHeader",
+        navigation: "rail",
         servers: "rail",
       },
       // A parallelogram, which is what `skewX(-12deg)` resolves to on a row of
@@ -1310,8 +1414,15 @@ export const NEBULA_THEMES: readonly NebulaThemeDef[] = [
       // serves both sides, because a bubble is not mirrored by the pack.
       clipBubble: "polygon(0 0, 100% 0, 100% 100%, 16px 100%, 0 calc(100% - 16px))",
       selection: "solid",
+      // The artboard fills your own message the same blue it fills the open
+      // channel with, white ink and all. Washed, it is a 20% accent under a
+      // 40% accent edge - a flat steel blue that reads as neither the
+      // window nor the accent.
+      bubbleOwn: "solid",
       selectionGlow: true,
       selectionBar: true,
+      // A 10px gold tab, plus the 8px the clip leans off the leading edge.
+      selectionBarPx: 18,
       // Opaque. The reference's panels are flat white with a hard 2px edge,
       // and frosting them would put the dot grid under the channel column
       // where the artboard keeps it strictly inside the conversation.

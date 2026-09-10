@@ -23,6 +23,16 @@ export interface NebulaTokens {
   line: string;
   /** Stronger hairline around cards and floating surfaces. */
   line2: string;
+  /**
+   * The hairline around the window itself, or `"none"` to draw none.
+   *
+   * Its own token rather than a reuse of `line2`, because `line2` is only ever
+   * right where the *window colour* reaches the window's edge. A skin that runs
+   * an inverted panel out to that edge - Midnight's black bar across the top and
+   * black rail down the left - gets a pale strip stuck to the panel instead of
+   * an outline, so those palettes name the window's edge themselves.
+   */
+  windowLine: string;
   text: string;
   muted: string;
   dim: string;
@@ -142,6 +152,7 @@ export const NEBULA_TOKENS: Record<NebulaMode, NebulaTokens> = {
     card2: "rgba(130,178,255,.17)",
     line: "rgba(135,180,255,.07)",
     line2: "rgba(135,180,255,.17)",
+    windowLine: "rgba(135,180,255,.17)",
     text: "#f1f5ff",
     muted: "#9fb3dd",
     dim: "#65779f",
@@ -189,6 +200,7 @@ export const NEBULA_TOKENS: Record<NebulaMode, NebulaTokens> = {
     card2: "rgba(40,48,80,.06)",
     line: "rgba(40,48,80,.055)",
     line2: "rgba(40,48,80,.12)",
+    windowLine: "rgba(40,48,80,.12)",
     text: "#252a3c",
     muted: "#666e85",
     dim: "#98a0b4",

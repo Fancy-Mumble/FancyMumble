@@ -142,6 +142,10 @@ export function schemeTokens(palette: NebulaPalette, skin: NebulaSkin, mode: Neb
     // rather than a second colour the sheet never chose.
     line: alpha(c.border, glass ? 0.35 : 0.5),
     line2: border,
+    // The window's outline. A stencil skin draws a hard edge on every surface
+    // and wants no second one around the whole window; every other skin uses
+    // the hairline unless its palette names an edge of its own.
+    windowLine: skin.chrome === "stencil" ? "none" : (c.edge ?? border),
     hover: alpha(c.text, dark ? 0.07 : 0.05),
 
     text: c.text,
