@@ -258,6 +258,12 @@ pub(crate) fn send_signal_distribution(shared: &Arc<Mutex<SharedState>>, channel
                 return;
             }
         };
+        // Our own sender key for this channel now exists in the bridge context,
+        // which is the thing `group_encrypt` looks for. Recorded before the
+        // network send, because it is the mint that makes encryption possible
+        // and the relay that makes it *readable* - a distribution the server
+        // never forwarded still leaves us able to send.
+        let _ = pchat.signal_distributed.insert(channel_id);
 
         // Taken here, while `pchat` is still borrowed; reading `state.conn`
         // below ends that borrow.

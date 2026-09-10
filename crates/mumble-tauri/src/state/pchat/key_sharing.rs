@@ -290,6 +290,9 @@ pub(crate) fn handle_proto_key_challenge_result(
         if let Some(ref mut s) = s {
             if let Some(ref mut pchat) = s.pchat_ctx.pchat {
                 pchat.key_manager.remove_channel(channel_id);
+                // It clears the bridge's channel state as well as the archive
+                // key, so the mint has to be forgotten with it.
+                let _ = pchat.signal_distributed.remove(&channel_id);
             }
             let before_len = s.pchat_ctx.pending_key_shares.len();
             s.pchat_ctx

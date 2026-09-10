@@ -41,7 +41,7 @@ pub(crate) use persistence::{
 };
 
 // Outbound
-pub(crate) use outbound::{OutboundMessage, send_fetch};
+pub(crate) use outbound::{Anchor, OutboundMessage, send_fetch};
 
 // Inbound
 pub(crate) use inbound::{
@@ -111,6 +111,14 @@ pub(crate) struct PchatState {
     pub seed: [u8; 32],
     /// Channels where we've already sent a fetch request (avoid duplicates).
     pub fetched_channels: std::collections::HashSet<u32>,
+    /// Channels this bridge has minted our own `SignalV1` sender key for.
+    ///
+    /// Tracked here rather than asked of the bridge, because the answer has to
+    /// survive nothing: a fresh `PchatState` carries a fresh bridge context,
+    /// and both start empty together. It is what lets the send path notice a
+    /// channel whose distribution no join ever created and mint one before
+    /// encrypting, instead of failing with "missing sender key state".
+    pub signal_distributed: std::collections::HashSet<u32>,
     /// Path to the per-identity storage directory (for persisting archive keys).
     pub identity_dir: Option<PathBuf>,
     /// Signal Protocol bridge (loaded from external DLL, AGPL-isolated).
@@ -203,6 +211,7 @@ impl PchatState {
             codec,
             seed,
             fetched_channels: std::collections::HashSet::new(),
+            signal_distributed: std::collections::HashSet::new(),
             identity_dir,
             signal_bridge: None,
             signal_bridge_load_failed: false,
@@ -212,6 +221,8 @@ impl PchatState {
     }
 
     /// Insert a decrypted message into the local cache (for `SignalV1`).
+    ///
+    /// Marks the cache dirty; the session's flush timer is what writes it.
     pub(crate) fn cache_signal_message(&mut self, msg: CachedMessage) {
         if let Some(ref mut cache) = self.local_cache {
             cache.insert(msg);

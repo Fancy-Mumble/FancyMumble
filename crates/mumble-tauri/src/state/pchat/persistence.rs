@@ -153,6 +153,31 @@ impl PchatState {
     }
 }
 
+impl crate::state::AppState {
+    /// Write every session's pchat state to disk.
+    ///
+    /// Called from the exit handler.  Until it was, the only writers were
+    /// the three disconnect paths, so closing the window - the ordinary way
+    /// to quit - dropped the process with the session's messages still only
+    /// in memory.  A `SignalV1` channel keeps no server-side history by
+    /// design, which made the local cache the sole copy and the loss
+    /// permanent.
+    ///
+    /// Runs on the main thread during `RunEvent::Exit`, so it stays
+    /// synchronous: a lock and a file write per session, nothing awaited.
+    pub fn flush_pchat_state(&self) {
+        for shared in self.registry.all_sessions() {
+            let Ok(state) = shared.lock() else {
+                continue;
+            };
+            if let Some(ref pchat) = state.pchat_ctx.pchat {
+                pchat.save_signal_state();
+                pchat.save_local_cache();
+            }
+        }
+    }
+}
+
 /// Load a previously saved signal state from disk into the bridge.
 pub(super) fn load_signal_state(identity_dir: Option<&Path>, bridge: &SignalBridge) {
     let Some(dir) = identity_dir else {
