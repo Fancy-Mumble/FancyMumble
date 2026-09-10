@@ -6,13 +6,16 @@ import { useTheme, type Theme } from "@mui/material/styles";
 import { useUserAvatars } from "@core/lazyBlobs";
 import type { ChatMessage, UserEntry } from "@core/types";
 import {
-  BASE_WINDOW,
   GROW_THRESHOLD_PX,
-  grownTailCount,
-  settledTailCount,
+  grownUp,
+  grownDown,
+  isAtTail,
+  initialWindow,
+  windowAfterAppend,
+  windowAtTail,
+  windowToInclude,
   SETTLE_SHRINK_MS,
-  tailCountAfterAppend,
-  tailCountToInclude,
+  type ThreadWindow,
 } from "@core/features/chat/chatWindowing";
 import { useMessageOffload } from "@core/features/chat/useMessageOffload";
 import { isHeavyContent, type MessageScope } from "@core/messageOffload";
@@ -223,24 +226,40 @@ export function MessageList({
    * The sizing policy is core's, shared with Standard, so the two packs agree
    * about what "near the top" and "a chunk" mean.
    */
-  const [tailCount, setTailCount] = useState(BASE_WINDOW);
+  const [range, setRange] = useState<ThreadWindow>(() => initialWindow(0, 0));
   const previousCount = useRef(messages.length);
   /** Nonce of the last jump actually served, so widening can take two passes. */
   const servedJump = useRef(0);
   /** Scroll height before the last render, for the prepend correction below. */
   const previousHeight = useRef(0);
   const previousFirstId = useRef<string | null>(null);
+  /** Arrivals the reader has not been carried down to. */
+  const [unseenBelow, setUnseenBelow] = useState(0);
 
-  const windowed = useMemo(
-    () => (messages.length <= tailCount ? messages : messages.slice(messages.length - tailCount)),
-    [messages, tailCount],
-  );
+  /**
+   * The range actually used, defaulted and clamped.
+   *
+   * A range is absolute where the old tail count was relative, so it needs
+   * both: an unset one has to resolve to the tail rather than to nothing, and
+   * one left over from a longer thread has to be brought back inside this one
+   * rather than slicing past its end.
+   */
+  const resolved = useMemo<ThreadWindow>(() => {
+    const total = messages.length;
+    if (total === 0) return { start: 0, end: 0 };
+    if (range.end === 0 || range.start > total) return initialWindow(total, 0);
+    return { start: Math.min(range.start, total), end: Math.min(range.end, total) };
+  }, [range, messages.length]);
+
+  const windowed = useMemo(() => messages.slice(resolved.start, resolved.end), [messages, resolved]);
   // What the window leaves out - the offloader puts its heavy bodies away
-  // without waiting for a row that is not going to be mounted.
-  const unmounted = useMemo(
-    () => (messages.length <= tailCount ? EMPTY_MESSAGES : messages.slice(0, messages.length - tailCount)),
-    [messages, tailCount],
-  );
+  // without waiting for a row that is not going to be mounted. Both sides of
+  // the range now: a reader scrolled up leaves rows *below* them unmounted,
+  // and those bodies are exactly as heavy as the ones above.
+  const unmounted = useMemo(() => {
+    if (resolved.start === 0 && resolved.end >= messages.length) return EMPTY_MESSAGES;
+    return [...messages.slice(0, resolved.start), ...messages.slice(resolved.end)];
+  }, [messages, resolved]);
 
   /**
    * Cold storage for the heavy bodies in this river.
@@ -266,11 +285,16 @@ export function MessageList({
   // them; at the bottom it snaps back and the history is released.
   useLayoutEffect(() => {
     const appended = messages.length - previousCount.current;
+    const previous = previousCount.current;
     previousCount.current = messages.length;
-    if (appended > 0) {
-      setTailCount((prev) => tailCountAfterAppend(prev, appended, pinnedToBottom.current));
-    }
-  }, [messages.length]);
+    if (appended <= 0) return;
+    // Followed down only when the window already reached the newest row.
+    // Otherwise the range stays where it is and the reader is told, rather
+    // than being moved to something they did not ask to see.
+    const wasAtTail = isAtTail(resolved, previous);
+    setRange(windowAfterAppend(resolved, messages.length, wasAtTail));
+    if (!wasAtTail) setUnseenBelow((n) => n + appended);
+  }, [messages.length, resolved]);
 
   // One batched avatar fetch for the whole list; the texture size comes from
   // the live user entry, which is the only place that knows it.
@@ -401,7 +425,7 @@ export function MessageList({
     if (!jumpTo || servedJump.current === jumpTo.nonce) return;
     const index = messages.findIndex((message) => message.message_id === jumpTo.messageId);
     if (index !== -1) {
-      setTailCount((prev) => tailCountToInclude(prev, index, messages.length));
+      setRange(windowToInclude(resolved, index, messages.length));
     }
     // Scanned rather than matched with a selector: a message id is an opaque
     // string from the server, and building a selector out of one means
@@ -418,7 +442,7 @@ export function MessageList({
       [{ background: "transparent" }, { background: "rgba(120,150,255,.18)" }, { background: "transparent" }],
       { duration: 1200 },
     );
-  }, [jumpTo, messages, tailCount]);
+  }, [jumpTo, messages, resolved]);
 
   return (
     <Box
@@ -427,9 +451,23 @@ export function MessageList({
         const node = event.currentTarget;
         pinnedToBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 60;
         scheduleStampSync();
-        if (node.scrollTop < GROW_THRESHOLD_PX) {
-          setTailCount((prev) => grownTailCount(prev, messages.length));
+        // At most one edge grows per scroll, and only an edge that has
+        // something behind it. Both conditions are true at once whenever the
+        // content is shorter than two thresholds -- and then growing up was
+        // immediately undone by growing down, so the window sat at the tail
+        // however far the reader climbed.
+        const fromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+        const total = messages.length;
+        let next = resolved;
+        if (resolved.start > 0 && node.scrollTop < GROW_THRESHOLD_PX) {
+          next = grownUp(resolved, total);
+        } else if (resolved.end < total && fromBottom < GROW_THRESHOLD_PX) {
+          // Without this a reader who climbed far enough for the window to
+          // release its tail could never scroll back to the present: the rows
+          // below them are not mounted, so there is nothing to scroll onto.
+          next = grownDown(resolved, total);
         }
+        if (next !== resolved) setRange(next);
         // Growing is one-way otherwise: a reader who climbed through a busy
         // channel and came back down keeps every row they passed. Settling at
         // the bottom releases them, and the rows released are all above the
@@ -437,7 +475,10 @@ export function MessageList({
         clearTimeout(settleTimer.current);
         if (pinnedToBottom.current) {
           settleTimer.current = setTimeout(() => {
-            if (pinnedToBottom.current) setTailCount(settledTailCount);
+            if (pinnedToBottom.current) {
+              setRange(windowAtTail(messages.length));
+              setUnseenBelow(0);
+            }
           }, SETTLE_SHRINK_MS);
         }
       }}
@@ -454,6 +495,38 @@ export function MessageList({
         flexDirection: "column",
       }}
     >
+      {/* A reader whose window has left the tail is not carried down to an
+          arrival, so this is the only thing that tells them one happened.
+          Without it the message is simply invisible until they scroll. */}
+      {unseenBelow > 0 && (
+        <Box
+          component="button"
+          type="button"
+          data-testid="chat-new-messages-pill"
+          onClick={() => {
+            setRange(windowAtTail(messages.length));
+            setUnseenBelow(0);
+            const node = scrollRef.current;
+            if (node) node.scrollTop = node.scrollHeight;
+          }}
+          sx={{
+            position: "sticky",
+            bottom: 12,
+            alignSelf: "center",
+            zIndex: 2,
+            border: "none",
+            cursor: "pointer",
+            borderRadius: 999,
+            px: 1.5,
+            py: 0.5,
+            fontSize: 12,
+            bgcolor: "primary.main",
+            color: "primary.contrastText",
+          }}
+        >
+          {unseenBelow === 1 ? "1 new message" : `${unseenBelow} new messages`}
+        </Box>
+      )}
       <Box
         ref={columnRef}
         sx={{

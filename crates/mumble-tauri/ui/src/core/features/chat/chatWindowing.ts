@@ -194,3 +194,17 @@ export function windowAfterPrepend(window: ThreadWindow, count: number): ThreadW
 export function windowAtTail(total: number): ThreadWindow {
   return { start: Math.max(0, total - BASE_WINDOW), end: total };
 }
+
+/**
+ * The window widened to cover row `index`, plus context above it.
+ *
+ * For jump-to-quote and search. Unlike the tail-anchored version this may move
+ * *both* edges, because the target can be anywhere — including below a window
+ * the reader has scrolled up past.
+ */
+export function windowToInclude(window: ThreadWindow, index: number, total: number): ThreadWindow {
+  if (index >= window.start && index < window.end) return window;
+  const start = Math.max(0, index - CONTEXT_ABOVE);
+  const end = Math.min(total, Math.max(index + 1, start + BASE_WINDOW));
+  return { start, end };
+}
