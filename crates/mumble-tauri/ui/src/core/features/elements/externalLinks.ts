@@ -70,6 +70,27 @@ export function isTrustedLink(url: string, hosts: readonly string[]): boolean {
   return host !== "" && hosts.includes(host);
 }
 
+/**
+ * The address of the link the pointer was over, or null.
+ *
+ * A message row is full of anchors that are not links to anywhere - a mention,
+ * a channel jump, the affordances a card draws - and only the ones the
+ * sanitiser marked `data-external` are addresses a browser could open. That
+ * mark is the same one the guard intercepts clicks on, so a menu built from
+ * this offers an action for exactly the links clicking would have opened.
+ *
+ * The scheme is checked here rather than trusted, for the reason
+ * `TRUSTABLE_PROTOCOLS` exists at all: a `javascript:` href that reached the
+ * DOM by some other route is not something to hand a browser, privately or
+ * otherwise.
+ */
+export function linkUnder(target: EventTarget | null): string | null {
+  if (!(target instanceof Element)) return null;
+  const href = target.closest("a[data-external]")?.getAttribute("href");
+  if (!href) return null;
+  return describeLink(href).host === "" ? null : href;
+}
+
 /** `hosts` plus this URL's host, unchanged when it is untrustable or already in. */
 export function withTrustedHost(hosts: readonly string[], url: string): string[] {
   const { host } = describeLink(url);

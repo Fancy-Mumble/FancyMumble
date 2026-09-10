@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeLink, isTrustedLink, withTrustedHost } from "./externalLinks";
+import { describeLink, isTrustedLink, linkUnder, withTrustedHost } from "./externalLinks";
 
 describe("describeLink", () => {
   it("splits the host from the rest so a warning can weight them apart", () => {
@@ -67,5 +67,43 @@ describe("withTrustedHost", () => {
 
   it("adds nothing for a URL there is no host to trust in", () => {
     expect(withTrustedHost(["example.com"], "javascript:alert(1)")).toEqual(["example.com"]);
+  });
+});
+
+describe("linkUnder", () => {
+  /** A row as the sanitiser leaves it: one external link among decoration. */
+  function row(): HTMLElement {
+    const el = document.createElement("div");
+    el.innerHTML =
+      '<a data-external href="https://example.com/a">link</a>' +
+      '<a href="#channel-3">jump</a>' +
+      '<a data-external href="javascript:alert(1)">bad</a>' +
+      '<a data-external href="https://example.com/b"><img id="thumb" alt="" /></a>';
+    return el;
+  }
+
+  it("names the link the pointer was over", () => {
+    const anchor = row().querySelector("a[data-external]");
+    expect(linkUnder(anchor)).toBe("https://example.com/a");
+  });
+
+  it("finds the link through whatever was drawn inside it", () => {
+    // The pointer lands on the thumbnail, not on the anchor around it.
+    expect(linkUnder(row().querySelector("#thumb"))).toBe("https://example.com/b");
+  });
+
+  it("offers nothing for an anchor that goes nowhere a browser could follow", () => {
+    // A mention or a channel jump is an anchor, and is not a link to anywhere.
+    expect(linkUnder(row().querySelector('a[href="#channel-3"]'))).toBeNull();
+  });
+
+  it("refuses a scheme that must never reach a browser as an argument", () => {
+    const bad = row().querySelectorAll("a[data-external]")[1];
+    expect(linkUnder(bad)).toBeNull();
+  });
+
+  it("answers null when the right-click was not on an anchor at all", () => {
+    expect(linkUnder(row())).toBeNull();
+    expect(linkUnder(null)).toBeNull();
   });
 });
