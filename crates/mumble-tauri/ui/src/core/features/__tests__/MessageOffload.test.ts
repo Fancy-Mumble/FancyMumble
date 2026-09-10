@@ -79,12 +79,12 @@ describe("isHeavyContent", () => {
   });
 
   it("returns true for long body with embedded image data-URL", () => {
-    const body = `<img src="data:image/png;base64,${"A".repeat(5000)}" />`;
+    const body = `<img src="data:image/png;base64,${"A".repeat(70_000)}" />`;
     expect(isHeavyContent(body)).toBe(true);
   });
 
   it("returns true for long body with embedded video data-URL", () => {
-    const body = `<video src="data:video/mp4;base64,${"B".repeat(5000)}"></video>`;
+    const body = `<video src="data:video/mp4;base64,${"B".repeat(70_000)}"></video>`;
     expect(isHeavyContent(body)).toBe(true);
   });
 
