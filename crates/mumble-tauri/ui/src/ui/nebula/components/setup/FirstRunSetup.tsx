@@ -19,6 +19,17 @@ import { Stack } from "../primitives";
 const STEPS = ["identity", "interface", "appearance", "ready"] as const;
 type StepId = (typeof STEPS)[number];
 
+/**
+ * How wide one theme tile is allowed to get.
+ *
+ * The tiles grow to share whatever row they are on - on a phone two of them
+ * fill the width instead of sitting at a fixed 96px with a third of the row
+ * left dead on the right - and stop at the maximum so a desktop window keeps
+ * the tile Personalize draws rather than four enormous swatches.
+ */
+const THEME_TILE_MIN = 96;
+const THEME_TILE_MAX = 132;
+
 interface SystemSpecs {
   total_memory_mb: number;
   cpu_cores: number;
@@ -56,6 +67,10 @@ export function FirstRunSetup({ onComplete }: Readonly<{ onComplete: () => void 
   // The stored record, so finishing patches `theme` rather than replacing
   // personalization with this page's idea of it.
   const personalization = useRef<PersonalizationData | null>(null);
+
+  // The scrolling middle, so a step that arrives after a taller one starts at
+  // its own heading rather than wherever the last one had been scrolled to.
+  const body = useRef<HTMLDivElement | null>(null);
 
   const step: StepId = STEPS[stepIndex];
   const isLast = stepIndex === STEPS.length - 1;
@@ -96,6 +111,10 @@ export function FirstRunSetup({ onComplete }: Readonly<{ onComplete: () => void 
     };
   }, [t]);
 
+  useEffect(() => {
+    if (body.current) body.current.scrollTop = 0;
+  }, [stepIndex]);
+
   const pickTheme = useCallback((id: ThemeId) => {
     setTheme(id);
     // Applied on pick rather than on finish: the whole point of the step is
@@ -123,9 +142,18 @@ export function FirstRunSetup({ onComplete }: Readonly<{ onComplete: () => void 
     <Box
       sx={(muiTheme) => ({
         height: "100%",
-        display: "grid",
-        placeItems: "center",
-        padding: 3,
+        display: "flex",
+        justifyContent: "center",
+        // A phone gets the card stretched over the whole screen, so the title
+        // and the button row hold one position however tall the step is; with
+        // room to spare the card centres at its own height instead.
+        alignItems: { xs: "stretch", sm: "center" },
+        // Narrow gutters on a phone, where 24px each side is width the card
+        // needs. Nebula does not load Standard's global.css, so the notch and
+        // the home indicator are this page's own to stay clear of.
+        padding: { xs: 1.5, sm: 3 },
+        paddingTop: { xs: "calc(12px + env(safe-area-inset-top, 0px))", sm: 3 },
+        paddingBottom: { xs: "calc(12px + env(safe-area-inset-bottom, 0px))", sm: 3 },
         color: muiTheme.palette.nebula.text,
       })}
     >
@@ -133,6 +161,12 @@ export function FirstRunSetup({ onComplete }: Readonly<{ onComplete: () => void 
         gap={2.5}
         sx={(muiTheme) => ({
           width: "min(560px, 100%)",
+          // Never taller than the window: the appearance step lists eighteen
+          // themes, and the room they want comes out of the middle rather than
+          // pushing the header off the top of the screen.
+          height: { xs: "100%", sm: "auto" },
+          maxHeight: "100%",
+          minHeight: 0,
           padding: "26px 28px",
           borderRadius: radius("xl"),
           background: muiTheme.palette.nebula.card,
@@ -148,7 +182,21 @@ export function FirstRunSetup({ onComplete }: Readonly<{ onComplete: () => void 
 
         <StepRail stepIndex={stepIndex} />
 
-        <Stack gap={1.5} sx={{ minHeight: 210 }}>
+        <Stack
+          ref={body}
+          gap={1.5}
+          sx={{
+            // The one part that moves. It takes whatever is left between the
+            // header and the button row and scrolls the rest, so neither of
+            // them shifts when a step is taller than the screen.
+            flex: 1,
+            minHeight: { xs: 0, sm: 210 },
+            overflowY: "auto",
+            // Reserved rather than claimed on demand, so a step that overflows
+            // does not nudge its content sideways against one that does not.
+            scrollbarGutter: "stable",
+          }}
+        >
           <Stack gap={0.5}>
             <Typography sx={{ fontSize: 15, fontWeight: 600 }}>
               {t(`onboarding.${step}.title`, { name: username.trim() })}
@@ -191,12 +239,15 @@ export function FirstRunSetup({ onComplete }: Readonly<{ onComplete: () => void 
           )}
 
           {step === "appearance" && (
-            <Stack
-              direction="row"
-              gap={1}
-              flexWrap="wrap"
+            <Box
               role="radiogroup"
               aria-label={t("onboarding.appearance.title")}
+              sx={{
+                display: "grid",
+                gridTemplateColumns: `repeat(auto-fit, minmax(${THEME_TILE_MIN}px, 1fr))`,
+                justifyItems: "center",
+                gap: 1,
+              }}
             >
               {THEMES.map((option) => (
                 <ThemeSwatch
@@ -207,7 +258,7 @@ export function FirstRunSetup({ onComplete }: Readonly<{ onComplete: () => void 
                   onSelect={() => pickTheme(option.id as ThemeId)}
                 />
               ))}
-            </Stack>
+            </Box>
           )}
 
           {step === "ready" && (
@@ -349,7 +400,12 @@ function ThemeSwatch({
       sx={(muiTheme) => ({
         all: "unset",
         cursor: "pointer",
-        width: 96,
+        // `all: unset` takes box-sizing back to content-box, where the padding
+        // and the border land outside the 100% and every tile sits 14px wider
+        // than the column it was given.
+        boxSizing: "border-box",
+        width: "100%",
+        maxWidth: THEME_TILE_MAX,
         padding: "6px",
         borderRadius: radius("md"),
         background: selected ? muiTheme.palette.nebula.accentSoft : muiTheme.palette.nebula.card2,
