@@ -168,3 +168,87 @@ impl CommandAction for SendFancyFileForget {
         }
     }
 }
+
+/// Ask to add or replace one server emote.
+///
+/// The image does not travel here: this asks for a URL to `PUT` it to, and is
+/// answered with a `Grant` exactly like a file upload. The shortcode becomes
+/// the name the stored object is reached by, so replacing an emote keeps the
+/// shortcode and swaps the picture.
+#[derive(Debug)]
+pub struct SendFancyEmoteUpload {
+    /// Correlates the grant. Minted by the caller.
+    pub request_id: String,
+    /// The shortcode, without colons.
+    pub shortcode: String,
+    /// The image's filename, from which the server derives the stored key.
+    pub filename: String,
+    /// What the image is.
+    pub content_type: String,
+    /// How many bytes are coming.
+    pub size: u64,
+    /// The emoji to show where the image cannot be.
+    pub alias_emoji: String,
+    /// A human-readable description.
+    pub description: String,
+}
+
+impl CommandAction for SendFancyEmoteUpload {
+    fn execute(&self, _state: &ServerState) -> CommandOutput {
+        CommandOutput {
+            tcp_messages: vec![ControlMessage::FancyEmoteUpload(
+                fancy::files::EmoteUpload {
+                    request_id: self.request_id.clone(),
+                    shortcode: self.shortcode.clone(),
+                    filename: self.filename.clone(),
+                    content_type: self.content_type.clone(),
+                    size: self.size,
+                    alias_emoji: self.alias_emoji.clone(),
+                    description: self.description.clone(),
+                },
+            )],
+            ..Default::default()
+        }
+    }
+}
+
+/// Ask for one server emote to be removed, image and all.
+#[derive(Debug)]
+pub struct SendFancyEmoteForget {
+    /// Correlates the answer.
+    pub request_id: String,
+    /// Which emote.
+    pub shortcode: String,
+}
+
+impl CommandAction for SendFancyEmoteForget {
+    fn execute(&self, _state: &ServerState) -> CommandOutput {
+        CommandOutput {
+            tcp_messages: vec![ControlMessage::FancyEmoteForget(
+                fancy::files::EmoteForget {
+                    request_id: self.request_id.clone(),
+                    shortcode: self.shortcode.clone(),
+                },
+            )],
+            ..Default::default()
+        }
+    }
+}
+
+/// Ask for this server's emotes.
+#[derive(Debug)]
+pub struct SendFancyEmoteQuery {
+    /// Correlates the answer.
+    pub request_id: String,
+}
+
+impl CommandAction for SendFancyEmoteQuery {
+    fn execute(&self, _state: &ServerState) -> CommandOutput {
+        CommandOutput {
+            tcp_messages: vec![ControlMessage::FancyEmoteQuery(fancy::files::EmoteQuery {
+                request_id: self.request_id.clone(),
+            })],
+            ..Default::default()
+        }
+    }
+}

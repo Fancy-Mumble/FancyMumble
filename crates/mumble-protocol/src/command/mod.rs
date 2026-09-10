@@ -19,6 +19,7 @@ mod request_acl;
 mod request_ban_list;
 mod request_blob;
 mod request_fancy_onboarding_response;
+mod request_gif_search;
 mod request_link_preview;
 mod request_livery;
 mod request_operator_ticket;
@@ -42,6 +43,7 @@ mod send_fancy_poll;
 mod send_fancy_poll_vote;
 mod send_fancy_push_register;
 mod send_fancy_push_update;
+mod send_fancy_record;
 mod send_fancy_scheduled_message;
 mod send_fancy_server_settings_update;
 mod send_fancy_subscribe_push;
@@ -97,6 +99,7 @@ pub use request_acl::RequestAcl;
 pub use request_ban_list::RequestBanList;
 pub use request_blob::RequestBlob;
 pub use request_fancy_onboarding_response::RequestFancyOnboardingResponse;
+pub use request_gif_search::RequestGifSearch;
 pub use request_link_preview::RequestLinkPreview;
 pub use request_livery::RequestLivery;
 pub use request_operator_ticket::RequestOperatorTicket;
@@ -112,8 +115,8 @@ pub use send_fancy_account_settings_update::SendFancyAccountSettingsUpdate;
 pub use send_fancy_audit_config_update::SendFancyAuditConfigUpdate;
 pub use send_fancy_audit_query::SendFancyAuditQuery;
 pub use send_fancy_file::{
-    SendFancyFileDownload, SendFancyFileForget, SendFancyFileList, SendFancyFileManage,
-    SendFancyFileUpload,
+    SendFancyEmoteForget, SendFancyEmoteQuery, SendFancyEmoteUpload, SendFancyFileDownload,
+    SendFancyFileForget, SendFancyFileList, SendFancyFileManage, SendFancyFileUpload,
 };
 pub use send_fancy_forum::{SendFancyForumDelete, SendFancyForumFetch, SendFancyForumPost};
 pub use send_fancy_onboarding_config_update::SendFancyOnboardingConfigUpdate;
@@ -126,6 +129,7 @@ pub use send_fancy_poll::SendFancyPoll;
 pub use send_fancy_poll_vote::SendFancyPollVote;
 pub use send_fancy_push_register::SendFancyPushRegister;
 pub use send_fancy_push_update::SendFancyPushUpdate;
+pub use send_fancy_record::{SendFancyRecordGet, SendFancyRecordList, SendFancyRecordPut};
 pub use send_fancy_scheduled_message::{
     RequestFancyScheduledMessages, SendFancyScheduledMessage, SendFancyScheduledMessageCancel,
 };
