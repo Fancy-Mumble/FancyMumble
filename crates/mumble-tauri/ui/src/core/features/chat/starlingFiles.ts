@@ -14,34 +14,36 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { FileServerConfig } from "@core/types";
-import { base64ToBytes } from "@core/utils/base64";
 import type { FileAttachmentInfo } from "./fileAttachments";
 import { previewKindForFilename } from "./fileAttachments";
 
 /**
- * How much of a file to pull down just to show it in the message list.
+ * How big a picture may be and still be shown on sight.
  *
  * A preview is a courtesy, and a courtesy that spends eighty megabytes of
  * somebody's connection without being asked is not one. Past this the card
  * shows its filename and a Save button, which is what the plugin path does for
- * everything that is not public anyway.
+ * everything that is not public anyway. A picture whose size the marker does
+ * not state gets the same treatment: the cap cannot be checked, and a Save
+ * button is the cheaper of the two mistakes.
  *
- * Applies to what is fetched *whole* - a picture, which is decoded in one
- * piece or not at all. Sound and video are not fetched whole: they are played
- * from {@link MEDIA_SCHEME} a range at a time, so their size is the player's
- * business rather than this module's.
+ * Only a picture is measured against it. Sound and video are played a range
+ * at a time, so their size is the player's business rather than this module's.
  */
 export const PREVIEW_BYTE_LIMIT = 8 * 1024 * 1024;
 
 /**
- * The kinds that stream rather than being fetched in one piece.
+ * The kinds a media element draws straight from an address.
  *
- * A player asks for a header, then for whatever the viewer seeks to; handing
- * it the whole file first would mean spending an entire video before showing a
- * frame of it, and would rule out anything past {@link PREVIEW_BYTE_LIMIT}
- * entirely - which is most videos.
+ * Everything previewable, which is the point: nothing a card shows is fetched
+ * through this module. A picture used to be pulled whole as base64 over IPC -
+ * a third bigger than the file, parsed as a string, turned back into bytes,
+ * wrapped in a blob, and thrown away on unmount, so scrolling back up through
+ * a channel of screenshots fetched every one of them again. An `<img>` pointed
+ * at the loopback origin loads the bytes itself, only once it is near the
+ * viewport, and the webview's own HTTP cache keeps them for the next mount.
  */
-const STREAMED_KINDS = new Set(["audio", "video"]);
+const ADDRESSED_KINDS = new Set(["image", "audio", "video"]);
 
 /**
  * Whether this attachment is one the server hands out per look.
@@ -99,12 +101,6 @@ export function mimeForFilename(filename: string): string {
   return MIME_BY_EXTENSION[extension] ?? "application/octet-stream";
 }
 
-/** Ask the server for a URL, fetch the object, and hand back its bytes. */
-async function fetchObject(key: string): Promise<Uint8Array> {
-  const base64 = await invoke<string>("starling_download_to_base64", { key });
-  return base64ToBytes(base64);
-}
-
 /**
  * Write one shared object to a path the user picked. Returns bytes written.
  *
@@ -122,13 +118,15 @@ export function saveCanonAttachment(
 }
 
 /**
- * The address a player can be pointed at for one shared object.
+ * The address a media element can be pointed at for one shared object.
  *
  * An ordinary loopback HTTP URL, because that is the only kind of address a
  * media element can actually load: a webview's media stack fetches over its
  * own HTTP client rather than through the page's loader, so a custom scheme -
- * `asset:` included - never reaches it. The backend answers it with ranges
- * pulled from a signed URL that never leaves the backend.
+ * `asset:` included - never reaches it. The backend answers it with bytes
+ * pulled from a signed URL that never leaves the backend, and the address is
+ * the same for the life of the run, which is what lets the webview's cache
+ * recognise a picture it has already loaded.
  */
 export function canonMediaUrl(key: string): Promise<string> {
   return invoke<string>("starling_media_url", { key });
@@ -137,20 +135,42 @@ export function canonMediaUrl(key: string): Promise<string> {
 /**
  * A source a media element can use, for an attachment with no standing URL.
  *
- * Sound and video get an address on {@link MEDIA_SCHEME} and nothing is
- * fetched here at all: the element asks for the ranges it wants, which is the
- * only way a file bigger than memory is playable and the only way seeking
- * works.
+ * An address on the loopback origin, and nothing is fetched here at all: a
+ * player asks for the ranges it wants, which is the only way a file bigger
+ * than memory is playable and the only way seeking works, and an `<img>`
+ * loads its picture when it comes near the viewport and not before.
  *
- * A picture is still fetched whole, as an object URL rather than a `data:`
- * one: a fifty-megabyte base64 string in a `src` attribute is a
- * fifty-megabyte string in the DOM. `null` for anything not worth fetching on
- * sight - too big, not previewable, or not a canon attachment at all - which
- * is the case the card already draws as a plain row with a Save button.
+ * `null` for anything not worth showing on sight - a picture past
+ * {@link PREVIEW_BYTE_LIMIT}, not previewable, or not a canon attachment at
+ * all - which is the case the card already draws as a plain row with a Save
+ * button.
  */
 export function useCanonPreviewSrc(info: FileAttachmentInfo): string | null {
-  const [source, setSource] = useState<string | null>(null);
-  const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  return useCanonPreview(info).src;
+}
+
+/** What {@link useCanonPreviewSrc} found, and whether it is still looking. */
+export interface CanonPreview {
+  /** The address to draw, or `null` while there is none to draw. */
+  readonly src: string | null;
+  /**
+   * A picture is on its way and has not arrived.
+   *
+   * The difference between this and a plain `null` is the difference between
+   * a box worth holding open and a file that is never going to be a picture:
+   * a card that cannot tell them apart draws a filename and a Save button for
+   * the length of the wait, then replaces it with a photograph.
+   */
+  readonly pending: boolean;
+}
+
+/** {@link useCanonPreviewSrc}, with the wait it is in reported alongside. */
+export function useCanonPreview(info: FileAttachmentInfo): CanonPreview {
+  const [src, setSrc] = useState<string | null>(null);
+  // An address that could not be had is not one still being asked for: the
+  // card goes back to being a row with a Save button, which is the path that
+  // reports properly.
+  const [failed, setFailed] = useState(false);
   const key = info.key ?? null;
   const { filename, sizeBytes } = info;
   const kind = previewKindForFilename(filename);
@@ -160,61 +180,44 @@ export function useCanonPreviewSrc(info: FileAttachmentInfo): string | null {
   // a broken image where a locked file belongs, and the password is the
   // reader's to supply, not this client's to hold.
   const canon = key !== null && isCanonAttachment(info) && info.mode !== "password";
-  const streamed = canon && STREAMED_KINDS.has(kind);
-  const eligible = canon && !streamed && kind === "image" && (sizeBytes ?? 0) <= PREVIEW_BYTE_LIMIT;
+  const picture = canon && kind === "image";
+  const withinCap = sizeBytes !== undefined && sizeBytes <= PREVIEW_BYTE_LIMIT;
+  const addressed = canon && ADDRESSED_KINDS.has(kind) && (!picture || withinCap);
 
   // One cheap call that moves no bytes: the origin is started on first ask and
-  // the answer is an address, so this costs the same for a clip and a film.
+  // the answer is an address, so this costs the same for a thumbnail and a
+  // film.
   useEffect(() => {
-    if (!streamed || key === null) {
-      setStreamUrl(null);
+    if (!addressed || key === null) {
+      setSrc(null);
+      setFailed(false);
       return;
     }
     let live = true;
+    setFailed(false);
     void canonMediaUrl(key)
       .then((url) => {
-        if (live) setStreamUrl(url);
+        if (live) setSrc(url);
       })
       .catch(() => {
         // An origin that will not start is a preview that does not appear.
         // The card still names the file and still offers to save it.
-        if (live) setStreamUrl(null);
-      });
-    return () => {
-      live = false;
-    };
-  }, [streamed, key]);
-
-  useEffect(() => {
-    if (!eligible || key === null) {
-      setSource(null);
-      return;
-    }
-    let url: string | null = null;
-    let live = true;
-    void fetchObject(key)
-      .then((bytes) => {
         if (!live) return;
-        // `slice()` detaches the view from any shared buffer, which is what
-        // `Blob` wants and what keeps the array from being retained whole.
-        url = URL.createObjectURL(new Blob([bytes.slice().buffer], { type: mimeForFilename(filename) }));
-        setSource(url);
-      })
-      .catch(() => {
-        // A preview that cannot be fetched is not an error worth a banner:
-        // the card still shows the file and its Save button, which is the
-        // path that reports properly when it fails.
-        if (live) setSource(null);
+        setSrc(null);
+        setFailed(true);
       });
-
     return () => {
       live = false;
-      // Revoked on unmount, or the tab holds every image ever scrolled past.
-      if (url) URL.revokeObjectURL(url);
     };
-  }, [eligible, key, filename]);
+  }, [addressed, key]);
 
-  return streamed ? streamUrl : source;
+  return {
+    src,
+    // Only a picture is waited for: a player draws its own poster while it
+    // asks for the header, and a card holding a box open for it as well
+    // would hold it open twice.
+    pending: picture && addressed && src === null && !failed,
+  };
 }
 
 /**
