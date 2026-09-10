@@ -171,6 +171,7 @@ export default function ChannelEditorSurface({
             >
               <option value="none">Disabled</option>
               <option value="fancy_v1_full_archive">Full archive</option>
+              <option value="server_managed">Server-stored history (not encrypted)</option>
               <option value="signal_v1">Encrypted Signal history</option>
             </select>
           </label>

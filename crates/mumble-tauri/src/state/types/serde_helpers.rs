@@ -12,6 +12,7 @@ pub(crate) fn serialize_pchat_protocol<S: Serializer>(
         Some(p) => s.serialize_str(match p {
             PchatProtocol::None => "none",
             PchatProtocol::FancyV1FullArchive => "fancy_v1_full_archive",
+            PchatProtocol::ServerManaged => "server_managed",
             PchatProtocol::SignalV1 => "signal_v1",
         }),
         _ => s.serialize_none(),

@@ -397,6 +397,7 @@ export default function ChannelEditorDialog({
             >
               <option value="none">{t("channelEditor.protocolNone")}</option>
               <option value="fancy_v1_full_archive">{t("channelEditor.protocolFullArchive")}</option>
+              <option value="server_managed">{t("channelEditor.protocolServerManaged")}</option>
               <option value="signal_v1">{t("channelEditor.protocolSignalV1")}</option>
             </select>
           </div>

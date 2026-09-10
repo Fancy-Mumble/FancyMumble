@@ -662,6 +662,15 @@ fn resolve_initial_channel(
 async fn init_encrypted_channel(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: PchatProtocol) {
     pchat::emit_history_loading(shared, ch, true);
 
+    // A mode with no client-side key skips the ladder entirely. Without this
+    // guard a server-managed channel would wait two seconds for a peer's key
+    // that nobody will ever send, then mint one nothing reads, and only then
+    // fetch -- two seconds of an empty chat window, every time.
+    if !mode.is_encrypted() {
+        fetch_channel_history(shared, ch, mode).await;
+        return;
+    }
+
     if !ensure_protocol_key(shared, ch, mode).await {
         return;
     }
@@ -817,10 +826,15 @@ async fn fetch_channel_history(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: 
     // the fetch handler does not distinguish "was already a member" from "just
     // joined". Skipping the request is the guarantee; nothing downstream
     // re-checks it once fetched.
-    if mode == PchatProtocol::SignalV1 {
+    //
+    // Asked as "does this mode have a server history" rather than "is this
+    // SignalV1", so a mode added later has to answer the question rather than
+    // inherit a fetch nobody considered.
+    if !mode.has_server_history() {
         debug!(
             channel_id = ch,
-            "pchat: skipping fetch for SignalV1 (no history by design)"
+            ?mode,
+            "pchat: skipping fetch for a mode the server keeps no history for"
         );
         pchat::emit_history_loading(shared, ch, false);
         return;

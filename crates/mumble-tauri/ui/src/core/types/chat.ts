@@ -2,7 +2,12 @@
  *  value types mirroring the Rust backend structs. */
 
 /** Persistent-chat protocol for a channel. */
-export type PchatProtocol = "none" | "fancy_v1_full_archive" | "signal_v1";
+export type PchatProtocol =
+  | "none"
+  | "fancy_v1_full_archive"
+  /** Persisted by the server, which holds the key. Not end-to-end encrypted. */
+  | "server_managed"
+  | "signal_v1";
 
 export interface ChannelEntry {
   id: number;

@@ -57,6 +57,16 @@ impl KeyManager {
                     epoch_fingerprint: [0u8; 8],
                 })
             }
+            // Not end-to-end: the server holds the key and seals the row at
+            // rest, so the client hands over the envelope as it is. Sending
+            // ciphertext here would make the archive unreadable to exactly the
+            // party the mode exists to let read it.
+            PchatProtocol::ServerManaged => Ok(EncryptedPayload {
+                ciphertext: plaintext.to_vec(),
+                epoch: None,
+                chain_index: None,
+                epoch_fingerprint: [0u8; 8],
+            }),
             _ => Err(Error::InvalidState(format!(
                 "cannot encrypt for protocol {protocol:?}"
             ))),
@@ -86,6 +96,8 @@ impl KeyManager {
                     .encryptor()
                     .decrypt(&channel_key.key, &payload.ciphertext, &aad)
             }
+            // The server already unsealed it on the way out.
+            PchatProtocol::ServerManaged => Ok(payload.ciphertext.clone()),
             _ => Err(Error::InvalidState(format!(
                 "cannot decrypt for protocol {protocol:?}"
             ))),

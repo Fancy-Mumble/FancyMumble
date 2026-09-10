@@ -81,18 +81,41 @@ impl PchatState {
 
 // -- Async send operations --------------------------------------------
 
+/// Which way a fetch walks the archive.
+///
+/// A cursor names one end or neither, never both: both ends is a bounded
+/// window the server does not implement, and it refuses rather than guessing.
+#[derive(Debug, Clone)]
+pub(crate) enum Anchor {
+    /// The newest page. What opening a channel asks for.
+    Newest,
+    /// Older than this message id.
+    Before(String),
+    /// Newer than this message id.
+    ///
+    /// The direction that lets a reader who scrolled up, and whose newer
+    /// messages were dropped to bound memory, get them back without paging
+    /// from the newest message all the way down again.
+    After(String),
+}
+
 /// Send a `PchatFetch` proto to request stored messages.
 pub(crate) async fn send_fetch(
     handle: &ClientHandle,
     channel_id: u32,
-    before_id: Option<String>,
+    anchor: Anchor,
     limit: u32,
 ) -> Result<(), String> {
+    let (before_id, after_id) = match &anchor {
+        Anchor::Newest => (None, None),
+        Anchor::Before(id) => (Some(id.clone()), None),
+        Anchor::After(id) => (None, Some(id.clone())),
+    };
     let fetch = mumble_tcp::PchatFetch {
         channel_id: Some(channel_id),
         before_id,
         limit: Some(limit),
-        after_id: None,
+        after_id,
     };
 
     handle
@@ -100,6 +123,6 @@ pub(crate) async fn send_fetch(
         .await
         .map_err(|e| format!("send pchat-fetch: {e}"))?;
 
-    debug!(channel_id, "sent pchat-fetch");
+    debug!(channel_id, ?anchor, "sent pchat-fetch");
     Ok(())
 }

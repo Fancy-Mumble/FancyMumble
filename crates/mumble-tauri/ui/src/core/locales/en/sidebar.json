@@ -86,6 +86,7 @@
     "protocolLabel": "Protocol",
     "protocolNone": "None (standard volatile chat)",
     "protocolFullArchive": "Full Archive (all messages)",
+    "protocolServerManaged": "Server-stored (the server can read this history)",
     "protocolSignalV1": "Signal V1 (E2EE via Signal Protocol)",
     "maxHistoryLabel": "Max History",
     "retentionLabel": "Retention (days)",

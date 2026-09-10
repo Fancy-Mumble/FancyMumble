@@ -74,6 +74,7 @@
     "protocolLabel": "Protokoll",
     "protocolNone": "Keines (klassischer flüchtiger Chat)",
     "protocolFullArchive": "Vollarchiv (alle Nachrichten)",
+    "protocolServerManaged": "Serverseitig gespeichert (Server kann mitlesen)",
     "protocolSignalV1": "Signal V1 (E2EE über Signal-Protokoll)",
     "maxHistoryLabel": "Max. Verlauf",
     "retentionLabel": "Aufbewahrung (Tage)",

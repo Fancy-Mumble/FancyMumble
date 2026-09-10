@@ -2,7 +2,11 @@
  *  trust / custodian state, stored-message history and key-share requests. */
 
 /** Persistence protocol for a channel (maps to Rust PchatProtocol). */
-export type PersistenceMode = "NONE" | "FANCY_V1_FULL_ARCHIVE" | "SIGNAL_V1";
+export type PersistenceMode =
+  | "NONE"
+  | "FANCY_V1_FULL_ARCHIVE"
+  | "SERVER_MANAGED"
+  | "SIGNAL_V1";
 
 /** Trust level for a channel's encryption key. */
 export type KeyTrustLevel = "ManuallyVerified" | "Verified" | "Unverified" | "Disputed";

@@ -88,10 +88,26 @@ fn cache_own_signal_message(state: &mut SharedState, msg: &ChatMessage, channel_
 }
 
 impl AppState {
+    /// Ask the server for a page of history in either direction.
+    ///
+    /// `fetch_older_messages` keeps its name and its meaning for the callers
+    /// that only ever walk backwards; [`Self::fetch_message_page`] is the one
+    /// that takes a direction.
     pub async fn fetch_older_messages(
         &self,
         channel_id: u32,
         before_id: Option<String>,
+        limit: u32,
+    ) -> Result<(), String> {
+        let anchor = before_id.map_or(pchat::Anchor::Newest, pchat::Anchor::Before);
+        self.fetch_message_page(channel_id, anchor, limit).await
+    }
+
+    /// Ask the server for a page of history anchored where the caller says.
+    pub async fn fetch_message_page(
+        &self,
+        channel_id: u32,
+        anchor: pchat::Anchor,
         limit: u32,
     ) -> Result<(), String> {
         let handle = {
@@ -100,7 +116,7 @@ impl AppState {
             state.conn.client_handle.clone()
         };
         let handle = handle.ok_or("Not connected")?;
-        pchat::send_fetch(&handle, channel_id, before_id, limit).await
+        pchat::send_fetch(&handle, channel_id, anchor, limit).await
     }
 
     pub async fn send_message(&self, channel_id: u32, body: String) -> Result<(), String> {
@@ -202,7 +218,11 @@ impl AppState {
         )>,
         String,
     > {
-        let Some(protocol) = pchat_protocol.filter(PchatProtocol::is_encrypted) else {
+        // `uses_pchat`, not `is_encrypted`: a server-managed channel's messages
+        // ride the same service and land in the same archive, they are simply
+        // not sealed by this client on the way. Filtering on encryption here
+        // would leave that mode with no persisted history at all.
+        let Some(protocol) = pchat_protocol.filter(PchatProtocol::uses_pchat) else {
             return Ok(None);
         };
         let Some(msg_id) = message_id else {
