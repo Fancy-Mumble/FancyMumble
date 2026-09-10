@@ -6,6 +6,7 @@ import type { MessageContextMenuState } from "./MessageContextMenu";
 import type { ToastData } from "../../elements/Toast";
 import styles from "../ChatView.module.css";
 import { bodyToCopyText } from "@core/features/chat/bodyText";
+import { linkUnder } from "@core/features/elements/externalLinks";
 
 interface UseMessageSelectionOptions {
   selectedChannel: number | null;
@@ -69,11 +70,17 @@ export function useMessageSelection({
     setSelectedMsgIds(new Set());
   }, []);
 
-  /** Handle right-click on a message bubble. */
+  /**
+   * Handle right-click on a message bubble.
+   *
+   * The link under the pointer is read here rather than in the menu: by the
+   * time the menu renders the event is gone, and which of a message's several
+   * links was aimed at is a question only the event can answer.
+   */
   const handleMessageContextMenu = useCallback((e: React.MouseEvent, msg: ChatMessage) => {
     if (!msg.message_id) return;
     e.preventDefault();
-    setMsgContextMenu({ x: e.clientX, y: e.clientY, message: msg });
+    setMsgContextMenu({ x: e.clientX, y: e.clientY, message: msg, link: linkUnder(e.target) });
   }, []);
 
   /** Handle single-message delete from context menu. */
