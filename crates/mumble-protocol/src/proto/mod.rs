@@ -86,4 +86,9 @@ pub mod fancy {
     pub mod files {
         include!("starling.fancy.files.v1.rs");
     }
+    /// Outer type 1018 - GIF search, run by the server against a provider the
+    /// operator holds the key for.
+    pub mod media {
+        include!("starling.fancy.media.v1.rs");
+    }
 }

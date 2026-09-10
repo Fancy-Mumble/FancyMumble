@@ -68,7 +68,7 @@ pub mod metadata_envelope {
     }
 }
 /// Fancy channel properties that upstream's ChannelState has no field for.
-/// Upstream owns 1–99 in every upstream message; these live out here instead of
+/// Upstream owns 1-99 in every upstream message; these live out here instead of
 /// squatting on upstream's next field number, docs/PROTOCOL-COMPATIBILITY.md §1.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ChannelExtras {
@@ -141,7 +141,10 @@ pub struct SyncDelta {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UserdataEnvelope {
-    #[prost(oneof = "userdata_envelope::Body", tags = "1, 2, 3, 4, 5, 6, 7")]
+    #[prost(
+        oneof = "userdata_envelope::Body",
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"
+    )]
     pub body: ::core::option::Option<userdata_envelope::Body>,
 }
 /// Nested message and enum types in `UserdataEnvelope`.
@@ -162,6 +165,16 @@ pub mod userdata_envelope {
         AccountQuery(super::AccountQuery),
         #[prost(message, tag = "7")]
         Account(super::AccountState),
+        #[prost(message, tag = "8")]
+        RecordGet(super::RecordGet),
+        #[prost(message, tag = "9")]
+        RecordPut(super::RecordPut),
+        #[prost(message, tag = "10")]
+        RecordList(super::RecordList),
+        #[prost(message, tag = "11")]
+        Record(super::Record),
+        #[prost(message, tag = "12")]
+        RecordKeys(super::RecordKeys),
     }
 }
 /// The account self-service surface: everything a user may change about their
@@ -203,8 +216,8 @@ pub mod account_action {
         /// Not an action, and the zero value on purpose.
         ///
         /// proto3 cannot distinguish an unset enum from its first value, so with
-        /// `SET_PASSWORD = 0` a default-constructed message - a client that forgot
-        /// the field, a decode of the wrong bytes - *was* a request to set the
+        /// `SET_PASSWORD = 0` a default-constructed message, a client that forgot
+        /// the field, a decode of the wrong bytes, *was* a request to set the
         /// password to the empty string. The dangerous default has to be the one
         /// that means nothing.
         Unspecified = 0,
@@ -340,6 +353,90 @@ pub struct AccountState {
     /// password is only allowed when it is, or the account locks its owner out.
     #[prost(bool, tag = "8")]
     pub cert_matches_session: bool,
+}
+/// The account's own record store: one value under one name, kept by the
+/// server and readable back on any connection.
+///
+/// **Not the settings map above**, and the difference is the point. `Settings`
+/// is a map answered whole: every query and every update carries all of it,
+/// which is right for a screenful of preferences and wrong for the things that
+/// need this - a document library, a citation list, a calendar. Those are tens
+/// of kilobytes that would then ride every toggle of every checkbox. A record
+/// is fetched and written one key at a time and never appears in `Settings`.
+///
+/// **Nothing here names an account**, by the same rule the rest of this
+/// envelope follows: the server resolves the caller's own from the session, so
+/// a client cannot read another person's records by asking differently.
+///
+/// Registered accounts only. A guest has nowhere durable to put anything - the
+/// account *is* the scope - so every arm answers one with a PERMISSION refusal
+/// rather than with silence, which is what leaves a client's library spinning.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RecordGet {
+    #[prost(string, tag = "1")]
+    pub request_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub key: ::prost::alloc::string::String,
+}
+/// "Which of my records start with this?"
+///
+/// The keys alone, never the values: a client asking what it has stored should
+/// not have to receive megabytes to find out. An empty prefix means all of them.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RecordList {
+    #[prost(string, tag = "1")]
+    pub request_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub prefix: ::prost::alloc::string::String,
+}
+/// Store one value, or remove it.
+///
+/// Answered with the `Record` as it now stands, not with an acknowledgement,
+/// for the reason `SettingsUpdate` is: a client that derives the new state from
+/// a bare ok is a client that guesses.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RecordPut {
+    #[prost(string, tag = "1")]
+    pub request_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub key: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "3")]
+    pub value: ::prost::alloc::vec::Vec<u8>,
+    /// Remove the record instead of writing it. `value` is ignored.
+    ///
+    /// Explicit rather than "an empty value means delete": a client storing an
+    /// empty document would otherwise silently lose the key, and the difference
+    /// between "stored, and empty" and "not stored" is one the caller decides.
+    #[prost(bool, tag = "4")]
+    pub remove: bool,
+}
+/// One record, in answer to a get or a put.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Record {
+    #[prost(string, tag = "1")]
+    pub request_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub key: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "3")]
+    pub value: ::prost::alloc::vec::Vec<u8>,
+    /// False when there is no such record. `value` is empty then, which is not
+    /// the same as a record whose value is empty - see `RecordPut.remove`.
+    #[prost(bool, tag = "4")]
+    pub found: bool,
+    #[prost(uint64, tag = "5")]
+    pub updated_at_ms: u64,
+    /// Set when the request was refused; `found` is false and `value` empty.
+    #[prost(message, optional, tag = "6")]
+    pub refused: ::core::option::Option<crate::proto::fancy::wire::Refusal>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RecordKeys {
+    #[prost(string, tag = "1")]
+    pub request_id: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "2")]
+    pub keys: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "3")]
+    pub refused: ::core::option::Option<crate::proto::fancy::wire::Refusal>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ServerConfigEnvelope {
