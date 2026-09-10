@@ -515,7 +515,11 @@ mod tests {
         // Not carried, and server-processed, so it cannot be relayed either:
         // dropped rather than sent somewhere it will be misread. The feature is
         // off until its canon lands, which is visible instead of silent.
-        let server_processed = ControlMessage::PchatPin(mumble_tcp::PchatPin {
+        //
+        // A pin stood here until the canon grew a home for it, which is the
+        // point of the assertion rather than a property of any one message.
+        // Forums are the case standing here now.
+        let server_processed = ControlMessage::FancyForumPost(mumble_tcp::FancyForumPost {
             channel_id: Some(0),
             ..Default::default()
         });

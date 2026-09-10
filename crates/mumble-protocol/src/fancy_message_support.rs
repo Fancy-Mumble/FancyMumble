@@ -269,19 +269,14 @@ mod tests {
         "PchatOfflineQueueDrain",
         "PchatReactionFetchResponse",
         "FancyCustomReactionsConfig",
-        // Pinned messages, whole.
-        "PchatPin",
-        "PchatPinDeliver",
-        "PchatPinFetchResponse",
         // Onboarding, whole.
         "FancyOnboardingConfig",
         "FancyOnboardingConfigUpdate",
         "FancyOnboardingResponse",
         "FancyOnboardingResponseQuery",
         "FancyOnboardingResponseDeliver",
-        // Plugins: the client-side registry and the whole admin surface.
-        "PluginMessage",
-        "PluginRegistry",
+        // Plugins: the admin surface. The registry and the envelope a plugin
+        // talks over are carried at outer type 1010.
         "FancyPluginAdminListRequest",
         "FancyPluginAdminList",
         "FancyPluginAdminSetEnabled",

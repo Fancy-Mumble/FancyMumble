@@ -250,6 +250,35 @@ pub enum TcpMessageType {
     /// tag that never reaches a wire. The canon carries it inside outer type
     /// 1013, the same envelope as `FancyServerSettingsUpdate`.
     FancyServerSettingsQuery = 187,
+    /// Fancy Mumble: client asks the server to search a GIF provider.
+    ///
+    /// Epoch 0 has no GIF message at all - the client called the provider
+    /// itself, with a key each user had to obtain - so there is nothing to
+    /// translate from. These three are local tags that never reach a wire; the
+    /// canon carries all of them inside outer type 1018.
+    FancyGifQuery = 188,
+    /// Fancy Mumble: one page of results.
+    FancyGifPage = 189,
+    /// Fancy Mumble: the server declined a search, and why.
+    FancyGifRefused = 190,
+    /// Fancy Mumble: client asks to add or replace a server emote.
+    FancyEmoteUpload = 196,
+    /// Fancy Mumble: client asks for a server emote to be removed.
+    FancyEmoteForget = 197,
+    /// Fancy Mumble: client asks for this server's emotes.
+    FancyEmoteQuery = 198,
+    /// Fancy Mumble: the server's emotes, sent on request and on every change.
+    FancyEmotes = 199,
+    /// Fancy Mumble: client asks for one of its own stored records.
+    FancyAccountRecordGet = 191,
+    /// Fancy Mumble: client stores or removes one of its own records.
+    FancyAccountRecordPut = 192,
+    /// Fancy Mumble: client asks which of its records start with a prefix.
+    FancyAccountRecordList = 193,
+    /// Fancy Mumble: one stored record, or why it could not be had.
+    FancyAccountRecord = 194,
+    /// Fancy Mumble: the keys under a prefix.
+    FancyAccountRecordKeys = 195,
     /// Fancy Mumble: generic plugin envelope (bidirectional).
     PluginMessage = 200,
     /// Fancy Mumble: server enumerates loaded plugins after `ServerSync`.
@@ -532,8 +561,62 @@ pub enum ControlMessage {
     FancyFileManaged(fancy::files::ManageListing),
     /// Fancy: ask for one stored file to be removed.
     FancyFileForget(fancy::files::ForgetRequest),
+    /// Fancy: ask for one of the caller's own stored records.
+    ///
+    /// The account's private key/value store, which is where a document
+    /// library, a citation list and a calendar live. Carries the canon type
+    /// for the same reason files do: there is no epoch-0 form to translate to.
+    ///
+    /// **Nothing here names an account.** The server answers about whoever
+    /// sent it, so this cannot be pointed at somebody else's records.
+    FancyAccountRecordGet(fancy::domain::RecordGet),
+    /// Fancy: store or remove one of the caller's own records.
+    FancyAccountRecordPut(fancy::domain::RecordPut),
+    /// Fancy: ask which of the caller's records start with a prefix.
+    FancyAccountRecordList(fancy::domain::RecordList),
+    /// Fancy: add or replace a server emote.
+    ///
+    /// The image does not travel here: this asks for a URL to `PUT` it to,
+    /// answered with a [`Self::FancyFileGrant`] like any other upload. The
+    /// shortcode becomes the name the stored object is reached by, so
+    /// replacing an emote keeps the shortcode and swaps the picture.
+    FancyEmoteUpload(fancy::files::EmoteUpload),
+    /// Fancy: remove a server emote, image and all.
+    FancyEmoteForget(fancy::files::EmoteForget),
+    /// Fancy: ask for this server's emotes.
+    FancyEmoteQuery(fancy::files::EmoteQuery),
+    /// Fancy: the server's emotes.
+    ///
+    /// Sent in answer to a query and again to everyone whenever the set
+    /// changes, so a client that never asked still stops showing one somebody
+    /// deleted.
+    FancyEmotes(fancy::files::Emotes),
+    /// Fancy: one stored record, correlated by `request_id`.
+    ///
+    /// `found` false with no `refused` is an absent record, which is the
+    /// ordinary first-run answer; `refused` set is the server declining, and a
+    /// guest asking at all gets `PERMISSION` rather than silence.
+    FancyAccountRecord(fancy::domain::Record),
+    /// Fancy: the keys under a prefix.
+    FancyAccountRecordKeys(fancy::domain::RecordKeys),
     /// Fancy: the server declined a file request, carrying a reason.
     FancyFileRefused(fancy::files::Refused),
+    /// Fancy: ask the server to search a GIF provider on the caller's behalf.
+    ///
+    /// Carries the canon type for the same reason files do: there is no
+    /// epoch-0 twin to translate to, because in epoch 0 this did not go over
+    /// the wire at all - the client held a provider key and called the API
+    /// directly. An empty `query` means trending.
+    FancyGifQuery(fancy::media::GifQuery),
+    /// Fancy: one page of results, correlated by `request_id`.
+    FancyGifPage(fancy::media::GifPage),
+    /// Fancy: the server declined a search.
+    ///
+    /// `kind` is the field that matters: `UNAVAILABLE` means this server does
+    /// not do GIFs, and is the only one on which falling back to a key of the
+    /// user's own is right. Falling back on `THROTTLED` would route around the
+    /// server's rate limit using the user's own quota.
+    FancyGifRefused(fancy::media::GifRefused),
     /// Fancy: generic plugin envelope (bidirectional).
     PluginMessage(mumble_tcp::PluginMessage),
     /// Fancy: server enumerates loaded plugins.
@@ -585,6 +668,10 @@ message_type_mapping! {
     PchatPin, PchatPinDeliver, PchatPinFetchResponse,
     FancyTypingIndicator,
     FancyLinkPreviewRequest, FancyLinkPreviewResponse,
+    FancyGifQuery, FancyGifPage, FancyGifRefused,
+    FancyAccountRecordGet, FancyAccountRecordPut, FancyAccountRecordList,
+    FancyAccountRecord, FancyAccountRecordKeys,
+    FancyEmoteUpload, FancyEmoteForget, FancyEmoteQuery, FancyEmotes,
     FancyWatchSync, FancyDrawStroke,
     FancyOnboardingConfig, FancyOnboardingConfigUpdate,
     FancyOnboardingResponse, FancyOnboardingResponseQuery,
@@ -769,7 +856,10 @@ mod tests {
         assert!(TcpMessageType::try_from(142u16).is_err());
         assert!(TcpMessageType::try_from(143u16).is_err());
         assert!(TcpMessageType::try_from(169u16).is_err());
-        assert!(TcpMessageType::try_from(199u16).is_err());
+        // 191-199 were free and are now the record and emote types, so the
+        // sentinel moved rather than the types: a gap this test names has to
+        // be a gap the enum actually has.
+        assert!(TcpMessageType::try_from(250u16).is_err());
         assert!(TcpMessageType::try_from(202u16).is_err());
         assert!(TcpMessageType::try_from(u16::MAX).is_err());
     }

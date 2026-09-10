@@ -239,6 +239,18 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
         FancyFileManaged(m) => m.encode_to_vec(),
         FancyFileForget(m) => m.encode_to_vec(),
         FancyFileRefused(m) => m.encode_to_vec(),
+        FancyEmoteUpload(m) => m.encode_to_vec(),
+        FancyEmoteForget(m) => m.encode_to_vec(),
+        FancyEmoteQuery(m) => m.encode_to_vec(),
+        FancyEmotes(m) => m.encode_to_vec(),
+        FancyAccountRecordGet(m) => m.encode_to_vec(),
+        FancyAccountRecordPut(m) => m.encode_to_vec(),
+        FancyAccountRecordList(m) => m.encode_to_vec(),
+        FancyAccountRecord(m) => m.encode_to_vec(),
+        FancyAccountRecordKeys(m) => m.encode_to_vec(),
+        FancyGifQuery(m) => m.encode_to_vec(),
+        FancyGifPage(m) => m.encode_to_vec(),
+        FancyGifRefused(m) => m.encode_to_vec(),
         FancyServerSettingsQuery(m) => m.encode_to_vec(),
         FancyLiveryQuery(m) => m.encode_to_vec(),
         FancyServerLivery(m) => m.encode_to_vec(),
@@ -369,6 +381,33 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
         FancyFileGrant => {
             ControlMessage::FancyFileGrant(crate::proto::fancy::files::Grant::decode(payload)?)
         }
+        FancyEmoteUpload => ControlMessage::FancyEmoteUpload(
+            crate::proto::fancy::files::EmoteUpload::decode(payload)?,
+        ),
+        FancyEmoteForget => ControlMessage::FancyEmoteForget(
+            crate::proto::fancy::files::EmoteForget::decode(payload)?,
+        ),
+        FancyEmoteQuery => ControlMessage::FancyEmoteQuery(
+            crate::proto::fancy::files::EmoteQuery::decode(payload)?,
+        ),
+        FancyEmotes => {
+            ControlMessage::FancyEmotes(crate::proto::fancy::files::Emotes::decode(payload)?)
+        }
+        FancyAccountRecordGet => ControlMessage::FancyAccountRecordGet(
+            crate::proto::fancy::domain::RecordGet::decode(payload)?,
+        ),
+        FancyAccountRecordPut => ControlMessage::FancyAccountRecordPut(
+            crate::proto::fancy::domain::RecordPut::decode(payload)?,
+        ),
+        FancyAccountRecordList => ControlMessage::FancyAccountRecordList(
+            crate::proto::fancy::domain::RecordList::decode(payload)?,
+        ),
+        FancyAccountRecord => ControlMessage::FancyAccountRecord(
+            crate::proto::fancy::domain::Record::decode(payload)?,
+        ),
+        FancyAccountRecordKeys => ControlMessage::FancyAccountRecordKeys(
+            crate::proto::fancy::domain::RecordKeys::decode(payload)?,
+        ),
         FancyFileShare => {
             ControlMessage::FancyFileShare(crate::proto::fancy::files::Share::decode(payload)?)
         }
@@ -387,6 +426,15 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
         FancyFileRefused => {
             ControlMessage::FancyFileRefused(crate::proto::fancy::files::Refused::decode(payload)?)
         }
+        FancyGifQuery => {
+            ControlMessage::FancyGifQuery(crate::proto::fancy::media::GifQuery::decode(payload)?)
+        }
+        FancyGifPage => {
+            ControlMessage::FancyGifPage(crate::proto::fancy::media::GifPage::decode(payload)?)
+        }
+        FancyGifRefused => ControlMessage::FancyGifRefused(
+            crate::proto::fancy::media::GifRefused::decode(payload)?,
+        ),
         FancyServerSettingsQuery => ControlMessage::FancyServerSettingsQuery(
             crate::proto::fancy::domain::ConfigQuery::decode(payload)?,
         ),

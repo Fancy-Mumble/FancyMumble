@@ -53,12 +53,21 @@ const SCREENSHARE: u16 = 1008;
 const AUDIT: u16 = 1012;
 /// Outer type for file sharing: the URL handshake, not the bytes.
 const FILES: u16 = 1009;
+/// Outer type for GIF search, which the server runs against a provider whose
+/// key only it holds.
+const GIFS: u16 = 1018;
+/// Outer type for the plugin host: the loaded set, and the opaque envelopes
+/// a plugin exchanges with its own half in this client.
+const PLUGINS: u16 = 1010;
 /// Outer type for chat and its history - which is where scheduled messages
 /// live, because at the due time a scheduled message *is* a text message.
 const TEXT: u16 = 1005;
 /// Outer type for accounts: the caller's own registration, and the settings
 /// stored against it.
 const USERDATA: u16 = 1003;
+
+/// The userdata envelope's bodies, named once so the record arms read short.
+use fancy::domain::userdata_envelope::Body as Userdata;
 /// Outer type for runtime-mutable settings, which is where livery lives:
 /// `server-config` owns the document, so its envelope carries it.
 const SERVER_CONFIG: u16 = 1013;
@@ -199,6 +208,27 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
         }
         ControlMessage::FancyAccountSettingsUpdate(update) => {
             return account_update_to_canon(update).map(|payload| (USERDATA, payload));
+        }
+        // The account's own record store. A rewrap rather than a translation:
+        // these have no epoch-0 twin, so the variant already carries the canon
+        // type and only needs its envelope.
+        ControlMessage::FancyAccountRecordGet(get) => {
+            return Some((
+                USERDATA,
+                userdata_envelope(Userdata::RecordGet(get.clone())),
+            ));
+        }
+        ControlMessage::FancyAccountRecordPut(put) => {
+            return Some((
+                USERDATA,
+                userdata_envelope(Userdata::RecordPut(put.clone())),
+            ));
+        }
+        ControlMessage::FancyAccountRecordList(list) => {
+            return Some((
+                USERDATA,
+                userdata_envelope(Userdata::RecordList(list.clone())),
+            ));
         }
         ControlMessage::FancyAuditQuery(query) => {
             return Some((AUDIT, audit_query_to_canon(query)));
@@ -435,6 +465,25 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
                 .encode_to_vec(),
             ));
         }
+        // A pin rides pchat rather than social because a pin is a property of
+        // the stored message, whatever the `Pchat*` prefix does for the
+        // reactions that share it.
+        //
+        // `sender_hash` and `timestamp` do not cross, and their absence is the
+        // point rather than an omission: both are claims. The server stamps the
+        // pinner from the TLS connection and owns the clock, exactly as it does
+        // for `PchatMessage.sender_cert`, so a field carrying the client's
+        // version is one the far end has to decide to distrust.
+        ControlMessage::PchatPin(pin) => {
+            let envelope = fancy::pchat::PchatEnvelope {
+                body: Some(fancy::pchat::pchat_envelope::Body::Pin(fancy::pchat::Pin {
+                    message_id: pin.message_id.clone().unwrap_or_default(),
+                    channel: pin.channel_id.unwrap_or_default(),
+                    unpin: pin.unpin.unwrap_or_default(),
+                })),
+            };
+            return Some((PCHAT, envelope.encode_to_vec()));
+        }
         ControlMessage::PchatFetch(fetch) => {
             let envelope = fancy::pchat::PchatEnvelope {
                 body: Some(fancy::pchat::pchat_envelope::Body::Fetch(
@@ -469,6 +518,69 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
         }
         ControlMessage::FancyFileForget(request) => {
             return Some((FILES, files_envelope(Files::Forget(request.clone()))));
+        }
+        ControlMessage::FancyEmoteUpload(upload) => {
+            return Some((FILES, files_envelope(Files::EmoteUpload(upload.clone()))));
+        }
+        ControlMessage::FancyEmoteForget(request) => {
+            return Some((FILES, files_envelope(Files::EmoteForget(request.clone()))));
+        }
+        ControlMessage::FancyEmoteQuery(query) => {
+            return Some((FILES, files_envelope(Files::EmoteQuery(query.clone()))));
+        }
+        // No fallback for this one, and that is the point: epoch 0 had no GIF
+        // message because the client called the provider itself. A server that
+        // cannot read this simply never answers, and the picker falls back to
+        // the user's own key on the timeout - which is the same place the
+        // `UNAVAILABLE` refusal lands it.
+        ControlMessage::FancyGifQuery(query) => {
+            return Some((
+                GIFS,
+                fancy::media::GifsEnvelope {
+                    body: Some(fancy::media::gifs_envelope::Body::Query(query.clone())),
+                }
+                .encode_to_vec(),
+            ));
+        }
+        // The plugin envelope, which is the whole of what a plugin says to
+        // its server half or to a peer. Epoch 0 sent it flat at type 200 and
+        // the canon nests the same fields in the plugins service, so this is
+        // a field move rather than a translation.
+        //
+        // Without it `to_canon` answered `None` here, which hands the message
+        // to the legacy codec - and that codec drops every `ServerOnly`
+        // message with one `debug!` line. Every plugin that talks over this
+        // envelope was mute on an epoch-1 server: the live-doc open request
+        // never left the process, which is one half of why no document ever
+        // opened.
+        //
+        // Three fields do not cross, and none of them is a loss:
+        //
+        // * `plugin_slot` is an index into the loaded set, so it changes
+        //   whenever anything is enabled or disabled. Both ends key on the
+        //   name, which is why the canon has no slot to carry.
+        // * `channel_id` was a fan-out hint the caller supplied. The plugins
+        //   service reads the sender's channel off its own roster instead,
+        //   which is the same answer without taking the client's word for
+        //   where it is standing.
+        // * `sender_session` is stamped by the server on delivery and
+        //   ignored on the way in, as its own field docs say.
+        ControlMessage::PluginMessage(message) => {
+            return Some((
+                PLUGINS,
+                fancy::feature::PluginsEnvelope {
+                    body: Some(fancy::feature::plugins_envelope::Body::Opaque(
+                        fancy::feature::Opaque {
+                            plugin: message.plugin_name.clone().unwrap_or_default(),
+                            payload: message.payload.clone().unwrap_or_default(),
+                            recipients: message.target_sessions.clone(),
+                            sender: 0,
+                            payload_type: message.payload_type.clone().unwrap_or_default(),
+                        },
+                    )),
+                }
+                .encode_to_vec(),
+            ));
         }
         _ => return None,
     };
@@ -979,6 +1091,8 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                         totp_uri: (!ack.totp_uri.is_empty()).then_some(ack.totp_uri),
                     },
                 )),
+                Some(Body::Record(record)) => Some(ControlMessage::FancyAccountRecord(record)),
+                Some(Body::RecordKeys(keys)) => Some(ControlMessage::FancyAccountRecordKeys(keys)),
                 // The stored client settings, which this client keeps locally,
                 // plus the client->server bodies.
                 _ => None,
@@ -1108,7 +1222,58 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                         channel_id: Some(query.channel),
                     }),
                 ),
+                // The server relays a pin to the channel verbatim, so what
+                // arrives is the pinner's own `Pin` rather than a delivery the
+                // server composed. The canon has no room for who pinned it,
+                // which is why `pinner_hash` and `pinner_name` come through
+                // absent: the handler resolves a name from the hash and shows
+                // nothing when there is none, which beats attributing the pin
+                // to whoever wrote the message.
+                Some(fancy::pchat::pchat_envelope::Body::Pin(pin)) => Some(
+                    ControlMessage::PchatPinDeliver(mumble_tcp::PchatPinDeliver {
+                        channel_id: Some(pin.channel),
+                        message_id: Some(pin.message_id),
+                        unpin: Some(pin.unpin),
+                        ..Default::default()
+                    }),
+                ),
+                // A pin list carries the pinned *messages*, so the only thing
+                // it can say about each pin is which message it sits on. The
+                // pinner and the moment are not in the canon at all.
+                Some(fancy::pchat::pchat_envelope::Body::PinList(list)) => Some(
+                    ControlMessage::PchatPinFetchResponse(mumble_tcp::PchatPinFetchResponse {
+                        channel_id: Some(list.channel),
+                        pins: list
+                            .pinned
+                            .into_iter()
+                            .map(
+                                |message| mumble_tcp::pchat_pin_fetch_response::PinnedMessage {
+                                    message_id: Some(message.message_id),
+                                    ..Default::default()
+                                },
+                            )
+                            .collect(),
+                    }),
+                ),
                 _ => None,
+            })
+        }
+        GIFS => {
+            let Ok(envelope) = fancy::media::GifsEnvelope::decode(payload) else {
+                return Ok(None);
+            };
+            // A rewrap rather than a translation: the variants carry the canon
+            // types, for the reason their docs give.
+            Ok(match envelope.body {
+                Some(fancy::media::gifs_envelope::Body::Page(page)) => {
+                    Some(ControlMessage::FancyGifPage(page))
+                }
+                Some(fancy::media::gifs_envelope::Body::Refused(refused)) => {
+                    Some(ControlMessage::FancyGifRefused(refused))
+                }
+                // The request arm. A server sending one is either confused or
+                // newer than this client; either way nothing here handles it.
+                Some(fancy::media::gifs_envelope::Body::Query(_)) | None => None,
             })
         }
         FILES => {
@@ -1126,6 +1291,7 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 Some(Files::Listing(listing)) => Some(ControlMessage::FancyFileListing(listing)),
                 Some(Files::Refused(refused)) => Some(ControlMessage::FancyFileRefused(refused)),
                 Some(Files::Managed(listing)) => Some(ControlMessage::FancyFileManaged(listing)),
+                Some(Files::Emotes(emotes)) => Some(ControlMessage::FancyEmotes(emotes)),
                 // The request arms. A server sending one of those is either
                 // confused or newer than this client; either way there is
                 // nothing here that handles it, so it takes the unknown path.
@@ -1134,7 +1300,63 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                     | Files::Download(_)
                     | Files::List(_)
                     | Files::Manage(_)
-                    | Files::Forget(_),
+                    | Files::Forget(_)
+                    | Files::EmoteUpload(_)
+                    | Files::EmoteForget(_)
+                    | Files::EmoteQuery(_),
+                )
+                | None => None,
+            })
+        }
+        PLUGINS => {
+            let Ok(envelope) = fancy::feature::PluginsEnvelope::decode(payload) else {
+                return Ok(None);
+            };
+            Ok(match envelope.body {
+                // What a plugin sent us. `sender` is the server's word for who
+                // sent it rather than the sender's own claim, and the
+                // recipient list has already been spent on the delivery, so a
+                // relayed message arrives with it empty.
+                Some(fancy::feature::plugins_envelope::Body::Opaque(opaque)) => {
+                    Some(ControlMessage::PluginMessage(mumble_tcp::PluginMessage {
+                        plugin_name: Some(opaque.plugin),
+                        plugin_slot: None,
+                        payload_type: Some(opaque.payload_type),
+                        payload: Some(opaque.payload),
+                        target_sessions: opaque.recipients,
+                        channel_id: None,
+                        sender_session: Some(opaque.sender),
+                        sender_name: None,
+                    }))
+                }
+                // The loaded set. A descriptor that says it is not enabled is
+                // dropped rather than listed: this client's registry entry has
+                // nowhere to put the flag, and the list means the plugins that
+                // are loaded.
+                Some(fancy::feature::plugins_envelope::Body::Registry(registry)) => {
+                    Some(ControlMessage::PluginRegistry(mumble_tcp::PluginRegistry {
+                        plugins: registry
+                            .plugins
+                            .into_iter()
+                            .filter(|plugin| plugin.enabled)
+                            .map(|plugin| mumble_tcp::PluginRegistryEntry {
+                                plugin_name: plugin.name,
+                                version: plugin.version,
+                                // No slot exists on this wire; the client
+                                // routes on the name.
+                                plugin_slot: None,
+                                info_json: Some(plugin.info_json),
+                            })
+                            .collect(),
+                    }))
+                }
+                // The query is ours to ask, and administration is an operator
+                // action the client plane carries no identity for - so both
+                // those arms and its result take the unknown path.
+                Some(
+                    fancy::feature::plugins_envelope::Body::Query(_)
+                    | fancy::feature::plugins_envelope::Body::Admin(_)
+                    | fancy::feature::plugins_envelope::Body::AdminResult(_),
                 )
                 | None => None,
             })
@@ -1146,6 +1368,11 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
 /// Wrap one files body in the envelope its outer type expects.
 fn files_envelope(body: fancy::files::files_envelope::Body) -> Vec<u8> {
     fancy::files::FilesEnvelope { body: Some(body) }.encode_to_vec()
+}
+
+/// Wrap one userdata body in the envelope its outer type expects.
+fn userdata_envelope(body: Userdata) -> Vec<u8> {
+    fancy::domain::UserdataEnvelope { body: Some(body) }.encode_to_vec()
 }
 
 /// A canon reaction, as the delivery this client's UI already handles.
@@ -1300,11 +1527,18 @@ fn emoji_to_canon(emoji: Option<&mumble_tcp::pchat_reaction::Emoji>) -> Option<f
 
 /// One canon `Preview` as the client's own response message.
 ///
-/// The canon is deliberately smaller than the epoch-0 shape: it carries what a
-/// server can honestly extract from a page - title, description, site, and the
-/// picture it fetched - and not the video/author/favicon/timestamp surface
-/// `Embed` has room for. Those are left unset rather than invented, so a client
-/// renders what was actually read.
+/// The canon carries what a server can honestly extract from a page, and since
+/// the crawler learned to classify one that is more than it was: what kind of
+/// thing the link is, who made it, how long it plays, what it costs, and the
+/// labelled facts the page published about itself. All of those have a home in
+/// the epoch-0 `Embed` already, so this is a mapping rather than an extension -
+/// the shape a client renders has not moved.
+///
+/// The one field with no epoch-0 home is the price, which arrives as `fields`
+/// rows named `price.amount`, `price.currency`, `price.was` and
+/// `price.availability`. The Tauri bridge reads those back into a typed price
+/// and keeps them out of the fact list it hands the UI; the names are the
+/// contract between the two, and they are spelled out in both places.
 ///
 /// The image travels as `Media::preview_data` and **`Media::url` stays unset**,
 /// which is the whole point of the field: the bytes are what the server
@@ -1316,6 +1550,12 @@ fn emoji_to_canon(emoji: Option<&mumble_tcp::pchat_reaction::Emoji>) -> Option<f
 /// `image_key` is still not mapped: it names a *full-resolution* object in the
 /// files service, and nothing stores one yet (`PROTOCOL-MIGRATION.md` M2b).
 fn preview_response(preview: &fancy::feature::Preview) -> mumble_tcp::FancyLinkPreviewResponse {
+    let author = (!preview.author.is_empty()).then(|| {
+        mumble_tcp::fancy_link_preview_response::embed::Author {
+            name: Some(preview.author.clone()),
+            url: None,
+        }
+    });
     mumble_tcp::FancyLinkPreviewResponse {
         request_id: Some(preview.request_id.clone()),
         embeds: vec![mumble_tcp::fancy_link_preview_response::Embed {
@@ -1323,11 +1563,129 @@ fn preview_response(preview: &fancy::feature::Preview) -> mumble_tcp::FancyLinkP
             title: Some(preview.title.clone()),
             description: Some(preview.description.clone()),
             site_name: Some(preview.site.clone()),
-            r#type: Some("link".to_owned()),
+            r#type: Some(preview_kind(preview.kind).to_owned()),
             image: preview_image(preview),
+            favicon: preview_icon(preview),
+            author,
+            media_duration: (preview.duration_seconds > 0).then(|| clock(preview.duration_seconds)),
+            published_time: (!preview.published_at.is_empty())
+                .then(|| preview.published_at.clone()),
+            // The word travels as a field row (see `preview_fields`) and the
+            // flag is derived from it here, because "is this safe to draw in
+            // a channel" is a decision every client makes the same way and
+            // none of them should have to know which vocabulary the page
+            // happened to use.
+            nsfw: (!preview.content_rating.is_empty()).then(|| is_adult(&preview.content_rating)),
+            fields: preview_fields(preview),
             ..Default::default()
         }],
     }
+}
+
+/// The canon kind as the word the epoch-0 `Embed.type` carries.
+///
+/// A word rather than a number because that is what the field has always held,
+/// and because a renderer switching on "video" reads as what it is. An
+/// unrecognised kind - a server newer than this client - is "link", which is
+/// the generic card and was the only card before any of this.
+fn preview_kind(kind: i32) -> &'static str {
+    match fancy::feature::preview::Kind::try_from(kind) {
+        Ok(fancy::feature::preview::Kind::Article) => "article",
+        Ok(fancy::feature::preview::Kind::Video) => "video",
+        Ok(fancy::feature::preview::Kind::Image) => "image",
+        Ok(fancy::feature::preview::Kind::Audio) => "audio",
+        Ok(fancy::feature::preview::Kind::Product) => "product",
+        Ok(fancy::feature::preview::Kind::Forum) => "forum",
+        Ok(fancy::feature::preview::Kind::Profile) => "profile",
+        Ok(fancy::feature::preview::Kind::Page) | Err(_) => "link",
+    }
+}
+
+/// Whether a page's own content rating means "not in front of everybody".
+///
+/// The vocabularies disagree and none maps onto another - image boards write
+/// "explicit" and "questionable", `OpenGraph` writes "18+", the old
+/// `<meta name="rating">` convention writes "adult" or "mature" - so this
+/// recognises the words rather than pretending there is a scale. Anything
+/// unrecognised is not adult: a picture hidden because nobody could read its
+/// rating is a card that failed for a reason the reader cannot see.
+fn is_adult(rating: &str) -> bool {
+    let rating = rating.to_ascii_lowercase();
+    [
+        "adult",
+        "explicit",
+        "mature",
+        "restricted",
+        "r18",
+        "18+",
+        "nsfw",
+        "questionable",
+    ]
+    .iter()
+    .any(|word| rating.contains(word))
+}
+
+/// Seconds as the clock a reader recognises: `3614` is "1:00:14".
+///
+/// Minutes and seconds are always two digits and the hour is only there when
+/// there is one, which is how every player in the world writes a playing time.
+fn clock(seconds: u32) -> String {
+    let (hours, minutes, seconds) = (seconds / 3600, (seconds / 60) % 60, seconds % 60);
+    if hours > 0 {
+        format!("{hours}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes}:{seconds:02}")
+    }
+}
+
+/// The price and the page's own labelled facts, as `Embed` field rows.
+///
+/// Two kinds of row in one list, told apart by their names: the four
+/// `price.*` rows are the bridge for a field epoch-0 never had, and everything
+/// else is a fact the page published, named by the crawler's reading of its
+/// label where it recognised one and by the label itself where it did not.
+/// `inline` marks the second kind, which is the sort a client draws in a row.
+fn preview_fields(
+    preview: &fancy::feature::Preview,
+) -> Vec<mumble_tcp::fancy_link_preview_response::embed::Field> {
+    let row = |name: &str, value: &str, inline: bool| {
+        mumble_tcp::fancy_link_preview_response::embed::Field {
+            name: Some(name.to_owned()),
+            value: Some(value.to_owned()),
+            inline: Some(inline),
+        }
+    };
+    let mut fields = Vec::new();
+    // The rating as the page wrote it, beside the flag derived from it: the
+    // flag decides whether to hide the picture, and the word is what a reader
+    // is shown when they ask why.
+    if !preview.content_rating.is_empty() {
+        fields.push(row("content.rating", &preview.content_rating, false));
+    }
+    if let Some(price) = preview.price.as_ref() {
+        fields.push(row("price.amount", &price.amount, false));
+        if !price.currency.is_empty() {
+            fields.push(row("price.currency", &price.currency, false));
+        }
+        if !price.was.is_empty() {
+            fields.push(row("price.was", &price.was, false));
+        }
+        if !price.availability.is_empty() {
+            fields.push(row("price.availability", &price.availability, false));
+        }
+    }
+    for fact in &preview.facts {
+        // The key where the crawler recognised the label, the label itself
+        // where it did not: a client draws a shape for the handful it knows
+        // and prints the rest as the page wrote them.
+        let name = if fact.key.is_empty() {
+            &fact.label
+        } else {
+            &fact.key
+        };
+        fields.push(row(name, &fact.value, true));
+    }
+    fields
 }
 
 /// The fetched thumbnail as canon media, or `None` when there is none.
@@ -1348,11 +1706,40 @@ fn preview_image(
         preview_mime: Some(preview.image_mime.clone()),
         preview_width: dimension(preview.image_width),
         preview_height: dimension(preview.image_height),
-        // The size the client lays the picture out at is the size of the
-        // picture it was given: there is no larger one to fetch, so `width`
-        // and `height` describe these bytes too.
-        width: dimension(preview.image_width),
-        height: dimension(preview.image_height),
+        // `width`/`height` are the *original's*, which is what those fields
+        // have always meant, and the preview pair beside them is the bytes
+        // that travelled. The difference is the whole reason a client can lay
+        // a 360-wide thumbnail out differently from a 3000-wide photograph
+        // shrunk into the same box - after the shrink it is not visible in
+        // the picture any more. A server that did not say falls back to the
+        // thumbnail's size, which is what this field held before.
+        width: dimension(preview.source_width).or_else(|| dimension(preview.image_width)),
+        height: dimension(preview.source_height).or_else(|| dimension(preview.image_height)),
+        original_size: None,
+        url: None,
+    })
+}
+
+/// The site's own icon as canon media, or `None` where there is none.
+///
+/// The bytes and never a URL, for the reason [`preview_image`] carries the
+/// picture that way: a favicon fetched by each viewer is one request per
+/// reader to a host that then knows who is in the channel.
+fn preview_icon(
+    preview: &fancy::feature::Preview,
+) -> Option<mumble_tcp::fancy_link_preview_response::embed::Media> {
+    if preview.icon.is_empty() {
+        return None;
+    }
+    Some(mumble_tcp::fancy_link_preview_response::embed::Media {
+        preview_data: Some(preview.icon.clone()),
+        preview_mime: Some(preview.icon_mime.clone()),
+        // Square by nature and tiny by design; the size it is drawn at is the
+        // card's business, so no dimensions are claimed for it.
+        preview_width: None,
+        preview_height: None,
+        width: None,
+        height: None,
         original_size: None,
         url: None,
     })
@@ -1434,6 +1821,10 @@ fn unhex(value: &str) -> Vec<u8> {
 mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
     use super::*;
+
+    /// One live-doc invite, as the plugin mints it: JSON this layer never
+    /// reads and must not touch.
+    const INVITE: &[u8] = br#"{"channelId":4,"slug":"notes","wsUrl":"wss://x/y"}"#;
 
     #[test]
     fn a_livery_document_comes_back_off_the_wire() {
@@ -2110,6 +2501,188 @@ mod tests {
     }
 
     #[test]
+    fn what_the_crawler_decided_the_link_was_survives_the_translation() {
+        // The card the client draws is chosen by the kind, so a kind that is
+        // dropped here is a shop listing rendered as a generic page. The
+        // facets travel with it, each into the epoch-0 field that already
+        // meant that thing.
+        let preview = fancy::feature::LinkPreviewEnvelope {
+            body: Some(fancy::feature::link_preview_envelope::Body::Preview(
+                fancy::feature::Preview {
+                    request_id: "r-6".to_owned(),
+                    url: "https://shop.example/c64".to_owned(),
+                    title: "THE C64 Maxi".to_owned(),
+                    kind: fancy::feature::preview::Kind::Product as i32,
+                    author: "Retro Games Ltd".to_owned(),
+                    duration_seconds: 3614,
+                    price: Some(fancy::feature::preview::Price {
+                        amount: "89.99".to_owned(),
+                        currency: "EUR".to_owned(),
+                        was: "129.99".to_owned(),
+                        availability: "instock".to_owned(),
+                    }),
+                    facts: vec![
+                        fancy::feature::preview::Fact {
+                            key: "shipping".to_owned(),
+                            label: "Shipping".to_owned(),
+                            value: "Free".to_owned(),
+                        },
+                        fancy::feature::preview::Fact {
+                            key: String::new(),
+                            label: "Assembled by".to_owned(),
+                            value: "hand".to_owned(),
+                        },
+                    ],
+                    ..Default::default()
+                },
+            )),
+        };
+        let back = from_canon(LINK_PREVIEW, &preview.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::FancyLinkPreviewResponse(response) = back else {
+            panic!("expected a preview response");
+        };
+        let embed = response.embeds.first().expect("an embed");
+        assert_eq!(embed.r#type.as_deref(), Some("product"));
+        assert_eq!(
+            embed
+                .author
+                .as_ref()
+                .and_then(|author| author.name.as_deref()),
+            Some("Retro Games Ltd")
+        );
+        // Seconds on the wire, a clock on the card: "1:00:14" is how every
+        // player in the world writes a playing time.
+        assert_eq!(embed.media_duration.as_deref(), Some("1:00:14"));
+
+        let named = |name: &str| {
+            embed
+                .fields
+                .iter()
+                .find(|field| field.name.as_deref() == Some(name))
+                .and_then(|field| field.value.as_deref())
+        };
+        assert_eq!(named("price.amount"), Some("89.99"));
+        assert_eq!(named("price.currency"), Some("EUR"));
+        assert_eq!(named("price.was"), Some("129.99"));
+        assert_eq!(named("price.availability"), Some("instock"));
+        // A fact the crawler recognised is filed under its key; one it did not
+        // keeps the label the page wrote, so it can still be printed.
+        assert_eq!(named("shipping"), Some("Free"));
+        assert_eq!(named("Assembled by"), Some("hand"));
+    }
+
+    #[test]
+    fn a_creator_a_date_and_a_rating_all_reach_the_card() {
+        // What the crawler learned from the page's structured data, which is
+        // where the facts a sharing vocabulary has no room for live.
+        let preview = fancy::feature::LinkPreviewEnvelope {
+            body: Some(fancy::feature::link_preview_envelope::Body::Preview(
+                fancy::feature::Preview {
+                    request_id: "r-8".to_owned(),
+                    url: "https://art.example/piece".to_owned(),
+                    author: "ame".to_owned(),
+                    published_at: "2026-08-04".to_owned(),
+                    content_rating: "Explicit".to_owned(),
+                    facts: vec![fancy::feature::preview::Fact {
+                        key: "likes".to_owned(),
+                        label: "Likes".to_owned(),
+                        value: "12400".to_owned(),
+                    }],
+                    ..Default::default()
+                },
+            )),
+        };
+        let back = from_canon(LINK_PREVIEW, &preview.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::FancyLinkPreviewResponse(response) = back else {
+            panic!("expected a preview response");
+        };
+        let embed = response.embeds.first().expect("an embed");
+        assert_eq!(
+            embed
+                .author
+                .as_ref()
+                .and_then(|author| author.name.as_deref()),
+            Some("ame")
+        );
+        assert_eq!(embed.published_time.as_deref(), Some("2026-08-04"));
+        // The word as the page wrote it, and the flag every client would
+        // otherwise have to derive from it with its own list of vocabularies.
+        assert_eq!(embed.nsfw, Some(true));
+        let rating = embed
+            .fields
+            .iter()
+            .find(|field| field.name.as_deref() == Some("content.rating"));
+        assert_eq!(
+            rating.and_then(|field| field.value.as_deref()),
+            Some("Explicit")
+        );
+    }
+
+    #[test]
+    fn a_rating_nobody_recognises_is_not_treated_as_adult() {
+        // A card hidden because its rating could not be read is a card that
+        // failed for a reason the reader cannot see.
+        let preview = fancy::feature::LinkPreviewEnvelope {
+            body: Some(fancy::feature::link_preview_envelope::Body::Preview(
+                fancy::feature::Preview {
+                    request_id: "r-9".to_owned(),
+                    content_rating: "PEGI 3".to_owned(),
+                    ..Default::default()
+                },
+            )),
+        };
+        let back = from_canon(LINK_PREVIEW, &preview.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::FancyLinkPreviewResponse(response) = back else {
+            panic!("expected a preview response");
+        };
+        assert_eq!(response.embeds.first().expect("an embed").nsfw, Some(false));
+    }
+
+    #[test]
+    fn a_preview_says_how_big_the_picture_was_before_it_was_shrunk() {
+        // Both sizes, because the card is laid out from the difference: a
+        // 360-wide thumbnail may not be blown up to a banner, and a 3000-wide
+        // photograph in the same box may be cropped to one. After the shrink
+        // that difference is no longer visible in the bytes.
+        let preview = fancy::feature::LinkPreviewEnvelope {
+            body: Some(fancy::feature::link_preview_envelope::Body::Preview(
+                fancy::feature::Preview {
+                    request_id: "r-7".to_owned(),
+                    image: vec![0xff, 0xd8],
+                    image_mime: "image/jpeg".to_owned(),
+                    image_width: 640,
+                    image_height: 360,
+                    source_width: 1920,
+                    source_height: 1080,
+                    ..Default::default()
+                },
+            )),
+        };
+        let back = from_canon(LINK_PREVIEW, &preview.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::FancyLinkPreviewResponse(response) = back else {
+            panic!("expected a preview response");
+        };
+        let media = response
+            .embeds
+            .first()
+            .and_then(|embed| embed.image.as_ref())
+            .expect("the picture travels");
+        assert_eq!((media.width, media.height), (Some(1920), Some(1080)));
+        assert_eq!(
+            (media.preview_width, media.preview_height),
+            (Some(640), Some(360))
+        );
+    }
+
+    #[test]
     fn a_reaction_keeps_which_kind_of_emoji_it_was() {
         // The distinction a bare string could not carry, and the reason
         // `wire.Emoji` exists: a shortcode is resolved against the server's
@@ -2181,6 +2754,197 @@ mod tests {
             message.sender_cert.is_empty(),
             "identity is the server's to stamp, never the client's to claim"
         );
+    }
+
+    #[test]
+    fn a_pin_reaches_the_server_and_a_peer_sees_it() {
+        // Without a canon arm `to_canon` answers `None`, which hands the pin to
+        // the legacy codec - and that codec drops every `ServerOnly` message
+        // with one `debug!` line. The pin button worked, the menu closed, and
+        // the pin never left the process.
+        let sent = ControlMessage::PchatPin(mumble_tcp::PchatPin {
+            channel_id: Some(4),
+            message_id: Some("m-9".to_owned()),
+            sender_hash: Some("deadbeef".to_owned()),
+            unpin: Some(true),
+            timestamp: Some(1_700_000_000_000),
+        });
+        let (outer, payload) = to_canon(&sent).expect("a pin has a canon home");
+        assert_eq!(outer, PCHAT);
+
+        let envelope = fancy::pchat::PchatEnvelope::decode(payload.as_slice()).unwrap();
+        let Some(fancy::pchat::pchat_envelope::Body::Pin(pin)) = envelope.body else {
+            panic!("expected a pin");
+        };
+        assert_eq!(pin.message_id, "m-9");
+        assert_eq!(pin.channel, 4);
+        assert!(
+            pin.unpin,
+            "an unpin that arrives as a pin is worse than a drop"
+        );
+
+        // The server relays the body unaltered, so this is what a peer decodes.
+        let back = from_canon(outer, &payload).unwrap().expect("decodes");
+        let ControlMessage::PchatPinDeliver(deliver) = back else {
+            panic!("expected a pin delivery");
+        };
+        assert_eq!(deliver.channel_id, Some(4));
+        assert_eq!(deliver.message_id.as_deref(), Some("m-9"));
+        assert_eq!(deliver.unpin, Some(true));
+    }
+
+    #[test]
+    fn a_pin_list_marks_its_messages_and_claims_nothing_else() {
+        let listed = fancy::pchat::PchatEnvelope {
+            body: Some(fancy::pchat::pchat_envelope::Body::PinList(
+                fancy::pchat::PinList {
+                    channel: 7,
+                    pinned: vec![fancy::pchat::Message {
+                        message_id: "m-1".to_owned(),
+                        sender_cert: vec![0xab, 0xcd],
+                        ..fancy::pchat::Message::default()
+                    }],
+                },
+            )),
+        };
+        let back = from_canon(PCHAT, &listed.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::PchatPinFetchResponse(response) = back else {
+            panic!("expected a pin list");
+        };
+        assert_eq!(response.channel_id, Some(7));
+        assert_eq!(response.pins.len(), 1);
+        assert_eq!(response.pins[0].message_id.as_deref(), Some("m-1"));
+        assert!(
+            response.pins[0].pinner_hash.is_none(),
+            "the message's author is not the person who pinned it"
+        );
+    }
+
+    #[test]
+    fn a_plugin_message_reaches_its_plugin_and_the_answer_comes_back() {
+        // Both halves of every plugin conversation. Before this arm existed
+        // `to_canon` answered `None` and the legacy codec dropped the request,
+        // while an inbound 1010 frame was skipped as a service this build does
+        // not translate - so the feature was dark in both directions and said
+        // nothing about it.
+        let sent = ControlMessage::PluginMessage(mumble_tcp::PluginMessage {
+            plugin_name: Some("fancy-live-doc".to_owned()),
+            plugin_slot: Some(3),
+            payload_type: Some("OpenRequest".to_owned()),
+            payload: Some(INVITE.to_vec()),
+            target_sessions: vec![7, 9],
+            channel_id: Some(4),
+            sender_session: None,
+            sender_name: None,
+        });
+        let (outer, payload) = to_canon(&sent).expect("a plugin envelope has a canon home");
+        assert_eq!(outer, PLUGINS);
+
+        let envelope = fancy::feature::PluginsEnvelope::decode(payload.as_slice()).unwrap();
+        let Some(fancy::feature::plugins_envelope::Body::Opaque(opaque)) = envelope.body else {
+            panic!("expected an opaque plugin message");
+        };
+        assert_eq!(opaque.plugin, "fancy-live-doc");
+        assert_eq!(opaque.payload_type, "OpenRequest");
+        assert_eq!(opaque.payload, INVITE);
+        assert_eq!(
+            opaque.recipients,
+            vec![7, 9],
+            "an addressed message that arrives unaddressed reaches nobody"
+        );
+
+        // The shape the plugins service relays, which is what a peer decodes.
+        let relayed = fancy::feature::PluginsEnvelope {
+            body: Some(fancy::feature::plugins_envelope::Body::Opaque(
+                fancy::feature::Opaque {
+                    sender: 11,
+                    recipients: Vec::new(),
+                    ..opaque
+                },
+            )),
+        };
+        let back = from_canon(PLUGINS, &relayed.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::PluginMessage(received) = back else {
+            panic!("expected a plugin message");
+        };
+        assert_eq!(received.plugin_name.as_deref(), Some("fancy-live-doc"));
+        assert_eq!(received.payload_type.as_deref(), Some("OpenRequest"));
+        assert_eq!(received.payload.as_deref(), Some(INVITE));
+        assert_eq!(
+            received.sender_session,
+            Some(11),
+            "the server's word for who sent it, not the sender's own"
+        );
+    }
+
+    #[test]
+    fn a_live_doc_invite_survives_the_crossing_byte_for_byte() {
+        // The invite the plugin mints is JSON the protocol layer never reads.
+        // What matters is that it arrives whole and under a name the frontend
+        // routes on: an empty `plugin_name` is dropped by the handler before
+        // any of it reaches the UI.
+        let delivered = fancy::feature::PluginsEnvelope {
+            body: Some(fancy::feature::plugins_envelope::Body::Opaque(
+                fancy::feature::Opaque {
+                    plugin: "fancy-live-doc".to_owned(),
+                    payload: INVITE.to_vec(),
+                    recipients: Vec::new(),
+                    sender: 0,
+                    payload_type: "Invite".to_owned(),
+                },
+            )),
+        };
+        let back = from_canon(PLUGINS, &delivered.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::PluginMessage(received) = back else {
+            panic!("expected a plugin message");
+        };
+        assert_eq!(received.plugin_name.as_deref(), Some("fancy-live-doc"));
+        assert_eq!(received.payload_type.as_deref(), Some("Invite"));
+        assert_eq!(received.payload.as_deref(), Some(INVITE));
+    }
+
+    #[test]
+    fn the_registry_lists_what_is_loaded_and_nothing_else() {
+        let registry = fancy::feature::PluginsEnvelope {
+            body: Some(fancy::feature::plugins_envelope::Body::Registry(
+                fancy::feature::Registry {
+                    plugins: vec![
+                        fancy::feature::PluginDescriptor {
+                            id: "fancy-live-doc".to_owned(),
+                            name: "fancy-live-doc".to_owned(),
+                            version: "0.4.0".to_owned(),
+                            enabled: true,
+                            info_json: "{}".to_owned(),
+                        },
+                        fancy::feature::PluginDescriptor {
+                            name: "fancy-off".to_owned(),
+                            enabled: false,
+                            ..fancy::feature::PluginDescriptor::default()
+                        },
+                    ],
+                },
+            )),
+        };
+        let back = from_canon(PLUGINS, &registry.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::PluginRegistry(listed) = back else {
+            panic!("expected a registry");
+        };
+        assert_eq!(
+            listed.plugins.len(),
+            1,
+            "a plugin that is off is not one the client can talk to"
+        );
+        assert_eq!(listed.plugins[0].plugin_name, "fancy-live-doc");
+        assert_eq!(listed.plugins[0].version, "0.4.0");
+        assert_eq!(listed.plugins[0].info_json.as_deref(), Some("{}"));
     }
 
     #[test]
@@ -2744,5 +3508,132 @@ mod tests {
         // The high byte is not part of the colour; a stroke that let it through
         // would render as a seven-digit string nothing parses.
         assert_eq!(css_colour(0xff00_0000), "#000000");
+    }
+
+    #[test]
+    fn a_record_get_rides_the_userdata_envelope() {
+        let (outer, payload) = to_canon(&ControlMessage::FancyAccountRecordGet(
+            fancy::domain::RecordGet {
+                request_id: "r-1".to_owned(),
+                key: "livedoc/sidebar".to_owned(),
+            },
+        ))
+        .expect("a canon form");
+
+        assert_eq!(outer, USERDATA);
+        let envelope =
+            fancy::domain::UserdataEnvelope::decode(payload.as_slice()).expect("an envelope");
+        let Some(fancy::domain::userdata_envelope::Body::RecordGet(get)) = envelope.body else {
+            panic!("expected a record get");
+        };
+        assert_eq!(get.key, "livedoc/sidebar");
+        assert_eq!(
+            get.request_id, "r-1",
+            "the correlation is what tells one in-flight read from another"
+        );
+    }
+
+    #[test]
+    fn a_record_put_carries_its_bytes_and_its_removal_flag() {
+        let (outer, payload) = to_canon(&ControlMessage::FancyAccountRecordPut(
+            fancy::domain::RecordPut {
+                request_id: "r-2".to_owned(),
+                key: "calendar".to_owned(),
+                value: b"{}".to_vec(),
+                remove: true,
+            },
+        ))
+        .expect("a canon form");
+
+        assert_eq!(outer, USERDATA);
+        let envelope =
+            fancy::domain::UserdataEnvelope::decode(payload.as_slice()).expect("an envelope");
+        let Some(fancy::domain::userdata_envelope::Body::RecordPut(put)) = envelope.body else {
+            panic!("expected a record put");
+        };
+        assert_eq!(put.value, b"{}");
+        assert!(
+            put.remove,
+            "a removal that arrived as a write would store an empty document              instead of dropping the key"
+        );
+    }
+
+    #[test]
+    fn a_record_comes_back_as_the_variant_that_carries_it() {
+        let answer = fancy::domain::UserdataEnvelope {
+            body: Some(fancy::domain::userdata_envelope::Body::Record(
+                fancy::domain::Record {
+                    request_id: "r-1".to_owned(),
+                    key: "livedoc/sidebar".to_owned(),
+                    value: b"{\"sections\":[]}".to_vec(),
+                    found: true,
+                    updated_at_ms: 42,
+                    refused: None,
+                },
+            )),
+        };
+
+        let back = from_canon(USERDATA, &answer.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::FancyAccountRecord(record) = back else {
+            panic!("expected a record back");
+        };
+        assert!(record.found);
+        assert_eq!(record.value, b"{\"sections\":[]}");
+        assert_eq!(record.updated_at_ms, 42);
+    }
+
+    #[test]
+    fn a_refusal_survives_the_trip_so_the_client_can_tell_it_from_an_empty_library() {
+        // The distinction the whole store turns on: a record that is simply
+        // not there yet is a normal first run, and a refusal is not.
+        let refused = fancy::domain::UserdataEnvelope {
+            body: Some(fancy::domain::userdata_envelope::Body::Record(
+                fancy::domain::Record {
+                    request_id: "r-1".to_owned(),
+                    key: "livedoc/sidebar".to_owned(),
+                    refused: Some(fancy::wire::Refusal {
+                        kind: fancy::wire::refusal::Kind::Permission as i32,
+                        detail: "records are kept per account".to_owned(),
+                        retry_after_ms: 0,
+                    }),
+                    ..Default::default()
+                },
+            )),
+        };
+
+        let back = from_canon(USERDATA, &refused.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::FancyAccountRecord(record) = back else {
+            panic!("expected a record back");
+        };
+        assert!(!record.found);
+        assert_eq!(
+            record.refused.expect("a refusal").kind,
+            fancy::wire::refusal::Kind::Permission as i32
+        );
+    }
+
+    #[test]
+    fn a_key_listing_comes_back_whole() {
+        let answer = fancy::domain::UserdataEnvelope {
+            body: Some(fancy::domain::userdata_envelope::Body::RecordKeys(
+                fancy::domain::RecordKeys {
+                    request_id: "r-3".to_owned(),
+                    keys: vec!["livedoc/sidebar".to_owned(), "livedoc/sources".to_owned()],
+                    refused: None,
+                },
+            )),
+        };
+
+        let back = from_canon(USERDATA, &answer.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::FancyAccountRecordKeys(keys) = back else {
+            panic!("expected keys back");
+        };
+        assert_eq!(keys.keys.len(), 2);
     }
 }
