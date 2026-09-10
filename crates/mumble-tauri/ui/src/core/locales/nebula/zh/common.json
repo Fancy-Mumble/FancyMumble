@@ -8,6 +8,7 @@
   "quickConnect": "快速连接",
   "app": {
     "back": "返回",
+    "sections": "分区",
     "addServer": "+ 添加",
     "searchServers": "搜索服务器",
     "searchChannels": "搜索频道",
@@ -24,7 +25,19 @@
     "noFileSharing": "此服务器没有文件共享功能",
     "pickConversationFirst": "请先选择一个对话",
     "deleteChannelTitle": "删除 #{{channel}}？",
-    "deleteChannelBody": "其子频道和已保存的消息将一并删除。此操作无法撤销。"
+    "deleteChannelBody": "其子频道和已保存的消息将一并删除。此操作无法撤销。",
+    "connect": "连接",
+    "pickAServer": "选择服务器",
+    "savedServers": "已保存的服务器",
+    "addAServer": "添加服务器",
+    "joinAs": "以此身份加入",
+    "newIdentity": "新建",
+    "connectAs": "以 {{name}} 连接",
+    "autoConnect": "启动时自动连接",
+    "servers": "服务器",
+    "identityCount_one": "{{count}} 个身份",
+    "identityCount_other": "{{count}} 个身份",
+    "anonymous": "匿名"
   },
   "presence": {
     "nobodyHere": "这里没有人",

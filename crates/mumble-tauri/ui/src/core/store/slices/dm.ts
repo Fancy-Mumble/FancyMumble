@@ -154,14 +154,29 @@ export const createDmSlice: StateCreator<AppState, [], [], DmSlice> = (set, get)
       }
     } catch (e) {
       console.error("send_dm error:", e);
-      if (showPlaceholder) {
-        const detail = e instanceof Error ? e.message : String(e);
-        set((s) => ({
-          pendingMessages: s.pendingMessages.map((p) =>
-            p.pendingId === pendingId ? { ...p, state: "failed" as const, errorMessage: detail } : p,
-          ),
-        }));
-      }
+      const detail = e instanceof Error ? e.message : String(e);
+      // Kept whether or not it was shown optimistically - same reason as
+      // `sendMessage`, and it bites harder here: a friend chat is backed by a
+      // detached signal_v1 channel, so a DM is exactly the send that can fail
+      // for want of a key.
+      set((s) => ({
+        pendingMessages: showPlaceholder
+          ? s.pendingMessages.map((p) =>
+              p.pendingId === pendingId ? { ...p, state: "failed" as const, errorMessage: detail } : p,
+            )
+          : [
+              ...s.pendingMessages,
+              {
+                pendingId,
+                channelId: null,
+                dmSession: targetSession,
+                body,
+                createdAt: Date.now(),
+                state: "failed" as const,
+                errorMessage: detail,
+              },
+            ],
+      }));
     }
   },
 

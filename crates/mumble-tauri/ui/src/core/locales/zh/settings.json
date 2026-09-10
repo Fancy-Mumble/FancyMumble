@@ -142,7 +142,7 @@
     "expertModeHintExpert": "完全掌控：可看到高级音频选项、自定义端口和标签。",
     "klipyApiKey": "Klipy API 密钥",
     "klipyApiKeyHintBefore": "提供你自己的",
-    "klipyApiKeyHintAfter": "API 密钥用于 GIF/贴纸搜索。留空则使用内置密钥。",
+    "klipyApiKeyHintAfter": "API 密钥用于 GIF/贴纸搜索。留空则使用服务器的密钥——大多数服务器都会提供，只有未提供的服务器才需要在此填写。",
     "developerMode": "开发者模式",
     "developerModeHint": "在服务器信息面板中显示调试统计（消息数、已转存内容、内存占用等）。",
     "logLevel": "日志级别",

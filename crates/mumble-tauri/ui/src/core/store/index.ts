@@ -8,6 +8,8 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+
+import { forgetServerGifSupport } from "../features/chat/gif/serverGifs";
 import { reconnectDelayMs, shouldAutoReconnect } from "../utils/reconnectBackoff";
 import {
   isPermissionGranted,
@@ -86,6 +88,7 @@ import { loadProfileData, loadServerProfileData } from "../features/settings/pro
 import { base64ToBytes } from "../utils/base64";
 import { serializeProfile, dataUrlToBytes } from "../profileFormat";
 import { sanitiseWsUrl } from "../features/chat/livedoc/sanitiseWsUrl";
+import { addCanonEmote, fetchCanonEmotes, removeCanonEmote, watchCanonEmotes } from "../features/canonEmotes";
 import { TauriEvent } from "../constants/tauriEvents";
 import {
   PluginDataId,
@@ -191,6 +194,57 @@ let navigateRef: ((path: string) => void) | null = null;
  *  state. Mutated by the voice-state event handler below; read by the voice
  *  slice's `toggleMute` (imported there as a live binding). */
 export let isRestoringVoice = false;
+
+/** Pending write from {@link persistVoiceState}, or null when nothing is due. */
+let voicePersistTimer: ReturnType<typeof setTimeout> | null = null;
+/** Long enough to swallow a burst of queued voice events, short enough that a
+ *  mute followed straight away by a quit is still on disk. */
+const VOICE_PERSIST_DEBOUNCE_MS = 300;
+
+/**
+ * Record the running voice state as the one to restore on the next connect.
+ *
+ * Called for every voice-state change, not only the ones the store's own
+ * actions made: the tray's Mute item, the global mute shortcut and the Linux
+ * desktop handler all mute through the backend directly, and a mute made that
+ * way used to come back unmuted on the next reconnect because nothing wrote it
+ * down.
+ *
+ * Two rules keep the ordering bug this replaced from returning. The write is
+ * debounced and reads the *settled* state rather than any one event's payload,
+ * so a burst of queued events cannot land in the wrong order and leave the
+ * wrong answer behind. And "inactive" is never written from here: a disconnect
+ * tears the pipeline down and reports it, and a teardown must not be mistaken
+ * for the user turning voice off - `disableVoice` records that intent itself.
+ */
+export function persistVoiceState(): void {
+  if (voicePersistTimer !== null) clearTimeout(voicePersistTimer);
+  voicePersistTimer = setTimeout(() => {
+    voicePersistTimer = null;
+    // The reconnect restore drives the state itself and writes its own
+    // preference; echoing it back here would only race that write.
+    if (isRestoringVoice) return;
+    const voiceState = useAppStore.getState().voiceState;
+    if (voiceState !== "active" && voiceState !== "muted") return;
+    updatePreferences({
+      voiceOnReconnect: true,
+      voiceMutedOnReconnect: voiceState === "muted",
+    }).catch(() => {});
+  }, VOICE_PERSIST_DEBOUNCE_MS);
+}
+
+/**
+ * Drop a queued write, for a caller about to record something better.
+ *
+ * Only `disableVoice` needs this: the state it leaves behind is the one
+ * {@link persistVoiceState} refuses to write, so a flush still in flight would
+ * outlive it and answer the next connect with the voice state before last.
+ */
+export function cancelVoicePersist(): void {
+  if (voicePersistTimer === null) return;
+  clearTimeout(voicePersistTimer);
+  voicePersistTimer = null;
+}
 
 function clearAutoReconnectTimer(): void {
   if (autoReconnectTimer !== null) {
@@ -1449,14 +1503,30 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
       }
     } catch (e) {
       console.error("send_message error:", e);
-      if (showPlaceholder) {
-        const detail = e instanceof Error ? e.message : String(e);
-        set((s) => ({
-          pendingMessages: s.pendingMessages.map((p) =>
-            p.pendingId === pendingId ? { ...p, state: "failed" as const, errorMessage: detail } : p,
-          ),
-        }));
-      }
+      const detail = e instanceof Error ? e.message : String(e);
+      // A failed send is kept whether or not it was shown optimistically. It
+      // used to be recorded only for bodies that had a progress placeholder
+      // (inline media, or something large), so an ordinary line of text that
+      // the backend refused - an encrypted channel with no key for it, say -
+      // disappeared with nothing said and nothing to retry.
+      set((s) => ({
+        pendingMessages: showPlaceholder
+          ? s.pendingMessages.map((p) =>
+              p.pendingId === pendingId ? { ...p, state: "failed" as const, errorMessage: detail } : p,
+            )
+          : [
+              ...s.pendingMessages,
+              {
+                pendingId,
+                channelId,
+                dmSession: null,
+                body,
+                createdAt: Date.now(),
+                state: "failed" as const,
+                errorMessage: detail,
+              },
+            ],
+      }));
     }
   },
 
@@ -1689,6 +1759,14 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
   },
 
   addCustomEmote: async ({ shortcode, aliasEmoji, description, filePath, mimeType }) => {
+    // A canon server keeps its own emotes and enforces `ManageEmotes` itself,
+    // so the refusal comes from the server rather than from a config flag the
+    // plugin would have set. The set it answers with is stored as-is.
+    if (get().fileServerKind === "canon") {
+      const emotes = await addCanonEmote(shortcode, aliasEmoji, description ?? "", filePath);
+      set({ customServerEmotes: emotes });
+      return;
+    }
     const cfg = get().fileServerConfig;
     if (!cfg) throw new Error("file-server is not configured for this server");
     if (!cfg.canManageEmotes) throw new Error("you are not allowed to manage emotes");
@@ -1706,6 +1784,11 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
   },
 
   removeCustomEmote: async (shortcode) => {
+    if (get().fileServerKind === "canon") {
+      const emotes = await removeCanonEmote(shortcode);
+      set({ customServerEmotes: emotes });
+      return;
+    }
     const cfg = get().fileServerConfig;
     if (!cfg) throw new Error("file-server is not configured for this server");
     if (!cfg.canManageEmotes) throw new Error("you are not allowed to manage emotes");
@@ -2555,6 +2638,29 @@ function markCanonFileService(): void {
     fileServerKind: "canon",
     fileServerConfig: state.fileServerConfig ?? canonFileServerConfig(state.ownSession ?? 0),
   });
+  // A canon server keeps its own emotes, and announces them to nobody: they
+  // are asked for. Without this a server with no file-server plugin showed an
+  // empty picker whatever it had stored.
+  void adoptCanonEmotes();
+}
+
+/**
+ * Take the server's own emote set, if it keeps one.
+ *
+ * Left alone when the plugin already supplied a set: two stores cannot both be
+ * right, and the plugin's is the one this connection was told about.
+ */
+async function adoptCanonEmotes(): Promise<void> {
+  const emotes = await fetchCanonEmotes();
+  if (emotes === null) return;
+  useAppStore.setState({ customServerEmotes: emotes });
+  setServerCustomReactions(
+    emotes.map((emote) => ({
+      shortcode: `:${emote.shortcode}:`,
+      display: emote.imageDataUrl,
+      label: emote.description ?? emote.aliasEmoji,
+    })),
+  );
 }
 
 /**
@@ -2719,6 +2825,21 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
   }
 
   // Server fully connected (ServerSync received).
+  // The server re-sends its whole emote set on every change, so an emote an
+  // administrator adds or deletes reaches everybody without anyone asking.
+  unlisteners.push(
+    await watchCanonEmotes((emotes) => {
+      useAppStore.setState({ customServerEmotes: emotes });
+      setServerCustomReactions(
+        emotes.map((emote) => ({
+          shortcode: `:${emote.shortcode}:`,
+          display: emote.imageDataUrl,
+          label: emote.description ?? emote.aliasEmoji,
+        })),
+      );
+    }),
+  );
+
   unlisteners.push(
     await listen(TauriEvent.ServerConnected, async () => {
       manualDisconnectRequested = false;
@@ -2925,6 +3046,10 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
     await listen<{ serverId?: string | null; reason: string | null } | string | null>(
       TauriEvent.ServerDisconnected,
       async (event) => {
+        // Whether a server does GIF search is a fact about that server, and
+        // the next one is a different server. A remembered "no" would leave a
+        // perfectly good picker unused for the rest of the run.
+        forgetServerGifSupport();
         // Normalise: backend now always sends an object payload, but tolerate
         // a bare reason string for forwards/backwards compatibility.
         const payload = event.payload;
@@ -3330,17 +3455,20 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
     }),
 
     // Voice state changed (enable/disable voice calling).
-    // Pref writes are NOT done here: queued IPC messages can arrive in the
-    // wrong order (especially with a slow backend event loop) and corrupt
-    // voiceMutedOnReconnect. Prefs are written by the explicit action
-    // handlers (enableVoice, disableVoice, toggleMute) where ordering is
-    // deterministic relative to the user's intent.
+    // The explicit action handlers (enableVoice, disableVoice, toggleMute)
+    // still write the on-reconnect preference themselves, where ordering is
+    // deterministic relative to the user's intent. `persistVoiceState` is
+    // what covers the mutes that never pass through them - the tray, the
+    // global shortcut, the Linux desktop handler - and it is debounced off
+    // the settled state precisely so that queued events arriving in the wrong
+    // order cannot corrupt what it writes.
     await listen<VoiceState>(TauriEvent.VoiceStateChanged, (event) => {
       const updates: Partial<ReturnType<typeof useAppStore.getState>> = { voiceState: event.payload };
       if (event.payload === "inactive") {
         updates.talkingSessions = new Set();
       }
       useAppStore.setState(updates);
+      persistVoiceState();
     }),
 
     // Audio transport mode changed (UDP vs TCP tunnel).  The payload names the
@@ -3547,7 +3675,19 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
         if (!request_id || !Array.isArray(embeds) || embeds.length === 0) return;
         const prev = useAppStore.getState().linkEmbeds;
         const next = new Map(prev);
-        next.set(request_id, embeds);
+        // Added to, not replaced. One answer arrives per *link*, each carrying
+        // the request id of the message it was asked about, so a message with
+        // three links is three events - and setting the list each time left
+        // only whichever host answered last. Keyed by URL, because a slow host
+        // answering twice is a retry rather than a second card.
+        const kept = prev.get(request_id) ?? [];
+        const merged = [...kept];
+        for (const embed of embeds) {
+          const at = merged.findIndex((seen) => seen.url === embed.url);
+          if (at === -1) merged.push(embed);
+          else merged[at] = embed;
+        }
+        next.set(request_id, merged);
         useAppStore.setState({ linkEmbeds: next });
       },
     ),

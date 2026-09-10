@@ -8,6 +8,7 @@
   "quickConnect": "Schnellverbindung",
   "app": {
     "back": "Zurück",
+    "sections": "Bereiche",
     "addServer": "+ Hinzufügen",
     "searchServers": "Server durchsuchen",
     "searchChannels": "Kanäle durchsuchen",
@@ -24,7 +25,19 @@
     "noFileSharing": "Dieser Server bietet keine Dateifreigabe",
     "pickConversationFirst": "Wähle zuerst ein Gespräch",
     "deleteChannelTitle": "#{{channel}} löschen?",
-    "deleteChannelBody": "Unterkanäle und gespeicherte Nachrichten verschwinden mit. Das lässt sich nicht rückgängig machen."
+    "deleteChannelBody": "Unterkanäle und gespeicherte Nachrichten verschwinden mit. Das lässt sich nicht rückgängig machen.",
+    "connect": "Verbinden",
+    "pickAServer": "Server wählen",
+    "savedServers": "Gespeicherte Server",
+    "addAServer": "Server hinzufügen",
+    "joinAs": "Beitreten als",
+    "newIdentity": "Neu",
+    "connectAs": "Als {{name}} verbinden",
+    "autoConnect": "Beim Start automatisch verbinden",
+    "servers": "Server",
+    "identityCount_one": "{{count}} Identität",
+    "identityCount_other": "{{count}} Identitäten",
+    "anonymous": "Anonym"
   },
   "presence": {
     "nobodyHere": "Niemand hier",

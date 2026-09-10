@@ -8,6 +8,7 @@
   "quickConnect": "Quick connect",
   "app": {
     "back": "Back",
+    "sections": "Sections",
     "addServer": "+ Add",
     "searchServers": "Search servers",
     "searchChannels": "Search channels",
@@ -24,7 +25,19 @@
     "noFileSharing": "This server has no file sharing",
     "pickConversationFirst": "Pick a conversation first",
     "deleteChannelTitle": "Delete #{{channel}}?",
-    "deleteChannelBody": "Its sub-channels and stored messages go with it. This cannot be undone."
+    "deleteChannelBody": "Its sub-channels and stored messages go with it. This cannot be undone.",
+    "connect": "Connect",
+    "pickAServer": "Pick a server",
+    "savedServers": "Saved servers",
+    "addAServer": "Add a server",
+    "joinAs": "Join as",
+    "newIdentity": "New",
+    "connectAs": "Connect as {{name}}",
+    "autoConnect": "Auto-connect on launch",
+    "servers": "Servers",
+    "identityCount_one": "{{count}} identity",
+    "identityCount_other": "{{count}} identities",
+    "anonymous": "Anonymous"
   },
   "presence": {
     "nobodyHere": "Nobody here",

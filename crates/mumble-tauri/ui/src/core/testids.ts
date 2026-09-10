@@ -69,6 +69,8 @@ export const TID = {
   /** Wrapper around the (contenteditable) markdown input. */
   chatComposerInput: "chat-composer-input",
   chatSend: "chat-send",
+  /** One send the backend refused, kept above the composer with its reason. */
+  chatSendFailed: "chat-send-failed",
   /** Recovered from the built bundle after a disk-full truncation;
    *  the name and value are exact, the description is not. */
   chatAttachMenu: "chat-attach-menu",

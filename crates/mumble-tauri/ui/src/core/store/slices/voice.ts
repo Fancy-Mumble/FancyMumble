@@ -3,17 +3,20 @@
  * UDP-vs-TCP, in-call, who's talking, which channels are being listened to)
  * and the toggle actions.
  *
- * Part of the `store.ts` split. `AppState` is imported type-only. The
- * reconnect-restore guard `isRestoringVoice` is a live binding imported from
- * the root store (the voice-state event handler there owns its mutation; here
- * it's only read inside `toggleMute`).
+ * Part of the `store.ts` split. `AppState` is imported type-only.
+ *
+ * None of these actions writes the on-reconnect preference itself. They ask
+ * `persistVoiceState` (in the root store) to record whatever the voice state
+ * settles to, which is also what the `voice-state-changed` listener does - one
+ * writer, so a slow action's write can no longer land after a newer one and
+ * undo it. `disableVoice` is the exception, and says why there.
  */
 
 import { invoke } from "@tauri-apps/api/core";
 import type { StateCreator } from "zustand";
 import type { VoiceState } from "../../types";
 import type { AppState } from "..";
-import { isRestoringVoice } from "..";
+import { cancelVoicePersist, persistVoiceState } from "..";
 import { updatePreferences } from "../../preferencesStorage";
 
 export interface VoiceSlice {
@@ -55,7 +58,7 @@ export const voiceInitialState: VoiceState_ = {
   listenedChannels: new Set<number>(),
 };
 
-export const createVoiceSlice: StateCreator<AppState, [], [], VoiceSlice> = (set, get) => ({
+export const createVoiceSlice: StateCreator<AppState, [], [], VoiceSlice> = (set) => ({
   ...voiceInitialState,
 
   toggleListen: async (channelId) => {
@@ -78,7 +81,7 @@ export const createVoiceSlice: StateCreator<AppState, [], [], VoiceSlice> = (set
     try {
       await invoke("enable_voice");
       set({ voiceState: "active", inCall: true });
-      updatePreferences({ voiceOnReconnect: true }).catch(() => {});
+      persistVoiceState();
     } catch (e) {
       console.error("enable_voice error:", e);
     }
@@ -88,6 +91,12 @@ export const createVoiceSlice: StateCreator<AppState, [], [], VoiceSlice> = (set
     try {
       await invoke("disable_voice");
       set({ voiceState: "inactive", inCall: false, talkingSessions: new Set() });
+      // The one preference `persistVoiceState` will not write: it refuses to
+      // record "inactive", because a disconnect reports the same thing and a
+      // teardown is not a decision. Turning voice off here *is* the decision,
+      // so it is written by hand - and anything already queued is dropped
+      // first, or it would turn voice back on for the next connect.
+      cancelVoicePersist();
       updatePreferences({ voiceOnReconnect: false, voiceMutedOnReconnect: false }).catch(() => {});
     } catch (e) {
       console.error("disable_voice error:", e);
@@ -95,15 +104,12 @@ export const createVoiceSlice: StateCreator<AppState, [], [], VoiceSlice> = (set
   },
 
   toggleMute: async () => {
-    // Capture state BEFORE the await so pref write is deterministic and
-    // ordered relative to the user action, not the async Rust IPC delivery.
-    // "active" -> will be muted; "muted" or "inactive" -> will be active.
-    const willBeMuted = get().voiceState === "active";
     try {
       await invoke("toggle_mute");
-      if (!isRestoringVoice) {
-        updatePreferences({ voiceOnReconnect: true, voiceMutedOnReconnect: willBeMuted }).catch(() => {});
-      }
+      // What the mute *became* is the backend's answer, delivered as a
+      // `voice-state-changed` event; this only asks for the write, and the
+      // debounce means whichever of the two arrives last is what decides.
+      persistVoiceState();
     } catch (e) {
       console.error("toggle_mute error:", e);
     }
@@ -112,6 +118,8 @@ export const createVoiceSlice: StateCreator<AppState, [], [], VoiceSlice> = (set
   toggleDeafen: async () => {
     try {
       await invoke("toggle_deafen");
+      // Deafening mutes as well, so it moves the state this store remembers.
+      persistVoiceState();
     } catch (e) {
       console.error("toggle_deafen error:", e);
     }
