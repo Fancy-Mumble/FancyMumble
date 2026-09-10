@@ -7,18 +7,30 @@ import { useMessageOffload } from "./useMessageOffload";
 /** One shared empty list, so an empty remainder never re-keys the offloader. */
 const EMPTY_MESSAGES: readonly ChatMessage[] = [];
 import {
-  BASE_WINDOW,
   GROW_THRESHOLD_PX,
-  grownTailCount,
-  initialTailCount,
-  settledTailCount,
+  grownDown,
+  grownUp,
+  initialWindow,
+  isAtTail,
   SETTLE_SHRINK_MS,
-  tailCountAfterAppend,
-  tailCountToInclude,
+  windowAfterAppend,
+  windowAfterPrepend,
+  windowAtTail,
+  windowToInclude,
+  type ThreadWindow,
 } from "./chatWindowing";
 
 /** Pixel threshold: user counts as "at the bottom" when within this. */
 const NEAR_BOTTOM_PX = 120;
+
+/**
+ * The range a thread starts out with, before its messages are known.
+ *
+ * `end === 0` is the "unset" marker `resolved` below looks for: the window is
+ * a range of absolute indices now, so it cannot be given a meaning until
+ * there is a list for it to be a range *over*.
+ */
+const UNSET_WINDOW: ThreadWindow = { start: 0, end: 0 };
 
 /** Returns true when the scrollable container is near the bottom. */
 function isNearBottom(el: HTMLElement): boolean {
@@ -91,34 +103,87 @@ export function useChatScroll({
    */
   const pendingUnreadRef = useRef(0);
 
-  // --- Tail-anchored render window (see chatWindowing.ts) -----------
-  // Only the last `tailCount` messages are mounted as DOM; the window
-  // grows as the user scrolls toward the top of the rendered content
-  // and snaps back to the base size at the bottom.
+  // --- Two-sided render window (see chatWindowing.ts) ---------------
+  // Only the rows inside `[start, end)` are mounted as DOM.  The window
+  // grows at whichever edge the reader approaches, and comes back to the
+  // tail when they settle at the bottom.  `end < total` means the newest
+  // rows are *not* mounted, which is what keeps the DOM bounded however
+  // far back somebody reads - and is why an arrival below the window has
+  // to be announced rather than scrolled to.
 
-  /** Number of trailing messages currently rendered. */
-  const [tailCount, setTailCount] = useState(BASE_WINDOW);
+  /** The mounted range, or [`UNSET_WINDOW`] before the thread is known. */
+  const [range, setRange] = useState<ThreadWindow>(UNSET_WINDOW);
 
   /** Render-time mirrors so event handlers see current values without
    *  re-subscribing. */
   const allMessagesRef = useRef(allMessages);
   allMessagesRef.current = allMessages;
-  const tailCountRef = useRef(tailCount);
-  tailCountRef.current = tailCount;
+
+  /**
+   * Which thread `range` was measured against.
+   *
+   * Indices only mean anything inside one conversation, and the reset below
+   * runs in an effect - a frame after the new thread has already rendered.
+   * Treating a range from the previous thread as unset is what stops that
+   * frame from showing an arbitrary slice of the middle of this one.
+   */
+  const threadKey = `${selectedChannel ?? "-"}:${selectedDmUser ?? "-"}`;
+  const rangeThreadRef = useRef("");
+  const activeRange = rangeThreadRef.current === threadKey ? range : UNSET_WINDOW;
+
+  // A page of older messages joined at the head: every mounted row keeps its
+  // message but changes its index, so the range has to move with them or the
+  // window would appear to jump backwards by exactly the size of the page.
+  // Adjusted here rather than in an effect because React re-runs the component
+  // before the browser paints, so the un-shifted window is never seen; done
+  // from an effect it would be, for one frame, on every history fetch.
+  // The identity check is what tells a prepend from any other list change:
+  // the row that used to be the head has to sit exactly `shift` further down.
+  const renderFirstIdRef = useRef<string | null>(null);
+  const renderCountRef = useRef(0);
+  const shift = allMessages.length - renderCountRef.current;
+  if (
+    shift > 0 &&
+    activeRange.end > 0 &&
+    renderFirstIdRef.current !== null &&
+    allMessages[shift]?.message_id === renderFirstIdRef.current
+  ) {
+    setRange(windowAfterPrepend(activeRange, shift));
+  }
+  renderFirstIdRef.current = allMessages.length > 0 ? (allMessages[0].message_id ?? null) : null;
+  renderCountRef.current = allMessages.length;
+
+  /**
+   * The range actually rendered: defaulted and clamped.
+   *
+   * A range is absolute where the old tail count was relative, so it needs
+   * both.  An unset one has to resolve to the tail rather than to nothing -
+   * the thread would render empty - and one left over from a longer thread
+   * has to be brought back inside this one rather than slicing past its end.
+   */
+  const resolved = useMemo<ThreadWindow>(() => {
+    const total = allMessages.length;
+    if (total === 0) return UNSET_WINDOW;
+    if (activeRange.end === 0 || activeRange.start >= total) {
+      return initialWindow(total, pendingUnreadRef.current);
+    }
+    return { start: Math.min(activeRange.start, total), end: Math.min(activeRange.end, total) };
+  }, [activeRange, allMessages.length]);
+  const resolvedRef = useRef(resolved);
+  resolvedRef.current = resolved;
 
   /**
    * Heavy bodies are handed to cold storage while they are out of view; the
    * set is the ones coming back right now.  See `useMessageOffload` - the rows
-   * below carry the two attributes it watches for, and the messages above the
-   * window, which have no row to watch, are handed over directly.
+   * inside the window carry the two attributes it watches for, and the
+   * messages the window leaves out are handed over directly.  Both sides of
+   * it now: a reader scrolled up leaves rows *below* them unmounted, and
+   * those bodies are exactly as heavy as the ones above.
    */
-  const unmounted = useMemo(
-    () =>
-      allMessages.length <= tailCount
-        ? EMPTY_MESSAGES
-        : allMessages.slice(0, allMessages.length - tailCount),
-    [allMessages, tailCount],
-  );
+  const unmounted = useMemo(() => {
+    if (resolved.start === 0 && resolved.end >= allMessages.length) return EMPTY_MESSAGES;
+    return [...allMessages.slice(0, resolved.start), ...allMessages.slice(resolved.end)];
+  }, [allMessages, resolved]);
   const { restoringKeys } = useMessageOffload({
     containerRef: messagesContainerRef,
     innerRef: messagesInnerRef,
@@ -127,64 +192,119 @@ export function useChatScroll({
   });
 
   /**
-   * Scroll height captured just before the window grows at the top.
-   * The layout effect below restores the scroll position by the height
-   * of the newly mounted rows, so the viewport keeps showing the same
-   * content (mirrors the history-prepend correction).
+   * Where the viewport was pinned just before the window moved.
+   *
+   * The window moves at both edges now, so "how much taller did the content
+   * get" is no longer enough on its own: a step that mounts rows above may
+   * release rows below in the same commit, and one that mounts rows below may
+   * release rows above.  Pinning a row that is actually on screen survives
+   * either; the height difference stays as the fallback for a container that
+   * has no rows to pin to (jsdom, or an empty thread).
    */
-  const growPendingRef = useRef<{ scrollHeight: number } | null>(null);
+  const anchorRef = useRef<{ id: string | null; top: number; scrollHeight: number } | null>(null);
 
-  /** Pending "the reader has come to rest at the bottom" shrink. */
+  /** Remember the topmost visible row, so the layout effect can put it back. */
+  const captureAnchor = useCallback((el: HTMLElement) => {
+    const containerTop = el.getBoundingClientRect().top;
+    let id: string | null = null;
+    let top = 0;
+    for (const row of el.querySelectorAll<HTMLElement>("[data-msg-id]")) {
+      const offset = row.getBoundingClientRect().top - containerTop;
+      if (offset >= 0) {
+        id = row.getAttribute("data-msg-id");
+        top = offset;
+        break;
+      }
+    }
+    anchorRef.current = { id, top, scrollHeight: el.scrollHeight };
+  }, []);
+
+  /** Pending "the reader has come to rest at the bottom" snap-back. */
   const settleTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(settleTimerRef.current), []);
 
   /** Mount one more chunk of older messages above the current window. */
-  const growWindow = useCallback((el: HTMLElement) => {
-    if (growPendingRef.current) return;
-    const total = allMessagesRef.current.length;
-    if (tailCountRef.current >= total) return;
-    growPendingRef.current = { scrollHeight: el.scrollHeight };
-    setTailCount(grownTailCount(tailCountRef.current, total));
-  }, []);
-
-  // Anchor the viewport after a growth step: newly mounted rows add
-  // height above the current content, so shift scrollTop by exactly
-  // that height before paint.  If the user is still within the growth
-  // threshold afterwards (fast drag to the very top), grow again.
-  useLayoutEffect(() => {
-    const pending = growPendingRef.current;
-    if (!pending) return;
-    growPendingRef.current = null;
-    const el = messagesContainerRef.current;
-    if (!el) return;
-    const diff = el.scrollHeight - pending.scrollHeight;
-    if (diff > 0) el.scrollTop += diff;
-    if (el.scrollTop < GROW_THRESHOLD_PX && !stickToBottomRef.current) {
-      growWindow(el);
-    }
-  }, [tailCount, growWindow]);
+  const growUp = useCallback(
+    (el: HTMLElement) => {
+      if (anchorRef.current) return;
+      const current = resolvedRef.current;
+      if (current.start <= 0) return;
+      captureAnchor(el);
+      setRange(grownUp(current, allMessagesRef.current.length));
+    },
+    [captureAnchor],
+  );
 
   /**
-   * Preserve the viewport when `delta` older messages were prepended
-   * to the in-memory list (history fetch).  When the render window does
-   * not cover the whole list yet, the new rows are not mounted in this
-   * commit - grow the window by the prepend size and let the growth
-   * layout-effect anchor the scroll position.  Otherwise the rows are
-   * already in this commit and the viewport is shifted directly.
+   * Mount one more chunk of newer messages below the current window.
+   *
+   * The other edge, and not optional: a reader who scrolled up far enough for
+   * the window to release its tail can otherwise never scroll back to the
+   * present, because the rows below them are not mounted and there is nothing
+   * to scroll onto.
    */
-  const handleHistoryPrepend = useCallback((count: number, delta: number) => {
+  const growDown = useCallback(
+    (el: HTMLElement) => {
+      if (anchorRef.current) return;
+      const total = allMessagesRef.current.length;
+      const current = resolvedRef.current;
+      if (isAtTail(current, total)) return;
+      captureAnchor(el);
+      setRange(grownDown(current, total));
+    },
+    [captureAnchor],
+  );
+
+  // Anchor the viewport after the window moved: the rows mounted (and the
+  // ones released) change the height above the viewport, so put the row the
+  // reader was looking at back where it was before paint.  If they are still
+  // within the growth threshold afterwards (a fast drag to the very top),
+  // grow again.
+  useLayoutEffect(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    anchorRef.current = null;
     const el = messagesContainerRef.current;
-    if (!el) return;
-    if (tailCountRef.current < count) {
-      growPendingRef.current ??= { scrollHeight: el.scrollHeight };
-      setTailCount((prev) => prev + delta);
-    } else {
-      const prevScrollHeight = el.scrollHeight;
-      requestAnimationFrame(() => {
-        el.scrollTop += el.scrollHeight - prevScrollHeight;
-      });
+    // Pinned to the bottom the browser keeps the view there by itself, and
+    // the re-pin below does the rest; correcting as well would fight it.
+    if (!el || stickToBottomRef.current) return;
+    let corrected = false;
+    if (anchor.id) {
+      const row = el.querySelector<HTMLElement>(`[data-msg-id="${CSS.escape(anchor.id)}"]`);
+      if (row) {
+        const offset = row.getBoundingClientRect().top - el.getBoundingClientRect().top;
+        el.scrollTop += offset - anchor.top;
+        corrected = true;
+      }
     }
-  }, []);
+    if (!corrected) {
+      const diff = el.scrollHeight - anchor.scrollHeight;
+      if (diff > 0) el.scrollTop += diff;
+    }
+    if (el.scrollTop < GROW_THRESHOLD_PX) growUp(el);
+  }, [resolved.start, resolved.end, growUp]);
+
+  /**
+   * Mount the page of `delta` older messages that has just been prepended.
+   *
+   * The range has already moved with the shifted indices (during render,
+   * above), so the same messages are still on screen and nothing has jumped.
+   * What is left is to mount the page the reader asked for by scrolling to
+   * the top, with the anchor keeping them where they are while it appears
+   * above them.  A page that lands under a window further down the thread is
+   * left alone: the shift was the whole of what it needed.
+   */
+  const handleHistoryPrepend = useCallback(
+    (count: number, delta: number) => {
+      const el = messagesContainerRef.current;
+      if (!el) return;
+      const current = resolvedRef.current;
+      if (current.start > delta) return;
+      captureAnchor(el);
+      setRange(grownUp(current, count));
+    },
+    [captureAnchor],
+  );
 
   /**
    * Make sure the message with `messageId` is inside the render window
@@ -195,14 +315,19 @@ export function useChatScroll({
     const msgs = allMessagesRef.current;
     const idx = msgs.findIndex((m) => m.message_id === messageId);
     if (idx === -1) return;
-    setTailCount((prev) => tailCountToInclude(prev, idx, msgs.length));
+    // Both edges may move: the target can be anywhere, including below a
+    // window the reader has scrolled up past.
+    setRange(windowToInclude(resolvedRef.current, idx, msgs.length));
   }, []);
 
   /** The slice of messages that is actually mounted. */
-  const windowStart = Math.max(0, allMessages.length - tailCount);
+  const windowStart = resolved.start;
   const visibleMessages = useMemo(
-    () => (windowStart === 0 ? allMessages : allMessages.slice(windowStart)),
-    [allMessages, windowStart],
+    () =>
+      resolved.start === 0 && resolved.end >= allMessages.length
+        ? allMessages
+        : allMessages.slice(resolved.start, resolved.end),
+    [allMessages, resolved],
   );
 
   /** Instant scroll-to-bottom, updating the programmatic-scroll timestamp. */
@@ -223,7 +348,11 @@ export function useChatScroll({
     if (!el) return;
 
     const onScroll = () => {
-      const atBottom = isNearBottom(el);
+      const total = allMessagesRef.current.length;
+      // The bottom of the rendered content is only the present when the
+      // window still reaches the newest row; below a detached window there
+      // are messages the reader has not been shown.
+      const atBottom = isNearBottom(el) && isAtTail(resolvedRef.current, total);
       if (atBottom) {
         stickToBottomRef.current = true;
         if (newMsgCount > 0) {
@@ -235,8 +364,17 @@ export function useChatScroll({
       }
       // Approaching the top of the rendered window while reading
       // history: mount the next chunk of older messages.
+      // At most one edge per scroll. Both tests are true whenever the content
+      // is shorter than two thresholds, and both handlers read the same range
+      // out of a ref - so the second `setRange` overwrote the first and the
+      // window sat still however far the reader moved. Nebula had the same
+      // bug; a test there is what found it.
       if (!stickToBottomRef.current && el.scrollTop < GROW_THRESHOLD_PX) {
-        growWindow(el);
+        growUp(el);
+      } else if (el.scrollHeight - el.scrollTop - el.clientHeight < GROW_THRESHOLD_PX) {
+        // Approaching the bottom of a window that has left the tail: mount the
+        // next chunk of newer ones, so the way back to the present exists.
+        growDown(el);
       }
       // Growth is otherwise one-way: a reader who climbed through a busy
       // channel and came back down keeps every row they passed, for as long
@@ -245,7 +383,7 @@ export function useChatScroll({
       clearTimeout(settleTimerRef.current);
       if (stickToBottomRef.current) {
         settleTimerRef.current = setTimeout(() => {
-          if (stickToBottomRef.current) setTailCount(settledTailCount);
+          if (stickToBottomRef.current) setRange(windowAtTail(allMessagesRef.current.length));
         }, SETTLE_SHRINK_MS);
       }
     };
@@ -274,12 +412,13 @@ export function useChatScroll({
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
     };
-  }, [newMsgCount, growWindow]);
+  }, [newMsgCount, growUp, growDown]);
 
   // React to message-count changes.
   useEffect(() => {
     const count = allMessages.length;
     const delta = count - prevMsgCountRef.current;
+    const prevCount = prevMsgCountRef.current;
     const prevFirstId = prevFirstMsgIdRef.current;
     const curFirstId = count > 0 ? (allMessages[0].message_id ?? null) : null;
 
@@ -302,6 +441,9 @@ export function useChatScroll({
     if (isInitialBatch && pendingUnreadRef.current > 0 && count > pendingUnreadRef.current) {
       const pending = pendingUnreadRef.current;
       const dividerIdx = count - pending;
+      // Pin the window the resolver was defaulting to, before the pending
+      // count that shaped it is cleared.
+      setRange(initialWindow(count, pending));
       pendingUnreadRef.current = 0;
       setLastReadIdx(dividerIdx);
       setNewMsgCount(pending);
@@ -327,20 +469,21 @@ export function useChatScroll({
       atBottom = el ? isWithinHalfViewport(el) : stickToBottomRef.current;
     }
 
-    if (atBottom) {
+    // Arrivals are followed down only when the reader is at the bottom *and*
+    // the window still reached the newest row.  Otherwise the range stays
+    // exactly where it is - moving it would shift what the reader is looking
+    // at to show them something they did not ask to see - and the message is
+    // announced by the pill instead.
+    const followed = atBottom && isAtTail(resolvedRef.current, prevCount);
+    setRange(windowAfterAppend(resolvedRef.current, count, followed));
+
+    if (followed) {
       stickToBottomRef.current = true;
-      // Reading at the bottom: snap the render window back to its base
-      // size so a long scroll-up session doesn't keep its DOM forever.
-      setTailCount((prev) => tailCountAfterAppend(prev, delta, true));
       requestAnimationFrame(() => {
         if (el) scrollToBottom(el);
       });
     } else {
       stickToBottomRef.current = false;
-      // Scrolled up: grow the window with the appended messages so it
-      // keeps starting at the same message and the content above the
-      // viewport doesn't shift.
-      setTailCount((prev) => tailCountAfterAppend(prev, delta, false));
       setLastReadIdx((prev) => prev ?? count - delta);
       setNewMsgCount((prev) => prev + delta);
     }
@@ -421,20 +564,23 @@ export function useChatScroll({
     prevMsgCountRef.current = 0;
     prevFirstMsgIdRef.current = null;
     stickToBottomRef.current = pendingUnreadRef.current === 0;
-    // Fresh render window: base size, or large enough to show the
-    // "new messages" divider with context above it.
-    growPendingRef.current = null;
-    setTailCount(initialTailCount(pendingUnreadRef.current));
-  }, [selectedChannel, selectedDmUser]);
+    // Fresh render window: unset, so the first batch of the new thread
+    // resolves to its tail, plus room for the "new messages" divider.
+    anchorRef.current = null;
+    rangeThreadRef.current = threadKey;
+    setRange(UNSET_WINDOW);
+  }, [selectedChannel, selectedDmUser, threadKey]);
 
   /** Jump-to-bottom handler used by the "new messages" pill. */
   const handleScrollToBottom = useCallback(() => {
     const el = messagesContainerRef.current;
-    if (el) scrollToBottom(el);
     setNewMsgCount(0);
     setLastReadIdx(null);
-    // Leaving history behind - snap the render window back to base size.
-    setTailCount(BASE_WINDOW);
+    // Leaving history behind - the window snaps back to the tail, which is
+    // also what mounts the arrivals the pill was announcing.
+    anchorRef.current = null;
+    setRange(windowAtTail(allMessagesRef.current.length));
+    if (el) scrollToBottom(el);
   }, [scrollToBottom]);
 
   return {
@@ -445,7 +591,7 @@ export function useChatScroll({
     lastReadIdx,
     restoringKeys,
     handleScrollToBottom,
-    /** Mounted slice of `allMessages` (tail-anchored render window). */
+    /** Mounted slice of `allMessages` (two-sided render window). */
     visibleMessages,
     /** Global index of `visibleMessages[0]` within `allMessages`. */
     windowStart,
