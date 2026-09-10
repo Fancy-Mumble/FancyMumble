@@ -22,16 +22,56 @@ function stripes(w: number, h: number): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-const thumb = { url: "", preview: { data_url: stripes(320, 180), mime: "image/svg+xml" } };
+/** A picture of a stated size, so the shape rules have something to read. */
+function picture(width: number, height: number) {
+  return {
+    url: "",
+    width,
+    height,
+    preview: { data_url: stripes(width, height), mime: "image/svg+xml", width, height },
+  };
+}
 
 const video = {
   url: "https://www.youtube.com/watch?v=eKqZWVcYs7E",
   type: "video",
-  title: "Entity — Stargazer (ft. Amy)",
+  title: "UK Hardcore 1 Hour Mix #4 — Lift Me Up",
   site_name: "youtube.com",
-  author: { name: "Entity Records" },
-  thumbnail: thumb,
+  author: { name: "UberCrow" },
+  media_duration: "1:00:14",
+  image: picture(1280, 720),
   video: { url: "https://www.youtube.com/embed/eKqZWVcYs7E" },
+} as never;
+
+/** Tall art: contained on a blurred bed of itself, nothing cropped. */
+const art = {
+  url: "https://www.pixiv.net/en/artworks/112922619",
+  type: "image",
+  title: "水面のふたり",
+  site_name: "pixiv",
+  author: { name: "ame" },
+  fields: [{ name: "likes", value: "12.4K", inline: true }],
+  image: picture(1000, 1418),
+} as never;
+
+/** Small art: its own size on that bed, never enlarged. */
+const small = {
+  url: "https://danbooru.donmai.us/posts/1",
+  type: "image",
+  title: "Summer beach — scenery study",
+  site_name: "danbooru.donmai.us",
+  image: picture(360, 253),
+} as never;
+
+/** A listing: the price is the headline. */
+const deal = {
+  url: "https://www.mydealz.de/deals/the-c64-maxi",
+  type: "product",
+  title: "THE C64 Maxi — Commodore-Nachbau",
+  site_name: "mydealz.de",
+  price: { amount: "89.99", currency: "EUR", was: "129.99", availability: "instock" },
+  fields: [{ name: "shipping", value: "Free", inline: true }],
+  image: picture(600, 400),
 } as never;
 
 const article = {
@@ -40,7 +80,7 @@ const article = {
   title: "The long way round: a field report on latency, jitter and the people who notice",
   site_name: "example.org",
   description: "Why the numbers that look fine on a graph still sound wrong in a room.",
-  thumbnail: thumb,
+  image: picture(1200, 630),
 } as never;
 
 const bare = {
@@ -70,6 +110,9 @@ function Pane({ mode }: Readonly<{ mode: "dark" | "light" }>) {
         }}
       >
         <LinkPreviewCard embeds={[video]} allowExternalResources={false} channelId={1} />
+        <LinkPreviewCard embeds={[art]} allowExternalResources={false} channelId={1} />
+        <LinkPreviewCard embeds={[small]} allowExternalResources={false} channelId={1} />
+        <LinkPreviewCard embeds={[deal]} allowExternalResources={false} channelId={1} />
         <LinkPreviewCard embeds={[article]} allowExternalResources={false} channelId={1} />
         <LinkPreviewCard embeds={[bare]} allowExternalResources={false} channelId={1} />
       </Box>
