@@ -32,8 +32,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD;
 use futures_util::StreamExt as _;
 use mumble_protocol::client::ClientHandle;
 use mumble_protocol::command;
@@ -474,38 +472,14 @@ impl AppState {
         })
     }
 
-    /// Fetch one shared object and hand it back as base64.
-    ///
-    /// For the callers that want the whole thing in one piece - a file the
-    /// webview is about to decode itself. Anything that plays rather than
-    /// decodes should be pointed at the `fancy-media` scheme instead, which
-    /// moves the same bytes a range at a time.
-    pub async fn starling_download_to_base64(&self, key: String) -> Result<String, String> {
-        let url = self.starling_download_url(&key).await?;
-        let response = self
-            .http_client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| format!("download request failed: {e}"))?;
-        if !response.status().is_success() {
-            let status = response.status();
-            return Err(format!("download failed: {status}"));
-        }
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|e| format!("download body: {e}"))?;
-        Ok(STANDARD.encode(bytes))
-    }
-
     /// Fetch one shared object straight to a path on disk.
     ///
-    /// Separate from [`Self::starling_download_to_base64`] rather than a
-    /// wrapper around it: base64 through the IPC boundary costs a third more
-    /// bytes and holds the whole object in memory twice, which is fine for a
-    /// thumbnail and not for the video somebody just shared. Returns the size
-    /// written.
+    /// Streamed to the file rather than collected first: the object is
+    /// whatever somebody shared, which may be the film they just uploaded.
+    /// Anything the webview *shows* is not fetched through here at all but
+    /// served to it from the loopback origin (`media_server.rs`), which is the
+    /// only route that neither holds the object in memory nor puts it through
+    /// the IPC boundary as base64. Returns the size written.
     pub async fn starling_download_to_file(
         &self,
         key: String,
@@ -659,7 +633,7 @@ impl AppState {
     /// race the fast path loses: a server on the same machine can answer
     /// before this task is scheduled again, and the grant would arrive with
     /// nobody listening for it.
-    fn expect_grant(
+    pub(crate) fn expect_grant(
         &self,
         request_id: &str,
     ) -> Result<(ClientHandle, oneshot::Receiver<GrantOutcome>), String> {
@@ -671,7 +645,7 @@ impl AppState {
     }
 
     /// Wait for the answer to a request already sent.
-    async fn wait_for_grant(
+    pub(crate) async fn wait_for_grant(
         &self,
         request_id: &str,
         waiting: oneshot::Receiver<GrantOutcome>,

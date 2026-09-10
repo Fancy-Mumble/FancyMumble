@@ -384,21 +384,13 @@ fn visibility_of(mode: Option<&str>) -> mumble_protocol::proto::fancy::files::Vi
     }
 }
 
-/// Fetch one shared object as base64.
-#[tauri::command]
-pub(crate) async fn starling_download_to_base64(
-    state: tauri::State<'_, AppState>,
-    key: String,
-) -> Result<String, String> {
-    state.starling_download_to_base64(key).await
-}
-
-/// Fetch one shared object straight to a path on disk.
-/// The URL a media element can play one shared object from.
+/// The URL a media element can load one shared object from.
 ///
-/// Sound and video are not fetched whole: the element asks the loopback origin
-/// for the ranges it wants, which is the only way a file bigger than memory is
-/// playable and the only way seeking works.
+/// Nothing shown in a message is fetched whole through IPC: a player asks the
+/// loopback origin for the ranges it wants, which is the only way a file
+/// bigger than memory is playable and the only way seeking works, and an
+/// `<img>` loads its picture from the same origin - lazily, once, and into
+/// the webview's own cache - instead of receiving it as base64.
 #[tauri::command]
 pub(crate) async fn starling_media_url(
     state: tauri::State<'_, AppState>,
