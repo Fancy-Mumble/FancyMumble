@@ -34,6 +34,7 @@ import {
 import { LatencyChart, type LatencyPalette } from "@shared/serverinfo/LatencyChart";
 import { useServerFeatures, type FeatureSupport } from "@shared/serverinfo/features";
 import { ChevronDownIcon, CloseIcon, RefreshCwIcon, ServerIcon, ShieldCheckIcon } from "@ui/icons";
+import { cornerControlsClearance } from "../../theme";
 import { NEBULA_MONO, radius } from "../../tokens";
 import { LinkGuard, SectionLabel, Stack } from "../primitives";
 
@@ -386,6 +387,10 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
         width: 320,
         flex: "none",
         minHeight: 0,
+        // The panel reaches the top edge, and its close button sits in the
+        // corner the floating window controls cover - without this it is
+        // behind them and the panel cannot be closed.
+        ...cornerControlsClearance(theme),
         borderLeft: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         background: theme.palette.nebula.panel,
       })}

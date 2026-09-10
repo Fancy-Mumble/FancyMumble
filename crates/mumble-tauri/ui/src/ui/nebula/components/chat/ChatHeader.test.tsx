@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { withNebulaTheme } from "../../testTheme";
+import { TID } from "@core/testids";
 import { ChatHeader } from "./ChatHeader";
 
 vi.mock("@core/lazyBlobs", () => ({ useUserAvatar: () => null }));
@@ -176,5 +177,50 @@ describe("ChatHeader", () => {
   it("lights the pin while its panel is hanging from it", () => {
     show({ pinnedOpen: true });
     expect(screen.getByLabelText("Pinned messages").getAttribute("aria-expanded")).toBe("true");
+  });
+});
+
+describe("ChatHeader on a phone", () => {
+  afterEach(cleanup);
+
+  it("draws no way back from a window, where the column is beside it", () => {
+    show();
+    expect(screen.queryByLabelText("Back")).toBeNull();
+  });
+
+  it("goes back to the channel list", () => {
+    const onBack = vi.fn();
+    show({ onBack });
+    fireEvent.click(screen.getByLabelText("Back"));
+    expect(onBack).toHaveBeenCalled();
+  });
+
+  it("keeps joining voice on the row and folds the rest into the menu", () => {
+    // The artboard keeps exactly one button beside the title. Five of them, a
+    // back arrow and a channel name do not fit across 390px.
+    show({ dense: true, canJoinVoice: true });
+    expect(screen.getByLabelText("Join voice")).toBeTruthy();
+    expect(screen.queryByLabelText("Members (5)")).toBeNull();
+    expect(screen.queryByLabelText("Search messages")).toBeNull();
+    expect(screen.queryByLabelText("Pinned messages")).toBeNull();
+  });
+
+  it("loses no action to the fold", () => {
+    // A button that is merely absent is a feature the reader no longer has.
+    const handlers = show({ dense: true });
+    fireEvent.click(screen.getByTestId(TID.chatHeaderKebab));
+    const menu = screen.getByRole("menu");
+    fireEvent.click(within(menu).getByText("Search messages"));
+    expect(handlers.onToggleSearch).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId(TID.chatHeaderKebab));
+    fireEvent.click(within(screen.getByRole("menu")).getByText("Pinned messages"));
+    expect(handlers.onShowPinned).toHaveBeenCalled();
+  });
+
+  it("carries the roster count into the menu it moved to", () => {
+    show({ dense: true });
+    fireEvent.click(screen.getByTestId(TID.chatHeaderKebab));
+    expect(within(screen.getByRole("menu")).getByText(/Members \(5\)/)).toBeTruthy();
   });
 });

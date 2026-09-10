@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@core/store";
 import { PERM_DELETE_MESSAGE, PERM_WRITE } from "@core/utils/permissions";
 import NebulaApp from "./index";
@@ -352,6 +352,49 @@ describe("NebulaApp", () => {
     });
   });
 
+  describe("a skin that hides the title bar", () => {
+    /** Nimbus is the one skin whose artboard draws no band across the top. */
+    beforeEach(() => {
+      document.documentElement.setAttribute("data-theme", "nimbus");
+    });
+    afterEach(() => {
+      document.documentElement.removeAttribute("data-theme");
+    });
+
+    it("still gives the window somewhere to be dragged by", async () => {
+      // The band was the only thing carrying `data-tauri-drag-region`, so
+      // re-homing its four pieces left the window unmovable: no strip, no
+      // drag region, nothing to grab. A skin may hide the band; it may not
+      // take the window with it.
+      render(<NebulaApp />);
+      useAppStore.setState({
+        status: "connected",
+        sessions: [OPEN_SESSION as never],
+        activeServerId: "sess",
+      });
+      await screen.findByTestId("nebula-client-root");
+      await waitFor(() =>
+        expect(document.querySelectorAll("[data-tauri-drag-region]").length).toBeGreaterThan(0),
+      );
+    });
+
+    it("leaves quick connect to the rail rather than the conversation header", async () => {
+      // The rail is on screen here and ends in its own plus. A second one in
+      // the header is two plus signs a column apart, reading as two different
+      // things - which is the same reason the title bar drops its own when the
+      // rail carries the servers.
+      render(<NebulaApp />);
+      useAppStore.setState({
+        status: "connected",
+        sessions: [OPEN_SESSION as never],
+        activeServerId: "sess",
+      });
+      const rail = await screen.findByTestId("nebula-server-rail");
+      expect(within(rail).getByLabelText("Add a server")).toBeTruthy();
+      expect(screen.queryByLabelText("Quick connect")).toBeNull();
+    });
+  });
+
   it("offers a saved server as a new tab from the title bar's +", async () => {
     // Quick connect is the title bar's own +, which it only draws when the
     // server strip is up there rather than on the rail.
@@ -584,6 +627,55 @@ describe("NebulaApp", () => {
     });
   });
 
+  // A friend chat is a channel named `__dm:<lo>-<hi>` - a storage detail of the
+  // room the friends plugin provisions, and nobody's business. The header
+  // already resolved it to the friend's name; everything else that names the
+  // conversation has to resolve it too, or the raw id name leaks out beside a
+  // header that reads correctly.
+  describe("naming a friend room", () => {
+    /** Connected and reading the `__dm:` room shared with Sebi. */
+    async function inFriendRoom() {
+      render(<NebulaApp />);
+      useAppStore.setState({
+        status: "connected",
+        sessions: [OPEN_SESSION as never],
+        activeServerId: "sess",
+        channels: [
+          { id: 0, parent_id: null, name: "Root", user_count: 0, position: 0 } as never,
+          {
+            id: 5,
+            parent_id: null,
+            name: "__dm:3-7",
+            user_count: 0,
+            position: 0,
+            detached: true,
+          } as never,
+        ],
+        selectedChannel: 5,
+        currentChannel: 0,
+        selectedDmUser: null,
+        ownSession: 7,
+        users: [
+          { session: 7, name: "ZewiWin", user_id: 3, channel_id: 0, texture_size: null } as never,
+          { session: 8, name: "Sebi", user_id: 7, channel_id: 0, texture_size: null } as never,
+        ],
+      });
+      await screen.findByLabelText("Search channels");
+    }
+
+    it("addresses the composer to the friend, not to the room's id name", async () => {
+      await inFriendRoom();
+      expect(await screen.findByLabelText("Message @Sebi")).toBeTruthy();
+      expect(screen.queryByLabelText(/__dm:/)).toBeNull();
+    });
+
+    it("keeps the room's id name out of the empty conversation", async () => {
+      await inFriendRoom();
+      expect(await screen.findByText("Start a conversation with Sebi")).toBeTruthy();
+      expect(document.body.textContent).not.toContain("__dm:");
+    });
+  });
+
   describe("entering a channel that asks for a password", () => {
     /** Connected, with one open room and one the server has restricted. */
     async function withRestrictedRoom(extra: Record<string, unknown> = {}) {
@@ -777,5 +869,47 @@ describe("NebulaApp", () => {
     } finally {
       globalThis.history.replaceState({}, "", "/");
     }
+  });
+});
+
+describe("NebulaApp on a phone", () => {
+  // `useIsHandheld` reads this before it asks the viewport, which is what
+  // makes the handheld branch reachable from a test at all: jsdom answers
+  // `matches: false` to every media query and its user-agent is a desktop.
+  beforeEach(() => {
+    document.documentElement.setAttribute("data-nebula-handheld", "on");
+    getSavedServersMock.mockResolvedValue([]);
+    getPreferencesMock.mockReset();
+    getPreferencesMock.mockResolvedValue(DEFAULT_PREFERENCES);
+    updatePreferencesMock.mockReset();
+    updatePreferencesMock.mockImplementation((patch: unknown) => Promise.resolve(patch));
+    useAppStore.setState({
+      status: "disconnected",
+      sessions: [],
+      activeServerId: null,
+      channels: [],
+      users: [],
+      messages: [],
+      selectedChannel: null,
+      selectedDmUser: null,
+      currentChannel: null,
+      ownSession: null,
+    });
+  });
+  afterEach(() => document.documentElement.removeAttribute("data-nebula-handheld"));
+
+  it("lays the client out for one hand", async () => {
+    render(<NebulaApp />);
+    expect(await screen.findByTestId("nebula-mobile-shell")).toBeTruthy();
+    // The window's own furniture is a window's: no title bar, and the row of
+    // columns that used to run off the right edge is gone.
+    expect(screen.queryByTestId("nebula-title-bar")).toBeNull();
+  });
+
+  it("leaves the window alone when nothing says otherwise", async () => {
+    document.documentElement.setAttribute("data-nebula-handheld", "off");
+    render(<NebulaApp />);
+    expect(await screen.findByTestId("nebula-client-root")).toBeTruthy();
+    expect(screen.queryByTestId("nebula-mobile-shell")).toBeNull();
   });
 });

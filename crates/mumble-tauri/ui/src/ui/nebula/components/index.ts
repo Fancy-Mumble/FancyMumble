@@ -17,7 +17,7 @@ export { ServerInfoPanel } from "./server/ServerInfoPanel";
 export { ChatBackdrop } from "./chat/ChatBackdrop";
 export { ChatHeader } from "./chat/ChatHeader";
 export { MessageList } from "./chat/MessageList";
-export { MessageRow } from "./chat/MessageRow";
+export { MessageAvatar, MessageRow } from "./chat/MessageRow";
 export { MemberPanel } from "./chat/MemberPanel";
 export { RichPresencePanel } from "./chat/RichPresencePanel";
 export { Composer } from "./chat/Composer";

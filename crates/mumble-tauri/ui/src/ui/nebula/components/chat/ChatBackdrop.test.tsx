@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, waitFor, fireEvent, cleanup } from "@testing-library/react";
+import { ThemeProvider } from "@mui/material/styles";
 import { withNebulaTheme } from "@nebula/testTheme";
 
 vi.mock("@core/utils/store", () => {
@@ -38,6 +39,9 @@ vi.mock("@core/features/settings/chatBackground", () => ({
 }));
 
 const { ChatBackdrop, BLUR_GRACE_MS } = await import("./ChatBackdrop");
+const { useAppStore } = await import("@core/store");
+const { createNebulaTheme } = await import("@nebula/theme");
+const { DEFAULT_SKIN } = await import("@nebula/themeCatalog");
 const { PERSONALIZATION_DEFAULTS, loadPersonalization, savePersonalization } =
   await import("@standard/personalizationStorage");
 
@@ -48,6 +52,12 @@ async function mount(overrides: Record<string, unknown>) {
 }
 
 const query = <T extends Element>(selector: string) => document.querySelector<T>(selector);
+
+/** The backdrop under a skin that draws the poster wordmark. */
+function mountStencil() {
+  const theme = createNebulaTheme("dark", null, null, { ...DEFAULT_SKIN, chrome: "stencil" });
+  render(<ThemeProvider theme={theme}><ChatBackdrop /></ThemeProvider>);
+}
 
 describe("Nebula animated chat background", () => {
   beforeEach(() => {
@@ -574,5 +584,39 @@ describe("Nebula still chat background", () => {
     const filter = getComputedStyle(img).filter;
     expect(filter).not.toContain("blur");
     expect(filter).not.toContain("brightness");
+  });
+
+  it("captions the room being read, not the room being spoken in", () => {
+    useAppStore.setState({
+      channels: [
+        { id: 1, name: "green is fucked" },
+        { id: 2, name: "Game for 2" },
+      ] as never,
+      // In voice in one room, reading another - which is every moment spent
+      // browsing without leaving the call.
+      currentChannel: 1,
+      selectedChannel: 2,
+      selectedDmUser: null,
+    });
+
+    mountStencil();
+
+    expect(document.body.textContent).toContain("GAME FOR");
+    expect(document.body.textContent).not.toContain("GREEN");
+  });
+
+  it("captions a direct message with the name at the other end", () => {
+    useAppStore.setState({
+      channels: [{ id: 1, name: "green is fucked" }] as never,
+      users: [{ session: 7, name: "ZewiLinux", channel_id: 1 }] as never,
+      currentChannel: 1,
+      selectedChannel: 1,
+      selectedDmUser: 7,
+    });
+
+    mountStencil();
+
+    expect(document.body.textContent).toContain("ZEWILINUX");
+    expect(document.body.textContent).not.toContain("GREEN");
   });
 });

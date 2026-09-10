@@ -15,6 +15,7 @@ import {
 } from "../primitives";
 import { MenuCheckBox } from "../sidebar/MenuCheckBox";
 import type { RosterGroup, RosterMember } from "../../selectors";
+import { cornerControlsClearance } from "../../theme";
 import { radius } from "../../tokens";
 
 interface MemberPanelProps {
@@ -37,6 +38,17 @@ interface MemberPanelProps {
   /** The (i) at the end of a channel row: open the User Information sheet. */
   onInfo?: (session: number) => void;
   onClose: () => void;
+  /**
+   * Where the roster is standing.
+   *
+   * `"column"` is the aside beside the conversation, which is the only place
+   * it has ever stood. `"sheet"` is a phone, where it is the whole width of a
+   * pane inside `MobileSheet` - so no fixed width, no left hairline dividing
+   * it from a conversation that is not beside it, and no clearance for window
+   * controls that are not drawn. Three coupled facts, so one word rather than
+   * three props that could be set to disagree.
+   */
+  variant?: "column" | "sheet";
 }
 
 /**
@@ -68,6 +80,7 @@ export function MemberPanel({
   onContextMenu,
   onInfo,
   onClose,
+  variant = "column",
 }: Readonly<MemberPanelProps>) {
   const { t } = useTranslation(["nebulaChat", "sidebar", "nebulaChrome"]);
 
@@ -94,10 +107,19 @@ export function MemberPanel({
       data-testid={TID.memberList}
       aria-label={t("sidebar:sidebarTabs.members")}
       sx={(theme) => ({
-        width: 264,
-        flex: "none",
+        width: variant === "sheet" ? "100%" : 264,
+        flex: variant === "sheet" ? 1 : "none",
         minHeight: 0,
-        borderLeft: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
+        // The panel reaches the top edge, and its close button sits in the
+        // corner the floating window controls cover - without this it is
+        // behind them and the panel cannot be closed. In a sheet the top edge
+        // belongs to the sheet, which leaves its own room.
+        ...(variant === "sheet" ? {} : cornerControlsClearance(theme)),
+        // The hairline divides the roster from the conversation beside it. In
+        // a sheet there is nothing beside it.
+        ...(variant === "sheet"
+          ? {}
+          : { borderLeft: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}` }),
         background: theme.palette.nebula.panel,
       })}
     >

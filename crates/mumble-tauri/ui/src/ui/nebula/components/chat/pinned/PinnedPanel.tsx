@@ -42,6 +42,14 @@ interface PinnedPanelProps {
   readonly onClose: () => void;
   /** Scroll the conversation to a pin. */
   readonly onJump: (messageId: string) => void;
+  /**
+   * Open the server's greeting at full size.
+   *
+   * The welcome row has nowhere to jump, but it does have somewhere to go: a
+   * row is two clamped lines of flattened text, and the greeting is the one
+   * pin whose layout, pictures and links are most of what it says.
+   */
+  readonly onOpenWelcome?: () => void;
   /** Drop the NEW marks without waiting for the next open. */
   readonly onMarkRead: () => void;
   readonly onUnpin?: (message: ChatMessage) => void;
@@ -54,6 +62,7 @@ export function PinnedPanel({
   time,
   onClose,
   onJump,
+  onOpenWelcome,
   onMarkRead,
   onUnpin,
 }: Readonly<PinnedPanelProps>) {
@@ -182,14 +191,16 @@ export function PinnedPanel({
               // The welcome pin is not in the conversation, so there is
               // nowhere to jump to and nothing to unpin: it is the server's,
               // not a member's, and offering either would be a dead end.
+              // Clicking it opens the greeting itself instead.
               const greeting = message.message_id === WELCOME_PIN_ID;
+              const id = message.message_id ?? "";
               return (
                 <PinRow
                   key={message.message_id}
                   message={message}
-                  unseen={unseenIds.has(message.message_id ?? "")}
+                  unseen={unseenIds.has(id)}
                   time={time}
-                  onJump={greeting ? undefined : onJump}
+                  onOpen={greeting ? onOpenWelcome : () => onJump(id)}
                   onUnpin={greeting ? undefined : onUnpin}
                 />
               );
@@ -220,8 +231,12 @@ interface PinRowProps {
   readonly message: ChatMessage;
   readonly unseen: boolean;
   readonly time: TimeDisplay;
-  /** Absent for a pin that is not in the conversation - the server's welcome. */
-  readonly onJump?: (messageId: string) => void;
+  /**
+   * What the row is a link to: the message in the conversation, or - for the
+   * server's welcome, which is in no conversation - the greeting itself.
+   * Absent where there is neither, and then the row is only there to be read.
+   */
+  readonly onOpen?: () => void;
   readonly onUnpin?: (message: ChatMessage) => void;
 }
 
@@ -234,9 +249,8 @@ interface PinRowProps {
  * the pointer is on the row: a row being read no longer needs telling that it
  * is unread, and the corner is where both belong.
  */
-function PinRow({ message, unseen, time, onJump, onUnpin }: Readonly<PinRowProps>) {
+function PinRow({ message, unseen, time, onOpen, onUnpin }: Readonly<PinRowProps>) {
   const { t } = useTranslation(["nebulaChat", "chat"]);
-  const id = message.message_id ?? "";
   // Parsing a body is a DOM round trip; the body only changes on an edit.
   const preview = useMemo(() => pinPreview(message.body), [message.body]);
   const age = pinAge(t, message.timestamp ?? message.pinned_at, time);
@@ -264,7 +278,7 @@ function PinRow({ message, unseen, time, onJump, onUnpin }: Readonly<PinRowProps
       <Box
         component="button"
         type="button"
-        onClick={() => onJump?.(id)}
+        onClick={onOpen}
         sx={(theme) => ({
           all: "unset",
           boxSizing: "border-box",
@@ -273,7 +287,7 @@ function PinRow({ message, unseen, time, onJump, onUnpin }: Readonly<PinRowProps
           width: "100%",
           // A pin with nowhere to jump is still worth reading, so it is still
           // a row - it just does not pretend to be a link to somewhere.
-          cursor: onJump ? "pointer" : "default",
+          cursor: onOpen ? "pointer" : "default",
           p: "11px 12px",
           borderRadius: radius("md"),
           "&:hover": { background: theme.palette.nebula.hover },

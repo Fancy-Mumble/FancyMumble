@@ -293,13 +293,25 @@ saved set that outlives any one connection: `@core/friendsStorage`, the same
 record Standard's Friends page reads and Nebula's user menu writes, so a friend
 added in either design is a friend in both.
 
-A friend is a TLS certificate hash. Only the backend can say where one is, so
-`useFriends` asks it - `find_user_by_hash`, across every open connection,
-whenever the list or the connections change and on a slow timer besides, because
-a friend can arrive on a server without anything in this client moving. What is
-learned while they are visible is written back: the registered user id, the
-connection target of their server, and their avatar. Those are what make the
-*other* rows work.
+A friend is a TLS certificate hash, plus the registered account and server that
+hash was saved as. Only the backend can say where one is, so `useFriends` asks
+it - `@core/friendsPresence`, across every open connection, whenever the list or
+the connections change and on a slow timer besides, because a friend can arrive
+on a server without anything in this client moving.
+
+The account is not decoration. A certificate is a *login*, and one login can
+carry several accounts - a second identity, a test account - so a hash-only
+lookup answers with whoever holds that certificate right now, and a row labelled
+with one friend's name opens a chat with somebody else. On the friend's own
+server the saved account decides and an impostor is refused; on any other open
+server the certificate is all that can be compared, which is what still finds a
+friend who is somewhere else today.
+
+What is learned while they are visible is written back - the registered user id,
+the connection target of their server, their avatar - but only from their own
+server, and only into fields that are still blank. A background resolver that
+overwrote them could replace the friend with a stranger, permanently, with
+nothing on screen saying so. Those fields are what make the *other* rows work.
 
 Because a friend chat between two registered users is a persisted,
 end-to-end-encrypted channel rather than a live direct message, one click means
@@ -475,8 +487,9 @@ day, and the ones that had gone stale were struck.
 
 - No drag-and-drop: channels cannot be reordered by dragging and users cannot
   be dragged between channels. Reordering is the channel editor's `position`
-  field, and moving a user is on their menu. `dragOrder.ts` is the server
-  rail's own, and reorders servers only.
+  field, and moving a user is on their menu. `@ui/dragOrder` is shared with
+  Standard - which does carry users between channels - but here it reorders
+  servers only.
 - No blocking, ignoring or user notes. Existing relations are still honoured
   when filtering messages; they just cannot be edited here. Nor in Standard:
   the only editor is Aurora's, and Aurora is being deleted, so this stops being
@@ -495,7 +508,40 @@ day, and the ones that had gone stale were struck.
 **Elsewhere**
 
 - No channel recording.
-- No mobile layout. Nebula assumes a desktop window.
+- No channel recording.
+
+## The handheld layout
+
+Below 600px, or on a phone, the pack lays itself out for one hand. The switch
+is `useIsHandheld` - a media query OR'd with the platform, with a
+`data-nebula-handheld` attribute on `<html>` outranking both so the preview
+page and the tests can reach the branch at all (`isMobile` is a user-agent
+constant, false in both).
+
+Nothing forks. The window is a row of four things at once - rail, column,
+conversation, aside - and `MobileShell` is the same four taken one at a time:
+the rail lies along the top as a strip, the column and the conversation become
+two **panes** with one in front, the aside comes up as a sheet, and a tab bar
+says which screen you are on. Everything below that row in `NebulaClientApp` -
+menus, dialogs, overlays, the runtime - is outside the branch and shared.
+
+The pane switch is the whole idea, and it is why the file is short: every
+screen the pack has is already a list beside a page - channels beside a
+conversation, saved servers beside a connect form, settings pages beside a
+settings page - so one "which half is in front" answers all of them and no
+screen needs a handheld design of its own to stop being clipped.
+
+Neither the panes nor the shell own application state. Each takes a bundle
+`NebulaClientApp` already assembled for the window (`shellModel.ts`), so a
+phone and a window run the same handlers over the same data.
+
+The artboards are Nimbus, and every mark in them is either a token or a
+`chrome: "stencil"` branch - skewed plates, hazard rules, halo rings, the gold
+selection tab, the poster face. The other twelve skins get the same anatomy in
+their own language, and `components/mobile/MobileShell.test.tsx` renders all
+thirteen in both schemes to say so. `preview/mobile.tsx` draws them at 390x844;
+it must be shot through `?frame=390`, because headless Edge will not give a
+window a viewport that narrow and the media query would be false.
 
 
 ## Form controls
@@ -1067,3 +1113,39 @@ bridges it, because a pointer crossing a real hole leaves the row, and a row
 that is no longer hovered takes the pill away before it is reached. It carries
 the composer's rhythm at 80% scale: bare 15px icons, 34px tall, and exactly one
 divider, only ever before the destructive end.
+
+## The picture menu
+
+A right-click that lands on a photograph is about the photograph. The message
+menu grows a group at the top for it - copy the picture, save it, copy its
+link, pop it out, open it in a browser - and the message's own rows carry on
+underneath, because the picture is often the whole message and deleting it has
+to stay reachable. Which picture is a question the menu cannot answer for
+itself: a block of four tiles is one message, so the row reads the `<img>` the
+pointer was over off the event and hands it over. Only the ones a gallery
+marked `data-picture` count; an avatar, an emote and the blurred copy behind a
+framed photograph are all `<img>` too, and none of them is a picture anybody
+wants to save.
+
+The link rows are not the `src`. A public or password-protected file is drawn
+from a downloaded copy or from bytes this client fetched, so what is on screen
+is a local path while the thing worth sharing is the link it arrived as - the
+card carries that separately in `data-picture-link`, and only for the two
+reaches a browser could actually follow. A pasted picture has neither, and
+those two rows stay away rather than offering a `data:` URI as an address.
+
+Getting at the bytes is `core/features/chat/imageActions`: `data:` and `blob:`
+are the webview's own and `fetch` reads them, but a file-server link is
+CORS-refused there, so the host is asked through `download_to_base64` with the
+session's credential. Saving is `save_image_as`, which opens the dialog on the
+host side - the webview cannot write a file at all, and opening the dialog
+there is what makes the only path ever written to one a person picked.
+
+The same menu is what the lightbox opens, drawn as a child of the overlay
+rather than a portal to the body: the overlay blurs everything behind it, so a
+menu portalled to the body appears *under* the blur, which is what a
+right-click there used to produce. And a right-click on an already-open menu
+lands on the menu's own invisible sheet rather than on what is underneath, so
+every context menu here hands its root slot `contextMenuRootSlot` - without it
+the webview answers with its own Back / Refresh / Inspect menu, drawn over
+ours.

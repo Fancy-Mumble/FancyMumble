@@ -75,10 +75,21 @@ function usePrefersReducedMotion(): boolean {
 export function ChatBackdrop() {
   const [personalization, setPersonalization] = useState<PersonalizationData | null>(null);
   const stencil = useTheme().palette.nebulaSkin.chrome === "stencil";
-  // The open room's name, broken onto two lines the way a poster would set it.
-  const channelName = useAppStore((state) =>
-    state.channels.find((channel) => channel.id === state.currentChannel)?.name ?? "",
-  );
+  // The name of the conversation on screen, broken onto two lines the way a
+  // poster would set it.
+  //
+  // `selectedChannel`, not `currentChannel`: the first is the room being read,
+  // the second the room being spoken in, and they part company the moment you
+  // browse anywhere while staying in voice. The header, the empty state and the
+  // composer all name the room being read, so a backdrop naming the other one
+  // is not a second opinion - it is the wrong caption on the page. A DM has no
+  // channel at all, and takes the name of whoever is on the other end.
+  const channelName = useAppStore((state) => {
+    if (state.selectedDmUser !== null) {
+      return state.users.find((user) => user.session === state.selectedDmUser)?.name ?? "";
+    }
+    return state.channels.find((channel) => channel.id === state.selectedChannel)?.name ?? "";
+  });
   const wordmark = useMemo(() => {
     const words = channelName.replace(/[^\p{L}\p{N} ]/gu, " ").trim().split(/\s+/).filter(Boolean);
     if (words.length === 0) return "";
@@ -388,12 +399,18 @@ export function ChatBackdrop() {
               right: 60,
               bottom: 110,
               textAlign: "right",
-              fontFamily: theme.palette.nebulaSkin.font,
+              // The skin's poster voice, not its interface one: this is set at
+              // 150px and hollowed to an outline, where a UI sans has nothing
+              // to show and reads as unstyled text. Condensed and heavy is the
+              // shape the artboard draws, and Saira carries both on its own
+              // axes - no second family, and no browser faking either one.
+              fontFamily: theme.palette.nebulaSkin.display ?? theme.palette.nebulaSkin.font,
               fontStyle: "italic",
               fontWeight: 800,
+              fontStretch: "78%",
               fontSize: 150,
               lineHeight: 0.86,
-              letterSpacing: "-.02em",
+              letterSpacing: "-.01em",
               color: "transparent",
               WebkitTextStroke: `2px ${theme.palette.nebula.line2}`,
               userSelect: "none",
