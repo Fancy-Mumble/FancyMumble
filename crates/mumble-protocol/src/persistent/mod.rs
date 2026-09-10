@@ -29,6 +29,7 @@ impl PchatProtocol {
         match self {
             Self::None => "NONE",
             Self::FancyV1FullArchive => "FANCY_V1_FULL_ARCHIVE",
+            Self::ServerManaged => "SERVER_MANAGED",
             Self::SignalV1 => "SIGNAL_V1",
         }
     }
@@ -43,6 +44,7 @@ impl PchatProtocol {
     pub fn from_wire_str(s: &str) -> Self {
         match s {
             "FANCY_V1_FULL_ARCHIVE" | "FULL_ARCHIVE" => Self::FancyV1FullArchive,
+            "SERVER_MANAGED" => Self::ServerManaged,
             "SIGNAL_V1" => Self::SignalV1,
             _ => Self::None,
         }
