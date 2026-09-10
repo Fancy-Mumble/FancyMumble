@@ -507,4 +507,101 @@ describe("MessageList", () => {
 
     vi.useRealTimers();
   });
+
+  describe("the two-sided render window", () => {
+    /** A thread long enough that the window cannot hold all of it. */
+    function longThread(count: number): ChatMessage[] {
+      return Array.from({ length: count }, (_, index) => message(`m${index}`, 1_700_000_000_000 + index));
+    }
+
+    /** The scroller the list mounts its rows inside. */
+    function scroller(container: HTMLElement): HTMLElement {
+      return container.firstElementChild as HTMLElement;
+    }
+
+    function mounted(container: HTMLElement): number {
+      return container.querySelectorAll("[data-message-id]").length;
+    }
+
+    it("mounts a bounded slice of a long thread rather than all of it", () => {
+      // The whole point of a window. 600 rows of DOM is what makes a busy
+      // channel expensive to look at rather than expensive to open.
+      const { container } = draw({ messages: longThread(600) });
+      const rows = mounted(container);
+
+      expect(rows).toBeGreaterThan(0);
+      expect(rows).toBeLessThan(600);
+    });
+
+    it("releases the trailing edge once the reader has climbed far enough", () => {
+      // The difference from the tail anchor: reading backwards used to keep
+      // every row between the reader and the present mounted.
+      const { container } = draw({ messages: longThread(600) });
+      const node = scroller(container);
+
+      const before = mounted(container);
+      for (let step = 0; step < 12; step += 1) {
+        act(() => {
+          node.scrollTop = 0;
+          fireEvent.scroll(node);
+        });
+      }
+
+      // Still bounded, and the newest row is no longer among them.
+      expect(mounted(container)).toBeLessThanOrEqual(Math.max(before, 300));
+      expect(container.querySelector('[data-message-id="m599"]')).toBeNull();
+    });
+
+    it("announces an arrival the reader is not carried down to", async () => {
+      // A window detached from the tail does not follow a new message, so
+      // this pill is the only thing that says one happened. Without it the
+      // message is simply invisible until the reader scrolls.
+      const thread = longThread(600);
+      const { container, rerender } = draw({ messages: thread });
+      const node = scroller(container);
+
+      for (let step = 0; step < 12; step += 1) {
+        act(() => {
+          node.scrollTop = 0;
+          fireEvent.scroll(node);
+        });
+      }
+      expect(screen.queryByTestId("chat-new-messages-pill")).toBeNull();
+
+      await act(async () => {
+        rerender(
+          withNebulaTheme(
+            <MessageList
+              messages={[...thread, message("fresh", 1_700_000_999_999)]}
+              users={[]}
+              renderMessage={(m) => <span>{m.body}</span>}
+            />,
+          ),
+        );
+      });
+
+      expect(screen.getByTestId("chat-new-messages-pill")).toBeTruthy();
+    });
+
+    it("does not announce an arrival the reader is already at the bottom for", async () => {
+      // At the tail the window follows the message down, so there is nothing
+      // to tell them: they can see it.
+      const thread = longThread(20);
+      const { rerender } = draw({ messages: thread });
+
+      await act(async () => {
+        rerender(
+          withNebulaTheme(
+            <MessageList
+              messages={[...thread, message("fresh", 1_700_000_999_999)]}
+              users={[]}
+              renderMessage={(m) => <span>{m.body}</span>}
+            />,
+          ),
+        );
+      });
+
+      expect(screen.queryByTestId("chat-new-messages-pill")).toBeNull();
+    });
+  });
 });
