@@ -8,9 +8,19 @@ import { ChevronDownIcon, CloseIcon, Link2Icon, LockIcon, PlusIcon, UsersGroupIc
 import { Stack } from "../primitives";
 import { NEBULA_MONO, radius } from "../../tokens";
 
-/** The square a staged file is previewed in, and the disc that removes it. */
-const TILE_PX = 54;
+/**
+ * The square a staged file is previewed in, and the disc that removes it.
+ *
+ * Two sizes, because the tray owns the same strip either way: with the
+ * options folded away there is nothing else in it, so the picture takes the
+ * room and can actually be recognised; unfolding the rows puts three lines of
+ * chips underneath, and the tiles shrink back rather than push the composer
+ * off the bottom of the window.
+ */
+const TILE_PX = 150;
+const TILE_COMPACT_PX = 54;
 const TILE_CLOSE_PX = 17;
+const TILE_CLOSE_LARGE_PX = 22;
 
 export type AttachmentQuality = "compressed" | "full";
 
@@ -75,6 +85,7 @@ export function AttachmentTray({
   onOptionsChange,
   onRemove,
   onAddMore,
+  onPreview,
 }: Readonly<{
   attachments: readonly StagedAttachment[];
   disabled?: boolean;
@@ -88,6 +99,8 @@ export function AttachmentTray({
   onOptionsChange: (next: ShareOptions) => void;
   onRemove: (id: string) => void;
   onAddMore: () => void;
+  /** Open the staged pictures full size, starting on this one. Absent = tiles are not clickable. */
+  onPreview?: (id: string) => void;
 }>) {
   const [open, setOpen] = useState(false);
 
@@ -104,6 +117,9 @@ export function AttachmentTray({
   // collapses to the one choice that is real and says why the rest are not.
   const visibilityLocked = !canSharePublic;
   const expiryLocked = !canExpire;
+  // The strip is the only thing in the tray until the options are folded out,
+  // so that is when a preview can afford to be a preview.
+  const tilePx = open ? TILE_COMPACT_PX : TILE_PX;
 
   // Scoped to the photos, not the whole batch: a video or a PDF sent
   // alongside them does not shrink, and folding its bytes into both figures
@@ -130,7 +146,13 @@ export function AttachmentTray({
       <Stack direction="row" alignItems="flex-start" gap="12px" sx={{ px: "4px", py: "6px" }}>
         <Stack direction="row" alignItems="center" gap="8px" sx={{ flex: 1, minWidth: 0, overflowX: "auto" }}>
           {attachments.map((file) => (
-            <AttachmentTile key={file.id} file={file} onRemove={() => onRemove(file.id)} />
+            <AttachmentTile
+              key={file.id}
+              file={file}
+              size={tilePx}
+              onRemove={() => onRemove(file.id)}
+              onOpen={onPreview && file.previewUrl ? () => onPreview(file.id) : undefined}
+            />
           ))}
           <Tooltip title={t("attachment.addAnotherFile")}>
             <Box
@@ -144,8 +166,8 @@ export function AttachmentTray({
                 cursor: "pointer",
                 flex: "none",
                 boxSizing: "border-box",
-                width: 44,
-                height: TILE_PX,
+                width: tilePx < TILE_PX ? 44 : 72,
+                height: tilePx,
                 display: "grid",
                 placeItems: "center",
                 borderRadius: radius("md"),
@@ -564,33 +586,82 @@ function ExpandGlyph() {
 /**
  * One staged file, drawn as what it is.
  *
- * An image is its own label, so it gets the square and nothing else. Anything
+ * An image is its own label, so it gets the square and nothing else - and,
+ * where the tray was given somewhere to send it, opens full size in the same
+ * lightbox a sent picture does, because the tile is a thumbnail and checking
+ * you picked the right photograph is exactly what it is there for. Anything
  * without a picture gets the opposite treatment - a type badge, the name and
  * the size - because for those, three facts *are* the file.
  */
-function AttachmentTile({ file, onRemove }: Readonly<{ file: StagedAttachment; onRemove: () => void }>) {
+function AttachmentTile({
+  file,
+  size,
+  onRemove,
+  onOpen,
+}: Readonly<{
+  file: StagedAttachment;
+  size: number;
+  onRemove: () => void;
+  /** Absent when there is no picture to enlarge, or nowhere to enlarge it. */
+  onOpen?: () => void;
+}>) {
   const remove = `Remove ${file.filename}`;
+  const { t } = useTranslation(TRAY_NS);
+  // Everything on a tile is drawn from its side: the disc, the type badge and
+  // the room kept clear for the disc all follow the square rather than sitting
+  // at one size that is right for only one of the two.
+  const large = size >= TILE_PX;
+  const closePx = large ? TILE_CLOSE_LARGE_PX : TILE_CLOSE_PX;
 
   if (file.previewUrl) {
+    const picture = (
+      <Box
+        component="img"
+        src={file.previewUrl}
+        alt={file.filename}
+        sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+      />
+    );
     return (
       <Box
         sx={(theme) => ({
           position: "relative",
           flex: "none",
-          width: TILE_PX,
-          height: TILE_PX,
+          width: size,
+          height: size,
           borderRadius: radius("md"),
           overflow: "hidden",
           border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         })}
       >
-        <Box
-          component="img"
-          src={file.previewUrl}
-          alt={file.filename}
-          sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-        />
-        <TileClose label={remove} onClick={onRemove} />
+        {onOpen ? (
+          // The picture is the button and the cross stays outside it: a
+          // button inside a button is not markup a browser will honour, and
+          // the disc has to keep taking its own clicks.
+          <Tooltip title={t("attachment.enlarge")}>
+            <Box
+              component="button"
+              type="button"
+              aria-label={file.filename}
+              onClick={onOpen}
+              sx={(theme) => ({
+                all: "unset",
+                display: "block",
+                cursor: "zoom-in",
+                width: "100%",
+                height: "100%",
+                "&:focus-visible": { outline: `2px solid ${theme.palette.nebula.accent}`, outlineOffset: "-2px" },
+                "&:hover img": { transform: "scale(1.05)" },
+                "& img": { transition: "transform .16s ease" },
+              })}
+            >
+              {picture}
+            </Box>
+          </Tooltip>
+        ) : (
+          picture
+        )}
+        <TileClose label={remove} onClick={onRemove} px={closePx} />
       </Box>
     );
   }
@@ -604,10 +675,10 @@ function AttachmentTile({ file, onRemove }: Readonly<{ file: StagedAttachment; o
         position: "relative",
         flex: "none",
         boxSizing: "border-box",
-        height: TILE_PX,
-        pl: "8px",
+        height: size,
+        pl: large ? "12px" : "8px",
         // Room for the disc on the corner, so a long name never runs under it.
-        pr: "30px",
+        pr: large ? "38px" : "30px",
         borderRadius: radius("md"),
         background: theme.palette.nebula.card2,
         border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
@@ -616,8 +687,8 @@ function AttachmentTile({ file, onRemove }: Readonly<{ file: StagedAttachment; o
       <Box
         aria-hidden
         sx={(theme) => ({
-          width: 34,
-          height: 38,
+          width: large ? 52 : 34,
+          height: large ? 60 : 38,
           flex: "none",
           display: "grid",
           placeItems: "center",
@@ -625,7 +696,7 @@ function AttachmentTile({ file, onRemove }: Readonly<{ file: StagedAttachment; o
           background: theme.palette.nebula.panel,
           border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
           fontFamily: NEBULA_MONO,
-          fontSize: 8.5,
+          fontSize: large ? 11 : 8.5,
           fontWeight: 600,
           color: theme.palette.nebula.muted,
         })}
@@ -651,7 +722,7 @@ function AttachmentTile({ file, onRemove }: Readonly<{ file: StagedAttachment; o
           </Typography>
         )}
       </Stack>
-      <TileClose label={remove} onClick={onRemove} />
+      <TileClose label={remove} onClick={onRemove} px={closePx} />
     </Stack>
   );
 }
@@ -663,7 +734,11 @@ function AttachmentTile({ file, onRemove }: Readonly<{ file: StagedAttachment; o
  * so this one is a disc on the corner, dark enough to stay a cross over
  * whatever the photograph happens to be doing underneath it.
  */
-function TileClose({ label, onClick }: Readonly<{ label: string; onClick: () => void }>) {
+function TileClose({
+  label,
+  onClick,
+  px = TILE_CLOSE_PX,
+}: Readonly<{ label: string; onClick: () => void; px?: number }>) {
   return (
     <Box
       component="button"
@@ -676,8 +751,8 @@ function TileClose({ label, onClick }: Readonly<{ label: string; onClick: () => 
         position: "absolute",
         right: "4px",
         top: "4px",
-        width: TILE_CLOSE_PX,
-        height: TILE_CLOSE_PX,
+        width: px,
+        height: px,
         display: "grid",
         placeItems: "center",
         borderRadius: "50%",
@@ -688,7 +763,7 @@ function TileClose({ label, onClick }: Readonly<{ label: string; onClick: () => 
         "&:hover": { background: "rgba(8,11,18,.92)", color: "#ffffff" },
       }}
     >
-      <CloseIcon width={9} height={9} />
+      <CloseIcon width={px > TILE_CLOSE_PX ? 11 : 9} height={px > TILE_CLOSE_PX ? 11 : 9} />
     </Box>
   );
 }

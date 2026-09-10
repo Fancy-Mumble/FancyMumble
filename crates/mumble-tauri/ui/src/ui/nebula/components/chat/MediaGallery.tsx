@@ -12,8 +12,213 @@ import { radius } from "../../tokens";
 /** How wide a single picture is allowed to be, and how tall. */
 const SINGLE_MAX_W = 420;
 const SINGLE_MAX_H = 320;
+/**
+ * The shape a picture is given once it is longer than this.
+ *
+ * The height cap alone takes a long thin picture - a screenshot of a chat log,
+ * a whole web page - down to a thread of pixels forty across, which is not a
+ * picture of anything. Past this shape the cap gives way to a frame of exactly
+ * this shape: the whole picture, uncropped, centred on a blurred copy of
+ * itself that fills what it does not reach. Every long picture in the thread
+ * is then the same size as every other.
+ */
+const FRAME_RATIO = 3 / 4;
+/** The frame itself, taller than the plain cap so the picture has room. */
+const FRAME_H = 400;
+const FRAME_W = FRAME_H * FRAME_RATIO;
+
+/**
+ * What a picture pasted into the body weighs, or null when that is unknowable.
+ *
+ * A picture sent as a file says its size, its reach and when it expires on a
+ * chip in its corner; a picture pasted into the body - which is what the
+ * original client and every paste does - said nothing at all, and the two sat
+ * next to each other in the same thread looking like one of them had been
+ * told less about. Weight is the one fact a body picture actually has: it is
+ * carried in the message, so this is the number, not an estimate of it.
+ *
+ * Only base64 answers. A picture the body points at by URL is a fetch away,
+ * and a chip that had to wait on the network to say anything would appear
+ * halfway through reading the message.
+ */
+function bodyImageBytes(src: string): number | null {
+  const comma = src.indexOf(",");
+  if (!src.startsWith("data:") || comma < 0) return null;
+  if (!src.slice(0, comma).includes(";base64")) return null;
+  const payload = src.slice(comma + 1);
+  if (payload.length === 0) return null;
+  const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
+  return Math.floor((payload.length * 3) / 4) - padding;
+}
 /** The tiled block is one object, so it has one width whatever it holds. */
 const GRID_W = 460;
+
+/**
+ * What is behind a picture that does not cover its own box.
+ *
+ * A PNG with an alpha channel is a picture with holes in it, and a hole drawn
+ * straight onto the thread reads as a bug in the thread: the half of a sticker
+ * that is nothing looks exactly like a tile that failed to fill. The
+ * checkerboard is what every image editor puts there, and it says the one
+ * thing the empty half means - there is nothing here, on purpose.
+ *
+ * Behind everything, always. An opaque photograph covers it completely, so it
+ * costs nothing and needs nobody to work out which pictures have an alpha
+ * channel - a question CSS cannot ask, and one a canvas could only answer by
+ * reading pixels back, which a remote picture will not allow anyway.
+ *
+ * Grey on grey rather than the editor's white on white: this sits inside a
+ * conversation, and has to be legible under a dark theme without lighting up
+ * the thread under a light one.
+ */
+const CHECKERBOARD_SX = {
+  backgroundColor: "rgba(128,128,128,0.10)",
+  backgroundImage: "repeating-conic-gradient(rgba(128,128,128,0.18) 0% 25%, transparent 0% 50%)",
+  backgroundSize: "18px 18px",
+} as const;
+
+/**
+ * The blurred copy that fills whatever the picture itself does not reach.
+ *
+ * The same thing a long single picture is already drawn on, at tile size: the
+ * cell is the shape, the picture sits whole in the middle of it, and the gap
+ * either side is the picture again rather than a hole in the block.
+ */
+const TILE_BACKDROP_SX = {
+  position: "absolute",
+  inset: 0,
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  filter: "blur(18px) brightness(0.62) saturate(1.1)",
+  // A blur samples past the edges it is given, which leaves the cell's own
+  // border soft and pale. Overscanning hides that seam.
+  transform: "scale(1.2)",
+} as const;
+
+/**
+ * The picture on a tile: whole, centred, and never a contributor to layout.
+ *
+ * Absolute, not merely 100%/100%: out of the flow the picture has no say in
+ * how big its cell is, so the cell is the grid's decision alone and every tile
+ * of a block comes out the same size as every other.
+ */
+const TILE_IMAGE_SX = {
+  position: "absolute",
+  inset: 0,
+  display: "block",
+  width: "100%",
+  height: "100%",
+  objectFit: "contain",
+} as const;
+
+/**
+ * What fills a picture's box until the picture does.
+ *
+ * Every box here has its shape before it has its picture - a tile from the
+ * grid, a lone photograph from the size read out of its own bytes - so this
+ * only ever covers a space that was already the right one. It pulses the way
+ * an offloaded body does while it is being fetched: the same kind of waiting,
+ * drawn the same way.
+ */
+function PictureSkeleton() {
+  return (
+    <Box
+      aria-hidden
+      sx={(theme) => ({
+        position: "absolute",
+        inset: 0,
+        zIndex: 1,
+        borderRadius: "inherit",
+        background: theme.palette.nebula.card2,
+        animation: "nebula-picture-pulse 1.4s ease-in-out infinite",
+        "@keyframes nebula-picture-pulse": { "50%": { opacity: 0.45 } },
+        "@media (prefers-reduced-motion: reduce)": { animation: "none" },
+      })}
+    />
+  );
+}
+
+/**
+ * Whether a picture has painted yet.
+ *
+ * A picture already in the cache is `complete` before React hears a `load`,
+ * and one that fails never will: both count as done, or the skeleton sits
+ * over a picture that is there, or shimmers for a picture that is not coming.
+ */
+function usePainted(): [boolean, (element: HTMLImageElement | null) => void, () => void] {
+  const [painted, setPainted] = useState(false);
+  const done = () => setPainted(true);
+  const onMount = (element: HTMLImageElement | null) => {
+    if (element?.complete) setPainted(true);
+  };
+  return [painted, onMount, done];
+}
+
+/** One tile of the block: its shape is the grid's, its picture arrives later. */
+function Tile({
+  image,
+  aspect,
+  span,
+  onClick,
+  label,
+}: Readonly<{
+  image: BodyImage;
+  aspect: string;
+  span: boolean;
+  onClick: () => void;
+  label: string;
+}>) {
+  const [painted, onMount, done] = usePainted();
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      sx={{
+        all: "unset",
+        ...CHECKERBOARD_SX,
+        position: "relative",
+        display: "block",
+        // The backdrop below overscans its own edges; without this the blur of
+        // one tile would wash over the tile beside it.
+        overflow: "hidden",
+        cursor: "zoom-in",
+        lineHeight: 0,
+        // The cell decides the shape, so every tile of a block is the same size
+        // as every other whatever it happens to be a picture of. Both axes are
+        // pinned as well: the shape decides how tall the row wants to be, but a
+        // cell shorter than the row it landed in would sit at the top of it
+        // with the block's own background showing beneath.
+        width: "100%",
+        height: "100%",
+        aspectRatio: aspect,
+        gridColumn: span ? "1 / -1" : undefined,
+      }}
+    >
+      {!painted && <PictureSkeleton />}
+      {/* The picture again, blurred, behind itself. Hidden from assistive
+          technology: it is the same picture, and the button already carries
+          its name. */}
+      <Box component="img" src={image.src} alt="" aria-hidden loading="lazy" sx={TILE_BACKDROP_SX} />
+      <Box
+        component="img"
+        src={image.src}
+        alt={image.alt}
+        loading="lazy"
+        // What a right-click looks for: the row's menu has to tell a picture
+        // worth acting on from an avatar or an emote, and the only thing they
+        // do not share is this.
+        data-picture=""
+        ref={onMount}
+        onLoad={done}
+        onError={done}
+        sx={TILE_IMAGE_SX}
+      />
+    </Box>
+  );
+}
 
 /**
  * The shape of a tile, by how many are sharing the block.
@@ -40,8 +245,9 @@ interface MediaGalleryProps {
  *
  * One picture hangs at its own shape, capped so a tall photograph cannot push
  * the rest of the conversation off the screen. Several become one rounded
- * block of tiles - cropped to fill, because a grid of letterboxed thumbnails
- * is mostly background, and the whole picture is one click away regardless.
+ * block of tiles, each the same size as the next: the whole picture centred in
+ * its cell on a blurred copy of itself, which is what a letterboxed thumbnail
+ * used to leave as a hole of background.
  */
 export function MediaGallery({ images, onOpen }: Readonly<MediaGalleryProps>) {
   const { t } = useTranslation("nebulaChat");
@@ -53,38 +259,7 @@ export function MediaGallery({ images, onOpen }: Readonly<MediaGalleryProps>) {
   const label = (image: BodyImage) => image.alt || t("attachment.enlarge");
 
   if (images.length === 1) {
-    const image = images[0]!;
-    return (
-      <Box
-        component="button"
-        type="button"
-        onClick={open(image)}
-        aria-label={label(image)}
-        sx={{
-          all: "unset",
-          display: "block",
-          width: "fit-content",
-          maxWidth: "100%",
-          cursor: "zoom-in",
-          lineHeight: 0,
-        }}
-      >
-        <Box
-          component="img"
-          src={image.src}
-          alt={image.alt}
-          loading="lazy"
-          sx={{
-            display: "block",
-            // No explicit width, so the two caps shrink the picture without
-            // ever letterboxing it: what is drawn is the whole photograph.
-            maxWidth: `min(${SINGLE_MAX_W}px, 100%)`,
-            maxHeight: SINGLE_MAX_H,
-            borderRadius: radius("lg"),
-          }}
-        />
-      </Box>
-    );
+    return <SinglePicture image={images[0]!} onClick={open(images[0]!)} label={label(images[0]!)} />;
   }
 
   return (
@@ -101,35 +276,156 @@ export function MediaGallery({ images, onOpen }: Readonly<MediaGalleryProps>) {
       }}
     >
       {images.map((image, index) => (
-        <Box
+        <Tile
           key={`${image.src}:${index}`}
-          component="button"
-          type="button"
+          image={image}
+          aspect={tileAspect(images.length, index)}
+          span={images.length === 3 && index === 2}
           onClick={open(image)}
-          aria-label={label(image)}
-          sx={{
-            all: "unset",
-            display: "block",
-            cursor: "zoom-in",
-            lineHeight: 0,
-            gridColumn: images.length === 3 && index === 2 ? "1 / -1" : undefined,
-          }}
-        >
-          <Box
-            component="img"
-            src={image.src}
-            alt={image.alt}
-            loading="lazy"
-            sx={{
-              display: "block",
-              width: "100%",
-              height: "100%",
-              aspectRatio: tileAspect(images.length, index),
-              objectFit: "cover",
-            }}
-          />
-        </Box>
+          label={label(image)}
+        />
       ))}
+    </Box>
+  );
+}
+
+/**
+ * One picture, at its own shape - up to the point where its own shape stops
+ * being worth drawing.
+ *
+ * The shape is settled before the picture loads wherever it can be: a pasted
+ * photograph is carried in the message, and its own dimensions are a few bytes
+ * into it. Then the box is the right one from the first frame, the decision
+ * between a plain picture and a framed one is made once, and a thread of them
+ * does not shuffle itself as they arrive. A picture the body only points at
+ * still has to be waited for, and is measured on `load` as it always was.
+ */
+function SinglePicture({
+  image,
+  onClick,
+  label,
+}: Readonly<{ image: BodyImage; onClick: () => void; label: string }>) {
+  const bytes = bodyImageBytes(image.src);
+  const known = image.width && image.height ? image.width / image.height : null;
+  const [measured, setMeasured] = useState<number | null>(null);
+  const [painted, onMount, done] = usePainted();
+  // A cached picture is complete before React sees a `load` event, so the ref
+  // measures it as well rather than waiting for one that has already fired.
+  const measure = (element: HTMLImageElement | null) => {
+    if (!element?.naturalHeight) return;
+    const next = element.naturalWidth / element.naturalHeight;
+    setMeasured((current) => (current === next ? current : next));
+  };
+  // What the picture measured always wins over what was read ahead of it.
+  const ratio = measured ?? known;
+  const framed = ratio != null && ratio < FRAME_RATIO;
+  /**
+   * The box the picture is going to fill, held open before it fills it.
+   *
+   * The same two caps the picture itself carries, applied to the frame around
+   * it instead: its own width, the width cap, and the height cap written as a
+   * width - which is the one that decides a landscape photograph's size.
+   */
+  const reserved =
+    !framed && known !== null && image.width
+      ? {
+          width: `min(${image.width}px, ${SINGLE_MAX_W}px, calc(${SINGLE_MAX_H}px * ${known}))`,
+          aspectRatio: `${image.width} / ${image.height}`,
+        }
+      : null;
+
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      sx={{
+        all: "unset",
+        ...CHECKERBOARD_SX,
+        position: "relative",
+        display: "block",
+        width: "fit-content",
+        maxWidth: "100%",
+        cursor: "zoom-in",
+        lineHeight: 0,
+        borderRadius: radius("lg"),
+        ...(reserved ?? {}),
+        ...(framed ? { width: FRAME_W, height: FRAME_H, overflow: "hidden" } : {}),
+      }}
+    >
+      {!painted && <PictureSkeleton />}
+      {/* The picture again, blurred, filling what the picture itself does not
+          reach. Hidden from assistive technology: it is the same picture, and
+          the button already carries its name. */}
+      {framed && (
+        <Box
+          component="img"
+          src={image.src}
+          alt=""
+          aria-hidden
+          sx={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            filter: "blur(22px) brightness(0.62) saturate(1.1)",
+            // A blur samples past the edges it is given, which leaves the
+            // frame's own border soft and pale. Overscanning hides that seam.
+            transform: "scale(1.2)",
+          }}
+        />
+      )}
+      <Box
+        component="img"
+        src={image.src}
+        alt={image.alt}
+        loading="lazy"
+        // See the tile: this is the handle the row's context menu picks a
+        // picture out by.
+        data-picture=""
+        ref={(element: HTMLImageElement | null) => {
+          measure(element);
+          onMount(element);
+        }}
+        onLoad={(event: { currentTarget: HTMLImageElement }) => {
+          measure(event.currentTarget);
+          done();
+        }}
+        onError={done}
+        sx={{
+          display: "block",
+          maxWidth: `min(${SINGLE_MAX_W}px, 100%)`,
+          // No explicit width in the ordinary case, so the two caps shrink the
+          // picture without ever letterboxing it: what is drawn is the whole
+          // photograph. A picture past the frame's shape is the exception -
+          // there the box is the frame, and the whole picture sits inside it
+          // with the blurred copy behind filling the rest.
+          ...(framed
+            ? {
+                position: "relative",
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+              }
+            : // A reserved box is already the picture's own shape, so filling
+              // it is the same drawing the caps would have arrived at - only
+              // without the frame having to grow into it.
+              {
+                maxHeight: SINGLE_MAX_H,
+                borderRadius: radius("lg"),
+                ...(reserved ? { position: "relative", width: "100%", height: "100%" } : {}),
+              }),
+        }}
+      />
+      {/* The same corner an attachment wears its facts in, saying the one fact
+          a pasted picture has. */}
+      {bytes !== null && (
+        <Box sx={{ ...CHIP_SX, left: "8px", bottom: "8px", borderRadius: radius("pill") }}>
+          {formatBytes(bytes)}
+        </Box>
+      )}
     </Box>
   );
 }
@@ -300,6 +596,13 @@ export function AttachmentGallery({ attachments }: Readonly<{ attachments: reado
               minWidth: 0,
               overflow: "hidden",
               borderRadius: "8px",
+              // Both axes pinned, so the cell is the column wide and the row
+              // tall. The shape below still decides how tall the row wants to
+              // be, but a cell shorter than the row it landed in would sit at
+              // the top of it with the block's own background showing beneath
+              // - which is the ragged half of a block, from the other side.
+              width: "100%",
+              height: "100%",
               aspectRatio: tileAspect(shown.length, index),
               gridColumn: shown.length === 3 && index === 2 ? "1 / -1" : undefined,
             }}
