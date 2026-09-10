@@ -1,0 +1,17 @@
+/*
+ * Worn only while a user is being carried, by the rows that may have to step
+ * aside and by the list that has to grow under them. Off the rest of the time:
+ * once the drop lands the list itself changes, and a row easing back to nothing
+ * from there would slide away from the place it had just taken.
+ */
+.moving {
+  transition:
+    transform 170ms cubic-bezier(0.2, 0, 0, 1),
+    margin-bottom 170ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moving {
+    transition: none;
+  }
+}
