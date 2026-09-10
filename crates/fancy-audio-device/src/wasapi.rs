@@ -107,64 +107,73 @@ pub fn capture_device_users() -> Vec<String> {
 }
 
 unsafe fn capture_device_users_inner() -> windows::core::Result<Vec<String>> {
-    let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
-    let device = enumerator.GetDefaultAudioEndpoint(eCapture, eConsole)?;
-    let manager: IAudioSessionManager2 = device.Activate(CLSCTX_ALL, None)?;
-    let sessions = manager.GetSessionEnumerator()?;
-    let count = sessions.GetCount()?;
-    let self_pid = std::process::id();
+    // SAFETY: the caller has initialized COM on this thread; every COM
+    // result is checked before it is used.
+    unsafe {
+        let enumerator: IMMDeviceEnumerator =
+            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL)?;
+        let device = enumerator.GetDefaultAudioEndpoint(eCapture, eConsole)?;
+        let manager: IAudioSessionManager2 = device.Activate(CLSCTX_ALL, None)?;
+        let sessions = manager.GetSessionEnumerator()?;
+        let count = sessions.GetCount()?;
+        let self_pid = std::process::id();
 
-    let mut names: Vec<String> = Vec::new();
-    for i in 0..count {
-        let Ok(ctrl) = sessions.GetSession(i) else {
-            continue;
-        };
-        let Ok(ctrl2) = ctrl.cast::<IAudioSessionControl2>() else {
-            continue;
-        };
-        // Only sessions that are actively capturing.
-        if ctrl.GetState().unwrap_or(AudioSessionStateActive) != AudioSessionStateActive {
-            continue;
-        }
-        let pid = ctrl2.GetProcessId().unwrap_or(0);
-        if pid == 0 || pid == self_pid {
-            continue;
-        }
-        if let Some(name) = process_name(pid) {
-            if !names.iter().any(|n| n.eq_ignore_ascii_case(&name)) {
+        let mut names: Vec<String> = Vec::new();
+        for i in 0..count {
+            let Ok(ctrl) = sessions.GetSession(i) else {
+                continue;
+            };
+            let Ok(ctrl2) = ctrl.cast::<IAudioSessionControl2>() else {
+                continue;
+            };
+            // Only sessions that are actively capturing.
+            if ctrl.GetState().unwrap_or(AudioSessionStateActive) != AudioSessionStateActive {
+                continue;
+            }
+            let pid = ctrl2.GetProcessId().unwrap_or(0);
+            if pid == 0 || pid == self_pid {
+                continue;
+            }
+            if let Some(name) = process_name(pid)
+                && !names.iter().any(|n| n.eq_ignore_ascii_case(&name))
+            {
                 names.push(name);
             }
         }
+        Ok(names)
     }
-    Ok(names)
 }
 
 /// Resolve a PID to its executable's display name (no path, no `.exe`).
 unsafe fn process_name(pid: u32) -> Option<String> {
-    let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
-    let mut buf = [0u16; 260];
-    let mut len = buf.len() as u32;
-    let ok = QueryFullProcessImageNameW(
-        handle,
-        PROCESS_NAME_WIN32,
-        PWSTR(buf.as_mut_ptr()),
-        &mut len,
-    );
-    let _ = CloseHandle(handle);
-    ok.ok()?;
-    if len == 0 {
-        return None;
-    }
-    let path = String::from_utf16_lossy(&buf[..len as usize]);
-    let file = path.rsplit(['\\', '/']).next().unwrap_or(&path);
-    let stem = file
-        .strip_suffix(".exe")
-        .or_else(|| file.strip_suffix(".EXE"))
-        .unwrap_or(file);
-    if stem.is_empty() {
-        None
-    } else {
-        Some(stem.to_owned())
+    // SAFETY: the process handle is checked before use and closed on every
+    // path; `buf` and `len` describe the same buffer.
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let mut buf = [0u16; 260];
+        let mut len = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(
+            handle,
+            PROCESS_NAME_WIN32,
+            PWSTR(buf.as_mut_ptr()),
+            &mut len,
+        );
+        let _ = CloseHandle(handle);
+        ok.ok()?;
+        if len == 0 {
+            return None;
+        }
+        let path = String::from_utf16_lossy(&buf[..len as usize]);
+        let file = path.rsplit(['\\', '/']).next().unwrap_or(&path);
+        let stem = file
+            .strip_suffix(".exe")
+            .or_else(|| file.strip_suffix(".EXE"))
+            .unwrap_or(file);
+        if stem.is_empty() {
+            None
+        } else {
+            Some(stem.to_owned())
+        }
     }
 }
 
@@ -227,12 +236,12 @@ impl AudioCapture for WasapiCapture {
     }
 
     fn read_frame(&mut self) -> Result<AudioFrame> {
-        if let Ok(dead) = self.dead.lock() {
-            if let Some(reason) = dead.as_ref() {
-                return Err(Error::InvalidState(format!(
-                    "wasapi capture lost: {reason}"
-                )));
-            }
+        if let Ok(dead) = self.dead.lock()
+            && let Some(reason) = dead.as_ref()
+        {
+            return Err(Error::InvalidState(format!(
+                "wasapi capture lost: {reason}"
+            )));
         }
         let mut buf = self
             .buffer
@@ -552,48 +561,53 @@ unsafe fn open_exclusive(
     mix_rate: u32,
     mix_channels: u16,
 ) -> std::result::Result<OpenResult, String> {
-    // 48 kHz first (pipeline-native, no resampling, Mumble's choice and
-    // the rate-switch that preempts shared holders), then the endpoint's
-    // own mix rate, then the remaining standard rates as belt-and-braces
-    // for hardware that supports neither. Whatever rate wins, the capture
-    // thread resamples it to 48 kHz, so any of these is fully usable.
-    // Failed Initialize attempts cost microseconds; first hit wins.
-    let mut rates: Vec<u32> = vec![
-        48_000, mix_rate, 44_100, 96_000, 88_200, 192_000, 32_000, 22_050, 16_000, 11_025, 8_000,
-    ];
-    let mut seen = Vec::with_capacity(rates.len());
-    rates.retain(|r| {
-        if seen.contains(r) {
-            false
-        } else {
-            seen.push(*r);
-            true
-        }
-    });
-    let mut ladder: Vec<(u16, u16)> = Vec::new();
-    for bits in [16u16, 32] {
-        for ch in [mix_channels, 2, 1] {
-            if !ladder.contains(&(ch, bits)) {
-                ladder.push((ch, bits));
+    // SAFETY: the caller has initialized COM on this thread, which is the
+    // contract `try_open_exclusive_format` needs in turn.
+    unsafe {
+        // 48 kHz first (pipeline-native, no resampling, Mumble's choice and
+        // the rate-switch that preempts shared holders), then the endpoint's
+        // own mix rate, then the remaining standard rates as belt-and-braces
+        // for hardware that supports neither. Whatever rate wins, the capture
+        // thread resamples it to 48 kHz, so any of these is fully usable.
+        // Failed Initialize attempts cost microseconds; first hit wins.
+        let mut rates: Vec<u32> = vec![
+            48_000, mix_rate, 44_100, 96_000, 88_200, 192_000, 32_000, 22_050, 16_000, 11_025,
+            8_000,
+        ];
+        let mut seen = Vec::with_capacity(rates.len());
+        rates.retain(|r| {
+            if seen.contains(r) {
+                false
+            } else {
+                seen.push(*r);
+                true
+            }
+        });
+        let mut ladder: Vec<(u16, u16)> = Vec::new();
+        for bits in [16u16, 32] {
+            for ch in [mix_channels, 2, 1] {
+                if !ladder.contains(&(ch, bits)) {
+                    ladder.push((ch, bits));
+                }
             }
         }
-    }
 
-    let mut last_err = String::from("no exclusive-capable PCM format found");
-    for &rate in &rates {
-        for &(ch, bits) in &ladder {
-            match try_open_exclusive_format(device, rate, ch, bits) {
-                Ok(result) => return Ok(result),
-                // A held device (or a hard COM failure) can't be fixed by
-                // trying another rate/format - stop the whole search.
-                Err(ExclusiveOpenErr::Fatal(msg)) => return Err(msg),
-                // This rate x format didn't initialize; remember why and
-                // keep searching the ladder.
-                Err(ExclusiveOpenErr::Soft(msg)) => last_err = msg,
+        let mut last_err = String::from("no exclusive-capable PCM format found");
+        for &rate in &rates {
+            for &(ch, bits) in &ladder {
+                match try_open_exclusive_format(device, rate, ch, bits) {
+                    Ok(result) => return Ok(result),
+                    // A held device (or a hard COM failure) can't be fixed by
+                    // trying another rate/format - stop the whole search.
+                    Err(ExclusiveOpenErr::Fatal(msg)) => return Err(msg),
+                    // This rate x format didn't initialize; remember why and
+                    // keep searching the ladder.
+                    Err(ExclusiveOpenErr::Soft(msg)) => last_err = msg,
+                }
             }
         }
+        Err(last_err)
     }
-    Err(last_err)
 }
 
 /// Why one exclusive-open attempt failed: `Fatal` aborts the whole search
@@ -613,98 +627,106 @@ unsafe fn try_open_exclusive_format(
     ch: u16,
     bits: u16,
 ) -> std::result::Result<OpenResult, ExclusiveOpenErr> {
-    use ExclusiveOpenErr::{Fatal, Soft};
+    // SAFETY: the caller has initialized COM on this thread; `wfe` outlives
+    // every `Initialize` call that borrows it, and each result is checked.
+    unsafe {
+        use ExclusiveOpenErr::{Fatal, Soft};
 
-    let client: IAudioClient = device
-        .Activate(CLSCTX_ALL, None)
-        .map_err(|e| Fatal(format!("Activate: {e}")))?;
-    let block = ch * bits / 8;
-    let wfe = WAVEFORMATEX {
-        wFormatTag: WAVE_FORMAT_PCM as u16,
-        nChannels: ch,
-        nSamplesPerSec: rate,
-        wBitsPerSample: bits,
-        nBlockAlign: block,
-        nAvgBytesPerSec: rate * u32::from(block),
-        cbSize: 0,
-    };
-    let (mut def, mut min) = (0i64, 0i64);
-    client
-        .GetDevicePeriod(Some(&mut def), Some(&mut min))
-        .map_err(|e| Fatal(format!("GetDevicePeriod: {e}")))?;
-    let mut period = min.max(100_000);
+        let client: IAudioClient = device
+            .Activate(CLSCTX_ALL, None)
+            .map_err(|e| Fatal(format!("Activate: {e}")))?;
+        let block = ch * bits / 8;
+        let wfe = WAVEFORMATEX {
+            wFormatTag: WAVE_FORMAT_PCM as u16,
+            nChannels: ch,
+            nSamplesPerSec: rate,
+            wBitsPerSample: bits,
+            nBlockAlign: block,
+            nAvgBytesPerSec: rate * u32::from(block),
+            cbSize: 0,
+        };
+        let (mut def, mut min) = (0i64, 0i64);
+        client
+            .GetDevicePeriod(Some(&mut def), Some(&mut min))
+            .map_err(|e| Fatal(format!("GetDevicePeriod: {e}")))?;
+        let mut period = min.max(100_000);
 
-    let mut attempt: IAudioClient = client;
-    for retry in 0..2 {
-        match attempt.Initialize(
-            AUDCLNT_SHAREMODE_EXCLUSIVE,
-            AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-            period,
-            period,
-            &wfe,
-            None,
-        ) {
-            Ok(()) => {
-                let (event, capture) = arm_stream(&attempt).map_err(Fatal)?;
-                let kind = if bits == 16 {
-                    SampleKind::I16
-                } else {
-                    SampleKind::I32
-                };
-                debug!("wasapi capture: EXCLUSIVE {rate} Hz, {ch} ch, {bits}-bit");
-                return Ok((attempt, capture, event, OpenMode::Exclusive, rate, ch, kind));
-            }
-            Err(e) if e.code().0 == E_BUFFER_SIZE_NOT_ALIGNED && retry == 0 => {
-                // Standard alignment dance: recompute the period from the
-                // driver's buffer size and retry on a FRESH client.
-                let frames = attempt
-                    .GetBufferSize()
-                    .map_err(|e2| Fatal(format!("GetBufferSize: {e2}")))?;
-                period = (10_000_000.0 * f64::from(frames) / f64::from(rate)).round() as i64;
-                attempt = device
-                    .Activate(CLSCTX_ALL, None)
-                    .map_err(|e2| Fatal(format!("re-Activate: {e2}")))?;
-            }
-            Err(e) if e.code().0 == E_DEVICE_IN_USE => {
-                // Another app owns the device exclusively - no other
-                // rate/format can change that. Bail with a clear, actionable
-                // message (the UI keys "device_busy" off this HRESULT and
-                // suggests closing the other app).
-                return Err(Fatal(format!(
-                    "device held exclusively by another application (0x{:08X})",
-                    e.code().0
-                )));
-            }
-            Err(e) => {
-                return Err(Soft(format!(
-                    "exclusive Initialize {rate}Hz/{ch}ch/{bits}bit: 0x{:08X} {}",
-                    e.code().0,
-                    e.message()
-                )));
+        let mut attempt: IAudioClient = client;
+        for retry in 0..2 {
+            match attempt.Initialize(
+                AUDCLNT_SHAREMODE_EXCLUSIVE,
+                AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+                period,
+                period,
+                &wfe,
+                None,
+            ) {
+                Ok(()) => {
+                    let (event, capture) = arm_stream(&attempt).map_err(Fatal)?;
+                    let kind = if bits == 16 {
+                        SampleKind::I16
+                    } else {
+                        SampleKind::I32
+                    };
+                    debug!("wasapi capture: EXCLUSIVE {rate} Hz, {ch} ch, {bits}-bit");
+                    return Ok((attempt, capture, event, OpenMode::Exclusive, rate, ch, kind));
+                }
+                Err(e) if e.code().0 == E_BUFFER_SIZE_NOT_ALIGNED && retry == 0 => {
+                    // Standard alignment dance: recompute the period from the
+                    // driver's buffer size and retry on a FRESH client.
+                    let frames = attempt
+                        .GetBufferSize()
+                        .map_err(|e2| Fatal(format!("GetBufferSize: {e2}")))?;
+                    period = (10_000_000.0 * f64::from(frames) / f64::from(rate)).round() as i64;
+                    attempt = device
+                        .Activate(CLSCTX_ALL, None)
+                        .map_err(|e2| Fatal(format!("re-Activate: {e2}")))?;
+                }
+                Err(e) if e.code().0 == E_DEVICE_IN_USE => {
+                    // Another app owns the device exclusively - no other
+                    // rate/format can change that. Bail with a clear, actionable
+                    // message (the UI keys "device_busy" off this HRESULT and
+                    // suggests closing the other app).
+                    return Err(Fatal(format!(
+                        "device held exclusively by another application (0x{:08X})",
+                        e.code().0
+                    )));
+                }
+                Err(e) => {
+                    return Err(Soft(format!(
+                        "exclusive Initialize {rate}Hz/{ch}ch/{bits}bit: 0x{:08X} {}",
+                        e.code().0,
+                        e.message()
+                    )));
+                }
             }
         }
+        // Unreachable in practice (the retry-1 iteration always returns from one
+        // of the match arms above), but the loop's type needs a fallthrough.
+        Err(Soft(format!(
+            "exclusive Initialize {rate}Hz/{ch}ch/{bits}bit: buffer alignment retry exhausted"
+        )))
     }
-    // Unreachable in practice (the retry-1 iteration always returns from one
-    // of the match arms above), but the loop's type needs a fallthrough.
-    Err(Soft(format!(
-        "exclusive Initialize {rate}Hz/{ch}ch/{bits}bit: buffer alignment retry exhausted"
-    )))
 }
 
 /// Create the event, attach it, fetch the capture service, start.
 unsafe fn arm_stream(
     client: &IAudioClient,
 ) -> std::result::Result<(HANDLE, IAudioCaptureClient), String> {
-    let event = CreateEventW(None, false, false, PCWSTR::null())
-        .map_err(|e| format!("CreateEvent: {e}"))?;
-    client
-        .SetEventHandle(event)
-        .map_err(|e| format!("SetEventHandle: {e}"))?;
-    let capture: IAudioCaptureClient = client
-        .GetService()
-        .map_err(|e| format!("GetService: {e}"))?;
-    client.Start().map_err(|e| format!("Start: {e}"))?;
-    Ok((event, capture))
+    // SAFETY: the caller has initialized COM on this thread; the event handle
+    // is handed to the caller together with the stream that uses it.
+    unsafe {
+        let event = CreateEventW(None, false, false, PCWSTR::null())
+            .map_err(|e| format!("CreateEvent: {e}"))?;
+        client
+            .SetEventHandle(event)
+            .map_err(|e| format!("SetEventHandle: {e}"))?;
+        let capture: IAudioCaptureClient = client
+            .GetService()
+            .map_err(|e| format!("GetService: {e}"))?;
+        client.Start().map_err(|e| format!("Start: {e}"))?;
+        Ok((event, capture))
+    }
 }
 
 fn select_device(
@@ -720,10 +742,10 @@ fn select_device(
             let count = coll.GetCount().map_err(|e| e.to_string())?;
             for i in 0..count {
                 let dev = coll.Item(i).map_err(|e| e.to_string())?;
-                if let Some(name) = friendly_name(&dev) {
-                    if name.to_lowercase().contains(&want.to_lowercase()) {
-                        return Ok(dev);
-                    }
+                if let Some(name) = friendly_name(&dev)
+                    && name.to_lowercase().contains(&want.to_lowercase())
+                {
+                    return Ok(dev);
                 }
             }
             warn!("wasapi: input '{want}' not found, using default device");
@@ -735,11 +757,15 @@ fn select_device(
 }
 
 unsafe fn friendly_name(dev: &IMMDevice) -> Option<String> {
-    let store = dev.OpenPropertyStore(STGM_READ).ok()?;
-    let mut prop = store.GetValue(&PKEY_Device_FriendlyName).ok()?;
-    let s = prop.to_string();
-    let _ = PropVariantClear(&mut prop);
-    if s.is_empty() { None } else { Some(s) }
+    // SAFETY: the caller has initialized COM on this thread; `prop` is cleared
+    // before it goes out of scope.
+    unsafe {
+        let store = dev.OpenPropertyStore(STGM_READ).ok()?;
+        let mut prop = store.GetValue(&PKEY_Device_FriendlyName).ok()?;
+        let s = prop.to_string();
+        let _ = PropVariantClear(&mut prop);
+        if s.is_empty() { None } else { Some(s) }
+    }
 }
 
 /// Downmix `frames` interleaved samples at `data` to mono f32 appended
