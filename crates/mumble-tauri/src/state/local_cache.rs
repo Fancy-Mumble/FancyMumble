@@ -8,6 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use ring::aead::{AES_256_GCM, Aad, LessSafeKey, NONCE_LEN, Nonce, UnboundKey};
 use ring::hkdf::{self, HKDF_SHA256, Salt};
@@ -25,6 +26,14 @@ const REACTION_CACHE_FILE: &str = "signal_reaction_cache.enc";
 
 /// HKDF info string for deriving the cache encryption key.
 const HKDF_INFO: &[u8] = b"fancy-mumble-local-message-cache-v1";
+
+/// How long [`LocalMessageCache::save_if_due`] lets changes sit unwritten.
+///
+/// The bound on what an abrupt end - a crash, a kill, a lost power cable -
+/// can take with it.  Short enough that the loss is a sentence rather than
+/// an evening; long enough that a busy channel does not re-encrypt its whole
+/// history on every message.
+const SAVE_INTERVAL: Duration = Duration::from_secs(15);
 
 /// Custom key type for HKDF output (32 bytes for AES-256).
 struct CacheKeyLen;
@@ -72,6 +81,12 @@ pub(crate) struct LocalMessageCache {
     cache_key: LessSafeKey,
     cache_path: PathBuf,
     reaction_cache_path: PathBuf,
+    /// Set by `insert`, cleared by a successful `save_if_due`.  Keeps the
+    /// throttled save from rewriting a cache nothing has added to.
+    dirty: bool,
+    /// When the throttled save last ran.  Starts at construction so a
+    /// freshly-loaded cache does not write itself straight back out.
+    last_save: Instant,
 }
 
 impl LocalMessageCache {
@@ -85,6 +100,8 @@ impl LocalMessageCache {
             cache_key,
             cache_path: identity_dir.join(CACHE_FILE),
             reaction_cache_path: identity_dir.join(REACTION_CACHE_FILE),
+            dirty: false,
+            last_save: Instant::now(),
         })
     }
 
@@ -120,6 +137,41 @@ impl LocalMessageCache {
         let channel = self.messages.entry(channel_id).or_default();
         let pos = channel.partition_point(|m| m.timestamp <= msg.timestamp);
         channel.insert(pos, msg);
+        self.dirty = true;
+    }
+
+    /// Write the cache out if it has changed and the last write is at least
+    /// [`SAVE_INTERVAL`] old.  Returns whether it wrote.
+    ///
+    /// Called from the session's flush timer, which holds the `SharedState`
+    /// lock while it runs; a full save re-serialises and re-encrypts every
+    /// message in the cache, so the interval is what keeps a busy channel
+    /// from paying that on every message.  What it bounds is how much an
+    /// abrupt end can take with it: without it the only writers were the
+    /// disconnect paths and the exit handler, and anything that ended the
+    /// process outside those lost the entire session.  For a `SignalV1`
+    /// channel, which has no server-side history, that loss is permanent.
+    pub fn save_if_due(&mut self) -> bool {
+        self.save_if_older_than(SAVE_INTERVAL)
+    }
+
+    /// [`Self::save_if_due`] with the interval spelled out, so a test can ask
+    /// for the behaviour without waiting out the real one.
+    fn save_if_older_than(&mut self, interval: Duration) -> bool {
+        if !self.dirty || self.last_save.elapsed() < interval {
+            return false;
+        }
+        // Stamped before the attempt, and left stamped if it fails: a disk
+        // that cannot be written to must not turn every later insert into
+        // another failing write.
+        self.last_save = Instant::now();
+        self.dirty = false;
+        if let Err(e) = self.save() {
+            self.dirty = true;
+            debug!("periodic message cache save failed: {e}");
+            return false;
+        }
+        true
     }
 
     /// Rebuild the `message_ids` index from `messages` after load.
@@ -389,6 +441,87 @@ mod tests {
         assert_eq!(ch5.len(), 2);
         assert_eq!(ch5[0].body, "Hello!");
         assert_eq!(ch5[1].body, "Hi!");
+    }
+
+    /// The bug this file's throttled save exists for: a message that was
+    /// only ever in memory. Nothing wrote the cache between the disconnect
+    /// paths, so a client that ended any other way - the window closed, a
+    /// crash, a kill - came back to an empty `SignalV1` channel, which has no
+    /// server-side history to re-fetch it from.
+    #[test]
+    fn a_due_save_writes_what_only_memory_had() {
+        let dir = TempDir::new().unwrap();
+        let seed = test_seed();
+        let mut cache = LocalMessageCache::new(dir.path(), &seed).unwrap();
+        cache.insert(CachedMessage {
+            message_id: "m-1".to_string(),
+            channel_id: 9,
+            timestamp: 100,
+            sender_hash: "x".to_string(),
+            sender_name: "X".to_string(),
+            body: "https://example.invalid/cat.png".to_string(),
+            is_own: true,
+        });
+
+        assert!(
+            cache.save_if_older_than(Duration::ZERO),
+            "an insert left the cache dirty but no save was made"
+        );
+
+        // Read back through a second cache, as a restarted client would.
+        let mut reopened = LocalMessageCache::new(dir.path(), &seed).unwrap();
+        reopened.load().unwrap();
+        assert_eq!(
+            reopened.all_chat_messages()[&9][0].body,
+            "https://example.invalid/cat.png"
+        );
+    }
+
+    #[test]
+    fn an_unchanged_cache_is_not_rewritten() {
+        let dir = TempDir::new().unwrap();
+        let mut cache = LocalMessageCache::new(dir.path(), &test_seed()).unwrap();
+        assert!(
+            !cache.save_if_older_than(Duration::ZERO),
+            "wrote an empty cache"
+        );
+
+        cache.insert(CachedMessage {
+            message_id: "m-1".to_string(),
+            channel_id: 1,
+            timestamp: 1,
+            sender_hash: "x".to_string(),
+            sender_name: "X".to_string(),
+            body: "hi".to_string(),
+            is_own: false,
+        });
+        assert!(cache.save_if_older_than(Duration::ZERO));
+        assert!(
+            !cache.save_if_older_than(Duration::ZERO),
+            "re-encrypted the whole cache with nothing added to it"
+        );
+    }
+
+    #[test]
+    fn a_save_inside_the_interval_waits() {
+        let dir = TempDir::new().unwrap();
+        let mut cache = LocalMessageCache::new(dir.path(), &test_seed()).unwrap();
+        cache.insert(CachedMessage {
+            message_id: "m-1".to_string(),
+            channel_id: 1,
+            timestamp: 1,
+            sender_hash: "x".to_string(),
+            sender_name: "X".to_string(),
+            body: "hi".to_string(),
+            is_own: false,
+        });
+        assert!(!cache.save_if_older_than(Duration::from_secs(3600)));
+        assert!(
+            !cache.cache_path.exists(),
+            "wrote before the interval elapsed"
+        );
+        // Still owed, and taken as soon as one is due.
+        assert!(cache.save_if_older_than(Duration::ZERO));
     }
 
     #[test]

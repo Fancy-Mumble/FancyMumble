@@ -34,6 +34,7 @@ mod handler;
 pub(crate) use handler::{LiverySnapshot, data_uri, to_snapshot};
 mod account;
 mod audit;
+pub(crate) mod canon_emotes;
 pub(crate) mod hash_names;
 pub(crate) mod local_cache;
 pub(crate) mod media_server;
@@ -53,6 +54,7 @@ pub(crate) mod protocol_commands;
 mod query;
 #[allow(dead_code, reason = "recording module is work-in-progress")]
 pub(crate) mod recording;
+pub(crate) mod records;
 mod registry;
 mod search;
 mod server_settings;
@@ -64,7 +66,7 @@ mod voice_decode;
 
 // Re-export everything that lib.rs needs.
 pub(crate) use event_handler::show_desktop_notification;
-pub(crate) use registry::UserHashMatch;
+pub(crate) use registry::{HashLookup, UserHashMatch};
 pub use sessions::{ServerId, SessionMeta};
 pub use types::{
     AudioDevice, AudioSettings, ChannelEntry, ChatMessage, ConnectionStatus, DebugStats,
@@ -91,6 +93,7 @@ use types::*;
 pub(crate) fn parse_pchat_protocol_str(s: &str) -> PchatProtocol {
     match s {
         "fancy_v1_full_archive" => PchatProtocol::FancyV1FullArchive,
+        "server_managed" => PchatProtocol::ServerManaged,
         "signal_v1" => PchatProtocol::SignalV1,
         _ => PchatProtocol::None,
     }
@@ -376,6 +379,11 @@ pub(super) struct SharedState {
     /// this one does files at all. Empty for a server running the plugin,
     /// which never sends a frame this reads.
     pub starling_files: starling_files::StarlingFiles,
+    /// In-flight reads and writes of this account's own record store, and
+    /// whether this server keeps one at all.
+    pub records: records::Records,
+    /// Whoever is waiting on this server's emote set.
+    pub canon_emotes: canon_emotes::CanonEmotes,
 }
 
 impl SharedState {

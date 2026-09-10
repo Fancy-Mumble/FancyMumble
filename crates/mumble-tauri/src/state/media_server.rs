@@ -1,5 +1,6 @@
-//! A loopback HTTP origin, so a shared file can be *played* rather than
-//! downloaded.
+//! A loopback HTTP origin, so a shared file can be *shown* rather than
+//! downloaded: played a range at a time by a media element, or loaded by an
+//! `<img>` when it comes into view and kept in the webview's own cache.
 //!
 //! # Why this is not a custom URI scheme
 //!
@@ -255,6 +256,20 @@ impl FetchedSpan {
         if let Some(value) = self.content_range {
             builder = builder.header(header::CONTENT_RANGE, value);
         }
+        if status.is_success() {
+            builder = builder
+                // What sits under a key never changes, and the address carries
+                // this run's token, so the webview may keep the bytes for as
+                // long as it likes. A picture scrolled past and back is then
+                // drawn from its cache rather than pulled from the file server
+                // again - which is what every mount used to cost, as base64
+                // over IPC, before pictures were served from here.
+                .header(header::CACHE_CONTROL, "private, max-age=31536000, immutable")
+                // The page reads from this origin as well as drawing from it -
+                // copying a picture to the clipboard fetches its bytes back -
+                // and the token is what guards the port, not who is asking.
+                .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+        }
         let body = if head_only {
             Full::new(Bytes::new())
         } else {
@@ -271,6 +286,10 @@ fn refuse(status: StatusCode) -> Response<Full<Bytes>> {
     Response::builder()
         .status(status)
         .header(header::CONTENT_LENGTH, 0)
+        // A `404` is one of the answers a browser may keep on its own
+        // judgement, and this one is often a stale grant that the next ask
+        // renews: it must not be remembered.
+        .header(header::CACHE_CONTROL, "no-store")
         .body(Full::new(Bytes::new()))
         .unwrap_or_default()
 }
@@ -398,6 +417,64 @@ mod tests {
         );
         assert_eq!(response.headers().get(header::CONTENT_LENGTH).unwrap(), "6");
         assert_eq!(body_of(response).await, b"abcdef");
+    }
+
+    #[tokio::test]
+    async fn a_picture_may_be_kept_by_the_webview_and_read_by_the_page() {
+        // An `<img>` sends no range and gets the whole object, once: the
+        // next mount of the same card is a cache hit, not a second download.
+        // The page also fetches from here itself, to copy a picture, which is
+        // refused without the CORS header.
+        let response = serve(
+            &Method::GET,
+            &format!("/{TOKEN}/7%2Fcat.png"),
+            None,
+            TOKEN,
+            |_, range| async move {
+                assert_eq!(range, None, "asked for whole");
+                Ok(FetchedSpan {
+                    status: 200,
+                    content_type: Some("image/png".to_owned()),
+                    content_range: None,
+                    bytes: b"\x89PNG".to_vec(),
+                })
+            },
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get(header::CACHE_CONTROL).unwrap(),
+            "private, max-age=31536000, immutable"
+        );
+        assert_eq!(
+            response
+                .headers()
+                .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .unwrap(),
+            "*"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_refusal_is_never_kept() {
+        // A stale grant answers `404` once and is renewed on the next ask; a
+        // browser that remembered the `404` would never ask again.
+        let response = serve(
+            &Method::GET,
+            &format!("/{TOKEN}/7%2Fcat.png"),
+            None,
+            TOKEN,
+            |_, _| async move { Err("stale".to_owned()) },
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            response.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-store"
+        );
+        assert!(response.headers().get(header::ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
     }
 
     #[tokio::test]

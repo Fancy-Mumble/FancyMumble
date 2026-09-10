@@ -15,6 +15,10 @@ impl HandleMessage for mumble_tcp::ChannelRemove {
             if let Some(ref mut p) = state.pchat_ctx.pchat {
                 p.key_manager.remove_channel(self.channel_id);
                 let _ = p.fetched_channels.remove(&self.channel_id);
+                // `remove_channel` took our sender key out of the bridge with
+                // it, so the record of having minted one has to go too - a
+                // recycled channel id must mint again, not assume.
+                let _ = p.signal_distributed.remove(&self.channel_id);
                 debug!(
                     channel_id = self.channel_id,
                     "cleared pchat state for removed channel"

@@ -28,6 +28,25 @@ pub(crate) struct UserHashMatch {
     pub server_id: ServerId,
     pub user_session: u32,
     pub user_name: String,
+    /// The registered account the match belongs to, when they have one.  The
+    /// caller needs it to tell whether the certificate it searched for is still
+    /// worn by the person it saved.
+    pub user_id: Option<u32>,
+}
+
+/// Who to look for, in [`Registry::find_user_by_hash`].
+///
+/// The hash on its own addresses a *certificate*; the other two fields are what
+/// narrow that to a person - the account the caller saved, and the session it
+/// saved them on.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct HashLookup<'a> {
+    /// The TLS certificate hash (hex SHA-1) to search for.
+    pub user_hash: &'a str,
+    /// The registered account the caller expects, when it knows one.
+    pub user_id: Option<u32>,
+    /// The session the caller's record was captured on, when it is open.
+    pub origin: Option<ServerId>,
 }
 
 /// Inner mutable state of [`Registry`].
@@ -52,6 +71,18 @@ impl Registry {
     /// Look up a specific session's [`SharedState`] handle by id.
     pub(crate) fn session(&self, id: ServerId) -> Option<Arc<Mutex<SharedState>>> {
         self.inner.lock().ok()?.sessions.get(&id).cloned()
+    }
+
+    /// Every session's [`SharedState`] handle, in no particular order.
+    ///
+    /// For teardown work that has to touch each connection rather than
+    /// just the active one - flushing per-session state to disk on exit,
+    /// say, which otherwise loses whatever the background tabs held.
+    pub(crate) fn all_sessions(&self) -> Vec<Arc<Mutex<SharedState>>> {
+        self.inner
+            .lock()
+            .map(|g| g.sessions.values().cloned().collect())
+            .unwrap_or_default()
     }
 
     /// Insert a new session and mark it as active.  Returns the id.
@@ -167,29 +198,72 @@ impl Registry {
         }
     }
 
-    /// Search every connected session for a user whose certificate hash
-    /// matches `user_hash`.  Returns the first match (server id + mumble
-    /// session + display name).
-    pub(crate) fn find_user_by_hash(&self, user_hash: &str) -> Option<UserHashMatch> {
+    /// Find the person a saved record refers to, among the users on every
+    /// connected session.
+    ///
+    /// A certificate hash is *not* a person: one certificate can log in under
+    /// several accounts (a second identity, a test login), so searching by hash
+    /// alone happily answers with whoever happens to hold that certificate now.
+    /// When the caller knows which registered account it saved
+    /// ([`HashLookup::user_id`]) and which session it saved it on
+    /// ([`HashLookup::origin`]), that account is what identifies the person on
+    /// that server, and a *different* account wearing the same certificate is
+    /// refused rather than returned.
+    ///
+    /// Registered ids only mean anything on the server that issued them, so the
+    /// check applies to sessions pointed at the friend's own `host:port` (both
+    /// of them, when the client holds two connections to it) and nowhere else.
+    /// Any other open server is still searched by certificate alone - that is
+    /// what finds a friend who is somewhere else today - but only after the
+    /// friend's own server has failed to answer.
+    pub(crate) fn find_user_by_hash(&self, lookup: HashLookup<'_>) -> Option<UserHashMatch> {
         let guard = self.inner.lock().ok()?;
-        for (id, shared) in &guard.sessions {
+        let origin_target = lookup
+            .origin
+            .and_then(|id| guard.sessions.get(&id))
+            .and_then(|shared| {
+                let s = shared.lock().ok()?;
+                Some((s.server.host.clone(), s.server.port))
+            });
+
+        // The friend's own session first, then the rest in a stable order: the
+        // session map is a `HashMap`, so without this the answer to "which of
+        // my connections is this friend on" changes from call to call.
+        let mut order: Vec<_> = guard.sessions.iter().collect();
+        order.sort_by_key(|(id, _)| (Some(**id) != lookup.origin, id.to_string()));
+
+        // A match on a server that is not the friend's own is the weaker
+        // answer, so it is kept only until the friend's own server has been
+        // searched.
+        let mut elsewhere: Option<UserHashMatch> = None;
+        for (id, shared) in order {
             let Ok(s) = shared.lock() else { continue };
             if s.conn.status != super::types::ConnectionStatus::Connected {
                 continue;
             }
-            if let Some(found) = s
-                .users
-                .values()
-                .find(|u| u.hash.as_deref() == Some(user_hash))
-            {
-                return Some(UserHashMatch {
-                    server_id: *id,
-                    user_session: found.session,
-                    user_name: found.name.clone(),
-                });
+            let same_server = origin_target
+                .as_ref()
+                .is_some_and(|(host, port)| *host == s.server.host && *port == s.server.port);
+            // On the friend's own server their account decides; anywhere else
+            // an id would be a different server's, so only the hash is asked.
+            let want = if same_server { lookup.user_id } else { None };
+            let Some(found) = wearer_of(&s, lookup.user_hash, want) else {
+                continue;
+            };
+            let matched = UserHashMatch {
+                server_id: *id,
+                user_session: found.session,
+                user_name: found.name.clone(),
+                user_id: found.user_id,
+            };
+            // Their own server has spoken, or there was never an account to
+            // check against - either way this is the answer.
+            if same_server || lookup.user_id.is_none() {
+                return Some(matched);
             }
+            let _ = elsewhere.get_or_insert(matched);
         }
-        None
+        elsewhere
     }
 
     /// Look up a user on a specific connected session by display name.
@@ -211,6 +285,7 @@ impl Registry {
             server_id,
             user_session: found.session,
             user_name: found.name.clone(),
+            user_id: found.user_id,
         })
     }
 
@@ -238,6 +313,19 @@ impl Registry {
             })
             .collect()
     }
+}
+
+/// The user on this session's roster wearing `hash` - narrowed to the account
+/// `want` when the caller knows which of the certificate's accounts it means.
+fn wearer_of<'a>(
+    state: &'a SharedState,
+    hash: &str,
+    want: Option<u32>,
+) -> Option<&'a super::UserEntry> {
+    state
+        .users
+        .values()
+        .find(|u| u.hash.as_deref() == Some(hash) && want.is_none_or(|id| u.user_id == Some(id)))
 }
 
 fn format_label(username: &str, host: &str, port: u16) -> String {
@@ -351,6 +439,126 @@ mod tests {
         // the connected one must be left intact.
         assert!(reg.take_reusable_for("h", 1, "u").is_none());
         assert_eq!(reg.list_meta().len(), 1);
+    }
+
+    /// Put `user` on `shared`'s roster.  `hash` is the certificate they
+    /// connected with, `user_id` their registered account (if any).
+    fn add_user(
+        shared: &Arc<Mutex<SharedState>>,
+        session: u32,
+        name: &str,
+        hash: &str,
+        user_id: Option<u32>,
+    ) {
+        use crate::state::types::UserEntry;
+
+        let mut entry = UserEntry::new(session);
+        entry.name = name.into();
+        entry.hash = Some(hash.into());
+        entry.user_id = user_id;
+
+        let mut s = shared.lock().unwrap();
+        s.conn.status = super::super::types::ConnectionStatus::Connected;
+        let _ = s.users.insert(session, entry);
+    }
+
+    #[test]
+    fn hash_lookup_refuses_another_account_on_the_same_certificate() {
+        // One certificate, two accounts on the friend's own server: the saved
+        // account is the friend, the other one is a stranger.
+        let reg = Registry::default();
+        let origin = ServerId::new();
+        let shared = make_shared("magical.rocks", 64738, "me");
+        add_user(&shared, 7, "TestUser", "cert-a", Some(2));
+        let _ = reg.register_active(origin, shared);
+
+        assert!(
+            reg.find_user_by_hash(HashLookup {
+                user_hash: "cert-a",
+                user_id: Some(5),
+                origin: Some(origin),
+            })
+            .is_none()
+        );
+
+        let found = reg
+            .find_user_by_hash(HashLookup {
+                user_hash: "cert-a",
+                user_id: Some(2),
+                origin: Some(origin),
+            })
+            .expect("the saved account is on this server");
+        assert_eq!(found.user_session, 7);
+        assert_eq!(found.user_id, Some(2));
+    }
+
+    #[test]
+    fn hash_lookup_checks_every_connection_to_the_friends_server() {
+        // Two connections to the same server (two identities of our own): the
+        // impostor must not be answered just because the friend was saved on
+        // the *other* one of them.
+        let reg = Registry::default();
+        let origin = ServerId::new();
+        let second = ServerId::new();
+        let origin_shared = make_shared("magical.rocks", 64738, "zewi");
+        let second_shared = make_shared("magical.rocks", 64738, "sebi");
+        add_user(&second_shared, 9, "TestUser", "cert-a", Some(2));
+        let _ = reg.register_active(origin, origin_shared);
+        let _ = reg.register_active(second, second_shared);
+
+        assert!(
+            reg.find_user_by_hash(HashLookup {
+                user_hash: "cert-a",
+                user_id: Some(5),
+                origin: Some(origin),
+            })
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn hash_lookup_still_finds_a_friend_on_another_server() {
+        // Registered ids are per-server, so elsewhere the certificate is all
+        // there is to go on - and it is enough to say "they are online here".
+        let reg = Registry::default();
+        let origin = ServerId::new();
+        let other = ServerId::new();
+        let origin_shared = make_shared("magical.rocks", 64738, "me");
+        let other_shared = make_shared("elsewhere", 64738, "me");
+        add_user(&other_shared, 3, "Sebi", "cert-a", Some(11));
+        let _ = reg.register_active(origin, origin_shared);
+        let _ = reg.register_active(other, other_shared);
+
+        let found = reg
+            .find_user_by_hash(HashLookup {
+                user_hash: "cert-a",
+                user_id: Some(5),
+                origin: Some(origin),
+            })
+            .expect("a friend on another open server is still found");
+        assert_eq!(found.server_id, other);
+        assert_eq!(found.user_session, 3);
+    }
+
+    #[test]
+    fn hash_lookup_without_a_saved_account_matches_the_certificate() {
+        // An anonymous friend, or a record saved before ids were kept: the
+        // hash is all there is, and it still resolves.
+        let reg = Registry::default();
+        let id = ServerId::new();
+        let shared = make_shared("magical.rocks", 64738, "me");
+        add_user(&shared, 4, "Jonas", "cert-b", None);
+        let _ = reg.register_active(id, shared);
+
+        let found = reg
+            .find_user_by_hash(HashLookup {
+                user_hash: "cert-b",
+                user_id: None,
+                origin: None,
+            })
+            .expect("hash-only lookups keep working");
+        assert_eq!(found.user_name, "Jonas");
+        assert_eq!(found.user_id, None);
     }
 
     #[test]
