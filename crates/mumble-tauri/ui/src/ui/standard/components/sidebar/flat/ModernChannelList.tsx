@@ -32,6 +32,7 @@ import SwipeableCard from "../../elements/SwipeableCard";
 import { isMobile } from "@core/utils/platform";
 import { PERM_MOVE, PERM_ENTER } from "@core/utils/permissions";
 import { useUserDrag, useChannelDropTarget } from "../../../utils/userMoveDnd";
+import { MemberSlots } from "../../../utils/userMoveRoom";
 import { useAppStore } from "@core/store";
 import { PchatBadge } from "../PchatBadge";
 import { ChannelReorderWrapper, useChannelReorderHandler } from "../channel/channelReorder";
@@ -450,22 +451,23 @@ function ModernChannelListImpl({
 
             {/* Expanded: show member names */}
             {!isCollapsed && hasUsers && (
-              <div className={styles.memberList} data-no-channel-drag="true">
-                {chUsers.map((u) => (
-                  <div
-                    key={u.session}
-                    className={u.session === highlightUserSession ? styles.highlighted : undefined}
-                  >
-                    <MemberItem
-                      user={u}
-                      isTalking={talkingSessions.has(u.session)}
-                      isBroadcasting={broadcastingSessions.has(u.session)}
-                      onContextMenu={onUserContextMenu}
-                      onClick={onUserClick}
-                    />
-                  </div>
-                ))}
-              </div>
+              <MemberSlots
+                channelId={channel.id}
+                members={chUsers}
+                order={users}
+                className={styles.memberList}
+                rowClassName={(u) => (u.session === highlightUserSession ? styles.highlighted : undefined)}
+              >
+                {(u) => (
+                  <MemberItem
+                    user={u}
+                    isTalking={talkingSessions.has(u.session)}
+                    isBroadcasting={broadcastingSessions.has(u.session)}
+                    onContextMenu={onUserContextMenu}
+                    onClick={onUserClick}
+                  />
+                )}
+              </MemberSlots>
             )}
           </div>
         </ChannelDropWrapper>

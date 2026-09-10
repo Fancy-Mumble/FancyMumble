@@ -154,6 +154,11 @@ export default function LiveDocSidebar({
             ⚠ {t("liveDoc.sidebar.guestHint")}
           </div>
         )}
+        {!available && loaded && reason === "unsupported" && (
+          <div className={styles.warning} role="status">
+            ⚠ {t("liveDoc.sidebar.unsupportedHint")}
+          </div>
+        )}
         {!available && loaded && reason === "error" && (
           <div className={styles.warning} role="alert">
             ⚠{" "}

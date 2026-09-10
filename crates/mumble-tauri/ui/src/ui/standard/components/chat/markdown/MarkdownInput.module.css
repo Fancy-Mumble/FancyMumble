@@ -25,18 +25,63 @@
   inset: 0;
   padding: 10px 14px;
   font-family: inherit;
+  /* The two layers hold the same words and must break them in the same
+     places, so every property that decides where a line breaks is stated for
+     both. A textarea's UA sheet resets weight and spacing to its own; on a
+     skin that runs the interface at 500 that left the overlay's text wider
+     than the textarea's, wrapping a line earlier - and the line it gained was
+     one the field had no height for. */
+  font-weight: inherit;
+  font-style: inherit;
+  letter-spacing: inherit;
   font-size: 14px;
   line-height: 1.45;
   white-space: pre-wrap;
   word-wrap: break-word;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: none; /* Firefox */
 }
 
-.overlay::-webkit-scrollbar,
-.textarea::-webkit-scrollbar {
-  display: none; /* Chrome / Safari / Edge */
+/*
+ * A draft too long for the field says so, in the app's own scrollbar.
+ *
+ * Neither layer states a width: the bar is whichever one the flavour draws
+ * everywhere else (Nebula's thin track-less chip, Standard's 6px rail), so
+ * the composer scrolls like every other pane in the window.
+ *
+ * Both layers keep the gutter, because a gutter is width taken off the text
+ * and the two must break their lines in the same places. Only the textarea
+ * paints a thumb - it is the layer that actually scrolls, and it sits over
+ * the other, so a second thumb underneath would only double the ink of a
+ * translucent one.
+ */
+.overlay {
+  scrollbar-color: transparent transparent;
+}
+
+.overlay::-webkit-scrollbar-thumb,
+.overlay::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/*
+ * The thumb takes a colour from the host, because the field is the one place
+ * the app's own is wrong: the chip tone every other pane scrolls with is
+ * picked to read against the window, and inside a composer it is drawn on a
+ * plate of very nearly that colour - a bar you cannot see is a bar that is
+ * not there. Only the colour is restated; the width, the corner and the inset
+ * stay whatever the flavour draws everywhere else.
+ */
+.textarea {
+  scrollbar-color: var(--editor-scrollbar, var(--color-scrollbar)) transparent;
+}
+
+.textarea::-webkit-scrollbar-thumb {
+  background: var(--editor-scrollbar, var(--color-scrollbar));
+}
+
+.textarea::-webkit-scrollbar-thumb:hover {
+  background: var(--editor-scrollbar-hover, var(--color-scrollbar-hover));
 }
 
 /* The overlay renders the decorated text on top. */

@@ -2,6 +2,12 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./KlipyGifBrowser.module.css";
 import { getActiveApiKey } from "@core/features/chat/gif/klipyConfig";
+import {
+  searchServerGifs,
+  serverGifsUnavailable,
+  shouldFallBack,
+  type ServerGif,
+} from "@core/features/chat/gif/serverGifs";
 import { PickerSearch } from "../../components/elements/SearchFields";
 
 const KLIPY_BASE = "https://api.klipy.com/api/v1";
@@ -99,21 +105,45 @@ export interface PagedResult {
   hasNext: boolean;
 }
 
-export async function searchGifs(query: string, page = 1): Promise<PagedResult> {
-  const data = await klipyFetch<KlipyPaginatedResponse>("/gifs/search", {
-    q: query,
-    per_page: "30",
-    page: String(page),
-  });
+/** The server's shape, in the one this browser draws. */
+function fromServer(results: ServerGif[]): KlipyGif[] {
+  return results.map((gif, index) => ({
+    // Numeric because that is what this grid has always keyed on, and the
+    // index is stable within the page it is rendered from.
+    id: index,
+    title: gif.title || "GIF",
+    url: gif.url,
+    preview: gif.preview,
+    width: gif.preview_width,
+    height: gif.preview_height,
+  }));
+}
+
+/**
+ * One page, from the server when it will and from a personal key when it will
+ * not. An empty `query` is trending, which is how both entry points share a
+ * path. See `serverGifs` for why only one kind of refusal falls back.
+ */
+async function pageOfGifs(query: string, page: number): Promise<PagedResult> {
+  try {
+    const answer = await searchServerGifs(query, page);
+    return { items: fromServer(answer.items), hasNext: answer.hasNext };
+  } catch (error) {
+    if (!shouldFallBack(error)) throw error;
+  }
+  const data = await klipyFetch<KlipyPaginatedResponse>(
+    query ? "/gifs/search" : "/gifs/trending",
+    query ? { q: query, per_page: "30", page: String(page) } : { per_page: "30", page: String(page) },
+  );
   return { items: mapMediaItems(data.data.data), hasNext: data.data.has_next };
 }
 
+export async function searchGifs(query: string, page = 1): Promise<PagedResult> {
+  return await pageOfGifs(query, page);
+}
+
 export async function fetchTrending(page = 1): Promise<PagedResult> {
-  const data = await klipyFetch<KlipyPaginatedResponse>("/gifs/trending", {
-    per_page: "30",
-    page: String(page),
-  });
-  return { items: mapMediaItems(data.data.data), hasNext: data.data.has_next };
+  return await pageOfGifs("", page);
 }
 
 // -- Component ---------------------------------------------------
@@ -147,12 +177,9 @@ const GIF_CATEGORIES = [
 
 async function fetchCategoryPreview(name: string): Promise<string | null> {
   try {
-    const data = await klipyFetch<KlipyPaginatedResponse>("/gifs/search", {
-      q: name,
-      per_page: "1",
-      page: "1",
-    });
-    const items = mapMediaItems(data.data.data);
+    // One page through the same path, so a server-provided browser shows
+    // category tiles too rather than a grid of empty cards.
+    const { items } = await pageOfGifs(name, 1);
     return items[0]?.preview ?? null;
   } catch {
     return null;
@@ -196,7 +223,11 @@ export function KlipyGifBrowser({ onSelect }: Readonly<KlipyGifBrowserProps>) {
 
     function loadInitialData() {
       if (cancelled) return;
-      if (!getActiveApiKey()) {
+      // Waiting for a key only makes sense while there is nothing else that
+      // could answer. Preferences load asynchronously, so this spin exists to
+      // let a personal key arrive - but a server that provides GIFs needs no
+      // key at all, and blocking on one there would leave its picker empty.
+      if (!getActiveApiKey() && serverGifsUnavailable()) {
         retryTimer = setTimeout(loadInitialData, 250);
         return;
       }

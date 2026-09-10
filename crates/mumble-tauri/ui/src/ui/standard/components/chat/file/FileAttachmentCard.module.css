@@ -47,7 +47,11 @@
   max-height: 260px;
   object-fit: contain;
   display: block;
-  background: rgba(0, 0, 0, 0.25);
+  /* The picture's own shape, where the card knows it before the picture has
+     decoded: the box is then the one the loaded picture would have taken,
+     rather than nothing followed by a jump.  Unset, this is `auto`, which is
+     what a picture nobody has measured yet still gets. */
+  aspect-ratio: var(--preview-ratio, auto);
 }
 
 .previewImageBtn {
@@ -262,8 +266,57 @@
   width: min(var(--bare-max-w), calc(var(--bare-max-h) * var(--bare-ratio, 100)));
   max-width: 100%;
   height: auto;
-  background: none;
+  /* Once the ratio is known ahead of the decode, it is also the height: the
+     width above alone leaves the box flat until the picture arrives in it. */
+  aspect-ratio: var(--bare-ratio, auto);
   border-radius: 0.75rem;
+}
+
+/* ---- The frame a long picture is drawn in -----------------------
+   The width rule above is a height cap read through the picture's own shape,
+   so a 1:8 screenshot came out forty pixels across: a thread of pixels with a
+   wall of chips over it. Past the frame's shape a picture gets a box of that
+   shape instead - the whole picture inside it, nothing cropped, and a blurred
+   copy of itself filling what it does not reach. Every long picture in the
+   thread is then the same size as every other. */
+.frame {
+  --frame-h: 400px;
+  position: relative;
+  height: var(--frame-h);
+  max-width: 100%;
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+/* Specificity beats the `fit-content` rule below, which is what a bare
+   picture's button is otherwise: the frame has a width of its own, and a
+   shrink-to-fit box collapses around the picture instead - which is the very
+   sliver the frame exists to stop. */
+.bare .previewImageBtn.frame {
+  width: calc(var(--frame-h) * var(--frame-ratio, 0.75));
+}
+
+.frameBackdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(22px) brightness(0.62) saturate(1.1);
+  /* A blur samples past the edges it is given, which leaves the frame's own
+     border soft and pale. Overscanning hides that seam. */
+  transform: scale(1.2);
+}
+
+.framedImage {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The whole picture, at whatever size fits: the backdrop is what fills the
+     frame, so nothing here has to be cropped to do it. */
+  object-fit: contain;
+  background: none;
 }
 
 /* Both hug the picture, so the strip's corner is the picture's corner. */
@@ -339,19 +392,109 @@
   height: 100%;
 }
 
+/* The cell the tile was handed is the frame, so it anchors the two pictures
+   drawn in it and clips the backdrop's overscan. */
+.tile .previewImageBtn {
+  position: relative;
+  overflow: hidden;
+}
+
+/* The picture, whole and centred, on a blurred copy of itself.
+ *
+ * Cropping to fill made the block's shape the picture's, which cuts the
+ * subject out of anything that is not the cell's own proportions - the reason
+ * the backdrop is here instead.
+ *
+ * Absolute, not merely 100%/100%: out of the flow the picture has no say in
+ * how big its cell is, so the cell is the grid's decision alone and every tile
+ * of a block comes out the same size. Sized as a percentage of a box that is
+ * itself still being measured, a tile was one bad guess away from being drawn
+ * at its own natural height - a block of four with its landscape tiles short
+ * and letterboxed while its square ones filled. */
 .tileImage {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 0;
   background: none;
+}
+
+/* ---- What is behind a picture that does not cover its own box ---
+ * A PNG with an alpha channel is a picture with holes in it, and a hole drawn
+ * straight onto the thread reads as a bug in the thread: the half of a sticker
+ * that is nothing looked exactly like a tile that had failed to fill. The
+ * checkerboard is what every image editor puts there, and it says the one
+ * thing the empty half means - there is nothing here, on purpose.
+ *
+ * Behind everything, always. An opaque photograph covers it completely, so
+ * this costs nothing and needs nobody to work out which pictures have an alpha
+ * channel - a question CSS cannot ask and a canvas could only answer by
+ * reading pixels back, which a remote picture will not allow anyway.
+ *
+ * Grey on grey rather than the editor's white on white: this sits inside a
+ * conversation, and it has to be legible under a dark theme without lighting
+ * up the thread under a light one.
+ */
+.previewImage,
+.bareImage,
+.frame,
+.tile .previewImageBtn {
+  background-color: rgba(128, 128, 128, 0.1);
+  background-image: repeating-conic-gradient(rgba(128, 128, 128, 0.18) 0% 25%, transparent 0% 50%);
+  background-size: 18px 18px;
+}
+
+.tileBackdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(18px) brightness(0.62) saturate(1.1);
+  /* A blur samples past the edges it is given, which leaves the cell's own
+     border soft and pale. Overscanning hides that seam. */
+  transform: scale(1.2);
 }
 
 /* A flag on a tile has far less room than one on a whole picture, and it is a
    button: clipped, the half that copies the link is the half that goes. */
 .tile .previewOverlay {
   max-width: calc(100% - 1rem);
+}
+
+/* What fills a cell while the picture for it is being fetched.
+   The cell is already the right size - the grid decided it - so this is a
+   wait drawn at the size of the thing waited for, rather than a file row that
+   a photograph replaces. Same shimmer as an inline picture's skeleton. */
+.tileSkeleton {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 25%,
+    rgba(255, 255, 255, 0.11) 50%,
+    rgba(255, 255, 255, 0.05) 75%
+  );
+  background-size: 200% 100%;
+  animation: tileShimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes tileShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tileSkeleton {
+    animation: none;
+  }
 }
 
 /* ---- A clip at rest ---------------------------------------------

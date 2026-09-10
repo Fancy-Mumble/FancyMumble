@@ -12,6 +12,7 @@
 
 import { useMemo } from "react";
 import { sanitizeHtml } from "@core/utils/sanitizeHtml";
+import { useInnerHtml } from "@core/utils/innerHtml";
 import { ExternalLinkGuard } from "./ExternalLinkGuard";
 
 interface SafeHtmlProps {
@@ -27,6 +28,8 @@ interface SafeHtmlProps {
 
 export function SafeHtml({ html, className, style, fallback }: SafeHtmlProps) {
   const clean = useMemo(() => sanitizeHtml(html), [html]);
+  // Stable, so a re-render does not rebuild the markup under a selection.
+  const markup = useInnerHtml(clean);
 
   if (!clean && fallback) {
     return (
@@ -40,7 +43,7 @@ export function SafeHtml({ html, className, style, fallback }: SafeHtmlProps) {
 
   return (
     <ExternalLinkGuard className={className} style={style}>
-      <div dangerouslySetInnerHTML={{ __html: clean }} />
+      <div dangerouslySetInnerHTML={markup} />
     </ExternalLinkGuard>
   );
 }
