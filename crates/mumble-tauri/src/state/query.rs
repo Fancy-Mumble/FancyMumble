@@ -185,6 +185,79 @@ impl AppState {
             .unwrap_or_default()
     }
 
+    /// One window of a channel's history, plus where its edges are.
+    ///
+    /// The UI asks for this instead of the whole thread. `get_messages` cloned
+    /// every row on every event, which is the cost that made a long channel
+    /// expensive to *look at* rather than expensive to load.
+    ///
+    /// Evicting is done here rather than on a timer because this is the one
+    /// place that learns what the reader is actually looking at. Only for a
+    /// thread the server can re-serve: a volatile channel has nowhere to fetch
+    /// a dropped row back from, so its rows stay.
+    pub fn messages_page(&self, request: &PageRequest) -> MessagePage {
+        let session = self.inner.snapshot();
+        let Ok(mut state) = session.lock() else {
+            return MessagePage::default();
+        };
+
+        let persistent = state
+            .channels
+            .get(&request.channel_id)
+            .and_then(|c| c.pchat_protocol)
+            .is_some_and(|p| p.has_server_history());
+
+        let total = state
+            .msgs
+            .by_channel
+            .get(&request.channel_id)
+            .map_or(0, Vec::len);
+        if total == 0 {
+            let window = state.msgs.window(request.channel_id);
+            return MessagePage {
+                rows: Vec::new(),
+                more_before: window.more_before,
+                more_after: window.more_after,
+                at_tail: !window.more_after,
+            };
+        }
+
+        // The window is expressed from the tail, because that is where a chat
+        // opens and what "scrolled up by N" means to the reader.
+        let limit = request.limit.clamp(1, super::MAX_MESSAGES_PER_THREAD);
+        let end = total.saturating_sub(request.offset_from_tail);
+        let start = end.saturating_sub(limit);
+
+        if persistent {
+            // Keep a margin either side so the reader can move without every
+            // step costing a round trip.
+            let margin = limit;
+            state.msgs.evict_outside(
+                request.channel_id,
+                start.saturating_sub(margin),
+                (end + margin).min(total),
+            );
+        }
+
+        let rows = state
+            .msgs
+            .by_channel
+            .get(&request.channel_id)
+            .map(|held| {
+                let end = end.min(held.len());
+                let start = start.min(end);
+                held[start..end].to_vec()
+            })
+            .unwrap_or_default();
+        let window = state.msgs.window(request.channel_id);
+        MessagePage {
+            rows,
+            more_before: window.more_before,
+            more_after: window.more_after,
+            at_tail: !window.more_after && request.offset_from_tail == 0,
+        }
+    }
+
     pub fn dm_messages(&self, session: u32) -> Vec<ChatMessage> {
         self.inner
             .snapshot()

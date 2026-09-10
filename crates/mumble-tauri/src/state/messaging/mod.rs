@@ -109,7 +109,13 @@ impl AppState {
     ) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
-            let state = __session.lock().map_err(|e| e.to_string())?;
+            let mut state = __session.lock().map_err(|e| e.to_string())?;
+            // The response does not echo the direction it was asked in, and
+            // `has_more` means the opposite thing each way, so the asker
+            // records it while it still knows.
+            state
+                .msgs
+                .note_fetch(channel_id, matches!(anchor, pchat::Anchor::After(_)));
             state.conn.client_handle.clone()
         };
         let handle = handle.ok_or("Not connected")?;

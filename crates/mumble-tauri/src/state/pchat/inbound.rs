@@ -222,8 +222,16 @@ fn insert_or_replace_message(
         return;
     }
 
-    let bucket = state.msgs.by_channel.entry(channel_id).or_default();
-    crate::state::push_capped(bucket, chat_msg);
+    // Refused when this client has dropped the thread's tail: the message
+    // does not follow the newest row held, and putting it there would leave a
+    // hole nobody sees until they scroll into it.
+    if !state.msgs.append_live(channel_id, chat_msg) {
+        debug!(
+            channel_id,
+            "pchat: an arrival for a thread detached from its tail was not appended"
+        );
+        return;
+    }
 
     // Same as a plain text message: a picture landing in a channel that is
     // not on screen goes to cold storage straight away.
@@ -278,7 +286,7 @@ pub(crate) fn handle_proto_fetch_resp(
     };
     state.pchat_ctx.pchat = Some(pchat);
 
-    merge_decrypted_messages(&mut state, channel_id, decrypted_msgs);
+    merge_decrypted_messages(&mut state, channel_id, decrypted_msgs, has_more);
 }
 
 /// Decrypt a batch of fetched messages outside the state lock.
@@ -389,49 +397,58 @@ fn decrypt_fetched_messages(
     decrypted_msgs
 }
 
-/// Merge decrypted messages into the channel history, deduplicating
-/// by `message_id` and sorting by timestamp.
+/// Join a fetched page onto the edge of the channel's range.
+///
+/// The page is attached in the order it arrived and **never sorted**. Both the
+/// page and the range are contiguous runs in the server's order, so joining
+/// them at an edge preserves the order each already had. Sorting by timestamp,
+/// which is what this did before, ordered the whole thread by the *sender's*
+/// clock: that is chosen by the sender, skews between machines, and put a
+/// message in the wrong place permanently once it had.
 fn merge_decrypted_messages(
     state: &mut SharedState,
     channel_id: u32,
     decrypted_msgs: Vec<ChatMessage>,
+    has_more: bool,
 ) {
+    let forward = state.msgs.window(channel_id).fetching_forward;
     if decrypted_msgs.is_empty() {
         debug!(
             channel_id,
             "pchat fetch-resp: no messages to insert (all filtered/empty)"
         );
+        // Still worth recording: an empty page is how the server says there is
+        // nothing further that way, and a reader that never learns it goes on
+        // asking at the same edge forever.
+        if forward {
+            state.msgs.extend_newer(channel_id, Vec::new(), has_more);
+        } else {
+            state.msgs.extend_older(channel_id, Vec::new(), has_more);
+        }
         return;
     }
 
     debug!(
         channel_id,
         new_count = decrypted_msgs.len(),
-        "pchat fetch-resp: inserting decrypted messages"
+        forward,
+        has_more,
+        "pchat fetch-resp: joining a page onto the range"
     );
-    let existing = state.msgs.by_channel.entry(channel_id).or_default();
-
-    let existing_ids: std::collections::HashSet<&str> = existing
-        .iter()
-        .filter_map(|m| m.message_id.as_deref())
-        .collect();
-
-    let mut new_msgs: Vec<ChatMessage> = decrypted_msgs
-        .into_iter()
-        .filter(|m| match m.message_id.as_deref() {
-            Some(id) => !existing_ids.contains(id),
-            None => true,
-        })
-        .collect();
-
-    new_msgs.append(existing);
-    *existing = new_msgs;
-    existing.sort_by_key(|m| m.timestamp.unwrap_or(0));
+    if forward {
+        state
+            .msgs
+            .extend_newer(channel_id, decrypted_msgs, has_more);
+    } else {
+        state
+            .msgs
+            .extend_older(channel_id, decrypted_msgs, has_more);
+    }
 
     debug!(
         channel_id,
-        total_messages = existing.len(),
-        "pchat fetch-resp: messages after merge+sort"
+        total_messages = state.msgs.by_channel.get(&channel_id).map_or(0, Vec::len),
+        "pchat fetch-resp: messages after join"
     );
 }
 

@@ -70,7 +70,8 @@ pub(crate) use registry::{HashLookup, UserHashMatch};
 pub use sessions::{ServerId, SessionMeta};
 pub use types::{
     AudioDevice, AudioSettings, ChannelEntry, ChatMessage, ConnectionStatus, DebugStats,
-    PhotoEntry, SearchResult, ServerConfig, ServerInfo, UserEntry, VoiceState,
+    MessagePage, PageRequest, PhotoEntry, SearchResult, ServerConfig, ServerInfo, UserEntry,
+    VoiceState,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -285,10 +286,149 @@ pub(super) fn push_capped(messages: &mut Vec<ChatMessage>, msg: ChatMessage) {
 #[derive(Default)]
 pub(super) struct MessageStore {
     pub by_channel: HashMap<u32, Vec<ChatMessage>>,
+    /// Per-channel bookkeeping for [`ThreadWindow`].
+    ///
+    /// Beside the rows rather than wrapping them: `by_channel` is read in
+    /// sixty-odd places and every one of them wants a plain slice.
+    pub windows: HashMap<u32, ThreadWindow>,
     pub by_dm: HashMap<u32, Vec<ChatMessage>>,
     pub channel_unread: HashMap<u32, u32>,
     pub dm_unread: HashMap<u32, u32>,
     pub selected_dm_user: Option<u32>,
+}
+
+/// How much of a thread's archive this client is holding, and which way it can
+/// still grow.
+///
+/// The rows themselves stay in `by_channel`; this is the bookkeeping that turns
+/// them from "everything we happen to have" into a **contiguous range** with
+/// known edges. Everything downstream depends on that contiguity: pages are
+/// concatenated at an edge rather than merged and re-sorted, so the range is
+/// only meaningful if there is no hole in it.
+#[derive(Debug, Default, Clone, Copy)]
+pub(super) struct ThreadWindow {
+    /// The server holds messages older than the oldest row here.
+    pub more_before: bool,
+    /// The server holds messages newer than the newest row here.
+    ///
+    /// False means the range reaches the live tail, and that is what makes it
+    /// safe to append an arriving message. While it is true an arrival must be
+    /// **dropped** rather than appended: putting it after a row it does not
+    /// actually follow is how a hole gets into the range, and the hole is
+    /// invisible until somebody scrolls into it.
+    pub more_after: bool,
+    /// Whether the fetch this client is waiting on walks forward.
+    ///
+    /// The epoch-0 `PchatFetchResponse` does not echo the direction it was
+    /// asked in, and the same `has_more` means "older still exist" or "newer
+    /// still exist" depending on which way the request went. The asker is the
+    /// only one who knows, so it records it here.
+    pub fetching_forward: bool,
+}
+
+impl MessageStore {
+    /// The window for `channel`, defaulting to "we hold the tail and nothing
+    /// older is known to exist".
+    ///
+    /// The default matters: a channel nobody has fetched yet reads as complete
+    /// rather than as having a gap, which is what keeps a plain volatile
+    /// channel out of all of this.
+    pub(super) fn window(&self, channel: u32) -> ThreadWindow {
+        self.windows.get(&channel).copied().unwrap_or_default()
+    }
+
+    /// Record which way the fetch now in flight for `channel` is walking.
+    pub(super) fn note_fetch(&mut self, channel: u32, forward: bool) {
+        self.windows.entry(channel).or_default().fetching_forward = forward;
+    }
+
+    /// Append a message that has just arrived live.
+    ///
+    /// Returns whether it was taken. A thread whose tail this client has
+    /// dropped refuses it, because appending would place the message after a
+    /// row it does not follow. The message is not lost: it is in the server's
+    /// archive, and the reader gets it when they scroll back down and the tail
+    /// is fetched again.
+    pub(super) fn append_live(&mut self, channel: u32, message: ChatMessage) -> bool {
+        if self.window(channel).more_after {
+            return false;
+        }
+        let rows = self.by_channel.entry(channel).or_default();
+        rows.push(message);
+        // Trimming the *head* here is safe only because this is the tail end of
+        // the range. It is what `push_capped` always did; the difference is
+        // that dropping the oldest row now has to be recorded, or the next page
+        // of history would be concatenated onto a range that has quietly moved.
+        if rows.len() > MAX_MESSAGES_PER_THREAD {
+            let over = rows.len() - MAX_MESSAGES_PER_THREAD;
+            let _ = rows.drain(..over);
+            self.windows.entry(channel).or_default().more_before = true;
+        }
+        true
+    }
+
+    /// Attach a page of older messages to the head of the range.
+    ///
+    /// `more` is what the server said about rows beyond the page.
+    pub(super) fn extend_older(&mut self, channel: u32, mut page: Vec<ChatMessage>, more: bool) {
+        let rows = self.by_channel.entry(channel).or_default();
+        let held: HashSet<&str> = rows
+            .iter()
+            .filter_map(|m| m.message_id.as_deref())
+            .collect();
+        page.retain(|m| m.message_id.as_deref().is_none_or(|id| !held.contains(id)));
+        // Prepended in the order the page arrived, never sorted. The server
+        // returns a contiguous run and this range is contiguous, so joining
+        // them at the edge preserves the order both already had -- whereas
+        // sorting by timestamp would order the whole thread by the *sender's*
+        // clock, which is attacker-controlled and puts a message with a skewed
+        // clock in the wrong place for good.
+        page.append(rows);
+        *rows = page;
+        self.windows.entry(channel).or_default().more_before = more;
+    }
+
+    /// Attach a page of newer messages to the tail of the range.
+    pub(super) fn extend_newer(&mut self, channel: u32, page: Vec<ChatMessage>, more: bool) {
+        let rows = self.by_channel.entry(channel).or_default();
+        let held: HashSet<&str> = rows
+            .iter()
+            .filter_map(|m| m.message_id.as_deref())
+            .collect();
+        let fresh: Vec<ChatMessage> = page
+            .into_iter()
+            .filter(|m| m.message_id.as_deref().is_none_or(|id| !held.contains(id)))
+            .collect();
+        rows.extend(fresh);
+        self.windows.entry(channel).or_default().more_after = more;
+    }
+
+    /// Drop rows from the edge the reader is moving away from.
+    ///
+    /// `keep_from` and `keep_to` are indices into the current range that must
+    /// survive; everything outside them goes, and whichever edge was trimmed is
+    /// marked so it can be fetched back. Only ever called for a thread whose
+    /// source can re-serve what is dropped -- for a volatile channel there is
+    /// nowhere to fetch from, so nothing is evicted.
+    pub(super) fn evict_outside(&mut self, channel: u32, keep_from: usize, keep_to: usize) {
+        let Some(rows) = self.by_channel.get_mut(&channel) else {
+            return;
+        };
+        let keep_to = keep_to.min(rows.len());
+        if keep_from >= keep_to {
+            return;
+        }
+        let dropped_tail = rows.len() - keep_to;
+        let dropped_head = keep_from;
+        if dropped_tail == 0 && dropped_head == 0 {
+            return;
+        }
+        rows.truncate(keep_to);
+        let _ = rows.drain(..dropped_head);
+        let window = self.windows.entry(channel).or_default();
+        window.more_before |= dropped_head > 0;
+        window.more_after |= dropped_tail > 0;
+    }
 }
 
 /// Connection lifecycle state.
@@ -857,5 +997,142 @@ mod tests {
         let _active = register_idle_session(&state);
         let bogus = ServerId::new();
         assert!(state.disconnect_session(bogus).await.is_err());
+    }
+}
+
+#[cfg(test)]
+mod window_tests {
+    use super::*;
+
+    fn message(id: &str, at: u64) -> ChatMessage {
+        ChatMessage {
+            message_id: Some(id.to_owned()),
+            timestamp: Some(at),
+            ..ChatMessage::default()
+        }
+    }
+
+    fn ids(store: &MessageStore, channel: u32) -> Vec<String> {
+        store
+            .by_channel
+            .get(&channel)
+            .map(|rows| rows.iter().filter_map(|m| m.message_id.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn a_thread_nobody_has_paged_is_complete_in_both_directions() {
+        // The default has to read as "no gap", or every plain volatile channel
+        // would look like it had history waiting behind it.
+        let store = MessageStore::default();
+        let window = store.window(4);
+        assert!(!window.more_before);
+        assert!(!window.more_after);
+    }
+
+    #[test]
+    fn a_page_of_older_messages_joins_at_the_head_in_its_own_order() {
+        // Not sorted: the page and the range are each contiguous runs in the
+        // server's order, so joining them at the edge is what preserves it.
+        let mut store = MessageStore::default();
+        assert!(store.append_live(4, message("c", 30)));
+        store.extend_older(4, vec![message("a", 10), message("b", 20)], true);
+
+        assert_eq!(ids(&store, 4), ["a", "b", "c"]);
+        assert!(store.window(4).more_before, "the server said there is more");
+    }
+
+    #[test]
+    fn a_sender_with_a_skewed_clock_does_not_reorder_the_thread() {
+        // What the old timestamp sort got wrong. The clock is the sender's,
+        // and a message stamped in 1970 belongs where the archive put it, not
+        // at the top of everybody's window.
+        let mut store = MessageStore::default();
+        assert!(store.append_live(4, message("first", 1_000)));
+        assert!(store.append_live(4, message("skewed", 0)));
+        assert!(store.append_live(4, message("third", 3_000)));
+
+        assert_eq!(ids(&store, 4), ["first", "skewed", "third"]);
+    }
+
+    #[test]
+    fn a_page_does_not_repeat_what_the_range_already_holds() {
+        let mut store = MessageStore::default();
+        assert!(store.append_live(4, message("b", 20)));
+        store.extend_older(4, vec![message("a", 10), message("b", 20)], false);
+
+        assert_eq!(ids(&store, 4), ["a", "b"]);
+    }
+
+    #[test]
+    fn a_thread_detached_from_its_tail_refuses_an_arrival() {
+        // The invariant the whole design rests on. Appending here would put the
+        // message after a row it does not follow, and the hole is invisible
+        // until somebody scrolls into it.
+        let mut store = MessageStore::default();
+        assert!(store.append_live(4, message("a", 10)));
+        store.extend_newer(4, vec![message("b", 20)], true);
+        assert!(store.window(4).more_after);
+
+        assert!(
+            !store.append_live(4, message("live", 30)),
+            "an arrival must be refused while the tail is missing"
+        );
+        assert_eq!(ids(&store, 4), ["a", "b"]);
+    }
+
+    #[test]
+    fn reaching_the_tail_again_lets_arrivals_land() {
+        let mut store = MessageStore::default();
+        assert!(store.append_live(4, message("a", 10)));
+        store.extend_newer(4, vec![message("b", 20)], true);
+        // The page that catches up says so by reporting no more.
+        store.extend_newer(4, vec![message("c", 30)], false);
+
+        assert!(store.append_live(4, message("live", 40)));
+        assert_eq!(ids(&store, 4), ["a", "b", "c", "live"]);
+    }
+
+    #[test]
+    fn evicting_the_far_edge_records_which_way_the_hole_is() {
+        // Dropping rows silently is what would corrupt the range: the flags are
+        // the only record that the edge moved.
+        let mut store = MessageStore::default();
+        for n in 0..10 {
+            assert!(store.append_live(4, message(&format!("m{n}"), n)));
+        }
+        store.evict_outside(4, 3, 7);
+
+        assert_eq!(ids(&store, 4), ["m3", "m4", "m5", "m6"]);
+        let window = store.window(4);
+        assert!(window.more_before, "rows were dropped from the head");
+        assert!(window.more_after, "and from the tail");
+    }
+
+    #[test]
+    fn evicting_nothing_leaves_the_range_attached_to_the_tail() {
+        let mut store = MessageStore::default();
+        for n in 0..4 {
+            assert!(store.append_live(4, message(&format!("m{n}"), n)));
+        }
+        store.evict_outside(4, 0, 4);
+
+        assert_eq!(ids(&store, 4).len(), 4);
+        assert!(!store.window(4).more_after, "the tail is still held");
+    }
+
+    #[test]
+    fn overflowing_the_cap_records_the_head_it_dropped() {
+        // `push_capped` did this drop silently. The next page of history would
+        // then be joined onto a range that had quietly moved, which is the same
+        // hole by another route.
+        let mut store = MessageStore::default();
+        for n in 0..(MAX_MESSAGES_PER_THREAD + 5) {
+            assert!(store.append_live(4, message(&format!("m{n}"), n as u64)));
+        }
+
+        assert_eq!(ids(&store, 4).len(), MAX_MESSAGES_PER_THREAD);
+        assert!(store.window(4).more_before, "the oldest rows are gone");
+        assert!(!store.window(4).more_after, "but the tail is still here");
     }
 }

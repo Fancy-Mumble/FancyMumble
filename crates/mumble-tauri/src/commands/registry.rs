@@ -75,6 +75,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::channels::delete_channel,
         // -- messaging -------------------------------------------------
         super::messaging::get_messages,
+        super::messaging::get_messages_page,
         super::messaging::send_message,
         super::messaging::edit_message,
         super::messaging::send_read_receipt,
@@ -195,6 +196,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::offload::load_offloaded_messages_batch,
         super::offload::clear_offloaded_messages,
         super::offload::fetch_older_messages,
+        super::offload::fetch_newer_messages,
         super::offload::get_debug_stats,
         // -- admin / moderation ----------------------------------------
         super::admin::kick_user,

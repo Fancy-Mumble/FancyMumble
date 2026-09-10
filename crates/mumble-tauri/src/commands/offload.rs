@@ -66,6 +66,31 @@ pub(crate) async fn fetch_older_messages(
         .await
 }
 
+/// Send a `PchatFetch` request for messages **newer** than `after_id`.
+///
+/// The other direction of the same walk. A reader who scrolled up far enough
+/// for this client to drop the thread's tail cannot get it back by paging
+/// backwards -- they would have to walk the whole archive down again -- so
+/// scrolling back toward the present asks forward instead.
+///
+/// The response arrives on the same path as the backward one; the store knows
+/// which way it asked, because `PchatFetchResponse` does not say.
+#[tauri::command]
+pub(crate) async fn fetch_newer_messages(
+    state: tauri::State<'_, AppState>,
+    channel_id: u32,
+    after_id: String,
+    limit: u32,
+) -> Result<(), String> {
+    state
+        .fetch_message_page(
+            channel_id,
+            crate::state::pchat::Anchor::After(after_id),
+            limit,
+        )
+        .await
+}
+
 /// Collect debug statistics for the developer info panel.
 #[tauri::command]
 pub(crate) fn get_debug_stats(state: tauri::State<'_, AppState>) -> DebugStats {
