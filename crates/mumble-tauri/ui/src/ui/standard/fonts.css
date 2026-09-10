@@ -23,6 +23,31 @@
   font-display: swap;
 }
 
+/* -- Saira (variable) ------------------------------------------- */
+
+/* The poster voice: a condensed grotesque with a drawn italic, for display
+   type that a UI sans cannot carry - see `display` in the Nebula skin. Both
+   axes are kept, so `font-stretch` narrows it rather than a second family.
+   SIL Open Font License 1.1; the text is in Saira-OFL.txt beside the files. */
+
+@font-face {
+  font-family: "Saira";
+  src: url("./assets/fonts/Saira-VariableFont_wdth,wght.ttf") format("truetype");
+  font-weight: 100 900;
+  font-stretch: 50% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Saira";
+  src: url("./assets/fonts/Saira-Italic-VariableFont_wdth,wght.ttf") format("truetype");
+  font-weight: 100 900;
+  font-stretch: 50% 125%;
+  font-style: italic;
+  font-display: swap;
+}
+
 /* -- Roboto (variable) ------------------------------------------ */
 
 @font-face {
