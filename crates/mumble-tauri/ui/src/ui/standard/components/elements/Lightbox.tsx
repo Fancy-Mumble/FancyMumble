@@ -10,11 +10,13 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
 import { CloseIcon, ChevronLeftIcon, ChevronRightIcon } from "../../icons";
 import type { ChatMessage, TimeFormat } from "@core/types";
 import { extractOffloadInfo, offloadManager, type MessageScope } from "@core/messageOffload";
 import { extractMedia } from "../chat/media/MediaPreview";
 import { formatTimestamp } from "@core/utils/format";
+import { ImageContextMenu } from "./ImageContextMenu";
 import styles from "./Lightbox.module.css";
 
 const SWIPE_THRESHOLD = 50;
@@ -30,8 +32,34 @@ interface MediaItem {
   offloadedMediaIndex?: number;
 }
 
+/**
+ * One picture in a gallery this component did not build from messages.
+ *
+ * Everything but the address is optional, because the callers that hand one
+ * over are looking at something that is not a message yet - a file staged in
+ * the composer has a name and nothing else to say about who sent it or when.
+ */
+export interface LightboxGalleryItem {
+  readonly src: string;
+  readonly kind?: "image" | "gif" | "video";
+  readonly alt?: string;
+  /** Drawn where a message's sender would be, e.g. the file's own name. */
+  readonly caption?: string;
+  readonly timestamp?: number;
+}
+
 export interface LightboxHandle {
   open: (src: string) => void;
+  /**
+   * Open on a gallery of the caller's own, rather than on the conversation.
+   *
+   * The gallery built from `allMessages` only knows about pictures that have
+   * been sent, so a caller showing something else - the composer's staged
+   * files - hands over its own list and the one to start on. The overlay is
+   * otherwise the same, and closing it returns the lightbox to the
+   * conversation's own gallery.
+   */
+  openGallery: (items: readonly LightboxGalleryItem[], index: number) => void;
 }
 
 export interface LightboxProps {
@@ -98,6 +126,8 @@ function LightboxOverlay({
 
   const [resolvedSrcs, setResolvedSrcs] = useState<Map<string, string>>(new Map());
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
+  /** Where the reader right-clicked the picture, while the menu is up. */
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
 
   const offloadKey = item?.offloadedMessageId
     ? `${item.offloadedMessageId}:${item.offloadedMediaIndex ?? 0}`
@@ -170,6 +200,10 @@ function LightboxOverlay({
   useEffect(() => {
     resetZoom();
   }, [activeIndex, resetZoom]);
+
+  // The menu belongs to the picture it was opened on, not to the lightbox:
+  // swiping or arrowing to the next one leaves it behind.
+  useEffect(() => setMenuAt(null), [activeIndex]);
 
   // -- Touch gesture tracking --
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -433,8 +467,29 @@ function LightboxOverlay({
       aria-label={t("lightbox.ariaLabel")}
       style={overlayStyle}
       onClick={(e) => {
+        // While the menu is up, the next click anywhere is about the menu:
+        // dismissing it should not also close the picture behind it.
+        if (menuAt) {
+          setMenuAt(null);
+          return;
+        }
         const t = e.target as HTMLElement;
         if (!t.closest("img, video, button") && zoomRef.current <= 1.05) onClose();
+      }}
+      /* Right-click on the picture itself opens the picture's own menu. Only
+         on the picture: the rest of the overlay is empty space, and a menu of
+         things to do with a photograph is not what a right-click on empty
+         space asked for. A video has no "copy image" to offer, so it keeps
+         the platform's own menu and its playback rows. */
+      onContextMenu={(e) => {
+        // A clip keeps the platform's menu: playback speed and "save video as"
+        // are rows this one has no answer for.
+        if (item.kind === "video") return;
+        // Everything else on the overlay is ours, including the dark space
+        // around the picture - so the webview's Back / Refresh / Inspect menu
+        // never comes up over a photograph, whether or not a menu follows.
+        e.preventDefault();
+        setMenuAt((e.target as HTMLElement).closest("img") ? { x: e.clientX, y: e.clientY } : null);
       }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -527,6 +582,30 @@ function LightboxOverlay({
           </time>
         </div>
       </div>
+
+      {/* A child of the overlay rather than a portal of its own: the overlay
+          is what blurs everything behind it, and only something drawn inside
+          it comes out on top of that. */}
+      {menuAt && displaySrc && (
+        <ImageContextMenu
+          src={displaySrc}
+          at={menuAt}
+          onClose={() => setMenuAt(null)}
+          onPopOut={() => {
+            void invoke("open_image_popout", {
+              payload: {
+                src: displaySrc,
+                sender_name: item.senderName || null,
+                // The lightbox never fetched an avatar; the popout draws the
+                // name on its own where there is none.
+                sender_avatar: null,
+                caption: item.alt || null,
+                timestamp_ms: item.timestamp,
+              },
+            }).catch(() => undefined);
+          }}
+        />
+      )}
     </div>,
     document.body,
   );
@@ -547,6 +626,8 @@ export const Lightbox = forwardRef<LightboxHandle, LightboxProps>(function Light
   ref,
 ) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  /** A gallery handed in by a caller, while one is open; else the conversation's. */
+  const [ownGallery, setOwnGallery] = useState<MediaItem[] | null>(null);
 
   const mediaCacheRef = useRef<Map<string, Omit<MediaItem, "src">[]>>(new Map());
 
@@ -596,8 +677,11 @@ export const Lightbox = forwardRef<LightboxHandle, LightboxProps>(function Light
     return result;
   }, [allMessages]);
 
+  const items = ownGallery ?? allMedia;
+
   const handleOpenLightbox = useCallback(
     (src: string) => {
+      setOwnGallery(null);
       const exact = allMedia.findIndex((m) => m.src === src);
       if (exact >= 0) {
         setLightboxIndex(exact);
@@ -628,21 +712,43 @@ export const Lightbox = forwardRef<LightboxHandle, LightboxProps>(function Light
     [currentScope],
   );
 
+  const handleOpenGallery = useCallback((gallery: readonly LightboxGalleryItem[], index: number) => {
+    if (gallery.length === 0 || index < 0 || index >= gallery.length) return;
+    setOwnGallery(
+      gallery.map((item) => ({
+        src: item.src,
+        kind: item.kind ?? "image",
+        alt: item.alt ?? "",
+        senderName: item.caption ?? "",
+        timestamp: item.timestamp ?? Date.now(),
+      })),
+    );
+    setLightboxIndex(index);
+  }, []);
+
   const handleNavigate = useCallback((idx: number) => setLightboxIndex(idx), []);
-  const handleClose = useCallback(() => setLightboxIndex(null), []);
+  const handleClose = useCallback(() => {
+    setLightboxIndex(null);
+    setOwnGallery(null);
+  }, []);
 
   // Close when switching conversations.
   useEffect(() => {
     setLightboxIndex(null);
+    setOwnGallery(null);
   }, [selectedChannel, selectedDmUser]);
 
-  useImperativeHandle(ref, () => ({ open: handleOpenLightbox }), [handleOpenLightbox]);
+  useImperativeHandle(
+    ref,
+    () => ({ open: handleOpenLightbox, openGallery: handleOpenGallery }),
+    [handleOpenLightbox, handleOpenGallery],
+  );
 
-  if (lightboxIndex === null || !allMedia[lightboxIndex]) return null;
+  if (lightboxIndex === null || !items[lightboxIndex]) return null;
 
   return (
     <LightboxOverlay
-      items={allMedia}
+      items={items}
       activeIndex={lightboxIndex}
       onClose={handleClose}
       onNavigate={handleNavigate}

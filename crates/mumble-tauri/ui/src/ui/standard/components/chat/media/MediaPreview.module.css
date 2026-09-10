@@ -162,6 +162,66 @@
   border-radius: 8px;
 }
 
+/* --- A frame held open for a picture that has not decoded ------- */
+
+/* `--thumb-w` / `--thumb-h` are the picture's own pixels, set inline once the
+   size has been read out of its bytes (`imageSizeFromSource`).  The frame is
+   then exactly the box the loaded picture would have taken: the same two caps
+   the rules above apply, done in advance instead of after the decode.  The
+   third term is the height cap expressed as a width, which is what keeps a
+   tall photograph from reserving a column it will never fill. */
+.thumbWrapSized {
+  width: min(
+    calc(var(--thumb-w) * 1px),
+    var(--media-thumb-max-width, 320px),
+    calc(var(--media-thumb-max-height, 240px) * var(--thumb-w) / var(--thumb-h))
+  );
+  aspect-ratio: var(--thumb-w) / var(--thumb-h);
+  height: auto;
+  /* The ratio already caps the height; leaving the cap on would let it clip. */
+  max-height: none;
+}
+
+.thumbWrapSized .thumb {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+}
+
+/* Fills the frame until the picture does.  Same shimmer as the offloaded-body
+   skeleton in the message list, so a picture that is decoding and a body that
+   is being read back look like the same kind of waiting. */
+.thumbSkeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    var(--color-glass-hover) 25%,
+    var(--color-glass-border) 50%,
+    var(--color-glass-hover) 75%
+  );
+  background-size: 200% 100%;
+  animation: thumbShimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes thumbShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thumbSkeleton {
+    animation: none;
+  }
+}
+
 /* --- Replay overlay (frozen GIF) -------------------------------- */
 
 .replayOverlay {
@@ -348,6 +408,14 @@
   border-radius: 8px;
   object-fit: contain;
   box-shadow: 0 8px 40px var(--color-overlay-heavy);
+  /* A picture with an alpha channel, enlarged over the scrim, is a picture
+     with the scrim showing through it - which reads as a hole in the picture
+     rather than a hole in the file. The same checkerboard the thread draws
+     behind a tile, so what is empty stays empty here too. An opaque picture
+     covers it and never knows it is there. */
+  background-color: rgba(128, 128, 128, 0.1);
+  background-image: repeating-conic-gradient(rgba(128, 128, 128, 0.18) 0% 25%, transparent 0% 50%);
+  background-size: 18px 18px;
 }
 
 .lightboxClose {
