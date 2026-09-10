@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@core/store";
+import { PERM_MANAGE_EMOTES } from "@core/utils/permissions";
 import { inferMimeType } from "@core/utils/media";
 import { Button, TextField } from "../primitives";
 import styles from "./CustomEmotesAdmin.module.css";
@@ -10,7 +11,13 @@ const ALLOWED_MIME = ["image/png", "image/jpeg", "image/gif", "image/webp", "ima
 export default function CustomEmotesAdmin() {
   const emotes = useAppStore((state) => state.customServerEmotes);
   const supported = useAppStore((state) => state.fileServerCapabilities?.features.custom_emotes ?? false);
-  const canManage = useAppStore((state) => state.fileServerConfig?.canManageEmotes ?? false);
+  // On a canon server the plugin's flag is never set; the root channel's own
+  // permission bits are what say whether this session may manage emotes.
+  const canManage = useAppStore((state) =>
+    state.fileServerKind === "canon"
+      ? ((state.channels.find((c) => c.id === 0)?.permissions ?? 0) & PERM_MANAGE_EMOTES) !== 0
+      : (state.fileServerConfig?.canManageEmotes ?? false),
+  );
   const [shortcode, setShortcode] = useState("");
   const [aliasEmoji, setAliasEmoji] = useState("");
   const [description, setDescription] = useState("");

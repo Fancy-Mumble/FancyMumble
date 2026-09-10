@@ -35,10 +35,10 @@ export function FileAttachmentCard({ info }: { info: FileAttachmentInfo }) {
   const [error, setError] = useState<string | null>(null);
   const kind = previewKindForFilename(info.filename);
   const expired = !!info.expiresAt && info.expiresAt * 1000 < Date.now();
-  // A canon attachment has no open link: a picture is bytes this client
-  // fetched against a URL the server signed, and sound or video is an address
-  // the player pulls a range at a time. Saving does not move a player onto the
-  // saved copy - a webview's media stack cannot load `asset:` at all.
+  // A canon attachment has no open link: what is drawn is an address on the
+  // loopback origin, which a player pulls a range at a time and an `<img>`
+  // loads lazily. Saving does not move a player onto the saved copy - a
+  // webview's media stack cannot load `asset:` at all.
   const canon = isCanonAttachment(info);
   const canonSource = useCanonPreviewSrc(info);
   const streams = canon && (kind === "audio" || kind === "video");
