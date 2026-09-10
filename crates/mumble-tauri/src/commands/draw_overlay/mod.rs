@@ -352,7 +352,7 @@ fn broadcast_source_placement() -> Option<OverlayPlacement> {
         w,
         h,
         #[cfg(target_os = "windows")]
-        follow: is_window.then(|| tracker::SourceFollower::Hwnd(id as isize)),
+        follow: is_window.then_some(tracker::SourceFollower::Hwnd(id as isize)),
         #[cfg(target_os = "linux")]
         follow: is_window
             .then(|| fancy_screenshare::sources::SharedWindow::resolve(id))

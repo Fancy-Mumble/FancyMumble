@@ -250,14 +250,14 @@ impl WindowsAspectRatio {
         _id: usize,
         _ref_data: usize,
     ) -> LRESULT {
-        if msg == WM_SIZING {
-            if let Some(ratio) = lock_registry().get(&(hwnd as isize)).copied() {
-                // SAFETY: per WM_SIZING contract, lparam is a valid
-                // pointer to a RECT for the duration of the message.
-                let rect = unsafe { &mut *(lparam as *mut RECT) };
-                Self::apply_to_sizing_rect(hwnd, wparam as u32, rect, ratio);
-                return 1; // TRUE - tell the OS to use our modified rect
-            }
+        if msg == WM_SIZING
+            && let Some(ratio) = lock_registry().get(&(hwnd as isize)).copied()
+        {
+            // SAFETY: per WM_SIZING contract, lparam is a valid
+            // pointer to a RECT for the duration of the message.
+            let rect = unsafe { &mut *(lparam as *mut RECT) };
+            Self::apply_to_sizing_rect(hwnd, wparam as u32, rect, ratio);
+            return 1; // TRUE - tell the OS to use our modified rect
         }
         if msg == WM_NCDESTROY {
             let _removed = lock_registry().remove(&(hwnd as isize));
