@@ -81,6 +81,20 @@ pub(crate) async fn request_link_preview(
     state.request_link_preview(urls, request_id).await
 }
 
+/// Ask the server to search its GIF provider.
+///
+/// The key lives on the server, so this works for users who have none of their
+/// own. An empty `query` asks for trending.
+#[tauri::command]
+pub(crate) async fn request_gif_search(
+    state: tauri::State<'_, AppState>,
+    query: String,
+    page: u32,
+    request_id: String,
+) -> Result<(), String> {
+    state.request_gif_search(query, page, request_id).await
+}
+
 /// Send a drawing stroke for the collaborative screen-share overlay.
 #[tauri::command]
 pub(crate) async fn send_draw_stroke(
