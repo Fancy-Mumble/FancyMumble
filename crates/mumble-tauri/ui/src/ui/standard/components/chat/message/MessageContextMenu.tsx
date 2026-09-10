@@ -1,6 +1,7 @@
 import {
   ArrowUpRightIcon,
   CheckboxIcon,
+  EyeOffIcon,
   CopyIcon,
   EditIcon,
   EmojiPlusIcon,
@@ -18,6 +19,7 @@ import { getReadersForMessage } from "@core/features/chat/readreceipt/readReceip
 import { useAppStore } from "@core/store";
 import { QUICK_REACTIONS } from "../../elements/MessageActionBar";
 import { useWatchStart } from "@core/features/chat/watch/useWatchStart";
+import { canOpenPrivately, openPrivatelyOrExplain } from "@core/features/elements/privateBrowsing";
 import styles from "./MessageContextMenu.module.css";
 
 // -- Overflow-aware position computation --------------------------
@@ -47,6 +49,14 @@ export interface MessageContextMenuState {
   x: number;
   y: number;
   message: ChatMessage;
+  /**
+   * The external link the pointer was over, or null where it was not on one.
+   *
+   * A message can carry several, so which one the menu acts on is not a
+   * question about the message - it is about where the pointer was, and only
+   * the right-click event knew that.
+   */
+  link?: string | null;
 }
 
 interface MessageContextMenuProps {
@@ -111,6 +121,28 @@ export default function MessageContextMenu({
       setPos(computePosition(menu.x, menu.y, menuRef.current));
     }
   }, [menu.x, menu.y]);
+
+  /**
+   * Whether this desktop can open a private window at all.
+   *
+   * The row is drawn only where the answer is yes: a default browser with no
+   * private mode - Safari, or one nobody here recognises - would otherwise
+   * give a row whose only possible outcome is an error. `canOpenPrivately`
+   * caches for the session, so the menu asks the backend once however often it
+   * is opened.
+   */
+  const [canPrivate, setCanPrivate] = useState(false);
+  /** The link the right-click was on, as a const so its narrowing survives. */
+  const link = menu.link ?? null;
+  useEffect(() => {
+    let live = true;
+    void canOpenPrivately().then((available) => {
+      if (live) setCanPrivate(available);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -302,6 +334,21 @@ export default function MessageContextMenu({
               <ArrowUpRightIcon width={14} height={14} />
             </span>
             {t("contextMenu.popOutImage")}
+          </button>
+        )}
+        {link && canPrivate && (
+          <button
+            type="button"
+            className={styles.menuItem}
+            onClick={() => {
+              void openPrivatelyOrExplain(link, t("contextMenu.openLinkPrivateFailed"));
+              onClose();
+            }}
+          >
+            <span className={styles.menuIcon}>
+              <EyeOffIcon width={14} height={14} />
+            </span>
+            {t("contextMenu.openLinkPrivate")}
           </button>
         )}
         {canDelete && (

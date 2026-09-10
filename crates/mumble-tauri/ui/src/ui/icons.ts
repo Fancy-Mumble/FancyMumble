@@ -20,6 +20,7 @@ export {
   ChevronDown as ChevronDownIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
+  LoaderCircle as SpinnerIcon,
   Circle as CircleIcon,
   CircleDot as CircleDotIcon,
   Clock as ClockIcon,
@@ -32,6 +33,8 @@ export {
   ExternalLink as ExternalLinkIcon,
   FileText as FileTextIcon,
   Globe as GlobeIcon,
+  // Private browsing, by the convention every browser already uses for it.
+  EyeOff as EyeOffIcon,
   GripVertical as GripVerticalIcon,
   Hash as HashIcon,
   Headphones as HeadphonesIcon,
