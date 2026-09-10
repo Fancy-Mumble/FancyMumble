@@ -1,19 +1,28 @@
 //! Voice-activation auto-calibration.
 //!
-//! Implements a robust noise-floor estimator that avoids the classic
-//! "user is silent" trap: traditional EMA-based calibrators drag the
-//! noise floor down toward digital silence whenever the speaker pauses,
-//! producing a useless near-zero threshold.
+//! Implements a robust noise-floor estimator that avoids two opposite
+//! traps.  The first is "user is silent": traditional EMA-based
+//! calibrators drag the noise floor down toward digital silence
+//! whenever the speaker pauses, producing a useless near-zero
+//! threshold.  The second is "user is *talking*": an estimator that
+//! reads the floor off a low percentile of a few seconds of recent
+//! audio has no floor left to read once those seconds are all speech,
+//! and reports a speech valley as the room.  The threshold then lands
+//! inside the speaker's own syllabic envelope and the gate cuts them
+//! off mid-sentence.
 //!
-//! The estimator here is inspired by Martin's *Minimum Statistics*
+//! The estimator here follows Martin's *Minimum Statistics*
 //! (R. Martin, "Noise Power Spectral Density Estimation Based on
 //! Optimal Smoothing and Minimum Statistics", IEEE TSAP 2001) and the
-//! IMCRA refinement (Cohen 2003): a sliding window of recent frame
-//! energies is kept, frames below a *digital-silence floor* are
-//! discarded as "no input" rather than "quiet ambient noise", and the
-//! noise floor is read off the lower percentile of the remaining
-//! distribution.  The spread of the lower half of the distribution
-//! gives the hysteresis budget for the close-threshold.
+//! IMCRA refinement (Cohen 2003).  Frames below a *digital-silence
+//! floor* are discarded as "no input" rather than "quiet ambient
+//! noise".  The noise floor is then the **minimum over a long horizon**
+//! of per-sub-window minima - the quietest moment of the last half
+//! minute - which continuous speech cannot raise, because speech only
+//! ever adds energy on top of the room.  A shorter sliding window of
+//! recent energies supplies the speech statistics that cap the
+//! threshold from above, and the spread of the frames sitting near the
+//! floor gives the hysteresis budget for the close-threshold.
 //!
 //! Working in dB throughout keeps the math invariant under the AGC
 //! gain stage and matches the user-facing VU meter.
@@ -47,20 +56,34 @@ const AUTO_CALIBRATION_MIN_OPEN_MARGIN_DB: f32 = 12.0;
 /// 6 dB hysteresis prevents chatter while keeping the gate responsive.
 const AUTO_CALIBRATION_MIN_CLOSE_MARGIN_DB: f32 = 6.0;
 
-/// Fixed hold-frames recommendation (20 ms frames -> 400 ms tail).
-/// Empirically wide enough to cover natural intra-word and inter-word
-/// pauses without dragging breath noise over the wire.  See ITU-T P.56
-/// which shows pause distributions in conversational speech centred
-/// around 250-400 ms.
-pub(super) const AUTO_CALIBRATION_HOLD_FRAMES: u32 = 20;
+/// Tail the gate is held open for after speech drops below the close
+/// threshold.  Empirically wide enough to cover natural intra-word and
+/// inter-word pauses without dragging breath noise over the wire.  See
+/// ITU-T P.56, which shows pause distributions in conversational speech
+/// centred around 250-400 ms.
+const AUTO_CALIBRATION_HOLD_MS: u32 = 400;
+
+/// [`AUTO_CALIBRATION_HOLD_MS`] expressed in frames of the pipeline's
+/// configured size.
+///
+/// The noise gate counts frames, not milliseconds, so a fixed frame
+/// count is a different amount of time at each of the frame sizes the
+/// encoder offers: 20 frames is the intended 400 ms at the 20 ms
+/// default, but only 200 ms for a user who picked 10 ms frames for
+/// latency - short enough that the gate closes inside their own pauses
+/// and clips the next word.
+pub(super) fn hold_frames_for(frame_size_ms: u32) -> u32 {
+    AUTO_CALIBRATION_HOLD_MS.div_ceil(frame_size_ms.max(1))
+}
 
 /// Hard floor for the close ratio when the noise floor is volatile.
 const AUTO_CALIBRATION_CLOSE_RATIO_MIN: f32 = 0.4;
 
-/// Hard ceiling for the close ratio when the noise floor is steady.
-/// 0.75 keeps the close threshold a comfortable ~2.5 dB below the open
-/// threshold even in the steadiest rooms - chatter-free without
-/// closing the gate inside the natural amplitude dips of speech.
+/// Hard ceiling for the close ratio: the gate never closes within
+/// 2.5 dB of where it opens, whatever the margins work out to.  It
+/// binds only when the speech cap has squeezed the open threshold down
+/// toward the floor; an ordinary room is set by the 12 dB / 6 dB
+/// comfort margins and lands near 0.5.
 const AUTO_CALIBRATION_CLOSE_RATIO_MAX: f32 = 0.75;
 
 /// Minimum number of usable (non-silence) frames needed before the
@@ -72,6 +95,35 @@ const AUTO_CALIBRATION_MIN_FRAMES: usize = 30;
 /// live mic-test calibrator.  Long enough to span typical pause
 /// patterns; short enough to react when the user switches mic.
 pub(super) const AUTO_CALIBRATION_WINDOW: usize = 150;
+
+/// Frames per minimum-statistics sub-window (~0.5 s at 30 frames/s).
+/// Martin's estimator takes the minimum within each sub-window; half a
+/// second is short enough that an ordinary inter-word gap lands inside
+/// one, and long enough that the minimum is not just sampling noise.
+const FLOOR_SUBWINDOW_FRAMES: usize = 15;
+
+/// Sub-window minima retained for the noise floor (~30 s of history).
+///
+/// This is the horizon over which the room is allowed to be quiet.  It
+/// is deliberately much longer than [`AUTO_CALIBRATION_WINDOW`]: the
+/// speech statistics must follow the speaker, but the floor must not,
+/// or a speaker who talks without a break for longer than the window
+/// walks their own threshold up into their sentences.  A room that
+/// genuinely gets noisier (a fan starts) takes one horizon to be
+/// believed, which errs toward a gate that opens too easily rather
+/// than one that clips speech.
+const FLOOR_SUBWINDOWS: usize = 60;
+
+/// Syllabic envelope of conversational speech, in dB (ITU-T P.56 puts
+/// it at 10-15 dB).  The open threshold is capped this far below the
+/// speech peaks so it stays clear of the speaker's own dips even when
+/// the recording contains no ambient stretch to measure a floor from.
+const AUTO_CALIBRATION_SPEECH_ENVELOPE_DB: f32 = 15.0;
+
+/// Frames needed near the floor before their spread is trusted as the
+/// ambient sigma.  Fewer than this and the window holds no ambient
+/// stretch at all, so the fixed minimum margins are used instead.
+const AMBIENT_SIGMA_MIN_FRAMES: usize = 8;
 
 /// Target post-AGC speech RMS (dB) used when picking `max_gain_db`.
 /// -9 dB RMS gives a loud, present voice that sits well above typical
@@ -144,12 +196,21 @@ fn db_to_linear(db: f32) -> f32 {
 /// estimated noise floor toward zero (the bug this estimator exists
 /// to solve).
 pub(super) struct Calibrator {
-    /// Post-AGC samples drive the noise-gate threshold derivation.
+    /// Post-chain samples (AGC and denoiser applied, exactly what the
+    /// noise gate measures) drive the threshold derivation.
     samples_db: VecDeque<f32>,
-    /// Pre-AGC samples drive the max-gain derivation - we need to know
-    /// how loud the mic is *before* AGC compresses it.
+    /// Raw microphone samples drive the max-gain derivation - we need to
+    /// know how loud the mic is *before* AGC compresses it.
     pre_agc_samples_db: VecDeque<f32>,
     capacity: usize,
+    /// Minimum post-chain dB seen in the sub-window currently filling.
+    subwindow_min_db: f32,
+    /// Frames accumulated into that sub-window so far.
+    subwindow_len: usize,
+    /// Completed sub-window minima, oldest first.  Their minimum is the
+    /// noise floor and is what makes the estimate immune to a speaker
+    /// who never pauses long enough to refill the sliding window.
+    floor_minima_db: VecDeque<f32>,
 }
 
 impl Calibrator {
@@ -158,35 +219,80 @@ impl Calibrator {
             samples_db: VecDeque::with_capacity(capacity),
             pre_agc_samples_db: VecDeque::with_capacity(capacity),
             capacity,
+            subwindow_min_db: f32::INFINITY,
+            subwindow_len: 0,
+            floor_minima_db: VecDeque::with_capacity(FLOOR_SUBWINDOWS),
         }
     }
 
-    /// Push a frame's post-AGC and pre-AGC RMS into the sliding window.
+    /// Push a frame's post-chain and raw RMS into the sliding window.
     ///
-    /// Silent frames (below the digital-silence floor) are dropped on
-    /// the post-AGC side so long pauses do not contaminate the noise
-    /// estimate.  The pre-AGC side keeps anything above its own
-    /// digital-silence floor so the max-gain estimator sees a full
-    /// distribution of mic levels.
+    /// Whether a frame carried any input at all is decided on the *raw*
+    /// level: a frame below the digital-silence floor there is a pause
+    /// or an unplugged mic and is dropped from both windows so it does
+    /// not contaminate the noise estimate.  A frame that had input is
+    /// kept on the post-chain side whatever the chain made of it - a
+    /// denoiser routinely takes a room's ambience 20 dB or more below
+    /// the silence floor, and judging those frames by their output
+    /// would discard exactly the frames that define the floor the gate
+    /// sits on, leaving the quietest *speech* to stand in for it.
     ///
-    /// When the AGC is disabled, callers pass the same value twice and
-    /// both estimators agree by construction.
-    pub(super) fn push(&mut self, post_agc_rms: f32, pre_agc_rms: f32) {
-        let post_db = linear_to_db(post_agc_rms);
-        if post_db > DIGITAL_SILENCE_DB {
-            if self.samples_db.len() == self.capacity {
-                let _ = self.samples_db.pop_front();
-            }
-            self.samples_db.push_back(post_db);
+    /// When neither AGC nor denoiser is active, callers pass the same
+    /// value twice and both estimators agree by construction.
+    pub(super) fn push(&mut self, post_chain_rms: f32, raw_rms: f32) {
+        let raw_db = linear_to_db(raw_rms);
+        if raw_db <= DIGITAL_SILENCE_DB {
+            return;
         }
 
-        let pre_db = linear_to_db(pre_agc_rms);
-        if pre_db > DIGITAL_SILENCE_DB {
-            if self.pre_agc_samples_db.len() == self.capacity {
-                let _ = self.pre_agc_samples_db.pop_front();
-            }
-            self.pre_agc_samples_db.push_back(pre_db);
+        let post_db = linear_to_db(post_chain_rms);
+
+        if self.samples_db.len() == self.capacity {
+            let _ = self.samples_db.pop_front();
         }
+        self.samples_db.push_back(post_db);
+
+        if self.pre_agc_samples_db.len() == self.capacity {
+            let _ = self.pre_agc_samples_db.pop_front();
+        }
+        self.pre_agc_samples_db.push_back(raw_db);
+
+        self.track_floor(post_db);
+    }
+
+    /// Feed one post-chain level into the minimum-statistics tracker.
+    fn track_floor(&mut self, post_db: f32) {
+        self.subwindow_min_db = self.subwindow_min_db.min(post_db);
+        self.subwindow_len += 1;
+        if self.subwindow_len < FLOOR_SUBWINDOW_FRAMES {
+            return;
+        }
+        if self.floor_minima_db.len() == FLOOR_SUBWINDOWS {
+            let _ = self.floor_minima_db.pop_front();
+        }
+        self.floor_minima_db.push_back(self.subwindow_min_db);
+        self.subwindow_min_db = f32::INFINITY;
+        self.subwindow_len = 0;
+    }
+
+    /// Noise floor in dB: the quietest moment over the retained horizon.
+    ///
+    /// The sub-window still filling counts once it is at least half
+    /// full, so a short one-shot calibration is not left waiting for a
+    /// sub-window boundary it may never reach.
+    fn noise_floor_db(&self) -> Option<f32> {
+        let completed = self
+            .floor_minima_db
+            .iter()
+            .copied()
+            .fold(f32::INFINITY, f32::min);
+        let partial = if self.subwindow_len >= FLOOR_SUBWINDOW_FRAMES / 2 {
+            self.subwindow_min_db
+        } else {
+            f32::INFINITY
+        };
+        let floor = completed.min(partial);
+        floor.is_finite().then_some(floor)
     }
 
     pub(super) fn ready(&self) -> bool {
@@ -196,7 +302,7 @@ impl Calibrator {
     /// Compute open/close thresholds, hold time and max gain from the
     /// buffered frame energies.  Returns `None` if fewer than
     /// `AUTO_CALIBRATION_MIN_FRAMES` non-silent frames have been seen.
-    pub(super) fn compute(&self) -> Option<CalibrationResult> {
+    pub(super) fn compute(&self, frame_size_ms: u32) -> Option<CalibrationResult> {
         if !self.ready() {
             return None;
         }
@@ -206,7 +312,19 @@ impl Calibrator {
         let mut pre_sorted: Vec<f32> = self.pre_agc_samples_db.iter().copied().collect();
         pre_sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-        Some(compute_from_sorted_db(&post_sorted, &pre_sorted))
+        // `ready()` guarantees enough frames for a sub-window to have
+        // closed, so the fallback is unreachable in practice; it keeps
+        // the function total rather than panicking on a future caller.
+        let floor_db = self
+            .noise_floor_db()
+            .unwrap_or_else(|| percentile(&post_sorted, 15.0));
+
+        Some(compute_from_sorted_db(
+            &post_sorted,
+            &pre_sorted,
+            floor_db,
+            frame_size_ms,
+        ))
     }
 }
 
@@ -223,46 +341,37 @@ fn percentile(sorted: &[f32], pct: f32) -> f32 {
 /// estimator since AGC needs to know how loud the mic is *before* it
 /// compresses.  If `pre_sorted` is empty the previous max-gain value
 /// is preserved by returning [`AUTO_CALIBRATION_MAX_GAIN_MIN_DB`] as
-/// the safe default.
+/// the safe default.  `floor_db` is the minimum-statistics noise floor
+/// from [`Calibrator::noise_floor_db`] - deliberately *not* derived
+/// from `post_sorted`, which holds only the last few seconds and is
+/// nothing but speech while somebody is talking.
 ///
 /// Splits into a separate function so unit tests can exercise the
 /// algorithm directly without setting up a `Calibrator`.
-fn compute_from_sorted_db(post_sorted: &[f32], pre_sorted: &[f32]) -> CalibrationResult {
-    // Noise floor = 15th percentile of non-silent frames.  Robust
-    // against the occasional micro-silence that slips past the digital
-    // gate AND against speech bursts at the top of the distribution.
-    let floor_db = percentile(post_sorted, 15.0);
+fn compute_from_sorted_db(
+    post_sorted: &[f32],
+    pre_sorted: &[f32],
+    floor_db: f32,
+    frame_size_ms: u32,
+) -> CalibrationResult {
+    // Ceiling on the open threshold from the speech in the window, so
+    // it cannot land inside the speaker's own syllabic envelope.
+    // Infinite when the window holds no speech to measure.
+    let speech_cap_db = speech_cap_db(post_sorted, floor_db);
 
-    // Speech ceiling reference = 90th percentile, used to bound the
-    // open threshold so it cannot land inside the speech distribution.
-    let speech_db = percentile(post_sorted, 90.0);
-
-    // Speech-valley reference: lowest 10% of frames that are clearly
-    // *above* the noise floor.  Conversational speech has a 10-15 dB
-    // syllabic envelope (ITU-T P.56), so the gate must sit below the
-    // speech valleys rather than just below the speech peaks - that is
-    // what the old `P90 - 3` cap got wrong and what caused the gate to
-    // chatter mid-sentence on otherwise good calibrations.
-    let speech_valley_db = speech_valley_cap_db(post_sorted, floor_db);
-
-    // Spread of the lower half (treated as the ambient distribution)
-    // sets dynamic hysteresis.  Quiet, steady rooms get a tight gate;
-    // noisy rooms get a wider one so the gate does not chatter.
-    let mid = post_sorted.len() / 2;
-    let ambient = &post_sorted[..mid.max(1)];
-    let mean: f32 = ambient.iter().sum::<f32>() / ambient.len() as f32;
-    let variance: f32 =
-        ambient.iter().map(|&v| (v - mean).powi(2)).sum::<f32>() / ambient.len() as f32;
-    let sigma_db = variance.sqrt();
+    // Spread of the frames sitting near the floor sets dynamic
+    // hysteresis.  Quiet, steady rooms get a tight gate; noisy rooms
+    // get a wider one so the gate does not chatter.  Measured on the
+    // ambient band rather than "the lower half of the window": half of
+    // a window recorded mid-sentence is still speech, and its spread
+    // is the syllabic envelope, not the room.
+    let ambient_end =
+        post_sorted.partition_point(|v| *v <= floor_db + SPEECH_VALLEY_FLOOR_HEADROOM_DB);
+    let sigma_db = ambient_sigma_db(&post_sorted[..ambient_end]);
 
     let open_margin_db = (3.0 * sigma_db).max(AUTO_CALIBRATION_MIN_OPEN_MARGIN_DB);
     let close_margin_db = (2.0 * sigma_db).max(AUTO_CALIBRATION_MIN_CLOSE_MARGIN_DB);
 
-    // Open threshold: floor + margin, capped 3 dB below the *lower*
-    // edge of the speech distribution so valleys do not drop us below
-    // the gate.  A second cap at `speech_p90 - 3 dB` guards against
-    // degenerate cases (no clear speech band detected).
-    let speech_cap_db = speech_valley_db.min(speech_db - 3.0);
     let open_db = (floor_db + open_margin_db).min(speech_cap_db);
     let close_db = (floor_db + close_margin_db).min(open_db - 3.0);
 
@@ -285,7 +394,7 @@ fn compute_from_sorted_db(post_sorted: &[f32], pre_sorted: &[f32]) -> Calibratio
     CalibrationResult {
         vad_threshold: open_linear,
         noise_gate_close_ratio: close_ratio,
-        hold_frames: AUTO_CALIBRATION_HOLD_FRAMES,
+        hold_frames: hold_frames_for(frame_size_ms),
         max_gain_db,
     }
 }
@@ -331,12 +440,23 @@ const SPEECH_VALLEY_MIN_FRAMES: usize = 12;
 /// above this is unambiguously above ambient.
 const SPEECH_VALLEY_FLOOR_HEADROOM_DB: f32 = 10.0;
 
-/// 10th-percentile dB of frames sitting clearly above the noise floor.
+/// Highest dB the open threshold may take given the speech in the
+/// window, or `f32::INFINITY` when the window holds no speech - in
+/// which case the caller's `min(...)` falls through to `floor + margin`
+/// and the threshold is set by the room alone.
 ///
-/// Returns `f32::INFINITY` when too few speech frames are present, so
-/// the caller's `min(...)` operator falls back transparently to the
-/// `P90 - 3 dB` cap.
-fn speech_valley_cap_db(post_sorted: &[f32], floor_db: f32) -> f32 {
+/// Two independent ceilings, whichever is lower:
+///
+/// - **The observed valleys.**  3 dB below the 10th percentile of the
+///   frames sitting clearly above the floor keeps the gate beneath even
+///   the quieter tail of the speech distribution.
+/// - **The syllabic envelope.**  [`AUTO_CALIBRATION_SPEECH_ENVELOPE_DB`]
+///   below the speech peaks.  This one does not depend on the floor
+///   being right, so it still holds when the recording contains nothing
+///   but speech and there is no ambient stretch to measure.  The `P90 -
+///   3 dB` this replaces was, by construction, *inside* the speech
+///   distribution and never bound anything useful.
+fn speech_cap_db(post_sorted: &[f32], floor_db: f32) -> f32 {
     let cutoff_db = floor_db + SPEECH_VALLEY_FLOOR_HEADROOM_DB;
     // post_sorted is ascending, so partition_point finds the first
     // entry that exceeds the cutoff in O(log n).
@@ -345,14 +465,33 @@ fn speech_valley_cap_db(post_sorted: &[f32], floor_db: f32) -> f32 {
     if speech.len() < SPEECH_VALLEY_MIN_FRAMES {
         return f32::INFINITY;
     }
-    // 3 dB below the 10th percentile keeps the gate beneath even the
-    // quieter tail of the speech distribution.
-    percentile(speech, 10.0) - 3.0
+    let valley_cap = percentile(speech, 10.0) - 3.0;
+    let envelope_cap = percentile(post_sorted, 90.0) - AUTO_CALIBRATION_SPEECH_ENVELOPE_DB;
+    valley_cap.min(envelope_cap)
+}
+
+/// Standard deviation of the ambient band, or 0 when the window holds
+/// too little of it to say anything - the caller then falls back to the
+/// fixed minimum margins.
+fn ambient_sigma_db(ambient: &[f32]) -> f32 {
+    if ambient.len() < AMBIENT_SIGMA_MIN_FRAMES {
+        return 0.0;
+    }
+    let mean: f32 = ambient.iter().sum::<f32>() / ambient.len() as f32;
+    let variance: f32 =
+        ambient.iter().map(|&v| (v - mean).powi(2)).sum::<f32>() / ambient.len() as f32;
+    variance.sqrt()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The floor a [`Calibrator`] would report for these levels: the
+    /// minimum, which is what minimum statistics converges on.
+    fn floor_of(sorted_db: &[f32]) -> f32 {
+        sorted_db.first().copied().unwrap_or(DIGITAL_SILENCE_DB)
+    }
 
     fn to_db_vec(linears: &[f32]) -> Vec<f32> {
         let mut v: Vec<f32> = linears.iter().copied().map(linear_to_db).collect();
@@ -374,7 +513,7 @@ mod tests {
             push_both(&mut c, db_to_linear(-80.0));
         }
         assert!(
-            c.compute().is_none(),
+            c.compute(20).is_none(),
             "silence-only buffer must not emit a calibration"
         );
     }
@@ -399,30 +538,186 @@ mod tests {
             push_both(&mut c, db_to_linear(-80.0));
         }
 
-        let Some(result) = c.compute() else {
+        let Some(result) = c.compute(20) else {
             panic!("calibrator should still produce a result after a long silent stretch")
         };
         let open_db = linear_to_db(result.vad_threshold);
         assert!(
-            open_db > -25.0 && open_db < -10.0,
+            open_db > -30.0 && open_db < -10.0,
             "open threshold should sit between ambient (-30 dB) and speech (-10 dB), got {open_db} dB",
         );
     }
 
+    /// One speech frame every `1/duty` frames, dipping `envelope_db`
+    /// below `peak_db` in between - a crude syllabic envelope.
+    fn syllable_db(i: usize, peak_db: f32, envelope_db: f32) -> f32 {
+        let phase = (i % 5) as f32 / 4.0 * std::f32::consts::PI;
+        peak_db - envelope_db * (1.0 - phase.sin())
+    }
+
+    /// Regression for the reported cut-off: a speaker who talks without
+    /// a long break must not walk their own threshold up into their
+    /// sentences.
+    ///
+    /// The old estimator read the noise floor off the 15th percentile of
+    /// a 5 s sliding window.  Talk for longer than that window and every
+    /// frame in it is speech, so the "floor" it found was a speech
+    /// valley - roughly 12 dB above the real room here - and the open
+    /// threshold it derived landed ~10 dB *above* the valleys.  The gate
+    /// then closed on every dip the hold time did not cover, cutting the
+    /// speaker off mid-sentence while they were plainly still talking.
     #[test]
-    fn quiet_steady_room_yields_high_close_ratio() {
-        // Almost-flat ambient distribution -> tiny sigma -> close
-        // ratio near the upper bound (gate closes quickly).
+    fn a_speaker_who_never_pauses_keeps_their_threshold() {
+        const ROOM_DB: f32 = -45.0;
+        const PEAK_DB: f32 = -15.0;
+        const ENVELOPE_DB: f32 = 18.0;
+        let valley_db = PEAK_DB - ENVELOPE_DB;
+
+        let mut c = Calibrator::new(AUTO_CALIBRATION_WINDOW);
+        // 2 s of room tone, as the mic test sees before the user starts.
+        for _ in 0..60 {
+            push_both(&mut c, db_to_linear(ROOM_DB));
+        }
+        // 13 s of continuous speech - far longer than the 5 s window, so
+        // not one ambient frame is left in it by the end.
+        for i in 0..400 {
+            push_both(&mut c, db_to_linear(syllable_db(i, PEAK_DB, ENVELOPE_DB)));
+        }
+
+        let Some(result) = c.compute(20) else {
+            panic!("13 s of speech is plenty to calibrate on")
+        };
+        let close_db = linear_to_db(result.vad_threshold * result.noise_gate_close_ratio);
+        assert!(
+            close_db < valley_db,
+            "the gate must not close inside the speaker's own syllabic dips: \
+             close={close_db:.1} dB, valleys reach {valley_db:.1} dB",
+        );
+        assert!(
+            close_db > ROOM_DB,
+            "the gate must still close on the room: close={close_db:.1} dB, \
+             room={ROOM_DB:.1} dB",
+        );
+    }
+
+    /// The floor is a property of the room, not of the last five
+    /// seconds: it must survive a window that holds nothing but speech.
+    #[test]
+    fn the_floor_outlives_the_sliding_window() {
+        let mut c = Calibrator::new(AUTO_CALIBRATION_WINDOW);
+        for _ in 0..60 {
+            push_both(&mut c, db_to_linear(-45.0));
+        }
+        for i in 0..400 {
+            push_both(&mut c, db_to_linear(syllable_db(i, -15.0, 18.0)));
+        }
+        let floor = c.noise_floor_db().expect("a floor after 15 s of audio");
+        assert!(
+            (floor - -45.0).abs() < 1.0,
+            "the floor should still be the room at -45 dB, got {floor} dB",
+        );
+        assert!(
+            !c.samples_db.iter().any(|&db| db < -40.0),
+            "the sliding window should hold no ambient frames at all by now",
+        );
+    }
+
+    /// The one-shot calibration records ~3 s and the user is told to
+    /// speak: there may be no ambient stretch in the recording at all.
+    /// The syllabic-envelope cap has to carry it, since the floor
+    /// estimate has nothing quiet to lock onto.
+    #[test]
+    fn speaking_through_the_whole_one_shot_still_clears_the_valleys() {
+        const PEAK_DB: f32 = -15.0;
+        const ENVELOPE_DB: f32 = 18.0;
+        let valley_db = PEAK_DB - ENVELOPE_DB;
+
+        let mut c = Calibrator::new(AUTO_CALIBRATION_WINDOW);
+        for i in 0..90 {
+            // Word gaps down near the room, as real speech has.
+            let db = if i % 25 >= 22 {
+                -43.0
+            } else {
+                syllable_db(i, PEAK_DB, ENVELOPE_DB)
+            };
+            push_both(&mut c, db_to_linear(db));
+        }
+        let result = c.compute(20).expect("3 s of speech is a valid calibration");
+        let close_db = linear_to_db(result.vad_threshold * result.noise_gate_close_ratio);
+        assert!(
+            close_db < valley_db,
+            "close threshold {close_db:.1} dB must stay under the {valley_db:.1} dB valleys",
+        );
+    }
+
+    /// Regression: with a denoiser in the chain the room's ambience
+    /// comes out far below the digital-silence floor while the raw
+    /// frames are plainly above it.  Those frames are real input and
+    /// must define the noise floor; dropping them would leave the
+    /// quietest speech to stand in as "ambient" and push the open
+    /// threshold up into the sentence tails - the "have to shout"
+    /// calibration `DeepFilterNet` users reported.
+    #[test]
+    fn a_denoised_room_still_counts_as_ambient() {
+        let mut c = Calibrator::new(300);
+        // 100 room frames: -40 dB at the mic, -72 dB after the denoiser.
+        for _ in 0..100 {
+            c.push(db_to_linear(-72.0), db_to_linear(-40.0));
+        }
+        // 60 speech frames the denoiser leaves alone, valleys at -30 dB.
+        for i in 0..60 {
+            let db = -30.0 + (i as f32 / 59.0) * 15.0;
+            c.push(db_to_linear(db), db_to_linear(db));
+        }
+        let Some(result) = c.compute(20) else {
+            panic!("a denoised room is input, not silence")
+        };
+        let open_db = linear_to_db(result.vad_threshold);
+        assert!(
+            open_db < -33.0,
+            "open threshold must sit below the -30 dB speech valleys, got {open_db} dB",
+        );
+        // The pre-chain window still saw the real mic level.
+        assert!(result.max_gain_db > AUTO_CALIBRATION_MAX_GAIN_MIN_DB);
+    }
+
+    #[test]
+    fn a_frame_with_no_input_is_dropped_from_both_windows() {
+        let mut c = Calibrator::new(10);
+        // Post-chain value would pass on its own; the raw frame says
+        // nothing was captured.
+        c.push(db_to_linear(-30.0), db_to_linear(-80.0));
+        assert!(c.samples_db.is_empty());
+        assert!(c.pre_agc_samples_db.is_empty());
+    }
+
+    /// A window with no speech in it at all: the gate is set by the room
+    /// alone, at the fixed comfort margins.
+    ///
+    /// This used to assert a close ratio above 0.6, which the old code
+    /// only reached by way of its `P90 - 3 dB` cap - in an all-ambient
+    /// window that cap put the *open* threshold 3 dB **below** the room,
+    /// so the gate could never close at all and the ratio it reported
+    /// described nothing.  With the cap gone the thresholds are the
+    /// documented 12 dB / 6 dB above the floor, and 6 dB of hysteresis
+    /// is what the ratio says.
+    #[test]
+    fn a_room_with_no_speech_gates_on_the_comfort_margins() {
         let mut samples = Vec::new();
         for _ in 0..150 {
             samples.push(db_to_linear(-40.0));
         }
         let sorted_db = to_db_vec(&samples);
-        let result = compute_from_sorted_db(&sorted_db, &sorted_db);
-        let ratio = result.noise_gate_close_ratio;
+        let result = compute_from_sorted_db(&sorted_db, &sorted_db, floor_of(&sorted_db), 20);
+        let open_db = linear_to_db(result.vad_threshold);
         assert!(
-            ratio > 0.6,
-            "steady room should produce a high close ratio, got {ratio}"
+            (open_db - -28.0).abs() < 0.5,
+            "open should sit the 12 dB comfort margin above the -40 dB room, got {open_db} dB",
+        );
+        let close_db = linear_to_db(result.vad_threshold * result.noise_gate_close_ratio);
+        assert!(
+            close_db > -40.0,
+            "close must stay above the room or the gate never closes, got {close_db} dB",
         );
     }
 
@@ -436,7 +731,7 @@ mod tests {
             samples.push(db_to_linear(-40.0 + dither * 200.0));
         }
         let sorted_db = to_db_vec(&samples);
-        let result = compute_from_sorted_db(&sorted_db, &sorted_db);
+        let result = compute_from_sorted_db(&sorted_db, &sorted_db, floor_of(&sorted_db), 20);
         let ratio = result.noise_gate_close_ratio;
         assert!(
             ratio < AUTO_CALIBRATION_CLOSE_RATIO_MAX,
@@ -447,14 +742,15 @@ mod tests {
     #[test]
     fn threshold_clamps_at_the_extremes() {
         let extreme_low = to_db_vec(&[db_to_linear(-50.0); 60]);
-        let low = compute_from_sorted_db(&extreme_low, &extreme_low);
+        let low = compute_from_sorted_db(&extreme_low, &extreme_low, floor_of(&extreme_low), 20);
         assert!(
             low.vad_threshold >= AUTO_CALIBRATION_THRESHOLD_MIN,
             "lower clamp should hold for very quiet rooms"
         );
 
         let extreme_high = to_db_vec(&[db_to_linear(-3.0); 60]);
-        let high = compute_from_sorted_db(&extreme_high, &extreme_high);
+        let high =
+            compute_from_sorted_db(&extreme_high, &extreme_high, floor_of(&extreme_high), 20);
         assert!(
             high.vad_threshold <= AUTO_CALIBRATION_THRESHOLD_MAX + f32::EPSILON,
             "upper clamp should hold for very loud rooms"
@@ -464,8 +760,12 @@ mod tests {
     #[test]
     fn hold_frames_matches_documented_baseline() {
         let sorted = to_db_vec(&[db_to_linear(-30.0); 60]);
-        let result = compute_from_sorted_db(&sorted, &sorted);
-        assert_eq!(result.hold_frames, AUTO_CALIBRATION_HOLD_FRAMES);
+        let result = compute_from_sorted_db(&sorted, &sorted, floor_of(&sorted), 20);
+        assert_eq!(result.hold_frames, 20, "400 ms at the 20 ms default");
+        // The tail is a duration, so a smaller frame needs more frames of
+        // it - the gate would otherwise close inside the speaker's pauses.
+        assert_eq!(hold_frames_for(10), 40);
+        assert_eq!(hold_frames_for(60), 7);
     }
 
     /// Regression: with a speech distribution whose valleys reach
@@ -487,7 +787,7 @@ mod tests {
             samples.push(db_to_linear(db));
         }
         let sorted_db = to_db_vec(&samples);
-        let result = compute_from_sorted_db(&sorted_db, &sorted_db);
+        let result = compute_from_sorted_db(&sorted_db, &sorted_db, floor_of(&sorted_db), 20);
         let open_db = linear_to_db(result.vad_threshold);
         assert!(
             open_db < -25.0,
