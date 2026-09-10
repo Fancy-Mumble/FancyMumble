@@ -649,3 +649,130 @@ describe("ChatView auto-scroll state machine", () => {
     expect(ctrl.distFromBottom).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The two-sided render window, driven through the real hook
+//
+// The controller above mirrors the scroll machine in isolation; this exercises
+// `useChatScroll` itself, because the part that broke in the conversion from a
+// tail count to a range is not the scroll arithmetic but what the range means:
+// an absolute range has to be defaulted, clamped and shifted where a relative
+// count needed none of that, and getting it wrong renders an empty thread or
+// silently strands the reader below the newest message.
+//
+// No DOM is attached, so this covers exactly the parts that do not need one:
+// which rows are mounted, and what the reader is told about the ones that are
+// not.
+// ---------------------------------------------------------------------------
+
+import { renderHook, act } from "@testing-library/react";
+import type { ChatMessage } from "../../types";
+import { useChatScroll } from "../chat/useChatScroll";
+import { BASE_WINDOW } from "../chat/chatWindowing";
+
+/** `count` messages whose ids run `m<from>` .. `m<from + count - 1>`. */
+function thread(count: number, from = 0): ChatMessage[] {
+  return Array.from({ length: count }, (_, i) => ({
+    sender_session: 1,
+    sender_name: "someone",
+    body: `body ${from + i}`,
+    channel_id: 1,
+    is_own: false,
+    message_id: `m${from + i}`,
+  }));
+}
+
+const SCOPE = {
+  selectedChannel: 1,
+  selectedDmUser: null,
+  // Null scope: the offloader has nothing to write bodies to, which is what a
+  // test runner is - the rows simply keep them.
+  currentScope: () => null,
+};
+
+function openThread(messages: ChatMessage[]) {
+  const view = renderHook((props: { allMessages: ChatMessage[] }) => useChatScroll({ ...SCOPE, ...props }), {
+    initialProps: { allMessages: [] as ChatMessage[] },
+  });
+  view.rerender({ allMessages: messages });
+  return view;
+}
+
+describe("useChatScroll two-sided window", () => {
+  it("opens a long thread at its tail", () => {
+    const { result } = openThread(thread(500));
+
+    expect(result.current.windowStart).toBe(500 - BASE_WINDOW);
+    expect(result.current.visibleMessages).toHaveLength(BASE_WINDOW);
+    expect(result.current.visibleMessages.at(-1)?.message_id).toBe("m499");
+  });
+
+  it("announces an arrival below a detached window instead of following it", () => {
+    const { result, rerender } = openThread(thread(500));
+
+    // Reading history far above the tail: the window lets the newest rows go.
+    act(() => result.current.ensureMessageRendered("m10"));
+    const start = result.current.windowStart;
+    expect(result.current.visibleMessages.at(-1)?.message_id).not.toBe("m499");
+
+    rerender({ allMessages: thread(501) });
+
+    // The reader is left exactly where they were reading...
+    expect(result.current.windowStart).toBe(start);
+    expect(result.current.visibleMessages.at(-1)?.message_id).not.toBe("m500");
+    // ...and told, since nothing else can tell them: the arrival has no row.
+    expect(result.current.newMsgCount).toBe(1);
+  });
+
+  it("comes back to the tail when the pill is clicked", () => {
+    const { result, rerender } = openThread(thread(500));
+    act(() => result.current.ensureMessageRendered("m10"));
+    rerender({ allMessages: thread(501) });
+
+    act(() => result.current.handleScrollToBottom());
+
+    expect(result.current.windowStart).toBe(501 - BASE_WINDOW);
+    expect(result.current.visibleMessages.at(-1)?.message_id).toBe("m500");
+    expect(result.current.newMsgCount).toBe(0);
+  });
+
+  it("keeps the same messages mounted when older ones are prepended", () => {
+    const { result, rerender } = openThread(thread(300));
+    act(() => result.current.ensureMessageRendered("m150"));
+    const before = result.current.visibleMessages.map((m) => m.message_id);
+    const startBefore = result.current.windowStart;
+
+    // A page of history joins at the head: every mounted row keeps its message
+    // but changes its index, and the window has to move with them.
+    rerender({ allMessages: [...thread(50, -50), ...thread(300)] });
+
+    expect(result.current.visibleMessages.map((m) => m.message_id)).toEqual(before);
+    expect(result.current.windowStart).toBe(startBefore + 50);
+  });
+
+  it("mounts the fetched page for a reader who is at the head", () => {
+    const { result, rerender } = openThread(thread(300));
+    // Attached so the growth step, which anchors the viewport, can run.
+    result.current.messagesContainerRef.current = document.createElement("div");
+    act(() => result.current.ensureMessageRendered("m0"));
+    expect(result.current.windowStart).toBe(0);
+
+    rerender({ allMessages: [...thread(50, -50), ...thread(300)] });
+
+    expect(result.current.windowStart).toBe(0);
+    expect(result.current.visibleMessages[0]?.message_id).toBe("m-50");
+  });
+
+  it("renders nothing but the tail of a thread that shrank under the window", () => {
+    const { result, rerender } = openThread(thread(500));
+    act(() => result.current.ensureMessageRendered("m400"));
+
+    // The whole conversation was replaced by a much shorter one (a channel's
+    // history being re-read).  A range left over from the longer thread has
+    // to be brought back inside this one, not slice past its end.
+    rerender({ allMessages: thread(5, 1000) });
+
+    expect(result.current.visibleMessages).toHaveLength(5);
+    expect(result.current.windowStart).toBe(0);
+  });
+});

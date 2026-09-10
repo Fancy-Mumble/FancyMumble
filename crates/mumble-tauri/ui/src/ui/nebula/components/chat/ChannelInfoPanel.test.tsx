@@ -356,7 +356,7 @@ function heavyMessage(id: string) {
     channel_id: 3,
     sender_session: 7,
     sender_name: "Lorelando",
-    body: `<img src="data:image/png;base64,${"A".repeat(5000)}">`,
+    body: `<img src="data:image/png;base64,${"A".repeat(70_000)}">`,
     is_own: false,
     timestamp: 1_700_000_000_000,
   };

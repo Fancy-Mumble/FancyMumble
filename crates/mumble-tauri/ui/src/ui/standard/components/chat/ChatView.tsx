@@ -207,7 +207,7 @@ export default function ChatView({
     chatBgVideoBaked: null,
     chatBgVideoBakedSigma: 0,
     chatBgVideoBakedDim: 0,
-  chatBgRecents: [],
+    chatBgRecents: [],
     bubbleStyle: "bubbles",
     fontSize: "medium",
     fontSizeCustomPx: 14,
@@ -1572,7 +1572,11 @@ export default function ChatView({
           </div>
         </div>
 
-        {/* "New messages" pill - shown when user scrolled up and messages arrive */}
+        {/* "New messages" pill - shown when messages arrive that the reader was
+            not carried down to: either they had scrolled up, or the render window
+            has left the tail and the arrival is not even mounted.  In that second
+            case this is the only thing that says it happened, and clicking it is
+            what brings the window back to the present. */}
         {newMsgCount > 0 && (
           <button className={styles.newMessagesPill} onClick={handleScrollToBottom}>
             <ChevronDownIcon width={16} height={16} aria-hidden="true" />

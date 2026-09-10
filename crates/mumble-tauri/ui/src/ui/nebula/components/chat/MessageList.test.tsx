@@ -16,7 +16,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 /** A body big enough, and inline enough, to be worth putting away. */
-const HEAVY_BODY = `<img src="data:image/png;base64,${"A".repeat(5000)}">`;
+const HEAVY_BODY = `<img src="data:image/png;base64,${"A".repeat(70_000)}">`;
 
 /**
  * An `IntersectionObserver` the test drives itself.
