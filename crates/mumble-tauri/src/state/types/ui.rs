@@ -180,7 +180,40 @@ impl UserEntry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+/// What the UI is asking to see of a thread.
+///
+/// Expressed from the **tail**, because that is where a chat opens and what
+/// "scrolled up by N" means to a reader. An absolute index would move under a
+/// page arriving at the head, which is exactly what happens while scrolling
+/// back.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageRequest {
+    pub channel_id: u32,
+    /// How many rows back from the newest held row the window starts.
+    #[serde(default)]
+    pub offset_from_tail: usize,
+    /// How many rows to return.
+    pub limit: usize,
+}
+
+/// One window of a thread, and what lies beyond its edges.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MessagePage {
+    pub rows: Vec<ChatMessage>,
+    /// More history exists before the first row here, on the server or in the
+    /// part of the range this client dropped.
+    pub more_before: bool,
+    /// More exists after the last row, which means this client is **not**
+    /// holding the live tail and an arriving message will not be appended.
+    pub more_after: bool,
+    /// The window reaches the newest message there is, so a new arrival lands
+    /// in it and the reader should be followed down.
+    pub at_tail: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize)]
 pub struct ChatMessage {
     pub sender_session: Option<u32>,
     pub sender_name: String,

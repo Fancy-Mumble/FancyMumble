@@ -2,7 +2,9 @@
 //! deletes, search, photos, typing/read receipts and link previews.
 
 use crate::state::protocol_commands::{DrawStrokeArgs, WatchSyncEventArg};
-use crate::state::{self, AppState, ChatMessage, PhotoEntry, SearchResult};
+use crate::state::{
+    self, AppState, ChatMessage, MessagePage, PageRequest, PhotoEntry, SearchResult,
+};
 
 #[tauri::command]
 pub(crate) fn super_search(
@@ -30,6 +32,19 @@ pub(crate) fn get_photos(
 #[tauri::command]
 pub(crate) fn get_messages(state: tauri::State<'_, AppState>, channel_id: u32) -> Vec<ChatMessage> {
     state.messages(channel_id)
+}
+
+/// One window of a channel's history.
+///
+/// Replaces `get_messages` on the chat path: that returned the whole thread and
+/// was re-invoked on essentially every event, so a long channel was expensive
+/// to look at rather than expensive to open.
+#[tauri::command]
+pub(crate) fn get_messages_page(
+    state: tauri::State<'_, AppState>,
+    request: PageRequest,
+) -> MessagePage {
+    state.messages_page(&request)
 }
 
 #[tauri::command]
