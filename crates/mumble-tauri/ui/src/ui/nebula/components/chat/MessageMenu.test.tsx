@@ -4,8 +4,9 @@ import { useAppStore } from "@core/store";
 import type { ChannelEntry, ChatMessage, UserEntry } from "@core/types";
 import { PERM_DELETE_MESSAGE } from "@core/utils/permissions";
 import { applyReadStates, clearReadReceipts } from "@core/features/chat/readreceipt/readReceiptStore";
+import { resetPrivateBrowsingCache } from "@core/features/elements/privateBrowsing";
 import { withNebulaTheme } from "../../testTheme";
-import { MessageMenu } from "./MessageMenu";
+import { MessageMenu, type MenuImage } from "./MessageMenu";
 
 const invokeMock = vi.fn<(cmd: string, args?: unknown) => Promise<unknown>>(() => Promise.resolve());
 vi.mock("@tauri-apps/api/core", () => ({
@@ -39,7 +40,14 @@ function message(partial: Partial<ChatMessage> = {}): ChatMessage {
   };
 }
 
-function open(msg: ChatMessage = message(), editable = true, allMessageIds?: readonly string[]) {
+function open(
+  msg: ChatMessage = message(),
+  editable = true,
+  allMessageIds?: readonly string[],
+  selection = "",
+  image: MenuImage | null = null,
+  link: string | null = null,
+) {
   const handlers = {
     onClose: vi.fn(),
     onReact: vi.fn(),
@@ -51,7 +59,7 @@ function open(msg: ChatMessage = message(), editable = true, allMessageIds?: rea
   render(
     withNebulaTheme(
       <MessageMenu
-        target={{ message: msg, x: 10, y: 20, editable }}
+        target={{ message: msg, x: 10, y: 20, editable, selection, image, link }}
         allMessageIds={allMessageIds}
         {...handlers}
       />,
@@ -65,6 +73,9 @@ describe("MessageMenu", () => {
     cleanup();
     clearReadReceipts();
     invokeMock.mockClear();
+    // The private-window answer is cached for the session, so a test that
+    // leaves it resolved would decide the next test's menu for it.
+    resetPrivateBrowsingCache();
     useAppStore.setState({
       channels: [channel()],
       users: [],
@@ -265,11 +276,146 @@ describe("MessageMenu copy", () => {
     expect(writeText).toHaveBeenCalledWith("Hello\nWorld");
   });
 
+  it("offers the highlighted words, and copies those rather than the message", () => {
+    // Right-clicking a sentence you have just picked out of a message and
+    // being offered only the whole message is the complaint this answers.
+    const writeText = stubClipboard();
+    open(message({ body: "<p>one sentence, then another</p>" }), true, undefined, "one sentence");
+    fireEvent.click(screen.getByText("Copy selection"));
+    expect(writeText).toHaveBeenCalledWith("one sentence");
+  });
+
+  it("says nothing about a selection where there is none", () => {
+    open(message({ body: "<p>Hello</p>" }));
+    expect(screen.queryByText("Copy selection")).toBeNull();
+  });
+
   it("pastes entities as the characters they stand for", () => {
     const writeText = stubClipboard();
     open(message({ body: "<p>a &amp; b &quot;c&quot;</p>" }));
     fireEvent.click(screen.getByText("Copy text"));
     expect(writeText).toHaveBeenCalledWith('a & b "c"');
   });
+
+  it("says nothing about pictures on a message that was not right-clicked on one", () => {
+    open(message({ body: "<p>Hello</p>" }));
+    expect(screen.queryByText("Copy image")).toBeNull();
+    expect(screen.queryByText("Save image…")).toBeNull();
+  });
+
+  it("puts the picture's own actions above the message's when one was aimed at", () => {
+    // The complaint this answers: right-clicking a photograph offered Reply,
+    // Pin and Delete, and nothing at all about the photograph.
+    open(message({ body: "" }), true, undefined, "", {
+      src: "data:image/png;base64,iVBORw0KGgo=",
+      alt: "cat",
+    });
+    expect(screen.getByText("Copy image")).toBeTruthy();
+    expect(screen.getByText("Save image…")).toBeTruthy();
+    expect(screen.getByText("Pop out image")).toBeTruthy();
+    // A pasted picture is carried in the message: there is no address to copy
+    // and no page to open it at.
+    expect(screen.queryByText("Copy image link")).toBeNull();
+    expect(screen.queryByText("Open in browser")).toBeNull();
+    // ...and the message's own rows are still all there underneath.
+    expect(screen.getByText("Reply")).toBeTruthy();
+  });
+
+  it("offers the link rows for a picture that has an address", () => {
+    open(message(), true, undefined, "", { src: "https://files.example.com/7/cat.png", alt: "cat" });
+    expect(screen.getByText("Copy image link")).toBeTruthy();
+    expect(screen.getByText("Open in browser")).toBeTruthy();
+  });
+
+  it("copies the link a public file arrived as, not the local copy on screen", () => {
+    // A public or password-protected file is drawn from a downloaded copy, so
+    // the `src` on screen is a path off this machine's disk.
+    const writeText = stubClipboard();
+    open(message(), true, undefined, "", {
+      src: "asset://localhost/C:/Users/me/cat.png",
+      alt: "cat",
+      link: "https://files.example.com/7/cat.png",
+    });
+    fireEvent.click(screen.getByText("Copy image link"));
+    expect(writeText).toHaveBeenCalledWith("https://files.example.com/7/cat.png");
+  });
+
+  it("says on the row that the link went to the clipboard", async () => {
+    stubClipboard();
+    open(message(), true, undefined, "", { src: "https://files.example.com/7/cat.png", alt: "cat" });
+    fireEvent.click(screen.getByText("Copy image link"));
+    await screen.findByText("Copied");
+  });
+
+  it("offers no Copy text on a message that is nothing but pictures", () => {
+    // An empty string on the clipboard is a row that looks like it did nothing.
+    open(message({ body: "" }), true, undefined, "", {
+      src: "data:image/png;base64,iVBORw0KGgo=",
+      alt: "cat",
+    });
+    expect(screen.queryByText("Copy text")).toBeNull();
+  });
+
+  it("answers a second right-click itself instead of leaving it to the webview", () => {
+    // An open menu lays a sheet over the window, so the next right-click never
+    // reaches the message underneath - and what came up was the webview's own
+    // Back / Refresh / Inspect menu, drawn on top of this one.
+    const handlers = open();
+    const root = document.querySelector(".MuiModal-root");
+    expect(root).toBeTruthy();
+
+    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+    root!.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(handlers.onClose).toHaveBeenCalled();
+  });
 });
 
+describe("MessageMenu private windows", () => {
+  beforeEach(() => {
+    cleanup();
+    invokeMock.mockReset();
+    // The answer is cached for the session, so a test that leaves it resolved
+    // would otherwise decide the next test's menu for it.
+    resetPrivateBrowsingCache();
+    useAppStore.setState({ channels: [channel()], users: [], ownSession: 1 });
+  });
+
+  /** Answer the one backend question the row is gated on. */
+  function withPrivateSupport(available: boolean) {
+    invokeMock.mockImplementation((cmd) =>
+      Promise.resolve(cmd === "can_open_url_private" ? available : undefined),
+    );
+  }
+
+  /** Let the effect's answer land before the menu is read. */
+  async function settle() {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+
+  it("offers a private window for the link that was right-clicked", async () => {
+    withPrivateSupport(true);
+    open(message(), true, undefined, "", null, "https://example.com/a");
+    await settle();
+    fireEvent.click(screen.getByText("Open link in private window"));
+    expect(invokeMock).toHaveBeenCalledWith("open_url_private", { url: "https://example.com/a" });
+  });
+
+  it("says nothing where the default browser has no private mode", async () => {
+    // Safari, or a browser nobody recognises: the row could only ever fail.
+    withPrivateSupport(false);
+    open(message(), true, undefined, "", null, "https://example.com/a");
+    await settle();
+    expect(screen.queryByText("Open link in private window")).toBeNull();
+  });
+
+  it("says nothing when the right-click was not on a link", async () => {
+    withPrivateSupport(true);
+    open();
+    await settle();
+    expect(screen.queryByText("Open link in private window")).toBeNull();
+  });
+});

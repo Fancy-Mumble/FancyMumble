@@ -14,7 +14,9 @@ import { getPoll } from "@core/features/chat/poll/model";
 import { useWatchStart } from "@core/features/chat/watch/useWatchStart";
 import { readWatchMarker } from "@core/features/chat/watch/watchMarker";
 import { MENTION_CHIP_SELECTOR, readMentionChip } from "@core/utils/mentions";
+import { useInnerHtml } from "@core/utils/innerHtml";
 import { useSelfMention } from "@core/features/chat/selfMention";
+import { linkUnder } from "@core/features/elements/externalLinks";
 import { TID } from "@core/testids";
 import {
   CheckIcon,
@@ -30,6 +32,7 @@ import {
 import ReactionBar from "./ReactionBar";
 import EmojiPicker from "@standard/components/elements/EmojiPicker";
 import LinkPreviewCard from "./LinkPreviewCard";
+import { isOnlyLinks, prettyLinks } from "./prettyLinks";
 import { WatchMarker } from "./watch/WatchMarker";
 import PollCard from "./PollCard";
 import ReadReceiptIndicator from "./ReadReceiptIndicator";
@@ -47,10 +50,12 @@ import { AttachmentGallery, MediaGallery } from "./MediaGallery";
 import { OffloadedBody } from "./OffloadedBody";
 import { MentionPopover, type MentionTarget } from "./MentionPopover";
 import { LinkGuard, UserAvatar, Stack } from "../primitives";
+import { textColorForBg } from "@shared/profilecard";
 import { chamferedSurface, floatingSurface } from "../../theme";
 import { NEBULA_MONO, radius } from "../../tokens";
 import type { HoverEvent } from "../../clientState";
 import { bodyToCopyText } from "@core/features/chat/bodyText";
+import type { MenuImage } from "./MessageMenu";
 
 /** The schemes a link in a message may point at; standard's renderer allows
  *  exactly these, and anything else loses its `href` rather than its text. */
@@ -182,6 +187,30 @@ function bodyMarkupSx(theme: Theme) {
   } as const;
 }
 
+/**
+ * A bubble's plate, in its picked colours or its ordinary ones.
+ *
+ * Being picked used to be a ring in the accent drawn around the whole row,
+ * which on the own side is an accent ring around an accent bubble - a halo
+ * rather than a mark, and one that says nothing about which part of the row is
+ * the message. The mark is the bubble's own colour instead: a neutral card is
+ * pushed towards the accent, and a bubble that is already the accent has
+ * nowhere left to push, so it steps away from the ink it carries - which is
+ * the one direction that cannot cost the text its contrast, and is a deeper
+ * accent under white ink, a lighter one under dark.
+ */
+function bubbleSurface(theme: Theme, fill: string, line: string, picked: boolean) {
+  const { nebula } = theme.palette;
+  const away = textColorForBg(nebula.onAccent);
+  const pick = (colour: string) =>
+    colour === nebula.accent
+      ? `color-mix(in srgb, ${away} 26%, ${nebula.accent})`
+      : `color-mix(in srgb, ${nebula.accent} 26%, ${colour})`;
+  // Edge and fill move together: shifting only the fill leaves the old edge
+  // colour around it, which is the ring this replaced.
+  return picked ? chamferedSurface(theme, pick(fill), pick(line)) : chamferedSurface(theme, fill, line);
+}
+
 interface MessageRowProps {
   message: ChatMessage;
   avatar?: string | null;
@@ -221,8 +250,29 @@ interface MessageRowProps {
   onQuote?: (message: ChatMessage) => void;
   /** Bring the quoted message into view. */
   onJumpTo?: (messageId: string) => void;
-  /** Right-click anywhere on the message. */
-  onContextMenu?: (message: ChatMessage, at: { x: number; y: number }, editable: boolean) => void;
+  /**
+   * Right-click anywhere on the message.
+   *
+   * `selection` is whatever the reader had highlighted when they right-clicked,
+   * where the highlight touches this row - read here rather than in the menu
+   * because opening the menu is the moment it can be lost, and because a
+   * highlight running across three messages is still one thing to copy.
+   *
+   * `image` is the picture under the pointer, when the right-click landed on
+   * one, for the same reason: which of a block's four tiles was aimed at is a
+   * fact about the event, and it is gone by the time the menu is open. `link`
+   * is the same fact about an external link, and is read the same way.
+   */
+  onContextMenu?: (
+    message: ChatMessage,
+    at: { x: number; y: number },
+    context: {
+      editable: boolean;
+      selection: string;
+      image: MenuImage | null;
+      link: string | null;
+    },
+  ) => void;
   /** Compact mode: no avatar column, and the row is tighter for it. */
   compact?: boolean;
   /**
@@ -262,6 +312,65 @@ interface MessageRowProps {
    * lives outside it, in the list that asked for it.
    */
   restoring?: boolean;
+  /**
+   * The list is drawing the avatar itself, one per block, in a column that
+   * follows the block down the screen - so the row reserves the gutter and
+   * puts nothing in it.
+   *
+   * A picture that belongs to a run of messages cannot live inside the first
+   * of them: it can only stick within its own box, and that box is one
+   * message tall. Hoisting it to something that spans the whole run is what
+   * lets it travel to the last message of the block and stop there.
+   */
+  stickyAvatar?: boolean;
+}
+
+/** The width of the avatar gutter, shared with the list that hoists it. */
+export const AVATAR_COLUMN_PX = 38;
+
+interface MessageAvatarProps {
+  message: ChatMessage;
+  avatar?: string | null;
+  onOpenProfile: (session: number, event: HoverEvent) => void;
+  onHoverProfile?: (session: number, event: React.MouseEvent) => void;
+  onLeaveProfile?: () => void;
+  onContextMenuProfile?: (session: number, event: React.MouseEvent) => void;
+}
+
+/**
+ * The author's picture, as the handle on them that it is.
+ *
+ * Its own component because it is drawn from two places: inside the row, and -
+ * when the list hoists it - in a column of the list's own that spans the whole
+ * block. Both draw the same button, with the same click, hover and menu the
+ * author's name carries.
+ */
+export function MessageAvatar({
+  message,
+  avatar,
+  onOpenProfile,
+  onHoverProfile,
+  onLeaveProfile,
+  onContextMenuProfile,
+}: Readonly<MessageAvatarProps>) {
+  const session = message.sender_session;
+  return (
+    <Box
+      component="button"
+      onClick={(event: React.MouseEvent) => session != null && onOpenProfile(session, event)}
+      onMouseEnter={(event: React.MouseEvent) => session != null && onHoverProfile?.(session, event)}
+      onMouseLeave={onLeaveProfile}
+      onContextMenu={(event: React.MouseEvent) => session != null && onContextMenuProfile?.(session, event)}
+      sx={{ all: "unset", cursor: "pointer", display: "flex" }}
+    >
+      <UserAvatar
+        name={message.sender_name}
+        session={message.sender_session}
+        src={avatar}
+        size={AVATAR_COLUMN_PX}
+      />
+    </Box>
+  );
 }
 
 /**
@@ -303,6 +412,7 @@ export function MessageRow({
   editing = false,
   onEditingChange,
   restoring = false,
+  stickyAvatar = false,
 }: Readonly<MessageRowProps>) {
   const { t } = useTranslation(["nebulaChat", "chat"]);
   // The avatar and the name are two handles on one person, so they carry the
@@ -348,7 +458,11 @@ export function MessageRow({
   // Pictures leave the body before it is drawn: what is left is prose, which
   // is what the bubble is for, and the pictures become the gallery below it.
   const split = useMemo(() => splitBodyImages(content.html), [content.html]);
-  const body = useMemo(() => sanitizeBody(split.html), [split.html]);
+  // Sanitised, then read: a pasted link is its own anchor text, in full, and
+  // set in link blue over three wrapped lines it is louder than the message
+  // and than the card under it. `prettyLinks` trims what is *shown*; the href
+  // and what copy takes are untouched.
+  const body = useMemo(() => prettyLinks(sanitizeBody(split.html)), [split.html]);
   const poll =
     content.kind === "poll" ? (knownPolls.get(content.pollId) ?? getPoll(content.pollId)) : undefined;
   // Every marker in the body, because a batch of photographs is one message
@@ -433,6 +547,18 @@ export function MessageRow({
   };
 
   const hasBody = body.trim().length > 0;
+  /**
+   * A message that is nothing but the link, with a card under it.
+   *
+   * The card is the link - it names the source, prints the title and opens
+   * the same page - so the URL above it is the same fact twice, and the
+   * louder of the two is the one nobody reads. The bubble becomes the
+   * preview, which is what "one object" meant. A sentence with a link in it
+   * keeps the sentence.
+   */
+  const bodyIsTheLink = useMemo(() => isOnlyLinks(body), [body]);
+  /** The markup, handed to React as one object so a re-render leaves it be. */
+  const bodyHtml = useInnerHtml(body);
 
   /** The right-hand accent bubble - only your own messages, only in "bubbles". */
   const ownBubble = message.is_own && bubbleStyle === "bubbles";
@@ -457,10 +583,28 @@ export function MessageRow({
   const dense = compact || bubbleStyle === "compact";
   /** IRC lines: the name runs into the body instead of heading it. */
   const inlineName = bubbleStyle === "compact";
+  /**
+   * Whether the link preview is drawn inside the message rather than under it.
+   *
+   * A card standing on its own below a bubble is a second block in the river:
+   * it has the same left edge and the same width as any message, so a reader
+   * arriving at it has to work out which of its neighbours it belongs to -
+   * and where the link was the last thing said, the answer is a guess. Inside
+   * the bubble there is nothing to guess: the message and what its link turned
+   * out to be are one thing, which is what they always were.
+   *
+   * Only where there is a bubble to go inside, and only where the message
+   * still has its body: a cold-stored placeholder or an open editor is not a
+   * message the card can hang off, so in those the card waits below as before.
+   */
+  const embedsInBubble = hasEmbeds && hasBody && !offloaded && !editing && (ownBubble || carded);
+  /** Whether the text above the card is drawn at all. */
+  const showBodyText = !(embedsInBubble && bodyIsTheLink);
 
   const openReactionPicker = (event: React.MouseEvent) => setPicker({ x: event.clientX, y: event.clientY });
 
   const selecting = selected !== null;
+  const picked = selected === true;
 
   /**
    * Being mentioned marks the row and rings once.
@@ -489,7 +633,16 @@ export function MessageRow({
       event.preventDefault();
       // Same bar the row's own Edit is held to: a body in cold storage has no
       // text to edit, only the placeholder standing in for it.
-      onContextMenu(message, { x: event.clientX, y: event.clientY }, content.kind === "text" && !offloaded);
+      onContextMenu(
+        message,
+        { x: event.clientX, y: event.clientY },
+        {
+          editable: content.kind === "text" && !offloaded,
+          selection: selectionTouching(event.currentTarget as HTMLElement),
+          image: pictureUnder(event.target),
+          link: linkUnder(event.target),
+        },
+      );
     },
     // In selection mode the whole row is the checkbox: aiming at a small box
     // beside a wall of text is the slowest way to pick several things.
@@ -514,8 +667,11 @@ export function MessageRow({
         ? {
             cursor: "pointer",
             borderRadius: radius("md"),
-            outline: selected ? "2px solid" : "none",
-            outlineColor: "nebula.accent",
+            // The bubble's own fill says which message is picked; the row says
+            // so for everything hanging off it that is not the bubble - a
+            // gallery, a body in cold storage - and nothing else is wide
+            // enough to carry that.
+            ...(picked ? { background: (theme: Theme) => theme.palette.nebula.accentSoft } : {}),
           }
         : {}),
     },
@@ -535,6 +691,21 @@ export function MessageRow({
 
   const quotes = content.quoteIds.map((id) => <QuoteBlock key={id} messageId={id} onScrollTo={onJumpTo} />);
 
+  /** Whatever the bubble did not take stays where it was, under the message. */
+  const embedsBelow = hasEmbeds && !embedsInBubble;
+
+  /** The preview as the bubble draws it, or nothing. */
+  const bubbleEmbeds = embedsInBubble ? (
+    <LinkPreviewCard
+      attached
+      bleed={showBodyText ? BUBBLE_PAD : undefined}
+      ownBubble={ownBubble}
+      embeds={embeds!}
+      allowExternalResources={allowExternal}
+      channelId={message.channel_id}
+    />
+  ) : null;
+
   /**
    * Whether anything below the body is actually drawn.
    *
@@ -549,7 +720,7 @@ export function MessageRow({
     !!poll ||
     attachments.length > 0 ||
     !!watchSessionId ||
-    hasEmbeds ||
+    embedsBelow ||
     reactions.length > 0 ||
     mention !== null ||
     picker !== null;
@@ -570,7 +741,7 @@ export function MessageRow({
           into the body gets. */}
       <AttachmentGallery attachments={attachments} />
       {watchSessionId && <WatchMarker sessionId={watchSessionId} />}
-      {hasEmbeds && (
+      {embedsBelow && (
         <LinkPreviewCard
           embeds={embeds!}
           allowExternalResources={allowExternal}
@@ -600,6 +771,37 @@ export function MessageRow({
       )}
     </>
   );
+
+  /**
+   * The accent plate, drawn on whichever element is actually the bubble.
+   *
+   * With a preview inside, that is a shell holding the text and the card;
+   * without one it is the text itself, and keeping the plain message a single
+   * element is what stops this change from re-shaping every message that
+   * carries no link.
+   */
+  const ownSurfaceSx = (theme: Theme) => ({
+    maxWidth: "min(620px, 78%)",
+    px: `${BUBBLE_PAD.x}px`,
+    py: "9px",
+    borderRadius: `${radius("lg")} ${radius("lg")} ${radius("sm")} ${radius("lg")}`,
+    // Edge and fill together, because a skin may cut the bubble's corners: a
+    // real `border` is sliced off at the diagonal and leaves the cut
+    // unstroked, so the edge is drawn as a ground with the fill inset 1px
+    // over it. That is a plain 1px border on the skins that cut nothing, so
+    // there is one path here rather than two.
+    // Which of the two the skin asks for: a wash of the accent over the
+    // canvas, or the accent itself with its own ink. A solid plate states no
+    // second edge colour - the drawn skins that take it set a 2px hairline,
+    // and a lighter blue ring around a blue bubble reads as a halo it never
+    // had.
+    ...(theme.palette.nebulaSkin.bubbleOwn === "solid"
+      ? {
+          ...bubbleSurface(theme, theme.palette.nebula.accent, theme.palette.nebula.accent, picked),
+          color: theme.palette.nebula.onAccent,
+        }
+      : bubbleSurface(theme, theme.palette.nebula.accentSoft, theme.palette.nebula.accentLine, picked)),
+  });
 
   if (ownBubble) {
     return (
@@ -631,38 +833,75 @@ export function MessageRow({
         ) : (
           hasBody && (
             <LinkGuard>
-              <Box
-                onClick={onBodyClick}
-                sx={(theme) => ({
-                  maxWidth: "min(620px, 78%)",
-                  px: "14px",
-                  py: "9px",
-                  borderRadius: `${radius("lg")} ${radius("lg")} ${radius("sm")} ${radius("lg")}`,
-                  // Edge and fill together, because a skin may cut the
-                  // bubble's corners: a real `border` is sliced off at the
-                  // diagonal and leaves the cut unstroked, so the edge is
-                  // drawn as a ground with the fill inset 1px over it. That
-                  // is a plain 1px border on the skins that cut nothing, so
-                  // there is one path here rather than two.
-                  ...chamferedSurface(
-                    theme,
-                    theme.palette.nebula.accentSoft,
-                    theme.palette.nebula.accentLine,
-                  ),
-                  lineHeight: 1.55,
-                  wordBreak: "break-word",
-                  "& img": {
-                    maxWidth: "100%",
-                    borderRadius: radius("lg"),
-                    display: "block",
-                    cursor: "zoom-in",
-                  },
-                  "& a": { color: theme.palette.nebula.accent },
-                  ...bodyMarkupSx(theme),
-                  ...mentionSx(theme),
-                })}
-                dangerouslySetInnerHTML={{ __html: body }}
-              />
+              {/* The handler and the body's own typography stay on the text:
+                  the card below carries a picture of its own, and a handler
+                  over the pair would open the lightbox on it. */}
+              <BubbleShell
+                sx={
+                  embedsInBubble
+                    ? (theme) => ({
+                        ...ownSurfaceSx(theme),
+                        // A floor, not a width: sized to the sentence above
+                        // it, the same preview is a different shape on every
+                        // message that quotes the same link - and a long one
+                        // still gets to run out to the bubble's full width.
+                        minWidth: "min(460px, 78%)",
+                        // The nine points under a line of prose are not
+                        // enough under a card: the thumbnail and the button
+                        // are hard edges, and they sit on the bubble's rim
+                        // without this.
+                        pb: `${BUBBLE_PAD.bottom}px`,
+                        // With no text above it the poster is the whole
+                        // bubble, so there is nothing left to pad: the
+                        // padding would be a bare strip of the accent above
+                        // the picture, which is what a bubble with its
+                        // sentence removed looks like.
+                        ...(showBodyText ? {} : { p: 0 }),
+                      })
+                    : undefined
+                }
+                below={bubbleEmbeds}
+              >
+                {showBodyText && (
+                  <Box
+                    onClick={onBodyClick}
+                    sx={(theme) => ({
+                      ...(embedsInBubble ? {} : ownSurfaceSx(theme)),
+                      lineHeight: 1.55,
+                      wordBreak: "break-word",
+                      "& img": {
+                        maxWidth: "100%",
+                        borderRadius: radius("lg"),
+                        display: "block",
+                        cursor: "zoom-in",
+                      },
+                      "& a": {
+                        color:
+                          theme.palette.nebulaSkin.bubbleOwn === "solid"
+                            ? theme.palette.nebula.onAccent
+                            : theme.palette.nebula.accent,
+                        // No underline: at this size, in the accent, on its own
+                        // line, a link is already unmistakably a link, and the
+                        // rule under a trimmed URL is what made it shout.
+                        textDecoration: "none",
+                        "&:hover": { textDecoration: "underline" },
+                        // One line, always: even trimmed, a link next to a long
+                        // word can be pushed past the bubble, and a URL that
+                        // wraps is the noise this was trimmed to stop.
+                        display: "inline-block",
+                        maxWidth: "100%",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        verticalAlign: "bottom",
+                      },
+                      ...bodyMarkupSx(theme),
+                      ...mentionSx(theme),
+                    })}
+                    dangerouslySetInnerHTML={bodyHtml}
+                  />
+                )}
+              </BubbleShell>
             </LinkGuard>
           )
         )}
@@ -800,25 +1039,20 @@ export function MessageRow({
         />
       )}
       {/* Compact drops the column rather than leaving a 38px gutter with
-          nothing in it: the width is the avatar, not an indent. */}
+          nothing in it: the width is the avatar, not an indent. The gutter
+          stays even when the list has hoisted the picture out of it - what
+          the list draws is an overlay, and the text still has to make room. */}
       {!dense && (
-        <Box sx={{ width: 38, flex: "none" }}>
-          {!grouped && (
-            <Box
-              component="button"
-              onClick={(event) =>
-                message.sender_session != null && onOpenProfile(message.sender_session, event)
-              }
-              {...authorHandlers}
-              sx={{ all: "unset", cursor: "pointer", display: "flex" }}
-            >
-              <UserAvatar
-                name={message.sender_name}
-                session={message.sender_session}
-                src={avatar}
-                size={38}
-              />
-            </Box>
+        <Box sx={{ width: AVATAR_COLUMN_PX, flex: "none" }}>
+          {!grouped && !stickyAvatar && (
+            <MessageAvatar
+              message={message}
+              avatar={avatar}
+              onOpenProfile={onOpenProfile}
+              onHoverProfile={onHoverProfile}
+              onLeaveProfile={onLeaveProfile}
+              onContextMenuProfile={onContextMenuProfile}
+            />
           )}
         </Box>
       )}
@@ -854,49 +1088,92 @@ export function MessageRow({
         ) : (
           hasBody && (
             <LinkGuard>
-              <Box
-                onClick={onBodyClick}
-                sx={(theme) => ({
-                  mt: grouped || inlineName ? 0 : "2px",
-                  lineHeight: 1.55,
-                  wordBreak: "break-word",
-                  // "Bubbles" means every message in a rounded card, not only
-                  // yours: this one takes the surface colour and hangs its tail
-                  // on the left, mirroring the accent bubble on the right.
-                  ...(carded
-                    ? {
+              <BubbleShell
+                sx={
+                  embedsInBubble
+                    ? (theme) => ({
+                        mt: grouped ? 0 : "2px",
+                        // Wide enough for the card, and no wider than any
+                        // other bubble - see the own side for why it is a
+                        // floor rather than a width.
                         width: "fit-content",
+                        minWidth: "min(460px, 100%)",
                         maxWidth: "min(620px, 100%)",
-                        px: "14px",
-                        py: "9px",
+                        px: `${BUBBLE_PAD.x}px`,
+                        pt: "9px",
+                        // See the own side: a card wants more under it than
+                        // a sentence does.
+                        pb: `${BUBBLE_PAD.bottom}px`,
+                        // And no padding at all where the poster is the whole
+                        // bubble; see the own side.
+                        ...(showBodyText ? {} : { p: 0 }),
                         borderRadius: `${radius("lg")} ${radius("lg")} ${radius("lg")} ${radius("sm")}`,
-                        ...chamferedSurface(
-                          theme,
-                          theme.palette.nebula.card,
-                          theme.palette.nebula.line,
-                        ),
-                      }
-                    : {}),
-                  // Compact runs the body into the name above it.
-                  ...(inlineName ? { display: "inline" } : {}),
-                  // Pictures are lifted out before this renders, so this is
-                  // only a floor under anything that somehow arrives as markup
-                  // the splitter did not see - and it matches the gallery
-                  // rather than the cramped thumbnail it used to be.
-                  "& img": {
-                    maxWidth: "min(420px, 100%)",
-                    maxHeight: 320,
-                    borderRadius: radius("lg"),
-                    display: "block",
-                    mt: "8px",
-                    cursor: "zoom-in",
-                  },
-                  "& a": { color: theme.palette.nebula.accent },
-                  ...bodyMarkupSx(theme),
-                  ...mentionSx(theme),
-                })}
-                dangerouslySetInnerHTML={{ __html: body }}
-              />
+                        ...bubbleSurface(theme, theme.palette.nebula.card, theme.palette.nebula.line, picked),
+                      })
+                    : undefined
+                }
+                below={bubbleEmbeds}
+              >
+                {showBodyText && (
+                  <Box
+                    onClick={onBodyClick}
+                    sx={(theme) => ({
+                      ...(embedsInBubble ? {} : { mt: grouped || inlineName ? 0 : "2px" }),
+                      lineHeight: 1.55,
+                      wordBreak: "break-word",
+                      // "Bubbles" means every message in a rounded card, not only
+                      // yours: this one takes the surface colour and hangs its tail
+                      // on the left, mirroring the accent bubble on the right.
+                      // With a preview inside, the shell above is that card and
+                      // the body is only the text in it.
+                      ...(carded && !embedsInBubble
+                        ? {
+                            width: "fit-content",
+                            maxWidth: "min(620px, 100%)",
+                            px: "14px",
+                            py: "9px",
+                            borderRadius: `${radius("lg")} ${radius("lg")} ${radius("lg")} ${radius("sm")}`,
+                            ...bubbleSurface(
+                              theme,
+                              theme.palette.nebula.card,
+                              theme.palette.nebula.line,
+                              picked,
+                            ),
+                          }
+                        : {}),
+                      // Compact runs the body into the name above it.
+                      ...(inlineName ? { display: "inline" } : {}),
+                      // Pictures are lifted out before this renders, so this is
+                      // only a floor under anything that somehow arrives as markup
+                      // the splitter did not see - and it matches the gallery
+                      // rather than the cramped thumbnail it used to be.
+                      "& img": {
+                        maxWidth: "min(420px, 100%)",
+                        maxHeight: 320,
+                        borderRadius: radius("lg"),
+                        display: "block",
+                        mt: "8px",
+                        cursor: "zoom-in",
+                      },
+                      "& a": {
+                        color: theme.palette.nebula.accent,
+                        // One line, always: even trimmed, a link next to a long
+                        // word can be pushed past the bubble, and a URL that
+                        // wraps is the noise this was trimmed to stop.
+                        display: "inline-block",
+                        maxWidth: "100%",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        verticalAlign: "bottom",
+                      },
+                      ...bodyMarkupSx(theme),
+                      ...mentionSx(theme),
+                    })}
+                    dangerouslySetInnerHTML={bodyHtml}
+                  />
+                )}
+              </BubbleShell>
             </LinkGuard>
           )
         )}
@@ -915,6 +1192,44 @@ export function MessageRow({
         )}
       </Box>
     </Stack>
+  );
+}
+
+/**
+ * The bubble around a body that has a preview under it - and nothing at all
+ * where it has none.
+ *
+ * Without this the row would need two spellings of the same body, one wrapped
+ * and one bare, and the two would drift. A `sx` of `undefined` means "no
+ * bubble to draw": the children are handed straight back, so the styles the
+ * body carries for the flat and compact styles land on the same element they
+ * always did.
+ */
+/**
+ * The padding of a bubble that holds a preview, in points.
+ *
+ * Stated once because two things depend on it: the shell that applies it, and
+ * the poster inside, which cancels it to reach the bubble's own edges. A
+ * poster that cancels a number this file has since changed leaves a strip of
+ * the bubble showing under it, which is what a hardcoded pair of margins did.
+ */
+export const BUBBLE_PAD = { x: 14, bottom: 12 };
+
+function BubbleShell({
+  sx,
+  below,
+  children,
+}: Readonly<{
+  sx?: (theme: Theme) => object;
+  below: React.ReactNode;
+  children: React.ReactNode;
+}>) {
+  if (!sx) return <>{children}</>;
+  return (
+    <Box sx={sx}>
+      {children}
+      {below}
+    </Box>
   );
 }
 
@@ -987,6 +1302,51 @@ function BodyEditor({
       </Typography>
     </Stack>
   );
+}
+
+/**
+ * What the reader has highlighted, if the highlight touches this row.
+ *
+ * A selection that runs across several messages belongs to all of them, so any
+ * of the rows it crosses may offer to copy the whole of it; a selection
+ * somewhere else entirely is not this row's to offer. Chromium has already
+ * collapsed the selection by the time a right-click outside one reaches us,
+ * which is what makes "no selection" answer itself.
+ */
+function selectionTouching(row: HTMLElement): string {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed) return "";
+  const text = selection.toString().trim();
+  if (!text) return "";
+  for (let index = 0; index < selection.rangeCount; index += 1) {
+    if (selection.getRangeAt(index).intersectsNode(row)) return text;
+  }
+  return "";
+}
+
+/**
+ * The picture the pointer was over, or null.
+ *
+ * A message row is full of `<img>` - the author's avatar, an emote in the
+ * line, the thumbnail on a link card - and almost none of them is a picture
+ * anybody wants to save. Only the ones the galleries mark as one answer here,
+ * which is also what keeps the blurred copy behind a framed photograph out:
+ * it is the same picture twice, and only one of them is the picture.
+ *
+ * The `src` is read off the attribute rather than the property, because that
+ * is the spelling the lightbox and the galleries both index by - see
+ * `onBodyClick`.
+ */
+function pictureUnder(target: EventTarget | null): MenuImage | null {
+  if (!(target instanceof Element)) return null;
+  const picture = target.closest<HTMLImageElement>("img[data-picture]");
+  const src = picture?.getAttribute("src");
+  if (!src) return null;
+  return {
+    src,
+    alt: picture?.getAttribute("alt") ?? "",
+    link: picture?.getAttribute("data-picture-link") ?? null,
+  };
 }
 
 /** How far the hover pill stands off the message it belongs to. */
