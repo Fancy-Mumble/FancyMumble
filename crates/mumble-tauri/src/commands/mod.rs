@@ -10,6 +10,10 @@ pub(crate) mod account;
 pub(crate) mod admin;
 pub(crate) mod audio;
 pub(crate) mod audit;
+/// Handing a link to the default browser's *private* window, which no
+/// operating system offers as a verb and every browser offers as a switch.
+pub(crate) mod browser;
+pub(crate) mod canon_emotes;
 pub(crate) mod certificates;
 pub(crate) mod channels;
 pub(crate) mod chat_background;
@@ -37,6 +41,7 @@ pub(crate) mod presence;
 pub(crate) mod profile;
 pub(crate) mod public_servers;
 pub(crate) mod realtime;
+mod records;
 pub(crate) mod scheduled_message;
 /// Screen-share BROADCASTING needs OS capture APIs unavailable on Android.
 /// Viewing does not live here: it is the webview viewer layer plus the

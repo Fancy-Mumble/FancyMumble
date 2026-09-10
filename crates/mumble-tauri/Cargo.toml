@@ -70,6 +70,10 @@ hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
 percent-encoding = "2"
+# Parsing a link before it is handed to a browser as a process argument. What
+# comes back out of the parser is what gets spawned, which is what keeps a
+# message body from becoming a browser switch - see `commands::browser`.
+url = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = [
@@ -111,6 +115,14 @@ chrono = "0.4"
 mp4 = "0.14"
 openh264 = "0.8"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+# Decides whether the foreground window is a game worth overlaying. Not in the
+# desktop-only block below, even though only a desktop can *have* a foreground
+# window: `commands/game_overlay` gates the watcher and the overlay window
+# itself on non-Android and keeps its configuration types either way, so the
+# module needs this crate's types to compile everywhere. It builds anywhere -
+# the probe has a stub for the platforms with no window manager to ask
+# (`probe/stub.rs`), which is what macOS already uses.
+fancy-gamedetect = { path = "../fancy-gamedetect" }
 
 # Desktop-only dependencies (cpal, global shortcuts, and Opus are not available on Android).
 [target.'cfg(not(target_os = "android"))'.dependencies]
@@ -132,8 +144,6 @@ fancy-screenshare = { path = "../fancy-screenshare" }
 # Discord Rich Presence listener. Desktop only: it hosts the Discord IPC
 # endpoint (Unix socket / named pipe), which has no Android equivalent.
 fancy-presence = { path = "../fancy-presence" }
-# Decides whether the foreground window is a game worth overlaying.
-fancy-gamedetect = { path = "../fancy-gamedetect" }
 rodio = { version = "0.22", features = ["recording"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-window-state = "2"
@@ -165,6 +175,7 @@ oboe = "0.6.1"
 fancy-audio-device = { path = "../fancy-audio-device" }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
+    "Win32_Globalization",
     "Win32_Graphics_Dwm",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Shell",
@@ -177,6 +188,9 @@ windows-sys = { version = "0.61", features = [
 # tauri/wry pull in so the COM interface types are identical.
 webview2-com = "0.38"
 windows-core = "0.61"
+# Reading which browser owns `https`, for "open in a private window". A safe
+# wrapper rather than the raw Win32 calls: `unsafe_code` is denied here.
+windows-registry = "0.5"
 
 # DeepFilterNet3, on top of the features the desktop block above already asks
 # for - cargo unions the matching target tables, so this adds the backend

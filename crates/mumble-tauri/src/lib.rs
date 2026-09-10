@@ -233,6 +233,10 @@ fn handle_exit(app: &tauri::AppHandle) {
     #[cfg(all(dev, not(target_os = "android")))]
     app::dev_server::stop();
     if let Some(state) = app.try_state::<AppState>() {
+        // Before the offload store goes: a SignalV1 channel has no
+        // server-side history, so an unwritten message cache is a message
+        // nobody can ever get back.
+        state.flush_pchat_state();
         state.shutdown_offload_store();
         #[cfg(not(target_os = "android"))]
         state.presence.release_slot_files();
