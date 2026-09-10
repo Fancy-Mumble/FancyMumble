@@ -23,6 +23,9 @@ export type Surface =
   // off it. Two different questions, so two surfaces rather than two tabs.
   | "my-files"
   | "pinned"
+  // The server's greeting at full size, opened from the pin the pinned list
+  // keeps it as: a two-line row cannot carry a designed welcome.
+  | "welcome"
   | "server-info"
   // What the machine is playing. A surface rather than an aside: it is a thing
   // you glance at and dismiss, not a thing you keep open beside a conversation.
@@ -114,7 +117,9 @@ export function useFirstUnreadId(
  *
  * Leaving the conversation drops the selection - the ids belong to messages
  * that are no longer on screen, and acting on them from somewhere else is
- * never what was meant.
+ * never what was meant. So does unpicking the last message: with nothing
+ * picked the mode can do nothing but be cancelled, and taking the last one
+ * back is how a reader says they are done with it.
  */
 export function useMessageSelection(conversationKey: unknown) {
   const [active, setActive] = useState(false);
@@ -124,6 +129,13 @@ export function useMessageSelection(conversationKey: unknown) {
     setActive(false);
     setSelected(new Set());
   }, [conversationKey]);
+
+  // Watched rather than folded into `toggle`, because unpicking the last one
+  // is not the only way to arrive with nothing picked - a message somebody
+  // else deletes leaves the same empty mode, and it should end there too.
+  useEffect(() => {
+    if (active && selected.size === 0) setActive(false);
+  }, [active, selected]);
 
   const toggle = useCallback((messageId: string) => {
     setSelected((prev) => {
