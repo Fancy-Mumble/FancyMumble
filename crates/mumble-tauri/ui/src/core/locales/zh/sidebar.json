@@ -1,4 +1,4 @@
-{
+﻿{
   "userMenu": {
     "sectionLocal": "本地",
     "sectionAdmin": "管理",
@@ -74,6 +74,7 @@
     "protocolLabel": "协议",
     "protocolNone": "无（标准易失聊天）",
     "protocolFullArchive": "完整归档（全部消息）",
+    "protocolServerManaged": "服务器存储（服务器可读取历史）",
     "protocolSignalV1": "Signal V1（通过 Signal 协议端到端加密）",
     "maxHistoryLabel": "最大历史记录",
     "retentionLabel": "保留时间（天）",

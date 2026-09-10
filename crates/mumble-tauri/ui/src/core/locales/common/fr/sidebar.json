@@ -74,6 +74,7 @@
     "protocolLabel": "Protocole",
     "protocolNone": "Aucun (chat classique, non persistant)",
     "protocolFullArchive": "Archive complète (tous les messages)",
+    "protocolServerManaged": "Stocke par le serveur (le serveur peut lire l'historique)",
     "protocolSignalV1": "Signal V1 (E2EE via Signal Protocol)",
     "maxHistoryLabel": "Historique max.",
     "retentionLabel": "Conservation (jours)",

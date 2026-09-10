@@ -13,6 +13,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import type { LiveDocDocLink, LiveDocIndex } from "../../../types";
 import { useAppStore } from "../../../store";
+import { RECORD_KEYS, classify, getRecord, putRecord } from "../../accountRecords";
 import {
   addDocLink,
   addFolder,
@@ -27,8 +28,20 @@ import {
   renameNode,
 } from "./sidebarModel";
 
-/** Fixed private-storage key the sidebar is stored under. */
+/** Fixed private-storage key the sidebar is stored under, on a server whose
+ *  storage is the file-server plugin.
+ *
+ *  Deliberately a different string from `RECORD_KEYS.liveDocSidebar`: a server
+ *  that has both stores must not have a write to one land where the other
+ *  reads, because nothing keeps the two in step. */
 const SIDEBAR_KEY = "livedoc-sidebar";
+
+/** Where this connection's sidebar is kept.
+ *
+ *  Settled by the first load and read by every persist after it, so an edit
+ *  cannot be written to a store the load did not come from. `null` until a
+ *  load has run, and while it is null nothing is persisted at all. */
+let backend: "records" | "plugin" | null = null;
 /** Debounce window for persisting sidebar edits. */
 const PERSIST_DEBOUNCE_MS = 800;
 
@@ -39,9 +52,11 @@ interface SidebarState {
   /** True when the sidebar can be persisted (registered user + file server). */
   available: boolean;
   /** Why the sidebar is unavailable, so the UI can tell a genuine guest
-   *  ("register to keep documents") apart from a transient server error
-   *  ("couldn't load - try again"). `null` while available or before load. */
-  reason: "guest" | "error" | null;
+   *  ("register to keep documents") apart from a server with no private
+   *  storage at all ("this server keeps no library") and from a transient
+   *  server error ("couldn't load - try again"). `null` while available or
+   *  before load. */
+  reason: "guest" | "unsupported" | "error" | null;
   load: () => Promise<void>;
   addSection: (name: string) => void;
   addFolder: (parentId: string, name: string) => void;
@@ -72,15 +87,70 @@ function privateStorageCreds(): { baseUrl: string; sessionJwt: string } | null {
   return { baseUrl: cfg.baseUrl, sessionJwt: cfg.sessionJwt };
 }
 
+/** Whether this session is a registered account on the server.
+ *
+ *  Read from the session's own user entry rather than from
+ *  `fileServerConfig.registered`: that flag is what the file-server *plugin*
+ *  said about this session, and a server without that plugin (canon file
+ *  sharing, or no file service at all) has nobody to say it - the config the
+ *  client synthesises there reports `false` for everyone.  Telling a
+ *  registered user they are not registered is the bug this exists to stop. */
+function selfIsRegistered(): boolean {
+  const state = useAppStore.getState();
+  const me = state.users.find((u) => u.session === state.ownSession);
+  return me?.user_id != null;
+}
+
+/** What a load settled on, or that this server keeps no records at all. */
+type LoadResult = Pick<SidebarState, "index" | "loaded" | "available" | "reason"> | "unsupported";
+
+/** Read the sidebar out of the account record store.
+ *
+ *  Returns `"unsupported"` - and only that - when the server has no record
+ *  store, which is the one case where the caller should go on to try the
+ *  plugin. Every other outcome is this store's answer and is final: a refusal
+ *  means this account cannot keep records (a guest), and an error means the
+ *  read failed, so `current` is kept and persistence stays off - otherwise the
+ *  next edit would overwrite a real stored tree with an empty one. */
+async function loadFromRecords(current: LiveDocIndex): Promise<LoadResult> {
+  try {
+    const record = await getRecord(RECORD_KEYS.liveDocSidebar);
+    const index = record.found && record.value ? normaliseIndex(JSON.parse(record.value)) : emptyIndex();
+    return { index, loaded: true, available: true, reason: null };
+  } catch (e) {
+    const { failure } = classify(e);
+    if (failure === "unsupported") return "unsupported";
+    if (failure === "refused") {
+      // The account cannot keep records, which for this store means a guest.
+      // "guest" rather than "no storage": registering is what fixes it.
+      return { index: emptyIndex(), loaded: true, available: false, reason: "guest" };
+    }
+    console.warn("[liveDocSidebar] record load failed:", e);
+    return { index: current, loaded: true, available: false, reason: "error" };
+  }
+}
+
 function schedulePersist(index: LiveDocIndex): void {
-  const creds = privateStorageCreds();
-  if (!creds) return;
+  if (backend === null) return;
+  const creds = backend === "plugin" ? privateStorageCreds() : null;
+  if (backend === "plugin" && !creds) return;
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
     persistTimer = null;
-    void invoke("fileserver_put_private", {
-      request: { ...creds, key: SIDEBAR_KEY, value: JSON.stringify(index) },
-    }).catch((e) => console.warn("[liveDocSidebar] persist failed:", e));
+    const value = JSON.stringify(index);
+    const written =
+      creds === null
+        ? putRecord(RECORD_KEYS.liveDocSidebar, value)
+        : invoke("fileserver_put_private", { request: { ...creds, key: SIDEBAR_KEY, value } });
+    void Promise.resolve(written).catch((e) => {
+      // Shown, not only logged: a persist that fails - the record ceiling,
+      // a dropped connection - leaves the user editing a library that is no
+      // longer being saved, and the sidebar has an error state and a retry
+      // for exactly that. `available` stays false until a reload succeeds,
+      // so the next edit cannot write over what the server still holds.
+      console.warn("[liveDocSidebar] persist failed:", e);
+      useLiveDocSidebarStore.setState({ available: false, reason: "error" });
+    });
   }, PERSIST_DEBOUNCE_MS);
 }
 
@@ -98,10 +168,25 @@ export const useLiveDocSidebarStore = create<SidebarState>((set, get) => {
     reason: null,
 
     load: async () => {
+      // The server's own store first. It works without a plugin, so a server
+      // that has it needs nothing else; only "no such store" is a reason to
+      // go on and look for the plugin.
+      const fromServer = await loadFromRecords(get().index);
+      if (fromServer !== "unsupported") {
+        backend = "records";
+        set(fromServer);
+        return;
+      }
+      backend = "plugin";
+
       const creds = privateStorageCreds();
       if (!creds) {
-        // No registered session / no file server: a genuine guest.
-        set({ index: emptyIndex(), loaded: true, available: false, reason: "guest" });
+        // Nowhere to persist to.  Which of the two reasons it is decides what
+        // the UI says: a guest can fix it by registering, a registered user on
+        // a server with no private storage cannot, and telling them to
+        // register is both wrong and unactionable.
+        const reason = selfIsRegistered() ? "unsupported" : "guest";
+        set({ index: emptyIndex(), loaded: true, available: false, reason });
         return;
       }
       try {
@@ -120,8 +205,12 @@ export const useLiveDocSidebarStore = create<SidebarState>((set, get) => {
         // Distinguish a genuine guest (the server replied 403 - the backend
         // prefixes that error with "forbidden:") from a transient server/network
         // error, so the UI shows the right message instead of always claiming
-        // the user isn't registered.
-        const isGuest = String(e ?? "").startsWith("forbidden:");
+        // the user isn't registered.  A 403 alone does not prove guest: the
+        // file-server answers a rejected session token - an expired one, say -
+        // the same way, and that must not read as "you aren't registered"
+        // either.
+        const forbidden = String(e ?? "").startsWith("forbidden:");
+        const isGuest = forbidden && !selfIsRegistered();
         set({ loaded: true, available: false, reason: isGuest ? "guest" : "error" });
       }
     },

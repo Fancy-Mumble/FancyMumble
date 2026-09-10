@@ -256,5 +256,30 @@
     "party": "WATCH PARTY",
     "synced": "Synced",
     "free": "Free"
+  },
+  "linkPreview": {
+    "viewDeal": "View deal",
+    "fromPrice": "from {{price}}",
+    "thumbnailOnly": "Thumbnail only · open for full size",
+    "by": "by {{author}}",
+    "inStock": "In stock",
+    "outOfStock": "Out of stock",
+    "preorder": "Pre-order",
+    "fact": {
+      "sellers": "{{value}} shops",
+      "shipping": "{{value}} shipping",
+      "rating": "★ {{value}}"
+    }
+  },
+  "mobile": {
+    "audio": "Audio",
+    "connected": "{{count}} connected",
+    "disconnect": "Disconnect",
+    "isSpeaking": "Speaking",
+    "leaveVoice": "Leave voice",
+    "listening": "Listening",
+    "micMuted": "Mic muted",
+    "speaking": "{{name}} speaking · {{count}} connected",
+    "voiceActive": "Voice active"
   }
 }

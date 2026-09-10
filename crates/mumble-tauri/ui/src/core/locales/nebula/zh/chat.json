@@ -256,5 +256,30 @@
     "party": "一起看",
     "synced": "已同步",
     "free": "自由"
+  },
+  "linkPreview": {
+    "viewDeal": "查看优惠",
+    "fromPrice": "起价 {{price}}",
+    "thumbnailOnly": "仅缩略图 · 打开查看原图",
+    "by": "作者 {{author}}",
+    "inStock": "有货",
+    "outOfStock": "缺货",
+    "preorder": "预售",
+    "fact": {
+      "sellers": "{{value}} 家商店",
+      "shipping": "配送：{{value}}",
+      "rating": "★ {{value}}"
+    }
+  },
+  "mobile": {
+    "audio": "音频",
+    "connected": "{{count}} 人在线",
+    "disconnect": "断开",
+    "isSpeaking": "正在说话",
+    "leaveVoice": "退出语音",
+    "listening": "正在聆听",
+    "micMuted": "麦克风已静音",
+    "speaking": "{{name}} 正在说话 · {{count}} 人在线",
+    "voiceActive": "语音已开"
   }
 }

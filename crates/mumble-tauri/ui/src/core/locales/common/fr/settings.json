@@ -142,7 +142,7 @@
     "expertModeHintExpert": "Contrôle total - options audio avancées, ports personnalisés et libellés sont visibles.",
     "klipyApiKey": "Clé API Klipy",
     "klipyApiKeyHintBefore": "Indiquez votre propre clé API",
-    "klipyApiKeyHintAfter": "pour la recherche de GIFs / stickers. Laissez vide pour utiliser la clé intégrée.",
+    "klipyApiKeyHintAfter": "pour la recherche de GIFs / stickers. Laissez vide pour utiliser celle du serveur : la plupart en fournissent une, une clé ici n'est nécessaire que pour les autres.",
     "developerMode": "Mode développeur",
     "developerModeHint": "Affiche les statistiques de débogage (nombre de messages, contenu déchargé, utilisation mémoire) dans le panneau d'information du serveur.",
     "logLevel": "Niveau de journal",

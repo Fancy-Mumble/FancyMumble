@@ -256,5 +256,30 @@
     "party": "SESSION COMMUNE",
     "synced": "Synchro",
     "free": "Libre"
+  },
+  "linkPreview": {
+    "viewDeal": "Voir l'offre",
+    "fromPrice": "à partir de {{price}}",
+    "thumbnailOnly": "Miniature seule · ouvrir en taille réelle",
+    "by": "par {{author}}",
+    "inStock": "En stock",
+    "outOfStock": "Rupture de stock",
+    "preorder": "Précommande",
+    "fact": {
+      "sellers": "{{value}} boutiques",
+      "shipping": "Livraison : {{value}}",
+      "rating": "★ {{value}}"
+    }
+  },
+  "mobile": {
+    "audio": "Audio",
+    "connected": "{{count}} connectés",
+    "disconnect": "Déconnecter",
+    "isSpeaking": "Parle",
+    "leaveVoice": "Quitter le vocal",
+    "listening": "À l'écoute",
+    "micMuted": "Micro coupé",
+    "speaking": "{{name}} parle · {{count}} connectés",
+    "voiceActive": "Vocal actif"
   }
 }

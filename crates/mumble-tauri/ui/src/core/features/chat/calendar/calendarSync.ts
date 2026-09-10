@@ -12,6 +12,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { RECORD_KEYS, classify, getRecord, putRecord } from "../../accountRecords";
 import { useAppStore } from "../../../store";
 import { sendPluginMessage } from "../../../store/plugins";
 
@@ -68,8 +69,34 @@ export function canPersistCalendar(): boolean {
   return fsConfig() !== null;
 }
 
-/** Load the user's calendar blob from the private store, or null. */
+/** Where this connection's calendar is kept.
+ *
+ *  Settled by the first load, so a save cannot land in a store the load did
+ *  not come from. */
+let backend: "records" | "plugin" | null = null;
+
+/** Load the user's calendar blob from the server, or null.
+ *
+ *  The account record store first, and the file-server plugin only where the
+ *  server has no record store: the plugin needs an operator to have loaded it,
+ *  and the record store is simply part of the server. */
 export async function loadCalendarBlob(): Promise<string | null> {
+  try {
+    const record = await getRecord(RECORD_KEYS.calendar);
+    backend = "records";
+    return record.found ? record.value : null;
+  } catch (e) {
+    if (classify(e).failure !== "unsupported") {
+      // A guest, or a failed read. Neither is a reason to write into the
+      // plugin instead - this server keeps records and this account's answer
+      // is the one that counts.
+      backend = "records";
+      console.warn("[calendar] record load failed:", e);
+      return null;
+    }
+  }
+
+  backend = "plugin";
   const cfg = fsConfig();
   if (!cfg) return null;
   try {
@@ -84,6 +111,17 @@ export async function loadCalendarBlob(): Promise<string | null> {
 
 /** Persist the user's calendar blob to the private store. */
 export async function saveCalendarBlob(json: string): Promise<void> {
+  // Nothing is written before a load has said where this calendar lives: a
+  // save that guessed would write a fresh calendar over a stored one.
+  if (backend === null) return;
+  if (backend === "records") {
+    try {
+      await putRecord(RECORD_KEYS.calendar, json);
+    } catch (e) {
+      console.error("[calendar] save failed:", e);
+    }
+    return;
+  }
   const cfg = fsConfig();
   if (!cfg) return;
   try {

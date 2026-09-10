@@ -12,6 +12,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { useAppStore } from "../../../store";
+import { RECORD_KEYS, classify, getRecord, putRecord } from "../../accountRecords";
 import type { CslItem } from "./liveDocCslTypes";
 
 const MASTER_KEY = "livedoc-sources-master";
@@ -34,16 +35,45 @@ function creds(): { baseUrl: string; sessionJwt: string } | null {
   return { baseUrl: cfg.baseUrl, sessionJwt: cfg.sessionJwt };
 }
 
+/** Where this connection's master list is kept.
+ *
+ *  Settled by the first load and read by every persist after it, so an edit
+ *  cannot be written to a store the load did not come from. */
+let backend: "records" | "plugin" | null = null;
+
 function schedulePersist(sources: CslItem[]): void {
-  const c = creds();
-  if (!c) return;
+  if (backend === null) return;
+  const c = backend === "plugin" ? creds() : null;
+  if (backend === "plugin" && !c) return;
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
     persistTimer = null;
-    void invoke("fileserver_put_private", {
-      request: { ...c, key: MASTER_KEY, value: JSON.stringify(sources) },
-    }).catch((e) => console.warn("[liveDocMasterSources] persist failed:", e));
+    const value = JSON.stringify(sources);
+    const written =
+      c === null
+        ? putRecord(RECORD_KEYS.liveDocSources, value)
+        : invoke("fileserver_put_private", { request: { ...c, key: MASTER_KEY, value } });
+    void Promise.resolve(written).catch((e) => console.warn("[liveDocMasterSources] persist failed:", e));
   }, PERSIST_DEBOUNCE_MS);
+}
+
+/** Read the master list out of the account record store.
+ *
+ *  `"unsupported"` - and only that - means the server has no record store and
+ *  the caller should try the plugin. Anything else is final. */
+async function loadFromRecords(): Promise<{ sources: CslItem[]; available: boolean } | "unsupported"> {
+  try {
+    const record = await getRecord(RECORD_KEYS.liveDocSources);
+    const parsed = record.found && record.value ? (JSON.parse(record.value) as CslItem[]) : [];
+    return { sources: Array.isArray(parsed) ? parsed : [], available: true };
+  } catch (e) {
+    if (classify(e).failure === "unsupported") return "unsupported";
+    // A guest, or a read that failed. Either way the list stays in memory for
+    // the session and is never written back, because a failed read says
+    // nothing about what is stored.
+    console.warn("[liveDocMasterSources] record load failed:", e);
+    return { sources: [], available: false };
+  }
 }
 
 export const useLiveDocMasterSourcesStore = create<MasterSourcesState>((set, get) => {
@@ -56,6 +86,14 @@ export const useLiveDocMasterSourcesStore = create<MasterSourcesState>((set, get
     loaded: false,
     available: false,
     load: async () => {
+      const fromServer = await loadFromRecords();
+      if (fromServer !== "unsupported") {
+        backend = "records";
+        set({ ...fromServer, loaded: true });
+        return;
+      }
+      backend = "plugin";
+
       const c = creds();
       if (!c) {
         set({ loaded: true, available: false });

@@ -8,6 +8,7 @@
   "quickConnect": "Connexion rapide",
   "app": {
     "back": "Retour",
+    "sections": "Sections",
     "addServer": "+ Ajouter",
     "searchServers": "Rechercher des serveurs",
     "searchChannels": "Rechercher des salons",
@@ -24,7 +25,19 @@
     "noFileSharing": "Ce serveur n’a pas de partage de fichiers",
     "pickConversationFirst": "Choisissez d’abord une conversation",
     "deleteChannelTitle": "Supprimer #{{channel}} ?",
-    "deleteChannelBody": "Ses sous-salons et ses messages enregistrés partent avec lui. Cette action est irréversible."
+    "deleteChannelBody": "Ses sous-salons et ses messages enregistrés partent avec lui. Cette action est irréversible.",
+    "connect": "Se connecter",
+    "pickAServer": "Choisir un serveur",
+    "savedServers": "Serveurs enregistrés",
+    "addAServer": "Ajouter un serveur",
+    "joinAs": "Rejoindre en tant que",
+    "newIdentity": "Nouveau",
+    "connectAs": "Se connecter en tant que {{name}}",
+    "autoConnect": "Connexion auto au lancement",
+    "servers": "Serveurs",
+    "identityCount_one": "{{count}} identité",
+    "identityCount_other": "{{count}} identités",
+    "anonymous": "Anonyme"
   },
   "presence": {
     "nobodyHere": "Personne ici",
