@@ -29,6 +29,7 @@ import { SearchBox } from "@nebula/components/primitives/SearchBox";
 import { Composer } from "@nebula/components/chat/Composer";
 import { ChatHeader } from "@nebula/components/chat/ChatHeader";
 import { MessageRow } from "@nebula/components/chat/MessageRow";
+import { DayDivider } from "@nebula/components/chat/MessageList";
 import { ChatBackdrop } from "@nebula/components/chat/ChatBackdrop";
 import { useAppStore } from "@core/store";
 import type { ChatMessage } from "@core/types";
@@ -69,6 +70,9 @@ useAppStore.setState({
   // The backdrop reads the open room's name off the store to set its wordmark.
   channels: CHANNELS as never,
   currentChannel: 1,
+  // What the backdrop's wordmark reads: the room on screen, not the room in
+  // voice. They are the same here; the app is where they are not.
+  selectedChannel: 1,
   users: USERS as never,
   polls: new Map(),
   linkEmbeds: new Map(),
@@ -159,6 +163,12 @@ function Shell() {
           height: Number(params.get("h") ?? 720),
           display: "flex",
           overflow: "hidden",
+          // Whatever the client's own root wears, so a seam between a panel
+          // and the window edge shows up here rather than only in the app.
+          border:
+            theme.palette.nebulaSkin.chrome === "stencil"
+              ? "none"
+              : `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
           background: theme.palette.nebula.bg0,
           backgroundImage: theme.palette.nebula.window,
           fontFamily: theme.palette.nebulaSkin.font,
@@ -266,6 +276,7 @@ function Shell() {
             }}
           >
             <ChatBackdrop />
+            <DayDivider label="Today" />
             {THREAD.map((m) => (
               <MessageRow key={m.message_id} message={m} bubbleStyle="bubbles" />
             ))}

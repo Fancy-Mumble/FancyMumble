@@ -101,12 +101,12 @@ createRoot(document.getElementById("root")!).render(
 );
 
 // ?drag=1 drives a real pointer drag after mount, so a screenshot can show the
-// ghost and the drop line that only exist mid-gesture.
+// gap and the ghost that only exist mid-gesture. The first server, by its
+// picture: there is no i18n here, so the labels are still their keys and say
+// nothing about which server they belong to.
 function simulateDrag() {
-  const tile = [...document.querySelectorAll("button")].find(
-    (candidate) =>
-      (candidate.getAttribute("aria-label") ?? "").startsWith("magical.rocks") ||
-      (candidate.textContent ?? "").includes("magical.rocks"),
+  const tile = [...document.querySelectorAll("button")].find((candidate) =>
+    candidate.querySelector("img"),
   ) as HTMLElement | undefined;
   if (!tile) return;
   const box = tile.getBoundingClientRect();

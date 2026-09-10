@@ -10,8 +10,9 @@ import { createRoot } from "react-dom/client";
 import { CssBaseline, Box } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
 import { createNebulaTheme } from "@nebula/theme";
+import { nebulaScheme } from "@nebula/themeScheme";
 import { MessageList } from "@nebula/components/chat/MessageList";
-import { MessageRow } from "@nebula/components/chat/MessageRow";
+import { MessageAvatar, MessageRow } from "@nebula/components/chat/MessageRow";
 import { useAppStore } from "@core/store";
 import type { ChatMessage } from "@core/types";
 import "@standard/theme.css";
@@ -60,10 +61,33 @@ const THREAD: ChatMessage[] = [
   msg("xzx+", false),
   msg("gizg", false),
   msg("save me a slot, 20 min out. jonas don't dodge the first lobby this time", true, 120_000),
+  // A run longer than the pane, which is the case the travelling picture
+  // exists for: it has to stay beside the run and stop at the foot of it.
+  ...Array.from({ length: 14 }, (_, index) =>
+    msg(`long run, line ${index + 1} - the picture beside this should follow it down`, false, 20_000),
+  ),
+  msg('<img src="https://placehold.co/420x220/2b6cb0/ffffff/png" alt="">', false, 20_000),
+  msg("and here somebody else cuts in, so the picture above must stop", true, 90_000),
+  ...Array.from({ length: 8 }, (_, index) =>
+    msg(`back again, line ${index + 1} - a second run, a second picture`, false, 20_000),
+  ),
 ];
 
+/**
+ * Which skin to draw in: `?skin=<theme id>` picks one out of the catalogue,
+ * so the river can be eyeballed in the drawn chrome as well as the plain one.
+ */
+const skinId = new URLSearchParams(location.search).get("skin");
+const scheme = nebulaScheme(skinId, "dark");
+const theme = scheme
+  ? createNebulaTheme("dark", scheme.tokens, null, scheme.skin)
+  : createNebulaTheme("dark");
+
+/** Scroll the river on load, so a headless shot can be taken part-way down. */
+const scrollTo = Number(new URLSearchParams(location.search).get("scroll") ?? "0");
+
 createRoot(document.getElementById("root")!).render(
-  <ThemeProvider theme={createNebulaTheme("dark")}>
+  <ThemeProvider theme={theme}>
     <CssBaseline />
     <Box sx={{ p: "24px", background: "#0a0e1a" }}>
       <Box
@@ -80,6 +104,9 @@ createRoot(document.getElementById("root")!).render(
         <MessageList
           messages={THREAD}
           users={[]}
+          renderAvatar={(message, avatar) => (
+            <MessageAvatar message={message} avatar={avatar} onOpenProfile={() => {}} />
+          )}
           renderMessage={(message, avatar, grouped, restoring, endsGroup) => (
             <MessageRow
               message={message}
@@ -87,6 +114,7 @@ createRoot(document.getElementById("root")!).render(
               grouped={grouped}
               endsGroup={endsGroup}
               restoring={restoring}
+              stickyAvatar
               onOpenProfile={() => {}}
             />
           )}
@@ -95,3 +123,16 @@ createRoot(document.getElementById("root")!).render(
     </Box>
   </ThemeProvider>,
 );
+
+// The list mounts pinned to the bottom, so a shot part-way down has to be
+// asked for: `?scroll=<px>` puts the river there once it has laid itself out.
+if (scrollTo > 0) {
+  setTimeout(() => {
+    for (const node of document.querySelectorAll<HTMLElement>("div")) {
+      if (node.scrollHeight > node.clientHeight + 40) {
+        node.scrollTop = scrollTo;
+        return;
+      }
+    }
+  }, 400);
+}
