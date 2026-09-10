@@ -1,18 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { requestFriendChannel } from "@core/friendsChannel";
 import { FRIENDS_CHANGED_EVENT, getFriends, removeFriend, type Friend } from "@core/friendsStorage";
+import { resolveFriendMatch, type FriendMatch } from "@core/friendsPresence";
 import { getSavedServers, getServerPassword } from "@core/serverStorage";
 import { useAppStore } from "@core/store";
 import { MessageCircleIcon, SearchIcon, TrashIcon, UsersGroupIcon } from "@ui/icons";
 import { Button, IconButton, ModalSurface, SearchField } from "../primitives";
 import styles from "./FriendsSurface.module.css";
 
-interface FriendsMatch {
-  serverId: string;
-  userSession: number;
-  userName: string;
-}
+type FriendsMatch = FriendMatch;
 
 const REFRESH_INTERVAL_MS = 15_000;
 
@@ -52,11 +48,8 @@ export default function FriendsSurface({ onClose }: { onClose: () => void }) {
       const next: Record<string, FriendsMatch> = {};
       await Promise.all(
         friends.map(async (friend) => {
-          if (!friend.userHash) return;
           try {
-            const match = await invoke<FriendsMatch | null>("find_user_by_hash", {
-              userHash: friend.userHash,
-            });
+            const match = await resolveFriendMatch(friend, sessions);
             if (match) next[friend.id] = match;
           } catch {
             // A server without the cross-session lookup still supports saved/offline friends.
@@ -120,10 +113,7 @@ export default function FriendsSurface({ onClose }: { onClose: () => void }) {
             saved ? await getServerPassword(saved.id) : null,
           );
         serverId = useAppStore.getState().activeServerId ?? undefined;
-        if (friend.userHash)
-          match =
-            (await invoke<FriendsMatch | null>("find_user_by_hash", { userHash: friend.userHash })) ??
-            undefined;
+        match = (await resolveFriendMatch(friend, useAppStore.getState().sessions)) ?? undefined;
       }
       if (!serverId) {
         setStatus(`No connection information is available for ${friend.userName}.`);

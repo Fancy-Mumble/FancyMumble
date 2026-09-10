@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 import DOMPurify from "dompurify";
 import { useAppStore } from "@core/store";
 import type { ChatMessage } from "@core/types";
@@ -6,6 +6,7 @@ import { getReactions, hasReacted } from "@core/features/chat/reaction/reactionS
 import { getReadersForMessage } from "@core/features/chat/readreceipt/readReceiptStore";
 import { FANCY_FILE_MARKER_RE } from "@core/features/chat/fileAttachments";
 import { useLinkPreviews } from "@core/features/chat/useLinkPreviews";
+import { useInnerHtml } from "@core/utils/innerHtml";
 import { CheckIcon, CopyIcon, EditIcon, PinIcon, QuoteIcon, TrashIcon } from "@ui/icons";
 import WatchStartButton from "@ui/standard/components/chat/watch/WatchStartButton";
 import WatchTogetherCard from "@ui/standard/components/chat/watch/WatchTogetherCard";
@@ -62,10 +63,13 @@ export default function MessageItem({
     : [];
   void reactionVersion;
   void readReceiptVersion;
-  const safeBody = DOMPurify.sanitize(message.body, {
-    USE_PROFILES: { html: true },
-    ADD_ATTR: ["target", "rel"],
-  });
+  const safeBody = useMemo(
+    () => DOMPurify.sanitize(message.body, { USE_PROFILES: { html: true }, ADD_ATTR: ["target", "rel"] }),
+    [message.body],
+  );
+  // Stable across renders, or React rewrites the body's `innerHTML` every
+  // time the row re-renders and drops any selection standing in it.
+  const bodyHtml = useInnerHtml(safeBody);
   const pollId = /<!--\s*FANCY_POLL:([^\s]+)\s*-->/.exec(message.body)?.[1];
   const filePayload = FANCY_FILE_MARKER_RE.exec(message.body)?.[1];
   const watchSessionId = /<!--\s*FANCY_WATCH:([^\s]+)\s*-->/.exec(message.body)?.[1];
@@ -180,12 +184,10 @@ export default function MessageItem({
             mountKey={`new-ui-${message.message_id ?? message.timestamp}`}
           />
         ) : (
-          <div className={extensionStyles.messageBody} dangerouslySetInnerHTML={{ __html: safeBody }} />
+          <div className={extensionStyles.messageBody} dangerouslySetInnerHTML={bodyHtml} />
         )}
         {!watchSessionId && <WatchStartButton body={message.body} channelId={message.channel_id} />}
-        {embeds && embeds.length > 0 && (
-          <LinkPreviews embeds={embeds} allowExternal={allowExternal} />
-        )}
+        {embeds && embeds.length > 0 && <LinkPreviews embeds={embeds} allowExternal={allowExternal} />}
         {reactions.length > 0 && (
           <div className={extensionStyles.reactionRow}>
             {reactions.map((reaction) => (
