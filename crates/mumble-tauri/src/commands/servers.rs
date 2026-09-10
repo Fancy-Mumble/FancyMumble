@@ -1,6 +1,6 @@
 //! Multi-server session commands.
 
-use crate::state::{AppState, ServerId, SessionMeta, UserHashMatch};
+use crate::state::{AppState, HashLookup, ServerId, SessionMeta, UserHashMatch};
 
 #[tauri::command]
 pub(crate) fn list_servers(state: tauri::State<'_, AppState>) -> Vec<SessionMeta> {
@@ -21,14 +21,27 @@ pub(crate) async fn set_active_server(
 }
 
 /// Find a user across every currently-connected session by their TLS
-/// certificate hash.  Used to resolve cross-server user shortcuts when
-/// the bound user has a stable certificate identity.
+/// certificate hash.  Used to resolve cross-server user shortcuts and saved
+/// friends when the bound user has a stable certificate identity.
+///
+/// One certificate can be used by more than one account, so a caller that knows
+/// which registered account it saved (`user_id`) and which session it saved it
+/// on (`server_id`) should pass both: on that server the account decides, and a
+/// stranger holding the same certificate is not returned.  Callers that only
+/// ever knew a hash (user shortcuts) may omit them and get the old
+/// certificate-only search.
 #[tauri::command]
 pub(crate) fn find_user_by_hash(
     state: tauri::State<'_, AppState>,
     user_hash: String,
+    user_id: Option<u32>,
+    server_id: Option<ServerId>,
 ) -> Option<UserHashMatch> {
-    state.registry.find_user_by_hash(&user_hash)
+    state.registry.find_user_by_hash(HashLookup {
+        user_hash: &user_hash,
+        user_id,
+        origin: server_id,
+    })
 }
 
 /// Look up a user on a specific connected server by display name.

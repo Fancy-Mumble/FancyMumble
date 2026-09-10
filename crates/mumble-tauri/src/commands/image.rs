@@ -122,3 +122,59 @@ pub(crate) async fn write_attachment_bytes(
         .map_err(|e| format!("write {}: {e}", file.display()))?;
     Ok(file.to_string_lossy().into_owned())
 }
+
+// -- saving a picture somewhere the reader chose -------------------------
+//
+// The webview can put a picture on the clipboard on its own, but it cannot
+// write one to a path: a `<a download>` is inert inside the app window, and
+// nothing else in the frontend reaches the filesystem. So the bytes come
+// across the IPC boundary already resolved - inline, an object URL or a
+// file-server download, all three arrive here as the same base64 - and the
+// dialog is opened on this side, which is what makes the only path ever
+// written to one that a person picked in it.
+
+/// Ask where a picture should be saved, then write it there.
+///
+/// Returns the chosen path, or `None` when the dialog was dismissed.
+#[tauri::command]
+pub(crate) async fn save_image_as(
+    app_handle: tauri::AppHandle,
+    data_base64: String,
+    default_filename: String,
+) -> Result<Option<String>, String> {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    use tauri_plugin_dialog::DialogExt;
+
+    let bytes = STANDARD
+        .decode(&data_base64)
+        .map_err(|e| format!("decode image bytes: {e}"))?;
+
+    // The filter is the picture's own kind rather than a list of every kind,
+    // so the dialog offers to keep the extension it arrived with instead of
+    // quietly renaming a JPEG to `.png`.
+    let extension = default_filename
+        .rsplit_once('.')
+        .map(|(_, ext)| ext.to_ascii_lowercase())
+        .filter(|ext| !ext.is_empty() && ext.chars().all(|c| c.is_ascii_alphanumeric()))
+        .unwrap_or_else(|| "png".to_owned());
+
+    let chosen = app_handle
+        .dialog()
+        .file()
+        .set_file_name(default_filename)
+        .add_filter("Image", &[extension.as_str()])
+        .blocking_save_file();
+
+    let Some(file_path) = chosen else {
+        return Ok(None);
+    };
+
+    let path = file_path
+        .into_path()
+        .map_err(|e| format!("invalid path: {e}"))?;
+    tokio::fs::write(&path, &bytes)
+        .await
+        .map_err(|e| format!("write {}: {e}", path.display()))?;
+
+    Ok(Some(path.to_string_lossy().into_owned()))
+}

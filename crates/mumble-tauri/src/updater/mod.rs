@@ -111,7 +111,6 @@ fn load_persisted_prefs(app: &tauri::AppHandle) {
     }
 }
 
-
 /// Spawn an async task that checks for updates shortly after launch.
 ///
 /// * If an update is available and not skipped: open the branded
