@@ -111,6 +111,35 @@ describe("AttachmentTray", () => {
     expect(onOptionsChange).toHaveBeenCalledWith({ ...DEFAULT_SHARE_OPTIONS, ttlSeconds: 0 });
   });
 
+  it("gives the tiles the room while the options are folded away, and takes it back when they are not", () => {
+    // The strip is alone in the tray until "Options" is clicked, and a 54px
+    // square is not enough of a photograph to tell two of them apart.
+    draw();
+    const tile = () => screen.getByAltText("dusk.png").closest("div") as HTMLElement;
+    expect(getComputedStyle(tile()).width).toBe("150px");
+
+    fireEvent.click(screen.getByLabelText("Sending options"));
+    expect(getComputedStyle(tile()).width).toBe("54px");
+  });
+
+  it("opens a staged picture on the tile, and only where there is a picture", () => {
+    const onPreview = vi.fn();
+    draw({ onPreview });
+    fireEvent.click(screen.getByLabelText("dusk.png"));
+    expect(onPreview).toHaveBeenCalledWith("a1");
+
+    // The video has no preview to enlarge, so its tile stays a plain tile -
+    // the only button on it is the one that unstages it.
+    expect(screen.queryByLabelText("clip.mp4")).toBeNull();
+    expect(screen.getByLabelText("Remove clip.mp4")).toBeTruthy();
+  });
+
+  it("leaves the tiles unclickable when the tray was given nowhere to open them", () => {
+    draw();
+    expect(screen.queryByLabelText("dusk.png")).toBeNull();
+    expect(screen.getByAltText("dusk.png")).toBeTruthy();
+  });
+
   it("locks Expires to Never on a server that never deletes on a timer", () => {
     draw({ canExpire: false });
     fireEvent.click(screen.getByLabelText("Sending options"));
