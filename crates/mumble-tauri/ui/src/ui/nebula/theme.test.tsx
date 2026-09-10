@@ -2,7 +2,8 @@ import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { CssBaseline } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
-import { createNebulaTheme } from "./theme";
+import { createNebulaTheme, handheldChrome, HANDHELD_HEADER_MAX } from "./theme";
+import { DEFAULT_SKIN, nebulaThemeDef } from "./themeCatalog";
 
 function baselineCss(): string {
   render(
@@ -43,5 +44,41 @@ describe("nebula form-control baseline", () => {
     const css = baselineCss();
     expect(css).toContain("textarea:where(:focus-visible)");
     expect(css).not.toMatch(/[^)]textarea:focus-visible/);
+  });
+});
+
+describe("handheld chrome", () => {
+  it("passes a skin's own header height through when it already fits", () => {
+    // Twelve of the thirteen ask for the pack's 66, which is the cap itself,
+    // so what they get back is the measure they asked for rather than a
+    // number this function chose.
+    const theme = createNebulaTheme("dark", null, null, DEFAULT_SKIN);
+    expect(DEFAULT_SKIN.headerHeight).toBeLessThanOrEqual(HANDHELD_HEADER_MAX);
+    expect(handheldChrome(theme).headerHeight).toBe(DEFAULT_SKIN.headerHeight);
+  });
+
+  it("would keep a shorter header short", () => {
+    // No skin draws one today. The clamp is a ceiling rather than a fixed
+    // height, and this is what says so.
+    const theme = createNebulaTheme("dark", null, null, { ...DEFAULT_SKIN, headerHeight: 48 });
+    expect(handheldChrome(theme).headerHeight).toBe(48);
+  });
+
+  it("clamps a desktop measure that would eat a tenth of the screen", () => {
+    // Nimbus draws a 90px header, which is right in a window and eleven per
+    // cent of an 844px phone.
+    const skin = nebulaThemeDef("nimbus")!.skin;
+    expect(skin.headerHeight).toBeGreaterThan(HANDHELD_HEADER_MAX);
+    const theme = createNebulaTheme("dark", null, null, skin);
+    expect(handheldChrome(theme).headerHeight).toBe(HANDHELD_HEADER_MAX);
+  });
+
+  it("gives the strip and the tab bar one answer for every skin", () => {
+    // These two are the phone's furniture rather than the theme's, which is
+    // why they are a derivation and not two more fields in the catalog.
+    const wide = handheldChrome(createNebulaTheme("dark", null, null, DEFAULT_SKIN));
+    const tall = handheldChrome(createNebulaTheme("dark", null, null, nebulaThemeDef("nimbus")!.skin));
+    expect(wide.stripHeight).toBe(tall.stripHeight);
+    expect(wide.tabBarHeight).toBe(tall.tabBarHeight);
   });
 });

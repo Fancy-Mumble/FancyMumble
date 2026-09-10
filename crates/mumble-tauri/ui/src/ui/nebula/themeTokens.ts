@@ -204,6 +204,10 @@ export function deriveNebulaTokens(mode: NebulaMode, vars: ThemeVars): NebulaTok
     card2: withAlpha(glass, dark ? 0.17 : 0.06),
     line: withAlpha(glassLine, dark ? 0.07 : 0.055),
     line2: withAlpha(glassLine, dark ? 0.17 : 0.12),
+    // A CSS-derived theme paints one chrome colour across bar, rail and column,
+    // so the window's edge is the same hairline every other surface uses. Only
+    // the sheet's palettes invert a panel against the window and need their own.
+    windowLine: withAlpha(glassLine, dark ? 0.17 : 0.12),
     hover: withAlpha(glass, dark ? 0.12 : 0.05),
     text: readable(flatten(vars.text, bg0, mock.text), bg0, CONTRAST_TEXT),
     muted: readable(flatten(vars.textSecondary, bg0, mock.muted), bg0, CONTRAST_MUTED),

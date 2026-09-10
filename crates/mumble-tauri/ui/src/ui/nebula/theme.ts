@@ -9,6 +9,7 @@
  * gradients) that have no MUI palette slot.
  */
 import { createTheme, alpha, type Theme } from "@mui/material/styles";
+import { isDesktopPlatform } from "@core/utils/platform";
 import { over } from "@shared/profilecard";
 import { liveryTokens, type ServerLivery } from "./livery";
 import { DEFAULT_SKIN, type NebulaSkin } from "./themeCatalog";
@@ -593,5 +594,48 @@ export function floatingSurface(theme: Theme) {
     boxShadow: nebula.shadow,
   } as const;
 }
+
+/**
+ * The room a surface that runs up to the window's top edge has to leave for
+ * the floating window controls.
+ *
+ * A skin with no title strip (`windowControls: "corner"`) stands the three
+ * buttons on a plate over the top-right corner, floating above whatever is
+ * under it. Anything reaching that edge - the chat header's row of buttons,
+ * the panels that open beside it and close from their own top-right corner -
+ * has to begin below the plate, or its own controls end up behind it and
+ * cannot be clicked at all. Twenty-four pixels is the plate's height with a
+ * few pixels of air under it; where there is a strip, and on mobile where no
+ * plate is drawn, it is nothing.
+ */
+export function cornerControlsClearance(theme: Theme) {
+  const corner = theme.palette.nebulaSkin.chromeSlots.windowControls === "corner";
+  return corner && isDesktopPlatform() ? ({ pt: "24px" } as const) : ({} as const);
+}
+
+/**
+ * The three chrome bands of the handheld layout, in this skin's measures.
+ *
+ * A derivation rather than three more `NebulaSkin` fields: the strip and the
+ * tab bar are the same on every skin - they are the phone's furniture, not the
+ * theme's - and thirteen palettes should not each have to restate a number
+ * they have no opinion about.
+ *
+ * The header is the one measure a skin *does* own, so its own value is kept
+ * and only clamped. Nimbus asks for 90px, which is a desktop measure: on an
+ * 844px screen it is eleven per cent of the whole window spent on a title. The
+ * pack's own 56 and every skin under the cap pass through untouched, so the
+ * proportion between skins survives.
+ */
+export function handheldChrome(theme: Theme) {
+  return {
+    headerHeight: Math.min(theme.palette.nebulaSkin.headerHeight, HANDHELD_HEADER_MAX),
+    stripHeight: 88,
+    tabBarHeight: 76,
+  } as const;
+}
+
+/** The tallest a header may be when the window is a phone. */
+export const HANDHELD_HEADER_MAX = 66;
 
 export { NEBULA_MONO, NEBULA_SANS };
