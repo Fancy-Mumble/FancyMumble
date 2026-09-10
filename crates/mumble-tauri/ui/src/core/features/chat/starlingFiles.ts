@@ -56,6 +56,29 @@ export function isCanonAttachment(info: FileAttachmentInfo): boolean {
   return typeof info.key === "string" && info.key.length > 0;
 }
 
+/**
+ * The object a card should actually draw for this attachment.
+ *
+ * The thumbnail when there is one, the file itself when there is not. Both
+ * are ordinary stored objects fetched the same way, so this is a choice of
+ * key and nothing more - no second route, no second kind of address.
+ *
+ * Only a picture is stood in for. A thumbnail of a film would be a poster
+ * frame, which is a different thing that nothing produces yet, and a player
+ * pointed at one would play a still image.
+ *
+ * *Not a privacy claim:* file attachments are **not** end-to-end encrypted
+ * today, so a thumbnail the server derived shows the server nothing it could
+ * not already read. What the sender's own thumbnail buys is the channel whose
+ * bytes the server never sees, where there is no other thumbnail to have.
+ */
+export function previewKeyFor(info: FileAttachmentInfo): string | null {
+  const key = info.key ?? null;
+  const thumb = info.thumbKey ?? "";
+  if (thumb.length > 0 && previewKindForFilename(info.filename) === "image") return thumb;
+  return key;
+}
+
 const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
   png: "image/png",
   jpg: "image/jpeg",
@@ -181,21 +204,29 @@ export function useCanonPreview(info: FileAttachmentInfo): CanonPreview {
   // reader's to supply, not this client's to hold.
   const canon = key !== null && isCanonAttachment(info) && info.mode !== "password";
   const picture = canon && kind === "image";
-  const withinCap = sizeBytes !== undefined && sizeBytes <= PREVIEW_BYTE_LIMIT;
+  // The thumbnail, when there is one: it is what makes a channel of
+  // screenshots affordable to scroll, and it is what a sealed picture will
+  // have instead of a preview of the full object once such pictures exist.
+  const drawKey = canon ? previewKeyFor(info) : null;
+  const thumbed = drawKey !== null && drawKey !== key;
+  // A thumbnail is small by construction, so the cap it would be measured
+  // against is the full picture's and no longer the question: the eighty
+  // megabytes the cap exists to refuse are not the bytes being fetched.
+  const withinCap = thumbed || (sizeBytes !== undefined && sizeBytes <= PREVIEW_BYTE_LIMIT);
   const addressed = canon && ADDRESSED_KINDS.has(kind) && (!picture || withinCap);
 
   // One cheap call that moves no bytes: the origin is started on first ask and
   // the answer is an address, so this costs the same for a thumbnail and a
   // film.
   useEffect(() => {
-    if (!addressed || key === null) {
+    if (!addressed || drawKey === null) {
       setSrc(null);
       setFailed(false);
       return;
     }
     let live = true;
     setFailed(false);
-    void canonMediaUrl(key)
+    void canonMediaUrl(drawKey)
       .then((url) => {
         if (live) setSrc(url);
       })
@@ -209,7 +240,7 @@ export function useCanonPreview(info: FileAttachmentInfo): CanonPreview {
     return () => {
       live = false;
     };
-  }, [addressed, key]);
+  }, [addressed, drawKey]);
 
   return {
     src,

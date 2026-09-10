@@ -42,7 +42,7 @@ function message(partial: Partial<ChatMessage> = {}): ChatMessage {
 
 /** A body big enough, and inline enough, to be worth putting away. */
 function heavy(id: string): ChatMessage {
-  return message({ message_id: id, body: `<img src="data:image/png;base64,${"A".repeat(5000)}">` });
+  return message({ message_id: id, body: `<img src="data:image/png;base64,${"A".repeat(70_000)}">` });
 }
 
 /** One already put away, with the size the original ran to. */

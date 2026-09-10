@@ -138,8 +138,15 @@ impl AppState {
 /// Bodies shorter than this are never worth a file, whatever they hold.
 ///
 /// The same rule the frontend applies (`isHeavyContent`), so a body the host
-/// puts away is one the rows already know how to draw a placeholder for.
-const HEAVY_THRESHOLD: usize = 4096;
+/// puts away is one the rows already know how to draw a placeholder for. The
+/// two constants are mirrored deliberately - change both or neither.
+///
+/// 64 KiB, and the number is the thumbnail's. An attachment card stands a
+/// picture in for its full object with a copy of about 24 KB; putting one of
+/// those away costs a write, a read and a round trip to recover something
+/// that was never big enough to be worth moving. Above this a body is
+/// carrying a whole pasted screenshot, which is what the store was built for.
+const HEAVY_THRESHOLD: usize = 65536;
 
 /// Whether a body carries inline media worth putting away: over the
 /// threshold and embedding a data-URL picture or clip.
@@ -315,10 +322,19 @@ mod tests {
         }
     }
 
+    /// A body over the threshold: a pasted screenshot, not a thumbnail.
     fn picture() -> String {
         format!(
             "look <img src=\"data:image/png;base64,{}\">",
-            "A".repeat(5000)
+            "A".repeat(70_000)
+        )
+    }
+
+    /// A card's stand-in copy, which must survive every sweep untouched.
+    fn thumbnail() -> String {
+        format!(
+            "look <img src=\"data:image/png;base64,{}\">",
+            "A".repeat(24 * 1024)
         )
     }
 
@@ -335,6 +351,9 @@ mod tests {
         assert!(!is_heavy_body(&"a".repeat(10_000)));
         // Inline media, but tiny: not worth a file either.
         assert!(!is_heavy_body("<img src=\"data:image/png;base64,AAAA\">"));
+        // A card's thumbnail. Recovering one costs more than holding it, so
+        // the threshold sits above every copy an attachment card can make.
+        assert!(!is_heavy_body(&thumbnail()));
     }
 
     #[test]

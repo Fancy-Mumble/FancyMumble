@@ -102,8 +102,22 @@ class LocalEncryptedProvider implements MessageContentProvider {
 const OFFLOAD_PREFIX = "<!-- OFFLOADED:";
 const OFFLOAD_SUFFIX = " -->";
 
-/** Minimum body length (bytes) to consider a message "heavy". */
-const HEAVY_THRESHOLD = 4096;
+/**
+ * Minimum body length (bytes) to consider a message "heavy".
+ *
+ * 64 KiB, and the number is the thumbnail's. An attachment card stands a
+ * picture in for its full object with a copy of about 24 KB; putting one of
+ * those away costs a file write, a file read and a round trip through the
+ * host to get back something that was never big enough to be worth moving.
+ * Above this a body is carrying a whole pasted screenshot, which is what the
+ * store was built for.
+ *
+ * Mirrored in `state/offload_ops.rs` (`HEAVY_THRESHOLD`) on purpose: the host
+ * sweeps idle threads with the same rule the viewport path applies here, and
+ * a body one half puts away is one the other half must know how to draw a
+ * placeholder for. Change both or neither.
+ */
+const HEAVY_THRESHOLD = 65536;
 
 /** Regex that matches embedded data-URL sources for images and videos. */
 const DATA_URL_RE = /src="data:(image|video)\//;

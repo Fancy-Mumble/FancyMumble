@@ -14,8 +14,12 @@
 import { useCallback, useRef, useState } from "react";
 import { useAppStore } from "../../store";
 import type { FileAccessMode } from "../../types";
-import { resizeImage } from "../settings/imageUtils";
-import { encodeFileAttachmentMarker, type FileAttachmentInfo } from "./fileAttachments";
+import { loadImage, resizeImage } from "../settings/imageUtils";
+import {
+  encodeFileAttachmentMarker,
+  previewKindForFilename,
+  type FileAttachmentInfo,
+} from "./fileAttachments";
 import { mimeForFilename } from "./starlingFiles";
 
 /** How the uploader wants this file shared, as answered by the pack's dialog. */
@@ -100,6 +104,95 @@ export async function compressStagedImage(
     return { filePath: compressedPath, sizeBytes };
   } catch (e) {
     console.error("compress staged image failed:", e);
+    return null;
+  }
+}
+
+/**
+ * The longest edge, and the budget, a thumbnail is made to.
+ *
+ * 320 px is what a card draws a preview at on any pack, doubled for a dense
+ * display; 24 KB is what that costs at the quality `resizeImage` settles on.
+ * The arithmetic that matters is the other end: 24 KB across the 300 rows a
+ * thread keeps is about 7 MB, against the 128 KB a full screenshot costs in
+ * the same slot.
+ */
+const THUMB_MAX_EDGE = 320;
+const THUMB_MAX_BYTES = 24 * 1024;
+
+/**
+ * Below this an image is its own thumbnail, so making one wastes an upload.
+ *
+ * A 32 KB picture is already inside a thumbnail's budget: a second object
+ * that saves 8 KB and costs a round trip to fetch is a worse card, not a
+ * cheaper one.
+ */
+const THUMB_MIN_SOURCE_BYTES = 32 * 1024;
+
+/** What the sender learned about a staged image, and what it made from it. */
+interface StagedImageThumbnail {
+  /** The full picture's pixel size, for the row to reserve space with. */
+  readonly width: number;
+  readonly height: number;
+  /**
+   * The small copy on disk, ready to upload; absent when the original is
+   * already small enough to be shown as it is.
+   */
+  readonly thumbPath?: string;
+  /** The small copy's own type, which need not be the original's. */
+  readonly thumbMime?: string;
+}
+
+/**
+ * Measure a staged image and, when it is worth it, make a small copy of it.
+ *
+ * This is the *sender's* thumbnail, and it is the only one that can exist for
+ * a channel whose bytes the server never reads: the server derives its own on
+ * upload for any image it can open, but an image it cannot open - a
+ * password-sealed one today, a client-sealed one when those land - it cannot
+ * derive anything from. Making one here costs one decode the sender has
+ * already paid for by picking the file.
+ *
+ * *Not a privacy claim:* file attachments are **not** end-to-end encrypted
+ * today. The thumbnail is uploaded as an ordinary object with the same
+ * visibility as the file it stands for, so it is exactly as readable as the
+ * full picture already is - no more and no less.
+ *
+ * `null` for everything that is not an image, and for an image the canvas
+ * cannot decode, which is the case a card has always drawn as a plain row.
+ */
+async function thumbnailStagedImage(
+  filePath: string,
+  filename: string,
+  sizeBytes: number | undefined,
+): Promise<StagedImageThumbnail | null> {
+  if (previewKindForFilename(filename) !== "image") return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const base64 = await invoke<string>("read_file_base64", { path: filePath });
+    const raw = `data:${mimeForFilename(filename)};base64,${base64}`;
+    const img = await loadImage(raw);
+    const width = img.naturalWidth;
+    const height = img.naturalHeight;
+    if (width <= 0 || height <= 0) return null;
+    // Measured, but not shrunk: a small picture is its own thumbnail.
+    if (sizeBytes === undefined || sizeBytes <= THUMB_MIN_SOURCE_BYTES) return { width, height };
+
+    const resized = await resizeImage(raw, THUMB_MAX_EDGE, THUMB_MAX_EDGE, THUMB_MAX_BYTES);
+    const outBase64 = resized.slice(resized.indexOf(",") + 1);
+    const thumbMime = resized.slice(5, resized.indexOf(";"));
+    // A "thumbnail" that came out no smaller than the picture is a second
+    // upload for nothing - a tiny PNG re-encoded as a bigger PNG, say.
+    if (Math.ceil(outBase64.length * 0.75) >= sizeBytes) return { width, height };
+    const thumbPath = await invoke<string>("write_attachment_bytes", {
+      dataBase64: outBase64,
+      mimeType: thumbMime,
+    });
+    return { width, height, thumbPath, thumbMime };
+  } catch (e) {
+    // A picture with no thumbnail still sends. The card falls back to the
+    // full object, which is what it did before thumbnails existed at all.
+    console.warn("thumbnail for staged image failed:", e);
     return null;
   }
 }
@@ -336,9 +429,66 @@ export async function uploadAttachment({
   choice: FileShareChoice;
 }): Promise<FileAttachmentInfo> {
   const store = useAppStore.getState();
-  return store.fileServerKind === "canon"
-    ? await uploadOverCanon(filePath, channelId, filename, uploadId, choice)
-    : await uploadOverPlugin(store, filePath, channelId, filename, uploadId, choice);
+  if (store.fileServerKind !== "canon") {
+    return await uploadOverPlugin(store, filePath, channelId, filename, uploadId, choice);
+  }
+  const info = await uploadOverCanon(filePath, channelId, filename, uploadId, choice);
+  // After the file itself, never before: the thumbnail is a courtesy, and
+  // decoding a 12-megapixel photograph before the first byte of it has moved
+  // would be a progress bar that sits at nothing while the webview works.
+  //
+  // A password share is left alone. It is sealed with a key derived from the
+  // password precisely so the server cannot read it; putting a plain little
+  // copy of the same picture beside it would hand over what the mode was
+  // chosen to withhold.
+  if (choice.mode === "password") return info;
+  const thumb = await thumbnailStagedImage(filePath, filename, info.sizeBytes);
+  if (!thumb) return info;
+  return {
+    ...info,
+    width: thumb.width,
+    height: thumb.height,
+    // The sender's own copy wins when there is one, and the server's derived
+    // `thumb_key` is what remains when there is not.
+    thumbKey: (await uploadThumbnailObject(thumb, channelId, filename, uploadId, choice)) ?? info.thumbKey,
+  };
+}
+
+/**
+ * Put the small copy up beside the file it stands for, and name its key.
+ *
+ * The same visibility and the same lifetime as the picture: a thumbnail that
+ * outlived its file would be a card with a preview and nothing behind it, and
+ * one shared more widely than its original would be a leak the sender never
+ * agreed to. It carries an upload id of its own so its progress events do not
+ * move the row the real upload is drawing.
+ *
+ * `undefined` when there was nothing to upload or the upload failed - the
+ * card then falls back to the full object, which still works.
+ */
+async function uploadThumbnailObject(
+  thumb: StagedImageThumbnail,
+  channelId: number,
+  filename: string,
+  uploadId: string,
+  choice: FileShareChoice,
+): Promise<string | undefined> {
+  if (!thumb.thumbPath) return undefined;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const shared = await invoke<{ key: string }>("starling_upload_file", {
+      filePath: thumb.thumbPath,
+      channelId,
+      mimeType: thumb.thumbMime ?? mimeForFilename(filename),
+      uploadId: `${uploadId}-thumb`,
+      mode: choice.mode,
+      ttlSeconds: choice.ttlSeconds,
+    });
+    return shared.key || undefined;
+  } catch (e) {
+    console.warn("thumbnail upload failed:", e);
+    return undefined;
+  }
 }
 
 /** Share a file with a server that runs the file-server plugin. */
