@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { Box } from "@mui/material";
 import { ADMIN_PAGES, type AdminCapabilities, type AdminPageId } from "./capabilities";
+import { cornerControlsClearance } from "../../theme";
 
 /**
  * One chunk per page.
@@ -150,9 +151,11 @@ export function AdminScreen({
     }
   }
 
+  const fullBleed = FULL_BLEED.includes(page);
+
   return (
     <Box
-      sx={{
+      sx={(theme) => ({
         flex: 1,
         minHeight: 0,
         overflowY: "auto",
@@ -165,9 +168,15 @@ export function AdminScreen({
         // its own bars: a margin here would frame the canvas in a lighter
         // panel, which is the one thing a full-bleed surface must not do.
         // The reading pages keep the wide margin that makes prose legible.
-        px: FULL_BLEED.includes(page) ? 0 : "52px",
-        py: FULL_BLEED.includes(page) ? 0 : "38px",
-      }}
+        px: fullBleed ? 0 : "52px",
+        py: fullBleed ? 0 : "38px",
+        // A canvas page starts at the window's top edge, and on a skin with no
+        // title strip that is exactly where the floating window controls sit:
+        // the plate covered the editor's Undo, Redo and Reset outright, and the
+        // drag strip beside it swallowed the clicks that did land on a button.
+        // The reading pages already clear both with the margin they have.
+        ...(fullBleed ? cornerControlsClearance(theme) : {}),
+      })}
     >
       <Suspense fallback={null}>{content}</Suspense>
     </Box>

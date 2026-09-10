@@ -16,3 +16,4 @@ export { PchatBadge } from "./PchatBadge";
 export { LinkGuard } from "./LinkGuard";
 export { LinkWarningDialog } from "./LinkWarningDialog";
 export { InfoCard, InfoCaps, InfoFact } from "./InfoCard";
+export { MakeRoom } from "./MakeRoom";

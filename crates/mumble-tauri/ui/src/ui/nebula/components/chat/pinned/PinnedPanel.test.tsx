@@ -108,6 +108,20 @@ describe("PinnedPanel", () => {
     expect(screen.getByText("Attachment")).toBeTruthy();
   });
 
+  it("opens the greeting in full rather than jumping to a message it is not", () => {
+    const onOpenWelcome = vi.fn();
+    const handlers = show({
+      welcome: { body: "<p>House rules, and where to ask for help.</p>", server: "Fancy" },
+      onOpenWelcome,
+    });
+    fireEvent.click(screen.getByRole("button", { name: /House rules/ }));
+    expect(onOpenWelcome).toHaveBeenCalled();
+    expect(handlers.onJump).not.toHaveBeenCalled();
+    // Nobody sent it, so there is nothing to unpin - the one Unpin on screen
+    // belongs to the member's pin below it.
+    expect(screen.getAllByLabelText("Unpin message")).toHaveLength(1);
+  });
+
   it("names the pinner only when it was not the author", () => {
     show({ messages: [message({ pinned_by: "Sebi" })] });
     expect(screen.queryByText(/pinned by/)).toBeNull();

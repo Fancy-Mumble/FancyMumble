@@ -2,15 +2,16 @@ import { useTranslation } from "react-i18next";
 import { Box, Typography } from "@mui/material";
 import { Stack } from "../../primitives";
 import { washPanel } from "../../../theme";
+import { radius } from "../../../tokens";
 import { CloseIcon } from "@ui/icons";
 
 /**
  * The shell every composer popover is made of.
  *
  * The canvas draws emoji, GIF, poll and file share as one object at four
- * widths - same 16px radius, same glass, same 44px header on a hairline - so
- * it is one component here too. Building each separately is how four panels
- * drift into four different paddings.
+ * widths - same corner, same glass, same 44px header on a hairline - so it is
+ * one component here too. Building each separately is how four panels drift
+ * into four different paddings.
  *
  * They are popovers, not dialogs: each sits on the composer's own 10px inset
  * directly above it, with no centred modal and no scrim over the conversation.
@@ -48,14 +49,25 @@ export function PopoverPanel({
       sx={(theme) => ({
         position: "absolute",
         bottom: "100%",
-        // The composer's inset, so the panel and the bar share one edge.
-        left: left + 10,
+        // The composer's inset, so the panel and the bar share one edge - but
+        // only while there is room to the right of it. On a narrow window a
+        // 400px panel opened from a button two thirds along the bar would
+        // begin past the point where it still fits, and `maxWidth` only
+        // narrows it: what overflows is the *offset*, not the width. The upper
+        // bound is therefore where this panel's right edge meets the opposite
+        // inset, and `max` keeps that bound from crossing behind the near one
+        // when the panel is wider than the whole bar. Inert on a desktop
+        // window, where the preferred offset is nowhere near the bound.
+        left: `clamp(10px, ${left + 10}px, max(10px, calc(100% - 10px - ${width}px)))`,
         width,
         maxWidth: "calc(100% - 20px)",
         zIndex: 25,
         display: "flex",
         flexDirection: "column",
-        borderRadius: "16px",
+        // The pack's floating-surface corner, the one NebulaSurface takes: a
+        // 16px literal rounded these four panels in a skin whose every other
+        // corner is square.
+        borderRadius: radius("xl"),
         overflow: "hidden",
         ...washPanel(theme),
       })}

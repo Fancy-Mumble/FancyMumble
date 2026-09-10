@@ -25,6 +25,7 @@ import {
   FRIENDS_CHANGED_EVENT,
   type Friend,
 } from "@core/friendsStorage";
+import { isFriendsOwnServer, matchFitsFriend } from "@core/friendsPresence";
 import {
   BlockIcon,
   HashIcon,
@@ -46,6 +47,7 @@ import { canDeleteMessages } from "@standard/components/sidebar/channel/ChannelE
 import { userMenuActions } from "../../selectors";
 import { SearchBox, Stack } from "../primitives";
 import { radius } from "../../tokens";
+import { contextMenuRootSlot } from "../contextMenuRoot";
 
 /** The person a right-click landed on, and where it landed. */
 export interface UserMenuTarget {
@@ -238,7 +240,8 @@ function UserMenuSurface({
       onClose={onClose}
       anchorReference="anchorPosition"
       anchorPosition={{ top: target.y, left: target.x }}
-      slotProps={{ list: { sx: { minWidth: 208 } } }}
+      // A second right-click is still this menu's: see `contextMenuRootSlot`.
+      slotProps={{ root: contextMenuRootSlot(onClose), list: { sx: { minWidth: 208 } } }}
     >
       {/* Everything you can do about someone on your own. */}
       {actions.isSelf
@@ -477,8 +480,17 @@ function useFriendEntry(user: UserEntry, isSelf: boolean): Friend | null {
       getFriends()
         .then((friends) => {
           if (!active) return;
+          const session = useAppStore.getState().sessions.find((entry) => entry.id === activeServerId);
           setFriend(
-            friends.find((entry) => user.hash && entry.userHash === user.hash) ??
+            // The certificate finds the record; on the friend's own server the
+            // account is what confirms it, because a second identity logged in
+            // with the same certificate is somebody else.
+            friends.find(
+              (entry) =>
+                user.hash &&
+                entry.userHash === user.hash &&
+                (!isFriendsOwnServer(entry, session) || matchFitsFriend(entry, user)),
+            ) ??
               friends.find(
                 (entry) =>
                   !entry.userHash &&
