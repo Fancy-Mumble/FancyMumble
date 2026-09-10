@@ -295,3 +295,17 @@ mod tests {
         assert!(sentence.contains("not allowed"), "got {sentence}");
     }
 }
+
+impl HandleMessage for fancy::files::Emotes {
+    fn handle(&self, ctx: &HandlerContext) {
+        // Sent in answer to a query and again to everyone on every change, so
+        // this both resolves whoever asked and refreshes those who did not:
+        // an emote somebody deleted has to stop rendering for the rest.
+        let emotes = crate::state::canon_emotes::emotes_of(self);
+        debug!(count = emotes.len(), "received the server's emotes");
+        ctx.emit("server-emotes-changed", &emotes);
+        if let Ok(mut state) = ctx.shared.lock() {
+            state.canon_emotes.resolve(emotes);
+        }
+    }
+}
