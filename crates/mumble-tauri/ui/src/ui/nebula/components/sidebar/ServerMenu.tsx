@@ -3,6 +3,7 @@ import { Box, Divider, Menu, MenuItem } from "@mui/material";
 import type { SavedServer } from "@core/types";
 import { CopyIcon, EditIcon, Link2Icon, LogOutIcon, StarIcon, TrashIcon } from "@ui/icons";
 import type { ServerGroup, ServerRailEntry } from "../../selectors";
+import { contextMenuRootSlot } from "../contextMenuRoot";
 
 export interface ServerMenuTarget {
   entry: ServerRailEntry;
@@ -64,6 +65,8 @@ export function ServerMenu({
       onClose={onClose}
       anchorReference="anchorPosition"
       anchorPosition={{ top: target.y, left: target.x }}
+      // A second right-click is still this menu's: see `contextMenuRootSlot`.
+      slotProps={{ root: contextMenuRootSlot(onClose) }}
     >
       {/* Where you already are needs no way in; the entry would only restate
           the ring round the tile. */}

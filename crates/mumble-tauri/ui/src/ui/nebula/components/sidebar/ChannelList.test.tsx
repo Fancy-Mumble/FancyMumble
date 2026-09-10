@@ -1,11 +1,15 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChannelEntry, UserEntry } from "@core/types";
+import { PERM_MOVE } from "@core/utils/permissions";
 import { withNebulaTheme } from "../../testTheme";
 import { ChannelList } from "./ChannelList";
 import type { NebulaChannelViewer } from "../../useChannelViewer";
 
 vi.mock("@core/lazyBlobs", () => ({ useUserAvatar: () => null, useChannelDescription: () => null }));
+
+const invokeMock = vi.fn((..._args: unknown[]) => Promise.resolve());
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }));
 
 // The layout the list is drawn in, without going through the personalization
 // store to say so.
@@ -17,6 +21,7 @@ vi.mock("../../useChannelViewer", async (importOriginal) => ({
 
 beforeEach(() => {
   viewer = "flat";
+  invokeMock.mockClear();
 });
 
 const channel = (id: number, name: string, extra: Partial<ChannelEntry> = {}): ChannelEntry =>
@@ -254,3 +259,100 @@ describe("ChannelList persistence badge", () => {
     expect(screen.getByText("Signal").getAttribute("title")).toBe("Signal Protocol encryption");
   });
 });
+
+describe("carrying a user to another channel", () => {
+  /** Two rooms, one moderator's worth of permission, and Ann sitting in one. */
+  function showRooms() {
+    render(
+      withNebulaTheme(
+        <ChannelList
+          channels={[
+            { channel: channel(2, "Gaming", { permissions: PERM_MOVE }), depth: 0 },
+            { channel: channel(3, "Lounge"), depth: 0 },
+          ]}
+          users={[member(1, "Ann", { channel_id: 2 })]}
+          selectedChannel={2}
+          currentChannel={2}
+          talkingSessions={new Set()}
+          unreadCounts={{}}
+          ownSession={9}
+          onSelect={vi.fn()}
+          onJoin={vi.fn()}
+          onContextMenu={vi.fn()}
+          onSelectUser={vi.fn()}
+          onHoverUser={vi.fn()}
+          onLeaveUser={vi.fn()}
+        />,
+      ),
+    );
+    const row = document.querySelector('[data-user-name="Ann"]') as HTMLElement;
+    const lounge = document
+      .querySelector('[data-channel-name="Lounge"]')
+      ?.closest("li") as HTMLElement;
+    lounge.getBoundingClientRect = () =>
+      ({ left: 0, top: 100, right: 200, bottom: 160, width: 200, height: 60 }) as DOMRect;
+    return { row, lounge };
+  }
+
+  it("moves them to the room the drop landed on", () => {
+    const { row } = showRooms();
+    fireEvent.pointerDown(row, { clientX: 10, clientY: 10, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(row, { clientX: 10, clientY: 130, pointerId: 1 });
+    fireEvent.pointerUp(row, { clientX: 10, clientY: 130, pointerId: 1 });
+
+    expect(invokeMock).toHaveBeenCalledWith("move_user_to_channel", { session: 1, channelId: 3 });
+  });
+
+  it("asks for nothing when the drop lands on no room at all", () => {
+    const { row } = showRooms();
+    fireEvent.pointerDown(row, { clientX: 10, clientY: 10, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(row, { clientX: 10, clientY: 900, pointerId: 1 });
+    fireEvent.pointerUp(row, { clientX: 10, clientY: 900, pointerId: 1 });
+
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves a press that never moved as a click on the user", () => {
+    const { row } = showRooms();
+    fireEvent.pointerDown(row, { clientX: 10, clientY: 10, pointerId: 1, button: 0 });
+    fireEvent.pointerUp(row, { clientX: 11, clientY: 11, pointerId: 1 });
+
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("will not carry somebody out of a room you may not move them from", () => {
+    render(
+      withNebulaTheme(
+        <ChannelList
+          channels={[
+            { channel: channel(2, "Gaming"), depth: 0 },
+            { channel: channel(3, "Lounge"), depth: 0 },
+          ]}
+          users={[member(1, "Ann", { channel_id: 2 })]}
+          selectedChannel={2}
+          currentChannel={2}
+          talkingSessions={new Set()}
+          unreadCounts={{}}
+          ownSession={9}
+          onSelect={vi.fn()}
+          onJoin={vi.fn()}
+          onContextMenu={vi.fn()}
+          onSelectUser={vi.fn()}
+          onHoverUser={vi.fn()}
+          onLeaveUser={vi.fn()}
+        />,
+      ),
+    );
+    const row = document.querySelector('[data-user-name="Ann"]') as HTMLElement;
+    const lounge = document.querySelector('[data-channel-name="Lounge"]')?.closest("li") as HTMLElement;
+    lounge.getBoundingClientRect = () =>
+      ({ left: 0, top: 100, right: 200, bottom: 160, width: 200, height: 60 }) as DOMRect;
+
+    fireEvent.pointerDown(row, { clientX: 10, clientY: 10, pointerId: 1, button: 0 });
+    fireEvent.pointerMove(row, { clientX: 10, clientY: 130, pointerId: 1 });
+    fireEvent.pointerUp(row, { clientX: 10, clientY: 130, pointerId: 1 });
+
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+});
+

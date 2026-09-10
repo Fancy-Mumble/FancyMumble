@@ -1,11 +1,11 @@
-import { Fragment, type ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, IconButton, Tooltip, Typography } from "@mui/material";
 import type { ServerPingResult } from "@core/types";
 import { TID } from "@core/testids";
 import { CloseIcon, PlusIcon, StarIcon, UsersGroupIcon } from "@ui/icons";
 import { serverTint, type ServerGroup, type ServerRailEntry } from "../../selectors";
-import { UserAvatar } from "../primitives";
+import { MakeRoom, UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
 
 /**
@@ -36,9 +36,10 @@ interface ServerRailPanelProps {
   pings?: ReadonlyMap<string, ServerPingResult>;
   /** Where you are on the server you are connected to. */
   activeChannelName?: string | null;
-  /** The tile being carried, and the row it would land in front of. */
+  /** The row being carried. */
   dragKey?: string | null;
-  dropBefore?: string | null;
+  /** How far each row has stepped aside to open the gap it would drop into. */
+  gaps?: ReadonlyMap<string, number> | null;
   registerRowRef?: (key: string, element: HTMLElement | null) => void;
   onRowPointerDown?: (key: string) => (event: React.PointerEvent<HTMLElement>) => void;
   /**
@@ -69,7 +70,26 @@ interface ServerRailPanelProps {
   onAddServer: () => void;
   /** Absent where favouriting is not offered; the star is then not drawn. */
   onToggleFavorite?: (group: ServerGroup) => void;
+  /**
+   * True while the floating panel is sliding back out of sight.
+   *
+   * It is still on the screen at that point - whoever opened it keeps it
+   * mounted for the length of the animation - so it needs to be told that the
+   * list is leaving rather than arriving. Meaningless pinned: a column that is
+   * always there never arrives or leaves.
+   */
+  leaving?: boolean;
+  /** The panel's own element, for whoever needs to know where it ends. */
+  ref?: Ref<HTMLElement>;
 }
+
+/**
+ * How long the floating panel takes to slide in or out.
+ *
+ * Shared with the rail, which has to keep the panel mounted for exactly as long
+ * as it takes to leave.
+ */
+export const RAIL_PANEL_MS = 180;
 
 /** Friends, as a row of the open list. Shaped like a server row, minus the
  *  avatar: it is a destination rather than a place to connect to. */
@@ -125,23 +145,6 @@ function FriendsRow({ active, unread, onOpen }: Readonly<RailFriends>) {
         </Box>
       )}
     </Box>
-  );
-}
-
-/** Where the carried row would land, drawn without moving anything. */
-function DropLine() {
-  return (
-    <Box
-      aria-hidden
-      sx={(theme) => ({
-        height: 2,
-        my: "-1px",
-        mx: "2px",
-        flex: "none",
-        borderRadius: "1px",
-        background: theme.palette.nebula.accent,
-      })}
-    />
   );
 }
 
@@ -398,7 +401,7 @@ export function ServerRailPanel({
   pings,
   activeChannelName,
   dragKey,
-  dropBefore,
+  gaps,
   registerRowRef,
   onRowPointerDown,
   pinned = false,
@@ -410,10 +413,13 @@ export function ServerRailPanel({
   onAddServer,
   onContextMenu,
   onToggleFavorite,
+  leaving = false,
+  ref,
 }: Readonly<ServerRailPanelProps>) {
   const { t } = useTranslation(PANEL_NS);
   return (
     <Box
+      ref={ref}
       component={pinned ? "nav" : "div"}
       aria-label={t("nebulaSidebar:servers.title")}
       data-testid="nebula-server-rail-panel"
@@ -437,6 +443,34 @@ export function ServerRailPanel({
         borderRight: "var(--nebula-line-width, 1px) solid " + (pinned ? theme.palette.nebula.line : theme.palette.nebula.line2),
         // Nothing is underneath it to cast onto.
         boxShadow: pinned ? "none" : "34px 0 70px rgba(2,6,18,.5)",
+        // Floating, it comes out of the window's left edge and goes back the
+        // same way, so the list reads as the rail widening rather than as a
+        // slab appearing over the screen. Pinned it is simply the column: it
+        // was never anywhere else to travel from.
+        ...(pinned
+          ? null
+          : {
+              animation:
+                (leaving ? "nebula-rail-panel-out" : "nebula-rail-panel-in") +
+                " " +
+                RAIL_PANEL_MS +
+                "ms cubic-bezier(.2,.8,.3,1) both",
+              "@keyframes nebula-rail-panel-in": {
+                from: { transform: "translateX(-100%)", opacity: 0 },
+                to: { transform: "translateX(0)", opacity: 1 },
+              },
+              "@keyframes nebula-rail-panel-out": {
+                from: { transform: "translateX(0)", opacity: 1 },
+                to: { transform: "translateX(-100%)", opacity: 0 },
+              },
+              // Without the travel there is nothing to wait for, so a panel
+              // that is leaving is simply gone rather than sitting there for
+              // the length of an animation it is not playing.
+              "@media (prefers-reduced-motion: reduce)": {
+                animation: "none",
+                display: leaving ? "none" : "flex",
+              },
+            }),
       })}
     >
       {/* Friends above the servers and fenced off from them: it is a place to
@@ -515,8 +549,11 @@ export function ServerRailPanel({
         }}
       >
         {entries.map((entry) => (
-          <Fragment key={entry.group.key}>
-            {dropBefore === entry.group.key && <DropLine />}
+          <MakeRoom
+            key={entry.group.key}
+            offset={gaps?.get(entry.group.key)}
+            animate={Boolean(dragKey)}
+          >
             <Box
               sx={{ position: "relative", "&:hover .nebula-fav": { opacity: 1 } }}
               onContextMenu={
@@ -546,9 +583,8 @@ export function ServerRailPanel({
               />
               {onToggleFavorite && <FavouriteStar group={entry.group} onToggle={onToggleFavorite} />}
             </Box>
-          </Fragment>
+          </MakeRoom>
         ))}
-        {dragKey && dropBefore === null && <DropLine />}
 
         {entries.length === 0 && empty && (
           <Typography

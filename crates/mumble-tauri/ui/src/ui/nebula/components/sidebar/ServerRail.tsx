@@ -1,15 +1,15 @@
-import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, Portal, Tooltip } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
-import { ChevronRightIcon, LogOutIcon, PlusIcon, UsersGroupIcon } from "@ui/icons";
+import { alpha, lighten, useTheme } from "@mui/material/styles";
+import { ChevronRightIcon, LogOutIcon, PlusIcon, SpinnerIcon, UsersGroupIcon } from "@ui/icons";
 import { reorderServerRail, serverTint, type ServerGroup, type ServerRailEntry } from "../../selectors";
-import { dropTarget, measureSlots, type DragSlot } from "../../dragOrder";
-import { UserAvatar } from "../primitives";
+import { dropTarget, makeRoom, measureSlots, type DragSlot } from "@ui/dragOrder";
+import { MakeRoom, UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
 import { BRAND_WORDMARK } from "../../brand";
 import type { SavedServer, ServerPingResult } from "@core/types";
-import { ServerRailPanel, ServerRailRowGhost, type RailFriends } from "./ServerRailPanel";
+import { RAIL_PANEL_MS, ServerRailPanel, ServerRailRowGhost, type RailFriends } from "./ServerRailPanel";
 import { ServerRailCard, useRailCardHover, type RailCardOccupant } from "./ServerRailCard";
 import { ServerMenu, type ServerMenuTarget } from "./ServerMenu";
 
@@ -102,6 +102,8 @@ function RailTile({
 }>) {
   const { t } = useTranslation("nebulaSidebar");
   const { group, status, unread } = entry;
+  const skin = useTheme().palette.nebulaSkin;
+  const graded = skin.chrome === "stencil";
   const waiting = unread > 99 ? "99+" : String(unread);
   const detail =
     status === "connecting"
@@ -152,7 +154,45 @@ function RailTile({
         // its own; the tile owns this gesture, not its contents.
         "& img": { WebkitUserDrag: "none", pointerEvents: "none" },
         borderRadius: radius("rail"),
-        outline: active ? "2px solid " + theme.palette.nebula.accent : "none",
+        // The ring the open server wears. An `outline` takes one colour, so
+        // the graded one is a plate behind the tile instead, four pixels
+        // proud on every side - the avatar covers the middle, leaving the
+        // gradient showing as a frame. Everything else keeps the outline: a
+        // flat ring is what eleven of the skins draw, and a plate would sit
+        // behind a tile whose corners are rounded differently.
+        ...(active && graded
+          ? {
+              // The gold flash the artboard puts against the rail's own edge
+              // for the server you are on - the same mark the open channel
+              // wears, and the rail's only warm colour. Reached by measuring
+              // back across the padding that centres the tile, because the
+              // bar belongs to the rail and the tile is what knows it is the
+              // active one.
+              "&::before": {
+                content: '""',
+                position: "absolute",
+                left: -(skin.railWidth - TILE) / 2,
+                top: 3,
+                bottom: 3,
+                width: 6,
+                background: theme.palette.nebula.accentOnRail,
+              },
+              "&::after": {
+                content: '""',
+                position: "absolute",
+                inset: -4,
+                zIndex: -1,
+                borderRadius: radius("rail"),
+                background: `linear-gradient(155deg, ${lighten(
+                  theme.palette.nebula.accent,
+                  0.55,
+                )}, ${theme.palette.nebula.accent} 70%, ${theme.palette.nebula.accent})`,
+                // Thrown by the ring rather than the tile, so the tile's own
+                // picture keeps its edges and only the frame lights up.
+                boxShadow: `0 0 16px ${alpha(theme.palette.nebula.accent, 0.75)}`,
+              },
+            }
+          : { outline: active ? "2px solid " + theme.palette.nebula.accent : "none" }),
         outlineOffset: 2,
         opacity: dragging ? 0.4 : status === "saved" ? 0.72 : 1,
         transition: "transform 120ms ease",
@@ -161,7 +201,10 @@ function RailTile({
         "&:hover": {
           opacity: 1,
           transform: "scale(1.08)",
-          outline: "2px solid " + (active ? theme.palette.nebula.accent : theme.palette.nebula.line2),
+          outline:
+            active && graded
+              ? "none"
+              : "2px solid " + (active ? theme.palette.nebula.accent : theme.palette.nebula.line2),
         },
         "@media (prefers-reduced-motion: reduce)": {
           transition: "none",
@@ -278,6 +321,71 @@ function FriendsTile({ active, unread, onOpen }: Readonly<RailFriends>) {
 }
 
 /** The hairline that separates one group of the column from the next. */
+/**
+ * The expander, as the artboard draws it: an open ring turning around a gold
+ * core.
+ *
+ * It turns whether or not anything is loading, which is the point - the mark
+ * is the skin's, not a progress report, and a ring that only moved sometimes
+ * would be read as one. Slowly, because it turns all the time and a fast
+ * ring beside a still column is the only thing the eye then looks at.
+ * Stilled for anyone who has asked motion to stop.
+  */
+function StencilExpander() {
+  return (
+    <Box
+      aria-hidden
+      component="svg"
+      viewBox="0 0 26 26"
+      width={26}
+      height={26}
+      sx={{ display: "block" }}
+    >
+      {/* One viewBox for all three marks rather than a stack of boxes that
+          each centre themselves: the rail is an odd width around an even
+          tile, so the mark lands on a half pixel, and separate centrings are
+          free to round it different ways. Sharing a coordinate system makes
+          them concentric wherever the box falls. */}
+      {/* A full, faint circle under the turning arc. The arc is 300 degrees
+          of ink, so its centre of mass sits about 1.7px off the geometric
+          centre - and because it turns, that imbalance orbits the core and
+          the mark reads as off-centre however exactly it is placed. The track
+          draws a complete circle round the core and the bright arc becomes a
+          highlight riding it. Sized in the icon's own units scaled to this
+          box: radius 9 of 24 is 9.75 of 26, and so is its 2px stroke. */}
+      <Box
+        component="circle"
+        cx={13}
+        cy={13}
+        r={9.75}
+        sx={{ fill: "none", stroke: "currentColor", strokeWidth: 2.17, opacity: 0.3 }}
+      />
+      <Box
+        component="g"
+        sx={{
+          transformBox: "view-box",
+          transformOrigin: "13px 13px",
+          animation: "nebula-rail-spin 3.2s linear infinite",
+          "@keyframes nebula-rail-spin": {
+            from: { transform: "rotate(0deg)" },
+            to: { transform: "rotate(360deg)" },
+          },
+          "@media (prefers-reduced-motion: reduce)": { animation: "none" },
+        }}
+      >
+        <SpinnerIcon width={26} height={26} />
+      </Box>
+      <Box
+        component="circle"
+        cx={13}
+        cy={13}
+        r={4.5}
+        sx={(theme) => ({ fill: theme.palette.nebula.accent2 })}
+      />
+    </Box>
+  );
+}
+
 function RailDivider() {
   return (
     <Box
@@ -360,6 +468,44 @@ export function ServerRail({
 
   const hoveredEntry = entries.find((candidate) => candidate.group.key === hovered?.key) ?? null;
 
+  // The floating panel outlives its own collapse: it has to stay on the screen
+  // for as long as it takes to slide back out of it. `leaving` is that stretch,
+  // and it is the panel's own state rather than the caller's - whoever owns
+  // `expanded` has already had its answer.
+  const panelElement = useRef<HTMLElement | null>(null);
+  const [mounted, setMounted] = useState(expanded);
+  const [leaving, setLeaving] = useState(false);
+  useEffect(() => {
+    if (expanded) {
+      setMounted(true);
+      setLeaving(false);
+      return;
+    }
+    if (!mounted) return;
+    setLeaving(true);
+    const timer = window.setTimeout(() => {
+      setMounted(false);
+      setLeaving(false);
+    }, RAIL_PANEL_MS);
+    return () => window.clearTimeout(timer);
+  }, [expanded, mounted]);
+
+  // Anywhere but the panel closes it. It is laid over the screen rather than
+  // given a column of its own, so the click that dismisses it is whichever one
+  // lands on what it was covering - and that click still reaches what it hit,
+  // since this only watches. The right-click menu is the exception: it belongs
+  // to a row in here even though it is drawn elsewhere, and it closes itself.
+  useEffect(() => {
+    if (pinned || !expanded || menu) return;
+    const away = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && panelElement.current?.contains(target)) return;
+      onToggleExpanded();
+    };
+    window.addEventListener("pointerdown", away, true);
+    return () => window.removeEventListener("pointerdown", away, true);
+  }, [expanded, pinned, menu, onToggleExpanded]);
+
   // The rail runs its own drag rather than the browser one: HTML5 drag never
   // starts reliably on a form control inside the webview, and it gives no way
   // to draw a ghost that stays pinned to the rail while the pointer wanders.
@@ -376,7 +522,14 @@ export function ServerRail({
     left: number;
     width: number;
     height: number;
+    /** The column the pointer is judged against: whichever one is on screen. */
     slots: DragSlot[];
+    /**
+     * The tiles, which open their gap as well. They keep being drawn beside
+     * the open list, and a list that rearranged itself while the column behind
+     * it stood still would show two different orders at once.
+     */
+    tiles: DragSlot[];
   } | null>(null);
 
   const beginGesture = useCallback(
@@ -406,10 +559,11 @@ export function ServerRail({
       if (!held.moved) {
         held.moved = true;
         dismiss();
-        // The slots are measured once, at the moment the drag starts: the
-        // indicator is drawn without moving anything, so the tiles the
-        // pointer is judged against stay where they were.
+        // The slots are measured once, at the moment the drag starts: the gap
+        // that follows is drawn with transforms rather than laid out, so the
+        // tiles the pointer is judged against stay where they were.
         const source = visibleRefs().get(held.key)?.getBoundingClientRect();
+        const tiles = measureSlots(tileRefs.current);
         setDrag({
           key: held.key,
           y: event.clientY,
@@ -418,7 +572,8 @@ export function ServerRail({
           left: source?.left ?? 0,
           width: source?.width ?? TILE,
           height: source?.height ?? TILE,
-          slots: measureSlots(visibleRefs()),
+          slots: open ? measureSlots(rowRefs.current) : tiles,
+          tiles,
         });
         return;
       }
@@ -450,6 +605,10 @@ export function ServerRail({
   const dragKey = drag?.key ?? null;
   const dropBefore = drag ? dropTarget(drag) : null;
   const draggedEntry = entries.find((candidate) => candidate.group.key === dragKey) ?? null;
+
+  // Both columns show the same move, each in its own row heights.
+  const tileGaps = drag ? makeRoom(drag.tiles, drag.key, dropBefore) : null;
+  const rowGaps = drag ? makeRoom(drag.slots, drag.key, dropBefore) : null;
 
   // Whatever is being carried, as a portal: it belongs to the gesture rather
   // than to the column the gesture started in, and the pinned panel drags too.
@@ -488,8 +647,10 @@ export function ServerRail({
       pings={pings}
       activeChannelName={activeChannelName}
       dragKey={dragKey}
-      dropBefore={dropBefore}
+      gaps={rowGaps}
       pinned={pinned}
+      leaving={leaving}
+      ref={panelElement}
       search={search}
       // Only the filter can empty a list that has servers in it; with none
       // saved at all the add button below is the whole answer.
@@ -543,24 +704,65 @@ export function ServerRail({
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: "7px",
-        py: "10px",
+        // The artboard stands its tiles further apart than the pack does -
+        // a wider rail with the same 40px tile has room to, and the ring the
+        // open one wears needs somewhere to bleed.
+        gap: stencil ? "16px" : "7px",
+        // The dashed band is absolute, so it takes no room in the column: on
+        // a skin that draws one, the padding has to clear it by hand - past
+        // where it starts, past its height, and then a gap of its own.
+        pt: stencil ? "30px" : "10px",
+        pb: "10px",
         position: "relative",
         // The blur below makes this a stacking context, so the pinned panel
         // cannot lift itself above the sidebar from in here - the rail as a
         // whole has to sit above it instead.
         zIndex: 45,
-        borderRight: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line,
+        // A skin that inverts the rail against the window needs no rule
+        // between the two - navy meeting white is already an edge, and the
+        // pack's hairline is drawn in the window's border colour, which over
+        // the rail reads as a pale seam stuck to it.
+        borderRight: stencil
+          ? "none"
+          : "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line,
         background: theme.palette.nebula.rail,
         backdropFilter: "blur(14px)",
       })}
     >
-      <RailButton label={expanded ? t("servers.collapse") : t("servers.pinOpen")} onClick={onToggleExpanded}>
-        <ChevronRightIcon
-          width={15}
-          height={15}
-          style={{ transform: expanded ? "rotate(180deg)" : "none" }}
+      {/* The artboard rules the rail off from the window with a run of gold
+          dashes rather than a hairline - the same warning-tape mark it puts
+          over the conversation, and the one thing that stops a navy column
+          reading as a shadow of the window behind it. Leaning, because every
+          other edge in this skin leans. */}
+      {stencil && (
+        <Box
+          aria-hidden
+          sx={(theme) => ({
+            position: "absolute",
+            // Off the edge rather than on it: run flush to the top and the
+            // band reads as the window's own trim rather than the rail's.
+            top: 10,
+            left: 0,
+            right: 0,
+            height: 6,
+            background: `repeating-linear-gradient(115deg, ${theme.palette.nebula.accent2} 0 8px, transparent 8px 16px)`,
+          })}
         />
+      )}
+
+      <RailButton label={expanded ? t("servers.collapse") : t("servers.pinOpen")} onClick={onToggleExpanded}>
+        {/* A ring rather than an arrow, and it does not turn: the artboard
+            draws the expander as the open arc it uses for anything in
+            progress, and half a turn of a circle says nothing anyway. */}
+        {stencil ? (
+          <StencilExpander />
+        ) : (
+          <ChevronRightIcon
+            width={15}
+            height={15}
+            style={{ transform: expanded ? "rotate(180deg)" : "none" }}
+          />
+        )}
       </RailButton>
 
       <RailDivider />
@@ -576,8 +778,11 @@ export function ServerRail({
       )}
 
       {entries.map((entry) => (
-        <Fragment key={entry.group.key}>
-          {dropBefore === entry.group.key && <DropLine />}
+        <MakeRoom
+          key={entry.group.key}
+          offset={tileGaps?.get(entry.group.key)}
+          animate={dragKey !== null}
+        >
           <RailTile
             entry={entry}
             active={entry.group.key === activeKey}
@@ -601,9 +806,8 @@ export function ServerRail({
             onLeave={closeSoon}
             onDragPointerDown={beginGesture(entry.group.key)}
           />
-        </Fragment>
+        </MakeRoom>
       ))}
-      {dragKey && dropBefore === null && <DropLine />}
 
       {ghost}
 
@@ -646,7 +850,9 @@ export function ServerRail({
 
       {/* The pinned panel says everything the card would, so the two never
           show together. */}
-      {!open && !menu && hoveredEntry && hovered && (
+      {/* `mounted` rather than `open`: a panel still sliding out is a panel,
+          and a card opening behind it would be the second of the two. */}
+      {!mounted && !menu && hoveredEntry && hovered && (
         <ServerRailCard
           entry={hoveredEntry}
           icon={icons?.get(hoveredEntry.group.key)}
@@ -666,31 +872,9 @@ export function ServerRail({
         />
       )}
 
-      {expanded && panel}
+      {mounted && panel}
       {serverMenu}
     </Box>
-  );
-}
-
-/**
- * Where the carried tile would land.
- *
- * A hairline rather than a gap: opening a slot would move every tile below it,
- * and the pointer is being judged against where they were.
- */
-function DropLine() {
-  return (
-    <Box
-      aria-hidden
-      sx={(theme) => ({
-        width: TILE,
-        height: 2,
-        my: "-1px",
-        flex: "none",
-        borderRadius: "1px",
-        background: theme.palette.nebula.accent,
-      })}
-    />
   );
 }
 
@@ -759,6 +943,7 @@ function RailButton({
   tone?: "muted" | "bad";
   atBottom?: boolean;
 }>) {
+  const plated = tone === "bad" && useTheme().palette.nebulaSkin.chrome === "stencil";
   return (
     <Tooltip title={label} placement="right">
       <Box
@@ -777,7 +962,16 @@ function RailButton({
           placeItems: "center",
           cursor: "pointer",
           borderRadius: radius("rail"),
-          border: dashed ? "1px dashed " + theme.palette.nebula.line2 : "var(--nebula-line-width, 1px) solid transparent",
+          // A drawn skin stands the destructive control on a plate of its own
+          // rather than leaving it a loose red glyph at the foot of the rail:
+          // everything else down there is bordered, and the one control that
+          // ends a session should not be the one that reads as decoration.
+          border: dashed
+            ? "1px dashed " + theme.palette.nebula.line2
+            : plated
+              ? `2px solid ${theme.palette.nebula.bad}`
+              : "var(--nebula-line-width, 1px) solid transparent",
+          background: plated ? alpha(theme.palette.nebula.bad, 0.14) : undefined,
           color: tone === "bad" ? theme.palette.nebula.bad : theme.palette.nebula.railDim,
           "&:hover": {
             background: dashed ? "transparent" : theme.palette.nebula.hover,

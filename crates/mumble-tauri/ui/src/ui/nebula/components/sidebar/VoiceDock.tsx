@@ -528,6 +528,10 @@ function DockButton({
                 // it upright.
                 background: nebula.card2,
                 border: `2px solid ${nebula.accentLine}`,
+                // Each switch stands on its own offset plate, the way the
+                // dock around them does. Hard, not soft: a drawn skin has no
+                // light source, so depth is a second edge behind the first.
+                boxShadow: `3px 3px 0 ${nebula.line2}`,
                 "&:hover": { filter: "brightness(.96)" },
               }
             : { "&:hover": { background: nebula.hover, color: nebula.text } };

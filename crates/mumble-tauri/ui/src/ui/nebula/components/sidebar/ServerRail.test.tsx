@@ -126,6 +126,29 @@ describe("ServerRail", () => {
     expect(screen.getByRole("menuitem", { name: "Copy address" })).toBeTruthy();
   });
 
+  it("closes the floating list on a click that lands anywhere else", () => {
+    const onToggleExpanded = vi.fn();
+    rail({ expanded: true, onToggleExpanded });
+    fireEvent.pointerDown(document.body);
+    expect(onToggleExpanded).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the floating list alone while the click is inside it", () => {
+    const onToggleExpanded = vi.fn();
+    rail({ expanded: true, onToggleExpanded });
+    fireEvent.pointerDown(screen.getByTestId("nebula-server-rail-panel"));
+    expect(onToggleExpanded).not.toHaveBeenCalled();
+  });
+
+  it("keeps the pinned column open wherever the click lands", () => {
+    // Pinned it is the screen's own sidebar; there is nothing to collapse into
+    // and nothing it is covering to click away.
+    const onToggleExpanded = vi.fn();
+    rail({ pinned: true, onToggleExpanded });
+    fireEvent.pointerDown(document.body);
+    expect(onToggleExpanded).not.toHaveBeenCalled();
+  });
+
   it("treats a press that never moved as a click, not a drag", () => {
     const onReorder = vi.fn();
     const onSelect = vi.fn();
