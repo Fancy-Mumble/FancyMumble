@@ -1,136 +1,21 @@
 /**
- * Drag-and-drop helpers for moving a user into another channel.
+ * Standard's picture of a user being carried between channels.
  *
- * Uses pointer events + a portal-mounted floating clone (similar to
- * the `ServerTabsBar` tab reorder), because HTML5 drag-and-drop is
- * unreliable inside Tauri's webview (drag ghost suppressed, the
- * `data-tauri-drag-region` attribute can swallow events).  Only the Y
- * axis follows the cursor; X is locked to the source row's left edge
- * because users are arranged vertically in the sidebar.
- *
- * Drop targets register themselves through `useChannelDropTarget`.
- * On `pointerup` we hit-test the cursor against every registered
- * target's bounding rect and invoke `move_user_to_channel` if the
- * drop landed on one.
+ * The gesture, the drop targets and the seat that opens in the target channel
+ * are `@ui/userCarry`'s, shared with Nebula. What lives here is the clone that
+ * follows the pointer: a translucent slab with the face and the name on it,
+ * which is this skin's answer and not the other one's.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { invoke } from "@tauri-apps/api/core";
-import { useAppStore } from "@core/store";
+import { useCarryUser } from "@ui/userCarry";
 
-const DRAG_THRESHOLD_PX = 4;
-
-// -- Global drop-target registry ----------------------------------
-
-interface DropRegistration {
-  channelId: number;
-  el: HTMLElement;
-  setActive: (active: boolean) => void;
-}
-
-const registry = new Set<DropRegistration>();
-
-function registerDropTarget(reg: DropRegistration): () => void {
-  registry.add(reg);
-  return () => {
-    registry.delete(reg);
-  };
-}
-
-function hitTest(clientX: number, clientY: number): DropRegistration | null {
-  for (const reg of registry) {
-    const rect = reg.el.getBoundingClientRect();
-    if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
-      return reg;
-    }
-  }
-  return null;
-}
-
-function clearAllActive(): void {
-  for (const reg of registry) {
-    reg.setActive(false);
-  }
-}
-
-function setActiveOnly(target: DropRegistration | null): void {
-  for (const reg of registry) {
-    reg.setActive(reg === target);
-  }
-}
-
-// -- Drop-target hook (channel rows) ------------------------------
-
-/**
- * Register a channel as a drop target for user-move drags.
- * Returns a `ref` to attach to the wrapper element and an `active`
- * flag that flips to `true` while a user drag is hovering it.
- */
-export function useChannelDropTarget(channelId: number) {
-  const [active, setActive] = useState(false);
-  const unregisterRef = useRef<(() => void) | null>(null);
-
-  const ref = useCallback(
-    (el: HTMLDivElement | null) => {
-      // Tear down any previous registration first.
-      unregisterRef.current?.();
-      unregisterRef.current = null;
-      if (el) {
-        unregisterRef.current = registerDropTarget({ channelId, el, setActive });
-      }
-    },
-    [channelId],
-  );
-
-  useEffect(
-    () => () => {
-      unregisterRef.current?.();
-      unregisterRef.current = null;
-    },
-    [],
-  );
-
-  return { ref, active };
-}
-
-// -- Drag-source hook (user rows) ---------------------------------
-
-interface DragState {
-  pointerId: number;
-  startX: number;
-  startY: number;
-  grabOffsetX: number;
-  grabOffsetY: number;
-  width: number;
-  height: number;
-  initialLeft: number;
-  started: boolean;
-  rafId: number | null;
-  pendingX: number;
-  pendingY: number;
-}
-
-interface FloatingState {
-  width: number;
-  height: number;
-  initialLeft: number;
-  initialTop: number;
-  label: string;
-  avatarUrl: string | null;
-}
+export { useChannelDropTarget } from "@ui/userCarry";
 
 /** Result of `useUserDrag`. */
 export interface UserDragResult {
   /** Spread on the draggable user row. */
-  handlers: {
-    onPointerDown: (e: React.PointerEvent<HTMLElement>) => void;
-    onPointerMove: (e: React.PointerEvent<HTMLElement>) => void;
-    onPointerUp: (e: React.PointerEvent<HTMLElement>) => void;
-    onPointerCancel: (e: React.PointerEvent<HTMLElement>) => void;
-    onClickCapture: (e: React.MouseEvent) => void;
-    style: React.CSSProperties;
-  };
+  handlers: ReturnType<typeof useCarryUser>["handlers"];
   /** Portal-rendered floating clone (or `null` when idle). */
   overlay: React.ReactNode;
   /** True while the user is being dragged (after threshold). */
@@ -138,9 +23,8 @@ export interface UserDragResult {
 }
 
 /**
- * Make a user row draggable.  When `disabled` is true the hook returns
- * inert handlers and never starts a drag (used for self / offline /
- * mobile rows).
+ * Make a user row draggable. When `disabled` is true the hook returns inert
+ * handlers and never starts a drag (used for self / offline / mobile rows).
  */
 export function useUserDrag(
   session: number,
@@ -148,197 +32,33 @@ export function useUserDrag(
   avatarUrl: string | null,
   disabled: boolean,
 ): UserDragResult {
-  const stateRef = useRef<DragState | null>(null);
-  const floatingElRef = useRef<HTMLDivElement | null>(null);
-  const justDraggedRef = useRef(false);
-  const [floating, setFloating] = useState<FloatingState | null>(null);
+  const carry = useCarryUser(session, disabled);
 
-  const flush = useCallback(() => {
-    const st = stateRef.current;
-    if (!st) return;
-    st.rafId = null;
-    const el = floatingElRef.current;
-    if (el) {
-      // Lock X to the source row's initial left; only Y follows the
-      // cursor (users are stacked vertically).
-      const y = st.pendingY - st.grabOffsetY;
-      el.style.transform = `translate(${st.initialLeft}px, ${y}px)`;
-    }
-    setActiveOnly(hitTest(st.pendingX, st.pendingY));
-  }, []);
-
-  const cleanup = useCallback(() => {
-    const st = stateRef.current;
-    if (st?.rafId != null) cancelAnimationFrame(st.rafId);
-    stateRef.current = null;
-    clearAllActive();
-    setFloating(null);
-  }, []);
-
-  const onPointerDown = useCallback(
-    (e: React.PointerEvent<HTMLElement>) => {
-      if (disabled || e.button !== 0) return;
-      // Allow nested interactive controls (volume sliders, etc.) to
-      // claim their own pointer events.
-      const targetEl = e.target as HTMLElement;
-      if (targetEl.closest("input, [data-no-drag='true']")) return;
-
-      const rect = e.currentTarget.getBoundingClientRect();
-      stateRef.current = {
-        pointerId: e.pointerId,
-        startX: e.clientX,
-        startY: e.clientY,
-        grabOffsetX: e.clientX - rect.left,
-        grabOffsetY: e.clientY - rect.top,
-        width: rect.width,
-        height: rect.height,
-        initialLeft: rect.left,
-        started: false,
-        rafId: null,
-        pendingX: e.clientX,
-        pendingY: e.clientY,
-      };
-      try {
-        e.currentTarget.setPointerCapture(e.pointerId);
-      } catch {
-        // Some webviews reject capture on disabled elements; ignore.
-      }
-    },
-    [disabled],
-  );
-
-  const onPointerMove = useCallback(
-    (e: React.PointerEvent<HTMLElement>) => {
-      const st = stateRef.current;
-      if (!st || st.pointerId !== e.pointerId) return;
-      st.pendingX = e.clientX;
-      st.pendingY = e.clientY;
-      if (!st.started) {
-        const dx = e.clientX - st.startX;
-        const dy = e.clientY - st.startY;
-        if (Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
-        st.started = true;
-        setFloating({
-          width: st.width,
-          height: st.height,
-          initialLeft: st.initialLeft,
-          initialTop: e.clientY - st.grabOffsetY,
-          label: name,
-          avatarUrl,
-        });
-      }
-      if (st.rafId == null) {
-        st.rafId = requestAnimationFrame(flush);
-      }
-    },
-    [flush, name, avatarUrl],
-  );
-
-  const commitDrop = useCallback(
-    (clientX: number, clientY: number) => {
-      const target = hitTest(clientX, clientY);
-      if (!target) return;
-      // For self-moves use join_channel (which sends a UserState without
-      // an explicit session) so the server treats it as a self-join and
-      // does not check PERM_MOVE on the source/target channels.  Other
-      // users go through move_user_to_channel which requires PERM_MOVE.
-      const ownSession = useAppStore.getState().ownSession;
-      const cmd =
-        ownSession === session
-          ? invoke("join_channel", { channelId: target.channelId })
-          : invoke("move_user_to_channel", { session, channelId: target.channelId });
-      cmd.catch((err: unknown) => console.error("channel move failed:", err));
-    },
-    [session],
-  );
-
-  const onPointerUp = useCallback(
-    (e: React.PointerEvent<HTMLElement>) => {
-      const st = stateRef.current;
-      if (!st || st.pointerId !== e.pointerId) {
-        cleanup();
-        return;
-      }
-      const wasDragging = st.started;
-      try {
-        if (e.currentTarget.hasPointerCapture(st.pointerId)) {
-          e.currentTarget.releasePointerCapture(st.pointerId);
-        }
-      } catch {
-        // Capture may have already been released.
-      }
-      if (wasDragging) {
-        commitDrop(e.clientX, e.clientY);
-        // Suppress the synthetic click that normally follows
-        // pointerup, otherwise selecting / opening DM would fire.
-        justDraggedRef.current = true;
-      }
-      cleanup();
-    },
-    [cleanup, commitDrop],
-  );
-
-  const onPointerCancel = useCallback(
-    (e: React.PointerEvent<HTMLElement>) => {
-      const st = stateRef.current;
-      if (st) {
-        try {
-          if (e.currentTarget.hasPointerCapture(st.pointerId)) {
-            e.currentTarget.releasePointerCapture(st.pointerId);
-          }
-        } catch {
-          // Capture may have already been released.
-        }
-      }
-      cleanup();
-    },
-    [cleanup],
-  );
-
-  const onClickCapture = useCallback((e: React.MouseEvent) => {
-    if (justDraggedRef.current) {
-      justDraggedRef.current = false;
-      e.preventDefault();
-      e.stopPropagation();
-    }
-  }, []);
-
-  // Render the floating clone via portal so it can travel outside the
-  // sidebar's overflow clip box.
+  // Through a portal, so the clone can travel outside the sidebar's overflow
+  // clip box.
   const overlay =
-    floating != null
+    carry.ghost != null
       ? createPortal(
           <FloatingUserClone
-            elRef={floatingElRef}
-            width={floating.width}
-            height={floating.height}
-            initialLeft={floating.initialLeft}
-            initialTop={floating.initialTop}
-            label={floating.label}
-            avatarUrl={floating.avatarUrl}
+            elRef={carry.ghostRef}
+            width={carry.ghost.width}
+            height={carry.ghost.height}
+            initialLeft={carry.ghost.left}
+            initialTop={carry.ghost.top}
+            label={name}
+            avatarUrl={avatarUrl}
           />,
           document.body,
         )
       : null;
 
-  return {
-    handlers: {
-      onPointerDown,
-      onPointerMove,
-      onPointerUp,
-      onPointerCancel,
-      onClickCapture,
-      style: floating ? { visibility: "hidden" } : {},
-    },
-    overlay,
-    isDragging: floating != null,
-  };
+  return { handlers: carry.handlers, overlay, isDragging: carry.isDragging };
 }
 
 // -- Floating clone (portal child) --------------------------------
 
 interface FloatingUserCloneProps {
-  elRef: React.MutableRefObject<HTMLDivElement | null>;
+  elRef: React.MutableRefObject<HTMLElement | null>;
   width: number;
   height: number;
   initialLeft: number;
@@ -358,7 +78,7 @@ function FloatingUserClone({
 }: FloatingUserCloneProps) {
   return (
     <div
-      ref={elRef}
+      ref={elRef as React.MutableRefObject<HTMLDivElement | null>}
       style={{
         position: "fixed",
         left: 0,
