@@ -96,6 +96,8 @@ interface ComposerProps {
   /** Files picked or dropped, waiting on the message that sends them. */
   attachments?: readonly StagedAttachment[];
   onRemoveAttachment?: (id: string) => void;
+  /** Open a staged picture full size. Absent leaves the tiles unclickable. */
+  onPreviewAttachment?: (id: string) => void;
   /** Uploads in flight, drawn as a tray above the text. */
   uploads?: readonly UploadPlaceholder[];
   onCancelUpload?: (id: string) => void;
@@ -107,6 +109,18 @@ interface ComposerProps {
    * streams from a path.
    */
   dropActive?: boolean;
+  /**
+   * Laid out for a phone.
+   *
+   * The bar is attach, field and send at every width. What does not survive
+   * 390px is the row of *inline* extras between them - the GIF chip and the
+   * attach menu's chevron - which together leave the field nothing to be: at
+   * that width they take more room than the group has, the editor computes to
+   * zero and the placeholder stacks one word per line inside a plate four
+   * times its drawn height. They are not lost, only folded: both are already
+   * reachable from the attach menu.
+   */
+  dense?: boolean;
 }
 
 /**
@@ -217,9 +231,11 @@ export function Composer({
   onRemoveQuote,
   attachments = [],
   onRemoveAttachment,
+  onPreviewAttachment,
   uploads = [],
   onCancelUpload,
   dropActive = false,
+  dense = false,
 }: Readonly<ComposerProps>) {
   const [draft, setDraft] = useState("");
   /**
@@ -278,6 +294,46 @@ export function Composer({
     openPopoverFrom(kind, event.currentTarget, width);
   const stencil = useTheme().palette.nebulaSkin.chrome === "stencil";
   const editor = useRef<MarkdownInputApi | null>(null);
+  /** The field itself, watched for the moment the draft stops being one line. */
+  const field = useRef<HTMLDivElement>(null);
+  /**
+   * Whether the newline hint has had its say.
+   *
+   * It is an instruction for a draft that is still one line: the moment the
+   * text breaks - because it was told to, or because it ran out of room - the
+   * reader has either used the key or does not need it, and the words are
+   * three lines of the field's width spent on something already answered.
+   *
+   * A latch, not a live reading of the height, and that is the whole point:
+   * putting the hint away gives its width back to the text, which can un-wrap
+   * the very line that put it away, which would bring it back. A field that
+   * flickers between one line and two on a single keystroke is worse than a
+   * hint that overstays. It comes back when the draft is empty again, which is
+   * the one state where showing it cannot re-wrap anything.
+   */
+  const [hintSpent, setHintSpent] = useState(false);
+  // Watched as a height rather than read out of the draft: a line that simply
+  // ran out of room breaks without a `\n` in it, and both breaks are the same
+  // event as far as the hint is concerned. The field's own box is what says so.
+  useEffect(() => {
+    const el = field.current;
+    if (!stencil || hintSpent || !el || typeof ResizeObserver === "undefined") return;
+    const check = () => {
+      const line = parseFloat(getComputedStyle(el.querySelector("textarea") ?? el).lineHeight);
+      if (el.getBoundingClientRect().height > (Number.isFinite(line) ? line : 20) * 1.5) {
+        setHintSpent(true);
+      }
+    };
+    check();
+    const watch = new ResizeObserver(check);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [stencil, hintSpent]);
+  // Sent, or cleared by hand: an empty field is one line by definition, so the
+  // hint can be offered again without the width it takes back rewriting it.
+  useEffect(() => {
+    if (draft === "") setHintSpent(false);
+  }, [draft]);
   /** Where the caret is, as the editor last reported it. */
   const caret = useRef({ start: 0, end: 0 });
   /**
@@ -758,6 +814,7 @@ export function Composer({
               onOptionsChange={(next) => onShareOptionsChange?.(next)}
               onRemove={(id) => onRemoveAttachment?.(id)}
               onAddMore={() => onAttach?.("any")}
+              onPreview={onPreviewAttachment}
             />
           </Tray>
         )}
@@ -779,8 +836,19 @@ export function Composer({
         <Stack
           direction="row"
           alignItems="center"
-          gap={stencil ? "12px" : "9px"}
-          sx={{ minHeight: stencil ? 56 : 54, flex: "none", ...(stencil ? {} : { px: "15px", py: "11px" }) }}
+          gap={stencil ? 0 : "9px"}
+          sx={{
+            minHeight: stencil ? 56 : 54,
+            flex: "none",
+            // Kerned the way the header's actions are: clip, field and Send
+            // overlap 3 of the 10px their leading edge leans, so the drawn
+            // plates never meet - what is left between two parallel leaning
+            // edges is a 7px slit of window. Wider than the header's, because
+            // these plates are 56px tall and a shared edge that long reads
+            // tighter at the same slit. `gap` cannot go negative, hence the
+            // margin.
+            ...(stencil ? { "& > * + *": { marginLeft: "-3px" } } : { px: "15px", py: "11px" }),
+          }}
         >
           {/* The paperclip is the picker. Pressed, it opens the file dialog
               and whatever comes back lands in the tray - no panel between
@@ -795,9 +863,23 @@ export function Composer({
                 ? {
                     // One plate for the clip and its chevron. Two would put a
                     // gap between them that the row's rhythm has no room for.
-                    alignSelf: "stretch",
-                    gap: "2px",
-                    px: "12px",
+                    //
+                    // Held at the row's own height rather than stretched to it:
+                    // the field is the only plate that grows with the text, and
+                    // a clip that grew with it while Send stayed put left the
+                    // row with one tool twice the height of the other. It is
+                    // also the height the plate is cut for - the silhouette
+                    // leans a fixed 10px, which is the row's slope at 56 and
+                    // nothing's slope at 180.
+                    alignSelf: "center",
+                    height: 56,
+                    // No padding and no gap: the two tools *are* the plate's
+                    // inside, tiling it corner to corner. What is held back is
+                    // the hairline - the plate's own background showing past
+                    // its inset fill - which a tool painted flush to the edge
+                    // would cover, leaving the plate undrawn while hovered.
+                    gap: 0,
+                    p: "var(--nebula-line-width, 1px)",
                     ...chamferedSurface(
                       theme,
                       theme.palette.nebula.card,
@@ -805,13 +887,21 @@ export function Composer({
                       "var(--nebula-clip-plate, none)",
                     ),
                   }
-                : { gap: "9px" }),
+                : {
+                    gap: "9px",
+                    // No plate on a skin that draws none, but the tools still
+                    // have a height, and it is the row's - not the field's.
+                    // Their hover fills are what the difference would show.
+                    alignSelf: "center",
+                    height: 32,
+                  }),
             })}
           >
           <BareButton
             label={attachBlocked ?? t("nebulaChat:composer.attachFiles")}
             disabled={disabled}
             muted={!!attachBlocked}
+            sx={stencil ? plateTool : toolFill}
             buttonRef={attachButton}
             onClick={(event) => {
               if (attachBlocked) openPopover("notice", event, NOTICE_POPOVER_WIDTH);
@@ -829,14 +919,22 @@ export function Composer({
           >
             <AttachIcon width={16} height={16} />
           </BareButton>
-          {hasAttachMenu && (
+          {hasAttachMenu && !dense && (
             <BareButton
               label={t("nebulaChat:composer.moreWaysToAttach")}
               testId={TID.chatAttachMenu}
               disabled={disabled}
               active={!!attachMenu}
               size={16}
-              sx={{ height: 28, ml: stencil ? 0 : "-6px", borderRadius: radius("sm") }}
+              sx={
+                stencil
+                  ? // Pulled back onto the clip's leaning right edge, which is
+                    // its own leaning left edge: cut from the same silhouette
+                    // at the same height, the two interlock exactly, so the
+                    // plate is tiled without a seam of dead plate between them.
+                    { ...plateTool, ml: "-10px" }
+                  : { ...toolFill, ml: "-6px", borderRadius: radius("sm") }
+              }
               onClick={(event) => setAttachMenu(event.currentTarget)}
             >
               <ChevronDownIcon width={10} height={10} strokeWidth={2.2} />
@@ -858,6 +956,27 @@ export function Composer({
                 ? {
                     alignSelf: "stretch",
                     px: "16px",
+                    // The plate keeps a band of itself above and below the
+                    // words. At one line the row's 56px floor was the whole of
+                    // that band and the field could be left flush; a field that
+                    // grows takes the row with it, so the last thing between
+                    // the text and the plate's own rule went with it - the
+                    // first line printed on the edge and the last one under it.
+                    // It is stated here rather than as padding on the field
+                    // because the text inside that box scrolls: padding there
+                    // would scroll away with the first line it let through,
+                    // while a plate that holds its own inset clips the run
+                    // short of the rule however far it has been scrolled.
+                    //
+                    // 16, because that is the band the row's floor already
+                    // draws: the tallest thing on an empty field is the 24px
+                    // GIF chip, and 16 above and below it is the 56 the mock
+                    // cuts every plate in this row at. Taking the number off
+                    // the floor leaves the one-line composer exactly as it was
+                    // drawn - Send and the clip still meet it edge to edge -
+                    // and keeps the band the same at every height, rather than
+                    // stepping in the moment the text wraps.
+                    py: "16px",
                     ...chamferedSurface(
                       theme,
                       theme.palette.nebula.card,
@@ -869,45 +988,75 @@ export function Composer({
             })}
           >
             {/* A word, not a glyph: the canvas gives GIF a small chip of its own
-              because there is no picture of "GIF" anyone reads faster. */}
-            <Box
-              component="button"
-              type="button"
-              aria-label={t("nebulaChat:composer.insertGif")}
-              disabled={disabled}
-              onClick={(event) => openPopover("gif", event, GIF_POPOVER_WIDTH)}
-              sx={(theme) => ({
-                all: "unset",
-                cursor: "pointer",
-                flex: "none",
-                padding: "4px 8px",
-                borderRadius: radius("sm"),
-                fontSize: 10,
-                fontWeight: 600,
-                letterSpacing: "0.03em",
-                // The one badge several skins invert outright - Midnight runs cyan
-                // on a bottle-green chip, Mobel and Ply leave it as plain type.
-                background: theme.palette.nebula.gifBg,
-                color: theme.palette.nebula.gifText,
-                // A drawn skin outlines the word and leans it, the way the
-                // artboard sets every small label.
-                ...(stencil
-                  ? {
-                      padding: "3px 8px",
-                      borderRadius: 0,
-                      border: `2px solid ${theme.palette.nebula.accentLine}`,
-                      background: "transparent",
-                      fontStyle: "italic",
-                      fontWeight: 800,
-                      fontSize: 13,
-                      letterSpacing: ".1em",
-                    }
-                  : {}),
-                "&:hover": { background: theme.palette.nebula.hover, color: theme.palette.nebula.text },
-              })}
-            >
-              GIF
-            </Box>
+                because there is no picture of "GIF" anyone reads faster. On a
+                phone it is the first thing folded away - see `dense`. */}
+            {!dense && (
+              <Box
+                component="button"
+                type="button"
+                aria-label={t("nebulaChat:composer.insertGif")}
+                disabled={disabled}
+                onClick={(event) => openPopover("gif", event, GIF_POPOVER_WIDTH)}
+                sx={(theme) => ({
+                  all: "unset",
+                  cursor: "pointer",
+                  flex: "none",
+                  padding: "4px 8px",
+                  borderRadius: radius("sm"),
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: "0.03em",
+                  // The one badge several skins invert outright - Midnight runs cyan
+                  // on a bottle-green chip, Mobel and Ply leave it as plain type.
+                  background: theme.palette.nebula.gifBg,
+                  color: theme.palette.nebula.gifText,
+                  // A drawn skin outlines the word and leans it, the way the
+                  // artboard sets every small label.
+                  ...(stencil
+                    ? {
+                        // Cut on the field's own angle rather than boxed square:
+                        // the plate around it leans 10px over its 56px, so at
+                        // this chip's 24px the same slope is 4.3px. Fixing the
+                        // height is what makes that arithmetic hold - a clip
+                        // takes a length, not an angle, so a chip left to size
+                        // itself off its line box would lean by whatever height
+                        // the font happened to give it.
+                        display: "flex",
+                        alignItems: "center",
+                        height: 24,
+                        padding: "0 10px",
+                        // The edge is the element's background under an inset
+                        // fill, not a border: a border is drawn outside the clip
+                        // and would be shaved off along both leaning sides.
+                        ...chamferedSurface(
+                          theme,
+                          theme.palette.nebula.card,
+                          theme.palette.nebula.accentLine,
+                          "polygon(4.3px 0, 100% 0, calc(100% - 4.3px) 100%, 0 100%)",
+                        ),
+                        fontStyle: "italic",
+                        fontWeight: 800,
+                        fontSize: 13,
+                        letterSpacing: ".1em",
+                      }
+                    : {}),
+                  ...(stencil
+                    ? {
+                        // The fill lives on the inset layer now, so that is where
+                        // a hover paints; on the element it would repaint the edge.
+                        "&:hover": {
+                          color: theme.palette.nebula.text,
+                          "&::before": { background: theme.palette.nebula.hover },
+                        },
+                      }
+                    : {
+                        "&:hover": { background: theme.palette.nebula.hover, color: theme.palette.nebula.text },
+                      }),
+                })}
+              >
+                GIF
+              </Box>
+            )}
 
             <Menu
               anchorEl={attachMenu}
@@ -1000,6 +1149,7 @@ export function Composer({
              * or the caret drifts off the text, so both are zeroed together.
              */}
             <Box
+              ref={field}
               // The e2e handle Standard puts on its own composer wrapper: the
               // suite locates this, then the `textarea` inside it.
               data-testid={TID.chatComposerInput}
@@ -1041,9 +1191,25 @@ export function Composer({
                 "--color-selection": theme.palette.nebula.accentSoft,
                 "--selection-ring": `0 0 0 1px ${theme.palette.nebula.accentLine}`,
                 "--selection-radius": "3px",
+                // A draft too long for the field scrolls, and the bar that says
+                // so is drawn in the ink rather than in the pack's chip tone:
+                // the chip is picked to read against the window, and the field
+                // is a plate of nearly that colour on more than one skin. Taken
+                // off the text it lands on any plate, on a scheme this pack has
+                // and on one a server sends.
+                "--editor-scrollbar": alpha(theme.palette.nebula.text, 0.22),
+                "--editor-scrollbar-hover": alpha(theme.palette.nebula.text, 0.38),
                 "& > div": {
                   minHeight: 22,
-                  maxHeight: 120,
+                  // The ceiling the field grows to before it starts scrolling
+                  // instead - about nine lines. Six was short of what people
+                  // actually paste in: a paragraph hit the cap with most of
+                  // itself already out of sight, and a composer you cannot
+                  // read your own message in is one you cannot proof-read it
+                  // in either. The panel is the tallest thing on the pane, so
+                  // this is as far as it can go without eating the last of the
+                  // conversation above it.
+                  maxHeight: 180,
                   background: "transparent",
                   border: "none",
                   borderRadius: 0,
@@ -1081,8 +1247,9 @@ export function Composer({
             </Box>
 
             {/* A drawn skin names the newline key inside the field, on the
-              right, where the mock puts it. */}
-            {stencil && (
+              right, where the mock puts it - for as long as the draft is the
+              single line the sentence is about. */}
+            {stencil && !hintSpent && (
               <Typography
                 component="div"
                 aria-hidden
@@ -1116,8 +1283,8 @@ export function Composer({
                   ...(stencil
                     ? {
                         width: "auto",
-                        height: 56,
-                        px: "26px",
+                        height: dense ? 48 : 56,
+                        px: dense ? "16px" : "26px",
                         gap: "10px",
                         borderRadius: 0,
                       }
@@ -1137,14 +1304,31 @@ export function Composer({
                     ? `0 8px 20px ${alpha(theme.palette.nebula.accent, 0.35)}`
                     : `0 4px 14px ${theme.palette.nebula.accent}66`,
                   "&:hover": { background: theme.palette.nebula.accent, filter: "brightness(1.08)" },
-                  "&.Mui-disabled": {
-                    background: theme.palette.nebula.card2,
-                    color: theme.palette.nebula.dim,
-                    boxShadow: "none",
-                  },
+                  // Unlit, not unpainted. A drawn skin puts Send on a plate of
+                  // its own with the label cut out of it, and dropping that
+                  // plate to the chip colour leaves a pale box with pale ink -
+                  // the one element the panel is built around, gone. It keeps
+                  // the accent and loses the gradient, the glow and the hover,
+                  // which is difference enough to read as "nothing to send".
+                  "&.Mui-disabled": stencil
+                    ? {
+                        background: theme.palette.nebula.accent,
+                        color: theme.palette.nebula.onAccent,
+                        opacity: 0.55,
+                        boxShadow: "none",
+                      }
+                    : {
+                        background: theme.palette.nebula.card2,
+                        color: theme.palette.nebula.dim,
+                        boxShadow: "none",
+                      },
                 })}
               >
-                {stencil && (
+                {/* The word is cut out of the plate on a drawn skin, and it
+                    is 60px of a 390px bar - which is the difference between a
+                    placeholder that fits on one line and one that does not.
+                    The arrow says the same thing in the room it has. */}
+                {stencil && !dense && (
                   <Box
                     component="span"
                     sx={{
@@ -1252,6 +1436,7 @@ export function Composer({
  * upward rather than as a pile of cards balanced on the field.
  */
 function Tray({ children }: Readonly<{ children: React.ReactNode }>) {
+  const stencil = useTheme().palette.nebulaSkin.chrome === "stencil";
   return (
     <Box
       data-nebula-tray
@@ -1259,7 +1444,27 @@ function Tray({ children }: Readonly<{ children: React.ReactNode }>) {
         flex: "none",
         px: "11px",
         py: "5px",
-        borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.washLine}`,
+        // A hairline is all a tray needs while the panel behind it is a
+        // surface. On a drawn skin the panel is ground - it hands its fill to
+        // the three plates in the row below - so the same tray had nothing
+        // under it and a staged file sat on the wallpaper. It takes a plate of
+        // its own instead, cut on the skin's silhouette and filled like the
+        // field it docks above, held off the row by the air that skin keeps
+        // between every other pair of plates.
+        ...(stencil
+          ? {
+              boxSizing: "border-box",
+              mb: "5px",
+              ...chamferedSurface(
+                theme,
+                theme.palette.nebula.input,
+                theme.palette.nebula.line2,
+                "var(--nebula-clip-plate, none)",
+              ),
+            }
+          : {
+              borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.washLine}`,
+            }),
       })}
     >
       {children}
@@ -1419,6 +1624,35 @@ function popoverLeft(shell: HTMLElement | null, button: HTMLElement | null, widt
   const room = (box?.width ?? width) - width - 20;
   return Math.max(0, Math.min((anchor?.left ?? 0) - (box?.left ?? 0), room));
 }
+
+/**
+ * A tool that fills the surface it stands on.
+ *
+ * The fill *is* the button - there is nothing else drawn to hover - so it
+ * takes the whole of the space it is given rather than a 28px square floating
+ * in the middle of it. A fill that stops short reads as a second, smaller
+ * button drawn inside the first, and it leaves the rest of the surface dead
+ * to the pointer, which is what a tall plate makes obvious.
+ */
+const toolFill = { alignSelf: "stretch", height: "auto" } as const;
+
+/**
+ * The same, for the two tools that share the clip's plate.
+ *
+ * Corner to corner: square, since the plate's corners are cut rather than
+ * rounded, and cut on the plate's own silhouette so the fill leans into the
+ * corner instead of being shaved off square at it. The cut is taken at the
+ * tool's height rather than the plate's, which leans it a fraction steeper -
+ * a clip path takes a length, not an angle - and 2px of that over 52px is
+ * below what an edge that short can show.
+ */
+const plateTool = {
+  ...toolFill,
+  width: "auto",
+  px: "12px",
+  borderRadius: 0,
+  clipPath: "var(--nebula-clip-plate, none)",
+} as const;
 
 /**
  * A tool on the composer's second row.

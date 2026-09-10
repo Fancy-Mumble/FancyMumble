@@ -3,8 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@core/store";
 import { SETTLE_SHRINK_MS } from "@core/features/chat/chatWindowing";
 import type { ChatMessage } from "@core/types";
+import { formatTime } from "../../selectors";
 import { withNebulaTheme } from "../../testTheme";
 import { MessageList } from "./MessageList";
+import { DEFAULT_CHAT_DISPLAY } from "../../useChatDisplay";
 
 vi.mock("@core/lazyBlobs", () => ({ useUserAvatars: () => new Map() }));
 
@@ -132,12 +134,186 @@ describe("MessageList", () => {
       messages: [message("a"), message("b", 1_700_000_000_000 + minute), message("c", 1_700_000_900_000)],
     });
     const top = (id: string) => container.querySelector<HTMLElement>(`[data-message-id="${id}"]`)!;
+    // The air above a block is the block's own rather than its first row's:
+    // the sticky picture is measured against the block, and a margin inside
+    // would leave it resting a row-gap above the message it heads.
+    const block = (id: string) => top(id).parentElement!;
 
     // Spacing is the only thing left saying that two messages are one person
     // talking, once the repeated name and clock have gone.
     const inside = getComputedStyle(top("b")).marginTop;
-    const between = getComputedStyle(top("c")).marginTop;
+    const between = getComputedStyle(block("c")).marginTop;
     expect(parseFloat(inside)).toBeLessThan(parseFloat(between));
+    // And the row that opens a block adds nothing on top of it.
+    expect(parseFloat(getComputedStyle(top("c")).marginTop)).toBe(0);
+  });
+
+  describe("the hoisted avatar", () => {
+    const minute = 60_000;
+    /** A speaker, so a day can be cut into runs of one person talking. */
+    const from = (session: number, id: string, timestamp: number): ChatMessage => ({
+      ...message(id, timestamp),
+      sender_session: session,
+      sender_name: `user-${session}`,
+    });
+    const drawSticky = (messages: ChatMessage[]) =>
+      draw({ messages, renderAvatar: (m) => <span>avatar-{m.body}</span> });
+    const sticky = (container: HTMLElement) => [
+      ...container.querySelectorAll<HTMLElement>("[data-sticky-avatar]"),
+    ];
+    /** Whose picture each hoisted column is drawing, in order down the day. */
+    const drawn = (container: HTMLElement) =>
+      sticky(container).map((node) => node.querySelector("span")?.textContent);
+    /** What each of those columns has its travelling clock reading. */
+    const clocks = (container: HTMLElement) =>
+      sticky(container).map((node) => node.querySelector("[data-avatar-stamp]")?.textContent);
+
+    it("gives a run of messages one picture, spanning the whole run", () => {
+      const { container } = drawSticky([
+        from(7, "a", 1_700_000_000_000),
+        from(7, "b", 1_700_000_000_000 + minute),
+        from(7, "c", 1_700_000_000_000 + 2 * minute),
+      ]);
+
+      // One picture for the three, drawn from the message that opens the run.
+      const pictures = sticky(container);
+      expect(pictures).toHaveLength(1);
+      expect(drawn(container)).toEqual(["avatar-a"]);
+      // It travels with the reader rather than scrolling away at the top of
+      // the run - and stops at the foot of the block, which is the last
+      // message of the run and nothing below it.
+      const column = pictures[0]!.parentElement!;
+      const block = column.parentElement!;
+      expect(getComputedStyle(pictures[0]!).position).toBe("sticky");
+      expect(getComputedStyle(column).position).toBe("absolute");
+      expect(block.contains(container.querySelector('[data-message-id="c"]'))).toBe(true);
+    });
+
+    it("starts a new picture where someone else has interrupted", () => {
+      const { container } = drawSticky([
+        from(7, "a", 1_700_000_000_000),
+        from(9, "b", 1_700_000_000_000 + minute),
+        from(7, "c", 1_700_000_000_000 + 2 * minute),
+        from(7, "d", 1_700_000_000_000 + 3 * minute),
+      ]);
+
+      // The first speaker's picture must not travel past the interruption
+      // into the run they came back with: that is two runs, two pictures.
+      expect(drawn(container)).toEqual(["avatar-a", "avatar-b", "avatar-c"]);
+      const second = sticky(container)[2]!.parentElement!.parentElement!;
+      expect(second.contains(container.querySelector('[data-message-id="d"]'))).toBe(true);
+      expect(second.contains(container.querySelector('[data-message-id="a"]'))).toBe(false);
+    });
+
+    it("opens its clock on the message the picture starts beside", () => {
+      const { container } = drawSticky([
+        from(7, "a", 1_700_000_000_000),
+        from(7, "b", 1_700_000_000_000 + minute),
+      ]);
+
+      // At rest the picture is beside the message that opens the run, so the
+      // clock says what the block's own header says.
+      expect(clocks(container)).toEqual([formatTime(1_700_000_000_000)]);
+    });
+
+    it("moves the clock to the message the picture has travelled to", () => {
+      const base = 1_700_000_000_000;
+      const { container } = drawSticky([
+        from(7, "a", base),
+        from(7, "b", base + minute),
+        from(7, "c", base + 2 * minute),
+      ]);
+      const scroller = container.firstElementChild as HTMLElement;
+      const block = container.querySelector<HTMLElement>("[data-avatar-block]")!;
+      const rows = [...block.querySelectorAll<HTMLElement>(":scope > [data-message-id]")];
+
+      // jsdom lays nothing out, and the reading is entirely a question of
+      // where things are - so a block scrolled half out of the top of the
+      // pane, with three rows of 200px in it, is stated rather than measured.
+      vi.spyOn(scroller, "getBoundingClientRect").mockReturnValue({
+        top: 0,
+        bottom: 800,
+        height: 800,
+      } as DOMRect);
+      vi.spyOn(block, "getBoundingClientRect").mockReturnValue({
+        top: -500,
+        bottom: 300,
+        height: 800,
+      } as DOMRect);
+      rows.forEach((row, index) => {
+        Object.defineProperty(row, "offsetTop", { value: index * 200, configurable: true });
+        Object.defineProperty(row, "offsetHeight", { value: 200, configurable: true });
+      });
+      vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      });
+
+      fireEvent.scroll(scroller);
+
+      // Held at the top of the pane, the picture is 527px into the block -
+      // which is the third message, and so the third message's time.
+      expect(clocks(container)).toEqual([formatTime(base + 2 * minute)]);
+    });
+
+    it("keeps its clock on a server that mints no message ids", () => {
+      const base = 1_700_000_000_000;
+      // A legacy server sends neither an id nor a persistence handle; the
+      // clock is the one thing it does send, and the picture has to carry it.
+      const legacy = (id: string, timestamp: number): ChatMessage => ({
+        ...from(7, id, timestamp),
+        message_id: null,
+      });
+      const { container } = drawSticky([legacy("a", base), legacy("b", base + minute)]);
+      const scroller = container.firstElementChild as HTMLElement;
+      const block = container.querySelector<HTMLElement>("[data-avatar-block]")!;
+      vi.spyOn(scroller, "getBoundingClientRect").mockReturnValue({
+        top: 0,
+        bottom: 800,
+        height: 800,
+      } as DOMRect);
+      vi.spyOn(block, "getBoundingClientRect").mockReturnValue({
+        top: -300,
+        bottom: 200,
+        height: 500,
+      } as DOMRect);
+      const rows = [...block.querySelectorAll<HTMLElement>(":scope > [data-msg-time]")];
+      rows.forEach((row, index) => {
+        Object.defineProperty(row, "offsetTop", { value: index * 250, configurable: true });
+        Object.defineProperty(row, "offsetHeight", { value: 250, configurable: true });
+      });
+      vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      });
+
+      fireEvent.scroll(scroller);
+
+      // 327px into the block, which is the second message - and emphatically
+      // not blank, which is what looking the rows up by id used to leave.
+      expect(clocks(container)).toEqual([formatTime(base + minute)]);
+    });
+
+    it("draws no column where the rows have no gutter", () => {
+      const messages = [from(7, "a", 1_700_000_000_000)];
+      // Compact drops the avatar column outright, so there is nothing to
+      // hoist and a picture laid over the text is all a column would be.
+      const { container } = draw({
+        messages,
+        display: { ...DEFAULT_CHAT_DISPLAY, compact: true },
+        renderAvatar: (m) => <span>avatar-{m.body}</span>,
+      });
+      expect(sticky(container)).toHaveLength(0);
+    });
+
+    it("draws no column for your own bubbles, which have no gutter either", () => {
+      const { container } = draw({
+        messages: [{ ...message("a"), is_own: true }],
+        display: { ...DEFAULT_CHAT_DISPLAY, bubbleStyle: "bubbles" },
+        renderAvatar: (m) => <span>avatar-{m.body}</span>,
+      });
+      expect(sticky(container)).toHaveLength(0);
+    });
   });
 
   it("draws the unread rule above the message it is given", () => {
@@ -285,7 +461,10 @@ describe("MessageList", () => {
       scopeId: "7",
     });
     // The one on screen stays where the reader can see it.
-    expect(invokeMock).not.toHaveBeenCalledWith("offload_message", expect.objectContaining({ messageId: "m259" }));
+    expect(invokeMock).not.toHaveBeenCalledWith(
+      "offload_message",
+      expect.objectContaining({ messageId: "m259" }),
+    );
     expect(useAppStore.getState().refreshMessages).toHaveBeenCalledWith(7);
 
     vi.useRealTimers();
