@@ -47,9 +47,11 @@ pub struct DeepFilterConfig {
     /// output without audibly over-smoothing speech.  Default: `0.02`.
     pub post_filter_beta: f32,
     /// Voice-activity threshold in dB.  Frames whose model-estimated
-    /// SNR falls below this value are passed through the gain stage
-    /// untouched (avoids "pumping" on near-silent input).  Range
-    /// roughly `-20.0 .. 0.0`.  Default: `-10.0` (matches upstream).
+    /// local SNR falls below this value are treated as noise only: the
+    /// gain stage applies a *zero* mask and the frame comes out at the
+    /// attenuation limit, not untouched.  The model clamps its estimate
+    /// to `-15.0 ..= 35.0`, so a value of `-15.0` or lower never mutes a
+    /// frame.  Default: `-10.0` (matches upstream).
     pub min_db_thresh: f32,
 }
 
