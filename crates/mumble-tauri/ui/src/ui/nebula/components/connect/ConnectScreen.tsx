@@ -31,7 +31,7 @@ import {
   type ProbeState,
 } from "../../liveryStatus";
 import { EditIcon, GripVerticalIcon } from "@ui/icons";
-import { dropTarget, measureSlots, type DragSlot } from "../../dragOrder";
+import { dropTarget, measureSlots, type DragSlot } from "@ui/dragOrder";
 import { reorderIdentities, serverTint } from "../../selectors";
 import { UserAvatar, Stack } from "../primitives";
 import { SectionLabel, StatChip } from "../primitives";
