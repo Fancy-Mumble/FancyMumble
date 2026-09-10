@@ -39,6 +39,7 @@ import {
   type Friend,
   type FriendIdentity,
 } from "@core/friendsStorage";
+import { isFriendsOwnServer, resolveFriendMatch } from "@core/friendsPresence";
 import {
   listFriendGroups,
   selfFriend,
@@ -113,22 +114,19 @@ export function useFriends(query: string): FriendsScreen {
   /** A friend to open as soon as their server finishes connecting. */
   const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
 
-  // Presence, by certificate hash, across every open connection. Friends saved
-  // without a hash are anonymous users who cannot be resolved at all; they stay
-  // in the list, and stay offline.
+  // Presence, across every open connection. Friends saved without a hash are
+  // anonymous users who cannot be resolved at all; they stay in the list, and
+  // stay offline.
   useEffect(() => {
     let live = true;
     const refresh = async () => {
       const next: Record<string, FriendMatch> = {};
       for (const friend of saved) {
-        if (!friend.userHash) continue;
         try {
-          const match = await invoke<FriendMatch | null>("find_user_by_hash", {
-            userHash: friend.userHash,
-          });
+          const match = await resolveFriendMatch(friend, sessions);
           if (match) next[friend.id] = match;
         } catch (reason) {
-          console.warn("find_user_by_hash failed:", reason);
+          console.warn("resolving a friend failed:", reason);
         }
       }
       if (live) setOnline(next);
@@ -144,6 +142,9 @@ export function useFriends(query: string): FriendsScreen {
   // What we learn about a friend while we can see them: their registered id and
   // the connection target of the server they are on, which together are what
   // let their chat open - or their server be rejoined - when they are gone.
+  // Only their *own* server may teach us that: a registered id belongs to the
+  // server that issued it, so copying one down from wherever the certificate
+  // turned up would quietly replace the friend with a stranger.
   // Their avatar is cached alongside, because the texture is only fetchable for
   // a session on the *active* connection, and an offline friend has none.
   useEffect(() => {
@@ -154,15 +155,17 @@ export function useFriends(query: string): FriendsScreen {
         if (!match || match.serverId !== activeServerId) continue;
         const user = users.find((entry) => entry.session === match.userSession);
         const session = sessions.find((entry) => entry.id === match.serverId);
-        const identity: FriendIdentity = {};
-        if (user?.user_id != null && user.user_id >= 0) identity.userId = user.user_id;
-        if (session) {
-          identity.serverHost = session.host;
-          identity.serverPort = session.port;
-          identity.serverUsername = session.username;
-          identity.serverCertLabel = session.certLabel;
+        if (isFriendsOwnServer(friend, session)) {
+          const identity: FriendIdentity = {};
+          if (user?.user_id != null && user.user_id >= 0) identity.userId = user.user_id;
+          if (session) {
+            identity.serverHost = session.host;
+            identity.serverPort = session.port;
+            identity.serverUsername = session.username;
+            identity.serverCertLabel = session.certLabel;
+          }
+          void updateFriendIdentity(friend.id, identity);
         }
-        void updateFriendIdentity(friend.id, identity);
 
         if (!user?.texture_size) continue;
         if (friend.avatarSize === user.texture_size && friend.avatar != null) continue;

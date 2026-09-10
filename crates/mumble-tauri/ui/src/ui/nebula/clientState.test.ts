@@ -1,6 +1,6 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { useFirstUnreadId } from "./clientState";
+import { useFirstUnreadId, useMessageSelection } from "./clientState";
 
 function messages(...ids: string[]) {
   return ids.map((message_id) => ({ message_id }));
@@ -46,5 +46,27 @@ describe("useFirstUnreadId", () => {
 
     rerender({ key: "chan:2", unread: 1 });
     expect(result.current).toBe("d");
+  });
+});
+
+describe("useMessageSelection", () => {
+  it("ends the mode once the last message is unpicked", () => {
+    const { result } = renderHook(() => useMessageSelection("chan:1"));
+
+    act(() => result.current.begin("a"));
+    expect(result.current.active).toBe(true);
+
+    act(() => result.current.toggle("b"));
+    expect(result.current.selected.size).toBe(2);
+    expect(result.current.active).toBe(true);
+
+    // Unpicking one of two leaves the mode standing: there is still something
+    // to act on, and the bar still has something to say.
+    act(() => result.current.toggle("b"));
+    expect(result.current.active).toBe(true);
+
+    act(() => result.current.toggle("a"));
+    expect(result.current.selected.size).toBe(0);
+    expect(result.current.active).toBe(false);
   });
 });

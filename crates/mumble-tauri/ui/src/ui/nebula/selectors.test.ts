@@ -106,6 +106,19 @@ describe("orderChannels", () => {
     expect(result.map((entry) => entry.channel.id)).toEqual([0, 1, 2, 3]);
   });
 
+  it("searches past hide-empty, which is only about the resting column", () => {
+    // Typing a quiet channel's name and being told there is no such channel is
+    // the toggle answering a question nobody asked it.
+    const result = orderChannels({
+      channels: tree,
+      query: "ranked",
+      hideEmpty: true,
+      currentChannel: null,
+      selectedChannel: null,
+    });
+    expect(result.map((entry) => entry.channel.id)).toEqual([0, 2, 3]);
+  });
+
   it("drops detached channels, which are never part of the tree", () => {
     const result = orderChannels({
       channels: [...tree, channel({ id: 9, name: "Meeting", detached: true })],

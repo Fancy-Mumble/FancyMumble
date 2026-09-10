@@ -10,11 +10,12 @@
  * "who is here".
  *
  * Identification follows Standard's rule, because it is the same saved list: a
- * friend is a TLS certificate hash, resolved live by the backend across every
- * open connection (`find_user_by_hash`), with the registered user id and the
- * connection target kept beside it so an *offline* friend can still be opened -
- * their chat is a persisted, end-to-end-encrypted channel the server replays
- * when they come back.
+ * friend is a TLS certificate hash plus the registered account and server it
+ * was saved on, resolved live by the backend (`@core/friendsPresence`) - the
+ * hash alone is a login, and several accounts can share one. The account and
+ * the connection target are also what let an *offline* friend be opened: their
+ * chat is a persisted, end-to-end-encrypted channel the server replays when
+ * they come back.
  *
  * Everything here is pure. The fetching, the polling and the writing live in
  * `useFriends`.
@@ -22,17 +23,13 @@
 
 import type { ChannelEntry, SessionMeta, UserEntry } from "@core/types";
 import { friendServerKey, type Friend } from "@core/friendsStorage";
+import { friendLoginSession, type FriendMatch } from "@core/friendsPresence";
 import { dmPeerUserId, isDmChannel } from "@core/utils/channelVisibility";
 
 /** Id prefix of the synthetic "yourself" row - your own private notepad. */
 export const SELF_FRIEND_PREFIX = "self:";
 
-/** Where a friend was found online, as `find_user_by_hash` answers it. */
-export interface FriendMatch {
-  serverId: string;
-  userSession: number;
-  userName: string;
-}
+export type { FriendMatch };
 
 /** A friend, plus everything a row needs to draw and act on them. */
 export interface FriendEntry {
@@ -79,15 +76,8 @@ export function reachFriend(
   sessions: readonly SessionMeta[],
 ): Pick<FriendEntry, "sessionId" | "canOpen" | "canConnect"> {
   let sessionId = match?.serverId ?? null;
-  if (sessionId === null && friend.serverHost != null) {
-    sessionId =
-      sessions.find(
-        (session) =>
-          session.status === "connected" &&
-          session.host === friend.serverHost &&
-          session.port === friend.serverPort &&
-          session.username === friend.serverUsername,
-      )?.id ?? null;
+  if (sessionId === null) {
+    sessionId = friendLoginSession(friend, sessions)?.id ?? null;
   }
   return {
     sessionId,

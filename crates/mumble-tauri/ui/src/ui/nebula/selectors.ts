@@ -12,10 +12,11 @@ import { htmlToMarkdown, markdownToHtml } from "@standard/components/chat/markdo
 import { bodyToHtml } from "@standard/components/chat/markdown/bodyHtml";
 import { hslToHex } from "@core/utils/colorUtils";
 import { formatTimestamp } from "@core/utils/format";
+import { imageSizeFromSource } from "@core/utils/imageSize";
 import { bodyToPlainText } from "@core/features/chat/bodyText";
 import { hueFromKey } from "@shared/profilecard/tint";
 import { primaryRoles } from "@core/features/roster/roles";
-import { reorderKeys } from "./dragOrder";
+import { reorderKeys } from "@ui/dragOrder";
 import type {
   AclGroup,
   ChannelEntry,
@@ -80,8 +81,14 @@ export function orderChannels(input: ChannelFilter): OrderedChannel[] {
   const needle = input.query.trim().toLocaleLowerCase();
   for (const channel of candidates) {
     const matchesQuery = !needle || channel.name.toLocaleLowerCase().includes(needle);
+    // A search reaches past "hide empty": that toggle is about what the column
+    // rests at, and someone typing a channel's name is asking for that channel
+    // rather than for the ones that happen to have people in it. Searching and
+    // finding nothing, for a room that is on the server and was only quiet,
+    // reads as the channel being gone.
     const matchesVisibility =
       !input.hideEmpty ||
+      needle.length > 0 ||
       channel.user_count > 0 ||
       channel.id === input.currentChannel ||
       channel.id === input.selectedChannel;
@@ -143,7 +150,14 @@ export function groupOccupants(users: readonly UserEntry[]): ReadonlyMap<number,
   return byChannel;
 }
 
-function byName(left: UserEntry, right: UserEntry) {
+/**
+ * How every list in the pack orders people: by name.
+ *
+ * Exported because a list that opens a seat for someone being carried into it
+ * has to know where they will sit, and the only way to know that is to rank
+ * them the same way the list itself does.
+ */
+export function byName(left: UserEntry, right: UserEntry) {
   return left.name.localeCompare(right.name);
 }
 
@@ -527,6 +541,17 @@ export type MessageContent = {
 export interface BodyImage {
   readonly src: string;
   readonly alt: string;
+  /**
+   * The picture's own dimensions, where they are knowable before it loads.
+   *
+   * A pasted picture is carried in the body, so its size can be read straight
+   * out of the bytes (`imageSizeFromSource`); one the body only points at
+   * cannot be, until something has loaded it once. Whoever draws it uses this
+   * to hold the right box open instead of laying the row out at nothing and
+   * moving the whole thread when the decode lands.
+   */
+  readonly width?: number;
+  readonly height?: number;
 }
 
 /**
@@ -557,7 +582,9 @@ export function splitBodyImages(html: string): { html: string; images: BodyImage
     const src = image.getAttribute("src") ?? "";
     // A picture with no source is nothing to show and nothing to enlarge, but
     // it is still markup: drop it rather than leaving a broken tile behind.
-    if (src) images.push({ src, alt: image.getAttribute("alt") ?? "" });
+    if (src) {
+      images.push({ src, alt: image.getAttribute("alt") ?? "", ...(imageSizeFromSource(src) ?? {}) });
+    }
     image.remove();
   }
   return { html: doc.body.innerHTML.trim(), images };
