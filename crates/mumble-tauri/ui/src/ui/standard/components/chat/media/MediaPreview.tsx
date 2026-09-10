@@ -7,7 +7,7 @@
  * - Videos show a poster frame; click opens a lightbox with playback.
  */
 
-import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import MediaPlayer from "@shared/mediaplayer/MediaPlayer";
@@ -16,6 +16,9 @@ import { ExternalLinkGuard } from "../../elements/ExternalLinkGuard";
 import { CloseIcon, EyeOffIcon } from "../../../icons";
 import type { TimeFormat } from "@core/types";
 import { formatTimestamp } from "@core/utils/format";
+import { useInnerHtml } from "@core/utils/innerHtml";
+import { imageSizeFromSource, rememberImageSize } from "@core/utils/imageSize";
+import { ImageContextMenu } from "../../elements/ImageContextMenu";
 
 // --- Types --------------------------------------------------------
 
@@ -25,6 +28,15 @@ export interface MediaItem {
   alt: string;
   /** When true, render heavily blurred until the viewer clicks to reveal. */
   spoiler: boolean;
+  /**
+   * The picture's own dimensions, where they could be known before it loads.
+   *
+   * Read out of the encoded bytes (see `imageSizeFromSource`) or off the tag
+   * that carried it. Absent for a remote source nobody has measured yet, and
+   * for video, whose container this client does not parse.
+   */
+  width?: number;
+  height?: number;
 }
 
 interface Props {
@@ -271,6 +283,34 @@ function renderMathNodes(root: HTMLElement): void {
   void loadKatex().then((katex) => renderMathWith(katex, root));
 }
 
+/** A positive whole number written in an attribute, or nothing. */
+function attrSize(raw: string | null): number | null {
+  if (!raw) return null;
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/** The size a tag states about itself - `<img width=… height=…>`. */
+function taggedSize(element: Element): { width?: number; height?: number } {
+  const width = attrSize(element.getAttribute("width"));
+  const height = attrSize(element.getAttribute("height"));
+  return width && height ? { width, height } : {};
+}
+
+/**
+ * How big a picture is going to be, decided before it has decoded.
+ *
+ * The tag is asked first - a live-doc or a bridge may have written the size
+ * down - and the bytes second, which is where an ordinary pasted screenshot
+ * answers from. Both are cheap, and either one is what stops the row being
+ * laid out at zero height and jumping when the decode lands.
+ */
+function intrinsicSize(element: Element, src: string): { width?: number; height?: number } {
+  const tagged = taggedSize(element);
+  if (tagged.width) return tagged;
+  return imageSizeFromSource(src) ?? {};
+}
+
 /** Parse `<img>` and `<video>` tags out of HTML and classify them. */
 export function extractMedia(html: string): { cleaned: string; media: MediaItem[] } {
   const media: MediaItem[] = [];
@@ -290,6 +330,7 @@ export function extractMedia(html: string): { cleaned: string; media: MediaItem[
       src,
       alt: img.alt || "",
       spoiler: img.getAttribute("data-spoiler") === "1",
+      ...intrinsicSize(img, src),
     });
     img.remove();
   });
@@ -298,7 +339,14 @@ export function extractMedia(html: string): { cleaned: string; media: MediaItem[
   doc.querySelectorAll("video").forEach((vid) => {
     const src = vid.getAttribute("src") ?? vid.querySelector("source")?.getAttribute("src") ?? "";
     if (!src) return;
-    media.push({ kind: "video", src, alt: "", spoiler: vid.getAttribute("data-spoiler") === "1" });
+    media.push({
+      kind: "video",
+      src,
+      alt: "",
+      spoiler: vid.getAttribute("data-spoiler") === "1",
+      // No container is parsed for a clip; only a tag that says so is believed.
+      ...taggedSize(vid),
+    });
     vid.remove();
   });
 
@@ -324,18 +372,89 @@ function SpoilerBadge() {
   );
 }
 
+/**
+ * The frame a picture is going to occupy, held open before it can fill it.
+ *
+ * Handed to CSS as the picture's own dimensions rather than as a finished
+ * width: the stylesheet already knows what a thumbnail may grow to, and it
+ * differs by where the message is drawn (the mobile thread caps them smaller).
+ * Two custom properties let the same caps do the arithmetic in both places
+ * instead of this file guessing at them.
+ *
+ * Only for a thumbnail whose frame is not already decided - a gallery tile and
+ * a grid tile are square whatever they hold, so they never move.
+ */
+function reservedBox(item: MediaItem, reserve: boolean): { className: string; style?: CSSProperties } {
+  if (!reserve || !item.width || !item.height) return { className: styles.thumbWrap };
+  return {
+    className: `${styles.thumbWrap} ${styles.thumbWrapSized}`,
+    style: { "--thumb-w": item.width, "--thumb-h": item.height } as CSSProperties,
+  };
+}
+
+/** What fills a reserved frame until the picture does. */
+function ThumbSkeleton() {
+  return <span className={styles.thumbSkeleton} aria-hidden="true" />;
+}
+
+/**
+ * Whether the picture has painted yet.
+ *
+ * A cached picture is `complete` before React ever hears a `load` event, so
+ * the ref settles it as well as the handler - otherwise a skeleton would sit
+ * over a picture that is already there. A picture that fails counts as
+ * settled too: a broken frame is an answer, an endless shimmer is not.
+ */
+function useThumbLoaded() {
+  const [loaded, setLoaded] = useState(false);
+  /**
+   * What the picture turned out to be, where that is not what was read of it.
+   *
+   * The frame was reserved from the encoded bytes, which is a reading, not a
+   * measurement. A file whose header lies - or a format this client parses
+   * imperfectly - corrects itself here rather than living in a frame of the
+   * wrong shape for as long as the message is on screen.
+   */
+  const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);
+  /** The picture is there (or is never going to be): stop standing in for it. */
+  const settle = useCallback((element: HTMLImageElement | null) => {
+    if (element && element.naturalWidth > 0) {
+      const size = { width: element.naturalWidth, height: element.naturalHeight };
+      // Worth writing down: a picture the body points at by URL cannot be
+      // measured from its bytes, and this is the only time anyone sees them.
+      rememberImageSize(element.currentSrc || element.src, size);
+      setNatural((current) =>
+        current?.width === size.width && current.height === size.height ? current : size,
+      );
+    }
+    setLoaded(true);
+  }, []);
+  /** For the ref: a picture that was already decoded gets no `load` event. */
+  const settleIfDone = useCallback(
+    (element: HTMLImageElement | null) => {
+      if (element?.complete) settle(element);
+    },
+    [settle],
+  );
+  return { loaded, natural, settle, settleIfDone };
+}
+
 function GifThumb({
   item,
   id,
   timeLabel,
+  reserve = false,
 }: Readonly<{
   item: MediaItem;
   id: string;
   timeLabel?: string | null;
+  reserve?: boolean;
 }>) {
   const { t } = useTranslation("chat");
   const imgRef = useRef<HTMLImageElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const { loaded, natural, settle, settleIfDone } = useThumbLoaded();
+  const box = reservedBox(natural ? { ...item, ...natural } : item, reserve);
   const [revealed, setRevealed] = useState(() => revealedSpoilers.has(id));
   const [frozen, setFrozen] = useState(() => playedGifs.has(id));
   const [posterSrc, setPosterSrc] = useState<string | null>(() => frozenFrames.get(id) ?? null);
@@ -434,14 +553,23 @@ function GifThumb({
     return (
       <button
         type="button"
-        className={styles.thumbWrap}
+        className={box.className}
+        style={box.style}
         onClick={() => {
           revealedSpoilers.add(id);
           setRevealed(true);
         }}
         aria-label={t("spoiler.reveal")}
       >
-        <img className={`${styles.thumb} ${styles.spoilerBlurred}`} src={posterSrc ?? item.src} alt="" />
+        <img
+          className={`${styles.thumb} ${styles.spoilerBlurred}`}
+          src={posterSrc ?? item.src}
+          alt=""
+          ref={settleIfDone}
+          onLoad={(event) => settle(event.currentTarget)}
+          onError={() => settle(null)}
+        />
+        {!loaded && <ThumbSkeleton />}
         <SpoilerBadge />
         {timeLabel && <span className={styles.timeChip}>{timeLabel}</span>}
       </button>
@@ -450,12 +578,20 @@ function GifThumb({
 
   if (frozen) {
     return (
-      <button type="button" className={styles.thumbWrap} onClick={handleToggle}>
+      <button type="button" className={box.className} style={box.style} onClick={handleToggle}>
         {posterSrc ? (
-          <img className={styles.thumb} src={posterSrc} alt={item.alt} />
+          <img
+            className={styles.thumb}
+            src={posterSrc}
+            alt={item.alt}
+            ref={settleIfDone}
+            onLoad={(event) => settle(event.currentTarget)}
+            onError={() => settle(null)}
+          />
         ) : (
           <div className={styles.thumbPlaceholder} />
         )}
+        {posterSrc && !loaded && <ThumbSkeleton />}
         <div className={styles.replayOverlay}>
           <span className={styles.replayIcon}>&#x25B6;</span>
         </div>
@@ -466,15 +602,23 @@ function GifThumb({
   }
 
   return (
-    <button type="button" className={styles.thumbWrap} onClick={captureAndFreeze}>
+    <button type="button" className={box.className} style={box.style} onClick={captureAndFreeze}>
       <img
-        ref={imgRef}
+        ref={(element) => {
+          imgRef.current = element;
+          settleIfDone(element);
+        }}
         className={styles.thumb}
         src={item.src}
         alt={item.alt}
         crossOrigin="anonymous"
-        onLoad={handleImgLoad}
+        onLoad={(event) => {
+          settle(event.currentTarget);
+          handleImgLoad();
+        }}
+        onError={() => settle(null)}
       />
+      {!loaded && <ThumbSkeleton />}
       <span className={styles.gifBadge}>GIF</span>
       {timeLabel && <span className={styles.timeChip}>{timeLabel}</span>}
     </button>
@@ -486,14 +630,18 @@ function ImageThumb({
   id,
   onOpen,
   timeLabel,
+  reserve = false,
 }: Readonly<{
   item: MediaItem;
   id: string;
   onOpen: () => void;
   timeLabel?: string | null;
+  reserve?: boolean;
 }>) {
   const { t } = useTranslation("chat");
   const [revealed, setRevealed] = useState(() => revealedSpoilers.has(id));
+  const { loaded, natural, settle, settleIfDone } = useThumbLoaded();
+  const box = reservedBox(natural ? { ...item, ...natural } : item, reserve);
   const blurred = item.spoiler && !revealed;
   const handleClick = useCallback(() => {
     if (blurred) {
@@ -506,7 +654,8 @@ function ImageThumb({
   return (
     <button
       type="button"
-      className={styles.thumbWrap}
+      className={box.className}
+      style={box.style}
       onClick={handleClick}
       aria-label={blurred ? t("spoiler.reveal") : undefined}
     >
@@ -514,7 +663,11 @@ function ImageThumb({
         className={`${styles.thumb} ${blurred ? styles.spoilerBlurred : ""}`}
         src={item.src}
         alt={blurred ? "" : item.alt}
+        ref={settleIfDone}
+        onLoad={(event) => settle(event.currentTarget)}
+        onError={() => settle(null)}
       />
+      {!loaded && <ThumbSkeleton />}
       {blurred && <SpoilerBadge />}
       {timeLabel && <span className={styles.timeChip}>{timeLabel}</span>}
     </button>
@@ -536,15 +689,19 @@ function VideoThumb({
   id,
   onOpen,
   timeLabel,
+  reserve = false,
 }: Readonly<{
   item: MediaItem;
   id: string;
   onOpen: () => void;
   timeLabel?: string | null;
+  reserve?: boolean;
 }>) {
   const { t } = useTranslation("chat");
   const [revealed, setRevealed] = useState(() => revealedSpoilers.has(id));
   const [seconds, setSeconds] = useState<number | null>(null);
+  const [posterShown, setPosterShown] = useState(false);
+  const box = reservedBox(item, reserve);
   const blurred = item.spoiler && !revealed;
   const handleClick = useCallback(() => {
     if (blurred) {
@@ -558,7 +715,8 @@ function VideoThumb({
   return (
     <button
       type="button"
-      className={styles.thumbWrap}
+      className={box.className}
+      style={box.style}
       onClick={handleClick}
       aria-label={blurred ? t("spoiler.reveal") : undefined}
     >
@@ -577,7 +735,13 @@ function VideoThumb({
             element.currentTime = Math.min(0.1, element.duration / 2);
           }
         }}
+        // The frame is there once the seek lands; until then the skeleton
+        // stands in rather than a black rectangle.
+        onSeeked={() => setPosterShown(true)}
+        onLoadedData={() => setPosterShown(true)}
+        onError={() => setPosterShown(true)}
       />
+      {!posterShown && <ThumbSkeleton />}
       {/* A clip reads as a clip from the disc in the middle of it, the way it
           does everywhere else. The small corner triangle it used to wear was
           the same size and weight as the timestamp opposite, so a video and a
@@ -609,6 +773,7 @@ export function MediaLightbox({
   timeFormat,
   convertToLocalTime,
   systemUses24h,
+  link,
 }: Readonly<{
   item: MediaItem;
   onClose: () => void;
@@ -617,7 +782,15 @@ export function MediaLightbox({
   timeFormat?: TimeFormat;
   convertToLocalTime?: boolean;
   systemUses24h?: boolean;
+  /**
+   * The address a browser could open this picture at, where the `src` is not
+   * one - a public or password-protected file drawn from a local copy.
+   */
+  link?: string | null;
 }>) {
+  /** Where the reader right-clicked the picture, while the menu is up. */
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+
   // Close on Escape.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -634,10 +807,37 @@ export function MediaLightbox({
       className={styles.lightboxOverlay}
       aria-label="Close lightbox"
       onClick={(e) => {
+        // See `onContextMenu`: in the React tree this overlay is still a child
+        // of whatever opened it, so a click inside it would reach the message
+        // row underneath - which in selection mode is the row's checkbox.
+        e.stopPropagation();
+        // While the menu is up the next click dismisses it, and leaves the
+        // picture behind it where it was.
+        if (menuAt) {
+          setMenuAt(null);
+          return;
+        }
         if (e.target === e.currentTarget) onClose();
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") onClose();
+      }}
+      /* The picture's own menu, in place of the platform's - and in place of
+         the message menu that used to come up through the overlay, drawn
+         underneath its blur. */
+      onContextMenu={(e) => {
+        /* This overlay is portalled to the body, but React propagates through
+           the tree it was *written* in - so the message row that drew the card
+           sees this right-click too, and answers it with its own menu, drawn
+           at the row's z-index behind this overlay's blur. Two menus, one of
+           them unreadable. The click stops here. */
+        e.stopPropagation();
+        // A clip keeps the platform's menu and its playback rows; everything
+        // else on the overlay is ours, so no Back / Refresh / Inspect comes up
+        // over a photograph.
+        if (item.kind === "video") return;
+        e.preventDefault();
+        setMenuAt((e.target as HTMLElement).closest("img") ? { x: e.clientX, y: e.clientY } : null);
       }}
     >
       <div className={styles.lightboxContent}>
@@ -662,6 +862,7 @@ export function MediaLightbox({
           </div>
         )}
       </div>
+      {menuAt && <ImageContextMenu src={item.src} link={link} at={menuAt} onClose={() => setMenuAt(null)} />}
     </div>
   );
 }
@@ -684,6 +885,10 @@ export default function MediaPreview({
   // Memoised: extractMedia parses + sanitises the HTML, so re-running it on
   // every render (e.g. hover/timestamp state changes) wasted CPU per message.
   const { cleaned, media } = useMemo(() => extractMedia(html), [html]);
+  // Handed to React as one object: a fresh literal makes it re-assign
+  // `innerHTML` on every render, and the rebuilt text nodes take the
+  // reader's selection with them.
+  const cleanedHtml = useInnerHtml(cleaned);
   const { t } = useTranslation("chat");
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
   /**
@@ -721,7 +926,7 @@ export default function MediaPreview({
       {/* Render remaining text (if any) */}
       {cleaned && (
         <ExternalLinkGuard>
-          <span ref={contentRef} dangerouslySetInnerHTML={{ __html: cleaned }} />
+          <span ref={contentRef} dangerouslySetInnerHTML={cleanedHtml} />
         </ExternalLinkGuard>
       )}
 
@@ -740,13 +945,18 @@ export default function MediaPreview({
         >
           {shown.map((item, i) => {
             const key = `${messageId}-${i}`;
+            // A tile's frame is already decided - square in a gallery, square
+            // in the grid - so only a lone thumbnail has a shape to hold open.
+            const reserve = !tile && media.length < 2;
             // Show the timestamp chip only once per message: on the last tile
             // of a gallery (or the sole tile of a single-media message).
             const itemTimeLabel = i === shown.length - 1 ? timeLabel : undefined;
             const thumb = (() => {
               switch (item.kind) {
                 case "gif":
-                  return <GifThumb key={key} item={item} id={key} timeLabel={itemTimeLabel} />;
+                  return (
+                    <GifThumb key={key} item={item} id={key} timeLabel={itemTimeLabel} reserve={reserve} />
+                  );
                 case "image":
                   return (
                     <ImageThumb
@@ -755,6 +965,7 @@ export default function MediaPreview({
                       item={item}
                       onOpen={() => openLightbox(i)}
                       timeLabel={itemTimeLabel}
+                      reserve={reserve}
                     />
                   );
                 case "video":
@@ -765,6 +976,7 @@ export default function MediaPreview({
                       item={item}
                       onOpen={() => openLightbox(i)}
                       timeLabel={itemTimeLabel}
+                      reserve={reserve}
                     />
                   );
               }
