@@ -37,8 +37,12 @@ export interface UserStats {
   bandwidth: number | null;
   onlinesecs: number | null;
   idlesecs: number | null;
-  strong_certificate: boolean;
-  opus: boolean;
+  /** Whether the certificate is strong, or null when the server did not say:
+   *  it reports this only to admins and to the person themselves. */
+  strong_certificate: boolean | null;
+  /** Whether the client speaks Opus, or null when the server did not say.
+   *  Gated exactly as `strong_certificate` is. */
+  opus: boolean | null;
   /** Client version string (e.g. "1.5.517"). */
   version?: string | null;
   /** Operating system name. */

@@ -45,8 +45,12 @@ impl HandleMessage for mumble_tcp::UserStats {
             bandwidth: self.bandwidth,
             onlinesecs: self.onlinesecs,
             idlesecs: self.idlesecs,
-            strong_certificate: self.strong_certificate.unwrap_or(false),
-            opus: self.opus.unwrap_or(false),
+            // Kept as options: the server omits both unless the asker is an
+            // administrator or is asking about themselves, and an absent field
+            // means "not reported", not "no".  Collapsing it here is what made
+            // every peer read as a weak certificate on legacy CELT.
+            strong_certificate: self.strong_certificate,
+            opus: self.opus,
             version,
             os,
             os_version,
