@@ -24,6 +24,9 @@ import { ThemeProvider } from "@mui/material/styles";
 import { useNebulaTheme } from "@nebula/useNebulaAppearance";
 import { HANDHELD_ATTR } from "@nebula/useIsHandheld";
 import { MobileShell } from "@nebula/components/mobile";
+import { SidebarShell } from "@nebula/components/sidebar/SidebarShell";
+import { SearchBox } from "@nebula/components/primitives/SearchBox";
+import { SectionLabel } from "@nebula/components/primitives/SectionLabel";
 import { MessageRow } from "@nebula/components/chat/MessageRow";
 import { BRAND_WORDMARK } from "@nebula/brand";
 import { serverTint } from "@nebula/selectors";
@@ -69,6 +72,8 @@ const SHEET = params.get("sheet");
 const VOICE = params.get("pane") === "voice";
 const START = params.get("pane") === "servers" || params.get("pane") === "connect";
 const CONNECT = params.get("pane") === "connect";
+const SETTINGS = params.get("pane") === "settings" || params.get("pane") === "settingspage";
+const SETTINGS_PAGE = params.get("pane") === "settingspage";
 
 // Belt and braces: inside a 390px frame the media query is already true, but
 // the outer window is not, and a `?handheld=1` capture without the frame is
@@ -342,6 +347,45 @@ const MODEL: MobileShellModel = {
   serverName: "Magical Rocks",
   screen: "chat",
   onScreen: noop,
+  screenTitle: "Settings",
+  screenNav: (
+    <SidebarShell
+      full
+      back={{ label: "Back", onClick: noop }}
+      search={<SearchBox value="" onChange={noop} placeholder="Search settings" />}
+    >
+      <Box sx={{ px: "14px", pb: "8px" }}>
+        <SectionLabel>Settings</SectionLabel>
+      </Box>
+      {["Profile", "Voice", "Personalize", "Notifications", "Privacy", "Language & format",
+        "Shortcuts", "Game overlay", "Identities", "Channels & roles", "Advanced"].map((label, index) => (
+        <Box
+          key={label}
+          sx={(theme) => ({
+            mx: "10px",
+            mb: "2px",
+            px: "12px",
+            py: "10px",
+            fontSize: 14,
+            borderRadius: "var(--nebula-radius-md, 8px)",
+            clipPath: index === 0 ? "var(--nebula-clip-selection, none)" : "none",
+            background: index === 0 ? theme.palette.nebula.accentSoft : "transparent",
+            color: index === 0 ? theme.palette.nebula.text : theme.palette.nebula.muted,
+          })}
+        >
+          {label}
+        </Box>
+      ))}
+    </SidebarShell>
+  ),
+  screenContent: (
+    <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", p: "18px" }}>
+      <Box sx={{ fontSize: 20, fontWeight: 700, mb: "12px" }}>Profile</Box>
+      <Box sx={(theme) => ({ fontSize: 13, color: theme.palette.nebula.muted })}>
+        The settings page the list opens, standing where the conversation would be.
+      </Box>
+    </Box>
+  ),
   unread: { chats: 6, people: 0 },
 };
 
@@ -370,8 +414,8 @@ function Shell() {
         })}
       >
         <MobileShell
-          model={START ? { ...MODEL, screen: "connect" } : MODEL}
-          initialPane={VOICE || CONNECT ? "content" : PANE}
+          model={START ? { ...MODEL, screen: "connect" } : SETTINGS ? { ...MODEL, screen: "settings" } : MODEL}
+          initialPane={VOICE || CONNECT || SETTINGS_PAGE ? "content" : PANE}
           openVoice={VOICE}
         />
       </Box>
