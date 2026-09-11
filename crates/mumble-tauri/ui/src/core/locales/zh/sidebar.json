@@ -148,6 +148,7 @@
     "labelCertificate": "证书",
     "certStrong": "强",
     "certWeak": "弱 / 无",
+    "notReported": "未报告",
     "labelOpus": "Opus",
     "pingStats": "延迟统计",
     "colPackets": "数据包",

@@ -86,9 +86,21 @@ describe("labels", () => {
     expect(certificateLabel(false)).toEqual({ labelKey: "sidebar:userInfo.certWeak", tone: "warn" });
   });
 
+  // The server sends neither field to an ordinary viewer looking at somebody
+  // else, and the answer there is "we were not told", not "weak" or "CELT".
+  it("does not call an unreported certificate weak", () => {
+    expect(certificateLabel(null)).toEqual({ labelKey: "sidebar:userInfo.notReported", tone: "muted" });
+    expect(certificateLabel(undefined)).toEqual({ labelKey: "sidebar:userInfo.notReported", tone: "muted" });
+  });
+
   it("names the codec", () => {
     expect(codecLabel(true)).toBe("nebulaUser:info.codecOpus");
     expect(codecLabel(false)).toBe("nebulaUser:info.codecCelt");
+  });
+
+  it("does not call an unreported codec CELT", () => {
+    expect(codecLabel(null)).toBe("nebulaUser:info.codecUnknown");
+    expect(codecLabel(undefined)).toBe("nebulaUser:info.codecUnknown");
   });
 
   it("joins the OS and its version, or says nothing", () => {

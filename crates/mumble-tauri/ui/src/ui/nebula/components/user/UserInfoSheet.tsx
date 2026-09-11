@@ -271,7 +271,12 @@ export function UserInfoSheet({
               />
               <InfoFact
                 label={t("sidebar:userInfo.labelOpus")}
-                value={stats.opus ? t("sidebar:userProfile.yes") : t("sidebar:userProfile.no")}
+                value={
+                  stats.opus == null
+                    ? t("sidebar:userInfo.notReported")
+                    : t(stats.opus ? "sidebar:userProfile.yes" : "sidebar:userProfile.no")
+                }
+                tone={stats.opus == null ? "muted" : undefined}
               />
             </InfoCard>
           )}

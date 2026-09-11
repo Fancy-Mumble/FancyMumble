@@ -69,7 +69,7 @@ export function InfoFact({
   label: string;
   value: string | number;
   mono?: boolean;
-  tone?: "ok" | "warn";
+  tone?: "ok" | "warn" | "muted";
 }>) {
   return (
     <Stack direction="row" alignItems="baseline" gap={2} sx={{ py: "3px" }}>

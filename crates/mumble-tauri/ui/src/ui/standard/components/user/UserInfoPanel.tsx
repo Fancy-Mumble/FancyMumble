@@ -123,15 +123,24 @@ function ConnectionInfo({ stats }: Readonly<Props>) {
             <span className={styles.infoValue}>{popupLabel}</span>
           </>
         )}
+        {/* Null, not false, is what an ordinary viewer gets for somebody else:
+            the server sends neither field unless the asker is an administrator
+            or is asking about themselves. */}
         <>
           <span className={styles.infoLabel}>{t("userInfo.labelCertificate")}</span>
           <span className={styles.infoValue}>
-            {stats.strong_certificate ? t("userInfo.certStrong") : t("userInfo.certWeak")}
+            {stats.strong_certificate == null
+              ? t("userInfo.notReported")
+              : t(stats.strong_certificate ? "userInfo.certStrong" : "userInfo.certWeak")}
           </span>
         </>
         <>
           <span className={styles.infoLabel}>{t("userInfo.labelOpus")}</span>
-          <span className={styles.infoValue}>{stats.opus ? t("userProfile.yes") : t("userProfile.no")}</span>
+          <span className={styles.infoValue}>
+            {stats.opus == null
+              ? t("userInfo.notReported")
+              : t(stats.opus ? "userProfile.yes" : "userProfile.no")}
+          </span>
         </>
       </div>
       {geo && !streamerMode && (

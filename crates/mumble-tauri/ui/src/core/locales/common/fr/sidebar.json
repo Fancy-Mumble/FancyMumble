@@ -160,6 +160,7 @@
     "labelCertificate": "Certificat",
     "certStrong": "Fort",
     "certWeak": "Faible / Aucun",
+    "notReported": "Non communiqué",
     "labelOpus": "Opus",
     "pingStats": "Statistiques de ping",
     "colPackets": "Paquets",
