@@ -16,7 +16,7 @@ mod draw_stroke;
 mod files;
 mod forum;
 mod gifs;
-mod link_preview;
+pub(crate) mod link_preview;
 mod livery;
 mod records;
 pub(crate) use livery::{LiverySnapshot, data_uri, to_snapshot};

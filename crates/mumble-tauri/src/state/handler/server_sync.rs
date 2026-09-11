@@ -549,6 +549,10 @@ impl HandlerContext {
                 if state.conn.epoch != epoch {
                     return;
                 }
+                // Before the pchat check, because the link cards are not a
+                // pchat concern: a client with no identity at all still
+                // accumulates them, and its cache still wants writing down.
+                let _ = state.previews.cache.save_if_due();
                 let Some(ref mut pchat) = state.pchat_ctx.pchat else {
                     // The session ended and took pchat with it; those paths
                     // save on the way out, so there is nothing left to do.

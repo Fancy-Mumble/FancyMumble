@@ -1,6 +1,7 @@
 //! Channel chat message commands: read/write/edit, reactions, pins,
 //! deletes, search, photos, typing/read receipts and link previews.
 
+use crate::state::preview_cache::CachedHit;
 use crate::state::protocol_commands::{DrawStrokeArgs, WatchSyncEventArg};
 use crate::state::{
     self, AppState, ChatMessage, MessagePage, PageRequest, PhotoEntry, SearchResult,
@@ -92,7 +93,7 @@ pub(crate) async fn request_link_preview(
     state: tauri::State<'_, AppState>,
     urls: Vec<String>,
     request_id: String,
-) -> Result<(), String> {
+) -> Result<Vec<CachedHit>, String> {
     state.request_link_preview(urls, request_id).await
 }
 

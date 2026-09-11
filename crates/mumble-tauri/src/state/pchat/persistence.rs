@@ -174,6 +174,12 @@ impl crate::state::AppState {
                 pchat.save_signal_state();
                 pchat.save_local_cache();
             }
+            // Not inside the `pchat` check: the link cards are collected by any
+            // client, identity or no identity, and closing the window is the
+            // ordinary way to quit.
+            if let Err(e) = state.previews.cache.save() {
+                warn!("failed to save the local preview cache: {e}");
+            }
         }
     }
 }

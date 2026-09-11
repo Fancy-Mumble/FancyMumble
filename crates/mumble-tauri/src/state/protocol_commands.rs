@@ -7,6 +7,7 @@ use mumble_protocol::proto::mumble_tcp;
 use serde::Deserialize;
 
 use super::AppState;
+use super::preview_cache::{self, CachedHit};
 use super::types::DeleteAckResult;
 
 /// Parameters for a single drawing-stroke packet sent to the server.
@@ -460,25 +461,57 @@ impl AppState {
         Ok(())
     }
 
+    /// Ask for the cards for `urls`, and answer from this client's own cache
+    /// whatever it already holds.
+    ///
+    /// The hits come back from the call itself rather than as an event: they
+    /// are already here, and a cache hit that arrives asynchronously is a card
+    /// that still pops in a frame late. Only the misses go to the server.
+    ///
+    /// A rejoin where every link is cached therefore sends nothing at all -
+    /// which is the case this exists for, and the reason it does not fail when
+    /// there is no connection.
     pub async fn request_link_preview(
         &self,
         urls: Vec<String>,
         request_id: String,
-    ) -> Result<(), String> {
-        let handle = {
+    ) -> Result<Vec<CachedHit>, String> {
+        let (handle, hits, misses) = {
             let __session = self.inner.snapshot();
-            let state = __session.lock().map_err(|e| e.to_string())?;
-            state.conn.client_handle.clone()
+            let mut state = __session.lock().map_err(|e| e.to_string())?;
+            let now = preview_cache::now_ms();
+            let mut hits = Vec::new();
+            let mut misses = Vec::new();
+            for url in urls {
+                match state.previews.cache.get(&url, now) {
+                    Some(embed) => hits.push(CachedHit {
+                        requested_url: url,
+                        embed,
+                    }),
+                    None => misses.push(url),
+                }
+            }
+            // Recorded before the send, so an answer that arrives while this is
+            // still awaiting has something to be attributed against.
+            state.previews.asked(&request_id, &misses);
+            (state.conn.client_handle.clone(), hits, misses)
         };
+
+        if misses.is_empty() {
+            return Ok(hits);
+        }
 
         let handle = handle.ok_or("Not connected")?;
 
         handle
-            .send(command::RequestLinkPreview { urls, request_id })
+            .send(command::RequestLinkPreview {
+                urls: misses,
+                request_id,
+            })
             .await
             .map_err(|e| format!("Failed to request link preview: {e}"))?;
 
-        Ok(())
+        Ok(hits)
     }
 
     pub async fn send_read_receipt(
