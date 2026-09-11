@@ -216,6 +216,11 @@ impl AppState {
                 pchat.save_signal_state();
                 pchat.save_local_cache();
             }
+            // Outside the `pchat` check: a client with no identity still
+            // collected cards, and they are as worth keeping.
+            if let Err(e) = state.previews.cache.save() {
+                tracing::debug!("could not write the preview cache: {e}");
+            }
 
             state.conn.status = ConnectionStatus::Disconnected;
             state.server_id = None;
@@ -330,6 +335,9 @@ fn reset_state_for_connect(
         pchat.save_signal_state();
         pchat.save_local_cache();
     }
+    if let Err(e) = state.previews.cache.save() {
+        tracing::debug!("could not write the preview cache: {e}");
+    }
     state.pchat_ctx.pchat = None;
     state.pchat_ctx.seed = None;
     state.pchat_ctx.identity_dir = None;
@@ -364,8 +372,16 @@ fn init_identity(inner: &SharedInner, app_handle: &AppHandle, cert_label: &Optio
         match store.load_or_generate_seed(identity_label) {
             Ok(seed) => {
                 if let Ok(mut state) = inner.lock() {
+                    let dir = store.identity_dir(identity_label);
+                    // The earliest point both halves of the key exist. The
+                    // preview cache is not a pchat concern - a plain text
+                    // channel accumulates cards too - but this is where the
+                    // seed that encrypts it becomes known.
+                    if let Err(e) = state.previews.cache.attach(&dir, &seed) {
+                        tracing::warn!("failed to open the local preview cache: {e}");
+                    }
                     state.pchat_ctx.seed = Some(seed);
-                    state.pchat_ctx.identity_dir = Some(store.identity_dir(identity_label));
+                    state.pchat_ctx.identity_dir = Some(dir);
                 }
             }
             Err(e) => {

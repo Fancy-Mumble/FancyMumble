@@ -49,6 +49,7 @@ mod plugin_admin;
 /// endpoint, which has no Android equivalent.
 #[cfg(not(target_os = "android"))]
 pub(crate) mod presence;
+pub(crate) mod preview_cache;
 mod profile;
 pub(crate) mod protocol_commands;
 mod query;
@@ -524,6 +525,13 @@ pub(super) struct SharedState {
     pub records: records::Records,
     /// Whoever is waiting on this server's emote set.
     pub canon_emotes: canon_emotes::CanonEmotes,
+    /// The link cards this client has already been given, and the ones it is
+    /// still waiting on.
+    ///
+    /// Not per-connection, and that is the point: previews were session state
+    /// before, so rejoining a channel re-asked for every link in its history.
+    /// See [`preview_cache`].
+    pub previews: preview_cache::Previews,
 }
 
 impl SharedState {
@@ -557,6 +565,10 @@ impl SharedState {
         self.server.max_bandwidth = None;
         self.server.opus = false;
         self.server.root_permissions = None;
+        // The outstanding *questions* go, because their answers are not coming.
+        // The cards stay: they are this client's own copy, and dropping them
+        // here is what made every rejoin re-ask for the whole history.
+        self.previews.forget_pending();
     }
 }
 

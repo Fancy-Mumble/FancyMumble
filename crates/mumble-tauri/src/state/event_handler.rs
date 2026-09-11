@@ -311,6 +311,9 @@ impl EventHandler for TauriEventHandler {
                 pchat.save_signal_state();
                 pchat.save_local_cache();
             }
+            if let Err(e) = state.previews.cache.save() {
+                tracing::debug!("could not write the preview cache: {e}");
+            }
             state.pchat_ctx.pchat = None;
             state.pchat_ctx.seed = None;
             state.pchat_ctx.identity_dir = None;
