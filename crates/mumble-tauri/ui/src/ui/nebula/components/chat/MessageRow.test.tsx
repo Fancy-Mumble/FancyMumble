@@ -108,7 +108,7 @@ describe("MessageRow", () => {
     // The embed arrives on its own event well after the row first mounted.
     useAppStore.setState({
       linkEmbeds: new Map([
-        ["preview-1", [{ url, type: "video", title: "Landing at Warsaw", site_name: "YouTube" }]],
+        [url, { url, type: "video", title: "Landing at Warsaw", site_name: "YouTube" }],
       ]),
     });
     rerender(
@@ -134,16 +134,14 @@ describe("MessageRow", () => {
     useAppStore.setState({
       linkEmbeds: new Map([
         [
-          "preview-3",
-          [
-            {
-              url,
-              type: "link" as const,
-              title: "Jean-Baptiste Auriol",
-              description: "A French acrobat and tightrope walker.",
-              image: { url: "", preview: { data_url: dataUrl, mime: "image/jpeg" } },
-            },
-          ],
+          url,
+          {
+            url,
+            type: "link" as const,
+            title: "Jean-Baptiste Auriol",
+            description: "A French acrobat and tightrope walker.",
+            image: { url: "", preview: { data_url: dataUrl, mime: "image/jpeg" } },
+          },
         ],
       ]),
     });
@@ -175,7 +173,7 @@ describe("MessageRow", () => {
 
     for (const is_own of [true, false]) {
       useAppStore.setState({
-        linkEmbeds: new Map([["preview-4", [{ url, type: "video" as const, title, site_name: "YouTube" }]]]),
+        linkEmbeds: new Map([[url, { url, type: "video" as const, title, site_name: "YouTube" }]]),
       });
       const { container, unmount } = draw(
         message({
@@ -204,7 +202,7 @@ describe("MessageRow", () => {
     const url = "https://www.youtube.com/watch?v=zc36tWQcXY";
     const title = "Unbreakable (Arknights Soundtrack)";
     useAppStore.setState({
-      linkEmbeds: new Map([["preview-5", [{ url, type: "video" as const, title, site_name: "YouTube" }]]]),
+      linkEmbeds: new Map([[url, { url, type: "video" as const, title, site_name: "YouTube" }]]),
     });
 
     const { container } = draw(message({ message_id: "preview-5", body: `<a href="${url}">${url}</a>` }), {
@@ -744,7 +742,7 @@ describe("MessageRow self-mention", () => {
     const url = "https://www.youtube.com/watch?v=zc36tWQcXY";
     useAppStore.setState({
       linkEmbeds: new Map([
-        ["preview-6", [{ url, type: "video" as const, title: "Unbreakable", site_name: "YouTube" }]],
+        [url, { url, type: "video" as const, title: "Unbreakable", site_name: "YouTube" }],
       ]),
     });
 
@@ -763,7 +761,7 @@ describe("MessageRow self-mention", () => {
     const url = "https://www.youtube.com/watch?v=zc36tWQcXY";
     const title = "Unbreakable (Arknights Soundtrack)";
     useAppStore.setState({
-      linkEmbeds: new Map([["preview-7", [{ url, type: "video" as const, title, site_name: "YouTube" }]]]),
+      linkEmbeds: new Map([[url, { url, type: "video" as const, title, site_name: "YouTube" }]]),
     });
 
     const { container } = draw(message({ message_id: "preview-7", body: `<a href="${url}">${url}</a>` }), {
