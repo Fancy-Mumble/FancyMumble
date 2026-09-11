@@ -483,9 +483,21 @@ export interface AppState
   /** Messages we have started sending but haven't yet confirmed. */
   pendingMessages: PendingMessage[];
 
-  // -- Link embed state (in-memory, not persisted) ---------------
-  /** Link embeds keyed by message_id. */
-  linkEmbeds: Map<string, import("../types").LinkEmbed[]>;
+  // -- Link embed state ------------------------------------------
+  /**
+   * Link embeds keyed by the URL they describe.
+   *
+   * By URL and not by message id, which is what this was and why rejoining a
+   * channel re-fetched everything: a card belongs to a link, not to whichever
+   * message happened to be the first to mention it. Keyed this way, the same
+   * link in ten messages is one entry and one request, and history that scrolls
+   * back into view costs nothing.
+   *
+   * Deliberately outside `INITIAL`, so it survives a reconnect. The backend
+   * keeps the durable copy (`state/preview_cache.rs`, encrypted on disk); this
+   * is the render-path lookup in front of it.
+   */
+  linkEmbeds: Map<string, import("../types").LinkEmbed>;
 
   /** Whether the user has opted out of requesting link previews. */
   disableLinkPreviews: boolean;
@@ -936,7 +948,6 @@ const INITIAL: Pick<
   | "polls"
   | "pollMessages"
   | "pendingMessages"
-  | "linkEmbeds"
   | "reactionVersion"
   | "unseenPinIds"
   | "readReceiptVersion"
@@ -1019,7 +1030,6 @@ const INITIAL: Pick<
   polls: new Map(),
   pollMessages: [],
   pendingMessages: [],
-  linkEmbeds: new Map(),
   reactionVersion: 0,
   unseenPinIds: new Map(),
   readReceiptVersion: 0,
@@ -1110,6 +1120,10 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
   // Rich presence is local-machine state, unrelated to the Mumble
   // connection, so its slice sits outside INITIAL and survives disconnects.
   ...createPresenceSlice(set, get, store),
+  // Outside INITIAL, so a reconnect does not throw away cards this client has
+  // already been given: they are keyed by URL and describe a link rather than a
+  // session. Wiping them here is what made every rejoin re-fetch the history.
+  linkEmbeds: new Map(),
   disableLinkPreviews: false,
   disableOsmMaps: false,
   enableExternalEmbeds: false,
@@ -1269,6 +1283,8 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
         volumeAppliedSessions.clear();
         clearReadReceipts();
         useOnboardingStore.getState().clear();
+        // Whatever was in flight is not coming; let the next render re-ask.
+        pendingPreviewRequests.clear();
         set({ ...INITIAL });
         invoke("update_badge_count", { count: null }).catch(() => {});
         navigateRef?.("/");
@@ -1344,6 +1360,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     resetReactions();
     clearReadReceipts();
     useOnboardingStore.getState().clear();
+    pendingPreviewRequests.clear();
     set({ ...INITIAL });
     invoke("update_badge_count", { count: null }).catch(() => {});
     useAppStore
@@ -1825,7 +1842,10 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     });
   },
   setError: (error) => set({ error }),
-  reset: () => set({ ...INITIAL }),
+  reset: () => {
+    pendingPreviewRequests.clear();
+    set({ ...INITIAL });
+  },
 
   retryWithPassword: async (password) => {
     const pending = get().pendingConnect;
@@ -2458,8 +2478,22 @@ export function onWebRtcSignal(handler: WebRtcSignalHandler): () => void {
   };
 }
 
-/** Set of request_ids already sent to avoid duplicate requests. */
+/**
+ * URLs a preview has been asked for and not yet answered.
+ *
+ * By URL rather than by request id, which is what this was: keyed by message,
+ * a link posted ten times was ten requests, and - worse - the set was never
+ * cleared while `linkEmbeds` was wiped on every reconnect. That pair is what
+ * made cards vanish on a reconnect and never come back: the embeds were gone
+ * and every re-request was suppressed as a duplicate. Both halves are keyed
+ * the same way now, and this one is emptied whenever the store resets.
+ */
 const pendingPreviewRequests = new Set<string>();
+
+/** Forget what is in flight, so a reconnect re-asks for anything unanswered. */
+export function clearPendingPreviewRequests(): void {
+  pendingPreviewRequests.clear();
+}
 
 /** In-flight `requestOpenLiveDoc` invocations keyed by `${channelId}|${slug}`.
  *  Resolved when the matching `fancy-live-doc/invite` PluginDataTransmission
@@ -2469,15 +2503,38 @@ const pendingLiveDocOpens = new Map<
   { resolve: () => void; silent: boolean; mode: "private" | "publish" }
 >();
 
-/** Request link previews from the server for the given URLs. */
+/**
+ * Ask for the cards for `urls`, skipping the ones already held or in flight.
+ *
+ * The backend answers from its own encrypted cache where it can, and those hits
+ * come back from the call itself rather than as an event - a card that is
+ * already on this machine should not pop in a frame late. Only what neither
+ * side holds reaches the server.
+ */
 export async function requestLinkPreview(urls: string[], requestId: string): Promise<void> {
-  if (pendingPreviewRequests.has(requestId)) return;
-  pendingPreviewRequests.add(requestId);
+  const held = useAppStore.getState().linkEmbeds;
+  const wanted = urls.filter((url) => !held.has(url) && !pendingPreviewRequests.has(url));
+  if (wanted.length === 0) return;
+  for (const url of wanted) pendingPreviewRequests.add(url);
   try {
-    await invoke("request_link_preview", { urls, requestId });
+    const hits = await invoke<{ requested_url: string; embed: import("../types").LinkEmbed }[]>(
+      "request_link_preview",
+      { urls: wanted, requestId },
+    );
+    if (Array.isArray(hits) && hits.length > 0) {
+      const next = new Map(useAppStore.getState().linkEmbeds);
+      for (const hit of hits) {
+        if (!hit?.requested_url) continue;
+        next.set(hit.requested_url, hit.embed);
+        pendingPreviewRequests.delete(hit.requested_url);
+      }
+      useAppStore.setState({ linkEmbeds: next });
+    }
   } catch (e) {
     console.error("request_link_preview failed:", e);
-    pendingPreviewRequests.delete(requestId);
+    // Released, or a URL that failed once is never asked about again for the
+    // life of the process.
+    for (const url of wanted) pendingPreviewRequests.delete(url);
   }
 }
 
@@ -3153,6 +3210,10 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
         // *sequence* (multiple failures) so they accumulate rather than
         // resetting on every failed attempt; a fresh loss starts the clock.
         const prevReconnect = useAppStore.getState();
+        // The connection went; anything still in flight is not coming, and the
+        // next render must be free to ask again. `linkEmbeds` itself is outside
+        // INITIAL and survives - that is the point of it being keyed by URL.
+        pendingPreviewRequests.clear();
         useAppStore.setState({
           ...INITIAL,
           error: reason,
@@ -3668,26 +3729,26 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
   // -- Link preview response events --------------------------------
 
   unlisteners.push(
-    await listen<{ request_id: string; embeds: import("../types").LinkEmbed[] }>(
+    await listen<{
+      request_id: string;
+      embeds: import("../types").LinkEmbed[];
+      requested_urls?: string[];
+    }>(
       "link-preview-response",
       (event) => {
-        const { request_id, embeds } = event.payload;
-        if (!request_id || !Array.isArray(embeds) || embeds.length === 0) return;
-        const prev = useAppStore.getState().linkEmbeds;
-        const next = new Map(prev);
-        // Added to, not replaced. One answer arrives per *link*, each carrying
-        // the request id of the message it was asked about, so a message with
-        // three links is three events - and setting the list each time left
-        // only whichever host answered last. Keyed by URL, because a slow host
-        // answering twice is a retry rather than a second card.
-        const kept = prev.get(request_id) ?? [];
-        const merged = [...kept];
-        for (const embed of embeds) {
-          const at = merged.findIndex((seen) => seen.url === embed.url);
-          if (at === -1) merged.push(embed);
-          else merged[at] = embed;
-        }
-        next.set(request_id, merged);
+        const { embeds, requested_urls } = event.payload;
+        if (!Array.isArray(embeds) || embeds.length === 0) return;
+        const next = new Map(useAppStore.getState().linkEmbeds);
+        // Filed under the URL that was *asked for*, which the backend supplies
+        // alongside each card: `embed.url` is where the fetch ended up, and for
+        // a shortened link that is a string no message contains and no renderer
+        // will ever look up.
+        embeds.forEach((embed, at) => {
+          const url = requested_urls?.[at] || embed.url;
+          if (!url) return;
+          next.set(url, embed);
+          pendingPreviewRequests.delete(url);
+        });
         useAppStore.setState({ linkEmbeds: next });
       },
     ),
