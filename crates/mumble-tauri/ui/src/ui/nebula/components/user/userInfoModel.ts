@@ -64,17 +64,29 @@ export function appendSample(
  * can be tested through.  The literal union is what lets `t()` still check them
  * at the call site.
  */
-export function certificateLabel(strong: boolean): {
-  labelKey: "sidebar:userInfo.certStrong" | "sidebar:userInfo.certWeak";
-  tone: "ok" | "warn";
+export function certificateLabel(strong: boolean | null | undefined): {
+  labelKey: "sidebar:userInfo.certStrong" | "sidebar:userInfo.certWeak" | "sidebar:userInfo.notReported";
+  tone: "ok" | "warn" | "muted";
 } {
+  // Absent is not weak: the server withholds the field from everyone but an
+  // administrator and the person themselves, so a warning colour here would
+  // accuse every peer of a bad certificate.
+  if (strong == null) return { labelKey: "sidebar:userInfo.notReported", tone: "muted" };
   return strong
     ? { labelKey: "sidebar:userInfo.certStrong", tone: "ok" }
     : { labelKey: "sidebar:userInfo.certWeak", tone: "warn" };
 }
 
-/** Mumble speaks Opus at 48 kHz or the legacy CELT codecs; the flag says which. */
-export function codecLabel(opus: boolean): "nebulaUser:info.codecOpus" | "nebulaUser:info.codecCelt" {
+/** Mumble speaks Opus at 48 kHz or the legacy CELT codecs; the flag says which.
+ *
+ * Null is a third answer, not a falsy second one: the server reports the codec
+ * only to an administrator or to the person asking about themselves, so for an
+ * ordinary viewer looking at somebody else there is nothing to report - and
+ * saying "CELT" there would be a claim the server never made. */
+export function codecLabel(
+  opus: boolean | null | undefined,
+): "nebulaUser:info.codecOpus" | "nebulaUser:info.codecCelt" | "nebulaUser:info.codecUnknown" {
+  if (opus == null) return "nebulaUser:info.codecUnknown";
   return opus ? "nebulaUser:info.codecOpus" : "nebulaUser:info.codecCelt";
 }
 

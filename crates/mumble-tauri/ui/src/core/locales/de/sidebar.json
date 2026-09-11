@@ -148,6 +148,7 @@
     "labelCertificate": "Zertifikat",
     "certStrong": "Stark",
     "certWeak": "Schwach / Keines",
+    "notReported": "Nicht gemeldet",
     "labelOpus": "Opus",
     "pingStats": "Ping-Statistiken",
     "colPackets": "Pakete",

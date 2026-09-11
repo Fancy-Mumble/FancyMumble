@@ -106,6 +106,7 @@
   "info": {
     "codecOpus": "Opus 48 kHz",
     "codecCelt": "CELT",
+    "codecUnknown": "Nicht gemeldet",
     "bansOnRecord": "aktenkundig",
     "bansPermanent": "dauerhaft",
     "bansExpired": "abgelaufen {{date}}",

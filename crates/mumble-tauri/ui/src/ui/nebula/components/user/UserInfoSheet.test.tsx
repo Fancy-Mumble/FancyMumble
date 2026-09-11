@@ -153,7 +153,7 @@ describe("UserInfoSheet", () => {
 
   it("shows no admin rows to someone the server told nothing", () => {
     renderSheet({
-      stats: { ...STATS, address: null },
+      stats: { ...STATS, address: null, strong_certificate: null, opus: null },
       location: null,
       reverseDns: null,
       groups: [],
@@ -165,6 +165,23 @@ describe("UserInfoSheet", () => {
     expect(screen.queryByText("Network & location")).toBeNull();
     expect(screen.queryByText("Moderation")).toBeNull();
     expect(screen.getByText("Connection quality")).toBeTruthy();
+  });
+
+  // A plain viewer gets no certificate and no codec for somebody else - murmur
+  // sends both only to an administrator or to the person themselves. The sheet
+  // used to read those absences as false and accuse everyone of a weak
+  // certificate on CELT.
+  it("says a withheld certificate and codec were not reported", () => {
+    renderSheet({
+      stats: { ...STATS, strong_certificate: null, opus: null },
+      admin: false,
+      actions: NOBODY,
+    });
+    expect(screen.queryByText("Weak / None")).toBeNull();
+    expect(screen.queryByText("CELT")).toBeNull();
+    expect(screen.queryByText("No")).toBeNull();
+    // The certificate row, the Opus row, and the codec figure below.
+    expect(screen.getAllByText("Not reported")).toHaveLength(3);
   });
 
   it("masks the address and drops the map in streamer mode", () => {
