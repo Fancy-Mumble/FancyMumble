@@ -81,6 +81,15 @@ export function MobileShell({
     arrived.current = true;
   }, [model.screen]);
 
+  // The other direction: a list opened something, so the something comes
+  // forward. Guarded the same way - the count arrives with the first render
+  // and that is not a press.
+  const opened = useRef(model.openedContent);
+  useEffect(() => {
+    if (opened.current !== model.openedContent) setPane("content");
+    opened.current = model.openedContent;
+  }, [model.openedContent]);
+
   const chat = model.screen === "chat";
   // The start screen is the same two halves as the conversation - a list, and
   // the thing a row on it opens - so it rides the same pane switch rather
@@ -90,10 +99,13 @@ export function MobileShell({
     <ChannelsPane model={model} onOpen={() => setPane("content")} />
   ) : start ? (
     <MobileServersPane
-      model={{ ...model.servers!, onOpen: (key) => {
-        model.servers!.onOpen(key);
-        setPane("content");
-      } }}
+      model={{
+        ...model.servers!,
+        onOpen: (key) => {
+          model.servers!.onOpen(key);
+          setPane("content");
+        },
+      }}
       brand={model.brand}
     />
   ) : (
@@ -103,6 +115,18 @@ export function MobileShell({
     <ChatPane model={model} onBack={() => setPane("nav")} onExpandVoice={() => setVoiceOpen(true)} />
   ) : start && model.connect ? (
     <MobileConnectPane model={{ ...model.connect, onBack: () => setPane("nav") }} />
+  ) : model.screenContent && model.screenNav ? (
+    // A screen with two halves needs a way back to the first one. Settings
+    // pages carry their own headings but no navigation - on a window the list
+    // they came from is still beside them, and here it is not.
+    <>
+      <MobileHeader
+        title={model.screenTitle ?? ""}
+        onBack={() => setPane("nav")}
+        testId="nebula-mobile-screen-header"
+      />
+      {model.screenContent}
+    </>
   ) : (
     model.screenContent
   );
@@ -146,9 +170,16 @@ export function MobileShell({
           <HazardRule />
           <MobileTabBar
             active={TAB_FOR_SCREEN[model.screen] ?? "chats"}
-            onSelect={(tab) => model.onScreen(SCREEN_FOR_TAB[tab])}
+            onSelect={(tab) => {
+              // Pressing the tab you are already on goes back to its list,
+              // which is what every phone does and is the only way out of a
+              // settings page: the screen has not changed, so the switch
+              // above will not fire.
+              if (SCREEN_FOR_TAB[tab] === model.screen) setPane("nav");
+              model.onScreen(SCREEN_FOR_TAB[tab]);
+            }}
             servers={start}
-        chatsBadge={model.unread.chats}
+            chatsBadge={model.unread.chats}
             peopleBadge={model.unread.people}
           />
         </>
@@ -169,10 +200,7 @@ export function MobileShell({
 }
 
 /** Artboard A: the servers, the search, and the channel tree. */
-function ChannelsPane({
-  model,
-  onOpen,
-}: Readonly<{ model: MobileShellModel; onOpen: () => void }>) {
+function ChannelsPane({ model, onOpen }: Readonly<{ model: MobileShellModel; onOpen: () => void }>) {
   const stencil = useStencil();
   return (
     <>

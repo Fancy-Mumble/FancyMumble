@@ -117,6 +117,17 @@ export interface MobileShellModel {
   screenContent?: ReactNode;
   screen: Screen;
   onScreen: (next: Screen) => void;
+  /**
+   * A counter the navigation pane bumps whenever it opens something.
+   *
+   * The pane switch needs to know that a page was *chosen*, which the page's
+   * own id cannot say: pressing the row you are already on opens the same page
+   * and changes nothing. Only the pane that owns the rows knows a press
+   * happened, and this is how it says so without reaching into the shell.
+   */
+  openedContent?: number;
+  /** What the content half of a non-conversation screen is called. */
+  screenTitle?: string;
   unread: { chats: number; people: number };
 }
 

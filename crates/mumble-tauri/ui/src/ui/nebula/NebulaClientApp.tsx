@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert, Box, Button, CssBaseline, Dialog, DialogContent, Snackbar, Typography } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
@@ -313,6 +313,14 @@ export default function NebulaClientApp() {
   // A phone, or a window narrowed to one. The tree below is the same
   // either way - only the row of columns is replaced.
   const handheld = useIsHandheld();
+  /**
+   * Bumped whenever something in a navigation pane opens a page.
+   *
+   * A phone shows one half at a time, so choosing a settings page has to bring
+   * that page forward - and the page id alone cannot say when, because pressing
+   * the row you are already on does not change it. A counter does.
+   */
+  const [openedContent, openContent] = useReducer((count: number) => count + 1, 0);
   // The two facts the handheld call bar and voice screen show, read here
   // rather than inside them so both wear the same answer.
   const micLive = useAppStore(selectMicLive);
@@ -1751,6 +1759,7 @@ export default function NebulaClientApp() {
   // bar lands on, and the page above is what a row on it opens.
   const settingsNav = (
     <SidebarShell
+      full={handheld}
       back={{
         label: t("nebulaCommon:app.back"),
         testId: TID.adminBack,
@@ -1765,6 +1774,7 @@ export default function NebulaClientApp() {
           onSelect={(target: SettingsSearchTarget) => {
             setAdminPage(null);
             setSettingsPage(target.page);
+            openContent();
             setSettingsHighlight((current) => ({
               term: target.term,
               titles: target.titles,
@@ -1782,8 +1792,12 @@ export default function NebulaClientApp() {
           setAdminPage(null);
           setSettingsPage(id);
           setSettingsHighlight(null);
+          openContent();
         }}
-        onOpenAdmin={(id) => setAdminPage(id as AdminPageId)}
+        onOpenAdmin={(id) => {
+          setAdminPage(id as AdminPageId);
+          openContent();
+        }}
       />
     </SidebarShell>
   );
@@ -1913,6 +1927,8 @@ export default function NebulaClientApp() {
     // it brings the page forward.
     screenNav: screen === "settings" ? settingsNav : screen === "messages" ? friendsPane : undefined,
     screenContent: screen === "settings" ? settingsPane : undefined,
+    openedContent,
+    screenTitle: adminPage !== null ? t("settings:heading") : t("common:minimal.settings"),
     voice: joinedChannel
       ? {
           channelName: joinedChannel.name,

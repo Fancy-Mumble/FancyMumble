@@ -436,3 +436,49 @@ describe("the start screen", () => {
     expect(onSelectIdentity).toHaveBeenCalledWith("zewi");
   });
 });
+
+describe("a screen that is a list beside a page", () => {
+  const skin = NEBULA_THEMES[0].skin;
+  const settings = (over: Partial<MobileShellModel> = {}) =>
+    model({
+      screen: "settings",
+      screenTitle: "Settings",
+      screenNav: <div>Settings list</div>,
+      screenContent: <div>A settings page</div>,
+      ...over,
+    });
+
+  it("lands on the list", () => {
+    mount(skin, "dark", <MobileShell model={settings()} />);
+    expect(screen.getByText("Settings list")).toBeTruthy();
+    expect(screen.queryByText("A settings page")).toBeNull();
+  });
+
+  it("brings the page forward when the list opens one", () => {
+    // The page id cannot say this happened - pressing the row you are already
+    // on opens the same page - so the list counts its own presses.
+    const { rerender, theme } = mount(skin, "dark", <MobileShell model={settings({ openedContent: 0 })} />);
+    rerender(
+      <ThemeProvider theme={theme}>
+        <MobileShell model={settings({ openedContent: 1 })} />
+      </ThemeProvider>,
+    );
+    expect(screen.getByText("A settings page")).toBeTruthy();
+  });
+
+  it("gives the page a way back, which the window did not need", () => {
+    mount(skin, "dark", <MobileShell model={settings()} initialPane="content" />);
+    expect(screen.getByTestId("nebula-mobile-screen-header").textContent).toContain("Settings");
+    fireEvent.click(screen.getByLabelText("Back"));
+    expect(screen.getByText("Settings list")).toBeTruthy();
+  });
+
+  it("goes back to the list when the tab you are on is pressed again", () => {
+    // The screen has not changed, so the screen-change switch cannot do it -
+    // and without this a settings page is a room with no door.
+    mount(skin, "dark", <MobileShell model={settings()} initialPane="content" />);
+    expect(screen.getByText("A settings page")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("nebula-mobile-tab-settings"));
+    expect(screen.getByText("Settings list")).toBeTruthy();
+  });
+});
