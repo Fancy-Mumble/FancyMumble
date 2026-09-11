@@ -22,6 +22,14 @@ interface SidebarShellProps {
   search?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
+  /**
+   * The column *is* the screen, rather than a column beside one.
+   *
+   * A phone has no second column to sit next to, so the fixed width becomes
+   * the whole width and the hairline that divided it from the pane on its
+   * right goes with it - there is nothing on its right.
+   */
+  full?: boolean;
 }
 
 /** The fixed 290px left column every screen fills differently. */
@@ -34,16 +42,17 @@ export function SidebarShell({
   search,
   children,
   footer,
+  full = false,
 }: Readonly<SidebarShellProps>) {
   const stencil = useTheme().palette.nebulaSkin.chrome === "stencil";
   return (
     <Stack
       component="nav"
       sx={(theme) => ({
-        width: theme.palette.nebulaSkin.columnWidth,
-        flex: "none",
+        width: full ? "100%" : theme.palette.nebulaSkin.columnWidth,
+        flex: full ? 1 : "none",
         minHeight: 0,
-        borderRight: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
+        ...(full ? {} : { borderRight: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}` }),
         background: theme.palette.nebula.panel,
       })}
     >
