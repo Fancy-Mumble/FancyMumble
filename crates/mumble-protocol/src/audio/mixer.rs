@@ -79,6 +79,41 @@ const JITTER_SHRINK_MAX_MS: u32 = 20;
 /// Crossfade across the seam a shrink leaves behind.
 const JITTER_SHRINK_RAMP_MS: u32 = 2; // plus a half, see `ramp_samples`
 
+/// What one speaker's jitter buffer had to do to keep playing.
+///
+/// Cumulative for the buffer's life. Nothing resets these - not
+/// [`clear`](SpeakerBuffer::clear), not the end of a talkspurt, not the
+/// shrink window - because the question they answer is how this speaker
+/// sounded across the call, and a counter that restarts every talkspurt
+/// cannot answer it.
+///
+/// The pair worth reading together is `underruns` against
+/// `skipped_samples`. Underruns alone mean the target is too shallow for
+/// this sender's arrival spread; skips alone mean it is deeper than the
+/// spread needs; both at once mean the spread is moving faster than the
+/// two-second shrink window can track.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct JitterStats {
+    /// Times the output arrived to find the buffer dry mid-talkspurt.
+    ///
+    /// Each one grew the target by `JITTER_GROW_MS` and cost the listener
+    /// a hole in the audio. The end of a sentence is not counted: a
+    /// buffer that drains after the terminator has done its job.
+    pub underruns: u32,
+    /// Times `shrink_if_unused` skipped depth the window proved unused.
+    pub shrinks: u32,
+    /// Samples those shrinks removed. Divide by the format's samples per
+    /// millisecond for the latency they bought back.
+    pub skipped_samples: usize,
+    /// Samples dropped from the front because the buffer hit `cap`.
+    ///
+    /// Not the same thing as a shrink. A shrink is the policy trimming
+    /// latency it proved nobody used; this is audio arriving faster than
+    /// playout drains it, thrown away mid-stream. Non-zero here is
+    /// audible.
+    pub overflow_dropped: usize,
+}
+
 /// One speaker's decoded audio, with the playout policy that decides when
 /// it starts and how deep it runs.
 ///
@@ -116,6 +151,9 @@ pub struct SpeakerBuffer {
     /// there is nothing to bound and dropping the oldest samples silently
     /// truncates the recording to its tail.
     cap: usize,
+    /// Counters for what the policy above has had to do. Diagnostics
+    /// only - nothing here feeds back into a decision.
+    stats: JitterStats,
 }
 
 impl SpeakerBuffer {
@@ -145,6 +183,7 @@ impl SpeakerBuffer {
             window_min: usize::MAX,
             window_drained: 0,
             last_out: 0.0,
+            stats: JitterStats::default(),
         };
         buf.target = buf.ms_to_samples(cfg.floor_ms);
         buf
@@ -170,6 +209,12 @@ impl SpeakerBuffer {
     /// Current target depth in milliseconds. Diagnostics and tests.
     pub fn target_ms(&self) -> u32 {
         (self.target / self.per_ms.max(1)) as u32
+    }
+
+    /// What this buffer has had to do to keep playing. See
+    /// [`JitterStats`] for how to read the counters against each other.
+    pub fn stats(&self) -> JitterStats {
+        self.stats
     }
 
     /// Start from a target this speaker had already learned, clamped into
@@ -236,6 +281,7 @@ impl SpeakerBuffer {
         if self.samples.len() > self.cap {
             let excess = self.samples.len() - self.cap;
             let _ = self.samples.drain(..excess);
+            self.stats.overflow_dropped = self.stats.overflow_dropped.saturating_add(excess);
         }
     }
 
@@ -306,6 +352,7 @@ impl SpeakerBuffer {
             // enough for the arrival spread, so grow before refilling.
             if self.live {
                 self.underrun = true;
+                self.stats.underruns = self.stats.underruns.saturating_add(1);
                 self.grow_target();
             }
             // Re-prime either way, rather than dribbling out every partial
@@ -344,6 +391,8 @@ impl SpeakerBuffer {
             return;
         }
         let _ = self.samples.drain(..skip);
+        self.stats.shrinks = self.stats.shrinks.saturating_add(1);
+        self.stats.skipped_samples = self.stats.skipped_samples.saturating_add(skip);
         // Ramp across the seam: the sample after the skip can be anywhere
         // in the waveform relative to the one before it, and a step there
         // is a click.
@@ -1250,6 +1299,84 @@ mod tests {
             1920,
             "the unused 20 ms goes, the 40 ms target stays"
         );
+    }
+
+    #[test]
+    fn an_underrun_is_counted_but_the_end_of_a_sentence_is_not() {
+        // The counter has to distinguish the two, or every talkspurt that
+        // ever ends reads as a network problem.
+        let mut dry = jitter_buffer(JitterConfig::default());
+        let mut out = vec![0.0; 960];
+        dry.push(&vec![0.5; 1920]);
+        for _ in 0..3 {
+            let _ = dry.drain_into(&mut out, 1.0);
+        }
+        assert_eq!(dry.stats().underruns, 1, "ran dry with the sender live");
+
+        let mut finished = jitter_buffer(JitterConfig::default());
+        finished.push(&vec![0.5; 1920]);
+        finished.end_talkspurt();
+        for _ in 0..3 {
+            let _ = finished.drain_into(&mut out, 1.0);
+        }
+        assert_eq!(
+            finished.stats().underruns,
+            0,
+            "the end of a sentence is not an underrun"
+        );
+    }
+
+    #[test]
+    fn a_shrink_records_what_it_skipped() {
+        // The same stream as `depth_the_output_never_needed_is_skimmed_off`,
+        // read through the counters: one shrink, and the 20 ms it removed.
+        let mut buf = jitter_buffer(JitterConfig::default());
+        let mut out = vec![0.0; 960];
+        buf.push(&vec![0.5; 2880]);
+
+        for _ in 0..250 {
+            assert_eq!(buf.drain_into(&mut out, 1.0), 960, "must never run dry");
+            buf.push(&vec![0.5; 960]);
+        }
+
+        assert_eq!(
+            buf.stats().shrinks,
+            1,
+            "the second window finds nothing spare"
+        );
+        assert_eq!(buf.stats().skipped_samples, 960, "20 ms of unused depth");
+        assert_eq!(buf.stats().underruns, 0, "skimming is not an underrun");
+        assert_eq!(
+            buf.stats().overflow_dropped,
+            0,
+            "a shrink is not the cap dropping audio"
+        );
+    }
+
+    #[test]
+    fn hitting_the_cap_counts_the_audio_it_threw_away() {
+        let mut buf = jitter_buffer(JitterConfig::default());
+        buf.push(&vec![0.5; MAX_SPEAKER_BUFFER_SAMPLES + 5_000]);
+        assert_eq!(buf.len(), MAX_SPEAKER_BUFFER_SAMPLES);
+        assert_eq!(buf.stats().overflow_dropped, 5_000);
+        assert_eq!(buf.stats().shrinks, 0, "the cap is not the shrink policy");
+    }
+
+    #[test]
+    fn the_counters_outlive_a_clear() {
+        // `clear` returns the buffer to un-primed for the next talkspurt.
+        // What the call has cost this listener so far is not undone by that.
+        let mut buf = jitter_buffer(JitterConfig::default());
+        let mut out = vec![0.0; 960];
+        buf.push(&vec![0.5; 1920]);
+        for _ in 0..3 {
+            let _ = buf.drain_into(&mut out, 1.0);
+        }
+        let before = buf.stats();
+        assert_eq!(before.underruns, 1);
+
+        buf.clear();
+        assert_eq!(buf.stats(), before, "a clear is not a fresh speaker");
     }
 
     #[test]
