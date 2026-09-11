@@ -103,8 +103,13 @@ pub(crate) struct UserStatsPayload {
     pub bandwidth: Option<u32>,
     pub onlinesecs: Option<u32>,
     pub idlesecs: Option<u32>,
-    pub strong_certificate: bool,
-    pub opus: bool,
+    /// Whether the certificate is strong, or `None` when the server did not
+    /// say.  murmur sends this only to an administrator or to the person
+    /// themselves, so absent means unknown, never weak.
+    pub strong_certificate: Option<bool>,
+    /// Whether the client speaks Opus, or `None` when the server did not say.
+    /// Gated exactly as `strong_certificate` is.
+    pub opus: Option<bool>,
     /// Client version string (e.g. "1.5.517").
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
