@@ -416,6 +416,8 @@ export const TID = {
   auditRow: "audit-row",
   /** Detail drawer opened by clicking a row. */
   auditDetailDrawer: "audit-detail-drawer",
+  /** The avatar or comment an `audit.profile` entry kept, in the detail drawer. */
+  auditSnapshot: "audit-snapshot",
   /** Switch to the Configuration half. */
   auditConfigHalf: "audit-config-half",
   /** Chain-status card in the Configuration half. */

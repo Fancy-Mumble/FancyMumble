@@ -233,6 +233,14 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
         ControlMessage::FancyAuditQuery(query) => {
             return Some((AUDIT, audit_query_to_canon(query)));
         }
+        ControlMessage::FancyAuditSnapshotQuery(query) => {
+            let envelope = fancy::feature::AuditEnvelope {
+                body: Some(fancy::feature::audit_envelope::Body::SnapshotQuery(
+                    query.clone(),
+                )),
+            };
+            return Some((AUDIT, envelope.encode_to_vec()));
+        }
         // The screen-share signalling, reframed rather than mapped: the canon
         // carries this message itself, with the same four fields under the same
         // numbers. `sender_session` goes out empty whatever this client put
@@ -739,7 +747,8 @@ fn audit_entry(record: &fancy::feature::AuditRecord) -> mumble_tcp::AuditEntry {
         // Epoch 0 numbers entries; the canon names them. The table keys rows on
         // this only for React, and the id is shown from `detail_json` instead,
         // so a hash of the name is a stable key rather than a lie about order.
-        id: None,
+        // Leaving it unset made every row id 0: one click selected them all.
+        id: Some(audit_row_key(&record.id)),
         ts: Some(record.at_ms),
         // Everything Starling records is server-authoritative; it has no plugin
         // ingest and takes no client claims, so the UI's "reported claim"
@@ -760,12 +769,23 @@ fn audit_entry(record: &fancy::feature::AuditRecord) -> mumble_tcp::AuditEntry {
                 "action": record.action,
                 "detail": record.detail,
                 "entry_hash": record.entry_hash,
+                "has_snapshot": record.has_snapshot,
             })
             .to_string(),
         ),
         entry_hash: Some(record.entry_hash.clone().into_bytes()),
         ..Default::default()
     }
+}
+
+/// A stable numeric key for an entry the canon names by UUID.
+///
+/// FNV-1a, masked to 53 bits so it survives being a JavaScript number.
+fn audit_row_key(id: &str) -> u64 {
+    let hash = id.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+    });
+    hash & ((1 << 53) - 1)
 }
 
 /// The canon config, as the `Setting` rows the config half renders.
@@ -806,6 +826,20 @@ fn audit_settings(config: &fancy::feature::Config) -> Vec<mumble_tcp::Setting> {
             label: Some("Recorded categories".to_owned()),
             value: Some(config.categories.join(",")),
             help: Some("What the server records, and what the filter offers.".to_owned()),
+            options: Vec::new(),
+            secret: Some(false),
+        },
+        mumble_tcp::Setting {
+            key: Some("audit.profile_history".to_owned()),
+            r#type: Some("int".to_owned()),
+            group: Some("audit".to_owned()),
+            label: Some("Profile history (per user)".to_owned()),
+            value: Some(config.profile_history.to_string()),
+            help: Some(
+                "Past avatars and comments kept per user, shrunk and compressed. \
+                 0 keeps none. Set it in Server settings."
+                    .to_owned(),
+            ),
             options: Vec::new(),
             secret: Some(false),
         },
@@ -1054,6 +1088,9 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                         sql_schema_json: None,
                     },
                 )),
+                Some(Audit::Snapshot(snapshot)) => {
+                    Some(ControlMessage::FancyAuditSnapshot(snapshot))
+                }
                 // Client->server bodies, and `Event`, which needs a live tail
                 // the canon does not model yet.
                 _ => None,
@@ -3379,6 +3416,43 @@ mod tests {
     }
 
     #[test]
+    fn a_snapshot_ask_and_its_answer_cross_the_canon_unchanged() {
+        let ask = fancy::feature::SnapshotQuery {
+            entry_id: "0192-abc".to_owned(),
+            query_id: "s-1".to_owned(),
+        };
+        let (outer, payload) = to_canon(&ControlMessage::FancyAuditSnapshotQuery(ask.clone()))
+            .expect("a snapshot ask has a canon home");
+        assert_eq!(outer, AUDIT);
+        let envelope = fancy::feature::AuditEnvelope::decode(payload.as_slice()).expect("decodes");
+        assert_eq!(
+            envelope.body,
+            Some(fancy::feature::audit_envelope::Body::SnapshotQuery(ask))
+        );
+
+        let kept = fancy::feature::ProfileSnapshot {
+            entry_id: "0192-abc".to_owned(),
+            query_id: "s-1".to_owned(),
+            found: true,
+            kind: "comment".to_owned(),
+            mime: "text/html".to_owned(),
+            body: b"<b>hi</b>".to_vec(),
+            original_size: 9,
+            stored_size: 9,
+        };
+        let reply = fancy::feature::AuditEnvelope {
+            body: Some(fancy::feature::audit_envelope::Body::Snapshot(kept.clone())),
+        };
+        let decoded = from_canon(AUDIT, &reply.encode_to_vec())
+            .expect("decodable")
+            .expect("a snapshot is translated");
+        let ControlMessage::FancyAuditSnapshot(back) = decoded else {
+            panic!("a ProfileSnapshot must become a FancyAuditSnapshot");
+        };
+        assert_eq!(back, kept);
+    }
+
+    #[test]
     fn a_page_comes_back_correlated_to_the_query_that_asked_for_it() {
         // The store drops any response whose `queryId` is not the one it last
         // sent, so a page that loses the id is a page the tab never renders -
@@ -3397,6 +3471,7 @@ mod tests {
                         entry_hash: "deadbeef".to_owned(),
                         target_account: 7,
                         target_channel: 3,
+                        has_snapshot: true,
                     }],
                     page: Some(fancy::wire::PageInfo {
                         more: true,
@@ -3424,6 +3499,15 @@ mod tests {
         // The verb has to survive: the table shows it, and a row that says
         // "audit.ban" without "issued" has lost what happened.
         assert_eq!(entry.reason.as_deref(), Some("issued"));
+        // The results drawer offers the kept avatar or comment only when this
+        // says there is one.
+        assert!(
+            entry
+                .detail_json
+                .as_deref()
+                .is_some_and(|json| json.contains("\"has_snapshot\":true"))
+        );
+        assert!(entry.id.is_some_and(|id| id > 0 && id < 1 << 53));
         assert!(
             entry
                 .detail_json
@@ -3473,6 +3557,7 @@ mod tests {
                     categories: vec!["audit.ban".to_owned(), "audit.move".to_owned()],
                     retention_days: 30,
                     chain_height: 41,
+                    profile_history: 3,
                 },
             )),
         };

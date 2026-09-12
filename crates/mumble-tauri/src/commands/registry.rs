@@ -235,6 +235,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::audit::get_audit_config,
         super::audit::query_audit_log,
         super::audit::save_audit_config,
+        super::audit::request_audit_snapshot,
         super::server_settings::get_server_settings,
         super::server_settings::request_server_settings,
         super::server_settings::save_server_settings,

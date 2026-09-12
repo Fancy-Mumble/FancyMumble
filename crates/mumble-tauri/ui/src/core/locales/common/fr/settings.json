@@ -726,7 +726,11 @@
     "pageResults": "Résultats",
     "prevPage": "Précédent",
     "quickFilters": "Filtres rapides",
-    "resultsLabel": "Résultats"
+    "resultsLabel": "Résultats",
+    "snapshotTitle": "Copie conservée",
+    "snapshotLoading": "Chargement de la copie conservée…",
+    "snapshotGone": "Plus conservée : supprimée par la limite d’historique de profil ou par la rétention.",
+    "snapshotSize": "Stockée en {{stored}}, envoyée en {{original}}"
   },
   "registeredUsers": {
     "title": "Utilisateurs enregistrés",

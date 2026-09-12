@@ -756,7 +756,11 @@
     "pageResults": "结果",
     "prevPage": "上一页",
     "quickFilters": "快捷筛选",
-    "resultsLabel": "结果"
+    "resultsLabel": "结果",
+    "snapshotTitle": "保留的副本",
+    "snapshotLoading": "正在加载保留的副本…",
+    "snapshotGone": "已不再保留：已被资料历史上限或保留期限清除。",
+    "snapshotSize": "存储为 {{stored}}，发送时为 {{original}}"
   },
   "serverSettings": {
     "intro": "在运行时修改服务器设置。修改会立即应用并保存在服务器上。",

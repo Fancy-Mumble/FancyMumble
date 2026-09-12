@@ -71,6 +71,25 @@ impl AppState {
             .map_err(|e| format!("Failed to request an operator ticket: {e}"))
     }
 
+    /// Ask for the avatar or comment an audit entry kept. The answer arrives
+    /// asynchronously as an `audit-snapshot` event.
+    pub async fn request_audit_snapshot(
+        &self,
+        entry_id: String,
+        query_id: String,
+    ) -> Result<(), String> {
+        let handle = {
+            let session = self.inner.snapshot();
+            let state = session.lock().map_err(|e| e.to_string())?;
+            state.conn.client_handle.clone()
+        };
+        let handle = handle.ok_or("Not connected")?;
+        handle
+            .send(command::RequestAuditSnapshot { entry_id, query_id })
+            .await
+            .map_err(|e| format!("Failed to request the audit snapshot: {e}"))
+    }
+
     /// Send an audit query / live-tail subscription / chain verification.
     pub async fn query_audit_log(&self, args: AuditQueryArgs) -> Result<(), String> {
         let handle = {

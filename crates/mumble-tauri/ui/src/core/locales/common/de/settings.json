@@ -726,7 +726,11 @@
     "pageResults": "Ergebnisse",
     "prevPage": "Zurück",
     "quickFilters": "Schnellfilter",
-    "resultsLabel": "Ergebnisse"
+    "resultsLabel": "Ergebnisse",
+    "snapshotTitle": "Aufbewahrte Kopie",
+    "snapshotLoading": "Aufbewahrte Kopie wird geladen…",
+    "snapshotGone": "Nicht mehr vorhanden: durch das Profilverlauf-Limit oder die Aufbewahrungsfrist entfernt.",
+    "snapshotSize": "Gespeichert mit {{stored}}, gesendet mit {{original}}"
   },
   "registeredUsers": {
     "title": "Registrierte Nutzer",

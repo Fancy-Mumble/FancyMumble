@@ -350,6 +350,8 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
         FancyAuditEvent(m) => m.encode_to_vec(),
         FancyAuditConfig(m) => m.encode_to_vec(),
         FancyAuditConfigUpdate(m) => m.encode_to_vec(),
+        FancyAuditSnapshotQuery(m) => m.encode_to_vec(),
+        FancyAuditSnapshot(m) => m.encode_to_vec(),
         PluginMessage(m) => m.encode_to_vec(),
         PluginRegistry(m) => m.encode_to_vec(),
         UdpTunnel(data) => data.clone(),
@@ -452,6 +454,12 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
         ),
         FancyOperatorTicketReply => ControlMessage::FancyOperatorTicketReply(
             crate::proto::fancy::domain::OperatorTicketReply::decode(payload)?,
+        ),
+        FancyAuditSnapshotQuery => ControlMessage::FancyAuditSnapshotQuery(
+            crate::proto::fancy::feature::SnapshotQuery::decode(payload)?,
+        ),
+        FancyAuditSnapshot => ControlMessage::FancyAuditSnapshot(
+            crate::proto::fancy::feature::ProfileSnapshot::decode(payload)?,
         ),
         UdpTunnel => ControlMessage::UdpTunnel(payload.to_vec()),
         Authenticate => ControlMessage::Authenticate(mumble_tcp::Authenticate::decode(payload)?),

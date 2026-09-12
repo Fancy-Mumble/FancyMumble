@@ -49,6 +49,7 @@ import type {
   AuditEntry,
   AuditEventPayload,
   AuditResponse,
+  AuditSnapshot,
   ServerSetting,
 } from "@core/types";
 import {
@@ -105,6 +106,7 @@ const KNOWN_CATEGORIES = [
   "audit.channel",
   "audit.register",
   "audit.config",
+  "audit.profile",
   "audit.plugin_admin",
   "audit.plugin_action",
   "audit.pchat_moderation",
@@ -125,6 +127,7 @@ const PAGE_SIZE = 25;
 const FILTER_DEBOUNCE_MS = 350;
 
 const fmtTime = (ts: number) => (ts ? new Date(ts).toLocaleString() : "-");
+const fmtBytes = (n: number) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KiB`);
 
 function download(filename: string, mime: string, content: string): void {
   const url = URL.createObjectURL(new Blob([content], { type: mime }));
@@ -215,6 +218,7 @@ export function AuditAdmin() {
   const applyResponse = useAuditStore((state) => state.applyResponse);
   const applyEvent = useAuditStore((state) => state.applyEvent);
   const applyConfig = useAuditStore((state) => state.applyConfig);
+  const applySnapshot = useAuditStore((state) => state.applySnapshot);
   const loadConfig = useAuditStore((state) => state.loadConfig);
 
   useEffect(() => {
@@ -223,11 +227,12 @@ export function AuditAdmin() {
       listen<AuditResponse>("audit-response", (event) => applyResponse(event.payload)),
       listen<AuditEventPayload>("audit-event", (event) => applyEvent(event.payload.entry)),
       listen<AuditConfigEvent>("audit-config", (event) => applyConfig(event.payload.config)),
+      listen<AuditSnapshot>("audit-snapshot", (event) => applySnapshot(event.payload)),
     ];
     return () => {
       for (const sub of subs) void sub.then((stop) => stop());
     };
-  }, [loadConfig, applyResponse, applyEvent, applyConfig]);
+  }, [loadConfig, applyResponse, applyEvent, applyConfig, applySnapshot]);
 
   return (
     <Box data-testid={TID.auditTab}>
@@ -886,6 +891,7 @@ function AuditResults({
               chain: {selected.entryHash}
             </Typography>
           )}
+          <ProfileSnapshotView entry={selected} />
         </SettingsCard>
       )}
 
@@ -1052,6 +1058,97 @@ function AuditResults({
         </Typography>
       </Stack>
     </>
+  );
+}
+
+/** The server's entry id, when Starling says it kept a copy for this entry. */
+function snapshotEntryId(entry: AuditEntry): string | null {
+  if (!entry.detailJson) return null;
+  try {
+    const detail = JSON.parse(entry.detailJson) as { id?: unknown; has_snapshot?: unknown };
+    return detail.has_snapshot === true && typeof detail.id === "string" ? detail.id : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The avatar or comment an `audit.profile` entry kept, fetched when opened. */
+function ProfileSnapshotView({ entry }: Readonly<{ entry: AuditEntry }>) {
+  const { t } = useTranslation("settings");
+  const entryId = snapshotEntryId(entry);
+  const snapshot = useAuditStore((state) => (entryId ? state.snapshots[entryId] : undefined));
+  const requestSnapshot = useAuditStore((state) => state.requestSnapshot);
+
+  useEffect(() => {
+    if (entryId) void requestSnapshot(entryId).catch(() => undefined);
+  }, [entryId, requestSnapshot]);
+
+  if (!entryId) return null;
+
+  let state = "loading";
+  if (snapshot) state = snapshot.found ? snapshot.kind : "gone";
+
+  return (
+    <Box data-testid={TID.auditSnapshot} data-snapshot-state={state} sx={{ mt: "12px", fontSize: 11.5 }}>
+      <DetailKey>{t("audit.snapshotTitle", { defaultValue: "Kept copy" })}</DetailKey>
+      {!snapshot && (
+        <Typography sx={(theme) => ({ mt: "4px", fontSize: 11, color: theme.palette.nebula.dim })}>
+          {t("audit.snapshotLoading", { defaultValue: "Loading the kept copy…" })}
+        </Typography>
+      )}
+      {snapshot && !snapshot.found && (
+        <Typography sx={(theme) => ({ mt: "4px", fontSize: 11, color: theme.palette.nebula.muted })}>
+          {t("audit.snapshotGone", {
+            defaultValue: "No longer kept: trimmed by the profile history limit or by retention.",
+          })}
+        </Typography>
+      )}
+      {snapshot?.found && snapshot.dataUrl && (
+        <Box
+          component="img"
+          src={snapshot.dataUrl}
+          alt={entry.actorName ?? ""}
+          sx={(theme) => ({
+            display: "block",
+            mt: "6px",
+            width: 96,
+            height: 96,
+            objectFit: "contain",
+            borderRadius: radius("md"),
+            background: theme.palette.nebula.card2,
+          })}
+        />
+      )}
+      {snapshot?.found && snapshot.text != null && (
+        // The source, never rendered: a comment is somebody else's HTML.
+        <Box
+          component="pre"
+          sx={(theme) => ({
+            mt: "6px",
+            p: "10px",
+            borderRadius: radius("md"),
+            maxHeight: 220,
+            overflow: "auto",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            fontFamily: NEBULA_MONO,
+            fontSize: 10.5,
+            background: theme.palette.nebula.card2,
+          })}
+        >
+          {snapshot.text}
+        </Box>
+      )}
+      {snapshot?.found && (
+        <Typography sx={(theme) => ({ mt: "4px", fontSize: 10, color: theme.palette.nebula.dim })}>
+          {t("audit.snapshotSize", {
+            defaultValue: "Stored in {{stored}}, sent as {{original}}",
+            stored: fmtBytes(snapshot.storedSize),
+            original: fmtBytes(snapshot.originalSize),
+          })}
+        </Typography>
+      )}
+    </Box>
   );
 }
 
