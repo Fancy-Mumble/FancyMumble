@@ -479,7 +479,7 @@ pub struct PushAck {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuditEnvelope {
-    #[prost(oneof = "audit_envelope::Body", tags = "1, 2, 3, 4, 5, 6, 7, 8")]
+    #[prost(oneof = "audit_envelope::Body", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10")]
     pub body: ::core::option::Option<audit_envelope::Body>,
 }
 /// Nested message and enum types in `AuditEnvelope`.
@@ -502,7 +502,43 @@ pub mod audit_envelope {
         Verify(super::Verify),
         #[prost(message, tag = "8")]
         VerifyResult(super::VerifyResult),
+        #[prost(message, tag = "9")]
+        SnapshotQuery(super::SnapshotQuery),
+        #[prost(message, tag = "10")]
+        Snapshot(super::ProfileSnapshot),
     }
+}
+/// Asks for the avatar or comment an `audit.profile` entry kept.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SnapshotQuery {
+    #[prost(string, tag = "1")]
+    pub entry_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub query_id: ::prost::alloc::string::String,
+}
+/// What was kept. `found` is false once retention or `profile_history` has
+/// pruned it. A comment comes back decompressed; an avatar as the shrunk copy.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ProfileSnapshot {
+    #[prost(string, tag = "1")]
+    pub entry_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub query_id: ::prost::alloc::string::String,
+    #[prost(bool, tag = "3")]
+    pub found: bool,
+    /// "avatar" or "comment".
+    #[prost(string, tag = "4")]
+    pub kind: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub mime: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "6")]
+    pub body: ::prost::alloc::vec::Vec<u8>,
+    /// The size of what the user sent, before it was shrunk or compressed.
+    #[prost(uint64, tag = "7")]
+    pub original_size: u64,
+    /// The size it is stored at.
+    #[prost(uint64, tag = "8")]
+    pub stored_size: u64,
 }
 /// Asks for the Config below. Client-initiated rather than pushed after sync:
 /// the admin surface is opened long after the handshake, and a snapshot pushed
@@ -582,6 +618,9 @@ pub struct AuditRecord {
     pub target_account: u64,
     #[prost(uint32, tag = "9")]
     pub target_channel: u32,
+    /// A stored avatar or comment can be fetched with SnapshotQuery.
+    #[prost(bool, tag = "10")]
+    pub has_snapshot: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Page {
@@ -606,6 +645,9 @@ pub struct Config {
     /// for a verify, which is the expensive part.
     #[prost(uint64, tag = "4")]
     pub chain_height: u64,
+    /// Past avatars and comments kept per user; zero records none.
+    #[prost(uint32, tag = "5")]
+    pub profile_history: u32,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ConfigUpdate {

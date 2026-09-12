@@ -283,6 +283,11 @@ pub enum TcpMessageType {
     PluginMessage = 200,
     /// Fancy Mumble: server enumerates loaded plugins after `ServerSync`.
     PluginRegistry = 201,
+    /// Fancy Mumble: an admin asks for the avatar or comment an audit entry
+    /// kept. A local tag; the canon carries it inside outer type 1012.
+    FancyAuditSnapshotQuery = 202,
+    /// Fancy Mumble: the kept avatar or comment.
+    FancyAuditSnapshot = 203,
 }
 
 /// Generates both `TryFrom<u16> for TcpMessageType` and
@@ -512,6 +517,10 @@ pub enum ControlMessage {
     FancyAuditConfig(mumble_tcp::FancyAuditConfig),
     /// Fancy: admin submits changed audit configuration.
     FancyAuditConfigUpdate(mumble_tcp::FancyAuditConfigUpdate),
+    /// Fancy: ask for the avatar or comment an `audit.profile` entry kept.
+    FancyAuditSnapshotQuery(fancy::feature::SnapshotQuery),
+    /// Fancy: the kept copy, or `found = false` once it was pruned.
+    FancyAuditSnapshot(fancy::feature::ProfileSnapshot),
     /// Fancy: client asks for the server's livery, naming the artwork it holds.
     ///
     /// Carries the canon type rather than a hand-written twin. Every other
@@ -688,6 +697,7 @@ message_type_mapping! {
     FancyScheduledMessageAck,
     FancyAuditQuery, FancyAuditResponse, FancyAuditEvent,
     FancyAuditConfig, FancyAuditConfigUpdate,
+    FancyAuditSnapshotQuery, FancyAuditSnapshot,
     PluginMessage, PluginRegistry,
 }
 
@@ -860,7 +870,7 @@ mod tests {
         // sentinel moved rather than the types: a gap this test names has to
         // be a gap the enum actually has.
         assert!(TcpMessageType::try_from(250u16).is_err());
-        assert!(TcpMessageType::try_from(202u16).is_err());
+        assert!(TcpMessageType::try_from(204u16).is_err());
         assert!(TcpMessageType::try_from(u16::MAX).is_err());
     }
 

@@ -22,6 +22,17 @@ pub(crate) async fn query_audit_log(
     state.query_audit_log(args).await
 }
 
+/// Ask for the avatar or comment an `audit.profile` entry kept. The answer
+/// arrives as an `audit-snapshot` event.
+#[tauri::command]
+pub(crate) async fn request_audit_snapshot(
+    state: tauri::State<'_, AppState>,
+    entry_id: String,
+    query_id: String,
+) -> Result<(), String> {
+    state.request_audit_snapshot(entry_id, query_id).await
+}
+
 /// Audit-admin path: send changed audit configuration to the server.
 #[tauri::command]
 pub(crate) async fn save_audit_config(

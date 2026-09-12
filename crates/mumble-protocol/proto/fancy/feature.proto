@@ -351,7 +351,31 @@ message AuditEnvelope {
     ConfigQuery config_query = 6;
     Verify verify = 7;
     VerifyResult verify_result = 8;
+    SnapshotQuery snapshot_query = 9;
+    ProfileSnapshot snapshot = 10;
   }
+}
+
+// Asks for the avatar or comment an `audit.profile` entry kept.
+message SnapshotQuery {
+  string entry_id = 1;
+  string query_id = 2;
+}
+
+// What was kept. `found` is false once retention or `profile_history` has
+// pruned it. A comment comes back decompressed; an avatar as the shrunk copy.
+message ProfileSnapshot {
+  string entry_id = 1;
+  string query_id = 2;
+  bool found = 3;
+  // "avatar" or "comment".
+  string kind = 4;
+  string mime = 5;
+  bytes body = 6;
+  // The size of what the user sent, before it was shrunk or compressed.
+  uint64 original_size = 7;
+  // The size it is stored at.
+  uint64 stored_size = 8;
 }
 
 // Asks for the Config below. Client-initiated rather than pushed after sync:
@@ -411,6 +435,8 @@ message AuditRecord {
   // reader had to parse `detail` (prose written for a human) to find out.
   uint64 target_account = 8;
   uint32 target_channel = 9;
+  // A stored avatar or comment can be fetched with SnapshotQuery.
+  bool has_snapshot = 10;
 }
 
 message Page {
@@ -428,6 +454,8 @@ message Config {
   // Sent with the config so the card can render a height before anybody asks
   // for a verify, which is the expensive part.
   uint64 chain_height = 4;
+  // Past avatars and comments kept per user; zero records none.
+  uint32 profile_history = 5;
 }
 
 message ConfigUpdate {

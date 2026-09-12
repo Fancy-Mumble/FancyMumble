@@ -200,6 +200,7 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::FancyAuditResponse(m) => m.handle(ctx),
         ControlMessage::FancyAuditEvent(m) => m.handle(ctx),
         ControlMessage::FancyAuditConfig(m) => m.handle(ctx),
+        ControlMessage::FancyAuditSnapshot(m) => m.handle(ctx),
         ControlMessage::FancyServerLivery(m) => m.handle(ctx),
         ControlMessage::FancyOperatorTicketReply(m) => m.handle(ctx),
         ControlMessage::FancyPluginAdminList(m) => m.handle(ctx),

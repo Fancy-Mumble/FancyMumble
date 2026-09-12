@@ -89,6 +89,24 @@ export interface AuditConfigSnapshot {
   sqlSchemaJson?: string;
 }
 
+/** Payload of the `audit-snapshot` event: the avatar or comment an
+ *  `audit.profile` entry kept. */
+export interface AuditSnapshot {
+  entryId: string;
+  queryId: string;
+  /** False once the profile history limit or retention trimmed it. */
+  found: boolean;
+  kind: "avatar" | "comment" | string;
+  /** An avatar, ready for an `<img>`. */
+  dataUrl?: string;
+  /** A comment, as its HTML source. */
+  text?: string;
+  /** Bytes the user sent. */
+  originalSize: number;
+  /** Bytes the server keeps, after shrinking or compression. */
+  storedSize: number;
+}
+
 /** Payload of the `audit-config` event. */
 export interface AuditConfigEvent {
   config: AuditConfigSnapshot;

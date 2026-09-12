@@ -6,7 +6,7 @@
 //! (like the editable server settings) so the admin panel can resync after
 //! an HMR reload without waiting for a re-broadcast.
 
-use mumble_protocol::proto::mumble_tcp;
+use mumble_protocol::proto::{fancy, mumble_tcp};
 use serde::Serialize;
 
 use super::server_settings::decode_setting;
@@ -120,5 +120,54 @@ impl HandleMessage for mumble_tcp::FancyAuditConfig {
         }
 
         ctx.emit("audit-config", AuditConfigPayload { config: snapshot });
+    }
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct AuditSnapshotPayload {
+    entry_id: String,
+    query_id: String,
+    found: bool,
+    kind: String,
+    /// An avatar, ready for an `<img>`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data_url: Option<String>,
+    /// A comment, as the HTML source the user wrote.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    text: Option<String>,
+    original_size: u64,
+    stored_size: u64,
+}
+
+impl HandleMessage for fancy::feature::ProfileSnapshot {
+    fn handle(&self, ctx: &HandlerContext) {
+        use base64::Engine as _;
+        let found = self.found && !self.body.is_empty();
+        // Only a picture type becomes a data URL: the mime is the server's
+        // word, and `text/html` in an `<img src>` is not for a webview.
+        let data_url =
+            (found && self.kind == "avatar" && self.mime.starts_with("image/")).then(|| {
+                format!(
+                    "data:{};base64,{}",
+                    self.mime,
+                    base64::engine::general_purpose::STANDARD.encode(&self.body)
+                )
+            });
+        let text = (found && self.kind == "comment")
+            .then(|| String::from_utf8_lossy(&self.body).into_owned());
+        ctx.emit(
+            "audit-snapshot",
+            AuditSnapshotPayload {
+                entry_id: self.entry_id.clone(),
+                query_id: self.query_id.clone(),
+                found,
+                kind: self.kind.clone(),
+                data_url,
+                text,
+                original_size: self.original_size,
+                stored_size: self.stored_size,
+            },
+        );
     }
 }

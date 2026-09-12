@@ -16,6 +16,7 @@ import type {
   AuditEntry,
   AuditQueryArgs,
   AuditResponse,
+  AuditSnapshot,
   ServerSetting,
 } from "../../types";
 
@@ -51,6 +52,8 @@ interface AuditStoreState {
   config: AuditConfigSnapshot | null;
   configBusy: boolean;
   configError: string | null;
+  /** Kept avatars and comments, by the server's entry id. */
+  snapshots: Record<string, AuditSnapshot>;
 
   /** The wire args of the most recent query (for pagination / re-subscribe). */
   lastArgs: AuditQueryArgs | null;
@@ -59,6 +62,7 @@ interface AuditStoreState {
   applyResponse: (res: AuditResponse) => void;
   applyEvent: (entry: AuditEntry) => void;
   applyConfig: (config: AuditConfigSnapshot) => void;
+  applySnapshot: (snapshot: AuditSnapshot) => void;
 
   // Command wrappers.
   runQuery: (args: AuditQueryArgs) => Promise<void>;
@@ -67,6 +71,8 @@ interface AuditStoreState {
   verifyChain: () => Promise<void>;
   loadConfig: () => Promise<void>;
   saveConfig: (changed: ServerSetting[]) => Promise<void>;
+  /** Ask for an entry's kept copy; it lands in `snapshots`. */
+  requestSnapshot: (entryId: string) => Promise<void>;
 
   /** Reset all audit state (disconnect / server switch / tab close). */
   clearAudit: () => void;
@@ -95,6 +101,7 @@ export const useAuditStore = create<AuditStoreState>((set, get) => ({
   config: null,
   configBusy: false,
   configError: null,
+  snapshots: {},
   lastArgs: null,
 
   applyResponse: (res) => {
@@ -151,6 +158,10 @@ export const useAuditStore = create<AuditStoreState>((set, get) => ({
       if (prev.config && config.revision < prev.config.revision) return prev;
       return { config };
     });
+  },
+
+  applySnapshot: (snapshot) => {
+    set((prev) => ({ snapshots: { ...prev.snapshots, [snapshot.entryId]: snapshot } }));
   },
 
   runQuery: async (args) => {
@@ -243,6 +254,12 @@ export const useAuditStore = create<AuditStoreState>((set, get) => ({
     }
   },
 
+  requestSnapshot: async (entryId) => {
+    // Kept copies never change, so one answer per entry is enough.
+    if (get().snapshots[entryId]) return;
+    await invoke("request_audit_snapshot", { entryId, queryId: nextQueryId() });
+  },
+
   clearAudit: () =>
     set({
       entries: [],
@@ -256,6 +273,7 @@ export const useAuditStore = create<AuditStoreState>((set, get) => ({
       config: null,
       configBusy: false,
       configError: null,
+      snapshots: {},
       lastArgs: null,
     }),
 }));

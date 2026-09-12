@@ -726,7 +726,11 @@
     "pageResults": "Results",
     "prevPage": "Previous",
     "quickFilters": "Quick filters",
-    "resultsLabel": "Results"
+    "resultsLabel": "Results",
+    "snapshotTitle": "Kept copy",
+    "snapshotLoading": "Loading the kept copy…",
+    "snapshotGone": "No longer kept: trimmed by the profile history limit or by retention.",
+    "snapshotSize": "Stored in {{stored}}, sent as {{original}}"
   },
   "registeredUsers": {
     "title": "Registered Users",
