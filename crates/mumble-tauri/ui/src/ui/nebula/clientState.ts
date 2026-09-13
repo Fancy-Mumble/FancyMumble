@@ -30,6 +30,12 @@ export type Surface =
   // What the machine is playing. A surface rather than an aside: it is a thing
   // you glance at and dismiss, not a thing you keep open beside a conversation.
   | "presence"
+  // Scheduling into the open channel, and the ones still waiting. A dialog, as
+  // a form is: typed into, submitted, put away.
+  | "scheduled"
+  // Meetings. Over the shell rather than beside the conversation: a week needs
+  // the room, and it is consulted and put away.
+  | "calendar"
   // Beside the conversation in the same slot as the server details, so opening
   // one closes the other rather than stacking two 320px asides on a chat.
   | "channel-info"

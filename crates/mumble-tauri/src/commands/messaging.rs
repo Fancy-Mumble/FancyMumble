@@ -218,3 +218,13 @@ pub(crate) async fn delete_pchat_messages(
         .delete_pchat_messages(channel_id, message_ids, time_from, time_to, sender_hash)
         .await
 }
+
+/// Forget messages this device holds for a channel, without the server.
+#[tauri::command]
+pub(crate) fn forget_local_messages(
+    state: tauri::State<'_, AppState>,
+    channel_id: u32,
+    message_ids: Vec<String>,
+) {
+    state.forget_local_messages(channel_id, message_ids);
+}

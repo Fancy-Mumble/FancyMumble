@@ -119,6 +119,65 @@ describe("ChatHeader", () => {
     expect(withDocs.onShowDocs).toHaveBeenCalled();
   });
 
+  it("offers scheduling only where the shell passes it, under the id the e2e suite locates", () => {
+    show();
+    fireEvent.click(screen.getByTestId(TID.chatHeaderKebab));
+    expect(screen.queryByText("Scheduled messages")).toBeNull();
+    cleanup();
+
+    const onShowScheduled = vi.fn();
+    show({ onShowScheduled });
+    fireEvent.click(screen.getByTestId(TID.chatHeaderKebab));
+    const item = screen.getByText("Scheduled messages").closest("li")!;
+    expect(item.getAttribute("data-testid")).toBe(TID.kebabMenuItem);
+    expect(item.getAttribute("data-item-id")).toBe("scheduled-messages");
+    fireEvent.click(item);
+    expect(onShowScheduled).toHaveBeenCalled();
+  });
+
+  it("offers the calendar only where the shell passes it, under the id the e2e suite locates", () => {
+    show();
+    fireEvent.click(screen.getByTestId(TID.chatHeaderKebab));
+    expect(screen.queryByText("Calendar")).toBeNull();
+    cleanup();
+
+    const onShowCalendar = vi.fn();
+    show({ onShowCalendar });
+    fireEvent.click(screen.getByTestId(TID.chatHeaderKebab));
+    const item = screen.getByText("Calendar").closest("li")!;
+    expect(item.getAttribute("data-testid")).toBe(TID.kebabMenuItem);
+    expect(item.getAttribute("data-item-id")).toBe("calendar");
+    fireEvent.click(item);
+    expect(onShowCalendar).toHaveBeenCalled();
+  });
+
+  it("opens the meeting behind a meeting room", () => {
+    const onShowMeeting = vi.fn();
+    show({ onShowMeeting });
+    fireEvent.click(screen.getByTestId(TID.chatHeaderKebab));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Meeting details" }));
+    expect(onShowMeeting).toHaveBeenCalled();
+  });
+
+  it("says under Share screen how a share would reach viewers", () => {
+    const handlers = show({ shareRoute: "Relayed by the server" });
+    fireEvent.click(screen.getByTestId(TID.chatHeaderKebab));
+    const item = screen.getByRole("menuitem", { name: "Share screen" });
+    expect(item.textContent).toContain("Relayed by the server");
+    fireEvent.click(item);
+    expect(handlers.onShareScreen).toHaveBeenCalled();
+  });
+
+  it("refuses a second share while another server holds the capture, and says why", () => {
+    const reason = "You are already sharing your screen from another server. Stop that share first.";
+    show({ shareBlockedReason: reason, shareRoute: "Relayed by the server" });
+    fireEvent.click(screen.getByTestId(TID.chatHeaderKebab));
+    const item = screen.getByRole("menuitem", { name: "Share screen" });
+    expect(item.getAttribute("aria-disabled")).toBe("true");
+    expect(item.textContent).toContain(reason);
+    expect(item.textContent).not.toContain("Relayed by the server");
+  });
+
   it("offers no channel menu or roster on a direct message", () => {
     show({
       title: "Lorelando",

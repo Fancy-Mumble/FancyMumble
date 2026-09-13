@@ -1029,6 +1029,75 @@ fn text_message_own_message_ignored() {
 }
 
 #[test]
+fn text_message_own_echo_of_stored_send_ignored() {
+    let (ctx, emitter) = make_ctx();
+    {
+        let mut state = ctx.shared.lock().unwrap();
+        state.conn.own_session = Some(10);
+        state.msgs.by_channel.entry(0).or_default().push(ChatMessage {
+            sender_session: Some(10),
+            sender_name: "Me".into(),
+            body: "My message".into(),
+            channel_id: 0,
+            is_own: true,
+            message_id: Some("sent-1".into()),
+            ..Default::default()
+        });
+    }
+
+    let tm = mumble_tcp::TextMessage {
+        actor: Some(10),
+        channel_id: vec![0],
+        message: "My message".into(),
+        message_id: Some("sent-1".into()),
+        ..Default::default()
+    };
+    tm.handle(&ctx);
+
+    let state = ctx.shared.lock().unwrap();
+    assert_eq!(state.msgs.by_channel.get(&0).unwrap().len(), 1);
+    drop(state);
+    assert!(emitter.events().is_empty());
+}
+
+/// A scheduled message comes due as a `TextMessage` attributed to its creator,
+/// with an id the server minted. Dropping it as an echo meant the person who
+/// scheduled it never saw it arrive.
+#[test]
+fn text_message_own_server_delivered_message_kept() {
+    let (ctx, emitter) = make_ctx();
+    {
+        let mut state = ctx.shared.lock().unwrap();
+        state.conn.own_session = Some(10);
+        let _ = state.users.insert(10, make_user(10, "Me"));
+        state.selected_channel = Some(0);
+        let _ = state.permanently_listened.insert(5);
+    }
+
+    let tm = mumble_tcp::TextMessage {
+        actor: Some(10),
+        channel_id: vec![5],
+        message: "Raid starts now".into(),
+        message_id: Some("scheduled-1".into()),
+        ..Default::default()
+    };
+    tm.handle(&ctx);
+
+    let state = ctx.shared.lock().unwrap();
+    let msgs = state.msgs.by_channel.get(&5).unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert!(msgs[0].is_own);
+    assert_eq!(msgs[0].sender_name, "Me");
+    assert!(!state.msgs.channel_unread.contains_key(&5));
+    drop(state);
+
+    let names = emitter.event_names();
+    assert!(names.contains(&"new-message".to_string()));
+    assert!(!names.contains(&"unread-changed".to_string()));
+    assert_eq!(emitter.attention_count(), 0);
+}
+
+#[test]
 fn text_message_no_channel_defaults_to_zero() {
     let (ctx, _) = make_ctx();
     {

@@ -17,8 +17,14 @@ function modeDescription(mode: PersistenceMode, t: (key: string) => string): str
       return t("persistence.modeFullArchive");
     case "SIGNAL_V1":
       return t("persistence.modeSignal");
-    default:
+    case "SERVER_MANAGED":
+      return t("persistence.modeServerManaged");
+    case "NONE":
       return "";
+    default: {
+      const unhandled: never = mode;
+      return unhandled;
+    }
   }
 }
 

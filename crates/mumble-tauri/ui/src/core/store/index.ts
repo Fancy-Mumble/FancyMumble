@@ -11,6 +11,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import { forgetServerGifSupport } from "../features/chat/gif/serverGifs";
 import { reconnectDelayMs, shouldAutoReconnect } from "../utils/reconnectBackoff";
+import { findSavedPassword } from "../serverStorage";
 import {
   isPermissionGranted,
   requestPermission,
@@ -128,7 +129,8 @@ import {
   dispatchMeetingRoom,
   dispatchMeetingInviteLink,
 } from "../features/chat/calendar/meetings";
-import { FRIENDS_PLUGIN, MSG_FRIENDS_ROOM, parseFriendsRoom } from "../friendsChannel";
+import { FRIENDS_PLUGIN, FRIENDS_ROOM_EVENT, MSG_FRIENDS_ROOM, parseFriendsRoom } from "../friendsChannel";
+import { watchSelfFriend } from "../selfFriend";
 import {
   createPersistentChatSlice,
   persistentChatInitialState,
@@ -539,6 +541,9 @@ export interface AppState
    *  broadcaster (which would render a phantom local stream and a stray
    *  "Desktop overlay" button on the wrong tab). */
   broadcastingOwnSession: number | null;
+  /** The server that broadcast was started on. Session numbers repeat across
+   *  servers, so the number alone cannot say which connection is sharing. */
+  broadcastingServerId: import("../types").ServerId | null;
   /** Whether the broadcaster WebRTC connection is still negotiating. */
   webrtcConnecting: boolean;
   /** Linux/GNOME only: the compositor stopped delivering fresh frames for
@@ -942,6 +947,7 @@ const INITIAL: Pick<
   | "udpCipher"
   | "inCall"
   | "talkingSessions"
+  | "voiceContexts"
   | "selectedDmUser"
   | "dmMessages"
   | "dmUnreadCounts"
@@ -956,6 +962,7 @@ const INITIAL: Pick<
   | "watchSessionsVersion"
   | "isSharingOwn"
   | "broadcastingOwnSession"
+  | "broadcastingServerId"
   | "webrtcConnecting"
   | "captureStalled"
   | "webrtcError"
@@ -1038,6 +1045,7 @@ const INITIAL: Pick<
   watchSessionsVersion: 0,
   isSharingOwn: false,
   broadcastingOwnSession: null,
+  broadcastingServerId: null,
   webrtcConnecting: false,
   captureStalled: false,
   webrtcError: null,
@@ -1297,8 +1305,6 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     manualDisconnectRequested = false;
     serverRejectedConnection = false;
     clearAutoReconnectTimer();
-    // Remembered so a follow-up TOTP prompt can re-send the same password.
-    lastAttemptedPassword = password ?? null;
     set({
       status: "connecting",
       error: null,
@@ -1308,13 +1314,18 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
       connectedCertLabel: certLabel ?? null,
       bootstrapStage: "Negotiating with server...",
     });
+    // Reconnects (auto, "Retry now", the status bar) dial without a password;
+    // the one saved for this login stands in, or they end on the prompt again.
+    const resolvedPassword = password ?? (await findSavedPassword(host, port, username).catch(() => null));
+    // Remembered so a follow-up TOTP prompt can re-send the same password.
+    lastAttemptedPassword = resolvedPassword;
     try {
       await invoke("connect", {
         host,
         port,
         username,
         certLabel: certLabel ?? null,
-        password: password ?? null,
+        password: resolvedPassword,
         totp: totp ?? null,
       });
       // Sync activeServerId before rejection events arrive, so listener
@@ -1370,7 +1381,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
   },
 
   selectChannel: async (id) => {
-    set({ selectedChannel: id, selectedDmUser: null, dmMessages: [] });
+    set({ selectedChannel: id, selectedDmUser: null, dmMessages: [], localNotesOpen: false });
     const seq = ++messageWriteSeq;
     try {
       // Notify backend - marks channel as read and clears DM selection.
@@ -2287,6 +2298,7 @@ function dispatchPluginMessage(p: PluginMessageEvent): void {
         useAppStore.getState().bindFriendChannel(room.peerUserId, room.channelId);
         void useAppStore.getState().peekChannel(room.channelId);
         useAppStore.getState().selectChannel(room.channelId);
+        globalThis.dispatchEvent(new CustomEvent(FRIENDS_ROOM_EVENT, { detail: room }));
       }
     }
     return;
@@ -2734,7 +2746,7 @@ async function adoptCanonFileService(): Promise<boolean> {
 
 export async function initEventListeners(navigate: (path: string) => void): Promise<UnlistenFn[]> {
   navigateRef = navigate;
-  const unlisteners: UnlistenFn[] = [];
+  const unlisteners: UnlistenFn[] = [watchSelfFriend(useAppStore)];
 
   // Bootstrap the multi-server session list once at startup so the
   // sessions slice reflects whatever the backend already has.  When the
@@ -3527,6 +3539,7 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
       const updates: Partial<ReturnType<typeof useAppStore.getState>> = { voiceState: event.payload };
       if (event.payload === "inactive") {
         updates.talkingSessions = new Set();
+        updates.voiceContexts = new Map();
       }
       useAppStore.setState(updates);
       persistVoiceState();
@@ -3566,7 +3579,25 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
       } else {
         next.delete(session);
       }
-      useAppStore.setState({ talkingSessions: next });
+      const contexts = useAppStore.getState().voiceContexts;
+      if (!talking && contexts.has(session)) {
+        const remaining = new Map(contexts);
+        remaining.delete(session);
+        useAppStore.setState({ talkingSessions: next, voiceContexts: remaining });
+      } else {
+        useAppStore.setState({ talkingSessions: next });
+      }
+    }),
+
+    // How a talking user's audio reaches us. Sent once per utterance, after
+    // the talking edge, so the roster can mark a whisper or a shout.
+    await listen<[number, number]>(TauriEvent.UserVoiceContext, (event) => {
+      const [session, context] = event.payload;
+      const prev = useAppStore.getState().voiceContexts;
+      if (prev.get(session) === context) return;
+      const next = new Map(prev);
+      next.set(session, context);
+      useAppStore.setState({ voiceContexts: next });
     }),
 
     // Server announced its (Fancy) version. Keep the cached
@@ -3733,25 +3764,22 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
       request_id: string;
       embeds: import("../types").LinkEmbed[];
       requested_urls?: string[];
-    }>(
-      "link-preview-response",
-      (event) => {
-        const { embeds, requested_urls } = event.payload;
-        if (!Array.isArray(embeds) || embeds.length === 0) return;
-        const next = new Map(useAppStore.getState().linkEmbeds);
-        // Filed under the URL that was *asked for*, which the backend supplies
-        // alongside each card: `embed.url` is where the fetch ended up, and for
-        // a shortened link that is a string no message contains and no renderer
-        // will ever look up.
-        embeds.forEach((embed, at) => {
-          const url = requested_urls?.[at] || embed.url;
-          if (!url) return;
-          next.set(url, embed);
-          pendingPreviewRequests.delete(url);
-        });
-        useAppStore.setState({ linkEmbeds: next });
-      },
-    ),
+    }>("link-preview-response", (event) => {
+      const { embeds, requested_urls } = event.payload;
+      if (!Array.isArray(embeds) || embeds.length === 0) return;
+      const next = new Map(useAppStore.getState().linkEmbeds);
+      // Filed under the URL that was *asked for*, which the backend supplies
+      // alongside each card: `embed.url` is where the fetch ended up, and for
+      // a shortened link that is a string no message contains and no renderer
+      // will ever look up.
+      embeds.forEach((embed, at) => {
+        const url = requested_urls?.[at] || embed.url;
+        if (!url) return;
+        next.set(url, embed);
+        pendingPreviewRequests.delete(url);
+      });
+      useAppStore.setState({ linkEmbeds: next });
+    }),
   );
 
   // -- Custom reactions config event --------------------------------

@@ -280,6 +280,13 @@ this to work, which is why `substringScore` mirrors the substring half of the
 backend's `fuzzy_score`. Each group is capped at six, or a server with a few
 dozen channels fills the panel with them and appears to have no people in it.
 
+The Photos and Links chips narrow the palette to messages carrying one. The
+store holds no messages, so a narrowed list drops the local rows and is
+`super_search`'s filtered answer alone. Photos with nothing typed has nothing to
+match, so it shows the pictures instead: a grid paged out of `get_photos` as it
+scrolls, walked with all four arrows, each tile landing on the channel or
+conversation it was sent in.
+
 ## Friends
 
 Friends is the second destination the shell has - the title bar's button, or the
@@ -485,11 +492,11 @@ day, and the ones that had gone stale were struck.
 
 **Channels and users**
 
-- No drag-and-drop: channels cannot be reordered by dragging and users cannot
-  be dragged between channels. Reordering is the channel editor's `position`
-  field, and moving a user is on their menu. `@ui/dragOrder` is shared with
-  Standard - which does carry users between channels - but here it reorders
-  servers only.
+- Channels are reordered only in arrange mode, entered from the channel menu:
+  a plain drag on the tree carries users (`@ui/userCarry`), so a channel drag
+  there would fight it. A channel moves among its siblings only - reparenting
+  is the editor's job - and `channelArrange.ts` spends one `position` write per
+  move where it can, renumbering the group only when neighbours leave no gap.
 - No blocking, ignoring or user notes. Existing relations are still honoured
   when filtering messages; they just cannot be edited here. Nor in Standard:
   the only editor is Aurora's, and Aurora is being deleted, so this stops being
@@ -750,6 +757,23 @@ name - the row already says four things - and *Mark read* drops those marks
 without waiting for the next open. Opening the panel is what clears the
 channel's badge; the marks deliberately outlive that open, so the badge that
 sent you here can still say what it was about.
+
+
+## Scheduled messages
+
+`components/chat/scheduled/ScheduledMessagesDialog` is a dialog opened from the
+header's menu, not a popover like the pins: it is a form, and a form hanging
+over a conversation invites typing into the wrong box. The server stores and
+delivers the message; the dialog only calls the shared store's scheduled
+actions, so the two packs cannot disagree about what was scheduled.
+
+It is offered for a channel only - the scheduler delivers into channels, and a
+direct message has none to name. An encrypted channel gets a warning before
+anything is typed, because the server holds and sends a scheduled message as
+plain text. A past time is refused in `scheduledModel.checkDelivery` rather
+than left to the server, which would deliver it at once. The markup carries
+Standard's `scheduled-*` test ids and the menu entry the kebab handles, so the
+e2e suite drives either pack unchanged.
 
 
 ## Entering a channel
@@ -1149,3 +1173,23 @@ lands on the menu's own invisible sheet rather than on what is underneath, so
 every context menu here hands its root slot `contextMenuRootSlot` - without it
 the webview answers with its own Back / Refresh / Inspect menu, drawn over
 ours.
+
+## The calendar
+
+The calendar is Standard's feature, redrawn. The store, recurrence, reminders
+and the plugin relay were already shared; what a gesture or a field *means* -
+drag snapping and overlap lanes (`timeGrid`), typed dates in the user's format
+(`calendarInputs`), the saved range and invitees (`eventDraft`), the invitee
+pool (`useInviteCandidates`) - moved into `core/features/chat/calendar` so both
+packs call it. Nebula draws the grids, the card, the menu and the form.
+
+It opens from the header's kebab, only where the server runs `fancy-calendar`,
+as a large dialog and the whole screen on a phone. Joining a meeting closes it:
+the room is where you were going. Delete asks first, and says when everyone
+invited loses the meeting too.
+
+A reminder or a followed `fancy://meeting` link used to leave nothing in the
+window. `useCalendarNotices` turns each into a notice naming the meeting, with
+Details to open its card; a join started from the calendar is not announced
+back. It also remembers which room belongs to which meeting, per server, so a
+meeting room's kebab offers Meeting details.

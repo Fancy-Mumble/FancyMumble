@@ -30,6 +30,8 @@ import nebulaConnect from "./src/core/locales/nebula/en/connect.json";
 import nebulaUser from "./src/core/locales/nebula/en/user.json";
 import nebulaServer from "./src/core/locales/nebula/en/server.json";
 import nebulaSettings from "./src/core/locales/nebula/en/settings.json";
+import nebulaWelcome from "./src/core/locales/nebula/en/welcome.json";
+import nebulaDesign from "./src/core/locales/nebula/en/design.json";
 
 type NestedRecord = { [key: string]: unknown };
 
@@ -64,6 +66,8 @@ const NAMESPACES: Record<string, NestedRecord> = {
   nebulaUser: nebulaUser as NestedRecord,
   nebulaServer: nebulaServer as NestedRecord,
   nebulaSettings: nebulaSettings as NestedRecord,
+  nebulaWelcome: nebulaWelcome as NestedRecord,
+  nebulaDesign: nebulaDesign as NestedRecord,
 };
 
 function resolveKey(data: NestedRecord, key: string): unknown {

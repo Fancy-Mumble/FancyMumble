@@ -9,7 +9,10 @@ import {
   versionOf,
   type Facts,
 } from "./solver";
-import { makeNode, type Edge, type WelcomeGraph, type WelcomeNode } from "./model";
+import { useTranslation } from "react-i18next";
+import { makeNode, type Edge, type Say, type WelcomeGraph, type WelcomeNode } from "./model";
+
+const say = useTranslation("nebulaWelcome").t as Say;
 import { seedGraph } from "./seed";
 
 /* -- Building a graph to solve -------------------------------------------- */
@@ -207,7 +210,7 @@ suite("greetings that shadow one another", () => {
     expect(conflicts.overlaps).toHaveLength(1);
     expect(conflicts.overlaps[0].first).toBe(specific.greeting.id);
     expect(conflicts.overlaps[0].second).toBe(general.greeting.id);
-    expect(describeVisitor(conflicts.overlaps[0].example)).toContain("guest");
+    expect(describeVisitor(conflicts.overlaps[0].example, say)).toContain("guest");
   });
 
   it("finds a condition no visitor can satisfy", () => {
@@ -263,15 +266,15 @@ suite("greetings that shadow one another", () => {
 suite("describing who is affected", () => {
   it("says something an operator can picture", () => {
     const facts: Facts = { registered: false, os: "Windows", country: "DE", ageSeconds: 86_400 };
-    const said = describeVisitor(facts);
+    const said = describeVisitor(facts, say);
     expect(said).toContain("guest");
     expect(said).toContain("on Windows");
     expect(said).toContain("from DE");
-    expect(said).toContain("1 days here");
+    expect(said).toContain("1 day here");
   });
 
   it("says so when the visitor is anybody at all", () => {
-    expect(describeVisitor({})).toBe("anybody at all");
+    expect(describeVisitor({}, say)).toBe("anybody at all");
   });
 });
 

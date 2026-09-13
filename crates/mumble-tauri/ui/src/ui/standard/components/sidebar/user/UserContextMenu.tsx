@@ -163,9 +163,10 @@ export function UserContextMenu({ menu, onClose }: UserContextMenuProps) {
     const refresh = async () => {
       const friends = await getFriends();
       const match =
-        friends.find((f) => user.hash && f.userHash === user.hash) ??
+        friends.find((f) => !f.self && user.hash && f.userHash === user.hash) ??
         friends.find(
-          (f) => !f.userHash && !user.hash && f.userName === user.name && f.serverId === activeServerId,
+          (f) =>
+            !f.self && !f.userHash && !user.hash && f.userName === user.name && f.serverId === activeServerId,
         ) ??
         null;
       if (!cancelled) setFriendEntry(match);

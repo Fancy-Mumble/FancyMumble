@@ -1,0 +1,466 @@
+{
+  "matches": "correspond à {{condition}}",
+  "admin": {
+    "saved": "Message d’accueil enregistré.",
+    "notSaved": "Non enregistré : {{error}}",
+    "viewBlocks": "Blocs",
+    "viewCanvas": "Éditeur de nœuds",
+    "testGreeting": "Tester le message",
+    "saving": "Enregistrement…",
+    "saveBroadcast": "Enregistrer et diffuser",
+    "reading": "Lecture du message d’accueil de ce serveur…",
+    "readFailed": "Impossible de lire le message d’accueil de ce serveur : {{error}}",
+    "retry": "Réessayer",
+    "greetingNumber": "Message d’accueil n° {{number}}",
+    "thisGreeting": "Ce message d’accueil",
+    "nothingWired": "rien n’est relié à QUAND",
+    "summary": {
+      "empty": "Aucun message d’accueil dans l’éditeur pour l’instant.",
+      "shows": "Affiché quand : {{condition}}",
+      "unwired": "Rien n’est relié à QUAND — ce message d’accueil n’est montré à personne.",
+      "greetings_one": "{{count}} message d’accueil, essayé dans l’ordre du dessin",
+      "greetings_other": "{{count}} messages d’accueil, essayés dans l’ordre du dessin",
+      "withoutWhen_one": "{{count}} sans rien de relié à QUAND",
+      "withoutWhen_other": "{{count}} sans rien de relié à QUAND",
+      "shadowed_one": "{{count}} n’atteint personne",
+      "shadowed_other": "{{count}} n’atteignent personne"
+    },
+    "blocksView": {
+      "greetings": "Messages d’accueil",
+      "noneOnCanvas": "— aucun dans l’éditeur —",
+      "greeting": "Message d’accueil",
+      "shownWhen": "Affiché quand",
+      "nothingWired": "— rien de relié —",
+      "theyRead": "Ce qu’ils lisent",
+      "empty": "— vide —",
+      "plusText": "Texte en plus",
+      "dismissal": "Fermeture",
+      "once": "Affiché une fois, puis mémorisé par compte.",
+      "everyConnect": "Affiché à chaque connexion."
+    }
+  },
+  "editor": {
+    "add": "+ ajouter",
+    "browse": "Parcourir les blocs",
+    "search": "Rechercher un bloc",
+    "favorites": "Favoris",
+    "noMatches": "Aucun bloc ne correspond.",
+    "complete": "Graphe complet",
+    "toFix_one": "{{count}} à corriger",
+    "toFix_other": "{{count}} à corriger",
+    "reset": "Réinitialiser",
+    "live": "EN DIRECT",
+    "idle": "NON RELIÉ",
+    "enabled": "activé"
+  },
+  "gallery": {
+    "open": "Modèles",
+    "empty": "Aucun modèle ne correspond.",
+    "add": "Ajouter à l’éditeur",
+    "replace": "Recommencer avec celui-ci",
+    "replaceHint": "Supprime tout ce qui se trouve déjà dans l’éditeur."
+  },
+  "categories": {
+    "who": "Qui se connecte",
+    "logic": "Logique",
+    "message": "Le message"
+  },
+  "portTypes": {
+    "condition": "condition",
+    "text": "texte",
+    "designInputs": "une par entrée déclarée par le design"
+  },
+  "ports": {
+    "when": "QUAND",
+    "plus": "PLUS",
+    "text": "TEXTE",
+    "condition": "CONDITION"
+  },
+  "blocks": {
+    "everyone": {
+      "label": "Tout le monde",
+      "description": "Vrai pour chaque arrivée. Reliez-le directement à un message d’accueil pour le montrer à tout le monde — la règle la plus simple qui soit."
+    },
+    "country": {
+      "label": "Pays",
+      "description": "Vrai quand le membre se connecte depuis l’un des pays choisis."
+    },
+    "tenure": {
+      "label": "Sur le serveur depuis",
+      "description": "Compare depuis combien de temps le compte existe sur ce serveur."
+    },
+    "clientVersion": {
+      "label": "Version du client",
+      "description": "Compare la version de Mumble annoncée par le client."
+    },
+    "fancyVersion": {
+      "label": "Version Fancy",
+      "description": "Compare la version propre au fork — ou n’importe quelle build de celui-ci, ce que Mumble standard n’est jamais."
+    },
+    "account": {
+      "label": "Compte",
+      "description": "Vrai pour un utilisateur enregistré ou un certificat précis."
+    },
+    "group": {
+      "label": "Groupe",
+      "description": "Vrai quand le membre appartient à un groupe ACL."
+    },
+    "os": {
+      "label": "Système d’exploitation",
+      "description": "Compare le système d’exploitation signalé par le client."
+    },
+    "gates": {
+      "and": "Vrai quand les deux entrées sont vraies.",
+      "or": "Vrai quand au moins une entrée est vraie.",
+      "xor": "Vrai quand exactement une entrée est vraie.",
+      "nand": "Vrai sauf si les deux entrées sont vraies.",
+      "nor": "Vrai quand aucune entrée n’est vraie.",
+      "xnor": "Vrai quand les deux entrées concordent.",
+      "not": "Inverse une seule condition."
+    },
+    "filter": {
+      "label": "Filtre",
+      "description": "Transforme une réponse indécise en un simple oui ou non, pour qu’une porte logique puisse l’utiliser."
+    },
+    "text": {
+      "label": "Texte réutilisable",
+      "description": "Une ligne de texte, ajoutée à un message d’accueil et à tous les autres messages d’accueil qui la relient."
+    },
+    "textRich": {
+      "label": "Texte réutilisable, mis en forme",
+      "description": "Le même extrait avec un éditeur WYSIWYG : titres, listes, couleur. Pour le règlement plutôt que pour une seule phrase."
+    },
+    "greeting": {
+      "label": "Afficher ce message d’accueil",
+      "description": "Le message lui-même : ce qu’il dit, et la condition qui décide qui le lit."
+    },
+    "greetingRich": {
+      "label": "Afficher ce message d’accueil, mis en forme",
+      "description": "Le message d’accueil écrit tel qu’il sera lu : un titre, un paragraphe, une liste. Relié exactement comme la version simple."
+    },
+    "greetingScreen": {
+      "label": "Écran d’accueil",
+      "description": "Un message d’accueil construit à partir de bandes — un bandeau principal, un bouton, une rangée de liens — que chaque client dessine avec sa propre échelle typographique."
+    },
+    "greetingDesign": {
+      "label": "Bloc de design",
+      "description": "Un message d’accueil mis en page dans l’éditeur de design : des blocs placés sur une feuille, avec des emplacements de texte nommés et des conditions activées ou désactivées reliées depuis l’éditeur de nœuds."
+    },
+    "greetingLegacy": {
+      "label": "Écran d’accueil pour Classic Mumble",
+      "description": "Les mêmes bandes compilées pour Qt : tableaux, couleurs en ligne, pas de coins arrondis. Placez-le derrière une condition de version du client ; la version moderne s’effondre sur ces clients."
+    }
+  },
+  "nodes": {
+    "country": "LE PAYS EST PARMI",
+    "tenure": "SUR LE SERVEUR DEPUIS",
+    "clientVersion": "VERSION DU CLIENT",
+    "fancyVersion": "VERSION FANCY",
+    "account": "COMPTE",
+    "group": "GROUPE",
+    "os": "SYSTÈME",
+    "filter": "FILTRE",
+    "text": "TEXTE RÉUTILISABLE",
+    "greeting": "AFFICHER CE MESSAGE",
+    "greetingClassic": "MESSAGE · CLASSIC",
+    "everyone": "TOUT LE MONDE",
+    "undecided": "Peut rester indécis — faites-le passer par un FILTRE pour trancher"
+  },
+  "body": {
+    "joinedLess": "inscrit il y a moins de",
+    "joinedMore": "inscrit il y a plus de",
+    "is": "est",
+    "any": "toute version",
+    "groupName": "nom du groupe",
+    "unknown": "inconnu →",
+    "no": "non",
+    "yes": "oui",
+    "snippetName": "nommer cet extrait",
+    "snippetNameLabel": "Nom de l’extrait",
+    "snippetText": "Texte ajouté à un message d’accueil",
+    "snippetTextLabel": "Texte de l’extrait",
+    "theyRead": "Ce qu’ils lisent",
+    "greetingText": "Ce qu’ils lisent en arrivant",
+    "greetingTextLabel": "Texte du message d’accueil",
+    "plusText": "Texte en plus",
+    "wireSnippet": "reliez un texte réutilisable ici",
+    "unnamed": "sans nom",
+    "once": "Affiché une fois, centré"
+  },
+  "windows": {
+    "day": "1 jour",
+    "week": "1 semaine",
+    "month": "1 mois",
+    "halfYear": "6 mois",
+    "year": "1 an"
+  },
+  "accountStates": {
+    "guest": "invité",
+    "registered": "inscrit",
+    "strongCertificate": "certificat fort"
+  },
+  "phrases": {
+    "country": "pays parmi {{codes}}",
+    "countryAny": "pays parmi …",
+    "joinedLess": "inscrit il y a moins de {{window}}",
+    "joinedMore": "inscrit il y a plus de {{window}}",
+    "version": "version {{op}} {{version}}",
+    "fancyAny": "sur le client Fancy",
+    "fancyVersion": "version Fancy {{op}} {{version}}",
+    "account": "compte {{state}}",
+    "group": "dans le groupe {{group}}",
+    "groupAny": "dans le groupe …",
+    "os": "système {{os}}",
+    "everyone": "toute personne qui arrive",
+    "unknownYes": "{{condition}} (inconnu compte comme oui)",
+    "not": "pas {{condition}}",
+    "gates": {
+      "and": "et",
+      "or": "ou",
+      "xor": "xor",
+      "nand": "nand",
+      "nor": "nor",
+      "xnor": "xnor"
+    }
+  },
+  "problems": {
+    "noGreeting": "Aucun nœud de message d’accueil — ajoutez-en un pour dire ce que les gens voient.",
+    "emptyScreen": "L’écran d’accueil n’a aucune bande avec du contenu.",
+    "badLink": "Un lien de l’écran d’accueil n’est ni http:// ni https:// : {{url}}",
+    "noText": "Le message d’accueil n’a pas de texte.",
+    "notWired": "Rien n’est relié à QUAND, le message d’accueil ne s’afficherait donc jamais.",
+    "emptyInput": "{{node}} a une entrée {{port}} vide.",
+    "noCountries": "Un nœud pays ne nomme aucun pays.",
+    "noGroup": "Un nœud groupe ne nomme aucun groupe.",
+    "emptySnippet": "Un nœud de texte réutilisable est vide.",
+    "tooLong": "{{node}} fait {{length}} caractères ; le serveur en accepte {{max}}."
+  },
+  "views": {
+    "plain": "Simple",
+    "rich": "Enrichi",
+    "html": "HTML",
+    "screen": "Écran",
+    "classic": "Classic",
+    "classicHint": "Les mêmes bandes, compilées pour le client Mumble d’origine — 1.5 et antérieurs",
+    "classicNote": "Compilé pour Qt : tableaux, couleurs en ligne, pas de coins arrondis. Placez-le derrière une condition de version du client pour que seuls les anciens clients le reçoivent.",
+    "lossy": "Ce balisage utilise des balises que l’éditeur ne peut pas conserver sans les réécrire — des tableaux, probablement. En le modifiant ici en HTML, il reste exactement tel quel."
+  },
+  "bands": {
+    "header": {
+      "label": "Bandeau d’en-tête",
+      "hint": "Une petite ligne en haut : le serveur, une version."
+    },
+    "hero": {
+      "label": "Bandeau principal",
+      "hint": "Le badge, le grand titre et la ligne en dessous."
+    },
+    "image": {
+      "label": "Visuel du serveur",
+      "hint": "L’icône ou la bannière propre à ce serveur, issue de son habillage."
+    },
+    "prose": {
+      "label": "Paragraphe",
+      "hint": "Du texte mis en forme, écrit comme tous les autres textes."
+    },
+    "action": {
+      "label": "Bouton",
+      "hint": "Une chose à faire, avec une légende en dessous."
+    },
+    "cards": {
+      "label": "Rangée de liens",
+      "hint": "De petites cartes côte à côte, chacune pointant quelque part."
+    },
+    "divider": {
+      "label": "Séparateur",
+      "hint": "Un trait entre deux bandes."
+    }
+  },
+  "screen": {
+    "addBand": "+ bande",
+    "noBands": "Un écran sans bandes n’affiche rien. Commencez par un bandeau principal.",
+    "moveUp": "Monter",
+    "moveDown": "Descendre",
+    "remove": "Supprimer : {{label}}",
+    "compact": "Une liste, pas des cartes",
+    "glyph": "badge, un caractère",
+    "glyphLabel": "Badge du bandeau principal",
+    "buttonTitle": "ce que dit le bouton",
+    "title": "la ligne que les gens lisent",
+    "titleLabel": "Titre : {{label}}",
+    "buttonLink": "Lien du bouton",
+    "webOnly": "Seuls les liens http:// et https:// sont envoyés.",
+    "buttonSubtitle": "la petite ligne en dessous",
+    "subtitle": "la deuxième ligne",
+    "subtitleLabel": "Sous-titre : {{label}}",
+    "primary": "L’action principale",
+    "paragraph": "Paragraphe",
+    "paragraphPlaceholder": "Ce que dit cette partie",
+    "eyebrow": "PARCOURIR",
+    "eyebrowLabel": "Surtitre de la carte",
+    "removeCard": "Supprimer la carte",
+    "cardPlaceholder": "Vue des salons",
+    "cardLabel": "Libellé de la carte",
+    "cardLink": "Lien de la carte",
+    "addCard": "+ carte",
+    "anotherLink": "Un autre lien",
+    "align": {
+      "default": "par défaut",
+      "left": "à gauche",
+      "center": "centré"
+    },
+    "tones": {
+      "none": "aucune",
+      "accent": "accent",
+      "muted": "atténuée",
+      "warn": "avertissement",
+      "danger": "danger"
+    },
+    "pictures": {
+      "icon": "icône",
+      "banner": "bannière"
+    }
+  },
+  "picture": {
+    "noRoom": "Pas de place : il reste {{room}}, et cette image ne tient pas en dessous.",
+    "unreadable": "Ce fichier n’est pas une image lisible ici.",
+    "fitting": "Ajustement…",
+    "drop": "Déposez une image, ou cliquez pour en choisir une",
+    "held": "{{size}} · {{w}}×{{h}} · {{room}} restants",
+    "room": "{{room}} disponibles · envoyé uniquement aux clients Fancy",
+    "remove": "Supprimer"
+  },
+  "preview": {
+    "heading": "APERÇU · CE QU’ILS VOIENT",
+    "unwired": "rien n’est relié à QUAND — montré à personne",
+    "dismissed": "Masqué définitivement",
+    "everyConnect": "Affiché à chaque connexion",
+    "gotIt": "Compris",
+    "legacy": "Dessiné comme le feront Mumble 1.5 et antérieurs : tableaux, couleurs en ligne, coins carrés. Leur texte enrichi est un sous-ensemble de HTML 4, c’est donc proche du rendu de Qt plutôt que de ce client.",
+    "htmlOff": "Ce serveur a désactivé allow_html, il envoie donc la moitié texte brut de chaque message d’accueil. La mise en forme est conservée et sera envoyée dès que le réglage sera activé.",
+    "unmatchable": "Aucun visiteur ne peut remplir cette condition, ce message d’accueil n’est donc montré à personne.",
+    "shadowed": "Ce message d’accueil n’est montré à personne : chaque visiteur qu’il cible est pris par un message que le serveur atteint avant. Faites-le glisser au-dessus de celui-ci, ou restreignez la condition de l’autre.",
+    "overlap": "Chevauche le message d’accueil précédent — {{visitor}} correspond aux deux, et le premier l’emporte. Voulu s’il s’agit du cas général derrière un cas particulier.",
+    "undecided": "Trop de combinaisons de conditions pour vérifier si les messages d’accueil se chevauchent."
+  },
+  "canvas": {
+    "undo": "Annuler",
+    "redo": "Rétablir",
+    "undoTitle": "Annuler (Ctrl+Z)",
+    "redoTitle": "Rétablir (Ctrl+Maj+Z)",
+    "annotate": "Annoter",
+    "annotations": {
+      "title": "Titre",
+      "note": "Note",
+      "frame": "Cadre autour d’une zone",
+      "label": "Petite étiquette"
+    },
+    "annotationFields": {
+      "title": "annotation de titre",
+      "note": "annotation de note",
+      "frame": "annotation de cadre",
+      "label": "annotation d’étiquette"
+    },
+    "placeholders": {
+      "title": "Section",
+      "note": "À quoi sert cette partie du graphe, et pourquoi elle est dessinée ainsi.",
+      "frame": "Zone",
+      "label": "étiquette"
+    },
+    "removeNode": "Supprimer le nœud",
+    "resizeNode": "Redimensionner le nœud",
+    "removeAnnotation": "Supprimer l’annotation",
+    "resizeAnnotation": "Redimensionner l’annotation",
+    "colour": "Couleur {{tone}}",
+    "tones": {
+      "muted": "atténuée",
+      "accent": "accent",
+      "ok": "validée",
+      "warn": "avertissement"
+    },
+    "addChip": "+ ajouter",
+    "removeTag": "Supprimer : {{label}}"
+  },
+  "templateCategories": {
+    "arriving": "Pour les nouveaux arrivants",
+    "housekeeping": "Organisation",
+    "occasion": "Pour une occasion"
+  },
+  "templates": {
+    "warm-welcome": {
+      "label": "Accueil chaleureux, avec le règlement",
+      "description": "Un message d’accueil mis en forme pour quiconque vient d’arriver, avec le règlement sous forme d’extrait réutilisable que vous pourrez relier à d’autres messages plus tard.",
+      "shows": "Montré aux comptes de moins d’une semaine."
+    },
+    "quiet-welcome": {
+      "label": "Une seule ligne",
+      "description": "Le plus petit message d’accueil qui vaille la peine : une phrase, pas de titre, montré une fois. Commencez ici quand les versions mises en forme semblent de trop.",
+      "shows": "Montré aux comptes de moins d’un mois."
+    },
+    "german-welcome": {
+      "label": "Accueil en allemand",
+      "description": "Un message d’accueil en allemand pour les personnes qui se connectent depuis DE, AT ou CH. Le modèle à copier pour toute autre langue : changez les pays, changez les mots.",
+      "shows": "Montré quand le pays est DE, AT ou CH — et à personne dont le serveur ne peut pas déterminer le pays."
+    },
+    "guest-nudge": {
+      "label": "Inciter les invités à s’inscrire",
+      "description": "Pour les personnes sans compte : ce que l’inscription leur apporte, et à qui s’adresser. Montré une fois, pour ne pas devenir un rappel mensuel.",
+      "shows": "Montré aux invités."
+    },
+    "outdated-client": {
+      "label": "Demander aux clients obsolètes de se mettre à jour",
+      "description": "Pour quiconque utilise un client antérieur à 1.5 : ce qui ne fonctionnera pas, et que la mise à jour est rapide. Le filtre avertit en cas de doute plutôt que de rester muet.",
+      "shows": "Montré quand le client est antérieur à 1.5.0, y compris quand le serveur ne peut pas le savoir."
+    },
+    "event-night": {
+      "label": "Annoncer une soirée régulière",
+      "description": "Une annonce centrée avec l’heure et le lieu du rendez-vous, montrée à chaque connexion plutôt qu’une seule fois — c’est le propre d’une annonce.",
+      "shows": "Montré aux membres inscrits, à chaque connexion."
+    },
+    "designed-modern": {
+      "label": "Un accueil moderne",
+      "description": "Le meilleur point de départ : une grande ligne de titre serrée à gauche, un petit badge teinté au-dessus, le règlement dans un cadre fin et un bouton dans la couleur d’accent du lecteur. Sobre plutôt que coloré, il suit le thème de chaque lecteur et son mode clair ou sombre.",
+      "shows": "Montré une fois aux comptes de moins d’un mois."
+    },
+    "designed-front-page": {
+      "label": "Une page d’accueil conçue",
+      "description": "Le même accueil, mis en page dans l’éditeur de design au lieu d’être écrit en prose : un badge, un titre, deux colonnes de liens, un avis, votre règlement dans un emplacement et un bouton. Chaque bloc peut aussi être dessiné par les anciens clients Qt.",
+      "shows": "Montré une fois aux comptes de moins d’un mois."
+    },
+    "designed-notice": {
+      "label": "Un avis conçu",
+      "description": "Le design dans sa forme courte : un titre, une carte encadrée, la date limite et un bouton discret pour les personnes ayant un compte. Commencez ici quand la page d’accueil est plus que ce que l’occasion demande.",
+      "shows": "Montré une fois à toute personne ayant un compte."
+    },
+    "front-door": {
+      "label": "Une porte d’entrée",
+      "description": "L’écran d’accueil complet : un badge, un titre, un paragraphe, un bouton qui compte et une rangée de liens. Construit à partir de bandes, il est dessiné avec l’échelle typographique du client plutôt que collé en HTML.",
+      "shows": "Montré une fois aux invités."
+    },
+    "server-front-page": {
+      "label": "La page d’accueil complète",
+      "description": "Tout ce qu’un écran d’accueil peut contenir : une barre de titre colorée, le visuel du serveur, une introduction centrée, une ligne de version, une liste de liens, le bouton et une barre d’avis en bas. Commencez ici et supprimez ce dont vous ne voulez pas.",
+      "shows": "Montré une fois aux invités."
+    },
+    "old-and-new": {
+      "label": "Un écran pour les nouveaux clients, un pour les anciens",
+      "description": "Le même accueil en double : des bandes pour les clients qui savent les dessiner, et les mêmes bandes compilées en tableaux Qt pour Mumble 1.5 et antérieurs. Séparé selon la version du client, pour que personne ne reçoive le mauvais.",
+      "shows": "Deux règles — clients plus récents que 1.5.0, et 1.5.0 ou antérieurs."
+    },
+    "newcomer-and-regular": {
+      "label": "Nouveaux venus ici, habitués là",
+      "description": "Deux messages d’accueil dans un même éditeur : le long accueil pour la première semaine, la courte annonce pour tous les autres. La forme à laquelle arrivent la plupart des serveurs.",
+      "shows": "Deux règles — moins d’une semaine, et tous les inscrits."
+    }
+  },
+  "visitor": {
+    "os": "sous {{os}}",
+    "country": "depuis {{country}}",
+    "elsewhere": "depuis n’importe où ailleurs",
+    "client": "client {{version}}",
+    "daysHere_one": "ici depuis {{count}} jour",
+    "daysHere_other": "ici depuis {{count}} jours",
+    "groups": "dans {{groups}}",
+    "separator": ", ",
+    "anybody": "absolument n’importe qui"
+  }
+}

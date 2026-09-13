@@ -4,6 +4,7 @@ import { Box, InputBase, Tooltip, Typography } from "@mui/material";
 import type { Theme } from "@mui/material/styles";
 import DOMPurify from "dompurify";
 import { useAppStore } from "@core/store";
+import { LOCAL_NOTES_CHANNEL_ID } from "@core/notepad";
 import { extractOffloadInfo } from "@core/messageOffload";
 import type { ChatMessage } from "@core/types";
 import type { BubbleStyle } from "@standard/personalizationStorage";
@@ -23,6 +24,7 @@ import {
   CopyIcon,
   EditIcon,
   EmojiPlusIcon,
+  KebabMenuIcon,
   PinIcon,
   PlayIcon,
   QuoteIcon,
@@ -56,6 +58,8 @@ import { NEBULA_MONO, radius } from "../../tokens";
 import type { HoverEvent } from "../../clientState";
 import { bodyToCopyText } from "@core/features/chat/bodyText";
 import type { MenuImage } from "./MessageMenu";
+import { useLongPress } from "./useLongPress";
+import { alpha } from "@mui/material/styles";
 
 /** The schemes a link in a message may point at; standard's renderer allows
  *  exactly these, and anything else loses its `href` rather than its text. */
@@ -495,7 +499,13 @@ export function MessageRow({
   // author typed, and rewriting the body would strip the marker the card is
   // drawn from. Nor one that is in cold storage - the text on hand is the
   // placeholder, and committing that would send it in place of the picture.
-  const canEdit = message.is_own && !!message.message_id && content.kind === "text" && !offloaded;
+  // A local note never reached a server, so there is nothing there to edit.
+  const canEdit =
+    message.is_own &&
+    !!message.message_id &&
+    content.kind === "text" &&
+    !offloaded &&
+    message.channel_id !== LOCAL_NOTES_CHANNEL_ID;
 
   const commitEdit = (text: string) => {
     onEditingChange?.(false);
@@ -616,6 +626,33 @@ export function MessageRow({
    */
   const selfMention = useSelfMention(message, { ownSession, currentChannel });
 
+  /**
+   * The message menu, from wherever it was asked for: a right-click, a held
+   * finger, or the strip's own button. One builder, so a phone reaches exactly
+   * the actions a mouse does.
+   */
+  const openMenu = (point: { x: number; y: number }, row: HTMLElement, target: EventTarget | null) => {
+    if (!onContextMenu) return;
+    // Same bar the row's own Edit is held to: a body in cold storage has no
+    // text to edit, only the placeholder standing in for it.
+    onContextMenu(message, point, {
+      editable: content.kind === "text" && !offloaded,
+      selection: selectionTouching(row),
+      image: pictureUnder(target),
+      link: linkUnder(target),
+    });
+  };
+  const longPress = useLongPress(
+    (point, target, row) => openMenu(point, row, target),
+    !!onContextMenu && !selecting && !editing,
+  );
+  // Hung under the button, so the menu opens where the finger already is.
+  const openMenuFromButton = (event: React.MouseEvent) => {
+    const button = event.currentTarget as HTMLElement;
+    const box = button.getBoundingClientRect();
+    openMenu({ x: box.left, y: box.bottom }, button.closest<HTMLElement>("[data-msg-id]") ?? button, null);
+  };
+
   const rowHandlers = {
     // The two handles every message assertion hangs off, on the row root so
     // they are there whoever wrote it - an own bubble draws no author name to
@@ -628,26 +665,27 @@ export function MessageRow({
     "data-self-mention": selfMention ? "1" : undefined,
     onMouseEnter: () => setHovered(true),
     onMouseLeave: () => setHovered(false),
+    ...longPress.handlers,
     onContextMenu: (event: React.MouseEvent) => {
       if (!onContextMenu) return;
       event.preventDefault();
-      // Same bar the row's own Edit is held to: a body in cold storage has no
-      // text to edit, only the placeholder standing in for it.
-      onContextMenu(
-        message,
-        { x: event.clientX, y: event.clientY },
-        {
-          editable: content.kind === "text" && !offloaded,
-          selection: selectionTouching(event.currentTarget as HTMLElement),
-          image: pictureUnder(event.target),
-          link: linkUnder(event.target),
-        },
-      );
+      // A hold already opened it; this is the webview raising its own.
+      if (longPress.justFired()) return;
+      openMenu({ x: event.clientX, y: event.clientY }, event.currentTarget as HTMLElement, event.target);
+    },
+    // Lifting the finger after a hold clicks whatever was under it - a picture
+    // would open its lightbox over the menu that was just asked for.
+    onClickCapture: (event: React.MouseEvent) => {
+      if (!longPress.justFired()) return;
+      event.preventDefault();
+      event.stopPropagation();
     },
     // In selection mode the whole row is the checkbox: aiming at a small box
     // beside a wall of text is the slowest way to pick several things.
     onClick: selecting && message.message_id ? () => onToggleSelected?.(message.message_id!) : undefined,
     sx: {
+      // A held finger opens the message menu, not the platform's own callout.
+      WebkitTouchCallout: "none",
       // A bar down the leading edge rather than a filled row: the river is
       // already coloured by bubbles and livery, and one more tinted block in
       // it reads as another kind of message rather than as "this one is for
@@ -819,6 +857,7 @@ export function MessageRow({
             onEdit={canEdit ? () => onEditingChange?.(true) : undefined}
             onQuote={message.message_id ? () => onQuote?.(message) : undefined}
             onReact={message.message_id ? openReactionPicker : undefined}
+            onMore={onContextMenu ? openMenuFromButton : undefined}
           />
         )}
         {quotes}
@@ -922,6 +961,7 @@ export function MessageRow({
             onEdit={canEdit ? () => onEditingChange?.(true) : undefined}
             onQuote={message.message_id ? () => onQuote?.(message) : undefined}
             onReact={message.message_id ? openReactionPicker : undefined}
+            onMore={onContextMenu ? openMenuFromButton : undefined}
           />
         )}
         {showOwnFooter && (
@@ -992,6 +1032,29 @@ export function MessageRow({
     </Typography>
   ) : null;
 
+  // Sent by a client without the channel's encryption, so this copy crossed the
+  // server in the clear. Standard marks it with the same word.
+  const legacyBadge = message.is_legacy ? (
+    <Tooltip title={t("nebulaChat:row.legacyHint")}>
+      <Typography
+        component="span"
+        data-legacy-badge=""
+        sx={(theme) => ({
+          fontSize: 9.5,
+          fontWeight: 600,
+          px: "6px",
+          borderRadius: radius("sm"),
+          textTransform: "uppercase",
+          letterSpacing: "0.04em",
+          background: alpha(theme.palette.nebula.warn, 0.14),
+          color: theme.palette.nebula.warn,
+        })}
+      >
+        {t("chat:message.legacyBadge")}
+      </Typography>
+    </Tooltip>
+  ) : null;
+
   /**
    * The receipt and the failure marker, for your own message drawn down here.
    *
@@ -1036,6 +1099,7 @@ export function MessageRow({
           onEdit={canEdit ? () => onEditingChange?.(true) : undefined}
           onQuote={message.message_id ? () => onQuote?.(message) : undefined}
           onReact={message.message_id ? openReactionPicker : undefined}
+          onMore={onContextMenu ? openMenuFromButton : undefined}
         />
       )}
       {/* Compact drops the column rather than leaving a 38px gutter with
@@ -1062,6 +1126,7 @@ export function MessageRow({
             {authorName}
             {stamp}
             {pluginBadge}
+            {legacyBadge}
             {ownMarkers}
           </Stack>
         )}
@@ -1073,6 +1138,7 @@ export function MessageRow({
           <Box component="span" sx={{ mr: "6px", whiteSpace: "nowrap" }}>
             {stamp} {authorName}
             {pluginBadge}
+            {legacyBadge}
             {ownMarkers}
           </Box>
         )}
@@ -1188,6 +1254,7 @@ export function MessageRow({
             onEdit={canEdit ? () => onEditingChange?.(true) : undefined}
             onQuote={message.message_id ? () => onQuote?.(message) : undefined}
             onReact={message.message_id ? openReactionPicker : undefined}
+            onMore={onContextMenu ? openMenuFromButton : undefined}
           />
         )}
       </Box>
@@ -1365,6 +1432,7 @@ function RowActions({
   onEdit,
   onQuote,
   onReact,
+  onMore,
   align,
   pinned = false,
   watchOnCard = false,
@@ -1373,6 +1441,12 @@ function RowActions({
   onEdit?: () => void;
   onQuote?: () => void;
   onReact?: (event: React.MouseEvent) => void;
+  /**
+   * Open the full message menu. The strip holds the few actions wanted
+   * mid-conversation; everything else is in the menu, and without this a touch
+   * screen - which has no right-click - could not reach it.
+   */
+  onMore?: (event: React.MouseEvent) => void;
   /** True where the link preview under the message already offers it. */
   watchOnCard?: boolean;
   /** Which edge of the bubble the pill hangs from. */
@@ -1384,8 +1458,10 @@ function RowActions({
    */
   pinned?: boolean;
 }>) {
-  const { t } = useTranslation(["nebulaChat", "chat"]);
+  const { t } = useTranslation(["nebulaChat", "chat", "common"]);
   const canModerate = message.is_own && !!message.message_id;
+  // Notes on this device: nothing to react to, pin or watch on a server.
+  const local = message.channel_id === LOCAL_NOTES_CHANNEL_ID;
   /**
    * Starting a watch-together session, on the strip rather than only in the
    * right-click menu.
@@ -1439,7 +1515,9 @@ function RowActions({
         color: theme.palette.nebula.muted,
       })}
     >
-      {onReact && <PillButton label={t("chat:reactions.add")} onClick={onReact} icon={EmojiPlusIcon} />}
+      {onReact && !local && (
+        <PillButton label={t("chat:reactions.add")} onClick={onReact} icon={EmojiPlusIcon} />
+      )}
       {onQuote && (
         <PillButton label={t("nebulaChat:row.replyToMessage")} onClick={onQuote} icon={QuoteIcon} />
       )}
@@ -1449,7 +1527,7 @@ function RowActions({
         onClick={() => void navigator.clipboard?.writeText(bodyToCopyText(message.body))}
         icon={CopyIcon}
       />
-      {message.message_id && (
+      {message.message_id && !local && (
         <PillButton
           label={message.pinned ? t("chat:pinned.unpinAriaLabel") : t("nebulaChat:row.pinMessage")}
           onClick={() =>
@@ -1458,12 +1536,15 @@ function RowActions({
           icon={message.pinned ? CheckIcon : PinIcon}
         />
       )}
-      {canWatchTogether && !watchOnCard && (
+      {canWatchTogether && !watchOnCard && !local && (
         <PillButton
           label={watchBusy ? t("chat:contextMenu.watchTogetherBusy") : t("chat:contextMenu.watchTogether")}
           onClick={() => void startWatch()}
           icon={PlayIcon}
         />
+      )}
+      {onMore && (
+        <PillButton label={t("common:messageActionBar.moreOptions")} onClick={onMore} icon={KebabMenuIcon} />
       )}
       {canModerate && (
         <>
@@ -1475,9 +1556,11 @@ function RowActions({
           <PillButton
             label={t("chat:contextMenu.deleteMessage")}
             onClick={() =>
-              void useAppStore
-                .getState()
-                .deletePchatMessages(message.channel_id, { messageIds: [message.message_id!] })
+              void (local
+                ? useAppStore.getState().deleteLocalNotes([message.message_id!])
+                : useAppStore
+                    .getState()
+                    .deletePchatMessages(message.channel_id, { messageIds: [message.message_id!] }))
             }
             icon={TrashIcon}
             danger

@@ -60,6 +60,7 @@ import {
 // registered" on fresh load). The import cycle with that module is safe:
 // it reaches back only for hoisted functions, called later.
 import "./nativeStreamView";
+import { broadcastOwner } from "@core/features/chat/broadcastOwner";
 
 // This module holds singleton WebRTC state (viewerPcs, the broadcast pin,
 // etc.).  Vite HMR would otherwise hot-swap the module while leaving stale
@@ -251,7 +252,7 @@ function endOwnBroadcast(reason: string): void {
   useAppStore.setState((s) => {
     const next = new Set(s.broadcastingSessions);
     if (own !== null) next.delete(own);
-    return { isSharingOwn: false, broadcastingOwnSession: null, broadcastingSessions: next };
+    return { isSharingOwn: false, broadcastingOwnSession: null, broadcastingServerId: null, broadcastingSessions: next };
   });
   if (own !== null) broadcastSignal(SIGNAL_STOP, "", sid);
 }
@@ -808,13 +809,14 @@ export function useScreenShare(): ScreenShareHook {
   // second server tab in the same window would inherit the global
   // `isSharingOwn` flag, causing the desktop-overlay button and a
   // phantom local preview to appear on the wrong tab.
-  const isBroadcasting =
-    broadcastingOwnSession !== null && ownSession !== null && broadcastingOwnSession === ownSession;
+  const broadcastingServerId = useAppStore((s) => s.broadcastingServerId);
+  const activeServerId = useAppStore((s) => s.activeServerId);
+  const owner = broadcastOwner({ broadcastingOwnSession, broadcastingServerId, ownSession, activeServerId });
+  const isBroadcasting = owner === "here" && broadcastingOwnSession === ownSession;
   // True when a different tab in the same window already owns the
   // singleton broadcast state.  Only one Rust capture runs per app,
   // so attempting to share again from another tab must be blocked.
-  const isBroadcastingFromOtherTab =
-    broadcastingOwnSession !== null && (ownSession === null || broadcastingOwnSession !== ownSession);
+  const isBroadcastingFromOtherTab = owner === "elsewhere";
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerDeviceOnly, setPickerDeviceOnly] = useState(false);
   const [portalPicker, setPortalPicker] = useState(portalPickerCache ?? false);
@@ -1003,6 +1005,7 @@ export function useScreenShare(): ScreenShareHook {
         return {
           isSharingOwn: true,
           broadcastingOwnSession: ownSession,
+          broadcastingServerId: s.activeServerId,
           broadcastingSessions: next,
           webrtcConnecting: true,
           // Starting a fresh share moves focus to the OWN broadcast; a

@@ -97,13 +97,7 @@ interface UserMenuProps {
  * their own copy of the target so dismissing the menu to show a dialog does
  * not take the dialog's subject with it.
  */
-export function UserMenu({
-  target,
-  onClose,
-  onMessage,
-  onInfo,
-  onJoinChannel,
-}: Readonly<UserMenuProps>) {
+export function UserMenu({ target, onClose, onMessage, onInfo, onJoinChannel }: Readonly<UserMenuProps>) {
   const { t } = useTranslation(MENU_NS);
   const [pending, setPending] = useState<Pending | null>(null);
   const [note, setNote] = useState<Note | null>(null);
@@ -323,10 +317,7 @@ function UserMenuSurface({
             </MenuItem>,
 
             actions.canJoinChannel ? (
-              <MenuItem
-                key="join"
-                onClick={run(() => onJoinChannel(user.channel_id))}
-              >
+              <MenuItem key="join" onClick={run(() => onJoinChannel(user.channel_id))}>
                 <Glyph>
                   <HashIcon width={13} height={13} />
                 </Glyph>
@@ -358,9 +349,7 @@ function UserMenuSurface({
                     <HeadphonesOffIcon width={13} height={13} />
                   )}
                 </Glyph>
-                {user.deaf
-                  ? t("nebulaUser:menu.undeafenOnServer")
-                  : t("nebulaUser:menu.deafenOnServer")}
+                {user.deaf ? t("nebulaUser:menu.undeafenOnServer") : t("nebulaUser:menu.deafenOnServer")}
               </MenuItem>
             ) : null,
             actions.canMuteDeafen ? (
@@ -487,6 +476,7 @@ function useFriendEntry(user: UserEntry, isSelf: boolean): Friend | null {
             // with the same certificate is somebody else.
             friends.find(
               (entry) =>
+                !entry.self &&
                 user.hash &&
                 entry.userHash === user.hash &&
                 (!isFriendsOwnServer(entry, session) || matchFitsFriend(entry, user)),

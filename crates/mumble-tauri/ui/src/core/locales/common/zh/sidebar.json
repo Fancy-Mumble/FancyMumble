@@ -249,6 +249,10 @@
     "noResultsHint": "尝试其他搜索词或筛选条件"
   },
   "userListItem": {
+    "whisperBadge": "悄悄话",
+    "shoutBadge": "喊话",
+    "whisperingTitle": "正在对你说悄悄话",
+    "shoutingTitle": "正在向你的频道喊话",
     "registeredTitle": "已注册",
     "serverMutedTitle": "被服务器静音",
     "selfMutedTitle": "已自我静音",
@@ -370,6 +374,7 @@
     "loadingOlderAriaLabel": "正在加载更早的消息",
     "modeFullArchive": "频道成员可查看所有已存储的消息。",
     "modeSignal": "消息使用 Signal 协议进行端到端加密。",
+    "modeServerManaged": "消息由服务器加密存储。",
     "retentionLabel": "保留时间：{{value}}",
     "storedLabel": "已存储：{{total}} 条消息",
     "retentionNoLimit": "无限制",

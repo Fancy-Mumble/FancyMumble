@@ -11,6 +11,8 @@ import type enNebulaConnect from "../locales/nebula/en/connect.json";
 import type enNebulaUser from "../locales/nebula/en/user.json";
 import type enNebulaServer from "../locales/nebula/en/server.json";
 import type enNebulaSettings from "../locales/nebula/en/settings.json";
+import type enNebulaWelcome from "../locales/nebula/en/welcome.json";
+import type enNebulaDesign from "../locales/nebula/en/design.json";
 
 declare module "i18next" {
   interface CustomTypeOptions {
@@ -29,6 +31,8 @@ declare module "i18next" {
       nebulaUser: typeof enNebulaUser;
       nebulaServer: typeof enNebulaServer;
       nebulaSettings: typeof enNebulaSettings;
+      nebulaWelcome: typeof enNebulaWelcome;
+      nebulaDesign: typeof enNebulaDesign;
     };
   }
 }

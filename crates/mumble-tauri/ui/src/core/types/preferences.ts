@@ -2,6 +2,7 @@
  *  developer debug-stats panel. */
 
 import type { ServerId } from "./server";
+import type { NotepadSettings } from "../notepad";
 
 /** Whether the user prefers a simplified or full-featured UI. */
 export type UserMode = "normal" | "expert" | "developer";
@@ -178,6 +179,9 @@ export interface UserPreferences {
    *  the local device (encrypted with AES-GCM) so the conversation
    *  history survives reconnects and app restarts.  Off by default. */
   persistDms?: boolean;
+  /** Where your notepad is kept and how it is encrypted. Absent until chosen,
+   *  which means the first login you were saved on, else this device. */
+  notepad?: NotepadSettings;
   /** Override marketplace API base URL used in developer mode.
    *  When absent or undefined the production URL is used. */
   marketplaceBaseUrl?: string;

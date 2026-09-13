@@ -19,6 +19,11 @@ import {
   type WelcomeGraph,
   type WelcomeNode,
 } from "./model";
+import { useTranslation } from "react-i18next";
+import type { Say } from "./model";
+
+/** The suite-wide mock answers from the English catalogue, so assertions stay in English. */
+const say = useTranslation("nebulaWelcome").t as Say;
 
 const SUBJECT = { name: "Lyn", channel: "#Gaming", server: "magical.rocks", allowHtml: true };
 
@@ -46,7 +51,7 @@ suite("the welcome template catalogue", () => {
         // can be saved. One that landed with a to-fix badge would be worse
         // than no template, because the operator now has to debug somebody
         // else's drawing rather than draw their own.
-        const status = graphStatus(laid(template.build()));
+        const status = graphStatus(laid(template.build()), say);
         expect(status.problems).toEqual([]);
         expect(status.complete).toBe(true);
       });
@@ -55,7 +60,7 @@ suite("the welcome template catalogue", () => {
         // A greeting with nothing wired to WHEN is drawn, enabled, complete
         // and shown to no one - the failure this editor exists to make
         // visible, and the last one a template should ship with.
-        expect(describe(laid(template.build()))).not.toBeNull();
+        expect(describe(laid(template.build()), say)).not.toBeNull();
       });
 
       it("opens in the editor rather than in the source view", () => {

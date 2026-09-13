@@ -18,6 +18,8 @@ export const PREF_PAGE = "page";
 export const PREF_RAIL_OPEN = "ezRailOpen";
 /** Endless scrolling (true) vs. pagination (false) for the results table. */
 export const PREF_ENDLESS = "endlessScroll";
+/** The results table's sort, as `column:asc|desc`. */
+export const PREF_SORT = "sort";
 
 export function readBoolPref(key: string, fallback: boolean): boolean {
   try {

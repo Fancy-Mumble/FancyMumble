@@ -1,5 +1,6 @@
 import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Box, alpha } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import { CloseIcon } from "@ui/icons";
 import { radius } from "../../../tokens";
 import { Stack } from "../../primitives";
@@ -75,6 +76,7 @@ function AnnotationView({
   onDragStart: (event: ReactPointerEvent) => void;
   onResizeStart: (event: ReactPointerEvent) => void;
 }>) {
+  const { t } = useTranslation("nebulaWelcome");
   const [hovered, setHovered] = useState(false);
   const frame = note.kind === "frame";
   const shown = selected || hovered;
@@ -169,7 +171,7 @@ function AnnotationView({
               key={tone}
               component="button"
               type="button"
-              aria-label={`Colour ${tone}`}
+              aria-label={t("canvas.colour", { tone: t(`canvas.tones.${tone}`) })}
               onPointerDown={(event: ReactPointerEvent) => event.stopPropagation()}
               onClick={() => onPatch({ tone })}
               sx={(theme) => ({
@@ -187,7 +189,7 @@ function AnnotationView({
           <Box
             component="button"
             type="button"
-            aria-label="Remove annotation"
+            aria-label={t("canvas.removeAnnotation")}
             onPointerDown={(event: ReactPointerEvent) => event.stopPropagation()}
             onClick={onRemove}
             sx={(theme) => ({
@@ -207,7 +209,7 @@ function AnnotationView({
       {shown && (
         <Box
           onPointerDown={onResizeStart}
-          aria-label="Resize annotation"
+          aria-label={t("canvas.resizeAnnotation")}
           sx={(theme) => ({
             position: "absolute",
             right: -3,
@@ -240,12 +242,13 @@ function Text({
   onPatch,
   bare,
 }: Readonly<{ note: Annotation; onPatch: (patch: Partial<Annotation>) => void; bare?: boolean }>) {
+  const { t } = useTranslation("nebulaWelcome");
   const heading = note.kind === "title";
   return (
     <Box
       component="textarea"
       value={note.text}
-      aria-label={`${note.kind} annotation`}
+      aria-label={t(`canvas.annotationFields.${note.kind}`)}
       spellCheck={false}
       // The press that puts the caret in must not also pick the annotation up,
       // and must not start a rubber band on the canvas behind it.

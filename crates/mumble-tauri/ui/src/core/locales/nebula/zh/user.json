@@ -92,7 +92,8 @@
     "none": "无",
     "bansValue": "{{count}} · {{note}}",
     "percent": "{{value}}%",
-    "unknown": "—"
+    "unknown": "—",
+    "priority": "优先发言"
   },
   "charts": {
     "roundTrip": "最近 {{seconds}} 秒的往返延迟：UDP {{udp}} 毫秒，TCP {{tcp}} 毫秒，介于 {{low}} 到 {{high}} 毫秒之间",

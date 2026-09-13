@@ -445,7 +445,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
               }}
             >
               <Box sx={{ width: 5, height: 5, borderRadius: "50%", background: "#e06b6b" }} />
-              LIVE
+              {t("chat:streamFocus.liveBadge")}
             </Stack>
             <Typography
               sx={{

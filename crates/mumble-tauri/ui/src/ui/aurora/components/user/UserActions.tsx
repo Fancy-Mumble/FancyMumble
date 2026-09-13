@@ -59,10 +59,12 @@ export default function UserActions({ user }: { user: UserEntry }) {
   useEffect(() => {
     void getFriends().then((entries) =>
       setFriend(
-        entries.find((entry) =>
-          user.hash
-            ? entry.userHash === user.hash
-            : entry.userName === user.name && entry.serverId === activeServerId,
+        entries.find(
+          (entry) =>
+            !entry.self &&
+            (user.hash
+              ? entry.userHash === user.hash
+              : entry.userName === user.name && entry.serverId === activeServerId),
         ) ?? null,
       ),
     );
@@ -193,7 +195,9 @@ export default function UserActions({ user }: { user: UserEntry }) {
         />
       </label>
       <div className={styles.userActionGrid}>
-        <Button onClick={() => void toggleFriend()}>{friend ? "Remove friend" : "Add friend"}</Button>
+        {!isSelf && (
+          <Button onClick={() => void toggleFriend()}>{friend ? "Remove friend" : "Add friend"}</Button>
+        )}
         <Button onClick={() => void patchRelation({ ignored: !relation.ignored })}>
           {relation.ignored ? "Show messages" : "Ignore messages"}
         </Button>

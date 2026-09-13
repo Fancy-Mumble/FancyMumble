@@ -527,6 +527,15 @@ pub(crate) fn handle_proto_delete_messages(
         return;
     };
 
+    // The on-disk copy first: it outlives the in-memory window below, and a
+    // channel with nothing loaded right now can still have notes on disk.
+    if !msg.message_ids.is_empty()
+        && let Some(ref mut pchat_state) = state.pchat_ctx.pchat
+        && let Some(ref mut cache) = pchat_state.local_cache
+    {
+        let _ = cache.remove(channel_id, &msg.message_ids);
+    }
+
     let Some(messages) = state.msgs.by_channel.get_mut(&channel_id) else {
         debug!(channel_id, "pchat delete: no local messages for channel");
         return;

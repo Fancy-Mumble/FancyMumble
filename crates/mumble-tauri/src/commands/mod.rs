@@ -31,6 +31,7 @@ pub(crate) mod livery_probe;
 pub(crate) mod messaging;
 pub(crate) mod offload;
 pub(crate) mod onboarding;
+pub(crate) mod operator_http;
 pub(crate) mod plugin_admin;
 pub(crate) mod plugin_info;
 pub(crate) mod popout;

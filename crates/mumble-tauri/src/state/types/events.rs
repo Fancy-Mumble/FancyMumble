@@ -259,3 +259,14 @@ pub(crate) struct DeleteAckResult {
     pub success: bool,
     pub reason: Option<String>,
 }
+
+/// A delete waiting for the server's answer.
+///
+/// Starling answers by relaying the delete back, and every member gets that
+/// relay, so the channel and ids are what tell our own confirmation apart from
+/// someone else's delete.
+pub(crate) struct PendingDeleteAck {
+    pub channel_id: u32,
+    pub message_ids: Vec<String>,
+    pub tx: tokio::sync::oneshot::Sender<DeleteAckResult>,
+}

@@ -678,6 +678,7 @@ export function MessageList({
 }
 
 function UnreadRule() {
+  const { t } = useTranslation("nebulaChat");
   return (
     <Stack direction="row" alignItems="center" gap={1.5}>
       <Divider sx={(theme) => ({ flex: 1, borderColor: theme.palette.nebula.line })} />
@@ -689,7 +690,7 @@ function UnreadRule() {
           color: theme.palette.nebula.bad,
         })}
       >
-        NEW
+        {t("row.unreadRule")}
       </Typography>
       <Divider sx={(theme) => ({ flex: 1, borderColor: theme.palette.nebula.line })} />
     </Stack>

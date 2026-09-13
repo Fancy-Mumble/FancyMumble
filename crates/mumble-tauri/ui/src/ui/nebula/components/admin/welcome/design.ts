@@ -2011,9 +2011,30 @@ export function readableText(block: Block): string {
 
 /* -- What is wrong with it -------------------------------------------------*/
 
+/** Which of the sentences `designIssues` writes an issue is. */
+export type IssueCode =
+  | "slotUnnamed"
+  | "slotGone"
+  | "inlineGone"
+  | "gateGone"
+  | "slotUnwired"
+  | "conditionUnwired"
+  | "nothingDrawn";
+
 /** One thing wrong with a design, and what it is wrong *about*. */
 export interface Issue {
   message: string;
+  /**
+   * Which sentence `message` is, and the pieces it quotes, so a reader in
+   * another language can be told the same thing without parsing English.
+   */
+  code: IssueCode;
+  /** The kind of block the sentence names. */
+  kind?: BlockType;
+  /** The input name the sentence quotes. */
+  name?: string;
+  /** The variant that draws nothing. */
+  variant?: Variant;
   /** The block at fault, where one block is. */
   block?: string;
   /** The declared input at fault, by name. */
@@ -2037,11 +2058,16 @@ export function designIssues(design: Design, wired: ReadonlySet<string> = new Se
 
   for (const block of design.blocks) {
     const what = BLOCK_LABELS[block.type];
+    const kind = block.type;
     if (block.type === "slot") {
-      if (!block.slot) issues.push({ message: `A ${what} names no text input.`, block: block.id });
-      else if (!slots.has(block.slot)) {
+      if (!block.slot) {
+        issues.push({ message: `A ${what} names no text input.`, code: "slotUnnamed", kind, block: block.id });
+      } else if (!slots.has(block.slot)) {
         issues.push({
           message: `${what} uses “${block.slot}”, which is not an input any more.`,
+          code: "slotGone",
+          kind,
+          name: block.slot,
           block: block.id,
         });
       }
@@ -2053,6 +2079,9 @@ export function designIssues(design: Design, wired: ReadonlySet<string> = new Se
       if (!slots.has(inline.name) && !isBuiltIn(inline.name)) {
         issues.push({
           message: `${what} mentions “${inline.name}” inline, which is not an input any more.`,
+          code: "inlineGone",
+          kind,
+          name: inline.name,
           block: block.id,
         });
       }
@@ -2060,6 +2089,9 @@ export function designIssues(design: Design, wired: ReadonlySet<string> = new Se
     if (block.gate && !conditions.has(block.gate)) {
       issues.push({
         message: `${what} is gated on “${block.gate}”, which is not an input any more.`,
+        code: "gateGone",
+        kind,
+        name: block.gate,
         block: block.id,
       });
     }
@@ -2072,6 +2104,8 @@ export function designIssues(design: Design, wired: ReadonlySet<string> = new Se
     if (!wired.has(input.name)) {
       issues.push({
         message: `The text input “${input.name}” has nothing wired to it.`,
+        code: "slotUnwired",
+        name: input.name,
         input: input.name,
       });
     }
@@ -2080,6 +2114,8 @@ export function designIssues(design: Design, wired: ReadonlySet<string> = new Se
     if (!wired.has(input.name)) {
       issues.push({
         message: `The condition “${input.name}” has nothing wired to it.`,
+        code: "conditionUnwired",
+        name: input.name,
         input: input.name,
       });
     }
@@ -2093,7 +2129,11 @@ export function designIssues(design: Design, wired: ReadonlySet<string> = new Se
   // still a set of readers who are greeted with nothing.
   for (const variant of VARIANTS) {
     if (design.blocks.length > 0 && flowOf(design, variant).length === 0) {
-      issues.push({ message: `Nothing at all is drawn on ${TARGET_LABELS[variant].label}.` });
+      issues.push({
+        message: `Nothing at all is drawn on ${TARGET_LABELS[variant].label}.`,
+        code: "nothingDrawn",
+        variant,
+      });
     }
   }
 
@@ -2103,4 +2143,17 @@ export function designIssues(design: Design, wired: ReadonlySet<string> = new Se
 /** The same problems as sentences, for everything that only reads them. */
 export function designProblems(design: Design, wired: ReadonlySet<string> = new Set()): string[] {
   return designIssues(design, wired).map((issue) => issue.message);
+}
+
+/**
+ * An issue in the reader's language, through any `t` that can reach
+ * `nebulaDesign` - so the editor's footer and the welcome status bar say the
+ * same sentence, and this module still imports no i18n.
+ */
+export function sayIssue(say: (key: string, params?: Record<string, unknown>) => string, issue: Issue): string {
+  return say(`nebulaDesign:issues.${issue.code}`, {
+    block: issue.kind === undefined ? "" : say(`nebulaDesign:blocks.${issue.kind}`),
+    name: issue.name ?? "",
+    target: issue.variant === undefined ? "" : say(`nebulaDesign:targets.${issue.variant}.label`),
+  });
 }

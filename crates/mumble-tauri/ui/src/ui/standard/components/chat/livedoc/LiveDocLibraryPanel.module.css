@@ -34,7 +34,7 @@
   margin: 0;
   font-size: 1rem;
   font-weight: 600;
-  color: var(--color-text, #e6e9ee);
+  color: var(--color-text-primary, #e6e9ee);
 }
 
 .hintText {

@@ -133,7 +133,8 @@
     "onlineMembers": "在线成员",
     "channelMembers": "此频道的成员",
     "gone": "该用户已断开连接。",
-    "empty": "这里没有人。"
+    "empty": "这里没有人。",
+    "overflow": "另外 {{count}} 人"
   },
   "menu": {
     "reactWith": "用 {{emoji}} 回应",
@@ -148,7 +149,9 @@
     "editMessage": "编辑消息",
     "editHint": "回车保存 · Esc 取消",
     "replyToMessage": "回复消息",
-    "pinMessage": "置顶消息"
+    "pinMessage": "置顶消息",
+    "legacyHint": "由不支持此频道加密的客户端发送，服务器可以看到其明文。",
+    "unreadRule": "新消息"
   },
   "emoji": {
     "title": "表情",
@@ -237,7 +240,9 @@
     "resizeHint": "拖动可改变舞台占用的空间。双击可重置。",
     "someone": "某人",
     "you": "你",
-    "on": "开启"
+    "on": "开启",
+    "routeRelayed": "由服务器中转",
+    "routeP2P": "点对点，观众直接连接到你"
   },
   "dock": {
     "pause": "暂停",
@@ -281,5 +286,40 @@
     "micMuted": "麦克风已静音",
     "speaking": "{{name}} 正在说话 · {{count}} 人在线",
     "voiceActive": "语音已开"
+  },
+  "scheduled": {
+    "to": "发送到 {{channels}}",
+    "hint": "服务器会在该时间发送，无论你届时是否仍在线。",
+    "plaintextWarning": "此频道已端到端加密，但定时消息由服务器以明文存储并发送。"
+  },
+  "calendar": {
+    "meetingDetails": "会议详情",
+    "viewLabel": "日历视图",
+    "more": "还有 {{count}} 项",
+    "join": "加入会议",
+    "copyLink": "复制邀请链接",
+    "linkCopied": "链接已复制",
+    "when": "时间",
+    "start": "开始",
+    "end": "结束",
+    "repeats": "重复",
+    "noInvitees": "尚未邀请任何人",
+    "workDays": "工作日",
+    "status": {
+      "invited": "已邀请",
+      "accepted": "已接受",
+      "tentative": "暂定",
+      "declined": "已拒绝"
+    },
+    "delete": {
+      "title": "删除“{{title}}”？",
+      "body": "它将从你的日历中移除。",
+      "bodyShared": "它将从你的日历以及所有受邀者的日历中移除。"
+    },
+    "notice": {
+      "upcoming": "即将开始的会议",
+      "inRoom": "你已进入会议室",
+      "details": "详情"
+    }
   }
 }

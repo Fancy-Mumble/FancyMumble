@@ -13,7 +13,7 @@
 //! `Install` cannot overtake the packets already queued for the mixer it
 //! replaces.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
@@ -36,6 +36,24 @@ const MAX_QUEUED_PACKETS: usize = 64;
 
 /// Set to `0` to keep decoding on the event loop (see [`start`]).
 const ENV_DECODE_THREAD: &str = "FANCY_VOICE_DECODE_THREAD";
+
+/// Tauri event carrying how a talking user's audio reaches us, as
+/// `(session, context)`.
+pub(crate) const VOICE_CONTEXT_EVENT: &str = "user-voice-context";
+
+/// The server's voice context for a frame: 0 in-channel, 1 shout, 2 whisper,
+/// 3 listen.
+///
+/// Carried in the header's `context` arm, but the legacy codec - and a
+/// protobuf packet that omits the header - leave it in `target`: the same five
+/// bits of byte 0 either way, which is why both arms read alike.
+pub(crate) fn packet_context(audio: &mumble_protocol::proto::mumble_udp::Audio) -> u8 {
+    use mumble_protocol::proto::mumble_udp::audio::Header;
+    match audio.header {
+        Some(Header::Context(raw) | Header::Target(raw)) => u8::try_from(raw & 0x1F).unwrap_or(0),
+        None => 0,
+    }
+}
 
 /// What the decoder thread is told to do.
 enum DecodeMsg {
@@ -126,6 +144,7 @@ pub(crate) fn start(
         queued: Arc::clone(&queued),
         mixer: None,
         talking: HashSet::new(),
+        contexts: HashMap::new(),
         packets: 0,
     };
     if let Err(e) = std::thread::Builder::new()
@@ -210,6 +229,9 @@ struct Decoder {
     queued: Arc<AtomicUsize>,
     mixer: Option<AudioMixer>,
     talking: HashSet<u32>,
+    /// The context each speaker's current utterance arrived with, so it is
+    /// announced once per utterance rather than per frame.
+    contexts: HashMap<u32, u8>,
     packets: u64,
 }
 
@@ -225,16 +247,19 @@ impl Decoder {
                 DecodeMsg::Install(mixer) => {
                     self.mixer = Some(*mixer);
                     self.talking.clear();
+                    self.contexts.clear();
                 }
                 DecodeMsg::Uninstall => {
                     self.mixer = None;
                     self.talking.clear();
+                    self.contexts.clear();
                 }
                 DecodeMsg::RemoveSpeaker(session) => {
                     if let Some(ref mut mixer) = self.mixer {
                         mixer.remove_speaker(session);
                     }
                     let _ = self.talking.remove(&session);
+                    let _ = self.contexts.remove(&session);
                 }
                 DecodeMsg::SetJitter(cfg) => {
                     if let Some(ref mut mixer) = self.mixer {
@@ -256,6 +281,7 @@ impl Decoder {
         }
         let session = audio.sender_session;
         let is_terminator = audio.is_terminator;
+        let context = packet_context(&audio);
 
         // e2e decoded-audio dump (no-op unless FANCY_E2E_AUDIO_DUMP_DIR is
         // set); idempotent, and this is the first point that is guaranteed to
@@ -268,6 +294,7 @@ impl Decoder {
             audio.frame_number,
             &audio.opus_data,
             is_terminator,
+            context,
         );
 
         self.packets += 1;
@@ -284,6 +311,24 @@ impl Decoder {
 
         if let Some(talking) = feed(&mut self.mixer, &mut self.talking, audio) {
             self.publish_talking(session, talking);
+        }
+        self.publish_context(session, context, is_terminator);
+    }
+
+    /// Tell the UI how a speaker reaches us, when that changes.
+    ///
+    /// Once per utterance in the common case - every frame of one carries the
+    /// same context - and again only if the speaker switches mid-sentence.
+    /// Forgotten on the terminator, so the next utterance announces itself even
+    /// when it arrives the same way. The talking edge goes out first, which is
+    /// what lets the UI drop a context when the talking stops.
+    fn publish_context(&mut self, session: u32, context: u8, is_terminator: bool) {
+        if is_terminator {
+            let _ = self.contexts.remove(&session);
+            return;
+        }
+        if self.contexts.insert(session, context) != Some(context) {
+            let _ = self.app.emit(VOICE_CONTEXT_EVENT, (session, context));
         }
     }
 
@@ -319,7 +364,7 @@ mod tests {
     use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
     use mumble_protocol::proto::mumble_udp;
 
-    use super::{AudioMixer, HashSet, feed};
+    use super::{AudioMixer, HashSet, feed, packet_context};
 
     /// One 20 ms packet of real (silent) Opus from `session`.
     fn packet(session: u32, sequence: u64, is_terminator: bool) -> mumble_udp::Audio {
@@ -401,5 +446,17 @@ mod tests {
             None,
             "a second terminator has no edge left to report"
         );
+    }
+
+    #[test]
+    fn the_context_is_read_from_either_header_arm() {
+        use mumble_protocol::proto::mumble_udp::audio::Header;
+        let mut audio = packet(1, 0, false);
+        audio.header = Some(Header::Context(2));
+        assert_eq!(packet_context(&audio), 2);
+        audio.header = Some(Header::Target(1));
+        assert_eq!(packet_context(&audio), 1);
+        audio.header = None;
+        assert_eq!(packet_context(&audio), 0);
     }
 }

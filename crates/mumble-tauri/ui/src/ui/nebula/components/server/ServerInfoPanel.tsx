@@ -1,7 +1,10 @@
 /**
- * Nebula's server details, drawn as the right-hand panel the mock puts beside
- * the conversation - the same slot and the same 1px seam as the member list, so
- * opening it narrows the chat instead of displacing the window's layout.
+ * Nebula's server details, as a sheet over the shell.
+ *
+ * Opened the way the Channel information sheet is - a card over a scrim, with
+ * the same banner, identity row and stack of cards - so the two "what is this"
+ * surfaces read as one kind of thing. The banner and tile are the server's
+ * livery when it sent one, and a tint keyed on the host when it did not.
  *
  * Standard's panel shows the same facts; only the frame differs, so the data
  * lives in `@shared/serverinfo/model` and this file is presentation only.
@@ -14,6 +17,7 @@ import {
   AccordionDetails,
   AccordionSummary,
   Box,
+  Dialog,
   IconButton,
   Tooltip,
   Typography,
@@ -24,7 +28,8 @@ import { WelcomeMarkup } from "../welcome/WelcomeMarkup";
 import { maskSensitive } from "@core/utils/maskSensitive";
 import { isOfficialPlugin } from "@core/plugins/tier1/official";
 import { useAppStore } from "@core/store";
-import type { PluginInfoRecord } from "@core/types";
+import type { FancyProfile, PluginInfoRecord } from "@core/types";
+import { resolveProfilePaint, userTint } from "@shared/profilecard";
 import {
   activationKind,
   decodeFancyVersion,
@@ -34,9 +39,21 @@ import {
 import { LatencyChart, type LatencyPalette } from "@shared/serverinfo/LatencyChart";
 import { useServerFeatures, type FeatureSupport } from "@shared/serverinfo/features";
 import { ChevronDownIcon, CloseIcon, RefreshCwIcon, ServerIcon, ShieldCheckIcon } from "@ui/icons";
-import { cornerControlsClearance } from "../../theme";
+import type { ServerLivery } from "../../livery";
+import { nebulaCardTokens } from "../../profileStyle";
 import { NEBULA_MONO, radius } from "../../tokens";
-import { LinkGuard, SectionLabel, Stack } from "../primitives";
+import {
+  bannerTextShadow,
+  InfoCard,
+  InfoFact,
+  infoSheetColumns,
+  infoSheetFrame,
+  infoSheetPair,
+  LinkGuard,
+  StatChip,
+  Stack,
+} from "../primitives";
+import { StatusDot } from "../primitives/StatusDot";
 
 /** How each activation mode is named, as `server` keys - the wording is the
  *  same one Standard's panel uses, so it lives in the shared namespace. */
@@ -46,36 +63,7 @@ const ACTIVATION_KEYS = {
   continuous: "server:infoPanel.activationContinuous",
 } as const;
 
-/** A titled group of facts, separated from its neighbours by a hairline. */
-function Section({
-  title,
-  action,
-  children,
-}: Readonly<{
-  title?: string;
-  action?: ReactNode;
-  children: ReactNode;
-}>) {
-  return (
-    <Box
-      sx={(theme) => ({
-        py: "14px",
-        borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
-        "&:first-of-type": { borderTop: "none", pt: "4px" },
-      })}
-    >
-      {title && (
-        <Stack direction="row" alignItems="center" sx={{ mb: "8px" }}>
-          <SectionLabel>{title}</SectionLabel>
-          {action && <Box sx={{ ml: "auto" }}>{action}</Box>}
-        </Stack>
-      )}
-      {children}
-    </Box>
-  );
-}
-
-/** Two columns of label/value pairs. `mono` is for developer figures. */
+/** Two columns of label/value pairs, for the developer folds' dense figures. */
 function Facts({ mono, children }: Readonly<{ mono?: boolean; children: ReactNode }>) {
   return (
     <Box
@@ -127,7 +115,7 @@ function Fact({
   );
 }
 
-/** The panel's collapsible block: a card header that opens onto its body. */
+/** A collapsible block inside a card: a header that opens onto its body. */
 function Fold({
   title,
   defaultExpanded,
@@ -157,7 +145,7 @@ function Fold({
         sx={(theme) => ({
           minHeight: 0,
           px: "12px",
-          background: theme.palette.nebula.card,
+          background: theme.palette.nebula.card2,
           "&:hover": { background: theme.palette.nebula.hover },
           "& .MuiAccordionSummary-content": { my: "9px", minWidth: 0 },
           "& .MuiAccordionSummary-expandIconWrapper": { color: theme.palette.nebula.dim },
@@ -358,11 +346,31 @@ function LatencyGraph() {
 }
 
 interface ServerInfoPanelProps {
+  /** What the server says it looks like, if it said anything. */
+  readonly livery?: ServerLivery | null;
   readonly onClose: () => void;
 }
 
-export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
+/** The Server information sheet, over the shell. */
+export function ServerInfoPanel({ livery = null, onClose }: Readonly<ServerInfoPanelProps>) {
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth={false}
+      slotProps={{ paper: { sx: { m: "16px", overflow: "hidden" } } }}
+    >
+      <ServerInfoSheet livery={livery} onClose={onClose} />
+    </Dialog>
+  );
+}
+
+function ServerInfoSheet({
+  livery,
+  onClose,
+}: Readonly<{ livery: ServerLivery | null; onClose: () => void }>) {
   const { t } = useTranslation(["nebulaServer", "server"]);
+  const { nebula } = useTheme().palette;
   const {
     info,
     welcomeText,
@@ -379,86 +387,161 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
     streamerMode,
   } = useServerInfoModel();
 
+  const host = info ? (streamerMode ? maskSensitive(info.host) : info.host) : "";
+  const name = livery?.displayName || host;
+  const fancy = info != null && (info.fancy_version != null || (info.fancy_protocol ?? 0) > 0);
+
+  // The same resolver the channel sheet uses: a server's banner photograph gets
+  // the fade, and a server without one gets a tint keyed on its host.
+  const paint = resolveProfilePaint(
+    livery?.bannerSrc ? ({ banner: { image: livery.bannerSrc } } as FancyProfile) : null,
+    userTint(info?.host ?? livery?.displayName ?? ""),
+    nebulaCardTokens(nebula),
+  );
+  const focus = livery?.bannerFocus;
+
   return (
-    <Stack
-      component="aside"
+    <Box
+      role="document"
       aria-label={t("nebulaServer:panel.heading")}
-      sx={(theme) => ({
-        width: 320,
-        flex: "none",
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        // The channel and user sheets' width, so the three open as one family.
+        ...infoSheetFrame,
+        maxHeight: "min(860px, 92vh)",
         minHeight: 0,
-        // The panel reaches the top edge, and its close button sits in the
-        // corner the floating window controls cover - without this it is
-        // behind them and the panel cannot be closed.
-        ...cornerControlsClearance(theme),
-        borderLeft: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
-        background: theme.palette.nebula.panel,
-      })}
+        color: nebula.text,
+      }}
     >
-      <Stack direction="row" alignItems="center" gap={1.25} sx={{ px: "14px", pt: "14px", pb: "10px" }}>
+      {/* The banner and the identity row stay put; the facts scroll under them. */}
+      <Box sx={{ flex: "none", position: "relative" }}>
         <Box
-          sx={(theme) => ({
-            flex: "none",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: 30,
-            height: 30,
-            borderRadius: radius("md"),
-            background: theme.palette.nebula.accentSoft,
-            color: theme.palette.nebula.accent,
-          })}
-        >
-          <ServerIcon width={16} height={16} strokeWidth={1.5} />
-        </Box>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 15, fontWeight: 600 }} noWrap>
-            {t("nebulaServer:panel.heading")}
-          </Typography>
-          {info && (
-            <Typography sx={(theme) => ({ fontSize: 11, color: theme.palette.nebula.muted })} noWrap>
-              {streamerMode ? maskSensitive(info.host) : info.host}
-            </Typography>
-          )}
-        </Box>
+          sx={{
+            height: 96,
+            ...paint.banner,
+            ...(focus ? { backgroundPosition: `${focus.x}% ${focus.y}%` } : {}),
+          }}
+        />
+        <Box sx={{ position: "absolute", top: 0, left: 0, right: 0, height: 96, ...paint.bannerScrim }} />
         <IconButton
           size="small"
           aria-label={t("server:infoPanel.closeAriaLabel")}
-          sx={{ ml: "auto" }}
           onClick={onClose}
+          sx={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            color: "#fff",
+            background: paint.bannerChrome,
+            "&:hover": { background: paint.bannerChrome },
+          }}
         >
-          <CloseIcon width={13} height={13} />
+          <CloseIcon width={12} height={12} />
         </IconButton>
-      </Stack>
 
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", px: "14px", pb: "14px" }}>
-        {info && (
-          <>
-            <Section title={t("server:infoPanel.sectionConnection")}>
-              <Facts>
-                <Fact
-                  label={t("server:infoPanel.labelHost")}
-                  value={streamerMode ? maskSensitive(info.host) : info.host}
-                />
-                <Fact
+        {/* Positioned, so the tile and name paint over the scrim they overlap. */}
+        <Stack
+          direction="row"
+          alignItems="flex-end"
+          gap={1.5}
+          sx={{ position: "relative", px: "22px", mt: "-26px", pb: "14px" }}
+        >
+          <Box
+            aria-hidden
+            sx={{
+              flex: "none",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflow: "hidden",
+              width: 56,
+              height: 56,
+              borderRadius: radius("lg"),
+              background: `linear-gradient(${nebula.accentSoft},${nebula.accentSoft}),${nebula.bg0}`,
+              color: nebula.accent,
+              boxShadow: `0 0 0 3px ${nebula.bg0}`,
+            }}
+          >
+            {livery?.iconSrc ? (
+              <Box
+                component="img"
+                src={livery.iconSrc}
+                alt=""
+                sx={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+            ) : (
+              <ServerIcon width={26} height={26} strokeWidth={1.5} />
+            )}
+          </Box>
+          <Box sx={{ minWidth: 0, pb: "2px", textShadow: bannerTextShadow(nebula.bg0) }}>
+            <Stack direction="row" alignItems="center" gap={1}>
+              <Typography sx={{ fontSize: 18, fontWeight: 700, lineHeight: 1.2 }} noWrap>
+                {name || t("nebulaServer:panel.heading")}
+              </Typography>
+              {info && (
+                <StatChip
+                  sx={{
+                    flex: "none",
+                    fontSize: 10,
+                    letterSpacing: ".06em",
+                    py: "2px",
+                    px: "8px",
+                    textShadow: "none",
+                    background: `linear-gradient(${nebula.card2},${nebula.card2}),${nebula.bg0}`,
+                  }}
+                >
+                  {t(fancy ? "nebulaServer:panel.kindFancy" : "nebulaServer:panel.kindMumble")}
+                </StatChip>
+              )}
+            </Stack>
+            {info && (
+              <Stack direction="row" alignItems="center" gap={0.75} sx={{ mt: "4px", minWidth: 0 }}>
+                <StatusDot status="online" />
+                <Typography sx={{ fontSize: 12, color: nebula.muted, flex: "none" }}>
+                  {t("nebulaServer:panel.online", { count: info.user_count })}
+                </Typography>
+                {/* Only when the name is the livery's: otherwise it already is the host. */}
+                {name !== host && (
+                  <Typography sx={{ fontSize: 12, color: nebula.dim }} noWrap>
+                    {host}
+                  </Typography>
+                )}
+              </Stack>
+            )}
+          </Box>
+        </Stack>
+      </Box>
+
+      {info && (
+        <Box sx={{ overflowY: "auto", minHeight: 0, px: "22px", pb: "22px" }}>
+          <Box sx={infoSheetColumns}>
+            <Box sx={infoSheetPair}>
+              <InfoCard title={t("server:infoPanel.sectionConnection")}>
+                <InfoFact label={t("server:infoPanel.labelHost")} value={host} />
+                <InfoFact
                   label={t("server:infoPanel.labelPort")}
                   value={streamerMode ? maskSensitive(info.port) : info.port}
                 />
-                <Fact
+                <InfoFact
                   label={t("server:infoPanel.labelUsers")}
                   value={`${info.user_count}${info.max_users == null ? "" : ` / ${info.max_users}`}`}
                 />
-              </Facts>
-            </Section>
-
-            <Section title={t("server:infoPanel.sectionServer")}>
-              <Facts>
-                {info.release && <Fact label={t("server:infoPanel.labelRelease")} value={info.release} />}
-                {info.os && <Fact label={t("server:infoPanel.labelOs")} value={info.os} />}
-                {info.protocol_version && (
-                  <Fact label={t("server:infoPanel.labelProtocol")} value={info.protocol_version} />
+                {info.max_bandwidth != null && (
+                  <InfoFact
+                    label={t("server:infoPanel.labelMaxBandwidth")}
+                    value={formatBandwidth(info.max_bandwidth)}
+                  />
                 )}
-                <Fact
+                <InfoFact label={t("server:infoPanel.labelCodec")} value={info.opus ? "Opus" : "CELT"} />
+              </InfoCard>
+              <InfoCard title={t("server:infoPanel.sectionServer")}>
+                {info.release && <InfoFact label={t("server:infoPanel.labelRelease")} value={info.release} />}
+                {info.os && <InfoFact label={t("server:infoPanel.labelOs")} value={info.os} />}
+                {info.protocol_version && (
+                  <InfoFact label={t("server:infoPanel.labelProtocol")} value={info.protocol_version} />
+                )}
+                <InfoFact
                   label={t("server:infoPanel.labelFancyMumble")}
                   value={
                     info.fancy_version == null
@@ -468,31 +551,17 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
                         })
                   }
                 />
-              </Facts>
-            </Section>
+              </InfoCard>
+            </Box>
 
-            <Section title={t("server:infoPanel.sectionAudio")}>
-              <Facts>
-                {info.max_bandwidth != null && (
-                  <Fact
-                    label={t("server:infoPanel.labelMaxBandwidth")}
-                    value={formatBandwidth(info.max_bandwidth)}
-                  />
-                )}
-                <Fact label={t("server:infoPanel.labelCodec")} value={info.opus ? "Opus" : "CELT"} />
-              </Facts>
-            </Section>
-
-            {welcomeText && (
-              <Section>
-                <Fold title={t("server:infoPanel.accordionWelcome")}>
-                  <WelcomeText html={welcomeText} />
-                </Fold>
-              </Section>
+            {welcomeText?.trim() && (
+              <InfoCard title={t("server:infoPanel.accordionWelcome")}>
+                <WelcomeText html={welcomeText} />
+              </InfoCard>
             )}
 
             {livePlugins.length > 0 && (
-              <Section title={t("server:infoPanel.sectionPlugins")}>
+              <InfoCard title={t("server:infoPanel.sectionPlugins")}>
                 <Folds>
                   {livePlugins.map((plugin) => (
                     <Fold
@@ -508,10 +577,7 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
                           })}
                           {isOfficialPlugin(plugin.name) && (
                             <Tooltip title={t("nebulaServer:panel.officialPlugin")}>
-                              <Box
-                                component="span"
-                                sx={(theme) => ({ display: "inline-flex", color: theme.palette.nebula.ok })}
-                              >
+                              <Box component="span" sx={{ display: "inline-flex", color: nebula.ok }}>
                                 <ShieldCheckIcon width={11} height={11} />
                               </Box>
                             </Tooltip>
@@ -523,26 +589,25 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
                     </Fold>
                   ))}
                 </Folds>
-              </Section>
+              </InfoCard>
             )}
 
-            <Section>
-              <Fold title={t("nebulaServer:panel.activityLog")} defaultExpanded>
-                <ActivityLog />
-              </Fold>
-            </Section>
+            <InfoCard title={t("nebulaServer:panel.activityLog")}>
+              <ActivityLog />
+            </InfoCard>
 
             {devMode && (
-              <Section
+              <InfoCard
                 title={t("server:infoPanel.sectionDeveloper")}
-                action={
+                chip={
                   <Tooltip title={t("server:infoPanel.refreshTitle")}>
                     <IconButton
                       size="small"
                       aria-label={t("server:infoPanel.refreshAriaLabel")}
+                      sx={{ ml: "auto" }}
                       onClick={refreshStats}
                     >
-                      <RefreshCwIcon width={13} height={13} />
+                      <RefreshCwIcon width={12} height={12} />
                     </IconButton>
                   </Tooltip>
                 }
@@ -776,7 +841,7 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
 
                   <Fold title={t("nebulaServer:panel.cspViolations")}>
                     <Stack direction="row" alignItems="center" sx={{ mb: "6px" }}>
-                      <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted })}>
+                      <Typography sx={{ fontSize: 11.5, color: nebula.muted }}>
                         {cspViolations.length === 0
                           ? t("server:infoPanel.cspNoViolations")
                           : t("server:infoPanel.cspViolationCount", { count: cspViolations.length })}
@@ -797,10 +862,7 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
                     {cspViolations.map((violation) => (
                       <Box
                         key={violation.id}
-                        sx={(theme) => ({
-                          py: "4px",
-                          borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
-                        })}
+                        sx={{ py: "4px", borderTop: `var(--nebula-line-width, 1px) solid ${nebula.line}` }}
                       >
                         <Facts mono>
                           <Fact mono label="directive" value={violation.directive} />
@@ -812,11 +874,11 @@ export function ServerInfoPanel({ onClose }: Readonly<ServerInfoPanelProps>) {
                     ))}
                   </Fold>
                 </Folds>
-              </Section>
+              </InfoCard>
             )}
-          </>
-        )}
-      </Box>
-    </Stack>
+          </Box>
+        </Box>
+      )}
+    </Box>
   );
 }

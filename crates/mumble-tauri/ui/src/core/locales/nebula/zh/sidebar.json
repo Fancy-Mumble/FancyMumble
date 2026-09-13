@@ -1,4 +1,4 @@
-{
+﻿{
   "channels": {
     "title": "频道",
     "privateRooms": "私密房间",
@@ -13,7 +13,14 @@
     "newTemporaryChannelHere": "在此新建临时频道",
     "joinChannel": "加入频道",
     "editChannel": "编辑频道",
-    "deleteChannel": "删除频道"
+    "deleteChannel": "删除频道",
+    "arrangeChannels": "排列频道",
+    "doneArranging": "完成排列",
+    "arrangeHint": "拖动频道以重新排序",
+    "arrangeDone": "完成",
+    "arrangeAlone": "此频道没有可交换位置的同级频道",
+    "arrangeDenied": "你无法移动此频道",
+    "you": "你"
   },
   "servers": {
     "title": "服务器",
@@ -46,9 +53,13 @@
     "copyAddress": "复制地址",
     "forgetTitle": "移除此服务器？",
     "forgetBody_one": "{{server}} 及其已保存的身份将从列表中移除。已打开的会话会保留到你离开为止。",
-    "forgetBody_other": "{{server}} 及其 {{count}} 个已保存的身份将从列表中移除。已打开的会话会保留到你离开为止。"
+    "forgetBody_other": "{{server}} 及其 {{count}} 个已保存的身份将从列表中移除。已打开的会话会保留到你离开为止。",
+    "addShort": "+ 添加"
   },
   "dock": {
+    "whisperDenied": "已拒绝：在 {{channel}} 中没有悄悄话权限",
+    "whispering": "正在说悄悄话",
+    "whisperUnresolved": "{{name}} 目前无人可达",
     "profile": "你的个人资料",
     "notInVoice": "不在语音中",
     "enableVoice": "启用语音",
@@ -58,7 +69,9 @@
     "menuCaption": "服务器与应用选项",
     "hideEmptyHint": "你无法发言的频道保持折叠",
     "leaveServer": "退出服务器",
-    "latency": " · {{ms}} 毫秒"
+    "latency": " · {{ms}} 毫秒",
+    "recordingElapsed": "录制中 · {{elapsed}}",
+    "shareScreenRoute": "共享你的屏幕 · {{route}}"
   },
   "friends": {
     "search": "搜索好友",
@@ -75,7 +88,10 @@
     "tileLabelUnread_one": "好友，{{count}} 条未读",
     "tileLabelUnread_other": "好友，{{count}} 条未读",
     "online": "在线",
-    "offline": "离线"
+    "offline": "离线",
+    "notepadLocal": "此设备上的笔记",
+    "notepadOptions": "记事本设置",
+    "thisDevice": "此设备"
   },
   "card": {
     "youreIn": "你在 #{{channel}}",

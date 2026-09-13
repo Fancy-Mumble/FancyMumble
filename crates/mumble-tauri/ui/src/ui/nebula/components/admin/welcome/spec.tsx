@@ -1,8 +1,10 @@
 import { createContext, useContext } from "react";
 import { Typography } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import { Stack } from "../../primitives";
 import {
   AddChip,
+  PillMenu,
   PillSelect,
   PlainInput,
   SectionLabel,
@@ -24,14 +26,16 @@ import { SETTLED, type Conflicts } from "./solver";
 import { BodyEditor } from "./BodyEditor";
 import { DesignBody } from "./DesignBody";
 import { starterDesign } from "./design";
-import { WELCOME_TEMPLATES } from "./templates";
+import { TEMPLATE_CATEGORIES, WELCOME_TEMPLATES } from "./templates";
 import {
+  ACCOUNT_STATE_KEYS,
   ACCOUNT_STATES,
   FANCY_OPS,
   GATE_KINDS,
   describeGreeting,
   greetingsOf,
   OS_CHOICES,
+  TENURE_WINDOW_KEYS,
   TENURE_WINDOWS,
   graphStatus,
   inputKindOf,
@@ -50,6 +54,7 @@ import {
   type GateKind,
   type NodeId,
   type PreviewSubject,
+  type Say,
   type WelcomeGraph,
   type WelcomeNode,
 } from "./model";
@@ -123,188 +128,173 @@ export const WelcomeOpenDesignProvider = OpenDesignContext.Provider;
  */
 const FANCY_RELEASES = ["0.2.12", "0.3.0", "0.4.0", "0.4.2"] as const;
 
-const WHO = "Who is connecting";
-const LOGIC = "Logic";
-const MESSAGE = "The message";
+/**
+ * Every block on the palette, with its words read off `say`.
+ *
+ * The seven gates keep their operator as their name in every language: AND is
+ * what somebody searching for one types, whatever language the rest is in.
+ */
+function blocksOf(say: Say): BlockDef<WelcomeNode>[] {
+  const who = say("categories.who");
+  const logic = say("categories.logic");
+  const message = say("categories.message");
 
-/** What a condition carries, as the browser's port pills print it. */
-const CONDITION: PortSummary = { type: "condition" };
-const TEXT: PortSummary = { type: "text" };
+  // What each port carries, as the browser's port pills print it.
+  const condition: PortSummary = { type: say("portTypes.condition") };
+  const text: PortSummary = { type: say("portTypes.text") };
+  const a: PortSummary = { name: "A", type: condition.type };
+  const b: PortSummary = { name: "B", type: condition.type };
+  const when: PortSummary = { name: say("ports.when"), type: condition.type };
+  const plus: PortSummary = { name: say("ports.plus"), type: text.type };
 
-const gateBlock = (gate: GateKind, label: string, description: string): BlockDef<WelcomeNode> => ({
-  id: `gate:${gate}`,
-  label,
-  description,
-  category: LOGIC,
-  tone: "muted",
-  create: (x, y) => ({ ...(makeNode("gate", x, y) as WelcomeNode & { kind: "gate" }), gate }),
-  inputs:
-    gate === "not"
-      ? [{ name: "A", type: "condition" }]
-      : [
-          { name: "A", type: "condition" },
-          { name: "B", type: "condition" },
-        ],
-  outputs: [CONDITION],
-});
+  const gateBlock = (gate: GateKind): BlockDef<WelcomeNode> => ({
+    id: `gate:${gate}`,
+    label: gate.toUpperCase(),
+    description: say(`blocks.gates.${gate}`),
+    category: logic,
+    tone: "muted",
+    create: (x, y) => ({ ...(makeNode("gate", x, y) as WelcomeNode & { kind: "gate" }), gate }),
+    inputs: gate === "not" ? [a] : [a, b],
+    outputs: [condition],
+  });
 
-const condition = (kind: WelcomeNode["kind"], label: string, description: string): BlockDef<WelcomeNode> => ({
-  id: kind,
-  label,
-  description,
-  category: WHO,
-  tone: toneOf({ kind }),
-  create: (x, y) => makeNode(kind, x, y),
-  inputs: [],
-  outputs: [CONDITION],
-});
-
-const BLOCKS: readonly BlockDef<WelcomeNode>[] = [
-  {
-    id: "everyone",
-    label: "Everyone",
-    description:
-      "True of every arrival. Wire it straight into a greeting to show that greeting to everybody - the simplest rule there is.",
-    category: WHO,
-    tone: "ok",
-    // A filter that settles `unknown` to yes, with nothing wired into it. Both
-    // evaluators already read that as true of everybody, so this needs nothing
-    // the server does not already understand.
-    create: (x, y) => ({ ...(makeNode("filter", x, y) as WelcomeNode & { kind: "filter" }), unknownAs: "yes" }),
-    // It is a filter underneath, so it has a filter's input - and leaving that
-    // input empty is precisely what makes it mean everybody. Wire something
-    // into it and it stops being "everyone" and starts being that condition,
-    // which is a useful thing to be able to do and a dishonest thing to hide.
-    inputs: [{ name: "A", type: "condition" }],
-    outputs: [CONDITION],
-  },
-  condition("country", "Country", "True when the member connects from one of the picked countries."),
-  condition("tenure", "On server since", "Compares how long the account has existed on this server."),
-  condition("clientVersion", "Client version", "Matches the Mumble version the client announces."),
-  condition(
-    "fancyVersion",
-    "Fancy version",
-    "Matches the fork's own version - or any build of it, which stock Mumble never is.",
-  ),
-  condition("account", "Account", "True for a specific registered user or certificate."),
-  condition("group", "Group", "True when the member belongs to an ACL group."),
-  condition("os", "OS", "Matches the operating system reported by the client."),
-
-  gateBlock("and", "AND", "True when both inputs are true."),
-  gateBlock("or", "OR", "True when either input is true."),
-  gateBlock("xor", "XOR", "True when exactly one input is true."),
-  gateBlock("nand", "NAND", "True unless both inputs are true."),
-  gateBlock("nor", "NOR", "True when neither input is true."),
-  gateBlock("xnor", "XNOR", "True when both inputs agree."),
-  gateBlock("not", "NOT", "Inverts a single condition."),
-  {
-    id: "filter",
-    label: "Filter",
-    description: "Settles an undecided answer into a plain yes or no, so a gate can use it.",
-    category: LOGIC,
-    tone: "warn",
-    create: (x, y) => makeNode("filter", x, y),
-    inputs: [{ name: "A", type: "condition" }],
-    outputs: [CONDITION],
-  },
-
-  {
-    id: "text",
-    label: "Reusable text",
-    description: "One line of prose, appended to a greeting and to every other greeting that wires it in.",
-    category: MESSAGE,
-    tone: "ok",
-    create: (x, y) => makeNode("text", x, y),
+  const conditionBlock = (kind: WelcomeNode["kind"]): BlockDef<WelcomeNode> => ({
+    id: kind,
+    label: say(`blocks.${kind}.label`),
+    description: say(`blocks.${kind}.description`),
+    category: who,
+    tone: toneOf({ kind }),
+    create: (x, y) => makeNode(kind, x, y),
     inputs: [],
-    outputs: [TEXT],
-  },
-  {
-    id: "text:rich",
-    label: "Reusable text, formatted",
-    description:
-      "The same snippet with a WYSIWYG editor on it: headings, lists, colour. For house rules rather than for one sentence.",
-    category: MESSAGE,
-    tone: "ok",
-    create: (x, y) => rich(makeNode("text", x, y)),
-    inputs: [],
-    outputs: [TEXT],
-  },
-  {
-    id: "greeting",
-    label: "Show this greeting",
-    description: "The message itself: what it says, and the condition that decides who reads it.",
-    category: MESSAGE,
-    tone: "accent",
-    create: (x, y) => makeNode("greeting", x, y),
-    inputs: [
-      { name: "WHEN", type: "condition" },
-      { name: "PLUS", type: "text" },
-    ],
-    outputs: [],
-  },
-  {
-    id: "greeting:rich",
-    label: "Show this greeting, formatted",
-    description:
-      "The greeting written the way it will be read: a heading, a paragraph, a list. Wired exactly like the plain one.",
-    category: MESSAGE,
-    tone: "accent",
-    create: (x, y) => rich(makeNode("greeting", x, y)),
-    inputs: [
-      { name: "WHEN", type: "condition" },
-      { name: "PLUS", type: "text" },
-    ],
-    outputs: [],
-  },
-  {
-    id: "greeting:screen",
-    label: "Welcome screen",
-    description:
-      "A greeting built from bands - a hero, a button, a row of links - which each client draws in its own type scale.",
-    category: MESSAGE,
-    tone: "accent",
-    create: screenBlock("screen"),
-    inputs: [
-      { name: "WHEN", type: "condition" },
-      { name: "PLUS", type: "text" },
-    ],
-    outputs: [],
-  },
-  {
-    id: "greeting:design",
-    label: "Design block",
-    description:
-      "A greeting laid out in the design editor: blocks placed on a sheet, with named text slots and on/off conditions wired in from the canvas.",
-    category: MESSAGE,
-    tone: "accent",
-    create: (x, y) => {
-      const made = makeNode("greeting", x, y);
-      return made.kind === "greeting"
-        ? { ...made, view: "design", design: starterDesign(), once: true }
-        : made;
+    outputs: [condition],
+  });
+
+  /** A block filed under the message; `key` is where its words live. */
+  const messageBlock = (block: {
+    id: string;
+    key: string;
+    tone: Tone;
+    create: (x: number, y: number) => WelcomeNode;
+    inputs: readonly PortSummary[];
+    outputs: readonly PortSummary[];
+  }): BlockDef<WelcomeNode> => ({
+    id: block.id,
+    label: say(`blocks.${block.key}.label`),
+    description: say(`blocks.${block.key}.description`),
+    category: message,
+    tone: block.tone,
+    create: block.create,
+    inputs: block.inputs,
+    outputs: block.outputs,
+  });
+
+  return [
+    {
+      id: "everyone",
+      label: say("blocks.everyone.label"),
+      description: say("blocks.everyone.description"),
+      category: who,
+      tone: "ok",
+      // A filter that settles `unknown` to yes, with nothing wired into it. Both
+      // evaluators already read that as true of everybody, so this needs nothing
+      // the server does not already understand.
+      create: (x, y) => ({ ...(makeNode("filter", x, y) as WelcomeNode & { kind: "filter" }), unknownAs: "yes" }),
+      // It is a filter underneath, so it has a filter's input - and leaving that
+      // input empty is precisely what makes it mean everybody. Wire something
+      // into it and it stops being "everyone" and starts being that condition,
+      // which is a useful thing to be able to do and a dishonest thing to hide.
+      inputs: [a],
+      outputs: [condition],
     },
-    // WHEN is the only port this block has before it has a design. The rest
-    // are the design's signature, so the card says how many there will be
-    // rather than naming ports that do not exist yet.
-    inputs: [{ name: "WHEN", type: "condition" }, { type: "one per input the design declares" }],
-    outputs: [],
-    dynamicPorts: true,
-  },
-  {
-    id: "greeting:legacy",
-    label: "Welcome screen for Classic Mumble",
-    description:
-      "The same bands compiled for Qt: tables, inline colour, no rounded corners. Wire it behind a client version condition; the modern one collapses on those clients.",
-    category: MESSAGE,
-    tone: "warn",
-    create: screenBlock("legacy"),
-    inputs: [
-      { name: "WHEN", type: "condition" },
-      { name: "PLUS", type: "text" },
-    ],
-    outputs: [],
-  },
-];
+    conditionBlock("country"),
+    conditionBlock("tenure"),
+    conditionBlock("clientVersion"),
+    conditionBlock("fancyVersion"),
+    conditionBlock("account"),
+    conditionBlock("group"),
+    conditionBlock("os"),
+
+    ...GATE_KINDS.map(gateBlock),
+    {
+      id: "filter",
+      label: say("blocks.filter.label"),
+      description: say("blocks.filter.description"),
+      category: logic,
+      tone: "warn",
+      create: (x, y) => makeNode("filter", x, y),
+      inputs: [a],
+      outputs: [condition],
+    },
+
+    messageBlock({
+      id: "text",
+      key: "text",
+      tone: "ok",
+      create: (x, y) => makeNode("text", x, y),
+      inputs: [],
+      outputs: [text],
+    }),
+    messageBlock({
+      id: "text:rich",
+      key: "textRich",
+      tone: "ok",
+      create: (x, y) => rich(makeNode("text", x, y)),
+      inputs: [],
+      outputs: [text],
+    }),
+    messageBlock({
+      id: "greeting",
+      key: "greeting",
+      tone: "accent",
+      create: (x, y) => makeNode("greeting", x, y),
+      inputs: [when, plus],
+      outputs: [],
+    }),
+    messageBlock({
+      id: "greeting:rich",
+      key: "greetingRich",
+      tone: "accent",
+      create: (x, y) => rich(makeNode("greeting", x, y)),
+      inputs: [when, plus],
+      outputs: [],
+    }),
+    messageBlock({
+      id: "greeting:screen",
+      key: "greetingScreen",
+      tone: "accent",
+      create: screenBlock("screen"),
+      inputs: [when, plus],
+      outputs: [],
+    }),
+    {
+      ...messageBlock({
+        id: "greeting:design",
+        key: "greetingDesign",
+        tone: "accent",
+        create: (x, y) => {
+          const made = makeNode("greeting", x, y);
+          return made.kind === "greeting"
+            ? { ...made, view: "design", design: starterDesign(), once: true }
+            : made;
+        },
+        // WHEN is the only port this block has before it has a design. The rest
+        // are the design's signature, so the card says how many there will be
+        // rather than naming ports that do not exist yet.
+        inputs: [when, { type: say("portTypes.designInputs") }],
+        outputs: [],
+      }),
+      dynamicPorts: true,
+    },
+    messageBlock({
+      id: "greeting:legacy",
+      key: "greetingLegacy",
+      tone: "warn",
+      create: screenBlock("legacy"),
+      inputs: [when, plus],
+      outputs: [],
+    }),
+  ];
+}
 
 /**
  * A greeting that opens as a welcome screen, in one of its two dialects.
@@ -451,111 +441,132 @@ const TEXT_TONE = "ok" as const;
  * only useful thing to say about it is what comes out, while an input is one
  * of several and the useful thing is which one.
  */
-function portInfo(node: WelcomeNode, port: PortId, side: PortSide): PortInfo {
-  if (side === "out") {
-    return node.kind === "text"
-      ? { label: "TEXT", type: "text", tone: TEXT_TONE }
-      : { label: "CONDITION", type: "condition", tone: CONDITION_TONE };
-  }
-  if (port === "when") return { label: "WHEN", type: "condition", tone: CONDITION_TONE };
-  if (port === "plus") return { label: "PLUS", type: "text", tone: TEXT_TONE };
+function portInfoOf(say: Say): (node: WelcomeNode, port: PortId, side: PortSide) => PortInfo {
+  return (node, port, side) => {
+    if (side === "out") {
+      return node.kind === "text"
+        ? { label: say("ports.text"), type: "text", tone: TEXT_TONE }
+        : { label: say("ports.condition"), type: "condition", tone: CONDITION_TONE };
+    }
+    if (port === "when") return { label: say("ports.when"), type: "condition", tone: CONDITION_TONE };
+    if (port === "plus") return { label: say("ports.plus"), type: "text", tone: TEXT_TONE };
 
-  // A design's own inputs are named by the design and typed by which list it
-  // declared them in.
-  const named = inputOfPort(port);
-  if (named !== null) {
-    const kind = inputKindOf(node, port);
-    if (kind === "text") return { label: named, type: "text", tone: TEXT_TONE };
-    if (kind === "bool") return { label: named, type: "condition", tone: CONDITION_TONE };
-    // A port left behind by an input the design no longer declares. Drawn
-    // quiet because nothing wired here reaches anything.
-    return { label: named, type: "gone", tone: "muted" };
-  }
+    // A design's own inputs are named by the design and typed by which list it
+    // declared them in.
+    const named = inputOfPort(port);
+    if (named !== null) {
+      const kind = inputKindOf(node, port);
+      if (kind === "text") return { label: named, type: "text", tone: TEXT_TONE };
+      if (kind === "bool") return { label: named, type: "condition", tone: CONDITION_TONE };
+      // A port left behind by an input the design no longer declares. Drawn
+      // quiet because nothing wired here reaches anything.
+      return { label: named, type: "gone", tone: "muted" };
+    }
 
-  // A gate's or a filter's inputs, which are named on the node as A and B.
-  return { label: port.toUpperCase(), type: "condition", tone: CONDITION_TONE };
+    // A gate's or a filter's inputs, which are named on the node as A and B.
+    return { label: port.toUpperCase(), type: "condition", tone: CONDITION_TONE };
+  };
+}
+
+/** The template gallery, with every card said in the operator's language. */
+function galleryOf(say: Say) {
+  const section = (category: string) => {
+    const key = Object.keys(TEMPLATE_CATEGORIES).find((candidate) => TEMPLATE_CATEGORIES[candidate] === category);
+    return key === undefined ? category : say(`templateCategories.${key}`);
+  };
+  return {
+    items: WELCOME_TEMPLATES.map((template) => ({
+      ...template,
+      label: say(`templates.${template.id}.label`),
+      description: say(`templates.${template.id}.description`),
+      category: section(template.category),
+      ...(template.shows === undefined ? {} : { shows: say(`templates.${template.id}.shows`) }),
+    })),
+    strings: {
+      open: say("gallery.open"),
+      empty: say("gallery.empty"),
+      add: say("gallery.add"),
+      replace: say("gallery.replace"),
+      replaceHint: say("gallery.replaceHint"),
+    },
+  };
 }
 
 /**
- * The welcome editor's dialect.
+ * The welcome editor's dialect, said in the operator's language.
  *
- * A constant rather than a factory: this page is not translated, and everything
- * that varies between one canvas and the next - who the preview greets - comes
+ * Rebuilt whenever the translation function changes, which is cheap: the
+ * components it names are module-level, so a new spec re-renders the canvas
+ * without remounting anything an operator is typing into. Everything that
+ * varies between one canvas and the next - who the preview greets - comes
  * through context instead.
  */
-export const welcomeSpec: NodeSpec<WelcomeNode> = {
-  ...welcomeWiring,
-  id: "welcome",
-  blocks: BLOCKS,
-  templates: {
-    items: WELCOME_TEMPLATES,
-    strings: {
-      open: "Templates",
-      empty: "No template matches that.",
-      add: "Add to canvas",
-      replace: "Start over with this",
-      replaceHint: "Removes everything already on the canvas.",
+export function welcomeSpec(say: Say): NodeSpec<WelcomeNode> {
+  return {
+    ...welcomeWiring,
+    id: "welcome",
+    blocks: blocksOf(say),
+    templates: galleryOf(say),
+    label: (node) => {
+      if (isDesign(node)) return say("nodes.greeting");
+      return isLegacy(node) ? say("nodes.greetingClassic") : labelOf(node, say);
     },
-  },
-  label: (node) => {
-    if (isDesign(node)) return "SHOW THIS GREETING";
-    return isLegacy(node) ? "GREETING · CLASSIC" : labelOf(node);
-  },
-  width: widthOf,
-  resizable,
-  // Narrow enough to still be a column of text; the toolbar sets the floor.
-  minSize: () => ({ w: 240, h: 120 }),
-  // The welcome document has a layer for them, so the canvas offers them.
-  annotate: true,
-  tone: toneOf,
-  portTop,
-  portInfo,
-  body: WelcomeBody,
-  attachment: WelcomeAttachment,
-  emphasise: (node) => node.kind === "greeting",
-  badge: (graph, node) => {
-    // The filter that means "everybody" says so, rather than reading as a
-    // filter somebody forgot to wire up.
-    if (isEveryone(graph, node)) return "EVERYONE";
-    if (node.kind === "text") return `${usesOf(graph, node.id)}×`;
-    // Which greeting this is in the order the server tries them, but only once
-    // there is more than one - the order is what decides who sees which, and
-    // on a single-greeting canvas it is noise.
-    if (node.kind === "greeting") {
-      const order = greetingsOf(graph);
-      if (order.length < 2) return null;
-      return `#${order.findIndex((candidate) => candidate.id === node.id) + 1}`;
-    }
-    return null;
-  },
-  // It is not an error - most useful graphs have undecided wires in them - but
-  // it is the thing that silently withholds a greeting, so it is worth seeing
-  // at a glance which parts of a canvas are decided and which are not.
-  warnPort: (graph, node, _port, side) =>
-    side === "out" && mayBeUnknown(graph, node.id)
-      ? "May be undecided — wire it through a FILTER to settle it"
-      : null,
-  status: graphStatus,
-  // Enabled and complete still reaches nobody when the greeting has no
-  // condition wired to it, and that is the failure an operator cannot see.
-  // Any greeting with a condition on it makes the graph live; a canvas of
-  // greetings none of which is wired reaches nobody however many there are.
-  liveness: (graph) =>
-    greetingsOf(graph).some((greeting) => describeGreeting(graph, greeting.id) !== null) ? "live" : "idle",
-  strings: {
-    add: "+ add",
-    browse: "Browse blocks",
-    search: "Search blocks",
-    favorites: "Favorites",
-    noMatches: "No block matches that.",
-    complete: "Graph complete",
-    toFix: (count) => `${count} to fix`,
-    reset: "Reset",
-    live: "LIVE",
-    idle: "UNWIRED",
-    enabled: "enabled",
-  },
-};
+    width: widthOf,
+    resizable,
+    // Narrow enough to still be a column of text; the toolbar sets the floor.
+    minSize: () => ({ w: 240, h: 120 }),
+    // The welcome document has a layer for them, so the canvas offers them.
+    annotate: true,
+    tone: toneOf,
+    portTop,
+    portInfo: portInfoOf(say),
+    body: WelcomeBody,
+    attachment: WelcomeAttachment,
+    emphasise: (node) => node.kind === "greeting",
+    badge: (graph, node) => {
+      // The filter that means "everybody" says so, rather than reading as a
+      // filter somebody forgot to wire up.
+      if (isEveryone(graph, node)) return say("nodes.everyone");
+      if (node.kind === "text") return `${usesOf(graph, node.id)}×`;
+      // Which greeting this is in the order the server tries them, but only once
+      // there is more than one - the order is what decides who sees which, and
+      // on a single-greeting canvas it is noise.
+      if (node.kind === "greeting") {
+        const order = greetingsOf(graph);
+        if (order.length < 2) return null;
+        return `#${order.findIndex((candidate) => candidate.id === node.id) + 1}`;
+      }
+      return null;
+    },
+    // It is not an error - most useful graphs have undecided wires in them - but
+    // it is the thing that silently withholds a greeting, so it is worth seeing
+    // at a glance which parts of a canvas are decided and which are not.
+    warnPort: (graph, node, _port, side) =>
+      side === "out" && mayBeUnknown(graph, node.id) ? say("nodes.undecided") : null,
+    status: (graph) => graphStatus(graph, say),
+    // Enabled and complete still reaches nobody when the greeting has no
+    // condition wired to it, and that is the failure an operator cannot see.
+    // Any greeting with a condition on it makes the graph live; a canvas of
+    // greetings none of which is wired reaches nobody however many there are.
+    liveness: (graph) =>
+      greetingsOf(graph).some((greeting) => describeGreeting(graph, greeting.id, say) !== null)
+        ? "live"
+        : "idle",
+    strings: {
+      add: say("editor.add"),
+      browse: say("editor.browse"),
+      search: say("editor.search"),
+      favorites: say("editor.favorites"),
+      noMatches: say("editor.noMatches"),
+      complete: say("editor.complete"),
+      toFix: (count) => say("editor.toFix", { count }),
+      reset: say("editor.reset"),
+      live: say("editor.live"),
+      idle: say("editor.idle"),
+      enabled: say("editor.enabled"),
+    },
+  };
+}
 
 /**
  * How tall the editor inside a node is allowed to be.
@@ -575,6 +586,8 @@ function editorHeight(node: MessageNode, fallback: number): number {
 /* -- Bodies --------------------------------------------------------------- */
 
 function WelcomeBody({ node, graph, onPatch }: NodeBodyProps<WelcomeNode>) {
+  const { t } = useTranslation("nebulaWelcome");
+  const say = t as Say;
   switch (node.kind) {
     case "country":
       return (
@@ -596,15 +609,18 @@ function WelcomeBody({ node, graph, onPatch }: NodeBodyProps<WelcomeNode>) {
     case "tenure":
       return (
         <Stack gap={0.75} alignItems="flex-start">
-          <PillSelect
-            value={node.op === "less" ? "joined less than" : "joined more than"}
-            options={["joined less than", "joined more than"]}
-            onChange={(v) => onPatch({ op: v.endsWith("less than") ? "less" : "more" })}
+          <PillMenu
+            value={node.op === "less" ? "less" : "more"}
+            options={[
+              { id: "less", label: t("body.joinedLess") },
+              { id: "more", label: t("body.joinedMore") },
+            ]}
+            onChange={(v) => onPatch({ op: v === "less" ? "less" : "more" })}
           />
-          <PillSelect
-            value={`${node.window} ago`}
-            options={TENURE_WINDOWS.map((w) => `${w} ago`)}
-            onChange={(v) => onPatch({ window: v.replace(" ago", "") as typeof node.window })}
+          <PillMenu
+            value={node.window}
+            options={TENURE_WINDOWS.map((w) => ({ id: w, label: say(`windows.${TENURE_WINDOW_KEYS[w]}`) }))}
+            onChange={(v) => onPatch({ window: v as typeof node.window })}
           />
         </Stack>
       );
@@ -628,9 +644,9 @@ function WelcomeBody({ node, graph, onPatch }: NodeBodyProps<WelcomeNode>) {
     case "fancyVersion":
       return (
         <Stack direction="row" gap={0.75} alignItems="center">
-          <PillSelect
+          <PillMenu
             value={node.op}
-            options={[...FANCY_OPS]}
+            options={FANCY_OPS.map((op) => ({ id: op, label: op === "any" ? t("body.any") : op }))}
             onChange={(v) => onPatch({ op: v as typeof node.op, ...(v === "any" ? { version: "" } : {}) })}
           />
           {/* Nothing to compare against under `any`, so nothing is drawn: a
@@ -648,10 +664,15 @@ function WelcomeBody({ node, graph, onPatch }: NodeBodyProps<WelcomeNode>) {
     case "account":
       return (
         <Stack direction="row" gap={0.75} alignItems="center">
-          <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted })}>is</Typography>
-          <PillSelect
+          <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted })}>
+            {t("body.is")}
+          </Typography>
+          <PillMenu
             value={node.state}
-            options={[...ACCOUNT_STATES]}
+            options={ACCOUNT_STATES.map((state) => ({
+              id: state,
+              label: say(`accountStates.${ACCOUNT_STATE_KEYS[state]}`),
+            }))}
             onChange={(v) => onPatch({ state: v as typeof node.state })}
           />
         </Stack>
@@ -660,7 +681,9 @@ function WelcomeBody({ node, graph, onPatch }: NodeBodyProps<WelcomeNode>) {
     case "os":
       return (
         <Stack direction="row" gap={0.75} alignItems="center">
-          <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted })}>is</Typography>
+          <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted })}>
+            {t("body.is")}
+          </Typography>
           <PillSelect
             value={node.os}
             options={[...OS_CHOICES]}
@@ -671,18 +694,21 @@ function WelcomeBody({ node, graph, onPatch }: NodeBodyProps<WelcomeNode>) {
 
     case "group":
       return (
-        <PlainInput value={node.group} placeholder="group name" onChange={(group) => onPatch({ group })} />
+        <PlainInput value={node.group} placeholder={t("body.groupName")} onChange={(group) => onPatch({ group })} />
       );
 
     case "filter":
       return (
         <Stack direction="row" alignItems="center" gap={0.75}>
           <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted })}>
-            unknown →
+            {t("body.unknown")}
           </Typography>
-          <PillSelect
+          <PillMenu
             value={node.unknownAs}
-            options={["no", "yes"]}
+            options={[
+              { id: "no", label: t("body.no") },
+              { id: "yes", label: t("body.yes") },
+            ]}
             onChange={(v) => onPatch({ unknownAs: v as typeof node.unknownAs })}
           />
         </Stack>
@@ -710,14 +736,14 @@ function WelcomeBody({ node, graph, onPatch }: NodeBodyProps<WelcomeNode>) {
         <Stack gap={0.75}>
           <PlainInput
             value={node.name}
-            placeholder="name this snippet"
-            ariaLabel="Snippet name"
+            placeholder={t("body.snippetName")}
+            ariaLabel={t("body.snippetNameLabel")}
             onChange={(name) => onPatch({ name })}
           />
           <BodyEditor
             node={node}
-            placeholder="Text appended to a greeting"
-            ariaLabel="Snippet text"
+            placeholder={t("body.snippetText")}
+            ariaLabel={t("body.snippetTextLabel")}
             minHeight={editorHeight(node, 92)}
             maxHeight={editorHeight(node, 220)}
             onPatch={onPatch}
@@ -739,6 +765,7 @@ function GreetingBody({
   graph: WelcomeGraph;
   onPatch: (patch: Partial<WelcomeNode>) => void;
 }>) {
+  const { t } = useTranslation("nebulaWelcome");
   const openDesign = useContext(OpenDesignContext);
   const snippets = graph.edges
     .filter((e) => e.to === node.id && e.port === "plus")
@@ -756,29 +783,29 @@ function GreetingBody({
 
   return (
     <Stack gap={1}>
-      <SectionLabel>They read</SectionLabel>
+      <SectionLabel>{t("body.theyRead")}</SectionLabel>
       <BodyEditor
         node={node}
-        placeholder="What they read on arrival"
-        ariaLabel="Greeting text"
+        placeholder={t("body.greetingText")}
+        ariaLabel={t("body.greetingTextLabel")}
         minHeight={editorHeight(node, 116)}
         maxHeight={editorHeight(node, 300)}
         onPatch={onPatch}
       />
-      <SectionLabel>Plus text</SectionLabel>
+      <SectionLabel>{t("body.plusText")}</SectionLabel>
       <Stack direction="row" gap={0.5} sx={{ flexWrap: "wrap", minHeight: 20 }}>
         {snippets.length === 0 && (
           <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })}>
-            wire a reusable text here
+            {t("body.wireSnippet")}
           </Typography>
         )}
         {snippets.map((s) => (
-          <TagChip key={s.id} label={s.name || "unnamed"} tone="ok" />
+          <TagChip key={s.id} label={s.name || t("body.unnamed")} tone="ok" />
         ))}
       </Stack>
       <ToggleRow
         checked={node.once}
-        label="Shown once, centered"
+        label={t("body.once")}
         onChange={() => onPatch({ once: !node.once })}
       />
     </Stack>

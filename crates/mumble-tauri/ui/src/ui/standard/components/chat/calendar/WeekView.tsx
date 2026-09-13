@@ -16,81 +16,15 @@ import {
   shortTimeFormatted,
   weekdayShortNames,
 } from "@core/features/chat/calendar/calendarFormat";
+import { layoutDay } from "@core/features/chat/calendar/timeGrid";
+import { CAL_EVENT_ATTR, useTimeGridDrag } from "@core/features/chat/calendar/useTimeGridDrag";
 import { useCalendarFormatPreferences } from "@core/features/chat/calendar/useCalendarFormatPreferences";
 import { TID } from "@core/testids";
 import styles from "./CalendarPanel.module.css";
 
 const HOUR_PX = 48;
 const PX_PER_MIN = HOUR_PX / 60;
-const SNAP_MIN = 15;
-const DRAG_THRESHOLD_PX = 4;
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
-
-type DragMode = "move" | "resize-start" | "resize-end";
-
-interface DragState {
-  key: string;
-  eventId: string;
-  mode: DragMode;
-  startX: number;
-  startY: number;
-  origStart: number;
-  origEnd: number;
-  moved: boolean;
-}
-
-interface Preview {
-  key: string;
-  eventId: string;
-  mode: DragMode;
-  start: number;
-  end: number;
-  /** Visual translate (px) applied during a "move" so the element stays mounted
-   *  in its original column - preserving pointer capture - while following the cursor. */
-  dx: number;
-  dy: number;
-}
-
-function snap(minutes: number): number {
-  return Math.round(minutes / SNAP_MIN) * SNAP_MIN;
-}
-
-/**
- * Side-by-side layout for overlapping events: greedily packs each occurrence
- * into the first lane whose previous event has ended, and reports the total lane
- * count of its overlap cluster so widths divide evenly.
- */
-function layoutDay(occs: EventOccurrence[]): Map<string, { lane: number; lanes: number }> {
-  const result = new Map<string, { lane: number; lanes: number }>();
-  const sorted = [...occs].sort((a, b) => a.start - b.start || a.end - b.end);
-  let cluster: EventOccurrence[] = [];
-  let clusterEnd = Number.NEGATIVE_INFINITY;
-  const flush = () => {
-    const laneEnds: number[] = [];
-    const assigned: Array<{ key: string; lane: number }> = [];
-    for (const o of cluster) {
-      let lane = laneEnds.findIndex((end) => end <= o.start);
-      if (lane === -1) {
-        lane = laneEnds.length;
-        laneEnds.push(o.end);
-      } else {
-        laneEnds[lane] = o.end;
-      }
-      assigned.push({ key: o.key, lane });
-    }
-    const lanes = Math.max(1, laneEnds.length);
-    for (const a of assigned) result.set(a.key, { lane: a.lane, lanes });
-    cluster = [];
-    clusterEnd = Number.NEGATIVE_INFINITY;
-  };
-  for (const o of sorted) {
-    if (cluster.length && o.start >= clusterEnd) flush();
-    cluster.push(o);
-    clusterEnd = Math.max(clusterEnd, o.end);
-  }
-  if (cluster.length) flush();
-  return result;
-}
 
 /** Day / Work-week / Week time grid, parametrised by how many days it spans. */
 export default function WeekView({ dayCount }: { readonly dayCount: 1 | 5 | 7 }) {
@@ -105,8 +39,14 @@ export default function WeekView({ dayCount }: { readonly dayCount: 1 | 5 | 7 })
 
   const colsRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<DragState | null>(null);
-  const [preview, setPreview] = useState<Preview | null>(null);
+  const { preview, beginDrag, onPointerMove, onPointerUp, onPointerCancel } = useTimeGridDrag({
+    dayCount,
+    pxPerMinute: PX_PER_MIN,
+    columnsRef: colsRef,
+    events,
+    onChange: (event, next) => upsertEvent({ ...event, ...next }),
+    onOpen: openDetail,
+  });
 
   // Current-time indicator; refresh each minute.
   const [now, setNow] = useState(Date.now());
@@ -150,103 +90,6 @@ export default function WeekView({ dayCount }: { readonly dayCount: 1 | 5 | 7 })
   }, [events, days]);
 
   const colsStyle = { gridTemplateColumns: `repeat(${dayCount}, minmax(0, 1fr))` };
-
-  const beginDrag = (e: React.PointerEvent, occ: EventOccurrence, mode: DragMode) => {
-    if (e.button !== 0) return;
-    e.stopPropagation();
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    dragRef.current = {
-      key: occ.key,
-      eventId: occ.event.id,
-      mode,
-      startX: e.clientX,
-      startY: e.clientY,
-      origStart: occ.start,
-      origEnd: occ.end,
-      moved: false,
-    };
-  };
-
-  const onPointerMove = (e: React.PointerEvent) => {
-    const d = dragRef.current;
-    if (!d) return;
-    const dx = e.clientX - d.startX;
-    const dy = e.clientY - d.startY;
-    if (!d.moved && Math.abs(dx) < DRAG_THRESHOLD_PX && Math.abs(dy) < DRAG_THRESHOLD_PX) return;
-    d.moved = true;
-    const deltaMin = snap(Math.round(dy / PX_PER_MIN));
-    const shift = deltaMin * MS_PER_MINUTE;
-    if (d.mode === "move") {
-      const colW = colsRef.current ? colsRef.current.clientWidth / dayCount : 0;
-      const deltaDays = colW ? Math.round(dx / colW) : 0;
-      setPreview({
-        key: d.key,
-        eventId: d.eventId,
-        mode: d.mode,
-        start: addDays(d.origStart, deltaDays) + shift,
-        end: addDays(d.origEnd, deltaDays) + shift,
-        dx: deltaDays * colW,
-        dy: deltaMin * PX_PER_MIN,
-      });
-    } else if (d.mode === "resize-start") {
-      setPreview({
-        key: d.key,
-        eventId: d.eventId,
-        mode: d.mode,
-        start: Math.min(d.origStart + shift, d.origEnd - SNAP_MIN * MS_PER_MINUTE),
-        end: d.origEnd,
-        dx: 0,
-        dy: 0,
-      });
-    } else {
-      setPreview({
-        key: d.key,
-        eventId: d.eventId,
-        mode: d.mode,
-        start: d.origStart,
-        end: Math.max(d.origEnd + shift, d.origStart + SNAP_MIN * MS_PER_MINUTE),
-        dx: 0,
-        dy: 0,
-      });
-    }
-  };
-
-  const onPointerUp = (e: React.PointerEvent) => {
-    const d = dragRef.current;
-    dragRef.current = null;
-    if (!d) return;
-    // Treat it as a drag if EITHER we saw movement during the gesture OR the
-    // pointer simply ended away from where it started (covers missed/late
-    // pointermove events or a capture hiccup). Only a true stationary press
-    // opens the detail card - never the end of a drag.
-    const endedFar =
-      Math.abs(e.clientX - d.startX) > DRAG_THRESHOLD_PX ||
-      Math.abs(e.clientY - d.startY) > DRAG_THRESHOLD_PX;
-    if (d.moved || endedFar) {
-      if (preview && (preview.start !== d.origStart || preview.end !== d.origEnd)) {
-        const ev = events.find((x) => x.id === d.eventId);
-        if (ev) {
-          upsertEvent({
-            ...ev,
-            start: ev.start + (preview.start - d.origStart),
-            end: ev.end + (preview.end - d.origEnd),
-          });
-        }
-      }
-      setPreview(null);
-      return;
-    }
-    // Stationary press/release → a genuine click → open the detail card.
-    setPreview(null);
-    const el = (e.target as HTMLElement).closest("[data-cal-event]") as HTMLElement | null;
-    const r = (el ?? (e.currentTarget as HTMLElement)).getBoundingClientRect();
-    openDetail(d.eventId, d.origStart, { top: r.top, left: r.left, bottom: r.bottom, right: r.right });
-  };
-
-  const onPointerCancel = () => {
-    dragRef.current = null;
-    setPreview(null);
-  };
 
   return (
     <div ref={bodyRef} className={styles.body}>
@@ -337,7 +180,7 @@ export default function WeekView({ dayCount }: { readonly dayCount: 1 | 5 | 7 })
                         ...eventVisualStyle(o.event).style,
                       }}
                       title={o.event.title}
-                      data-cal-event=""
+                      {...{ [CAL_EVENT_ATTR]: "" }}
                       data-testid={TID.calendarEvent}
                       data-event-title={o.event.title}
                       onPointerDown={(e) => beginDrag(e, o, "move")}

@@ -59,7 +59,10 @@ export enum TauriEvent {
   TypingIndicator = "typing-indicator",
   UnreadChanged = "unread-changed",
   UserTalking = "user-talking",
+  UserVoiceContext = "user-voice-context",
   VoiceStateChanged = "voice-state-changed",
   WatchSync = "watch-sync",
   WebrtcSignal = "webrtc-signal",
+  WhisperDenials = "whisper-denials",
+  WhisperState = "whisper-state",
 }

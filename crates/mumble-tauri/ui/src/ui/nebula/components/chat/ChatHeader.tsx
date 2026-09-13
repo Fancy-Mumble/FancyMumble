@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, IconButton, Menu, MenuItem, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import type { KeyTrustLevel } from "@core/types";
-import { TID } from "@core/testids";
+import { KEBAB_ITEM_ATTR, TID } from "@core/testids";
 import {
+  CalendarIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
+  ClockIcon,
   DownloadIcon,
   FileTextIcon,
   HashIcon,
@@ -46,6 +48,10 @@ interface ChatHeaderProps {
   onToggleSearch: () => void;
   onShowMembers: () => void;
   onShareScreen: () => void;
+  /** Why a share cannot start from here, or null when it can. */
+  shareBlockedReason?: string | null;
+  /** How a share from here reaches viewers, said under the entry. */
+  shareRoute?: string;
   onShowPinned: () => void;
   /** Whether the pinned panel is the one currently hanging from the header. */
   pinnedOpen?: boolean;
@@ -69,6 +75,15 @@ interface ChatHeaderProps {
   /** Show what the applications on this machine are publishing. Absent while
    *  rich presence is switched off, so the entry appears with the feature. */
   onShowPresence?: () => void;
+  /** Schedule a message into the open channel. Absent for a direct message:
+   *  the server's scheduler delivers into channels only. */
+  onShowScheduled?: () => void;
+  /** Open the calendar. Absent where the server runs no calendar plugin, which
+   *  is what hides the entry. */
+  onShowCalendar?: () => void;
+  /** Open the meeting this room was made for. Present only in a meeting's
+   *  room, once this client has been told which meeting that is. */
+  onShowMeeting?: () => void;
   /**
    * Where the conversation came from, when it is the only thing on screen.
    *
@@ -116,6 +131,8 @@ export function ChatHeader({
   onToggleSearch,
   onShowMembers,
   onShareScreen,
+  shareBlockedReason = null,
+  shareRoute,
   onShowPinned,
   pinnedOpen = false,
   onShowInfo,
@@ -127,12 +144,17 @@ export function ChatHeader({
   onPopOutDm,
   onShowMyFiles,
   onShowPresence,
+  onShowScheduled,
+  onShowCalendar,
+  onShowMeeting,
   onBack,
   dense = false,
 }: Readonly<ChatHeaderProps>) {
   const { t } = useTranslation(["nebulaChat", "nebulaCommon", "common", "chat", "server"]);
   const stencil = useTheme().palette.nebulaSkin.chrome === "stencil";
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const shareHintId = useId();
+  const shareHint = shareBlockedReason ?? shareRoute;
   const closeMenu = () => setMenuAnchor(null);
   const run = (action: () => void) => () => {
     closeMenu();
@@ -420,9 +442,35 @@ export function ChatHeader({
           {t("nebulaChat:header.members")}
           {dense && memberCount !== undefined ? ` (${memberCount})` : ""}
         </MenuItem>
-        <MenuItem onClick={run(onShareScreen)}>
+        {/* The route is said here because it is decided before anyone watches:
+            peer-to-peer costs the sharer an upload per viewer. Disabled rather
+            than hidden while another server holds the capture, so the reason
+            is on screen where the share was looked for. */}
+        <MenuItem
+          onClick={run(onShareScreen)}
+          disabled={!!shareBlockedReason}
+          aria-label={t("chat:header.shareScreen")}
+          aria-describedby={shareHint ? shareHintId : undefined}
+          sx={shareHint ? { alignItems: "flex-start" } : undefined}
+        >
           <MonitorIcon width={13} height={13} />
-          {t("chat:header.shareScreen")}
+          <Stack gap="1px" sx={{ minWidth: 0 }}>
+            {t("chat:header.shareScreen")}
+            {shareHint && (
+              <Typography
+                id={shareHintId}
+                sx={(theme) => ({
+                  fontSize: 11,
+                  lineHeight: 1.35,
+                  maxWidth: 240,
+                  whiteSpace: "normal",
+                  color: theme.palette.nebula.muted,
+                })}
+              >
+                {shareHint}
+              </Typography>
+            )}
+          </Stack>
         </MenuItem>
         {onShowChannelInfo && (
           <MenuItem onClick={run(onShowChannelInfo)}>
@@ -445,6 +493,38 @@ export function ChatHeader({
           <MenuItem onClick={run(onShowMyFiles)}>
             <UploadIcon width={13} height={13} />
             {t("chat:mySharedFiles.title")}
+          </MenuItem>
+        )}
+        {onShowScheduled && (
+          <MenuItem
+            onClick={run(onShowScheduled)}
+            data-testid={TID.kebabMenuItem}
+            {...{ [KEBAB_ITEM_ATTR]: "scheduled-messages" }}
+          >
+            <ClockIcon width={13} height={13} />
+            {t("chat:header.scheduledMessages")}
+          </MenuItem>
+        )}
+        {/* The meeting first, when this room is one: it is about the room on
+            screen, where the calendar is about every meeting. */}
+        {onShowMeeting && (
+          <MenuItem
+            onClick={run(onShowMeeting)}
+            data-testid={TID.kebabMenuItem}
+            {...{ [KEBAB_ITEM_ATTR]: "meeting-details" }}
+          >
+            <CalendarIcon width={13} height={13} />
+            {t("nebulaChat:calendar.meetingDetails")}
+          </MenuItem>
+        )}
+        {onShowCalendar && (
+          <MenuItem
+            onClick={run(onShowCalendar)}
+            data-testid={TID.kebabMenuItem}
+            {...{ [KEBAB_ITEM_ATTR]: "calendar" }}
+          >
+            <CalendarIcon width={13} height={13} />
+            {t("chat:calendar.title")}
           </MenuItem>
         )}
         {onShowPresence && (

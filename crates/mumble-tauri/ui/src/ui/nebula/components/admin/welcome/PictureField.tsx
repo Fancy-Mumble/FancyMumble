@@ -8,6 +8,7 @@
  */
 import { useCallback, useRef, useState } from "react";
 import { Box } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import { radius } from "../../../tokens";
 import { Stack } from "../../primitives";
 import { searchFit, roomFor, type Crop, type Fitted } from "./pictures";
@@ -68,6 +69,7 @@ export function PictureField({
   /** Whether this stands for the picture *behind* the block rather than in it. */
   behind?: boolean;
 }>) {
+  const { t } = useTranslation("nebulaWelcome");
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -86,17 +88,17 @@ export function PictureField({
         const box = { w: Math.max(16, block.w), h: Math.max(16, block.h ?? Math.round(block.w * 0.6)) };
         const picked = await fit(file, box, room);
         if (picked === null) {
-          setProblem(`No room: ${KB(room)} left, and this will not go under it.`);
+          setProblem(t("picture.noRoom", { room: KB(room) }));
           return;
         }
         onPick({ ...picked, id: current?.id ?? `a${Date.now().toString(36)}` });
       } catch {
-        setProblem("That file is not a picture this can read.");
+        setProblem(t("picture.unreadable"));
       } finally {
         setBusy(false);
       }
     },
-    [block.w, block.h, room, onPick, current],
+    [block.w, block.h, room, onPick, current, t],
   );
 
   return (
@@ -129,7 +131,7 @@ export function PictureField({
           />
         ) : (
           <Box sx={(theme) => ({ fontSize: 11, color: theme.palette.nebula.dim })}>
-            {busy ? "Fitting…" : "Drop a picture, or click to choose"}
+            {busy ? t("picture.fitting") : t("picture.drop")}
           </Box>
         )}
       </Box>
@@ -145,8 +147,8 @@ export function PictureField({
         <Box sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim, flex: 1 })}>
           {problem ??
             (current
-              ? `${KB(current.bytes)} · ${current.w}×${current.h} · ${KB(room)} left`
-              : `${KB(room)} of room · sent to Fancy clients only`)}
+              ? t("picture.held", { size: KB(current.bytes), w: current.w, h: current.h, room: KB(room) })
+              : t("picture.room", { room: KB(room) }))}
         </Box>
         {current && (
           <Box
@@ -161,7 +163,7 @@ export function PictureField({
               "&:hover": { color: theme.palette.nebula.accent },
             })}
           >
-            Remove
+            {t("picture.remove")}
           </Box>
         )}
       </Stack>

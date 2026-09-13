@@ -712,11 +712,13 @@
     "saved": "Enregistré",
     "saving": "Enregistrement…",
     "saveChanges": "Enregistrer les modifications",
+    "listAllChosen": "Tout est déjà sélectionné",
     "collapseFilters": "Replier les filtres rapides",
     "countNote": "{{count}} entrées chargées",
     "endlessOff": "Par pages, 25 lignes à la fois.",
     "endlessOn": "Charge davantage au défilement.",
     "endlessScroll": "Défilement infini",
+    "sortLoadedOnly": "Tri limité aux entrées chargées ; les plus anciennes sont encore sur le serveur.",
     "endOfResults": "Fin des résultats",
     "expandFilters": "Déplier les filtres rapides",
     "filterCategory": "Catégories",
@@ -1277,7 +1279,9 @@
     "installed": "Installé",
     "alreadyInstalled": "Déjà installé sur ce serveur",
     "abiVersion": "API v{{version}}",
-    "incompatibleAbi": "Ce plugin cible une version de l'API de plugin différente de celle du serveur et ne peut pas être installé."
+    "incompatibleAbi": "Ce plugin cible une version de l'API de plugin différente de celle du serveur et ne peut pas être installé.",
+    "yanked": "retiré",
+    "minServer": "serveur ≥ {{version}}"
   },
   "plugins": {
     "empty": "Aucun plugin n'est chargé sur le serveur connecté.",
@@ -1334,7 +1338,10 @@
     "richTextLossy": "Ce texte d’accueil utilise un balisage que l’éditeur visuel ne peut pas conserver — une mise en page en tableau, ou un style pour lequel il n’a pas de contrôle. L’y modifier réécrirait les parties qu’il ne peut pas afficher, il est donc édité en HTML.",
     "welcomeEditorTitle": "Envie de plus d'un message d'accueil ?",
     "welcomeEditorHint": "Ce texte est envoyé à tout le monde. L'éditeur de message d'accueil compose des accueils qui dépendent de qui arrive — version du client, présence d'un compte — et les met en page comme un écran. Un accueil qui correspond est envoyé à la place de ce texte.",
-    "welcomeEditorOpen": "Ouvrir l'éditeur"
+    "welcomeEditorOpen": "Ouvrir l'éditeur",
+    "modePreview": "Aperçu",
+    "previewOf": "Aperçu de {{label}}",
+    "previewEmpty": "Rien à afficher. Ce paramètre est vide, ou tout son contenu a été retiré par le filtre de sécurité que chaque client applique avant l’affichage."
   },
   "fileServer": {
     "title": "Stockage du serveur de fichiers",
@@ -1495,6 +1502,42 @@
     "token": "Jeton",
     "tokenHint": "Non enregistré — à ressaisir à chaque session.",
     "use": "Utiliser",
-    "version": "version"
+    "version": "version",
+    "tagsCount": "{{count}} sur {{max}}",
+    "lede": "L’apparence de ce serveur sur l’écran de connexion. Chaque champ est facultatif — un slogan seul fait déjà une très bonne livrée.",
+    "credsLead": "Les images sont envoyées via l’API opérateur, qui a besoin de son adresse et d’un jeton."
+  },
+  "whisper": {
+    "deniedRow": "Le serveur a refusé cette cible : pas de permission Chuchoter dans {{channels}}",
+    "title": "Chuchoter et crier",
+    "hint": "Maintenez une touche pour parler à certaines personnes ou dans un autre salon que celui où vous êtes. Fonctionne avec tous les modes d'activation.",
+    "empty": "Aucune cible de chuchotement ou de cri pour l'instant.",
+    "addBtn": "Ajouter une cible de chuchotement",
+    "defaultName": "Chuchotement {{n}}",
+    "edit": "Modifier",
+    "remove": "Supprimer",
+    "save": "Enregistrer",
+    "nameLabel": "Nom",
+    "kindLabel": "Cible",
+    "kindUsers": "Chuchoter à des utilisateurs",
+    "kindChannel": "Crier dans un salon",
+    "usersLabel": "Utilisateurs",
+    "addUser": "Ajouter un utilisateur...",
+    "noUsersPicked": "Aucun utilisateur choisi pour l'instant.",
+    "removeUser": "Retirer {{name}}",
+    "hashless": "Les utilisateurs avec un certificat sont retrouvés sur n'importe quel serveur. Ceux sans certificat sont reconnus par leur nom.",
+    "channelModeLabel": "Salon",
+    "channelFixed": "Un salon précis",
+    "channelCurrent": "Mon salon actuel",
+    "channelPick": "Choisir un salon",
+    "links": "Inclure les salons liés",
+    "children": "Inclure les sous-salons",
+    "group": "Seulement les membres du groupe",
+    "groupHint": "Facultatif. Un nom de groupe ACL comme admin. Laissez vide pour atteindre tout le monde.",
+    "summaryUsers": "À {{names}}",
+    "summaryChannel": "Crier dans {{name}}",
+    "summaryCurrent": "Crier dans votre salon actuel",
+    "summaryUnset": "Aucune cible définie",
+    "noActiveServer": "Connectez-vous à un serveur pour choisir des utilisateurs et des salons."
   }
 }

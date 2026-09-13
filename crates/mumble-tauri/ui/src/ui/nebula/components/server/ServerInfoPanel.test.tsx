@@ -45,14 +45,27 @@ describe("Nebula ServerInfoPanel", () => {
     expect(screen.getByText("Opus")).toBeTruthy();
   });
 
-  it("is a fixed-width panel beside the conversation, not a block in the column", async () => {
+  it("opens as a sheet over the shell, like the channel sheet", async () => {
     render(withNebulaTheme(<ServerInfoPanel onClose={() => {}} />));
 
-    const panel = await screen.findByRole("complementary", { name: "Server info" });
-    // The layout bug this replaced came from a panel that sized itself as a row
-    // in Nebula's window column; the roster's own geometry is the correct one.
-    expect(getComputedStyle(panel).width).toBe("320px");
-    expect(getComputedStyle(panel).flex).toBe("0 0 auto");
+    const sheet = await screen.findByRole("document", { name: "Server info" });
+    expect(screen.getByRole("dialog").contains(sheet)).toBe(true);
+    expect(screen.queryByRole("complementary")).toBeNull();
+  });
+
+  it("wears the server's livery name, and keeps the host beneath it", async () => {
+    render(
+      withNebulaTheme(
+        <ServerInfoPanel
+          livery={{ version: 1, displayName: "Magical Rocks", tags: [], palette: {} }}
+          onClose={() => {}}
+        />,
+      ),
+    );
+
+    expect(await screen.findByText("Magical Rocks")).toBeTruthy();
+    // Beneath the name, and as the Connection fact.
+    expect(screen.getAllByText("magical.rocks")).toHaveLength(2);
   });
 
   it("lists what the server can do, in developer mode", async () => {

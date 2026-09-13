@@ -251,6 +251,52 @@ pub(crate) async fn voice_priority_end(state: tauri::State<'_, AppState>) -> Res
     state.push_to_talk_end().await
 }
 
+/// Start whispering to `targets` (whisper key down).
+///
+/// The frontend resolves its configured target to sessions and channel ids at
+/// the moment of the press, because that is the only time the answer is known:
+/// a user bound by certificate hash has a different session on every
+/// reconnect, and a shortcut that whispered to yesterday's session number
+/// would reach whoever holds it today.
+#[tauri::command]
+pub(crate) async fn whisper_start(
+    state: tauri::State<'_, AppState>,
+    slot: u8,
+    targets: Vec<state::WhisperEntry>,
+) -> Result<(), String> {
+    state.whisper_start(slot, targets).await
+}
+
+/// Keep a whisper slot registered ahead of its key, so a press only switches
+/// slots. Returns whether a `VoiceTarget` actually went out.
+#[tauri::command]
+pub(crate) async fn whisper_register(
+    state: tauri::State<'_, AppState>,
+    slot: u8,
+    targets: Vec<state::WhisperEntry>,
+) -> Result<bool, String> {
+    state.whisper_register(slot, targets).await
+}
+
+/// Stop whispering (whisper key up).
+#[tauri::command]
+pub(crate) async fn whisper_end(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.whisper_end().await
+}
+
+/// Whether a whisper is in progress, for a view that mounted after the key
+/// went down.
+#[tauri::command]
+pub(crate) fn get_whisper_active(state: tauri::State<'_, AppState>) -> bool {
+    state.whisper_active()
+}
+
+/// Channels the server currently refuses whispers into.
+#[tauri::command]
+pub(crate) fn get_whisper_denials(state: tauri::State<'_, AppState>) -> Vec<u32> {
+    state.whisper_denials()
+}
+
 /// Set the local playback volume for a specific remote user.
 ///
 /// `volume` is a multiplier (0.0 = muted, 1.0 = normal, 2.0 = 200%).

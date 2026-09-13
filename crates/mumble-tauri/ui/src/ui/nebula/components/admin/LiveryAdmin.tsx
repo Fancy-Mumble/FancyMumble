@@ -148,8 +148,24 @@ const CARD_COLUMN = { display: "flex", flexDirection: "column", boxSizing: "bord
 /** Characters as the *server* counts them - code points, not UTF-16 units. */
 const used = (value: string | undefined) => [...(value ?? "")].length;
 
+/** Who the connect preview greets when this session has no name to lend it. */
+const STAND_IN_NAMES = [
+  "Captain Crackle",
+  "Sir Talksalot",
+  "Lady Latency",
+  "Pushy McPushtotalk",
+  "Echo Chamberlain",
+  "Duke of Decibels",
+  "Muted Marvin",
+  "Baron von Bitrate",
+];
+const pickStandIn = () => STAND_IN_NAMES[Math.floor(Math.random() * STAND_IN_NAMES.length)];
+
 export function LiveryAdmin() {
   const { t } = useTranslation("settings");
+  // The preview's connect button reads as the operator's own, where we know it.
+  const ownName = useAppStore((state) => state.users.find((user) => user.session === state.ownSession)?.name);
+  const [standIn] = useState(pickStandIn);
 
   // Only the artwork routes need these, and only when one is replaced. Both
   // are filled automatically by a ticket where the session allows it; the
@@ -472,7 +488,7 @@ export function LiveryAdmin() {
           <Stack direction="row" alignItems="baseline" gap={1} sx={{ mt: "22px", mb: "10px" }}>
             <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{t("livery.tags", "Tags")}</Typography>
             <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })}>
-              {tags.length} of {LIMITS.tags}
+              {t("livery.tagsCount", { count: tags.length, max: LIMITS.tags })}
             </Typography>
           </Stack>
 
@@ -1292,7 +1308,7 @@ export function LiveryAdmin() {
                   background: auraFrom ? `linear-gradient(90deg,${auraFrom},${auraTo})` : shownAccent,
                 }}
               >
-                {t("livery.connectAs", "Connect as")} ZewiWin
+                {t("livery.connectAs", "Connect as")} {ownName || standIn}
               </Box>
             </Box>
           </Box>

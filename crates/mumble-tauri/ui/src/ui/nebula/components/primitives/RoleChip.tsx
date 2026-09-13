@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { Box, alpha } from "@mui/material";
+import { Box } from "@mui/material";
+import { safeRoleColor } from "@core/features/roster/roles";
 import { textureToDataUrl } from "@core/profileFormat";
 import { radius } from "../../tokens";
 
@@ -29,10 +30,15 @@ const SIZES = {
  * raw: a fill at full strength on a Nebula card is a slab, and role colours are
  * chosen against a dark chat list rather than against this scheme. Uncoloured
  * roles fall back to the neutral chip, never to a made-up hue.
+ *
+ * Mixed in CSS rather than with MUI's `alpha()`: the colour can be anything a
+ * server stored, and `alpha()` throws on a named colour and garbles a short or
+ * half-typed hex - a single such role took down every surface listing it.
  */
 export function RoleChip({ name, color, icon, size = "medium", title, onClick }: RoleChipProps) {
   const iconSrc = useMemo(() => (icon && icon.length > 0 ? textureToDataUrl(icon) : null), [icon]);
   const step = SIZES[size];
+  const tint = safeRoleColor(color);
 
   return (
     <Box
@@ -56,9 +62,9 @@ export function RoleChip({ name, color, icon, size = "medium", title, onClick }:
           fontWeight: 600,
           lineHeight: 1.2,
           ...step,
-          color: color ?? nebula.text,
-          background: color ? alpha(color, 0.18) : nebula.card2,
-          border: `var(--nebula-line-width, 1px) solid ${color ? alpha(color, 0.5) : "transparent"}`,
+          color: tint ?? nebula.text,
+          background: tint ? `color-mix(in srgb, ${tint} 18%, transparent)` : nebula.card2,
+          border: `var(--nebula-line-width, 1px) solid ${tint ? `color-mix(in srgb, ${tint} 50%, transparent)` : "transparent"}`,
         };
       }}
     >

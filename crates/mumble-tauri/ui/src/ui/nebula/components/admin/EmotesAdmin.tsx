@@ -111,7 +111,7 @@ export function EmotesAdmin() {
           label={t("emotes.fieldDescription")}
           value={description}
           onChange={setDescription}
-          placeholder="(optional)"
+          placeholder={t("common:actions.optional")}
         />
         <Typography sx={{ fontSize: 12, fontWeight: 600, mb: "7px" }}>{t("emotes.fieldImage")}</Typography>
         <Stack direction="row" alignItems="center" gap={1.25}>

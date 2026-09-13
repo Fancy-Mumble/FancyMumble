@@ -79,7 +79,8 @@
     "onlineMembers": "Online members",
     "channelMembers": "Members in this channel",
     "gone": "This person is no longer connected.",
-    "empty": "No one here."
+    "empty": "No one here.",
+    "overflow": "+{{count}} more"
   },
   "menu": {
     "reactWith": "React with {{emoji}}",
@@ -94,7 +95,9 @@
     "editMessage": "Edit message",
     "editHint": "Enter saves · Esc cancels",
     "replyToMessage": "Reply to message",
-    "pinMessage": "Pin message"
+    "pinMessage": "Pin message",
+    "legacyHint": "Sent from a client without this channel's encryption, so the server saw it in plain text.",
+    "unreadRule": "NEW"
   },
   "channelInfo": {
     "close": "Close channel info",
@@ -237,7 +240,9 @@
     "resizeHint": "Drag to change how much room the stage takes. Double-click to reset.",
     "someone": "Someone",
     "you": "You",
-    "on": "On"
+    "on": "On",
+    "routeRelayed": "Relayed by the server",
+    "routeP2P": "Peer-to-peer, viewers connect to you directly"
   },
   "dock": {
     "pause": "Pause",
@@ -281,5 +286,40 @@
     "micMuted": "Mic muted",
     "speaking": "{{name}} speaking · {{count}} connected",
     "voiceActive": "Voice active"
+  },
+  "scheduled": {
+    "to": "To {{channels}}",
+    "hint": "The server sends it at that time, whether or not you are still connected.",
+    "plaintextWarning": "This channel is end-to-end encrypted, but a scheduled message is stored and sent by the server as plain text."
+  },
+  "calendar": {
+    "meetingDetails": "Meeting details",
+    "viewLabel": "Calendar view",
+    "more": "+{{count}} more",
+    "join": "Join meeting",
+    "copyLink": "Copy invite link",
+    "linkCopied": "Link copied",
+    "when": "When",
+    "start": "Starts",
+    "end": "Ends",
+    "repeats": "Repeats",
+    "noInvitees": "Nobody invited yet",
+    "workDays": "Work days",
+    "status": {
+      "invited": "Invited",
+      "accepted": "Accepted",
+      "tentative": "Tentative",
+      "declined": "Declined"
+    },
+    "delete": {
+      "title": "Delete “{{title}}”?",
+      "body": "It is removed from your calendar.",
+      "bodyShared": "It is removed from your calendar and from everyone you invited."
+    },
+    "notice": {
+      "upcoming": "Upcoming meeting",
+      "inRoom": "You are in the meeting room",
+      "details": "Details"
+    }
   }
 }

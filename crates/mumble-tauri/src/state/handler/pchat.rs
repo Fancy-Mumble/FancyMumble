@@ -212,8 +212,8 @@ impl HandleMessage for mumble_tcp::PchatAck {
                 Ok(mut state) => std::mem::take(&mut state.pchat_ctx.pending_delete_acks),
                 _ => Vec::new(),
             };
-            for tx in senders {
-                let _ = tx.send(crate::state::types::DeleteAckResult {
+            for pending in senders {
+                let _ = pending.tx.send(crate::state::types::DeleteAckResult {
                     success: is_deleted,
                     reason: self.reason.clone(),
                 });
@@ -362,6 +362,30 @@ impl HandleMessage for mumble_tcp::PchatDeleteMessages {
         debug!("received PchatDeleteMessages");
         let channel_id = self.channel_id.unwrap_or(0);
         pchat::handle_proto_delete_messages(&ctx.shared, self);
+
+        // Starling confirms a delete by relaying it back to the deleter.
+        let confirmed = match ctx.shared.lock() {
+            Ok(mut state) => {
+                let (done, waiting) = std::mem::take(&mut state.pchat_ctx.pending_delete_acks)
+                    .into_iter()
+                    .partition(|pending| {
+                        pending.channel_id == channel_id
+                            && pending
+                                .message_ids
+                                .iter()
+                                .all(|id| self.message_ids.contains(id))
+                    });
+                state.pchat_ctx.pending_delete_acks = waiting;
+                done
+            }
+            _ => Vec::new(),
+        };
+        for pending in confirmed {
+            let _ = pending.tx.send(crate::state::types::DeleteAckResult {
+                success: true,
+                reason: None,
+            });
+        }
         ctx.emit(
             "new-message",
             NewMessagePayload {

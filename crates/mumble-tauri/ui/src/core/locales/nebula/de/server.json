@@ -1,6 +1,9 @@
 ﻿{
   "panel": {
     "heading": "Serverinfo",
+    "online": "{{count}} online",
+    "kindFancy": "Fancy-Server",
+    "kindMumble": "Mumble-Server",
     "activityLog": "Aktivitätsprotokoll",
     "noActivity": "Noch keine Aktivität",
     "audioTransport": "Audiotransport",

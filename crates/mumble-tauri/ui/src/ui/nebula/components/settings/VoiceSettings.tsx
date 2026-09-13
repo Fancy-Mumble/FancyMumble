@@ -579,6 +579,7 @@ function AudioStats() {
 }
 
 function StatsRow({ label, stats }: Readonly<{ label: string; stats: PacketStats }>) {
+  const { t } = useTranslation("nebulaSettings");
   const total = stats.good + stats.late + stats.lost;
   const loss = total > 0 ? ((stats.lost / total) * 100).toFixed(1) : "0.0";
   return (
@@ -590,7 +591,13 @@ function StatsRow({ label, stats }: Readonly<{ label: string; stats: PacketStats
     >
       <span>{label}</span>
       <span>
-        {stats.good} good · {stats.late} late · {stats.lost} lost ({loss}%) · {stats.resync} resync
+        {t("voice.packetStats", {
+          good: stats.good,
+          late: stats.late,
+          lost: stats.lost,
+          loss,
+          resync: stats.resync,
+        })}
       </span>
     </Stack>
   );

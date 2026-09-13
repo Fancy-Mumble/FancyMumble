@@ -36,6 +36,8 @@ export const NEBULA_NAMESPACES = [
   "nebulaUser",
   "nebulaServer",
   "nebulaSettings",
+  "nebulaWelcome",
+  "nebulaDesign",
 ] as const;
 
 /** Public list of namespaces shipped with the app. */
@@ -62,6 +64,8 @@ const NAMESPACE_SOURCES: Record<I18nNamespace, { group: string; file: string }> 
   nebulaUser: { group: "nebula", file: "user" },
   nebulaServer: { group: "nebula", file: "server" },
   nebulaSettings: { group: "nebula", file: "settings" },
+  nebulaWelcome: { group: "nebula", file: "welcome" },
+  nebulaDesign: { group: "nebula", file: "design" },
 };
 
 export const LANGUAGE_STORAGE_KEY = "mumble-language";

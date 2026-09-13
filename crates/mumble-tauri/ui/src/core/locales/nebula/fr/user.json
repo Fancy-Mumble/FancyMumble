@@ -92,7 +92,8 @@
     "none": "Aucun",
     "bansValue": "{{count}} · {{note}}",
     "percent": "{{value}} %",
-    "unknown": "—"
+    "unknown": "—",
+    "priority": "PRIORITAIRE"
   },
   "charts": {
     "roundTrip": "Aller-retour sur les {{seconds}} dernières secondes : UDP {{udp}} ms, TCP {{tcp}} ms, entre {{low}} et {{high}} ms",

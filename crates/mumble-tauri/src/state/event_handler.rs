@@ -190,6 +190,7 @@ impl EventHandler for TauriEventHandler {
             }
             let session = audio.sender_session;
             let is_terminator = audio.is_terminator;
+            let context = super::voice_decode::packet_context(audio);
 
             // e2e decoded-audio dump (no-op unless FANCY_E2E_AUDIO_DUMP_DIR is
             // set). Started here rather than at audio init because this is the
@@ -204,6 +205,7 @@ impl EventHandler for TauriEventHandler {
                 audio.frame_number,
                 &audio.opus_data,
                 is_terminator,
+                context,
             );
             self.inbound_audio_count += 1;
             if self.inbound_audio_count == 1 || self.inbound_audio_count.is_multiple_of(500) {
@@ -269,6 +271,14 @@ impl EventHandler for TauriEventHandler {
 
             if let Some(talking) = emit_action {
                 let _ = self.app.emit("user-talking", (session, talking));
+                // On the talking edge only: this path has nowhere to remember a
+                // mid-utterance change, and runs only with the decode thread
+                // switched off.
+                if talking {
+                    let _ = self
+                        .app
+                        .emit(super::voice_decode::VOICE_CONTEXT_EVENT, (session, context));
+                }
             }
         }
     }

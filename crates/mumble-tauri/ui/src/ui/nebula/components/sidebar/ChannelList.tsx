@@ -1,27 +1,33 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { Box, Tooltip, Typography } from "@mui/material";
+import { Box, Button, Tooltip, Typography } from "@mui/material";
 import { useTheme, type Theme } from "@mui/material/styles";
 import { chamferedSurface } from "../../theme";
 import { parseChannelDescription } from "@core/channelProfile";
 import { useChannelDescription } from "@core/lazyBlobs";
 import type { ChannelEntry, UserEntry } from "@core/types";
 import { TID } from "@core/testids";
-import { LockIcon, VolumeIcon } from "@ui/icons";
+import { GripVerticalIcon, ListenBadgeIcon, LockIcon, VolumeIcon } from "@ui/icons";
 import { isMobile } from "@core/utils/platform";
 import { PERM_MOVE } from "@core/utils/permissions";
 import { useCarryRoom, useCarryUser, useChannelDropTarget, type CarriedGhost } from "@ui/userCarry";
 import { byName, groupOccupants, type OrderedChannel } from "../../selectors";
+import { arrangeState, siblingBlocks, type ArrangeState } from "../../channelArrange";
+import { useChannelArrange, type ArrangeDrag } from "./useChannelArrange";
 import { useChannelViewer, type NebulaChannelViewer } from "../../useChannelViewer";
 import {
+  DmUnreadBadge,
   MakeRoom,
   PchatBadge,
+  RoleColorsContext,
+  useRoleColor,
   PriorityBadge,
   SectionLabel,
   StatusDot,
   TalkingBars,
   UserAvatar,
+  LiveBadge, VoiceContextBadge,
   VoiceStateBadges,
   Stack,
 } from "../primitives";
@@ -38,6 +44,10 @@ interface ChannelListProps {
   talkingSessions: ReadonlySet<number>;
   unreadCounts: Record<number, number>;
   ownSession: number | null;
+  /** Channels being listened to without being in them, each marked on its row. */
+  listenedChannels?: ReadonlySet<number>;
+  /** `user_id` to the colour their name is drawn in, from the server's roles. */
+  roleColors?: ReadonlyMap<number, string>;
   /**
    * Detached rooms - meetings and invitee-only rooms - which the tree above
    * deliberately never lists. Absent, or empty, and the section is not drawn.
@@ -51,7 +61,20 @@ interface ChannelListProps {
   onLeaveUser: () => void;
   /** Right-click on an occupant. Absent leaves the channel's own menu to answer. */
   onContextMenuUser?: (user: UserEntry, event: React.MouseEvent) => void;
+  /**
+   * Arrange mode: a drag on a row moves the channel among its siblings instead
+   * of carrying anyone, and the rows stop opening channels. Occupants and
+   * private rooms step out of the way, since neither can be arranged.
+   */
+  arranging?: boolean;
+  /** Put a channel in front of a sibling, or last among them for null. */
+  onArrange?: (channelId: number, beforeId: number | null) => void;
+  onDoneArranging?: () => void;
 }
+
+const nothing = () => {};
+const NO_CHANNELS: ReadonlySet<number> = new Set();
+const NO_COLORS: ReadonlyMap<number, string> = new Map();
 
 /**
  * The channel tree.
@@ -73,6 +96,8 @@ export function ChannelList({
   talkingSessions,
   unreadCounts,
   ownSession,
+  listenedChannels = NO_CHANNELS,
+  roleColors = NO_COLORS,
   privateRooms = [],
   onSelect,
   onJoin,
@@ -81,8 +106,25 @@ export function ChannelList({
   onHoverUser,
   onLeaveUser,
   onContextMenuUser,
+  arranging = false,
+  onArrange = nothing,
+  onDoneArranging = nothing,
 }: Readonly<ChannelListProps>) {
   const { t } = useTranslation("nebulaSidebar");
+  const arrange = useChannelArrange({
+    entries: channels,
+    enabled: arranging,
+    onMove: onArrange,
+    onDone: onDoneArranging,
+  });
+  const draggedId = arrange.drag?.channelId ?? null;
+  // The carried channel and everything under it, which go faint together:
+  // they are what moves.
+  const lifted = useMemo(() => {
+    if (draggedId === null) return null;
+    const block = siblingBlocks(channels, draggedId).find((candidate) => candidate.channelId === draggedId);
+    return new Set(block ? channels.slice(block.first, block.last + 1).map((entry) => entry.channel.id) : []);
+  }, [channels, draggedId]);
   const occupantsByChannel = useMemo(() => groupOccupants(users), [users]);
   // Ranked the way the lists themselves are, which is what says where somebody
   // carried into a channel will sit once they are in it.
@@ -92,6 +134,11 @@ export function ChannelList({
   const row = (entry: OrderedChannel) => (
     <ChannelRow
       key={entry.channel.id}
+      arranging={arranging}
+      arrangeable={arranging ? arrangeState(channels, entry.channel) : null}
+      lifted={lifted?.has(entry.channel.id) ?? false}
+      registerArrangeRow={arrange.registerRow}
+      beginArrange={arrange.beginGesture}
       channel={entry.channel}
       depth={entry.depth}
       viewer={viewer}
@@ -100,6 +147,7 @@ export function ChannelList({
       occupants={occupantsByChannel.get(entry.channel.id) ?? []}
       roster={roster}
       unread={unreadCounts[entry.channel.id] ?? 0}
+      listening={listenedChannels.has(entry.channel.id)}
       ownSession={ownSession}
       talkingSessions={talkingSessions}
       onSelect={onSelect}
@@ -113,9 +161,12 @@ export function ChannelList({
   );
 
   return (
+    <RoleColorsContext.Provider value={roleColors}>
     <Box
       component="ul"
+      ref={arrange.listRef}
       sx={{
+        userSelect: arranging ? "none" : undefined,
         flex: 1,
         overflowY: "auto",
         overflowX: "hidden",
@@ -130,7 +181,8 @@ export function ChannelList({
     >
       {/* Labelled only when there is a second group to tell it apart from. One
           list needs no heading saying what it is. */}
-      {privateRooms.length > 0 && (
+      {arranging && <ArrangeBar onDone={onDoneArranging} />}
+      {!arranging && privateRooms.length > 0 && (
         <>
           <GroupLabel>{t("channels.privateRooms")}</GroupLabel>
           {privateRooms.map((channel) => row({ channel, depth: 0 }))}
@@ -138,7 +190,15 @@ export function ChannelList({
         </>
       )}
       {channels.map((entry) => row(entry))}
+      {arrange.drag && (
+        <ArrangeOverlay
+          drag={arrange.drag}
+          ghostRef={arrange.ghostRef}
+          channel={channels.find((entry) => entry.channel.id === draggedId)?.channel}
+        />
+      )}
     </Box>
+    </RoleColorsContext.Provider>
   );
 }
 
@@ -224,6 +284,15 @@ function selectionStyle(theme: Theme, selected: boolean) {
 }
 
 interface ChannelRowProps {
+  arranging: boolean;
+  /** Whether this row can be picked up in arrange mode, and why not; null outside it. */
+  arrangeable: ArrangeState | null;
+  /** Part of the channel being dragged, which fades while it is in the air. */
+  lifted: boolean;
+  registerArrangeRow: (channelId: number, element: HTMLElement | null) => void;
+  beginArrange: (
+    channelId: number,
+  ) => (event: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>) => void;
   channel: ChannelEntry;
   depth: number;
   viewer: NebulaChannelViewer;
@@ -233,6 +302,8 @@ interface ChannelRowProps {
   /** Everyone on the server, in the order a channel would list them. */
   roster: readonly UserEntry[];
   unread: number;
+  /** Listened to from outside it, which the row marks. */
+  listening: boolean;
   ownSession: number | null;
   talkingSessions: ReadonlySet<number>;
   onSelect: (channel: ChannelEntry) => void;
@@ -245,6 +316,11 @@ interface ChannelRowProps {
 }
 
 function ChannelRow({
+  arranging,
+  arrangeable: arrangeState,
+  lifted,
+  registerArrangeRow,
+  beginArrange,
   channel,
   depth,
   viewer,
@@ -253,6 +329,7 @@ function ChannelRow({
   occupants,
   roster,
   unread,
+  listening,
   ownSession,
   talkingSessions,
   onSelect,
@@ -276,7 +353,7 @@ function ChannelRow({
   const plated = skin.chrome === "stencil";
   // The faces belong on the row itself, so a channel whose people are drawn
   // there has nothing left to nest underneath it.
-  const stacked = viewer === "modern" && occupants.length > 0;
+  const stacked = !arranging && viewer === "modern" && occupants.length > 0;
   // Somewhere a carried user can be dropped, and the seat that opens in the
   // list below when the pointer is over it.
   const drop = useChannelDropTarget(channel.id);
@@ -284,13 +361,38 @@ function ChannelRow({
   // Carrying somebody else out of this channel is a moderator's move; your own
   // row is yours to carry wherever you are allowed to go.
   const canMove = ((channel.permissions ?? 0) & PERM_MOVE) !== 0;
+  const arrangeable = arrangeState === "movable";
+  // One element answers both for where a carried user lands and for where a
+  // dragged channel's block starts and ends.
+  const dropRef = drop.ref;
+  const rowRef = useCallback(
+    (element: HTMLElement | null) => {
+      dropRef(element);
+      registerArrangeRow(channel.id, element);
+    },
+    [dropRef, registerArrangeRow, channel.id],
+  );
 
   return (
     <Box
       component="li"
-      ref={drop.ref}
+      ref={rowRef}
+      // The whole element is the handle while arranging, card and padding
+      // included, not just the line with the name on it.
+      onPointerDown={arrangeable ? beginArrange(channel.id) : undefined}
+      onMouseDown={arrangeable ? beginArrange(channel.id) : undefined}
+      // A row without a handle says why, rather than looking broken.
+      title={
+        arrangeState === "alone"
+          ? t("channels.arrangeAlone")
+          : arrangeState === "denied"
+            ? t("channels.arrangeDenied")
+            : undefined
+      }
+      style={arranging ? { cursor: arrangeable ? "grab" : "default", touchAction: arrangeable ? "none" : undefined } : undefined}
       sx={(theme) => ({
         ml: `${depth * 12}px`,
+        opacity: lifted ? 0.35 : 1,
         borderRadius: radius("md"),
         // The channel a carried user would land in says so itself, rather than
         // leaving the ghost under the pointer to be read as the answer.
@@ -318,9 +420,12 @@ function ChannelRow({
         data-channel-id={channel.id}
         data-channel-name={channel.name}
         data-joined={joined ? "true" : undefined}
-        onClick={() => onSelect(channel)}
-        onDoubleClick={joined ? undefined : () => onJoin(channel)}
+        data-arrangeable={arrangeable ? "true" : undefined}
+        onClick={arranging ? undefined : () => onSelect(channel)}
+        onDoubleClick={joined || arranging ? undefined : () => onJoin(channel)}
         onContextMenu={(event) => onContextMenu(channel, event)}
+        // Inline, so it wins over the pointer cursor either row shape sets.
+        style={arranging ? { cursor: arrangeable ? "grab" : "default" } : undefined}
         sx={(theme) =>
           joined && !plated
             ? {
@@ -358,6 +463,7 @@ function ChannelRow({
               }
         }
       >
+        {arranging && <ArrangeGrip shown={arrangeable} />}
         <ChannelGlyph channel={channel} active={joined || selected} filled={filled} />
         <Typography sx={{ fontSize: 12.5, fontWeight: joined ? 600 : 400 }} noWrap>
           {channel.name}
@@ -366,7 +472,11 @@ function ChannelRow({
             belongs on the row rather than only on the channel once opened:
             picking which room to speak in is exactly when it matters. */}
         <PchatBadge protocol={channel.pchat_protocol} />
+        {listening && <ListenMark />}
         {stacked && <StackedOccupants occupants={occupants} talkingSessions={talkingSessions} />}
+        {/* Faces carry no badges, so a room drawn as a stack says it has
+            someone sharing on the row itself, as Standard's icon list does. */}
+        {stacked && <LiveBadge sessions={occupants.map((occupant) => occupant.session)} />}
         {joined ? (
           <Stack
             direction="row"
@@ -380,7 +490,7 @@ function ChannelRow({
         ) : (
           <Stack direction="row" alignItems="center" gap={0.75} sx={{ ml: "auto" }}>
             {unread > 0 && <StatusDot status="online" size={5} />}
-            {channel.user_count > 0 && (
+            {!arranging && channel.user_count > 0 && (
               <Tooltip title={t("channels.inVoice", { count: channel.user_count })}>
                 <Box
                   component="span"
@@ -403,7 +513,7 @@ function ChannelRow({
         )}
       </Stack>
 
-      {!stacked && occupants.length > 0 && (
+      {!arranging && !stacked && occupants.length > 0 && (
         <Stack
           sx={{
             px: joined ? "8px" : "11px",
@@ -510,9 +620,11 @@ function OccupantRow({
   onLeave,
   onContextMenu,
 }: Readonly<OccupantRowProps>) {
+  const { t } = useTranslation("nebulaSidebar");
   // Your own row goes wherever you may go; anyone else's needs the permission
   // to move them. Touch has no cursor to carry anything with.
   const carry = useCarryUser(user.session, isMobile || (!own && !canMove));
+  const nameColor = useRoleColor(user.user_id);
 
   return (
     <Stack
@@ -549,11 +661,14 @@ function OccupantRow({
         size={20}
         talking={talking}
       />
-      <Typography sx={{ fontSize: 12.5 }} noWrap>
+      <Typography sx={{ fontSize: 12.5, color: nameColor ?? "inherit" }} noWrap>
         {user.name}
       </Typography>
       <PriorityBadge user={user} />
       <VoiceStateBadges user={user} />
+      <LiveBadge session={user.session} />
+      <VoiceContextBadge session={user.session} />
+      {!own && <DmUnreadBadge session={user.session} />}
       {own ? (
         <Typography
           sx={(theme) => ({
@@ -563,7 +678,7 @@ function OccupantRow({
             color: theme.palette.nebula.dim,
           })}
         >
-          you
+          {t("channels.you")}
         </Typography>
       ) : (
         <Box sx={{ ml: "auto", display: "flex" }}>
@@ -679,3 +794,153 @@ function CarriedUser({
   );
 }
 
+
+/**
+ * Pinned over the list while it is being arranged: says what a drag does now,
+ * since the same gesture carries users the rest of the time, and is the
+ * obvious way back out.
+ */
+function ArrangeBar({ onDone }: Readonly<{ onDone: () => void }>) {
+  const { t } = useTranslation("nebulaSidebar");
+  return (
+    <Box
+      component="li"
+      data-testid={TID.channelArrangeBar}
+      sx={(theme) => ({
+        // The list's own padding is 8px; pinned at -8px it sits flush with the
+        // top edge instead of letting rows scroll through the gap above it.
+        position: "sticky",
+        top: "-8px",
+        zIndex: 1,
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+        mb: "4px",
+        pl: "10px",
+        pr: "4px",
+        py: "4px",
+        borderRadius: radius("md"),
+        background: theme.palette.nebula.bg0,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accentLine}`,
+        color: theme.palette.nebula.muted,
+      })}
+    >
+      <GripVerticalIcon width={12} height={12} aria-hidden />
+      <Typography sx={{ flex: 1, minWidth: 0, fontSize: 11.5 }}>{t("channels.arrangeHint")}</Typography>
+      <Button size="small" onClick={onDone} data-testid={TID.channelArrangeDone} sx={{ minWidth: 0, flex: "none" }}>
+        {t("channels.arrangeDone")}
+      </Button>
+    </Box>
+  );
+}
+
+/** The handle a row is picked up by; a row that cannot move keeps the space. */
+function ArrangeGrip({ shown }: Readonly<{ shown: boolean }>) {
+  return (
+    <Box
+      component="span"
+      aria-hidden
+      sx={(theme) => ({
+        display: "flex",
+        flex: "none",
+        width: 12,
+        color: theme.palette.nebula.dim,
+        visibility: shown ? "visible" : "hidden",
+      })}
+    >
+      <GripVerticalIcon width={12} height={12} />
+    </Box>
+  );
+}
+
+/**
+ * The channel in the air and where it would land.
+ *
+ * At the document root for the same reason as a carried user: the list clips
+ * what overflows it. The ghost is moved by the gesture directly rather than by
+ * a render per pointer frame.
+ */
+function ArrangeOverlay({
+  drag,
+  ghostRef,
+  channel,
+}: Readonly<{
+  drag: ArrangeDrag;
+  ghostRef: React.MutableRefObject<HTMLElement | null>;
+  channel: ChannelEntry | undefined;
+}>) {
+  return createPortal(
+    <>
+      <Box
+        aria-hidden
+        ref={ghostRef as React.MutableRefObject<HTMLDivElement | null>}
+        sx={(theme) => ({
+          position: "fixed",
+          left: drag.ghost.left,
+          top: drag.ghost.top,
+          width: drag.ghost.width,
+          height: drag.ghost.height,
+          display: "flex",
+          alignItems: "center",
+          gap: "9px",
+          px: "12px",
+          boxSizing: "border-box",
+          pointerEvents: "none",
+          zIndex: 1400,
+          borderRadius: radius("md"),
+          background: theme.palette.nebula.bg0,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accentLine}`,
+          boxShadow: "0 10px 24px rgba(2,6,18,.5)",
+          color: theme.palette.nebula.text,
+        })}
+      >
+        <GripVerticalIcon width={12} height={12} />
+        <Typography sx={{ fontSize: 12.5 }} noWrap>
+          {channel?.name}
+        </Typography>
+      </Box>
+      {drag.line && (
+        <Box
+          aria-hidden
+          data-testid={TID.channelArrangeMark}
+          sx={(theme) => ({
+            position: "fixed",
+            left: drag.line!.left,
+            top: drag.line!.top - 1,
+            width: drag.line!.width,
+            height: 2,
+            borderRadius: "1px",
+            pointerEvents: "none",
+            zIndex: 1400,
+            background: theme.palette.nebula.accent,
+            boxShadow: `0 0 6px ${theme.palette.nebula.accentLine}`,
+          })}
+        />
+      )}
+    </>,
+    document.body,
+  );
+}
+
+/**
+ * Listening to a channel from outside it.
+ *
+ * The listen toggle lives in the channel's menu; without a mark on the row
+ * there was no telling which rooms were being heard until one spoke.
+ */
+function ListenMark() {
+  const { t } = useTranslation("sidebar");
+  return (
+    <Tooltip title={t("channelList.listening")}>
+      <Box
+        component="span"
+        role="img"
+        aria-label={t("channelList.listening")}
+        data-listening=""
+        sx={(theme) => ({ display: "flex", flex: "none", color: theme.palette.nebula.accent })}
+      >
+        <ListenBadgeIcon width={12} height={12} />
+      </Box>
+    </Tooltip>
+  );
+}

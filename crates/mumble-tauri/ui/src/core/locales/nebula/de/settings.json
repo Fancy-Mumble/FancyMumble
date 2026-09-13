@@ -124,7 +124,12 @@
     "explainerBefore": "Die Übertragung startet oberhalb von",
     "explainerMiddle": "und stoppt unterhalb von",
     "explainerAfter": ", sodass eine Pause zwischen Wörtern dich nicht abschneidet.",
-    "replayHint": "Nimm bis zu {{seconds}} s durch dieselben Filter auf, die deine Zuhörer bekommen, und spiel es dann ab."
+    "replayHint": "Nimm bis zu {{seconds}} s durch dieselben Filter auf, die deine Zuhörer bekommen, und spiel es dann ab.",
+    "readoutThreshold": "Schwelle {{value}}%",
+    "readoutClose": "Schließen {{value}}%",
+    "readoutHold_one": "Halten {{count}} Frame",
+    "readoutHold_other": "Halten {{count}} Frames",
+    "readoutMaxGain": "max. Verstärkung {{value}} dB"
   },
   "voice": {
     "activationVoice": "Sprachaktivierung",
@@ -172,7 +177,8 @@
     "legacyBackendHint": "Wechsle zum alten cpal-Backend, falls sich das Standard-Backend rodio danebenbenimmt. Wird beim nächsten Sprach-Umschalten wirksam.",
     "audioStatistics": "Audiostatistik",
     "toClient": "Zum Client",
-    "fromClient": "Vom Client"
+    "fromClient": "Vom Client",
+    "packetStats": "{{good}} gut · {{late}} verspätet · {{lost}} verloren ({{loss}}%) · {{resync}} Resync"
   },
   "profile": {
     "pageHint": "Alles auf einer Seite — jede Zeile zeigt deine aktuelle Wahl; „Ändern“ öffnet genau diesen Abschnitt.",
@@ -193,6 +199,10 @@
     "image": "Bild",
     "bannerColour": "Bannerfarbe",
     "removeBanner": "Banner entfernen",
+    "gif": "GIF",
+    "chooseAvatarGif": "Animierten Avatar wählen",
+    "chooseBannerGif": "Animiertes Banner wählen",
+    "gifFailed": "Dieses GIF konnte nicht heruntergeladen werden.",
     "cardStyle": "Kartenstil",
     "cardStyleHint": "Zuerst die Farben: Alles andere auf der Karte übernimmt seinen Verlauf von ihnen.",
     "cardColours": "Kartenfarben",
@@ -319,5 +329,43 @@
     "contentFailed": "Inhalt: die Seite konnte ihre Daten nicht lesen",
     "contentDisconnected": "Inhalt: nichts - nicht mit einem Server verbunden",
     "contentDrawing": "Inhalt: {{count}} im Kanal"
+  },
+  "notepad": {
+    "title": "Notizblock",
+    "hint": "Deine privaten Notizen. Sie erscheinen unter Freunde als du selbst.",
+    "location": "Gespeichert auf",
+    "thisDevice": "Nur dieses Gerät",
+    "loginLabel": "{{server}} als {{name}}",
+    "placeDevice": "diesem Gerät",
+    "encryption": "Verschlüsselung",
+    "protocolSignal": "Signal",
+    "protocolFancy": "Fancy-Archiv",
+    "protocolServer": "Serverseitig",
+    "localHint": "Mit dem Schlüssel dieses Geräts verschlüsselt. Verlässt dieses Gerät nie.",
+    "signalHint": "Ende-zu-Ende-verschlüsselt. Der Server behält keine Kopie, die Notizen liegen nur auf den Geräten, die sie geschrieben haben.",
+    "fancyHint": "Ende-zu-Ende-verschlüsselt und auf dem Server gespeichert, damit alle deine Geräte sie lesen können.",
+    "serverHint": "Auf dem Server gespeichert, der sie lesen kann. Nicht Ende-zu-Ende-verschlüsselt.",
+    "changeTitle": "Damit beginnt ein neuer Notizblock",
+    "changeBody": "Deine bisherigen Notizen bleiben, wo sie sind, außer du wählst etwas anderes.",
+    "copyOld": "Meine Notizen nach {{place}} kopieren",
+    "copyHint": "Kopierte Notizen werden neu gesendet und tragen daher die heutige Zeit.",
+    "deleteOld": "Meine Notizen von {{place}} löschen",
+    "deleteWarning": "Ohne vorheriges Kopieren sind gelöschte Notizen endgültig weg.",
+    "needsConnection": "Verbinde dich mit {{server}}, um dort Notizen zu kopieren oder zu löschen.",
+    "apply": "Notizblock wechseln",
+    "cancel": "Beibehalten",
+    "progressReading": "Notizen werden gelesen… {{done}}",
+    "progressCopying": "{{done}} von {{total}} werden kopiert…",
+    "progressDeleting": "{{done}} von {{total}} werden gelöscht…",
+    "done": "Gewechselt. {{copied}} kopiert, {{deleted}} gelöscht.",
+    "skipped": "{{count}} Notizen hatten keine ID und wurden nicht gelöscht.",
+    "errors": {
+      "notConnected": "Verbinde dich zuerst mit diesem Server.",
+      "notRegistered": "Ein Notizblock auf einem Server braucht dort ein registriertes Konto.",
+      "protocolUnsupported": "Dieser Server kann noch keinen Notizblock mit dieser Verschlüsselung anlegen. Es wurde nichts geändert.",
+      "readFailed": "Deine Notizen konnten nicht gelesen werden: {{detail}}",
+      "copyFailed": "Kopieren abgebrochen: {{detail}}. Es wurde nichts gelöscht.",
+      "deleteFailed": "Löschen abgebrochen: {{detail}}"
+    }
   }
 }

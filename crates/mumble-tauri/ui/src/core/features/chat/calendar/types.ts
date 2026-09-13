@@ -130,5 +130,15 @@ export const CALENDAR_COLORS: readonly string[] = [
   "#8e8e93",
 ];
 
+/** Dispatched on `globalThis` as each reminder fires, so a pack can show the
+ *  meeting it belongs to and the sound cue can play. */
+export const EVT_CALENDAR_REMINDER = "fancy:calendar-reminder";
+
+export interface CalendarReminderDetail {
+  readonly eventId: string;
+  /** Start of the occurrence being announced (UTC ms). */
+  readonly occStart: number;
+}
+
 /** Reminder offsets offered in the dropdown (minutes; `null` = none). */
 export const REMINDER_OPTIONS: readonly ReminderMinutes[] = [null, 0, 5, 10, 15, 30, 60, 120, 1440];

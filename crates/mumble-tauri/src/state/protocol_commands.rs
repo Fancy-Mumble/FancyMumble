@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 use super::AppState;
 use super::preview_cache::{self, CachedHit};
-use super::types::DeleteAckResult;
+use super::types::{DeleteAckResult, PendingDeleteAck};
 
 /// Parameters for a single drawing-stroke packet sent to the server.
 ///
@@ -701,7 +701,11 @@ impl AppState {
             let h = state.conn.client_handle.clone().ok_or("Not connected")?;
 
             let (tx, rx) = tokio::sync::oneshot::channel::<DeleteAckResult>();
-            state.pchat_ctx.pending_delete_acks.push(tx);
+            state.pchat_ctx.pending_delete_acks.push(PendingDeleteAck {
+                channel_id,
+                message_ids: message_ids.clone(),
+                tx,
+            });
             (h, rx)
         };
 
@@ -736,5 +740,17 @@ impl AppState {
             Ok(Err(_)) => Err("Delete acknowledgement channel closed".to_string()),
             Err(_) => Err("Delete request timed out".to_string()),
         }
+    }
+
+    /// Forget messages this device holds for a channel without asking the
+    /// server. A `SignalV1` channel keeps no server-side copy, so there is
+    /// nothing there to delete and nobody to ask.
+    pub fn forget_local_messages(&self, channel_id: u32, message_ids: Vec<String>) {
+        let message = mumble_tcp::PchatDeleteMessages {
+            channel_id: Some(channel_id),
+            message_ids,
+            ..Default::default()
+        };
+        crate::state::pchat::handle_proto_delete_messages(&self.inner.snapshot(), &message);
     }
 }

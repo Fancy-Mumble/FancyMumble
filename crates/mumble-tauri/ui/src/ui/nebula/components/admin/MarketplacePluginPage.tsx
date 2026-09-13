@@ -574,7 +574,7 @@ export function MarketplacePluginPage({
                             component="span"
                             sx={(theme) => ({ fontSize: 9.5, color: theme.palette.nebula.bad })}
                           >
-                            yanked
+                            {t("marketplace.yanked")}
                           </Box>
                         )}
                       </Stack>
@@ -596,7 +596,7 @@ export function MarketplacePluginPage({
                         flexWrap="wrap"
                         sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.muted })}
                       >
-                        {version.min_server_version && <span>server ≥ {version.min_server_version}</span>}
+                        {version.min_server_version && <span>{t("marketplace.minServer", { version: version.min_server_version })}</span>}
                         {version.min_fancy_server_version && (
                           <span>
                             {t("marketplace.minFancyServer", {

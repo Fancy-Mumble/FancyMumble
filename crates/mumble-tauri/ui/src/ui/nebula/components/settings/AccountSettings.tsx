@@ -126,7 +126,7 @@ export function AccountSettings() {
         {queryError && (
           <Banner tone="warn" title={errorText(tDynamic, queryError)}>
             <Button variant="outlined" size="small" onClick={() => void query()}>
-              {tDynamic("common:retry")}
+              {tDynamic("common:actions.retry")}
             </Button>
           </Banner>
         )}

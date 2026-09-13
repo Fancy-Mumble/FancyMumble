@@ -11,10 +11,16 @@ import { describe as suite, expect, it } from "vitest";
 import { welcomeSpec } from "../welcome/spec";
 import { onboardingSpec } from "../onboarding/spec";
 import type { GraphNode, NodeSpec } from "./index";
+import { useTranslation } from "react-i18next";
+import type { Say } from "../welcome/model";
+
+/** The suite-wide mock answers from the English catalogue, so assertions stay in English. */
+const say = useTranslation("nebulaWelcome").t as Say;
+const welcome = welcomeSpec(say);
 
 /** Both dialects, with the onboarding one handed a translator that says the key. */
 const SPECS: readonly [string, NodeSpec<never>][] = [
-  ["welcome", welcomeSpec as unknown as NodeSpec<never>],
+  ["welcome", welcome as unknown as NodeSpec<never>],
   ["onboarding", onboardingSpec((key) => key) as unknown as NodeSpec<never>],
 ];
 
@@ -61,7 +67,7 @@ suite("block browser", () => {
     it("offers each gate as its own block, already set to that operator", () => {
       // The point of the seven: an operator searches for XOR rather than
       // adding a "logic gate" and then reading a dropdown.
-      const gates = welcomeSpec.blocks.filter((block) => block.id.startsWith("gate:"));
+      const gates = welcome.blocks.filter((block) => block.id.startsWith("gate:"));
       expect(gates.map((block) => block.label)).toEqual(["AND", "OR", "XOR", "NAND", "NOR", "XNOR", "NOT"]);
       for (const block of gates) {
         const node = block.create(0, 0);
@@ -71,7 +77,7 @@ suite("block browser", () => {
     });
 
     it("gives NOT one input where the rest take two", () => {
-      const inputs = (id: string) => welcomeSpec.blocks.find((block) => block.id === id)?.inputs.length;
+      const inputs = (id: string) => welcome.blocks.find((block) => block.id === id)?.inputs.length;
       expect(inputs("gate:not")).toBe(1);
       expect(inputs("gate:xnor")).toBe(2);
     });
@@ -79,10 +85,10 @@ suite("block browser", () => {
     it("names a port the same as the port it stands for", () => {
       // Only where the block names one at all: a node with a single output
       // calls it nothing, and the card prints just what it carries.
-      for (const block of welcomeSpec.blocks) {
+      for (const block of welcome.blocks) {
         if (block.dynamicPorts) continue;
         const node = block.create(0, 0);
-        const ports = welcomeSpec.inputs(node);
+        const ports = welcome.inputs(node);
         block.inputs.forEach((summary, index) => {
           if (summary.name) expect(summary.name.toLowerCase()).toBe(ports[index]);
         });
@@ -90,10 +96,10 @@ suite("block browser", () => {
     });
 
     it("files the message blocks apart from the conditions and the logic", () => {
-      const categories = new Set(welcomeSpec.blocks.map((block) => block.category));
+      const categories = new Set(welcome.blocks.map((block) => block.category));
       expect(categories.size).toBe(3);
-      const greeting = welcomeSpec.blocks.find((block) => block.id === "greeting");
-      const country = welcomeSpec.blocks.find((block) => block.id === "country");
+      const greeting = welcome.blocks.find((block) => block.id === "greeting");
+      const country = welcome.blocks.find((block) => block.id === "country");
       expect(greeting?.category).not.toBe(country?.category);
     });
   });

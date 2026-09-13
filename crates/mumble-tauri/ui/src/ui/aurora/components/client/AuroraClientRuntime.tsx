@@ -14,6 +14,11 @@ import {
   loadUserShortcuts,
   type JumpToUserDetail,
 } from "@core/features/settings/userShortcuts";
+import {
+  applyAllWhisperTargets,
+  loadWhisperTargets,
+  startWhisperSync,
+} from "@core/features/settings/whisperTargets";
 import { setKlipyApiKey } from "@core/features/chat/gif/klipyConfig";
 import type { AudioSettings, NotificationSoundSettings } from "@core/types";
 import { useVisualViewport } from "@ui/standard/hooks/useVisualViewport";
@@ -84,7 +89,14 @@ function AuroraClientRuntimeInner({ onOpenMarketplace }: { onOpenMarketplace: (p
     void loadUserShortcuts()
       .then(applyAllUserShortcuts)
       .catch((reason) => console.error("Aurora user shortcut bootstrap failed:", reason));
+    void loadWhisperTargets()
+      .then(applyAllWhisperTargets)
+      .catch((reason) => console.error("Aurora whisper shortcut bootstrap failed:", reason));
   }, []);
+
+  // Keeps every whisper target registered with the server ahead of its key,
+  // so a press only switches slots and its first syllable is not lost.
+  useEffect(() => startWhisperSync(), []);
 
   useEffect(() => {
     const update = (event: Event) =>

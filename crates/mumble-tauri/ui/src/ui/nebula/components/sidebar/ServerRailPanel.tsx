@@ -532,7 +532,7 @@ export function ServerRailPanel({
             "&:focus-visible": { outline: "2px solid " + theme.palette.nebula.accent, outlineOffset: 2 },
           })}
         >
-          + Add
+          {t("servers.addShort")}
         </Box>
       </Box>
 

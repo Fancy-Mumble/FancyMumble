@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Box, Button, Snackbar, Typography } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import { useAppStore } from "@core/store";
 import { useServerLivery } from "../../useServerLivery";
 import { Stack } from "../primitives";
@@ -26,6 +27,7 @@ import {
   inputOfPort,
   wiredInputsOf,
   type PreviewSubject,
+  type Say,
   type WelcomeGraph,
 } from "./welcome/model";
 
@@ -52,6 +54,11 @@ export function WelcomeAdmin() {
   // a mis-drag scatters a selection, Delete takes a node and its wires, a
   // template can replace the lot - and without undo the safe move is to not
   // touch it, which is the opposite of what a canvas is for.
+  const { t } = useTranslation("nebulaWelcome");
+  const say = t as Say;
+  // Rebuilt only when the language changes, so the canvas is not handed a new
+  // dialect on every render.
+  const spec = useMemo(() => welcomeSpec(t as Say), [t]);
   const history = useGraphHistory<WelcomeGraph>(emptyGraph);
   const graph = history.value;
   const setGraph = history.set;
@@ -116,7 +123,7 @@ export function WelcomeAdmin() {
     [ownName, serverName, livery, allowHtml],
   );
 
-  const status = graphStatus(graph);
+  const status = graphStatus(graph, say);
   const conflicts = useConflicts(graph);
 
   // What this server has drawn, or the scaffold if it has drawn nothing. A
@@ -152,10 +159,10 @@ export function WelcomeAdmin() {
   const save = useCallback(() => {
     setSaving(true);
     saveGreeting(graph)
-      .then(() => setNotice({ tone: "success", text: "Greeting saved." }))
-      .catch((error: unknown) => setNotice({ tone: "error", text: `Not saved: ${String(error)}` }))
+      .then(() => setNotice({ tone: "success", text: t("admin.saved") }))
+      .catch((error: unknown) => setNotice({ tone: "error", text: t("admin.notSaved", { error: String(error) }) }))
       .finally(() => setSaving(false));
-  }, [graph]);
+  }, [graph, t]);
 
   if (read.state !== "ready") {
     return (
@@ -174,7 +181,7 @@ export function WelcomeAdmin() {
           rest of the admin chrome - the sidebar, the tabs - alone. */}
           <Stack sx={{ position: "relative", flex: 1, minHeight: 0 }}>
             <NodeEditor
-              spec={welcomeSpec}
+              spec={spec}
               graph={graph}
               onChange={setGraph}
               onReset={() => setGraph(seedGraph())}
@@ -184,24 +191,24 @@ export function WelcomeAdmin() {
                 <Segmented
                   value={mode}
                   options={[
-                    { id: "blocks", label: "Blocks" },
-                    { id: "canvas", label: "Node canvas" },
+                    { id: "blocks", label: t("admin.viewBlocks") },
+                    { id: "canvas", label: t("admin.viewCanvas") },
                   ]}
                   onChange={(id) => setMode(id as typeof mode)}
                 />
               }
               view={mode === "blocks" ? <BlocksView graph={graph} /> : undefined}
-              summary={summarise(graph, conflicts.shadowed.length)}
+              summary={summarise(graph, conflicts.shadowed.length, say)}
               actions={
                 <>
-                  <Button size="small">Test greeting</Button>
+                  <Button size="small">{t("admin.testGreeting")}</Button>
                   <Button
                     variant="contained"
                     size="small"
                     disabled={!status.complete || saving}
                     onClick={save}
                   >
-                    {saving ? "Saving…" : "Save & broadcast"}
+                    {saving ? t("admin.saving") : t("admin.saveBroadcast")}
                   </Button>
                 </>
               }
@@ -209,8 +216,8 @@ export function WelcomeAdmin() {
             {design && open && (
               <DesignEditor
                 design={design}
-                name={designName(graph, open.id)}
-                detail={designDetail(graph, open.id)}
+                name={designName(graph, open.id, say)}
+                detail={designDetail(graph, open.id, say)}
                 // The design declares its inputs; only the graph knows which of
                 // them anything actually feeds.
                 wired={wiredInputsOf(graph, open.id)}
@@ -262,6 +269,7 @@ function emptyGraph(): WelcomeGraph {
  * a claim it has not checked.
  */
 function Reading({ failure, onRetry }: Readonly<{ failure: string | null; onRetry: () => void }>) {
+  const { t } = useTranslation("nebulaWelcome");
   return (
     <Stack alignItems="center" justifyContent="center" gap={2} sx={{ flex: 1, minHeight: 0, p: "48px" }}>
       <Typography
@@ -273,11 +281,11 @@ function Reading({ failure, onRetry }: Readonly<{ failure: string | null; onRetr
           color: failure === null ? theme.palette.nebula.muted : theme.palette.error.main,
         })}
       >
-        {failure === null ? "Reading this server's greeting…" : `Could not read this server's greeting: ${failure}`}
+        {failure === null ? t("admin.reading") : t("admin.readFailed", { error: failure })}
       </Typography>
       {failure !== null && (
         <Button size="small" variant="contained" onClick={onRetry}>
-          Try again
+          {t("admin.retry")}
         </Button>
       )}
     </Stack>
@@ -314,10 +322,10 @@ function useConflicts(graph: WelcomeGraph): Conflicts {
  * needs to keep in mind while they are looking at a design instead of at the
  * wires that decide who sees it.
  */
-function designName(graph: WelcomeGraph, id: string): string {
+function designName(graph: WelcomeGraph, id: string, say: Say): string {
   const order = greetingsOf(graph);
   const at = order.findIndex((greeting) => greeting.id === id);
-  return order.length > 1 ? `Greeting #${at + 1}` : "This greeting";
+  return order.length > 1 ? say("admin.greetingNumber", { number: at + 1 }) : say("admin.thisGreeting");
 }
 
 /**
@@ -340,9 +348,9 @@ function designValues(graph: WelcomeGraph, id: string): ReadonlyMap<string, stri
 }
 
 /** Who it reaches, for the line under the title. */
-function designDetail(graph: WelcomeGraph, id: string): string {
-  const condition = describeGreeting(graph, id);
-  return condition ? `matches ${condition}` : "nothing wired to WHEN";
+function designDetail(graph: WelcomeGraph, id: string, say: Say): string {
+  const condition = describeGreeting(graph, id, say);
+  return condition ? say("matches", { condition }) : say("admin.nothingWired");
 }
 
 /**
@@ -353,19 +361,17 @@ function designDetail(graph: WelcomeGraph, id: string): string {
  * footer rather than only on the node: it is the failure an operator would
  * otherwise have to scroll the canvas to find.
  */
-function summarise(graph: WelcomeGraph, shadowed: number): string {
+function summarise(graph: WelcomeGraph, shadowed: number, say: Say): string {
   const greetings = greetingsOf(graph);
-  if (greetings.length === 0) return "No greeting on the canvas yet.";
+  if (greetings.length === 0) return say("admin.summary.empty");
   if (greetings.length === 1) {
-    const condition = describeGreeting(graph, greetings[0].id);
-    return condition
-      ? `Shows when ${condition}`
-      : "Nothing is wired to WHEN — this greeting shows to nobody.";
+    const condition = describeGreeting(graph, greetings[0].id, say);
+    return condition ? say("admin.summary.shows", { condition }) : say("admin.summary.unwired");
   }
-  const unwired = greetings.filter((greeting) => describeGreeting(graph, greeting.id) === null).length;
-  const parts = [`${greetings.length} greetings, tried in the order they are drawn`];
-  if (unwired > 0) parts.push(`${unwired} with nothing wired to WHEN`);
-  if (shadowed > 0) parts.push(`${shadowed} that reach nobody`);
+  const unwired = greetings.filter((greeting) => describeGreeting(graph, greeting.id, say) === null).length;
+  const parts = [say("admin.summary.greetings", { count: greetings.length })];
+  if (unwired > 0) parts.push(say("admin.summary.withoutWhen", { count: unwired }));
+  if (shadowed > 0) parts.push(say("admin.summary.shadowed", { count: shadowed }));
   return parts.join(" — ");
 }
 
@@ -377,6 +383,7 @@ function summarise(graph: WelcomeGraph, shadowed: number): string {
  * is worse at than a list.
  */
 function BlocksView({ graph }: Readonly<{ graph: WelcomeGraph }>) {
+  const { t } = useTranslation("nebulaWelcome");
   const greetings = greetingsOf(graph);
 
   return (
@@ -392,24 +399,28 @@ function BlocksView({ graph }: Readonly<{ graph: WelcomeGraph }>) {
       })}
     >
       <Stack gap={3} sx={{ maxWidth: 640 }}>
-        {greetings.length === 0 && <Field label="Greetings">— none on the canvas —</Field>}
+        {greetings.length === 0 && (
+          <Field label={t("admin.blocksView.greetings")}>{t("admin.blocksView.noneOnCanvas")}</Field>
+        )}
         {greetings.map((greeting, index) => {
           const snippets = snippetsOf(graph, greeting.id);
           return (
             <Stack key={greeting.id} gap={1.5}>
               {/* Numbered, because the order is what decides who sees which. */}
-              {greetings.length > 1 && <Field label="Greeting">{`#${index + 1}`}</Field>}
-              <Field label="Shown when">{describeGreeting(graph, greeting.id) ?? "— nothing wired —"}</Field>
-              <Field label="They read">{greeting.body || "— empty —"}</Field>
+              {greetings.length > 1 && <Field label={t("admin.blocksView.greeting")}>{`#${index + 1}`}</Field>}
+              <Field label={t("admin.blocksView.shownWhen")}>
+                {describeGreeting(graph, greeting.id, t as Say) ?? t("admin.blocksView.nothingWired")}
+              </Field>
+              <Field label={t("admin.blocksView.theyRead")}>{greeting.body || t("admin.blocksView.empty")}</Field>
               {snippets.length > 0 && (
-                <Field label="Plus text">
+                <Field label={t("admin.blocksView.plusText")}>
                   {snippets.map((s) => (s.kind === "text" ? s.body : "")).join("\n")}
                 </Field>
               )}
-              <Field label="Dismissal">
+              <Field label={t("admin.blocksView.dismissal")}>
                 {greeting.kind === "greeting" && greeting.once
-                  ? "Shown once, then remembered per account."
-                  : "Shown on every connect."}
+                  ? t("admin.blocksView.once")
+                  : t("admin.blocksView.everyConnect")}
               </Field>
             </Stack>
           );

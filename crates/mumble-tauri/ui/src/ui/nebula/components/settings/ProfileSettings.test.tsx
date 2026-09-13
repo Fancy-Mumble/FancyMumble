@@ -51,6 +51,30 @@ vi.mock("@core/features/settings/profileData", async (importOriginal) => {
   };
 });
 
+const trendingGif = {
+  id: 1,
+  title: "party parrot",
+  url: "https://static.klipy.com/hd/parrot.gif",
+  preview: "https://static.klipy.com/sm/parrot.gif",
+  width: 480,
+  height: 360,
+};
+
+vi.mock("@standard/pages/settings/KlipyGifBrowser", () => ({
+  fetchTrending: () => Promise.resolve({ items: [trendingGif], hasNext: false }),
+  searchGifs: () => Promise.resolve({ items: [trendingGif], hasNext: false }),
+}));
+
+/** The URLs the page downloaded, and what each download hands back. */
+const fetched: string[] = [];
+vi.mock("@core/utils/media", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@core/utils/media")>()),
+  fetchAsDataUrl: (url: string) => {
+    fetched.push(url);
+    return Promise.resolve("data:image/gif;base64,R0lGODlh");
+  },
+}));
+
 vi.mock("@core/preferencesStorage", () => ({
   getPreferences: () => Promise.resolve({ defaultUsername: "ZewiWin" }),
   updatePreferences: () => Promise.resolve(),
@@ -76,6 +100,7 @@ describe("ProfileSettings", () => {
     for (const key of Object.keys(stored)) delete stored[key];
     certificates = [];
     invoked.length = 0;
+    fetched.length = 0;
     denyListener = null;
     useAppStore.setState({ connectedCertLabel: null, status: "disconnected" });
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -253,6 +278,25 @@ describe("ProfileSettings", () => {
 
     denyListener?.({ payload: { deny_type: 4, reason: null } });
     expect(await screen.findByText(/too large for this server/i)).toBeTruthy();
+  });
+
+  it("sets a GIF banner by its link, the way Standard's banner editor does", async () => {
+    await renderPage();
+    fireEvent.click(screen.getByLabelText("Choose an animated banner"));
+    fireEvent.click(await screen.findByLabelText("party parrot"));
+
+    await waitFor(() => expect(saved.at(-1)?.profile.banner?.image).toBe(trendingGif.url));
+    expect(fetched).toEqual([]);
+    await waitFor(() => expect(screen.queryByLabelText("party parrot")).toBeNull());
+  });
+
+  it("sets a GIF avatar as the bytes of its small rendition, uncropped", async () => {
+    await renderPage();
+    fireEvent.click(screen.getByLabelText("Choose an animated avatar"));
+    fireEvent.click(await screen.findByLabelText("party parrot"));
+
+    await waitFor(() => expect(saved.at(-1)?.avatarDataUrl).toBe("data:image/gif;base64,R0lGODlh"));
+    expect(fetched).toEqual([trendingGif.preview]);
   });
 
   it("opens on the identity the Identities page sent it to", async () => {

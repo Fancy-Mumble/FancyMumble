@@ -7,6 +7,12 @@ import { welcomeSpec } from "@nebula/components/admin/welcome/spec";
 import { seedGraph } from "@nebula/components/admin/welcome/seed";
 import { DesignEditor } from "@nebula/components/admin/welcome/DesignEditor";
 import { starterDesign } from "@nebula/components/admin/welcome/design";
+import { useTranslation } from "react-i18next";
+import type { Say } from "@nebula/components/admin/welcome/model";
+
+/** The suite-wide mock answers from the English catalogue, so assertions stay in English. */
+const say = useTranslation("nebulaWelcome").t as Say;
+const welcome = welcomeSpec(say);
 
 // The canvas measures its ports with one; jsdom has neither this nor pointer
 // capture, and a real webview has both.
@@ -28,7 +34,7 @@ function editor() {
   const view = render(
     <ThemeProvider theme={createNebulaTheme("dark")}>
       <NodeEditor
-        spec={welcomeSpec}
+        spec={welcome}
         graph={seedGraph()}
         onChange={() => undefined}
         history={history}
@@ -91,7 +97,7 @@ suite("undo from the keyboard, through the editor", () => {
     // The one field always on screen here, and the one an operator is most
     // likely to press Ctrl+Z in without meaning the graph.
     const { history, view } = editor();
-    press(view.getByPlaceholderText(welcomeSpec.strings.search));
+    press(view.getByPlaceholderText(welcome.strings.search));
     expect(history.undo).not.toHaveBeenCalled();
   });
 });
@@ -109,7 +115,7 @@ suite("undo while the design editor is open over the canvas", () => {
     const view = render(
       <ThemeProvider theme={createNebulaTheme("dark")}>
         <NodeEditor
-          spec={welcomeSpec}
+          spec={welcome}
           graph={seedGraph()}
           onChange={() => undefined}
           history={history}

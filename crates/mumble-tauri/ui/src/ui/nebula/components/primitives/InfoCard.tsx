@@ -15,6 +15,53 @@ import { NEBULA_MONO, radius } from "../../tokens";
 import { SectionLabel } from "./SectionLabel";
 import { Stack } from "./Stack";
 
+/**
+ * The shadow the identity row's text wears where it overlaps a sheet's banner.
+ *
+ * The banner is whatever the user or room picked, so no text colour reads on
+ * all of them; a hard 1px drop in the window colour edges dark text in the
+ * light theme and light text in the dark one alike.
+ */
+export function bannerTextShadow(ground: string): string {
+  return `1px 1px 0 ${ground}`;
+}
+
+/**
+ * Where a sheet has room to spread out. Past this window width it grows and
+ * its cards flow into two columns, rather than one tall stack that scrolls.
+ */
+const WIDE_SHEET = "@media (min-width: 1000px)";
+
+/** Where a card sits in the wide layout: whole, one under the next. */
+const COLUMN_ITEM = { breakInside: "avoid", marginBottom: "12px" };
+
+/** A sheet's width: the mock's 560, and 900 where the window allows. */
+export const infoSheetFrame = { width: 560, maxWidth: "100%", [WIDE_SHEET]: { width: 900 } };
+
+/** The cards: stacked, and in two balanced columns on a wide sheet. */
+export const infoSheetColumns = {
+  display: "grid",
+  gap: "12px",
+  [WIDE_SHEET]: {
+    display: "block",
+    columnCount: 2,
+    columnGap: "12px",
+    marginBottom: "-12px",
+    "& > *": COLUMN_ITEM,
+  },
+};
+
+/**
+ * Two cards side by side. In the wide layout a half-column is too narrow for
+ * them, so they join the columns as two cards of their own.
+ */
+export const infoSheetPair = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: "12px",
+  [WIDE_SHEET]: { display: "contents", "& > *": COLUMN_ITEM },
+};
+
 /** One of a sheet's blocks: a raised card with a tracked-out title. */
 export function InfoCard({
   title,

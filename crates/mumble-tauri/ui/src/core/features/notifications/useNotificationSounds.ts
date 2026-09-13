@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { NotificationSoundSettings, NotificationEvent, VoiceState, UserEntry } from "@core/types";
 import { findSoundUrl } from "./sounds";
+import { EVT_CALENDAR_REMINDER } from "@core/features/chat/calendar/types";
 import { useAppStore } from "@core/store";
 
 function playSound(url: string, volume: number) {
@@ -66,11 +67,11 @@ export function useNotificationSounds(settings: NotificationSoundSettings) {
     const onCalendarReminder = () => {
       playSoundForEvent(settingsRef.current, "mention");
     };
-    globalThis.addEventListener("fancy:calendar-reminder", onCalendarReminder);
+    globalThis.addEventListener(EVT_CALENDAR_REMINDER, onCalendarReminder);
 
     return () => {
       globalThis.removeEventListener("fancy:self-mention", onSelfMention);
-      globalThis.removeEventListener("fancy:calendar-reminder", onCalendarReminder);
+      globalThis.removeEventListener(EVT_CALENDAR_REMINDER, onCalendarReminder);
       for (const p of unlisteners) {
         p.then((f) => f());
       }

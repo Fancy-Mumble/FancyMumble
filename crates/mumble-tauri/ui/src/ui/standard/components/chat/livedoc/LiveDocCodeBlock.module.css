@@ -37,13 +37,13 @@
 .languageSelect:hover,
 .languageSelect:focus {
   border-color: var(--color-accent, #2aabee);
-  color: var(--color-text, #e6edf3);
+  color: var(--color-text-primary, #e6edf3);
   outline: none;
 }
 
 .languageSelect option {
   background: var(--color-surface, #1e2128);
-  color: var(--color-text, #e6edf3);
+  color: var(--color-text-primary, #e6edf3);
 }
 
 .languageLabel {

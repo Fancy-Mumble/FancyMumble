@@ -263,6 +263,37 @@ fn try_apply_edit(
     }
 }
 
+/// Whether a channel message attributed to this session is one the server
+/// sent on its behalf rather than an echo of a send already stored here.
+///
+/// An echo repeats the id `send_message` stored its local copy under, so only
+/// an id nothing here carries yet qualifies. Without an id the two cannot be
+/// told apart, and the message is treated as the echo it usually is.
+fn is_unseen_own_channel_message(
+    tm: &mumble_tcp::TextMessage,
+    kind: &MessageKind,
+    state: &SharedState,
+) -> bool {
+    let MessageKind::Channel = kind else {
+        return false;
+    };
+    let Some(id) = tm.message_id.as_deref() else {
+        return false;
+    };
+    let channel_ids = if tm.channel_id.is_empty() {
+        &[0u32][..]
+    } else {
+        &tm.channel_id[..]
+    };
+    !channel_ids.iter().any(|ch_id| {
+        state
+            .msgs
+            .by_channel
+            .get(ch_id)
+            .is_some_and(|msgs| msgs.iter().any(|m| m.message_id.as_deref() == Some(id)))
+    })
+}
+
 // -- Per-kind handlers ---------------------------------------------
 
 fn resolve_sender_name(state: &SharedState, actor: Option<u32>) -> String {
@@ -341,6 +372,9 @@ fn handle_channel_message(
     let selected = state.selected_channel;
     let app_focused = state.prefs.app_focused;
     let sender_name = resolve_sender_name(state, tm.actor);
+    // Only reaches here for our own session when the server sent the message
+    // for us (see `is_unseen_own_channel_message`): ours to read, not news.
+    let is_own = tm.actor.is_some() && tm.actor == state.conn.own_session;
     let mut unreads_changed = false;
 
     for &ch_id in &target_channels {
@@ -372,7 +406,7 @@ fn handle_channel_message(
             sender_hash: resolve_sender_hash(state, tm.actor),
             body: tm.message.clone(),
             channel_id: ch_id,
-            is_own: false,
+            is_own,
             dm_session: None,
             message_id: tm.message_id.clone(),
             timestamp: tm.timestamp,
@@ -389,7 +423,7 @@ fn handle_channel_message(
         let bucket = state.msgs.by_channel.entry(ch_id).or_default();
         crate::state::push_capped(bucket, msg);
 
-        if selected != Some(ch_id) {
+        if selected != Some(ch_id) && !is_own {
             *state.msgs.channel_unread.entry(ch_id).or_insert(0) += 1;
             unreads_changed = true;
             // Nothing in a channel that is not on screen is being looked at,
@@ -409,13 +443,13 @@ fn handle_channel_message(
 
         // Flash the taskbar when a permanently-listened channel gets a
         // message while it is not the viewed channel.
-        if state.permanently_listened.contains(&ch_id) && selected != Some(ch_id) {
+        if !is_own && state.permanently_listened.contains(&ch_id) && selected != Some(ch_id) {
             deferred.push(DeferredEvent::RequestUserAttention);
         }
 
         // Native notification for messages arriving in non-viewed channels,
         // or for ANY channel when the app is not focused (backgrounded).
-        if selected != Some(ch_id) || !app_focused {
+        if !is_own && (selected != Some(ch_id) || !app_focused) {
             deferred.push(DeferredEvent::ChannelMessage {
                 channel_id: ch_id,
                 sender_name: sender_name.clone(),
@@ -441,10 +475,13 @@ impl HandleMessage for mumble_tcp::TextMessage {
             // Don't duplicate messages we sent ourselves (regular sends).
             // For edits from ourselves, we *do* need to process them because
             // the local edit_message path already applied the change locally,
-            // and the server won't echo edits back to us.
+            // and the server won't echo edits back to us. A channel message the
+            // server sent on our behalf - a scheduled message coming due - is
+            // not a duplicate of anything, and is kept.
             if self.actor == state.conn.own_session
                 && self.actor.is_some()
                 && self.edit_id.is_none()
+                && !is_unseen_own_channel_message(self, &kind, &state)
             {
                 return;
             }

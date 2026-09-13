@@ -99,6 +99,9 @@ struct SessionStats {
     /// was cleaned up from audio that was crushed - or from a denoiser
     /// that was never linked into the build.
     rms: f64,
+    /// The voice context of the latest packet: 0 in-channel, 1 shout,
+    /// 2 whisper, 3 listen. What a whisper suite asserts the server stamped.
+    last_context: u8,
 }
 
 struct StatsInner {
@@ -127,7 +130,13 @@ fn inner() -> Option<&'static StatsInner> {
 }
 
 /// Record one inbound voice packet. No-op unless the env var is set.
-pub fn record_packet(session: u32, frame_number: u64, opus: &[u8], is_terminator: bool) {
+pub fn record_packet(
+    session: u32,
+    frame_number: u64,
+    opus: &[u8],
+    is_terminator: bool,
+    context: u8,
+) {
     let Some(inner) = inner() else { return };
     {
         let Ok(mut sessions) = inner.sessions.lock() else {
@@ -138,6 +147,7 @@ pub fn record_packet(session: u32, frame_number: u64, opus: &[u8], is_terminator
             s.first_frame_number = frame_number;
         }
         s.packets += 1;
+        s.last_context = context;
         if is_terminator {
             s.terminators += 1;
         }

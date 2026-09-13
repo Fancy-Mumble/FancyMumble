@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { canOpenPrivately, openPrivatelyOrExplain } from "@core/features/elements/privateBrowsing";
 import { useAppStore } from "@core/store";
+import { LOCAL_NOTES_CHANNEL_ID } from "@core/notepad";
 import type { ChatMessage } from "@core/types";
 import { getCachedUserAvatar } from "@core/lazyBlobs";
 import { getReadersForMessage } from "@core/features/chat/readreceipt/readReceiptStore";
@@ -143,6 +144,7 @@ export function MessageMenu({
     const messageId = target?.message.message_id;
     if (!target || !messageId || !target.message.is_own) return null;
     if (target.message.dm_session || !allMessageIds) return null;
+    if (target.message.channel_id === LOCAL_NOTES_CHANNEL_ID) return null;
     const ownHash = users.find((user) => user.session === ownSession)?.hash;
     void readReceiptVersion;
     return getReadersForMessage(target.message.channel_id, messageId, [...allMessageIds])
@@ -235,6 +237,8 @@ export function MessageMenu({
   const { message } = target;
   const channel = channels.find((candidate) => candidate.id === message.channel_id);
   const hasId = !!message.message_id;
+  // A note kept on this device: no reactions, pins or watch sessions to reach.
+  const local = message.channel_id === LOCAL_NOTES_CHANNEL_ID;
   const canBulkDelete = hasId && canDeleteMessages(channel);
   // Your own message is yours to remove wherever it landed; anyone else needs
   // the moderation bit.
@@ -320,7 +324,7 @@ export function MessageMenu({
         },
       }}
     >
-      {hasId && (
+      {hasId && !local && (
         <Box sx={{ display: "flex", alignItems: "center", gap: "5px", px: "6px", pt: "5px", pb: "7px" }}>
           {QUICK_REACTIONS.map((emoji) => (
             <ReactionButton
@@ -340,7 +344,7 @@ export function MessageMenu({
           </ReactionButton>
         </Box>
       )}
-      {hasId && <Rule />}
+      {hasId && !local && <Rule />}
       {/* The picture first, and above everything about the message: a
           right-click that landed on a photograph was aimed at the photograph,
           and "Reply" is not what it was reaching for. What it was reaching
@@ -393,12 +397,12 @@ export function MessageMenu({
           {t("nebulaChat:menu.reply")}
         </MenuItem>
       )}
-      {message.is_own && target.editable && hasId && (
+      {message.is_own && target.editable && hasId && !local && (
         <MenuItem sx={ITEM} onClick={run(() => onEdit(message))}>
           {t("chat:contextMenu.edit")}
         </MenuItem>
       )}
-      {hasId && (
+      {hasId && !local && (
         <MenuItem
           sx={ITEM}
           onClick={run(() =>
@@ -434,7 +438,7 @@ export function MessageMenu({
           larger, and both appear only where there is something to open. The
           busy label is short-lived - the click closes the menu - but it is
           what makes the disabled row legible while it goes. */}
-      {canWatchTogether && (
+      {canWatchTogether && !local && (
         <MenuItem sx={ITEM} disabled={watchBusy} onClick={run(() => void startWatch())}>
           {watchBusy ? t("chat:contextMenu.watchTogetherBusy") : t("chat:contextMenu.watchTogether")}
         </MenuItem>
@@ -450,9 +454,11 @@ export function MessageMenu({
         <MenuItem
           key="delete"
           onClick={run(() =>
-            useAppStore
-              .getState()
-              .deletePchatMessages(message.channel_id, { messageIds: [message.message_id!] }),
+            local
+              ? useAppStore.getState().deleteLocalNotes([message.message_id!])
+              : useAppStore
+                  .getState()
+                  .deletePchatMessages(message.channel_id, { messageIds: [message.message_id!] }),
           )}
           sx={(theme) => ({ ...ITEM, color: theme.palette.nebula.bad })}
         >

@@ -1,5 +1,6 @@
 import { useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Box, Button, Menu, MenuItem, Typography, alpha } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import { CloseIcon } from "@ui/icons";
 import { radius } from "../../../tokens";
 import { Stack } from "../../primitives";
@@ -179,6 +180,7 @@ export function TagChip({
   tone = "accent",
   onRemove,
 }: Readonly<{ label: string; tone?: Tone; onRemove?: () => void }>) {
+  const { t } = useTranslation("nebulaWelcome");
   return (
     <Stack
       direction="row"
@@ -203,7 +205,7 @@ export function TagChip({
         <Box
           component="button"
           type="button"
-          aria-label={`Remove ${label}`}
+          aria-label={t("canvas.removeTag", { label })}
           onClick={onRemove}
           sx={{ all: "unset", display: "flex", cursor: "pointer", opacity: 0.7 }}
         >
@@ -216,10 +218,11 @@ export function TagChip({
 
 /** The dashed `+ add` affordance, with the list of what may be added. */
 export function AddChip({
-  label = "+ add",
+  label,
   options,
   onAdd,
 }: Readonly<{ label?: string; options: readonly string[]; onAdd: (option: string) => void }>) {
+  const { t } = useTranslation("nebulaWelcome");
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   return (
     <>
@@ -240,7 +243,7 @@ export function AddChip({
           "&:hover": { color: theme.palette.nebula.muted },
         })}
       >
-        {label}
+        {label ?? t("canvas.addChip")}
       </Box>
       <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
         {options.map((option) => (

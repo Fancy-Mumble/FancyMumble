@@ -5,10 +5,10 @@ import {
   addDays,
   isToday,
   monthGridDays,
-  MS_PER_DAY,
   startOfDay,
   startOfMonth,
 } from "@core/features/chat/calendar/calendarDates";
+import { shiftToDay } from "@core/features/chat/calendar/timeGrid";
 import type { CalendarEvent, EventOccurrence } from "@core/features/chat/calendar/types";
 import {
   eventVisualStyle,
@@ -57,9 +57,8 @@ export default function MonthView() {
       const { eventId, occStart } = JSON.parse(raw) as DragPayload;
       const ev = events.find((e) => e.id === eventId);
       if (!ev) return;
-      const deltaDays = Math.round((targetDay - startOfDay(occStart)) / MS_PER_DAY);
-      if (deltaDays === 0) return;
-      upsertEvent({ ...ev, start: addDays(ev.start, deltaDays), end: addDays(ev.end, deltaDays) });
+      const next = shiftToDay(ev, occStart, targetDay);
+      if (next) upsertEvent({ ...ev, ...next });
     } catch {
       /* ignore malformed payloads */
     }

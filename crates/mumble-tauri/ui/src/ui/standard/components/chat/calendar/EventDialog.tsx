@@ -1,14 +1,10 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { Modal } from "../../elements/Modal";
 import { MemberPicker } from "../../elements/MemberPicker";
 import { Toggle } from "../../../pages/settings/SharedControls";
 import { useAppStore } from "@core/store";
-import { getCachedUserAvatar } from "@core/lazyBlobs";
-import { acquireRegisteredTextures, releaseRegisteredTextures } from "@core/registeredTextureLease";
-import type { RegisteredUser } from "@core/types";
+import { useInviteCandidates } from "@core/features/chat/calendar/useInviteCandidates";
 import {
   CalendarClockIcon,
   ClockIcon,
@@ -22,18 +18,11 @@ import { useCalendarStore } from "@core/features/chat/calendar/calendarStore";
 import { useCalendarFormatPreferences } from "@core/features/chat/calendar/useCalendarFormatPreferences";
 import { DateInput } from "./DateInput";
 import { TimeInput } from "./TimeInput";
-import {
-  fromDateInput,
-  startOfDay,
-  toDateInput,
-  toTimeInput,
-  withTime,
-  MS_PER_HOUR,
-} from "@core/features/chat/calendar/calendarDates";
+import { toDateInput, toTimeInput, MS_PER_HOUR } from "@core/features/chat/calendar/calendarDates";
+import { draftParticipants, draftRange, nextHour } from "@core/features/chat/calendar/eventDraft";
 import {
   CALENDAR_COLORS,
   REMINDER_OPTIONS,
-  type Participant,
   type RepeatFreq,
   type RepeatUnit,
 } from "@core/features/chat/calendar/types";
@@ -45,13 +34,6 @@ const DescriptionEditor = lazy(() => import("./DescriptionEditor"));
 
 const REPEAT_FREQS: RepeatFreq[] = ["none", "weekdays", "daily", "weekly", "monthly", "yearly", "custom"];
 
-/** Round `ms` up to the next whole hour (used for sensible new-event defaults). */
-function nextHour(ms: number): number {
-  const d = new Date(ms);
-  d.setMinutes(0, 0, 0);
-  d.setHours(d.getHours() + 1);
-  return d.getTime();
-}
 
 export default function EventDialog() {
   const { t } = useTranslation("chat");
@@ -68,50 +50,9 @@ export default function EventDialog() {
   const ownSession = useAppStore((s) => s.ownSession);
   const formatPrefs = useCalendarFormatPreferences();
 
-  // The server's full registered-user directory (online AND offline), so an
-  // organiser can invite someone who isn't currently connected. The query is
-  // available to any authenticated user; the backend emits the response on the
-  // shared `user-list` event and caches registered avatars (released on close).
-  const [registered, setRegistered] = useState<RegisteredUser[]>([]);
-  useEffect(() => {
-    acquireRegisteredTextures();
-    const unlisten = listen<RegisteredUser[]>("user-list", (event) => {
-      setRegistered(event.payload);
-    });
-    invoke("request_user_list").catch(() => {
-      /* server may deny on legacy/locked-down deployments; online list still works */
-    });
-    return () => {
-      unlisten.then((f) => f());
-      releaseRegisteredTextures();
-    };
-  }, []);
-
-  // Invitee suggestion pool: every registered user we can resolve - the online
-  // user list, the server's registered-user directory (covers offline users),
-  // and anyone already on the event. MemberPicker keys on a stable user_id.
-  // Registered ids are >= 0 (SuperUser is 0); guests carry -1, so gate on >= 0
-  // rather than > 0 or SuperUser could never be invited.
-  const candidates = useMemo(() => {
-    const map = new Map<number, string>();
-    for (const u of registered) {
-      if (u.user_id >= 0) map.set(u.user_id, u.name);
-    }
-    // Prefer the live online name where present (handles a mid-session rename
-    // the directory snapshot may predate).
-    for (const u of users) {
-      if (u.user_id != null && u.user_id >= 0) map.set(u.user_id, u.name);
-    }
-    for (const p of existing?.participants ?? []) map.set(p.userId, p.name);
-    return [...map.entries()].map(([user_id, name]) => ({ user_id, name }));
-  }, [registered, users, existing]);
-
-  // Avatar resolver for the picker: map a registered user_id to the live online
-  // user's cached avatar (mirrors RoleMembersPanel).
-  const getAvatar = (id: number): string | null => {
-    const live = users.find((u) => u.user_id === id);
-    return live ? getCachedUserAvatar(live.session, live.texture_size) : null;
-  };
+  // Online and offline registered users, so an organiser can invite someone
+  // who isn't currently connected.
+  const { candidates, avatarFor: getAvatar } = useInviteCandidates(existing?.participants);
 
   const initialStart = existing?.start ?? draftStart ?? nextHour(Date.now());
   const initialEnd = existing?.end ?? initialStart + MS_PER_HOUR;
@@ -141,21 +82,9 @@ export default function EventDialog() {
   };
 
   const handleSave = () => {
-    const sDay = fromDateInput(startDate);
-    const eDay = fromDateInput(endDate);
-    const start = allDay ? startOfDay(sDay) : withTime(sDay, startTime);
-    let end = allDay ? startOfDay(eDay) + 86_400_000 : withTime(eDay, endTime);
-    if (end <= start) end = start + (allDay ? 86_400_000 : MS_PER_HOUR);
-
+    const { start, end } = draftRange({ allDay, startDate, startTime, endDate, endTime });
     const organizer = users.find((u) => u.session === ownSession);
-    const participants: Participant[] = invitees.map((userId) => {
-      const prev = existing?.participants.find((p) => p.userId === userId);
-      return {
-        userId,
-        name: prev?.name ?? candidates.find((c) => c.user_id === userId)?.name ?? `#${userId}`,
-        status: prev?.status ?? "invited",
-      };
-    });
+    const participants = draftParticipants(invitees, existing?.participants, candidates);
 
     upsertEvent({
       id: existing?.id,

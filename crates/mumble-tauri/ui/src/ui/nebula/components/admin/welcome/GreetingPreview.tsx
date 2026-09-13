@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Box, Button, Typography } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import { sanitizeHtml } from "@core/utils/sanitizeHtml";
 import { opaque, radius } from "../../../tokens";
 import { LinkGuard, Stack } from "../../primitives";
@@ -14,6 +15,7 @@ import {
   previewText,
   sectionsOf,
   type PreviewSubject,
+  type Say,
   type WelcomeGraph,
 } from "./model";
 
@@ -50,9 +52,10 @@ export function GreetingPreview({
   subject: PreviewSubject;
   conflicts: Conflicts;
 }>) {
+  const { t } = useTranslation("nebulaWelcome");
   const node = graph.nodes.find((candidate) => candidate.id === greeting);
 
-  const condition = describeGreeting(graph, greeting);
+  const condition = describeGreeting(graph, greeting, t as Say);
   // A design carries a sheet of blocks rather than a body, so it is compiled
   // and assembled the way the server does it; the prose halves stay for every
   // other greeting.
@@ -90,7 +93,7 @@ export function GreetingPreview({
           color: theme.palette.nebula.dim,
         })}
       >
-        PREVIEW · WHAT THEY SEE
+        {t("preview.heading")}
       </Typography>
 
       <Box
@@ -121,7 +124,7 @@ export function GreetingPreview({
             <Typography
               sx={(theme) => ({ fontSize: 9.5, lineHeight: 1.45, color: theme.palette.nebula.dim })}
             >
-              {condition ? `matches ${condition}` : "nothing is wired to WHEN — shown to nobody"}
+              {condition ? t("matches", { condition }) : t("preview.unwired")}
             </Typography>
           </Box>
         </Stack>
@@ -186,10 +189,10 @@ export function GreetingPreview({
 
         <Stack direction="row" alignItems="center" gap={1} sx={{ mt: "12px" }}>
           <Typography sx={(theme) => ({ flex: 1, fontSize: 10, color: theme.palette.nebula.dim })}>
-            {node.once ? "Dismissed for good" : "Shown on every connect"}
+            {node.once ? t("preview.dismissed") : t("preview.everyConnect")}
           </Typography>
           <Button variant="contained" size="small" sx={{ flex: "none" }} disabled>
-            Got it
+            {t("preview.gotIt")}
           </Button>
         </Stack>
       </Box>
@@ -198,18 +201,10 @@ export function GreetingPreview({
           formatted a greeting on a server that will not send the formatting is
           otherwise looking at their own plain text with no idea why. */}
       {legacy && (
-        <Note tone="dim">
-          Drawn as Mumble 1.5 and older will: tables, inline colour, square corners. Their rich text is a
-          subset of HTML 4, so this is close to what Qt renders rather than to this client.
-        </Note>
+        <Note tone="dim">{t("preview.legacy")}</Note>
       )}
 
-      {markup !== null && !subject.allowHtml && (
-        <Note tone="warn">
-          This server has allow_html switched off, so it sends the plain half of every greeting. The
-          formatting is kept, and starts being sent the moment the setting is on.
-        </Note>
-      )}
+      {markup !== null && !subject.allowHtml && <Note tone="warn">{t("preview.htmlOff")}</Note>}
 
       {/* The quietest failure this canvas has, and the reason for the solver:
           the server shows the first greeting whose condition holds, so a
@@ -217,23 +212,15 @@ export function GreetingPreview({
           seen by nobody. */}
       {shadow && (
         <Note tone="warn">
-          {shadow.behind.length === 0
-            ? "No visitor can match this condition, so this greeting shows to nobody."
-            : "This greeting shows to nobody: every visitor it matches is taken by a greeting the server " +
-              "reaches first. Drag it above that one, or narrow the other's condition."}
+          {shadow.behind.length === 0 ? t("preview.unmatchable") : t("preview.shadowed")}
         </Note>
       )}
 
       {!shadow && clash && (
-        <Note tone="dim">
-          {`Overlaps with the greeting before it — ${describeVisitor(clash.example)} matches both, and the ` +
-            "earlier one wins. Deliberate if this is the general case behind a specific one."}
-        </Note>
+        <Note tone="dim">{t("preview.overlap", { visitor: describeVisitor(clash.example, t as Say) })}</Note>
       )}
 
-      {!conflicts.decided && (
-        <Note tone="dim">Too many combinations of conditions to check whether the greetings overlap.</Note>
-      )}
+      {!conflicts.decided && <Note tone="dim">{t("preview.undecided")}</Note>}
     </Box>
   );
 }

@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, Dialog, InputBase, Typography } from "@mui/material";
 import { invoke } from "@tauri-apps/api/core";
-import type { ChannelEntry, SearchResult, UserEntry } from "@core/types";
+import type { ChannelEntry, PhotoEntry, SearchResult, UserEntry } from "@core/types";
 import { CloseIcon, SearchIcon, ServerIcon } from "@ui/icons";
 import {
   globalSearchRows,
+  type GlobalSearchFilter,
   type GlobalSearchKind,
   type GlobalSearchRow,
   type GroupableSession,
@@ -13,6 +14,7 @@ import {
 import { DEFAULT_TIME_DISPLAY, type TimeDisplay } from "../../selectors";
 import { radius } from "../../tokens";
 import { SectionLabel, StatusDot, UserAvatar } from "../primitives";
+import { PHOTO_COLUMNS, SearchPhotoGrid, useSearchPhotos } from "./SearchPhotoGrid";
 
 /** The group heading each kind of row sits under, as a `nebulaChrome` key.
  *  `as const` keeps the values literal so `t()` still type-checks them. */
@@ -25,6 +27,22 @@ const HEADING_KEYS = {
 
 /** Long enough to swallow a burst of typing, short enough to feel answered. */
 const DEBOUNCE_MS = 120;
+
+/** The chips under the field, in the order they sit. */
+const FILTER_KEYS = {
+  all: "search.filterAll",
+  photos: "search.filterPhotos",
+  links: "search.filterLinks",
+} as const satisfies Record<GlobalSearchFilter, string>;
+const FILTERS = Object.keys(FILTER_KEYS) as GlobalSearchFilter[];
+
+/** How far each arrow moves the highlight across the photo grid. */
+const GRID_STEPS: Readonly<Partial<Record<string, number>>> = {
+  ArrowLeft: -1,
+  ArrowRight: 1,
+  ArrowUp: -PHOTO_COLUMNS,
+  ArrowDown: PHOTO_COLUMNS,
+};
 
 interface GlobalSearchProps {
   open: boolean;
@@ -44,6 +62,8 @@ interface GlobalSearchProps {
   time?: TimeDisplay;
   onClose: () => void;
   onSelect: (row: GlobalSearchRow) => void;
+  /** A tile from the Photos grid: lands where the picture was sent. */
+  onOpenPhoto: (photo: PhotoEntry) => void;
 }
 
 /**
@@ -60,6 +80,10 @@ interface GlobalSearchProps {
  * matched by the backend, which is the only place the history lives. Both
  * arrive as one ranked list rather than as two panels, because the person
  * typing is looking for a conversation and does not yet care which kind.
+ *
+ * The Photos and Links chips narrow it to messages carrying one. The store
+ * holds neither, so a narrowed list is the backend's alone; Photos with nothing
+ * typed is the pictures themselves, a grid paged out of `get_photos`.
  */
 export function GlobalSearch({
   open,
@@ -71,6 +95,7 @@ export function GlobalSearch({
   time = DEFAULT_TIME_DISPLAY,
   onClose,
   onSelect,
+  onOpenPhoto,
 }: Readonly<GlobalSearchProps>) {
   const { t } = useTranslation("nebulaChrome");
   // A second handle on the catalogue, for the selectors that name the rows:
@@ -79,6 +104,7 @@ export function GlobalSearch({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<readonly SearchResult[]>([]);
   const [active, setActive] = useState(0);
+  const [filter, setFilter] = useState<GlobalSearchFilter>("all");
   const listRef = useRef<HTMLDivElement>(null);
   const fieldRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -89,18 +115,35 @@ export function GlobalSearch({
 
   const rows = useMemo(
     () =>
-      globalSearchRows({ t: label, results, channels, users, sessions, ownSession, serverLabel, query, time }),
-    [channels, ownSession, query, results, serverLabel, sessions, time, users],
+      globalSearchRows({
+        t: label,
+        results,
+        channels,
+        users,
+        sessions,
+        ownSession,
+        serverLabel,
+        query,
+        time,
+        filter,
+      }),
+    [channels, filter, ownSession, query, results, serverLabel, sessions, time, users],
   );
 
-  const search = useCallback((text: string) => {
+  // The grid stands in for the list only while nothing is typed: a query under
+  // Photos searches what was said with the pictures, and reads as messages.
+  const photoGrid = filter === "photos" && !query.trim();
+  const { photos, loading: photosLoading, loadMore: loadMorePhotos } = useSearchPhotos(open && photoGrid);
+
+  const search = useCallback((text: string, narrowed: GlobalSearchFilter) => {
     const issue = ++issuedRef.current;
     if (!text.trim()) {
       settledRef.current = issue;
       setResults([]);
       return;
     }
-    void invoke<SearchResult[]>("super_search", { query: text })
+    const args = narrowed === "all" ? { query: text } : { query: text, filter: narrowed };
+    void invoke<SearchResult[]>("super_search", args)
       .then((found) => {
         if (issue < settledRef.current) return;
         settledRef.current = issue;
@@ -115,7 +158,21 @@ export function GlobalSearch({
     setQuery(text);
     setActive(0);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => search(text), DEBOUNCE_MS);
+    debounceRef.current = setTimeout(() => search(text, filter), DEBOUNCE_MS);
+  };
+
+  // A chip answers at once - there is no burst of typing to wait out - and
+  // hands the caret back to the field, where the next keystroke is headed.
+  const onFilterChange = (next: GlobalSearchFilter) => {
+    fieldRef.current?.focus();
+    if (next === filter) return;
+    setFilter(next);
+    setActive(0);
+    setResults([]);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    // Anything still in flight was asked under the old chip.
+    settledRef.current = ++issuedRef.current;
+    search(query, next);
   };
 
   // Every opening starts on an empty query and the first row, so the panel
@@ -133,6 +190,7 @@ export function GlobalSearch({
     setQuery("");
     setResults([]);
     setActive(0);
+    setFilter("all");
     issuedRef.current += 1;
     settledRef.current = issuedRef.current;
     const frame = requestAnimationFrame(() => fieldRef.current?.focus());
@@ -159,9 +217,35 @@ export function GlobalSearch({
     onClose();
   };
 
+  const openPhoto = (photo: PhotoEntry) => {
+    onOpenPhoto(photo);
+    onClose();
+  };
+
+  // The grid is walked in two dimensions. Left and right are free to take: the
+  // grid only shows while the field is empty, so there is no caret to move. The
+  // edges stop the highlight rather than wrap it - past the last tile is the
+  // next page, not the first photo.
+  const onGridKeyDown = (event: React.KeyboardEvent) => {
+    if (photos.length === 0) return;
+    const step = GRID_STEPS[event.key];
+    if (step !== undefined) {
+      event.preventDefault();
+      setActive((index) => Math.min(Math.max(index + step, 0), photos.length - 1));
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const photo = photos[active];
+      if (photo) openPhoto(photo);
+    }
+  };
+
   // Escape is deliberately absent: the dialog already closes on it, and
   // answering it here as well would run the close twice.
   const onKeyDown = (event: React.KeyboardEvent) => {
+    if (photoGrid) {
+      onGridKeyDown(event);
+      return;
+    }
     if (rows.length === 0) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -177,6 +261,14 @@ export function GlobalSearch({
   };
 
   let previousKind: GlobalSearchKind | null = null;
+
+  let emptyText: string = t("search.empty");
+  if (query.trim()) emptyText = t("search.noMatch", { query: query.trim() });
+  else if (filter === "links") emptyText = t("search.linksEmpty");
+
+  const summary = photoGrid
+    ? t("search.photos", { count: photos.length })
+    : t("search.results", { count: rows.length });
 
   return (
     <Dialog
@@ -232,12 +324,24 @@ export function GlobalSearch({
         </Box>
       </Box>
 
+      <FilterChips value={filter} onChange={onFilterChange} />
+
       <Box sx={(theme) => ({ height: "1px", background: theme.palette.nebula.line })} />
 
       <Box ref={listRef} sx={{ p: "8px", maxHeight: 420, overflowY: "auto" }}>
-        {rows.length === 0 && (
+        {photoGrid && (
+          <SearchPhotoGrid
+            photos={photos}
+            loading={photosLoading}
+            active={active}
+            onActivate={setActive}
+            onOpen={openPhoto}
+            onNearEnd={loadMorePhotos}
+          />
+        )}
+        {!photoGrid && rows.length === 0 && (
           <Typography sx={(theme) => ({ p: "14px", fontSize: 12.5, color: theme.palette.nebula.muted })}>
-            {query.trim() ? t("search.noMatch", { query: query.trim() }) : t("search.empty")}
+            {emptyText}
           </Typography>
         )}
         {rows.map((row, index) => {
@@ -263,8 +367,53 @@ export function GlobalSearch({
         })}
       </Box>
 
-      <Footer count={rows.length} />
+      <Footer summary={summary} />
     </Dialog>
+  );
+}
+
+interface FilterChipsProps {
+  value: GlobalSearchFilter;
+  onChange: (next: GlobalSearchFilter) => void;
+}
+
+/** All, Photos, Links: what the list is narrowed to. */
+function FilterChips({ value, onChange }: Readonly<FilterChipsProps>) {
+  const { t } = useTranslation("nebulaChrome");
+  return (
+    <Box role="group" aria-label={t("search.filters")} sx={{ display: "flex", gap: "6px", p: "0 16px 10px" }}>
+      {FILTERS.map((key) => {
+        const selected = key === value;
+        return (
+          <Box
+            key={key}
+            component="button"
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(key)}
+            // A press that took the caret out of the field first would leave
+            // the next keystroke with nowhere to go.
+            onMouseDown={(event: React.MouseEvent) => event.preventDefault()}
+            sx={(theme) => ({
+              all: "unset",
+              boxSizing: "border-box",
+              cursor: "pointer",
+              p: "3px 10px",
+              fontSize: 11.5,
+              fontWeight: selected ? 600 : 500,
+              borderRadius: radius("pill"),
+              border: `var(--nebula-line-width, 1px) solid ${selected ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
+              background: selected ? theme.palette.nebula.accentSoft : "transparent",
+              color: selected ? theme.palette.nebula.accent : theme.palette.nebula.muted,
+              "&:hover": { color: selected ? theme.palette.nebula.accent : theme.palette.nebula.text },
+              "&:focus-visible": { outline: `2px solid ${theme.palette.nebula.accent}`, outlineOffset: "2px" },
+            })}
+          >
+            {t(FILTER_KEYS[key])}
+          </Box>
+        );
+      })}
+    </Box>
   );
 }
 
@@ -415,7 +564,7 @@ function Highlighted({ text, query }: Readonly<{ text: string; query: string }>)
   );
 }
 
-function Footer({ count }: Readonly<{ count: number }>) {
+function Footer({ summary }: Readonly<{ summary: string }>) {
   const { t } = useTranslation(["nebulaChrome", "sidebar"]);
   return (
     <Box
@@ -436,10 +585,10 @@ function Footer({ count }: Readonly<{ count: number }>) {
         <KeyChip>↵</KeyChip> {t("sidebar:superSearch.hintSelect")}
       </Typography>
       <Typography component="span" sx={{ fontSize: "inherit" }}>
-        <KeyChip>esc</KeyChip> {t("sidebar:superSearch.hintClose")}
+        <KeyChip>{t("search.keyEsc")}</KeyChip> {t("sidebar:superSearch.hintClose")}
       </Typography>
       <Typography component="span" sx={{ ml: "auto", fontSize: "inherit" }}>
-        {t("nebulaChrome:search.results", { count })}
+        {summary}
       </Typography>
     </Box>
   );

@@ -8,6 +8,8 @@ import {
   PERM_WRITE,
 } from "@core/utils/permissions";
 import { ChannelAttribute } from "@core/utils/channelAttributes";
+import { DM_CHANNEL_PREFIX } from "@core/utils/channelVisibility";
+import { TID } from "@core/testids";
 import { withNebulaTheme } from "../../testTheme";
 import { ChannelMenu } from "./ChannelMenu";
 
@@ -19,6 +21,11 @@ const actions = {
 };
 
 vi.mock("@core/store", () => ({ useAppStore: { getState: () => actions } }));
+
+const leaveMeeting = vi.fn();
+vi.mock("@core/features/chat/calendar/meetings", () => ({
+  requestLeaveMeeting: (channelId: number) => leaveMeeting(channelId),
+}));
 
 const channel = (partial: Partial<ChannelEntry> = {}) =>
   ({
@@ -43,6 +50,7 @@ function open(props: Partial<React.ComponentProps<typeof ChannelMenu>> = {}) {
     onPurgeHistory: vi.fn(),
     onDelete: vi.fn(),
     onEditPermissions: vi.fn(),
+    onToggleArrange: vi.fn(),
     onClose: vi.fn(),
   };
   render(
@@ -53,6 +61,7 @@ function open(props: Partial<React.ComponentProps<typeof ChannelMenu>> = {}) {
         notificationsMuted={false}
         occupantCount={2}
         hideEmpty={false}
+        arranging={false}
         {...handlers}
         {...props}
       />,
@@ -146,6 +155,7 @@ function open_props() {
     notificationsMuted: false,
     occupantCount: 2,
     hideEmpty: false,
+    arranging: false,
     onToggleHideEmpty: vi.fn(),
     onJoin: vi.fn(),
     onShowInfo: vi.fn(),
@@ -155,6 +165,7 @@ function open_props() {
     onPurgeHistory: vi.fn(),
     onDelete: vi.fn(),
     onEditPermissions: vi.fn(),
+    onToggleArrange: vi.fn(),
     onClose: vi.fn(),
   };
 }
@@ -256,5 +267,42 @@ describe("ChannelMenu, acting on the room", () => {
     });
     fireEvent.click(screen.getByText("Purge chat history"));
     expect(handlers.onPurgeHistory).toHaveBeenCalledWith(expect.objectContaining({ id: 8 }));
+  });
+});
+
+describe("ChannelMenu arrange mode", () => {
+  it("offers to arrange the list to someone who can edit channels", () => {
+    const handlers = open();
+    fireEvent.click(screen.getByText("Arrange channels"));
+    expect(handlers.onToggleArrange).toHaveBeenCalledTimes(1);
+    expect(handlers.onClose).toHaveBeenCalled();
+  });
+
+  it("offers the way back out while arranging", () => {
+    open({ arranging: true });
+    expect(screen.getByText("Done arranging")).toBeTruthy();
+    expect(screen.queryByText("Arrange channels")).toBeNull();
+  });
+
+  it("is not offered without write on the channel", () => {
+    open({ target: { channel: channel({ permissions: 0 }), x: 0, y: 0 } });
+    expect(screen.queryByText("Arrange channels")).toBeNull();
+  });
+  it("offers leaving a meeting room, and asks the calendar to revoke it", () => {
+    leaveMeeting.mockClear();
+    const handlers = open({ target: { channel: channel({ id: 41, name: "Standup", detached: true }), x: 1, y: 1 } });
+    const item = screen.getByTestId(TID.leaveMeeting);
+    expect(item.textContent).toBe("Leave meeting");
+    fireEvent.click(item);
+    expect(leaveMeeting).toHaveBeenCalledWith(41);
+    expect(handlers.onClose).toHaveBeenCalled();
+  });
+
+  it("offers no leaving on a channel of the tree or on a friend chat", () => {
+    open();
+    expect(screen.queryByTestId(TID.leaveMeeting)).toBeNull();
+    cleanup();
+    open({ target: { channel: channel({ detached: true, name: `${DM_CHANNEL_PREFIX}3-9` }), x: 1, y: 1 } });
+    expect(screen.queryByTestId(TID.leaveMeeting)).toBeNull();
   });
 });

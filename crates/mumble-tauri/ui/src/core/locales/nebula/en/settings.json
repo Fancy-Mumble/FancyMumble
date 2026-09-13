@@ -124,7 +124,12 @@
     "explainerBefore": "Transmission starts above",
     "explainerMiddle": "and stops below",
     "explainerAfter": ", so a pause between words does not cut you off.",
-    "replayHint": "Record up to {{seconds}} s through the same filters your listeners receive, then play it back."
+    "replayHint": "Record up to {{seconds}} s through the same filters your listeners receive, then play it back.",
+    "readoutThreshold": "threshold {{value}}%",
+    "readoutClose": "close {{value}}%",
+    "readoutHold_one": "hold {{count}} frame",
+    "readoutHold_other": "hold {{count}} frames",
+    "readoutMaxGain": "max gain {{value}} dB"
   },
   "voice": {
     "activationVoice": "Voice activation",
@@ -172,7 +177,8 @@
     "legacyBackendHint": "Switch to the legacy cpal backend if the default rodio backend misbehaves. Takes effect on the next voice toggle.",
     "audioStatistics": "Audio statistics",
     "toClient": "To client",
-    "fromClient": "From client"
+    "fromClient": "From client",
+    "packetStats": "{{good}} good · {{late}} late · {{lost}} lost ({{loss}}%) · {{resync}} resync"
   },
   "profile": {
     "pageHint": "Everything on one page — each row shows your current pick; Change opens just that section.",
@@ -193,6 +199,10 @@
     "image": "Image",
     "bannerColour": "Banner colour",
     "removeBanner": "Remove banner",
+    "gif": "GIF",
+    "chooseAvatarGif": "Choose an animated avatar",
+    "chooseBannerGif": "Choose an animated banner",
+    "gifFailed": "That GIF could not be downloaded.",
     "cardStyle": "Card style",
     "cardStyleHint": "Colours first: everything else on the card takes its ramp from them.",
     "cardColours": "Card colours",
@@ -319,5 +329,43 @@
     "contentFailed": "Content: the page could not read its data",
     "contentDisconnected": "Content: nothing - not connected to a server",
     "contentDrawing": "Content: {{count}} in the channel"
+  },
+  "notepad": {
+    "title": "Notepad",
+    "hint": "Your private notes. They appear as you in Friends.",
+    "location": "Kept on",
+    "thisDevice": "This device only",
+    "loginLabel": "{{server}} as {{name}}",
+    "placeDevice": "this device",
+    "encryption": "Encryption",
+    "protocolSignal": "Signal",
+    "protocolFancy": "Fancy archive",
+    "protocolServer": "Server-side",
+    "localHint": "Encrypted with this device's key. Never leaves this device.",
+    "signalHint": "End-to-end encrypted. The server keeps no copy, so notes live only on the devices that wrote them.",
+    "fancyHint": "End-to-end encrypted and stored on the server, so every device of yours can read them.",
+    "serverHint": "Stored on the server. Not end-to-end encrypted.",
+    "changeTitle": "This starts a new notepad",
+    "changeBody": "Your current notes stay where they are unless you choose otherwise.",
+    "copyOld": "Copy my notes to {{place}}",
+    "copyHint": "Copied notes are sent again, so they show today's time.",
+    "deleteOld": "Delete my notes from {{place}}",
+    "deleteWarning": "Without copying them first, deleted notes are gone for good.",
+    "needsConnection": "Connect to {{server}} to copy or delete notes there.",
+    "apply": "Switch notepad",
+    "cancel": "Keep current",
+    "progressReading": "Reading notes… {{done}}",
+    "progressCopying": "Copying {{done}} of {{total}}…",
+    "progressDeleting": "Deleting {{done}} of {{total}}…",
+    "done": "Switched. Copied {{copied}}, deleted {{deleted}}.",
+    "skipped": "{{count}} notes had no id and were not deleted.",
+    "errors": {
+      "notConnected": "Connect to that server first.",
+      "notRegistered": "A notepad on a server needs a registered account there.",
+      "protocolUnsupported": "This server cannot create a notepad with that encryption yet. Nothing was changed.",
+      "readFailed": "Could not read your notes: {{detail}}",
+      "copyFailed": "Copying stopped: {{detail}}. Nothing was deleted.",
+      "deleteFailed": "Deleting stopped: {{detail}}"
+    }
   }
 }

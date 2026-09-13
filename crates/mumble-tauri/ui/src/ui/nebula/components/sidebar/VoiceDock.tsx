@@ -7,8 +7,10 @@ import { selectMicLive, selectSelfDeafened } from "@core/store/voiceSelectors";
 import { TID } from "@core/testids";
 import { stopOwnBroadcast } from "@standard/components/chat/stream/useScreenShare";
 import { captureHolders, useCaptureError } from "@standard/hooks/useCaptureError";
+import { useWhisperState } from "@core/features/settings/useWhisperState";
 import {
   ChevronRightIcon,
+  CircleDotIcon,
   HeadphonesIcon,
   HeadphonesOffIcon,
   KebabMenuIcon,
@@ -24,6 +26,8 @@ import {
 import { Stack, UserAvatar } from "../primitives";
 import { chamferedSurface } from "../../theme";
 import { radius } from "../../tokens";
+import { formatElapsed } from "../recording/useRecording";
+import { useShareAvailability } from "../chat/share/useShareAvailability";
 
 /** The dock sits on the composer's inset; they are one strip. */
 const DOCK_INSET = "10px";
@@ -59,6 +63,10 @@ interface VoiceDockProps {
   onShareScreen?: () => void;
   /** Ask for the picker in camera-only mode, from the overflow menu. */
   onShareCamera?: () => void;
+  /** Open the audio recorder; absent outside developer mode, as in Standard. */
+  onRecord?: () => void;
+  /** Seconds recorded so far while a recording runs, or null when none does. */
+  recordingElapsed?: number | null;
 }
 
 /**
@@ -91,13 +99,23 @@ export function VoiceDock({
   onLeaveServer,
   onShareScreen,
   onShareCamera,
+  onRecord,
+  recordingElapsed = null,
 }: Readonly<VoiceDockProps>) {
-  const { t } = useTranslation(["nebulaSidebar", "common", "chat", "sidebar"]);
+  const { t } = useTranslation(["nebulaSidebar", "nebulaChat", "common", "chat", "sidebar"]);
   const micLive = useAppStore(selectMicLive);
   const deafened = useAppStore(selectSelfDeafened);
   const voiceState = useAppStore((state) => state.voiceState);
-  const ownSession = useAppStore((state) => state.ownSession);
-  const broadcastingOwnSession = useAppStore((state) => state.broadcastingOwnSession);
+  // The whisper key is global, so the press that starts one usually lands while
+  // the user is looking at something else. The status line under the name is
+  // where they look to check what they are sending, so that is where it shows.
+  const whisper = useWhisperState();
+  const refusedChannel = useAppStore((state) =>
+    whisper.refusal
+      ? (state.channels.find((channel) => channel.id === whisper.refusal?.channelId)?.name ??
+        `#${whisper.refusal.channelId}`)
+      : null,
+  );
   const stencil = useTheme().palette.nebulaSkin.chrome === "stencil";
   const [open, setOpen] = useState(false);
   const card = useRef<HTMLDivElement>(null);
@@ -116,8 +134,14 @@ export function VoiceDock({
   // Read from the store rather than from `useScreenShare`: that hook owns the
   // capture and only one component may. All the dock needs to know is whether
   // the broadcast running in this window belongs to this tab's session.
-  const sharing =
-    broadcastingOwnSession !== null && ownSession !== null && broadcastingOwnSession === ownSession;
+  // Compared by server as well as by session: two servers can hand out the
+  // same session number, and a share on the other one is not ours to stop here.
+  const shareAvailability = useShareAvailability();
+  const sharing = shareAvailability.here;
+  // The app runs one capture. While another server connection holds it, the
+  // start controls stay drawn but say why they do nothing.
+  const shareBlocked = !sharing && shareAvailability.elsewhere;
+  const shareBlockedReason = t("chat:screenShare.alreadySharingOtherServer");
 
   return (
     <Box
@@ -182,6 +206,9 @@ export function VoiceDock({
             {name}
           </Typography>
           <Typography
+            data-testid={TID.selfDockStatus}
+            data-whisper={whisper.active ? "active" : undefined}
+            aria-live="polite"
             sx={(theme) => ({
               fontSize: 10.5,
               lineHeight: 1.35,
@@ -197,27 +224,61 @@ export function VoiceDock({
                     color: theme.palette.nebula.bad,
                   }
                 : {}),
+              // Replaces the channel name rather than adding a line: the dock
+              // keeps its height, and the channel is exactly what a whisper is
+              // not going to.
+              ...(whisper.refusal !== null || whisper.unresolved !== null
+                ? { color: theme.palette.nebula.warn, fontWeight: 600 }
+                : whisper.active
+                  ? { color: theme.palette.nebula.accent, fontWeight: 600 }
+                  : {}),
             })}
             noWrap
           >
-            {voiceState === "inactive"
-              ? t("common:minimal.voiceOff")
-              : (channelName ?? t("nebulaSidebar:dock.notInVoice"))}
-            {latencyMs != null && voiceState !== "inactive"
+            {refusedChannel !== null
+              ? t("nebulaSidebar:dock.whisperDenied", { channel: refusedChannel })
+              : whisper.unresolved !== null
+              ? t("nebulaSidebar:dock.whisperUnresolved", { name: whisper.unresolved })
+              : whisper.active
+                ? t("nebulaSidebar:dock.whispering")
+                : voiceState === "inactive"
+                  ? t("common:minimal.voiceOff")
+                  : (channelName ?? t("nebulaSidebar:dock.notInVoice"))}
+            {latencyMs != null && voiceState !== "inactive" && !whisper.active && whisper.unresolved === null && whisper.refusal === null
               ? t("nebulaSidebar:dock.latency", { ms: latencyMs })
               : ""}
           </Typography>
         </Stack>
 
-        <DockButton
-          label={t("common:actions.more")}
-          active={open}
-          width={28}
-          testId={TID.selfDockMenu}
-          onClick={() => setOpen(true)}
-        >
-          <KebabMenuIcon width={15} height={15} />
-        </DockButton>
+        {/* A recording keeps running after its dialog closes, so the button
+            that leads back to it carries a mark for as long as it does. */}
+        <Box sx={{ position: "relative", display: "flex" }}>
+          <DockButton
+            label={t("common:actions.more")}
+            active={open}
+            width={28}
+            testId={TID.selfDockMenu}
+            onClick={() => setOpen(true)}
+          >
+            <KebabMenuIcon width={15} height={15} />
+          </DockButton>
+          {recordingElapsed !== null && (
+            <Box
+              data-recording-dot=""
+              aria-hidden
+              sx={(theme) => ({
+                position: "absolute",
+                top: 2,
+                right: 2,
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                background: theme.palette.nebula.bad,
+                pointerEvents: "none",
+              })}
+            />
+          )}
+        </Box>
       </Stack>
 
       <Stack
@@ -270,7 +331,18 @@ export function VoiceDock({
         {onShareScreen && (
           <DockButton
             spread
-            label={sharing ? t("chat:screenShare.stopScreenShare") : t("nebulaSidebar:dock.shareScreen")}
+            label={
+              sharing
+                ? t("chat:screenShare.stopScreenShare")
+                : shareBlocked
+                  ? shareBlockedReason
+                  : t("nebulaSidebar:dock.shareScreenRoute", {
+                      route: shareAvailability.relayed
+                        ? t("nebulaChat:share.routeRelayed")
+                        : t("nebulaChat:share.routeP2P"),
+                    })
+            }
+            disabled={shareBlocked}
             active={sharing}
             accent
             trailing
@@ -316,15 +388,24 @@ export function VoiceDock({
 
         {onShareCamera && (
           <MenuItem
+            disabled={shareBlocked}
             onClick={() => {
               setOpen(false);
               onShareCamera();
             }}
+            sx={shareBlocked ? { alignItems: "flex-start" } : undefined}
           >
-            <MenuGlyph>
+            <MenuGlyph inset={shareBlocked}>
               <WebcamIcon width={15} height={15} />
             </MenuGlyph>
-            {t("nebulaSidebar:dock.shareCamera")}
+            <Stack gap="1px" sx={{ minWidth: 0 }}>
+              {t("nebulaSidebar:dock.shareCamera")}
+              {shareBlocked && (
+                <Typography sx={(theme) => ({ fontSize: 11, lineHeight: 1.35, whiteSpace: "normal", color: theme.palette.nebula.muted })}>
+                  {shareBlockedReason}
+                </Typography>
+              )}
+            </Stack>
           </MenuItem>
         )}
         {onShareCamera && <MenuRule />}
@@ -391,6 +472,23 @@ export function VoiceDock({
             </MenuGlyph>
             {t("nebulaSidebar:dock.serverAdmin")}
             <MenuChevron />
+          </MenuItem>
+        )}
+
+        {onRecord && (
+          <MenuItem
+            onClick={() => {
+              setOpen(false);
+              onRecord();
+            }}
+            sx={recordingElapsed !== null ? (theme) => ({ color: theme.palette.nebula.bad }) : undefined}
+          >
+            <MenuGlyph tone={recordingElapsed !== null ? "inherit" : "muted"}>
+              <CircleDotIcon width={15} height={15} />
+            </MenuGlyph>
+            {recordingElapsed !== null
+              ? t("nebulaSidebar:dock.recordingElapsed", { elapsed: formatElapsed(recordingElapsed) })
+              : t("sidebar:channelSidebar.recordAudio")}
           </MenuItem>
         )}
 
@@ -461,6 +559,7 @@ function DockButton({
   width = 30,
   spread = false,
   trailing = false,
+  disabled = false,
   testId,
   onClick,
   children,
@@ -478,6 +577,12 @@ function DockButton({
   spread?: boolean;
   /** Pushes the button to the end of the row. */
   trailing?: boolean;
+  /**
+   * Drawn, but not acted on. Kept focusable and hoverable rather than using the
+   * `disabled` attribute, which would also silence the tooltip - and the
+   * tooltip is where the label says why.
+   */
+  disabled?: boolean;
   /** e2e handle; the dock's own buttons carry the shared registry's ids. */
   testId?: string;
   onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
@@ -493,7 +598,8 @@ function DockButton({
         data-testid={testId}
         aria-label={label}
         aria-pressed={active}
-        onClick={onClick}
+        aria-disabled={disabled || undefined}
+        onClick={disabled ? undefined : onClick}
         sx={(theme: Theme) => {
           const { nebula } = theme.palette;
           const align = trailing ? { marginLeft: "auto" } : {};
@@ -544,6 +650,7 @@ function DockButton({
                 ? { color: tone.ink, background: tone.fill, border: `2px solid ${tone.edge}` }
                 : fill
               : rest),
+            ...(disabled ? { opacity: 0.45, cursor: "not-allowed", "&:hover": {} } : {}),
           };
         }}
       >

@@ -14,10 +14,22 @@
     "headingMessage": "Nachrichten",
     "headingServer": "Server",
     "results_one": "{{count}} Treffer",
-    "results_other": "{{count}} Treffer"
+    "results_other": "{{count}} Treffer",
+    "filters": "Ergebnisse filtern",
+    "filterAll": "Alle",
+    "filterPhotos": "Fotos",
+    "filterLinks": "Links",
+    "photosEmpty": "Noch keine Fotos geteilt.",
+    "linksEmpty": "Tippen, um einen geteilten Link zu finden.",
+    "photosLoading": "Fotos werden geladen …",
+    "photos_one": "{{count}} Foto",
+    "photos_other": "{{count}} Fotos",
+    "photoLabel": "Foto von {{sender}}, {{place}}",
+    "keyEsc": "Esc"
   },
   "gameOverlay": {
     "you": "DU",
-    "more": "+{{count}} weitere"
+    "more": "+{{count}} weitere",
+    "channel": "Kanal"
   }
 }

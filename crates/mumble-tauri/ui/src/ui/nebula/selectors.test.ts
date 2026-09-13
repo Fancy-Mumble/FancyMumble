@@ -791,6 +791,18 @@ describe("globalSearchRows", () => {
     expect(rows.some((row) => row.kind === "person")).toBe(true);
     expect(rows.some((row) => row.kind === "server")).toBe(true);
   });
+
+  it("keeps only the backend's messages once narrowed to photos or links", () => {
+    // "Gam" matches the Gaming channel in this window; a channel carries no link.
+    const rows = globalSearchRows({
+      ...input,
+      t,
+      query: "Gam",
+      filter: "links",
+      results: [messageResult({ sender_name: "Ada", sender_session: 8 })],
+    });
+    expect(rows.map((row) => row.kind)).toEqual(["message"]);
+  });
 });
 
 describe("messageContent", () => {

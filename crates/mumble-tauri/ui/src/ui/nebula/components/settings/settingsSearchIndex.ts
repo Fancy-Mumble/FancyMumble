@@ -364,6 +364,12 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
   { page: "privacy", title: "Read receipts", titleKey: "privacy.readReceipts", keywords: ["seen"] },
   {
     page: "privacy",
+    title: "Notepad",
+    titleKey: "nebulaSettings:notepad.title",
+    keywords: ["notes", "notepad", "self chat", "encryption", "signal", "local"],
+  },
+  {
+    page: "privacy",
     title: "Typing indicators",
     titleKey: "privacy.typingIndicators",
     keywords: ["typing"],
@@ -456,6 +462,12 @@ export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = [
     title: "Window",
     titleKey: "shortcuts.groupWindow",
     keywords: ["fullscreen", "open settings", "developer overlay", "hotkey"],
+  },
+  {
+    page: "shortcuts",
+    title: "Whisper and shout",
+    titleKey: "whisper.title",
+    keywords: ["whisper", "shout", "voice target", "hotkey"],
   },
   {
     page: "shortcuts",

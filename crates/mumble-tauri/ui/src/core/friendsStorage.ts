@@ -56,6 +56,9 @@ export interface Friend {
   avatarSize?: number;
   /** Unix epoch millis when the cached avatar was last refreshed. */
   avatarUpdatedAt?: number;
+  /** True for yourself: the private notepad of one of your logins, saved like a
+   *  friend so it stays listed while that server is closed. Never removable. */
+  self?: boolean;
 }
 
 /**
@@ -115,9 +118,12 @@ export async function hasFriend(opts: {
  * they share a certificate - so when both sides name an account, that decides.
  */
 function isSameFriend(
-  a: Pick<Friend, "userHash" | "userName" | "serverId" | "userId">,
-  b: Pick<Friend, "userHash" | "userName" | "serverId" | "userId">,
+  a: Pick<Friend, "userHash" | "userName" | "serverId" | "userId" | "self">,
+  b: Pick<Friend, "userHash" | "userName" | "serverId" | "userId" | "self">,
 ): boolean {
+  // Your own record is matched by login in `saveSelfFriend`, never here: your
+  // certificate is also worn by any second account of yours.
+  if (a.self || b.self) return false;
   if (a.userHash && b.userHash) {
     if (a.userHash !== b.userHash) return false;
     if (a.userId != null && b.userId != null) return a.userId === b.userId;
@@ -218,9 +224,53 @@ export async function updateFriendIdentity(id: string, identity: FriendIdentity)
   if (applyIdentity(friend, identity, "fill")) await saveFriends([...friends]);
 }
 
+/** What identifies one of your own logins, as {@link saveSelfFriend} records it. */
+export interface SelfFriendInput {
+  userName: string;
+  userId: number;
+  userHash?: string;
+  serverId: string;
+  serverLabel?: string;
+  serverHost: string;
+  serverPort: number;
+  serverUsername: string;
+  serverCertLabel: string | null;
+}
+
+/**
+ * Save yourself as a friend for this login, or refresh the record you already
+ * have. One record per login (host, port, username): the same certificate and
+ * even the same user id recur across servers, so neither can tell them apart.
+ */
+export async function saveSelfFriend(input: SelfFriendInput): Promise<Friend> {
+  const friends = await getFriends();
+  const index = friends.findIndex(
+    (f) =>
+      f.self &&
+      f.serverHost === input.serverHost &&
+      f.serverPort === input.serverPort &&
+      f.serverUsername === input.serverUsername,
+  );
+  const current = index === -1 ? null : friends[index];
+  const next: Friend = {
+    ...current,
+    ...input,
+    id: current?.id ?? crypto.randomUUID(),
+    addedAt: current?.addedAt ?? Date.now(),
+    self: true,
+  };
+  if (current && JSON.stringify(current) === JSON.stringify(next)) return current;
+  const list = [...friends];
+  if (index === -1) list.push(next);
+  else list[index] = next;
+  await saveFriends(list);
+  return next;
+}
+
 export async function removeFriend(id: string): Promise<void> {
   const friends = await getFriends();
-  const next = friends.filter((f) => f.id !== id);
+  // You cannot unfriend yourself.
+  const next = friends.filter((f) => f.id !== id || f.self);
   if (next.length !== friends.length) await saveFriends(next);
 }
 

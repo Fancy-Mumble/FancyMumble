@@ -193,7 +193,7 @@ export function MentionPopover({ target, onClose }: Readonly<MentionPopoverProps
                     color: theme.palette.nebula.muted,
                   })}
                 >
-                  +{overflow} more
+                  {t("mention.overflow", { count: overflow })}
                 </Typography>
               )}
             </Stack>

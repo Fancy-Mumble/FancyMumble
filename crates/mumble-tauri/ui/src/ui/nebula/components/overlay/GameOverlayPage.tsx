@@ -280,7 +280,7 @@ export default function GameOverlayPage() {
             #
           </Typography>
           <Typography sx={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 11.5 }} noWrap>
-            {snapshot.channelName ?? t("common:labels.channel", { defaultValue: "Channel" })}
+            {snapshot.channelName ?? t("gameOverlay.channel")}
           </Typography>
           <Box sx={(t2) => ({ display: "flex", alignItems: "center", color: t2.palette.nebula.dim })}>
             {snapshot.selfDeaf ? (
