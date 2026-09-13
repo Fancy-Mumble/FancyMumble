@@ -249,6 +249,10 @@
     "noResultsHint": "Try a different search term or filter"
   },
   "userListItem": {
+    "whisperBadge": "Whisper",
+    "shoutBadge": "Shout",
+    "whisperingTitle": "Whispering to you",
+    "shoutingTitle": "Shouting to your channel",
     "registeredTitle": "Registered",
     "serverMutedTitle": "Server muted",
     "selfMutedTitle": "Self muted",
@@ -370,6 +374,7 @@
     "loadingOlderAriaLabel": "Loading older messages",
     "modeFullArchive": "All stored messages are visible to channel members.",
     "modeSignal": "Messages are end-to-end encrypted using the Signal Protocol.",
+    "modeServerManaged": "Messages are stored and encrypted by the server.",
     "retentionLabel": "Retention: {{value}}",
     "storedLabel": "Stored: {{total}} messages",
     "retentionNoLimit": "No limit",

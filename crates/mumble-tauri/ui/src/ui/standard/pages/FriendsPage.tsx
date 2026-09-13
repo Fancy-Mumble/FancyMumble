@@ -33,7 +33,7 @@ import {
 import { useAppStore } from "@core/store";
 import { TID } from "@core/testids";
 import { isDmChannel, dmPeerUserId } from "@core/utils/channelVisibility";
-import { requestFriendChannel, FRIENDS_PLUGIN } from "@core/friendsChannel";
+import { requestFriendChannel } from "@core/friendsChannel";
 import { getSavedServers, getServerPassword } from "@core/serverStorage";
 import { useAclGroups } from "../hooks/useAclGroups";
 import {
@@ -65,9 +65,6 @@ type FriendsMatch = FriendMatch;
 
 const ONLINE_REFRESH_MS = 15000;
 
-/** Id prefix for the synthetic "yourself" friend entry (a self-chat). */
-const SELF_FRIEND_PREFIX = "self:";
-
 export default function FriendsPage() {
   const { t } = useTranslation("server");
   const { t: tChat } = useTranslation("chat");
@@ -83,7 +80,6 @@ export default function FriendsPage() {
   const toggleDeafen = useAppStore((s) => s.toggleDeafen);
   const selectedDmUser = useAppStore((s) => s.selectedDmUser);
   const selectedChannel = useAppStore((s) => s.selectedChannel);
-  const pluginInfos = useAppStore((s) => s.pluginInfos);
   const switchServer = useAppStore((s) => s.switchServer);
   const selectDmUser = useAppStore((s) => s.selectDmUser);
   const connect = useAppStore((s) => s.connect);
@@ -223,6 +219,11 @@ export default function FriendsPage() {
       const { online, sessionId } = resolveFriend(friend);
       if (sessionId == null) return false;
       if (activeServerId !== sessionId) await switchServer(sessionId);
+      if (friend.self) {
+        // Yourself: your private E2E notepad on this login.
+        requestFriendChannel();
+        return true;
+      }
       if (online != null) {
         // Online: open the DM; a registered pair upgrades to the E2E channel.
         await selectDmUser(online.userSession);
@@ -244,11 +245,6 @@ export default function FriendsPage() {
   const handleClickFriend = useCallback(
     async (friend: Friend) => {
       try {
-        // The synthetic self-entry opens a chat with yourself.
-        if (friend.id.startsWith(SELF_FRIEND_PREFIX)) {
-          requestFriendChannel();
-          return;
-        }
         if (await openFriendChat(friend)) return;
         // Not connected to their server - offer to (re)connect to it.
         if (resolveFriend(friend).canConnect) setPendingConnect(friend);
@@ -301,14 +297,12 @@ export default function FriendsPage() {
     void openFriendChat(friend).finally(() => setPendingOpenId(null));
   }, [pendingOpenId, friends, sessions, onlineMap, resolveFriend, openFriendChat]);
 
-  // The own registered user id on the active server (null for a guest). Chatting
-  // with yourself (a private E2E notepad) needs a registered user + the plugin;
-  // when available, "yourself" shows up in the friends list like any friend.
+  // The own registered user id on the active server (null for a guest). Yourself
+  // is a saved friend per login (`@core/selfFriend`), opening your E2E notepad.
   const ownUserId = useMemo(
     () => users.find((u) => u.session === ownSession)?.user_id ?? null,
     [users, ownSession],
   );
-  const canSelfChat = activeServerId != null && ownUserId != null && pluginInfos.has(FRIENDS_PLUGIN);
 
   // Whether a friend chat is open in the embedded ChatView: either a classic DM
   // (selectedDmUser) or - after the upgrade - the friend's `__dm:` channel (the
@@ -346,34 +340,16 @@ export default function FriendsPage() {
     [ownUser, channels],
   );
 
-  // "Yourself" as a friend entry on the active server: it groups under your own
-  // name, is searchable, and clicking it opens your private E2E self-chat - it
-  // behaves like any other friend.  Only present when self-chat is possible.
-  const selfFriend = useMemo<Friend | null>(() => {
-    if (!canSelfChat || activeServerId == null || !ownUser) return null;
-    const label = sessions.find((s) => s.id === activeServerId)?.label;
-    const f: Friend = {
-      id: `${SELF_FRIEND_PREFIX}${activeServerId}`,
-      userName: ownUser.name,
-      serverId: activeServerId,
-      addedAt: 0,
-    };
-    if (ownUser.hash) f.userHash = ownUser.hash;
-    if (label) f.serverLabel = label;
-    return f;
-  }, [canSelfChat, activeServerId, ownUser, sessions]);
-
-  const allFriends = useMemo(() => (selfFriend ? [selfFriend, ...friends] : friends), [selfFriend, friends]);
-
   const filteredFriends = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return allFriends;
     // Search matches the friend's name OR the server they're on, so typing a
-    // server name narrows to that server's chats.
-    return allFriends.filter(
-      (f) => f.userName.toLowerCase().includes(q) || (f.serverLabel ?? "").toLowerCase().includes(q),
-    );
-  }, [allFriends, searchQuery]);
+    // server name narrows to that server's chats. Yourself leads each server.
+    return friends
+      .filter(
+        (f) => !q || f.userName.toLowerCase().includes(q) || (f.serverLabel ?? "").toLowerCase().includes(q),
+      )
+      .sort((a, b) => Number(b.self === true) - Number(a.self === true));
+  }, [friends, searchQuery]);
 
   /** Friends grouped by the server they belong to, for the divided list. Keyed
    *  by a *stable* server identity (label / connection target, not the volatile
@@ -450,8 +426,8 @@ export default function FriendsPage() {
               </button>
             </div>
             <div className={styles.list}>
-              {allFriends.length === 0 && <div className={styles.empty}>{t("friendsPage.empty")}</div>}
-              {allFriends.length > 0 && filteredFriends.length === 0 && (
+              {friends.length === 0 && <div className={styles.empty}>{t("friendsPage.empty")}</div>}
+              {friends.length > 0 && filteredFriends.length === 0 && (
                 <div className={styles.empty}>{t("friendsPage.noMatches")}</div>
               )}
               {friendGroups.map((group) => (
@@ -461,24 +437,24 @@ export default function FriendsPage() {
                     <span className={styles.serverDividerCount}>{group.friends.length}</span>
                   </div>
                   {group.friends.map((f) => {
-                    // "Yourself" is always online and active when its self-chat is
-                    // open; it has no unfriend action.
-                    const isSelf = f.id.startsWith(SELF_FRIEND_PREFIX);
-                    const match = isSelf ? undefined : onlineMap[f.id];
-                    const res = isSelf ? null : resolveFriend(f);
+                    // "Yourself" is online wherever that login is open, active when
+                    // its self-chat is open there, and has no unfriend action.
+                    const isSelf = f.self === true;
+                    const match = onlineMap[f.id];
+                    const res = resolveFriend(f);
                     const isActive = isSelf
-                      ? selfChatActive
+                      ? selfChatActive && res.sessionId === activeServerId
                       : match != null &&
                         selectedDmUser === match.userSession &&
                         activeServerId === match.serverId;
                     // Clickable when we can open the chat (online, or offline on a
                     // connected server) or at least offer to connect to the server.
-                    const clickable = isSelf || res!.canOpen || res!.canConnect;
+                    const clickable = res.canOpen || res.canConnect;
                     return (
                       <FriendRow
                         key={f.id}
                         friend={f}
-                        online={isSelf || match != null}
+                        online={isSelf ? res.sessionId != null : match != null}
                         clickable={clickable}
                         isActive={isActive}
                         onClick={() => {

@@ -15,6 +15,7 @@ import type { ChatMessage, UserEntry } from "../../types";
 import type { AppState } from "..";
 import { newPendingId, bodyNeedsProgressUI } from "..";
 import { requestFriendChannel, FRIENDS_PLUGIN } from "../../friendsChannel";
+import { loadLocalNotes, localNote, saveLocalNotes } from "../../localNotes";
 import {
   friendKeyFor as dmFriendKeyFor,
   isDmPersistenceEnabled,
@@ -55,16 +56,27 @@ export interface DmSlice {
    *  E2E, persisted friend chat with them (resolved via the `fancy-friends`
    *  plugin). Lets a re-opened chat jump straight to the channel. */
   friendChannels: Record<number, number>;
+  /** Whether the conversation pane shows the notepad kept on this device. */
+  localNotesOpen: boolean;
+  /** The notes kept on this device, loaded when the notepad is opened. */
+  localNotes: ChatMessage[];
 
   selectDmUser: (session: number) => Promise<void>;
   sendDm: (targetSession: number, body: string) => Promise<void>;
   refreshDmMessages: (session: number) => Promise<void>;
   /** Record the channel the `fancy-friends` plugin provisioned for a peer. */
   bindFriendChannel: (peerUserId: number, channelId: number) => void;
+  /** Show the notepad kept on this device in the conversation pane. */
+  openLocalNotes: () => Promise<void>;
+  addLocalNote: (body: string, author: { name: string; hash?: string | null }) => Promise<void>;
+  deleteLocalNotes: (messageIds: readonly string[]) => Promise<void>;
 }
 
 /** State-only portion of {@link DmSlice}. */
-type DmState = Pick<DmSlice, "selectedDmUser" | "dmMessages" | "dmUnreadCounts" | "friendChannels">;
+type DmState = Pick<
+  DmSlice,
+  "selectedDmUser" | "dmMessages" | "dmUnreadCounts" | "friendChannels" | "localNotesOpen" | "localNotes"
+>;
 
 /** Default DM state (single source of truth; also spread into the root `INITIAL`
  *  so `reset()` / disconnect / switchServer clear it). */
@@ -73,6 +85,8 @@ export const dmInitialState: DmState = {
   dmMessages: [],
   dmUnreadCounts: {},
   friendChannels: {},
+  localNotesOpen: false,
+  localNotes: [],
 };
 
 export const createDmSlice: StateCreator<AppState, [], [], DmSlice> = (set, get) => ({
@@ -84,14 +98,20 @@ export const createDmSlice: StateCreator<AppState, [], [], DmSlice> = (set, get)
     const { selectedDmUser, currentChannel, selectChannel } = get();
     if (selectedDmUser === session) {
       if (currentChannel == null) {
-        set({ selectedDmUser: null, dmMessages: [], selectedUser: null });
+        set({ selectedDmUser: null, dmMessages: [], selectedUser: null, localNotesOpen: false });
       } else {
         await selectChannel(currentChannel);
         set({ selectedUser: null });
       }
       return;
     }
-    set({ selectedDmUser: session, selectedChannel: null, messages: [], selectedUser: session });
+    set({
+      selectedDmUser: session,
+      selectedChannel: null,
+      messages: [],
+      selectedUser: session,
+      localNotesOpen: false,
+    });
     try {
       await invoke("select_dm_user", { session });
       const remote = await invoke<ChatMessage[]>("get_dm_messages", { session });
@@ -192,5 +212,24 @@ export const createDmSlice: StateCreator<AppState, [], [], DmSlice> = (set, get)
 
   bindFriendChannel: (peerUserId, channelId) => {
     set((s) => ({ friendChannels: { ...s.friendChannels, [peerUserId]: channelId } }));
+  },
+
+  openLocalNotes: async () => {
+    set({ localNotesOpen: true, selectedDmUser: null, dmMessages: [], selectedUser: null });
+    const notes = await loadLocalNotes();
+    if (get().localNotesOpen) set({ localNotes: notes });
+  },
+
+  addLocalNote: async (body, author) => {
+    const notes = [...get().localNotes, localNote(body, author)];
+    set({ localNotes: notes });
+    await saveLocalNotes(notes);
+  },
+
+  deleteLocalNotes: async (messageIds) => {
+    const removed = new Set(messageIds);
+    const notes = get().localNotes.filter((note) => !note.message_id || !removed.has(note.message_id));
+    set({ localNotes: notes });
+    await saveLocalNotes(notes);
   },
 });

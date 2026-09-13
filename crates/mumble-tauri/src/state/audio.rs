@@ -502,7 +502,7 @@ mod voice_pipeline {
             // Re-use existing input volume handle or create a new one. The
             // claim is taken here, before the build below: a stop or a newer
             // start that lands while the pipeline is being built retires it.
-            let (generation, input_vol, app, own_session, max_bandwidth) = {
+            let (generation, input_vol, app, own_session, max_bandwidth, voice_target) = {
                 let __session = self.inner.snapshot();
                 let mut state = __session.lock().map_err(|e| e.to_string())?;
                 (
@@ -511,6 +511,10 @@ mod voice_pipeline {
                     state.conn.tauri_app_handle.clone(),
                     state.conn.own_session,
                     state.server.max_bandwidth,
+                    // Handed to the loop rather than re-read through the lock:
+                    // it outlives this pipeline, so a whisper held across a
+                    // device change keeps its target.
+                    state.audio.voice_target.clone(),
                 )
             };
             let input_vol = input_vol
@@ -569,7 +573,7 @@ mod voice_pipeline {
                 let client = client.clone();
                 let app = app.clone();
                 Some(tokio::spawn(async move {
-                    outbound_audio_loop(outbound, client, app, own_session).await;
+                    outbound_audio_loop(outbound, client, app, own_session, voice_target).await;
                 }))
             } else {
                 None

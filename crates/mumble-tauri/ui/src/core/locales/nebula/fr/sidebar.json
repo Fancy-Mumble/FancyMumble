@@ -1,4 +1,4 @@
-{
+﻿{
   "channels": {
     "title": "Salons",
     "privateRooms": "Salons privés",
@@ -13,7 +13,14 @@
     "newTemporaryChannelHere": "Nouveau salon temporaire ici",
     "joinChannel": "Rejoindre le salon",
     "editChannel": "Modifier le salon",
-    "deleteChannel": "Supprimer le salon"
+    "deleteChannel": "Supprimer le salon",
+    "arrangeChannels": "Organiser les salons",
+    "doneArranging": "Terminer l’organisation",
+    "arrangeHint": "Faites glisser les salons pour les réordonner",
+    "arrangeDone": "Terminé",
+    "arrangeAlone": "Ce salon n’a aucun voisin avec qui échanger sa place",
+    "arrangeDenied": "Vous ne pouvez pas déplacer ce salon",
+    "you": "vous"
   },
   "servers": {
     "title": "Serveurs",
@@ -46,9 +53,13 @@
     "copyAddress": "Copier l’adresse",
     "forgetTitle": "Supprimer ce serveur ?",
     "forgetBody_one": "{{server}} et son identité enregistrée seront retirés de la liste. Une session ouverte reste jusqu’à ce que vous la quittiez.",
-    "forgetBody_other": "{{server}} et ses {{count}} identités enregistrées seront retirés de la liste. Une session ouverte reste jusqu’à ce que vous la quittiez."
+    "forgetBody_other": "{{server}} et ses {{count}} identités enregistrées seront retirés de la liste. Une session ouverte reste jusqu’à ce que vous la quittiez.",
+    "addShort": "+ Ajouter"
   },
   "dock": {
+    "whisperDenied": "Refusé : pas de permission Chuchoter dans {{channel}}",
+    "whispering": "Chuchotement en cours",
+    "whisperUnresolved": "{{name}} n'atteint personne pour l'instant",
     "profile": "Votre profil",
     "notInVoice": "Pas en vocal",
     "enableVoice": "Activer le vocal",
@@ -58,7 +69,9 @@
     "menuCaption": "Options du serveur et de l’application",
     "hideEmptyHint": "Les canaux où vous ne pouvez pas écrire restent repliés",
     "leaveServer": "Quitter le serveur",
-    "latency": " · {{ms}} ms"
+    "latency": " · {{ms}} ms",
+    "recordingElapsed": "Enregistrement · {{elapsed}}",
+    "shareScreenRoute": "Partager votre écran · {{route}}"
   },
   "friends": {
     "search": "Rechercher des amis",
@@ -75,7 +88,10 @@
     "tileLabelUnread_one": "Amis, {{count}} non lu",
     "tileLabelUnread_other": "Amis, {{count}} non lus",
     "online": "En ligne",
-    "offline": "Hors ligne"
+    "offline": "Hors ligne",
+    "notepadLocal": "Notes sur cet appareil",
+    "notepadOptions": "Réglages du bloc-notes",
+    "thisDevice": "Cet appareil"
   },
   "card": {
     "youreIn": "Vous êtes dans #{{channel}}",

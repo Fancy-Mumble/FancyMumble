@@ -1,6 +1,9 @@
 ﻿{
   "panel": {
     "heading": "服务器信息",
+    "online": "{{count}} 人在线",
+    "kindFancy": "Fancy 服务器",
+    "kindMumble": "Mumble 服务器",
     "activityLog": "活动日志",
     "noActivity": "暂无活动",
     "audioTransport": "音频传输",

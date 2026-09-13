@@ -75,6 +75,7 @@ export default function FriendsSurface({ onClose }: { onClose: () => void }) {
       )
       .sort(
         (left, right) =>
+          Number(right.self === true) - Number(left.self === true) ||
           Number(!matches[left.id]) - Number(!matches[right.id]) ||
           left.userName.localeCompare(right.userName),
       );
@@ -120,7 +121,9 @@ export default function FriendsSurface({ onClose }: { onClose: () => void }) {
         return;
       }
       if (activeServerId !== serverId) await useAppStore.getState().switchServer(serverId);
-      if (match) await useAppStore.getState().selectDmUser(match.userSession);
+      // Yourself opens your private notepad on this login.
+      if (friend.self) requestFriendChannel();
+      else if (match) await useAppStore.getState().selectDmUser(match.userSession);
       else if (friend.userId != null) requestFriendChannel(friend.userId);
       else {
         setStatus(`${friend.userName} is offline and has no registered account stored for offline chat.`);
@@ -165,6 +168,11 @@ export default function FriendsSurface({ onClose }: { onClose: () => void }) {
                 friend.serverPort === session.port &&
                 friend.serverUsername === session.username,
             );
+          // Yourself is online wherever that login is open.
+          const online = friend.self ? connected : match != null;
+          let presence = connected ? "Offline chat" : "Disconnected";
+          if (friend.self) presence = connected ? "Notepad" : "Disconnected";
+          else if (match) presence = "Online";
           return (
             <article key={friend.id} className={styles.friend}>
               <button
@@ -190,18 +198,20 @@ export default function FriendsSurface({ onClose }: { onClose: () => void }) {
                   </small>
                 </span>
                 <span
-                  className={`${styles.presence} ${match ? styles.online : connected ? styles.connected : ""}`}
+                  className={`${styles.presence} ${online ? styles.online : connected ? styles.connected : ""}`}
                 >
                   <i />
-                  {match ? "Online" : connected ? "Offline chat" : "Disconnected"}
+                  {presence}
                 </span>
                 <MessageCircleIcon />
               </button>
-              <IconButton
-                icon={<TrashIcon />}
-                label={`Remove ${friend.userName}`}
-                onClick={() => void removeFriend(friend.id)}
-              />
+              {!friend.self && (
+                <IconButton
+                  icon={<TrashIcon />}
+                  label={`Remove ${friend.userName}`}
+                  onClick={() => void removeFriend(friend.id)}
+                />
+              )}
             </article>
           );
         })}

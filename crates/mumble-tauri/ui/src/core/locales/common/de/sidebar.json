@@ -249,6 +249,10 @@
     "noResultsHint": "Probier einen anderen Suchbegriff oder Filter"
   },
   "userListItem": {
+    "whisperBadge": "Flüstern",
+    "shoutBadge": "Rufen",
+    "whisperingTitle": "Flüstert dir zu",
+    "shoutingTitle": "Ruft in deinen Kanal",
     "registeredTitle": "Registriert",
     "serverMutedTitle": "Vom Server stummgeschaltet",
     "selfMutedTitle": "Selbst stummgeschaltet",
@@ -370,6 +374,7 @@
     "loadingOlderAriaLabel": "Ältere Nachrichten werden geladen",
     "modeFullArchive": "Alle gespeicherten Nachrichten sind für Kanalmitglieder sichtbar.",
     "modeSignal": "Nachrichten werden Ende-zu-Ende mit dem Signal-Protokoll verschlüsselt.",
+    "modeServerManaged": "Nachrichten werden vom Server verschlüsselt gespeichert.",
     "retentionLabel": "Aufbewahrung: {{value}}",
     "storedLabel": "Gespeichert: {{total}} Nachrichten",
     "retentionNoLimit": "Kein Limit",

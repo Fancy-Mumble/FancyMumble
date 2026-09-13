@@ -605,6 +605,13 @@ const ARRIVING = "For people arriving";
 const HOUSEKEEPING = "Housekeeping";
 const OCCASION = "For an occasion";
 
+/** The gallery's sections, by the key their caption is translated under. */
+export const TEMPLATE_CATEGORIES: Readonly<Record<string, string>> = {
+  arriving: ARRIVING,
+  housekeeping: HOUSEKEEPING,
+  occasion: OCCASION,
+};
+
 /**
  * The palette these bodies paint with.
  *

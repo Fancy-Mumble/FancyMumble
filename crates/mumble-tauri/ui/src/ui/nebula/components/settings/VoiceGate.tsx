@@ -76,10 +76,10 @@ export function VoiceGate({
         flexWrap="wrap"
         sx={(theme) => ({ mt: "10px", fontSize: 10.5, color: theme.palette.nebula.dim })}
       >
-        <span>threshold {(settings.vad_threshold * 100).toFixed(1)}%</span>
-        <span>close {Math.round(settings.noise_gate_close_ratio * 100)}%</span>
-        <span>hold {settings.hold_frames} frames</span>
-        <span>max gain {settings.max_gain_db.toFixed(1)} dB</span>
+        <span>{t("gate.readoutThreshold", { value: (settings.vad_threshold * 100).toFixed(1) })}</span>
+        <span>{t("gate.readoutClose", { value: Math.round(settings.noise_gate_close_ratio * 100) })}</span>
+        <span>{t("gate.readoutHold", { count: settings.hold_frames })}</span>
+        <span>{t("gate.readoutMaxGain", { value: settings.max_gain_db.toFixed(1) })}</span>
       </Stack>
 
       <HearYourself gate={gate} />

@@ -64,10 +64,12 @@ mod shared_handle;
 pub(crate) mod starling_files;
 pub mod types;
 mod voice_decode;
+pub(crate) mod whisper;
 
 // Re-export everything that lib.rs needs.
 pub(crate) use event_handler::show_desktop_notification;
 pub(crate) use registry::{HashLookup, UserHashMatch};
+pub(crate) use whisper::WhisperEntry;
 pub use sessions::{ServerId, SessionMeta};
 pub use types::{
     AudioDevice, AudioSettings, ChannelEntry, ChatMessage, ConnectionStatus, DebugStats,
@@ -76,7 +78,7 @@ pub use types::{
 };
 
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::AtomicU32;
+use std::sync::atomic::{AtomicU8, AtomicU32};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -109,6 +111,34 @@ pub(crate) fn parse_pchat_protocol_str(s: &str) -> PchatProtocol {
 pub(super) struct AudioPipelineState {
     pub settings: AudioSettings,
     pub voice_state: VoiceState,
+    /// The voice target stamped on every outbound packet: `0` is normal
+    /// speech into the current channel, `1..=30` a slot registered with
+    /// `VoiceTarget` - a whisper or a shout.
+    ///
+    /// Shared with the encoding loop instead of read through the lock. It
+    /// changes twice per whisper - once on the key down, once on the key up -
+    /// and is read once per 20 ms frame, and a frame-rate lock on `SharedState`
+    /// is exactly what moving decoding off the event loop was for.
+    pub voice_target: Arc<AtomicU8>,
+    /// What each whisper slot holds on the server, by slot.
+    ///
+    /// The frontend re-registers every target whenever the roster moves, and
+    /// nearly all of those ask for what the slot already holds; this is what
+    /// makes the repeat free. Per connection, because the slots are: a
+    /// reconnect gets a fresh `SharedState` and an empty map.
+    pub whisper_slots: HashMap<u8, Vec<WhisperEntry>>,
+    /// Channels the server refused a whisper or shout into, from
+    /// `PermissionDenied`. A registration touching a channel clears it first,
+    /// so what remains is what the server still refuses.
+    pub whisper_denied: std::collections::BTreeSet<u32>,
+    /// Whether the whisper key is what put the mic live.
+    ///
+    /// A whisper transmits while held whatever the activation mode is, so it
+    /// engages push-to-talk on the way in. Releasing it must only undo that
+    /// where it did it: in voice-activity mode the user was already talking,
+    /// and muting them on the key up would be the shortcut turning their mic
+    /// off.
+    pub whisper_held_ptt: bool,
     /// The decoder thread of the live connection, when there is one.
     ///
     /// It holds the mixer while it runs; `mixer` below is the fallback for a
@@ -195,6 +225,13 @@ impl AudioPipelineState {
         if let Some(handle) = self.outbound_task_handle.take() {
             handle.abort();
         }
+        // A mic that has stopped is not whispering. Without this a lost key-up
+        // - the window loses focus mid-press on some compositors, and the
+        // release never arrives - would leave the target set, and the next
+        // thing said in the channel would go to the whisper's audience
+        // instead.
+        self.voice_target.store(0, std::sync::atomic::Ordering::Relaxed);
+        self.whisper_held_ptt = false;
     }
 
     /// Claim the right to install the next outbound loop. Building one can
@@ -263,7 +300,7 @@ pub(super) struct PchatContext {
     pub pending_key_shares: Vec<PendingKeyShare>,
     pub key_holders: HashMap<u32, Vec<KeyHolderEntry>>,
     pub hash_name_resolver: Option<Arc<dyn hash_names::HashNameResolver>>,
-    pub pending_delete_acks: Vec<tokio::sync::oneshot::Sender<DeleteAckResult>>,
+    pub pending_delete_acks: Vec<PendingDeleteAck>,
 }
 
 /// Maximum number of in-memory messages retained per thread (channel or DM).
@@ -516,6 +553,8 @@ pub(super) struct SharedState {
     /// to let the frontend resync after an HMR reload via
     /// `get_plugin_broadcasts` instead of forcing a full reconnect.
     pub plugin_broadcasts: Vec<PluginDataPayload>,
+    /// Backend requests waiting on an operator ticket from this server.
+    pub operator_tickets: handler::operator_ticket::TicketWaiters,
     /// File requests waiting on a signed URL from a canon server, and whether
     /// this one does files at all. Empty for a server running the plugin,
     /// which never sends a frame this reads.

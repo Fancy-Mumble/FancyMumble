@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import type enDesign from "@core/locales/nebula/en/design.json";
 import { Box, ListSubheader, Menu, MenuItem, Divider, Typography, useTheme } from "@mui/material";
 import { assemble, compileTarget } from "./compile";
 import { HtmlSourceField } from "../../primitives";
@@ -11,7 +14,6 @@ import { MAX_BODY, plainTextOf, richBody, splitInlineSlots, withoutSlotTokens } 
 import {
   BUILT_INS,
   BUILT_IN_GROUPS,
-  BUILT_IN_GROUP_LABELS,
   builtIn,
   builtInsOf,
   isBuiltIn,
@@ -22,29 +24,25 @@ import { DESIGN_TEMPLATES } from "./templates";
 import { PictureField, type Picked } from "./PictureField";
 import { OnlineNow } from "../../welcome/OnlineNow";
 import {
-  BLOCK_LABELS,
   GRID,
   addInput,
   TARGETS,
-  TARGET_LABELS,
   addBlock,
-  CATEGORY_LABELS,
   PALETTE,
   PALETTE_CATEGORIES,
   addInlineUsage,
   carriesInline,
   isRichBody,
   designIssues,
+  sayIssue,
   hideUsage,
   paletteFor,
   paletteOf,
   readableText,
   resizable,
-  SECTION_LABELS,
   SECTIONS,
   usagesBySection,
   usagesOf,
-  usagesOfInput,
   droppedOn,
   effective,
   gateOpen,
@@ -112,6 +110,76 @@ import {
  * once, and each client takes what it can draw - rather than the design being
  * pinned to the least capable target from the start.
  */
+
+/** The editor's own `t`, for the helpers that are not components. */
+type DesignT = TFunction<"nebulaDesign">;
+
+/*
+ * Catalogue ids the modules type as plain strings, narrowed to the keys the
+ * locale files hold for them. The English file is the list of what exists.
+ */
+type PaletteId = keyof typeof enDesign.palette;
+type SwatchId = keyof typeof enDesign.swatches;
+type TemplateId = keyof typeof enDesign.templates;
+type BuiltInSlug = keyof typeof enDesign.builtins.about;
+type ShadowId = keyof typeof enDesign.shadows;
+type TextShadowId = keyof typeof enDesign.textShadows;
+type AutoSlug = keyof typeof enDesign.autoColours;
+
+/** `Soft ink` as `softInk`: a swatch's key, from the name `design.ts` gives it. */
+const swatchSlug = (label: string) =>
+  label.toLowerCase().replaceAll(/ (\w)/g, (_, letter: string) => letter.toUpperCase()) as SwatchId;
+
+/** `user.country` as `user_country`, because a dot is a key separator. */
+const aboutSlug = (name: string) => name.replace(".", "_") as BuiltInSlug;
+
+const autoSlug = (id: AutoColourId) => id.slice("auto:".length) as AutoSlug;
+
+/** Built-ins whose sample is words rather than a code or a number. */
+const WORDED_SAMPLES = new Set(["user.account", "user.cert", "user.since", "now.date"]);
+type SampleSlug = keyof typeof enDesign.builtins.sample;
+
+/** What a built-in reads as in the editor, in the operator's language where it is words. */
+function sampleOf(t: DesignT, entry: Readonly<{ name: string; sample: string }>): string {
+  return WORDED_SAMPLES.has(entry.name) ? t(`builtins.sample.${aboutSlug(entry.name) as SampleSlug}`) : entry.sample;
+}
+
+/**
+ * A sentence split around one piece of it, so markup can sit in the gap.
+ *
+ * The whole sentence stays one string for a translator - word order is theirs -
+ * and the gap is found again by interpolating a character no sentence carries.
+ */
+const GAP = "\u0000";
+function around(sentence: string): [string, string] {
+  const at = sentence.indexOf(GAP);
+  return at === -1 ? [sentence, ""] : [sentence.slice(0, at), sentence.slice(at + GAP.length)];
+}
+
+/** An issue, said in the operator's language rather than as `design.ts` wrote it. */
+function issueText(t: DesignT, issue: Issue): string {
+  return sayIssue(t as unknown as Parameters<typeof sayIssue>[0], issue);
+}
+
+/**
+ * What a usage is called in a list, in the operator's language.
+ *
+ * The same three shapes `usagesOf` writes - the block's kind, the kind with
+ * "inline", or a toggle group's branch - worked out again from the block.
+ */
+function usageLabel(t: DesignT, design: Design, usage: Usage): string {
+  const block = design.blocks.find((entry) => entry.id === usage.block);
+  if (!block) return usage.label;
+  const kind = t(`blocks.${block.type}`);
+  if (usage.kind === "inline") return t("usages.inline", { block: kind });
+  if (usage.id.endsWith(`:branch:${usage.at}`)) {
+    return t("usages.branch", {
+      block: kind,
+      branch: block.items?.[usage.at]?.label || t("usages.branchFallback"),
+    });
+  }
+  return kind;
+}
 
 let seq = 0;
 
@@ -271,6 +339,7 @@ export function DesignEditor({
   onRenameInput?: (id: string, name: string) => void;
   onRemoveInput?: (id: string) => void;
 }>) {
+  const { t, i18n } = useTranslation("nebulaDesign");
   const [target, setTarget] = useState<Target>("base");
   const [selected, setSelected] = useState<string | null>(null);
   const [grid, setGrid] = useState(true);
@@ -410,14 +479,25 @@ export function DesignEditor({
    * resolves them in, so a preview that looked right is right.
    */
   const resolve = useCallback(
-    (name: string, fallback?: string) =>
-      values?.get(name) ?? builtIn(name)?.sample ?? fallback ?? "",
-    [values],
+    (name: string, fallback?: string) => {
+      const entry = builtIn(name);
+      return values?.get(name) ?? (entry ? sampleOf(t, entry) : undefined) ?? fallback ?? "";
+    },
+    [values, t],
   );
 
-  const offered = paletteFor(target, search);
+  // Matched the way the palette matches - English names and keywords - and on
+  // the names the operator is actually reading as well.
+  const needle = search.trim().toLowerCase();
+  const matched = new Set(paletteFor(target, search).map((item) => item.id));
+  const offered = paletteFor(target).filter(
+    (item) =>
+      matched.has(item.id) ||
+      t(`palette.${item.id as PaletteId}`).toLowerCase().includes(needle) ||
+      t(`categories.${item.category}`).toLowerCase().includes(needle),
+  );
   /** Every place an input is used, which most of this editor is now about. */
-  const usages = usagesOf(design);
+  const usages = usagesOf(design).map((usage) => ({ ...usage, label: usageLabel(t, design, usage) }));
   const issues = designIssues(design, wired ?? new Set());
   /** Which blocks an issue names, so the layer list can mark them. */
   const faulty = new Set(issues.map((issue) => issue.block).filter((id): id is string => !!id));
@@ -700,7 +780,7 @@ export function DesignEditor({
       />
       <Box
         role="dialog"
-        aria-label="Design editor"
+        aria-label={t("editor.dialog")}
         onKeyDown={onPanelKeyDown}
         {...drag.handlers}
         sx={(theme) => ({
@@ -721,7 +801,7 @@ export function DesignEditor({
             a 1px edge is not something anybody can grab. */}
         <Box
           onPointerDown={(event: React.PointerEvent) => drag.startPanel(panelW, event)}
-          aria-label="Resize the design editor"
+          aria-label={t("editor.resize")}
           sx={{
             position: "absolute",
             left: -4,
@@ -782,18 +862,18 @@ export function DesignEditor({
               {name}
             </Typography>
             <Typography sx={(theme) => ({ fontSize: 11, color: theme.palette.nebula.dim })} noWrap>
-              Message editor · {detail}
+              {t("editor.subtitle", { detail })}
             </Typography>
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }} />
 
-          <Kicker>Target</Kicker>
+          <Kicker>{t("editor.target")}</Kicker>
           <Tabs
             value={target}
             options={TARGETS.map((entry) => ({
               id: entry,
-              label: TARGET_LABELS[entry].label,
-              title: TARGET_LABELS[entry].title,
+              label: t(`targets.${entry}.label`),
+              title: t(`targets.${entry}.title`),
               // A dot rather than a count: what matters at a glance is *that* a
               // target has diverged, and the number is on the banner below.
               marked: overrideCount(design, entry) > 0,
@@ -802,10 +882,10 @@ export function DesignEditor({
             onMenu={(id, at) => setCopyOnto({ target: id as Target, ...at })}
           />
           <Box sx={(theme) => ({ flex: "none", width: "1px", height: "24px", background: theme.palette.nebula.line2 })} />
-          <Chrome label="Templates" glyph="▤" onClick={(at) => setGallery(at)} />
-          <Chrome on={grid} label="Grid" glyph="#" onClick={() => setGrid((was) => !was)} />
-          <Chrome on={preview} label="Preview" onClick={() => setPreview((was) => !was)} />
-          <Chrome primary label="Done" onClick={onClose} />
+          <Chrome label={t("editor.templates")} glyph="▤" onClick={(at) => setGallery(at)} />
+          <Chrome on={grid} label={t("editor.grid")} glyph="#" onClick={() => setGrid((was) => !was)} />
+          <Chrome on={preview} label={t("editor.preview")} onClick={() => setPreview((was) => !was)} />
+          <Chrome primary label={t("editor.done")} onClick={onClose} />
         </Stack>
 
         {/* The one line that says what a target tab does, because nothing else
@@ -838,12 +918,12 @@ export function DesignEditor({
               textTransform: "uppercase",
             })}
           >
-            {TARGET_LABELS[target].label}
+            {t(`targets.${target}.label`)}
           </Box>
           <Typography sx={(theme) => ({ flex: 1, fontSize: 11.5, color: theme.palette.nebula.muted })}>
             {target === "base"
-              ? "Edits here apply to every target. Switch a target tab above to override just that one."
-              : `${TARGET_LABELS[target].title}. Editing here changes only this target.`}
+              ? t("banner.base")
+              : t("banner.other", { title: t(`targets.${target}.title`) })}
           </Typography>
           {/* What this target will not draw of what is on the sheet. Nothing is
               lost from the design - the blocks are still there, and still drawn
@@ -870,15 +950,23 @@ export function DesignEditor({
                 !
               </Box>
               <span>
-                {`${TARGET_LABELS[target].label} cannot draw ${missing
-                  .map((type) => BLOCK_LABELS[type].toLowerCase())
-                  .join(", ")} — ${missing.length === 1 ? "that block is" : "those blocks are"} left out here`}
+                {t("banner.missing", {
+                  count: missing.length,
+                  target: t(`targets.${target}.label`),
+                  // Lower case, as a noun mid-sentence is - except in German,
+                  // where it keeps its capital.
+                  kinds: missing
+                    .map((type) =>
+                      i18n.language.startsWith("de") ? t(`blocks.${type}`) : t(`blocks.${type}`).toLowerCase(),
+                    )
+                    .join(", "),
+                })}
               </span>
             </Stack>
           )}
           {overrideCount(design, target) > 0 && (
             <Chrome
-              label={`Clear ${overrideCount(design, target)} override(s)`}
+              label={t("banner.clearOverrides", { n: overrideCount(design, target) })}
               onClick={() => onChange(revertTarget(design, target))}
             />
           )}
@@ -912,8 +1000,8 @@ export function DesignEditor({
           >
             <Stack sx={{ minWidth: 0, minHeight: 0, p: "14px 14px 0" }}>
               <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: "9px" }}>
-                <SectionLabel>Insert</SectionLabel>
-                <Hint>{PALETTE.length} blocks · click to add</Hint>
+                <SectionLabel>{t("insert.title")}</SectionLabel>
+                <Hint>{t("insert.hint", { n: PALETTE.length })}</Hint>
               </Stack>
               {/* Twenty-eight tiles is past the point where scanning works, and
                   everybody who already knows the name would rather type it. */}
@@ -937,8 +1025,8 @@ export function DesignEditor({
                 <Box sx={{ flex: 1, minWidth: 0, fontSize: 11.5 }}>
                   <PlainInput
                     value={search}
-                    placeholder="Search blocks…"
-                    ariaLabel="Search blocks"
+                    placeholder={t("insert.search")}
+                    ariaLabel={t("insert.searchLabel")}
                     onChange={setSearch}
                   />
                 </Box>
@@ -946,7 +1034,7 @@ export function DesignEditor({
                   <Box
                     component="button"
                     type="button"
-                    aria-label="Clear the block search"
+                    aria-label={t("insert.clearSearch")}
                     onClick={() => setSearch("")}
                     sx={(theme) => ({
                       all: "unset",
@@ -968,7 +1056,7 @@ export function DesignEditor({
                   return (
                     <Box key={category}>
                       <Stack direction="row" alignItems="center" gap={1} sx={{ mt: "14px", mb: "8px" }}>
-                        <Kicker>{CATEGORY_LABELS[category]}</Kicker>
+                        <Kicker>{t(`categories.${category}`)}</Kicker>
                         <Box sx={(theme) => ({ flex: 1, height: "1px", background: theme.palette.nebula.line })} />
                         <Mono>{items.length}</Mono>
                       </Stack>
@@ -978,7 +1066,7 @@ export function DesignEditor({
                             key={item.id}
                             component="button"
                             type="button"
-                            title={item.label}
+                            title={t(`palette.${item.id as PaletteId}`)}
                             onClick={() => {
                               const made = makeBlock(item, design.sheetW, lowestOf(design) + 16);
                               onChange(addBlock(design, made));
@@ -1022,7 +1110,7 @@ export function DesignEditor({
                                 whiteSpace: "nowrap",
                               }}
                             >
-                              {item.label}
+                              {t(`palette.${item.id as PaletteId}`)}
                             </Box>
                           </Box>
                         ))}
@@ -1032,7 +1120,7 @@ export function DesignEditor({
                 })}
                 {offered.length === 0 && (
                   <Box sx={{ mt: "14px" }}>
-                    <Hint>Nothing here matches “{search}”.</Hint>
+                    <Hint>{t("insert.noMatch", { query: search })}</Hint>
                   </Box>
                 )}
               </Box>
@@ -1052,8 +1140,8 @@ export function DesignEditor({
                 justifyContent="space-between"
                 sx={{ px: "6px", mb: "8px" }}
               >
-                <SectionLabel>Layers</SectionLabel>
-                <Hint>top → bottom</Hint>
+                <SectionLabel>{t("layers.title")}</SectionLabel>
+                <Hint>{t("layers.order")}</Hint>
               </Stack>
             <Stack gap={0.1} sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
               {/* Reverse order, as every design tool lists them: the thing on
@@ -1111,14 +1199,14 @@ export function DesignEditor({
                         whiteSpace: "nowrap",
                       }}
                     >
-                      {layerLabel(block)}
+                      {layerLabel(t, block)}
                     </Box>
                     {/* How many inputs land in this row, which is the thing a
                         layer list could not say when a block had at most one. */}
                     {slots > 0 && <Count tone="accent">{slots}</Count>}
                     {gates > 0 && (
                       <Badge tone="ok">
-                        if{gates > 1 ? ` ${gates}` : ""}
+                        {gates > 1 ? t("layers.ifWhat", { what: gates }) : t("layers.if")}
                       </Badge>
                     )}
                     {faulty.has(block.id) && <Dot tone="warn" />}
@@ -1147,9 +1235,9 @@ export function DesignEditor({
                 borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
               })}
             >
-              <Kicker>Artboard</Kicker>
+              <Kicker>{t("artboard.title")}</Kicker>
               <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted })}>
-                {TARGET_LABELS[target].label} design
+                {t("artboard.caption", { target: t(`targets.${target}.label`) })}
               </Typography>
               <Mono>
                 {design.sheetW} × {sheetHeight(design)}
@@ -1167,13 +1255,13 @@ export function DesignEditor({
                   border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
                 })}
               >
-                <Step label="Zoom out" onClick={() => zoomBy(1 / ZOOM_STEP)}>
+                <Step label={t("artboard.zoomOut")} onClick={() => zoomBy(1 / ZOOM_STEP)}>
                   −
                 </Step>
                 <Box
                   component="button"
                   type="button"
-                  title="Back to 1:1"
+                  title={t("artboard.reset")}
                   onClick={view.reset}
                   sx={(theme) => ({
                     all: "unset",
@@ -1188,7 +1276,7 @@ export function DesignEditor({
                 >
                   {Math.round(view.scale * 100)}%
                 </Box>
-                <Step label="Zoom in" onClick={() => zoomBy(ZOOM_STEP)}>
+                <Step label={t("artboard.zoomIn")} onClick={() => zoomBy(ZOOM_STEP)}>
                   +
                 </Step>
               </Stack>
@@ -1197,7 +1285,7 @@ export function DesignEditor({
             <Box
               ref={viewport}
               tabIndex={0}
-              aria-label="Design sheet"
+              aria-label={t("artboard.sheet")}
               onPointerDown={(event) => {
                 view.handlers.onPointerDown(event);
                 // Anything that reaches here landed on empty space: a block, a
@@ -1495,7 +1583,7 @@ export function DesignEditor({
                                   color: theme.palette.nebula.ok,
                                 })}
                               >
-                                shown if {block.gate}
+                                {t("sheet.shownIf", { name: block.gate })}
                               </Box>
                             </Stack>
                           </>
@@ -1540,15 +1628,15 @@ export function DesignEditor({
                                 {mine.index}/{siblings}
                               </Box>
                             )}
-                            {BLOCK_LABELS[block.type]}
+                            {t(`blocks.${block.type}`)}
                             <Box component="span" sx={{ opacity: 0.7 }}>
-                              {block.h ? `${block.w} × ${block.h}` : `${block.w} wide`}
+                              {block.h ? `${block.w} × ${block.h}` : t("sheet.wide", { w: block.w })}
                             </Box>
                             {mine && (
                               <Box
                                 component="button"
                                 type="button"
-                                title="Keep the usage, leave it out of the message"
+                                title={t("sheet.hideTitle")}
                                 onPointerDown={(event: React.PointerEvent) => event.stopPropagation()}
                                 onClick={(event: React.MouseEvent) => {
                                   event.stopPropagation();
@@ -1565,7 +1653,7 @@ export function DesignEditor({
                                   "&:hover": { background: "rgba(255,255,255,0.38)" },
                                 }}
                               >
-                                {mine.hidden ? "◌ hidden" : "◉ hide"}
+                                {mine.hidden ? t("sheet.hiddenToggle") : t("sheet.hideToggle")}
                               </Box>
                             )}
                           </Stack>
@@ -1579,8 +1667,8 @@ export function DesignEditor({
                             <RichTextField
                               floating
                               value={richBody(block.text)}
-                              placeholder="what it says"
-                              ariaLabel="Block text"
+                              placeholder={t("sheet.textPlaceholder")}
+                              ariaLabel={t("sheet.textLabel")}
                               preset="document"
                               tools={TEXT_TOOLS}
                               maxLength={MAX_BODY}
@@ -1600,7 +1688,7 @@ export function DesignEditor({
                                   <Box
                                     component="button"
                                     type="button"
-                                    title="Put an input into this copy"
+                                    title={t("sheet.insertTitle")}
                                     onClick={() => setPicking(raw.id)}
                                     sx={(theme) => ({
                                       all: "unset",
@@ -1620,7 +1708,7 @@ export function DesignEditor({
                                     <Box component="span" sx={{ fontFamily: NEBULA_MONO, fontSize: 11 }}>
                                       ⌗
                                     </Box>
-                                    Insert
+                                    {t("sheet.insert")}
                                   </Box>
                                 </>
                               }
@@ -1660,7 +1748,7 @@ export function DesignEditor({
                                 <Box
                                   key={handle.id}
                                   aria-hidden={!live}
-                                  aria-label={live ? `Resize the ${handle.edge} edge` : undefined}
+                                  aria-label={live ? t(`sheet.resize.${handle.id as "e" | "s" | "se"}`) : undefined}
                                   onPointerDown={
                                     live
                                       ? (event: React.PointerEvent) => {
@@ -1761,7 +1849,7 @@ export function DesignEditor({
               })}
             >
               <Stack direction="row" alignItems="center" gap={1.25} sx={{ px: "18px", pt: "9px" }}>
-                <Kicker>Data inputs</Kicker>
+                <Kicker>{t("dock.title")}</Kicker>
                 {/* Two different things share this dock, and the difference
                     matters more than it looks: one half is wired by the
                     operator and can be left unfed, the other is answered by the
@@ -1780,8 +1868,8 @@ export function DesignEditor({
                 >
                   {(
                     [
-                      ["yours", `Yours ${design.slots.length + design.conditions.length}`],
-                      ["builtins", `Built-ins ${BUILT_INS.length}`],
+                      ["yours", t("dock.yours", { n: design.slots.length + design.conditions.length })],
+                      ["builtins", t("dock.builtins", { n: BUILT_INS.length })],
                     ] as const
                   ).map(([id, label]) => (
                     <Box
@@ -1814,8 +1902,8 @@ export function DesignEditor({
                 </Stack>
                 <Hint>
                   {dockTab === "yours"
-                    ? "values supplied at send time"
-                    : "always answered by the server — nothing to wire"}
+                    ? t("dock.yoursHint")
+                    : t("dock.builtinsHint")}
                 </Hint>
                 <Box sx={{ flex: 1 }} />
                 <Box
@@ -1843,7 +1931,7 @@ export function DesignEditor({
                   <Box component="span" sx={{ fontSize: 13, lineHeight: 1 }}>
                     +
                   </Box>
-                  New input
+                  {t("dock.newInput")}
                 </Box>
               </Stack>
 
@@ -1865,8 +1953,8 @@ export function DesignEditor({
                 >
                   <AddInput
                     glyph="Aa"
-                    label="Text slot"
-                    body="A placeholder replaced with a value when the message is sent."
+                    label={t("dock.slotLabel")}
+                    body={t("dock.slotBody")}
                     onClick={() => {
                       onChange(addInput(design, "slot"));
                       setAdding(false);
@@ -1874,8 +1962,8 @@ export function DesignEditor({
                   />
                   <AddInput
                     glyph="◑"
-                    label="Toggle"
-                    body="A true/false switch that shows or hides elements on the artboard."
+                    label={t("dock.toggleLabel")}
+                    body={t("dock.toggleBody")}
                     onClick={() => {
                       onChange(addInput(design, "condition"));
                       setAdding(false);
@@ -1888,7 +1976,7 @@ export function DesignEditor({
                 <UsagesPanel
                   input={browsing}
                   kind={design.slots.some((entry) => entry.name === browsing) ? "slot" : "condition"}
-                  usages={usagesOfInput(design, browsing)}
+                  usages={usages.filter((usage) => usage.input === browsing)}
                   overridden={(usage) => overrideOf(design, target, usage.block) !== undefined}
                   emptyFallback={(usage) =>
                     usage.kind === "slot" &&
@@ -1923,12 +2011,12 @@ export function DesignEditor({
                       })}
                     >
                       <Stack direction="row" alignItems="center" gap={0.9} sx={{ mb: "6px" }}>
-                        <Kicker>{BUILT_IN_GROUP_LABELS[group]}</Kicker>
+                        <Kicker>{t(`builtins.groups.${group}`)}</Kicker>
                         <Box sx={{ flex: 1 }} />
                         <Stack direction="row" alignItems="center" gap={0.6}>
                           <Dot tone="ok" />
                           <Box component="span" sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.muted })}>
-                            always wired
+                            {t("dock.alwaysWired")}
                           </Box>
                         </Stack>
                       </Stack>
@@ -1940,8 +2028,8 @@ export function DesignEditor({
                             type="button"
                             title={
                               chosen && FIELDS[chosen.type].includes("text")
-                                ? `Put $${entry.name} into ${BLOCK_LABELS[chosen.type]}`
-                                : "Select a block with copy to place this"
+                                ? t("dock.putInto", { name: `$${entry.name}`, block: t(`blocks.${chosen.type}`) })
+                                : t("dock.selectFirst")
                             }
                             disabled={!chosen || !FIELDS[chosen.type].includes("text")}
                             onClick={() =>
@@ -1985,9 +2073,9 @@ export function DesignEditor({
                                 color: theme.palette.nebula.muted,
                               })}
                             >
-                              {entry.about}
+                              {t(`builtins.about.${aboutSlug(entry.name)}`)}
                             </Box>
-                            <Mono>{entry.sample}</Mono>
+                            <Mono>{sampleOf(t, entry)}</Mono>
                           </Box>
                         ))}
                       </Stack>
@@ -2005,8 +2093,7 @@ export function DesignEditor({
                       textWrap: "pretty",
                     })}
                   >
-                    These are the facts the server has at handshake. Missing values fall back to the
-                    text you set on the element.
+                    {t("dock.facts")}
                   </Box>
                 </Stack>
               )}
@@ -2018,7 +2105,7 @@ export function DesignEditor({
                 hidden={dockTab !== "yours"}
               >
                 {design.slots.length === 0 && design.conditions.length === 0 && (
-                  <Hint>none yet — a design declares what it takes, and the canvas fills it</Hint>
+                  <Hint>{t("dock.empty")}</Hint>
                 )}
                 {[
                   ...design.slots.map((input) => ({ input, kind: "slot" as InputKind })),
@@ -2065,8 +2152,10 @@ export function DesignEditor({
                       color: theme.palette.nebula.dim,
                     })}
                   >
-                    {design.slots.length + design.conditions.length} of{" "}
-                    {design.slots.length + design.conditions.length} inputs
+                    {t("dock.count", {
+                      shown: design.slots.length + design.conditions.length,
+                      count: design.slots.length + design.conditions.length,
+                    })}
                   </Box>
                 )}
               </Stack>
@@ -2103,13 +2192,13 @@ export function DesignEditor({
                   })}
                   noWrap
                 >
-                  {chosen ? BLOCK_LABELS[chosen.type] : "Nothing selected"}
+                  {chosen ? t(`blocks.${chosen.type}`) : t("inspector.nothing")}
                 </Typography>
               </Stack>
               {chosen && (
                 <Chrome
                   danger
-                  label="Delete"
+                  label={t("inspector.delete")}
                   onClick={() => {
                     onChange(removeBlock(design, chosen.id));
                     setSelected(null);
@@ -2118,15 +2207,15 @@ export function DesignEditor({
               )}
             </Stack>
 
-            {!chosen && <Hint>Pick something on the artboard to change it.</Hint>}
+            {!chosen && <Hint>{t("inspector.pick")}</Hint>}
 
             {chosen && overrideOf(design, target, chosen.id) && (
               <Stack direction="row" alignItems="center" gap={1} sx={{ mb: "12px" }}>
                 <Typography sx={(theme) => ({ flex: 1, fontSize: 10.5, color: theme.palette.nebula.accent })}>
-                  Overridden on {TARGET_LABELS[target].label}
+                  {t("inspector.overridden", { target: t(`targets.${target}.label`) })}
                 </Typography>
                 <Quiet
-                  label="Revert to base"
+                  label={t("inspector.revert")}
                   onClick={() => onChange(revertBlock(design, target, chosen.id))}
                 />
               </Stack>
@@ -2169,7 +2258,7 @@ export function DesignEditor({
           onClose={() => setCopyOnto(null)}
         >
           <ListSubheader sx={{ lineHeight: "28px" }}>
-            {copyOnto ? `Copy a design onto ${TARGET_LABELS[copyOnto.target].label}` : ""}
+            {copyOnto ? t("copyOnto.title", { target: t(`targets.${copyOnto.target}.label`) }) : ""}
           </ListSubheader>
           {TARGETS.filter((entry) => entry !== copyOnto?.target).map((from) => {
             const dropped = copyOnto ? droppedBy(design, copyOnto.target).length : 0;
@@ -2183,8 +2272,8 @@ export function DesignEditor({
                   setCopyOnto(null);
                 }}
               >
-                {`From ${TARGET_LABELS[from].label}`}
-                {dropped > 0 ? ` · ${dropped} kind${dropped === 1 ? "" : "s"} left out` : ""}
+                {t("copyOnto.from", { target: t(`targets.${from}.label`) })}
+                {dropped > 0 ? ` · ${t("copyOnto.leftOut", { count: dropped })}` : ""}
               </MenuItem>
             );
           })}
@@ -2205,7 +2294,7 @@ export function DesignEditor({
           anchorPosition={gallery ?? undefined}
           onClose={() => setGallery(null)}
         >
-          <ListSubheader sx={{ lineHeight: "28px" }}>Start from a sheet</ListSubheader>
+          <ListSubheader sx={{ lineHeight: "28px" }}>{t("gallery.title")}</ListSubheader>
           {DESIGN_TEMPLATES.map((entry) => (
             <MenuItem
               key={entry.id}
@@ -2229,11 +2318,11 @@ export function DesignEditor({
                 setGallery(null);
               }}
             >
-              <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{entry.label}</Typography>
+              <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{t(`templates.${entry.id as TemplateId}.label`)}</Typography>
               <Typography
                 sx={(theme) => ({ fontSize: 11, lineHeight: 1.45, color: theme.palette.nebula.dim })}
               >
-                {entry.description}
+                {t(`templates.${entry.id as TemplateId}.description`)}
               </Typography>
               <Typography
                 sx={(theme) => ({
@@ -2245,7 +2334,7 @@ export function DesignEditor({
                   color: theme.palette.nebula.dim,
                 })}
               >
-                {entry.targets}
+                {t(`templates.${entry.id as TemplateId}.targets`)}
               </Typography>
             </MenuItem>
           ))}
@@ -2267,7 +2356,7 @@ export function DesignEditor({
                 setMenuAt(null);
               }}
             >
-              Duplicate
+              {t("menu.duplicate")}
             </MenuItem>,
             <MenuItem
               key="copy"
@@ -2276,7 +2365,7 @@ export function DesignEditor({
                 setMenuAt(null);
               }}
             >
-              Copy
+              {t("menu.copy")}
             </MenuItem>,
             <MenuItem
               key="paste"
@@ -2286,7 +2375,7 @@ export function DesignEditor({
                 setMenuAt(null);
               }}
             >
-              Paste
+              {t("menu.paste")}
             </MenuItem>,
             <Divider key="d1" />,
             <MenuItem
@@ -2296,7 +2385,7 @@ export function DesignEditor({
                 setMenuAt(null);
               }}
             >
-              Centre on the sheet
+              {t("menu.centre")}
             </MenuItem>,
             <MenuItem
               key="fill"
@@ -2305,7 +2394,7 @@ export function DesignEditor({
                 setMenuAt(null);
               }}
             >
-              Fill the width
+              {t("menu.fill")}
             </MenuItem>,
             <Divider key="d2" />,
             <MenuItem
@@ -2315,7 +2404,7 @@ export function DesignEditor({
                 setMenuAt(null);
               }}
             >
-              Bring to front
+              {t("menu.front")}
             </MenuItem>,
             <MenuItem
               key="back"
@@ -2324,7 +2413,7 @@ export function DesignEditor({
                 setMenuAt(null);
               }}
             >
-              Send to back
+              {t("menu.back")}
             </MenuItem>,
             ...(overrideOf(design, target, menuBlock.id)
               ? [
@@ -2336,7 +2425,7 @@ export function DesignEditor({
                       setMenuAt(null);
                     }}
                   >
-                    Revert to base
+                    {t("menu.revert")}
                   </MenuItem>,
                 ]
               : []),
@@ -2348,7 +2437,7 @@ export function DesignEditor({
                 setMenuAt(null);
               }}
             >
-              Delete
+              {t("menu.delete")}
             </MenuItem>,
           ]}
         </Menu>
@@ -2380,15 +2469,17 @@ export function DesignEditor({
             noWrap
           >
             {issues.length > 0
-              ? `${issues.length} issue${issues.length === 1 ? "" : "s"} · ${issues[0].message}`
-              : "Nothing outstanding."}
+              ? t("footer.issues", { count: issues.length, message: issueText(t, issues[0]) })
+              : t("footer.clear")}
           </Typography>
           {issues.length > 0 && (issues[0].block || issues[0].input) && (
-            <Chrome warn label="Fix" onClick={() => reveal(issues[0])} />
+            <Chrome warn label={t("footer.fix")} onClick={() => reveal(issues[0])} />
           )}
           <Mono>
-            {TARGET_LABELS[target].label.toUpperCase()} · {shown.length} layers ·{" "}
-            {design.slots.length + design.conditions.length} inputs · {usages.length} usages
+            {`${t(`targets.${target}.label`).toUpperCase()} · ${t("footer.layers", { count: shown.length })} · ${t(
+              "footer.inputs",
+              { count: design.slots.length + design.conditions.length },
+            )} · ${t("footer.usages", { count: usages.length })}`}
           </Mono>
         </Stack>
       </Box>
@@ -2631,6 +2722,7 @@ function InputCard({
   /** Conditions only: what the sheet should assume while it is being drawn. */
   onPreview?: (on: boolean) => void;
 }>) {
+  const { t } = useTranslation("nebulaDesign");
   const [draft, setDraft] = useState(input.name);
   // The committed name wins whenever it changes under us - a rename that came
   // back different (taken, or normalised) has to show, or the field says one
@@ -2688,12 +2780,12 @@ function InputCard({
         {onPreview ? (
           <Box
             onPointerDown={(event: React.PointerEvent) => event.stopPropagation()}
-            title="What the sheet assumes while you draw. Never sent."
+            title={t("card.previewTitle")}
             sx={{ flex: "none", display: "flex" }}
           >
             <MiniSwitch
               checked={input.on !== false}
-              label={`Preview ${input.name} as ${input.on === false ? "on" : "off"}`}
+              label={t(input.on === false ? "card.previewOn" : "card.previewOff", { name: input.name })}
               onChange={() => onPreview(input.on === false)}
             />
           </Box>
@@ -2703,7 +2795,7 @@ function InputCard({
         <Box
           component="input"
           value={draft}
-          aria-label={`${kind === "slot" ? "Text slot" : "Toggle"} name`}
+          aria-label={t(kind === "slot" ? "card.slotName" : "card.toggleName")}
           spellCheck={false}
           onPointerDown={(event: React.PointerEvent) => event.stopPropagation()}
           onChange={(event: React.ChangeEvent<HTMLInputElement>) => setDraft(event.target.value)}
@@ -2734,7 +2826,7 @@ function InputCard({
         <Box
           component="button"
           type="button"
-          aria-label={`Remove ${input.name}`}
+          aria-label={t("card.remove", { name: input.name })}
           onClick={onRemove}
           sx={(theme) => ({
             all: "unset",
@@ -2761,10 +2853,10 @@ function InputCard({
         <Stack direction="row" alignItems="center" gap={0.9}>
           <Kicker>
             {usages.length === 0
-              ? "not placed"
+              ? t("card.notPlaced")
               : kind === "slot"
-                ? `used in ${usages.length} place${usages.length === 1 ? "" : "s"}`
-                : `gates ${usages.length} element${usages.length === 1 ? "" : "s"}`}
+                ? t("card.usedIn", { count: usages.length })
+                : t("card.gates", { count: usages.length })}
           </Kicker>
           <Box sx={{ flex: 1 }} />
           <Stack direction="row" alignItems="center" gap={0.6} sx={{ flex: "none" }}>
@@ -2776,14 +2868,14 @@ function InputCard({
                 color: wired ? theme.palette.nebula.muted : theme.palette.nebula.warn,
               })}
             >
-              {wired ? "wired" : "unwired"}
+              {wired ? t("card.wired") : t("card.unwired")}
             </Box>
           </Stack>
         </Stack>
 
         {usages.length === 0 && (
           <Box sx={{ mt: "6px" }}>
-            <Hint>nowhere on the sheet yet</Hint>
+            <Hint>{t("card.nowhere")}</Hint>
           </Box>
         )}
 
@@ -2794,7 +2886,7 @@ function InputCard({
                 key={usage.id}
                 component="button"
                 type="button"
-                title={`Go to usage ${usage.index}`}
+                title={t("card.goTo", { n: usage.index })}
                 onClick={() => onGo(usage)}
                 sx={(theme) => {
                   const colour =
@@ -2818,7 +2910,7 @@ function InputCard({
                 }}
               >
                 <Count tone={kind === "slot" ? "accent" : "ok"}>{usage.index}</Count>
-                {usage.hidden ? "hidden" : usage.label}
+                {usage.hidden ? t("card.hidden") : usage.label}
               </Box>
             ))}
             {usages.length > 1 && (
@@ -2836,7 +2928,7 @@ function InputCard({
                   "&:hover": { textDecoration: "underline" },
                 })}
               >
-                Select all
+                {t("card.selectAll")}
               </Box>
             )}
           </Stack>
@@ -2860,7 +2952,7 @@ function InputCard({
                   whiteSpace: "nowrap",
                 })}
               >
-                {SECTION_LABELS[section]} {count}
+                {t("card.sectionCount", { section: t(`sections.${section}`), n: count })}
               </Box>
             ))}
             <Box sx={{ flex: 1 }} />
@@ -2877,7 +2969,7 @@ function InputCard({
                 "&:hover": { textDecoration: "underline" },
               })}
             >
-              Show all →
+              {t("card.showAll")}
             </Box>
           </Stack>
         )}
@@ -2919,6 +3011,7 @@ function UsagesPanel({
   onRename: () => void;
   onClose: () => void;
 }>) {
+  const { t } = useTranslation("nebulaDesign");
   const [filter, setFilter] = useState<"all" | "overridden" | "empty">("all");
   const [needle, setNeedle] = useState("");
   const [open, setOpen] = useState<ReadonlySet<Section>>(new Set(SECTIONS));
@@ -2938,7 +3031,7 @@ function UsagesPanel({
   return (
     <Box
       role="dialog"
-      aria-label={`Usages of ${input}`}
+      aria-label={t("usages.dialog", { name: input })}
       sx={(theme) => ({
         position: "absolute",
         zIndex: 30,
@@ -2982,7 +3075,7 @@ function UsagesPanel({
             fontSize: 10,
           })}
         >
-          {usages.length} usages
+          {t("usages.count", { count: usages.length })}
         </Box>
         <Box sx={{ flex: 1 }} />
         <Stack
@@ -3005,13 +3098,13 @@ function UsagesPanel({
           <Box sx={{ flex: 1, minWidth: 0, fontSize: 11.5 }}>
             <PlainInput
               value={needle}
-              placeholder="Filter usages…"
-              ariaLabel="Filter usages"
+              placeholder={t("usages.filter")}
+              ariaLabel={t("usages.filterLabel")}
               onChange={setNeedle}
             />
           </Box>
         </Stack>
-        <Step label="Close the usage list" onClick={onClose}>
+        <Step label={t("usages.close")} onClick={onClose}>
           ×
         </Step>
       </Stack>
@@ -3028,9 +3121,9 @@ function UsagesPanel({
       >
         {(
           [
-            ["all", `All ${counts.all}`],
-            ["overridden", `Overridden ${counts.overridden}`],
-            ["empty", `Empty fallback ${counts.empty}`],
+            ["all", t("usages.all", { n: counts.all })],
+            ["overridden", t("usages.overridden", { n: counts.overridden })],
+            ["empty", t("usages.empty", { n: counts.empty })],
           ] as const
         ).map(([id, label]) => (
           <Box
@@ -3056,7 +3149,7 @@ function UsagesPanel({
           </Box>
         ))}
         <Box sx={{ flex: 1 }} />
-        <Hint>grouped by section</Hint>
+        <Hint>{t("usages.grouped")}</Hint>
       </Stack>
 
       <Box sx={{ flex: 1, minHeight: "110px", overflowY: "auto" }}>
@@ -3095,7 +3188,7 @@ function UsagesPanel({
                   {shown ? "▾" : "▸"}
                 </Box>
                 <Box component="span" sx={{ flex: 1, fontSize: 11.5, fontWeight: 600 }}>
-                  {SECTION_LABELS[section]}
+                  {t(`sections.${section}`)}
                 </Box>
                 <Mono>{rows.length}</Mono>
               </Box>
@@ -3133,7 +3226,7 @@ function UsagesPanel({
                       }}
                     >
                       {usage.label}
-                      {usage.hidden ? " · hidden" : ""}
+                      {usage.hidden ? ` · ${t("usages.hidden")}` : ""}
                     </Box>
                     <Box
                       component="span"
@@ -3145,7 +3238,7 @@ function UsagesPanel({
                           : theme.palette.nebula.dim,
                       })}
                     >
-                      {overridden(usage) ? "OVERRIDE" : "BASE"}
+                      {overridden(usage) ? t("usages.override") : t("usages.base")}
                     </Box>
                   </Box>
                 ))}
@@ -3154,7 +3247,7 @@ function UsagesPanel({
         })}
         {matching.length === 0 && (
           <Box sx={{ p: "14px" }}>
-            <Hint>Nothing matches that filter.</Hint>
+            <Hint>{t("usages.noMatch")}</Hint>
           </Box>
         )}
       </Box>
@@ -3170,9 +3263,9 @@ function UsagesPanel({
           background: theme.palette.nebula.panel,
         })}
       >
-        <Chrome label="Rename everywhere" onClick={onRename} />
+        <Chrome label={t("usages.rename")} onClick={onRename} />
         <Box sx={{ flex: 1 }} />
-        <Hint>a row takes you to that usage on the artboard</Hint>
+        <Hint>{t("usages.rowHint")}</Hint>
       </Stack>
     </Box>
   );
@@ -3192,6 +3285,7 @@ function PlaceholderPicker({
   onPick,
   onClose,
 }: Readonly<{ slots: readonly Input[]; onPick: (name: string) => void; onClose: () => void }>) {
+  const { t } = useTranslation("nebulaDesign");
   const [needle, setNeedle] = useState("");
   const match = (name: string, about: string) =>
     needle === "" ||
@@ -3201,7 +3295,7 @@ function PlaceholderPicker({
   const yours = slots.filter((input) => match(input.name, ""));
   const groups = BUILT_IN_GROUPS.map((group) => ({
     group,
-    rows: builtInsOf(group).filter((entry) => match(entry.name, entry.about)),
+    rows: builtInsOf(group).filter((entry) => match(entry.name, t(`builtins.about.${aboutSlug(entry.name)}`))),
   })).filter((entry) => entry.rows.length > 0);
 
   // Escape, wherever focus happens to be. A popover that can only be dismissed
@@ -3228,7 +3322,7 @@ function PlaceholderPicker({
       />
     <Box
       role="dialog"
-      aria-label="Insert a placeholder"
+      aria-label={t("placeholders.dialog")}
       onPointerDown={(event: React.PointerEvent) => event.stopPropagation()}
       sx={(theme) => ({
         position: "absolute",
@@ -3258,7 +3352,7 @@ function PlaceholderPicker({
           borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         })}
       >
-        <Kicker>Insert placeholder</Kicker>
+        <Kicker>{t("placeholders.title")}</Kicker>
         <Stack
           direction="row"
           alignItems="center"
@@ -3279,13 +3373,13 @@ function PlaceholderPicker({
           <Box sx={{ flex: 1, minWidth: 0, fontSize: 11.5 }}>
             <PlainInput
               value={needle}
-              placeholder="Type to filter…"
-              ariaLabel="Filter placeholders"
+              placeholder={t("placeholders.filter")}
+              ariaLabel={t("placeholders.filterLabel")}
               onChange={setNeedle}
             />
           </Box>
         </Stack>
-        <Step label="Close the placeholder list" onClick={onClose}>
+        <Step label={t("placeholders.close")} onClick={onClose}>
           ×
         </Step>
       </Stack>
@@ -3294,14 +3388,14 @@ function PlaceholderPicker({
         {yours.length > 0 && (
           <>
             <Box sx={{ px: "8px", py: "5px" }}>
-              <Kicker>Your inputs</Kicker>
+              <Kicker>{t("placeholders.yours")}</Kicker>
             </Box>
             {yours.map((input) => (
               <Row
                 key={input.id}
                 name={input.name}
-                about="Filled by whatever the canvas wires to it"
-                sample="unwired until then"
+                about={t("placeholders.yourAbout")}
+                sample={t("placeholders.yourSample")}
                 onPick={onPick}
               />
             ))}
@@ -3310,14 +3404,14 @@ function PlaceholderPicker({
         {groups.map(({ group, rows }) => (
           <Box key={group}>
             <Box sx={{ px: "8px", py: "5px", mt: "6px" }}>
-              <Kicker>{BUILT_IN_GROUP_LABELS[group]}</Kicker>
+              <Kicker>{t(`builtins.groups.${group}`)}</Kicker>
             </Box>
             {rows.map((entry) => (
               <Row
                 key={entry.name}
                 name={entry.name}
-                about={entry.about}
-                sample={entry.sample}
+                about={t(`builtins.about.${aboutSlug(entry.name)}`)}
+                sample={sampleOf(t, entry)}
                 onPick={onPick}
               />
             ))}
@@ -3325,7 +3419,7 @@ function PlaceholderPicker({
         ))}
         {yours.length === 0 && groups.length === 0 && (
           <Box sx={{ p: "14px" }}>
-            <Hint>Nothing matches “{needle}”.</Hint>
+            <Hint>{t("placeholders.noMatch", { query: needle })}</Hint>
           </Box>
         )}
       </Box>
@@ -4195,6 +4289,7 @@ function Swatches({
   none: string;
   onChange: (colour: string | undefined) => void;
 }>) {
+  const { t } = useTranslation("nebulaDesign");
   const resolve = useResolved();
   return (
     <Stack
@@ -4240,8 +4335,8 @@ function Swatches({
             key={id}
             component="button"
             type="button"
-            title={`${AUTO_COLOURS[id].label} — follows each reader's own theme`}
-            aria-label={`${AUTO_COLOURS[id].label}, automatic`}
+            title={t("swatch.follows", { label: t(`autoColours.${autoSlug(id)}`) })}
+            aria-label={t("swatch.automatic", { label: t(`autoColours.${autoSlug(id)}`) })}
             aria-pressed={on}
             onClick={() => onChange(id)}
             sx={(theme) => ({
@@ -4277,8 +4372,8 @@ function Swatches({
             key={swatch.colour}
             component="button"
             type="button"
-            title={swatch.label}
-            aria-label={swatch.label}
+            title={t(`swatches.${swatchSlug(swatch.label)}`)}
+            aria-label={t(`swatches.${swatchSlug(swatch.label)}`)}
             aria-pressed={on}
             onClick={() => onChange(swatch.colour)}
             sx={(theme) => ({
@@ -4395,15 +4490,15 @@ const TEXT_TOOLS: readonly RichTextTool[] = ["bold", "italic", "underline", "str
  * `<p>Welcome` in a one-line row is the tags rather than the words, so it is
  * flattened first.
  */
-function layerLabel(block: Block): string {
+function layerLabel(t: DesignT, block: Block): string {
   if (block.type === "slot" || block.type === "repeater") {
-    return `${BLOCK_LABELS[block.type]} · ${block.slot || "unbound"}`;
+    return t("layers.slotRow", { block: t(`blocks.${block.type}`), slot: block.slot || t("layers.unbound") });
   }
   // Through `readableText` so an inline usage reads as `$name` rather than as
   // the braces around it - the row is meant to say what the block says.
   const words = readableText(block);
   const text = block.type === "text" ? plainTextOf(richBody(words)).replaceAll("\n", " ") : words;
-  return text.trim() || BLOCK_LABELS[block.type];
+  return text.trim() || t(`blocks.${block.type}`);
 }
 
 /**
@@ -4437,6 +4532,7 @@ function Preview({
 }>) {
   const align = flat ? "left" : (block.align ?? "left");
   const size = flat ? 13 : (block.size ?? 14);
+  const { t } = useTranslation("nebulaDesign");
   const assetSrc = assets?.find((entry) => entry.id === block.asset)?.src;
   switch (block.type) {
     case "mark":
@@ -4634,7 +4730,7 @@ function Preview({
               color: theme.palette.nebula.dim,
             })}
           >
-            hidden · ${block.slot}
+            {t("preview.hiddenSlot", { name: block.slot })}
           </Stack>
         );
       }
@@ -4660,10 +4756,10 @@ function Preview({
               color: theme.palette.nebula.accent,
             })}
           >
-            ${block.slot || "not chosen"}
+            ${block.slot || t("preview.notChosen")}
           </Box>
           <Box sx={{ flex: 1 }} />
-          <Hint>value at send time</Hint>
+          <Hint>{t("preview.valueAtSend")}</Hint>
         </Stack>
       ) : (
         <Typography sx={{ fontSize: size, textAlign: align }}>
@@ -4755,7 +4851,7 @@ function Preview({
             fill, a rule or a wash is already visible, and a word printed on
             top of it is chrome drawn into the design. */}
           {chrome && block.bg === undefined && block.border === undefined && block.grad === undefined
-            ? (block.flow ?? "stack")
+            ? t(`preview.flow.${block.flow ?? "stack"}`)
             : ""}
         </Box>
       );
@@ -4902,7 +4998,7 @@ function Preview({
           <Box component="span" aria-hidden sx={{ fontSize: 20 }}>
             ▶
           </Box>
-          {block.text || "video"}
+          {block.text || t("preview.video")}
         </Box>
       );
     case "presence":
@@ -4951,12 +5047,12 @@ function Preview({
                 color: theme.palette.nebula.dim,
               })}
             >
-              No branches yet
+              {t("preview.noBranches")}
             </Box>
           )}
           {(block.items ?? []).map((item, index) => (
             <Stack key={index} direction="row" alignItems="center" gap={1}>
-              {chrome && <Badge tone="ok">if {item.kicker || "—"}</Badge>}
+              {chrome && <Badge tone="ok">{t("layers.ifWhat", { what: item.kicker || "—" })}</Badge>}
               <Box component="span" sx={(theme) => ({ fontSize: size, color: theme.palette.nebula.muted })}>
                 {item.label}
               </Box>
@@ -5004,10 +5100,10 @@ function Preview({
         >
           <Glyph>⧉</Glyph>
           <Box component="span" sx={(theme) => ({ fontFamily: NEBULA_MONO, fontSize: 12, color: theme.palette.nebula.accent })}>
-            ${block.slot || "not chosen"}
+            ${block.slot || t("preview.notChosen")}
           </Box>
           <Box sx={{ flex: 1 }} />
-          {chrome && <Hint>one block per line of the value</Hint>}
+          {chrome && <Hint>{t("preview.perLine")}</Hint>}
         </Stack>
       );
     case "image":
@@ -5035,7 +5131,7 @@ function Preview({
             border: `1px dashed ${theme.palette.nebula.line2}`,
           })}
         >
-          no picture yet
+          {t("preview.noPicture")}
         </Box>
       );
     case "theme":
@@ -5049,7 +5145,7 @@ function Preview({
             color: theme.palette.nebula.dim,
           })}
         >
-          Theme block
+          {t("preview.themeBlock")}
         </Box>
       );
   }
@@ -5139,6 +5235,7 @@ function Countdown({
   size,
   chrome,
 }: Readonly<{ block: Block; align: "left" | "center" | "right"; size: number; chrome: boolean }>) {
+  const { t } = useTranslation("nebulaDesign");
   const target = block.until ? new Date(`${block.until}T00:00:00Z`) : null;
   const valid = target !== null && !Number.isNaN(target.getTime());
   const left = valid ? Math.max(0, target.getTime() - Date.now()) : 0;
@@ -5184,7 +5281,7 @@ function Countdown({
                 {String(unit.value).padStart(2, "0")}
               </Box>
               <Box component="span" sx={(theme) => ({ fontSize: 9, color: theme.palette.nebula.dim })}>
-                {unit.label}
+                {t(`preview.units.${unit.label as "days" | "hrs" | "min"}`)}
               </Box>
             </Stack>
           ))}
@@ -5201,11 +5298,11 @@ function Countdown({
               color: theme.palette.nebula.dim,
             })}
           >
-            No date set
+            {t("preview.noDate")}
           </Box>
         )
       )}
-      {chrome && valid && <Hint>the message carries the date, not a ticking clock</Hint>}
+      {chrome && valid && <Hint>{t("preview.dateNote")}</Hint>}
     </Stack>
   );
 }
@@ -5269,13 +5366,18 @@ function InlineSlot({
   usage,
   onHide,
 }: Readonly<{ name: string; hidden: boolean; usage?: Usage; onHide?: (usage: Usage) => void }>) {
+  const { t } = useTranslation("nebulaDesign");
   const known = builtIn(name);
   return (
     <Box
       component="span"
       // A built-in says what it will actually read as; a declared input has
       // nothing to say yet, because nothing has been wired to it.
-      title={known ? `${known.about} — e.g. ${known.sample}` : undefined}
+      title={
+        known
+          ? t("preview.example", { about: t(`builtins.about.${aboutSlug(known.name)}`), sample: sampleOf(t, known) })
+          : undefined
+      }
       sx={(theme) => ({
         display: "inline-flex",
         alignItems: "center",
@@ -5295,13 +5397,13 @@ function InlineSlot({
     >
       {usage && <Count tone="accent">{usage.index}</Count>}
       <Box component="span" sx={(theme) => ({ color: hidden ? theme.palette.nebula.dim : "inherit" })}>
-        {hidden ? "hidden" : `$${name}`}
+        {hidden ? t("preview.hidden") : `$${name}`}
       </Box>
       {usage && onHide && (
         <Box
           component="button"
           type="button"
-          title="Keep the usage, leave it out of the message"
+          title={t("sheet.hideTitle")}
           onPointerDown={(event: React.PointerEvent) => event.stopPropagation()}
           onClick={(event: React.MouseEvent) => {
             event.stopPropagation();
@@ -5383,12 +5485,15 @@ function Properties({
   const siblings = bound ? usages.filter((usage) => usage.input === bound) : [];
   const here = siblings.findIndex((usage) => usage.block === block.id);
   const at = Math.min(Math.max(stepped, 0), Math.max(0, siblings.length - 1));
+  const { t } = useTranslation("nebulaDesign");
+  const [unfedBefore, unfedAfter] = around(t("props.unfed", { name: GAP }));
+  const [resizeBefore, resizeAfter] = around(t("props.noResize", { hide: GAP }));
 
   return (
     <Stack gap={1.5}>
       {has("slot") && (
         <Group
-          label="Bound input"
+          label={t("props.groups.bound")}
           aside={
             bound && (
               <Stack direction="row" alignItems="center" gap={0.6}>
@@ -5400,7 +5505,7 @@ function Properties({
                     color: wired.has(bound) ? theme.palette.nebula.muted : theme.palette.nebula.warn,
                   })}
                 >
-                  {wired.has(bound) ? "wired" : "unwired"}
+                  {wired.has(bound) ? t("props.wired") : t("props.unwired")}
                 </Box>
               </Stack>
             )
@@ -5409,7 +5514,7 @@ function Properties({
           <Picker
             value={block.slot ?? ""}
             options={[
-              { id: "", label: "not chosen" },
+              { id: "", label: t("props.notChosen") },
               ...design.slots.map((input) => ({ id: input.name, label: input.name })),
             ]}
             onChange={(slot) => onSet("slot", slot)}
@@ -5427,16 +5532,16 @@ function Properties({
               })}
             >
               <Stack direction="row" alignItems="center" gap={0.9} sx={{ mb: "6px" }}>
-                <Kicker>Other usages</Kicker>
+                <Kicker>{t("props.otherUsages")}</Kicker>
                 <Hint>{siblings.length - 1}</Hint>
                 <Box sx={{ flex: 1 }} />
-                <Step label="Previous usage" onClick={() => onStep(Math.max(0, at - 1))}>
+                <Step label={t("props.previousUsage")} onClick={() => onStep(Math.max(0, at - 1))}>
                   ◀
                 </Step>
                 <Mono>
                   {at + 1}/{siblings.length}
                 </Mono>
-                <Step label="Next usage" onClick={() => onStep(Math.min(siblings.length - 1, at + 1))}>
+                <Step label={t("props.nextUsage")} onClick={() => onStep(Math.min(siblings.length - 1, at + 1))}>
                   ▶
                 </Step>
               </Stack>
@@ -5477,59 +5582,60 @@ function Properties({
                           color: current ? theme.palette.nebula.accent : theme.palette.nebula.dim,
                         })}
                       >
-                        {current ? "editing" : "→"}
+                        {current ? t("props.editing") : "→"}
                       </Box>
                     </Box>
                   );
                 })}
               </Stack>
               <Box sx={{ mt: "6px" }}>
-                <Chrome label="Show all usages…" onClick={() => bound && onBrowse(bound)} />
+                <Chrome label={t("props.showAllUsages")} onClick={() => bound && onBrowse(bound)} />
               </Box>
               <Typography sx={(theme) => ({ mt: "7px", fontSize: 11, color: theme.palette.nebula.dim })}>
-                Editing the input’s value changes every usage. Style stays per element.
+                {t("props.everyUsage")}
               </Typography>
             </Box>
           )}
           {bound && !wired.has(bound) && (
             <Note>
-              Nothing feeds <Code>{bound}</Code> yet — the slot renders empty. Wire it on the canvas
-              behind this panel.
+              {unfedBefore}
+              <Code>{bound}</Code>
+              {unfedAfter}
             </Note>
           )}
         </Group>
       )}
 
       {has("fallback") && (
-        <Group label="Fallback text">
+        <Group label={t("props.groups.fallback")}>
           <Boxed>
             <PlainInput
               value={block.fallback ?? ""}
-              placeholder="Shown when empty…"
-              ariaLabel="Fallback text"
+              placeholder={t("props.placeholders.fallback")}
+              ariaLabel={t("props.labels.fallback")}
               onChange={(text) => onSet("fallback", text)}
             />
           </Boxed>
           <Typography sx={(theme) => ({ mt: "8px", fontSize: 11, color: theme.palette.nebula.dim })}>
-            Sent in the input’s place when nothing feeds it, instead of a hole in the message.
+            {t("props.fallbackNote")}
           </Typography>
         </Group>
       )}
 
       {(has("lines") || has("rows") || has("items") || has("altText")) && (
-        <Group label={has("altText") ? "Variants" : "Rows"}>
+        <Group label={has("altText") ? t("props.groups.variants") : t("props.groups.rows")}>
           <Stack gap={1.25}>
             {/* One line each, edited as text. A repeater of little field
                 groups is the tidier form and the slower one to actually use:
                 these are lists of short strings, and typing them as lines is
                 how somebody writes a list. */}
             {has("lines") && (
-              <Field label="Items — one per line">
+              <Field label={t("props.fields.listItems")}>
                 <Boxed>
                   <PlainInput
                     value={(block.lines ?? []).join("\n")}
-                    placeholder={"First thing\nSecond thing"}
-                    ariaLabel="List items"
+                    placeholder={t("props.placeholders.list")}
+                    ariaLabel={t("props.labels.listItems")}
                     multiline
                     onChange={(text) => onSet("lines", text.split("\n"))}
                   />
@@ -5537,12 +5643,12 @@ function Properties({
               </Field>
             )}
             {has("rows") && (
-              <Field label="Rows — cells split by |">
+              <Field label={t("props.fields.tableRows")}>
                 <Boxed>
                   <PlainInput
                     value={(block.rows ?? []).map((row) => row.join(" | ")).join("\n")}
-                    placeholder={"Channel | What it is for\nLobby | Anyone, any time"}
-                    ariaLabel="Table rows"
+                    placeholder={t("props.placeholders.table")}
+                    ariaLabel={t("props.labels.tableRows")}
                     multiline
                     onChange={(text) =>
                       onSet(
@@ -5557,7 +5663,7 @@ function Properties({
             {has("items") && (
               <Field
                 label={
-                  block.type === "toggles" ? "Branches — toggle | what it says" : "Items — label | link"
+                  block.type === "toggles" ? t("props.fields.branches") : t("props.fields.itemsLink")
                 }
               >
                 <Boxed>
@@ -5567,10 +5673,10 @@ function Properties({
                       .join("\n")}
                     placeholder={
                       block.type === "toggles"
-                        ? "is_new_member | Welcome aboard"
-                        : "Browse | Channel viewer"
+                        ? t("props.placeholders.branches")
+                        : t("props.placeholders.items")
                     }
-                    ariaLabel="Items"
+                    ariaLabel={t("props.labels.items")}
                     multiline
                     onChange={(text) =>
                       onSet(
@@ -5589,12 +5695,12 @@ function Properties({
               </Field>
             )}
             {has("altText") && (
-              <Field label="B — sent when the toggle does not hold">
+              <Field label={t("props.fields.variantB")}>
                 <Boxed>
                   <PlainInput
                     value={block.altText ?? ""}
-                    placeholder="what everyone else gets"
-                    ariaLabel="Variant B"
+                    placeholder={t("props.placeholders.variantB")}
+                    ariaLabel={t("props.labels.variantB")}
                     multiline
                     onChange={(text) => onSet("altText", text)}
                   />
@@ -5606,7 +5712,7 @@ function Properties({
       )}
 
       {(has("text") || has("glyph") || has("url")) && (
-        <Group label="Content">
+        <Group label={t("props.groups.content")}>
           <Stack gap={1.25}>
             {has("text") && block.type === "html" && (
               /* The one block whose content *is* markup, so it is edited as
@@ -5615,7 +5721,7 @@ function Properties({
                  field the message editor's own HTML view uses. */
               <HtmlSourceField
                 value={block.text ?? ""}
-                ariaLabel="Block markup"
+                ariaLabel={t("props.labels.markup")}
                 minHeight={140}
                 maxHeight={320}
                 onChange={(html) => onSet("text", html)}
@@ -5626,8 +5732,8 @@ function Properties({
               (isRichBody(block.type) ? (
                 <RichTextField
                   value={richBody(block.text)}
-                  placeholder="what it says"
-                  ariaLabel="Block text"
+                  placeholder={t("sheet.textPlaceholder")}
+                  ariaLabel={t("sheet.textLabel")}
                   preset="document"
                   tools={TEXT_TOOLS}
                   maxLength={MAX_BODY}
@@ -5639,8 +5745,8 @@ function Properties({
                 <Boxed>
                   <PlainInput
                     value={block.text ?? ""}
-                    placeholder="what it says"
-                    ariaLabel="Block text"
+                    placeholder={t("sheet.textPlaceholder")}
+                    ariaLabel={t("sheet.textLabel")}
                     multiline={block.type !== "button"}
                     onChange={(text) => onSet("text", text)}
                   />
@@ -5656,14 +5762,14 @@ function Properties({
                 blocks can still be *bound* to an input; what they cannot do is
                 hold one mid-sentence. */}
             {carriesInline(block.type) && design.slots.length > 0 && (
-              <Field label="Insert an input">
+              <Field label={t("props.fields.insertInput")}>
                 <Stack direction="row" flexWrap="wrap" gap={0.7}>
                   {design.slots.map((input) => (
                     <Box
                       key={input.id}
                       component="button"
                       type="button"
-                      title={`Put ${input.name} into this copy`}
+                      title={t("props.putInput", { name: input.name })}
                       onClick={() => onInsertInline(input.name)}
                       sx={(theme) => ({
                         all: "unset",
@@ -5688,12 +5794,12 @@ function Properties({
               </Field>
             )}
             {has("glyph") && (
-              <Field label="Glyph">
+              <Field label={t("props.fields.glyph")}>
                 <Boxed>
                   <PlainInput
                     value={block.glyph ?? ""}
                     placeholder="◆"
-                    ariaLabel="Badge"
+                    ariaLabel={t("props.labels.badge")}
                     maxLength={2}
                     onChange={(glyph) => onSet("glyph", glyph)}
                   />
@@ -5701,12 +5807,12 @@ function Properties({
               </Field>
             )}
             {has("url") && (
-              <Field label="Link">
+              <Field label={t("props.fields.link")}>
                 <Boxed>
                   <PlainInput
                     value={block.url ?? ""}
                     placeholder="https://…"
-                    ariaLabel="Link"
+                    ariaLabel={t("props.labels.link")}
                     onChange={(url) => onSet("url", url)}
                   />
                 </Boxed>
@@ -5717,69 +5823,69 @@ function Properties({
       )}
 
       {(has("align") || has("style") || has("size") || has("tone") || has("bg") || has("fg")) && (
-        <Group label="Appearance">
+        <Group label={t("props.groups.appearance")}>
           <Stack gap={1.25}>
             {has("align") && (
-              <Field label="Alignment">
+              <Field label={t("props.fields.alignment")}>
                 <Choice
                   value={block.align ?? "left"}
                   options={[
-                    { id: "left", label: "Left" },
-                    { id: "center", label: "Centre" },
-                    { id: "right", label: "Right" },
+                    { id: "left", label: t("props.options.left") },
+                    { id: "center", label: t("props.options.centre") },
+                    { id: "right", label: t("props.options.right") },
                   ]}
                   onChange={(align) => onSet("align", align as Block["align"])}
                 />
               </Field>
             )}
             {has("style") && (
-              <Field label="Treatment">
+              <Field label={t("props.fields.treatment")}>
                 <Choice
                   value={block.style ?? "button"}
                   options={[
-                    { id: "button", label: "Solid" },
-                    { id: "link", label: "Link" },
+                    { id: "button", label: t("props.options.filled") },
+                    { id: "link", label: t("props.options.link") },
                   ]}
                   onChange={(style) => onSet("style", style as Block["style"])}
                 />
               </Field>
             )}
             {has("fg") && (
-              <Field label="Text colour">
+              <Field label={t("props.fields.textColour")}>
                 <Swatches
                   value={block.fg}
                   options={TEXT_SWATCHES}
                   auto={["auto:text", "auto:muted", "auto:accent"]}
-                  none="Default — the reader's own colour"
+                  none={t("props.none.text")}
                   onChange={(colour) => onSet("fg", colour)}
                 />
               </Field>
             )}
             {has("bg") && (
-              <Field label="Background">
+              <Field label={t("props.fields.background")}>
                 <Swatches
                   value={block.bg}
                   options={BACKGROUND_SWATCHES}
                   auto={["auto:surface", "auto:accent"]}
-                  none="None — no fill behind it"
+                  none={t("props.none.background")}
                   onChange={(colour) => onSet("bg", colour)}
                 />
               </Field>
             )}
             {has("tone") && (
-              <Field label="Kind">
+              <Field label={t("props.fields.kind")}>
                 <Choice
                   value={block.tone ?? "info"}
                   options={NOTICE_TONES.map((tone) => ({
                     id: tone,
-                    label: `${NOTICE_STYLE[tone].mark}  ${tone[0].toUpperCase()}${tone.slice(1)}`,
+                    label: `${NOTICE_STYLE[tone].mark}  ${t(`tones.${tone}`)}`,
                   }))}
                   onChange={(tone) => onSet("tone", tone as Block["tone"])}
                 />
               </Field>
             )}
             {has("stars") && (
-              <Field label="Stars">
+              <Field label={t("props.fields.stars")}>
                 <Choice
                   value={String(Math.max(1, Math.min(5, Math.round(block.stars ?? 5))))}
                   options={[1, 2, 3, 4, 5].map((n) => ({ id: String(n), label: String(n) }))}
@@ -5788,24 +5894,24 @@ function Properties({
               </Field>
             )}
             {has("until") && (
-              <Field label="Counts down to">
+              <Field label={t("props.fields.countsDown")}>
                 <Boxed>
                   <PlainInput
                     value={block.until ?? ""}
                     placeholder="2026-12-24"
-                    ariaLabel="Countdown date"
+                    ariaLabel={t("props.labels.countdownDate")}
                     onChange={(value) => onSet("until", value)}
                   />
                 </Boxed>
               </Field>
             )}
             {has("size") && (
-              <Field label="Size (px)">
+              <Field label={t("props.fields.size")}>
                 <Boxed>
                   <PlainInput
                     value={String(block.size ?? 14)}
                     placeholder="14"
-                    ariaLabel="Font size"
+                    ariaLabel={t("props.labels.fontSize")}
                     onChange={(size) => onSet("size", Number(size.replace(/\D/g, "")) || 14)}
                   />
                 </Boxed>
@@ -5816,11 +5922,11 @@ function Properties({
       )}
 
       {(has("radius") || has("pad") || has("weight") || has("tracking") || has("leading") || has("measure") || has("flow") || has("src") || has("faces") || has("shadow") || has("border")) && (
-        <Group label="Shape & type">
+        <Group label={t("props.groups.shapeType")}>
           <Stack gap={1.25}>
-            <Hint>Left alone, each of these is whatever the client's own default is.</Hint>
+            <Hint>{t("props.shapeHint")}</Hint>
             {has("weight") && (
-              <Field label="Weight">
+              <Field label={t("props.fields.weight")}>
                 {/* The stops a variable face actually wants. 400 reads thin on
                   a dark ground and 700 reads like a shout; the weights current
                   interfaces set are between the named ones, and a control that
@@ -5828,7 +5934,7 @@ function Properties({
                 <Choice
                   value={String(block.weight ?? 0)}
                   options={[
-                    { id: "0", label: "Auto" },
+                    { id: "0", label: t("props.options.auto") },
                     { id: "400", label: "400" },
                     { id: "510", label: "510" },
                     { id: "590", label: "590" },
@@ -5839,18 +5945,18 @@ function Properties({
               </Field>
             )}
             {has("border") && (
-              <Field label="Rule">
+              <Field label={t("props.fields.rule")}>
                 <Swatches
                   value={block.border}
                   options={BORDER_SWATCHES}
                   auto={["auto:line", "auto:accent"]}
-                  none="None — no rule around it"
+                  none={t("props.none.rule")}
                   onChange={(colour) => onSet("border", colour)}
                 />
               </Field>
             )}
             {has("borderWidth") && block.border !== undefined && (
-              <Field label="Thickness">
+              <Field label={t("props.fields.thickness")}>
                 {/* Only once there is a rule to be thick. A thickness control
                   on a block with no border is a control that does nothing,
                   which is worse than one that is not there. */}
@@ -5867,13 +5973,13 @@ function Properties({
               </Field>
             )}
             {has("borderStyle") && block.border !== undefined && (
-              <Field label="Rule style">
+              <Field label={t("props.fields.ruleStyle")}>
                 <Choice
                   value={block.borderStyle ?? "solid"}
                   options={[
-                    { id: "solid", label: "Solid" },
-                    { id: "dashed", label: "Dashed" },
-                    { id: "dotted", label: "Dotted" },
+                    { id: "solid", label: t("props.options.solid") },
+                    { id: "dashed", label: t("props.options.dashed") },
+                    { id: "dotted", label: t("props.options.dotted") },
                   ]}
                   onChange={(value) =>
                     onSet("borderStyle", value === "solid" ? undefined : (value as Block["borderStyle"]))
@@ -5882,7 +5988,7 @@ function Properties({
               </Field>
             )}
             {has("picFit") && (
-              <Field label="Picture fills">
+              <Field label={t("props.fields.pictureFills")}>
                 {/* Cover crops to fill the box, which is what a band wants.
                   Contain fits the whole picture in and keeps its shape - "take
                   the height and stay in proportion", which is what a logo or a
@@ -5890,9 +5996,9 @@ function Properties({
                 <Choice
                   value={block.picFit ?? "none"}
                   options={[
-                    { id: "none", label: "As is" },
-                    { id: "cover", label: "Cover" },
-                    { id: "contain", label: "Contain" },
+                    { id: "none", label: t("props.options.asIs") },
+                    { id: "cover", label: t("props.options.cover") },
+                    { id: "contain", label: t("props.options.contain") },
                   ]}
                   onChange={(value) =>
                     onSet("picFit", value === "none" ? undefined : (value as Block["picFit"]))
@@ -5901,21 +6007,21 @@ function Properties({
               </Field>
             )}
             {has("ratio") && (
-              <Field label="Shape">
+              <Field label={t("props.fields.shape")}>
                 <Choice
                   value={block.ratio ?? ""}
                   options={[
-                    { id: "", label: "Free" },
-                    { id: "1", label: "Square" },
+                    { id: "", label: t("props.options.free") },
+                    { id: "1", label: t("props.options.square") },
                     { id: "16/9", label: "16:9" },
-                    { id: "21/9", label: "Band" },
+                    { id: "21/9", label: t("props.options.band") },
                   ]}
                   onChange={(value) => onSet("ratio", value === "" ? undefined : value)}
                 />
               </Field>
             )}
             {has("bgAsset") && (
-              <Field label="Picture behind">
+              <Field label={t("props.fields.pictureBehind")}>
                 <PictureField
                   block={block}
                   assets={design.assets}
@@ -5926,30 +6032,30 @@ function Properties({
               </Field>
             )}
             {has("bgFit") && block.bgAsset !== undefined && (
-              <Field label="It fills">
+              <Field label={t("props.fields.itFills")}>
                 <Choice
                   value={block.bgFit ?? "cover"}
                   options={[
-                    { id: "cover", label: "Cover" },
-                    { id: "contain", label: "Contain" },
-                    { id: "fill", label: "Stretch" },
+                    { id: "cover", label: t("props.options.cover") },
+                    { id: "contain", label: t("props.options.contain") },
+                    { id: "fill", label: t("props.options.stretch") },
                   ]}
                   onChange={(value) => onSet("bgFit", value as Block["bgFit"])}
                 />
               </Field>
             )}
             {has("blurBehind") && (
-              <Field label="Frosted">
+              <Field label={t("props.fields.frosted")}>
                 {/* A blur of whatever is behind, which needs a fill over it to
                   be visible - and which is the only way to put words on a
                   photograph and keep both readable. */}
                 <Choice
                   value={String(block.blurBehind ?? 0)}
                   options={[
-                    { id: "0", label: "Clear" },
-                    { id: "6", label: "Light" },
-                    { id: "14", label: "Frosted" },
-                    { id: "28", label: "Heavy" },
+                    { id: "0", label: t("props.options.clear") },
+                    { id: "6", label: t("props.options.light") },
+                    { id: "14", label: t("props.options.frosted") },
+                    { id: "28", label: t("props.options.heavy") },
                   ]}
                   onChange={(value) =>
                     onSet("blurBehind", value === "0" ? undefined : Number(value))
@@ -5958,20 +6064,20 @@ function Properties({
               </Field>
             )}
             {has("blur") && (
-              <Field label="Blur it">
+              <Field label={t("props.fields.blurIt")}>
                 <Choice
                   value={String(block.blur ?? 0)}
                   options={[
-                    { id: "0", label: "Sharp" },
-                    { id: "3", label: "Soft" },
-                    { id: "10", label: "Blurred" },
+                    { id: "0", label: t("props.options.sharp") },
+                    { id: "3", label: t("props.options.soft") },
+                    { id: "10", label: t("props.options.blurred") },
                   ]}
                   onChange={(value) => onSet("blur", value === "0" ? undefined : Number(value))}
                 />
               </Field>
             )}
             {has("shadow") && (
-              <Field label="Shadow">
+              <Field label={t("props.fields.shadow")}>
                 {/* Named rather than typed, because the useful ones are not
                   drop shadows: a spread ring stands in for a border, and an
                   inset highlight along the top edge is how a dark surface says
@@ -5980,77 +6086,79 @@ function Properties({
                 <Presets
                   value={block.shadow}
                   options={SHADOW_PRESETS}
-                  none="None"
+                  family="shadows"
+                  none={t("props.options.none")}
                   onChange={(css) => onSet("shadow", css)}
                 />
               </Field>
             )}
             {has("textShadow") && (
-              <Field label="Shadow on the words">
+              <Field label={t("props.fields.textShadow")}>
                 <Presets
                   value={block.textShadow}
                   options={TEXT_SHADOW_PRESETS}
-                  none="None"
+                  family="textShadows"
+                  none={t("props.options.none")}
                   onChange={(css) => onSet("textShadow", css)}
                 />
               </Field>
             )}
             {has("grow") && (
-              <Field label="In a row">
+              <Field label={t("props.fields.inARow")}>
                 {/* Only means anything inside a row: that is the one flow with
                   space left over to divide. A pair of growing buttons takes
                   half the row each whatever their labels say. */}
                 <Choice
                   value={block.grow === true ? "grow" : "natural"}
                   options={[
-                    { id: "natural", label: "Its own width" },
-                    { id: "grow", label: "Share the row" },
+                    { id: "natural", label: t("props.options.ownWidth") },
+                    { id: "grow", label: t("props.options.shareRow") },
                   ]}
                   onChange={(value) => onSet("grow", value === "grow" ? true : undefined)}
                 />
               </Field>
             )}
             {has("fit") && (
-              <Field label="Width">
+              <Field label={t("props.fields.width")}>
                 <Choice
                   value={block.fit === true ? "fit" : "full"}
                   options={[
-                    { id: "full", label: "Full" },
-                    { id: "fit", label: "Fits words" },
+                    { id: "full", label: t("props.options.full") },
+                    { id: "fit", label: t("props.options.fitsWords") },
                   ]}
                   onChange={(value) => onSet("fit", value === "fit" ? true : undefined)}
                 />
               </Field>
             )}
             {has("radius") && (
-              <Field label="Corners">
+              <Field label={t("props.fields.corners")}>
                 <Choice
                   value={String(block.radius ?? 0)}
                   options={[
-                    { id: "0", label: "Square" },
-                    { id: "6", label: "Soft" },
-                    { id: "12", label: "Round" },
-                    { id: "999", label: "Pill" },
+                    { id: "0", label: t("props.options.squareCorners") },
+                    { id: "6", label: t("props.options.soft") },
+                    { id: "12", label: t("props.options.round") },
+                    { id: "999", label: t("props.options.pill") },
                   ]}
                   onChange={(value) => onSet("radius", value === "0" ? undefined : Number(value))}
                 />
               </Field>
             )}
             {has("flow") && (
-              <Field label="Layout">
+              <Field label={t("props.fields.layout")}>
                 <Choice
                   value={block.flow ?? "stack"}
                   options={[
-                    { id: "stack", label: "Stack" },
-                    { id: "row", label: "Row" },
-                    { id: "cells", label: "Columns" },
+                    { id: "stack", label: t("props.options.stack") },
+                    { id: "row", label: t("props.options.row") },
+                    { id: "cells", label: t("props.options.columns") },
                   ]}
                   onChange={(value) => onSet("flow", value === "stack" ? undefined : (value as Block["flow"]))}
                 />
               </Field>
             )}
             {has("gap") && (
-              <Field label="Gap">
+              <Field label={t("props.fields.gap")}>
                 {/* Negative on purpose. A row of avatars is a row whose
                   children overlap, and there is no other way to say it. */}
                 <PlainInput
@@ -6063,7 +6171,7 @@ function Properties({
               </Field>
             )}
             {has("grad") && (
-              <Field label="Gradient">
+              <Field label={t("props.fields.gradient")}>
                 {/* Written whole, because there is no smaller vocabulary for a
                   gradient that a control could usefully offer. It sits behind
                   the flat fill rather than instead of it. */}
@@ -6075,36 +6183,36 @@ function Properties({
               </Field>
             )}
             {has("borderTop") && (
-              <Field label="Lit top edge">
+              <Field label={t("props.fields.litTop")}>
                 <Swatches
                   value={block.borderTop}
                   options={[{ label: "Light", colour: "#ffffff" }]}
                   auto={["auto:line", "auto:accent"]}
-                  none="None — the same rule all round"
+                  none={t("props.none.litTop")}
                   onChange={(colour) => onSet("borderTop", colour)}
                 />
               </Field>
             )}
             {has("round") && (
-              <Field label="Circle">
+              <Field label={t("props.fields.circle")}>
                 <Choice
                   value={block.round === true ? "yes" : "no"}
                   options={[
-                    { id: "no", label: "Box" },
-                    { id: "yes", label: "Round" },
+                    { id: "no", label: t("props.options.box") },
+                    { id: "yes", label: t("props.options.round") },
                   ]}
                   onChange={(value) => onSet("round", value === "yes" ? true : undefined)}
                 />
               </Field>
             )}
             {has("valign") && (
-              <Field label="Sits">
+              <Field label={t("props.fields.sits")}>
                 <Choice
                   value={block.valign ?? "baseline"}
                   options={[
-                    { id: "baseline", label: "Baseline" },
-                    { id: "top", label: "Top" },
-                    { id: "middle", label: "Middle" },
+                    { id: "baseline", label: t("props.options.baseline") },
+                    { id: "top", label: t("props.options.top") },
+                    { id: "middle", label: t("props.options.middle") },
                   ]}
                   onChange={(value) =>
                     onSet("valign", value === "baseline" ? undefined : (value as Block["valign"]))
@@ -6113,26 +6221,26 @@ function Properties({
               </Field>
             )}
             {has("bare") && (
-              <Field label="These words are">
+              <Field label={t("props.fields.wordsAre")}>
                 <Choice
                   value={block.bare === true ? "line" : "prose"}
                   options={[
-                    { id: "prose", label: "Prose" },
-                    { id: "line", label: "One line" },
+                    { id: "prose", label: t("props.options.prose") },
+                    { id: "line", label: t("props.options.oneLine") },
                   ]}
                   onChange={(value) => onSet("bare", value === "line" ? true : undefined)}
                 />
               </Field>
             )}
             {has("faces") && (
-              <Field label="Faces shown">
+              <Field label={t("props.fields.faces")}>
                 {/* A cluster is a glance, not a census: past four or five
                   overlapping discs nobody is reading faces any more and the
                   number beside them is doing all the work. */}
                 <Choice
                   value={String(block.faces ?? 3)}
                   options={[
-                    { id: "0", label: "None" },
+                    { id: "0", label: t("props.options.none") },
                     { id: "3", label: "3" },
                     { id: "4", label: "4" },
                     { id: "5", label: "5" },
@@ -6142,7 +6250,7 @@ function Properties({
               </Field>
             )}
             {has("asset") && (
-              <Field label="Picture">
+              <Field label={t("props.fields.picture")}>
                 <PictureField
                   block={block}
                   assets={design.assets}
@@ -6152,7 +6260,7 @@ function Properties({
               </Field>
             )}
             {has("src") && (
-              <Field label="Icon, inlined">
+              <Field label={t("props.fields.icon")}>
                 {/* A data URI, because the sanitiser every reader renders
                   through drops an `<img>` pointing anywhere else - so that a
                   greeting cannot be used to log the address of everybody who
@@ -6172,7 +6280,7 @@ function Properties({
               </Field>
             )}
             {has("margin") && (
-              <Field label="Outer space">
+              <Field label={t("props.fields.outer")}>
                 <PlainInput
                   value={block.margin ?? ""}
                   placeholder="0 0 20px"
@@ -6181,7 +6289,7 @@ function Properties({
               </Field>
             )}
             {has("padCss") && (
-              <Field label="Inner space, per side">
+              <Field label={t("props.fields.innerSides")}>
                 <PlainInput
                   value={block.padCss ?? ""}
                   placeholder="9px 17px"
@@ -6190,55 +6298,55 @@ function Properties({
               </Field>
             )}
             {has("pad") && (
-              <Field label="Inner space">
+              <Field label={t("props.fields.inner")}>
                 <Choice
                   value={String(block.pad ?? 0)}
                   options={[
-                    { id: "0", label: "None" },
-                    { id: "10", label: "Snug" },
-                    { id: "18", label: "Roomy" },
-                    { id: "28", label: "Airy" },
+                    { id: "0", label: t("props.options.none") },
+                    { id: "10", label: t("props.options.snug") },
+                    { id: "18", label: t("props.options.roomy") },
+                    { id: "28", label: t("props.options.airy") },
                   ]}
                   onChange={(value) => onSet("pad", value === "0" ? undefined : Number(value))}
                 />
               </Field>
             )}
             {has("leading") && (
-              <Field label="Line height">
+              <Field label={t("props.fields.lineHeight")}>
                 <Choice
                   value={String(block.leading ?? 0)}
                   options={[
-                    { id: "0", label: "Auto" },
-                    { id: "105", label: "Tight" },
-                    { id: "140", label: "Prose" },
-                    { id: "170", label: "Loose" },
+                    { id: "0", label: t("props.options.auto") },
+                    { id: "105", label: t("props.options.tight") },
+                    { id: "140", label: t("props.options.prose") },
+                    { id: "170", label: t("props.options.loose") },
                   ]}
                   onChange={(value) => onSet("leading", value === "0" ? undefined : Number(value))}
                 />
               </Field>
             )}
             {has("tracking") && (
-              <Field label="Letter spacing">
+              <Field label={t("props.fields.letterSpacing")}>
                 <Choice
                   value={String(block.tracking ?? 0)}
                   options={[
-                    { id: "-3", label: "Tight" },
-                    { id: "0", label: "Normal" },
-                    { id: "8", label: "Wide" },
-                    { id: "16", label: "Widest" },
+                    { id: "-3", label: t("props.options.tight") },
+                    { id: "0", label: t("props.options.normal") },
+                    { id: "8", label: t("props.options.wide") },
+                    { id: "16", label: t("props.options.widest") },
                   ]}
                   onChange={(value) => onSet("tracking", value === "0" ? undefined : Number(value))}
                 />
               </Field>
             )}
             {has("measure") && (
-              <Field label="Text width">
+              <Field label={t("props.fields.textWidth")}>
                 <Choice
                   value={String(block.measure ?? 0)}
                   options={[
-                    { id: "0", label: "Full" },
-                    { id: "420", label: "Wide" },
-                    { id: "340", label: "Read" },
+                    { id: "0", label: t("props.options.full") },
+                    { id: "420", label: t("props.options.wide") },
+                    { id: "340", label: t("props.options.read") },
                   ]}
                   onChange={(value) => onSet("measure", value === "0" ? undefined : Number(value))}
                 />
@@ -6248,16 +6356,16 @@ function Properties({
         </Group>
       )}
 
-      <Group label="Arrange">
+      <Group label={t("props.groups.arrange")}>
         <Stack gap={1}>
-          <Hint>Blocks overlap. This is which one is on top.</Hint>
+          <Hint>{t("props.arrange.hint")}</Hint>
           <Stack direction="row" gap={0.5}>
             {(
               [
-                ["front", "Front", "Bring to front"],
-                ["forward", "Forward", "Bring forward (Ctrl+])"],
-                ["backward", "Back", "Send backward (Ctrl+[)"],
-                ["back", "Bottom", "Send to back"],
+                ["front", t("props.arrange.front"), t("props.arrange.frontTitle")],
+                ["forward", t("props.arrange.forward"), t("props.arrange.forwardTitle")],
+                ["backward", t("props.arrange.backward"), t("props.arrange.backwardTitle")],
+                ["back", t("props.arrange.back"), t("props.arrange.backTitle")],
               ] as const
             ).map(([to, label, title]) => (
               <Box
@@ -6290,12 +6398,12 @@ function Properties({
       {/* Every block can be gated, which is what makes one design cover the
           variations that used to need a greeting each. */}
       {block.type !== "theme" && (
-        <Group label="Visibility">
+        <Group label={t("props.groups.visibility")}>
           <Choice
             value={gated ? "if" : "always"}
             options={[
-              { id: "always", label: "Always" },
-              { id: "if", label: "Only if…" },
+              { id: "always", label: t("props.options.always") },
+              { id: "if", label: t("props.options.onlyIf") },
             ]}
             onChange={(id) =>
               onSet("gate", id === "always" ? undefined : (design.conditions[0]?.name ?? undefined))
@@ -6312,24 +6420,24 @@ function Properties({
           ) : (
             <Typography sx={(theme) => ({ mt: "9px", fontSize: 11, color: theme.palette.nebula.dim })}>
               {design.conditions.length === 0
-                ? "Declare a toggle under the artboard first, then gate this on it."
-                : "Pick “Only if…” to gate this element on a toggle input."}
+                ? t("props.declareFirst")
+                : t("props.pickOnlyIf")}
             </Typography>
           )}
         </Group>
       )}
 
-      <Group label="Position & size">
+      <Group label={t("props.groups.position")}>
         {/* Four cells rather than one combined field: these are read off the
             sheet and compared against another block's, and a single "44 · 264 ·
             432" is three numbers nobody can line up against three others. */}
         {!resizable(block) && (
           <Typography sx={(theme) => ({ mb: "8px", fontSize: 11, color: theme.palette.nebula.dim })}>
-            Data-input elements can’t be resized — they take the size of the value. Use{" "}
+            {resizeBefore}
             <Box component="span" sx={(theme) => ({ color: theme.palette.nebula.accent })}>
-              hide
-            </Box>{" "}
-            on the element to drop this usage.
+              {t("props.hide")}
+            </Box>
+            {resizeAfter}
           </Typography>
         )}
         <Box sx={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "6px" }}>
@@ -6360,6 +6468,7 @@ function Num({
   value,
   onChange,
 }: Readonly<{ label: string; value?: number; onChange?: (value: number) => void }>) {
+  const { t } = useTranslation("nebulaDesign");
   return (
     <Stack
       direction="row"
@@ -6399,7 +6508,7 @@ function Num({
           component="span"
           sx={(theme) => ({ fontFamily: NEBULA_MONO, fontSize: 11.5, color: theme.palette.nebula.dim })}
         >
-          {value ?? "auto"}
+          {value ?? t("props.autoValue")}
         </Box>
       )}
     </Stack>
@@ -6518,14 +6627,18 @@ function merged<T extends { id: string; name: string }>(
 function Presets({
   value,
   options,
+  family,
   none,
   onChange,
 }: Readonly<{
   value: string | undefined;
   options: readonly { readonly id: string; readonly label: string; readonly css: string }[];
+  /** Which catalogue the options come from, for their names. */
+  family: "shadows" | "textShadows";
   none: string;
   onChange: (css: string | undefined) => void;
 }>) {
+  const { t } = useTranslation("nebulaDesign");
   const known = options.find((option) => option.css === value);
   const custom = value !== undefined && known === undefined;
   return (
@@ -6533,10 +6646,16 @@ function Presets({
       value={value === undefined ? "" : (known?.id ?? "custom")}
       options={[
         { id: "", label: none },
-        ...options.map((option) => ({ id: option.id, label: option.label })),
+        ...options.map((option) => ({
+          id: option.id,
+          label:
+            family === "shadows"
+              ? t(`shadows.${option.id as ShadowId}`)
+              : t(`textShadows.${option.id as TextShadowId}`),
+        })),
         // Offered only when there is one, so the list does not carry a choice
         // that cannot be chosen.
-        ...(custom ? [{ id: "custom", label: "Custom" }] : []),
+        ...(custom ? [{ id: "custom", label: t("props.options.custom") }] : []),
       ]}
       onChange={(id) => {
         if (id === "custom") return;

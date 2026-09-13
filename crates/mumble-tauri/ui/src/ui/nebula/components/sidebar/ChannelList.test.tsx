@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChannelEntry, UserEntry } from "@core/types";
+import { useAppStore } from "@core/store";
 import { PERM_MOVE } from "@core/utils/permissions";
 import { withNebulaTheme } from "../../testTheme";
 import { ChannelList } from "./ChannelList";
@@ -353,6 +354,235 @@ describe("carrying a user to another channel", () => {
     fireEvent.pointerUp(row, { clientX: 10, clientY: 130, pointerId: 1 });
 
     expect(invokeMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("ChannelList live badge", () => {
+  const initial = useAppStore.getState();
+  afterEach(() => {
+    useAppStore.setState({ broadcastingSessions: initial.broadcastingSessions, serverConfig: initial.serverConfig });
+  });
+
+  it("marks a member sharing their screen, and says which route it takes", () => {
+    useAppStore.setState({
+      broadcastingSessions: new Set([4]),
+      serverConfig: { ...initial.serverConfig, webrtc_sfu_available: true },
+    });
+    show([member(4, "Sharer"), member(5, "Watcher")]);
+    const badges = document.querySelectorAll("[data-live-badge]");
+    expect(badges).toHaveLength(1);
+    expect(badges[0].getAttribute("data-live-badge")).toBe("relayed");
+    expect(badges[0].textContent).toBe("Live");
+    expect(badges[0].closest('[data-user-name="Sharer"]')).toBeTruthy();
+  });
+
+  it("says P2P where the server relays nothing", () => {
+    useAppStore.setState({
+      broadcastingSessions: new Set([4]),
+      serverConfig: { ...initial.serverConfig, webrtc_sfu_available: false },
+    });
+    show([member(4, "Sharer")]);
+    expect(document.querySelector("[data-live-badge]")?.textContent).toBe("P2P");
+  });
+});
+
+describe("ChannelList arrange mode", () => {
+  const tree = [
+    { channel: channel(2, "Gaming"), depth: 0 },
+    { channel: channel(3, "Lounge"), depth: 0 },
+    { channel: channel(4, "Music"), depth: 0 },
+  ];
+  // jsdom lays nothing out, so each row answers with a 40px slot of its own.
+  const slotOf = (element: Element) => {
+    if (element.tagName === "UL") return { top: 0, bottom: 1000, left: 0, right: 200 };
+    const id = Number(element.querySelector("[data-channel-id]")?.getAttribute("data-channel-id"));
+    const index = tree.findIndex((entry) => entry.channel.id === id);
+    return index === -1 ? null : { top: index * 40 + 100, bottom: index * 40 + 140, left: 10, right: 190 };
+  };
+  let frames: FrameRequestCallback[] = [];
+
+  beforeEach(() => {
+    frames = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const slot = slotOf(this);
+      return { x: 0, y: 0, width: 180, height: 40, toJSON: () => ({}), ...(slot ?? { top: 0, bottom: 0, left: 0, right: 0 }) } as DOMRect;
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  function arrange(arranging: boolean, currentChannel: number | null = null) {
+    const handlers = { onArrange: vi.fn(), onDoneArranging: vi.fn(), onSelect: vi.fn() };
+    render(
+      withNebulaTheme(
+        <ChannelList
+          channels={tree}
+          users={[member(1, "enot", { channel_id: 3 })]}
+          selectedChannel={currentChannel}
+          currentChannel={currentChannel}
+          talkingSessions={new Set()}
+          unreadCounts={{}}
+          ownSession={9}
+          onJoin={vi.fn()}
+          onContextMenu={vi.fn()}
+          onSelectUser={vi.fn()}
+          onHoverUser={vi.fn()}
+          onLeaveUser={vi.fn()}
+          arranging={arranging}
+          {...handlers}
+        />,
+      ),
+    );
+    return handlers;
+  }
+
+  const row = (name: string) => document.querySelector(`[data-channel-name="${name}"]`) as HTMLElement;
+  const pointer = (target: EventTarget, type: string, clientY: number) =>
+    target.dispatchEvent(new MouseEvent(type, { bubbles: true, button: 0, clientY }));
+  const flush = () => {
+    const pending = frames;
+    frames = [];
+    act(() => pending.forEach((callback) => callback(0)));
+  };
+
+  it("swaps the occupants for a bar that leads back out", () => {
+    const handlers = arrange(true);
+    expect(screen.queryByText("enot")).toBeNull();
+    fireEvent.click(row("Lounge"));
+    expect(handlers.onSelect).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Done"));
+    expect(handlers.onDoneArranging).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a channel below its last sibling", () => {
+    const handlers = arrange(true);
+    act(() => pointer(row("Gaming"), "pointerdown", 120));
+    act(() => pointer(window, "pointermove", 215));
+    flush();
+    expect(document.querySelector('[data-testid="channel-arrange-mark"]')).toBeTruthy();
+    act(() => pointer(window, "pointerup", 215));
+    expect(handlers.onArrange).toHaveBeenCalledWith(2, null);
+  });
+
+  it("drops a channel in front of the sibling it is over", () => {
+    const handlers = arrange(true);
+    act(() => pointer(row("Music"), "pointerdown", 200));
+    act(() => pointer(window, "pointermove", 125));
+    flush();
+    act(() => pointer(window, "pointerup", 125));
+    expect(handlers.onArrange).toHaveBeenCalledWith(4, 3);
+  });
+
+  it("sends nothing for a drop back where it started", () => {
+    const handlers = arrange(true);
+    act(() => pointer(row("Lounge"), "pointerdown", 160));
+    act(() => pointer(window, "pointermove", 150));
+    flush();
+    expect(document.querySelector('[data-testid="channel-arrange-mark"]')).toBeNull();
+    act(() => pointer(window, "pointerup", 150));
+    expect(handlers.onArrange).not.toHaveBeenCalled();
+  });
+
+  it("moves the channel you are in, picked up anywhere on its card", () => {
+    const handlers = arrange(true, 4);
+    const card = row("Music").closest("li")!;
+    expect(row("Music").getAttribute("data-arrangeable")).toBe("true");
+    act(() => pointer(card, "pointerdown", 200));
+    act(() => pointer(window, "pointermove", 105));
+    flush();
+    act(() => pointer(window, "pointerup", 105));
+    expect(handlers.onArrange).toHaveBeenCalledWith(4, 2);
+  });
+
+  it("starts from a bare mousedown, which is all WebKitWebDriver sends", () => {
+    const handlers = arrange(true);
+    act(() => pointer(row("Gaming"), "mousedown", 120));
+    act(() => pointer(window, "pointermove", 215));
+    act(() => pointer(window, "mouseup", 215));
+    expect(handlers.onArrange).toHaveBeenCalledWith(2, null);
+  });
+
+  it("leaves a drag on the tree alone outside arrange mode", () => {
+    const handlers = arrange(false);
+    act(() => pointer(row("Gaming"), "pointerdown", 120));
+    act(() => pointer(window, "pointermove", 215));
+    flush();
+    act(() => pointer(window, "pointerup", 215));
+    expect(handlers.onArrange).not.toHaveBeenCalled();
+    expect(screen.getByText("enot")).toBeTruthy();
+  });
+});
+
+describe("ChannelList row marks", () => {
+  const initial = useAppStore.getState();
+  afterEach(() => {
+    viewer = "flat";
+    useAppStore.setState({
+      broadcastingSessions: initial.broadcastingSessions,
+      serverConfig: initial.serverConfig,
+      dmUnreadCounts: initial.dmUnreadCounts,
+    });
+  });
+
+  function draw(users: UserEntry[], extra: Partial<Parameters<typeof ChannelList>[0]> = {}) {
+    return render(
+      withNebulaTheme(
+        <ChannelList
+          channels={[
+            { channel: channel(2, "Gaming"), depth: 0 },
+            { channel: channel(3, "Lounge"), depth: 0 },
+          ]}
+          users={users}
+          selectedChannel={2}
+          currentChannel={2}
+          talkingSessions={new Set()}
+          unreadCounts={{}}
+          ownSession={9}
+          onSelect={vi.fn()}
+          onJoin={vi.fn()}
+          onContextMenu={vi.fn()}
+          onSelectUser={vi.fn()}
+          onHoverUser={vi.fn()}
+          onLeaveUser={vi.fn()}
+          {...extra}
+        />,
+      ),
+    );
+  }
+
+  it("marks the channels being listened to, and only those", () => {
+    const { container } = draw([], { listenedChannels: new Set([3]) });
+    const marks = container.querySelectorAll("[data-listening]");
+    expect(marks).toHaveLength(1);
+    expect(marks[0].getAttribute("aria-label")).toBe("Listening");
+  });
+
+  it("says a stacked room has someone sharing, where faces carry no badge", () => {
+    viewer = "modern";
+    useAppStore.setState({ broadcastingSessions: new Set([4]) });
+    const { container } = draw([member(4, "Sharer"), member(5, "Watcher")]);
+    expect(container.querySelector("[data-user-name]")).toBeNull();
+    expect(container.querySelectorAll("[data-live-badge]")).toHaveLength(1);
+  });
+
+  it("draws a name in its role's colour", () => {
+    draw([member(4, "Mod", { user_id: 12 } as Partial<UserEntry>)], { roleColors: new Map([[12, "#ed4245"]]) });
+    // Through `sx`, so the colour is in a generated class rather than an inline style.
+    expect(getComputedStyle(screen.getByText("Mod")).color).toBe("rgb(237, 66, 69)");
+  });
+
+  it("counts unread direct messages on the person who sent them", () => {
+    useAppStore.setState({ dmUnreadCounts: { 4: 3 } });
+    const { container } = draw([member(4, "Friend"), member(9, "Me")]);
+    const badge = container.querySelector("[data-dm-unread]");
+    expect(badge?.textContent).toBe("3");
+    expect(badge?.closest('[data-user-name="Friend"]')).toBeTruthy();
   });
 });
 

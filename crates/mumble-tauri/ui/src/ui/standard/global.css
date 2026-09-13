@@ -71,10 +71,14 @@ body {
 
 /* --- Custom Scrollbar ------------------------------------------- */
 
-/* Standards-based thin scrollbar (Firefox, future Chromium). */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-scrollbar) transparent;
+/* Standards-based thin scrollbar, only where the pseudo-elements below are
+   missing (Firefox). On WebKitGTK either property swaps in GTK's overlay
+   scrollbar, which ignores these styles and draws over menus above it. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-scrollbar) transparent;
+  }
 }
 
 /* Webkit/Blink engines (current Chromium, Safari). */

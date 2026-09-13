@@ -16,6 +16,7 @@ import {
   saveUserShortcuts,
   type UserShortcut,
 } from "@core/features/settings/userShortcuts";
+import { WhisperTargetsSection } from "./WhisperTargetsSection";
 import { Stack } from "../primitives";
 import {
   Banner,
@@ -190,6 +191,9 @@ export function ShortcutsSettings() {
           </Box>
         );
       })}
+
+      <GroupRule />
+      <WhisperTargetsSection recorderProps={recorderProps} />
 
       <GroupRule />
       <UserShortcuts recorderProps={recorderProps} />

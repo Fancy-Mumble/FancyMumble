@@ -24,6 +24,11 @@ import {
   type WelcomeNode,
 } from "./model";
 import { plainTextOf } from "./markup";
+import { useTranslation } from "react-i18next";
+import type { Say } from "./model";
+
+/** The suite-wide mock answers from the English catalogue, so assertions stay in English. */
+const say = useTranslation("nebulaWelcome").t as Say;
 
 /**
  * A worked graph to ask questions of: four conditions, their filters, three
@@ -120,7 +125,7 @@ suite("welcome graph", () => {
   it("reads the mock's graph back as the sentence the status bar prints", () => {
     // The one assertion that ties the drawing to the design: this string is
     // what the mock shows, character for character.
-    expect(describe(seedGraph())).toBe(
+    expect(describe(seedGraph(), say)).toBe(
       "((country in DE/AT/CH and joined less than 1 month ago) xor (version < 1.5.0 or account is guest))",
     );
   });
@@ -129,21 +134,21 @@ suite("welcome graph", () => {
     // Precedence between and/or/xor is not something an operator should have to
     // know to read their own rule back.
     const graph = seedGraph();
-    expect(describe(graph)?.startsWith("((")).toBe(true);
+    expect(describe(graph, say)?.startsWith("((")).toBe(true);
   });
 
   it("says nothing rather than 'shows when' with an empty condition", () => {
     const graph = seedGraph();
     const cut: WelcomeGraph = { ...graph, edges: graph.edges.filter((e) => e.port !== "when") };
-    expect(describe(cut)).toBeNull();
+    expect(describe(cut, say)).toBeNull();
   });
 
   it("is complete only when every input is wired", () => {
-    expect(graphStatus(seedGraph()).complete).toBe(true);
+    expect(graphStatus(seedGraph(), say).complete).toBe(true);
 
     const graph = seedGraph();
     const loose: WelcomeGraph = { ...graph, edges: graph.edges.filter((e) => e.id !== "e2") };
-    const status = graphStatus(loose);
+    const status = graphStatus(loose, say);
     expect(status.complete).toBe(false);
     // Names the node, so an operator knows where to look.
     expect(status.problems.some((p) => p.includes("AND") && p.includes("B"))).toBe(true);
@@ -193,13 +198,13 @@ suite("welcome graph", () => {
     it("takes a node's wires with it when it goes", () => {
       const graph = removeNode(seedGraph(), "and");
       expect(graph.edges.some((e) => e.from === "and" || e.to === "and")).toBe(false);
-      expect(graphStatus(graph).complete).toBe(false);
+      expect(graphStatus(graph, say).complete).toBe(false);
     });
   });
 
   it("re-describes itself after an edit rather than caching the old words", () => {
     const graph = patchNode(seedGraph(), "version", { version: "2.0.0" });
-    expect(describe(graph)).toContain("version < 2.0.0");
+    expect(describe(graph, say)).toContain("version < 2.0.0");
   });
 
   suite("filters", () => {
@@ -222,8 +227,8 @@ suite("welcome graph", () => {
       // what the sentence already means and saying it adds nothing. `yes`
       // is the one that changes who is greeted without changing a word of
       // the condition, so that one is said.
-      expect(describe(filtered("no"))).toBe("country in DE/AT/CH");
-      expect(describe(filtered("yes"))).toBe("country in DE/AT/CH (unknown counts as yes)");
+      expect(describe(filtered("no"), say)).toBe("country in DE/AT/CH");
+      expect(describe(filtered("yes"), say)).toBe("country in DE/AT/CH (unknown counts as yes)");
     });
 
     it("settles everything downstream of it", () => {
@@ -269,7 +274,7 @@ suite("welcome graph", () => {
     it("needs its input wired before the graph can be saved", () => {
       const graph = filtered("no");
       const loose = { ...graph, edges: graph.edges.filter((e) => e.id !== "f1") };
-      const status = graphStatus(loose);
+      const status = graphStatus(loose, say);
       expect(status.complete).toBe(false);
       expect(status.problems.some((p) => p.includes("FILTER") && p.includes("A"))).toBe(true);
     });
@@ -319,7 +324,7 @@ suite("welcome graph", () => {
       const over = patchNode(graph, "greeting", {
         html: "<p>" + "x".repeat(MAX_BODY) + "</p>",
       } as Partial<WelcomeNode>);
-      const status = graphStatus(over);
+      const status = graphStatus(over, say);
       expect(status.complete).toBe(false);
       expect(status.problems.some((problem) => problem.includes("SHOW THIS GREETING"))).toBe(true);
       expect(status.problems.some((problem) => problem.includes(String(MAX_BODY)))).toBe(true);

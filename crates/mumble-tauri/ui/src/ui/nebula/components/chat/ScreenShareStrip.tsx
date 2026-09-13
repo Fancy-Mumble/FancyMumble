@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react
 import { useTranslation } from "react-i18next";
 import { Button, Dialog, DialogContent } from "@mui/material";
 import { useAppStore } from "@core/store";
-import { useScreenShare } from "@standard/components/chat/stream/useScreenShare";
+import { useScreenShare, type ScreenShareHook } from "@standard/components/chat/stream/useScreenShare";
 import ScreenSharePickerDialog from "@standard/components/chat/stream/ScreenSharePickerDialog";
 import { Stack } from "../primitives";
 import { radius } from "../../tokens";
@@ -42,8 +42,25 @@ export function ScreenShareStrip({
   cameraRequested = false,
   onPickerClosed,
 }: Readonly<ScreenShareStripProps>) {
-  const { t } = useTranslation(["nebulaChat", "common"]);
+  const { t } = useTranslation(["nebulaChat", "chat", "common"]);
   const share = useScreenShare();
+  // Set when a share was asked for while another server connection holds the
+  // app's one capture; cleared once that share ends.
+  const [blocked, setBlocked] = useState(false);
+  const elsewhere = share.isBroadcastingFromOtherTab;
+  useEffect(() => {
+    if (!elsewhere) setBlocked(false);
+  }, [elsewhere]);
+  // Every way into a share passes through here - the header, the dock, the
+  // phone's voice screen, the stage's own camera button - so this is where a
+  // second capture is refused, rather than in each of them.
+  const guarded = useMemo<ScreenShareHook>(
+    () =>
+      elsewhere
+        ? { ...share, startSharing: () => setBlocked(true), startCameraSharing: () => setBlocked(true) }
+        : share,
+    [elsewhere, share],
+  );
   const users = useAppStore((state) => state.users);
   const currentChannel = useAppStore((state) => state.currentChannel);
   const ownSession = useAppStore((state) => state.ownSession);
@@ -77,9 +94,9 @@ export function ScreenShareStrip({
   const requested = pickerRequested || cameraRequested;
   useEffect(() => {
     if (!requested || share.pickerOpen) return;
-    if (cameraRequested) share.startCameraSharing();
-    else share.startSharing();
-  }, [cameraRequested, requested, share]);
+    if (cameraRequested) guarded.startCameraSharing();
+    else guarded.startSharing();
+  }, [cameraRequested, guarded, requested, share.pickerOpen]);
   useEffect(() => {
     if (requested && !share.pickerOpen) onPickerClosed();
   }, [onPickerClosed, requested, share.pickerOpen]);
@@ -133,31 +150,18 @@ export function ScreenShareStrip({
       )}
 
       {error && (
-        <Stack
-          direction="row"
-          alignItems="center"
-          gap={1.5}
-          sx={(theme) => ({
-            mx: "20px",
-            mt: "12px",
-            px: "12px",
-            py: "8px",
-            borderRadius: radius("md"),
-            fontSize: 11.5,
-            color: theme.palette.nebula.bad,
-            background: `${theme.palette.nebula.bad}1f`,
-            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.bad}55`,
-          })}
-        >
-          <span>{error}</span>
-          <Button
-            size="small"
-            sx={{ ml: "auto" }}
-            onClick={() => useAppStore.setState({ webrtcError: null })}
-          >
-            {t("common:actions.dismiss")}
-          </Button>
-        </Stack>
+        <StripNotice
+          text={error}
+          dismissLabel={t("common:actions.dismiss")}
+          onDismiss={() => useAppStore.setState({ webrtcError: null })}
+        />
+      )}
+      {blocked && elsewhere && (
+        <StripNotice
+          text={t("chat:screenShare.alreadySharingOtherServer")}
+          dismissLabel={t("common:actions.dismiss")}
+          onDismiss={() => setBlocked(false)}
+        />
       )}
 
       {/* Resolution, frame rate and what is captured, changed on the live share
@@ -191,8 +195,36 @@ export function ScreenShareStrip({
       ))}
 
       {feeds.length > 0 && (
-        <ScreenShareStage feeds={feeds} share={share} onOpenQuality={() => setQualityOpen(true)} />
+        <ScreenShareStage feeds={feeds} share={guarded} onOpenQuality={() => setQualityOpen(true)} />
       )}
     </>
+  );
+}
+
+/** A line under the stage saying why a share is not happening, until dismissed. */
+function StripNotice({ text, dismissLabel, onDismiss }: Readonly<{ text: string; dismissLabel: string; onDismiss: () => void }>) {
+  return (
+    <Stack
+      direction="row"
+      alignItems="center"
+      gap={1.5}
+      role="alert"
+      sx={(theme) => ({
+        mx: "20px",
+        mt: "12px",
+        px: "12px",
+        py: "8px",
+        borderRadius: radius("md"),
+        fontSize: 11.5,
+        color: theme.palette.nebula.bad,
+        background: `${theme.palette.nebula.bad}1f`,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.bad}55`,
+      })}
+    >
+      <span>{text}</span>
+      <Button size="small" sx={{ ml: "auto" }} onClick={onDismiss}>
+        {dismissLabel}
+      </Button>
+    </Stack>
   );
 }

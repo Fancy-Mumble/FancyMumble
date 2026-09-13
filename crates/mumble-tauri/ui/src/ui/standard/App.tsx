@@ -17,6 +17,11 @@ import {
   JUMP_TO_USER_EVENT,
   type JumpToUserDetail,
 } from "@core/features/settings/userShortcuts";
+import {
+  loadWhisperTargets,
+  applyAllWhisperTargets,
+  startWhisperSync,
+} from "@core/features/settings/whisperTargets";
 import { useVisualViewport } from "./hooks/useVisualViewport";
 import { useNotificationSounds } from "@core/features/notifications/useNotificationSounds";
 import { useCalendarReminders } from "@core/features/chat/calendar/useCalendarReminders";
@@ -265,7 +270,14 @@ function MainApp() {
     loadUserShortcuts().then((us) => {
       applyAllUserShortcuts(us).catch(console.error);
     });
+    loadWhisperTargets().then((targets) => {
+      applyAllWhisperTargets(targets).catch(console.error);
+    });
   }, []);
+
+  // Keeps every whisper target registered with the server ahead of its key,
+  // so a press only switches slots and its first syllable is not lost.
+  useEffect(() => startWhisperSync(), []);
 
   // Sync notification sounds when settings page saves changes.
   useEffect(() => {

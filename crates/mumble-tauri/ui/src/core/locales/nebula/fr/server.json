@@ -1,6 +1,9 @@
 ﻿{
   "panel": {
     "heading": "Infos du serveur",
+    "online": "{{count}} en ligne",
+    "kindFancy": "Serveur Fancy",
+    "kindMumble": "Serveur Mumble",
     "activityLog": "Journal d’activité",
     "noActivity": "Aucune activité pour l’instant",
     "audioTransport": "Transport audio",

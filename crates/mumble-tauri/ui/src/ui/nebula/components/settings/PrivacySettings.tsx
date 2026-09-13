@@ -1,7 +1,8 @@
 import { Box } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@core/store";
-import { Banner, GroupRule, PageTitle, ToggleRow } from "./controls";
+import { Banner, GroupRule, GroupTitle, PageTitle, ToggleRow } from "./controls";
+import { NotepadSettings } from "./NotepadSettings";
 import { usePreferenceSettings } from "./usePreferenceSettings";
 
 /**
@@ -15,6 +16,7 @@ import { usePreferenceSettings } from "./usePreferenceSettings";
  */
 export function PrivacySettings() {
   const { t } = useTranslation("settings");
+  const { t: tNebula } = useTranslation("nebulaSettings");
   const { prefs, toggle } = usePreferenceSettings();
   const richPresenceStatus = useAppStore((state) => state.richPresenceStatus);
 
@@ -142,6 +144,10 @@ export function PrivacySettings() {
           {bridgeNote && <Banner tone="info">{bridgeNote}</Banner>}
         </Box>
       )}
+
+      <GroupRule />
+      <GroupTitle hint={tNebula("notepad.hint")}>{tNebula("notepad.title")}</GroupTitle>
+      <NotepadSettings />
     </Box>
   );
 }

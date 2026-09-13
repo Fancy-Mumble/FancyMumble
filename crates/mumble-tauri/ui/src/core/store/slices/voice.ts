@@ -32,6 +32,12 @@ export interface VoiceSlice {
   inCall: boolean;
   /** Session IDs of users currently transmitting audio (talking). */
   talkingSessions: Set<number>;
+  /**
+   * How each talking user's audio reaches us, by session: the server's voice
+   * context (0 in-channel, 1 shout, 2 whisper, 3 listen). Dropped when the
+   * user stops talking.
+   */
+  voiceContexts: Map<number, number>;
   /** Channels the local user is listening to (without being a member). */
   listenedChannels: Set<number>;
 
@@ -45,7 +51,7 @@ export interface VoiceSlice {
 /** State-only portion of {@link VoiceSlice}. */
 type VoiceState_ = Pick<
   VoiceSlice,
-  "voiceState" | "udpActive" | "udpCipher" | "inCall" | "talkingSessions" | "listenedChannels"
+  "voiceState" | "udpActive" | "udpCipher" | "inCall" | "talkingSessions" | "voiceContexts" | "listenedChannels"
 >;
 
 /** Default voice state (also spread into the root `INITIAL` for resets). */
@@ -55,8 +61,24 @@ export const voiceInitialState: VoiceState_ = {
   udpCipher: null,
   inCall: false,
   talkingSessions: new Set<number>(),
+  voiceContexts: new Map<number, number>(),
   listenedChannels: new Set<number>(),
 };
+
+/** The voice contexts the roster marks. */
+export const VOICE_CONTEXT_SHOUT = 1;
+export const VOICE_CONTEXT_WHISPER = 2;
+
+/**
+ * Which cue a voice context earns, if any. In-channel speech and a channel
+ * listen sound like what they are; a whisper and a shout do not, and answering
+ * one out loud is answering it in front of the whole room.
+ */
+export function voiceContextKind(context: number | undefined): "whisper" | "shout" | null {
+  if (context === VOICE_CONTEXT_WHISPER) return "whisper";
+  if (context === VOICE_CONTEXT_SHOUT) return "shout";
+  return null;
+}
 
 export const createVoiceSlice: StateCreator<AppState, [], [], VoiceSlice> = (set) => ({
   ...voiceInitialState,
@@ -90,7 +112,7 @@ export const createVoiceSlice: StateCreator<AppState, [], [], VoiceSlice> = (set
   disableVoice: async () => {
     try {
       await invoke("disable_voice");
-      set({ voiceState: "inactive", inCall: false, talkingSessions: new Set() });
+      set({ voiceState: "inactive", inCall: false, talkingSessions: new Set(), voiceContexts: new Map() });
       // The one preference `persistVoiceState` will not write: it refuses to
       // record "inactive", because a disconnect reports the same thing and a
       // teardown is not a decision. Turning voice off here *is* the decision,

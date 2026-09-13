@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Box, Typography } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import { HtmlSourceField, RichTextField, richTextSurvives, Stack, type RichTextTool } from "../../primitives";
 import { PlainInput, useScrollGuard } from "../nodes";
 import { MAX_BODY, switchView, writeMarkup, writeSections, type BodyView, type MessageNode } from "./model";
@@ -75,6 +76,7 @@ export function BodyEditor({
   maxHeight: number;
   onPatch: (patch: Partial<MessageNode>) => void;
 }>) {
+  const { t } = useTranslation("nebulaWelcome");
   const guard = useScrollGuard<HTMLDivElement>();
   // Skipped while the editor is the thing that wrote it: what comes out of
   // Tiptap survives Tiptap by construction, and the check is a parse and a
@@ -107,33 +109,37 @@ export function BodyEditor({
     // the wheel has to be caught in.
     <Box ref={guard} sx={{ display: "flex", flexDirection: "column", gap: "6px" }}>
       <Stack direction="row" alignItems="center" gap={0.25}>
-        <ViewButton on={shown === "plain"} label="Plain" onClick={() => onPatch(switchView(node, "plain"))} />
+        <ViewButton
+          on={shown === "plain"}
+          label={t("views.plain")}
+          onClick={() => onPatch(switchView(node, "plain"))}
+        />
         <ViewButton
           on={shown === "rich"}
           // Not merely unselected: choosing it would rewrite the document, and
           // an operator cannot be expected to know that from a toolbar.
           disabled={!survives}
-          title={survives ? undefined : LOSSY}
-          label="Rich"
+          title={survives ? undefined : t("views.lossy")}
+          label={t("views.rich")}
           onClick={() => onPatch(switchView(node, "rich"))}
         />
         <ViewButton
           on={shown === "source"}
-          label="HTML"
+          label={t("views.html")}
           onClick={() => onPatch(switchView(node, "source"))}
         />
         {screens && (
           <ViewButton
             on={shown === "screen"}
-            label="Screen"
+            label={t("views.screen")}
             onClick={() => onPatch(switchView(node, "screen"))}
           />
         )}
         {screens && (
           <ViewButton
             on={shown === "legacy"}
-            label="Classic"
-            title="The same bands, compiled for the original Mumble client - 1.5 and older"
+            label={t("views.classic")}
+            title={t("views.classicHint")}
             onClick={() => onPatch(switchView(node, "legacy"))}
           />
         )}
@@ -182,8 +188,7 @@ export function BodyEditor({
             <Typography
               sx={(theme) => ({ fontSize: 10, lineHeight: 1.45, color: theme.palette.nebula.muted })}
             >
-              Compiled for Qt: tables, inline colour, no rounded corners. Wire it behind a client version
-              condition so only the old clients get it.
+              {t("views.classicNote")}
             </Typography>
           )}
           <ScreenEditor
@@ -205,22 +210,16 @@ export function BodyEditor({
 
       {!survives && (
         <Typography sx={(theme) => ({ fontSize: 10, lineHeight: 1.45, color: theme.palette.nebula.muted })}>
-          {LOSSY}
+          {/* Why the editor is refusing to open a document. Said in full rather
+              than as "unsupported markup": the operator's question is whether
+              their welcome screen is broken, and the answer is that it is fine
+              and this editor is the thing that cannot be trusted with it. */}
+          {t("views.lossy")}
         </Typography>
       )}
     </Box>
   );
 }
-
-/**
- * Why the editor is refusing to open a document.
- *
- * Said in full rather than as "unsupported markup": the operator's question is
- * whether their welcome screen is broken, and the answer is that it is fine and
- * this editor is the thing that cannot be trusted with it.
- */
-const LOSSY =
-  "This markup uses tags the editor cannot hold without rewriting them - tables, most likely. Editing it here as HTML keeps it exactly as it is.";
 
 /** One of the three views, as a pill in the node's own scale. */
 function ViewButton({

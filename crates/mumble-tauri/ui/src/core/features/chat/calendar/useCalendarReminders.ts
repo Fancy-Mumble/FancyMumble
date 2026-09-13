@@ -7,6 +7,7 @@ import { showDesktopNotification } from "./calendarSync";
 import { expandEvent } from "./recurrence";
 import { MS_PER_MINUTE } from "./calendarDates";
 import { shortTime } from "./calendarFormat";
+import { EVT_CALENDAR_REMINDER, type CalendarReminderDetail } from "./types";
 
 const CHECK_INTERVAL_MS = 20_000;
 const FIRED_CAP = 500;
@@ -48,7 +49,11 @@ export function useCalendarReminders(): void {
           const key = `${occ.key}:${offset}`;
           if (remindAt <= now && occ.start > now && !fired.has(key)) {
             fired.add(key);
-            globalThis.dispatchEvent(new CustomEvent("fancy:calendar-reminder"));
+            globalThis.dispatchEvent(
+              new CustomEvent<CalendarReminderDetail>(EVT_CALENDAR_REMINDER, {
+                detail: { eventId: event.id, occStart: occ.start },
+              }),
+            );
             // The reminder is an OS notification, drawn by the desktop rather
             // than by a component, so its two strings are asked of the
             // catalogue directly instead of through `useTranslation`.

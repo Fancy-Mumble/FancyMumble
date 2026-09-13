@@ -742,11 +742,13 @@
     "saved": "已保存",
     "saving": "保存中…",
     "saveChanges": "保存更改",
+    "listAllChosen": "已全部选择",
     "collapseFilters": "收起快捷筛选",
     "countNote": "已加载 {{count}} 条记录",
     "endlessOff": "分页显示，每次 25 行。",
     "endlessOn": "滚动时自动加载更多。",
     "endlessScroll": "无限滚动",
+    "sortLoadedOnly": "仅对已加载的条目排序；更早的条目仍在服务器上。",
     "endOfResults": "已到结果末尾",
     "expandFilters": "展开快捷筛选",
     "filterCategory": "类别",
@@ -774,7 +776,10 @@
     "richTextLossy": "这段欢迎文本使用了可视化编辑器无法保留的标记 — 表格布局，或它没有对应控件的样式。在那里编辑会重写它无法显示的部分，因此改为以 HTML 方式编辑。",
     "welcomeEditorTitle": "想要不止一条欢迎消息？",
     "welcomeEditorHint": "这段文本发给所有人。欢迎消息编辑器可以根据来访者的情况（客户端版本、是否有账号）编写欢迎语，并将其排布成一个页面。匹配到的欢迎语会代替这段文本发送。",
-    "welcomeEditorOpen": "打开编辑器"
+    "welcomeEditorOpen": "打开编辑器",
+    "modePreview": "预览",
+    "previewOf": "{{label}} 的预览",
+    "previewEmpty": "没有可显示的内容。此设置为空，或其全部内容已被每个客户端在渲染前应用的安全过滤器移除。"
   },
   "fileServer": {
     "title": "文件服务器存储",
@@ -1396,7 +1401,9 @@
     "installed": "已安装",
     "alreadyInstalled": "已在此服务器上安装",
     "abiVersion": "API v{{version}}",
-    "incompatibleAbi": "此插件面向的插件 API 版本与服务器不同，无法安装。"
+    "incompatibleAbi": "此插件面向的插件 API 版本与服务器不同，无法安装。",
+    "yanked": "已撤回",
+    "minServer": "服务器 ≥ {{version}}"
   },
   "plugins": {
     "empty": "当前连接的服务器上未加载任何插件。",
@@ -1491,6 +1498,42 @@
     "token": "令牌",
     "tokenHint": "不会存储 — 每次会话重新输入。",
     "use": "使用",
-    "version": "版本"
+    "version": "版本",
+    "tagsCount": "{{count}} / {{max}}",
+    "lede": "此服务器在连接界面上的样子。每个字段都是可选的——只写一句标语也是很好的品牌外观。",
+    "credsLead": "图片通过运营者 API 上传，需要填写其地址和令牌。"
+  },
+  "whisper": {
+    "deniedRow": "服务器拒绝了此目标：在 {{channels}} 中没有悄悄话权限",
+    "title": "悄悄话与喊话",
+    "hint": "按住按键即可对指定用户或其他频道说话，而不是对你所在的频道。适用于所有激活模式。",
+    "empty": "还没有悄悄话或喊话目标。",
+    "addBtn": "添加悄悄话目标",
+    "defaultName": "悄悄话 {{n}}",
+    "edit": "编辑",
+    "remove": "移除",
+    "save": "保存",
+    "nameLabel": "名称",
+    "kindLabel": "目标",
+    "kindUsers": "对用户说悄悄话",
+    "kindChannel": "对频道喊话",
+    "usersLabel": "用户",
+    "addUser": "添加用户...",
+    "noUsersPicked": "尚未选择用户。",
+    "removeUser": "移除 {{name}}",
+    "hashless": "有证书的用户可在任何服务器上找到，没有证书的用户按名称匹配。",
+    "channelModeLabel": "频道",
+    "channelFixed": "指定频道",
+    "channelCurrent": "我当前的频道",
+    "channelPick": "选择频道",
+    "links": "包括已链接的频道",
+    "children": "包括子频道",
+    "group": "仅限该组成员",
+    "groupHint": "可选。ACL 组名，例如 admin。留空则所有人都能听到。",
+    "summaryUsers": "发给 {{names}}",
+    "summaryChannel": "喊话到 {{name}}",
+    "summaryCurrent": "喊话到你当前的频道",
+    "summaryUnset": "未设置目标",
+    "noActiveServer": "连接服务器后才能选择用户和频道。"
   }
 }

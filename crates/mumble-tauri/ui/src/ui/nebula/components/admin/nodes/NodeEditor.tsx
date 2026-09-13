@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Box, Button, Tooltip, Typography } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import { radius } from "../../../tokens";
 import { Stack } from "../../primitives";
 import { MiniSwitch, SearchField } from "./controls";
@@ -68,6 +69,7 @@ export function NodeEditor<N extends GraphNode>({
   suggested,
   history,
 }: NodeEditorProps<N>) {
+  const { t } = useTranslation("nebulaWelcome");
   const status = spec.status(graph);
   /**
    * Which drawer is open, if either.
@@ -223,16 +225,21 @@ export function NodeEditor<N extends GraphNode>({
             {/* Buttons as well as the chords: an operator who has just watched
                 a template replace their canvas is not in a mood to guess at a
                 keyboard shortcut. */}
-            <Button size="small" disabled={!history.canUndo} onClick={history.undo} title="Undo (Ctrl+Z)">
-              Undo
+            <Button
+              size="small"
+              disabled={!history.canUndo}
+              onClick={history.undo}
+              title={t("canvas.undoTitle")}
+            >
+              {t("canvas.undo")}
             </Button>
             <Button
               size="small"
               disabled={!history.canRedo}
               onClick={history.redo}
-              title="Redo (Ctrl+Shift+Z)"
+              title={t("canvas.redoTitle")}
             >
-              Redo
+              {t("canvas.redo")}
             </Button>
           </Stack>
         )}

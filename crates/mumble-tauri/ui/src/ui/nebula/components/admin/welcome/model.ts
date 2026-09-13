@@ -35,7 +35,7 @@ import {
   type Section,
 } from "./layout";
 import { legacyMarkupOfScreen } from "./qtHtml";
-import { designProblems, removeInput, renameInput, type Design } from "./design";
+import { designIssues, removeInput, renameInput, sayIssue, type Design } from "./design";
 import { assemble, compileTarget } from "./compile";
 import type { Variant } from "./design";
 
@@ -237,8 +237,30 @@ export type MessageNode = Extract<WelcomeNode, { kind: "text" | "greeting" }>;
 /** The one that can be a whole welcome screen. Bands live only here. */
 export type GreetingNode = Extract<WelcomeNode, { kind: "greeting" }>;
 
-/** What a greeting reaching everybody reads as, in the status bar and the node. */
-export const EVERYONE = "everyone who arrives";
+/**
+ * How this module says a sentence: a `nebulaWelcome` key and its values in,
+ * the words out.
+ *
+ * Handed in rather than imported, so what a graph means stays testable without
+ * a translation stack. The page passes its `t`.
+ */
+export type Say = (key: string, params?: Record<string, unknown>) => string;
+
+/** The key each tenure window is said under, since the window is also data. */
+export const TENURE_WINDOW_KEYS: Record<TenureWindow, string> = {
+  "1 day": "day",
+  "1 week": "week",
+  "1 month": "month",
+  "6 months": "halfYear",
+  "1 year": "year",
+};
+
+/** The key each account state is said under. */
+export const ACCOUNT_STATE_KEYS: Record<AccountState, string> = {
+  guest: "guest",
+  registered: "registered",
+  "strong certificate": "strongCertificate",
+};
 
 /**
  * Whether this node is the "everybody" condition.
@@ -595,22 +617,28 @@ export function switchView<N extends MessageNode>(node: N, view: BodyView): Part
 /* -- Reading the graph back in words -------------------------------------- */
 
 /** One condition, in the words the status bar uses. */
-function phrase(node: WelcomeNode): string {
+function phrase(node: WelcomeNode, say: Say): string {
   switch (node.kind) {
     case "country":
-      return node.codes.length > 0 ? `country in ${node.codes.join("/")}` : "country in …";
+      return node.codes.length > 0
+        ? say("phrases.country", { codes: node.codes.join("/") })
+        : say("phrases.countryAny");
     case "tenure":
-      return `joined ${node.op === "less" ? "less" : "more"} than ${node.window} ago`;
+      return say(node.op === "less" ? "phrases.joinedLess" : "phrases.joinedMore", {
+        window: say(`windows.${TENURE_WINDOW_KEYS[node.window]}`),
+      });
     case "clientVersion":
-      return `version ${node.op} ${node.version}`;
+      return say("phrases.version", { op: node.op, version: node.version });
     case "fancyVersion":
-      return node.op === "any" ? "on the Fancy client" : `Fancy version ${node.op} ${node.version}`;
+      return node.op === "any"
+        ? say("phrases.fancyAny")
+        : say("phrases.fancyVersion", { op: node.op, version: node.version });
     case "account":
-      return `account is ${node.state}`;
+      return say("phrases.account", { state: say(`accountStates.${ACCOUNT_STATE_KEYS[node.state]}`) });
     case "group":
-      return node.group ? `in group ${node.group}` : "in group …";
+      return node.group ? say("phrases.group", { group: node.group }) : say("phrases.groupAny");
     case "os":
-      return `os is ${node.os}`;
+      return say("phrases.os", { os: node.os });
     default:
       return "…";
   }
@@ -624,37 +652,37 @@ function phrase(node: WelcomeNode): string {
  * their head to read their own rule back, and the drawing has no precedence in
  * it either - the parentheses *are* the shape they drew.
  */
-function expressionAt(graph: WelcomeGraph, node: NodeId, port: PortId): string | null {
+function expressionAt(graph: WelcomeGraph, node: NodeId, port: PortId, say: Say): string | null {
   const edge = graph.edges.find((e) => e.to === node && e.port === port);
   if (!edge) return null;
-  return expressionOf(graph, edge.from);
+  return expressionOf(graph, edge.from, say);
 }
 
-function expressionOf(graph: WelcomeGraph, id: NodeId): string | null {
+function expressionOf(graph: WelcomeGraph, id: NodeId, say: Say): string | null {
   const node = graph.nodes.find((n) => n.id === id);
   if (!node) return null;
   if (node.kind === "filter") {
-    const inner = expressionAt(graph, node.id, "a");
+    const inner = expressionAt(graph, node.id, "a", say);
     // Nothing wired in, and unknown counts as yes: that is true of every
     // arrival, which is how this canvas says "everybody". See `isEveryone`.
-    if (!inner) return node.unknownAs === "yes" ? EVERYONE : null;
+    if (!inner) return node.unknownAs === "yes" ? say("phrases.everyone") : null;
     // Only the surprising setting is spelled out. Every condition has to
     // pass through a filter to reach a gate, so `no` is what the sentence
     // already reads as - "country in DE" excludes anyone whose country
     // could not be determined. Annotating all of them would put the same
     // clause after every clause and bury the one that inverts it.
-    return node.unknownAs === "yes" ? `${inner} (unknown counts as yes)` : inner;
+    return node.unknownAs === "yes" ? say("phrases.unknownYes", { condition: inner }) : inner;
   }
-  if (node.kind !== "gate") return phrase(node);
+  if (node.kind !== "gate") return phrase(node, say);
 
   if (node.gate === "not") {
-    const inner = expressionAt(graph, node.id, "a");
-    return inner ? `not ${inner}` : null;
+    const inner = expressionAt(graph, node.id, "a", say);
+    return inner ? say("phrases.not", { condition: inner }) : null;
   }
-  const left = expressionAt(graph, node.id, "a");
-  const right = expressionAt(graph, node.id, "b");
+  const left = expressionAt(graph, node.id, "a", say);
+  const right = expressionAt(graph, node.id, "b", say);
   if (!left || !right) return null;
-  return `(${left} ${node.gate} ${right})`;
+  return `(${left} ${say(`phrases.gates.${node.gate}`)} ${right})`;
 }
 
 /**
@@ -688,14 +716,14 @@ export function greetingOf(graph: WelcomeGraph): WelcomeNode | undefined {
  * rather than printing an empty condition, because "shows when" with nothing
  * after it reads as "shows always", which is the opposite.
  */
-export function describeGreeting(graph: WelcomeGraph, greeting: NodeId): string | null {
-  return expressionAt(graph, greeting, "when");
+export function describeGreeting(graph: WelcomeGraph, greeting: NodeId, say: Say): string | null {
+  return expressionAt(graph, greeting, "when", say);
 }
 
 /** The first greeting's condition, for the places that speak about the graph. */
-export function describe(graph: WelcomeGraph): string | null {
+export function describe(graph: WelcomeGraph, say: Say): string | null {
   const greeting = greetingOf(graph);
-  return greeting ? describeGreeting(graph, greeting.id) : null;
+  return greeting ? describeGreeting(graph, greeting.id, say) : null;
 }
 
 /** The snippets wired into a greeting's `plus` port, in wiring order. */
@@ -738,32 +766,33 @@ export function mayBeUnknown(graph: WelcomeGraph, id: NodeId): boolean {
  * Every entry names a node the operator can go and look at. "Invalid graph"
  * tells somebody staring at eleven nodes nothing at all.
  */
-export function graphStatus(graph: WelcomeGraph): GraphStatus {
+export function graphStatus(graph: WelcomeGraph, say: Say): GraphStatus {
   const problems: string[] = [];
   const greeting = greetingOf(graph);
 
   if (!greeting) {
-    problems.push("No greeting node - add one to say what people see.");
+    problems.push(say("problems.noGreeting"));
     return { complete: false, problems };
   }
   if (greeting.kind === "greeting" && greeting.design && greeting.view === "design") {
-    problems.push(...designProblems(greeting.design, wiredInputsOf(graph, greeting.id)));
+    const issues = designIssues(greeting.design, wiredInputsOf(graph, greeting.id));
+    problems.push(...issues.map((issue) => sayIssue(say, issue)));
   } else if (greeting.kind === "greeting" && isScreen(greeting)) {
     // A screen of nothing but dividers has a body - the generated markup is a
     // row of rules - so "is the body empty" is the wrong question to ask of it.
     if (!screenSpeaks(greeting.sections)) {
-      problems.push("The welcome screen has no bands with anything in them.");
+      problems.push(say("problems.emptyScreen"));
     }
     for (const url of urlsOf(greeting.sections)) {
       if (url !== "" && !isWebUrl(url)) {
-        problems.push(`A link on the welcome screen is not http:// or https://: ${url}`);
+        problems.push(say("problems.badLink", { url }));
       }
     }
   } else if (greeting.kind === "greeting" && greeting.body.trim() === "") {
-    problems.push("The greeting has no text.");
+    problems.push(say("problems.noText"));
   }
   if (!graph.edges.some((e) => e.to === greeting.id && e.port === "when")) {
-    problems.push("Nothing is wired to WHEN, so the greeting would never show.");
+    problems.push(say("problems.notWired"));
   }
 
   for (const node of graph.nodes) {
@@ -777,17 +806,17 @@ export function graphStatus(graph: WelcomeGraph): GraphStatus {
       // unfinished one - see `isEveryone`.
       if (isEveryone(graph, node)) continue;
       if (!graph.edges.some((e) => e.to === node.id && e.port === port)) {
-        problems.push(`${labelOf(node)} has an empty ${port.toUpperCase()} input.`);
+        problems.push(say("problems.emptyInput", { node: labelOf(node, say), port: port.toUpperCase() }));
       }
     }
     if (node.kind === "country" && node.codes.length === 0) {
-      problems.push("A country node names no countries.");
+      problems.push(say("problems.noCountries"));
     }
     if (node.kind === "group" && node.group.trim() === "") {
-      problems.push("A group node names no group.");
+      problems.push(say("problems.noGroup"));
     }
     if (node.kind === "text" && node.body.trim() === "") {
-      problems.push("A reusable text node is empty.");
+      problems.push(say("problems.emptySnippet"));
     }
     // Checked against the server's own cap rather than left to the save: the
     // server refuses the *whole document* for one over-long body, and an
@@ -795,7 +824,9 @@ export function graphStatus(graph: WelcomeGraph): GraphStatus {
     // which one it was.
     for (const half of [markupOf(node), isMessage(node) ? node.body : ""]) {
       if ([...half].length > MAX_BODY) {
-        problems.push(`${labelOf(node)} is ${[...half].length} characters; the server takes ${MAX_BODY}.`);
+        problems.push(
+          say("problems.tooLong", { node: labelOf(node, say), length: [...half].length, max: MAX_BODY }),
+        );
       }
     }
   }
@@ -804,31 +835,10 @@ export function graphStatus(graph: WelcomeGraph): GraphStatus {
 }
 
 /** The header caption of a node, as the mock sets it: short and shouted. */
-export function labelOf(node: WelcomeNode): string {
-  switch (node.kind) {
-    case "country":
-      return "COUNTRY IS ONE OF";
-    case "tenure":
-      return "ON SERVER SINCE";
-    case "clientVersion":
-      return "CLIENT VERSION";
-    case "fancyVersion":
-      return "FANCY VERSION";
-    case "account":
-      return "ACCOUNT";
-    case "group":
-      return "GROUP";
-    case "os":
-      return "OS";
-    case "gate":
-      return node.gate.toUpperCase();
-    case "filter":
-      return "FILTER";
-    case "text":
-      return "REUSABLE TEXT";
-    case "greeting":
-      return "SHOW THIS GREETING";
-  }
+export function labelOf(node: WelcomeNode, say: Say): string {
+  // A gate is named by its operator, which reads the same in every language.
+  if (node.kind === "gate") return node.gate.toUpperCase();
+  return say(`nodes.${node.kind}`);
 }
 
 /* -- Preview -------------------------------------------------------------- */

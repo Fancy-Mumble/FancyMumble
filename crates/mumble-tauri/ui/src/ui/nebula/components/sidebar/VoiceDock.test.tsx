@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { useAppStore } from "@core/store";
 import { withNebulaTheme } from "../../testTheme";
 import { VoiceDock } from "./VoiceDock";
 
@@ -107,5 +108,73 @@ describe("the menu sheet", () => {
     expect(screen.queryByRole("menuitem", { name: "Server admin" })).toBeNull();
     // Settings is everyone's, and stays.
     expect(screen.getByRole("menuitem", { name: "Settings" })).toBeTruthy();
+  });
+  it("offers the recorder only where the shell passes it", () => {
+    renderDock();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    expect(screen.queryByRole("menuitem", { name: "Record audio" })).toBeNull();
+    cleanup();
+
+    const onRecord = vi.fn();
+    renderDock({ onRecord });
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Record audio" }));
+    expect(onRecord).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks a running recording on the button and says how long in the menu", () => {
+    const { container } = render(
+      withNebulaTheme(
+        <VoiceDock
+          name="ZewiWin"
+          session={7}
+          textureSize={null}
+          channelName="Gaming"
+          latencyMs={14}
+          hideEmpty={false}
+          onOpenSettings={vi.fn()}
+          onOpenProfile={vi.fn()}
+          onToggleHideEmpty={vi.fn()}
+          onRecord={vi.fn()}
+          recordingElapsed={83}
+        />,
+      ),
+    );
+    expect(container.querySelector("[data-recording-dot]")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    expect(screen.getByRole("menuitem", { name: "Recording · 01:23" })).toBeTruthy();
+  });
+  it("names the route on the share button", () => {
+    useAppStore.setState({ serverConfig: { ...useAppStore.getState().serverConfig, webrtc_sfu_available: true } });
+    renderDock({ onShareScreen: vi.fn() });
+    expect(screen.getByLabelText("Share your screen · Relayed by the server")).toBeTruthy();
+  });
+
+  it("refuses a second share while another server connection holds the capture", () => {
+    const initial = useAppStore.getState();
+    // Both servers handed out session 4: only the server id tells them apart.
+    useAppStore.setState({ ownSession: 4, activeServerId: "b", broadcastingOwnSession: 4, broadcastingServerId: "a" });
+    try {
+      const onShareScreen = vi.fn();
+      const onShareCamera = vi.fn();
+      renderDock({ onShareScreen, onShareCamera });
+      const button = screen.getByLabelText(
+        "You are already sharing your screen from another server. Stop that share first.",
+      );
+      expect(button.getAttribute("aria-disabled")).toBe("true");
+      fireEvent.click(button);
+      expect(onShareScreen).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("button", { name: "More" }));
+      const camera = screen.getByRole("menuitem", { name: /Share your camera/ });
+      expect(camera.getAttribute("aria-disabled")).toBe("true");
+    } finally {
+      useAppStore.setState({
+        ownSession: initial.ownSession,
+        activeServerId: initial.activeServerId,
+        broadcastingOwnSession: initial.broadcastingOwnSession,
+        broadcastingServerId: initial.broadcastingServerId,
+      });
+    }
   });
 });

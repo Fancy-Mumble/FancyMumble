@@ -28,7 +28,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "@core/store";
-import { FRIENDS_PLUGIN, requestFriendChannel } from "@core/friendsChannel";
+import { requestFriendChannel } from "@core/friendsChannel";
 import { getSavedServers, getServerPassword } from "@core/serverStorage";
 import {
   FRIENDS_CHANGED_EVENT,
@@ -40,13 +40,15 @@ import {
   type FriendIdentity,
 } from "@core/friendsStorage";
 import { isFriendsOwnServer, resolveFriendMatch } from "@core/friendsPresence";
+import { selfLogins, type ResolvedNotepad } from "@core/notepad";
 import {
   listFriendGroups,
-  selfFriend,
+  withNotepad,
   type FriendEntry,
   type FriendGroup,
   type FriendMatch,
 } from "./friends";
+import { useResolvedNotepad } from "./useNotepad";
 
 /** How often presence is re-asked for when nothing else has prompted it. */
 const ONLINE_REFRESH_MS = 15_000;
@@ -66,6 +68,16 @@ export interface FriendsScreen {
   cancelConnect: () => void;
   /** Drop a friend from the saved list. */
   remove: (entry: FriendEntry) => void;
+  /** The notepad in effect, which the row for yourself opens. */
+  notepad: ResolvedNotepad;
+}
+
+/** What the list calls the parts it cannot name from saved data. */
+export interface FriendsLabels {
+  /** The heading over a notepad kept on this device. */
+  thisDevice: string;
+  /** The notepad row's name when no login of yours has been seen yet. */
+  notepad: string;
 }
 
 /**
@@ -100,15 +112,23 @@ export function useSavedFriends(): Friend[] {
   return saved;
 }
 
-export function useFriends(query: string): FriendsScreen {
+export function useFriends(query: string, labels: FriendsLabels): FriendsScreen {
   const sessions = useAppStore((state) => state.sessions);
   const activeServerId = useAppStore((state) => state.activeServerId);
   const users = useAppStore((state) => state.users);
-  const ownSession = useAppStore((state) => state.ownSession);
   const dmUnreadCounts = useAppStore((state) => state.dmUnreadCounts);
-  const pluginInfos = useAppStore((state) => state.pluginInfos);
 
+  const ownSession = useAppStore((state) => state.ownSession);
+
+  // Includes yourself, saved per login by `@core/selfFriend`.
   const saved = useSavedFriends();
+  const notepad = useResolvedNotepad(saved);
+  const ownName =
+    selfLogins(saved)[0]?.userName ??
+    users.find((user) => user.session === ownSession)?.name ??
+    labels.notepad;
+  // Yourself appears once, as the notepad you chose.
+  const friends = useMemo(() => withNotepad(saved, notepad, ownName), [notepad, ownName, saved]);
   const [online, setOnline] = useState<Record<string, FriendMatch>>({});
   const [pendingConnect, setPendingConnect] = useState<Friend | null>(null);
   /** A friend to open as soon as their server finishes connecting. */
@@ -185,23 +205,6 @@ export function useFriends(query: string): FriendsScreen {
     };
   }, [saved, online, users, sessions, activeServerId]);
 
-  const ownUser = useMemo(
-    () => users.find((user) => user.session === ownSession) ?? null,
-    [users, ownSession],
-  );
-
-  // Yourself, as a friend: the notepad is the same kind of room a friend chat
-  // is, so it is listed like one rather than hidden behind its own control.
-  const friends = useMemo(() => {
-    const self = selfFriend({
-      activeServerId,
-      ownUser,
-      sessions,
-      hasFriendsPlugin: pluginInfos.has(FRIENDS_PLUGIN),
-    });
-    return self ? [self, ...saved] : saved;
-  }, [activeServerId, ownUser, pluginInfos, saved, sessions]);
-
   const groups = useMemo(
     () =>
       listFriendGroups({
@@ -212,36 +215,43 @@ export function useFriends(query: string): FriendsScreen {
         activeServerId,
         unreadCounts: dmUnreadCounts,
         query,
+        localLabel: labels.thisDevice,
       }),
-    [activeServerId, dmUnreadCounts, friends, online, query, sessions, users],
+    [activeServerId, dmUnreadCounts, friends, labels.thisDevice, online, query, sessions, users],
   );
 
   /** Open the chat, or answer false when their server is not open. */
-  const openChat = useCallback(async (entry: FriendEntry): Promise<boolean> => {
-    // Yourself first: your own hash resolves online like anyone's, and taking
-    // the direct-message path on it would open a conversation with yourself
-    // rather than the notepad the plugin keeps for you.
-    if (entry.self) {
-      requestFriendChannel();
-      return true;
-    }
-    if (entry.sessionId === null) return false;
-    const store = useAppStore.getState();
-    if (store.activeServerId !== entry.sessionId) await store.switchServer(entry.sessionId);
-    if (entry.match !== null) {
-      // Online: the direct message. Between two registered users the store
-      // upgrades it to the pair's encrypted channel on its own.
-      await useAppStore.getState().selectDmUser(entry.match.userSession);
-      return true;
-    }
-    if (entry.friend.userId != null) {
-      // Offline: there is no session to address, so the plugin is asked for the
-      // pair's persisted room directly and answers by selecting it.
-      requestFriendChannel(entry.friend.userId);
-      return true;
-    }
-    return false;
-  }, []);
+  const protocol = notepad.protocol;
+  const openChat = useCallback(
+    async (entry: FriendEntry): Promise<boolean> => {
+      if (entry.local) {
+        await useAppStore.getState().openLocalNotes();
+        return true;
+      }
+      if (entry.sessionId === null) return false;
+      const store = useAppStore.getState();
+      if (store.activeServerId !== entry.sessionId) await store.switchServer(entry.sessionId);
+      // Yourself: the notepad the plugin keeps for you, in the encryption you chose.
+      if (entry.self) {
+        requestFriendChannel(undefined, protocol);
+        return true;
+      }
+      if (entry.match !== null) {
+        // Online: the direct message. Between two registered users the store
+        // upgrades it to the pair's encrypted channel on its own.
+        await useAppStore.getState().selectDmUser(entry.match.userSession);
+        return true;
+      }
+      if (entry.friend.userId != null) {
+        // Offline: there is no session to address, so the plugin is asked for the
+        // pair's persisted room directly and answers by selecting it.
+        requestFriendChannel(entry.friend.userId);
+        return true;
+      }
+      return false;
+    },
+    [protocol],
+  );
 
   const open = useCallback(
     (entry: FriendEntry) => {
@@ -309,5 +319,6 @@ export function useFriends(query: string): FriendsScreen {
     confirmConnect,
     cancelConnect,
     remove,
+    notepad,
   };
 }

@@ -21,6 +21,8 @@ import enConnect from "../locales/nebula/en/connect.json";
 import enUser from "../locales/nebula/en/user.json";
 import enServer from "../locales/nebula/en/server.json";
 import enSettings from "../locales/nebula/en/settings.json";
+import enWelcome from "../locales/nebula/en/welcome.json";
+import enDesign from "../locales/nebula/en/design.json";
 
 const EN_BUNDLES = {
   nebulaCommon: enCommon,
@@ -31,6 +33,8 @@ const EN_BUNDLES = {
   nebulaUser: enUser,
   nebulaServer: enServer,
   nebulaSettings: enSettings,
+  nebulaWelcome: enWelcome,
+  nebulaDesign: enDesign,
 } as const;
 
 for (const [ns, bundle] of Object.entries(EN_BUNDLES)) {

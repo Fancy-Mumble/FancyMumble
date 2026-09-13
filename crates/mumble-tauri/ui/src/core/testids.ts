@@ -64,6 +64,10 @@ export const TID = {
   /** Recovered from the built bundle after a disk-full truncation;
    *  the name and value are exact, the description is not. */
   selfDockMenu: "self-dock-menu",
+  /** The dock's status line, which says "Whispering" while the key is held. */
+  selfDockStatus: "self-dock-status",
+  /** Opens the whisper target editor on the Shortcuts page. */
+  whisperTargetAdd: "whisper-target-add",
 
   // -- Chat composer --------------------------------------------------------
   /** Wrapper around the (contenteditable) markdown input. */
@@ -105,6 +109,14 @@ export const TID = {
    * (create/edit/delete); double-click joins.
    */
   channelItem: "channel-item",
+  /** Nebula: the channel menu entry that enters, or leaves, arrange mode. */
+  channelArrangeToggle: "channel-arrange-toggle",
+  /** Nebula: the bar pinned over the channel list while it is being arranged. */
+  channelArrangeBar: "channel-arrange-bar",
+  /** Nebula: that bar's button, which leaves arrange mode. */
+  channelArrangeDone: "channel-arrange-done",
+  /** Nebula: the mark drawn where a dragged channel would land. */
+  channelArrangeMark: "channel-arrange-mark",
   /** Flat list (above the channel tree) of private/hidden rooms the user is in
    *  (private rooms + scheduled meeting rooms). */
   privateChannelsViewer: "private-channels-viewer",
@@ -194,6 +206,12 @@ export const TID = {
    *  ("true"/"false") - the online state is resolved by cert hash over the live
    *  user list, so it reflects presence even for a friend in a hidden channel. */
   friendRow: "friend-row",
+  /** The gear on your notepad row that opens where it is kept and how. */
+  notepadOptions: "notepad-options",
+  /** The notepad location and encryption form (settings page and dialog). */
+  notepadSettings: "notepad-settings",
+  /** Confirms a notepad change, running any copy or delete chosen with it. */
+  notepadApply: "notepad-apply",
   /** The "connect to this friend's server" prompt shown in the Friends chat
    *  pane when you click a friend whose server you aren't connected to. */
   friendsConnectPrompt: "friends-connect-prompt",
@@ -412,6 +430,8 @@ export const TID = {
   auditKpiRow: "audit-kpi-row",
   /** Results table; rows are {@link TID.auditRow}. */
   auditTable: "audit-table",
+  /** A results column's sort control; carries `data-sort-key`. */
+  auditSortHeader: "audit-sort-header",
   /** One result row; carries `data-entry-id`. */
   auditRow: "audit-row",
   /** Detail drawer opened by clicking a row. */

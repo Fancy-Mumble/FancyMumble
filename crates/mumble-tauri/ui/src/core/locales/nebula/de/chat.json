@@ -133,7 +133,8 @@
     "onlineMembers": "Mitglieder online",
     "channelMembers": "Mitglieder in diesem Kanal",
     "gone": "Diese Person ist nicht mehr verbunden.",
-    "empty": "Niemand hier."
+    "empty": "Niemand hier.",
+    "overflow": "+{{count}} weitere"
   },
   "menu": {
     "reactWith": "Mit {{emoji}} reagieren",
@@ -148,7 +149,9 @@
     "editMessage": "Nachricht bearbeiten",
     "editHint": "Enter speichert · Esc bricht ab",
     "replyToMessage": "Auf Nachricht antworten",
-    "pinMessage": "Nachricht anheften"
+    "pinMessage": "Nachricht anheften",
+    "legacyHint": "Von einem Client ohne die Verschlüsselung dieses Kanals gesendet – der Server hat die Nachricht im Klartext gesehen.",
+    "unreadRule": "NEU"
   },
   "emoji": {
     "title": "Emoji",
@@ -237,7 +240,9 @@
     "resizeHint": "Ziehen, um den Platz der Bühne zu ändern. Doppelklick setzt zurück.",
     "someone": "Jemand",
     "you": "Du",
-    "on": "An"
+    "on": "An",
+    "routeRelayed": "Über den Server weitergeleitet",
+    "routeP2P": "Peer-to-Peer, Zuschauer verbinden sich direkt mit dir"
   },
   "dock": {
     "pause": "Pause",
@@ -281,5 +286,40 @@
     "micMuted": "Mikro stumm",
     "speaking": "{{name}} spricht · {{count}} verbunden",
     "voiceActive": "Sprache aktiv"
+  },
+  "scheduled": {
+    "to": "An {{channels}}",
+    "hint": "Der Server sendet sie zu diesem Zeitpunkt, auch wenn du dann nicht mehr verbunden bist.",
+    "plaintextWarning": "Dieser Kanal ist Ende-zu-Ende-verschlüsselt, eine geplante Nachricht speichert und sendet der Server jedoch als Klartext."
+  },
+  "calendar": {
+    "meetingDetails": "Besprechungsdetails",
+    "viewLabel": "Kalenderansicht",
+    "more": "+{{count}} weitere",
+    "join": "Besprechung beitreten",
+    "copyLink": "Einladungslink kopieren",
+    "linkCopied": "Link kopiert",
+    "when": "Wann",
+    "start": "Beginn",
+    "end": "Ende",
+    "repeats": "Wiederholung",
+    "noInvitees": "Noch niemand eingeladen",
+    "workDays": "Arbeitstage",
+    "status": {
+      "invited": "Eingeladen",
+      "accepted": "Zugesagt",
+      "tentative": "Vorläufig",
+      "declined": "Abgesagt"
+    },
+    "delete": {
+      "title": "„{{title}}“ löschen?",
+      "body": "Sie wird aus deinem Kalender entfernt.",
+      "bodyShared": "Sie wird aus deinem Kalender und bei allen Eingeladenen entfernt."
+    },
+    "notice": {
+      "upcoming": "Anstehende Besprechung",
+      "inRoom": "Du bist im Besprechungsraum",
+      "details": "Details"
+    }
   }
 }

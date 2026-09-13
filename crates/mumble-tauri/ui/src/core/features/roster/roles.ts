@@ -37,7 +37,8 @@ export function primaryRoles(groups: readonly AclGroup[]): PrimaryRoles {
 
   for (const group of groups) {
     if (group.name.startsWith("~")) continue;
-    if (group.color && !colors.has(group.name)) colors.set(group.name, group.color);
+    const color = safeRoleColor(group.color);
+    if (color && !colors.has(group.name)) colors.set(group.name, color);
 
     const removed = new Set(group.remove);
     let took = false;
@@ -78,3 +79,44 @@ export function rolesForUser(
   return mine;
 }
 
+/**
+ * A server-given role colour made safe to put in a style, or null.
+ *
+ * The colour is whatever the server stored, typed by whoever edits the roles
+ * in whichever client. Anything that could escape the declaration it is
+ * written into is refused, and - where the runtime can say - so is anything
+ * that is not a colour at all, a half-typed `#5865f` included. A refused
+ * colour draws the role uncoloured rather than wrong.
+ */
+export function safeRoleColor(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const value = raw.trim();
+  if (value.length === 0 || value.length > 64) return null;
+  if (!/^[#A-Za-z0-9 .,()%/]+$/.test(value)) return null;
+  if (typeof CSS !== "undefined" && typeof CSS.supports === "function" && !CSS.supports("color", value)) {
+    return null;
+  }
+  return value;
+}
+
+/**
+ * The colour a member's name is drawn in: that of the first group, in ACL
+ * order, that both holds them and has a colour.
+ *
+ * Not the same pick as {@link primaryRoles}, which files a member under their
+ * first group whether or not it is coloured - a list heading needs a name, a
+ * name only needs a colour.
+ */
+export function roleColorsByUser(groups: readonly AclGroup[]): ReadonlyMap<number, string> {
+  const byUser = new Map<number, string>();
+  for (const group of groups) {
+    if (group.name.startsWith("~")) continue;
+    const color = safeRoleColor(group.color);
+    if (!color) continue;
+    const removed = new Set(group.remove);
+    for (const userId of [...group.add, ...group.inherited_members]) {
+      if (!removed.has(userId) && !byUser.has(userId)) byUser.set(userId, color);
+    }
+  }
+  return byUser;
+}

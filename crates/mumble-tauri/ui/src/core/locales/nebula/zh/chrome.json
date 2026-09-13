@@ -14,10 +14,22 @@
     "headingMessage": "消息",
     "headingServer": "服务器",
     "results_one": "{{count}} 个结果",
-    "results_other": "{{count}} 个结果"
+    "results_other": "{{count}} 个结果",
+    "filters": "筛选结果",
+    "filterAll": "全部",
+    "filterPhotos": "图片",
+    "filterLinks": "链接",
+    "photosEmpty": "暂无分享的图片。",
+    "linksEmpty": "输入内容以查找分享过的链接。",
+    "photosLoading": "正在加载图片…",
+    "photos_one": "{{count}} 张图片",
+    "photos_other": "{{count}} 张图片",
+    "photoLabel": "{{sender}} 分享的图片，{{place}}",
+    "keyEsc": "Esc"
   },
   "gameOverlay": {
     "you": "你",
-    "more": "还有 {{count}} 人"
+    "more": "还有 {{count}} 人",
+    "channel": "频道"
   }
 }

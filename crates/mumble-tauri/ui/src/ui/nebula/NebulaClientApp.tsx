@@ -6,6 +6,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useAppStore } from "@core/store";
+import { selfLogins } from "@core/notepad";
 import { selectMicLive, selectSelfDeafened } from "@core/store/voiceSelectors";
 import { getPreferences, isFirstRun, updatePreferences } from "@core/preferencesStorage";
 import {
@@ -23,7 +24,14 @@ import { TID } from "@core/testids";
 import { PERM_WRITE } from "@core/utils/permissions";
 import { applyMentionsToHtml, type MentionResolver } from "@core/utils/mentions";
 import { isSpentWatchMarker } from "@core/features/chat/watch/watchMarker";
-import type { AudioSettings, ChannelEntry, ChatMessage, SavedServer, ServerSwitcher } from "@core/types";
+import type {
+  AudioSettings,
+  ChannelEntry,
+  ChatMessage,
+  PhotoEntry,
+  SavedServer,
+  ServerSwitcher,
+} from "@core/types";
 import ChannelEditorDialog from "@standard/components/sidebar/channel/ChannelEditorDialog";
 import DownloadsPanel from "@standard/components/chat/download/DownloadsPanel";
 import MySharedFilesTable from "./components/chat/MySharedFilesTable";
@@ -32,6 +40,19 @@ import TypingIndicator from "./components/chat/TypingIndicator";
 import FailedSends from "./components/chat/FailedSends";
 import PublicServersSurface from "./components/connect/PublicServersSurface";
 import { PinnedPanel } from "./components/chat/pinned/PinnedPanel";
+import { ScheduledMessagesDialog } from "./components/chat/scheduled/ScheduledMessagesDialog";
+import { RecordingDialog } from "./components/recording/RecordingDialog";
+import { useRecording } from "./components/recording/useRecording";
+import { useShareAvailability } from "./components/chat/share/useShareAvailability";
+import {
+  CalendarDialog,
+  CalendarNoticeToast,
+  currentOccurrence,
+  UNANCHORED,
+  useCalendarNotices,
+} from "./components/calendar";
+import { useCalendarStore } from "@core/features/chat/calendar/calendarStore";
+import { PLUGIN_NAME_CALENDAR } from "@core/constants/pluginData";
 import { useWelcomePin } from "./components/chat/pinned/useWelcomePin";
 import { WelcomeDialog } from "./components/welcome/WelcomeDialog";
 import { LiveDocDock } from "./components/chat/livedoc/LiveDocDock";
@@ -159,9 +180,10 @@ import {
   type GlobalSearchRow,
   type ServerGroup,
 } from "./selectors";
+import { planChannelMove } from "./channelArrange";
 import { useRegisteredMembers } from "@core/features/roster/registeredMembers";
 import { useAclGroups } from "@ui/standard/hooks/useAclGroups";
-import { rolesForUser } from "@core/features/roster/roles";
+import { roleColorsByUser, rolesForUser } from "@core/features/roster/roles";
 import { usePublishOwnRoles } from "@core/features/chat/selfMention";
 import { dmChannelLabel } from "./friends";
 import { useSavedFriends } from "./useFriends";
@@ -178,6 +200,7 @@ import { useServerLiveries } from "./useServerLivery";
 import { radius } from "./tokens";
 import { MobileShell } from "./components/mobile";
 import { useIsHandheld } from "./useIsHandheld";
+import { useDeveloperMode } from "./useDeveloperMode";
 import type {
   ChannelPaneModel,
   ChatHeaderModel,
@@ -332,7 +355,12 @@ export default function NebulaClientApp() {
   useThemedWindowIcon(theme);
   const channels = useAppStore((state) => state.channels);
   const users = useAppStore((state) => state.users);
-  const selectedChannel = useAppStore((state) => state.selectedChannel);
+  const localNotesOpen = useAppStore((state) => state.localNotesOpen);
+  const localNotes = useAppStore((state) => state.localNotes);
+  // While the notepad kept on this device is open, no server channel is the
+  // conversation - whatever the store still remembers selecting.
+  const storedSelectedChannel = useAppStore((state) => state.selectedChannel);
+  const selectedChannel = localNotesOpen ? null : storedSelectedChannel;
   const currentChannel = useAppStore((state) => state.currentChannel);
   const selectedDmUser = useAppStore((state) => state.selectedDmUser);
   const selectedUser = useAppStore((state) => state.selectedUser);
@@ -347,10 +375,53 @@ export default function NebulaClientApp() {
   const listenedChannels = useAppStore((state) => state.listenedChannels);
   const mutedPushChannels = useAppStore((state) => state.mutedPushChannels);
   const voiceState = useAppStore((state) => state.voiceState);
+  // The recorder is Standard's developer tool, offered on the same terms:
+  // developer mode, with voice on. One already running stays reachable either
+  // way, so it can always be stopped.
+  const developerMode = useDeveloperMode();
+  const canRecord = developerMode && voiceState !== "inactive";
+  const recording = useRecording(canRecord);
+  const [recordingOpen, setRecordingOpen] = useState(false);
+  const shareAvailability = useShareAvailability();
   const error = useAppStore((state) => state.error);
 
   const { screen, openScreen, surface, setSurface, marketplacePluginId, openMarketplace } =
     useScreenRouting();
+
+  // The calendar exists only where the server runs its plugin - the same
+  // registry signal Standard gates its header button on.
+  const calendarActive = useAppStore((state) => state.pluginInfos.has(PLUGIN_NAME_CALENDAR));
+  const calendarNotices = useCalendarNotices();
+  const openCalendar = useCallback(() => {
+    const store = useCalendarStore.getState();
+    store.closeDetail();
+    store.closeMenu();
+    setSurface("calendar");
+  }, [setSurface]);
+  // One meeting's card, over the week it falls in.
+  const openMeeting = useCallback(
+    (eventId: string, occStart?: number) => {
+      const store = useCalendarStore.getState();
+      const event = store.events.find((entry) => entry.id === eventId);
+      if (!event) return;
+      const start = occStart ?? currentOccurrence(event, Date.now());
+      store.closeMenu();
+      store.closeDialog();
+      store.setAnchor(start);
+      store.openDetail(eventId, start, UNANCHORED);
+      setSurface("calendar");
+    },
+    [setSurface],
+  );
+  // The meeting this room was opened for, when it is one this calendar holds.
+  const meetingHere = useCalendarStore((state) => {
+    const eventId =
+      selectedDmUser === null ? calendarNotices.meetingInRoom(activeServerId, selectedChannel) : undefined;
+    return eventId !== undefined && state.events.some((event) => event.id === eventId) ? eventId : undefined;
+  });
+  useEffect(() => {
+    if (!calendarActive && surface === "calendar") setSurface(null);
+  }, [calendarActive, surface, setSurface]);
   // Backend events drive `status`, `bootstrapStage` and every list below, so
   // this has to run for the client as a whole - including mini mode, which
   // renders its own tree and would otherwise drop the subscription.
@@ -430,6 +501,8 @@ export default function NebulaClientApp() {
   const [channelMenu, setChannelMenu] = useState<{ channel: ChannelEntry; x: number; y: number } | null>(
     null,
   );
+  /** Whether the channel tree is in arrange mode, where a drag reorders it. */
+  const [arrangingChannels, setArrangingChannels] = useState(false);
   /**
    * The channel editor, in whichever of its two jobs is open.
    *
@@ -558,16 +631,20 @@ export default function NebulaClientApp() {
     [channels],
   );
 
+  // Arranging needs the whole tree: a filter that hid a sibling would leave a
+  // channel dropped "next to" a room nobody could see. Nor does it outlive the
+  // connection whose tree it was arranging.
+  const arranging = arrangingChannels && channels.length > 0;
   const orderedChannels = useMemo(
     () =>
       orderChannels({
         channels,
-        query: search.channelQuery,
-        hideEmpty,
+        query: arranging ? "" : search.channelQuery,
+        hideEmpty: hideEmpty && !arranging,
         currentChannel,
         selectedChannel,
       }),
-    [channels, currentChannel, hideEmpty, search.channelQuery, selectedChannel],
+    [arranging, channels, currentChannel, hideEmpty, search.channelQuery, selectedChannel],
   );
 
   /**
@@ -632,11 +709,13 @@ export default function NebulaClientApp() {
    * receipt and drop images out of the gallery.
    */
   const conversationMessages = useMemo(() => {
-    const pool = activeDmUser
-      ? dmMessages
-      : [...messages, ...pollMessages].filter(
-          (message) => message.channel_id === selectedChannel && !message.dm_session,
-        );
+    const pool = localNotesOpen
+      ? localNotes
+      : activeDmUser
+        ? dmMessages
+        : [...messages, ...pollMessages].filter(
+            (message) => message.channel_id === selectedChannel && !message.dm_session,
+          );
     return pool.filter((message) => {
       const key = message.sender_hash
         ? `hash:${message.sender_hash}`
@@ -644,7 +723,16 @@ export default function NebulaClientApp() {
       if (relations[key]?.ignored) return false;
       return !(activeDmUser && relations[userRelationIdentity(activeDmUser)]?.blocked);
     });
-  }, [activeDmUser, dmMessages, messages, pollMessages, relations, selectedChannel]);
+  }, [
+    activeDmUser,
+    dmMessages,
+    localNotes,
+    localNotesOpen,
+    messages,
+    pollMessages,
+    relations,
+    selectedChannel,
+  ]);
 
   /**
    * Which watch sessions exist, as a set that only changes when one starts
@@ -901,6 +989,9 @@ export default function NebulaClientApp() {
   // channel's ACL. Reading it needs Write there, so on an ordinary account it
   // comes back empty and the list falls back to one "Members" group.
   const roles = useAclGroups();
+  // Names are drawn in their role's colour, as Standard draws them. Worked out
+  // once here rather than per row: the rows only look a user up.
+  const roleColors = useMemo(() => roleColorsByUser(roles), [roles]);
 
   // The same ACL answers "am I in the group this message mentioned?". Kept off
   // `users` so the set holds its identity through talking-state churn: it is a
@@ -974,17 +1065,19 @@ export default function NebulaClientApp() {
    * to open and no voice to join.
    */
   const savedFriends = useSavedFriends();
-  const friendChatName = useMemo(
-    () =>
-      activeChannel === null
-        ? null
-        : dmChannelLabel(activeChannel, {
-            users,
-            friends: savedFriends,
-            ownUserId: ownUser?.user_id ?? null,
-          }),
-    [activeChannel, ownUser?.user_id, savedFriends, users],
-  );
+  const friendChatName = useMemo(() => {
+    // The notepad on this device is headed like the one on a server: your name.
+    if (localNotesOpen) {
+      return selfLogins(savedFriends)[0]?.userName ?? ownUser?.name ?? t("nebulaSidebar:friends.notepad");
+    }
+    return activeChannel === null
+      ? null
+      : dmChannelLabel(activeChannel, {
+          users,
+          friends: savedFriends,
+          ownUserId: ownUser?.user_id ?? null,
+        });
+  }, [activeChannel, localNotesOpen, ownUser?.name, ownUser?.user_id, savedFriends, t, users]);
 
   // The encryption state of the open channel: whether it persists, whose keys
   // are trusted, who is waiting for one. Standard owns these flows; what
@@ -1329,6 +1422,13 @@ export default function NebulaClientApp() {
     if (!body.trim() && staged.length === 0) return;
     setPendingQuotes([]);
 
+    if (localNotesOpen) {
+      await useAppStore
+        .getState()
+        .addLocalNote(body, { name: friendChatName ?? ownUser?.name ?? "", hash: ownUser?.hash ?? null });
+      return;
+    }
+
     // Files that were staged go up now, and the batch becomes one message
     // carrying a marker each - what was staged together arrives together, and
     // the row draws it as one gallery rather than as a column of separate
@@ -1423,6 +1523,17 @@ export default function NebulaClientApp() {
     openScreen("chat");
   };
 
+  // A photo from the search grid lands where it was sent, as a message row does.
+  const openSearchPhoto = (photo: PhotoEntry) => {
+    if (photo.dm_session != null) {
+      openConversation(photo.dm_session);
+      return;
+    }
+    if (photo.channel_id == null) return;
+    void useAppStore.getState().selectChannel(photo.channel_id);
+    openScreen("chat");
+  };
+
   // One card, one place in the tree: the person whose card was clicked open and
   // stays, or - while nothing is pinned - the one the pointer is resting on.
   const profileCardUser = users.find((user) => user.session === (selectedUser ?? hovered.target?.session));
@@ -1444,6 +1555,8 @@ export default function NebulaClientApp() {
     talkingSessions,
     unreadCounts,
     ownSession,
+    listenedChannels,
+    roleColors,
     onSelect: (channel) => void useAppStore.getState().selectChannel(channel.id),
     onJoin: (channel) => enterChannel(channel.id),
     onContextMenu: (channel, event) => {
@@ -1454,6 +1567,16 @@ export default function NebulaClientApp() {
     onHoverUser: hovered.hover,
     onLeaveUser: hovered.clear,
     onContextMenuUser: userMenu.open,
+    arranging,
+    onArrange: (channelId, beforeId) => {
+      for (const write of planChannelMove(channels, channelId, beforeId)) {
+        useAppStore
+          .getState()
+          .updateChannel(write.channelId, { position: write.position })
+          .catch((err: unknown) => console.error("channel arrange failed:", err));
+      }
+    },
+    onDoneArranging: () => setArrangingChannels(false),
   };
 
   // The conversation's header, as one value - the handheld layout draws the
@@ -1461,8 +1584,9 @@ export default function NebulaClientApp() {
   const chatHeader: ChatHeaderModel = {
     title:
       activeDmUser?.name ?? friendChatName ?? activeChannel?.name ?? t("nebulaCommon:app.chooseConversation"),
-    subtitle:
-      activeDmUser || friendChatName
+    subtitle: localNotesOpen
+      ? t("nebulaSidebar:friends.notepadLocal")
+      : activeDmUser || friendChatName
         ? t("nebulaCommon:app.directMessage")
         : presence
           ? presenceLabel(tSelectors, presence)
@@ -1487,6 +1611,8 @@ export default function NebulaClientApp() {
     onToggleSearch: () => search.setChatOpen(!search.chatOpen),
     onShowMembers: () => memberPanel.setOpen(true),
     onShareScreen: () => setSurface("screen-share"),
+    shareBlockedReason: shareAvailability.elsewhere ? t("chat:screenShare.alreadySharingOtherServer") : null,
+    shareRoute: shareAvailability.relayed ? t("nebulaChat:share.routeRelayed") : t("nebulaChat:share.routeP2P"),
     onShowPinned: openPinned,
     pinnedOpen: surface === "pinned",
     onShowInfo: () => setSurface("server-info"),
@@ -1505,6 +1631,9 @@ export default function NebulaClientApp() {
      panel whose only content is "presence is off", and the
      switch that fixes it is in Settings, not here. */
     onShowPresence: richPresenceOn ? () => setSurface("presence") : undefined,
+    onShowScheduled: activeDmUser || !activeChannel ? undefined : () => setSurface("scheduled"),
+    onShowCalendar: calendarActive ? openCalendar : undefined,
+    onShowMeeting: calendarActive && meetingHere ? () => openMeeting(meetingHere) : undefined,
     onPopOutDm: activeDmUser
       ? () =>
           void openDmPopout(
@@ -1590,7 +1719,7 @@ export default function NebulaClientApp() {
       activeDmUser || friendChatName
         ? `@${activeDmUser?.name ?? friendChatName}`
         : `#${activeChannel?.name ?? "channel"}`,
-    disabled: (!activeChannel && !activeDmUser) || persistent.sendBlocked,
+    disabled: (!activeChannel && !activeDmUser && !localNotesOpen) || persistent.sendBlocked,
     onSend: send,
     onAttach: canAttach ? (kind) => void pickAttachment(kind) : undefined,
     onAttachFiles: canAttach ? stagePastedFiles : undefined,
@@ -1717,6 +1846,8 @@ export default function NebulaClientApp() {
      screen this dock is drawn on. */
     onShareScreen: currentChannel !== null ? () => setSurface("screen-share") : undefined,
     onShareCamera: currentChannel !== null ? () => setSurface("camera-share") : undefined,
+    onRecord: canRecord || recording.state.is_recording ? () => setRecordingOpen(true) : undefined,
+    recordingElapsed: recording.state.is_recording ? recording.state.elapsed_secs : null,
   };
 
   // The roster. A window stands it beside the conversation; a phone
@@ -1735,6 +1866,7 @@ export default function NebulaClientApp() {
     onLeave: hovered.clear,
     onContextMenu: userMenu.open,
     onInfo: userInfo.open,
+    roleColors,
     onClose: () => memberPanel.setOpen(false),
   };
 
@@ -2228,7 +2360,7 @@ export default function NebulaClientApp() {
                     }}
                     onReorderIdentities={reorderIdentitiesFor}
                   />
-                ) : sessionNotReady ? (
+                ) : sessionNotReady && !localNotesOpen ? (
                   <SessionStatus onOpenServers={() => openScreen("connect")} />
                 ) : (
                   <>
@@ -2314,7 +2446,7 @@ export default function NebulaClientApp() {
                         display: liveDoc.hidesChat ? "none" : "flex",
                       }}
                     >
-                      {bootstrapStage ? (
+                      {bootstrapStage && !localNotesOpen ? (
                         <Stack sx={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
                           <Typography sx={{ fontSize: 12.5 }}>{bootstrapStage}</Typography>
                         </Stack>
@@ -2422,7 +2554,12 @@ export default function NebulaClientApp() {
 
               {memberPanel.open && screen === "chat" && <MemberPanel {...memberList} />}
 
-              {surface === "server-info" && <ServerInfoPanel onClose={() => setSurface(null)} />}
+              {surface === "server-info" && (
+                <ServerInfoPanel
+                  livery={liveries[activeServerId ?? ""] ?? null}
+                  onClose={() => setSurface(null)}
+                />
+              )}
 
               {surface === "channel-info" && selectedChannel !== null && (
                 /* No fallback: the sheet opens over the shell rather than beside
@@ -2468,6 +2605,19 @@ export default function NebulaClientApp() {
                 <RichPresencePanel />
               </DialogContent>
             </Dialog>
+          )}
+          {surface === "scheduled" && activeChannel && (
+            <ScheduledMessagesDialog
+              channelId={activeChannel.id}
+              channelName={activeChannel.name}
+              encrypted={isEncryptedChannel(activeChannel)}
+              time={timeDisplay}
+              fullScreen={handheld}
+              onClose={() => setSurface(null)}
+            />
+          )}
+          {surface === "calendar" && calendarActive && (
+            <CalendarDialog fullScreen={handheld} onClose={() => setSurface(null)} />
           )}
           {surface === "downloads" && (
             <Dialog open onClose={() => setSurface(null)} maxWidth="sm" fullWidth>
@@ -2533,6 +2683,7 @@ export default function NebulaClientApp() {
             time={timeDisplay}
             onClose={() => setSwitcherOpen(false)}
             onSelect={openSearchRow}
+            onOpenPhoto={openSearchPhoto}
           />
 
           <AddServerDialog
@@ -2570,6 +2721,14 @@ export default function NebulaClientApp() {
           />
           <UserInfoDialog session={userInfo.session} onClose={userInfo.close} />
 
+          {recordingOpen && (
+            <RecordingDialog
+              recording={recording}
+              fullScreen={handheld}
+              onClose={() => setRecordingOpen(false)}
+            />
+          )}
+
           <ChannelMenu
             target={channelMenu}
             listening={!!channelMenu && listenedChannels.has(channelMenu.channel.id)}
@@ -2599,6 +2758,8 @@ export default function NebulaClientApp() {
               setAdminPage("acl");
               openScreen("settings");
             }}
+            arranging={arranging}
+            onToggleArrange={() => setArrangingChannels(!arranging)}
             onClose={() => setChannelMenu(null)}
           />
 
@@ -2745,6 +2906,16 @@ export default function NebulaClientApp() {
           )}
 
           <ConnectionOverlays />
+          {/* What a reminder or a meeting link was about, while the calendar
+              itself is shut. */}
+          {calendarActive && surface !== "calendar" && (
+            <CalendarNoticeToast
+              notice={calendarNotices.notice}
+              onDismiss={calendarNotices.dismiss}
+              onOpen={openMeeting}
+              handheld={handheld}
+            />
+          )}
           <NebulaRuntime
             onOpenMarketplace={(pluginId) => {
               openMarketplace(pluginId);

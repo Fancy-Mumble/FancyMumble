@@ -4,6 +4,7 @@
 //! Extracted from `audio.rs` to keep file sizes manageable.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Duration;
 
 use tracing::{debug, warn};
@@ -86,6 +87,7 @@ pub(super) async fn outbound_audio_loop(
     handle: ClientHandle,
     app: Option<tauri::AppHandle>,
     own_session: Option<u32>,
+    voice_target: Arc<AtomicU8>,
 ) {
     debug!("outbound_audio_loop: task started");
 
@@ -102,7 +104,7 @@ pub(super) async fn outbound_audio_loop(
     // Bounded channel: 50 packets ~ 1 second of audio at 20ms/frame.
     let (tx, rx) = tokio::sync::mpsc::channel::<AudioPacketOut>(50);
 
-    let _outbound_send_task = tokio::spawn(outbound_send_task(rx, handle));
+    let _outbound_send_task = tokio::spawn(outbound_send_task(rx, handle, voice_target));
 
     // Brief yield so the cpal callback can deliver an initial batch of
     // samples, then drain any that accumulated during startup.
@@ -266,15 +268,23 @@ fn process_outbound_tick(
 
 /// Drains encoded audio packets from the channel and sends them to
 /// the server via the high-priority audio path.
+///
+/// `voice_target` is the slot each packet is addressed to: `0` for the
+/// channel, or the whisper slot while the whisper key is held.
 async fn outbound_send_task(
     mut rx: tokio::sync::mpsc::Receiver<AudioPacketOut>,
     handle: ClientHandle,
+    voice_target: Arc<AtomicU8>,
 ) {
     let mut sent: u64 = 0;
     let mut dropped: u64 = 0;
     while let Some(pkt) = rx.recv().await {
+        // Read per packet, not per utterance: the whisper key can go down and
+        // up inside one, and the target is what decides who hears each frame.
         let audio = mumble_udp::Audio {
-            header: Some(mumble_udp::audio::Header::Target(0)),
+            header: Some(mumble_udp::audio::Header::Target(u32::from(
+                voice_target.load(Ordering::Relaxed),
+            ))),
             sender_session: 0,
             frame_number: pkt.sequence,
             opus_data: pkt.data,

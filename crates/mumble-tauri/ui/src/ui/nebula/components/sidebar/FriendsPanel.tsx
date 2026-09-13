@@ -1,4 +1,4 @@
-import { useMemo, type RefObject } from "react";
+import { useMemo, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Dialog, DialogActions, DialogContent, Typography } from "@mui/material";
 import { useAppStore } from "@core/store";
@@ -6,6 +6,7 @@ import { TID } from "@core/testids";
 import { isFriendChatOpen } from "../../friends";
 import { useFriends } from "../../useFriends";
 import { SearchBox } from "../primitives";
+import { NotepadSettings } from "../settings/NotepadSettings";
 import { FriendList } from "./FriendList";
 import { SidebarShell } from "./SidebarShell";
 
@@ -39,8 +40,13 @@ export function FriendsPanel({
   onHoverUser,
   onLeaveUser,
 }: Readonly<FriendsPanelProps>) {
-  const { t } = useTranslation(["nebulaSidebar", "common", "server"]);
-  const friends = useFriends(query);
+  const { t } = useTranslation(["nebulaSidebar", "nebulaSettings", "common", "server"]);
+  const friends = useFriends(query, {
+    thisDevice: t("nebulaSidebar:friends.thisDevice"),
+    notepad: t("nebulaSidebar:friends.notepad"),
+  });
+  const [notepadOpen, setNotepadOpen] = useState(false);
+  const localNotesOpen = useAppStore((state) => state.localNotesOpen);
   const selectedDmUser = useAppStore((state) => state.selectedDmUser);
   const selectedChannel = useAppStore((state) => state.selectedChannel);
   const activeServerId = useAppStore((state) => state.activeServerId);
@@ -50,13 +56,22 @@ export function FriendsPanel({
 
   const activeId = useMemo(() => {
     const ownUserId = users.find((user) => user.session === ownSession)?.user_id ?? null;
-    const state = { selectedDmUser, selectedChannel, activeServerId, channels, ownUserId };
+    const state = { selectedDmUser, selectedChannel, activeServerId, channels, ownUserId, localNotesOpen };
     for (const group of friends.groups) {
       const open = group.entries.find((entry) => isFriendChatOpen(entry, state));
       if (open) return open.friend.id;
     }
     return null;
-  }, [activeServerId, channels, friends.groups, ownSession, selectedChannel, selectedDmUser, users]);
+  }, [
+    activeServerId,
+    channels,
+    friends.groups,
+    localNotesOpen,
+    ownSession,
+    selectedChannel,
+    selectedDmUser,
+    users,
+  ]);
 
   const pending = friends.pendingConnect;
 
@@ -78,14 +93,11 @@ export function FriendsPanel({
           activeId={activeId}
           onOpen={friends.open}
           onRemove={friends.remove}
+          onNotepadOptions={() => setNotepadOpen(true)}
           onContextMenu={onContextMenuUser}
           onHover={onHoverUser}
           onLeave={onLeaveUser}
-          empty={
-            friends.filtered
-              ? t("nebulaSidebar:friends.noMatch")
-              : t("nebulaSidebar:friends.empty")
-          }
+          empty={friends.filtered ? t("nebulaSidebar:friends.noMatch") : t("nebulaSidebar:friends.empty")}
         />
       </SidebarShell>
 
@@ -102,9 +114,7 @@ export function FriendsPanel({
               ? t("nebulaSidebar:friends.connectBody", {
                   name: pending.userName,
                   server:
-                    pending.serverLabel ??
-                    pending.serverHost ??
-                    t("nebulaSidebar:friends.anotherServer"),
+                    pending.serverLabel ?? pending.serverHost ?? t("nebulaSidebar:friends.anotherServer"),
                 })
               : ""}
           </Typography>
@@ -115,6 +125,16 @@ export function FriendsPanel({
             {t("server:password.connect")}
           </Button>
         </DialogActions>
+      </Dialog>
+
+      {/* The same form as the Privacy page, where the notepad itself is. */}
+      <Dialog open={notepadOpen} onClose={() => setNotepadOpen(false)} maxWidth="xs" fullWidth>
+        <DialogContent>
+          <Typography sx={{ fontWeight: 600, fontSize: 14, mb: "12px" }}>
+            {t("nebulaSettings:notepad.title")}
+          </Typography>
+          <NotepadSettings onDone={() => setNotepadOpen(false)} />
+        </DialogContent>
       </Dialog>
     </>
   );

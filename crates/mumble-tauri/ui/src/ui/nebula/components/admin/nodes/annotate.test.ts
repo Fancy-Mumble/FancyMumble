@@ -26,7 +26,7 @@ suite("the annotation layer", () => {
   });
 
   it("gives a fresh note a size and some words", () => {
-    const note = makeAnnotation("note", 10, 20);
+    const note = makeAnnotation("note", 10, 20, "Section");
     expect(note.w).toBe(ANNOTATION_SIZES.note.w);
     // Not an empty box: one of those on a canvas reads as a rendering fault
     // rather than as something to type into.
@@ -35,7 +35,7 @@ suite("the annotation layer", () => {
   });
 
   it("adds, edits and removes without touching the nodes", () => {
-    const note = makeAnnotation("title", 0, 0);
+    const note = makeAnnotation("title", 0, 0, "Section");
     const withNote = addAnnotation(empty, note);
     expect(annotationsOf(withNote)).toHaveLength(1);
 
@@ -49,13 +49,13 @@ suite("the annotation layer", () => {
   });
 
   it("gives every note its own id", () => {
-    const ids = ["title", "note", "frame", "label"].map((kind) => makeAnnotation(kind as "title", 0, 0).id);
+    const ids = ["title", "note", "frame", "label"].map((kind) => makeAnnotation(kind as "title", 0, 0, "Section").id);
     expect(new Set(ids).size).toBe(4);
   });
 });
 
 suite("what a frame encloses", () => {
-  const frame = makeAnnotation("frame", 100, 100);
+  const frame = makeAnnotation("frame", 100, 100, "Section");
 
   it("is whatever is inside the rectangle, and nothing stored", () => {
     // Geometric on purpose: a frame is not a group whose membership somebody

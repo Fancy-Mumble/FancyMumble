@@ -104,6 +104,7 @@ function standardVariables(t: NebulaTokens): Record<string, string> {
     "--color-danger-alt": t.bad,
     "--color-warning": t.warn,
     "--color-warning-amber": t.warn,
+    "--color-warning-text": t.warn,
     "--color-online": t.ok,
 
     "--color-scrollbar": t.card2,
@@ -142,6 +143,39 @@ export function createNebulaTheme(
   // the caller's decision, which is where the user's own "use this server's
   // colours" switch lives - livery is a suggestion, never a mandate.
   const nebula = liveryTokens(base ?? NEBULA_TOKENS[mode], livery ?? null, mode);
+  // Everything that floats over the window - a menu, an autocomplete's list,
+  // a dialog - is the same surface, so it is stated once here rather than
+  // three times below.
+  //
+  // The ground is two longhands rather than the `background` shorthand: the
+  // base `MuiPaper` sets `backgroundColor: transparent` for the surfaces that
+  // paint their own, and a shorthand that loses the cascade to it leaves the
+  // gradients painting over nothing at all.
+  //
+  // The frost below is the skin's, not a fixed radius. A skin that declares
+  // `glass: 0` means it - Nimbus says in so many words that frosting its
+  // panels "would put the dot grid under the channel column", which is exactly
+  // what a frosted menu was doing over its sidebar.
+  const floating = {
+    backgroundColor: nebula.bg0,
+    backgroundImage: nebula.tint,
+    border: `var(--nebula-line-width, 1px) solid ${nebula.line2}`,
+    // A drawn skin has no light source to cast a soft shadow, so a floating
+    // panel sits on a hard offset plate instead - the same one the voice dock
+    // and its switches stand on.
+    boxShadow:
+      skin.chrome === "stencil" ? `6px 6px 0 ${nebula.line2}` : nebula.shadow,
+  } as const;
+  // A menu and an autocomplete's list are the two that frost what they cover;
+  // a dialog never did, and darkens the window behind it instead.
+  //
+  // `none` rather than a blur of zero on the skins that asked for no glass: a
+  // backdrop filter is a backdrop filter at any radius, and the compositing
+  // layer it buys is the whole cost. Under an opaque ground that layer shows
+  // nothing it is supposed to show and, on WebKitGTK, sometimes shows the
+  // sampled backdrop's own edges instead.
+  const frost = skin.glass ? "blur(var(--nebula-blur, 16px))" : "none";
+  const frosted = { ...floating, backdropFilter: frost, WebkitBackdropFilter: frost } as const;
   // The theme's own typeface, unless the user named one in Personalization -
   // an explicit choice outranks a skin's suggestion, and `--font-family` is
   // where that choice lands.
@@ -281,7 +315,15 @@ export function createNebulaTheme(
             },
           // The mock's scrollbars are part of its surface language, not an
           // afterthought - thin, track-less, and the same tone as a chip.
-          "*": { scrollbarWidth: "thin", scrollbarColor: `${nebula.card2} transparent` },
+          //
+          // The standard pair only where the pseudo-elements below do not
+          // exist. On WebKitGTK either property hands the scroller to GTK's
+          // own overlay scrollbar, which ignores these styles, fades in and
+          // out on its own timer, and is composited over whatever covers the
+          // scroller - a strip through any menu opened over the channel list.
+          "@supports not selector(::-webkit-scrollbar)": {
+            "*": { scrollbarWidth: "thin", scrollbarColor: `${nebula.card2} transparent` },
+          },
           "*::-webkit-scrollbar": { width: 9, height: 9 },
           "*::-webkit-scrollbar-track": { background: "transparent" },
           "*::-webkit-scrollbar-thumb": {
@@ -379,12 +421,17 @@ export function createNebulaTheme(
             minWidth: 210,
             borderRadius: radius("lg"),
             padding: 5,
-            background: `${nebula.tint},${nebula.bg0}`,
-            border: `var(--nebula-line-width, 1px) solid ${nebula.line2}`,
-            boxShadow: nebula.shadow,
-            backdropFilter: "blur(16px)",
+            ...frosted,
           },
           list: { padding: 0 },
+        },
+      },
+      // The same floating surface as a menu; the base Paper is transparent, so
+      // without this the options float over whatever is behind them.
+      MuiAutocomplete: {
+        styleOverrides: {
+          paper: { borderRadius: radius("lg"), ...frosted },
+          option: { fontSize: 12.5 },
         },
       },
       MuiMenuItem: {
@@ -401,12 +448,7 @@ export function createNebulaTheme(
       },
       MuiDialog: {
         styleOverrides: {
-          paper: {
-            borderRadius: radius("xl"),
-            background: `${nebula.tint},${nebula.bg0}`,
-            border: `var(--nebula-line-width, 1px) solid ${nebula.line2}`,
-            boxShadow: nebula.shadow,
-          },
+          paper: { borderRadius: radius("xl"), ...floating },
         },
       },
       MuiTooltip: {

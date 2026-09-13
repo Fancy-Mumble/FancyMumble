@@ -1,8 +1,9 @@
 /** Editable server settings (schema + values) advertised to admins, and the
  *  broadcast event that delivers them. */
 
-/** Input type for a server setting, mapped to a form control by the factory. */
-export type ServerSettingType = "string" | "text" | "bool" | "int" | "enum" | "country" | "password";
+/** Input type for a server setting, mapped to a form control by the factory.
+ *  `list` is any number of `options`, comma-joined in the value. */
+export type ServerSettingType = "string" | "text" | "bool" | "int" | "enum" | "list" | "country" | "password";
 
 /** One editable server setting (schema + current value), advertised by the
  *  server. The `type` drives the client's form-control factory. */
@@ -17,7 +18,7 @@ export interface ServerSetting {
   label: string;
   /** Current value (string-encoded). Omitted for secret settings. */
   value?: string | null;
-  /** Allowed values for `enum` types. */
+  /** Allowed values for `enum` and `list` types. */
   options: string[];
   /** Whether the value is a secret (masked, write-only). */
   secret: boolean;

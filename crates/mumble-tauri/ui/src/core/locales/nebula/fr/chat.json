@@ -133,7 +133,8 @@
     "onlineMembers": "Membres en ligne",
     "channelMembers": "Membres de ce salon",
     "gone": "Cette personne n’est plus connectée.",
-    "empty": "Personne ici."
+    "empty": "Personne ici.",
+    "overflow": "+{{count}} de plus"
   },
   "menu": {
     "reactWith": "Réagir avec {{emoji}}",
@@ -148,7 +149,9 @@
     "editMessage": "Modifier le message",
     "editHint": "Entrée valide · Échap annule",
     "replyToMessage": "Répondre au message",
-    "pinMessage": "Épingler le message"
+    "pinMessage": "Épingler le message",
+    "legacyHint": "Envoyé depuis un client sans le chiffrement de ce salon : le serveur l’a vu en clair.",
+    "unreadRule": "NOUVEAU"
   },
   "emoji": {
     "title": "Émoji",
@@ -237,7 +240,9 @@
     "resizeHint": "Faites glisser pour changer la place de la scène. Double-cliquez pour réinitialiser.",
     "someone": "Quelqu’un",
     "you": "Vous",
-    "on": "Activé"
+    "on": "Activé",
+    "routeRelayed": "Relayé par le serveur",
+    "routeP2P": "Pair à pair, les spectateurs se connectent directement à vous"
   },
   "dock": {
     "pause": "Pause",
@@ -281,5 +286,40 @@
     "micMuted": "Micro coupé",
     "speaking": "{{name}} parle · {{count}} connectés",
     "voiceActive": "Vocal actif"
+  },
+  "scheduled": {
+    "to": "À {{channels}}",
+    "hint": "Le serveur l’envoie à cette heure-là, que vous soyez encore connecté ou non.",
+    "plaintextWarning": "Ce salon est chiffré de bout en bout, mais un message programmé est stocké et envoyé par le serveur en clair."
+  },
+  "calendar": {
+    "meetingDetails": "Détails de la réunion",
+    "viewLabel": "Vue du calendrier",
+    "more": "+{{count}} de plus",
+    "join": "Rejoindre la réunion",
+    "copyLink": "Copier le lien d’invitation",
+    "linkCopied": "Lien copié",
+    "when": "Quand",
+    "start": "Début",
+    "end": "Fin",
+    "repeats": "Répétition",
+    "noInvitees": "Personne n’est encore invité",
+    "workDays": "Jours travaillés",
+    "status": {
+      "invited": "Invité",
+      "accepted": "Accepté",
+      "tentative": "Provisoire",
+      "declined": "Refusé"
+    },
+    "delete": {
+      "title": "Supprimer « {{title}} » ?",
+      "body": "Elle est retirée de votre calendrier.",
+      "bodyShared": "Elle est retirée de votre calendrier et de celui de toutes les personnes invitées."
+    },
+    "notice": {
+      "upcoming": "Réunion à venir",
+      "inRoom": "Vous êtes dans la salle de réunion",
+      "details": "Détails"
+    }
   }
 }

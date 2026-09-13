@@ -87,6 +87,19 @@ export async function getServerPassword(serverId: string): Promise<string | null
   return map[serverId] ?? null;
 }
 
+/**
+ * The password saved for a login, looked up by address rather than id:
+ * reconnects only know host, port and username, and the password may sit on a
+ * duplicate entry for the same login.
+ */
+export async function findSavedPassword(host: string, port: number, username: string): Promise<string | null> {
+  const map = (await (await getPasswordStore()).get<PasswordMap>(PASSWORD_KEY)) ?? {};
+  const match = (await getSavedServers()).find(
+    (s) => s.host === host && s.port === port && s.username === username && map[s.id],
+  );
+  return match ? map[match.id] : null;
+}
+
 /** Save a password for a server. Pass null to remove it. */
 export async function setServerPassword(serverId: string, password: string | null): Promise<void> {
   const store = await getPasswordStore();

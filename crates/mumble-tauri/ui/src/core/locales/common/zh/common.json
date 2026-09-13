@@ -21,7 +21,8 @@
     "collapse": "折叠",
     "optional": "（可选）",
     "more": "更多",
-    "leave": "离开"
+    "leave": "离开",
+    "back": "返回"
   },
   "confirmDialog": {
     "confirmLabel": "确认",

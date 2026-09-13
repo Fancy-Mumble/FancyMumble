@@ -1,5 +1,6 @@
-import { Box, Typography, alpha } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
+import { safeRoleColor } from "@core/features/roster/roles";
 import { radius } from "../../../tokens";
 import { RoleChip, Stack } from "../../primitives";
 
@@ -20,6 +21,9 @@ export interface RolePreviewCardProps {
  * answered is "is this readable", and a square of colour cannot answer it.
  */
 export function RolePreviewCard({ name, color, icon, sampleUsername }: RolePreviewCardProps) {
+  // Sanitised and mixed in CSS: a named or half-typed colour made `alpha()`
+  // throw, which took the preview down while the colour was being typed.
+  const safeColor = safeRoleColor(color);
   const { t } = useTranslation("settings");
   const resolvedUsername = sampleUsername ?? t("roleDisplay.previewSampleUser");
   const label = name || t("roleDisplay.previewRoleFallback");
@@ -52,7 +56,7 @@ export function RolePreviewCard({ name, color, icon, sampleUsername }: RolePrevi
       </Box>
 
       <Stack direction="row" alignItems="baseline" gap={0.5}>
-        <Typography sx={{ fontSize: 14, fontWeight: 600, color: color ?? "inherit" }}>
+        <Typography sx={{ fontSize: 14, fontWeight: 600, color: safeColor ?? "inherit" }}>
           {resolvedUsername}
         </Typography>
         <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted })}>
@@ -75,14 +79,14 @@ export function RolePreviewCard({ name, color, icon, sampleUsername }: RolePrevi
         <Box
           component="span"
           sx={(theme) => {
-            const tint = color ?? theme.palette.nebula.accent;
+            const tint = safeColor ?? theme.palette.nebula.accent;
             return {
               display: "inline-block",
               px: "4px",
               borderRadius: radius("sm"),
               fontWeight: 600,
               color: tint,
-              background: alpha(tint, 0.2),
+              background: `color-mix(in srgb, ${tint} 20%, transparent)`,
             };
           }}
         >

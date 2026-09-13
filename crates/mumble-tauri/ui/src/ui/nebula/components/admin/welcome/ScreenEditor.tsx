@@ -1,8 +1,9 @@
 import { Box, Typography } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import { CloseIcon } from "@ui/icons";
 import { Stack } from "../../primitives";
 import { radius } from "../../../tokens";
-import { AddChip, PillSelect, PlainInput, SectionLabel, ToggleRow, useScrollGuard } from "../nodes";
+import { AddChip, PillMenu, PlainInput, SectionLabel, ToggleRow, useScrollGuard } from "../nodes";
 import {
   ALIGNABLE,
   ALIGNMENTS,
@@ -10,7 +11,6 @@ import {
   PICTURES,
   SECTION_FIELDS,
   SECTION_KINDS,
-  SECTION_LABELS,
   TONEABLE,
   isWebUrl,
   makeCard,
@@ -43,6 +43,7 @@ export function ScreenEditor({
   sections: readonly Section[];
   onChange: (next: Section[]) => void;
 }>) {
+  const { t } = useTranslation("nebulaWelcome");
   const guard = useScrollGuard<HTMLDivElement>();
 
   const patch = (id: string, fields: Partial<Section>) =>
@@ -74,10 +75,10 @@ export function ScreenEditor({
 
       <Stack direction="row" gap={0.5} sx={{ flexWrap: "wrap" }}>
         <AddChip
-          label="+ band"
-          options={SECTION_KINDS.map((kind) => SECTION_LABELS[kind].label)}
+          label={t("screen.addBand")}
+          options={SECTION_KINDS.map((kind) => t(`bands.${kind}.label`))}
           onAdd={(label) => {
-            const kind = SECTION_KINDS.find((candidate) => SECTION_LABELS[candidate].label === label);
+            const kind = SECTION_KINDS.find((candidate) => t(`bands.${candidate}.label`) === label);
             if (kind) onChange([...sections, makeSection(kind)]);
           }}
         />
@@ -85,7 +86,7 @@ export function ScreenEditor({
 
       {sections.length === 0 && (
         <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })}>
-          A screen with no bands shows nothing. Start with a hero.
+          {t("screen.noBands")}
         </Typography>
       )}
     </Box>
@@ -107,7 +108,9 @@ function Band({
   onRemove: () => void;
   onMove: (by: number) => void;
 }>) {
+  const { t } = useTranslation("nebulaWelcome");
   const fields = SECTION_FIELDS[section.kind];
+  const name = t(`bands.${section.kind}.label`);
 
   return (
     <Box
@@ -125,14 +128,14 @@ function Band({
         gap={0.5}
         sx={{ mb: fields.length > 0 ? "7px" : 0, flexWrap: "wrap" }}
       >
-        <SectionLabel>{SECTION_LABELS[section.kind].label}</SectionLabel>
+        <SectionLabel>{name}</SectionLabel>
         <Box sx={{ flex: 1 }} />
         {/* Order is the whole layout decision an operator makes here, so it is
             two buttons on every band rather than a drag nobody discovers. */}
         {ALIGNABLE.includes(section.kind) && (
-          <PillSelect
+          <PillMenu
             value={section.align}
-            options={[...ALIGNMENTS]}
+            options={ALIGNMENTS.map((align) => ({ id: align, label: t(`screen.align.${align}`) }))}
             onChange={(align) => onPatch({ align: align as Align })}
           />
         )}
@@ -140,18 +143,18 @@ function Band({
             band is *for*, and every client maps that onto its own palette in
             whichever theme the person reading it is running. */}
         {TONEABLE.includes(section.kind) && (
-          <PillSelect
+          <PillMenu
             value={section.tone}
-            options={[...BAND_TONES]}
+            options={BAND_TONES.map((tone) => ({ id: tone, label: t(`screen.tones.${tone}`) }))}
             onChange={(tone) => onPatch({ tone: tone as BandTone })}
           />
         )}
-        <Nudge label="Move up" disabled={first} onClick={() => onMove(-1)} up />
-        <Nudge label="Move down" disabled={last} onClick={() => onMove(1)} />
+        <Nudge label={t("screen.moveUp")} disabled={first} onClick={() => onMove(-1)} up />
+        <Nudge label={t("screen.moveDown")} disabled={last} onClick={() => onMove(1)} />
         <Box
           component="button"
           type="button"
-          aria-label={`Remove ${SECTION_LABELS[section.kind].label}`}
+          aria-label={t("screen.remove", { label: name })}
           onPointerDown={(event: React.PointerEvent) => event.stopPropagation()}
           onClick={onRemove}
           sx={(theme) => ({
@@ -168,24 +171,24 @@ function Band({
       </Stack>
 
       {fields.includes("picture") && (
-        <PillSelect
+        <PillMenu
           value={section.picture}
-          options={[...PICTURES]}
+          options={PICTURES.map((picture) => ({ id: picture, label: t(`screen.pictures.${picture}`) }))}
           onChange={(picture) => onPatch({ picture: picture as Picture })}
         />
       )}
       {fields.includes("compact") && (
         <ToggleRow
           checked={section.compact}
-          label="A list, not cards"
+          label={t("screen.compact")}
           onChange={() => onPatch({ compact: !section.compact })}
         />
       )}
       {fields.includes("glyph") && (
         <PlainInput
           value={section.glyph}
-          placeholder="badge, one character"
-          ariaLabel="Hero badge"
+          placeholder={t("screen.glyph")}
+          ariaLabel={t("screen.glyphLabel")}
           maxLength={2}
           onChange={(glyph) => onPatch({ glyph })}
         />
@@ -193,8 +196,8 @@ function Band({
       {fields.includes("title") && (
         <PlainInput
           value={section.title}
-          placeholder={section.kind === "action" ? "what the button says" : "the line people read"}
-          ariaLabel={`${SECTION_LABELS[section.kind].label} title`}
+          placeholder={section.kind === "action" ? t("screen.buttonTitle") : t("screen.title")}
+          ariaLabel={t("screen.titleLabel", { label: name })}
           onChange={(title) => onPatch({ title })}
         />
       )}
@@ -203,7 +206,7 @@ function Band({
           <PlainInput
             value={section.url}
             placeholder="https://…"
-            ariaLabel="Button link"
+            ariaLabel={t("screen.buttonLink")}
             onChange={(url) => onPatch({ url })}
           />
           {/* Said the moment it is typed rather than at save: the server
@@ -211,7 +214,7 @@ function Band({
               learns that from a rejected save has to find which. */}
           {section.url !== "" && !isWebUrl(section.url) && (
             <Typography sx={(theme) => ({ fontSize: 9.5, color: theme.palette.nebula.warn })}>
-              Only http:// and https:// links are sent.
+              {t("screen.webOnly")}
             </Typography>
           )}
         </>
@@ -219,15 +222,15 @@ function Band({
       {fields.includes("subtitle") && (
         <PlainInput
           value={section.subtitle}
-          placeholder={section.kind === "action" ? "the small line underneath" : "the second line"}
-          ariaLabel={`${SECTION_LABELS[section.kind].label} subtitle`}
+          placeholder={section.kind === "action" ? t("screen.buttonSubtitle") : t("screen.subtitle")}
+          ariaLabel={t("screen.subtitleLabel", { label: name })}
           onChange={(subtitle) => onPatch({ subtitle })}
         />
       )}
       {fields.includes("primary") && (
         <ToggleRow
           checked={section.primary}
-          label="The main thing to do"
+          label={t("screen.primary")}
           onChange={() => onPatch({ primary: !section.primary })}
         />
       )}
@@ -235,8 +238,8 @@ function Band({
         <RichTextField
           value={section.html}
           onChange={(html) => onPatch({ html })}
-          ariaLabel="Paragraph"
-          placeholder="What this part says"
+          ariaLabel={t("screen.paragraph")}
+          placeholder={t("screen.paragraphPlaceholder")}
           preset="document"
           maxLength={MAX_BODY}
           tools={["bold", "italic", "underline", "lists", "align", "colour"]}
@@ -253,6 +256,7 @@ function Cards({
   section,
   onPatch,
 }: Readonly<{ section: Section; onPatch: (fields: Partial<Section>) => void }>) {
+  const { t } = useTranslation("nebulaWelcome");
   const patch = (index: number, fields: Partial<Section["cards"][number]>) =>
     onPatch({
       cards: section.cards.map((card, at) => (at === index ? { ...card, ...fields } : card)),
@@ -269,15 +273,15 @@ function Cards({
           <Stack direction="row" alignItems="center" gap={0.5}>
             <PlainInput
               value={card.eyebrow}
-              placeholder="BROWSE"
-              ariaLabel="Card eyebrow"
+              placeholder={t("screen.eyebrow")}
+              ariaLabel={t("screen.eyebrowLabel")}
               maxLength={24}
               onChange={(eyebrow) => patch(index, { eyebrow })}
             />
             <Box
               component="button"
               type="button"
-              aria-label="Remove card"
+              aria-label={t("screen.removeCard")}
               onPointerDown={(event: React.PointerEvent) => event.stopPropagation()}
               onClick={() => onPatch({ cards: section.cards.filter((_, at) => at !== index) })}
               sx={(theme) => ({
@@ -293,22 +297,22 @@ function Cards({
           </Stack>
           <PlainInput
             value={card.label}
-            placeholder="Channel Viewer"
-            ariaLabel="Card label"
+            placeholder={t("screen.cardPlaceholder")}
+            ariaLabel={t("screen.cardLabel")}
             onChange={(label) => patch(index, { label })}
           />
           <PlainInput
             value={card.url}
             placeholder="https://…"
-            ariaLabel="Card link"
+            ariaLabel={t("screen.cardLink")}
             onChange={(url) => patch(index, { url })}
           />
         </Stack>
       ))}
       <Box>
         <AddChip
-          label="+ card"
-          options={["Another link"]}
+          label={t("screen.addCard")}
+          options={[t("screen.anotherLink")]}
           onAdd={() => onPatch({ cards: [...section.cards, makeCard()] })}
         />
       </Box>

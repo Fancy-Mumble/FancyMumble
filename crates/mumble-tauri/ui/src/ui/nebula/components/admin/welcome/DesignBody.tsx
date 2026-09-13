@@ -1,4 +1,5 @@
 import { Box, Typography } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import { radius } from "../../../tokens";
 import { Stack } from "../../primitives";
 import { compileTarget } from "./compile";
@@ -23,6 +24,7 @@ export function DesignBody({
   design: Design;
   onOpen: () => void;
 }>) {
+  const { t } = useTranslation("nebulaDesign");
   const blocks = design.blocks.length;
   const slots = design.slots.length;
 
@@ -35,7 +37,7 @@ export function DesignBody({
           drawn in, and whether anything is wired to it is in the dot. */}
       {design.slots.length === 0 && design.conditions.length === 0 && (
         <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })}>
-          no theme inputs yet — a design declares these
+          {t("body.noInputs")}
         </Typography>
       )}
 
@@ -64,7 +66,10 @@ export function DesignBody({
           "&:hover": { background: theme.palette.nebula.hover },
         })}
       >
-        {`Design · ${blocks} block${blocks === 1 ? "" : "s"} · ${slots} slot${slots === 1 ? "" : "s"}`}
+        {t("body.open", {
+          blocks: t("body.blocks", { count: blocks }),
+          slots: t("body.slots", { count: slots }),
+        })}
       </Box>
     </Stack>
   );

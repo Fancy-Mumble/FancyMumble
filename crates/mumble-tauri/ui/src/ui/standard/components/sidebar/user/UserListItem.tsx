@@ -10,6 +10,7 @@ import { memo, useState, useMemo, useCallback, useEffect, useRef, createContext,
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@core/store";
+import { voiceContextKind } from "@core/store/slices/voice";
 import type { UserEntry, FancyProfile, AclGroup } from "@core/types";
 import { parseComment } from "@core/profileFormat";
 import { useUserAvatar, useUserComment } from "@core/lazyBlobs";
@@ -21,6 +22,7 @@ import { PERM_MOVE as PERM_MOVE_BIT } from "@core/utils/permissions";
 import { useUserDrag } from "../../../utils/userMoveDnd";
 import { useStreamThumbnail } from "../../chat/stream/useStreamPreview";
 import { TID } from "@core/testids";
+import { safeRoleColor } from "@core/features/roster/roles";
 import styles from "./UserListItem.module.css";
 
 // Re-export so existing consumers (e.g. ChannelSidebar) keep working.
@@ -28,12 +30,10 @@ export { colorFor } from "@core/utils/format";
 
 // -- Role colour context -----------------------------------------
 
-/** Reject any value that could escape the inline style attribute. */
+/** Reject any value that could escape the inline style attribute. The rule is
+ *  shared with Nebula so both designs accept and refuse the same colours. */
 function sanitiseRoleColor(raw: string): string | null {
-  const v = raw.trim();
-  if (v.length === 0 || v.length > 64) return null;
-  if (!/^[#A-Za-z0-9 .,()%/]+$/.test(v)) return null;
-  return v;
+  return safeRoleColor(raw);
 }
 
 /**
@@ -283,6 +283,9 @@ export const UserListItem = memo(function UserListItem({
   onRequestComment,
 }: UserListItemProps) {
   const { t } = useTranslation("sidebar");
+  const voiceContext = useAppStore((state) =>
+    isTalking ? voiceContextKind(state.voiceContexts.get(user.session)) : null,
+  );
   const roleColors = useContext(RoleColorsContext);
   const roleColor = user.user_id != null ? (roleColors.get(user.user_id) ?? null) : null;
   const roleGroups = useContext(RoleGroupsContext);
@@ -343,6 +346,7 @@ export const UserListItem = memo(function UserListItem({
         data-registered={isRegistered ? "true" : undefined}
         data-offline={offline ? "true" : undefined}
         data-talking={isTalking ? "true" : undefined}
+        data-voice-context={voiceContext ?? undefined}
         data-muted={isMuted ? "true" : undefined}
         data-deaf={isDeafened ? "true" : undefined}
         data-clickable={isSelf && onClick ? "true" : undefined}
@@ -370,6 +374,15 @@ export const UserListItem = memo(function UserListItem({
         <span className={styles.userName} style={roleColor ? { color: roleColor } : undefined}>
           {user.name}
         </span>
+        {voiceContext && (
+          <span
+            className={styles.voiceContextBadge}
+            data-voice-context-badge={voiceContext}
+            title={voiceContext === "whisper" ? t("userListItem.whisperingTitle") : t("userListItem.shoutingTitle")}
+          >
+            {voiceContext === "whisper" ? t("userListItem.whisperBadge") : t("userListItem.shoutBadge")}
+          </span>
+        )}
         {!isSelf && volumePct !== 100 && (
           <span className={styles.volumeBadge} title={`Volume: ${volumePct}%`}>
             <VolumeIcon width={12} height={12} />

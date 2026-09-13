@@ -1,4 +1,4 @@
-﻿import { act, fireEvent, render, screen, within } from "@testing-library/react";
+﻿import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@core/store";
@@ -38,6 +38,10 @@ function draw(msg: ChatMessage, props: Partial<Parameters<typeof MessageRow>[0]>
   return render(
     withNebulaTheme(<MessageRow message={msg} grouped={false} onOpenProfile={() => {}} {...props} />),
   );
+}
+
+function cleanupRows() {
+  cleanup();
 }
 
 describe("MessageRow", () => {
@@ -873,5 +877,50 @@ describe("MessageRow self-mention", () => {
       expect.anything(),
       expect.objectContaining({ image: null }),
     );
+  });
+  it("marks a message from a client without the channel's encryption", () => {
+    const { container } = draw(message({ is_legacy: true }));
+    expect(container.querySelector("[data-legacy-badge]")?.textContent).toBe("legacy");
+    cleanupRows();
+    const plain = draw(message());
+    expect(plain.container.querySelector("[data-legacy-badge]")).toBeNull();
+  });
+
+  it("opens the message menu where a finger is held on the message", () => {
+    vi.useFakeTimers();
+    try {
+      const onContextMenu = vi.fn();
+      const { container } = draw(message(), { onContextMenu });
+      const row = container.querySelector('[data-msg-id="m1"]')!;
+      fireEvent.touchStart(row, { touches: [{ clientX: 30, clientY: 40 }] });
+      act(() => vi.advanceTimersByTime(499));
+      expect(onContextMenu).not.toHaveBeenCalled();
+      act(() => vi.advanceTimersByTime(1));
+      expect(onContextMenu).toHaveBeenCalledWith(message(), { x: 30, y: 40 }, expect.objectContaining({ editable: true }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not take a scroll that starts on a message for a hold", () => {
+    vi.useFakeTimers();
+    try {
+      const onContextMenu = vi.fn();
+      const { container } = draw(message(), { onContextMenu });
+      const row = container.querySelector('[data-msg-id="m1"]')!;
+      fireEvent.touchStart(row, { touches: [{ clientX: 30, clientY: 40 }] });
+      fireEvent.touchMove(row, { touches: [{ clientX: 30, clientY: 80 }] });
+      act(() => vi.advanceTimersByTime(600));
+      expect(onContextMenu).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reaches the full menu from the strip, for a screen with no right-click", () => {
+    const onContextMenu = vi.fn();
+    draw(message(), { alwaysShowActions: true, onContextMenu });
+    fireEvent.click(screen.getByLabelText("More options"));
+    expect(onContextMenu).toHaveBeenCalledWith(message(), expect.any(Object), expect.objectContaining({ editable: true }));
   });
 });

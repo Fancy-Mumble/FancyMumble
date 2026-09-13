@@ -12,6 +12,7 @@ import { PLUGIN_NAME_CALENDAR } from "../../../constants/pluginData";
 import { shortTime } from "./calendarFormat";
 import { useCalendarStore } from "./calendarStore";
 import { useCalendarReminders } from "./useCalendarReminders";
+import { EVT_CALENDAR_REMINDER, type CalendarReminderDetail } from "./types";
 import type { CalendarEvent } from "./types";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn().mockResolvedValue(undefined) }));
@@ -65,6 +66,20 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe("calendar reminder event", () => {
+  it("names the meeting and the occurrence it announces", () => {
+    const event = dueEvent();
+    let detail: CalendarReminderDetail | null = null;
+    const listen = (e: Event) => {
+      detail = (e as CustomEvent<CalendarReminderDetail>).detail;
+    };
+    globalThis.addEventListener(EVT_CALENDAR_REMINDER, listen);
+    fireAndCapture(event);
+    globalThis.removeEventListener(EVT_CALENDAR_REMINDER, listen);
+    expect(detail).toEqual({ eventId: "evt-1", occStart: event.start });
+  });
 });
 
 describe("calendar reminder notification", () => {

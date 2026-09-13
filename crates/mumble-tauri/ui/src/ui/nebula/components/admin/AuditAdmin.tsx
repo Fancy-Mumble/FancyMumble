@@ -25,6 +25,7 @@ import {
   type UIEvent,
 } from "react";
 import {
+  Autocomplete,
   Box,
   Button,
   IconButton,
@@ -36,6 +37,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
   TextField,
   Typography,
 } from "@mui/material";
@@ -52,6 +54,7 @@ import type {
   AuditSnapshot,
   ServerSetting,
 } from "@core/types";
+import { AUDIT_SEVERITIES } from "@core/types/audit";
 import {
   AuditQueryError,
   EMPTY_FILTERS,
@@ -67,6 +70,7 @@ import {
   PREF_ENDLESS,
   PREF_PAGE,
   PREF_RAIL_OPEN,
+  PREF_SORT,
   readBoolPref,
   readEnumPref,
   writeBoolPref,
@@ -89,6 +93,9 @@ import { Banner, EmptyState, Field, GroupTitle, SegmentedGroup, SettingsCard } f
 import { AdminPage } from "./controls";
 
 type AuditPage = "dashboard" | "results" | "config";
+
+/** A flex column that hands its leftover height to whichever child asks. */
+const FILL_COLUMN = { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 } as const;
 const AUDIT_PAGES = ["dashboard", "results", "config"] as const;
 
 /**
@@ -123,6 +130,59 @@ const SINCE_OPTIONS = ["", "1h", "24h", "7d", "30d"] as const;
 
 /** Rows per page when paginating (endless scrolling off). */
 const PAGE_SIZE = 25;
+
+type SortKey = "time" | "severity" | "source" | "category" | "actor" | "target" | "channel" | "reason";
+type SortDir = "asc" | "desc";
+type SortPref = `${SortKey}:${SortDir}`;
+
+/** The direction a column starts in: newest and most severe first, text A-Z. */
+const FIRST_DIR: Record<SortKey, SortDir> = {
+  time: "desc",
+  severity: "desc",
+  source: "asc",
+  category: "asc",
+  actor: "asc",
+  target: "asc",
+  channel: "asc",
+  reason: "asc",
+};
+const SORT_PREFS = (Object.keys(FIRST_DIR) as SortKey[]).flatMap(
+  (key) => [`${key}:asc`, `${key}:desc`] as SortPref[],
+);
+/** The server's own order, so the default sort never reshuffles anything. */
+const DEFAULT_SORT: SortPref = "time:desc";
+
+/** A user as the table shows them: the recorded name, else the bare id. */
+const who = (name?: string, id?: number) => name ?? (id != null ? `#${id}` : undefined);
+
+/** What a column sorts on; `undefined` is an empty cell. */
+function sortValue(
+  entry: AuditEntry,
+  key: SortKey,
+  channelName: (id?: number) => string | undefined,
+): string | number | undefined {
+  switch (key) {
+    case "time":
+      return entry.ts;
+    case "severity": {
+      // By rank, not alphabetically: "critical" sorts above "warning".
+      const rank = (AUDIT_SEVERITIES as readonly string[]).indexOf(entry.severity);
+      return rank < 0 ? undefined : rank;
+    }
+    case "source":
+      return entry.source || undefined;
+    case "category":
+      return entry.category || undefined;
+    case "actor":
+      return who(entry.actorName, entry.actorUserId);
+    case "target":
+      return who(entry.targetName, entry.targetUserId);
+    case "channel":
+      return entry.channelId != null ? (channelName(entry.channelId) ?? `#${entry.channelId}`) : undefined;
+    case "reason":
+      return entry.reason || undefined;
+  }
+}
 /** How long the rail's free-text fields coalesce keystrokes before querying. */
 const FILTER_DEBOUNCE_MS = 350;
 
@@ -234,10 +294,15 @@ export function AuditAdmin() {
     };
   }, [loadConfig, applyResponse, applyEvent, applyConfig, applySnapshot]);
 
+  // The results table takes the window's leftover height and scrolls inside
+  // it; the dashboard and the config page are prose and scroll the pane.
+  const fill = page === "results";
+
   return (
-    <Box data-testid={TID.auditTab}>
+    <Box data-testid={TID.auditTab} sx={fill ? FILL_COLUMN : undefined}>
       <AdminPage
         wide
+        fill={fill}
         title={t("adminTabs.auditLog", { defaultValue: "Audit log" })}
         toolbar={
           <Box data-testid={TID.auditSubTabs}>
@@ -408,8 +473,10 @@ function AuditViewer({
     [catChips, users, channels],
   );
 
+  const fill = view === "results";
+
   return (
-    <Box>
+    <Box sx={fill ? FILL_COLUMN : undefined}>
       <Stack direction="row" gap={0.75} alignItems="center" flexWrap="wrap" sx={{ mb: "12px" }}>
         <Box sx={{ flex: "1 1 320px", minWidth: 260 }}>
           {sqlMode ? (
@@ -492,8 +559,13 @@ function AuditViewer({
         </Box>
       )}
 
-      <Stack direction="row" gap={1.5} alignItems="flex-start">
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+      <Stack
+        direction="row"
+        gap={1.5}
+        alignItems="flex-start"
+        sx={fill ? { flex: 1, minHeight: 0 } : undefined}
+      >
+        <Box sx={{ flex: 1, minWidth: 0, ...(fill && { ...FILL_COLUMN, alignSelf: "stretch" }) }}>
           {view === "dashboard" ? (
             <AuditDashboard entries={entries} hasMore={hasMore} />
           ) : (
@@ -516,6 +588,7 @@ function AuditViewer({
         {/* Pills cannot express SQL, so the rail has nothing to say in SQL mode. */}
         {!sqlMode && (
           <AuditFilterRail
+            fill={fill}
             open={railOpen}
             onToggle={() =>
               setRailOpen((open) => {
@@ -780,11 +853,44 @@ function AuditResults({
 }>) {
   const { t } = useTranslation("settings");
 
+  const [sort, setSort] = useState(() => readEnumPref(PREF_SORT, DEFAULT_SORT, SORT_PREFS));
+  const [sortKey, sortDir] = sort.split(":") as [SortKey, SortDir];
+  const sortBy = (key: SortKey) => {
+    const dir = key === sortKey ? (sortDir === "asc" ? "desc" : "asc") : FIRST_DIR[key];
+    const next: SortPref = `${key}:${dir}`;
+    writeEnumPref(PREF_SORT, next);
+    setSort(next);
+    onPageChange(0);
+  };
+
+  // The server has no ordering of its own to ask for, so this sorts the loaded
+  // buffer. Empty cells stay at the bottom either way, and ties keep the
+  // server's newest-first order.
+  const sorted = useMemo(() => {
+    if (sort === DEFAULT_SORT) return entries;
+    const factor = sortDir === "asc" ? 1 : -1;
+    return entries
+      .map((entry) => ({ entry, value: sortValue(entry, sortKey, channelName) }))
+      .sort((a, b) => {
+        if (a.value !== b.value) {
+          if (a.value === undefined) return 1;
+          if (b.value === undefined) return -1;
+          const order =
+            typeof a.value === "number" && typeof b.value === "number"
+              ? a.value - b.value
+              : String(a.value).localeCompare(String(b.value), undefined, { numeric: true, sensitivity: "base" });
+          if (order !== 0) return order * factor;
+        }
+        return b.entry.id - a.entry.id;
+      })
+      .map(({ entry }) => entry);
+  }, [entries, sort, sortKey, sortDir, channelName]);
+
   // Pagination slices the already-loaded buffer; running past its end pulls
   // the next keyset page from the server.
   const pageCount = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
   const atLastPage = page >= pageCount - 1;
-  const visible = endless ? entries : entries.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const visible = endless ? sorted : sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const onScroll = (event: UIEvent<HTMLDivElement>) => {
     if (!endless || !hasMore || loadingMore) return;
@@ -798,15 +904,15 @@ function AuditResults({
     </Box>
   );
 
-  const HEADERS = [
-    t("audit.colTime", { defaultValue: "Time" }),
-    t("audit.colSeverity", { defaultValue: "Severity" }),
-    t("audit.colSource", { defaultValue: "Source" }),
-    t("audit.colCategory", { defaultValue: "Category" }),
-    t("audit.colActor", { defaultValue: "Actor" }),
-    t("audit.colTarget", { defaultValue: "Target" }),
-    t("audit.colChannel", { defaultValue: "Channel" }),
-    t("audit.colReason", { defaultValue: "Reason" }),
+  const COLUMNS: readonly { key: SortKey; label: string }[] = [
+    { key: "time", label: t("audit.colTime", { defaultValue: "Time" }) },
+    { key: "severity", label: t("audit.colSeverity", { defaultValue: "Severity" }) },
+    { key: "source", label: t("audit.colSource", { defaultValue: "Source" }) },
+    { key: "category", label: t("audit.colCategory", { defaultValue: "Category" }) },
+    { key: "actor", label: t("audit.colActor", { defaultValue: "Actor" }) },
+    { key: "target", label: t("audit.colTarget", { defaultValue: "Target" }) },
+    { key: "channel", label: t("audit.colChannel", { defaultValue: "Channel" }) },
+    { key: "reason", label: t("audit.colReason", { defaultValue: "Reason" }) },
   ];
 
   return (
@@ -898,7 +1004,11 @@ function AuditResults({
       <TableContainer
         onScroll={onScroll}
         sx={(theme) => ({
-          maxHeight: "52vh",
+          // The leftover height of the pane, not a slice of the viewport: the
+          // floor keeps a few rows visible under an open detail card, and past
+          // it the pane scrolls rather than the table vanishing.
+          flex: 1,
+          minHeight: 200,
           overflow: "auto",
           borderRadius: radius("lg"),
           background: theme.palette.nebula.card,
@@ -913,9 +1023,10 @@ function AuditResults({
         >
           <TableHead>
             <TableRow>
-              {HEADERS.map((header) => (
+              {COLUMNS.map(({ key, label }) => (
                 <TableCell
-                  key={header}
+                  key={key}
+                  sortDirection={sortKey === key ? sortDir : false}
                   sx={(theme) => ({
                     px: "10px",
                     py: "8px",
@@ -929,7 +1040,20 @@ function AuditResults({
                     borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
                   })}
                 >
-                  {header}
+                  <TableSortLabel
+                    active={sortKey === key}
+                    direction={sortKey === key ? sortDir : FIRST_DIR[key]}
+                    onClick={() => sortBy(key)}
+                    data-testid={TID.auditSortHeader}
+                    data-sort-key={key}
+                    sx={(theme) => ({
+                      color: "inherit",
+                      "&:hover, &:focus-visible, &.Mui-active": { color: theme.palette.nebula.text },
+                      "& .MuiTableSortLabel-icon": { fontSize: 14, color: "inherit !important" },
+                    })}
+                  >
+                    {label}
+                  </TableSortLabel>
                 </TableCell>
               ))}
             </TableRow>
@@ -978,10 +1102,8 @@ function AuditResults({
                   <AuditBadge value={entry.source} kind="source" />
                 </Cell>
                 <Cell>{entry.category}</Cell>
-                <Cell>{entry.actorName ?? (entry.actorUserId != null ? `#${entry.actorUserId}` : "-")}</Cell>
-                <Cell>
-                  {entry.targetName ?? (entry.targetUserId != null ? `#${entry.targetUserId}` : "-")}
-                </Cell>
+                <Cell>{who(entry.actorName, entry.actorUserId) ?? "-"}</Cell>
+                <Cell>{who(entry.targetName, entry.targetUserId) ?? "-"}</Cell>
                 <Cell>
                   {entry.channelId != null ? (channelName(entry.channelId) ?? `#${entry.channelId}`) : "-"}
                 </Cell>
@@ -1056,6 +1178,13 @@ function AuditResults({
         <Typography sx={(theme) => ({ fontSize: 11, color: theme.palette.nebula.dim })}>
           {t("audit.countNote", { defaultValue: "{{count}} entries loaded", count: entries.length })}
         </Typography>
+        {hasMore && sort !== DEFAULT_SORT && (
+          <Typography sx={(theme) => ({ fontSize: 11, color: theme.palette.nebula.dim })}>
+            {t("audit.sortLoadedOnly", {
+              defaultValue: "Sorted within what is loaded; older entries are still on the server.",
+            })}
+          </Typography>
+        )}
       </Stack>
     </>
   );
@@ -1189,6 +1318,7 @@ function Cell({ children, sx }: Readonly<{ children: React.ReactNode; sx?: objec
  * search box can never drift apart, and results update as you click.
  */
 function AuditFilterRail({
+  fill,
   open,
   onToggle,
   filters,
@@ -1197,6 +1327,9 @@ function AuditFilterRail({
   endless,
   onEndlessChange,
 }: Readonly<{
+  /** Cap the rail at the row's height and scroll it, so it cannot push the
+   *  table past the window on a short screen. */
+  fill: boolean;
   open: boolean;
   onToggle: () => void;
   filters: AuditFilterState;
@@ -1214,6 +1347,7 @@ function AuditFilterRail({
         flex: "none",
         width: open ? 220 : 40,
         transition: "width .15s",
+        ...(fill && { maxHeight: "100%", boxSizing: "border-box", overflowY: "auto" }),
         p: "8px",
         borderRadius: radius("lg"),
         background: theme.palette.nebula.card,
@@ -1346,7 +1480,12 @@ function AuditFilterRail({
             </Stack>
           </Box>
 
-          <Box sx={(theme) => ({ borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`, pt: "8px" })}>
+          <Box
+            sx={(theme) => ({
+              borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
+              pt: "8px",
+            })}
+          >
             <Typography sx={{ fontSize: 11, fontWeight: 600, mb: "4px" }}>
               {t("audit.resultsLabel", { defaultValue: "Results" })}
             </Typography>
@@ -1522,10 +1661,14 @@ function AuditConfig() {
             {items.map((setting) => (
               <Stack
                 key={setting.key}
-                direction="row"
-                alignItems="center"
-                gap={2}
-                sx={(theme) => ({ py: "8px", borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}` })}
+                // A list of chips needs the row's width, so it goes under its label.
+                direction={setting.type === "list" ? "column" : "row"}
+                alignItems={setting.type === "list" ? "stretch" : "center"}
+                gap={setting.type === "list" ? 1 : 2}
+                sx={(theme) => ({
+                  py: "8px",
+                  borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
+                })}
               >
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>
@@ -1544,7 +1687,7 @@ function AuditConfig() {
                     </Typography>
                   )}
                 </Box>
-                <Box sx={{ flex: "none", width: setting.type === "bool" ? "auto" : 200 }}>
+                <Box sx={{ flex: "none", width: setting.type === "bool" ? "auto" : setting.type === "list" ? "100%" : 200 }}>
                   <AuditSettingField
                     setting={setting}
                     value={edits[setting.key] ?? setting.value ?? ""}
@@ -1588,10 +1731,42 @@ function AuditSettingField({
   value,
   onChange,
 }: Readonly<{ setting: ServerSetting; value: string; onChange: (value: string) => void }>) {
+  const { t } = useTranslation("settings");
   const label = setting.label || setting.key;
   // The E2E suites address a setting by this attribute, so it has to reach the
   // real control rather than a wrapper.
   const hook = { "data-audit-setting": setting.key };
+
+  if (setting.type === "list") {
+    const chosen = value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    // A value the server holds that its own option list lacks stays offered,
+    // for the same reason as the enum below: a save must not drop it unseen.
+    const options = [...new Set([...setting.options, ...chosen])];
+    return (
+      <Autocomplete
+        multiple
+        size="small"
+        disableCloseOnSelect
+        filterSelectedOptions
+        options={options}
+        value={chosen}
+        onChange={(_event, next) => onChange(next.join(","))}
+        noOptionsText={t("audit.listAllChosen", { defaultValue: "Everything is already chosen" })}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            slotProps={{
+              ...params.slotProps,
+              htmlInput: { ...params.slotProps.htmlInput, "aria-label": label, ...hook },
+            }}
+          />
+        )}
+      />
+    );
+  }
 
   if (setting.type === "bool") {
     const checked = value === "true" || value === "1";

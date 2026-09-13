@@ -140,6 +140,27 @@ impl LocalMessageCache {
         self.dirty = true;
     }
 
+    /// Drop messages from a channel, returning how many were held. A
+    /// `SignalV1` channel has no server-side history, so without this a
+    /// deleted message came back from disk on the next launch.
+    pub fn remove(&mut self, channel_id: u32, message_ids: &[String]) -> usize {
+        let Some(channel) = self.messages.get_mut(&channel_id) else {
+            return 0;
+        };
+        let before = channel.len();
+        channel.retain(|m| !message_ids.contains(&m.message_id));
+        let removed = before - channel.len();
+        if removed > 0 {
+            if let Some(ids) = self.message_ids.get_mut(&channel_id) {
+                for id in message_ids {
+                    let _ = ids.remove(id);
+                }
+            }
+            self.dirty = true;
+        }
+        removed
+    }
+
     /// Write the cache out if it has changed and the last write is at least
     /// [`SAVE_INTERVAL`] old.  Returns whether it wrote.
     ///
@@ -404,6 +425,42 @@ mod tests {
         let other_seed = [99u8; 32];
         let cache2 = LocalMessageCache::new(dir.path(), &other_seed).unwrap();
         assert!(cache2.decrypt(&encrypted).is_err());
+    }
+
+    #[test]
+    fn a_removed_message_stays_gone_after_a_reload() {
+        let dir = TempDir::new().unwrap();
+        let seed = test_seed();
+        let message = |id: &str, timestamp| CachedMessage {
+            message_id: id.to_string(),
+            channel_id: 5,
+            timestamp,
+            sender_hash: "abc".to_string(),
+            sender_name: "Alice".to_string(),
+            body: "note".to_string(),
+            is_own: true,
+        };
+
+        let mut cache = LocalMessageCache::new(dir.path(), &seed).unwrap();
+        cache.insert(message("keep", 1000));
+        cache.insert(message("drop", 2000));
+        assert_eq!(
+            cache.remove(5, &["drop".to_string(), "absent".to_string()]),
+            1
+        );
+        cache.save().unwrap();
+
+        let mut reloaded = LocalMessageCache::new(dir.path(), &seed).unwrap();
+        reloaded.load().unwrap();
+        let ids: Vec<_> = reloaded.all_chat_messages()[&5]
+            .iter()
+            .filter_map(|m| m.message_id.clone())
+            .collect();
+        assert_eq!(ids, vec!["keep".to_string()]);
+
+        // The dedup index forgot it too, so the same id can be cached again.
+        cache.insert(message("drop", 3000));
+        assert_eq!(cache.all_chat_messages()[&5].len(), 2);
     }
 
     #[test]

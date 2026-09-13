@@ -2,6 +2,9 @@ import { useTranslation } from "react-i18next";
 import { Box, Divider, Menu, MenuItem } from "@mui/material";
 import { useAppStore } from "@core/store";
 import type { ChannelEntry } from "@core/types";
+import { TID } from "@core/testids";
+import { requestLeaveMeeting } from "@core/features/chat/calendar/meetings";
+import { isDmChannel } from "@core/utils/channelVisibility";
 import { isStructuralChannel } from "@core/utils/channelAttributes";
 import { PERM_WRITE } from "@core/utils/permissions";
 import {
@@ -16,10 +19,12 @@ import {
   BellOffIcon,
   DatabaseIcon,
   EditIcon,
+  GripVerticalIcon,
   HashIcon,
   InfoIcon,
   Link2Icon,
   LockIcon,
+  LogOutIcon,
   PlusIcon,
   RadioIcon,
   TrashIcon,
@@ -48,6 +53,9 @@ interface ChannelMenuProps {
   onPurgeHistory: (channel: ChannelEntry) => void;
   onDelete: (channel: ChannelEntry) => void;
   onEditPermissions: (channel: ChannelEntry) => void;
+  /** Whether the list is in arrange mode, which the entry below toggles. */
+  arranging: boolean;
+  onToggleArrange: () => void;
   onClose: () => void;
 }
 
@@ -88,6 +96,8 @@ export function ChannelMenu({
   onPurgeHistory,
   onDelete,
   onEditPermissions,
+  arranging,
+  onToggleArrange,
   onClose,
 }: Readonly<ChannelMenuProps>) {
   const { t } = useTranslation(["nebulaSidebar", "sidebar", "chat"]);
@@ -113,6 +123,11 @@ export function ChannelMenu({
   // anything where the server is keeping a history at all - `canDeleteMessages`
   // is exactly that pair.
   const purgeable = canDeleteMessages(channel);
+  // A meeting room is detached from the tree and granted to its invitees, so
+  // leaving it asks the calendar to revoke that grant; the room then drops out
+  // of the list, and the calendar event can re-admit you. A friend chat is
+  // detached too, but it is a conversation rather than a room.
+  const meeting = !!channel.detached && !isDmChannel(channel);
   const run = (action: () => void) => () => {
     action();
     onClose();
@@ -164,6 +179,20 @@ export function ChannelMenu({
               </Glyph>
               {notificationsMuted ? t("chat:header.unmuteChannel") : t("chat:header.muteChannel")}
             </MenuItem>,
+            ...(meeting
+              ? [
+                  <MenuItem
+                    key="leave-meeting"
+                    data-testid={TID.leaveMeeting}
+                    title={t("sidebar:channelSidebar.leaveMeetingTitle")}
+                    onClick={run(() => requestLeaveMeeting(channel.id))}
+                    sx={(theme) => ({ color: theme.palette.nebula.bad })}
+                  >
+                    <LogOutIcon width={13} height={13} />
+                    {t("sidebar:channelSidebar.leaveMeeting")}
+                  </MenuItem>,
+                ]
+              : []),
             <Divider key="mute-end" sx={DIVIDER} />,
           ]}
 
@@ -203,6 +232,19 @@ export function ChannelMenu({
             >
               <LockIcon width={13} height={13} />
               {t("nebulaSidebar:channels.permissions")}
+            </MenuItem>,
+            // About the list rather than this row, but it is here that someone
+            // who can edit channels goes looking for how to reorder them.
+            <MenuItem
+              key="arrange"
+              data-testid={TID.channelArrangeToggle}
+              onClick={run(onToggleArrange)}
+              sx={(theme) => ({ color: theme.palette.nebula.muted })}
+            >
+              <GripVerticalIcon width={13} height={13} />
+              {arranging
+                ? t("nebulaSidebar:channels.doneArranging")
+                : t("nebulaSidebar:channels.arrangeChannels")}
             </MenuItem>,
           ]
         : null}

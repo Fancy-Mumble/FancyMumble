@@ -132,7 +132,7 @@ export function RolesAdmin({ initialRole }: Readonly<{ initialRole?: string | nu
         <Stack direction="row" alignItems="center" gap={1} sx={{ mb: "16px" }}>
           <IconButton
             size="small"
-            aria-label={t("common:actions.back", { defaultValue: "Back" })}
+            aria-label={t("common:actions.back")}
             onClick={() => setEditing(null)}
           >
             <ArrowLeftIcon width={15} height={15} />

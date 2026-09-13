@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ChannelEntry, SearchResult, UserEntry } from "@core/types";
+import type { ChannelEntry, PhotoEntry, SearchResult, UserEntry } from "@core/types";
 import { withNebulaTheme } from "../../testTheme";
 import { GlobalSearch } from "./GlobalSearch";
 
@@ -41,7 +41,7 @@ const messageHit = (): SearchResult => ({
 });
 
 function open(props: Partial<React.ComponentProps<typeof GlobalSearch>> = {}) {
-  const handlers = { onClose: vi.fn(), onSelect: vi.fn() };
+  const handlers = { onClose: vi.fn(), onSelect: vi.fn(), onOpenPhoto: vi.fn() };
   render(
     withNebulaTheme(
       <GlobalSearch
@@ -174,6 +174,7 @@ describe("GlobalSearch", () => {
       serverLabel: "magical.rocks",
       onClose: vi.fn(),
       onSelect: vi.fn(),
+      onOpenPhoto: vi.fn(),
     } as const;
     const { rerender } = render(withNebulaTheme(<GlobalSearch open={false} {...props} />));
     rerender(withNebulaTheme(<GlobalSearch open {...props} />));
@@ -197,5 +198,93 @@ describe("GlobalSearch", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByLabelText("Close search"));
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  describe("filters", () => {
+    const photo = (src: string, partial: Partial<PhotoEntry> = {}): PhotoEntry => ({
+      src,
+      sender_name: "enot",
+      channel_id: 1,
+      dm_session: null,
+      context: "in #Gaming",
+      timestamp: 1,
+      ...partial,
+    });
+
+    function answer(photos: PhotoEntry[], found: SearchResult[] = []) {
+      invokeMock.mockImplementation((command: string) =>
+        Promise.resolve(command === "get_photos" ? photos : found),
+      );
+    }
+
+    it("narrows a query to messages carrying a link", async () => {
+      answer([], [messageHit()]);
+      const { field } = open();
+      fireEvent.click(screen.getByRole("button", { name: "Links" }));
+      fireEvent.change(field, { target: { value: "game" } });
+
+      await waitFor(() =>
+        expect(invokeMock).toHaveBeenCalledWith("super_search", { query: "game", filter: "links" }),
+      );
+      expect(await screen.findByText("Messages")).toBeTruthy();
+      // "Gaming" matches in this window, but a channel is not a link.
+      expect(screen.queryByText("Channels")).toBeNull();
+    });
+
+    it("asks again at once when the chip changes under a query", async () => {
+      const { field } = open();
+      fireEvent.change(field, { target: { value: "game" } });
+      await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("super_search", { query: "game" }));
+
+      fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+      expect(invokeMock).toHaveBeenLastCalledWith("super_search", { query: "game", filter: "photos" });
+    });
+
+    it("says what Links wants before anything is typed", () => {
+      open();
+      fireEvent.click(screen.getByRole("button", { name: "Links" }));
+      expect(screen.getByText("Type to find a link someone sent.")).toBeTruthy();
+      expect(invokeMock).not.toHaveBeenCalled();
+    });
+
+    it("shows the pictures under Photos, and opens the one walked to", async () => {
+      answer([photo("a.png"), photo("b.png", { sender_name: "Ada" }), photo("a.png")]);
+      const { field, onOpenPhoto, onClose } = open();
+      fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+
+      // The same picture pasted twice is one tile.
+      await waitFor(() => expect(screen.getAllByRole("button", { name: /^Photo from/ })).toHaveLength(2));
+      expect(invokeMock).toHaveBeenCalledWith("get_photos", { offset: 0, limit: 24 });
+      expect(screen.getByText("2 photos")).toBeTruthy();
+
+      fireEvent.keyDown(field, { key: "ArrowRight" });
+      fireEvent.keyDown(field, { key: "Enter" });
+      expect(onOpenPhoto).toHaveBeenCalledWith(expect.objectContaining({ src: "b.png" }));
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it("says so when there are no pictures", async () => {
+      open();
+      fireEvent.click(screen.getByRole("button", { name: "Photos" }));
+      expect(await screen.findByText("No photos shared yet.")).toBeTruthy();
+    });
+
+    it("reopens on All", () => {
+      const props = {
+        channels: [channel(1, "Gaming")],
+        users: [],
+        sessions: [],
+        ownSession: null,
+        serverLabel: "magical.rocks",
+        onClose: vi.fn(),
+        onSelect: vi.fn(),
+        onOpenPhoto: vi.fn(),
+      } as const;
+      const { rerender } = render(withNebulaTheme(<GlobalSearch open {...props} />));
+      fireEvent.click(screen.getByRole("button", { name: "Links" }));
+      rerender(withNebulaTheme(<GlobalSearch open={false} {...props} />));
+      rerender(withNebulaTheme(<GlobalSearch open {...props} />));
+      expect(screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed")).toBe("true");
+    });
   });
 });

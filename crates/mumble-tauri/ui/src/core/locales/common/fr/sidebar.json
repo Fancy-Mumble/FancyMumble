@@ -249,6 +249,10 @@
     "noResultsHint": "Essayez un autre terme de recherche ou filtre"
   },
   "userListItem": {
+    "whisperBadge": "Chuchote",
+    "shoutBadge": "Crie",
+    "whisperingTitle": "Vous chuchote",
+    "shoutingTitle": "Crie dans votre salon",
     "registeredTitle": "Enregistré",
     "serverMutedTitle": "Muet par le serveur",
     "selfMutedTitle": "Auto-muet",
@@ -370,6 +374,7 @@
     "loadingOlderAriaLabel": "Chargement des anciens messages",
     "modeFullArchive": "Tous les messages stockés sont visibles par les membres du canal.",
     "modeSignal": "Les messages sont chiffrés de bout en bout avec le protocole Signal.",
+    "modeServerManaged": "Les messages sont chiffrés et stockés par le serveur.",
     "retentionLabel": "Conservation : {{value}}",
     "storedLabel": "Stocké : {{total}} messages",
     "retentionNoLimit": "Sans limite",

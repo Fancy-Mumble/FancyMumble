@@ -25,11 +25,12 @@ import type { ChannelEntry, SessionMeta, UserEntry } from "@core/types";
 import { friendServerKey, type Friend } from "@core/friendsStorage";
 import { friendLoginSession, type FriendMatch } from "@core/friendsPresence";
 import { dmPeerUserId, isDmChannel } from "@core/utils/channelVisibility";
-
-/** Id prefix of the synthetic "yourself" row - your own private notepad. */
-export const SELF_FRIEND_PREFIX = "self:";
+import type { ResolvedNotepad } from "@core/notepad";
 
 export type { FriendMatch };
+
+/** Id of the row for the notepad kept on this device. */
+export const LOCAL_NOTEPAD_ID = "self:local";
 
 /** A friend, plus everything a row needs to draw and act on them. */
 export interface FriendEntry {
@@ -50,8 +51,10 @@ export interface FriendEntry {
   canConnect: boolean;
   /** Waiting direct messages from them. */
   unread: number;
-  /** True for the synthetic "yourself" row, which is never removable. */
+  /** True for yourself - your notepad on this login - which is never removable. */
   self: boolean;
+  /** True for the notepad kept on this device, which needs no server. */
+  local: boolean;
 }
 
 /** The friends of one server, drawn under one heading. */
@@ -87,36 +90,6 @@ export function reachFriend(
 }
 
 /**
- * The synthetic "yourself" row.
- *
- * Chatting with yourself is a private, end-to-end-encrypted notepad the
- * `fancy-friends` plugin provisions like any other friend pair, so it is listed
- * as a friend rather than tucked behind a button of its own. It needs a
- * registered account and the plugin, and it is only ever about the server you
- * are on - hence null when any of that is missing.
- */
-export function selfFriend(input: {
-  activeServerId: string | null;
-  ownUser: UserEntry | null;
-  sessions: readonly SessionMeta[];
-  hasFriendsPlugin: boolean;
-}): Friend | null {
-  const { activeServerId, ownUser } = input;
-  if (!input.hasFriendsPlugin || activeServerId === null || ownUser === null) return null;
-  if (ownUser.user_id == null || ownUser.user_id < 0) return null;
-  const session = input.sessions.find((entry) => entry.id === activeServerId);
-  return {
-    id: `${SELF_FRIEND_PREFIX}${activeServerId}`,
-    userName: ownUser.name,
-    serverId: activeServerId,
-    addedAt: 0,
-    userId: ownUser.user_id,
-    ...(ownUser.hash ? { userHash: ownUser.hash } : {}),
-    ...(session?.label ? { serverLabel: session.label } : {}),
-  };
-}
-
-/**
  * The saved friends, searched and grouped by the server they belong to.
  *
  * Grouping is on `friendServerKey` rather than on the stored `serverId`: that id
@@ -126,6 +99,21 @@ export function selfFriend(input: {
  * reconnecting - and inside a group the rows you would want first do: yourself,
  * then anyone waiting, then whoever is here.
  */
+/**
+ * The saved friends with yourself as the one notepad you chose.
+ *
+ * Every login you use is saved as a self record, but only one of them is where
+ * your notes are kept; the others would be rows opening notepads you have moved
+ * away from. A notepad on this device has no record at all, so it is added.
+ */
+export function withNotepad(saved: readonly Friend[], notepad: ResolvedNotepad, localName: string): Friend[] {
+  const friends = saved.filter((friend) => !friend.self);
+  if (notepad.location.kind === "local") {
+    return [{ id: LOCAL_NOTEPAD_ID, userName: localName, self: true, addedAt: 0 }, ...friends];
+  }
+  return notepad.friend ? [notepad.friend, ...friends] : friends;
+}
+
 export function listFriendGroups(input: {
   friends: readonly Friend[];
   online: Readonly<Record<string, FriendMatch>>;
@@ -134,7 +122,10 @@ export function listFriendGroups(input: {
   activeServerId: string | null;
   unreadCounts: Readonly<Record<number, number>>;
   query: string;
+  /** The heading over the notepad kept on this device. */
+  localLabel?: string;
 }): FriendGroup[] {
+  const localLabel = input.localLabel ?? "This device";
   const needle = input.query.trim().toLocaleLowerCase();
   const activeSession = input.sessions.find((session) => session.id === input.activeServerId);
   const activeKey = activeSession
@@ -148,12 +139,13 @@ export function listFriendGroups(input: {
 
   const groups = new Map<string, FriendGroup>();
   for (const friend of input.friends) {
+    const local = friend.id === LOCAL_NOTEPAD_ID;
     // The server name is searched alongside the person's, so typing a server
     // narrows the column to that server's friends.
     if (
       needle &&
       !friend.userName.toLocaleLowerCase().includes(needle) &&
-      !(friend.serverLabel ?? "").toLocaleLowerCase().includes(needle)
+      !(local ? localLabel : (friend.serverLabel ?? "")).toLocaleLowerCase().includes(needle)
     ) {
       continue;
     }
@@ -165,14 +157,17 @@ export function listFriendGroups(input: {
         match !== null && match.serverId === input.activeServerId
           ? (input.users.find((user) => user.session === match.userSession) ?? null)
           : null,
-      ...reachFriend(friend, match, input.sessions),
+      ...(local
+        ? { sessionId: null, canOpen: true, canConnect: false }
+        : reachFriend(friend, match, input.sessions)),
       unread: match ? (input.unreadCounts[match.userSession] ?? 0) : 0,
-      self: friend.id.startsWith(SELF_FRIEND_PREFIX),
+      self: friend.self === true,
+      local,
     };
-    const key = friendServerKey(friend);
+    const key = local ? LOCAL_NOTEPAD_ID : friendServerKey(friend);
     const group = groups.get(key) ?? {
       key,
-      label: friend.serverLabel || friend.serverHost || "Other",
+      label: local ? localLabel : friend.serverLabel || friend.serverHost || "Other",
       entries: [],
     };
     group.entries.push(entry);
@@ -190,6 +185,10 @@ export function listFriendGroups(input: {
   }
 
   return [...groups.values()].sort((left, right) => {
+    // Notes on this device open from anywhere, so they lead.
+    const leftLocal = left.key === LOCAL_NOTEPAD_ID;
+    const rightLocal = right.key === LOCAL_NOTEPAD_ID;
+    if (leftLocal !== rightLocal) return leftLocal ? -1 : 1;
     const leftActive = activeKey !== null && left.key === activeKey;
     const rightActive = activeKey !== null && right.key === activeKey;
     if (leftActive !== rightActive) return leftActive ? -1 : 1;
@@ -214,8 +213,11 @@ export function isFriendChatOpen(
     activeServerId: string | null;
     channels: readonly ChannelEntry[];
     ownUserId: number | null;
+    localNotesOpen?: boolean;
   },
 ): boolean {
+  if (entry.local) return state.localNotesOpen === true;
+  if (state.localNotesOpen) return false;
   if (
     entry.match !== null &&
     state.selectedDmUser === entry.match.userSession &&
@@ -223,7 +225,10 @@ export function isFriendChatOpen(
   ) {
     return true;
   }
+  // A registered id only means something on its own server: yourself on two
+  // servers is often the same id twice.
   if (entry.friend.userId == null || state.selectedChannel === null) return false;
+  if (entry.sessionId !== state.activeServerId) return false;
   const channel = state.channels.find((candidate) => candidate.id === state.selectedChannel);
   if (!channel || !isDmChannel(channel)) return false;
   return dmPeerUserId(channel, state.ownUserId) === entry.friend.userId;

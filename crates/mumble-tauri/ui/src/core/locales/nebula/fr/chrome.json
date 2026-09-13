@@ -14,10 +14,22 @@
     "headingMessage": "Messages",
     "headingServer": "Serveurs",
     "results_one": "{{count}} résultat",
-    "results_other": "{{count}} résultats"
+    "results_other": "{{count}} résultats",
+    "filters": "Filtrer les résultats",
+    "filterAll": "Tout",
+    "filterPhotos": "Photos",
+    "filterLinks": "Liens",
+    "photosEmpty": "Aucune photo partagée pour l'instant.",
+    "linksEmpty": "Tapez pour retrouver un lien partagé.",
+    "photosLoading": "Chargement des photos…",
+    "photos_one": "{{count}} photo",
+    "photos_other": "{{count}} photos",
+    "photoLabel": "Photo de {{sender}}, {{place}}",
+    "keyEsc": "Échap"
   },
   "gameOverlay": {
     "you": "VOUS",
-    "more": "+{{count}} de plus"
+    "more": "+{{count}} de plus",
+    "channel": "Salon"
   }
 }

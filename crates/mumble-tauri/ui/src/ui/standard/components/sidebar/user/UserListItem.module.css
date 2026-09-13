@@ -332,3 +332,17 @@
     height: 32px;
   }
 }
+
+/* Marks a whisper or a shout, which sound like ordinary speech. */
+.voiceContextBadge {
+  flex: none;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 14px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}

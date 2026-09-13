@@ -1,6 +1,9 @@
 ﻿{
   "panel": {
     "heading": "Server info",
+    "online": "{{count}} online",
+    "kindFancy": "Fancy server",
+    "kindMumble": "Mumble server",
     "activityLog": "Activity log",
     "noActivity": "No activity yet",
     "audioTransport": "Audio transport",

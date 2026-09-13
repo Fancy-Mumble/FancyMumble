@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Box, Divider, ListSubheader, Menu, MenuItem, alpha } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import { NodeCard } from "./NodeCard";
 import { AnnotationLayer, minimumOf } from "./AnnotationLayer";
 import {
@@ -42,12 +43,7 @@ import { boundsOf, useCanvasView } from "./useCanvasView";
 import type { CanvasDrop } from "./useBlockCarry";
 
 /** The annotation kinds, in the order the add menu offers them. */
-const ANNOTATION_LABELS: readonly (readonly [AnnotationKind, string])[] = [
-  ["title", "Title"],
-  ["note", "Note"],
-  ["frame", "Frame around a region"],
-  ["label", "Small label"],
-];
+const ANNOTATION_KINDS: readonly AnnotationKind[] = ["title", "note", "frame", "label"];
 
 /** Where a port sits, in world coordinates. */
 interface Point {
@@ -579,9 +575,16 @@ export function NodeCanvas<N extends GraphNode>({
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
   };
 
+  const { t } = useTranslation("nebulaWelcome");
+
   /** Drop a fresh annotation, selected, where the add menu was opened. */
   const addNote = (kind: AnnotationKind, at: Point) => {
-    const made = makeAnnotation(kind, Math.max(0, Math.round(at.x)), Math.max(0, Math.round(at.y)));
+    const made = makeAnnotation(
+      kind,
+      Math.max(0, Math.round(at.x)),
+      Math.max(0, Math.round(at.y)),
+      t(`canvas.placeholders.${kind}`),
+    );
     onChange(addAnnotation(graph, made));
     setSelection(new Set([made.id]));
   };
@@ -977,7 +980,9 @@ export function NodeCanvas<N extends GraphNode>({
   const wanted = addQuery.trim().toLowerCase();
   const offered = spec.blocks.filter((block) => blockMatches(block, wanted));
   const offeredNotes = spec.annotate
-    ? ANNOTATION_LABELS.filter(([, label]) => wanted === "" || label.toLowerCase().includes(wanted))
+    ? ANNOTATION_KINDS.map((kind) => [kind, t(`canvas.annotations.${kind}`)] as const).filter(
+        ([, label]) => wanted === "" || label.toLowerCase().includes(wanted),
+      )
     : [];
 
   /** Put one down where the menu was opened, selected, and close up. */
@@ -1225,7 +1230,7 @@ export function NodeCanvas<N extends GraphNode>({
             is exactly what this menu, anchored under the pointer, answers. */}
         {spec.annotate && offered.length > 0 && offeredNotes.length > 0 && <Divider />}
         {spec.annotate && offeredNotes.length > 0 && (
-          <ListSubheader sx={{ lineHeight: "28px" }}>Annotate</ListSubheader>
+          <ListSubheader sx={{ lineHeight: "28px" }}>{t("canvas.annotate")}</ListSubheader>
         )}
         {spec.annotate &&
           offeredNotes.map(([kind, label]) => (

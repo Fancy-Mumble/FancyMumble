@@ -12,6 +12,12 @@ import {
   welcomeWiring,
   type WelcomeGraph,
 } from "@nebula/components/admin/welcome/model";
+import { useTranslation } from "react-i18next";
+import type { Say } from "@nebula/components/admin/welcome/model";
+
+/** The suite-wide mock answers from the English catalogue, so assertions stay in English. */
+const say = useTranslation("nebulaWelcome").t as Say;
+const welcome = welcomeSpec(say);
 
 // The canvas measures its ports with one; jsdom has neither this nor pointer
 // capture, and a real webview has both.
@@ -44,7 +50,7 @@ suite("a design node's sockets", () => {
   it("draws one per declared input, so there is something to wire to", () => {
     const view = render(
       <ThemeProvider theme={createNebulaTheme("dark")}>
-        <NodeEditor spec={welcomeSpec} graph={graph()} onChange={() => undefined} summary="" />
+        <NodeEditor spec={welcome} graph={graph()} onChange={() => undefined} summary="" />
       </ThemeProvider>,
     );
     const ports = [...view.container.querySelectorAll("[data-port]")].map((el) =>
@@ -108,32 +114,32 @@ suite("what each socket says it carries", () => {
   const design = { ...makeNode("greeting", 0, 0), view: "design" as const, design: starterDesign() };
 
   it("types a slot as prose and a toggle as a condition", () => {
-    expect(welcomeSpec.portInfo(design, "in:rules", "in")).toMatchObject({ type: "text", tone: "ok" });
-    expect(welcomeSpec.portInfo(design, "in:is_new_member", "in")).toMatchObject({
+    expect(welcome.portInfo(design, "in:rules", "in")).toMatchObject({ type: "text", tone: "ok" });
+    expect(welcome.portInfo(design, "in:is_new_member", "in")).toMatchObject({
       type: "condition",
       tone: "accent",
     });
   });
 
   it("names a design's inputs the way the design does", () => {
-    expect(welcomeSpec.portInfo(design, "in:rules", "in").label).toBe("rules");
-    expect(welcomeSpec.portInfo(design, "in:is_new_member", "in").label).toBe("is_new_member");
+    expect(welcome.portInfo(design, "in:rules", "in").label).toBe("rules");
+    expect(welcome.portInfo(design, "in:is_new_member", "in").label).toBe("is_new_member");
   });
 
   it("leaves the greeting's own ports as they were", () => {
-    expect(welcomeSpec.portInfo(design, "plus", "in")).toMatchObject({ label: "PLUS", tone: "ok" });
-    expect(welcomeSpec.portInfo(design, "when", "in")).toMatchObject({ label: "WHEN", tone: "accent" });
+    expect(welcome.portInfo(design, "plus", "in")).toMatchObject({ label: "PLUS", tone: "ok" });
+    expect(welcome.portInfo(design, "when", "in")).toMatchObject({ label: "WHEN", tone: "accent" });
   });
 
   it("stays quiet for a port the design no longer declares", () => {
-    expect(welcomeSpec.portInfo(design, "in:gone", "in").tone).toBe("muted");
+    expect(welcome.portInfo(design, "in:gone", "in").tone).toBe("muted");
   });
 
   it("names an output by what comes out of it", () => {
     const text = makeNode("text", 0, 0);
     const country = makeNode("country", 0, 0);
-    expect(welcomeSpec.portInfo(text, "out", "out")).toMatchObject({ label: "TEXT", type: "text" });
-    expect(welcomeSpec.portInfo(country, "out", "out")).toMatchObject({
+    expect(welcome.portInfo(text, "out", "out")).toMatchObject({ label: "TEXT", type: "text" });
+    expect(welcome.portInfo(country, "out", "out")).toMatchObject({
       label: "CONDITION",
       type: "condition",
     });
@@ -142,13 +148,13 @@ suite("what each socket says it carries", () => {
   it("gives every socket on every kind a word to go by", () => {
     // The complaint this answers: a canvas of unlabelled dots, where some of
     // them happened to have a name in the body and the rest had nothing.
-    for (const block of welcomeSpec.blocks) {
+    for (const block of welcome.blocks) {
       const node = block.create(0, 0);
-      for (const port of welcomeSpec.inputs(node)) {
-        expect(welcomeSpec.portInfo(node, port, "in").label).not.toBe("");
+      for (const port of welcome.inputs(node)) {
+        expect(welcome.portInfo(node, port, "in").label).not.toBe("");
       }
-      for (const port of welcomeSpec.outputs(node)) {
-        expect(welcomeSpec.portInfo(node, port, "out").label).not.toBe("");
+      for (const port of welcome.outputs(node)) {
+        expect(welcome.portInfo(node, port, "out").label).not.toBe("");
       }
     }
   });
@@ -206,7 +212,7 @@ suite("what the card says about its sockets", () => {
     render(
       <ThemeProvider theme={createNebulaTheme("dark")}>
         <NodeEditor
-          spec={welcomeSpec}
+          spec={welcome}
           graph={{ nodes, edges: [], enabled: true } as unknown as WelcomeGraph}
           onChange={() => undefined}
           summary=""
@@ -217,7 +223,7 @@ suite("what the card says about its sockets", () => {
   const drawn = () =>
     render(
       <ThemeProvider theme={createNebulaTheme("dark")}>
-        <NodeEditor spec={welcomeSpec} graph={seedGraph()} onChange={() => undefined} summary="" />
+        <NodeEditor spec={welcome} graph={seedGraph()} onChange={() => undefined} summary="" />
       </ThemeProvider>,
     );
 

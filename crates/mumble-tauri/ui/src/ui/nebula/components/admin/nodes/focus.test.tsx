@@ -5,6 +5,12 @@ import { createNebulaTheme } from "@nebula/theme";
 import { NodeEditor } from "@nebula/components/admin/nodes";
 import { welcomeSpec } from "@nebula/components/admin/welcome/spec";
 import { makeNode, type WelcomeGraph } from "@nebula/components/admin/welcome/model";
+import { useTranslation } from "react-i18next";
+import type { Say } from "@nebula/components/admin/welcome/model";
+
+/** The suite-wide mock answers from the English catalogue, so assertions stay in English. */
+const say = useTranslation("nebulaWelcome").t as Say;
+const welcome = welcomeSpec(say);
 
 // The canvas measures its ports with one; jsdom has neither this nor pointer
 // capture, and a real webview has both.
@@ -29,7 +35,7 @@ function graph(): WelcomeGraph {
 function mount() {
   return render(
     <ThemeProvider theme={createNebulaTheme("dark")}>
-      <NodeEditor spec={welcomeSpec} graph={graph()} onChange={() => undefined} summary="" />
+      <NodeEditor spec={welcome} graph={graph()} onChange={() => undefined} summary="" />
     </ThemeProvider>,
   );
 }

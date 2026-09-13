@@ -712,11 +712,13 @@
     "saved": "Gespeichert",
     "saving": "Speichere…",
     "saveChanges": "Änderungen speichern",
+    "listAllChosen": "Alles ist bereits ausgewählt",
     "collapseFilters": "Schnellfilter einklappen",
     "countNote": "{{count}} Einträge geladen",
     "endlessOff": "Seitenweise, 25 Zeilen auf einmal.",
     "endlessOn": "Lädt beim Scrollen nach.",
     "endlessScroll": "Endloses Scrollen",
+    "sortLoadedOnly": "Sortiert innerhalb der geladenen Einträge; ältere liegen noch auf dem Server.",
     "endOfResults": "Ende der Ergebnisse",
     "expandFilters": "Schnellfilter ausklappen",
     "filterCategory": "Kategorien",
@@ -1277,7 +1279,9 @@
     "installed": "Installiert",
     "alreadyInstalled": "Bereits auf diesem Server installiert",
     "abiVersion": "API v{{version}}",
-    "incompatibleAbi": "Dieses Plugin zielt auf eine andere Plugin-API-Version als der Server ab und kann nicht installiert werden."
+    "incompatibleAbi": "Dieses Plugin zielt auf eine andere Plugin-API-Version als der Server ab und kann nicht installiert werden.",
+    "yanked": "zurückgezogen",
+    "minServer": "Server ≥ {{version}}"
   },
   "plugins": {
     "empty": "Auf dem verbundenen Server sind keine Plugins geladen.",
@@ -1334,7 +1338,10 @@
     "richTextLossy": "Dieser Willkommenstext nutzt Markup, das der visuelle Editor nicht halten kann — ein Tabellenlayout oder Styling, für das er keine Bedienelemente hat. Ihn dort zu bearbeiten würde die Teile umschreiben, die er nicht zeigen kann, deshalb wird er als HTML bearbeitet.",
     "welcomeEditorTitle": "Mehr als eine Begrüßung?",
     "welcomeEditorHint": "Dieser Text geht an alle. Der Begrüßungsnachrichten-Editor baut Begrüßungen, die davon abhängen, wer ankommt — Client-Version, ob ein Konto vorhanden ist — und legt sie als Seite an. Passt eine davon, wird sie statt dieses Textes gesendet.",
-    "welcomeEditorOpen": "Editor öffnen"
+    "welcomeEditorOpen": "Editor öffnen",
+    "modePreview": "Vorschau",
+    "previewOf": "Vorschau von {{label}}",
+    "previewEmpty": "Nichts anzuzeigen. Diese Einstellung ist leer, oder jeder Teil davon wurde vom Sicherheitsfilter entfernt, den jeder Client vor dem Anzeigen anwendet."
   },
   "fileServer": {
     "title": "Dateiserver-Speicher",
@@ -1495,6 +1502,42 @@
     "token": "Token",
     "tokenHint": "Wird nicht gespeichert — jede Sitzung neu eingeben.",
     "use": "Verwenden",
-    "version": "Version"
+    "version": "Version",
+    "tagsCount": "{{count}} von {{max}}",
+    "lede": "So erscheint dieser Server auf dem Verbindungsbildschirm. Jedes Feld ist optional — ein Slogan allein ist schon eine gute Livery.",
+    "credsLead": "Bilder werden über die Operator-API hochgeladen, die dafür ihre Adresse und ein Token braucht."
+  },
+  "whisper": {
+    "deniedRow": "Der Server hat dieses Ziel abgelehnt: keine Flüster-Berechtigung in {{channels}}",
+    "title": "Flüstern und Rufen",
+    "hint": "Halte eine Taste gedrückt, um mit bestimmten Personen oder in einen anderen Kanal zu sprechen statt in deinen aktuellen. Funktioniert in jedem Aktivierungsmodus.",
+    "empty": "Noch keine Flüster- oder Rufziele.",
+    "addBtn": "Flüsterziel hinzufügen",
+    "defaultName": "Flüstern {{n}}",
+    "edit": "Bearbeiten",
+    "remove": "Entfernen",
+    "save": "Speichern",
+    "nameLabel": "Name",
+    "kindLabel": "Ziel",
+    "kindUsers": "Benutzern zuflüstern",
+    "kindChannel": "In Kanal rufen",
+    "usersLabel": "Benutzer",
+    "addUser": "Benutzer hinzufügen...",
+    "noUsersPicked": "Noch keine Benutzer ausgewählt.",
+    "removeUser": "{{name}} entfernen",
+    "hashless": "Benutzer mit Zertifikat werden auf jedem Server gefunden. Benutzer ohne Zertifikat werden über ihren Namen zugeordnet.",
+    "channelModeLabel": "Kanal",
+    "channelFixed": "Ein bestimmter Kanal",
+    "channelCurrent": "Mein aktueller Kanal",
+    "channelPick": "Kanal auswählen",
+    "links": "Verknüpfte Kanäle einbeziehen",
+    "children": "Unterkanäle einbeziehen",
+    "group": "Nur Mitglieder der Gruppe",
+    "groupHint": "Optional. Ein ACL-Gruppenname wie admin. Leer lassen, um alle zu erreichen.",
+    "summaryUsers": "An {{names}}",
+    "summaryChannel": "Rufen in {{name}}",
+    "summaryCurrent": "Rufen in deinen aktuellen Kanal",
+    "summaryUnset": "Kein Ziel festgelegt",
+    "noActiveServer": "Verbinde dich mit einem Server, um Benutzer und Kanäle auszuwählen."
   }
 }

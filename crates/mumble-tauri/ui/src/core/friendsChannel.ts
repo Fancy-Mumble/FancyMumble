@@ -11,6 +11,7 @@
  * the caller falls back to a classic (non-persisted) direct message.
  */
 import { sendPluginMessage } from "./store/plugins";
+import type { NotepadProtocol } from "./notepad";
 
 /** Stable plugin identifier (matches the plugin's `PluginInfo` name). */
 export const FRIENDS_PLUGIN = "fancy-friends";
@@ -18,6 +19,9 @@ export const FRIENDS_PLUGIN = "fancy-friends";
 export const MSG_FRIENDS_OPEN = "friends.open";
 /** Plugin -> client: the channel hosting a friend chat. */
 export const MSG_FRIENDS_ROOM = "friends.room";
+
+/** Fired with the {@link FriendsRoomDetail} whenever a `friends.room` lands. */
+export const FRIENDS_ROOM_EVENT = "fancy:friends-room";
 
 /** Inbound `friends.room` payload. */
 export interface FriendsRoomDetail {
@@ -30,14 +34,36 @@ export interface FriendsRoomDetail {
 /**
  * Ask the `fancy-friends` plugin to provision (or locate) the detached
  * `signal_v1` channel for a chat with `targetUserId`. Omit `targetUserId` for a
- * self-notepad. No-op-safe: if the plugin is absent the server simply drops the
- * message and no `friends.room` arrives, so the caller's classic-DM fallback
- * stands.
+ * self-notepad, whose `protocol` picks which of your notepad rooms opens (a
+ * server whose plugin predates the choice ignores it and opens the Signal one).
+ * No-op-safe: if the plugin is absent the server simply drops the message and
+ * no `friends.room` arrives, so the caller's classic-DM fallback stands.
  */
-export function requestFriendChannel(targetUserId?: number): void {
-  const payload = typeof targetUserId === "number" ? { targetUserId } : {};
+export function requestFriendChannel(targetUserId?: number, protocol?: NotepadProtocol): void {
+  const payload = typeof targetUserId === "number" ? { targetUserId } : protocol ? { protocol } : {};
   void sendPluginMessage(FRIENDS_PLUGIN, MSG_FRIENDS_OPEN, payload).catch((e) => {
     console.error("[friends] sendPluginMessage failed:", e);
+  });
+}
+
+/** The next `friends.room` for `peerUserId`, or a rejection after `timeoutMs`. */
+export function waitForFriendsRoom(peerUserId: number, timeoutMs = 10_000): Promise<FriendsRoomDetail> {
+  return new Promise((resolve, reject) => {
+    const onRoom = (event: Event) => {
+      const room = (event as CustomEvent<FriendsRoomDetail>).detail;
+      if (room.peerUserId !== peerUserId) return;
+      done();
+      resolve(room);
+    };
+    const timer = globalThis.setTimeout(() => {
+      done();
+      reject(new Error("the server did not open the notepad"));
+    }, timeoutMs);
+    const done = () => {
+      globalThis.clearTimeout(timer);
+      globalThis.removeEventListener(FRIENDS_ROOM_EVENT, onRoom);
+    };
+    globalThis.addEventListener(FRIENDS_ROOM_EVENT, onRoom);
   });
 }
 

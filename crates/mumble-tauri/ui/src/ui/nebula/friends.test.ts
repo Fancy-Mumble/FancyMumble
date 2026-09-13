@@ -6,8 +6,7 @@ import {
   isFriendChatOpen,
   listFriendGroups,
   reachFriend,
-  selfFriend,
-  SELF_FRIEND_PREFIX,
+  withNotepad,
   type FriendEntry,
   type FriendMatch,
 } from "./friends";
@@ -168,7 +167,7 @@ describe("listFriendGroups", () => {
         friend({ id: "f1", userName: "Ada", serverLabel: "Magical" }),
         friend({ id: "f2", userName: "Here", serverLabel: "Magical" }),
         friend({ id: "f3", userName: "Waiting", serverLabel: "Magical" }),
-        friend({ id: `${SELF_FRIEND_PREFIX}s1`, userName: "Sebi", serverLabel: "Magical" }),
+        friend({ id: "me", self: true, userName: "Sebi", serverLabel: "Magical" }),
       ],
     });
     expect(groups[0].entries.map((entry) => entry.friend.userName)).toEqual([
@@ -222,33 +221,89 @@ describe("listFriendGroups", () => {
   });
 });
 
-describe("selfFriend", () => {
-  const registered = user({ session: 3, name: "Sebi", user_id: 4 });
+describe("yourself in the friends list", () => {
+  const me = friend({
+    id: "me",
+    userName: "Sebi",
+    userId: 4,
+    self: true,
+    serverLabel: "Magical",
+    serverHost: "magical.rocks",
+    serverPort: 64738,
+    serverUsername: "Sebi",
+  });
+  const input = {
+    friends: [] as Friend[],
+    online: {},
+    sessions: [OPEN],
+    users: [],
+    activeServerId: "s1",
+    unreadCounts: {},
+    query: "",
+  };
 
-  it("lists you as a friend when the notepad can exist", () => {
-    const self = selfFriend({
-      activeServerId: "s1",
-      ownUser: registered,
-      sessions: [OPEN],
-      hasFriendsPlugin: true,
+  it("leads your server's friends and opens while that login is open", () => {
+    const ada = friend({ id: "f1", userName: "Ada", serverLabel: "Magical" });
+    const [group] = listFriendGroups({ ...input, friends: [ada, me] });
+    expect(group.entries.map((entry) => entry.friend.userName)).toEqual(["Sebi", "Ada"]);
+    expect(group.entries[0]).toMatchObject({ self: true, sessionId: "s1", canOpen: true, canConnect: false });
+  });
+
+  it("stays listed while that server is closed, as an offer to connect", () => {
+    const [group] = listFriendGroups({ ...input, friends: [me], sessions: [], activeServerId: null });
+    expect(group.entries[0]).toMatchObject({ self: true, sessionId: null, canOpen: false, canConnect: true });
+  });
+});
+
+describe("withNotepad", () => {
+  const login = (id: string, host: string, userId: number) =>
+    friend({
+      id,
+      userName: "Sebi",
+      self: true,
+      userId,
+      serverHost: host,
+      serverPort: 64738,
+      serverUsername: "Sebi",
+      serverLabel: host,
     });
-    expect(self?.userName).toBe("Sebi");
-    expect(self?.userId).toBe(4);
-    // The label is what groups it under the server you are on.
-    expect(self?.serverLabel).toBe("Magical");
+  const home = login("home", "magical.rocks", 4);
+  const work = login("work", "voice.kumo.gg", 4);
+  const ada = friend({ id: "f1", userName: "Ada", serverLabel: "magical.rocks" });
+
+  it("lists only the login your notes are kept on", () => {
+    const list = withNotepad(
+      [home, work, ada],
+      {
+        location: { kind: "server", host: "voice.kumo.gg", port: 64738, username: "Sebi" },
+        protocol: "signal_v1",
+        friend: work,
+      },
+      "Sebi",
+    );
+    expect(list.map((entry) => entry.id)).toEqual(["work", "f1"]);
   });
 
-  it("is absent without the plugin that would provision the room", () => {
-    expect(
-      selfFriend({ activeServerId: "s1", ownUser: registered, sessions: [OPEN], hasFriendsPlugin: false }),
-    ).toBeNull();
-  });
-
-  it("is absent for a guest, who has no registered id to name a room after", () => {
-    const guest = user({ session: 3, name: "Sebi", user_id: null });
-    expect(
-      selfFriend({ activeServerId: "s1", ownUser: guest, sessions: [OPEN], hasFriendsPlugin: true }),
-    ).toBeNull();
+  it("puts a notepad on this device first, openable with nothing connected", () => {
+    const friends = withNotepad(
+      [home, ada],
+      { location: { kind: "local" }, protocol: "signal_v1", friend: null },
+      "Sebi",
+    );
+    const groups = listFriendGroups({
+      friends,
+      online: {},
+      sessions: [],
+      users: [],
+      activeServerId: null,
+      unreadCounts: {},
+      query: "",
+      localLabel: "This device",
+    });
+    expect(groups[0].label).toBe("This device");
+    expect(groups[0].entries[0]).toMatchObject({ local: true, self: true, canOpen: true, sessionId: null });
+    // The server logins were set aside, not listed as second notepads.
+    expect(groups.flatMap((group) => group.entries).filter((entry) => entry.self)).toHaveLength(1);
   });
 });
 
@@ -262,6 +317,7 @@ describe("isFriendChatOpen", () => {
     canConnect: false,
     unread: 0,
     self: false,
+    local: false,
     ...partial,
   });
   const room = { id: 12, name: "__dm:2-4", detached: true } as ChannelEntry;
@@ -287,6 +343,17 @@ describe("isFriendChatOpen", () => {
   it("does not mark a friend whose room merely exists on another server", () => {
     const open = entry({ match: match({ serverId: "s2", userSession: 7 }) });
     expect(isFriendChatOpen(open, { ...state, selectedDmUser: 7 })).toBe(false);
+  });
+
+  it("does not mark a room on another server that happens to share the user id", () => {
+    expect(isFriendChatOpen(entry({ sessionId: "s2" }), { ...state, selectedChannel: 12 })).toBe(false);
+  });
+
+  it("marks the notepad on this device only while it is open, and nothing else then", () => {
+    const local = entry({ local: true, self: true, sessionId: null });
+    expect(isFriendChatOpen(local, { ...state, localNotesOpen: true })).toBe(true);
+    expect(isFriendChatOpen(local, state)).toBe(false);
+    expect(isFriendChatOpen(entry({}), { ...state, selectedChannel: 12, localNotesOpen: true })).toBe(false);
   });
 
   it("does not mark anyone for an ordinary channel", () => {

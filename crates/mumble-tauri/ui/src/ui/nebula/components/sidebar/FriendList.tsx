@@ -4,7 +4,7 @@ import { Box, Tooltip, Typography } from "@mui/material";
 import { TID } from "@core/testids";
 import { base64ToBytes, type Friend } from "@core/friendsStorage";
 import { bytesToAvatarUrl, revokeDisplayUrl } from "@core/utils/imageBlobs";
-import { UserXIcon } from "@ui/icons";
+import { SettingsIcon, UserXIcon } from "@ui/icons";
 import type { FriendEntry, FriendGroup } from "../../friends";
 import { SectionLabel, Stack, UserAvatar } from "../primitives";
 import { radius } from "../../tokens";
@@ -15,6 +15,8 @@ interface FriendListProps {
   activeId: string | null;
   onOpen: (entry: FriendEntry) => void;
   onRemove: (entry: FriendEntry) => void;
+  /** Open where your notepad is kept; the row for yourself offers it. */
+  onNotepadOptions?: () => void;
   /** Right-click a friend who is online here: the same menu every other row of
    *  a person opens. Absent for anyone we cannot see, who has no live entry for
    *  the menu to act on. */
@@ -44,6 +46,7 @@ export function FriendList({
   activeId,
   onOpen,
   onRemove,
+  onNotepadOptions,
   onContextMenu,
   onHover,
   onLeave,
@@ -84,6 +87,7 @@ export function FriendList({
                 active={entry.friend.id === activeId}
                 onOpen={onOpen}
                 onRemove={onRemove}
+                onNotepadOptions={onNotepadOptions}
                 onContextMenu={onContextMenu}
                 onHover={onHover}
                 onLeave={onLeave}
@@ -102,11 +106,13 @@ function statusLineKey(
   entry: FriendEntry,
 ):
   | "friends.notepad"
+  | "friends.notepadLocal"
   | "friends.online"
   | "friends.offline"
   | "friends.serverNotConnected"
   | "friends.unreachable" {
-  if (entry.self) return "friends.notepad";
+  if (entry.local) return "friends.notepadLocal";
+  if (entry.self && entry.canOpen) return "friends.notepad";
   if (entry.match !== null) return "friends.online";
   if (entry.canOpen) return "friends.offline";
   if (entry.canConnect) return "friends.serverNotConnected";
@@ -118,6 +124,7 @@ interface FriendRowProps {
   active: boolean;
   onOpen: (entry: FriendEntry) => void;
   onRemove: (entry: FriendEntry) => void;
+  onNotepadOptions?: () => void;
   onContextMenu?: (session: number, event: React.MouseEvent) => void;
   onHover?: (session: number, event: React.MouseEvent) => void;
   onLeave?: () => void;
@@ -128,19 +135,21 @@ function FriendRow({
   active,
   onOpen,
   onRemove,
+  onNotepadOptions,
   onContextMenu,
   onHover,
   onLeave,
 }: Readonly<FriendRowProps>) {
   const { t } = useTranslation("nebulaSidebar");
   const cached = useCachedAvatar(entry.friend);
-  const online = entry.self || entry.match !== null;
+  // You are "online" wherever that login is open.
+  const online = entry.self ? entry.canOpen : entry.match !== null;
   // Only a friend on the server in front of the user has a live entry, and so
   // only they can be hovered for a card, right-clicked for the menu, or drawn
   // with a freshly-fetched picture.
   const live = entry.live;
   const session = live?.session ?? null;
-  const interactive = entry.self || entry.canOpen || entry.canConnect;
+  const interactive = entry.canOpen || entry.canConnect;
 
   return (
     <Stack
@@ -164,7 +173,18 @@ function FriendRow({
       }}
       onMouseEnter={session !== null ? (event) => onHover?.(session, event) : undefined}
       onMouseLeave={session !== null ? onLeave : undefined}
-      onContextMenu={session !== null && onContextMenu ? (event) => onContextMenu(session, event) : undefined}
+      onContextMenu={
+        entry.self && onNotepadOptions
+          ? (event) => {
+              // Yourself has no user menu worth having here; where the notes
+              // are kept is the thing to change about this row.
+              event.preventDefault();
+              onNotepadOptions();
+            }
+          : session !== null && onContextMenu
+            ? (event) => onContextMenu(session, event)
+            : undefined
+      }
       sx={(theme) => ({
         px: "12px",
         py: "9px",
@@ -226,7 +246,35 @@ function FriendRow({
         </Box>
       )}
 
-      {/* You cannot unfriend yourself, so the notepad row has no button. */}
+      {/* You cannot unfriend yourself; the notepad row changes where it lives instead. */}
+      {entry.self && onNotepadOptions && (
+        <Tooltip title={t("friends.notepadOptions")} placement="left">
+          <Box
+            component="button"
+            type="button"
+            className="friend-remove"
+            aria-label={t("friends.notepadOptions")}
+            data-testid={TID.notepadOptions}
+            onClick={(event: React.MouseEvent) => {
+              event.stopPropagation();
+              onNotepadOptions();
+            }}
+            sx={(theme) => ({
+              all: "unset",
+              display: "flex",
+              flex: "none",
+              cursor: "pointer",
+              opacity: 0,
+              color: theme.palette.nebula.dim,
+              transition: "opacity 120ms ease",
+              "&:hover": { color: theme.palette.nebula.accent },
+              "&:focus-visible": { opacity: 1 },
+            })}
+          >
+            <SettingsIcon width={14} height={14} />
+          </Box>
+        </Tooltip>
+      )}
       {!entry.self && (
         <Tooltip title={`Remove ${entry.friend.userName}`} placement="left">
           <Box

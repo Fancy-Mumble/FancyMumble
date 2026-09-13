@@ -32,6 +32,7 @@ vi.mock("@tauri-apps/plugin-store", () => ({
 
 // Import after mocks are in place.
 import {
+  findSavedPassword,
   getServerPassword,
   setServerPassword,
   removeServerPassword,
@@ -47,6 +48,17 @@ beforeEach(() => {
 });
 
 describe("Password storage", () => {
+  it("finds a saved password by login, including on a duplicate entry", async () => {
+    const login = { label: "L", host: "example.com", port: 64738, username: "user", cert_label: null };
+    const withPw = await addServer(login);
+    await addServer(login);
+    await addServer({ ...login, username: "other" });
+    await setServerPassword(withPw.id, "pw");
+    expect(await findSavedPassword("example.com", 64738, "user")).toBe("pw");
+    expect(await findSavedPassword("example.com", 64738, "other")).toBeNull();
+    expect(await findSavedPassword("example.com", 1, "user")).toBeNull();
+  });
+
   it("returns null for unknown server", async () => {
     const pw = await getServerPassword("nonexistent");
     expect(pw).toBeNull();

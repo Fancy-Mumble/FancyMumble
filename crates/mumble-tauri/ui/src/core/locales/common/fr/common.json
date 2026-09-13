@@ -21,7 +21,8 @@
     "collapse": "Réduire",
     "optional": "(facultatif)",
     "more": "Plus",
-    "leave": "Quitter"
+    "leave": "Quitter",
+    "back": "Retour"
   },
   "confirmDialog": {
     "confirmLabel": "Confirmer",

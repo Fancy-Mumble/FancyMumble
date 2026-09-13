@@ -38,10 +38,13 @@
 import { edgesInto, nodeOf, type NodeId } from "../nodes/graph";
 import {
   ACCOUNT_STATES,
+  ACCOUNT_STATE_KEYS,
   OS_CHOICES,
   greetingsOf,
   isMessage,
+  type AccountState,
   type OsChoice,
+  type Say,
   type TenureWindow,
   type WelcomeGraph,
   type WelcomeNode,
@@ -634,18 +637,26 @@ export function conflictsIn(graph: WelcomeGraph): Conflicts {
 }
 
 /** One visitor in the words an operator would use to describe them. */
-export function describeVisitor(facts: Facts): string {
+export function describeVisitor(facts: Facts, say: Say): string {
   const parts: string[] = [];
+  const account = (state: AccountState) => say(`accountStates.${ACCOUNT_STATE_KEYS[state]}`);
   if (facts.registered !== undefined) {
-    parts.push(facts.registered ? ACCOUNT_STATES[1] : ACCOUNT_STATES[0]);
+    parts.push(account(facts.registered ? ACCOUNT_STATES[1] : ACCOUNT_STATES[0]));
   }
-  if (facts.strongCert) parts.push(ACCOUNT_STATES[2]);
-  if (facts.os !== undefined) parts.push(`on ${facts.os}`);
+  if (facts.strongCert) parts.push(account(ACCOUNT_STATES[2]));
+  if (facts.os !== undefined) parts.push(say("visitor.os", { os: facts.os }));
   if (facts.country !== undefined) {
-    parts.push(facts.country === ELSEWHERE ? "from anywhere else" : `from ${facts.country}`);
+    parts.push(
+      facts.country === ELSEWHERE ? say("visitor.elsewhere") : say("visitor.country", { country: facts.country }),
+    );
   }
-  if (facts.version !== undefined) parts.push(`client ${facts.version.join(".")}`);
-  if (facts.ageSeconds !== undefined) parts.push(`${Math.round(facts.ageSeconds / 86_400)} days here`);
-  if (facts.groups !== undefined && facts.groups.length > 0) parts.push(`in ${facts.groups.join(", ")}`);
-  return parts.length > 0 ? parts.join(", ") : "anybody at all";
+  if (facts.version !== undefined) parts.push(say("visitor.client", { version: facts.version.join(".") }));
+  if (facts.ageSeconds !== undefined) {
+    parts.push(say("visitor.daysHere", { count: Math.round(facts.ageSeconds / 86_400) }));
+  }
+  const separator = say("visitor.separator");
+  if (facts.groups !== undefined && facts.groups.length > 0) {
+    parts.push(say("visitor.groups", { groups: facts.groups.join(separator) }));
+  }
+  return parts.length > 0 ? parts.join(separator) : say("visitor.anybody");
 }

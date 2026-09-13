@@ -60,15 +60,13 @@ export const ANNOTATION_SIZES: Record<AnnotationKind, { w: number; h: number; mi
     label: { w: 150, h: 26, minW: 50, minH: 20 },
   };
 
-/** The words each kind starts with, so a fresh one is not an empty box. */
-const PLACEHOLDERS: Record<AnnotationKind, string> = {
-  title: "Section",
-  note: "What this part of the graph is for, and why it is drawn this way.",
-  frame: "Region",
-  label: "label",
-};
-
-export function makeAnnotation(kind: AnnotationKind, x: number, y: number): Annotation {
+/**
+ * A fresh annotation of one kind.
+ *
+ * `text` is the words it starts with, so a fresh one is not an empty box. The
+ * canvas hands them in, in the operator's language.
+ */
+export function makeAnnotation(kind: AnnotationKind, x: number, y: number, text: string): Annotation {
   const size = ANNOTATION_SIZES[kind];
   return {
     id: `a${nextId()}`,
@@ -77,7 +75,7 @@ export function makeAnnotation(kind: AnnotationKind, x: number, y: number): Anno
     w: size.w,
     h: size.h,
     kind,
-    text: PLACEHOLDERS[kind],
+    text,
     // Quiet by default: an annotation is there to be read when looked for, not
     // to compete with the nodes for the eye.
     tone: "muted",

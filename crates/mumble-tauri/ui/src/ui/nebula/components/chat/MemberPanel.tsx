@@ -1,15 +1,19 @@
 import { useTranslation } from "react-i18next";
+import { useAppStore } from "@core/store";
+import { voiceContextKind } from "@core/store/slices/voice";
 import { Box, IconButton, Typography } from "@mui/material";
 import type { UserEntry } from "@core/types";
 import { TID } from "@core/testids";
 import { CloseIcon, InfoIcon, MicIcon } from "@ui/icons";
 import {
+  DmUnreadBadge,
   PriorityBadge,
   RoleChip,
   SearchBox,
   SectionLabel,
   TalkingBars,
   UserAvatar,
+  LiveBadge, VoiceContextBadge,
   VoiceStateBadges,
   Stack,
 } from "../primitives";
@@ -37,6 +41,8 @@ interface MemberPanelProps {
   onContextMenu?: (user: UserEntry, event: React.MouseEvent) => void;
   /** The (i) at the end of a channel row: open the User Information sheet. */
   onInfo?: (session: number) => void;
+  /** `user_id` to the colour their name is drawn in, from the server's roles. */
+  roleColors?: ReadonlyMap<number, string>;
   onClose: () => void;
   /**
    * Where the roster is standing.
@@ -79,6 +85,7 @@ export function MemberPanel({
   onLeave,
   onContextMenu,
   onInfo,
+  roleColors,
   onClose,
   variant = "column",
 }: Readonly<MemberPanelProps>) {
@@ -230,6 +237,11 @@ export function MemberPanel({
                   onLeave={onLeave}
                   onContextMenu={onContextMenu}
                   onInfo={onInfo}
+                  nameColor={
+                    member.user.user_id != null && member.user.user_id > 0
+                      ? (roleColors?.get(member.user.user_id) ?? null)
+                      : null
+                  }
                 />
               ))}
             </Box>
@@ -261,6 +273,8 @@ interface MemberRowProps {
   onLeave: () => void;
   onContextMenu?: (user: UserEntry, event: React.MouseEvent) => void;
   onInfo?: (session: number) => void;
+  /** Their role's colour, as Standard draws names in its member list. */
+  nameColor?: string | null;
 }
 
 /**
@@ -282,9 +296,13 @@ function MemberRow({
   onLeave,
   onContextMenu,
   onInfo,
+  nameColor = null,
 }: Readonly<MemberRowProps>) {
   const { t } = useTranslation(["nebulaChat", "nebulaChrome"]);
   const { user, offline } = member;
+  const voiceContext = useAppStore((state) =>
+    talking ? voiceContextKind(state.voiceContexts.get(user.session)) : null,
+  );
 
   return (
     <Stack
@@ -297,6 +315,7 @@ function MemberRow({
       data-registered={user.user_id != null && user.user_id > 0 ? "true" : undefined}
       data-offline={offline ? "true" : undefined}
       data-talking={talking ? "true" : undefined}
+      data-voice-context={voiceContext ?? undefined}
       data-muted={user.mute || user.self_mute ? "true" : undefined}
       data-deaf={user.deaf || user.self_deaf ? "true" : undefined}
       data-clickable={own ? "true" : undefined}
@@ -324,7 +343,7 @@ function MemberRow({
         // everyone under that heading is here, by definition.
         status={inChannel ? undefined : offline ? "offline" : "online"}
       />
-      <Typography sx={{ fontSize: 12.5, minWidth: 0 }} noWrap>
+      <Typography sx={{ fontSize: 12.5, minWidth: 0, color: nameColor ?? "inherit" }} noWrap>
         {user.name}
       </Typography>
       {own && (
@@ -335,10 +354,13 @@ function MemberRow({
         </Typography>
       )}
       {inChannel && <PriorityBadge user={user} />}
+      <VoiceContextBadge session={user.session} />
+      {!own && !offline && <DmUnreadBadge session={user.session} />}
 
       {inChannel ? (
         <Stack direction="row" alignItems="center" gap={0.75} sx={{ ml: "auto", flex: "none" }}>
           <VoiceStateBadges user={user} />
+          <LiveBadge session={user.session} />
           <TalkingBars talking={talking} />
           {onInfo && (
             <IconButton

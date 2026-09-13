@@ -1142,6 +1142,9 @@ export interface GlobalSearchRow {
   online: boolean;
 }
 
+/** What the global search is narrowed to; `all` is how it opens. */
+export type GlobalSearchFilter = "all" | "photos" | "links";
+
 /** Everything the global search draws from, for one query. */
 export interface GlobalSearchInput {
   /** Rides in the input so the whole matching chain can name what it found. */
@@ -1158,6 +1161,11 @@ export interface GlobalSearchInput {
   query: string;
   /** The clock a matched message's time is read under. */
   time?: TimeDisplay;
+  /**
+   * What the list is narrowed to. Photos and Links are kinds of message, and
+   * the store holds no messages, so a narrowed list is the backend's alone.
+   */
+  filter?: GlobalSearchFilter;
 }
 
 /** Kinds in the order the mock heads them, and the tie-break when two groups
@@ -1391,7 +1399,8 @@ export function globalSearchRows(input: GlobalSearchInput): GlobalSearchRow[] {
   const ranked = input.query.trim().length > 0;
 
   const best = new Map<string, GlobalSearchRow>();
-  for (const row of [...localRows(input), ...matchedRows(input)]) {
+  const local = (input.filter ?? "all") === "all" ? localRows(input) : [];
+  for (const row of [...local, ...matchedRows(input)]) {
     const seen = best.get(row.key);
     if (!seen) best.set(row.key, row);
     // The same row found twice keeps the better of the two scores; the local

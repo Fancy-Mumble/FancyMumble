@@ -21,7 +21,8 @@
     "collapse": "Einklappen",
     "optional": "(optional)",
     "more": "Mehr",
-    "leave": "Verlassen"
+    "leave": "Verlassen",
+    "back": "Zurück"
   },
   "confirmDialog": {
     "confirmLabel": "Bestätigen",

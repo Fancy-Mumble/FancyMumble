@@ -1,4 +1,4 @@
-{
+﻿{
   "channels": {
     "title": "Channels",
     "privateRooms": "Private rooms",
@@ -13,7 +13,14 @@
     "newTemporaryChannelHere": "New temporary channel here",
     "joinChannel": "Join channel",
     "editChannel": "Edit channel",
-    "deleteChannel": "Delete channel"
+    "deleteChannel": "Delete channel",
+    "arrangeChannels": "Arrange channels",
+    "doneArranging": "Done arranging",
+    "arrangeHint": "Drag channels to reorder them",
+    "arrangeDone": "Done",
+    "arrangeAlone": "This channel has no siblings to swap places with",
+    "arrangeDenied": "You can't move this channel",
+    "you": "you"
   },
   "servers": {
     "title": "Servers",
@@ -46,9 +53,13 @@
     "copyAddress": "Copy address",
     "forgetTitle": "Remove this server?",
     "forgetBody_one": "{{server}} and its saved identity will be removed from the list. An open session stays until you leave it.",
-    "forgetBody_other": "{{server}} and its {{count}} saved identities will be removed from the list. An open session stays until you leave it."
+    "forgetBody_other": "{{server}} and its {{count}} saved identities will be removed from the list. An open session stays until you leave it.",
+    "addShort": "+ Add"
   },
   "dock": {
+    "whisperDenied": "Refused: no Whisper permission in {{channel}}",
+    "whispering": "Whispering",
+    "whisperUnresolved": "{{name}} reaches nobody right now",
     "profile": "Your profile",
     "notInVoice": "Not in voice",
     "enableVoice": "Enable voice",
@@ -58,7 +69,9 @@
     "menuCaption": "Server & app options",
     "hideEmptyHint": "Channels you can't post in stay collapsed",
     "leaveServer": "Leave server",
-    "latency": " · {{ms}} ms"
+    "latency": " · {{ms}} ms",
+    "recordingElapsed": "Recording · {{elapsed}}",
+    "shareScreenRoute": "Share your screen · {{route}}"
   },
   "friends": {
     "search": "Search friends",
@@ -75,7 +88,10 @@
     "tileLabelUnread_one": "Friends, {{count}} unread",
     "tileLabelUnread_other": "Friends, {{count}} unread",
     "online": "Online",
-    "offline": "Offline"
+    "offline": "Offline",
+    "notepadLocal": "Notes on this device",
+    "notepadOptions": "Notepad settings",
+    "thisDevice": "This device"
   },
   "card": {
     "youreIn": "You’re in #{{channel}}",

@@ -581,7 +581,9 @@ export function SelectField<T extends string>({
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value as T)}
-        slotProps={{ htmlInput: { "aria-label": label } }}
+        // Without it a "" option - the usual "pick one" prompt - draws as an
+        // empty box, because MUI treats "" as no value at all.
+        slotProps={{ select: { displayEmpty: true }, htmlInput: { "aria-label": label } }}
       >
         {options.map((option) => (
           <MenuItem key={option.id} value={option.id}>

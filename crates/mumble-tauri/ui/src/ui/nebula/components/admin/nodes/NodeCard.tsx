@@ -7,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Box, Typography, alpha } from "@mui/material";
+import { useTranslation } from "react-i18next";
 import { CloseIcon } from "@ui/icons";
 import { opaque, radius } from "../../../tokens";
 import { Stack } from "../../primitives";
@@ -127,6 +128,7 @@ function DrawnNodeCard<N extends GraphNode>({
   registerPort,
   onPortDown,
 }: NodeCardProps<N>) {
+  const { t } = useTranslation("nebulaWelcome");
   const tone = spec.tone(node);
   const emphasised = spec.emphasise?.(node) ?? false;
   const badge = spec.badge?.(graph, node) ?? null;
@@ -210,7 +212,7 @@ function DrawnNodeCard<N extends GraphNode>({
           <Box
             component="button"
             type="button"
-            aria-label="Remove node"
+            aria-label={t("canvas.removeNode")}
             onPointerDown={(e: ReactPointerEvent) => e.stopPropagation()}
             onClick={onRemove}
             sx={(theme) => ({
@@ -237,7 +239,7 @@ function DrawnNodeCard<N extends GraphNode>({
         {onResizeStart && (
           <Box
             onPointerDown={onResizeStart}
-            aria-label="Resize node"
+            aria-label={t("canvas.resizeNode")}
             sx={(theme) => ({
               position: "absolute",
               right: -4,

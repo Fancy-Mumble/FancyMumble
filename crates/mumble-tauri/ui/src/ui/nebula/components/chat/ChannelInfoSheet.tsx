@@ -64,9 +64,13 @@ import {
 import { nebulaCardTokens } from "../../profileStyle";
 import { NEBULA_MONO, radius } from "../../tokens";
 import {
+  bannerTextShadow,
   InfoCard,
   InfoCaps,
   InfoFact,
+  infoSheetColumns,
+  infoSheetFrame,
+  infoSheetPair,
   LinkGuard,
   RichTextField,
   SectionLabel,
@@ -98,13 +102,6 @@ const CROP_SIZES = {
 } as const;
 
 type CropKind = keyof typeof CROP_SIZES;
-
-/**
- * The sheet's width - the mock's, and the user sheet's, because the two open
- * over the same shell and a channel that came up narrower would read as a
- * different kind of thing.
- */
-const SHEET_WIDTH = 560;
 
 interface ChannelInfoSheetProps {
   /** The channel being described. */
@@ -245,8 +242,9 @@ export function ChannelInfoSheet({ channelId, onClose }: Readonly<ChannelInfoShe
       sx={{
         display: "flex",
         flexDirection: "column",
-        width: SHEET_WIDTH,
-        maxWidth: "100%",
+        // The user sheet's width too: a channel that came up narrower would
+        // read as a different kind of thing.
+        ...infoSheetFrame,
         maxHeight: "min(860px, 92vh)",
         minHeight: 0,
         color: nebula.text,
@@ -310,7 +308,9 @@ export function ChannelInfoSheet({ channelId, onClose }: Readonly<ChannelInfoShe
               width: 56,
               height: 56,
               borderRadius: radius("lg"),
-              background: nebula.accentSoft,
+              // The soft accent is translucent; laid over the window it stays
+              // solid instead of letting the banner show through the tile.
+              background: `linear-gradient(${nebula.accentSoft},${nebula.accentSoft}),${nebula.bg0}`,
               color: nebula.accent,
               boxShadow: `0 0 0 3px ${nebula.bg0}`,
             }}
@@ -326,13 +326,24 @@ export function ChannelInfoSheet({ channelId, onClose }: Readonly<ChannelInfoShe
               <HashIcon width={26} height={26} strokeWidth={1.5} />
             )}
           </Box>
-          <Box sx={{ minWidth: 0, pb: "2px" }}>
+          {/* The name straddles the banner's edge, so it carries a shadow in the
+              window colour to stay readable on whatever the banner is. */}
+          <Box sx={{ minWidth: 0, pb: "2px", textShadow: bannerTextShadow(nebula.bg0) }}>
             <Stack direction="row" alignItems="center" gap={1}>
               <Typography sx={{ fontSize: 18, fontWeight: 700, lineHeight: 1.2 }} noWrap>
                 {channel?.name ?? t("sidebar:channelInfoPanel.noChannel")}
               </Typography>
               {channel && (
-                <StatChip sx={{ fontSize: 10, letterSpacing: ".06em", py: "2px", px: "8px" }}>
+                <StatChip
+                  sx={{
+                    fontSize: 10,
+                    letterSpacing: ".06em",
+                    py: "2px",
+                    px: "8px",
+                    textShadow: "none",
+                    background: `linear-gradient(${nebula.card2},${nebula.card2}),${nebula.bg0}`,
+                  }}
+                >
                   {t(channelKind(channel))}
                 </StatChip>
               )}
@@ -353,209 +364,211 @@ export function ChannelInfoSheet({ channelId, onClose }: Readonly<ChannelInfoShe
       </Box>
 
       {channel && (
-        <Box sx={{ overflowY: "auto", minHeight: 0, px: "22px", pb: "22px", display: "grid", gap: "12px" }}>
-          {editing ? (
-            <InfoCard title={t("sidebar:channelInfoPanel.sectionChannel")}>
-              <Stack gap={1.25}>
-                <Box>
-                  <SectionLabel>{t("nebulaChat:channelInfo.appearance")}</SectionLabel>
-                  <Stack direction="row" gap={1.25} sx={{ mt: "8px" }}>
-                    <ImageSlot
-                      label={t("nebulaChat:channelInfo.icon")}
-                      preview={draftAppearance?.icon}
-                      width={56}
-                      onPick={() => iconInput.current?.click()}
-                      onClear={() => setDraftAppearance((prev) => ({ ...prev, icon: undefined }))}
-                      empty={<HashIcon width={20} height={20} strokeWidth={1.5} />}
+        <Box sx={{ overflowY: "auto", minHeight: 0, px: "22px", pb: "22px" }}>
+          <Box sx={infoSheetColumns}>
+            {editing ? (
+              <InfoCard title={t("sidebar:channelInfoPanel.sectionChannel")}>
+                <Stack gap={1.25}>
+                  <Box>
+                    <SectionLabel>{t("nebulaChat:channelInfo.appearance")}</SectionLabel>
+                    <Stack direction="row" gap={1.25} sx={{ mt: "8px" }}>
+                      <ImageSlot
+                        label={t("nebulaChat:channelInfo.icon")}
+                        preview={draftAppearance?.icon}
+                        width={56}
+                        onPick={() => iconInput.current?.click()}
+                        onClear={() => setDraftAppearance((prev) => ({ ...prev, icon: undefined }))}
+                        empty={<HashIcon width={20} height={20} strokeWidth={1.5} />}
+                      />
+                      <ImageSlot
+                        label={t("nebulaChat:channelInfo.banner")}
+                        preview={draftAppearance?.banner?.image}
+                        colour={draftAppearance?.banner?.color}
+                        width={168}
+                        onPick={() => bannerInput.current?.click()}
+                        onClear={() => setDraftAppearance((prev) => ({ ...prev, banner: undefined }))}
+                      />
+                    </Stack>
+                    <input
+                      ref={iconInput}
+                      type="file"
+                      accept="image/*"
+                      aria-label={t("nebulaChat:channelInfo.icon")}
+                      style={{ display: "none" }}
+                      onChange={(event) => {
+                        readImage(event.target.files?.[0], "icon");
+                        event.target.value = "";
+                      }}
                     />
-                    <ImageSlot
-                      label={t("nebulaChat:channelInfo.banner")}
-                      preview={draftAppearance?.banner?.image}
-                      colour={draftAppearance?.banner?.color}
-                      width={168}
-                      onPick={() => bannerInput.current?.click()}
-                      onClear={() => setDraftAppearance((prev) => ({ ...prev, banner: undefined }))}
-                    />
-                  </Stack>
-                  <input
-                    ref={iconInput}
-                    type="file"
-                    accept="image/*"
-                    aria-label={t("nebulaChat:channelInfo.icon")}
-                    style={{ display: "none" }}
-                    onChange={(event) => {
-                      readImage(event.target.files?.[0], "icon");
-                      event.target.value = "";
-                    }}
-                  />
-                  <input
-                    ref={bannerInput}
-                    type="file"
-                    accept="image/*"
-                    aria-label={t("nebulaChat:channelInfo.banner")}
-                    style={{ display: "none" }}
-                    onChange={(event) => {
-                      readImage(event.target.files?.[0], "banner");
-                      event.target.value = "";
-                    }}
-                  />
-                </Box>
-                <TextField
-                  size="small"
-                  fullWidth
-                  label={t("sidebar:channelInfoPanel.editLabelName")}
-                  value={draftName}
-                  onChange={(event) => setDraftName(event.target.value)}
-                />
-                <Box>
-                  <SectionLabel>{t("sidebar:channelInfoPanel.editLabelDescription")}</SectionLabel>
-                  <Box sx={{ mt: "6px" }}>
-                    <RichTextField
-                      value={draftDescription}
-                      onChange={setDraftDescription}
-                      placeholder={t("sidebar:channelInfoPanel.descriptionPlaceholder")}
-                      ariaLabel={t("sidebar:channelInfoPanel.editLabelDescription")}
-                      minHeight={90}
-                      maxHeight={200}
+                    <input
+                      ref={bannerInput}
+                      type="file"
+                      accept="image/*"
+                      aria-label={t("nebulaChat:channelInfo.banner")}
+                      style={{ display: "none" }}
+                      onChange={(event) => {
+                        readImage(event.target.files?.[0], "banner");
+                        event.target.value = "";
+                      }}
                     />
                   </Box>
-                </Box>
-                <Stack direction="row" gap={1} sx={{ justifyContent: "flex-end" }}>
-                  <Button size="small" disabled={saving} onClick={() => setEditing(false)}>
-                    {t("common:actions.cancel")}
-                  </Button>
-                  <Button size="small" variant="contained" disabled={saving} onClick={() => void save()}>
-                    {saving ? t("sidebar:channelInfoPanel.saving") : t("sidebar:channelInfoPanel.saveBtn")}
-                  </Button>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    label={t("sidebar:channelInfoPanel.editLabelName")}
+                    value={draftName}
+                    onChange={(event) => setDraftName(event.target.value)}
+                  />
+                  <Box>
+                    <SectionLabel>{t("sidebar:channelInfoPanel.editLabelDescription")}</SectionLabel>
+                    <Box sx={{ mt: "6px" }}>
+                      <RichTextField
+                        value={draftDescription}
+                        onChange={setDraftDescription}
+                        placeholder={t("sidebar:channelInfoPanel.descriptionPlaceholder")}
+                        ariaLabel={t("sidebar:channelInfoPanel.editLabelDescription")}
+                        minHeight={90}
+                        maxHeight={200}
+                      />
+                    </Box>
+                  </Box>
+                  <Stack direction="row" gap={1} sx={{ justifyContent: "flex-end" }}>
+                    <Button size="small" disabled={saving} onClick={() => setEditing(false)}>
+                      {t("common:actions.cancel")}
+                    </Button>
+                    <Button size="small" variant="contained" disabled={saving} onClick={() => void save()}>
+                      {saving ? t("sidebar:channelInfoPanel.saving") : t("sidebar:channelInfoPanel.saveBtn")}
+                    </Button>
+                  </Stack>
                 </Stack>
-              </Stack>
-            </InfoCard>
-          ) : (
-            <InfoCard title={t("sidebar:channelInfoPanel.editLabelDescription")}>
-              <Description html={body} empty={t("sidebar:channelInfoPanel.noDescription")} />
-            </InfoCard>
-          )}
-
-          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-            <InfoCard title={t("sidebar:channelInfoPanel.sectionChannel")}>
-              <InfoFact label={t("sidebar:channelInfoPanel.labelChannelId")} value={channel.id} />
-              <InfoFact
-                label={t("nebulaChat:channelInfo.labelParent")}
-                value={parentName(channels, channel, t("nebulaChat:channelInfo.root"))}
-              />
-              <InfoFact
-                label={t("nebulaChat:channelInfo.labelMaxUsers")}
-                value={
-                  channel.max_users > 0 ? String(channel.max_users) : t("nebulaChat:channelInfo.unlimited")
-                }
-              />
-              <InfoFact label={t("nebulaChat:channelInfo.labelPosition")} value={channel.position} />
-              {persisted && (
-                <InfoFact label={t("nebulaChat:channelInfo.labelKeysHeld")} value={holders.length} />
-              )}
-            </InfoCard>
-            <InfoCard title={t("nebulaChat:channelInfo.sectionActivity")}>
-              <InfoFact label={t("nebulaChat:channelInfo.labelMembers")} value={members} />
-              <InfoFact label={t("nebulaChat:channelInfo.labelInVoice")} value={occupants.length} />
-              <ConversationFacts channelId={channelId} />
-            </InfoCard>
-          </Box>
-
-          <InfoCard
-            title={t("nebulaChat:channelInfo.sectionMembers")}
-            chip={
-              <InfoCaps>
-                {t("nebulaChat:channelInfo.memberCounts", {
-                  online: occupants.length,
-                  offline: absent.length,
-                })}
-              </InfoCaps>
-            }
-          >
-            {members === 0 && (
-              <Typography sx={{ fontSize: 12, color: nebula.muted }}>
-                {t("sidebar:channelInfoPanel.noUsers")}
-              </Typography>
+              </InfoCard>
+            ) : (
+              <InfoCard title={t("sidebar:channelInfoPanel.editLabelDescription")}>
+                <Description html={body} empty={t("sidebar:channelInfoPanel.noDescription")} />
+              </InfoCard>
             )}
 
-            <Box component="ul" sx={{ listStyle: "none", m: "-4px -6px", p: 0 }}>
-              {occupants.map((user) => (
-                <MemberRow
-                  key={user.session}
-                  name={user.name}
-                  session={user.session}
-                  textureSize={user.texture_size}
-                  meta={t("nebulaChat:channelInfo.memberHere")}
-                  /* A key holder is marked; on a persisted channel so is
+            <Box sx={infoSheetPair}>
+              <InfoCard title={t("sidebar:channelInfoPanel.sectionChannel")}>
+                <InfoFact label={t("sidebar:channelInfoPanel.labelChannelId")} value={channel.id} />
+                <InfoFact
+                  label={t("nebulaChat:channelInfo.labelParent")}
+                  value={parentName(channels, channel, t("nebulaChat:channelInfo.root"))}
+                />
+                <InfoFact
+                  label={t("nebulaChat:channelInfo.labelMaxUsers")}
+                  value={
+                    channel.max_users > 0 ? String(channel.max_users) : t("nebulaChat:channelInfo.unlimited")
+                  }
+                />
+                <InfoFact label={t("nebulaChat:channelInfo.labelPosition")} value={channel.position} />
+                {persisted && (
+                  <InfoFact label={t("nebulaChat:channelInfo.labelKeysHeld")} value={holders.length} />
+                )}
+              </InfoCard>
+              <InfoCard title={t("nebulaChat:channelInfo.sectionActivity")}>
+                <InfoFact label={t("nebulaChat:channelInfo.labelMembers")} value={members} />
+                <InfoFact label={t("nebulaChat:channelInfo.labelInVoice")} value={occupants.length} />
+                <ConversationFacts channelId={channelId} />
+              </InfoCard>
+            </Box>
+
+            <InfoCard
+              title={t("nebulaChat:channelInfo.sectionMembers")}
+              chip={
+                <InfoCaps>
+                  {t("nebulaChat:channelInfo.memberCounts", {
+                    online: occupants.length,
+                    offline: absent.length,
+                  })}
+                </InfoCaps>
+              }
+            >
+              {members === 0 && (
+                <Typography sx={{ fontSize: 12, color: nebula.muted }}>
+                  {t("sidebar:channelInfoPanel.noUsers")}
+                </Typography>
+              )}
+
+              <Box component="ul" sx={{ listStyle: "none", m: "-4px -6px", p: 0 }}>
+                {occupants.map((user) => (
+                  <MemberRow
+                    key={user.session}
+                    name={user.name}
+                    session={user.session}
+                    textureSize={user.texture_size}
+                    meta={t("nebulaChat:channelInfo.memberHere")}
+                    /* A key holder is marked; on a persisted channel so is
                      everyone who is not one, because that is a client that
                      cannot read a word of the history it is sitting in - a
                      fact about them, not about the room. */
-                  holdsKey={!!user.hash && holderHashes.has(user.hash)}
-                  legacy={persisted && (!user.hash || !holderHashes.has(user.hash))}
-                />
-              ))}
-              {absent.map((holder) => (
-                <MemberRow
-                  key={holder.cert_hash}
-                  name={holder.name}
-                  meta={t(
-                    holder.is_online
-                      ? "nebulaChat:channelInfo.memberElsewhere"
-                      : "nebulaChat:channelInfo.memberOffline",
-                  )}
-                  holdsKey
-                  dimmed
-                />
-              ))}
-            </Box>
-
-            {canTakeOver && (
-              <Box sx={{ mt: "12px" }}>
-                {takeover === null ? (
-                  <Button
-                    size="small"
-                    startIcon={<KeyIcon width={13} height={13} />}
-                    onClick={() => setTakeover("full_wipe")}
-                    sx={{ color: nebula.bad }}
-                  >
-                    {t("sidebar:channelInfoPanel.resetKeyOwnership")}
-                  </Button>
-                ) : (
-                  <Stack gap={0.75}>
-                    <SectionLabel>{t("sidebar:channelInfoPanel.takeoverModeLabel")}</SectionLabel>
-                    <TakeoverChoice
-                      checked={takeover === "full_wipe"}
-                      onChoose={() => setTakeover("full_wipe")}
-                      label={t("sidebar:channelInfoPanel.takeoverFullWipe")}
-                      hint={t("sidebar:channelInfoPanel.takeoverFullWipeHint")}
-                    />
-                    <TakeoverChoice
-                      checked={takeover === "key_only"}
-                      onChoose={() => setTakeover("key_only")}
-                      label={t("sidebar:channelInfoPanel.takeoverKeyOnly")}
-                      hint={t("sidebar:channelInfoPanel.takeoverKeyOnlyHint")}
-                    />
-                    <Stack direction="row" gap={1} sx={{ justifyContent: "flex-end" }}>
-                      <Button size="small" onClick={() => setTakeover(null)}>
-                        {t("common:actions.cancel")}
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="contained"
-                        color="error"
-                        onClick={() => void confirmTakeover()}
-                      >
-                        {t("sidebar:channelInfoPanel.confirmBtn")}
-                      </Button>
-                    </Stack>
-                  </Stack>
-                )}
+                    holdsKey={!!user.hash && holderHashes.has(user.hash)}
+                    legacy={persisted && (!user.hash || !holderHashes.has(user.hash))}
+                  />
+                ))}
+                {absent.map((holder) => (
+                  <MemberRow
+                    key={holder.cert_hash}
+                    name={holder.name}
+                    meta={t(
+                      holder.is_online
+                        ? "nebulaChat:channelInfo.memberElsewhere"
+                        : "nebulaChat:channelInfo.memberOffline",
+                    )}
+                    holdsKey
+                    dimmed
+                  />
+                ))}
               </Box>
-            )}
-          </InfoCard>
 
-          <PermissionFacts channelId={channelId} />
-          <OffloadFacts channelId={channelId} />
+              {canTakeOver && (
+                <Box sx={{ mt: "12px" }}>
+                  {takeover === null ? (
+                    <Button
+                      size="small"
+                      startIcon={<KeyIcon width={13} height={13} />}
+                      onClick={() => setTakeover("full_wipe")}
+                      sx={{ color: nebula.bad }}
+                    >
+                      {t("sidebar:channelInfoPanel.resetKeyOwnership")}
+                    </Button>
+                  ) : (
+                    <Stack gap={0.75}>
+                      <SectionLabel>{t("sidebar:channelInfoPanel.takeoverModeLabel")}</SectionLabel>
+                      <TakeoverChoice
+                        checked={takeover === "full_wipe"}
+                        onChoose={() => setTakeover("full_wipe")}
+                        label={t("sidebar:channelInfoPanel.takeoverFullWipe")}
+                        hint={t("sidebar:channelInfoPanel.takeoverFullWipeHint")}
+                      />
+                      <TakeoverChoice
+                        checked={takeover === "key_only"}
+                        onChoose={() => setTakeover("key_only")}
+                        label={t("sidebar:channelInfoPanel.takeoverKeyOnly")}
+                        hint={t("sidebar:channelInfoPanel.takeoverKeyOnlyHint")}
+                      />
+                      <Stack direction="row" gap={1} sx={{ justifyContent: "flex-end" }}>
+                        <Button size="small" onClick={() => setTakeover(null)}>
+                          {t("common:actions.cancel")}
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="error"
+                          onClick={() => void confirmTakeover()}
+                        >
+                          {t("sidebar:channelInfoPanel.confirmBtn")}
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  )}
+                </Box>
+              )}
+            </InfoCard>
+
+            <PermissionFacts channelId={channelId} />
+            <OffloadFacts channelId={channelId} />
+          </Box>
         </Box>
       )}
 

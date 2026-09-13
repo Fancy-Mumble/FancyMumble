@@ -20,7 +20,18 @@ import { CloseIcon, PriorityIcon } from "@ui/icons";
 import { nebulaCardTokens } from "../../profileStyle";
 import type { UserMenuActions } from "../../selectors";
 import { radius } from "../../tokens";
-import { InfoCard, InfoCaps, InfoFact, Stack, StatChip, UserAvatar } from "../primitives";
+import {
+  bannerTextShadow,
+  InfoCard,
+  InfoCaps,
+  InfoFact,
+  infoSheetColumns,
+  infoSheetFrame,
+  infoSheetPair,
+  Stack,
+  StatChip,
+  UserAvatar,
+} from "../primitives";
 import { StatusDot, type Status } from "../primitives/StatusDot";
 import { BarStrip, RoundTripChart } from "./ConnectionCharts";
 import type { ModerationAction } from "./UserMenu";
@@ -37,9 +48,6 @@ import {
 
 /** Leaflet joins the bundle the first time a sheet has somewhere to show. */
 const LocationMap = lazy(() => import("./LocationMap"));
-
-/** The sheet's width - the mock's, and wide enough for two fact columns. */
-export const SHEET_WIDTH = 560;
 
 export interface UserInfoSheetProps {
   user: UserEntry;
@@ -142,8 +150,7 @@ export function UserInfoSheet({
       sx={{
         display: "flex",
         flexDirection: "column",
-        width: SHEET_WIDTH,
-        maxWidth: "100%",
+        ...infoSheetFrame,
         maxHeight,
         minHeight: 0,
         color: nebula.text,
@@ -195,7 +202,7 @@ export function UserInfoSheet({
           <Box sx={{ flex: "none", borderRadius: radius("lg"), boxShadow: `0 0 0 3px ${nebula.bg0}` }}>
             <UserAvatar name={user.name} src={avatar} size={56} square talking={talking} />
           </Box>
-          <Box sx={{ minWidth: 0, pb: "2px" }}>
+          <Box sx={{ minWidth: 0, pb: "2px", textShadow: bannerTextShadow(nebula.bg0) }}>
             <Stack direction="row" alignItems="center" gap={1}>
               <Typography sx={{ fontSize: 18, fontWeight: 700, lineHeight: 1.2 }} noWrap>
                 {user.name}
@@ -203,7 +210,7 @@ export function UserInfoSheet({
               {user.priority_speaker && (
                 <StatChip tone="accent" sx={{ fontSize: 10, letterSpacing: ".06em", py: "2px", px: "8px" }}>
                   <PriorityIcon width={10} height={10} />
-                  PRIORITY
+                  {t("sheet.priority")}
                 </StatChip>
               )}
             </Stack>
@@ -220,309 +227,320 @@ export function UserInfoSheet({
         </Stack>
       </Box>
 
-      <Box sx={{ overflowY: "auto", minHeight: 0, px: "22px", pb: "22px", display: "grid", gap: "12px" }}>
-        {bio.trim() !== "" && (
-          <InfoCard title={t("sidebar:userProfile.aboutMe")}>
-            <RichText
-              html={bio}
-              linkColor={nebula.accent}
-              style={{ fontSize: 12.5, lineHeight: 1.55, color: nebula.muted }}
-            />
-          </InfoCard>
-        )}
-
-        <Box sx={{ display: "grid", gridTemplateColumns: stats ? "1fr 1fr" : "1fr", gap: "12px" }}>
-          <InfoCard title={t("sidebar:userProfile.labelSession")}>
-            <InfoFact label={t("sidebar:userProfile.labelSession")} value={String(user.session)} />
-            {channelName && (
-              <InfoFact label={t("sidebar:userProfile.labelChannel")} value={`#${channelName}`} />
-            )}
-            <InfoFact
-              label={t("sidebar:userProfile.labelRegistered")}
-              value={
-                user.user_id != null
-                  ? t("nebulaUser:sheet.registeredYes", { id: user.user_id })
-                  : t("sidebar:userProfile.no")
-              }
-            />
-            {stats?.onlinesecs != null && (
-              <InfoFact
-                label={t("nebulaUser:sheet.joined")}
-                value={formatTimestamp(joinedAt(Date.now(), stats.onlinesecs))}
-              />
-            )}
-            {stats?.idlesecs != null && (
-              <InfoFact label={t("nebulaUser:sheet.idle")} value={formatDuration(stats.idlesecs)} />
-            )}
-          </InfoCard>
-          {stats && certificate && (
-            <InfoCard title={t("nebulaUser:sheet.client")}>
-              {stats.version && <InfoFact label={t("sidebar:userInfo.labelVersion")} value={stats.version} />}
-              {osLabel(stats.os, stats.os_version) && (
-                <InfoFact
-                  label={t("sidebar:userInfo.labelOs")}
-                  value={osLabel(stats.os, stats.os_version) ?? ""}
-                />
-              )}
-              <InfoFact
-                label={t("sidebar:userInfo.labelCertificate")}
-                value={t(certificate.labelKey)}
-                tone={certificate.tone}
-              />
-              <InfoFact
-                label={t("sidebar:userInfo.labelOpus")}
-                value={
-                  stats.opus == null
-                    ? t("sidebar:userInfo.notReported")
-                    : t(stats.opus ? "sidebar:userProfile.yes" : "sidebar:userProfile.no")
-                }
-                tone={stats.opus == null ? "muted" : undefined}
+      <Box sx={{ overflowY: "auto", minHeight: 0, px: "22px", pb: "22px" }}>
+        <Box sx={infoSheetColumns}>
+          {bio.trim() !== "" && (
+            <InfoCard title={t("sidebar:userProfile.aboutMe")}>
+              <RichText
+                html={bio}
+                linkColor={nebula.accent}
+                style={{ fontSize: 12.5, lineHeight: 1.55, color: nebula.muted }}
               />
             </InfoCard>
           )}
-        </Box>
 
-        {address && (
-          <InfoCard
-            title={t("nebulaUser:sheet.sectionNetwork")}
-            chip={<StatChip tone="accent">{t("nebulaUser:sheet.adminOnly")}</StatChip>}
-          >
-            <InfoFact
-              label={t("sidebar:userInfo.labelAddress")}
-              value={streamerMode ? maskSensitive(address) : address}
-              mono
-            />
-            {reverseDns && !streamerMode && (
-              <InfoFact label={t("nebulaUser:sheet.reverseDns")} value={reverseDns} mono />
-            )}
-            {place && <InfoFact label={t("sidebar:userInfo.labelLocation")} value={place} />}
-            {groups.length > 0 && (
-              <InfoFact label={t("settings:groups.sectionTitle")} value={groups.join(", ")} />
-            )}
-            {location && !streamerMode && (
-              <Box
-                sx={{
-                  position: "relative",
-                  mt: "12px",
-                  // Taller than the mock's frame by a little: the map pans and
-                  // zooms, and a box this wide wants some height to do it in.
-                  height: 176,
-                  borderRadius: radius("md"),
-                  overflow: "hidden",
-                  background: `repeating-linear-gradient(-45deg,${nebula.line} 0 1px,transparent 1px 9px)`,
-                  border: `var(--nebula-line-width, 1px) solid ${nebula.line}`,
-                }}
-              >
-                {location.state === "located" ? (
-                  <Box sx={{ position: "absolute", inset: 0, isolation: "isolate" }}>
-                    <Suspense fallback={null}>
-                      <LocationMap
-                        lat={location.lat}
-                        lng={location.lng}
-                        dark={theme.palette.mode === "dark"}
-                        accent={nebula.accent}
-                      />
-                    </Suspense>
-                  </Box>
-                ) : (
-                  <Typography
-                    sx={{
-                      position: "absolute",
-                      inset: 0,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 11,
-                      color: nebula.dim,
-                    }}
-                  >
-                    {t("nebulaUser:sheet.findingLocation")}
-                  </Typography>
-                )}
-                {place && (
-                  <Box
-                    component="span"
-                    sx={{
-                      position: "absolute",
-                      left: 10,
-                      bottom: 10,
-                      px: "10px",
-                      py: "4px",
-                      borderRadius: radius("md"),
-                      fontSize: 11,
-                      color: "#fff",
-                      background: "rgba(10,14,26,.66)",
-                      backdropFilter: "blur(6px)",
-                    }}
-                  >
-                    {t("nebulaUser:sheet.approxFromIp", { place: place.split(",")[0] })}
-                  </Box>
-                )}
-              </Box>
-            )}
-          </InfoCard>
-        )}
-
-        {stats && (
-          <InfoCard
-            title={t("nebulaUser:sheet.sectionQuality")}
-            chip={
-              <StatChip tone="ok" sx={{ py: "2px" }}>
-                <StatusDot status="online" size={5} />
-                {t("nebulaUser:sheet.live")}
-              </StatChip>
-            }
-          >
-            <Stack direction="row" alignItems="center" gap={1.5} sx={{ mb: "6px" }}>
-              <InfoCaps>{t("nebulaUser:sheet.roundTripWindow", { seconds: SAMPLE_WINDOW })}</InfoCaps>
-              <Legend color={nebula.accent} label={t("nebulaUser:sheet.udp")} />
-              <Legend color={nebula.text} label={t("nebulaUser:sheet.tcp")} dashed />
-              <Typography sx={{ ml: "auto", fontSize: 12.5, fontWeight: 600 }}>
-                {latest
-                  ? t("nebulaUser:sheet.milliseconds", { value: latest.udpPing.toFixed(1) })
-                  : t("nebulaUser:sheet.unknown")}
-              </Typography>
-            </Stack>
-            <RoundTripChart samples={samples} />
-
-            <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", mt: "14px" }}>
-              <Box>
-                <Stack direction="row" alignItems="center" sx={{ mb: "6px" }}>
-                  <InfoCaps>{t("sidebar:userInfo.bandwidth")}</InfoCaps>
-                  <Typography sx={{ ml: "auto", fontSize: 12.5, fontWeight: 600 }}>
-                    {stats.bandwidth != null
-                      ? formatBandwidth(stats.bandwidth * 8)
-                      : t("nebulaUser:sheet.unknown")}
-                  </Typography>
-                </Stack>
-                <BarStrip
-                  label={t("sidebar:userInfo.bandwidth")}
-                  values={samples.map((sample) => sample.bandwidth)}
-                  color={nebula.accent}
-                  format={(value) => formatBandwidth(value * 8)}
+          <Box sx={[infoSheetPair, !stats && { gridTemplateColumns: "1fr" }]}>
+            <InfoCard title={t("sidebar:userProfile.labelSession")}>
+              <InfoFact label={t("sidebar:userProfile.labelSession")} value={String(user.session)} />
+              {channelName && (
+                <InfoFact label={t("sidebar:userProfile.labelChannel")} value={`#${channelName}`} />
+              )}
+              <InfoFact
+                label={t("sidebar:userProfile.labelRegistered")}
+                value={
+                  user.user_id != null
+                    ? t("nebulaUser:sheet.registeredYes", { id: user.user_id })
+                    : t("sidebar:userProfile.no")
+                }
+              />
+              {stats?.onlinesecs != null && (
+                <InfoFact
+                  label={t("nebulaUser:sheet.joined")}
+                  value={formatTimestamp(joinedAt(Date.now(), stats.onlinesecs))}
                 />
-              </Box>
-              <Box>
-                <Stack direction="row" alignItems="center" sx={{ mb: "6px" }}>
-                  <InfoCaps>{t("chat:screenShare.stats.packetLoss")}</InfoCaps>
-                  <Typography sx={{ ml: "auto", fontSize: 12.5, fontWeight: 600 }}>
-                    {loss != null
-                      ? t("nebulaUser:sheet.percent", { value: loss.toFixed(2) })
-                      : t("nebulaUser:sheet.unknown")}
-                  </Typography>
-                </Stack>
-                <BarStrip
-                  label={t("chat:screenShare.stats.packetLoss")}
-                  values={samples.map((sample) => sample.loss)}
-                  color={nebula.warn}
-                  format={(value) => t("nebulaUser:sheet.percent", { value: value.toFixed(2) })}
+              )}
+              {stats?.idlesecs != null && (
+                <InfoFact label={t("nebulaUser:sheet.idle")} value={formatDuration(stats.idlesecs)} />
+              )}
+            </InfoCard>
+            {stats && certificate && (
+              <InfoCard title={t("nebulaUser:sheet.client")}>
+                {stats.version && (
+                  <InfoFact label={t("sidebar:userInfo.labelVersion")} value={stats.version} />
+                )}
+                {osLabel(stats.os, stats.os_version) && (
+                  <InfoFact
+                    label={t("sidebar:userInfo.labelOs")}
+                    value={osLabel(stats.os, stats.os_version) ?? ""}
+                  />
+                )}
+                <InfoFact
+                  label={t("sidebar:userInfo.labelCertificate")}
+                  value={t(certificate.labelKey)}
+                  tone={certificate.tone}
                 />
-              </Box>
-            </Box>
+                <InfoFact
+                  label={t("sidebar:userInfo.labelOpus")}
+                  value={
+                    stats.opus == null
+                      ? t("sidebar:userInfo.notReported")
+                      : t(stats.opus ? "sidebar:userProfile.yes" : "sidebar:userProfile.no")
+                  }
+                  tone={stats.opus == null ? "muted" : undefined}
+                />
+              </InfoCard>
+            )}
+          </Box>
 
-            <FactTable
-              head={[
-                "",
-                t("sidebar:userInfo.colPackets"),
-                t("sidebar:userInfo.colAvgPing"),
-                t("sidebar:userInfo.colDeviation"),
-              ]}
-              rows={[
-                [
-                  t("nebulaUser:sheet.tcp"),
-                  String(stats.tcp_packets),
-                  t("nebulaUser:sheet.milliseconds", { value: stats.tcp_ping_avg.toFixed(1) }),
-                  t("nebulaUser:sheet.milliseconds", { value: stats.tcp_ping_var.toFixed(1) }),
-                ],
-                [
-                  t("nebulaUser:sheet.udp"),
-                  String(stats.udp_packets),
-                  t("nebulaUser:sheet.milliseconds", { value: stats.udp_ping_avg.toFixed(1) }),
-                  t("nebulaUser:sheet.milliseconds", { value: stats.udp_ping_var.toFixed(1) }),
-                ],
-              ]}
-            />
-            {(stats.from_client || stats.from_server) && (
+          {address && (
+            <InfoCard
+              title={t("nebulaUser:sheet.sectionNetwork")}
+              chip={<StatChip tone="accent">{t("nebulaUser:sheet.adminOnly")}</StatChip>}
+            >
+              <InfoFact
+                label={t("sidebar:userInfo.labelAddress")}
+                value={streamerMode ? maskSensitive(address) : address}
+                mono
+              />
+              {reverseDns && !streamerMode && (
+                <InfoFact label={t("nebulaUser:sheet.reverseDns")} value={reverseDns} mono />
+              )}
+              {place && <InfoFact label={t("sidebar:userInfo.labelLocation")} value={place} />}
+              {groups.length > 0 && (
+                <InfoFact label={t("settings:groups.sectionTitle")} value={groups.join(", ")} />
+              )}
+              {location && !streamerMode && (
+                <Box
+                  sx={{
+                    position: "relative",
+                    mt: "12px",
+                    // Taller than the mock's frame by a little: the map pans and
+                    // zooms, and a box this wide wants some height to do it in.
+                    height: 176,
+                    borderRadius: radius("md"),
+                    overflow: "hidden",
+                    background: `repeating-linear-gradient(-45deg,${nebula.line} 0 1px,transparent 1px 9px)`,
+                    border: `var(--nebula-line-width, 1px) solid ${nebula.line}`,
+                  }}
+                >
+                  {location.state === "located" ? (
+                    <Box sx={{ position: "absolute", inset: 0, isolation: "isolate" }}>
+                      <Suspense fallback={null}>
+                        <LocationMap
+                          lat={location.lat}
+                          lng={location.lng}
+                          dark={theme.palette.mode === "dark"}
+                          accent={nebula.accent}
+                        />
+                      </Suspense>
+                    </Box>
+                  ) : (
+                    <Typography
+                      sx={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 11,
+                        color: nebula.dim,
+                      }}
+                    >
+                      {t("nebulaUser:sheet.findingLocation")}
+                    </Typography>
+                  )}
+                  {place && (
+                    <Box
+                      component="span"
+                      sx={{
+                        position: "absolute",
+                        left: 10,
+                        bottom: 10,
+                        px: "10px",
+                        py: "4px",
+                        borderRadius: radius("md"),
+                        fontSize: 11,
+                        color: "#fff",
+                        background: "rgba(10,14,26,.66)",
+                        backdropFilter: "blur(6px)",
+                      }}
+                    >
+                      {t("nebulaUser:sheet.approxFromIp", { place: place.split(",")[0] })}
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </InfoCard>
+          )}
+
+          {stats && (
+            <InfoCard
+              title={t("nebulaUser:sheet.sectionQuality")}
+              chip={
+                <StatChip tone="ok" sx={{ py: "2px" }}>
+                  <StatusDot status="online" size={5} />
+                  {t("nebulaUser:sheet.live")}
+                </StatChip>
+              }
+            >
+              <Stack direction="row" alignItems="center" gap={1.5} sx={{ mb: "6px" }}>
+                <InfoCaps>{t("nebulaUser:sheet.roundTripWindow", { seconds: SAMPLE_WINDOW })}</InfoCaps>
+                <Legend color={nebula.accent} label={t("nebulaUser:sheet.udp")} />
+                <Legend color={nebula.text} label={t("nebulaUser:sheet.tcp")} dashed />
+                <Typography sx={{ ml: "auto", fontSize: 12.5, fontWeight: 600 }}>
+                  {latest
+                    ? t("nebulaUser:sheet.milliseconds", { value: latest.udpPing.toFixed(1) })
+                    : t("nebulaUser:sheet.unknown")}
+                </Typography>
+              </Stack>
+              <RoundTripChart samples={samples} />
+
+              <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", mt: "14px" }}>
+                <Box>
+                  <Stack direction="row" alignItems="center" sx={{ mb: "6px" }}>
+                    <InfoCaps>{t("sidebar:userInfo.bandwidth")}</InfoCaps>
+                    <Typography sx={{ ml: "auto", fontSize: 12.5, fontWeight: 600 }}>
+                      {stats.bandwidth != null
+                        ? formatBandwidth(stats.bandwidth * 8)
+                        : t("nebulaUser:sheet.unknown")}
+                    </Typography>
+                  </Stack>
+                  <BarStrip
+                    label={t("sidebar:userInfo.bandwidth")}
+                    values={samples.map((sample) => sample.bandwidth)}
+                    color={nebula.accent}
+                    format={(value) => formatBandwidth(value * 8)}
+                  />
+                </Box>
+                <Box>
+                  <Stack direction="row" alignItems="center" sx={{ mb: "6px" }}>
+                    <InfoCaps>{t("chat:screenShare.stats.packetLoss")}</InfoCaps>
+                    <Typography sx={{ ml: "auto", fontSize: 12.5, fontWeight: 600 }}>
+                      {loss != null
+                        ? t("nebulaUser:sheet.percent", { value: loss.toFixed(2) })
+                        : t("nebulaUser:sheet.unknown")}
+                    </Typography>
+                  </Stack>
+                  <BarStrip
+                    label={t("chat:screenShare.stats.packetLoss")}
+                    values={samples.map((sample) => sample.loss)}
+                    color={nebula.warn}
+                    format={(value) => t("nebulaUser:sheet.percent", { value: value.toFixed(2) })}
+                  />
+                </Box>
+              </Box>
+
               <FactTable
                 head={[
                   "",
-                  t("sidebar:userInfo.colGood"),
-                  t("sidebar:userInfo.colLate"),
-                  t("sidebar:userInfo.colLost"),
-                  t("sidebar:userInfo.colResync"),
+                  t("sidebar:userInfo.colPackets"),
+                  t("sidebar:userInfo.colAvgPing"),
+                  t("sidebar:userInfo.colDeviation"),
                 ]}
                 rows={[
-                  stats.from_client && [t("nebulaUser:sheet.inbound"), ...packetRow(stats.from_client)],
-                  stats.from_server && [t("nebulaUser:sheet.outbound"), ...packetRow(stats.from_server)],
-                ].filter((row): row is string[] => !!row)}
+                  [
+                    t("nebulaUser:sheet.tcp"),
+                    String(stats.tcp_packets),
+                    t("nebulaUser:sheet.milliseconds", { value: stats.tcp_ping_avg.toFixed(1) }),
+                    t("nebulaUser:sheet.milliseconds", { value: stats.tcp_ping_var.toFixed(1) }),
+                  ],
+                  [
+                    t("nebulaUser:sheet.udp"),
+                    String(stats.udp_packets),
+                    t("nebulaUser:sheet.milliseconds", { value: stats.udp_ping_avg.toFixed(1) }),
+                    t("nebulaUser:sheet.milliseconds", { value: stats.udp_ping_var.toFixed(1) }),
+                  ],
+                ]}
               />
-            )}
+              {(stats.from_client || stats.from_server) && (
+                <FactTable
+                  head={[
+                    "",
+                    t("sidebar:userInfo.colGood"),
+                    t("sidebar:userInfo.colLate"),
+                    t("sidebar:userInfo.colLost"),
+                    t("sidebar:userInfo.colResync"),
+                  ]}
+                  rows={[
+                    stats.from_client && [t("nebulaUser:sheet.inbound"), ...packetRow(stats.from_client)],
+                    stats.from_server && [t("nebulaUser:sheet.outbound"), ...packetRow(stats.from_server)],
+                  ].filter((row): row is string[] => !!row)}
+                />
+              )}
 
-            <Stack
-              direction="row"
-              gap={3}
-              sx={{ mt: "14px", pt: "12px", borderTop: `var(--nebula-line-width, 1px) solid ${nebula.line}` }}
+              <Stack
+                direction="row"
+                gap={3}
+                sx={{
+                  mt: "14px",
+                  pt: "12px",
+                  borderTop: `var(--nebula-line-width, 1px) solid ${nebula.line}`,
+                }}
+              >
+                <Figure
+                  label={t("sidebar:userInfo.bandwidth")}
+                  value={
+                    stats.bandwidth != null
+                      ? formatBandwidth(stats.bandwidth * 8)
+                      : t("nebulaUser:sheet.unknown")
+                  }
+                />
+                <Figure label={t("chat:screenShare.stats.codec")} value={t(codecLabel(stats.opus))} />
+                {stats.onlinesecs != null && (
+                  <Figure
+                    label={t("sidebar:userInfo.labelOnline")}
+                    value={formatDuration(stats.onlinesecs)}
+                  />
+                )}
+              </Stack>
+            </InfoCard>
+          )}
+
+          {(moderation.length > 0 || bans) && (
+            <InfoCard
+              title={t("nebulaUser:sheet.sectionModeration")}
+              chip={<StatChip tone="accent">{t("nebulaUser:sheet.adminOnly")}</StatChip>}
             >
-              <Figure
-                label={t("sidebar:userInfo.bandwidth")}
+              <InfoFact
+                label={t("nebulaUser:sheet.priorBans")}
                 value={
-                  stats.bandwidth != null
-                    ? formatBandwidth(stats.bandwidth * 8)
-                    : t("nebulaUser:sheet.unknown")
+                  bans
+                    ? t("nebulaUser:sheet.bansValue", {
+                        count: bans.count,
+                        note: t(bans.note.key, "date" in bans.note ? { date: bans.note.date } : {}),
+                      })
+                    : t("nebulaUser:sheet.none")
                 }
               />
-              <Figure label={t("chat:screenShare.stats.codec")} value={t(codecLabel(stats.opus))} />
-              {stats.onlinesecs != null && (
-                <Figure label={t("sidebar:userInfo.labelOnline")} value={formatDuration(stats.onlinesecs)} />
+              {moderation.length > 0 && (
+                <Stack direction="row" gap={1} sx={{ mt: "12px", flexWrap: "wrap" }}>
+                  {moderation.map((entry) => (
+                    <Button
+                      key={entry.key}
+                      size="small"
+                      variant="outlined"
+                      onClick={() =>
+                        entry.key === "move" ? onMove() : onModerate(entry.key as ModerationAction)
+                      }
+                      sx={{
+                        px: "14px",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        textTransform: "none",
+                        borderRadius: radius("md"),
+                        color: entry.danger ? nebula.bad : nebula.text,
+                        borderColor: entry.danger ? `${nebula.bad}88` : nebula.line2,
+                        background: entry.danger ? "transparent" : nebula.card2,
+                      }}
+                    >
+                      {entry.label}
+                    </Button>
+                  ))}
+                </Stack>
               )}
-            </Stack>
-          </InfoCard>
-        )}
-
-        {(moderation.length > 0 || bans) && (
-          <InfoCard
-            title={t("nebulaUser:sheet.sectionModeration")}
-            chip={<StatChip tone="accent">{t("nebulaUser:sheet.adminOnly")}</StatChip>}
-          >
-            <InfoFact
-              label={t("nebulaUser:sheet.priorBans")}
-              value={
-                bans
-                  ? t("nebulaUser:sheet.bansValue", {
-                      count: bans.count,
-                      note: t(bans.note.key, "date" in bans.note ? { date: bans.note.date } : {}),
-                    })
-                  : t("nebulaUser:sheet.none")
-              }
-            />
-            {moderation.length > 0 && (
-              <Stack direction="row" gap={1} sx={{ mt: "12px", flexWrap: "wrap" }}>
-                {moderation.map((entry) => (
-                  <Button
-                    key={entry.key}
-                    size="small"
-                    variant="outlined"
-                    onClick={() =>
-                      entry.key === "move" ? onMove() : onModerate(entry.key as ModerationAction)
-                    }
-                    sx={{
-                      px: "14px",
-                      fontSize: 12,
-                      fontWeight: 600,
-                      textTransform: "none",
-                      borderRadius: radius("md"),
-                      color: entry.danger ? nebula.bad : nebula.text,
-                      borderColor: entry.danger ? `${nebula.bad}88` : nebula.line2,
-                      background: entry.danger ? "transparent" : nebula.card2,
-                    }}
-                  >
-                    {entry.label}
-                  </Button>
-                ))}
-              </Stack>
-            )}
-          </InfoCard>
-        )}
+            </InfoCard>
+          )}
+        </Box>
       </Box>
     </Box>
   );

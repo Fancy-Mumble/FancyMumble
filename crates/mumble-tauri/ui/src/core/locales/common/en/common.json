@@ -21,7 +21,8 @@
     "collapse": "Collapse",
     "optional": "(optional)",
     "more": "More",
-    "leave": "Leave"
+    "leave": "Leave",
+    "back": "Back"
   },
   "confirmDialog": {
     "confirmLabel": "Confirm",

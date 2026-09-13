@@ -78,13 +78,15 @@ export function friendServerSession(friend: Friend, sessions: readonly SessionMe
  * any open connection.
  *
  * Anonymous friends (no certificate) can never be resolved and answer null
- * without asking the backend.
+ * without asking the backend. Neither does yourself: your certificate is online
+ * on every server you are connected to, and your notepad is reached through
+ * its login instead.
  */
 export async function resolveFriendMatch(
   friend: Friend,
   sessions: readonly SessionMeta[],
 ): Promise<FriendMatch | null> {
-  if (!friend.userHash) return null;
+  if (!friend.userHash || friend.self) return null;
   const origin = friendServerSession(friend, sessions);
   return (
     (await invoke<FriendMatch | null>("find_user_by_hash", {

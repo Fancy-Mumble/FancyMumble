@@ -492,6 +492,19 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
             };
             return Some((PCHAT, envelope.encode_to_vec()));
         }
+        // Only a delete by id has a canon form. A time-range or by-sender delete
+        // would ask the server to pick the rows, which it does not offer.
+        ControlMessage::PchatDeleteMessages(delete) if !delete.message_ids.is_empty() => {
+            let envelope = fancy::pchat::PchatEnvelope {
+                body: Some(fancy::pchat::pchat_envelope::Body::Delete(
+                    fancy::pchat::Delete {
+                        channel: delete.channel_id.unwrap_or_default(),
+                        message_ids: delete.message_ids.clone(),
+                    },
+                )),
+            };
+            return Some((PCHAT, envelope.encode_to_vec()));
+        }
         ControlMessage::PchatFetch(fetch) => {
             let envelope = fancy::pchat::PchatEnvelope {
                 body: Some(fancy::pchat::pchat_envelope::Body::Fetch(
@@ -821,12 +834,14 @@ fn audit_settings(config: &fancy::feature::Config) -> Vec<mumble_tcp::Setting> {
         },
         mumble_tcp::Setting {
             key: Some("audit.categories".to_owned()),
-            r#type: Some("string".to_owned()),
+            // A pick from the server's own vocabulary, so nobody has to know
+            // the strings to type them.
+            r#type: Some("list".to_owned()),
             group: Some("audit".to_owned()),
             label: Some("Recorded categories".to_owned()),
             value: Some(config.categories.join(",")),
             help: Some("What the server records, and what the filter offers.".to_owned()),
-            options: Vec::new(),
+            options: config.categories.clone(),
             secret: Some(false),
         },
         mumble_tcp::Setting {
@@ -1290,6 +1305,15 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                                 },
                             )
                             .collect(),
+                    }),
+                ),
+                // Relayed once the rows are gone, to the deleter as well: their
+                // own delete coming back is what confirms it.
+                Some(fancy::pchat::pchat_envelope::Body::Delete(delete)) => Some(
+                    ControlMessage::PchatDeleteMessages(mumble_tcp::PchatDeleteMessages {
+                        channel_id: Some(delete.channel),
+                        message_ids: delete.message_ids,
+                        ..Default::default()
                     }),
                 ),
                 _ => None,
@@ -2831,6 +2855,36 @@ mod tests {
     }
 
     #[test]
+    fn a_delete_by_id_reaches_the_server_and_comes_back_as_a_delete() {
+        // Without this arm the delete was a `ServerOnly` message with no canon
+        // home: dropped in-process, and the caller timed out waiting.
+        let sent = ControlMessage::PchatDeleteMessages(mumble_tcp::PchatDeleteMessages {
+            channel_id: Some(7),
+            message_ids: vec!["a".to_owned(), "b".to_owned()],
+            ..Default::default()
+        });
+        let (outer, payload) = to_canon(&sent).expect("a delete by id has a canon home");
+        assert_eq!(outer, PCHAT);
+
+        let back = from_canon(outer, &payload).unwrap().expect("decodes");
+        let ControlMessage::PchatDeleteMessages(delete) = back else {
+            panic!("expected a delete");
+        };
+        assert_eq!(delete.channel_id, Some(7));
+        assert_eq!(delete.message_ids, vec!["a".to_owned(), "b".to_owned()]);
+    }
+
+    #[test]
+    fn a_delete_without_ids_has_no_canon_form() {
+        let by_sender = ControlMessage::PchatDeleteMessages(mumble_tcp::PchatDeleteMessages {
+            channel_id: Some(7),
+            sender_hash: Some("deadbeef".to_owned()),
+            ..Default::default()
+        });
+        assert!(to_canon(&by_sender).is_none());
+    }
+
+    #[test]
     fn a_pin_list_marks_its_messages_and_claims_nothing_else() {
         let listed = fancy::pchat::PchatEnvelope {
             body: Some(fancy::pchat::pchat_envelope::Body::PinList(
@@ -3578,6 +3632,14 @@ mod tests {
                 .any(|s| s.key.as_deref() == Some("audit.retention_days")
                     && s.value.as_deref() == Some("30"))
         );
+        let categories = config
+            .settings
+            .iter()
+            .find(|s| s.key.as_deref() == Some("audit.categories"))
+            .expect("a categories row");
+        assert_eq!(categories.r#type.as_deref(), Some("list"));
+        assert_eq!(categories.options, ["audit.ban", "audit.move"]);
+        assert_eq!(categories.value.as_deref(), Some("audit.ban,audit.move"));
     }
 
     #[test]
