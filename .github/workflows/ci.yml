@@ -773,9 +773,19 @@ jobs:
             "${{ steps.version.outputs.version }}" "$BASE" artifacts "$NOTES" > latest.json
           cat latest.json
 
+      # The hand-written section for this version leads the release notes and
+      # GitHub's generated list follows it. develop takes direct pushes, so the
+      # generated list alone would be one line: the pull request into main.
+      - name: Release notes from the changelog
+        run: |
+          set -euo pipefail
+          bash scripts/changelog-section.sh "${{ steps.version.outputs.version }}" > release-notes.md
+          cat release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          body_path: release-notes.md
           tag_name: ${{ steps.version.outputs.tag }}
           name: Fancy Mumble ${{ steps.version.outputs.tag }}${{ steps.version.outputs.is_beta == 'true' && ' (beta)' || '' }}
           generate_release_notes: true
