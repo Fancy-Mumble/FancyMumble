@@ -32,6 +32,7 @@ import { createNebulaTheme } from "@nebula/theme";
 import { MessageList } from "@nebula/components/chat/MessageList";
 import { MessageAvatar, MessageRow } from "@nebula/components/chat/MessageRow";
 import { useAppStore } from "@core/store";
+import { reconcileList } from "@core/store/reconcile";
 import type { ChatMessage } from "@core/types";
 import "@standard/theme.css";
 import { initializeStandardAppearance } from "@standard/appearance";
@@ -218,10 +219,19 @@ function Harness() {
         settle,
         forceRender,
         appendOne: () => setMessages((prior) => [...prior, makeMessage(next++)]),
-        // What the backend does on every state change today: a fresh array of
-        // entries that say exactly what the old ones said.
+        // What `refreshState` does on every state change: the backend answers
+        // with the whole roster, freshly deserialised, and the store decides
+        // how much of it is actually new. Reconciled here for the same reason
+        // it is reconciled there - a scenario that skipped that step would be
+        // measuring a store this client no longer has.
         replaceUsers: () =>
-          useAppStore.setState({ users: useAppStore.getState().users.map((user) => ({ ...user })) }),
+          useAppStore.setState({
+            users: reconcileList(
+              useAppStore.getState().users,
+              useAppStore.getState().users.map((user) => ({ ...user })),
+              (user) => user.session,
+            ),
+          }),
         flipTalking: (on: boolean) =>
           useAppStore.setState({ talkingSessions: new Set(on ? [7] : []) }),
         bumpReaction: () =>
