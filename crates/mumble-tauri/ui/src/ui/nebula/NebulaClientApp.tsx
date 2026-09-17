@@ -2230,7 +2230,7 @@ export default function NebulaClientApp() {
 
           {!handheld && chromeSlots.windowControls === "corner" && (
             <Box sx={{ position: "absolute", top: 0, right: 0, zIndex: 60, display: "flex" }}>
-              <WindowControls variant="corner" label={activeServerName} />
+              <WindowControls variant="corner" label={BRAND_WORDMARK} />
             </Box>
           )}
 
@@ -2241,7 +2241,7 @@ export default function NebulaClientApp() {
               {serverSwitcher !== "titlebar" && <ServerRail {...serverRail} />}
               {screen === "chat" && channelSidebarOpen && !sessionNotReady && (
                 <SidebarShell
-                  brand={BRAND_WORDMARK}
+                  plate={activeServerName ?? BRAND_WORDMARK}
                   heading={{ label: activeServerName, count: orderedChannels.length }}
                   search={
                     <SearchBox

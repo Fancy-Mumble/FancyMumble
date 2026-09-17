@@ -16,8 +16,8 @@ const close = () => void getCurrentWindow().close();
  *
  * `band` is the pack's arrangement - three loose glyphs at the end of the top
  * strip. `corner` is for a skin with no strip to end: the three sit on a
- * bevelled tab that floats over the window's top-right corner and names the
- * server, which is where that kind of design puts them.
+ * bevelled tab that floats over the window's top-right corner beside the
+ * product's name, which is where that kind of design puts them.
  */
 export function WindowControls({
   variant = "band",
@@ -32,10 +32,14 @@ export function WindowControls({
       alignItems="center"
       gap={corner ? 1.5 : 0.5}
       data-testid="nebula-window-controls"
+      // The tab floats above the skin's drag strip and would otherwise swallow
+      // the press: the plate and its label hold the window, the buttons do not.
+      data-tauri-drag-region={corner ? true : undefined}
       sx={(theme) =>
         corner
           ? {
               flex: "none",
+              userSelect: "none",
               px: "14px",
               py: "3px",
               background: theme.palette.nebula.rail,
@@ -48,7 +52,9 @@ export function WindowControls({
       {corner && label && (
         <Typography
           component="div"
+          data-tauri-drag-region
           sx={(theme) => ({
+            cursor: "default",
             fontSize: 10,
             fontWeight: 700,
             letterSpacing: ".18em",

@@ -8,10 +8,11 @@ interface SidebarShellProps {
   /** Column heading; omitted on the chat screen, which leads with search. */
   title?: string;
   /**
-   * Product wordmark for the plate above the column. Only a stencil skin
-   * prints it - every other chrome voice leads with search, as it always has.
+   * What the plate above the column says - the server you are on; the product
+   * wordmark sits with the window controls. Only a stencil skin prints it -
+   * every other chrome voice leads with search, as it always has.
    */
-  brand?: string;
+  plate?: string;
   /**
    * The heading over the column's contents - the server, and how many
    * channels are under it. Stencil-only, like the brand plate above it.
@@ -35,7 +36,7 @@ interface SidebarShellProps {
 /** The fixed 290px left column every screen fills differently. */
 export function SidebarShell({
   title,
-  brand,
+  plate,
   heading,
   action,
   back,
@@ -56,7 +57,7 @@ export function SidebarShell({
         background: theme.palette.nebula.panel,
       })}
     >
-      {brand && stencil && (
+      {plate && stencil && (
         <Box
           sx={(theme) => ({
             flex: "none",
@@ -72,6 +73,10 @@ export function SidebarShell({
           <Box
             sx={(theme) => ({
               transform: "skewX(-12deg)",
+              // A server names itself, and at any length: the plate stops at
+              // the column's edge and the name is cut rather than the layout.
+              minWidth: 0,
+              maxWidth: "100%",
               background: theme.palette.nebula.accent,
               px: "14px",
               py: "6px",
@@ -89,10 +94,12 @@ export function SidebarShell({
                 textTransform: "uppercase",
                 lineHeight: 1.2,
                 whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
                 color: theme.palette.nebula.onAccent,
               })}
             >
-              {brand}
+              {plate}
             </Typography>
           </Box>
         </Box>
