@@ -107,8 +107,17 @@ interface MessageListProps {
   time?: TimeDisplay;
 }
 
-/** Consecutive messages from one sender collapse into a single block. */
-const GROUP_WINDOW_MS = 5 * 60 * 1000;
+/**
+ * Consecutive messages from one sender collapse into a single block.
+ *
+ * An hour, not the five minutes this started at. The window is there to end
+ * a run that has stopped being one - somebody coming back to a channel the
+ * next morning is not still mid-sentence - and five minutes is far shorter
+ * than the pauses a conversation actually has in it. Somebody who says
+ * something, goes to find the picture they meant and posts it a quarter of
+ * an hour later was given a second copy of their own face for it.
+ */
+const GROUP_WINDOW_MS = 60 * 60 * 1000;
 
 /**
  * Where the hoisted avatar comes to rest against the top of the river.

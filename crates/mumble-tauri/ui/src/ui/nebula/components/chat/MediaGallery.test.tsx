@@ -26,6 +26,27 @@ describe("a single picture in a message", () => {
     expect(style.objectFit).not.toBe("cover");
   });
 
+  it("takes its box from what it measured, for a picture whose bytes say nothing", () => {
+    // The strip of checkerboard beside a photograph: the box was shrink-to-fit
+    // around a picture whose height cap the browser applies to what it draws,
+    // and whose `min(..., 100%)` width cap it cannot apply while measuring. A
+    // landscape picture then sat at 420px inside a box two thirds again as
+    // wide, and the empty third read as the transparent part of a picture with
+    // nothing transparent in it.
+    const { container } = render(withNebulaTheme(<MediaGallery images={picture} />));
+    const box = container.querySelector("button")!;
+    // Nothing is known before the decode: the source is an address, not bytes.
+    expect(getComputedStyle(box).width).toBe("fit-content");
+
+    loadPicture(container.querySelector("img")!, 1280, 604);
+    const drawn = getComputedStyle(container.querySelector("button")!);
+    // A width of its own, and the picture's own shape: the box is now the
+    // width cap rather than whatever shrink-to-fit made of the height cap.
+    expect(drawn.width).not.toBe("fit-content");
+    expect(drawn.width).toContain("420px");
+    expect(drawn.aspectRatio.replace(/\s/g, "")).toBe("1280/604");
+  });
+
   it("frames a picture far longer than it is wide, whole, on a blurred copy", () => {
     const { container } = render(withNebulaTheme(<MediaGallery images={picture} />));
     const image = container.querySelector("img")!;

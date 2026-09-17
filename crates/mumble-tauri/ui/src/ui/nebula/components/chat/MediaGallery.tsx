@@ -5,6 +5,7 @@ import FileAttachmentCard from "@standard/components/chat/file/FileAttachmentCar
 import { previewKindForFilename, type FileAttachmentInfo } from "@core/features/chat/fileAttachments";
 import { useAppStore } from "@core/store";
 import { formatBytes } from "@core/utils/format";
+import { rememberImageSize, type ImageSize } from "@core/utils/imageSize";
 import { AttachmentVisibilityBadge } from "./AttachmentVisibilityBadge";
 import type { BodyImage } from "../../selectors";
 import { radius } from "../../tokens";
@@ -306,18 +307,33 @@ function SinglePicture({
   label,
 }: Readonly<{ image: BodyImage; onClick: () => void; label: string }>) {
   const bytes = bodyImageBytes(image.src);
-  const known = image.width && image.height ? image.width / image.height : null;
-  const [measured, setMeasured] = useState<number | null>(null);
+  const known = image.width && image.height ? { width: image.width, height: image.height } : null;
+  const [measured, setMeasured] = useState<ImageSize | null>(null);
   const [painted, onMount, done] = usePainted();
   // A cached picture is complete before React sees a `load` event, so the ref
   // measures it as well rather than waiting for one that has already fired.
   const measure = (element: HTMLImageElement | null) => {
     if (!element?.naturalHeight) return;
-    const next = element.naturalWidth / element.naturalHeight;
-    setMeasured((current) => (current === next ? current : next));
+    const next = { width: element.naturalWidth, height: element.naturalHeight };
+    // Worth keeping: a picture the body points at by URL has no other way of
+    // being known ahead of its decode, and the next row to draw it reserves
+    // its box instead of growing into one.
+    rememberImageSize(element.currentSrc || element.src, next);
+    setMeasured((current) =>
+      current && current.width === next.width && current.height === next.height ? current : next,
+    );
   };
-  // What the picture measured always wins over what was read ahead of it.
-  const ratio = measured ?? known;
+  /**
+   * The picture's own size: what it measured, or what was read ahead of it.
+   *
+   * What the picture measured always wins, and it is a *size* rather than a
+   * shape because the box below is built from both numbers. Measuring only
+   * the shape left a picture whose bytes could not be read - one the body
+   * points at by URL, one in a format the header reader does not cover - with
+   * no box of its own for as long as it was on screen.
+   */
+  const size = measured ?? known;
+  const ratio = size ? size.width / size.height : null;
   const framed = ratio != null && ratio < FRAME_RATIO;
   /**
    * The box the picture is going to fill, held open before it fills it.
@@ -325,12 +341,20 @@ function SinglePicture({
    * The same two caps the picture itself carries, applied to the frame around
    * it instead: its own width, the width cap, and the height cap written as a
    * width - which is the one that decides a landscape photograph's size.
+   *
+   * Not decoration, and not only about the thread jumping: without it the
+   * button is shrink-to-fit around a picture whose height cap the browser
+   * applies to what it *draws* and whose `min(…, 100%)` width cap it cannot
+   * apply while measuring. A landscape photograph then sat at 420px inside a
+   * box the height cap had made half as wide again, and the strip of button
+   * beside it was the checkerboard - the "transparent" half of a picture with
+   * nothing transparent about it.
    */
   const reserved =
-    !framed && known !== null && image.width
+    !framed && size !== null
       ? {
-          width: `min(${image.width}px, ${SINGLE_MAX_W}px, calc(${SINGLE_MAX_H}px * ${known}))`,
-          aspectRatio: `${image.width} / ${image.height}`,
+          width: `min(${size.width}px, ${SINGLE_MAX_W}px, calc(${SINGLE_MAX_H}px * ${ratio}))`,
+          aspectRatio: `${size.width} / ${size.height}`,
         }
       : null;
 

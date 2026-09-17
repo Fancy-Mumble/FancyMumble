@@ -112,9 +112,9 @@ describe("MessageList", () => {
     const ends: Array<[string, boolean]> = [];
     const minute = 60_000;
     draw({
-      // "c" is a quarter of an hour later, so it starts a block of its own -
+      // "c" is two hours later, so it starts a block of its own -
       // which makes "b" the end of the first one and "c" the end of its own.
-      messages: [message("a"), message("b", 1_700_000_000_000 + minute), message("c", 1_700_000_900_000)],
+      messages: [message("a"), message("b", 1_700_000_000_000 + minute), message("c", 1_700_007_200_000)],
       renderMessage: (m, _avatar, _grouped, _restoring, endsGroup) => {
         ends.push([m.body, endsGroup]);
         return <span>{m.body}</span>;
@@ -131,7 +131,7 @@ describe("MessageList", () => {
   it("closes up the air inside a block and keeps it between blocks", () => {
     const minute = 60_000;
     const { container } = draw({
-      messages: [message("a"), message("b", 1_700_000_000_000 + minute), message("c", 1_700_000_900_000)],
+      messages: [message("a"), message("b", 1_700_000_000_000 + minute), message("c", 1_700_007_200_000)],
     });
     const top = (id: string) => container.querySelector<HTMLElement>(`[data-message-id="${id}"]`)!;
     // The air above a block is the block's own rather than its first row's:
@@ -189,6 +189,28 @@ describe("MessageList", () => {
       expect(block.contains(container.querySelector('[data-message-id="c"]'))).toBe(true);
     });
 
+    it("holds one picture across the pauses a conversation actually has", () => {
+      // Somebody who says something, goes to find the picture they meant and
+      // posts it a quarter of an hour later is still the same person talking.
+      // At five minutes they were handed a second copy of their own face for
+      // the wait; the run now holds for an hour.
+      // Mid-afternoon, so none of these gaps steps over midnight - a day
+      // divider is a break of its own and would prove nothing about the run.
+      const afternoon = 1_699_970_000_000;
+      const { container } = drawSticky([
+        from(7, "a", afternoon),
+        from(7, "b", afternoon + 18 * minute),
+        from(7, "c", afternoon + 55 * minute),
+      ]);
+      expect(drawn(container)).toEqual(["avatar-a"]);
+
+      // Past the hour it is a different sitting, and a picture of its own.
+      const { container: later } = drawSticky([
+        from(7, "a", afternoon),
+        from(7, "b", afternoon + 70 * minute),
+      ]);
+      expect(drawn(later)).toEqual(["avatar-a", "avatar-b"]);
+    });
     it("starts a new picture where someone else has interrupted", () => {
       const { container } = drawSticky([
         from(7, "a", 1_700_000_000_000),

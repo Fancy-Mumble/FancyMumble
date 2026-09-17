@@ -44,6 +44,7 @@ import {
   DEFAULT_TIME_DISPLAY,
   editableText,
   formatTime,
+  hasDrawableHtml,
   messageContent,
   splitBodyImages,
   type TimeDisplay,
@@ -59,6 +60,7 @@ import type { HoverEvent } from "../../clientState";
 import { bodyToCopyText } from "@core/features/chat/bodyText";
 import type { MenuImage } from "./MessageMenu";
 import { useLongPress } from "./useLongPress";
+import { useRowHover } from "./rowHover";
 import { alpha } from "@mui/material/styles";
 
 /** The schemes a link in a message may point at; standard's renderer allows
@@ -331,6 +333,15 @@ interface MessageRowProps {
 
 /** The width of the avatar gutter, shared with the list that hoists it. */
 export const AVATAR_COLUMN_PX = 38;
+/**
+ * The air between the avatar gutter and the body, and between the row's edge
+ * and the body where there is no gutter.
+ *
+ * A number rather than a spacing unit because the hover pill has to land on
+ * the body's left edge, and "1.5 spacing units" is not something an `absolute`
+ * offset can be written in.
+ */
+const ROW_GAP_PX = { roomy: 12, dense: 8 } as const;
 
 interface MessageAvatarProps {
   message: ChatMessage;
@@ -430,7 +441,7 @@ export function MessageRow({
           onContextMenu: (event: React.MouseEvent) => onContextMenuProfile?.(message.sender_session!, event),
         };
 
-  const [hovered, setHovered] = useState(false);
+  const { hovered, ref: hoverRef, onMouseEnter: enterRow, onMouseLeave: leaveRow } = useRowHover();
   /** Anchor for the reaction picker, or null while it is closed. */
   const [picker, setPicker] = useState<{ x: number; y: number } | null>(null);
   /** The mention chip whose member list is open, or null while none is. */
@@ -556,7 +567,15 @@ export function MessageRow({
     if (src) onOpenImage?.(src);
   };
 
-  const hasBody = body.trim().length > 0;
+  /**
+   * Whether the bubble has anything to hold.
+   *
+   * Not whether the string is empty: a message that was only a photograph
+   * still leaves behind the markup the picture sat in, and a bubble drawn
+   * around a paragraph with nothing in it is an empty plate above the
+   * picture. See `hasDrawableHtml`.
+   */
+  const hasBody = useMemo(() => hasDrawableHtml(body), [body]);
   /**
    * A message that is nothing but the link, with a card under it.
    *
@@ -663,8 +682,11 @@ export function MessageRow({
     // is an emotion class, which neither a unit test nor an e2e run can read
     // back off the element.
     "data-self-mention": selfMention ? "1" : undefined,
-    onMouseEnter: () => setHovered(true),
-    onMouseLeave: () => setHovered(false),
+    // The hover tracker measures the row to know how far its own strip stands
+    // off it, so it needs the element as well as the two events.
+    ref: hoverRef,
+    onMouseEnter: enterRow,
+    onMouseLeave: leaveRow,
     ...longPress.handlers,
     onContextMenu: (event: React.MouseEvent) => {
       if (!onContextMenu) return;
@@ -947,7 +969,22 @@ export function MessageRow({
         {gallery}
         {hasExtras && (
           <Box
-            sx={{ maxWidth: "min(620px, 78%)", width: "100%", display: "flex", justifyContent: "flex-end" }}
+            sx={{
+              maxWidth: "min(620px, 78%)",
+              width: "100%",
+              display: "flex",
+              // A column, because `extras` is several things and not one: an
+              // attachment card, a poll, a preview and the reactions are all
+              // siblings here, and in a row the reaction pills landed beside
+              // the card they belong to - stretched to its full height, since
+              // that is what a flex row does to an item next to a taller one.
+              // They hang under the message, as they do on the other side.
+              flexDirection: "column",
+              // Each one keeps its own width and hugs the message's edge
+              // rather than being stretched to the column - a file card
+              // pulled out to 78% of the river is a different card.
+              alignItems: "flex-end",
+            }}
           >
             {extras}
           </Box>
@@ -1087,7 +1124,7 @@ export function MessageRow({
   return (
     <Stack
       direction="row"
-      gap={dense ? 1 : 1.5}
+      gap={`${dense ? ROW_GAP_PX.dense : ROW_GAP_PX.roomy}px`}
       {...rowHandlers}
       sx={{ position: "relative", minWidth: 0, ...(rowHandlers.sx ?? {}) }}
     >
@@ -1095,7 +1132,14 @@ export function MessageRow({
         <RowActions
           watchOnCard={hasEmbeds}
           message={message}
-          align="right"
+          // This row is drawn from the left, and in "bubbles" somebody else's
+          // card is only as wide as what they said - so a pill pinned to the
+          // right edge floats in empty canvas half a screen from the message
+          // it acts on. It hangs off the body's own left edge instead, past
+          // the avatar gutter, which is where the pinned strip below already
+          // puts itself.
+          align="left"
+          inset={dense ? 0 : AVATAR_COLUMN_PX + ROW_GAP_PX.roomy}
           onEdit={canEdit ? () => onEditingChange?.(true) : undefined}
           onQuote={message.message_id ? () => onQuote?.(message) : undefined}
           onReact={message.message_id ? openReactionPicker : undefined}
@@ -1434,6 +1478,7 @@ function RowActions({
   onReact,
   onMore,
   align,
+  inset = 0,
   pinned = false,
   watchOnCard = false,
 }: Readonly<{
@@ -1451,6 +1496,15 @@ function RowActions({
   watchOnCard?: boolean;
   /** Which edge of the bubble the pill hangs from. */
   align: "left" | "right";
+  /**
+   * How far in from that edge, in px.
+   *
+   * The pill is positioned against the whole row, which on a left-hand
+   * message begins with the avatar gutter - so "flush left" would hang it off
+   * the picture rather than off what was said. The row hands over the width
+   * of the chrome it has to clear.
+   */
+  inset?: number;
   /**
    * Drawn in the flow under its own message instead of floating over the row
    * above - what "always show message actions" asks for. Floating is only safe
@@ -1477,97 +1531,115 @@ function RowActions({
     start: startWatch,
   } = useWatchStart(message.body, message.channel_id);
   return (
-    <Stack
-      direction="row"
-      alignItems="center"
-      gap="14px"
-      sx={(theme) => ({
-        ...(pinned
-          ? { alignSelf: align === "right" ? "flex-end" : "flex-start", mt: "5px", height: 30 }
-          : {
-              position: "absolute",
-              // Above the row, not half over it: hanging into the message put
-              // the pill on top of the first line, where it swallowed clicks
-              // meant for a link.
-              bottom: `calc(100% + ${PILL_GAP}px)`,
-              ...(align === "right" ? { right: 0 } : { left: 0 }),
-              zIndex: 2,
-              height: 34,
-              backdropFilter: "blur(30px)",
-              WebkitBackdropFilter: "blur(30px)",
-              // The gap is air to look at, not to walk through: the pointer
-              // crossing it has to stay inside the row, or the row stops being
-              // hovered and the pill is gone before it is reached. This bridges
-              // it, invisibly.
-              "&::after": {
-                content: '""',
+    <>
+      {/* The gap is air to look at, not to walk through: the pointer crossing
+          it has to stay inside the row, or the row stops being hovered and the
+          pill is gone before it is reached. The bridge used to be the pill's
+          own edge, and so was only as wide as the pill - which left the rest
+          of the row's top edge a trapdoor, and reaching the pill from anywhere
+          but straight below it a matter of moving fast enough. It spans the
+          whole row instead. A child of the row, so the pointer resting on it
+          is still the pointer on this message; drawn only while the pill is
+          up, so it covers nothing the reader could otherwise be clicking. */}
+      {!pinned && (
+        <Box
+          aria-hidden
+          sx={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: "100%",
+            height: `${PILL_GAP}px`,
+            zIndex: 2,
+          }}
+        />
+      )}
+      <Stack
+        direction="row"
+        alignItems="center"
+        gap="14px"
+        sx={(theme) => ({
+          ...(pinned
+            ? { alignSelf: align === "right" ? "flex-end" : "flex-start", mt: "5px", height: 30 }
+            : {
                 position: "absolute",
-                left: 0,
-                right: 0,
-                top: "100%",
-                height: `${PILL_GAP}px`,
-              },
-            }),
-        width: "fit-content",
-        px: "12px",
-        borderRadius: radius("lg"),
-        ...floatingSurface(theme),
-        color: theme.palette.nebula.muted,
-      })}
-    >
-      {onReact && !local && (
-        <PillButton label={t("chat:reactions.add")} onClick={onReact} icon={EmojiPlusIcon} />
-      )}
-      {onQuote && (
-        <PillButton label={t("nebulaChat:row.replyToMessage")} onClick={onQuote} icon={QuoteIcon} />
-      )}
-      {onEdit && <PillButton label={t("nebulaChat:row.editMessage")} onClick={onEdit} icon={EditIcon} />}
-      <PillButton
-        label={t("chat:inlineActions.copy")}
-        onClick={() => void navigator.clipboard?.writeText(bodyToCopyText(message.body))}
-        icon={CopyIcon}
-      />
-      {message.message_id && !local && (
+                // Above the row, not half over it: hanging into the message put
+                // the pill on top of the first line, where it swallowed clicks
+                // meant for a link.
+                bottom: `calc(100% + ${PILL_GAP}px)`,
+                ...(align === "right" ? { right: inset } : { left: inset }),
+                zIndex: 2,
+                height: 34,
+                backdropFilter: "blur(30px)",
+                WebkitBackdropFilter: "blur(30px)",
+              }),
+          width: "fit-content",
+          px: "12px",
+          borderRadius: radius("lg"),
+          ...floatingSurface(theme),
+          color: theme.palette.nebula.muted,
+        })}
+      >
+        {onReact && !local && (
+          <PillButton label={t("chat:reactions.add")} onClick={onReact} icon={EmojiPlusIcon} />
+        )}
+        {onQuote && (
+          <PillButton label={t("nebulaChat:row.replyToMessage")} onClick={onQuote} icon={QuoteIcon} />
+        )}
+        {onEdit && <PillButton label={t("nebulaChat:row.editMessage")} onClick={onEdit} icon={EditIcon} />}
         <PillButton
-          label={message.pinned ? t("chat:pinned.unpinAriaLabel") : t("nebulaChat:row.pinMessage")}
-          onClick={() =>
-            void useAppStore.getState().pinMessage(message.channel_id, message.message_id!, !!message.pinned)
-          }
-          icon={message.pinned ? CheckIcon : PinIcon}
+          label={t("chat:inlineActions.copy")}
+          onClick={() => void navigator.clipboard?.writeText(bodyToCopyText(message.body))}
+          icon={CopyIcon}
         />
-      )}
-      {canWatchTogether && !watchOnCard && !local && (
-        <PillButton
-          label={watchBusy ? t("chat:contextMenu.watchTogetherBusy") : t("chat:contextMenu.watchTogether")}
-          onClick={() => void startWatch()}
-          icon={PlayIcon}
-        />
-      )}
-      {onMore && (
-        <PillButton label={t("common:messageActionBar.moreOptions")} onClick={onMore} icon={KebabMenuIcon} />
-      )}
-      {canModerate && (
-        <>
-          {/* The only divider, and only ever before the destructive end. */}
-          <Box
-            aria-hidden
-            sx={(theme) => ({ width: "1px", height: 14, background: theme.palette.nebula.line2 })}
-          />
+        {message.message_id && !local && (
           <PillButton
-            label={t("chat:contextMenu.deleteMessage")}
+            label={message.pinned ? t("chat:pinned.unpinAriaLabel") : t("nebulaChat:row.pinMessage")}
             onClick={() =>
-              void (local
-                ? useAppStore.getState().deleteLocalNotes([message.message_id!])
-                : useAppStore
-                    .getState()
-                    .deletePchatMessages(message.channel_id, { messageIds: [message.message_id!] }))
+              void useAppStore
+                .getState()
+                .pinMessage(message.channel_id, message.message_id!, !!message.pinned)
             }
-            icon={TrashIcon}
-            danger
+            icon={message.pinned ? CheckIcon : PinIcon}
           />
-        </>
-      )}
-    </Stack>
+        )}
+        {canWatchTogether && !watchOnCard && !local && (
+          <PillButton
+            label={watchBusy ? t("chat:contextMenu.watchTogetherBusy") : t("chat:contextMenu.watchTogether")}
+            onClick={() => void startWatch()}
+            icon={PlayIcon}
+          />
+        )}
+        {onMore && (
+          <PillButton
+            label={t("common:messageActionBar.moreOptions")}
+            onClick={onMore}
+            icon={KebabMenuIcon}
+          />
+        )}
+        {canModerate && (
+          <>
+            {/* The only divider, and only ever before the destructive end. */}
+            <Box
+              aria-hidden
+              sx={(theme) => ({ width: "1px", height: 14, background: theme.palette.nebula.line2 })}
+            />
+            <PillButton
+              label={t("chat:contextMenu.deleteMessage")}
+              onClick={() =>
+                void (local
+                  ? useAppStore.getState().deleteLocalNotes([message.message_id!])
+                  : useAppStore
+                      .getState()
+                      .deletePchatMessages(message.channel_id, { messageIds: [message.message_id!] }))
+              }
+              icon={TrashIcon}
+              danger
+            />
+          </>
+        )}
+      </Stack>
+    </>
   );
 }
 
