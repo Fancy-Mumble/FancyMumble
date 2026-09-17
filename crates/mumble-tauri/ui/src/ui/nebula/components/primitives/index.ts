@@ -4,6 +4,7 @@ export { SectionLabel } from "./SectionLabel";
 export { StatusDot } from "./StatusDot";
 export { TalkingBars } from "./TalkingBars";
 export { UserAvatar } from "./UserAvatar";
+export { SpeakingAvatar, SpeakingBars, useIsTalking } from "./speaking";
 export { SearchBox } from "./SearchBox";
 export { RichTextField, type RichTextFieldProps, type RichTextTool } from "./RichTextField";
 export { HtmlSourceField, type HtmlSourceFieldProps } from "./HtmlSourceField";

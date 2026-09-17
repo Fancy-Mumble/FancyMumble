@@ -16,6 +16,7 @@ import {
   LiveBadge, VoiceContextBadge,
   VoiceStateBadges,
   Stack,
+  useIsTalking,
 } from "../primitives";
 import { MenuCheckBox } from "../sidebar/MenuCheckBox";
 import type { RosterGroup, RosterMember } from "../../selectors";
@@ -27,7 +28,6 @@ interface MemberPanelProps {
   groups: readonly RosterGroup[];
   query: string;
   onQueryChange: (query: string) => void;
-  talkingSessions: ReadonlySet<number>;
   ownSession: number | null;
   /** Whether the server's registered-but-absent people are drawn. */
   showOffline: boolean;
@@ -75,7 +75,6 @@ export function MemberPanel({
   groups,
   query,
   onQueryChange,
-  talkingSessions,
   ownSession,
   showOffline,
   onShowOfflineChange,
@@ -231,7 +230,6 @@ export function MemberPanel({
                   member={member}
                   inChannel={group.kind === "channel"}
                   own={member.user.session === ownSession}
-                  talking={talkingSessions.has(member.user.session)}
                   onSelect={onSelect}
                   onHover={onHover}
                   onLeave={onLeave}
@@ -267,7 +265,6 @@ interface MemberRowProps {
   /** Drawn under the open channel's heading rather than under a role. */
   inChannel: boolean;
   own: boolean;
-  talking: boolean;
   onSelect: (session: number, event: React.MouseEvent) => void;
   onHover: (session: number, event: React.MouseEvent) => void;
   onLeave: () => void;
@@ -290,7 +287,6 @@ function MemberRow({
   member,
   inChannel,
   own,
-  talking,
   onSelect,
   onHover,
   onLeave,
@@ -300,6 +296,8 @@ function MemberRow({
 }: Readonly<MemberRowProps>) {
   const { t } = useTranslation(["nebulaChat", "nebulaChrome"]);
   const { user, offline } = member;
+  // One person's answer, not the whole set: see `useIsTalking`.
+  const talking = useIsTalking(user.session);
   const voiceContext = useAppStore((state) =>
     talking ? voiceContextKind(state.voiceContexts.get(user.session)) : null,
   );

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { withNebulaTheme } from "../../testTheme";
 import type { ServerRailEntry, ServerRailStatus } from "../../selectors";
 import { ServerRailCard } from "./ServerRailCard";
+import { useAppStore } from "@core/store";
 
 vi.mock("@core/lazyBlobs", () => ({ useUserAvatar: () => null }));
 
@@ -38,10 +39,13 @@ const card = (props: Partial<Parameters<typeof ServerRailCard>[0]>) =>
 
 describe("ServerRailCard", () => {
   it("says who is around you on the server you are on", () => {
+    // Who has the floor is the store's answer now, not a flag the caller works
+    // out: the card's rows ask for themselves, one person at a time.
+    useAppStore.setState({ talkingSessions: new Set([1]) });
     card({
       channelName: "Gaming",
       ownName: "Zewi",
-      occupants: [{ session: 1, name: "Sebi", talking: true, muted: false }],
+      occupants: [{ session: 1, name: "Sebi", muted: false }],
     });
     expect(screen.getByText("YOU’RE IN #GAMING AS ZEWI")).toBeTruthy();
     expect(screen.getByText("speaking")).toBeTruthy();

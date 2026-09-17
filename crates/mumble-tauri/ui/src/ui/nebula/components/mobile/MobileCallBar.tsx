@@ -17,6 +17,7 @@ import { useTheme } from "@mui/material/styles";
 import { CloseIcon, MicIcon, MicOffIcon } from "@ui/icons";
 import { Stack, TalkingBars, UserAvatar } from "../primitives";
 import type { VoiceModel } from "../../shellModel";
+import { useAppStore } from "@core/store";
 import { DisplayText, PlateButton, useStencil } from "./mobileMarks";
 
 export function MobileCallBar({
@@ -26,7 +27,14 @@ export function MobileCallBar({
   const { t } = useTranslation(["nebulaChat", "chat"]);
   const stencil = useStencil();
   const nebula = useTheme().palette.nebula;
-  const speaking = model.participants.find((user) => model.talkingSessions.has(user.session));
+  // Who has the floor, as a session id. The band names them, so a boolean will
+  // not do - but an id compares equal to itself, so this renders again only
+  // when the speaker actually changes rather than on every utterance edge.
+  const speakingSession = useAppStore(
+    (state) =>
+      model.participants.find((user) => state.talkingSessions.has(user.session))?.session ?? null,
+  );
+  const speaking = model.participants.find((user) => user.session === speakingSession) ?? null;
   // The rail's accent, not the window's: this band stands on the rail, and the
   // window's accent is picked for contrast against a pale surface.
   const accent = stencil ? nebula.accentOnRail : nebula.railText;

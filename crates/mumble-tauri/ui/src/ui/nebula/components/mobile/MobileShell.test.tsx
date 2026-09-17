@@ -69,7 +69,6 @@ function model(over: Partial<MobileShellModel> = {}): MobileShellModel {
     voice: {
       channelName: "Green is fucked",
       participants: USERS as never,
-      talkingSessions: new Set([7]),
       ownSession: 1,
       micLive: false,
       deafened: false,
@@ -92,7 +91,6 @@ function model(over: Partial<MobileShellModel> = {}): MobileShellModel {
       users: USERS as never,
       selectedChannel: 1,
       currentChannel: 1,
-      talkingSessions: new Set([7]),
       unreadCounts: {},
       ownSession: 1,
       onSelect: noop,
@@ -132,7 +130,6 @@ function model(over: Partial<MobileShellModel> = {}): MobileShellModel {
       groups: [],
       query: "",
       onQueryChange: noop,
-      talkingSessions: new Set(),
       ownSession: 1,
       showOffline: false,
       onShowOfflineChange: noop,

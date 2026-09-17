@@ -30,6 +30,8 @@ import {
   LiveBadge, VoiceContextBadge,
   VoiceStateBadges,
   Stack,
+  SpeakingAvatar,
+  useIsTalking,
 } from "../primitives";
 import { radius } from "../../tokens";
 
@@ -41,7 +43,6 @@ interface ChannelListProps {
   users: readonly UserEntry[];
   selectedChannel: number | null;
   currentChannel: number | null;
-  talkingSessions: ReadonlySet<number>;
   unreadCounts: Record<number, number>;
   ownSession: number | null;
   /** Channels being listened to without being in them, each marked on its row. */
@@ -93,7 +94,6 @@ export function ChannelList({
   users,
   selectedChannel,
   currentChannel,
-  talkingSessions,
   unreadCounts,
   ownSession,
   listenedChannels = NO_CHANNELS,
@@ -149,7 +149,6 @@ export function ChannelList({
       unread={unreadCounts[entry.channel.id] ?? 0}
       listening={listenedChannels.has(entry.channel.id)}
       ownSession={ownSession}
-      talkingSessions={talkingSessions}
       onSelect={onSelect}
       onJoin={onJoin}
       onContextMenu={onContextMenu}
@@ -305,7 +304,6 @@ interface ChannelRowProps {
   /** Listened to from outside it, which the row marks. */
   listening: boolean;
   ownSession: number | null;
-  talkingSessions: ReadonlySet<number>;
   onSelect: (channel: ChannelEntry) => void;
   onJoin: (channel: ChannelEntry) => void;
   onContextMenu: (channel: ChannelEntry, event: React.MouseEvent) => void;
@@ -331,7 +329,6 @@ function ChannelRow({
   unread,
   listening,
   ownSession,
-  talkingSessions,
   onSelect,
   onJoin,
   onContextMenu,
@@ -473,7 +470,7 @@ function ChannelRow({
             picking which room to speak in is exactly when it matters. */}
         <PchatBadge protocol={channel.pchat_protocol} />
         {listening && <ListenMark />}
-        {stacked && <StackedOccupants occupants={occupants} talkingSessions={talkingSessions} />}
+        {stacked && <StackedOccupants occupants={occupants} />}
         {/* Faces carry no badges, so a room drawn as a stack says it has
             someone sharing on the row itself, as Standard's icon list does. */}
         {stacked && <LiveBadge sessions={occupants.map((occupant) => occupant.session)} />}
@@ -535,7 +532,6 @@ function ChannelRow({
               <OccupantRow
                 user={user}
                 own={user.session === ownSession}
-                talking={talkingSessions.has(user.session)}
                 canMove={canMove}
                 registerRow={registerRow}
                 onSelect={onSelectUser}
@@ -558,10 +554,7 @@ function ChannelRow({
  * with thirty people in it is "thirty people", and thirty 18px circles say
  * that worse than the number does.
  */
-function StackedOccupants({
-  occupants,
-  talkingSessions,
-}: Readonly<{ occupants: readonly UserEntry[]; talkingSessions: ReadonlySet<number> }>) {
+function StackedOccupants({ occupants }: Readonly<{ occupants: readonly UserEntry[] }>) {
   const shown = occupants.slice(0, MAX_STACKED);
   const overflow = occupants.length - shown.length;
 
@@ -570,12 +563,11 @@ function StackedOccupants({
       {shown.map((user, index) => (
         <Tooltip key={user.session} title={user.name}>
           <Box sx={{ display: "flex", ml: index === 0 ? 0 : "-6px" }}>
-            <UserAvatar
+            <SpeakingAvatar
               name={user.name}
               session={user.session}
               textureSize={user.texture_size}
               size={18}
-              talking={talkingSessions.has(user.session)}
             />
           </Box>
         </Tooltip>
@@ -599,7 +591,6 @@ function StackedOccupants({
 interface OccupantRowProps {
   user: UserEntry;
   own: boolean;
-  talking: boolean;
   /** Whether this channel's people may be moved out of it by hand. */
   canMove: boolean;
   registerRow: (session: number, element: HTMLElement | null) => void;
@@ -612,7 +603,6 @@ interface OccupantRowProps {
 function OccupantRow({
   user,
   own,
-  talking,
   canMove,
   registerRow,
   onSelect,
@@ -621,6 +611,10 @@ function OccupantRow({
   onContextMenu,
 }: Readonly<OccupantRowProps>) {
   const { t } = useTranslation("nebulaSidebar");
+  // Asked here rather than handed down the tree: the answer changes several
+  // times a second, and a set passed from the shell re-rendered every channel
+  // and every occupant in it on each edge.
+  const talking = useIsTalking(user.session);
   // Your own row goes wherever you may go; anyone else's needs the permission
   // to move them. Touch has no cursor to carry anything with.
   const carry = useCarryUser(user.session, isMobile || (!own && !canMove));

@@ -14,8 +14,9 @@ import { useTranslation } from "react-i18next";
 import { Box } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { ChevronDownIcon, HeadphonesIcon, MicIcon, MicOffIcon, MonitorIcon } from "@ui/icons";
-import { Stack, TalkingBars, UserAvatar } from "../primitives";
+import { Stack, TalkingBars, UserAvatar, useIsTalking } from "../primitives";
 import type { VoiceModel } from "../../shellModel";
+import type { UserEntry } from "@core/types";
 import { DisplayText, PlateButton, useStencil } from "./mobileMarks";
 
 export function MobileVoiceScreen({
@@ -136,56 +137,9 @@ export function MobileVoiceScreen({
         gap={1.75}
         sx={{ position: "relative", px: "20px", pt: "30px", flex: 1, minHeight: 0, overflowY: "auto" }}
       >
-        {model.participants.map((user) => {
-          const talking = model.talkingSessions.has(user.session);
-          const own = user.session === model.ownSession;
-          const muted = own && !model.micLive;
-          return (
-            <Stack
-              key={user.session}
-              direction="row"
-              alignItems="center"
-              gap={1.75}
-              data-testid="nebula-mobile-voice-row"
-              sx={{
-                flex: "none",
-                px: "14px",
-                py: "12px",
-                background: nebula.railTile,
-                border: `var(--nebula-line-width, 1px) solid ${talking ? accent : nebula.railLine}`,
-                borderRadius: "var(--nebula-radius-lg, 12px)",
-              }}
-            >
-              <UserAvatar
-                name={user.name}
-                session={user.session}
-                textureSize={user.texture_size}
-                size={48}
-                talking={talking}
-              />
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Box sx={{ fontWeight: 900, fontSize: 17, color: nebula.railText }}>{user.name}</Box>
-                <Box
-                  sx={{
-                    mt: "2px",
-                    fontSize: 10,
-                    fontWeight: 700,
-                    letterSpacing: ".16em",
-                    textTransform: "uppercase",
-                    color: muted ? nebula.bad : talking ? accent : nebula.railDim,
-                  }}
-                >
-                  {muted
-                    ? t("nebulaChat:mobile.micMuted")
-                    : talking
-                      ? t("nebulaChat:mobile.isSpeaking")
-                      : t("nebulaChat:mobile.listening")}
-                </Box>
-              </Box>
-              <TalkingBars talking={talking} />
-            </Stack>
-          );
-        })}
+        {model.participants.map((user) => (
+          <VoiceRow key={user.session} user={user} model={model} />
+        ))}
       </Stack>
 
       <Stack
@@ -242,6 +196,69 @@ export function MobileVoiceScreen({
           <DisplayText size={15}>{t("nebulaChat:mobile.disconnect")}</DisplayText>
         </PlateButton>
       </Stack>
+    </Stack>
+  );
+}
+
+/**
+ * One person in the call.
+ *
+ * A component rather than a block inside the map, so whether they are speaking
+ * is a question this row asks the store for itself. The screen used to be
+ * handed the whole talking set, which meant every utterance edge re-rendered
+ * the screen, its buttons and every other row on it.
+ */
+function VoiceRow({ user, model }: Readonly<{ user: UserEntry; model: VoiceModel }>) {
+  const { t } = useTranslation(["nebulaChat", "chat", "common"]);
+  const stencil = useStencil();
+  const nebula = useTheme().palette.nebula;
+  const accent = stencil ? nebula.accentOnRail : nebula.railText;
+  const talking = useIsTalking(user.session);
+  const own = user.session === model.ownSession;
+  const muted = own && !model.micLive;
+
+  return (
+    <Stack
+      direction="row"
+      alignItems="center"
+      gap={1.75}
+      data-testid="nebula-mobile-voice-row"
+      sx={{
+        flex: "none",
+        px: "14px",
+        py: "12px",
+        background: nebula.railTile,
+        border: `var(--nebula-line-width, 1px) solid ${talking ? accent : nebula.railLine}`,
+        borderRadius: "var(--nebula-radius-lg, 12px)",
+      }}
+    >
+      <UserAvatar
+        name={user.name}
+        session={user.session}
+        textureSize={user.texture_size}
+        size={48}
+        talking={talking}
+      />
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ fontWeight: 900, fontSize: 17, color: nebula.railText }}>{user.name}</Box>
+        <Box
+          sx={{
+            mt: "2px",
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: ".16em",
+            textTransform: "uppercase",
+            color: muted ? nebula.bad : talking ? accent : nebula.railDim,
+          }}
+        >
+          {muted
+            ? t("nebulaChat:mobile.micMuted")
+            : talking
+              ? t("nebulaChat:mobile.isSpeaking")
+              : t("nebulaChat:mobile.listening")}
+        </Box>
+      </Box>
+      <TalkingBars talking={talking} />
     </Stack>
   );
 }
