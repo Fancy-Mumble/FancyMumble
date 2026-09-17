@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { Box, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@core/store";
@@ -76,13 +76,10 @@ function findMessage(
  */
 export default function QuoteBlock({ messageId, onScrollTo }: QuoteBlockProps) {
   const { t } = useTranslation("common");
-  const messages = useAppStore((s) => s.messages);
-  const dmMessages = useAppStore((s) => s.dmMessages);
-
-  const quoted = useMemo(
-    () => findMessage(messageId, messages, dmMessages),
-    [messageId, messages, dmMessages],
-  );
+  // The quoted message itself, not the two lists it might be in. Selecting
+  // those meant every reply in the river re-rendered on every arrival, each of
+  // them walking the whole conversation again to find the line it quotes.
+  const quoted = useAppStore((s) => findMessage(messageId, s.messages, s.dmMessages));
 
   const handleClick = useCallback(() => {
     onScrollTo?.(messageId);

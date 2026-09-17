@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Box } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@core/store";
+import { hashesOf, selectChannelHashKey, selectOwnHash } from "@core/store/selectors";
 import { allActiveUsersRead, getReadersForMessage } from "@core/features/chat/readreceipt/readReceiptStore";
 import { CheckDoubleIcon, CheckIcon } from "@ui/icons";
 
@@ -25,17 +26,15 @@ export default function ReadReceiptIndicator({
   allMessageIds,
 }: ReadReceiptIndicatorProps) {
   const readReceiptVersion = useAppStore((s) => s.readReceiptVersion);
-  const users = useAppStore((s) => s.users);
-  const ownSession = useAppStore((s) => s.ownSession);
+  // Two strings rather than the roster. A tick on a message has nothing to say
+  // about anybody arriving or muting, but selecting `users` meant every row
+  // carrying one re-rendered whenever the backend re-sent the list.
+  const ownHash = useAppStore(selectOwnHash);
+  const channelHashKey = useAppStore(selectChannelHashKey(channelId));
 
   const { t } = useTranslation("chat");
 
-  const ownHash = useMemo(() => users.find((u) => u.session === ownSession)?.hash, [users, ownSession]);
-
-  const activeHashes = useMemo(
-    () => users.filter((u) => u.channel_id === channelId && u.hash).map((u) => u.hash!),
-    [users, channelId],
-  );
+  const activeHashes = useMemo(() => hashesOf(channelHashKey), [channelHashKey]);
 
   const allRead = useMemo(
     () => allActiveUsersRead(channelId, messageId, allMessageIds, activeHashes, ownHash),
