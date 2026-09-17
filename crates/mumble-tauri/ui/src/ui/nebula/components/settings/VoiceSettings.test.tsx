@@ -167,7 +167,9 @@ describe("VoiceSettings", () => {
 
   it("asks for a calibration the input chain has never had, and starts one", async () => {
     await renderPage();
-    expect(screen.getByText("Calibration needed")).toBeTruthy();
+    // The saved calibration is a second read that settles after the page
+    // itself, so the banner is waited for, not expected on arrival.
+    expect(await screen.findByText("Calibration needed")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Calibrate" }));
     await waitFor(() => expect(invokeMock.mock.calls.some(([cmd]) => cmd === "start_mic_test")).toBe(true));

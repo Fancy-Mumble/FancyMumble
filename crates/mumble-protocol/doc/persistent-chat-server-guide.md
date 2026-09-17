@@ -12,6 +12,15 @@
 > **Companion document**: See `persistent-chat.md` for the full
 > architecture, encryption scheme, and client-side design.
 
+> **Transport superseded.** The chapters on the wire describe how the extension
+> was first built: `PluginDataTransmission` envelopes told apart by `dataID`,
+> carrying MessagePack. Since the epoch-1 wire canon the same messages travel as
+> first-class protobuf control messages - the `Pchat*` entries in
+> [`src/fancy_message_support.rs`](../src/fancy_message_support.rs), defined in
+> [`proto/fancy/pchat.proto`](../proto/fancy/pchat.proto). The encryption scheme,
+> key management and trust chapters still describe the code; read the transport
+> chapters as history.
+
 ---
 
 ## Table of Contents

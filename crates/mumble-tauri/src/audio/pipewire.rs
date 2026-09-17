@@ -696,7 +696,9 @@ mod tests {
 
         let raw = std::fs::read(&wav).unwrap_or_default();
         let samples: Vec<f32> = raw
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .skip(22) // WAV header
             .map(|c| f32::from(i16::from_le_bytes([c[0], c[1]])) / 32768.0)
             .collect();

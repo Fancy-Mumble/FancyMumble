@@ -5,185 +5,92 @@
 
 ## Project overview
 
-**Fancy Mumble** is a modern desktop Mumble (VoIP) client with profile
-customisation features (avatar frames, banners, nameplates, effects).
-Licensed MIT.  Written in Rust + TypeScript/React.
+**Fancy Mumble** is a modern Mumble (VoIP) client for Windows, Linux and
+Android: voice, rich and end-to-end encrypted persistent chat, screen sharing,
+profile customisation, server administration.  Licensed MIT.  Written in
+Rust + TypeScript/React.  The server it is developed against is Starling
+(<https://github.com/Fancy-Mumble/starling>); voice and plain text chat work
+against any Mumble server.
 
 | Layer | Crate / package | Tech |
 |-------|-----------------|------|
 | Protocol library | `crates/mumble-protocol` | Rust, tokio, prost (protobuf), rustls, optional Opus codec |
 | OMLSA denoiser | `crates/mumble-protocol` | Inlined in `src/audio/filter/denoiser/omlsa/` (Cohen 2001/2003), uses `realfft` |
 | DeepFilterNet denoiser | `crates/fancy-denoiser-deepfilter` | Standalone Rust crate, `DeepFilterNet3` (Schroeter et al. 2023) via upstream `deep_filter` git dep + pinned `tract-onnx`/`ndarray` |
-| Tauri backend | `crates/mumble-tauri` | Rust, Tauri 2, cpal (audio I/O, desktop only), rcgen (self-signed certs) |
-| Tauri frontend | `crates/mumble-tauri/ui` | React 19, Vite 6, Zustand 5, react-router-dom 7, TypeScript 5 |
+| Tauri backend | `crates/mumble-tauri` | Rust, Tauri 2, rcgen (self-signed certs), oboe (Android audio) |
+| Audio devices | `crates/fancy-audio-device` | cpal capture and mixing playback shared by both clients, plus a WASAPI path |
+| Screen sharing | `crates/fancy-screenshare` | Capture, hardware encode (Media Foundation, NVENC, VA-API), WebRTC |
+| Game detection | `crates/fancy-gamedetect` | Foreground-window probe and launcher indexes (Steam, Epic, Heroic, registry) |
+| Rich presence | `crates/fancy-presence` | Hosts Discord's IPC endpoint |
+| Shared helpers | `crates/fancy-utils` | Permissions table, markdown, version and net helpers |
+| Tauri frontend | `crates/mumble-tauri/ui` | React 19, Vite 8, Zustand 5, react-router-dom 7, TypeScript 5, MUI 9 (Nebula), CSS Modules (Standard) |
 | Tauri Android | `crates/mumble-tauri/gen/android` | Gradle/Kotlin, Android API 34, NDK 27 |
-| Dioxus GUI (alt) | `crates/mumble-gui` | Rust, Dioxus 0.7 desktop - older/parallel UI, same protocol lib |
+| Signal bridge | `crates/signal-bridge` | AGPL-3.0 cdylib, excluded from the workspace, `dlopen`ed at runtime so the client stays MIT |
+| Minimal client | `crates/qt6ui` | LGPL-3.0 Qt 6 / QML client, excluded from the workspace, same protocol lib |
 
 ## Workspace layout
 
+Only the parts worth knowing before opening a file.  Anything finer than this
+goes stale faster than it helps - list the directory instead.
+
 ```
-Cargo.toml                          # Rust workspace root (resolver = "2")
-ANDROID_DEV.md                      # Android development setup guide
-scripts/
-  android-dev.ps1                   # Android prerequisites checker & dev launcher (Windows)
+Cargo.toml                      # workspace root (resolver = "3"); excludes signal-bridge and qt6ui
+config/constants.json           # cross-client constants, baked in by each build.rs
+deny.toml  .clippy.toml  rustfmt.toml
+docs/                           # RELEASING.md, design notes
+packaging/                      # aur/, flatpak/
+scripts/                        # android helpers, update manifest, changelog section
 crates/
-  mumble-protocol/                  # Pure async Mumble client library
-    proto/Mumble.proto              # TCP protobuf definitions
-    proto/MumbleUDP.proto           # UDP protobuf definitions
-    build.rs                        # prost-build code-gen
+  mumble-protocol/
+    proto/                      # Mumble.proto, MumbleUDP.proto, fancy/*.proto (the epoch-1 canon)
     src/
-      lib.rs                        # re-exports: audio, client, command, error, event, message, proto, state, transport, work_queue
-      client.rs                     # Async event-loop orchestrator (ClientConfig, ClientHandle, run())
-      state.rs                      # ServerState: tracked users (User), channels (Channel), ConnectionInfo
-      event.rs                      # EventHandler trait (on_control_message, on_udp_message, on_connected, on_disconnected)
-      error.rs                      # Error enum (thiserror), Result alias
-      message.rs                    # ControlMessage / UdpMessage enums, TcpMessageType id mapping
-      work_queue.rs                 # Priority work queue: UDP > TCP > user commands
-      command/
-        mod.rs                      # CommandAction trait, CommandOutput, BoxedCommand
-        authenticate.rs  join_channel.rs  send_audio.rs  send_text_message.rs
-        set_comment.rs   set_texture.rs   set_self_mute.rs  set_self_deaf.rs
-        set_voice_target.rs  channel_listen.rs  disconnect.rs  ban_user.rs
-        kick_user.rs  request_blob.rs  request_ban_list.rs  request_user_stats.rs
-        send_plugin_data.rs
-      transport/
-        tcp.rs                      # TcpTransport (TLS via tokio-rustls), TcpConfig
-        udp.rs                      # UdpTransport, PlaintextCryptState, UdpConfig
-        codec.rs                    # Wire framing helpers
-        audio_codec.rs              # Opus-in-UDP framing
-      audio/
-        mod.rs                      # Pipeline architecture overview
-        sample.rs                   # AudioFrame, AudioFormat
-        capture.rs                  # AudioCapture trait + SilentCapture
-        playback.rs                 # AudioPlayback trait + NullPlayback
-        encoder.rs                  # AudioEncoder trait + OpusEncoder
-        decoder.rs                  # AudioDecoder trait + OpusDecoder
-        pipeline.rs                 # OutboundPipeline / InboundPipeline
-        filter/                     # AudioFilter trait, FilterChain, NoiseGate, AutomaticGainControl
-    tests/
-      integration.rs               # End-to-end tests against a real murmur (via docker-compose)
-      audio_quality.rs              # Audio pipeline quality tests
-
-  mumble-tauri/                     # Tauri 2 desktop app
-    tauri.conf.json                 # Product "Fancy Mumble", id com.fancymumble.app, 1024×768 frameless
-    Cargo.toml                      # depends on mumble-protocol (with opus-codec), tauri 2, cpal, rcgen
+      client.rs  work_queue.rs  event.rs  state.rs  message.rs
+      canon.rs  fancy_codec.rs  fancy_message_support.rs
+      command/                  # one file per user action (CommandAction)
+      transport/                # tcp, udp, ocb2, modern_crypt (XChaCha20-Poly1305)
+      audio/                    # capture/playback traits, mixer, resampler, filter/ (AGC, gate, denoiser/)
+      persistent/               # end-to-end encrypted persistent chat: keys, encryption, protocol
+      proto/                    # prost output, written by build.rs and checked in
+    doc/                        # architecture, detailed design, persistent chat, diagrams
+    tests/                      # integration.rs (Docker), denoiser corpus
+  mumble-tauri/
+    build.rs                    # tauri-build, signal-bridge, generated TS (see below)
+    capabilities/               # Tauri ACL, hand-written
+    gen/android/                # Kotlin sources and Gradle project - hand-edited despite the name
     src/
-      main.rs                       # Tauri entry point (calls lib::run)
-      lib.rs                        # All #[tauri::command] handlers, app bootstrap
-      audio.rs                      # CpalCapture / CpalPlayback - OS audio via cpal
-      state/
-        mod.rs                      # AppState struct, SharedState, query/messaging/channel/profile methods
-        types.rs                    # UI value types (ChannelEntry, UserEntry, ChatMessage, etc.), event payloads, config structs
-        connection.rs               # connect() / disconnect() lifecycle
-        audio.rs                    # Voice pipeline management (enable, mute, deafen, outbound audio loop)
-        event_handler.rs            # TauriEventHandler - EventHandler impl bridging protocol events to Tauri
-    gen/
-      android/                      # Generated Tauri Android project (Gradle/Kotlin, API 34)
-    ui/                             # React frontend
-      package.json                  # npm deps: @tauri-apps/api 2, react 19, zustand 5, react-router-dom 7
-      vite.config.ts                # Vite 6, target esnext, Tauri env prefix
-      index.html
-      src/
-        main.tsx                    # ReactDOM.createRoot, BrowserRouter
-        App.tsx                     # Routes: /welcome (first-run), / (connect), /chat, /settings
-        store.ts                    # Zustand store: channels, users, messages, voice state, Tauri invoke/listen
-        types.ts                    # TS types mirroring Rust: ChannelEntry, UserEntry, ChatMessage, FancyProfile, AudioSettings, etc.
-        profileFormat.ts            # FancyMumble profile serialisation (comment marker <!--FANCY:{json}-->), base122 codec, data-URL helpers
-        serverStorage.ts            # Persistent saved servers via @tauri-apps/plugin-store
-        preferencesStorage.ts       # Persistent user preferences via @tauri-apps/plugin-store
-        components/
-          chat/                     # Chat view and all related components/hooks
-            ChatView.tsx            # Chat message view with rich markdown input, GIF picker, polls
-            ChatHeader.tsx          # Channel/group header bar
-            ChatComposer.tsx        # Message input area with attachments
-            ChatMessageList.tsx     # Message list rendering with date separators
-            MessageItem.tsx         # Individual message with reactions, media, quotes
-            QuotePreviewStrip.tsx   # Quote preview strip in composer
-            MarkdownInput.tsx       # Overlay-based markdown input with live formatting preview
-            GifPicker.tsx           # GIF/sticker search popup (Klipy API)
-            MediaPreview.tsx        # Image/file preview component
-            MessageContextMenu.tsx  # Right-click/long-press message menu
-            MobileMessageActionSheet.tsx  # Mobile message action sheet
-            MessageSelectionBar.tsx # Bulk message selection toolbar
-            MobileCallControls.tsx  # Mobile mic/deaf toggle buttons
-            PollCreator.tsx         # Poll creation modal (question, options, checkbox/radio)
-            PollCard.tsx            # Poll rendering in chat with interactive voting
-            useChatSend.ts          # Message sending hook
-            useChatScroll.ts        # Scroll behavior hook
-            useMessageSelection.ts  # Selection mode hook
-            usePolls.ts             # Poll creation & voting hook
-          sidebar/                  # Channel sidebar and user list
-            ChannelSidebar.tsx      # Channel tree, user list with hover profile cards
-            ModernChannelList.tsx   # Flat channel view with inline members
-            SidebarSearchView.tsx   # Search overlay for channels, users, messages
-            UserListItem.tsx        # User entry with avatar, mute/deaf badges
-            UserContextMenu.tsx     # Right-click user menu (mute, volume, admin)
-            ChannelEditorDialog.tsx # Channel creation/edit dialog
-            ChannelInfoPanel.tsx    # Channel description, members, permissions
-            PchatBadge.tsx          # Protocol indicator badge
-            RecordingModal.tsx      # Recording indicator modal
-          server/                   # Server connection and management
-            ServerList.tsx          # Saved server list (connect page)
-            PublicServerList.tsx    # Public server directory
-            ServerEditSheet.tsx     # Server edit form
-            ServerInfoPanel.tsx     # Server connection metadata panel
-            PasswordDialog.tsx      # Server password dialog
-          user/                     # User profile display
-            UserProfileView.tsx     # Full-height right panel showing user profile
-            UserInfoPanel.tsx       # User connection stats
-            MobileProfileSheet.tsx  # Mobile user profile bottom sheet
-          security/                 # Encryption, keys, persistent chat
-            KeyTrustIndicator.tsx   # Trust level icon/badge
-            KeyVerificationDialog.tsx  # Fingerprint verification dialog
-            KeyShareWarningDialog.tsx  # Key share warning
-            CustodianPrompt.tsx     # Custodian mode prompt
-            PersistenceBanner.tsx   # Persistent chat info banner
-            PersistentChatOverlays.tsx  # Container for security overlays
-            InfoBanner.tsx          # Reusable info/warning banner
-          layout/                   # App-level layout
-            TitleBar.tsx            # Custom frameless title bar
-            SuperSearch.tsx         # Global search overlay (Cmd+K)
-          elements/                 # Reusable UI primitives
-            ConfirmDialog.tsx       # Confirmation dialog
-            KebabMenu.tsx           # Dropdown kebab menu
-            Lightbox.tsx            # Full-screen media viewer with carousel
-            MessageActionBar.tsx    # Message action bar (reactions, quote, etc.)
-            MobileBottomSheet.tsx   # Swipe-to-dismiss bottom sheet
-            QuoteBlock.tsx          # Quoted message block
-            SafeHtml.tsx            # Sanitized HTML renderer
-            ExternalLinkGuard.tsx   # External link confirmation guard
-            SwipeableCard.tsx       # Swipeable list item
-            TabbedPage.tsx          # Tabbed page container
-            Toast.tsx               # Toast notification
-        pages/
-          ConnectPage.tsx           # Server connect / add-server page
-          ChatPage.tsx              # Main connected view (sidebar + chat)
-          WelcomePage.tsx           # First-run setup wizard
-          settings/
-            index.ts SettingsPage.tsx  # Tabbed settings container, auto-saves profile locally & to server
-            AudioPanel.tsx          # Input device, VAD, gain settings
-            VoicePanel.tsx          # Voice state controls
-            ProfilePanel.tsx        # FancyMumble profile editor (no manual save button - auto-saved)
-            ProfilePreviewCard.tsx  # Live profile preview (renders bio as HTML)
-            BioEditor.tsx           # Tiptap WYSIWYG bio editor (bold, italic, underline, colour)
-            AdvancedPanel.tsx       # Expert-mode settings
-            ShortcutsPanel.tsx      # PTT key binding
-            SharedControls.tsx      # Reusable setting controls
-            ImageEditor.tsx         # Avatar/banner crop/resize
-            imageUtils.ts           # Canvas helpers
-            profileData.ts          # Profile save/load logic
-            shortcutHelpers.ts      # Key combo helpers
-        utils/
-          media.ts                  # Media utility helpers
-          platform.ts               # Platform detection (isMobilePlatform, isDesktopPlatform)
-
-  mumble-gui/                       # Dioxus desktop GUI (alternative frontend)
-    Dioxus.toml
-    src/main.rs                     # Dioxus launch, App component, event bridge
-    src/state.rs
-    src/components/                 # channel_sidebar, chat_view, connect_page
-    src/services/                   # mumble_backend (wraps mumble-protocol)
+      app/                      # bootstrap
+      commands/                 # #[tauri::command] functions, one file per area; registry.rs registers them
+      state/                    # AppState, handler/ (server events), pchat/, per-feature state
+      audio/                    # desktop, pipewire, android (oboe), stream audio
+      platform/                 # per-OS window, webview and desktop integration
+      updater/                  # self-updater (feature `self-updater`) and channels
+    ui/                         # the React frontend - see below
 ```
+
+### Frontend (`crates/mumble-tauri/ui/src`)
+
+Read `src/README.md`, `src/ui/README.md` and `src/ui/nebula/ARCHITECTURE.md`
+first; they are kept current.  In short:
+
+```
+main.tsx                        # entry: picks the UI pack from the registry
+core/                           # everything that is not drawing: no pack imports from another pack
+  store/                        # the Zustand store and its slices
+  features/                     # per-feature logic and hooks (chat, admin, onboarding, settings, ...)
+  types/  utils/  i18n/  locales/  plugins/
+  utils/appConstants.ts         # GENERATED by mumble-tauri/build.rs - do not edit
+  utils/permissions.ts          # GENERATED by mumble-tauri/build.rs - do not edit
+shared/                         # components more than one pack draws (profilecard/, serverinfo/)
+ui/
+  registry.ts                   # the packs and the default (Nebula)
+  standard/                     # the classic pack: CSS Modules, themes/*.css
+  nebula/                       # the default pack: MUI 9 + `sx`, tokens.ts, theme.ts
+  aurora/                       # deprecated; do not extend
+preview/                        # scratch entries for eyeballing one component headlessly; not part of the app
+```
+
+Path aliases (`tsconfig.json`, `vite.config.ts`, `vitest.config.ts` must agree):
+`@core`, `@shared`, `@standard`, `@nebula`, `@aurora`, `@ui`.
 
 ## Key architecture decisions
 
@@ -208,7 +115,7 @@ crates/
 
 6. **Base122 encoding** - binary data inside the profile comment (which must
    be valid UTF-8) is encoded with a custom base122 codec
-   (`profileFormat.ts`: `b122Encode` / `b122Decode`).  The alphabet is
+   (`core/profileFormat.ts`: `b122Encode` / `b122Decode`).  The alphabet is
    ASCII 0-127 minus 6 illegal chars (NUL, LF, CR, `"`, `&`, `\`).  ~14 %
    smaller than base64.  Data URLs use `;base122,` as the encoding tag.
    `dataUrlToBytes` reads both `;base122` and legacy `;base64` for backwards
@@ -220,24 +127,27 @@ crates/
    `{app_data_dir}/certs/`.
 
 8. **Audio pipeline** - trait-based: `AudioCapture` -> `FilterChain` (AGC,
-   `RNNoise`-based AI noise suppressor via `nnnoiseless`, noise gate)
-   -> `OpusEncoder` -> network; inbound is the reverse.
-   OS audio I/O uses `cpal` (desktop only, gated with
-   `#[cfg(not(target_os = "android"))]`).  The denoiser is enabled via
-   the `rnnoise-denoiser` cargo feature on `mumble-protocol` (turned on
-   by both desktop and Android targets of `mumble-tauri`).
+   a denoiser, noise gate) -> `OpusEncoder` -> network; inbound is the
+   reverse, decoded on a thread of its own and mixed for playback.  The
+   denoiser is one of four backends under `audio/filter/denoiser/`
+   (`rnnoise`, `spectral_subtraction`, `omlsa`, `deepfilter`); `rnnoise` and
+   `deepfilter` sit behind the `rnnoise-denoiser` and `deepfilternet-denoiser`
+   cargo features of `mumble-protocol`.  OS audio I/O lives in
+   `fancy-audio-device` on desktop (cpal, WASAPI) with a PipeWire path in
+   `mumble-tauri/src/audio/pipewire.rs`, and in `audio/android.rs` (oboe)
+   on Android.
 
-9. **Android platform gating** - `cpal` and `tauri-plugin-global-shortcut`
-   are desktop-only dependencies.  Audio commands return stub errors on
-   Android.  The `mod audio` (cpal wrappers), audio pipeline fields
-   (`inbound_pipeline`, `outbound_task_handle`), and event handler audio
-   callbacks are all behind `#[cfg(not(target_os = "android"))]`.
+9. **Android platform gating** - desktop-only dependencies (`cpal`,
+   `tauri-plugin-global-shortcut`, screen capture) are gated with
+   `#[cfg(not(target_os = "android"))]`; Android has its own audio backend
+   rather than stubs.
 
-10. **Responsive UI** - CSS breakpoint at 768 px separates mobile from
-    desktop.  On mobile: sidebar becomes a slide-in drawer with hamburger
-    toggle, touch targets are 44 px minimum, TitleBar is hidden (Android
-    has its own status bar), and `UserProfileView` is hidden.  Platform
-    detection uses `isMobilePlatform()` from `utils/platform.ts`.
+10. **Responsive UI** - each pack owns its handheld layout.  Standard
+    switches at a 768 px CSS breakpoint (drawer sidebar, 44 px touch
+    targets, no TitleBar).  Nebula switches on `useIsHandheld` - a media
+    query OR'd with the platform - and lays out a separate one-handed shell
+    (`nebula/components/mobile/`).  Platform detection uses
+    `isMobilePlatform()` from `core/utils/platform.ts`.
 
 11. **Onboarding workflow** - native Mumble.proto extension (wire IDs
     136-140) for a Discord-style join-time questionnaire.  Requires a
@@ -245,7 +155,7 @@ crates/
     declares `(0, 3, 1) FancyOnboarding* => ServerOnly` in
     `fancy_message_support!`, and the UI gates everything on
     `isOnboardingSupported(serverFancyVersion)` from
-    `components/onboarding/onboardingStore.ts`.  On legacy / pre-0.3.1
+    `core/features/onboarding/onboardingStore.ts`.  On legacy / pre-0.3.1
     servers the modal never opens, the Settings "Channels &amp; Roles"
     tab and the Admin "Onboarding" tab are hidden, and `hydrate()` is a
     no-op.  Server broadcasts `FancyOnboardingConfig` after
@@ -255,7 +165,8 @@ crates/
     revision/updated_by/updated_at and re-broadcasts.  Users submit via
     `FancyOnboardingResponse`; the server stores per-cert-hash and
     applies the answer-mapped Mumble ACL group memberships.
-    Frontend lives under `ui/src/components/onboarding/`; backend
+    Frontend logic lives under `ui/src/core/features/onboarding/`, drawn by
+    each pack; backend
     handler in `state/handler/onboarding.rs`, state methods in
     `state/onboarding.rs`, commands in `commands/onboarding.rs`.
 
@@ -326,8 +237,9 @@ steps before declaring the task done:
    exercises the new behaviour and would fail if the feature were removed
    or regressed.  Place Rust unit tests in the same file as the code under
    test (in a `#[cfg(test)] mod tests { ... }` block) or in the relevant
-   integration test file under `tests/`.  Frontend tests go in
-   `crates/mumble-tauri/ui/src/components/__tests__/`.
+   integration test file under `tests/`.  Frontend tests sit beside the
+   file they test as `*.test.ts(x)`, or in a `__tests__/` directory next
+   to it.
 4. **Fix all build-log warnings** - run `cargo build` (or the appropriate
    build command) and resolve every warning before finishing.  A clean,
    warning-free build is a hard requirement.
@@ -335,7 +247,7 @@ steps before declaring the task done:
 ## Coding conventions
 
 ### Rust
-- Edition 2021, `resolver = "2"`
+- Edition 2024, `resolver = "3"`; `rustfmt.toml` pins the style and CI runs `cargo fmt --all -- --check`
 - Workspace-wide Clippy lints: `correctness = deny`, `suspicious/style/perf = warn`
 - `thiserror` for error enums, `Result<T>` type alias per crate
 - `tracing` for logging (not `log`)
@@ -345,7 +257,7 @@ steps before declaring the task done:
 - **Utility functions** - place new helper/utility functions in the `utils`
   module (i.e. `src/utils.rs` or `src/utils/`) of the crate being worked in.
   If a utility is general-purpose enough to benefit multiple crates, add it
-  to the `fancy-utility` crate instead and depend on it from the consuming
+  to the `fancy-utils` crate instead and depend on it from the consuming
   crate. Before creating a new utility function, check if one already exists
   in the `fancy-utils` crate to avoid duplication.
 - When you need to add a comment  to explain what your code is doing, ask yourself:
@@ -362,13 +274,17 @@ steps before declaring the task done:
 - React 19 with function components and hooks
 - State: Zustand 5 (`create` store, not context-based)
 - Routing: react-router-dom 7 (`Routes`/`Route`)
-- Styling: CSS Modules (`*.module.css`)
-- Build: Vite 6, target `esnext`
-- No ESLint config currently in repo
+- Styling: per pack - CSS Modules (`*.module.css`) in Standard, MUI 9 with
+  `sx` and the theme tokens in Nebula.  Never import one pack from another;
+  what two packs need goes in `core/` (logic) or `shared/` (drawing).
+- Build: Vite 8
+- ESLint (`npm run lint`), Prettier (`.prettierrc.json`) and `tsc --noEmit`
+  must all pass
 - `type` imports preferred (`import type { ... }`)
 - **Reusable UI elements** - new primitive UI components (buttons, inputs,
-  badges, tables, tooltips, modals, etc.) must be placed in
-  `ui/src/components/elements/`.  If you encounter an existing component
+  badges, tables, tooltips, modals, etc.) go in the pack's own primitives
+  folder: `ui/src/ui/standard/components/elements/` or
+  `ui/src/ui/nebula/components/primitives/`.  If you encounter an existing component
   elsewhere in the codebase that is clearly a generic, reusable primitive,
   move it into that folder as part of your change (Boy Scout Rule).
 
@@ -418,10 +334,6 @@ cargo tauri android dev
 cd crates/mumble-tauri
 cargo tauri android build
 
-# Run the Dioxus dev server
-cd crates/mumble-gui
-dx serve
-
 # Build the protocol library only
 cargo build -p mumble-protocol
 
@@ -438,9 +350,11 @@ docker compose -f docker-compose.test.yml down
 cd crates/mumble-tauri/ui
 npm run dev
 
-# Run frontend unit tests
+# Run frontend unit tests, lint and type check
 cd crates/mumble-tauri/ui
 npm test
+npm run lint
+npx tsc --noEmit
 ```
 
 ## Integration tests
@@ -529,94 +443,41 @@ so `cargo test` still passes without Docker.
 
 ## Frontend tests
 
-The React frontend has unit tests using **Vitest** + **@testing-library/react**,
-located in `crates/mumble-tauri/ui/src/components/__tests__/`.
+The React frontend has unit tests using **Vitest** + **@testing-library/react**
+(some 280 files).  A test sits beside the file it tests as `*.test.ts(x)`, or in
+a `__tests__/` directory next to it.  Nebula components render through
+`withNebulaTheme` from `@nebula/testTheme`.
 
 ```bash
 cd crates/mumble-tauri/ui
-npm test          # single run
-npm run test:watch # watch mode
+npm test                                  # single run
+npm run test:watch                        # watch mode
+npx vitest run src/ui/nebula/theme.test.tsx   # one file
 ```
 
-| Test file | What it covers |
-|-----------|---------------|
-| `PollCard.test.ts` | Module-level stores: `pollStore`, `voteStore`, `localVotes`, `PollPayload` wire format |
-| `ChatViewPolls.test.ts` | Poll logic: channel filtering, poll-marker regex, dedup, target computation, payload round-trips, bidirectional delivery simulation |
-| `PollCardRender.test.tsx` | React component rendering: question/options display, voting interactions, single/multi choice indicators, vote percentages |
-| `StorePollProcessing.test.ts` | Regression: Zustand store `addPoll` action, simulated plugin-data event processing, creator name resolution, multi-sender scenarios, reset resilience |
+Vitest blanks every stylesheet it is not told to process; `vitest.config.ts`
+lists the ones a test reads as text.
 
-## Tauri commands (Rust → JS bridge)
+## Tauri commands (Rust -> JS bridge)
 
-| Command | Parameters | Returns | Purpose |
-|---------|-----------|---------|---------|
-| `connect` | host, port, username, cert_label? | `()` | Connect to server |
-| `disconnect` | - | `()` | Disconnect |
-| `get_status` | - | `ConnectionStatus` | Current connection status |
-| `get_channels` | - | `ChannelEntry[]` | All channels |
-| `get_users` | - | `UserEntry[]` | All users |
-| `get_messages` | channel_id | `ChatMessage[]` | Messages for channel |
-| `send_message` | channel_id, body | `()` | Send text message |
-| `select_channel` | channel_id | `()` | UI selection |
-| `join_channel` | channel_id | `()` | Move to channel |
-| `toggle_listen` | channel_id | `bool` | Listen/unlisten |
-| `get_listened_channels` | - | `u32[]` | Listened channel IDs |
-| `get_unread_counts` | - | `Map<u32,u32>` | Unread per channel |
-| `mark_channel_read` | channel_id | - | Clear unread |
-| `get_server_config` | - | `ServerConfig` | Server limits |
-| `ping_server` | host, port | `PingResult` | Ping latency |
-| `generate_certificate` | label | `()` | Create self-signed cert |
-| `list_certificates` | - | `string[]` | Cert labels |
-| `delete_certificate` | label | `()` | Remove cert |
-| `get_audio_devices` | - | `AudioDevice[]` | List mics |
-| `get_audio_settings` | - | `AudioSettings` | Current audio config |
-| `set_audio_settings` | settings | - | Update audio config |
-| `get_voice_state` | - | `VoiceState` | Mute/deaf state |
-| `enable_voice` | - | `()` | Unmute+undeaf |
-| `disable_voice` | - | `()` | Go deaf+muted |
-| `toggle_mute` | - | `()` | Toggle mic |
-| `toggle_deafen` | - | `()` | Toggle deaf |
-| `set_user_comment` | comment | `()` | Set profile comment |
-| `set_user_texture` | texture (`Vec<u8>`) | `()` | Set avatar |
-| `send_plugin_data` | receiver_sessions, data (`Vec<u8>`), data_id | `()` | Send plugin data (polls, etc.) - receiver_sessions must list each target explicitly |
-| `get_own_session` | - | `u32 \| null` | Our own session ID (after connect) |
-| `get_onboarding_config` | - | `OnboardingConfig \| null` | Latest onboarding config from server |
-| `get_onboarding_response` | - | `OnboardingResponse \| null` | Local user's stored answers |
-| `save_onboarding_config` | config | `()` | Admin: persist new onboarding config (server stamps revision) |
-| `submit_onboarding_response` | response | `()` | User: submit answers; server applies ACL groups |
-| `request_onboarding_response` | - | `()` | User: ask server to deliver stored answers |
-| `reset_app_data` | - | `()` | Factory reset |
+There are several hundred, so there is no table here to go stale.  They live in
+`crates/mumble-tauri/src/commands/`, one file per area (`connection.rs`,
+`messaging.rs`, `channels.rs`, `audio.rs`, `screenshare.rs`, `admin.rs`, ...),
+and are registered in `commands/registry.rs`.  A new command needs its
+function, its registration, and - if it is not covered by an existing
+permission - an entry under `crates/mumble-tauri/capabilities/`.
 
-## Key types (TypeScript)
+Blocking work inside a command goes through `spawn_blocking`: a command that
+blocks a runtime worker starves the protocol event loop, and the first symptom
+is audio dropping out.
 
-```typescript
-// types.ts
-ChannelEntry    { id, parent_id, name, description, user_count }
-UserEntry       { session, name, channel_id, texture: number[]|null, comment: string|null }
-ChatMessage     { sender_session, sender_name, body, channel_id, is_own }
-SavedServer     { id, label, host, port, username, cert_label }
-UserPreferences { userMode, hasCompletedSetup, defaultUsername }
-AudioSettings   { selected_device, auto_gain, vad_threshold, max_gain_db, noise_gate_close_ratio, hold_frames, push_to_talk, push_to_talk_key }
-FancyProfile    { v, decoration, nameplate, effect, banner: {color,image}, nameStyle: {font,color,gradient,glow,bold,italic}, cardBackground, cardBackgroundCustom, avatarBorder, avatarBorderCustom, status }
-VoiceState      = "inactive" | "active" | "muted"
-ConnectionStatus = "disconnected" | "connecting" | "connected"
-OnboardingConfig    { version, enabled, default_channel_ids: number[], questions: OnboardingQuestion[], revision, updated_by?, updated_at? }
-OnboardingQuestion  { id, text, multi_select, required, ask_before_join, answers: OnboardingAnswer[] }
-OnboardingAnswer    { id, label, channel_ids: number[], group_names: string[], emoji?, description? }
-OnboardingResponse  { user_hash?, submitted_at?, config_revision, selections: { question_id, answer_ids: string[] }[] }
-```
+## Key types
 
-## Key types (Rust - mumble-protocol)
+TypeScript types live in `ui/src/core/types/` (split by area; `chat.ts` holds
+`UserEntry`, `ChannelEntry` and the message types).  The store is
+`ui/src/core/store/index.ts` with its slices under `store/slices/`.
 
-```rust
-// state.rs
-User     { session, name, channel_id, mute, deaf, self_mute, self_deaf, comment, texture, hash }
-Channel  { channel_id, parent_id, name, description, position, temporary, max_users }
-ServerState { connection: ConnectionInfo, users: HashMap<u32,User>, channels: HashMap<u32,Channel> }
-
-// client.rs
-ClientConfig { tcp: TcpConfig, udp: UdpConfig, ping_interval }
-ClientHandle { send<C: CommandAction>(cmd) }
-
-// error.rs
-Error { Io, Tls, Decode, Encode, UnknownMessageType, Rejected, ConnectionClosed, QueueClosed, InvalidState, OpusCodec, Other }
-```
+On the Rust side: `ClientHandle`, `CommandAction` and `EventHandler` in
+`mumble-protocol` (`client.rs`, `command/mod.rs`, `event.rs`), `ServerState` in
+`state.rs`, `ControlMessage` in `message.rs`, and `AppState` in
+`mumble-tauri/src/state/mod.rs`.

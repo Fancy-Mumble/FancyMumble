@@ -88,7 +88,9 @@ pub(crate) fn push(session: u32, stereo: &[f32]) {
     // Downmix into a scratch buffer: `push` takes a slice, and frames arrive
     // 20 ms at a time, so this is one small allocation per frame.
     let mono: Vec<f32> = stereo
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|f| (f[0] + f[1]) * 0.5)
         .collect();
     // `push`, not `push_complete`: a stream never sends a terminator, so this

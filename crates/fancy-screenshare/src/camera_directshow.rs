@@ -847,7 +847,10 @@ fn convert_rgb(buf: &[u8], w: u32, h: u32, bpp: usize, bottom_up: bool) -> RgbaI
     convert_rows_parallel(wu, hu, |row, dst| {
         let src_y = if bottom_up { hu - 1 - row } else { row };
         let src = &buf[src_y * stride..src_y * stride + wu * bpp];
-        for (s, d) in src.chunks_exact(bpp).zip(dst.chunks_exact_mut(4)) {
+        for (s, d) in src
+            .chunks_exact(bpp)
+            .zip(dst.as_chunks_mut::<4>().0.iter_mut())
+        {
             // DIB pixel order is BGR(X).
             d[0] = s[2];
             d[1] = s[1];

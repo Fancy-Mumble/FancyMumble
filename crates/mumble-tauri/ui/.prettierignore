@@ -3,4 +3,6 @@ dist
 build
 coverage
 *.min.*
-src-tauri/target
+# Written by crates/mumble-tauri/build.rs, which compares byte for byte.
+src/core/utils/appConstants.ts
+src/core/utils/permissions.ts

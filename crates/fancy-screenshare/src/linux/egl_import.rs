@@ -521,7 +521,7 @@ impl DmabufImporter {
         // returns texel-memory order - row 0 is the buffer's TOP row, same
         // as the dmabuf (a flip here showed everyone an upside-down share).
         // Only force alpha opaque: the X channel of BGRx reads undefined.
-        for px in rgba.chunks_exact_mut(4) {
+        for px in rgba.as_chunks_mut::<4>().0 {
             px[3] = 255;
         }
         Ok(rgba)

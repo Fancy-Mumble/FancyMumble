@@ -6,9 +6,13 @@ on:
   pull_request:
     branches: [main, develop, beta]
 
+# A newer push supersedes an older pull-request run. A run on `main` or `beta`
+# is never cancelled: it ends in the release job, and one cancelled between
+# creating the tag and publishing the manifest leaves a release no client is
+# told about.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -156,7 +160,9 @@ jobs:
 
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
-        run: choco install protoc -y
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       # -- Frontend ------------------------------------------------
       - name: Install npm dependencies
@@ -352,7 +358,9 @@ jobs:
 
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
-        run: choco install protoc -y
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install npm dependencies
         working-directory: crates/mumble-tauri/ui
@@ -467,6 +475,10 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The action's default also asks for `tools`, an obsolete package the
+          # SDK repository no longer serves; sdkmanager fails on it.
+          packages: platform-tools
 
       - name: Install Android NDK
         run: sdkmanager --install "ndk;27.0.12077973"
@@ -644,9 +656,15 @@ jobs:
           sudo apt-get install -y \
             libasound2-dev protobuf-compiler libgl1-mesa-dev libxkbcommon-dev ninja-build
 
-      - name: Install protoc and ninja (Windows)
+      - name: Install protoc (Windows)
         if: runner.os == 'Windows'
-        run: choco install protoc ninja -y
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install ninja (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja -y
 
       - name: Build qt6ui (Windows)
         if: runner.os == 'Windows'
@@ -773,9 +791,19 @@ jobs:
             "${{ steps.version.outputs.version }}" "$BASE" artifacts "$NOTES" > latest.json
           cat latest.json
 
+      # The hand-written section for this version leads the release notes and
+      # GitHub's generated list follows it. develop takes direct pushes, so the
+      # generated list alone would be one line: the pull request into main.
+      - name: Release notes from the changelog
+        run: |
+          set -euo pipefail
+          bash scripts/changelog-section.sh "${{ steps.version.outputs.version }}" > release-notes.md
+          cat release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          body_path: release-notes.md
           tag_name: ${{ steps.version.outputs.tag }}
           name: Fancy Mumble ${{ steps.version.outputs.tag }}${{ steps.version.outputs.is_beta == 'true' && ' (beta)' || '' }}
           generate_release_notes: true
