@@ -2752,6 +2752,9 @@ async function adoptCanonFileService(): Promise<boolean> {
   return available !== null;
 }
 
+/** When each typist's "is typing" mark runs out, keyed `channel:session`. */
+const typingExpiry = new Map<string, ReturnType<typeof setTimeout>>();
+
 export async function initEventListeners(navigate: (path: string) => void): Promise<UnlistenFn[]> {
   navigateRef = navigate;
   const unlisteners: UnlistenFn[] = [watchSelfFriend(useAppStore)];
@@ -3843,30 +3846,41 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
   unlisteners.push(
     await listen<{ session: number; channel_id: number }>(TauriEvent.TypingIndicator, (event) => {
       const { session, channel_id } = event.payload;
-      useAppStore.setState((prev) => {
-        const next = new Map(prev.typingUsers);
-        const channelSet = new Set(next.get(channel_id));
-        channelSet.add(session);
-        next.set(channel_id, channelSet);
-        return { typingUsers: next };
-      });
+      const who = `${channel_id}:${session}`;
 
-      // Auto-expire after 5 seconds.
-      setTimeout(() => {
+      // Only the first keystroke of a run changes what is on screen. The ones
+      // after it used to republish the whole map regardless, waking every
+      // reader of it to tell them something they already knew.
+      const showing = useAppStore.getState().typingUsers.get(channel_id)?.has(session) ?? false;
+      if (!showing) {
         useAppStore.setState((prev) => {
           const next = new Map(prev.typingUsers);
-          const channelSet = next.get(channel_id);
-          if (!channelSet) return prev;
-          const updated = new Set(channelSet);
-          updated.delete(session);
-          if (updated.size === 0) {
-            next.delete(channel_id);
-          } else {
-            next.set(channel_id, updated);
-          }
+          next.set(channel_id, new Set(prev.typingUsers.get(channel_id)).add(session));
           return { typingUsers: next };
         });
-      }, 5000);
+      }
+
+      // The mark lasts five seconds from the *last* thing they typed, so one
+      // timer each, restarted. A timer per keystroke meant the first one fired
+      // while they were still typing and took the mark away under them.
+      const running = typingExpiry.get(who);
+      if (running) clearTimeout(running);
+      typingExpiry.set(
+        who,
+        setTimeout(() => {
+          typingExpiry.delete(who);
+          useAppStore.setState((prev) => {
+            const channelSet = prev.typingUsers.get(channel_id);
+            if (!channelSet?.has(session)) return {};
+            const next = new Map(prev.typingUsers);
+            const updated = new Set(channelSet);
+            updated.delete(session);
+            if (updated.size === 0) next.delete(channel_id);
+            else next.set(channel_id, updated);
+            return { typingUsers: next };
+          });
+        }, 5000),
+      );
     }),
   );
 
