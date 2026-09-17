@@ -1225,7 +1225,7 @@ mod tests {
             let bar_x = (i * 9) % (W - 40);
             for row in 0..H as usize {
                 let start = row * (W as usize) * 4 + (bar_x as usize) * 4;
-                for px in rgba[start..start + 40 * 4].chunks_exact_mut(4) {
+                for px in rgba[start..start + 40 * 4].as_chunks_mut::<4>().0 {
                     px[0] = 240;
                     px[1] = 80;
                     px[2] = (i * 4) as u8;

@@ -46,8 +46,8 @@ pub trait AudioDecoder: Send + 'static {
 #[cfg(feature = "opus-codec")]
 fn f32_slice_to_ne_bytes(pcm: &[f32]) -> Vec<u8> {
     let mut data = vec![0u8; pcm.len() * 4];
-    for (chunk, s) in data.chunks_exact_mut(4).zip(pcm) {
-        chunk.copy_from_slice(&s.to_ne_bytes());
+    for (chunk, s) in data.as_chunks_mut::<4>().0.iter_mut().zip(pcm) {
+        *chunk = s.to_ne_bytes();
     }
     data
 }

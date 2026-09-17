@@ -143,28 +143,22 @@ fn without_silent_tracks(moov: &[u8]) -> Option<Vec<u8>> {
 /// to be rewritten as `co64`, which a wallpaper capped far below that never
 /// needs.
 fn shift_narrow(entries: &mut [u8], delta: i64) -> bool {
-    for entry in entries.chunks_exact_mut(4) {
-        let Ok(raw) = (&*entry).try_into() else {
-            return false;
-        };
-        let Some(moved) = i64::from(u32::from_be_bytes(raw)).checked_add(delta) else {
+    for entry in entries.as_chunks_mut::<4>().0 {
+        let Some(moved) = i64::from(u32::from_be_bytes(*entry)).checked_add(delta) else {
             return false;
         };
         let Ok(moved) = u32::try_from(moved) else {
             return false;
         };
-        entry.copy_from_slice(&moved.to_be_bytes());
+        *entry = moved.to_be_bytes();
     }
     true
 }
 
 /// Add `delta` to each 64-bit chunk offset in a `co64`'s entry table.
 fn shift_wide(entries: &mut [u8], delta: i64) -> bool {
-    for entry in entries.chunks_exact_mut(8) {
-        let Ok(raw) = (&*entry).try_into() else {
-            return false;
-        };
-        let Ok(moved) = i64::try_from(u64::from_be_bytes(raw)) else {
+    for entry in entries.as_chunks_mut::<8>().0 {
+        let Ok(moved) = i64::try_from(u64::from_be_bytes(*entry)) else {
             return false;
         };
         let Some(moved) = moved.checked_add(delta) else {
@@ -173,7 +167,7 @@ fn shift_wide(entries: &mut [u8], delta: i64) -> bool {
         let Ok(moved) = u64::try_from(moved) else {
             return false;
         };
-        entry.copy_from_slice(&moved.to_be_bytes());
+        *entry = moved.to_be_bytes();
     }
     true
 }
