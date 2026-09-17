@@ -257,15 +257,14 @@ mod tests {
     /// anything not already here.
     const UNCARRIED: &[&str] = &[
         // The persistent-chat key ladder past the parts the canon models: the
-        // challenge round trip, the epoch countersignature, and the fetch and
-        // delete verbs.
+        // challenge round trip, the epoch countersignature, the offline queue
+        // and the reaction fetch.
         "PchatAck",
         "PchatEpochCountersig",
         "PchatKeyHoldersList",
         "PchatKeyChallenge",
         "PchatKeyChallengeResponse",
         "PchatKeyChallengeResult",
-        "PchatDeleteMessages",
         "PchatOfflineQueueDrain",
         "PchatReactionFetchResponse",
         "FancyCustomReactionsConfig",
