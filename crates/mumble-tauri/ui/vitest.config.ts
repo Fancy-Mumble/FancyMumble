@@ -16,6 +16,9 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    // Room for the slowest file under a full parallel run; see the note on
+    // `asyncUtilTimeout` in the setup file.
+    testTimeout: 20_000,
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
     css: {

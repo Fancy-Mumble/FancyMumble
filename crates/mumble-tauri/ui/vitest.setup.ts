@@ -8,6 +8,22 @@
  */
 
 import { vi } from "vitest";
+import { configure } from "@testing-library/react";
+
+/**
+ * How long a `findBy…` waits before giving up.
+ *
+ * Testing Library's default is one second, which is generous for one test and
+ * not nearly enough for two hundred files running at once on a machine with
+ * two dozen cores: a render that takes four milliseconds on its own can take
+ * far longer when every worker is competing for the thread. The result was a
+ * rotating handful of failures that all passed when run on their own, which is
+ * the least useful kind of red.
+ *
+ * A longer ceiling costs a passing test nothing - it waits for the condition,
+ * not for the timeout - and only makes a genuinely broken one slower to report.
+ */
+configure({ asyncUtilTimeout: 5000 });
 // The shared namespaces moved into `locales/common/` and the packs took their
 // own strings with them. Both layouts are read, newer over older, because the
 // move is still in flight and a key that has not been carried across yet is
