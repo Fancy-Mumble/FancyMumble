@@ -12,7 +12,6 @@ import {
   isAtTail,
   initialWindow,
   windowAfterAppend,
-  windowAfterPrepend,
   windowAtTail,
   windowToInclude,
   SETTLE_SHRINK_MS,
@@ -243,8 +242,9 @@ export function MessageList({
   /** Scroll height before the last render, for the prepend correction below. */
   const previousHeight = useRef(0);
   const previousFirstId = useRef<string | null>(null);
-  /** The newest id last time, which is what says whether the tail grew. */
-  const previousLastId = useRef<string | null>(null);
+  /** The ids at each end last time: what tells a prepend from an arrival. */
+  const previousFirstEdge = useRef<string | null>(null);
+  const previousLastEdge = useRef<string | null>(null);
   /** Arrivals the reader has not been carried down to. */
   const [unseenBelow, setUnseenBelow] = useState(0);
 
@@ -296,35 +296,43 @@ export function MessageList({
   // above the viewport keep their place instead of being unmounted from under
   // them; at the bottom it snaps back and the history is released.
   //
-  // A page of fetched scrollback grows the list by exactly the same number, at
-  // the other end, and the two want opposite things: an arrival may carry the
-  // reader down and is worth announcing, while history joined at the head must
-  // move nothing and is not news. Told apart by the last id - it only stays the
-  // same when nothing was added at the tail - because the count cannot say
-  // which end grew.
+  // A page of fetched scrollback grows the list by the same number at the other
+  // end, and the window is deliberately left alone for it: every index has
+  // shifted by that many, so a window that does not move is now looking at the
+  // rows that just arrived, which is what makes scrolling back mount older
+  // messages at all. Moving the window with them would pin the reader to the
+  // same messages and fetch history they could never reach - which is what an
+  // earlier version of this did, and it took the real client to catch it.
+  //
+  // What the two do differ about is whether to announce anything: an arrival
+  // below the reader is news, a page of last week's messages is not, and
+  // announcing it was how paging backwards came to report "N new messages".
   useLayoutEffect(() => {
     const added = messages.length - previousCount.current;
     const previous = previousCount.current;
+    const firstId = messages[0]?.message_id ?? null;
     const lastId = messages.at(-1)?.message_id ?? null;
-    const grewAtTail = lastId !== previousLastId.current;
+    // Positive evidence only: ids at both ends, the head changed and the tail
+    // did not. Without ids to compare this says "arrival", which is what it
+    // said before there was a question.
+    const prepended =
+      firstId !== null &&
+      lastId !== null &&
+      previousFirstEdge.current !== null &&
+      previousLastEdge.current !== null &&
+      firstId !== previousFirstEdge.current &&
+      lastId === previousLastEdge.current;
     previousCount.current = messages.length;
-    previousLastId.current = lastId;
+    previousFirstEdge.current = firstId;
+    previousLastEdge.current = lastId;
     if (added <= 0) return;
-
-    if (!grewAtTail) {
-      // Older rows at the head: every index the window holds has shifted by
-      // exactly that many, so the window shifts with them and the reader keeps
-      // the rows they were reading. Nothing arrived, so nothing is announced.
-      setRange(windowAfterPrepend(resolved, added));
-      return;
-    }
 
     // Followed down only when the window already reached the newest row.
     // Otherwise the range stays where it is and the reader is told, rather
     // than being moved to something they did not ask to see.
     const wasAtTail = isAtTail(resolved, previous);
     setRange(windowAfterAppend(resolved, messages.length, wasAtTail));
-    if (!wasAtTail) setUnseenBelow((n) => n + added);
+    if (!wasAtTail && !prepended) setUnseenBelow((n) => n + added);
   }, [messages, resolved]);
 
   // One batched avatar fetch for the whole list; the texture size comes from
