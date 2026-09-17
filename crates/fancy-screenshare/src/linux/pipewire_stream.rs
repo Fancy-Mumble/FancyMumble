@@ -861,7 +861,12 @@ fn convert_to_rgba(
         let in_row = &src[row_index * stride..row_index * stride + w * bpp];
         match format {
             VideoFormat::BGRx | VideoFormat::BGRA => {
-                for (out_px, in_px) in out_row.chunks_exact_mut(4).zip(in_row.chunks_exact(4)) {
+                for (out_px, in_px) in out_row
+                    .as_chunks_mut::<4>()
+                    .0
+                    .iter_mut()
+                    .zip(in_row.as_chunks::<4>().0.iter())
+                {
                     out_px[0] = in_px[2];
                     out_px[1] = in_px[1];
                     out_px[2] = in_px[0];
@@ -869,7 +874,12 @@ fn convert_to_rgba(
                 }
             }
             VideoFormat::RGBx | VideoFormat::RGBA => {
-                for (out_px, in_px) in out_row.chunks_exact_mut(4).zip(in_row.chunks_exact(4)) {
+                for (out_px, in_px) in out_row
+                    .as_chunks_mut::<4>()
+                    .0
+                    .iter_mut()
+                    .zip(in_row.as_chunks::<4>().0.iter())
+                {
                     out_px[0] = in_px[0];
                     out_px[1] = in_px[1];
                     out_px[2] = in_px[2];
@@ -877,7 +887,12 @@ fn convert_to_rgba(
                 }
             }
             VideoFormat::BGR => {
-                for (out_px, in_px) in out_row.chunks_exact_mut(4).zip(in_row.chunks_exact(3)) {
+                for (out_px, in_px) in out_row
+                    .as_chunks_mut::<4>()
+                    .0
+                    .iter_mut()
+                    .zip(in_row.as_chunks::<3>().0.iter())
+                {
                     out_px[0] = in_px[2];
                     out_px[1] = in_px[1];
                     out_px[2] = in_px[0];
@@ -885,7 +900,12 @@ fn convert_to_rgba(
                 }
             }
             VideoFormat::RGB => {
-                for (out_px, in_px) in out_row.chunks_exact_mut(4).zip(in_row.chunks_exact(3)) {
+                for (out_px, in_px) in out_row
+                    .as_chunks_mut::<4>()
+                    .0
+                    .iter_mut()
+                    .zip(in_row.as_chunks::<3>().0.iter())
+                {
                     out_px[0] = in_px[0];
                     out_px[1] = in_px[1];
                     out_px[2] = in_px[2];

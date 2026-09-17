@@ -42,7 +42,7 @@ impl DenoiserBackend for RnnoiseBackend {
         let mut in_buf = [0.0_f32; FRAME];
         let mut out_buf = [0.0_f32; FRAME];
 
-        for chunk in samples.chunks_exact_mut(FRAME) {
+        for chunk in samples.as_chunks_mut::<FRAME>().0 {
             for (dst, &src) in in_buf.iter_mut().zip(chunk.iter()) {
                 *dst = src * SCALE_UP;
             }
