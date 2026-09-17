@@ -2019,7 +2019,6 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
       .replaceAll(/[^a-z0-9_-]+/g, "-")
       .replaceAll(/^-+|-+$/g, "")
       .slice(0, 64);
-    console.log("[store] requestOpenLiveDoc:", { channelId, slug, sanitised, title });
     if (!sanitised) {
       console.warn("[store] requestOpenLiveDoc aborted: slug sanitised to empty string", { slug });
       throw new Error("Document name produces empty slug; pick a different title.");
@@ -2031,12 +2030,10 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     // its invite, don't fire another OpenRequest (rapid clicks would otherwise
     // spam the server with duplicate envelopes while the first is in flight).
     if (pendingLiveDocOpens.has(key)) {
-      console.log("[store] requestOpenLiveDoc: open already in flight; skipping duplicate", { key });
       return;
     }
     const activeServerId = get().activeServerId;
     if (get().activeLiveDocs.has(liveDocKey(activeServerId, channelId))) {
-      console.log("[store] requestOpenLiveDoc: channel already has active doc; skipping wait");
       await sendPluginMessage("fancy-live-doc", "OpenRequest", {
         channelId,
         slug: sanitised,
@@ -2074,9 +2071,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
       title: trimmedTitle,
       mode,
     });
-    console.log("[store] requestOpenLiveDoc: open dispatched, awaiting invite");
     await waitForInvite;
-    console.log("[store] requestOpenLiveDoc: invite received");
   },
 
   publishLiveDoc: async (channelId, slug) => {

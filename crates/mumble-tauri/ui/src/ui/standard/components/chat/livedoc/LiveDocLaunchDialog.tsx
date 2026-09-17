@@ -104,7 +104,6 @@ export default function LiveDocLaunchDialog({ open, onSubmit, onCancel }: LiveDo
     (e: FormEvent) => {
       e.preventDefault();
       const trimmed = title.trim();
-      console.log("[LiveDocLaunchDialog] submit:", { mode, trimmed, hasSeed: !!seedMarkdown });
       if (!trimmed) {
         console.warn("[LiveDocLaunchDialog] aborted: empty title");
         return;
