@@ -308,7 +308,10 @@ export function MiniSwitch({
         height: size === "md" ? 18 : 17,
         flex: "none",
         cursor: "pointer",
-        borderRadius: radius("pill"),
+        // A capsule whatever the skin says, like the pack's `MuiSwitch`: the
+        // knob below is a circle, so the chip corner a squared-off skin sets
+        // on `radiusPill` would leave it sliding inside a rectangle.
+        borderRadius: "999px",
         position: "relative",
         background: checked ? theme.palette.nebula.accent : theme.palette.nebula.card2,
         "&::after": {
