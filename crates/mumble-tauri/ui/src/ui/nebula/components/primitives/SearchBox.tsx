@@ -1,6 +1,7 @@
 import { Box, InputBase } from "@mui/material";
 import { SearchIcon } from "@ui/icons";
 import { radius } from "../../tokens";
+import { chamferedSurface } from "../../theme";
 
 interface SearchBoxProps {
   value: string;
@@ -36,12 +37,27 @@ export function SearchBox({
         px: "14px",
         py: "9px",
         borderRadius: radius("lg"),
-        // A skin may lean its controls instead of rounding them; `none` for
-        // every theme that draws plain rectangles.
-        clipPath: "var(--nebula-clip-plate, none)",
         background: theme.palette.nebula.input,
         border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
         color: theme.palette.nebula.dim,
+        // A skin may lean its controls instead of rounding them, and a real
+        // `border` is sliced off at the diagonal: the lean survived, the edge
+        // along it did not, so the field sat open down both cut sides. Drawn
+        // instead as an edge-coloured ground with the fill inset over it,
+        // which is the one technique that strokes a diagonal.
+        //
+        // Only where there is a diagonal to stroke. That ground shows through
+        // wherever the fill is translucent, which on a glass skin lifts the
+        // whole field a step - and a rounded border was never sliced to begin
+        // with, so those skins keep the real one.
+        ...(theme.palette.nebulaSkin.clipPlate !== "none"
+          ? chamferedSurface(
+              theme,
+              theme.palette.nebula.input,
+              theme.palette.nebula.line2,
+              "var(--nebula-clip-plate, none)",
+            )
+          : {}),
       })}
     >
       <SearchIcon width={12} height={12} />

@@ -68,6 +68,9 @@
   "sheet": {
     "title": "Information about {{name}}",
     "viewingAsAdmin": "Viewing as admin",
+    "viewingAsUser": "Viewing as user",
+    "viewAsUser": "See this sheet as a user does",
+    "viewAsAdmin": "See this sheet as an admin does",
     "presenceInVoice": "In voice · #{{channel}}",
     "move": "Move…",
     "joined": "Joined",

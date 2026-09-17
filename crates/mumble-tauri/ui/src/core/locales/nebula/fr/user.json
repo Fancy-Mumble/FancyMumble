@@ -68,6 +68,9 @@
   "sheet": {
     "title": "Informations sur {{name}}",
     "viewingAsAdmin": "Vue administrateur",
+    "viewingAsUser": "Vue utilisateur",
+    "viewAsUser": "Voir cette fiche comme un utilisateur",
+    "viewAsAdmin": "Voir cette fiche comme un administrateur",
     "presenceInVoice": "En vocal · #{{channel}}",
     "move": "Déplacer…",
     "joined": "Arrivé",

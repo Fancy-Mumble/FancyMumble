@@ -439,6 +439,28 @@ export function userMenuActions({
   };
 }
 
+/**
+ * The same grants as a member without permissions holds: none of them.
+ *
+ * What the user sheet's "viewing as" switch runs the real grants through, so
+ * an administrator sees the moderation they would be offered without their
+ * permissions - which is nothing. Who the target is and where they are
+ * sitting stays, since neither is an administrator's secret.
+ */
+export function withoutModeration(actions: UserMenuActions): UserMenuActions {
+  return {
+    ...actions,
+    canMuteDeafen: false,
+    canMove: false,
+    canKick: false,
+    canBan: false,
+    canRegister: false,
+    canUnregister: false,
+    canResetContent: false,
+    hasModeration: false,
+  };
+}
+
 export interface DaySection<T> {
   /** Local day key, `YYYY-MM-DD`. */
   key: string;

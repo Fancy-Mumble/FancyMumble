@@ -8,9 +8,9 @@ import { parseComment } from "@core/profileFormat";
 import { useAppStore } from "@core/store";
 import type { BanEntry, UserEntry } from "@core/types";
 import { useAclGroups } from "@ui/standard/hooks/useAclGroups";
-import { userMenuActions } from "../../selectors";
+import { userMenuActions, withoutModeration } from "../../selectors";
 import { groupsOf } from "./userCardModel";
-import { describeBans, viewerIsAdmin, type BanNote } from "./userInfoModel";
+import { describeBans, plainViewerStats, viewerIsAdmin, type BanNote } from "./userInfoModel";
 import { useLiveUserStats } from "./useLiveUserStats";
 import { useUserLocation } from "./useUserLocation";
 import { UserInfoSheet } from "./UserInfoSheet";
@@ -68,19 +68,31 @@ function UserInfoContent({ user, onClose }: Readonly<{ user: UserEntry; onClose:
     return comment ? parseComment(comment) : { profile: null, bio: "" };
   }, [user.comment, liveComment]);
 
-  const actions = useMemo(
+  const granted = useMemo(
     () => userMenuActions({ user, channels, ownSession, currentChannel }),
     [user, channels, ownSession, currentChannel],
   );
   const { t } = useTranslation("nebulaUser");
-  const admin = viewerIsAdmin(channels);
+  const isAdmin = viewerIsAdmin(channels);
+  // An admin reads the sheet as themselves until they press the badge, which
+  // hands them the member's view of the same person. A preview only - the
+  // grants the server gave them are untouched, and pressing it again gives
+  // the admin rows straight back.
+  const [asAdmin, setAsAdmin] = useState(true);
+  const previewing = isAdmin && !asAdmin;
+  const admin = isAdmin && !previewing;
+  const actions = useMemo(() => (previewing ? withoutModeration(granted) : granted), [previewing, granted]);
   const aclGroups = useAclGroups();
   const groups = useMemo(
-    () => groupsOf(aclGroups, user.user_id).map((group) => group.name),
-    [aclGroups, user.user_id],
+    () => (previewing ? [] : groupsOf(aclGroups, user.user_id).map((group) => group.name)),
+    [previewing, aclGroups, user.user_id],
   );
 
-  const { stats, samples } = useLiveUserStats(user.session, true);
+  const { stats: liveStats, samples } = useLiveUserStats(user.session, true);
+  const stats = useMemo(
+    () => (previewing ? plainViewerStats(liveStats, granted.isSelf) : liveStats),
+    [previewing, liveStats, granted.isSelf],
+  );
   const location = useUserLocation(stats?.address);
   const reverseDns = useReverseDns(stats?.address, !streamerMode);
   const bans = useBansAgainst(user, stats?.address, actions.canBan);
@@ -119,6 +131,7 @@ function UserInfoContent({ user, onClose }: Readonly<{ user: UserEntry; onClose:
         onClose={onClose}
         onModerate={moderate}
         onMove={() => setMoving(true)}
+        onToggleAdminView={isAdmin ? () => setAsAdmin((current) => !current) : undefined}
       />
       {moving && (
         <MoveUserDialog

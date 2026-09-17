@@ -68,6 +68,9 @@
   "sheet": {
     "title": "关于 {{name}} 的信息",
     "viewingAsAdmin": "以管理员身份查看",
+    "viewingAsUser": "以用户身份查看",
+    "viewAsUser": "以普通用户视角查看此页",
+    "viewAsAdmin": "以管理员视角查看此页",
     "presenceInVoice": "语音中 · #{{channel}}",
     "move": "移动…",
     "joined": "加入时间",
