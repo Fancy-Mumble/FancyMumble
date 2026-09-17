@@ -6,9 +6,13 @@ on:
   pull_request:
     branches: [main, develop, beta]
 
+# A newer push supersedes an older pull-request run. A run on `main` or `beta`
+# is never cancelled: it ends in the release job, and one cancelled between
+# creating the tag and publishing the manifest leaves a release no client is
+# told about.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
