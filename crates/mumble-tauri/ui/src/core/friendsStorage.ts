@@ -84,15 +84,47 @@ const FRIENDS_KEY = "friends";
 /** Broadcast event fired whenever the persisted friends list changes. */
 export const FRIENDS_CHANGED_EVENT = "fancy:friends-changed";
 
-export async function getFriends(): Promise<Friend[]> {
+/** Straight off disk. The read-modify-write helpers below use this one. */
+async function readFriends(): Promise<Friend[]> {
   const store = await load(FRIENDS_STORE, { autoSave: true, defaults: {} });
   const saved = await store.get<Friend[]>(FRIENDS_KEY);
   return Array.isArray(saved) ? saved : [];
 }
 
+/**
+ * The last answer, held until something says the list has changed.
+ *
+ * The list is small and changes rarely, but it is asked for on paths that run
+ * often - opening a person's menu asks every time, and used to wait a disk
+ * round trip to find out whether to offer "Add friend" or "Remove friend",
+ * which is why the row visibly changed its mind a frame after the menu opened.
+ *
+ * Anything that writes the list clears this, and so does the change event, so a
+ * write from anywhere in the window is picked up. The helpers that read in
+ * order to write go straight to disk regardless: they must not fold a stale
+ * copy back over somebody else's change.
+ */
+let cachedFriends: Promise<Friend[]> | null = null;
+
+export async function getFriends(): Promise<Friend[]> {
+  cachedFriends ??= readFriends().catch((error: unknown) => {
+    cachedFriends = null;
+    throw error;
+  });
+  return cachedFriends;
+}
+
+/** Drop the cached list, so the next reader goes and looks. */
+export function forgetCachedFriends(): void {
+  cachedFriends = null;
+}
+
+globalThis.addEventListener(FRIENDS_CHANGED_EVENT, forgetCachedFriends);
+
 export async function saveFriends(friends: Friend[]): Promise<void> {
   const store = await load(FRIENDS_STORE, { autoSave: true, defaults: {} });
   await store.set(FRIENDS_KEY, friends);
+  forgetCachedFriends();
   globalThis.dispatchEvent(new CustomEvent(FRIENDS_CHANGED_EVENT));
 }
 
@@ -106,7 +138,7 @@ export async function hasFriend(opts: {
   serverId?: string;
   userId?: number;
 }): Promise<boolean> {
-  const friends = await getFriends();
+  const friends = await readFriends();
   return friends.some((f) => isSameFriend(f, opts));
 }
 
@@ -185,7 +217,7 @@ export async function addFriend(
     serverLabel?: string;
   } & FriendIdentity,
 ): Promise<Friend> {
-  const friends = await getFriends();
+  const friends = await readFriends();
   const existing = friends.find((f) => isSameFriend(f, input));
   if (existing) {
     // Already saved - the user is pointing at this person right now, so what
@@ -218,7 +250,7 @@ export async function addFriend(
  * anywhere else is a different account's.
  */
 export async function updateFriendIdentity(id: string, identity: FriendIdentity): Promise<void> {
-  const friends = await getFriends();
+  const friends = await readFriends();
   const friend = friends.find((f) => f.id === id);
   if (!friend) return;
   if (applyIdentity(friend, identity, "fill")) await saveFriends([...friends]);
@@ -243,7 +275,7 @@ export interface SelfFriendInput {
  * even the same user id recur across servers, so neither can tell them apart.
  */
 export async function saveSelfFriend(input: SelfFriendInput): Promise<Friend> {
-  const friends = await getFriends();
+  const friends = await readFriends();
   const index = friends.findIndex(
     (f) =>
       f.self &&
@@ -268,7 +300,7 @@ export async function saveSelfFriend(input: SelfFriendInput): Promise<Friend> {
 }
 
 export async function removeFriend(id: string): Promise<void> {
-  const friends = await getFriends();
+  const friends = await readFriends();
   // You cannot unfriend yourself.
   const next = friends.filter((f) => f.id !== id || f.self);
   if (next.length !== friends.length) await saveFriends(next);
@@ -280,7 +312,7 @@ export async function removeFriend(id: string): Promise<void> {
  * bytes are identical to what is already cached.
  */
 export async function updateFriendAvatar(id: string, bytes: number[] | Uint8Array): Promise<void> {
-  const friends = await getFriends();
+  const friends = await readFriends();
   const idx = friends.findIndex((f) => f.id === id);
   if (idx === -1) return;
   const arr = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
