@@ -682,7 +682,6 @@ export default function ChatView({
 
   const handleLiveDocLaunchSubmit = useCallback(
     async (choice: LiveDocLaunchChoice) => {
-      console.log("[ChatView] handleLiveDocLaunchSubmit:", { selectedChannel, choice });
       if (selectedChannel === null) {
         console.warn("[ChatView] live-doc submit aborted: no channel selected");
         showToast({ message: t("openDocumentNoChannel"), variant: "error" });
