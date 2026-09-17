@@ -56,7 +56,7 @@ body:
         - Linux (Fedora/RHEL)
         - Linux (Arch)
         - Linux (Other)
-        - macOS
+        - Android
     validations:
       required: true
 
@@ -65,7 +65,7 @@ body:
     attributes:
       label: App version
       description: Found in Settings or the title bar.
-      placeholder: "0.1.0"
+      placeholder: "0.4.0"
     validations:
       required: false
 

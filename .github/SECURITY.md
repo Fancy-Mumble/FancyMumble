@@ -9,21 +9,20 @@
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability, please **do not** open a public
-issue. Instead, report it privately via one of these methods:
+issue. Instead, report it privately through a GitHub Security Advisory:
 
-1. **GitHub Security Advisories** (preferred):
-   <https://github.com/Fancy-Mumble/FancyMumbleNext/security/advisories/new>
-
-2. **Email**: Open a private advisory on the repository (see link above).
+<https://github.com/Fancy-Mumble/FancyMumble/security/advisories/new>
 
 We will acknowledge receipt within **48 hours** and aim to provide a fix or
 mitigation within **7 days** for critical issues.
 
 ## Scope
 
-This policy covers the Fancy Mumble desktop application and its protocol
-library (`mumble-protocol`). It does **not** cover the upstream Mumble
-server software.
+This policy covers everything in this repository: the desktop and Android
+application, the protocol library (`mumble-protocol`) including end-to-end
+encrypted persistent chat and its key handling, the `signal-bridge` library,
+and the minimal Qt client (`qt6ui`). It does **not** cover the Mumble server
+software.
 
 ## What Qualifies
 
