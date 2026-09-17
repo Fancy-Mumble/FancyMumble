@@ -5,7 +5,7 @@
 //! its separate workspace and copies the resulting library next to the
 //! executable so `load_signal_bridge` finds it at runtime.
 //!
-//! Also regenerates `ui/src/utils/permissions.ts` from the canonical
+//! Also regenerates `ui/src/core/utils/permissions.ts` from the canonical
 //! Rust permission table in `crates/fancy-utils/src/permissions.rs` so
 //! the React frontend stays in lock-step with the backend.
 
@@ -533,7 +533,7 @@ fn install_qt6ui_binary(qt6ui_dir: &std::path::Path, profile: &str) {
 /// 1. `$OUT_DIR/fancy_constants.rs` - `pub const` items included by
 ///    `src/constants.rs`, so the values are baked in at compile time with
 ///    zero runtime overhead;
-/// 2. `ui/src/utils/appConstants.ts` - the same values for the React UI
+/// 2. `ui/src/core/utils/appConstants.ts` - the same values for the React UI
 ///    (same generate-and-commit flow as `permissions.ts` above).
 ///
 /// The minimal `qt6ui` client runs the same codegen from its own build.rs
@@ -568,6 +568,7 @@ fn generate_shared_constants() {
     let ts_path = std::path::Path::new(&manifest_dir)
         .join("ui")
         .join("src")
+        .join("core")
         .join("utils")
         .join("appConstants.ts");
     let up_to_date = std::fs::read_to_string(&ts_path).is_ok_and(|existing| existing == ts);
@@ -681,7 +682,7 @@ fn build_rust_constants(c: &serde_json::Value) -> String {
     rs
 }
 
-/// The `export const` items for `ui/src/utils/appConstants.ts`.
+/// The `export const` items for `ui/src/core/utils/appConstants.ts`.
 fn build_ts_constants(c: &serde_json::Value) -> String {
     use std::fmt::Write as _;
     let mut ts = String::new();
@@ -731,7 +732,7 @@ fn build_ts_constants(c: &serde_json::Value) -> String {
     ts
 }
 
-/// Regenerate `ui/src/utils/permissions.ts` from the canonical Rust table.
+/// Regenerate `ui/src/core/utils/permissions.ts` from the canonical Rust table.
 ///
 /// Only writes the file when its content actually changes, so incremental
 /// rebuilds don't bump the mtime (which would trigger Vite HMR loops).
@@ -746,6 +747,7 @@ fn generate_permissions_ts() {
     let out_path = std::path::Path::new(&manifest_dir)
         .join("ui")
         .join("src")
+        .join("core")
         .join("utils")
         .join("permissions.ts");
 

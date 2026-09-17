@@ -14,7 +14,7 @@ pub mod net;
 /// Mumble ACL permission bit definitions.
 ///
 /// Single source of truth shared with the React frontend via the
-/// `mumble-tauri` build script (regenerates `ui/src/utils/permissions.ts`).
+/// `mumble-tauri` build script (regenerates `ui/src/core/utils/permissions.ts`).
 /// Mirrors `enum ChanACL::Perm` in the Mumble server's `ACL.h`.
 pub mod permissions;
 pub mod version;
