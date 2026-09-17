@@ -228,7 +228,14 @@ export function useChatScroll({
     (el: HTMLElement) => {
       if (anchorRef.current) return;
       const current = resolvedRef.current;
-      if (current.start <= 0) return;
+      if (current.start <= 0) {
+        // Nothing left to mount: the window is over the whole of what is
+        // loaded. Older messages are the store's to load - out of what the
+        // backend holds behind this window, or out of the server's archive -
+        // and they arrive as a prepend, which `handleHistoryPrepend` mounts.
+        void useAppStore.getState().loadOlderMessages();
+        return;
+      }
       captureAnchor(el);
       setRange(grownUp(current, allMessagesRef.current.length));
     },

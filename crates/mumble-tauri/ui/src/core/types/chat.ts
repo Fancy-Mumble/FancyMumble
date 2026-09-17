@@ -126,6 +126,26 @@ export interface ChatMessage {
 }
 
 /**
+ * One window of a thread, as the backend answers `get_messages_page`.
+ *
+ * The chat view asks for the newest rows rather than the whole thread: the
+ * backend holds up to five hundred per channel, and redrawing a hundred of
+ * them used to mean cloning all five hundred across the bridge on every
+ * event.
+ */
+export interface MessagePage {
+  rows: ChatMessage[];
+  /** History exists before the first row here - held back by the backend, or
+   *  still only on the server. What the way back is offered on. */
+  moreBefore: boolean;
+  /** The window does not reach the newest message, so an arrival will not be
+   *  appended to it. */
+  moreAfter: boolean;
+  /** The window reaches the newest message there is. */
+  atTail: boolean;
+}
+
+/**
  * An optimistically-rendered chat message that is currently being sent
  * to the server.  Lives only in the frontend store; replaced by the
  * real ChatMessage once `send_message` resolves successfully (or marked

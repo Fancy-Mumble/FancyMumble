@@ -21,6 +21,25 @@
  * testable without DOM.
  */
 
+/**
+ * How many of a thread's newest messages are loaded from the backend.
+ *
+ * The render window's business is which loaded rows are mounted; this is how
+ * many there are to mount. Twice [`BASE_WINDOW`], so a reader can scroll a
+ * screenful back before anything has to be asked for.
+ */
+export const LOADED_WINDOW = 200;
+
+/**
+ * How much the loaded window grows when the reader reaches its head.
+ *
+ * Reaching the head is the one place the render window cannot help: there is
+ * nothing above the first loaded row to mount, so the next step has to come
+ * from the backend - out of the rows it is holding, or, when it has none left,
+ * out of the server's archive.
+ */
+export const LOADED_WINDOW_STEP = 200;
+
 /** Number of trailing messages rendered when at the bottom of a thread. */
 export const BASE_WINDOW = 100;
 

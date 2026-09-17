@@ -619,11 +619,7 @@ export default function AuroraClientApp() {
             variant="bare"
             className={extensionStyles.loadHistory}
             disabled={pchatHistoryLoading.has(activeChannel.id)}
-            onClick={() =>
-              void useAppStore
-                .getState()
-                .fetchHistory(activeChannel.id, channelMessages[0]?.message_id ?? undefined)
-            }
+            onClick={() => void useAppStore.getState().loadOlderMessages()}
           >
             {pchatHistoryLoading.has(activeChannel.id) ? "Loading history…" : "Load earlier messages"}
           </Button>
