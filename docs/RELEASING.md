@@ -72,6 +72,26 @@ These all pin the tag or a checksum of it, so they cannot be done earlier.
 
 ## A beta
 
-Branch `beta` off `develop` and push. The version files must already name the
-*next* stable version; CI appends `-beta.<run number>`. The release notes of a
-beta are the changelog section of the version it is a beta of.
+A beta is tagged `vX.Y.Z-beta.N` and flagged as a pre-release, so it never
+becomes `releases/latest` and no stable client is offered it.
+
+1. `develop` is green - through a pull request, since pushes to it run nothing.
+2. The version files name the *next* stable version. CI refuses a beta whose
+   base version is not above the latest stable release.
+3. Create or fast-forward `beta` from `develop` and push it:
+   ```bash
+   git push origin origin/develop:refs/heads/beta
+   ```
+   That push is the release: CI builds the NSIS installer, the AppImage, the APK
+   and the minimal clients, tags `vX.Y.Z-beta.<run number>`, and then writes
+   `beta.json` to the orphan `updater` branch, creating the branch the first
+   time. N is the repository's CI run number, so betas count upwards but not
+   consecutively.
+4. The release notes are the changelog section of the version it is a beta of,
+   so the `Unreleased` section is what testers read.
+5. Testers opt in under Settings -> Advanced -> Beta updates. A client older
+   than 0.4.0 has no such setting, so the first beta has to be installed by
+   hand from the Releases page; from then on betas update themselves.
+
+To fix a beta, push the fix to `develop` and fast-forward `beta` again. Do not
+commit to `beta` directly, or it and `develop` drift apart.

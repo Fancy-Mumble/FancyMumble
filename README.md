@@ -222,8 +222,9 @@ the orphan `updater` branch after the release itself exists. It is served from
 
 **Cutting a beta.** Branch `beta` off `develop`, set all three version files to
 the *next* stable version (e.g. `0.4.0` while `0.3.0` is released), and push. CI
-appends `-beta.<run number>`, so successive pushes give `0.4.0-beta.1`,
-`0.4.0-beta.2` and so on. Pushing a `beta` branch whose version is not above the
+appends `-beta.<run number>`. The run number counts every CI run of the
+repository, not only betas, so successive betas are numbered upwards but not
+consecutively: `0.4.0-beta.193`, `0.4.0-beta.197` and so on. Pushing a `beta` branch whose version is not above the
 latest stable release fails the build on purpose: such a build would sort below
 what testers already have and reach nobody.
 
