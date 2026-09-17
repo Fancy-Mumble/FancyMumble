@@ -11,6 +11,7 @@ import type { RailCardOccupant } from "../sidebar/ServerRailCard";
 import { ServerTabStrip } from "./ServerTabStrip";
 import { FriendsButton, QuickConnectButton } from "./ChromeNav";
 import { WindowControls } from "./WindowControls";
+import { frost } from "../../theme";
 
 interface TitleBarProps {
   /**
@@ -102,7 +103,7 @@ export function TitleBar({
         px: "14px",
         background: theme.palette.nebula.bar,
         borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
-        backdropFilter: "blur(14px)",
+        ...frost(theme, 14),
       })}
     >
       <BrandMark />

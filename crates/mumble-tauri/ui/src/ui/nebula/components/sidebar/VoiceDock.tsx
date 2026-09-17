@@ -24,7 +24,7 @@ import {
   WebcamIcon,
 } from "@ui/icons";
 import { Stack, UserAvatar } from "../primitives";
-import { chamferedSurface } from "../../theme";
+import { chamferedSurface, frost } from "../../theme";
 import { radius } from "../../tokens";
 import { formatElapsed } from "../recording/useRecording";
 import { useShareAvailability } from "../chat/share/useShareAvailability";
@@ -167,8 +167,7 @@ export function VoiceDock({
           // deal heavier than the hairline every other panel gets.
           stencil ? theme.palette.nebula.railLine : theme.palette.nebula.line2,
         ),
-        backdropFilter: "blur(var(--nebula-blur, 12px))",
-        WebkitBackdropFilter: "blur(var(--nebula-blur, 12px))",
+        ...frost(theme, "var(--nebula-blur, 12px)"),
         // A drawn skin has no light source to cast a soft shadow, so the panel
         // sits on a hard offset plate instead of floating over a blur.
         boxShadow:

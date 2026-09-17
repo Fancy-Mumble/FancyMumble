@@ -5,6 +5,7 @@ import type { ServerPingResult } from "@core/types";
 import { serverTint, type ServerRailEntry } from "../../selectors";
 import { UserAvatar, useIsTalking } from "../primitives";
 import { radius } from "../../tokens";
+import { frost } from "../../theme";
 
 /** How wide the card is, for whoever has to keep it on the screen. */
 export const RAIL_CARD_WIDTH = 272;
@@ -243,7 +244,7 @@ export function ServerRailCard({
         background: theme.palette.nebula.tint + "," + theme.palette.nebula.bg0,
         border: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line2,
         boxShadow: theme.palette.nebula.shadow,
-        backdropFilter: "blur(22px) saturate(1.2)",
+        ...frost(theme, 22, 1.2),
       })}
     >
       <Box sx={{ height: 76, position: "relative", overflow: "hidden" }}>

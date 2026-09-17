@@ -2,7 +2,7 @@ import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { CssBaseline } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
-import { createNebulaTheme, handheldChrome, HANDHELD_HEADER_MAX } from "./theme";
+import { createNebulaTheme, frost, handheldChrome, HANDHELD_HEADER_MAX } from "./theme";
 import { DEFAULT_SKIN, nebulaThemeDef } from "./themeCatalog";
 
 function baselineCss(): string {
@@ -47,6 +47,19 @@ describe("nebula form-control baseline", () => {
   });
 });
 
+describe("nebula switch", () => {
+  it("keeps the track a capsule under a squared-off skin", () => {
+    // Nimbus squares `radiusPill` because its chips and badges are hard
+    // rectangles. The switch track used to read that token too, which left a
+    // round thumb sliding inside a rectangle.
+    const skin = nebulaThemeDef("nimbus")!.skin;
+    expect(skin.radiusPill).toBe("0px");
+    const theme = createNebulaTheme("dark", null, null, skin);
+    const track = theme.components?.MuiSwitch?.styleOverrides?.track as { borderRadius?: string };
+    expect(track.borderRadius).toBe("999px");
+  });
+});
+
 describe("handheld chrome", () => {
   it("passes a skin's own header height through when it already fits", () => {
     // Twelve of the thirteen ask for the pack's 66, which is the cap itself,
@@ -80,5 +93,35 @@ describe("handheld chrome", () => {
     const tall = handheldChrome(createNebulaTheme("dark", null, null, nebulaThemeDef("nimbus")!.skin));
     expect(wide.stripHeight).toBe(tall.stripHeight);
     expect(wide.tabBarHeight).toBe(tall.tabBarHeight);
+  });
+});
+
+describe("frost", () => {
+  // The rule the theme states for menus, applied to every glass surface: a
+  // backdrop filter is a backdrop filter at any radius, and the compositing
+  // layer it buys is the whole cost. A skin that asked for no glass must get
+  // no layer, rather than a blur of zero.
+  const glassy = { ...DEFAULT_SKIN, glass: 0.3 };
+
+  it("draws nothing at all on a skin with no glass", () => {
+    const theme = createNebulaTheme("dark", undefined, null, { ...DEFAULT_SKIN, glass: 0 });
+    expect(frost(theme, 32)).toEqual({ backdropFilter: "none", WebkitBackdropFilter: "none" });
+  });
+
+  it("blurs where the skin asked for glass", () => {
+    const theme = createNebulaTheme("dark", undefined, null, glassy);
+    expect(frost(theme, 32).backdropFilter).toBe("blur(32px)");
+    expect(frost(theme, 20, 1.2).backdropFilter).toBe("blur(20px) saturate(1.2)");
+  });
+
+  it("passes a CSS length through, for the surfaces that follow the skin", () => {
+    const theme = createNebulaTheme("dark", undefined, null, glassy);
+    expect(frost(theme, "var(--nebula-blur, 14px)").backdropFilter).toBe("blur(var(--nebula-blur, 14px))");
+  });
+
+  it("writes the prefixed property as well, and the same way", () => {
+    const theme = createNebulaTheme("dark", undefined, null, glassy);
+    const { backdropFilter, WebkitBackdropFilter } = frost(theme, 12);
+    expect(WebkitBackdropFilter).toBe(backdropFilter);
   });
 });

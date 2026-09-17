@@ -12,7 +12,7 @@ import {
 import { useAppStore } from "@core/store";
 import { useAclGroups } from "@standard/hooks/useAclGroups";
 import { Stack, UserAvatar } from "../primitives";
-import { floatingSurface } from "../../theme";
+import { floatingSurface, frost } from "../../theme";
 import { radius } from "../../tokens";
 
 export interface MentionTarget {
@@ -95,7 +95,7 @@ export function MentionPopover({ target, onClose }: Readonly<MentionPopoverProps
             flexDirection: "column",
             borderRadius: radius("lg"),
             ...floatingSurface(theme),
-            backdropFilter: "blur(20px) saturate(1.2)",
+            ...frost(theme, 20, 1.2),
           }),
         },
       }}
