@@ -92,6 +92,15 @@ becomes `releases/latest` and no stable client is offered it.
 5. Testers opt in under Settings -> Advanced -> Beta updates. A client older
    than 0.4.0 has no such setting, so the first beta has to be installed by
    hand from the Releases page; from then on betas update themselves.
+6. Check the release page: the tag must point at the `beta` tip (the first
+   beta's tag landed on `main` until the workflow named the commit), the
+   pre-release flag must be set, `releases/latest` must still resolve to the
+   stable release, and `beta.json` on the `updater` branch must name the new
+   version.
+
+Every push to `beta` publishes a release, so a change that is not meant for
+testers - a workflow fix, a typo - goes to `develop` alone and reaches `beta`
+with the next real beta.
 
 To fix a beta, push the fix to `develop` and fast-forward `beta` again. Do not
 commit to `beta` directly, or it and `develop` drift apart.
