@@ -605,6 +605,50 @@ describe("MessageList", () => {
       expect(screen.getByTestId("chat-new-messages-pill")).toBeTruthy();
     });
 
+    it("keeps its place, and says nothing, when a page of history joins the head", async () => {
+      // Scrollback grows the list by as many rows as an arrival does, at the
+      // other end. Counted rather than placed, the two are the same event, and
+      // paging backwards through a channel announced "new messages" about
+      // messages from last week and shifted the reader off what they were
+      // reading by exactly the size of the page.
+      const thread = longThread(600);
+      const { container, rerender } = draw({ messages: thread });
+      const node = scroller(container);
+
+      for (let step = 0; step < 12; step += 1) {
+        act(() => {
+          node.scrollTop = 0;
+          fireEvent.scroll(node);
+        });
+      }
+      const reading = [...container.querySelectorAll("[data-message-id]")].map((row) =>
+        row.getAttribute("data-message-id"),
+      );
+
+      const older = Array.from({ length: 50 }, (_, index) =>
+        message(`older${index}`, 1_600_000_000_000 + index),
+      );
+      await act(async () => {
+        rerender(
+          withNebulaTheme(
+            <MessageList
+              messages={[...older, ...thread]}
+              users={[]}
+              renderMessage={(m) => <span>{m.body}</span>}
+            />,
+          ),
+        );
+      });
+
+      // The same rows, and no claim that anything arrived.
+      expect(
+        [...container.querySelectorAll("[data-message-id]")].map((row) =>
+          row.getAttribute("data-message-id"),
+        ),
+      ).toEqual(reading);
+      expect(screen.queryByTestId("chat-new-messages-pill")).toBeNull();
+    });
+
     it("does not announce an arrival the reader is already at the bottom for", async () => {
       // At the tail the window follows the message down, so there is nothing
       // to tell them: they can see it.
