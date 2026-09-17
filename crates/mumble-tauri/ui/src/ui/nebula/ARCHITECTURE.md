@@ -475,14 +475,10 @@ and a second one would be a second set of numbers to keep honest.
 Kept honest by reading the code, not by memory: entries here have been false
 before, because a feature landed and its line was never struck. Last read
 against the code on 2026-09-05; every line below was checked against it that
-day, and the ones that had gone stale were struck.
-
-**Composing**
-
-- No scheduled messages, and no calendar or meeting composer. Note that the
-  runtime already runs `useCalendarReminders` and `requestJoinMeeting`, so a
-  reminder fires and a meeting invite arrives with no calendar to open either
-  in.
+day, and the ones that had gone stale were struck. Two more were struck on
+2026-09-17 without re-reading the rest: scheduled messages and the calendar
+(both have sections of their own below), and channel recording
+(`components/recording/`).
 
 **Reading**
 
@@ -511,11 +507,6 @@ day, and the ones that had gone stale were struck.
   annotates the picture and pops a feed out. What it has no separate surface
   for is Standard's focused single-stream view - the stage is where a feed
   gets large here, and the filmstrip is how you change which one.
-
-**Elsewhere**
-
-- No channel recording.
-- No channel recording.
 
 ## The handheld layout
 
