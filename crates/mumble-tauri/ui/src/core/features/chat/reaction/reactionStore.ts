@@ -50,6 +50,25 @@ const reactionMap = new Map<
   >
 >();
 
+/**
+ * How many times each message's reactions have changed.
+ *
+ * The store carries one counter for the whole client, which is what tells React
+ * that a reaction landed - and, read literally, it says only "something,
+ * somewhere". Every mounted message row watched it, so one person reacting to
+ * one message re-rendered the entire conversation.
+ *
+ * A row reads its own message's count instead. The global counter still ticks,
+ * which is what makes every selector run again; only the row whose number
+ * actually moved renders.
+ */
+const revisions = new Map<string, number>();
+
+/** How many times this message's reactions have changed. */
+export function reactionRevision(messageId: string | null | undefined): number {
+  return messageId ? (revisions.get(messageId) ?? 0) : 0;
+}
+
 /** Server-provided custom reactions for the current connection. */
 let serverCustomReactions: ServerCustomReaction[] = [];
 
@@ -105,6 +124,8 @@ export function applyReaction(
     byEmoji.set(emoji, data);
   }
 
+  revisions.set(messageId, (revisions.get(messageId) ?? 0) + 1);
+
   if (action === "add") {
     data.hashes.add(senderHash);
     data.hashNames.set(senderHash, senderName);
@@ -124,5 +145,6 @@ export function setServerCustomReactions(reactions: ServerCustomReaction[]): voi
 /** Clear all reaction data (called on disconnect). */
 export function resetReactions(): void {
   reactionMap.clear();
+  revisions.clear();
   serverCustomReactions = [];
 }
