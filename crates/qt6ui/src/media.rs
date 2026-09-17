@@ -1,8 +1,8 @@
 //! Image-message helpers: fitting images into the server's byte budget and
 //! extracting embedded images from incoming HTML bodies.
 //!
-//! Mirrors the web client's `ui/src/utils/media.ts` (`fitImage`,
-//! `mediaToHtml`) and `ui/src/utils/gallery.ts` (gallery markers) so images
+//! Mirrors the web client's `ui/src/core/utils/media.ts` (`fitImage`,
+//! `mediaToHtml`) and `ui/src/core/utils/gallery.ts` (gallery markers) so images
 //! sent from either client render identically in both. Decoding/scaling uses
 //! the already-linked Qt (`QImage` via cxx-qt-lib); the JPEG/base64 encode
 //! leaves Qt can't expose through cxx-qt-lib live in `cpp/image_codec.cpp`.
