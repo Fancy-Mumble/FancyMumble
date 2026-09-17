@@ -52,6 +52,55 @@ export const infoSheetColumns = {
 };
 
 /**
+ * The two sides of a wide sheet, as one row of equal columns.
+ *
+ * Where `infoSheetColumns` lets the cards flow and balance themselves, this
+ * places them: the sheet says which side each card belongs on, and both sides
+ * end on the same line however much each holds. One side alone takes the
+ * whole width, since a column of empty sheet is worse than a long one.
+ */
+export const infoSheetSides = {
+  display: "grid",
+  gap: "12px",
+  [WIDE_SHEET]: {
+    gridAutoFlow: "column",
+    gridAutoColumns: "minmax(0, 1fr)",
+    alignItems: "stretch",
+  },
+};
+
+/**
+ * One side's cards, filling the height the taller side sets.
+ *
+ * The spare height is shared out between them rather than left at the bottom,
+ * which is what keeps the sheet square instead of ragged down one edge. Under
+ * the wide breakpoint the side is not a column at all: the cards fall back
+ * into the one stack the narrow sheet draws.
+ */
+export const infoSheetSide = {
+  display: "contents",
+  [WIDE_SHEET]: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+    // Cards that came from a pair carry the flowed layout's own spacing.
+    "& > *": { flex: "1 1 auto", marginBottom: 0 },
+  },
+};
+
+/**
+ * The pair inside a side: side by side while the sheet is narrow, and one
+ * under the other once a side is only half of it, where they share whatever
+ * height the side has been given.
+ */
+export const infoSheetSidePair = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: "12px",
+  [WIDE_SHEET]: { gridTemplateColumns: "1fr" },
+};
+
+/**
  * Two cards side by side. In the wide layout a half-column is too narrow for
  * them, so they join the columns as two cards of their own.
  */

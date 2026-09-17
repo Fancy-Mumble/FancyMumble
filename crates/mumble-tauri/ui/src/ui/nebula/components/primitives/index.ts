@@ -25,6 +25,9 @@ export {
   infoSheetColumns,
   infoSheetFrame,
   infoSheetPair,
+  infoSheetSide,
+  infoSheetSidePair,
+  infoSheetSides,
 } from "./InfoCard";
 export { MakeRoom } from "./MakeRoom";
 export { RoleColorsContext, useRoleColor } from "./roleColors";

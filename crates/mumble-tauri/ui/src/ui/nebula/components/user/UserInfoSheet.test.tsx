@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { UserEntry, UserStats } from "@core/types";
 import type { UserMenuActions } from "../../selectors";
@@ -149,6 +149,27 @@ describe("UserInfoSheet", () => {
     expect(onModerate).toHaveBeenCalledWith("mute");
     fireEvent.click(screen.getByRole("button", { name: "Move…" }));
     expect(onMove).toHaveBeenCalled();
+  });
+
+  it("turns the badge into a switch for an admin, and leaves it a label otherwise", () => {
+    const onToggleAdminView = vi.fn();
+    renderSheet({ onToggleAdminView });
+    fireEvent.click(screen.getByRole("button", { name: "Viewing as admin" }));
+    expect(onToggleAdminView).toHaveBeenCalled();
+
+    cleanup();
+    renderSheet();
+    expect(screen.queryByRole("button", { name: "Viewing as admin" })).toBeNull();
+    expect(screen.getByText("Viewing as admin")).toBeTruthy();
+  });
+
+  it("keeps the switch for an admin who is reading the sheet as a member", () => {
+    const onToggleAdminView = vi.fn();
+    renderSheet({ admin: false, onToggleAdminView });
+    const badge = screen.getByRole("button", { name: "Viewing as user" });
+    expect(badge.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(badge);
+    expect(onToggleAdminView).toHaveBeenCalled();
   });
 
   it("shows no admin rows to someone the server told nothing", () => {

@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@core/store";
 import type { UserEntry, UserStats } from "@core/types";
@@ -106,6 +106,34 @@ describe("UserInfoDialog", () => {
     await flush();
     expect(invoke).toHaveBeenCalledWith("reverse_dns", { address: "203.0.113.9" });
     expect(await screen.findByText("host.example.net")).toBeTruthy();
+  });
+
+  it("hands an admin the member's view of the sheet, and back again", async () => {
+    render(withNebulaTheme(<UserInfoDialog session={26} onClose={vi.fn()} />));
+    await flush();
+    await act(async () => {
+      listeners.get("user-stats")?.({ payload: STATS });
+    });
+    expect(screen.getByText("Network & location")).toBeTruthy();
+    expect(screen.getByText("Moderation")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Viewing as admin" }));
+    });
+    expect(screen.getByText("Viewing as user")).toBeTruthy();
+    // Everything murmur keeps for admins goes with it - the address and its
+    // name, the moderation, and the certificate the server only tells them.
+    expect(screen.queryByText("Network & location")).toBeNull();
+    expect(screen.queryByText("203.0.113.9")).toBeNull();
+    expect(screen.queryByText("host.example.net")).toBeNull();
+    expect(screen.queryByText("Moderation")).toBeNull();
+    expect(screen.queryByText("Strong")).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Viewing as user" }));
+    });
+    expect(screen.getByText("203.0.113.9")).toBeTruthy();
+    expect(screen.getByText("Moderation")).toBeTruthy();
   });
 
   it("ignores another session's figures", async () => {

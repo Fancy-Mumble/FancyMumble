@@ -106,6 +106,27 @@ export function viewerIsAdmin(channels: readonly ChannelEntry[]): boolean {
   return ((root?.permissions ?? 0) & PERM_WRITE) !== 0;
 }
 
+/**
+ * The stats as the server would have sent them to a member without
+ * permissions.
+ *
+ * Murmur keeps the address to administrators, and the certificate and codec
+ * to an administrator or the person themselves; the sheet's "viewing as"
+ * switch has to withhold exactly the same fields, or the preview would show
+ * an admin facts no member ever receives. Nothing is invented and nothing is
+ * blanked that everyone gets - `null` here means "not reported", which is
+ * what the sheet already draws for a withheld field.
+ */
+export function plainViewerStats(stats: UserStats | null, isSelf: boolean): UserStats | null {
+  if (!stats) return null;
+  return {
+    ...stats,
+    address: null,
+    strong_certificate: isSelf ? stats.strong_certificate : null,
+    opus: isSelf ? stats.opus : null,
+  };
+}
+
 /** "12 Jun" - a date the mock writes without a year, since bans are recent news.
  *  `undefined` for the locale means the browser's, which is the user's. */
 function shortDate(epochMs: number): string {

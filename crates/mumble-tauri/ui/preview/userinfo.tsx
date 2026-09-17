@@ -1,11 +1,13 @@
+import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Box, CssBaseline } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
 import { createNebulaTheme } from "@nebula/theme";
 import { UserInfoSheet } from "@nebula/components/user/UserInfoSheet";
-import { sampleOf, type StatsSample } from "@nebula/components/user/userInfoModel";
-import type { UserMenuActions } from "@nebula/selectors";
+import { plainViewerStats, sampleOf, type StatsSample } from "@nebula/components/user/userInfoModel";
+import { withoutModeration, type UserMenuActions } from "@nebula/selectors";
 import type { UserEntry, UserStats } from "@core/types";
+import "@core/i18n";
 import "@standard/theme.css";
 
 /** The User Information sheet as an admin sees it, with 45 s of readings. */
@@ -76,6 +78,45 @@ const actions: UserMenuActions = {
 const noop = () => undefined;
 const theme = createNebulaTheme("dark");
 
+/** The sheet with its "viewing as" switch live, so both views can be seen. */
+function Preview() {
+  // `?member` opens straight into the view the switch leads to.
+  const [asAdmin, setAsAdmin] = useState(!new URLSearchParams(location.search).has("member"));
+  return (
+    <UserInfoSheet
+      user={user}
+      avatar={null}
+      profile={{ banner: { color: "#3b4a7a" } }}
+      bio="<p>Mid-lane or feed, no in between. Ping me for scrims — usually around after 20:00 CET.</p>"
+      channelName="Gaming"
+      talking={false}
+      stats={asAdmin ? stats : plainViewerStats(stats, false)}
+      samples={samples}
+      location={
+        asAdmin
+          ? {
+              state: "located",
+              lat: 51.9066,
+              lng: 8.3785,
+              place: "Gütersloh, North Rhine-Westphalia, DE",
+            }
+          : null
+      }
+      reverseDns={asAdmin ? "dyn-c200.hsi.magenta.de" : null}
+      groups={asAdmin ? ["admin", "mods", "scrim-crew"] : []}
+      bans={asAdmin ? { count: 1, note: { key: "nebulaUser:info.bansExpired", date: "12 Jun" } } : null}
+      admin={asAdmin}
+      streamerMode={false}
+      actions={asAdmin ? actions : withoutModeration(actions)}
+      maxHeight="none"
+      onClose={noop}
+      onModerate={noop}
+      onMove={noop}
+      onToggleAdminView={() => setAsAdmin((current) => !current)}
+    />
+  );
+}
+
 createRoot(document.getElementById("root")!).render(
   <ThemeProvider theme={theme}>
     <CssBaseline />
@@ -98,32 +139,7 @@ createRoot(document.getElementById("root")!).render(
           boxShadow: t.palette.nebula.shadow,
         })}
       >
-        <UserInfoSheet
-          user={user}
-          avatar={null}
-          profile={{ banner: { color: "#3b4a7a" } }}
-          bio="<p>Mid-lane or feed, no in between. Ping me for scrims — usually around after 20:00 CET.</p>"
-          channelName="Gaming"
-          talking={false}
-          stats={stats}
-          samples={samples}
-          location={{
-            state: "located",
-            lat: 51.9066,
-            lng: 8.3785,
-            place: "Gütersloh, North Rhine-Westphalia, DE",
-          }}
-          reverseDns="dyn-c200.hsi.magenta.de"
-          groups={["admin", "mods", "scrim-crew"]}
-          bans={{ count: 1, note: "expired 12 Jun" }}
-          admin
-          streamerMode={false}
-          actions={actions}
-          maxHeight="none"
-          onClose={noop}
-          onModerate={noop}
-          onMove={noop}
-        />
+        <Preview />
       </Box>
     </Box>
   </ThemeProvider>,
