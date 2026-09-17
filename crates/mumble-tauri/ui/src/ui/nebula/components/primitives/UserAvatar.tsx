@@ -1,3 +1,4 @@
+import { keyframes } from "@emotion/react";
 import { Avatar, Box } from "@mui/material";
 import { useUserAvatar } from "@core/lazyBlobs";
 import { radius } from "../../tokens";
@@ -136,6 +137,22 @@ export function UserAvatar({
  * The glint is decoration, so it stops for `prefers-reduced-motion`; the
  * bloom stays, because a still glow is not motion.
  */
+/**
+ * The glint that travels along a stencil skin's halo.
+ *
+ * Declared here rather than inside the `sx` below, because `sx` is evaluated
+ * and serialised for every element it is given to: written there, these four
+ * lines were turned into CSS again for every face on screen, on every render
+ * that reached one - and a busy channel draws a face per message block, per
+ * roster row and per occupant in the tree.
+ */
+const HALO_GLINT = keyframes({
+  // A pause between passes: the glint crosses in the first third and the halo
+  // is left to simply glow for the rest.
+  "0%": { backgroundPosition: "-120% 0" },
+  "38%, 100%": { backgroundPosition: "220% 0" },
+});
+
 function StencilHalo({ size, talking }: Readonly<{ size: number; talking: boolean }>) {
   const height = Math.max(6, size * 0.26);
   return (
@@ -184,13 +201,7 @@ function StencilHalo({ size, talking }: Readonly<{ size: number; talking: boolea
             )} 44%, #ffffff 50%, ${alpha(lighten(gold, 0.55), 0.85)} 56%, transparent 66%)`,
             backgroundSize: "260% 100%",
             backgroundRepeat: "no-repeat",
-            animation: "nebula-halo-glint 3.4s ease-in-out infinite",
-            "@keyframes nebula-halo-glint": {
-              // A pause between passes: the glint crosses in the first third
-              // and the halo is left to simply glow for the rest.
-              "0%": { backgroundPosition: "-120% 0" },
-              "38%, 100%": { backgroundPosition: "220% 0" },
-            },
+            animation: `${HALO_GLINT} 3.4s ease-in-out infinite`,
             "@media (prefers-reduced-motion: reduce)": { animation: "none", opacity: 0 },
           },
         };
