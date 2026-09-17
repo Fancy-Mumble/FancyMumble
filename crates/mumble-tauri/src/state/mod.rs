@@ -69,13 +69,13 @@ pub(crate) mod whisper;
 // Re-export everything that lib.rs needs.
 pub(crate) use event_handler::show_desktop_notification;
 pub(crate) use registry::{HashLookup, UserHashMatch};
-pub(crate) use whisper::WhisperEntry;
 pub use sessions::{ServerId, SessionMeta};
 pub use types::{
     AudioDevice, AudioSettings, ChannelEntry, ChatMessage, ConnectionStatus, DebugStats,
     MessagePage, PageRequest, PhotoEntry, SearchResult, ServerConfig, ServerInfo, UserEntry,
     VoiceState,
 };
+pub(crate) use whisper::WhisperEntry;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU8, AtomicU32};
@@ -230,7 +230,8 @@ impl AudioPipelineState {
         // release never arrives - would leave the target set, and the next
         // thing said in the channel would go to the whisper's audience
         // instead.
-        self.voice_target.store(0, std::sync::atomic::Ordering::Relaxed);
+        self.voice_target
+            .store(0, std::sync::atomic::Ordering::Relaxed);
         self.whisper_held_ptt = false;
     }
 
