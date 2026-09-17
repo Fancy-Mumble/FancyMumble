@@ -11,7 +11,7 @@ skinparam component {
 }
 
 package "Application Layer" {
-    component [mumble-gui\n(Dioxus)] <<external>> as gui
+    component [qt6ui\n(Qt 6 / QML)] <<external>> as gui
     component [mumble-tauri\n(Tauri)] <<external>> as tauri
 }
 
