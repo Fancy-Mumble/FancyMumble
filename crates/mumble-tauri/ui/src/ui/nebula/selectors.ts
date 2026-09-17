@@ -590,6 +590,39 @@ export function splitBodyImages(html: string): { html: string; images: BodyImage
   return { html: doc.body.innerHTML.trim(), images };
 }
 
+/**
+ * The tags that are worth a bubble on their own, with no words in them.
+ *
+ * Everything a message can say without saying anything: a rule, a picture the
+ * splitter left behind, a clip. Deliberately short - a `<p>` or a `<span>` is
+ * a wrapper around content, not content, and counting one is what put an
+ * empty bubble over a photograph.
+ */
+const DRAWING_TAGS = "img, video, audio, iframe, svg, canvas, hr, table, blockquote, pre";
+
+/**
+ * Whether this markup would actually draw anything.
+ *
+ * Emptiness is not a question about the string's length. A body that has had
+ * its pictures lifted out of it is often still markup - the `<p>` they sat
+ * in, a trailing `<br>`, a marker comment some other pack wrote and this one
+ * does not read - and every one of those is a non-empty string that renders
+ * nothing at all. Asked the blunt way, a message that was only a photograph
+ * came out as the photograph with an empty bubble sitting on top of it.
+ *
+ * Parsed rather than pattern-matched: `<p>&nbsp;</p>`, a comment carrying
+ * angle brackets and a stray `<br>` are three different shapes of nothing,
+ * and the DOM settles all three by being asked what is in them.
+ */
+export function hasDrawableHtml(html: string): boolean {
+  if (!html.trim()) return false;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  // `\s` covers the non-breaking space, which is what an editor leaves behind
+  // in a paragraph nobody typed in - a bubble holding one is still empty.
+  if ((doc.body.textContent ?? "").replace(/\s+/g, "").length > 0) return true;
+  return doc.body.querySelector(DRAWING_TAGS) !== null;
+}
+
 const POLL_MARKER = /<!-- FANCY_POLL:(.+?) -->/;
 const FILE_MARKER = /<!-- FANCY_FILE:([A-Za-z0-9+/=]+) -->/g;
 const QUOTE_MARKER = /<!-- FANCY_QUOTE:(.+?) -->/g;

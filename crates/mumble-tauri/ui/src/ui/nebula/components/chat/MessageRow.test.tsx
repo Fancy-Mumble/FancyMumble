@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@core/store";
 import { registerPoll } from "@core/features/chat/poll/model";
 import { encodeFileAttachmentMarker } from "@core/features/chat/fileAttachments";
+import { applyReaction, resetReactions } from "@core/features/chat/reaction/reactionStore";
 import type { ChatMessage, UserEntry } from "@core/types";
 import { withNebulaTheme } from "../../testTheme";
 import { MessageRow } from "./MessageRow";
@@ -47,6 +48,9 @@ function cleanupRows() {
 describe("MessageRow", () => {
   beforeEach(() => {
     invokeMock.mockClear();
+    // The reaction store is module-level, so one test's pill is on every
+    // later row that reuses the same message id.
+    resetReactions();
     useAppStore.setState({
       ownSession: 1,
       users: [],
@@ -199,6 +203,25 @@ describe("MessageRow", () => {
     }
   });
 
+  it("draws no bubble over a message that is only a picture", () => {
+    // The pictures come out of the body before it is drawn, and what they
+    // leave behind is markup that renders nothing - the paragraph they sat
+    // in, a trailing break, a marker comment written by a pack that is not
+    // this one. Measured by length, all of that is a body, and the message
+    // came out as the photograph with an empty plate sitting on top of it.
+    const { container } = draw(
+      message({
+        message_id: "picture-only",
+        body: '<p><img src="https://files.example/dusk.png" alt="dusk"><br></p><!-- FANCY_GALLERY:g1:0:2 -->',
+      }),
+    );
+
+    // The picture is drawn as the message itself...
+    expect(container.querySelector("img[data-picture]")).not.toBeNull();
+    // ...and none of what it left behind was mistaken for something to say.
+    expect(container.querySelector("p")).toBeNull();
+    expect(container.querySelector("br")).toBeNull();
+  });
   it("leaves the preview a card of its own where there is no bubble to put it in", () => {
     // Flat and compact draw no plate, so there is nothing to attach to: the
     // card keeps its own ground rather than becoming loose text under the
@@ -273,6 +296,29 @@ describe("MessageRow", () => {
     expect(screen.getByText("report.pdf")).toBeTruthy();
     expect(screen.getByText("here it is")).toBeTruthy();
     expect(document.body.textContent).not.toContain("FANCY_FILE");
+  });
+
+  it("hangs the reactions under an attachment card on your own message, not beside it", () => {
+    // Everything below an own bubble shares one box, and while that box was a
+    // flex row the pills sat to the right of the card - stretched to its full
+    // height, because that is what a row does to a short item next to a tall
+    // one. On the other side they have always hung underneath.
+    applyReaction("m1", "😅", "add", "hash-9", "Lorelando");
+    useAppStore.setState({ reactionVersion: 1 });
+    const marker = encodeFileAttachmentMarker({
+      url: "https://files.example/report.pdf",
+      filename: "report.pdf",
+      sizeBytes: 2048,
+      mode: "public",
+    });
+
+    draw(message({ is_own: true, body: marker }));
+
+    const pill = screen.getByLabelText("😅 1");
+    const card = screen.getByText("report.pdf");
+    let shared = pill.parentElement;
+    while (shared && !shared.contains(card)) shared = shared.parentElement;
+    expect(getComputedStyle(shared!).flexDirection).toBe("column");
   });
 
   it("draws a batch of attached pictures as one block, each with its own link", () => {
@@ -430,6 +476,103 @@ describe("MessageRow", () => {
     // off the top edge: a fixed gap above the row, never a step back into it.
     expect(style.bottom.startsWith("calc(100% + ")).toBe(true);
     expect(style.top.startsWith("-")).toBe(false);
+  });
+
+  it("hangs the hover pill on the side the message is drawn on", () => {
+    // Somebody else's bubble is as wide as what they said and sits on the
+    // left; a pill pinned right floated in empty canvas, a screen away from
+    // the message it acts on.
+    const theirs = draw(message(), { bubbleStyle: "bubbles" });
+    fireEvent.mouseEnter(theirs.container.firstElementChild!);
+    const theirStyle = getComputedStyle(screen.getByLabelText("Copy message").closest("div")!);
+    expect(theirStyle.right).toBe("");
+    // Past the avatar gutter: flush left would hang it off the picture rather
+    // than off the words.
+    expect(theirStyle.left).toBe("50px");
+    cleanupRows();
+
+    const mine = draw(message({ is_own: true, sender_session: 1 }), { bubbleStyle: "bubbles" });
+    fireEvent.mouseEnter(mine.container.firstElementChild!);
+    const myStyle = getComputedStyle(screen.getByLabelText("Copy message").closest("div")!);
+    expect(myStyle.left).toBe("");
+    expect(myStyle.right).toBe("0px");
+  });
+
+  it("bridges the whole width of the gap the pointer has to cross to reach the pill", () => {
+    // The pill stands off the row's top edge, and the air between the two is
+    // not part of the row: a pointer crossing it stops hovering the message,
+    // and the pill it was on its way to is gone. The bridge used to be as wide
+    // as the pill alone, so anywhere else along that edge was a trapdoor.
+    const { container } = draw(message());
+    const bridge = () =>
+      Array.from(container.querySelectorAll("div")).find((node) => {
+        const style = getComputedStyle(node);
+        return style.bottom === "100%" && style.left === "0px" && style.right === "0px";
+      });
+
+    expect(bridge()).toBeUndefined();
+    fireEvent.mouseEnter(container.firstElementChild!);
+    expect(bridge()).toBeTruthy();
+
+    // And it goes with the pill once the row has stopped waiting for the
+    // pointer to come back: an invisible strip lying over the message above
+    // would eat clicks meant for it.
+    vi.useFakeTimers();
+    try {
+      fireEvent.mouseLeave(container.firstElementChild!);
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(bridge()).toBeUndefined();
+  });
+
+  it("holds the pill for a moment after the pointer leaves, so it can be reached", () => {
+    // The pill hangs off the row rather than inside it, so the pointer has to
+    // cross air that belongs to no message on the way to it. Dropping the pill
+    // the instant the row was left meant the thing being reached for went out
+    // under the pointer - reliably, if the hand moved at a human pace.
+    const { container } = draw(message());
+    const row = container.firstElementChild!;
+    const pill = () => screen.queryByLabelText("Copy message");
+    const tick = (ms: number) =>
+      act(() => {
+        vi.advanceTimersByTime(ms);
+      });
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.mouseEnter(row);
+      expect(pill()).toBeTruthy();
+
+      fireEvent.mouseLeave(row);
+      tick(100);
+      expect(pill()).toBeTruthy();
+
+      // Coming back - which is what walking into the pill itself looks like
+      // from here - and the row never lets go at all.
+      fireEvent.mouseEnter(row);
+      tick(1_000);
+      expect(pill()).toBeTruthy();
+
+      // Gone for good once the pointer really has moved on, though: the strip
+      // hangs over the message above, and one left there is a pill on a row it
+      // does not belong to.
+      fireEvent.mouseLeave(row);
+      tick(1_000);
+      expect(pill()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("drops the gutter offset where the row has no avatar column", () => {
+    const { container } = draw(message(), { compact: true });
+    fireEvent.mouseEnter(container.firstElementChild!);
+    const style = getComputedStyle(screen.getByLabelText("Copy message").closest("div")!);
+    expect(style.left).toBe("0px");
   });
 
   it("can react to a message that has no reactions yet", () => {
