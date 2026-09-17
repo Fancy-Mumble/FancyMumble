@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, waitFor, fireEvent, cleanup } from "@testing-library/react";
+import { act, render, waitFor, fireEvent, cleanup } from "@testing-library/react";
 import { ThemeProvider } from "@mui/material/styles";
 import { withNebulaTheme } from "@nebula/testTheme";
 
@@ -53,6 +53,30 @@ async function mount(overrides: Record<string, unknown>) {
 
 const query = <T extends Element>(selector: string) => document.querySelector<T>(selector);
 
+/**
+ * The clip, once the component is done mounting it.
+ *
+ * The element reaching the DOM is not the end of it: the listeners and the
+ * watchdog's interval go on in an effect, and a poll answers the moment the
+ * node exists, which can be before that effect has run. A test that then drives
+ * fake timers ticks an interval that is not there yet. The empty `act` lets the
+ * effects land first.
+ *
+ * `wait` is `vi.waitFor` for a test that fakes `setTimeout`, which the testing
+ * library's own `waitFor` polls on.
+ */
+async function mountedVideo(
+  wait: (check: () => HTMLVideoElement) => Promise<HTMLVideoElement> = waitFor,
+): Promise<HTMLVideoElement> {
+  const video = await wait(() => {
+    const node = query<HTMLVideoElement>("video");
+    expect(node).not.toBeNull();
+    return node as HTMLVideoElement;
+  });
+  await act(async () => {});
+  return video;
+}
+
 /** The backdrop under a skin that draws the poster wordmark. */
 function mountStencil() {
   const theme = createNebulaTheme("dark", null, null, { ...DEFAULT_SKIN, chrome: "stencil" });
@@ -85,11 +109,7 @@ describe("Nebula animated chat background", () => {
       chatBgBlurred: "bgstore:processed-poster.jpg",
     });
 
-    const video = await waitFor(() => {
-      const node = query<HTMLVideoElement>("video");
-      expect(node).not.toBeNull();
-      return node as HTMLVideoElement;
-    });
+    const video = await mountedVideo();
     // The optimized file, not the raw clip.
     expect(video.getAttribute("src")).toBe("blob:baked");
     // The look is in the pixels; only the saturation nudge remains.
@@ -115,11 +135,7 @@ describe("Nebula animated chat background", () => {
       chatBgBlurred: "bgstore:processed-poster.jpg",
     });
 
-    const video = await waitFor(() => {
-      const node = query<HTMLVideoElement>("video");
-      expect(node).not.toBeNull();
-      return node as HTMLVideoElement;
-    });
+    const video = await mountedVideo();
     expect(video.getAttribute("src")).toBe("blob:raw");
     const filter = getComputedStyle(video).filter;
     expect(filter).toContain("blur(8px)");
@@ -137,11 +153,7 @@ describe("Nebula animated chat background", () => {
         chatBgOriginal: "bgstore:image-poster.jpg",
       });
 
-      const video = await waitFor(() => {
-        const node = query<HTMLVideoElement>("video");
-        expect(node).not.toBeNull();
-        return node as HTMLVideoElement;
-      });
+      const video = await mountedVideo();
       // A decode failure: the element carries a MediaError when `error` fires.
       Object.defineProperty(video, "error", { value: { code: 4 } });
 
@@ -177,11 +189,7 @@ describe("Nebula animated chat background", () => {
         chatBgOriginal: "bgstore:image-poster.jpg",
       });
 
-      const video = await waitFor(() => {
-        const node = query<HTMLVideoElement>("video");
-        expect(node).not.toBeNull();
-        return node as HTMLVideoElement;
-      });
+      const video = await mountedVideo();
       Object.defineProperty(video, "readyState", { value: HTMLMediaElement.HAVE_ENOUGH_DATA });
       // The wrap-around at the end of a pass, wedged: seeking, and staying so.
       Object.defineProperty(video, "seeking", { value: true });
@@ -208,11 +216,7 @@ describe("Nebula animated chat background", () => {
       chatBgOriginal: "bgstore:image-poster.jpg",
     });
 
-    const video = await waitFor(() => {
-      const node = query<HTMLVideoElement>("video");
-      expect(node).not.toBeNull();
-      return node as HTMLVideoElement;
-    });
+    const video = await mountedVideo();
     // The poster's image loader fires `error` on the <video> itself, with no
     // MediaError attached. That is not a dead clip.
     expect(video.error).toBeFalsy();
@@ -229,11 +233,7 @@ describe("Nebula animated chat background", () => {
       chatBgOriginal: "bgstore:image-poster.jpg",
     });
 
-    const video = await waitFor(() => {
-      const node = query<HTMLVideoElement>("video");
-      expect(node).not.toBeNull();
-      return node as HTMLVideoElement;
-    });
+    const video = await mountedVideo();
     video.currentTime = 17;
     play.mockClear();
     fireEvent.ended(video);
@@ -291,11 +291,7 @@ describe("Nebula animated chat background", () => {
         chatBgVideo: "video-raw.mp4",
         chatBgOriginal: "bgstore:image-poster.jpg",
       });
-      const video = await vi.waitFor(() => {
-        const node = query<HTMLVideoElement>("video");
-        expect(node).not.toBeNull();
-        return node as HTMLVideoElement;
-      });
+      const video = await mountedVideo(vi.waitFor);
       Object.defineProperty(video, "readyState", { value: HTMLMediaElement.HAVE_ENOUGH_DATA });
       Object.defineProperty(video, "seeking", { value: false });
 
@@ -320,11 +316,7 @@ describe("Nebula animated chat background", () => {
 
   /// Park the wallpaper the way losing focus does, and hand back the element.
   async function parked() {
-    const video = await vi.waitFor(() => {
-      const node = query<HTMLVideoElement>("video");
-      expect(node).not.toBeNull();
-      return node as HTMLVideoElement;
-    });
+    const video = await mountedVideo(vi.waitFor);
     Object.defineProperty(video, "readyState", { value: HTMLMediaElement.HAVE_ENOUGH_DATA });
     Object.defineProperty(video, "seeking", { value: false });
     vi.advanceTimersByTime(BLUR_GRACE_MS);
@@ -418,11 +410,7 @@ describe("Nebula animated chat background", () => {
         chatBgOriginal: "bgstore:image-poster.jpg",
       });
 
-      const video = await waitFor(() => {
-        const node = query<HTMLVideoElement>("video");
-        expect(node).not.toBeNull();
-        return node as HTMLVideoElement;
-      });
+      const video = await mountedVideo();
       Object.defineProperty(video, "readyState", { value: HTMLMediaElement.HAVE_ENOUGH_DATA });
       Object.defineProperty(video, "seeking", { value: false });
 
