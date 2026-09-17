@@ -61,32 +61,61 @@ export function formatBytes(n: number | null | undefined): string {
  * @param systemUses24h - OS-reported clock format for "auto" mode. When
  *   provided, bypasses the unreliable WebView2 Intl probe on Windows.
  */
+/**
+ * One formatter per way of writing a clock, built the first time it is wanted.
+ *
+ * `toLocaleTimeString` builds a formatter internally on every call, and this is
+ * called for every message in the river, twice - once for the row and once for
+ * the block's travelling stamp - on every render of the list. Constructing a
+ * few hundred `Intl.DateTimeFormat`s per render is most of what "formatting the
+ * timestamps" costs; reusing four of them is the whole fix.
+ */
+const clocks = new Map<string, Intl.DateTimeFormat>();
+
+/** Whether this machine's own clock is a 24-hour one, asked once. */
+let systemHour12: boolean | null = null;
+
+function systemPrefersHour12(): boolean {
+  if (systemHour12 === null) {
+    const resolved = new Intl.DateTimeFormat([], { hour: "numeric" }).resolvedOptions();
+    systemHour12 = resolved.hour12 ?? (resolved.hourCycle !== "h23" && resolved.hourCycle !== "h24");
+  }
+  return systemHour12;
+}
+
 export function formatTimestamp(
   epochMs: number,
   timeFormat: TimeFormat = "auto",
   localTime = true,
   systemUses24h?: boolean,
 ): string {
-  const d = new Date(epochMs);
-  const opts: Intl.DateTimeFormatOptions = {
-    hour: "2-digit",
-    minute: "2-digit",
-  };
+  const hour12 =
+    timeFormat === "12h"
+      ? true
+      : timeFormat === "24h"
+        ? false
+        : systemUses24h !== undefined
+          ? !systemUses24h
+          : systemPrefersHour12();
 
-  if (timeFormat === "12h") {
-    opts.hour12 = true;
-  } else if (timeFormat === "24h") {
-    opts.hour12 = false;
-  } else if (systemUses24h !== undefined) {
-    opts.hour12 = !systemUses24h;
-  } else {
-    const resolved = new Intl.DateTimeFormat([], { hour: "numeric" }).resolvedOptions();
-    opts.hour12 = resolved.hour12 ?? (resolved.hourCycle !== "h23" && resolved.hourCycle !== "h24");
+  const key = `${hour12 ? 12 : 24}:${localTime ? "local" : "utc"}`;
+  let clock = clocks.get(key);
+  if (!clock) {
+    clock = new Intl.DateTimeFormat(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12,
+      ...(localTime ? {} : { timeZone: "UTC" }),
+    });
+    clocks.set(key, clock);
   }
+  return clock.format(epochMs);
+}
 
-  if (!localTime) opts.timeZone = "UTC";
-
-  return d.toLocaleTimeString(undefined, opts);
+/** Forget the cached formatters. Only the tests, which change the locale. */
+export function resetClockCacheForTests(): void {
+  clocks.clear();
+  systemHour12 = null;
 }
 
 // -- Avatar colour -------------------------------------------------
