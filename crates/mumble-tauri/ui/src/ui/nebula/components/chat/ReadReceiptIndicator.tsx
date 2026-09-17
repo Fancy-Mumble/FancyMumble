@@ -9,7 +9,7 @@ import { CheckDoubleIcon, CheckIcon } from "@ui/icons";
 interface ReadReceiptIndicatorProps {
   readonly messageId: string;
   readonly channelId: number;
-  readonly allMessageIds: string[];
+  readonly allMessageIds: readonly string[];
 }
 
 /**

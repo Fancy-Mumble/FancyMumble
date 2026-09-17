@@ -1,14 +1,15 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, InputBase, Tooltip, Typography } from "@mui/material";
 import type { Theme } from "@mui/material/styles";
 import DOMPurify from "dompurify";
 import { useAppStore } from "@core/store";
+import { selectOwnHash } from "@core/store/selectors";
 import { LOCAL_NOTES_CHANNEL_ID } from "@core/notepad";
 import { extractOffloadInfo } from "@core/messageOffload";
 import type { ChatMessage } from "@core/types";
 import type { BubbleStyle } from "@standard/personalizationStorage";
-import { getReactions, hasReacted } from "@core/features/chat/reaction/reactionStore";
+import { getReactions, hasReacted, reactionRevision } from "@core/features/chat/reaction/reactionStore";
 import { decodeFileAttachmentPayload } from "@core/features/chat/fileAttachments";
 import { useLinkPreviews } from "@core/features/chat/useLinkPreviews";
 import { getPoll } from "@core/features/chat/poll/model";
@@ -309,7 +310,14 @@ interface MessageRowProps {
    * an edit - and it cannot reach a row's own state.
    */
   editing?: boolean;
-  onEditingChange?: (editing: boolean) => void;
+  /**
+   * Which message is being edited, by id, or null for none.
+   *
+   * Said as an id rather than as a boolean about this row, so the shell can
+   * hand over its own setter instead of making a closure over this message on
+   * every render - which is a fresh prop, which is a row that renders again.
+   */
+  onEditingChange?: (messageId: string | null) => void;
   /**
    * Its body is in cold storage and being read back right now.
    *
@@ -333,6 +341,11 @@ interface MessageRowProps {
 
 /** The width of the avatar gutter, shared with the list that hoists it. */
 export const AVATAR_COLUMN_PX = 38;
+
+/** One empty list, shared: a new `[]` per render is a new prop per render. */
+const EMPTY_IDS: readonly string[] = [];
+const EMPTY_REACTIONS: ReturnType<typeof getReactions> = [];
+const EMPTY_ATTACHMENTS: NonNullable<ReturnType<typeof decodeFileAttachmentPayload>>[] = [];
 /**
  * The air between the avatar gutter and the body, and between the row's edge
  * and the body where there is no gutter.
@@ -403,7 +416,22 @@ export function MessageAvatar({
  * in a rounded card. "flat" and "compact" send yours down the author-row path
  * with everybody else's, which is what "one continuous river" means.
  */
-export function MessageRow({
+/**
+ * One message.
+ *
+ * Memoised, and that is the single most valuable line in this file. The shell
+ * above rebuilds every pane's props on each of its own renders, and a busy
+ * channel keeps a hundred of these mounted, each parsing its body and
+ * serialising a dozen style objects. Without the comparison here, anything at
+ * all happening anywhere in the client - a menu opening, a card appearing, a
+ * message arriving - re-rendered every one of them.
+ *
+ * The comparison is only worth having while the props are stable, which is why
+ * the shell hands over `popupActions` and its own setters rather than closures
+ * made this render, and why `onEditingChange` says *which* message rather than
+ * "this one".
+ */
+export const MessageRow = memo(function MessageRow({
   message,
   avatar,
   grouped,
@@ -449,16 +477,20 @@ export function MessageRow({
   const ownSession = useAppStore((state) => state.ownSession);
   // `@here` and `@everyone` only reach you in the room they were said in.
   const currentChannel = useAppStore((state) => state.currentChannel);
-  const users = useAppStore((state) => state.users);
   const embeds = useLinkPreviews(message.message_id, message.body);
   // The card carries its own "Watch together" where it has one, so the hover
   // strip stands down rather than offering the same thing twice on one row.
   const hasEmbeds = !!embeds && embeds.length > 0;
   const allowExternal = useAppStore((state) => state.enableExternalEmbeds);
-  const reactionVersion = useAppStore((state) => state.reactionVersion);
-  // Read polls through the store as well as the module map: the map is what
-  // holds them, but only the store tells React that one has arrived.
-  const knownPolls = useAppStore((state) => state.polls);
+  // This message's reactions, not everybody's. The client-wide counter is what
+  // makes this selector run again; the number it returns is what decides
+  // whether *this* row has anything new to draw.
+  const reactionVersion = useAppStore((state) =>
+    state.reactionVersion >= 0 ? reactionRevision(message.message_id) : 0,
+  );
+  // Your own certificate, as a string. Selecting the roster for it meant every
+  // mounted row re-rendered whenever anybody joined, left or muted.
+  const ownHash = useAppStore(selectOwnHash) ?? "";
 
   // A body that has been put in cold storage is not here to be drawn: what is
   // left of it is the placeholder the backend swapped in, which carries the
@@ -478,21 +510,34 @@ export function MessageRow({
   // and than the card under it. `prettyLinks` trims what is *shown*; the href
   // and what copy takes are untouched.
   const body = useMemo(() => prettyLinks(sanitizeBody(split.html)), [split.html]);
-  const poll =
-    content.kind === "poll" ? (knownPolls.get(content.pollId) ?? getPoll(content.pollId)) : undefined;
+  // This message's poll, not every poll. The map is what holds them, but only
+  // the store tells React that one has arrived.
+  const storedPoll = useAppStore((state) =>
+    content.kind === "poll" ? state.polls.get(content.pollId) : undefined,
+  );
+  const poll = content.kind === "poll" ? (storedPoll ?? getPoll(content.pollId)) : undefined;
   // Every marker in the body, because a batch of photographs is one message
   // with a marker each - see `messageContent`.
-  const attachments =
-    content.kind === "file"
-      ? content.payloads
-          .map(decodeFileAttachmentPayload)
-          .filter((info): info is NonNullable<typeof info> => info !== null)
-      : [];
+  const attachments = useMemo(
+    () =>
+      content.kind === "file"
+        ? content.payloads
+            .map(decodeFileAttachmentPayload)
+            .filter((info): info is NonNullable<typeof info> => info !== null)
+        : EMPTY_ATTACHMENTS,
+    [content],
+  );
   // Reactions live in a side store keyed by message id; the version counter is
   // the only thing that tells React a toggle landed.
-  const reactions = reactionVersion >= 0 && message.message_id ? getReactions(message.message_id) : [];
-  const watchSessionId = readWatchMarker(message.body) ?? undefined;
-  const ownHash = users.find((user) => user.session === ownSession)?.hash ?? "";
+  // `getReactions` builds and sorts a fresh array on every call, so it is asked
+  // once per version rather than once per render.
+  const reactions = useMemo(
+    () => (message.message_id ? getReactions(message.message_id) : EMPTY_REACTIONS),
+    // The counter is what says a toggle landed; the reactions themselves live
+    // in a side store this hook cannot watch.
+    [message.message_id, reactionVersion],
+  );
+  const watchSessionId = useMemo(() => readWatchMarker(message.body) ?? undefined, [message.body]);
 
   const toggleReaction = (emoji: string) => {
     if (!message.message_id || ownSession === null) return;
@@ -519,7 +564,7 @@ export function MessageRow({
     message.channel_id !== LOCAL_NOTES_CHANNEL_ID;
 
   const commitEdit = (text: string) => {
-    onEditingChange?.(false);
+    onEditingChange?.(null);
     const trimmed = text.trim();
     if (!trimmed || !message.message_id) return;
     if (trimmed === editableText(message.body).trim()) return;
@@ -543,7 +588,10 @@ export function MessageRow({
     const chip = chipElement && readMentionChip(chipElement);
     if (chip && chipElement) {
       event.preventDefault();
-      if (chip.kind === "user" && users.some((user) => user.session === chip.session)) {
+      const stillHere =
+        chip.kind === "user" &&
+        useAppStore.getState().users.some((user) => user.session === chip.session);
+      if (stillHere) {
         // The card is placed beside the word that named them, not beside the
         // whole message - `currentTarget` here is the body, which is neither.
         onOpenProfile(chip.session, {
@@ -876,7 +924,7 @@ export function MessageRow({
             watchOnCard={hasEmbeds}
             message={message}
             align="right"
-            onEdit={canEdit ? () => onEditingChange?.(true) : undefined}
+            onEdit={canEdit ? () => onEditingChange?.(message.message_id ?? null) : undefined}
             onQuote={message.message_id ? () => onQuote?.(message) : undefined}
             onReact={message.message_id ? openReactionPicker : undefined}
             onMore={onContextMenu ? openMenuFromButton : undefined}
@@ -887,7 +935,7 @@ export function MessageRow({
           <BodyEditor
             initial={editableText(message.body)}
             onCommit={commitEdit}
-            onCancel={() => onEditingChange?.(false)}
+            onCancel={() => onEditingChange?.(null)}
           />
         ) : offloaded ? (
           coldBody
@@ -995,7 +1043,7 @@ export function MessageRow({
             pinned
             message={message}
             align="right"
-            onEdit={canEdit ? () => onEditingChange?.(true) : undefined}
+            onEdit={canEdit ? () => onEditingChange?.(message.message_id ?? null) : undefined}
             onQuote={message.message_id ? () => onQuote?.(message) : undefined}
             onReact={message.message_id ? openReactionPicker : undefined}
             onMore={onContextMenu ? openMenuFromButton : undefined}
@@ -1014,7 +1062,7 @@ export function MessageRow({
               <ReadReceiptIndicator
                 messageId={message.message_id}
                 channelId={message.channel_id}
-                allMessageIds={allMessageIds ? [...allMessageIds] : []}
+                allMessageIds={allMessageIds ?? EMPTY_IDS}
               />
             )}
             {message.send_failed && (
@@ -1105,7 +1153,7 @@ export function MessageRow({
         <ReadReceiptIndicator
           messageId={message.message_id}
           channelId={message.channel_id}
-          allMessageIds={allMessageIds ? [...allMessageIds] : []}
+          allMessageIds={allMessageIds ?? EMPTY_IDS}
         />
       )}
       {message.send_failed && (
@@ -1140,7 +1188,7 @@ export function MessageRow({
           // puts itself.
           align="left"
           inset={dense ? 0 : AVATAR_COLUMN_PX + ROW_GAP_PX.roomy}
-          onEdit={canEdit ? () => onEditingChange?.(true) : undefined}
+          onEdit={canEdit ? () => onEditingChange?.(message.message_id ?? null) : undefined}
           onQuote={message.message_id ? () => onQuote?.(message) : undefined}
           onReact={message.message_id ? openReactionPicker : undefined}
           onMore={onContextMenu ? openMenuFromButton : undefined}
@@ -1191,7 +1239,7 @@ export function MessageRow({
             align="left"
             initial={editableText(message.body)}
             onCommit={commitEdit}
-            onCancel={() => onEditingChange?.(false)}
+            onCancel={() => onEditingChange?.(null)}
           />
         ) : offloaded ? (
           coldBody
@@ -1295,7 +1343,7 @@ export function MessageRow({
             pinned
             message={message}
             align="left"
-            onEdit={canEdit ? () => onEditingChange?.(true) : undefined}
+            onEdit={canEdit ? () => onEditingChange?.(message.message_id ?? null) : undefined}
             onQuote={message.message_id ? () => onQuote?.(message) : undefined}
             onReact={message.message_id ? openReactionPicker : undefined}
             onMore={onContextMenu ? openMenuFromButton : undefined}
@@ -1304,7 +1352,7 @@ export function MessageRow({
       </Box>
     </Stack>
   );
-}
+});
 
 /**
  * The bubble around a body that has a preview under it - and nothing at all

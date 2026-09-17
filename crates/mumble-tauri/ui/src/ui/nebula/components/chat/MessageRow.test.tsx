@@ -390,13 +390,13 @@ describe("MessageRow", () => {
     // Editing is controlled by the shell - the message menu starts one too -
     // so the test owns the flag the way NebulaClientApp does.
     function Controlled() {
-      const [editing, setEditing] = useState(false);
+      const [editing, setEditing] = useState<string | null>(null);
       return (
         <MessageRow
           message={message({ is_own: true, body: "typo" })}
           grouped={false}
           onOpenProfile={() => {}}
-          editing={editing}
+          editing={editing !== null}
           onEditingChange={setEditing}
         />
       );
@@ -727,14 +727,14 @@ describe("MessageRow", () => {
 
   it("still lets you edit your own message outside the bubbles style", () => {
     function Controlled() {
-      const [editing, setEditing] = useState(false);
+      const [editing, setEditing] = useState<string | null>(null);
       return (
         <MessageRow
           message={message({ is_own: true, body: "typo" })}
           grouped={false}
           bubbleStyle="flat"
           onOpenProfile={() => {}}
-          editing={editing}
+          editing={editing !== null}
           onEditingChange={setEditing}
         />
       );

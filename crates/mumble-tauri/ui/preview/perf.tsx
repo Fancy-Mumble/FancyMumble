@@ -24,7 +24,7 @@
  * stable here, because that is what the shell is meant to hand them: a harness
  * that passed fresh closures would measure its own sloppiness instead.
  */
-import { Profiler, useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { memo, Profiler, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Box, CssBaseline } from "@mui/material";
 import { ThemeProvider } from "@mui/material/styles";
@@ -162,6 +162,29 @@ function settle(): Promise<void> {
   });
 }
 
+/**
+ * A row, counted.
+ *
+ * The counter has to sit *inside* a memo boundary of its own, or it reports the
+ * wrong thing entirely. `MessageList` calls its render prop again on every list
+ * render, so a `Profiler` wrapped around the outside is a new element every
+ * time and commits every time - even when the row inside it compared its props
+ * and did nothing at all. Measured that way, memoising the row appeared to
+ * change nothing.
+ *
+ * Wrapped like this, the bail-out happens here first and nothing below it
+ * renders, which is exactly what happens in the client: `MessageRow` is
+ * memoised with the same shallow comparison, so "rows whose props changed" and
+ * "rows React had to render again" are the same number.
+ */
+const CountedRow = memo(function CountedRow(props: React.ComponentProps<typeof MessageRow>) {
+  return (
+    <Profiler id={props.message.message_id ?? "?"} onRender={countRow}>
+      <MessageRow {...props} />
+    </Profiler>
+  );
+});
+
 // -- The harness --------------------------------------------------------
 
 /**
@@ -194,17 +217,15 @@ function Harness() {
       restoring: boolean,
       endsGroup: boolean,
     ) => (
-      <Profiler id={message.message_id ?? "?"} onRender={countRow}>
-        <MessageRow
-          message={message}
-          avatar={avatar}
-          grouped={grouped}
-          endsGroup={endsGroup}
-          restoring={restoring}
-          stickyAvatar
-          onOpenProfile={noop}
-        />
-      </Profiler>
+      <CountedRow
+        message={message}
+        avatar={avatar}
+        grouped={grouped}
+        endsGroup={endsGroup}
+        restoring={restoring}
+        stickyAvatar
+        onOpenProfile={noop}
+      />
     ),
     [noop],
   );
