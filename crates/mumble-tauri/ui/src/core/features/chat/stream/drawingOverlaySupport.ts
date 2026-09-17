@@ -43,11 +43,14 @@ export const ASSUMED_OVERLAY_SUPPORT: DrawingOverlaySupport = {
   excludedFromCapture: true,
 };
 
-/** Ask the backend. Never throws: an unreachable command means an old build,
- *  where the overlay behaved as the optimistic default claims. */
+/** Ask the backend. Never throws, and never answers with nothing: an
+ *  unreachable command means an old build, and a host that answers null is
+ *  not a host at all (a component preview) - the overlay behaved as the
+ *  optimistic default claims in both. */
 export async function fetchDrawingOverlaySupport(): Promise<DrawingOverlaySupport> {
   try {
-    return await invoke<DrawingOverlaySupport>("drawing_overlay_support");
+    const support = await invoke<DrawingOverlaySupport | null>("drawing_overlay_support");
+    return support ?? ASSUMED_OVERLAY_SUPPORT;
   } catch {
     return ASSUMED_OVERLAY_SUPPORT;
   }

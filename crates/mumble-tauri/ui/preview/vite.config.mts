@@ -24,8 +24,8 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "dist-titlebar",
+    outDir: "dist-sharemenu",
     emptyOutDir: true,
-    rollupOptions: { input: fileURLToPath(new URL("./titlebar.html", import.meta.url)) },
+    rollupOptions: { input: fileURLToPath(new URL("./sharemenu.html", import.meta.url)) },
   },
 });

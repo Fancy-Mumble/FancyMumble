@@ -229,6 +229,7 @@
     "unavailable": "Flux indisponible",
     "connecting": "Connexion…",
     "copyScreenshot": "Copier une capture de ce flux",
+    "copyFrame": "Copier cette image",
     "shareCamera": "Partager votre caméra",
     "streamOptions": "Options du flux",
     "stop": "Arrêter",

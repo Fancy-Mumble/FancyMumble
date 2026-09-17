@@ -229,6 +229,7 @@
     "unavailable": "Stream unavailable",
     "connecting": "Connecting…",
     "copyScreenshot": "Copy a screenshot of this feed",
+    "copyFrame": "Copy this frame",
     "shareCamera": "Share your camera",
     "streamOptions": "Stream options",
     "stop": "Stop",

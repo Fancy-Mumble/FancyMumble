@@ -229,6 +229,7 @@
     "unavailable": "流不可用",
     "connecting": "连接中…",
     "copyScreenshot": "复制此画面的截图",
+    "copyFrame": "复制当前画面",
     "shareCamera": "共享你的摄像头",
     "streamOptions": "流选项",
     "stop": "停止",
