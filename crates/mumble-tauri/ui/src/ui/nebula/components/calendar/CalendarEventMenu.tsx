@@ -4,7 +4,7 @@ import { useCalendarStore } from "@core/features/chat/calendar/calendarStore";
 import { CALENDAR_COLORS, SHOW_AS_OPTIONS } from "@core/features/chat/calendar/types";
 import { CheckIcon, EditIcon, TrashIcon } from "@ui/icons";
 import { radius } from "../../tokens";
-import { contextMenuRootSlot } from "../contextMenuRoot";
+import { contextMenuRootSlot, CONTEXT_MENU_PROPS } from "../contextMenuRoot";
 import { RSVP_CHOICES } from "./calendarModel";
 
 const ITEM = { fontSize: 12.5, gap: "8px", minHeight: 30 } as const;
@@ -47,6 +47,7 @@ export function CalendarEventMenu({ onDelete }: Readonly<{ onDelete: (eventId: s
     <Menu
       open
       onClose={closeMenu}
+      {...CONTEXT_MENU_PROPS}
       anchorReference="anchorPosition"
       anchorPosition={{ top: menu.y, left: menu.x }}
       slotProps={{ root: contextMenuRootSlot(closeMenu), list: { dense: true }, paper: { sx: { minWidth: 220 } } }}

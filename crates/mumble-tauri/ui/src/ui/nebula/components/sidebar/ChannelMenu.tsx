@@ -31,7 +31,7 @@ import {
   UsersGroupIcon,
 } from "@ui/icons";
 import { MenuCheckBox } from "./MenuCheckBox";
-import { contextMenuRootSlot } from "../contextMenuRoot";
+import { contextMenuRootSlot, CONTEXT_MENU_PROPS } from "../contextMenuRoot";
 import { popupActions, useChannelMenuTarget, type ChannelMenuTarget } from "../../clientState";
 
 interface ChannelMenuProps {
@@ -148,6 +148,7 @@ function OpenChannelMenu({
     <Menu
       open
       onClose={onClose}
+      {...CONTEXT_MENU_PROPS}
       anchorReference="anchorPosition"
       anchorPosition={{ top: target.y, left: target.x }}
       // A second right-click is still this menu's: see `contextMenuRootSlot`.
