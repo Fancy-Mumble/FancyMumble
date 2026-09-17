@@ -47,7 +47,7 @@ import { canDeleteMessages } from "@standard/components/sidebar/channel/ChannelE
 import { userMenuActions } from "../../selectors";
 import { SearchBox, Stack } from "../primitives";
 import { radius } from "../../tokens";
-import { contextMenuRootSlot } from "../contextMenuRoot";
+import { contextMenuRootSlot, CONTEXT_MENU_PROPS } from "../contextMenuRoot";
 import { popupActions, useUserMenuTarget } from "../../clientState";
 
 /** The person a right-click landed on, and where it landed. */
@@ -236,6 +236,7 @@ function UserMenuSurface({
     <Menu
       open
       onClose={onClose}
+      {...CONTEXT_MENU_PROPS}
       anchorReference="anchorPosition"
       anchorPosition={{ top: target.y, left: target.x }}
       // A second right-click is still this menu's: see `contextMenuRootSlot`.

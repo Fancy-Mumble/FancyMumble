@@ -16,7 +16,7 @@ import { useWatchStart } from "@core/features/chat/watch/useWatchStart";
 import { canDeleteMessages } from "@standard/components/sidebar/channel/ChannelEditorDialog";
 import { EmojiPlusIcon } from "@ui/icons";
 import { Stack, UserAvatar } from "../primitives";
-import { contextMenuRootSlot } from "../contextMenuRoot";
+import { contextMenuRootSlot, CONTEXT_MENU_PROPS } from "../contextMenuRoot";
 import { popupActions, useMessageMenuTarget } from "../../clientState";
 import { radius } from "../../tokens";
 import { bodyToCopyText } from "@core/features/chat/bodyText";
@@ -113,18 +113,26 @@ const IMAGE_ACTION_LINGER = 900;
  * otherwise. Selecting several to delete at once is offered only where deleting
  * one is, so the mode cannot be entered to reach an action that will be refused.
  */
-export function MessageMenu({
+export function MessageMenu(props: Readonly<MessageMenuProps>) {
+  // The message the menu is about is pack state, not a prop - see
+  // `popupActions`. The shell used to hold it, which made a right-click on a
+  // message re-render every other message in the river first.
+  const target = useMessageMenuTarget();
+  // Nothing below this line runs while the menu is closed, which is most of the
+  // time. Held in one component, its four store subscriptions and its watch
+  // lookup ran on every write the store took, all session, to decide nothing.
+  return target ? <OpenMessageMenu target={target} {...props} /> : null;
+}
+
+function OpenMessageMenu({
+  target,
   onReact,
   onQuickReact,
   onQuote,
   onEdit,
   onSelect,
   allMessageIds,
-}: Readonly<MessageMenuProps>) {
-  // The message the menu is about is pack state, not a prop - see
-  // `popupActions`. The shell used to hold it, which made a right-click on a
-  // message re-render every other message in the river first.
-  const target = useMessageMenuTarget();
+}: Readonly<MessageMenuProps & { target: MessageMenuTarget }>) {
   const onClose = popupActions.closeMessageMenu;
   const { t } = useTranslation(["nebulaChat", "chat"]);
   const channels = useAppStore((state) => state.channels);
@@ -234,8 +242,6 @@ export function MessageMenu({
     };
   }, []);
 
-  if (!target) return null;
-
   const { message } = target;
   const channel = channels.find((candidate) => candidate.id === message.channel_id);
   const hasId = !!message.message_id;
@@ -307,6 +313,7 @@ export function MessageMenu({
       // Focus the list, not its first row: the canvas opens the menu with
       // nothing chosen, and a highlighted Reply reads as a pending action.
       autoFocus={false}
+      {...CONTEXT_MENU_PROPS}
       anchorReference="anchorPosition"
       anchorPosition={{ top: target.y, left: target.x }}
       slotProps={{

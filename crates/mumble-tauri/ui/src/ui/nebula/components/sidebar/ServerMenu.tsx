@@ -3,7 +3,7 @@ import { Box, Divider, Menu, MenuItem } from "@mui/material";
 import type { SavedServer } from "@core/types";
 import { CopyIcon, EditIcon, Link2Icon, LogOutIcon, StarIcon, TrashIcon } from "@ui/icons";
 import type { ServerGroup, ServerRailEntry } from "../../selectors";
-import { contextMenuRootSlot } from "../contextMenuRoot";
+import { contextMenuRootSlot, CONTEXT_MENU_PROPS } from "../contextMenuRoot";
 
 export interface ServerMenuTarget {
   entry: ServerRailEntry;
@@ -63,6 +63,7 @@ export function ServerMenu({
     <Menu
       open
       onClose={onClose}
+      {...CONTEXT_MENU_PROPS}
       anchorReference="anchorPosition"
       anchorPosition={{ top: target.y, left: target.x }}
       // A second right-click is still this menu's: see `contextMenuRootSlot`.
