@@ -111,6 +111,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+    env:
+      # Clippy and the unit tests compile mumble-tauri, whose build.rs would
+      # otherwise probe for the Qt MinGW kit to build the minimal client and,
+      # on a runner that has none, warn that it was skipped. That client is
+      # built and packaged by its own job.
+      SKIP_QT6UI: "1"
 
     steps:
       - uses: actions/checkout@v6
