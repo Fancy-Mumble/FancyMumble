@@ -41,7 +41,7 @@ pub(crate) use persistence::{
 };
 
 // Outbound
-pub(crate) use outbound::{Anchor, OutboundMessage, send_fetch};
+pub(crate) use outbound::{Anchor, OutboundMessage, send_fetch, send_open_fetch};
 
 // Inbound
 pub(crate) use inbound::{

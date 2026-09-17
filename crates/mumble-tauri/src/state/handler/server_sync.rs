@@ -7,19 +7,27 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::{debug, info, warn};
 
 use super::{HandleMessage, HandlerContext};
-use crate::state::SharedState;
-use crate::state::local_cache::CachedReaction;
+use crate::state::local_cache::{CachedReaction, CachedTail};
 use crate::state::pchat::{self, PchatState};
 use crate::state::types::{
-    ChatMessage, ConnectionStatus, CurrentChannelPayload, ReactionFetchResponsePayload,
-    StoredReactionPayload,
+    ConnectionStatus, CurrentChannelPayload, ReactionFetchResponsePayload, StoredReactionPayload,
 };
+use crate::state::{MAX_MESSAGES_PER_THREAD, SharedState};
 
 /// How much of a channel to ask for when probing for the file service.
 ///
 /// A page rather than one row: the answer doubles as the channel file list, so
 /// asking for a single entry would mean asking again immediately.
 const FILE_PROBE_LIMIT: u32 = 100;
+
+/// How much of a channel's local cache is worth holding on connect.
+///
+/// Enough to paint the first screen, for a channel whose archive the server
+/// keeps: the fetch on open supplies the authoritative tail, and whatever the
+/// reader scrolls back to comes from the server as they ask for it. A
+/// `SignalV1` channel has no such fallback -- its local cache is the only copy
+/// of what was said -- so it gets whatever the live store would have held.
+const CACHED_TAIL_WITH_SERVER_HISTORY: usize = 100;
 
 /// How often the flusher looks at the local message cache.
 ///
@@ -510,11 +518,7 @@ impl HandlerContext {
 
         if let Ok(mut state) = self.shared.lock() {
             state.pchat_ctx.pchat = Some(pchat_state);
-            for (ch_id, msgs) in cached_messages {
-                if !msgs.is_empty() {
-                    state.msgs.by_channel.entry(ch_id).or_default().extend(msgs);
-                }
-            }
+            restore_cached_tails(&mut state, cached_messages);
         }
 
         self.emit_cached_reactions(cached_reactions);
@@ -654,10 +658,7 @@ impl PchatState {
     /// decryption can take hundreds of milliseconds.
     fn load_local_cache(
         &mut self,
-    ) -> (
-        HashMap<u32, Vec<ChatMessage>>,
-        HashMap<u32, Vec<CachedReaction>>,
-    ) {
+    ) -> (HashMap<u32, CachedTail>, HashMap<u32, Vec<CachedReaction>>) {
         let Some(ref mut cache) = self.local_cache else {
             return (HashMap::new(), HashMap::new());
         };
@@ -666,12 +667,16 @@ impl PchatState {
             warn!("failed to load local message cache: {e}");
             HashMap::new()
         } else {
-            let cached = cache.all_chat_messages();
-            for (ch_id, msgs) in &cached {
-                if !msgs.is_empty() {
+            // The tail only, and read out here rather than inside the lock:
+            // the whole archive of every channel used to be decrypted and
+            // handed over, which is the cost this is bounding.
+            let cached = cache.newest_chat_messages(MAX_MESSAGES_PER_THREAD);
+            for (ch_id, tail) in &cached {
+                if !tail.rows.is_empty() {
                     info!(
                         channel_id = ch_id,
-                        count = msgs.len(),
+                        count = tail.rows.len(),
+                        older_left_behind = tail.truncated,
                         "restored cached messages"
                     );
                 }
@@ -694,6 +699,48 @@ impl PchatState {
         }
 
         (msgs, rxns)
+    }
+}
+
+/// Seed the message store with what the local cache holds, per channel.
+///
+/// Two questions per channel, both of which used to go unasked while every
+/// cached row of every channel was poured in:
+///
+///  - *does this channel still keep history?* A cache outlives the setting
+///    that filled it, so a channel switched back to volatile still has its
+///    rows on disk. Restoring them regardless is what made messages come back
+///    to a channel whose own editor said it keeps none.
+///  - *how much of it does this client need?* A channel the server archives
+///    needs a screenful; the fetch on open replaces it with the live tail and
+///    paging back goes to the server. Only a channel nobody archives for us
+///    needs its whole cached tail held.
+fn restore_cached_tails(state: &mut SharedState, cached: HashMap<u32, CachedTail>) {
+    for (ch_id, mut tail) in cached {
+        if tail.rows.is_empty() {
+            continue;
+        }
+        let mode = state
+            .channels
+            .get(&ch_id)
+            .and_then(|ch| ch.pchat_protocol)
+            .filter(PchatProtocol::uses_pchat);
+        let Some(mode) = mode else {
+            debug!(
+                channel_id = ch_id,
+                "skipping cached messages for a channel that keeps no history"
+            );
+            continue;
+        };
+        let limit = if mode.has_server_history() {
+            CACHED_TAIL_WITH_SERVER_HISTORY
+        } else {
+            MAX_MESSAGES_PER_THREAD
+        };
+        let from = tail.rows.len().saturating_sub(limit);
+        let older_left_behind = tail.truncated || from > 0;
+        let rows = tail.rows.split_off(from);
+        state.msgs.restore_cached(ch_id, rows, older_left_behind);
     }
 }
 
@@ -922,23 +969,10 @@ async fn fetch_channel_history(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: 
     {
         let _ = p.fetched_channels.insert(ch);
     }
-    let fetch = mumble_tcp::PchatFetch {
-        channel_id: Some(ch),
-        before_id: None,
-        limit: Some(50),
-        after_id: None,
-    };
-    let handle = shared
-        .lock()
-        .ok()
-        .and_then(|s| s.conn.client_handle.clone());
-    let fetch_sent = if let Some(handle) = handle {
-        let _ = handle.send(command::SendPchatFetch { fetch }).await;
+    let fetch_sent = pchat::send_open_fetch(shared, ch).await;
+    if fetch_sent {
         info!(channel_id = ch, "sent initial pchat-fetch");
-        true
-    } else {
-        false
-    };
+    }
 
     if fetch_sent {
         let shared_timeout = Arc::clone(shared);

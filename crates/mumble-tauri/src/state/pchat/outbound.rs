@@ -1,5 +1,7 @@
 //! Outbound message construction and sending for persistent chat.
 
+use std::sync::{Arc, Mutex};
+
 use tracing::debug;
 
 use mumble_protocol::client::ClientHandle;
@@ -7,6 +9,8 @@ use mumble_protocol::command;
 use mumble_protocol::persistent::PchatProtocol;
 use mumble_protocol::persistent::wire::{MessageEnvelope, WireCodec};
 use mumble_protocol::proto::mumble_tcp;
+
+use crate::state::{FetchWalk, SharedState};
 
 use super::PchatState;
 use super::conversion::protocol_to_proto;
@@ -125,4 +129,34 @@ pub(crate) async fn send_fetch(
 
     debug!(channel_id, ?anchor, "sent pchat-fetch");
     Ok(())
+}
+
+/// How much of a channel's archive opening it asks for.
+const OPEN_FETCH_LIMIT: u32 = 50;
+
+/// Ask for the newest page of `channel_id`, which is what opening it needs.
+///
+/// One helper for the three moments a channel opens -- the channel this
+/// client lands in on connect, one it joins later, one that gains a
+/// persistence mode while it is being looked at -- because the request has to
+/// record which way it walks in the same breath as sending it. The response
+/// does not echo it, and a tail page joined as though it were a walk backwards
+/// lands at the wrong end of the thread.
+///
+/// Returns whether the request went out.
+pub(crate) async fn send_open_fetch(shared: &Arc<Mutex<SharedState>>, channel_id: u32) -> bool {
+    let handle = {
+        let Ok(mut state) = shared.lock() else {
+            return false;
+        };
+        state.msgs.note_fetch(channel_id, FetchWalk::Newest);
+        state.conn.client_handle.clone()
+    };
+    let Some(handle) = handle else {
+        return false;
+    };
+    send_fetch(&handle, channel_id, Anchor::Newest, OPEN_FETCH_LIMIT)
+        .await
+        .inspect_err(|e| debug!(channel_id, "open fetch not sent: {e}"))
+        .is_ok()
 }

@@ -6,7 +6,7 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::{debug, info};
 
 use super::{HandleMessage, HandlerContext};
-use crate::state::{SharedState, types::ChannelEntry};
+use crate::state::{SharedState, pchat, types::ChannelEntry};
 
 impl HandleMessage for mumble_tcp::ChannelState {
     fn handle(&self, ctx: &HandlerContext) {
@@ -291,10 +291,10 @@ async fn pchat_key_gen_and_fetch(shared: Arc<Mutex<SharedState>>, id: u32) {
     // ...", before `send_message` had sent anything at all. Reconnecting fixed
     // it, because that is a join.
     if mode == PchatProtocol::SignalV1 {
-        if crate::state::pchat::ensure_signal_bridge_unlocked(&shared) {
-            crate::state::pchat::send_signal_distribution(&shared, id);
+        if pchat::ensure_signal_bridge_unlocked(&shared) {
+            pchat::send_signal_distribution(&shared, id);
         } else {
-            crate::state::pchat::emit_signal_bridge_error(
+            pchat::emit_signal_bridge_error(
                 &shared,
                 "Signal bridge library could not be loaded. End-to-end encryption is unavailable.",
             );
@@ -340,18 +340,7 @@ async fn pchat_key_gen_and_fetch(shared: Arc<Mutex<SharedState>>, id: u32) {
         {
             let _ = p.fetched_channels.insert(id);
         }
-        let fetch = mumble_tcp::PchatFetch {
-            channel_id: Some(id),
-            before_id: None,
-            limit: Some(50),
-            after_id: None,
-        };
-        let handle = shared
-            .lock()
-            .ok()
-            .and_then(|s| s.conn.client_handle.clone());
-        if let Some(handle) = handle {
-            let _ = handle.send(command::SendPchatFetch { fetch }).await;
+        if pchat::send_open_fetch(&shared, id).await {
             debug!(channel_id = id, "sent pchat-fetch after mode change");
         }
     }
@@ -363,7 +352,7 @@ fn derive_and_store_archive_key(shared: &Arc<Mutex<SharedState>>, id: u32) {
     // Every client observing the mode change ran this, not just the one that
     // made it, so each minted a key of its own the moment a channel became an
     // archive. Only the client whose key it is to mint may.
-    if !crate::state::pchat::should_mint_archive_key(&s, id) {
+    if !pchat::should_mint_archive_key(&s, id) {
         return;
     }
     let Some(ref mut pchat) = s.pchat_ctx.pchat else {

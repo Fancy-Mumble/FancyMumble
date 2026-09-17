@@ -8,7 +8,7 @@ use mumble_protocol::command;
 use mumble_protocol::persistent::PchatProtocol;
 
 use super::types::ChatMessage;
-use super::{AppState, SharedState, pchat};
+use super::{AppState, FetchWalk, SharedState, pchat};
 
 struct OwnMessageData {
     channel_id: u32,
@@ -84,6 +84,15 @@ fn cache_own_signal_message(state: &mut SharedState, msg: &ChatMessage, channel_
     }
 }
 
+/// Which way a fetch for `anchor` walks the archive.
+fn walk_of(anchor: &pchat::Anchor) -> FetchWalk {
+    match anchor {
+        pchat::Anchor::Newest => FetchWalk::Newest,
+        pchat::Anchor::Before(_) => FetchWalk::Older,
+        pchat::Anchor::After(_) => FetchWalk::Newer,
+    }
+}
+
 impl AppState {
     /// Ask the server for a page of history in either direction.
     ///
@@ -113,9 +122,7 @@ impl AppState {
             // The response does not echo the direction it was asked in, and
             // `has_more` means the opposite thing each way, so the asker
             // records it while it still knows.
-            state
-                .msgs
-                .note_fetch(channel_id, matches!(anchor, pchat::Anchor::After(_)));
+            state.msgs.note_fetch(channel_id, walk_of(&anchor));
             state.conn.client_handle.clone()
         };
         let handle = handle.ok_or("Not connected")?;

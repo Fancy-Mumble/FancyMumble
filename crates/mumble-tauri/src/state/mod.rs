@@ -356,13 +356,27 @@ pub(super) struct ThreadWindow {
     /// actually follow is how a hole gets into the range, and the hole is
     /// invisible until somebody scrolls into it.
     pub more_after: bool,
-    /// Whether the fetch this client is waiting on walks forward.
+    /// Which way the fetch this client is waiting on walks.
     ///
     /// The epoch-0 `PchatFetchResponse` does not echo the direction it was
     /// asked in, and the same `has_more` means "older still exist" or "newer
     /// still exist" depending on which way the request went. The asker is the
     /// only one who knows, so it records it here.
-    pub fetching_forward: bool,
+    pub fetching: FetchWalk,
+}
+
+/// Which end of the archive the fetch in flight is asking about.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(super) enum FetchWalk {
+    /// The newest page, which is what opening a channel asks for. Its answer
+    /// *is* the tail, so it is joined there rather than at whichever edge of
+    /// the range the caller happened to be standing on.
+    #[default]
+    Newest,
+    /// Older than a cursor: a page for the head of the range.
+    Older,
+    /// Newer than a cursor: a page for the tail of the range.
+    Newer,
 }
 
 impl MessageStore {
@@ -377,8 +391,84 @@ impl MessageStore {
     }
 
     /// Record which way the fetch now in flight for `channel` is walking.
-    pub(super) fn note_fetch(&mut self, channel: u32, forward: bool) {
-        self.windows.entry(channel).or_default().fetching_forward = forward;
+    pub(super) fn note_fetch(&mut self, channel: u32, walk: FetchWalk) {
+        self.windows.entry(channel).or_default().fetching = walk;
+    }
+
+    /// Seed a thread with rows restored from the local cache.
+    ///
+    /// `older_left_behind` is the cache saying it holds more than it handed
+    /// over; recorded as a gap at the head so the reader is offered the way
+    /// back to it instead of being shown a short thread as a complete one.
+    pub(super) fn restore_cached(
+        &mut self,
+        channel: u32,
+        rows: Vec<ChatMessage>,
+        older_left_behind: bool,
+    ) {
+        if rows.is_empty() {
+            return;
+        }
+        self.by_channel.entry(channel).or_default().extend(rows);
+        if older_left_behind {
+            self.windows.entry(channel).or_default().more_before = true;
+        }
+    }
+
+    /// Join the newest page of a thread onto the range, at the tail.
+    ///
+    /// A fetch that names no cursor asks for the live tail, and the answer
+    /// belongs at the tail whatever the range already holds. Joined as a
+    /// backward walk instead -- which is what it used to get, a cursorless
+    /// request looking like one -- the newest messages were *prepended*, so a
+    /// channel whose local cache had been restored opened on the oldest thing
+    /// this client held while the latest sat above it, off the top of the
+    /// thread.
+    ///
+    /// The held rows survive when the page joins onto them cleanly: its first
+    /// row is one of theirs, so everything from there on is the page's own,
+    /// fresher copy and what lies before it is untouched history. A page that
+    /// does not overlap them is a different matter -- there is no way to tell
+    /// whether anything belongs between the two without inventing an order for
+    /// rows whose only common clock is the sender's -- so the range becomes the
+    /// page, and the gap is recorded rather than papered over.
+    pub(super) fn join_tail(&mut self, channel: u32, page: Vec<ChatMessage>, more: bool) {
+        if page.is_empty() {
+            // An empty tail says nothing about what is held: a channel whose
+            // history the server does not keep answers this way, and its local
+            // cache is the only copy there is. Taking the page as the range
+            // would throw that away.
+            self.windows.entry(channel).or_default().more_after = false;
+            return;
+        }
+        let rows = self.by_channel.entry(channel).or_default();
+        let joined_at = page[0].message_id.as_deref().and_then(|head| {
+            rows.iter()
+                .position(|m| m.message_id.as_deref() == Some(head))
+        });
+        let dropped = match joined_at {
+            Some(at) => {
+                rows.truncate(at);
+                false
+            }
+            None => {
+                let had_rows = !rows.is_empty();
+                rows.clear();
+                had_rows
+            }
+        };
+        let kept_older = !rows.is_empty();
+        rows.extend(page);
+        let window = self.windows.entry(channel).or_default();
+        window.more_after = false;
+        if !kept_older {
+            // Nothing older is held any more, so what the server said about
+            // rows before the page is the whole answer -- unless rows were
+            // dropped to keep the range contiguous, which is a gap either way.
+            window.more_before = more || dropped;
+        }
+        // Otherwise the rows still held are older than the page, and what lies
+        // before *them* is already recorded.
     }
 
     /// Append a message that has just arrived live.
@@ -913,6 +1003,90 @@ mod tests {
         }
         assert_eq!(buf.len(), 10);
         assert_eq!(buf.first().and_then(|m| m.timestamp), Some(0));
+    }
+
+    /// A named row, so a test can say which ids a page and a range share.
+    fn row(id: &str, ts: u64) -> ChatMessage {
+        ChatMessage {
+            message_id: Some(id.into()),
+            timestamp: Some(ts),
+            ..dummy_message(0)
+        }
+    }
+
+    fn ids(store: &MessageStore, channel: u32) -> Vec<String> {
+        store
+            .by_channel
+            .get(&channel)
+            .map(|rows| {
+                rows.iter()
+                    .filter_map(|m| m.message_id.clone())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    }
+
+    /// The bug: opening a channel showed the oldest messages this client had.
+    ///
+    /// The newest page has no cursor, which made it look like a walk backwards
+    /// -- so it was *prepended* to the rows restored from the local cache, and
+    /// the thread ended on the oldest of them.
+    #[test]
+    fn the_newest_page_joins_the_tail_not_the_head() {
+        let mut store = MessageStore::default();
+        store.restore_cached(7, vec![row("a", 1), row("b", 2), row("c", 3)], false);
+
+        // The server's newest page overlaps the last cached row.
+        store.join_tail(7, vec![row("c", 3), row("d", 4), row("e", 5)], false);
+
+        assert_eq!(ids(&store, 7), ["a", "b", "c", "d", "e"]);
+        let window = store.window(7);
+        assert!(!window.more_after, "the tail page is the tail");
+        assert!(
+            !window.more_before,
+            "the rows in front of the page were kept, so nothing is missing"
+        );
+    }
+
+    #[test]
+    fn a_tail_page_that_does_not_overlap_replaces_the_range() {
+        let mut store = MessageStore::default();
+        store.restore_cached(7, vec![row("a", 1), row("b", 2)], false);
+
+        store.join_tail(7, vec![row("y", 9), row("z", 10)], false);
+
+        assert_eq!(
+            ids(&store, 7),
+            ["y", "z"],
+            "rows that cannot be joined without inventing an order are dropped"
+        );
+        assert!(
+            store.window(7).more_before,
+            "and the gap they left is recorded, or the reader is shown a short              thread as a complete one"
+        );
+    }
+
+    /// A channel whose history the server does not keep answers the open fetch
+    /// with nothing. Its local cache is the only copy there is.
+    #[test]
+    fn an_empty_tail_page_keeps_what_is_held() {
+        let mut store = MessageStore::default();
+        store.restore_cached(7, vec![row("a", 1), row("b", 2)], false);
+
+        store.join_tail(7, Vec::new(), false);
+
+        assert_eq!(ids(&store, 7), ["a", "b"]);
+    }
+
+    #[test]
+    fn a_truncated_cache_restores_as_a_thread_with_a_head_to_page_to() {
+        let mut store = MessageStore::default();
+        store.restore_cached(7, vec![row("b", 2)], true);
+
+        assert!(
+            store.window(7).more_before,
+            "the cache said it held more than it handed over"
+        );
     }
 
     // Phase E: voice migration on active-session switch.
