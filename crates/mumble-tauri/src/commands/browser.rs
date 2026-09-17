@@ -160,8 +160,12 @@ fn flag_for_key(key: &str) -> Option<&'static str> {
 /// lives in `...\Programs\Opera\`, and the folder a browser installs itself
 /// into is its own name far more often than it is anything else.
 fn parent_key(token: &str) -> Option<String> {
-    let parent = Path::new(token).parent()?.file_name()?.to_str()?;
-    browser_key(parent)
+    // Split by hand on either separator, as `browser_key` does. `Path` only
+    // knows the host's own, and this has to read a Windows command line the
+    // same way wherever it runs - the tests included.
+    let mut parts = token.rsplit(['/', '\\']);
+    let _file = parts.next()?;
+    browser_key(parts.next()?)
 }
 
 /// The private-window switch for a whole command line, or `None` when nothing
