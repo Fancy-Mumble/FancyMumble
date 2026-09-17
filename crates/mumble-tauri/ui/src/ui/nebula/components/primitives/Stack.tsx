@@ -18,10 +18,22 @@ export interface StackProps extends Omit<MuiStackProps, "gap"> {
  * precedence, with an explicit `sx` still winning.
  */
 export function Stack({ alignItems, justifyContent, gap, flexWrap, sx, ...rest }: Readonly<StackProps>) {
-  return (
-    <MuiStack
-      {...(rest as MuiStackProps)}
-      sx={[{ alignItems, justifyContent, gap, flexWrap }, ...(Array.isArray(sx) ? sx : [sx])]}
-    />
-  );
+  // Only build something when there is something to build. This used to wrap
+  // every caller's `sx` in a fresh two-element array whether or not a shorthand
+  // had been given - and `Stack` is what nearly seven hundred rows in this pack
+  // are made of, so that was an array and an object allocated per row per
+  // render, each one a chain emotion then had to merge and re-serialise.
+  const shorthands =
+    alignItems === undefined && justifyContent === undefined && gap === undefined && flexWrap === undefined
+      ? undefined
+      : { alignItems, justifyContent, gap, flexWrap };
+
+  const style =
+    shorthands === undefined
+      ? sx
+      : sx === undefined
+        ? shorthands
+        : [shorthands, ...(Array.isArray(sx) ? sx : [sx])];
+
+  return <MuiStack {...(rest as MuiStackProps)} sx={style} />;
 }
