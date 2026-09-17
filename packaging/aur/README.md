@@ -21,7 +21,7 @@ own header comment says is deliberate. Splitting it keeps `fancy-mumble` MIT and
 lets a user decline the AGPL half.
 
 Nothing has to be configured to connect the two. `load_signal_bridge()` in
-`mumble-protocol` walks a candidate list relative to the executable, and
+`mumble-tauri` (`src/state/pchat/signal_bridge.rs`) walks a candidate list relative to the executable, and
 `../lib/fancy-mumble/` is already on it, so installing the bridge package puts
 `libsignal_bridge.so` exactly where `/usr/bin/mumble-tauri` looks. Without it,
 private chat is unavailable — which is what upstream's own `.deb` and AppImage
@@ -65,16 +65,16 @@ the AUR's other Tauri and Electron packages follow.
   declaration in its `Cargo.toml` header. AGPL-3.0 is in Arch's common licences
   so the package needs nothing installed, but adding a `LICENSE` to that
   directory upstream would be worth doing.
-- The updater plugin is compiled in and unconditional, and its configured
-  endpoint still names `FancyMumbleNext` (GitHub redirects it to `FancyMumble`,
-  so it works, but the redirect is one rename away from breaking). A distro
-  package should not update itself; a cargo feature to gate
-  `tauri-plugin-updater` would let the PKGBUILD turn it off.
+- A distro package should not update itself. Tags up to `v0.3.0` compile the
+  updater in unconditionally; from `v0.4.0` it sits behind the `self-updater`
+  cargo feature, which is on by default. When bumping `fancy-mumble` to 0.4.0,
+  build with `--no-default-features --features custom-protocol`, as the Flatpak
+  manifest already does.
 
 ## Submitting
 
 ```sh
 git clone ssh://aur@aur.archlinux.org/fancy-mumble.git aur-fancy-mumble
 cp packaging/aur/fancy-mumble/{PKGBUILD,.SRCINFO,fancy-mumble.desktop} aur-fancy-mumble/
-cd aur-fancy-mumble && git add -A && git commit -m 'fancy-mumble 0.3.0-1' && git push
+cd aur-fancy-mumble && git add -A && git commit -m 'fancy-mumble <pkgver>-1' && git push
 ```
