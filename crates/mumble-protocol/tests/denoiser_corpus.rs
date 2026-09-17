@@ -123,6 +123,13 @@
     unused_crate_dependencies,
     reason = "integration test: it links the whole crate's dependency set and uses a few"
 )]
+#![cfg_attr(
+    not(feature = "deepfilternet-denoiser"),
+    allow(
+        dead_code,
+        reason = "the corpus and its scoring are only reached from the tests behind deepfilternet-denoiser; they stay compiled without it so they cannot rot"
+    )
+)]
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
