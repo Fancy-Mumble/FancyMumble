@@ -43,6 +43,7 @@ export { SettingsSearch, type SettingsSearchTarget } from "./settings/SettingsSe
 // console - into the graph of a window that is showing a connect screen.
 // Both are loaded from their own modules, lazily, by `NebulaClientApp`.
 export { ProfileCard } from "./user/ProfileCard";
+export { HoverProfileCard } from "./user/HoverProfileCard";
 export { UserInfoDialog } from "./user/UserInfoDialog";
 export { UserMenu, type UserMenuTarget } from "./user/UserMenu";
 export { NebulaRuntime } from "./runtime/NebulaRuntime";
