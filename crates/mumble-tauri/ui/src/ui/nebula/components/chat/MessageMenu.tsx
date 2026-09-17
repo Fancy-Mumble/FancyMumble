@@ -20,6 +20,7 @@ import { contextMenuRootSlot, CONTEXT_MENU_PROPS } from "../contextMenuRoot";
 import { popupActions, useMessageMenuTarget } from "../../clientState";
 import { radius } from "../../tokens";
 import { bodyToCopyText } from "@core/features/chat/bodyText";
+import { frost } from "../../theme";
 
 /** One picture, as the row that was right-clicked knows it. */
 export interface MenuImage {
@@ -328,7 +329,7 @@ function OpenMessageMenu({
             border: "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line2,
             background: theme.palette.nebula.tint + "," + theme.palette.nebula.bg0,
             boxShadow: theme.palette.nebula.shadow,
-            backdropFilter: "blur(20px) saturate(1.2)",
+            ...frost(theme, 20, 1.2),
           }),
         },
       }}

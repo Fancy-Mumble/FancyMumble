@@ -48,7 +48,7 @@ import type { StagedAttachment, UploadPlaceholder } from "@core/features/chat/us
 import { formatBytes } from "@core/utils/format";
 import { TID } from "@core/testids";
 import { composerHtml, plainText } from "../../selectors";
-import { chamferedSurface, glassChrome } from "../../theme";
+import { chamferedSurface, frost, glassChrome } from "../../theme";
 import { CHAT_COLUMN_INSET_PX, CHAT_COLUMN_MAX_WIDTH, NEBULA_MONO, radius } from "../../tokens";
 
 /** What the paperclip asks the picker for. */
@@ -165,7 +165,8 @@ const NOTICE_POPOVER_WIDTH = 300;
  * sits under.
  */
 const PANEL_RADIUS = radius("lg");
-const PANEL_BLUR = "blur(32px) saturate(160%)";
+/** The canvas's blur for the composer panel, if the skin wants glass at all. */
+const PANEL_BLUR = [32, 1.6] as const;
 
 const POPUP = {
   position: "absolute",
@@ -690,8 +691,7 @@ export function Composer({
           flexDirection: "column",
           borderRadius: PANEL_RADIUS,
           overflow: "hidden",
-          backdropFilter: PANEL_BLUR,
-          WebkitBackdropFilter: PANEL_BLUR,
+          ...frost(theme, ...PANEL_BLUR),
           opacity: disabled ? 0.6 : 1,
           // Focus is stated on the panel, because the panel is the field. A
           // ring drawn around the words inside would be a second field boxed
@@ -1360,8 +1360,7 @@ export function Composer({
             gap: "8px",
             borderRadius: PANEL_RADIUS,
             ...glassChrome(theme),
-            backdropFilter: PANEL_BLUR,
-            WebkitBackdropFilter: PANEL_BLUR,
+            ...frost(theme, ...PANEL_BLUR),
             border: `1px dashed ${theme.palette.nebula.accentLine}`,
             zIndex: 25,
           })}

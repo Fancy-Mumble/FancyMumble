@@ -500,7 +500,12 @@ export function createNebulaTheme(
             "&.Mui-checked + .MuiSwitch-track": { backgroundColor: nebula.accent, opacity: 1 },
           },
           thumb: { width: 14, height: 14, boxShadow: "none" },
-          track: { borderRadius: skin.radiusPill, backgroundColor: nebula.card2, opacity: 1 },
+          // A capsule, not the chip token. `radiusPill` is what badges and
+          // chips read, and a squared-off skin (Nimbus) means it for those -
+          // but the thumb riding this track is a circle whatever the skin says,
+          // the same exemption `radiusAvatar` gets, so borrowing the chip corner
+          // left a round knob sliding inside a rectangle.
+          track: { borderRadius: "999px", backgroundColor: nebula.card2, opacity: 1 },
         },
       },
       MuiSlider: {
@@ -594,6 +599,29 @@ export function chamferedSurface(
   } as const;
 }
 
+/**
+ * A backdrop blur, or nothing at all on a skin that asked for no glass.
+ *
+ * The rule was already written down for menus - "a backdrop filter is a
+ * backdrop filter at any radius, and the compositing layer it buys is the whole
+ * cost" - and then every other glass surface in the pack ignored it and wrote
+ * its own `blur(...)` regardless. On the default skin, where `--nebula-blur`
+ * resolves to `0px`, that meant the window carried a compositing layer per
+ * translucent panel, each re-sampling whatever scrolled under it, to produce a
+ * blur of zero. The header and the composer sit over the conversation, so what
+ * they were re-sampling was the river.
+ *
+ * `blur` may be a number of pixels or a CSS length - `var(--nebula-blur, 14px)`
+ * for the surfaces that want whatever the skin asked for.
+ */
+export function frost(theme: Theme, blur: number | string, saturate?: number) {
+  const radius = typeof blur === "number" ? `${blur}px` : blur;
+  const value = theme.palette.nebulaSkin.glass
+    ? `blur(${radius})${saturate ? ` saturate(${saturate})` : ""}`
+    : "none";
+  return { WebkitBackdropFilter: value, backdropFilter: value } as const;
+}
+
 export function glassChrome(theme: Theme) {
   const { nebula } = theme.palette;
   return {
@@ -603,8 +631,7 @@ export function glassChrome(theme: Theme) {
     background: nebula.header,
     // How far a panel blurs is the skin's, not a constant: an opaque skin must
     // not blur at all, and Aurora blurs at 40px. `--nebula-blur` carries it.
-    WebkitBackdropFilter: "blur(var(--nebula-blur, 14px)) saturate(1.15)",
-    backdropFilter: "blur(var(--nebula-blur, 14px)) saturate(1.15)",
+    ...frost(theme, "var(--nebula-blur, 14px)", 1.15),
   } as const;
 }
 
@@ -621,8 +648,7 @@ export function washPanel(theme: Theme) {
   const { nebula } = theme.palette;
   return {
     background: nebula.wash,
-    WebkitBackdropFilter: "blur(36px) saturate(160%)",
-    backdropFilter: "blur(36px) saturate(160%)",
+    ...frost(theme, 36, 1.6),
     border: `var(--nebula-line-width, 1px) solid ${nebula.washLine}`,
   } as const;
 }

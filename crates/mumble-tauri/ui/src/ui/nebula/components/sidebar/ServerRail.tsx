@@ -12,6 +12,7 @@ import type { SavedServer, ServerPingResult } from "@core/types";
 import { RAIL_PANEL_MS, ServerRailPanel, ServerRailRowGhost, type RailFriends } from "./ServerRailPanel";
 import { ServerRailCard, useRailCardHover, type RailCardOccupant } from "./ServerRailCard";
 import { ServerMenu, type ServerMenuTarget } from "./ServerMenu";
+import { frost } from "../../theme";
 
 /** Every tile, and the two buttons that bracket them, are one square. */
 const TILE = 40;
@@ -726,7 +727,7 @@ export function ServerRail({
           ? "none"
           : "var(--nebula-line-width, 1px) solid " + theme.palette.nebula.line,
         background: theme.palette.nebula.rail,
-        backdropFilter: "blur(14px)",
+        ...frost(theme, 14),
       })}
     >
       {/* The artboard rules the rail off from the window with a run of gold
