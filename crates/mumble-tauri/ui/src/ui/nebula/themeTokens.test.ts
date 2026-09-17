@@ -1,5 +1,3 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { contrast, parseHex } from "./livery";
 import { NEBULA_TOKENS, type NebulaTokens } from "./tokens";
@@ -12,9 +10,13 @@ import {
 } from "./themeTokens";
 import { resolveMode } from "./useNebulaAppearance";
 
-// Vitest runs from the UI package root, and the themes are a fixed part of the
-// tree rather than something a bundler resolves.
-const THEMES_DIR = resolve(process.cwd(), "src/ui/standard/themes");
+// The stylesheets as text, keyed by path. A glob rather than `node:fs`, so the
+// suite type-checks under the app's own tsconfig, which carries no Node types.
+const THEME_SOURCES = import.meta.glob<string>("../standard/themes/*.css", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
 
 /**
  * The bundled themes, read from the stylesheets themselves.
@@ -25,10 +27,9 @@ const THEMES_DIR = resolve(process.cwd(), "src/ui/standard/themes");
  * that directory is covered the moment it is added.
  */
 function bundledThemes(): { id: string; vars: ThemeVars }[] {
-  return readdirSync(THEMES_DIR)
-    .filter((name) => name.endsWith(".css"))
-    .map((name) => {
-      const source = readFileSync(`${THEMES_DIR}/${name}`, "utf8");
+  return Object.entries(THEME_SOURCES)
+    .map(([path, source]) => {
+      const name = path.slice(path.lastIndexOf("/") + 1);
       const id = /\[data-theme="([^"]+)"\]/.exec(source)?.[1] ?? name.replace(/\.css$/, "");
       const vars = Object.fromEntries(
         Object.entries(THEME_VARIABLES).map(([key, property]) => [
