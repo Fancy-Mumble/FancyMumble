@@ -237,7 +237,9 @@ impl AppState {
             .map_err(|error| format!("Failed to request an operator ticket: {error}"))?;
         let ticket = tokio::time::timeout(TICKET_TIMEOUT, reply)
             .await
-            .map_err(|_| "the server did not answer the operator ticket request in time".to_owned())?
+            .map_err(|_| {
+                "the server did not answer the operator ticket request in time".to_owned()
+            })?
             .map_err(|_| "the connection closed before the server answered".to_owned())?;
         operator_from_ticket(ticket, scope)
     }
@@ -397,8 +399,14 @@ mod tests {
 
     #[test]
     fn a_source_names_its_marketplace_id() {
-        assert_eq!(marketplace_id("marketplace:fancy-greeter@0.3.0").as_deref(), Some("fancy-greeter"));
-        assert_eq!(marketplace_id("marketplace:fancy-greeter").as_deref(), Some("fancy-greeter"));
+        assert_eq!(
+            marketplace_id("marketplace:fancy-greeter@0.3.0").as_deref(),
+            Some("fancy-greeter")
+        );
+        assert_eq!(
+            marketplace_id("marketplace:fancy-greeter").as_deref(),
+            Some("fancy-greeter")
+        );
         assert_eq!(marketplace_id("files:blob/x.so"), None);
         assert_eq!(marketplace_id("marketplace:@1"), None);
     }
@@ -418,9 +426,10 @@ mod tests {
     #[test]
     fn a_ticket_that_cannot_be_used_says_why() {
         // No `expect_err`: that would need `Debug` on a type holding a token.
-        let Err(denied) =
-            operator_from_ticket(ticket(&[], "", "no requested scope is covered"), "plugins:write")
-        else {
+        let Err(denied) = operator_from_ticket(
+            ticket(&[], "", "no requested scope is covered"),
+            "plugins:write",
+        ) else {
             panic!("a denied ticket was usable");
         };
         assert!(denied.contains("no requested scope is covered"), "{denied}");
@@ -431,7 +440,10 @@ mod tests {
         ) else {
             panic!("a livery ticket was usable for plugins");
         };
-        assert!(other_scope.contains("Write on the root channel"), "{other_scope}");
+        assert!(
+            other_scope.contains("Write on the root channel"),
+            "{other_scope}"
+        );
 
         let Err(nowhere) =
             operator_from_ticket(ticket(&["plugins:write"], "", ""), "plugins:write")

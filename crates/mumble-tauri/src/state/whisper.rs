@@ -134,10 +134,12 @@ fn channels_touched(
     entries
         .iter()
         .flat_map(|entry| {
-            entry
-                .channel_id
-                .into_iter()
-                .chain(entry.sessions.iter().filter_map(|session| channel_of(*session)))
+            entry.channel_id.into_iter().chain(
+                entry
+                    .sessions
+                    .iter()
+                    .filter_map(|session| channel_of(*session)),
+            )
         })
         .collect()
 }
@@ -155,14 +157,20 @@ impl AppState {
         entries: Vec<WhisperEntry>,
     ) -> Result<bool, String> {
         if !valid_slot(slot) {
-            return Err(format!("whisper slot {slot} is outside 1..={MAX_WHISPER_SLOT}"));
+            return Err(format!(
+                "whisper slot {slot} is outside 1..={MAX_WHISPER_SLOT}"
+            ));
         }
         let entries: Vec<WhisperEntry> = entries.into_iter().filter(|e| !e.is_empty()).collect();
 
         let (handle, cleared) = {
             let __session = self.inner.snapshot();
             let mut state = __session.lock().map_err(|e| e.to_string())?;
-            let held = state.audio.whisper_slots.get(&slot).map_or(&[][..], Vec::as_slice);
+            let held = state
+                .audio
+                .whisper_slots
+                .get(&slot)
+                .map_or(&[][..], Vec::as_slice);
             if held == entries.as_slice() {
                 return Ok(false);
             }
@@ -175,9 +183,18 @@ impl AppState {
                 state.users.get(&session).map(|user| user.channel_id)
             });
             let before = state.audio.whisper_denied.len();
-            state.audio.whisper_denied.retain(|channel| !touched.contains(channel));
-            let cleared = (state.audio.whisper_denied.len() != before)
-                .then(|| state.audio.whisper_denied.iter().copied().collect::<Vec<_>>());
+            state
+                .audio
+                .whisper_denied
+                .retain(|channel| !touched.contains(channel));
+            let cleared = (state.audio.whisper_denied.len() != before).then(|| {
+                state
+                    .audio
+                    .whisper_denied
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>()
+            });
 
             if entries.is_empty() {
                 let _ = state.audio.whisper_slots.remove(&slot);
@@ -187,7 +204,10 @@ impl AppState {
             (handle, cleared)
         };
 
-        let targets = entries.iter().map(command::VoiceTargetEntry::from).collect();
+        let targets = entries
+            .iter()
+            .map(command::VoiceTargetEntry::from)
+            .collect();
         let sent = handle
             .send(command::SetVoiceTarget {
                 id: u32::from(slot),
@@ -210,7 +230,10 @@ impl AppState {
                 latest: None,
             });
         }
-        debug!("whisper: registered slot {slot} ({} entries)", entries.len());
+        debug!(
+            "whisper: registered slot {slot} ({} entries)",
+            entries.len()
+        );
         Ok(true)
     }
 

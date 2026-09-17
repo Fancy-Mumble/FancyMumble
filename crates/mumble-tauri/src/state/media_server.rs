@@ -264,7 +264,10 @@ impl FetchedSpan {
                 // drawn from its cache rather than pulled from the file server
                 // again - which is what every mount used to cost, as base64
                 // over IPC, before pictures were served from here.
-                .header(header::CACHE_CONTROL, "private, max-age=31536000, immutable")
+                .header(
+                    header::CACHE_CONTROL,
+                    "private, max-age=31536000, immutable",
+                )
                 // The page reads from this origin as well as drawing from it -
                 // copying a picture to the clipboard fetches its bytes back -
                 // and the token is what guards the port, not who is asking.
@@ -474,7 +477,12 @@ mod tests {
             response.headers().get(header::CACHE_CONTROL).unwrap(),
             "no-store"
         );
-        assert!(response.headers().get(header::ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
+        assert!(
+            response
+                .headers()
+                .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .is_none()
+        );
     }
 
     #[tokio::test]
