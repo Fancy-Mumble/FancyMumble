@@ -63,7 +63,7 @@ export interface LightboxHandle {
 }
 
 export interface LightboxProps {
-  readonly allMessages: ChatMessage[];
+  readonly allMessages: readonly ChatMessage[];
   readonly selectedChannel: number | null;
   readonly selectedDmUser: number | null;
   readonly currentScope: () => MessageScope | null;

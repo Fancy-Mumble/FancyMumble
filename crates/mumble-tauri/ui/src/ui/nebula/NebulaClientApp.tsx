@@ -162,6 +162,7 @@ import {
   useSearchState,
   useServerPings,
 } from "./clientState";
+import { selectLiveWatchKey } from "./watchSelectors";
 import {
   serverTint,
   channelOccupants,
@@ -367,7 +368,6 @@ export default function NebulaClientApp() {
   const dmMessages = useAppStore((state) => state.dmMessages);
   const unreadCounts = useAppStore((state) => state.unreadCounts);
   const dmUnreadCounts = useAppStore((state) => state.dmUnreadCounts);
-  const talkingSessions = useAppStore((state) => state.talkingSessions);
   const bootstrapStage = useAppStore((state) => state.bootstrapStage);
   const listenedChannels = useAppStore((state) => state.listenedChannels);
   const voiceState = useAppStore((state) => state.voiceState);
@@ -735,8 +735,12 @@ export default function NebulaClientApp() {
    * Selected as a joined key rather than the map itself: the map is replaced
    * on every sync heartbeat, and subscribing this component to that would
    * re-render the whole client every couple of seconds through a film.
+   *
+   * The joining is cached against the map it came from, because a selector runs
+   * on every write the store takes from anywhere - sorting and joining on each
+   * of them was a cost paid to avoid a render.
    */
-  const liveWatchKey = useAppStore((state) => [...state.watchSessions.keys()].sort().join(","));
+  const liveWatchKey = useAppStore(selectLiveWatchKey);
   const liveWatchIds = useMemo(() => new Set(liveWatchKey ? liveWatchKey.split(",") : []), [liveWatchKey]);
 
   const visibleMessages = useMemo(() => {
@@ -905,11 +909,10 @@ export default function NebulaClientApp() {
         ? channelOccupants(users, joinedChannel.id).map((person) => ({
             session: person.session,
             name: person.name,
-            talking: talkingSessions.has(person.session),
             muted: Boolean(person.mute || person.self_mute),
           }))
         : [],
-    [joinedChannel, users, talkingSessions],
+    [joinedChannel, users],
   );
 
   const railIcons = useMemo(() => {
@@ -1531,7 +1534,6 @@ export default function NebulaClientApp() {
     users,
     selectedChannel,
     currentChannel,
-    talkingSessions,
     unreadCounts,
     ownSession,
     listenedChannels,
@@ -1838,7 +1840,6 @@ export default function NebulaClientApp() {
     showOffline: memberPanel.showOffline,
     onShowOfflineChange: memberPanel.setShowOffline,
     offlineLoading: registeredMembers.loading,
-    talkingSessions: talkingSessions,
     ownSession: ownSession,
     onSelect: popupActions.openProfile,
     onHover: popupActions.hoverUser,
@@ -2044,7 +2045,6 @@ export default function NebulaClientApp() {
       ? {
           channelName: joinedChannel.name,
           participants: users.filter((user) => user.channel_id === currentChannel),
-          talkingSessions,
           ownSession,
           micLive,
           deafened,
@@ -2107,7 +2107,6 @@ export default function NebulaClientApp() {
           channelName={joinedChannel.name}
           occupants={channelOccupants(users, joinedChannel.id)}
           ownSession={ownSession}
-          talkingSessions={talkingSessions}
           latencyMs={null}
           onExpand={() => setMini(false)}
           // Restore the full window first: the confirmation belongs on a
@@ -2833,7 +2832,7 @@ export default function NebulaClientApp() {
 
           <Lightbox
             ref={lightboxRef}
-            allMessages={[...conversationMessages]}
+            allMessages={conversationMessages}
             selectedChannel={selectedChannel}
             selectedDmUser={selectedDmUser}
             currentScope={currentScope}
