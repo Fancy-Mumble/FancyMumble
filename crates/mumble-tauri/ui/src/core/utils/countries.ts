@@ -8,7 +8,7 @@
  * value is the lowercase 2-letter code (matching murmur's `registerlocation`).
  */
 
-import * as Flags from "country-flag-icons/react/3x2";
+import { countries } from "country-flag-icons";
 
 export interface Country {
   /** ISO-3166-1 alpha-2 code (lowercase). */
@@ -33,8 +33,19 @@ function regionName(cc: string): string {
   }
 }
 
-/** Every ISO-3166 alpha-2 code `country-flag-icons` ships a flag for. */
-export const COUNTRY_CODES: readonly string[] = Object.keys(Flags).filter((k) => /^[A-Z]{2}$/.test(k));
+/**
+ * Every ISO-3166 alpha-2 code `country-flag-icons` ships a flag for.
+ *
+ * Read from the package's own list rather than from the names of its React
+ * components. Asking the components meant importing all two hundred and fifty
+ * of them - a quarter of a megabyte of SVG - to find out what they were called,
+ * for a module whose whole job is a list of two-letter strings. The pages that
+ * actually draw a flag still import the components; this does not.
+ *
+ * The list carries a few subdivision codes (`GB-SCT`, `ES-CT`) that are not
+ * countries and were never offered here, so the same filter still applies.
+ */
+export const COUNTRY_CODES: readonly string[] = countries.filter((code) => /^[A-Z]{2}$/.test(code));
 
 export const COUNTRIES: readonly Country[] = COUNTRY_CODES.map((cc) => ({
   code: cc.toLowerCase(),
