@@ -53,7 +53,6 @@ function renderPanel({ onInfo, groups, showOffline = true }: Options = {}) {
         groups={groups ?? [CHANNEL_GROUP]}
         query=""
         onQueryChange={() => undefined}
-        talkingSessions={new Set()}
         ownSession={1}
         showOffline={showOffline}
         onShowOfflineChange={onShowOfflineChange}

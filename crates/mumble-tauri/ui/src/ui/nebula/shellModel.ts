@@ -68,7 +68,6 @@ export type ServerStripModel = Omit<
 export interface VoiceModel {
   channelName: string;
   participants: readonly UserEntry[];
-  talkingSessions: ReadonlySet<number>;
   ownSession: number | null;
   micLive: boolean;
   deafened: boolean;

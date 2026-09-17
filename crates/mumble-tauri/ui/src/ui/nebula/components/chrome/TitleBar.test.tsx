@@ -67,7 +67,7 @@ describe("hovering a tab", () => {
       tabs: true,
       activeChannelName: "Gaming",
       ownName: "Zewi",
-      occupants: [{ session: 1, name: "Sebi", talking: false, muted: false }],
+      occupants: [{ session: 1, name: "Sebi", muted: false }],
     });
     fireEvent.mouseEnter(tabOf("Magical Rocks"));
     expect(screen.getByText("YOU’RE IN #GAMING AS ZEWI")).toBeTruthy();

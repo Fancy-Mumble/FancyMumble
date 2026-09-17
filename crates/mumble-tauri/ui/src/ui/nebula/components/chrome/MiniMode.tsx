@@ -4,7 +4,7 @@ import { useAppStore } from "@core/store";
 import { selectMicLive, selectSelfDeafened } from "@core/store/voiceSelectors";
 import type { UserEntry } from "@core/types";
 import { HeadphonesIcon, HeadphonesOffIcon, MicIcon, MicOffIcon } from "@ui/icons";
-import { NebulaSurface, TalkingBars, UserAvatar, Stack } from "../primitives";
+import { NebulaSurface, SpeakingAvatar, SpeakingBars, Stack } from "../primitives";
 import { radius } from "../../tokens";
 
 interface MiniModeProps {
@@ -12,7 +12,6 @@ interface MiniModeProps {
   channelName: string;
   occupants: readonly UserEntry[];
   ownSession: number | null;
-  talkingSessions: ReadonlySet<number>;
   latencyMs: number | null;
   onExpand: () => void;
   /** Leave the server. Restores the full window first - see NebulaClientApp. */
@@ -33,7 +32,6 @@ export function MiniMode({
   channelName,
   occupants,
   ownSession,
-  talkingSessions,
   latencyMs,
   onExpand,
   onLeave,
@@ -101,12 +99,11 @@ export function MiniMode({
             onContextMenu={onContextMenuUser ? (event) => onContextMenuUser(user, event) : undefined}
             sx={{ px: "8px", py: "6px" }}
           >
-            <UserAvatar
+            <SpeakingAvatar
               name={user.name}
               session={user.session}
               textureSize={user.texture_size}
               size={22}
-              talking={talkingSessions.has(user.session)}
             />
             <Typography sx={{ fontSize: 12.5 }} noWrap>
               {user.name}
@@ -117,7 +114,7 @@ export function MiniMode({
               </Typography>
             ) : (
               <Box sx={{ ml: "auto", display: "flex" }}>
-                <TalkingBars talking={talkingSessions.has(user.session)} />
+                <SpeakingBars session={user.session} />
               </Box>
             )}
           </Stack>

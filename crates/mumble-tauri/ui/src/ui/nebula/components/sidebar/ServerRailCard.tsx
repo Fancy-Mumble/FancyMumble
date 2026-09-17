@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Box, Portal, Typography } from "@mui/material";
 import type { ServerPingResult } from "@core/types";
 import { serverTint, type ServerRailEntry } from "../../selectors";
-import { UserAvatar } from "../primitives";
+import { UserAvatar, useIsTalking } from "../primitives";
 import { radius } from "../../tokens";
 
 /** How wide the card is, for whoever has to keep it on the screen. */
@@ -53,7 +53,6 @@ export function useRailCardHover<At>() {
 export interface RailCardOccupant {
   session: number;
   name: string;
-  talking: boolean;
   muted: boolean;
 }
 
@@ -408,23 +407,7 @@ function CardBody({
         </Typography>
         <Box sx={{ display: "flex", flexDirection: "column", gap: "5px" }}>
           {occupants.map((person) => (
-            <Box key={person.session} sx={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <UserAvatar name={person.name} session={person.session} size={22} talking={person.talking} />
-              <Typography sx={{ fontSize: 11.5 }}>{person.name}</Typography>
-              <Typography
-                sx={(theme) => ({
-                  ml: "auto",
-                  fontSize: 9.5,
-                  color: person.muted ? theme.palette.nebula.bad : theme.palette.nebula.dim,
-                })}
-              >
-                {person.muted
-                  ? t("nebulaSidebar:card.muted")
-                  : person.talking
-                    ? t("nebulaSidebar:card.speaking")
-                    : ""}
-              </Typography>
-            </Box>
+            <OccupantLine key={person.session} person={person} />
           ))}
         </Box>
         <Typography sx={(theme) => ({ mt: "10px", fontSize: 10.5, color: theme.palette.nebula.dim })}>
@@ -475,5 +458,33 @@ function CardBody({
         onClick={onOpen}
       />
     </>
+  );
+}
+
+/**
+ * One person in the card's list.
+ *
+ * A component rather than three lines inside the map, so that whether they are
+ * speaking is a question this row asks for itself. Handed down as a flag it
+ * would have to be recomputed by whoever built the list, on every edge of every
+ * utterance, and that whoever was the shell.
+ */
+function OccupantLine({ person }: Readonly<{ person: RailCardOccupant }>) {
+  const { t } = useTranslation("nebulaSidebar");
+  const talking = useIsTalking(person.session);
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      <UserAvatar name={person.name} session={person.session} size={22} talking={talking} />
+      <Typography sx={{ fontSize: 11.5 }}>{person.name}</Typography>
+      <Typography
+        sx={(theme) => ({
+          ml: "auto",
+          fontSize: 9.5,
+          color: person.muted ? theme.palette.nebula.bad : theme.palette.nebula.dim,
+        })}
+      >
+        {person.muted ? t("card.muted") : talking ? t("card.speaking") : ""}
+      </Typography>
+    </Box>
   );
 }
