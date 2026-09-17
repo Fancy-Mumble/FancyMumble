@@ -19,6 +19,9 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
     css: {
+      // Vitest blanks every stylesheet it is not told to process, `?raw`
+      // included. themeTokens.test.ts reads the bundled themes as text.
+      include: [/src\/ui\/standard\/themes\/.+\.css/],
       modules: {
         classNameStrategy: "non-scoped",
       },
