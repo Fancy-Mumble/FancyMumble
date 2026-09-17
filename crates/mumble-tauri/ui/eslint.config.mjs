@@ -25,7 +25,6 @@ export default tseslint.config(
       "build/**",
       "coverage/**",
       "node_modules/**",
-      "src-tauri/target/**",
     ],
   },
   ...tseslint.configs.recommended,

@@ -108,7 +108,10 @@ mod tests {
         let mut plugins = waiters.expect(vec!["plugins:read".to_owned()]);
 
         waiters.deliver(&ticket(&["plugins:read"]));
-        assert_eq!(plugins.try_recv().expect("delivered").granted_scopes, ["plugins:read"]);
+        assert_eq!(
+            plugins.try_recv().expect("delivered").granted_scopes,
+            ["plugins:read"]
+        );
         assert!(livery.try_recv().is_err(), "not a livery ticket");
 
         // A denial grants nothing to match on, so the oldest waiter hears it.

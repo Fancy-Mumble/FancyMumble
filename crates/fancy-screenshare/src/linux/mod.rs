@@ -634,7 +634,7 @@ mod perf_probe {
         (0..3u32)
             .map(|i| {
                 let mut rgba = vec![0u8; (w * h * 4) as usize];
-                for (p, px) in rgba.chunks_exact_mut(4).enumerate() {
+                for (p, px) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                     px[0] = ((p % 251) as u8).wrapping_add((i * 29) as u8);
                     px[1] = ((p / 7 % 253) as u8).wrapping_add((i * 11) as u8);
                     px[2] = (i * 97) as u8;
@@ -744,7 +744,7 @@ mod perf_probe {
         for i in 0..120 {
             let start = Instant::now();
             let mut rgba = vec![7u8; (w * h * 4) as usize];
-            for px in rgba.chunks_exact_mut(4) {
+            for px in rgba.as_chunks_mut::<4>().0 {
                 px[3] = 255;
             }
             let _ = std::hint::black_box(rgba.len());

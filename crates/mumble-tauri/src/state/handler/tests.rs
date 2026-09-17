@@ -1034,15 +1034,20 @@ fn text_message_own_echo_of_stored_send_ignored() {
     {
         let mut state = ctx.shared.lock().unwrap();
         state.conn.own_session = Some(10);
-        state.msgs.by_channel.entry(0).or_default().push(ChatMessage {
-            sender_session: Some(10),
-            sender_name: "Me".into(),
-            body: "My message".into(),
-            channel_id: 0,
-            is_own: true,
-            message_id: Some("sent-1".into()),
-            ..Default::default()
-        });
+        state
+            .msgs
+            .by_channel
+            .entry(0)
+            .or_default()
+            .push(ChatMessage {
+                sender_session: Some(10),
+                sender_name: "Me".into(),
+                body: "My message".into(),
+                channel_id: 0,
+                is_own: true,
+                message_id: Some("sent-1".into()),
+                ..Default::default()
+            });
     }
 
     let tm = mumble_tcp::TextMessage {

@@ -46,8 +46,8 @@ workspace crates **without** the Tauri/WebView stack.
   dark theme (frameless window with custom 40px titlebar, gradient background
   with accent/purple glows, glass connect card, 320px glass sidebar with flat
   channel cards, chat bubbles with the own-message gradient). The design
-  tokens are copied 1:1 from `mumble-tauri/ui/src/themes/dark.css` +
-  `theme.css` into the `theme` object at the top of the QML; icons use the
+  tokens are copied 1:1 from the Standard pack's
+  `mumble-tauri/ui/src/ui/standard/themes/dark.css` + `theme.css` into the `theme` object at the top of the QML; icons use the
   system "Segoe Fluent Icons" font.
 
 All of that logic lives in the reused crates - this crate is only the UI glue:
@@ -82,12 +82,12 @@ binary share a `ui-mode` marker file (`full`/`minimal`) in the app config dir
 
 - Integration constants (app identifier, marker file name, binary names,
   env-var names, default port, weak-PC thresholds, locale list) live in the
-  repo-root **`constants.json`** - the single source of truth. `build.rs`
+  repo's **`config/constants.json`** - the single source of truth. `build.rs`
   bakes them into `src/constants.rs` at compile time (the full client and
   the React UI generate their own copies the same way), so changing a value
   means editing one file and rebuilding.
 - UI strings come from the **same locale bundles as the web front-end**
-  (`crates/mumble-tauri/ui/src/locales/{lang}/{ns}.json`), embedded at build
+  (`crates/mumble-tauri/ui/src/core/locales/{lang}/{ns}.json`), embedded at build
   time and exposed to QML as `backend.t("ns.path.key")` /
   `backend.tr_n("ns.path.key", count)` ([`src/i18n.rs`](src/i18n.rs)).
   Language is auto-detected from the OS (override with `FANCY_LANG=de`).

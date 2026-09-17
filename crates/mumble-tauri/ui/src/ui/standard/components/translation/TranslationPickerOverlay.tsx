@@ -28,7 +28,7 @@ const LEGACY_HIGHLIGHT_CLASS = "translation-picker-highlight";
 const LEGACY_STYLE_ID = "translation-picker-style";
 
 /** Set to true to flood the console with picker diagnostics. */
-const DEBUG = true;
+const DEBUG = false;
 const log = (...args: unknown[]): void => {
   if (DEBUG) console.log("[trpicker]", ...args);
 };

@@ -191,8 +191,3 @@ Verify `NDK_HOME` points to the correct NDK installation:
 ls $env:NDK_HOME
 # Should show: build, meta, ndk-build, prebuilt, ...
 ```
-
-### Audio not available
-
-Audio capture/playback is not yet implemented on Android. Voice-related
-controls will show an error message when used on Android.

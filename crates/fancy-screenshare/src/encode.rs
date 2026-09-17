@@ -523,7 +523,7 @@ mod tests {
     /// or flat 120px cells with one row's shade cycling (e2e-like content).
     fn fill_bench_frame(rgba: &mut [u8], w: u32, i: u32, noise: bool) {
         if noise {
-            for (px, chunk) in rgba.chunks_exact_mut(4).enumerate() {
+            for (px, chunk) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                 let v = (px as u32).wrapping_add(i.wrapping_mul(7919)) as u8;
                 chunk[0] = v;
                 chunk[1] = v.wrapping_mul(3);
@@ -532,7 +532,7 @@ mod tests {
             }
             return;
         }
-        for (px, chunk) in rgba.chunks_exact_mut(4).enumerate() {
+        for (px, chunk) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             let (x, y) = (px as u32 % w, px as u32 / w);
             let green = ((x / 120 + y / 120) % 2) == 0;
             let step = if y / 120 == i % 9 {
@@ -594,7 +594,7 @@ mod tests {
     fn green_frame_encodes_to_idr() {
         let (w, h) = (64u32, 48u32);
         let mut rgba = vec![0u8; (w * h * 4) as usize];
-        for px in rgba.chunks_exact_mut(4) {
+        for px in rgba.as_chunks_mut::<4>().0 {
             px[0] = 0;
             px[1] = 180;
             px[2] = 0;

@@ -1048,7 +1048,7 @@ mod tests {
         for i in 0..8u8 {
             // Changing content so the encoder has real deltas to code.
             let mut rgba = vec![0u8; (w * h * 4) as usize];
-            for (p, px) in rgba.chunks_exact_mut(4).enumerate() {
+            for (p, px) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                 px[0] = ((p % 251) as u8).wrapping_add(i * 29);
                 px[1] = ((p / 7 % 253) as u8).wrapping_add(i * 11);
                 px[2] = i * 29;

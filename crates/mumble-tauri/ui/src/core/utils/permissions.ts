@@ -61,12 +61,7 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   { bit: PERM_DELETE_MESSAGE, ident: "DELETE_MESSAGE", label: "Delete Message", rootOnly: false },
   { bit: PERM_SUBSCRIBE_PUSH, ident: "SUBSCRIBE_PUSH", label: "Subscribe Push", rootOnly: false },
   { bit: PERM_SHARE_FILES, ident: "SHARE_FILES", label: "Share Files", rootOnly: false },
-  {
-    bit: PERM_SHARE_FILES_PUBLIC,
-    ident: "SHARE_FILES_PUBLIC",
-    label: "Share Files (Public)",
-    rootOnly: false,
-  },
+  { bit: PERM_SHARE_FILES_PUBLIC, ident: "SHARE_FILES_PUBLIC", label: "Share Files (Public)", rootOnly: false },
   { bit: PERM_KICK, ident: "KICK", label: "Kick", rootOnly: true },
   { bit: PERM_BAN, ident: "BAN", label: "Ban", rootOnly: true },
   { bit: PERM_REGISTER, ident: "REGISTER", label: "Register", rootOnly: true },
@@ -79,7 +74,9 @@ export const PERMISSIONS: readonly PermissionDef[] = [
 ] as const;
 
 /** Subset of permissions that apply to non-root channels. */
-export const CHANNEL_PERMISSIONS: readonly PermissionDef[] = PERMISSIONS.filter((p) => !p.rootOnly);
+export const CHANNEL_PERMISSIONS: readonly PermissionDef[] =
+  PERMISSIONS.filter((p) => !p.rootOnly);
 
 /** Subset of permissions that only apply to the root channel. */
-export const ROOT_PERMISSIONS: readonly PermissionDef[] = PERMISSIONS.filter((p) => p.rootOnly);
+export const ROOT_PERMISSIONS: readonly PermissionDef[] =
+  PERMISSIONS.filter((p) => p.rootOnly);
