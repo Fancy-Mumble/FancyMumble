@@ -61,10 +61,9 @@ the AUR's other Tauri and Electron packages follow.
 - Re-run `updpkgsums` and `makepkg --printsrcinfo > .SRCINFO` in each directory
   on every version bump. `fancy-mumble-bin` has three sums: the `.deb`, the
   licence fetched from the tag, and the local `.desktop` file.
-- `crates/signal-bridge` carries no licence text of its own — only the AGPL
-  declaration in its `Cargo.toml` header. AGPL-3.0 is in Arch's common licences
-  so the package needs nothing installed, but adding a `LICENSE` to that
-  directory upstream would be worth doing.
+- Tags up to `v0.3.0` carry no licence text in `crates/signal-bridge` — only the
+  AGPL declaration in its `Cargo.toml` header — which is why the package leans
+  on Arch's common licences. From `v0.4.0` the directory has a `LICENSE`.
 - A distro package should not update itself. Tags up to `v0.3.0` compile the
   updater in unconditionally; from `v0.4.0` it sits behind the `self-updater`
   cargo feature, which is on by default. When bumping `fancy-mumble` to 0.4.0,
