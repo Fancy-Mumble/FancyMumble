@@ -23,7 +23,7 @@ Mumble clients, bots, and bridges without exposing raw protocol details.
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         Application / UI                            │
-│                   (mumble-gui / mumble-tauri)                       │
+│                   (mumble-tauri / qt6ui)                            │
 └───────────────────────────┬─────────────────────────────────────────┘
                             │  ClientHandle::send(cmd)
                             ▼

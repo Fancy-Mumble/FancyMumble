@@ -9,6 +9,9 @@ an asynchronous Mumble client library written in Rust.
 |----------|-------------|
 | [architecture.md](architecture.md) | High-level architectural overview, module map, and design principles |
 | [detailed-design.md](detailed-design.md) | In-depth design of every module, data structures, and interactions |
+| [persistent-chat.md](persistent-chat.md) | End-to-end encrypted persistent chat: keys, epochs, trust levels, wire format |
+| [persistent-chat-server-guide.md](persistent-chat-server-guide.md) | What a server has to implement to host persistent chat |
+| [marketplace-api.md](marketplace-api.md) | Draft HTTP API of the plugin marketplace |
 | [diagrams/](diagrams/) | PlantUML source files for all diagrams |
 
 ## Diagrams
@@ -40,3 +43,9 @@ docker run --rm -v $(pwd)/diagrams:/data plantuml/plantuml "*.puml"
 | [flow_command_execution.puml](diagrams/flow_command_execution.puml) | Sequence | Command submission and execution |
 | [component_overview.puml](diagrams/component_overview.puml) | Component | System component overview |
 | [activity_work_queue.puml](diagrams/activity_work_queue.puml) | Activity | Priority work queue dispatch logic |
+| [pchat_component_overview.puml](diagrams/pchat_component_overview.puml) | Component | Persistent chat components |
+| [pchat_encryption_pipeline.puml](diagrams/pchat_encryption_pipeline.puml) | Activity | Persistent chat encryption pipeline |
+| [pchat_key_exchange_post_join.puml](diagrams/pchat_key_exchange_post_join.puml) | Sequence | Key exchange after joining a channel |
+| [pchat_message_dual_path.puml](diagrams/pchat_message_dual_path.puml) | Sequence | A message on its live and its stored path |
+| [pchat_epoch_fork_resolution.puml](diagrams/pchat_epoch_fork_resolution.puml) | Sequence | Resolving a forked key epoch |
+| [pchat_trust_levels.puml](diagrams/pchat_trust_levels.puml) | State | Key trust levels and their transitions |

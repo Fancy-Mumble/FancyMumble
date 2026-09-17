@@ -1,5 +1,9 @@
 # Design blocks
 
+> The server-side paths this document names (`serverconfig.proto`,
+> `runtime/src/greeting.rs`, `session-lifecycle/src/handshake.rs`) live in the
+> server repository, not in this one.
+
 _Architecture for the welcome editor's design block, its typed inputs, and the
 design editor that opens from it._
 
