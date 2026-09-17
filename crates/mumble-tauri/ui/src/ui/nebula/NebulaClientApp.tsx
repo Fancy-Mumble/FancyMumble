@@ -1396,6 +1396,10 @@ export default function NebulaClientApp() {
   }, [canAttach, stageFiles]);
 
   const lightboxRef = useRef<LightboxHandle>(null);
+  // Stable, because it is a prop of every mounted message row: a closure made
+  // here on each render is a changed prop on each render, and the rows compare
+  // their props now.
+  const openImage = useCallback((src: string) => lightboxRef.current?.open(src), []);
   const currentScope = useCallback((): MessageScope | null => {
     if (selectedDmUser !== null) return { scope: "dm", scopeId: String(selectedDmUser) };
     if (selectedChannel !== null) return { scope: "channel", scopeId: String(selectedChannel) };
@@ -1677,18 +1681,16 @@ export default function NebulaClientApp() {
         onLeaveProfile={popupActions.leaveUser}
         onContextMenuProfile={popupActions.openUserMenuFor}
         onVote={handlePollVote}
-        onOpenImage={(src) => lightboxRef.current?.open(src)}
+        onOpenImage={openImage}
         time={timeDisplay}
         allMessageIds={conversationMessageIds}
         onQuote={quoteMessage}
         onJumpTo={jumpToMessage}
-        onContextMenu={(target, at, context) =>
-          popupActions.openMessageMenu({ message: target, x: at.x, y: at.y, ...context })
-        }
+        onContextMenu={popupActions.openMessageMenu}
         selected={selection.active && message.message_id ? selection.selected.has(message.message_id) : null}
         onToggleSelected={selection.toggle}
         editing={!!message.message_id && editingMessageId === message.message_id}
-        onEditingChange={(next) => setEditingMessageId(next ? (message.message_id ?? null) : null)}
+        onEditingChange={setEditingMessageId}
       />
     ),
   };

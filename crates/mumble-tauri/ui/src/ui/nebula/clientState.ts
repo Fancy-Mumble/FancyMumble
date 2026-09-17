@@ -317,8 +317,18 @@ export const popupActions = {
     usePopupStore.setState({ channelMenu: null });
   },
 
-  openMessageMenu(target: MessageMenuTarget): void {
-    usePopupStore.setState({ messageMenu: target });
+  /**
+   * Taken in the shape the row reads off the event, so a row can be handed
+   * this function itself rather than a closure the shell built this render.
+   * A row that compares its props needs every one of them to be the same
+   * object it saw last time, and a menu opener is one of them.
+   */
+  openMessageMenu(
+    message: MessageMenuTarget["message"],
+    at: { x: number; y: number },
+    context: Omit<MessageMenuTarget, "message" | "x" | "y">,
+  ): void {
+    usePopupStore.setState({ messageMenu: { message, x: at.x, y: at.y, ...context } });
   },
 
   closeMessageMenu(): void {

@@ -49,7 +49,7 @@ function open(
   image: MenuImage | null = null,
   link: string | null = null,
 ) {
-  popupActions.openMessageMenu({ message: msg, x: 10, y: 20, editable, selection, image, link });
+  popupActions.openMessageMenu(msg, { x: 10, y: 20 }, { editable, selection, image, link });
   const handlers = {
     onReact: vi.fn(),
     onQuickReact: vi.fn(),
