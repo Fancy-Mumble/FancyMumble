@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Stack } from "../primitives";
+import { LinkGuard, Stack } from "../primitives";
 import { Box, Divider, Typography } from "@mui/material";
 import { useTheme, type Theme } from "@mui/material/styles";
 import { useUserAvatars } from "@core/lazyBlobs";
@@ -12,6 +12,7 @@ import {
   isAtTail,
   initialWindow,
   windowAfterAppend,
+  windowAfterPrepend,
   windowAtTail,
   windowToInclude,
   SETTLE_SHRINK_MS,
@@ -242,6 +243,8 @@ export function MessageList({
   /** Scroll height before the last render, for the prepend correction below. */
   const previousHeight = useRef(0);
   const previousFirstId = useRef<string | null>(null);
+  /** The newest id last time, which is what says whether the tail grew. */
+  const previousLastId = useRef<string | null>(null);
   /** Arrivals the reader has not been carried down to. */
   const [unseenBelow, setUnseenBelow] = useState(0);
 
@@ -292,18 +295,37 @@ export function MessageList({
   // Arrivals grow the window while the reader is scrolled up, so the rows
   // above the viewport keep their place instead of being unmounted from under
   // them; at the bottom it snaps back and the history is released.
+  //
+  // A page of fetched scrollback grows the list by exactly the same number, at
+  // the other end, and the two want opposite things: an arrival may carry the
+  // reader down and is worth announcing, while history joined at the head must
+  // move nothing and is not news. Told apart by the last id - it only stays the
+  // same when nothing was added at the tail - because the count cannot say
+  // which end grew.
   useLayoutEffect(() => {
-    const appended = messages.length - previousCount.current;
+    const added = messages.length - previousCount.current;
     const previous = previousCount.current;
+    const lastId = messages.at(-1)?.message_id ?? null;
+    const grewAtTail = lastId !== previousLastId.current;
     previousCount.current = messages.length;
-    if (appended <= 0) return;
+    previousLastId.current = lastId;
+    if (added <= 0) return;
+
+    if (!grewAtTail) {
+      // Older rows at the head: every index the window holds has shifted by
+      // exactly that many, so the window shifts with them and the reader keeps
+      // the rows they were reading. Nothing arrived, so nothing is announced.
+      setRange(windowAfterPrepend(resolved, added));
+      return;
+    }
+
     // Followed down only when the window already reached the newest row.
     // Otherwise the range stays where it is and the reader is told, rather
     // than being moved to something they did not ask to see.
     const wasAtTail = isAtTail(resolved, previous);
     setRange(windowAfterAppend(resolved, messages.length, wasAtTail));
-    if (!wasAtTail) setUnseenBelow((n) => n + appended);
-  }, [messages.length, resolved]);
+    if (!wasAtTail) setUnseenBelow((n) => n + added);
+  }, [messages, resolved]);
 
   // One batched avatar fetch for the whole list; the texture size comes from
   // the live user entry, which is the only place that knows it.
@@ -536,6 +558,15 @@ export function MessageList({
           {unseenBelow === 1 ? "1 new message" : `${unseenBelow} new messages`}
         </Box>
       )}
+      {/* One guard for the whole conversation rather than one per message.
+          `useExternalLinkGuard` finds the anchor with `closest()` off a single
+          native click listener, so it works from any ancestor - and mounted per
+          row it meant a window listener, a preferences read, a click listener
+          and a dialog for every message on screen, a few hundred of each in a
+          busy channel, to answer a click that can only land in one of them.
+          Inside the scroller, and `display: contents`, so the column is still
+          the scroller's own child and nothing about the layout moves. */}
+      <LinkGuard>
       <Box
         ref={columnRef}
         sx={{
@@ -682,6 +713,7 @@ export function MessageList({
           </Stack>
         ))}
       </Box>
+      </LinkGuard>
     </Box>
   );
 }
