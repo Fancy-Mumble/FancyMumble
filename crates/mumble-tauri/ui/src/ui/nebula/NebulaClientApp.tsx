@@ -1649,6 +1649,7 @@ export default function NebulaClientApp() {
     users: users,
     firstUnreadId: firstUnreadId,
     header: chatBanners,
+    onReachHead: () => void useAppStore.getState().loadOlderMessages(),
     jumpTo: jumpTo,
     display: chatDisplay,
     currentScope: currentScope,

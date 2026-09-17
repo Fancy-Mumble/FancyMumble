@@ -53,6 +53,15 @@ interface MessageListProps {
    */
   header?: React.ReactNode;
   /**
+   * The reader has reached the top of what is loaded.
+   *
+   * The render window can mount rows that are already here; this is for when
+   * there are none left above it. Older messages then have to be loaded -
+   * out of what the backend holds behind this window, or out of the server's
+   * archive - and they arrive as a prepend.
+   */
+  onReachHead?: () => void;
+  /**
    * Message to bring into view, and a nonce so asking twice for the same one
    * still scrolls. Following a quote to a message you are already looking at
    * has to flash it again, or the click reads as broken.
@@ -177,6 +186,7 @@ export function MessageList({
   users,
   firstUnreadId,
   header,
+  onReachHead,
   jumpTo,
   display = DEFAULT_CHAT_DISPLAY,
   currentScope = NO_SCOPE,
@@ -500,6 +510,11 @@ export function MessageList({
         let next = resolved;
         if (resolved.start > 0 && node.scrollTop < GROW_THRESHOLD_PX) {
           next = grownUp(resolved, total);
+        } else if (node.scrollTop < GROW_THRESHOLD_PX) {
+          // The window is over the whole of what is loaded, so there is
+          // nothing above it to mount: the next step of history has to be
+          // loaded before the window can grow into it.
+          onReachHead?.();
         } else if (resolved.end < total && fromBottom < GROW_THRESHOLD_PX) {
           // Without this a reader who climbed far enough for the window to
           // release its tail could never scroll back to the present: the rows

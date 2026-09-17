@@ -433,6 +433,41 @@ describe("MessageList", () => {
     vi.useRealTimers();
   });
 
+  it("asks for older messages when there is nothing left above the window", async () => {
+    const onReachHead = vi.fn();
+    // Short enough that the window already covers it: the only way to show
+    // the reader more history is to load some.
+    const { container } = draw({ messages: [message("a"), message("b")], onReachHead });
+    const scroller = container.firstElementChild as HTMLElement;
+    Object.defineProperty(scroller, "scrollHeight", { value: 900, configurable: true });
+    Object.defineProperty(scroller, "clientHeight", { value: 600, configurable: true });
+
+    scroller.scrollTop = 0;
+    await act(async () => {
+      fireEvent.scroll(scroller);
+    });
+
+    expect(onReachHead).toHaveBeenCalled();
+  });
+
+  it("mounts what is already loaded before asking for more", async () => {
+    const onReachHead = vi.fn();
+    const many = Array.from({ length: 400 }, (_, index) => message(`m${index}`));
+    const { container } = draw({ messages: many, onReachHead });
+    const scroller = container.firstElementChild as HTMLElement;
+    Object.defineProperty(scroller, "scrollHeight", { value: 9000, configurable: true });
+    Object.defineProperty(scroller, "clientHeight", { value: 600, configurable: true });
+
+    scroller.scrollTop = 0;
+    await act(async () => {
+      fireEvent.scroll(scroller);
+    });
+
+    // Three hundred rows above the window are the cheap way to show more.
+    expect(container.querySelectorAll("[data-message-id]").length).toBeGreaterThan(100);
+    expect(onReachHead).not.toHaveBeenCalled();
+  });
+
   it("widens the window to reach a jump target that is not mounted", () => {
     const many = Array.from({ length: 260 }, (_, index) => message(`m${index}`));
     const scrollIntoView = vi.fn();

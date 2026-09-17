@@ -8,7 +8,8 @@ const CHANNEL = 7;
 const state = {
   channelPersistence: {} as Record<number, ChannelPersistenceState>,
   pchatHistoryLoading: new Set<number>(),
-  fetchHistory: vi.fn(),
+  loadOlderMessages: vi.fn(),
+  messagesMoreBefore: false,
   messages: [] as unknown[],
 };
 
@@ -39,6 +40,8 @@ function showChannelIn(mode: PersistenceMode) {
 beforeEach(() => {
   state.channelPersistence = {};
   state.pchatHistoryLoading = new Set();
+  state.messagesMoreBefore = false;
+  state.loadOlderMessages.mockClear();
 });
 
 afterEach(cleanup);

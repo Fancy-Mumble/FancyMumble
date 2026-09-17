@@ -10,6 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import { forgetServerGifSupport } from "../features/chat/gif/serverGifs";
+import { LOADED_WINDOW, LOADED_WINDOW_STEP } from "../features/chat/chatWindowing";
 import { reconnectDelayMs, shouldAutoReconnect } from "../utils/reconnectBackoff";
 import { findSavedPassword } from "../serverStorage";
 import { reconcileList, reconcileSet } from "./reconcile";
@@ -24,6 +25,7 @@ import type {
   ChannelEntry,
   UserEntry,
   ChatMessage,
+  MessagePage,
   ConnectionStatus,
   MumbleServerConfig,
   VoiceState,
@@ -396,6 +398,12 @@ export interface AppState
   /** Our own session ID assigned by the server after connecting. */
   ownSession: number | null;
   messages: ChatMessage[];
+  /** How many of the selected thread's newest messages are loaded. Grows as
+   *  the reader pages back, and starts over on every channel switch. */
+  messageLimit: number;
+  /** History exists before the first loaded message - held back by the
+   *  backend, or still only in the server's archive. */
+  messagesMoreBefore: boolean;
   error: string | null;
   unreadCounts: Record<number, number>;
   serverConfig: MumbleServerConfig;
@@ -758,6 +766,10 @@ export interface AppState
 
   refreshState: () => Promise<void>;
   refreshMessages: (channelId: number) => Promise<void>;
+  /** Load the next step of older messages for the selected channel: out of
+   *  what the backend is holding, or out of the server's archive when it has
+   *  nothing left to hand over. */
+  loadOlderMessages: () => Promise<void>;
   // Voice actions (toggleListen/enableVoice/disableVoice/toggleMute/toggleDeafen)
   // live in VoiceSlice (store/slices/voice.ts).
   selectUser: (session: number | null) => void;
@@ -914,6 +926,8 @@ const INITIAL: Pick<
   | "selectedUser"
   | "ownSession"
   | "messages"
+  | "messageLimit"
+  | "messagesMoreBefore"
   | "error"
   | "listenedChannels"
   | "unreadCounts"
@@ -1006,6 +1020,8 @@ const INITIAL: Pick<
   selectedUser: null,
   ownSession: null,
   messages: [],
+  messageLimit: LOADED_WINDOW,
+  messagesMoreBefore: false,
   error: null,
   unreadCounts: {},
   serverConfig: {
@@ -1082,6 +1098,36 @@ const INITIAL: Pick<
  * stale `get_messages` responses from overwriting fresher data.
  */
 let messageWriteSeq = 0;
+
+/** Guards `loadOlderMessages` against the scroll handler asking twice. */
+let loadingOlderMessages = false;
+
+/**
+ * Load the newest `limit` messages of a channel into `messages`.
+ *
+ * The view asks for a window, not the thread. Every one of these call sites
+ * used to read the whole of it - up to five hundred rows cloned across the
+ * bridge, on every send, every edit and every arrival - to redraw a hundred.
+ *
+ * `moreBefore` comes back with the rows and is what the way back through
+ * history is offered on: the backend answers it for rows it is holding as
+ * well as for rows only the server's archive has.
+ */
+async function loadMessageWindow(channelId: number, limit?: number): Promise<void> {
+  const windowLimit = limit ?? useAppStore.getState().messageLimit;
+  const seq = ++messageWriteSeq;
+  const page = await invoke<MessagePage>("get_messages_page", {
+    request: { channelId, offsetFromTail: 0, limit: windowLimit },
+  });
+  // Only apply if no newer write has started, so a slow answer cannot
+  // overwrite fresher data (a concurrent refresh, an arriving message).
+  if (messageWriteSeq !== seq) return;
+  useAppStore.setState({
+    messages: page.rows,
+    messageLimit: windowLimit,
+    messagesMoreBefore: page.moreBefore,
+  });
+}
 
 /**
  * Threshold (in HTML body length) above which a sent message gets an
@@ -1214,10 +1260,9 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
         const currentCh = await invoke<number | null>("get_current_channel");
         set({ currentChannel: currentCh, selectedChannel: currentCh });
         if (currentCh !== null) {
-          const messages = await invoke<ChatMessage[]>("get_messages", { channelId: currentCh });
-          set({ messages });
+          await loadMessageWindow(currentCh, LOADED_WINDOW);
         } else {
-          set({ messages: [] });
+          set({ messages: [], messagesMoreBefore: false });
         }
       } catch (e) {
         console.error("switchServer post-switch refresh error:", e);
@@ -1382,19 +1427,20 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
   },
 
   selectChannel: async (id) => {
-    set({ selectedChannel: id, selectedDmUser: null, dmMessages: [], localNotesOpen: false });
-    const seq = ++messageWriteSeq;
+    set({
+      selectedChannel: id,
+      selectedDmUser: null,
+      dmMessages: [],
+      localNotesOpen: false,
+      // A thread opens at its newest messages, however far back the reader
+      // had paged in the one they just left.
+      messageLimit: LOADED_WINDOW,
+      messagesMoreBefore: false,
+    });
     try {
       // Notify backend - marks channel as read and clears DM selection.
       await invoke("select_channel", { channelId: id });
-      const messages = await invoke<ChatMessage[]>("get_messages", {
-        channelId: id,
-      });
-      // Only apply if no newer write has started (avoids overwriting
-      // fresher data from a concurrent refreshMessages / new-message).
-      if (messageWriteSeq === seq) {
-        set({ messages });
-      }
+      await loadMessageWindow(id, LOADED_WINDOW);
     } catch (e) {
       console.error("select_channel error:", e);
     }
@@ -1514,21 +1560,11 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     }
     try {
       await invoke("send_message", { channelId, body });
-      const seq = ++messageWriteSeq;
-      const messages = await invoke<ChatMessage[]>("get_messages", {
-        channelId,
-      });
-      const updates: Partial<AppState> = {};
-      if (messageWriteSeq === seq) {
-        updates.messages = messages;
-      }
+      await loadMessageWindow(channelId);
       if (showPlaceholder) {
         set((s) => ({
-          ...updates,
           pendingMessages: s.pendingMessages.filter((p) => p.pendingId !== pendingId),
         }));
-      } else if (Object.keys(updates).length > 0) {
-        set(updates);
       }
     } catch (e) {
       console.error("send_message error:", e);
@@ -1607,13 +1643,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
   editMessage: async (channelId, messageId, newBody) => {
     try {
       await invoke("edit_message", { channelId, messageId, newBody });
-      const seq = ++messageWriteSeq;
-      const messages = await invoke<ChatMessage[]>("get_messages", {
-        channelId,
-      });
-      if (messageWriteSeq === seq) {
-        set({ messages });
-      }
+      await loadMessageWindow(channelId);
     } catch (e) {
       console.error("edit_message error:", e);
     }
@@ -1683,16 +1713,34 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
   },
 
   refreshMessages: async (channelId) => {
-    const seq = ++messageWriteSeq;
     try {
-      const messages = await invoke<ChatMessage[]>("get_messages", {
-        channelId,
-      });
-      if (messageWriteSeq === seq) {
-        set({ messages });
-      }
+      await loadMessageWindow(channelId);
     } catch (e) {
       console.error("refresh messages error:", e);
+    }
+  },
+
+  loadOlderMessages: async () => {
+    const { selectedChannel, selectedDmUser, messageLimit, messagesMoreBefore } = get();
+    // A DM thread is held whole; there is no page behind it to ask for.
+    if (selectedChannel === null || selectedDmUser !== null) return;
+    if (!messagesMoreBefore || loadingOlderMessages) return;
+    loadingOlderMessages = true;
+    const held = get().messages.length;
+    try {
+      await loadMessageWindow(selectedChannel, messageLimit + LOADED_WINDOW_STEP);
+      const { messages, messagesMoreBefore: stillMore } = get();
+      // A bigger window that came back no bigger means the backend has
+      // nothing further to hand over, so what is behind it is the server's.
+      // The page it answers with arrives as `pchat-fetch-complete`, which
+      // refreshes this window with the new rows inside it.
+      if (stillMore && messages.length === held) {
+        await get().fetchHistory(selectedChannel, messages[0]?.message_id ?? undefined);
+      }
+    } catch (e) {
+      console.error("load older messages error:", e);
+    } finally {
+      loadingOlderMessages = false;
     }
   },
 
@@ -2772,8 +2820,7 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
         const currentCh = await invoke<number | null>("get_current_channel");
         useAppStore.setState({ currentChannel: currentCh, selectedChannel: currentCh });
         if (currentCh !== null) {
-          const messages = await invoke<ChatMessage[]>("get_messages", { channelId: currentCh });
-          useAppStore.setState({ messages });
+          await loadMessageWindow(currentCh, LOADED_WINDOW);
         }
       } catch (e) {
         console.error("HMR state restore (channel/messages) failed:", e);

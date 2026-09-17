@@ -43,7 +43,8 @@ export default function PersistenceBanner({ channelId }: PersistenceBannerProps)
   const { t } = useTranslation("sidebar");
   const tStr = t as (key: string, opts?: Record<string, unknown>) => string;
   const persistence = useAppStore((s) => s.channelPersistence[channelId]);
-  const fetchHistory = useAppStore((s) => s.fetchHistory);
+  const loadOlderMessages = useAppStore((s) => s.loadOlderMessages);
+  const moreBefore = useAppStore((s) => s.messagesMoreBefore);
   const isLoadingKeys = useAppStore((s) => s.pchatHistoryLoading.has(channelId));
   const [dismissed, setDismissed] = useState(false);
 
@@ -66,16 +67,20 @@ export default function PersistenceBanner({ channelId }: PersistenceBannerProps)
   // Intersection observer for "load more" scroll-to-top trigger.
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
+  // Older messages, wherever they are: the store pages back through what the
+  // backend is holding first and only asks the server once that runs out. It
+  // used to go straight to the server, which fetched a page the reader
+  // already had in memory but could not see.
   const handleLoadMore = useCallback(() => {
-    if (!persistence || persistence.isFetching || !persistence.hasMore) return;
-    const messages = useAppStore.getState().messages;
-    const firstId = messages.length > 0 ? messages[0].message_id : undefined;
-    fetchHistory(channelId, firstId ?? undefined);
-  }, [channelId, fetchHistory, persistence]);
+    if (persistence?.isFetching) return;
+    void loadOlderMessages();
+  }, [loadOlderMessages, persistence]);
+
+  const hasMore = moreBefore || (persistence?.hasMore ?? false);
 
   useEffect(() => {
     const el = loadMoreRef.current;
-    if (!el || !persistence?.hasMore) return;
+    if (!el || !hasMore) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -85,7 +90,7 @@ export default function PersistenceBanner({ channelId }: PersistenceBannerProps)
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [persistence?.hasMore, handleLoadMore]);
+  }, [hasMore, handleLoadMore]);
 
   const shieldIcon = <ShieldIcon aria-hidden="true" />;
 
@@ -132,7 +137,7 @@ export default function PersistenceBanner({ channelId }: PersistenceBannerProps)
       )}
 
       {/* Invisible sentinel for intersection-observer-based pagination */}
-      {persistence.hasMore && (
+      {hasMore && (
         <div ref={loadMoreRef} className={styles.loadMore}>
           {persistence.isFetching && (
             <div className={styles.loadingSpinner} aria-label={t("persistence.loadingOlderAriaLabel")} />
