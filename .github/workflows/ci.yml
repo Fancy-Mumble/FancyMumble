@@ -811,6 +811,10 @@ jobs:
         with:
           body_path: release-notes.md
           tag_name: ${{ steps.version.outputs.tag }}
+          # The commit the tag is created on. Left unset, the action tags the
+          # repository's default branch - v0.4.0-beta.202 was cut from `beta`
+          # and its tag landed on `main`, at the 0.3.0 commit.
+          target_commitish: ${{ github.sha }}
           name: Fancy Mumble ${{ steps.version.outputs.tag }}${{ steps.version.outputs.is_beta == 'true' && ' (beta)' || '' }}
           generate_release_notes: true
           draft: false
