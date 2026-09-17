@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Box, InputBase, Tooltip, Typography } from "@mui/material";
 import type { Theme } from "@mui/material/styles";
 import DOMPurify from "dompurify";
+import { parseBody } from "./bodyCache";
 import { useAppStore } from "@core/store";
 import { selectOwnHash } from "@core/store/selectors";
 import { LOCAL_NOTES_CHANNEL_ID } from "@core/notepad";
@@ -46,14 +47,12 @@ import {
   editableText,
   formatTime,
   hasDrawableHtml,
-  messageContent,
-  splitBodyImages,
   type TimeDisplay,
 } from "../../selectors";
 import { AttachmentGallery, MediaGallery } from "./MediaGallery";
 import { OffloadedBody } from "./OffloadedBody";
 import { MentionPopover, type MentionTarget } from "./MentionPopover";
-import { LinkGuard, UserAvatar, Stack } from "../primitives";
+import { UserAvatar, Stack } from "../primitives";
 import { textColorForBg } from "@shared/profilecard";
 import { chamferedSurface, floatingSurface } from "../../theme";
 import { NEBULA_MONO, radius } from "../../tokens";
@@ -90,13 +89,18 @@ const stampSx = (theme: Theme) =>
   }) as const;
 
 /**
- * Sanitise a message body and hand its links to `LinkGuard`.
+ * Sanitise a message body and mark its links for the conversation's guard.
  *
  * DOMPurify keeps anchors but leaves them live, and a live anchor in a webview
  * navigates the app itself: the window becomes the target page with no way
  * back. Tagging each one `data-external` is what standard's renderer does, and
  * what the guard watches for before it hands the URL to the system browser.
  */
+/** The row's own reading of a body: sanitised, then its links shortened. */
+function sanitizeAndPretty(html: string): string {
+  return prettyLinks(sanitizeBody(html));
+}
+
 function sanitizeBody(html: string): string {
   const fragment = DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
@@ -499,17 +503,23 @@ export const MessageRow = memo(function MessageRow({
   const offload = useMemo(() => extractOffloadInfo(message.body), [message.body]);
   const offloaded = offload !== null || restoring;
 
-  // What the body *is* decides what gets drawn; only the leftover HTML is
-  // sanitised, so a marker never reaches the renderer as text.
-  const content = useMemo(() => messageContent(message.body), [message.body]);
-  // Pictures leave the body before it is drawn: what is left is prose, which
-  // is what the bubble is for, and the pictures become the gallery below it.
-  const split = useMemo(() => splitBodyImages(content.html), [content.html]);
-  // Sanitised, then read: a pasted link is its own anchor text, in full, and
-  // set in link blue over three wrapped lines it is louder than the message
-  // and than the card under it. `prettyLinks` trims what is *shown*; the href
-  // and what copy takes are untouched.
-  const body = useMemo(() => prettyLinks(sanitizeBody(split.html)), [split.html]);
+  // What the body *is* decides what gets drawn; the pictures leave it before it
+  // is drawn, becoming the gallery below the bubble; only the leftover HTML is
+  // sanitised, so a marker never reaches the renderer as text. And a pasted
+  // link is its own anchor text, in full - set in link blue over three wrapped
+  // lines it is louder than the message and than the card under it, so
+  // `prettyLinks` trims what is *shown* while the href and what copy takes are
+  // untouched.
+  //
+  // All of that is four passes over the markup, and it is cached against the
+  // body rather than against this row: the render window slides constantly, so
+  // the same message is mounted, dropped and mounted again while the reader
+  // scrolls, and it would otherwise be read apart from scratch each time. See
+  // `bodyCache`.
+  const parsed = parseBody(message.body, sanitizeAndPretty);
+  const content = parsed.content;
+  const split = parsed;
+  const body = parsed.html;
   // This message's poll, not every poll. The map is what holds them, but only
   // the store tells React that one has arrived.
   const storedPoll = useAppStore((state) =>
@@ -940,12 +950,11 @@ export const MessageRow = memo(function MessageRow({
         ) : offloaded ? (
           coldBody
         ) : (
+          // The handler and the body's own typography stay on the text: the
+          // card below carries a picture of its own, and a handler over the
+          // pair would open the lightbox on it.
           hasBody && (
-            <LinkGuard>
-              {/* The handler and the body's own typography stay on the text:
-                  the card below carries a picture of its own, and a handler
-                  over the pair would open the lightbox on it. */}
-              <BubbleShell
+            <BubbleShell
                 sx={
                   embedsInBubble
                     ? (theme) => ({
@@ -1011,7 +1020,6 @@ export const MessageRow = memo(function MessageRow({
                   />
                 )}
               </BubbleShell>
-            </LinkGuard>
           )
         )}
         {gallery}
@@ -1245,7 +1253,6 @@ export const MessageRow = memo(function MessageRow({
           coldBody
         ) : (
           hasBody && (
-            <LinkGuard>
               <BubbleShell
                 sx={
                   embedsInBubble
@@ -1332,7 +1339,6 @@ export const MessageRow = memo(function MessageRow({
                   />
                 )}
               </BubbleShell>
-            </LinkGuard>
           )
         )}
         {gallery}
