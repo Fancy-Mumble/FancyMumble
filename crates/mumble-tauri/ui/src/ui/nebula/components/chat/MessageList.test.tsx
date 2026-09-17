@@ -605,12 +605,14 @@ describe("MessageList", () => {
       expect(screen.getByTestId("chat-new-messages-pill")).toBeTruthy();
     });
 
-    it("keeps its place, and says nothing, when a page of history joins the head", async () => {
-      // Scrollback grows the list by as many rows as an arrival does, at the
-      // other end. Counted rather than placed, the two are the same event, and
-      // paging backwards through a channel announced "new messages" about
-      // messages from last week and shifted the reader off what they were
-      // reading by exactly the size of the page.
+    it("mounts the older messages a page of history brought, and announces nothing", async () => {
+      // Two halves, and an earlier version of this got the second right by
+      // breaking the first. Scrolling back is what fetches the page, so the
+      // rows it brought have to become reachable: the window is deliberately
+      // left where it is, and since every index has shifted the window is now
+      // looking at the older rows. Moving the window with the shift pinned the
+      // reader to the same messages and paged in history they could never see -
+      // caught by the e2e suite driving the real client, not here.
       const thread = longThread(600);
       const { container, rerender } = draw({ messages: thread });
       const node = scroller(container);
@@ -621,7 +623,7 @@ describe("MessageList", () => {
           fireEvent.scroll(node);
         });
       }
-      const reading = [...container.querySelectorAll("[data-message-id]")].map((row) =>
+      const before = [...container.querySelectorAll("[data-message-id]")].map((row) =>
         row.getAttribute("data-message-id"),
       );
 
@@ -640,12 +642,12 @@ describe("MessageList", () => {
         );
       });
 
-      // The same rows, and no claim that anything arrived.
-      expect(
-        [...container.querySelectorAll("[data-message-id]")].map((row) =>
-          row.getAttribute("data-message-id"),
-        ),
-      ).toEqual(reading);
+      const after = [...container.querySelectorAll("[data-message-id]")].map((row) =>
+        row.getAttribute("data-message-id"),
+      );
+      // Older rows are reachable now...
+      expect(after).not.toEqual(before);
+      // ...and last week's messages were not announced as new ones.
       expect(screen.queryByTestId("chat-new-messages-pill")).toBeNull();
     });
 
