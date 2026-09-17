@@ -792,7 +792,10 @@ describe("NebulaApp", () => {
 
       fireEvent.click(screen.getByLabelText("Channel menu"));
       fireEvent.click(await screen.findByRole("menuitem", { name: "Server Info" }));
-      await screen.findByRole("complementary", { name: "Server info" });
+      // A sheet, not the rail it used to be: the server details open over the
+      // shell the way the channel and user sheets do, and say so with the same
+      // role. The assertion was left behind when the panel moved.
+      await screen.findByRole("document", { name: "Server info" });
       expect(screen.queryByRole("document", { name: "Channel info" })).toBeNull();
     });
   });
