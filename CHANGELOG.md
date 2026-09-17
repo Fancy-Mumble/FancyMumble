@@ -26,6 +26,9 @@ written in Rust.
   administration pages.
 - A one-handed layout for phones and narrow windows, drawing into the display
   cutout on Android.
+- It stays quick in a long conversation: a reaction, a roster refresh, a menu
+  opening or somebody starting to talk redraws the row it concerns and nothing
+  else, and a skin without glass pays for no blur.
 - Standard stays available and gained a Nimbus theme, a picture context menu and
   lightbox, dragging a user into another channel, and a bundled Saira font
   instead of a fetched one.
@@ -55,8 +58,9 @@ written in Rust.
 - Mentions that reach a whole role.
 - A message that failed to send says so.
 - Markdown lists render as lists.
-- Long histories load lazily in both directions, and the client puts away
-  message bodies nobody is looking at, which keeps memory flat in busy channels.
+- A channel opens on its newest messages and pages back through its history as
+  you scroll, in both directions, and the client puts away message bodies nobody
+  is looking at, which keeps memory flat in busy channels.
 - GIF search, emotes and file sharing provided by the server itself, with no
   plugin needed.
 
@@ -87,6 +91,8 @@ written in Rust.
 - An account page with optional TOTP two-factor login.
 - Persistent chat enforces the countersignature and the consensus threshold
   when it accepts a key, and keeps the old identity files if a migration fails.
+- The TLS library is past a TLS 1.3 handshake advisory (RUSTSEC-2026-0285), in
+  the full client and in the minimal one.
 
 **Server administration**
 
@@ -129,6 +135,7 @@ written in Rust.
 ### Fixed
 
 - A disconnect left a ghost session on the server.
+- An "is typing" mark lasts from the last keystroke, not from the first.
 - A join that never left the client was reported as a success.
 - "Reset app data" now clears the identities it promises to.
 - Preferences are read from the directory they are written to.
