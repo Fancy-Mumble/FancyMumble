@@ -1,6 +1,5 @@
 use std::sync::{Arc, Mutex};
 
-use mumble_protocol::command;
 use mumble_protocol::persistent::KeyTrustLevel;
 use mumble_protocol::persistent::PchatProtocol;
 use mumble_protocol::proto::mumble_tcp;
@@ -643,30 +642,10 @@ async fn derive_channel_key_if_needed(shared: &Arc<Mutex<SharedState>>, ch: u32)
 /// Request recent history for the joined channel, arming a timeout that
 /// clears the loading indicator if no delivery arrives.
 async fn send_join_pchat_fetch(shared: &Arc<Mutex<SharedState>>, ch: u32) {
-    let handle = shared
-        .lock()
-        .ok()
-        .and_then(|s| s.conn.client_handle.clone());
-    let fetch_sent = if let Some(handle) = handle {
-        let fetch = mumble_tcp::PchatFetch {
-            channel_id: Some(ch),
-            before_id: None,
-            limit: Some(50),
-            after_id: None,
-        };
-        match handle.send(command::SendPchatFetch { fetch }).await {
-            Err(e) => {
-                tracing::warn!("send pchat-fetch failed: {e}");
-                false
-            }
-            _ => {
-                info!(channel_id = ch, "sent pchat-fetch on join");
-                true
-            }
-        }
-    } else {
-        false
-    };
+    let fetch_sent = pchat::send_open_fetch(shared, ch).await;
+    if fetch_sent {
+        info!(channel_id = ch, "sent pchat-fetch on join");
+    }
 
     if fetch_sent {
         let shared_timeout = Arc::clone(shared);

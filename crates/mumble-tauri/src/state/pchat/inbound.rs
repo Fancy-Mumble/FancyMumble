@@ -10,9 +10,9 @@ use mumble_protocol::command;
 use mumble_protocol::persistent::PchatProtocol;
 use mumble_protocol::proto::mumble_tcp;
 
-use crate::state::SharedState;
 use crate::state::local_cache::CachedMessage;
 use crate::state::types::ChatMessage;
+use crate::state::{FetchWalk, SharedState};
 
 use super::PchatState;
 use super::PendingSignalEnvelope;
@@ -411,19 +411,20 @@ fn merge_decrypted_messages(
     decrypted_msgs: Vec<ChatMessage>,
     has_more: bool,
 ) {
-    let forward = state.msgs.window(channel_id).fetching_forward;
+    let walk = state.msgs.window(channel_id).fetching;
     if decrypted_msgs.is_empty() {
         debug!(
             channel_id,
+            ?walk,
             "pchat fetch-resp: no messages to insert (all filtered/empty)"
         );
         // Still worth recording: an empty page is how the server says there is
         // nothing further that way, and a reader that never learns it goes on
         // asking at the same edge forever.
-        if forward {
-            state.msgs.extend_newer(channel_id, Vec::new(), has_more);
-        } else {
-            state.msgs.extend_older(channel_id, Vec::new(), has_more);
+        match walk {
+            FetchWalk::Newest => state.msgs.join_tail(channel_id, Vec::new(), has_more),
+            FetchWalk::Newer => state.msgs.extend_newer(channel_id, Vec::new(), has_more),
+            FetchWalk::Older => state.msgs.extend_older(channel_id, Vec::new(), has_more),
         }
         return;
     }
@@ -431,18 +432,18 @@ fn merge_decrypted_messages(
     debug!(
         channel_id,
         new_count = decrypted_msgs.len(),
-        forward,
+        ?walk,
         has_more,
         "pchat fetch-resp: joining a page onto the range"
     );
-    if forward {
-        state
+    match walk {
+        FetchWalk::Newest => state.msgs.join_tail(channel_id, decrypted_msgs, has_more),
+        FetchWalk::Newer => state
             .msgs
-            .extend_newer(channel_id, decrypted_msgs, has_more);
-    } else {
-        state
+            .extend_newer(channel_id, decrypted_msgs, has_more),
+        FetchWalk::Older => state
             .msgs
-            .extend_older(channel_id, decrypted_msgs, has_more);
+            .extend_older(channel_id, decrypted_msgs, has_more),
     }
 
     debug!(

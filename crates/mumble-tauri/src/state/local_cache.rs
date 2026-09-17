@@ -56,6 +56,39 @@ pub(crate) struct CachedMessage {
     pub is_own: bool,
 }
 
+/// The newest rows of one channel's cache, and whether it holds more.
+pub(crate) struct CachedTail {
+    pub rows: Vec<ChatMessage>,
+    /// Older rows the cache holds that this tail leaves out.
+    pub truncated: bool,
+}
+
+/// One cached row as the UI's `ChatMessage`.
+///
+/// `sender_session` is left empty on purpose: a session id is only meaningful
+/// while its owner is connected, and these rows come off disk.
+fn to_chat_message(m: &CachedMessage) -> ChatMessage {
+    ChatMessage {
+        sender_session: None,
+        sender_name: m.sender_name.clone(),
+        sender_hash: Some(m.sender_hash.clone()),
+        body: m.body.clone(),
+        channel_id: m.channel_id,
+        is_own: m.is_own,
+        dm_session: None,
+        message_id: Some(m.message_id.clone()),
+        timestamp: Some(m.timestamp),
+        is_legacy: false,
+        send_failed: false,
+        edited_at: None,
+        pinned: false,
+        pinned_by: None,
+        pinned_at: None,
+        plugin_name: None,
+        plugin_components: None,
+    }
+}
+
 /// A single cached reaction entry (serializable plaintext).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub(crate) struct CachedReaction {
@@ -207,34 +240,27 @@ impl LocalMessageCache {
             .collect();
     }
 
-    /// Convert all cached messages into `ChatMessage` format, grouped by channel.
-    pub fn all_chat_messages(&self) -> HashMap<u32, Vec<ChatMessage>> {
+    /// The newest `limit` cached rows of each channel, in `ChatMessage` form.
+    ///
+    /// Only the tail, because only the tail is looked at. The whole of every
+    /// channel's cache used to be handed over on connect and poured into the
+    /// message store - an archive that grows without bound on disk, decrypted
+    /// and held in memory before the reader had opened any of those channels.
+    /// What lies behind the tail is what paging back is for, and
+    /// [`CachedTail::truncated`] is how the store learns there is something
+    /// back there to page to.
+    pub fn newest_chat_messages(&self, limit: usize) -> HashMap<u32, CachedTail> {
         self.messages
             .iter()
             .map(|(&channel_id, msgs)| {
-                let chat_msgs = msgs
-                    .iter()
-                    .map(|m| ChatMessage {
-                        sender_session: None,
-                        sender_name: m.sender_name.clone(),
-                        sender_hash: Some(m.sender_hash.clone()),
-                        body: m.body.clone(),
-                        channel_id: m.channel_id,
-                        is_own: m.is_own,
-                        dm_session: None,
-                        message_id: Some(m.message_id.clone()),
-                        timestamp: Some(m.timestamp),
-                        is_legacy: false,
-                        send_failed: false,
-                        edited_at: None,
-                        pinned: false,
-                        pinned_by: None,
-                        pinned_at: None,
-                        plugin_name: None,
-                        plugin_components: None,
-                    })
-                    .collect();
-                (channel_id, chat_msgs)
+                // Rows are kept timestamp-ordered by `insert`, so the newest
+                // are simply the last ones.
+                let from = msgs.len().saturating_sub(limit);
+                let tail = CachedTail {
+                    rows: msgs[from..].iter().map(to_chat_message).collect(),
+                    truncated: from > 0,
+                };
+                (channel_id, tail)
             })
             .collect()
     }
@@ -452,7 +478,8 @@ mod tests {
 
         let mut reloaded = LocalMessageCache::new(dir.path(), &seed).unwrap();
         reloaded.load().unwrap();
-        let ids: Vec<_> = reloaded.all_chat_messages()[&5]
+        let ids: Vec<_> = reloaded.newest_chat_messages(usize::MAX)[&5]
+            .rows
             .iter()
             .filter_map(|m| m.message_id.clone())
             .collect();
@@ -460,7 +487,7 @@ mod tests {
 
         // The dedup index forgot it too, so the same id can be cached again.
         cache.insert(message("drop", 3000));
-        assert_eq!(cache.all_chat_messages()[&5].len(), 2);
+        assert_eq!(cache.newest_chat_messages(usize::MAX)[&5].rows.len(), 2);
     }
 
     #[test]
@@ -492,9 +519,9 @@ mod tests {
         let mut cache2 = LocalMessageCache::new(dir.path(), &seed).unwrap();
         cache2.load().unwrap();
 
-        let msgs = cache2.all_chat_messages();
+        let msgs = cache2.newest_chat_messages(usize::MAX);
         assert_eq!(msgs.len(), 1); // 1 channel
-        let ch5 = &msgs[&5];
+        let ch5 = &msgs[&5].rows;
         assert_eq!(ch5.len(), 2);
         assert_eq!(ch5[0].body, "Hello!");
         assert_eq!(ch5[1].body, "Hi!");
@@ -529,7 +556,7 @@ mod tests {
         let mut reopened = LocalMessageCache::new(dir.path(), &seed).unwrap();
         reopened.load().unwrap();
         assert_eq!(
-            reopened.all_chat_messages()[&9][0].body,
+            reopened.newest_chat_messages(usize::MAX)[&9].rows[0].body,
             "https://example.invalid/cat.png"
         );
     }
@@ -620,11 +647,46 @@ mod tests {
         cache.insert(make("d", 400));
         cache.insert(make("b", 200));
 
-        let msgs = cache.all_chat_messages();
-        let ch1 = &msgs[&1];
+        let msgs = cache.newest_chat_messages(usize::MAX);
+        let ch1 = &msgs[&1].rows;
         assert_eq!(ch1.len(), 4);
         let bodies: Vec<&str> = ch1.iter().map(|m| m.body.as_str()).collect();
         assert_eq!(bodies, vec!["a", "b", "c", "d"]);
+    }
+
+    /// What connect asks the cache for: the newest rows, and whether there is
+    /// more behind them. The whole of every channel's cache used to be handed
+    /// over and held in memory before the reader had opened any of them.
+    #[test]
+    fn only_the_newest_rows_are_handed_over() {
+        let dir = TempDir::new().unwrap();
+        let mut cache = LocalMessageCache::new(dir.path(), &test_seed()).unwrap();
+        for n in 0..10u64 {
+            cache.insert(CachedMessage {
+                message_id: format!("m-{n}"),
+                channel_id: 1,
+                timestamp: n,
+                sender_hash: "x".to_string(),
+                sender_name: "X".to_string(),
+                body: format!("{n}"),
+                is_own: false,
+            });
+        }
+
+        let tails = cache.newest_chat_messages(3);
+        let tail = &tails[&1];
+        let bodies: Vec<&str> = tail.rows.iter().map(|m| m.body.as_str()).collect();
+        assert_eq!(bodies, vec!["7", "8", "9"], "the newest three, in order");
+        assert!(
+            tail.truncated,
+            "and the seven behind them are still on disk"
+        );
+
+        let whole = cache.newest_chat_messages(10);
+        assert!(
+            !whole[&1].truncated,
+            "a tail that reaches the first row leaves nothing behind"
+        );
     }
 
     #[test]

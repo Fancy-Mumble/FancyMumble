@@ -224,7 +224,12 @@ impl AppState {
 
         // The window is expressed from the tail, because that is where a chat
         // opens and what "scrolled up by N" means to the reader.
-        let limit = request.limit.clamp(1, super::MAX_MESSAGES_PER_THREAD);
+        // No ceiling of its own: what the caller asks for is what it is about
+        // to render, and a reader who has paged a long way back holds more
+        // than the live cap -- paging back is what grew the range past it.
+        // Clamped to `MAX_MESSAGES_PER_THREAD`, their next page came back
+        // outside the window and the way further back stopped existing.
+        let limit = request.limit.max(1);
         let end = total.saturating_sub(request.offset_from_tail);
         let start = end.saturating_sub(limit);
 
@@ -252,7 +257,13 @@ impl AppState {
         let window = state.msgs.window(request.channel_id);
         MessagePage {
             rows,
-            more_before: window.more_before,
+            // `start > 0` as well as the window's own flag: rows this client
+            // is holding but did not put in the page are history the reader
+            // can still be shown, and the caller has no other way to learn
+            // they are there. Without it a thread with five hundred rows in
+            // memory and a hundred in the page read as complete, and the way
+            // back through the other four hundred did not exist.
+            more_before: window.more_before || start > 0,
             more_after: window.more_after,
             at_tail: !window.more_after && request.offset_from_tail == 0,
         }
