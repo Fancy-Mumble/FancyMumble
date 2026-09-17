@@ -35,7 +35,7 @@ if (frame) {
 }
 
 try {
-  localStorage.setItem("nebula.recording.target", JSON.stringify({ directory: "/home/sebi/Recordings", filename: "recording_{datetime}_{channel}" }));
+  localStorage.setItem("nebula.recording.target", JSON.stringify({ directory: "/home/me/Recordings", filename: "recording_{datetime}_{channel}" }));
 } catch {
   // Preview only.
 }
@@ -43,7 +43,7 @@ try {
 const live = params.has("live");
 const recording = {
   state: live
-    ? { is_recording: true, file_path: "/home/sebi/Recordings/recording_2026-09-13_01-12-40_Gaming.wav", elapsed_secs: 83 }
+    ? { is_recording: true, file_path: "/home/me/Recordings/recording_2026-09-13_01-12-40_Gaming.wav", elapsed_secs: 83 }
     : { is_recording: false, file_path: null, elapsed_secs: 0 },
   start: async () => undefined,
   stop: async () => undefined,
