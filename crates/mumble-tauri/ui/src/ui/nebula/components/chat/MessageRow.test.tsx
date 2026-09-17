@@ -8,6 +8,7 @@ import { applyReaction, resetReactions } from "@core/features/chat/reaction/reac
 import type { ChatMessage, UserEntry } from "@core/types";
 import { withNebulaTheme } from "../../testTheme";
 import { MessageRow } from "./MessageRow";
+import { LinkGuard } from "../primitives";
 import { resetSelfMentionNotifications } from "@core/features/chat/selfMention";
 
 function user(session: number, name: string, channel_id = 1): UserEntry {
@@ -38,6 +39,23 @@ function message(partial: Partial<ChatMessage> = {}): ChatMessage {
 function draw(msg: ChatMessage, props: Partial<Parameters<typeof MessageRow>[0]> = {}) {
   return render(
     withNebulaTheme(<MessageRow message={msg} grouped={false} onOpenProfile={() => {}} {...props} />),
+  );
+}
+
+/**
+ * A row inside the guard the conversation puts around it.
+ *
+ * The guard is `MessageList`'s, not the row's - one click listener and one
+ * dialog for the river rather than a set per message - so a row drawn on its
+ * own has nothing to intercept its links unless it is wrapped the same way.
+ */
+function drawGuarded(msg: ChatMessage) {
+  return render(
+    withNebulaTheme(
+      <LinkGuard>
+        <MessageRow message={msg} grouped={false} onOpenProfile={() => {}} />
+      </LinkGuard>,
+    ),
   );
 }
 
@@ -445,7 +463,7 @@ describe("MessageRow", () => {
 
   it("hands a link in a message to the browser instead of the window", () => {
     openUrlMock.mockClear();
-    const { container } = draw(message({ body: '<a href="https://example.org/docs">docs</a>' }));
+    const { container } = drawGuarded(message({ body: '<a href="https://example.org/docs">docs</a>' }));
 
     const link = container.querySelector("a")!;
     // Standard's renderer marks anchors for the guard; nebula's has to as well,
