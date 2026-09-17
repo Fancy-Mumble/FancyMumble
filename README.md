@@ -14,7 +14,7 @@
 
 Built with **Rust** for rock-solid performance and **React** for a sleek, responsive interface.
 
-[Features](#features) • [Screenshots](#screenshots) • [Getting Started](#getting-started) • [Building](#building) • [Server](#related-projects)
+[Features](#features) • [Screenshots](#screenshots) • [Installing](#installing) • [Getting Started](#getting-started) • [Building](#building) • [Changelog](CHANGELOG.md) • [Server](#related-projects)
 
 </div>
 
@@ -22,7 +22,7 @@ Built with **Rust** for rock-solid performance and **React** for a sleek, respon
 
 ## Overview
 
-Fancy Mumble is a next-generation desktop client for Mumble that combines the reliability of the battle-tested Mumble protocol with modern features users expect in 2026. Whether you're coordinating with your gaming guild, hosting a podcast, or running a community server, Fancy Mumble delivers crystal-clear voice communication with style.
+Fancy Mumble is a next-generation desktop and Android client for Mumble that combines the reliability of the battle-tested Mumble protocol with modern features users expect in 2026. Whether you're coordinating with your gaming guild, hosting a podcast, or running a community server, Fancy Mumble delivers crystal-clear voice communication with style.
 
 > **Status:** Active development - Core features are functional, but expect some rough edges as we polish the experience.
 
@@ -30,13 +30,22 @@ Fancy Mumble is a next-generation desktop client for Mumble that combines the re
 
 ## Features
 
-- **Crystal-clear voice** - Opus codec with AI-powered noise suppression (DeepFilterNet3), AGC, and noise gate
-- **Rich chat** - Markdown formatting, inline images, GIF picker, and interactive polls
-- **Profile customization** - Custom avatar frames, banners, nameplates, and WYSIWYG bio editor
-- **Modern glassmorphic UI** - Responsive design for desktop and Android
-- **Flexible voice controls** - Push-to-talk, voice activity detection, per-channel listening
-- **Secure** - TLS encryption, self-signed certificates, no telemetry
-- **Cross-platform** - Windows, Linux, and Android support
+- **Crystal-clear voice** - Opus with a choice of noise suppressors (RNNoise, DeepFilterNet3), AGC and a noise gate, on a receive path tuned for low latency
+- **Flexible voice controls** - Push-to-talk, voice activity detection, whisper targets, per-channel listening, channel recording
+- **Screen and camera sharing** - Both at once, with the desktop's audio, hardware encoding (Media Foundation, NVENC, VA-API), drawing on the shared picture, and live statistics
+- **Rich chat** - Markdown, picture galleries, spoilers, GIFs, polls, reactions, link previews, mentions that reach a role, read receipts, scheduled messages, file sharing
+- **Persistent, end-to-end encrypted history** - Chat that survives a restart without the server being able to read it, plus XChaCha20-Poly1305 voice on Fancy servers
+- **Working together** - Live documents edited by several people at once, a calendar with meeting rooms and invite links, friends and direct messages across servers, in-place translation
+- **Profile customization** - Avatar frames, banners, nameplates, a WYSIWYG bio editor, and profile cards
+- **A look of your own** - Nebula, the default interface, ships thirteen skins and a one-handed layout for phones; Standard keeps the classic glass look with its own theme catalogue
+- **Server administration** - Channels, ACLs, roles and bans, a searchable audit log, a block-based welcome screen editor, server branding, and a plugin marketplace
+- **Around the game** - Game detection with rich presence, and an in-game overlay
+- **Secure** - TLS everywhere, certificate identities, optional TOTP two-factor login, no telemetry
+- **Cross-platform** - Windows, Linux and Android, plus a minimal Qt 6 client for machines where a webview is too heavy
+- **Stays current** - A built-in updater with an opt-in beta channel
+
+Voice and plain text chat work against any Mumble server. Most of the rest needs
+a Fancy server - see [Related Projects](#related-projects).
 
 ---
 
@@ -63,15 +72,40 @@ Fancy Mumble is built as a Rust workspace with multiple crates:
 
 | Crate | Purpose |
 |-------|---------|
-| [`mumble-protocol`](crates/mumble-protocol) | Core Mumble protocol implementation - TCP/UDP, TLS, Opus, audio pipeline |
-| [`mumble-tauri`](crates/mumble-tauri) | Tauri desktop app - native audio I/O, backend commands, state management |
-| [`mumble-tauri/ui`](crates/mumble-tauri/ui) | React frontend - chat UI, profile editor, settings |
+| [`mumble-protocol`](crates/mumble-protocol) | Core Mumble protocol implementation - TCP/UDP, TLS, Opus, the audio pipeline, persistent chat |
+| [`mumble-tauri`](crates/mumble-tauri) | Tauri app for desktop and Android - backend commands, state management, updater |
+| [`mumble-tauri/ui`](crates/mumble-tauri/ui) | React frontend - a shared core and the UI packs drawn on top of it |
+| [`fancy-audio-device`](crates/fancy-audio-device) | Audio capture and mixing playback shared by both clients (cpal, with a WASAPI path of its own) |
+| [`fancy-screenshare`](crates/fancy-screenshare) | Screen and camera capture, hardware encoding, WebRTC delivery |
 | [`fancy-denoiser-deepfilter`](crates/fancy-denoiser-deepfilter) | AI noise suppression using DeepFilterNet3 |
+| [`fancy-gamedetect`](crates/fancy-gamedetect) | Finds the game in the foreground and the launchers that installed it |
+| [`fancy-presence`](crates/fancy-presence) | Rich presence over Discord's IPC endpoint |
 | [`fancy-utils`](crates/fancy-utils) | Shared utility functions |
+| [`signal-bridge`](crates/signal-bridge) | Signal sender keys for encrypted chat. AGPL-3.0, built on its own and loaded at runtime, so the client stays MIT |
+| [`qt6ui`](crates/qt6ui) | Minimal native Qt 6 / QML client. LGPL-3.0, built outside the workspace |
 
-**Tech Stack:** Rust + Tauri 2 + React 19 + TypeScript 5 + Tokio async runtime
+**Tech Stack:** Rust 2024 + Tauri 2 + React 19 + TypeScript 5 + MUI + Tokio async runtime
 
-For detailed documentation, see [`crates/mumble-protocol/doc/`](crates/mumble-protocol/doc/).
+For detailed documentation, see [`crates/mumble-protocol/doc/`](crates/mumble-protocol/doc/)
+for the protocol library and [`crates/mumble-tauri/ui/src/README.md`](crates/mumble-tauri/ui/src/README.md)
+for how the frontend is laid out.
+
+---
+
+## Installing
+
+Installers for every release are on the
+[Releases page](https://github.com/Fancy-Mumble/FancyMumble/releases/latest):
+
+| Platform | File |
+|----------|------|
+| Windows | `-setup.exe` (updates itself) or `.msi` |
+| Linux | `.AppImage` (updates itself) or `.deb` |
+| Android | `.apk` |
+| Minimal Qt client | `.zip` (Windows) or `.tar.gz` (Linux) |
+
+Packaging recipes for the AUR and Flathub live under [`packaging/`](packaging/).
+What changed between versions is in the [changelog](CHANGELOG.md).
 
 ---
 
@@ -79,7 +113,7 @@ For detailed documentation, see [`crates/mumble-protocol/doc/`](crates/mumble-pr
 
 ### Prerequisites
 
-- **Rust** (stable, edition 2021 or later) - [Install via rustup](https://rustup.rs/)
+- **Rust** (stable, 1.85 or later - the workspace is on edition 2024) - [Install via rustup](https://rustup.rs/)
 - **Node.js** (v22 or later) - [Download from nodejs.org](https://nodejs.org/)
 - **Tauri CLI** - Install with: `cargo install tauri-cli --version "^2"`
 
@@ -95,9 +129,18 @@ sudo apt-get install -y \
   patchelf \
   libasound2-dev \
   libgtk-3-dev \
+  libglib2.0-dev \
   libsoup-3.0-dev \
-  libjavascriptcoregtk-4.1-dev
+  libjavascriptcoregtk-4.1-dev \
+  protobuf-compiler \
+  libpipewire-0.3-dev \
+  libva-dev \
+  libdrm-dev \
+  libgbm-dev
 ```
+
+**Windows:** `protoc` has to be on the `PATH`
+([protobuf releases](https://github.com/protocolbuffers/protobuf/releases)).
 
 **Android:**
 See [ANDROID_DEV.md](ANDROID_DEV.md) for complete Android development setup instructions.
@@ -216,11 +259,15 @@ FANCY_UPDATER_BETA_URL=http://127.0.0.1:8787/beta.json cargo tauri dev
 cd crates/mumble-tauri/ui
 npm test              # Single run
 npm run test:watch    # Watch mode
+npm run lint          # ESLint
+npx tsc --noEmit      # Type check
 ```
 
 ### Rust Unit Tests
 ```bash
 cargo test --package mumble-protocol --features opus-codec --lib
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
 ```
 
 ### Integration Tests
@@ -251,17 +298,16 @@ docker compose -f docker-compose.test.yml down
 
 ### Server Implementation
 
-Fancy Mumble works with any standard Mumble server. We maintain an enhanced fork with additional features:
+Fancy Mumble connects to any standard Mumble server for voice and plain text
+chat. Everything beyond that - persistent encrypted history, file sharing, screen
+sharing, the calendar, server branding and the rest - is spoken over a protocol
+extension that a Fancy server implements:
 
-**SetZero/mumble-server** - [github.com/SetZero/mumble-server](https://github.com/SetZero/mumble-server)
-
-Key server components:
-- [**Protocol Implementation**](https://github.com/SetZero/mumble-server/tree/1.6.x/src) - C++ server core (Mumble.proto, MumbleUDP.proto)
-- [**User Management**](https://github.com/SetZero/mumble-server/blob/1.6.x/src/User.cpp) - User state, authentication, and permissions
-- [**Channel System**](https://github.com/SetZero/mumble-server/blob/1.6.x/src/Channel.cpp) - Channel hierarchy and ACL
-- [**ACL Engine**](https://github.com/SetZero/mumble-server/blob/1.6.x/src/ACL.cpp) - Access control lists and groups
-- [**HTML Filtering**](https://github.com/SetZero/mumble-server/blob/1.6.x/src/HTMLFilter.cpp) - Safe HTML rendering in comments/messages
-- [**Ban Management**](https://github.com/SetZero/mumble-server/blob/1.6.x/src/Ban.cpp) - Server ban system
+- **Starling** - [github.com/Fancy-Mumble/starling](https://github.com/Fancy-Mumble/starling) -
+  the Fancy Mumble server, written in Rust. This is the server the client is
+  developed and tested against.
+- **SetZero/mumble-server** - [github.com/SetZero/mumble-server](https://github.com/SetZero/mumble-server) -
+  the earlier fork of the C++ Mumble server, kept as a reference.
 
 ### Official Resources
 
@@ -285,7 +331,7 @@ We welcome contributions! Whether you're fixing bugs, adding features, improving
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Make your changes with clear, descriptive commits
-4. Run tests and linters (`cargo clippy`, `cargo test`, `npm test`)
+4. Run tests and linters (`cargo fmt`, `cargo clippy`, `cargo test`, `npm test`, `npm run lint`)
 5. Push to your fork and open a pull request
 
 ---
