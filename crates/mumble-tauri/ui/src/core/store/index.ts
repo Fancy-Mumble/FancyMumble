@@ -12,6 +12,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { forgetServerGifSupport } from "../features/chat/gif/serverGifs";
 import { reconnectDelayMs, shouldAutoReconnect } from "../utils/reconnectBackoff";
 import { findSavedPassword } from "../serverStorage";
+import { reconcileList, reconcileSet } from "./reconcile";
 import {
   isPermissionGranted,
   requestPermission,
@@ -1620,11 +1621,18 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
 
   refreshState: async () => {
     try {
-      const [channels, users, pushSubscribed] = await Promise.all([
+      const [freshChannels, freshUsers, pushSubscribed] = await Promise.all([
         invoke<ChannelEntry[]>("get_channels"),
         invoke<UserEntry[]>("get_users"),
         invoke<number[]>("get_push_subscribed_channels"),
       ]);
+
+      // The backend answers with the whole world every time, freshly
+      // deserialised, so everything below would be a new object saying exactly
+      // what the old one said. Kept as it was where it has not changed - see
+      // `reconcile` for why that matters as much as it does.
+      const channels = reconcileList(get().channels, freshChannels, (entry) => entry.id);
+      const users = reconcileList(get().users, freshUsers, (entry) => entry.session);
 
       // Derive channelPersistence from channel pchat_protocol so the
       // PersistenceBanner (and its loading indicator) can render.
@@ -1647,7 +1655,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
         channels,
         users,
         channelPersistence: nextPersistence,
-        pushSubscribedChannels: new Set(pushSubscribed),
+        pushSubscribedChannels: reconcileSet(get().pushSubscribedChannels, pushSubscribed),
       });
 
       // Clean up broadcastingSessions for users that are no longer connected.
@@ -3573,6 +3581,9 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
     await listen<[number, boolean]>(TauriEvent.UserTalking, (event) => {
       const [session, talking] = event.payload;
       const prev = useAppStore.getState().talkingSessions;
+      // A repeat of what the set already says is not a change, and publishing
+      // a new set for it wakes every row watching this person for nothing.
+      if (prev.has(session) === talking) return;
       const next = new Set(prev);
       if (talking) {
         next.add(session);
