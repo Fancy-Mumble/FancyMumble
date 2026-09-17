@@ -426,7 +426,13 @@ fn should_fetch_pchat_history(shared: &Arc<Mutex<SharedState>>, ch: u32) -> bool
         .pchat
         .as_ref()
         .is_some_and(|p| p.fetched_channels.contains(&ch));
-    s.pchat_ctx.pchat.is_some() && mode.is_some_and(|m| m.is_encrypted()) && !already_fetched
+    // `uses_pchat`, not `is_encrypted`: a `ServerManaged` channel keeps its
+    // history on the server and is the one mode that does not seal it here, so
+    // asking about encryption skipped the fetch for the very mode that has the
+    // most to fetch. Every mode that rides pchat gets the init; which of them
+    // has anything to *ask* for is `fetch_channel_history`'s question, and
+    // `pchat_init_task` asks it.
+    s.pchat_ctx.pchat.is_some() && mode.is_some_and(|m| m.uses_pchat()) && !already_fetched
 }
 
 fn mark_channel_fetched(shared: &Arc<Mutex<SharedState>>, ch: u32) {
@@ -507,7 +513,14 @@ async fn pchat_init_task(shared: Arc<Mutex<SharedState>>, ch: u32) {
     if !run_pchat_mode_init(&shared, ch, mode).await {
         return; // mode init already emitted the loading-finished signal
     }
-    derive_channel_key_if_needed(&shared, ch).await;
+    // A mode with no client-side key skips the ladder entirely, the way the
+    // connect path does. Without this guard a server-managed channel waits two
+    // seconds for a key no peer will ever send, mints one nothing reads, and
+    // only then fetches - two seconds of empty chat window on every join, for a
+    // key that seals nothing.
+    if mode.is_some_and(|m| m.is_encrypted()) {
+        derive_channel_key_if_needed(&shared, ch).await;
+    }
     // SignalV1 keeps no server-side history by design (forward secrecy): a
     // late joiner must never read what was said before it joined, even once
     // it holds every sender's key. The server stores SignalV1 ciphertext too

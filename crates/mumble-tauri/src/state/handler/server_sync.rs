@@ -593,7 +593,7 @@ impl HandlerContext {
     }
 
     /// Spawn the async task that sends `key-announce` and then initialises
-    /// the encrypted channel (key derivation/exchange + history fetch).
+    /// the persistent channel (key derivation/exchange + history fetch).
     fn spawn_key_announce_and_channel_init(&self) {
         let shared = Arc::clone(&self.shared);
         let _key_announce_task = tokio::spawn(async move {
@@ -609,10 +609,18 @@ impl HandlerContext {
             let (ch, mode) = resolve_initial_channel(&shared);
             debug!(channel = ?ch, mode = ?mode, "pchat: initial channel/mode resolved");
 
+            // `uses_pchat`, not `is_encrypted`: `ServerManaged` is the one mode
+            // that is deliberately not end-to-end encrypted, and asking about
+            // encryption here excluded it from the only place that fetches the
+            // landing channel's history. The archive existed, the server served
+            // it on request, and the request was never sent - so the mode whose
+            // entire purpose is server-held history opened on an empty channel,
+            // every time. `init_pchat_channel` already handles the keyless case;
+            // this gate was what made that branch unreachable.
             if let (Some(ch), Some(mode)) = (ch, mode)
-                && mode.is_encrypted()
+                && mode.uses_pchat()
             {
-                init_encrypted_channel(&shared, ch, mode).await;
+                init_pchat_channel(&shared, ch, mode).await;
             }
         });
     }
@@ -707,9 +715,15 @@ fn resolve_initial_channel(
     }
 }
 
-/// Set up the encryption key for the initial channel and fetch message
+/// Set up the initial channel's key, where its mode has one, and fetch message
 /// history from the server.
-async fn init_encrypted_channel(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: PchatProtocol) {
+///
+/// Named for pchat rather than for encryption because it serves every mode that
+/// rides the pchat service, including the one that is not encrypted. It was
+/// called `init_encrypted_channel` while its only caller filtered on
+/// `is_encrypted`, which made the keyless branch below unreachable and left
+/// `ServerManaged` with no history fetch at all.
+async fn init_pchat_channel(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: PchatProtocol) {
     pchat::emit_history_loading(shared, ch, true);
 
     // A mode with no client-side key skips the ladder entirely. Without this

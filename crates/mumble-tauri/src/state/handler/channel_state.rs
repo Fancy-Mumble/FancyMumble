@@ -263,7 +263,17 @@ async fn pchat_key_gen_and_fetch(shared: Arc<Mutex<SharedState>>, id: u32) {
         .ok()
         .and_then(|s| s.channels.get(&id).and_then(|c| c.pchat_protocol));
     let Some(mode) = mode else { return };
+    if !mode.uses_pchat() {
+        return;
+    }
+    // `ServerManaged` has no key ladder to run - nothing here seals its
+    // messages - but it does have an archive, and a channel that turns
+    // server-managed while we are standing in it is never joined, so the join
+    // path never fires for it. Returning here left that history unfetched until
+    // the next reconnect. `ensure_pchat_history` is idempotent, so a channel
+    // already fetched under a previous mode is not asked twice.
     if !mode.is_encrypted() {
+        super::user_state::ensure_pchat_history(&shared, id);
         return;
     }
     // SignalV1 has no server-side history to fetch (forward secrecy) - see
