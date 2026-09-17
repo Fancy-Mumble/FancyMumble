@@ -571,13 +571,23 @@ fn generate_shared_constants() {
         .join("core")
         .join("utils")
         .join("appConstants.ts");
-    let up_to_date = std::fs::read_to_string(&ts_path).is_ok_and(|existing| existing == ts);
+    let up_to_date =
+        std::fs::read_to_string(&ts_path).is_ok_and(|existing| same_text(&existing, &ts));
     if !up_to_date {
         std::fs::write(&ts_path, ts).unwrap_or_else(|e| {
             panic!("failed to write {}: {e}", ts_path.display());
         });
         eprintln!("regenerated {}", ts_path.display());
     }
+}
+
+/// Whether a generated file already says what would be written.
+///
+/// Line endings are not a difference: a checkout with `core.autocrlf` holds
+/// the file as CRLF, and rewriting it as LF on every build leaves it modified
+/// in `git status` with nothing in it changed.
+fn same_text(existing: &str, generated: &str) -> bool {
+    existing.replace("\r\n", "\n") == generated
 }
 
 /// A required string field of `constants.json`.
@@ -799,7 +809,7 @@ fn generate_permissions_ts() {
     out.push_str("  PERMISSIONS.filter((p) => p.rootOnly);\n");
 
     let needs_write = match std::fs::read_to_string(&out_path) {
-        Ok(existing) => existing != out,
+        Ok(existing) => !same_text(&existing, &out),
         Err(_) => true,
     };
     if needs_write {
