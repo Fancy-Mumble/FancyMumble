@@ -12,6 +12,7 @@ import { DM_CHANNEL_PREFIX } from "@core/utils/channelVisibility";
 import { TID } from "@core/testids";
 import { withNebulaTheme } from "../../testTheme";
 import { ChannelMenu } from "./ChannelMenu";
+import { popupActions, closeAllPopups } from "../../clientState";
 
 const actions = {
   selectChannel: vi.fn(),
@@ -20,7 +21,27 @@ const actions = {
   toggleMutePushChannel: vi.fn(),
 };
 
-vi.mock("@core/store", () => ({ useAppStore: { getState: () => actions } }));
+/**
+ * The roster and the two channel sets the menu now reads for itself.
+ *
+ * It used to be handed `listening`, `notificationsMuted` and `occupantCount` by
+ * the shell, which meant the shell had to know a menu was open and re-render
+ * the whole client to work them out. The menu asks the store instead, so the
+ * mock has to answer a selector rather than only `getState`.
+ */
+const storeState = {
+  ...actions,
+  listenedChannels: new Set<number>(),
+  mutedPushChannels: new Set<number>(),
+  users: [] as { session: number; channel_id: number }[],
+};
+
+vi.mock("@core/store", () => ({
+  useAppStore: Object.assign(
+    (selector: (state: typeof storeState) => unknown) => selector(storeState),
+    { getState: () => storeState },
+  ),
+}));
 
 const leaveMeeting = vi.fn();
 vi.mock("@core/features/chat/calendar/meetings", () => ({
@@ -39,7 +60,34 @@ const channel = (partial: Partial<ChannelEntry> = {}) =>
     ...partial,
   }) as unknown as ChannelEntry;
 
-function open(props: Partial<React.ComponentProps<typeof ChannelMenu>> = {}) {
+/**
+ * What used to be props and is now state the menu reads for itself.
+ *
+ * The call sites are unchanged on purpose: which channel, whether it is being
+ * listened to and how many people are in it are still the facts each test is
+ * setting up - only where the menu gets them from has moved.
+ */
+interface OpenOptions extends Partial<React.ComponentProps<typeof ChannelMenu>> {
+  target?: { channel: ChannelEntry; x: number; y: number };
+  listening?: boolean;
+  notificationsMuted?: boolean;
+  occupantCount?: number;
+}
+
+function open({ target, listening, notificationsMuted, occupantCount, ...props }: OpenOptions = {}) {
+  const subject = target?.channel ?? channel();
+  storeState.listenedChannels = new Set(listening ? [subject.id] : []);
+  storeState.mutedPushChannels = new Set(notificationsMuted ? [subject.id] : []);
+  storeState.users = Array.from({ length: occupantCount ?? 2 }, (_, index) => ({
+    session: index + 1,
+    channel_id: subject.id,
+  }));
+  popupActions.openChannelMenu(subject, {
+    preventDefault: () => {},
+    clientX: target?.x ?? 120,
+    clientY: target?.y ?? 240,
+  } as unknown as React.MouseEvent);
+
   const handlers = {
     onToggleHideEmpty: vi.fn(),
     onJoin: vi.fn(),
@@ -51,30 +99,24 @@ function open(props: Partial<React.ComponentProps<typeof ChannelMenu>> = {}) {
     onDelete: vi.fn(),
     onEditPermissions: vi.fn(),
     onToggleArrange: vi.fn(),
-    onClose: vi.fn(),
   };
-  render(
-    withNebulaTheme(
-      <ChannelMenu
-        target={{ channel: channel(), x: 120, y: 240 }}
-        listening={false}
-        notificationsMuted={false}
-        occupantCount={2}
-        hideEmpty={false}
-        arranging={false}
-        {...handlers}
-        {...props}
-      />,
-    ),
-  );
+  render(withNebulaTheme(<ChannelMenu hideEmpty={false} arranging={false} {...handlers} {...props} />));
   return handlers;
 }
 
+/** Closing is the store's now, so it is read off the screen rather than a spy. */
+function expectClosed() {
+  expect(screen.queryByRole("menu")).toBeNull();
+}
+
 describe("ChannelMenu", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    closeAllPopups();
+  });
 
   it("renders nothing until a row is right-clicked", () => {
-    render(withNebulaTheme(<ChannelMenu target={null} {...open_props()} />));
+    render(withNebulaTheme(<ChannelMenu {...open_props()} />));
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
@@ -99,7 +141,7 @@ describe("ChannelMenu", () => {
     fireEvent.click(screen.getByText("Join channel"));
     expect(handlers.onJoin).toHaveBeenCalledWith(expect.objectContaining({ id: 3 }));
     expect(actions.joinChannel).not.toHaveBeenCalled();
-    expect(handlers.onClose).toHaveBeenCalled();
+    expectClosed();
   });
 
   it("names the reverse of the current listen and notification state", () => {
@@ -112,15 +154,20 @@ describe("ChannelMenu", () => {
     const handlers = open({ hideEmpty: true });
     fireEvent.click(screen.getByText("Hide empty channels"));
     expect(handlers.onToggleHideEmpty).toHaveBeenCalled();
-    expect(handlers.onClose).toHaveBeenCalled();
+    expectClosed();
   });
 
   it("hands the channel to the editor and the permission surface", () => {
-    const handlers = open();
+    // Opened twice rather than clicked twice: choosing an entry now really does
+    // dismiss the menu, where the close used to be a spy that did nothing.
+    const first = open();
     fireEvent.click(screen.getByText("Edit channel"));
-    expect(handlers.onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: 3 }));
+    expect(first.onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: 3 }));
+    cleanup();
+
+    const second = open();
     fireEvent.click(screen.getByText("Permissions…"));
-    expect(handlers.onEditPermissions).toHaveBeenCalledWith(expect.objectContaining({ id: 3 }));
+    expect(second.onEditPermissions).toHaveBeenCalledWith(expect.objectContaining({ id: 3 }));
   });
 
   it("drops the administrative pair without write permission", () => {
@@ -151,9 +198,6 @@ describe("ChannelMenu", () => {
 
 function open_props() {
   return {
-    listening: false,
-    notificationsMuted: false,
-    occupantCount: 2,
     hideEmpty: false,
     arranging: false,
     onToggleHideEmpty: vi.fn(),
@@ -166,7 +210,6 @@ function open_props() {
     onDelete: vi.fn(),
     onEditPermissions: vi.fn(),
     onToggleArrange: vi.fn(),
-    onClose: vi.fn(),
   };
 }
 
@@ -275,7 +318,7 @@ describe("ChannelMenu arrange mode", () => {
     const handlers = open();
     fireEvent.click(screen.getByText("Arrange channels"));
     expect(handlers.onToggleArrange).toHaveBeenCalledTimes(1);
-    expect(handlers.onClose).toHaveBeenCalled();
+    expectClosed();
   });
 
   it("offers the way back out while arranging", () => {
@@ -290,12 +333,12 @@ describe("ChannelMenu arrange mode", () => {
   });
   it("offers leaving a meeting room, and asks the calendar to revoke it", () => {
     leaveMeeting.mockClear();
-    const handlers = open({ target: { channel: channel({ id: 41, name: "Standup", detached: true }), x: 1, y: 1 } });
+    open({ target: { channel: channel({ id: 41, name: "Standup", detached: true }), x: 1, y: 1 } });
     const item = screen.getByTestId(TID.leaveMeeting);
     expect(item.textContent).toBe("Leave meeting");
     fireEvent.click(item);
     expect(leaveMeeting).toHaveBeenCalledWith(41);
-    expect(handlers.onClose).toHaveBeenCalled();
+    expectClosed();
   });
 
   it("offers no leaving on a channel of the tree or on a friend chat", () => {

@@ -32,14 +32,9 @@ import {
 } from "@ui/icons";
 import { MenuCheckBox } from "./MenuCheckBox";
 import { contextMenuRootSlot } from "../contextMenuRoot";
+import { popupActions, useChannelMenuTarget, type ChannelMenuTarget } from "../../clientState";
 
 interface ChannelMenuProps {
-  /** Right-click target and where the menu was opened, or null when closed. */
-  target: { channel: ChannelEntry; x: number; y: number } | null;
-  listening: boolean;
-  notificationsMuted: boolean;
-  /** How many people are standing in it, which is what "move everyone" acts on. */
-  occupantCount: number;
   hideEmpty: boolean;
   onToggleHideEmpty: () => void;
   /** Enter it. The shell answers this rather than the store, because a
@@ -56,7 +51,6 @@ interface ChannelMenuProps {
   /** Whether the list is in arrange mode, which the entry below toggles. */
   arranging: boolean;
   onToggleArrange: () => void;
-  onClose: () => void;
 }
 
 /**
@@ -81,11 +75,16 @@ interface ChannelMenuProps {
  * entry that empties an archive is worse to offer speculatively than one that
  * opens an editor.
  */
-export function ChannelMenu({
+export function ChannelMenu(props: Readonly<ChannelMenuProps>) {
+  const target = useChannelMenuTarget();
+  // Nothing below this line runs while the menu is closed, which is the point
+  // of the split: a menu that is not showing has no business subscribing to
+  // the roster on every state change the server sends.
+  return target ? <OpenChannelMenu target={target} {...props} /> : null;
+}
+
+function OpenChannelMenu({
   target,
-  listening,
-  notificationsMuted,
-  occupantCount,
   hideEmpty,
   onToggleHideEmpty,
   onJoin,
@@ -98,11 +97,23 @@ export function ChannelMenu({
   onEditPermissions,
   arranging,
   onToggleArrange,
-  onClose,
-}: Readonly<ChannelMenuProps>) {
+}: Readonly<ChannelMenuProps & { target: ChannelMenuTarget }>) {
   const { t } = useTranslation(["nebulaSidebar", "sidebar", "chat"]);
-  if (!target) return null;
   const { channel } = target;
+  const onClose = popupActions.closeChannelMenu;
+  const listening = useAppStore((state) => state.listenedChannels.has(channel.id));
+  const notificationsMuted = useAppStore((state) => state.mutedPushChannels.has(channel.id));
+  /**
+   * How many people are standing in it, which is what "move everyone" acts on.
+   *
+   * Counted rather than gathered: `channelOccupants` builds and sorts an array,
+   * and a selector that allocates runs on every write the store takes, open
+   * menu or not. A number compares equal to itself, so this one wakes nothing.
+   */
+  const occupantCount = useAppStore(
+    (state) =>
+      state.users.reduce((total, user) => (user.channel_id === channel.id ? total + 1 : total), 0),
+  );
   // A structural channel is a heading rather than a room: it holds no users
   // and cannot be entered, so the entry actions are omitted instead of shown
   // failing.

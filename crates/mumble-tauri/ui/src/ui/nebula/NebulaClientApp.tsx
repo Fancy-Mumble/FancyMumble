@@ -92,7 +92,7 @@ import {
   ForgetServerDialog,
   LeaveServerDialog,
   PurgeHistoryDialog,
-  ProfileCard,
+  HoverProfileCard,
   QuickConnect,
   SearchBox,
   ServerInfoPanel,
@@ -146,23 +146,21 @@ const ChannelInfoPanel = lazy(() =>
 
 import { AddServerDialog } from "./components/connect/AddServerDialog";
 import { ScreenShareStrip } from "./components/chat/ScreenShareStrip";
-import { MessageMenu, type MessageMenuTarget } from "./components/chat/MessageMenu";
+import { MessageMenu } from "./components/chat/MessageMenu";
 import { WatchDock } from "./components/chat/watch/WatchDock";
 import {
+  closeAllPopups,
+  popupActions,
   useFirstUnreadId,
   useHideEmptyChannels,
-  useHoverTarget,
   useMemberPanel,
   useMiniMode,
   useMiniWindow,
-  useProfileAnchor,
   useScreenRouting,
   useUserInfo,
-  useUserMenu,
   useMessageSelection,
   useSearchState,
   useServerPings,
-  type HoverEvent,
 } from "./clientState";
 import {
   serverTint,
@@ -363,7 +361,6 @@ export default function NebulaClientApp() {
   const selectedChannel = localNotesOpen ? null : storedSelectedChannel;
   const currentChannel = useAppStore((state) => state.currentChannel);
   const selectedDmUser = useAppStore((state) => state.selectedDmUser);
-  const selectedUser = useAppStore((state) => state.selectedUser);
   const ownSession = useAppStore((state) => state.ownSession);
   const messages = useAppStore((state) => state.messages);
   const pollMessages = useAppStore((state) => state.pollMessages);
@@ -373,7 +370,6 @@ export default function NebulaClientApp() {
   const talkingSessions = useAppStore((state) => state.talkingSessions);
   const bootstrapStage = useAppStore((state) => state.bootstrapStage);
   const listenedChannels = useAppStore((state) => state.listenedChannels);
-  const mutedPushChannels = useAppStore((state) => state.mutedPushChannels);
   const voiceState = useAppStore((state) => state.voiceState);
   // The recorder is Standard's developer tool, offered on the same terms:
   // developer mode, with voice on. One already running stays reachable either
@@ -426,11 +422,12 @@ export default function NebulaClientApp() {
   // this has to run for the client as a whole - including mini mode, which
   // renders its own tree and would otherwise drop the subscription.
   useNebulaEventBridge(openScreen);
+  // Menus and cards outlive their components now - they are pack state rather
+  // than the shell's - so the shell sweeps them away as it goes, or a menu left
+  // open when a session ends would be waiting over the next one.
+  useEffect(() => closeAllPopups, []);
   const search = useSearchState(`${selectedChannel}:${selectedDmUser}`);
   const memberPanel = useMemberPanel();
-  const hovered = useHoverTarget();
-  const profileAnchor = useProfileAnchor();
-  const userMenu = useUserMenu();
   const userInfo = useUserInfo();
   const channelSearchRef = useRef<HTMLInputElement>(null);
   // Bumped rather than set: the request is "focus the field now", which has to
@@ -498,9 +495,6 @@ export default function NebulaClientApp() {
   const [railExpanded, setRailExpanded] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [relations, setRelations] = useState<Record<string, UserRelation>>({});
-  const [channelMenu, setChannelMenu] = useState<{ channel: ChannelEntry; x: number; y: number } | null>(
-    null,
-  );
   /** Whether the channel tree is in arrange mode, where a drag reorders it. */
   const [arrangingChannels, setArrangingChannels] = useState(false);
   /**
@@ -1295,7 +1289,6 @@ export default function NebulaClientApp() {
   }, []);
 
   const selection = useMessageSelection(`${selectedChannel}:${selectedDmUser}`);
-  const [messageMenu, setMessageMenu] = useState<MessageMenuTarget | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   /** The message a menu-opened reaction picker is about, and where it sits. */
   const [reactionTarget, setReactionTarget] = useState<{
@@ -1489,19 +1482,6 @@ export default function NebulaClientApp() {
     }
   };
 
-  // The card opens beside whatever was clicked, so the click carries the row.
-  const openProfile = (session: number, event?: HoverEvent) => {
-    profileAnchor.openFrom(event);
-    void useAppStore.getState().selectUser(session);
-  };
-
-  // Surfaces that know only a session - message authors, the dock - still open
-  // the menu the lists do; the roster is what turns one into the other.
-  const openUserMenuFor = (session: number | null, event: React.MouseEvent) => {
-    const user = users.find((entry) => entry.session === session);
-    if (user) userMenu.open(user, event);
-  };
-
   // The menu's "Message" lands the conversation the same way the card's does.
   const openConversation = (session: number) => {
     void useAppStore.getState().selectDmUser(session);
@@ -1536,7 +1516,6 @@ export default function NebulaClientApp() {
 
   // One card, one place in the tree: the person whose card was clicked open and
   // stays, or - while nothing is pinned - the one the pointer is resting on.
-  const profileCardUser = users.find((user) => user.session === (selectedUser ?? hovered.target?.session));
 
   // What the channel column is, as one value.
   //
@@ -1561,12 +1540,12 @@ export default function NebulaClientApp() {
     onJoin: (channel) => enterChannel(channel.id),
     onContextMenu: (channel, event) => {
       event.preventDefault();
-      setChannelMenu({ channel, x: event.clientX, y: event.clientY });
+      popupActions.openChannelMenu(channel, event);
     },
-    onSelectUser: openProfile,
-    onHoverUser: hovered.hover,
-    onLeaveUser: hovered.clear,
-    onContextMenuUser: userMenu.open,
+    onSelectUser: popupActions.openProfile,
+    onHoverUser: popupActions.hoverUser,
+    onLeaveUser: popupActions.leaveUser,
+    onContextMenuUser: popupActions.openUserMenu,
     arranging,
     onArrange: (channelId, beforeId) => {
       for (const write of planChannelMove(channels, channelId, beforeId)) {
@@ -1674,10 +1653,10 @@ export default function NebulaClientApp() {
       <MessageAvatar
         message={message}
         avatar={avatar}
-        onOpenProfile={openProfile}
-        onHoverProfile={hovered.hover}
-        onLeaveProfile={hovered.clear}
-        onContextMenuProfile={openUserMenuFor}
+        onOpenProfile={popupActions.openProfile}
+        onHoverProfile={popupActions.hoverUser}
+        onLeaveProfile={popupActions.leaveUser}
+        onContextMenuProfile={popupActions.openUserMenuFor}
       />
     ),
     renderMessage: (message, avatar, grouped, restoring, endsGroup) => (
@@ -1691,10 +1670,10 @@ export default function NebulaClientApp() {
         compact={chatDisplay.compact}
         bubbleStyle={chatDisplay.bubbleStyle}
         alwaysShowActions={chatDisplay.alwaysShowActions}
-        onOpenProfile={openProfile}
-        onHoverProfile={hovered.hover}
-        onLeaveProfile={hovered.clear}
-        onContextMenuProfile={openUserMenuFor}
+        onOpenProfile={popupActions.openProfile}
+        onHoverProfile={popupActions.hoverUser}
+        onLeaveProfile={popupActions.leaveUser}
+        onContextMenuProfile={popupActions.openUserMenuFor}
         onVote={handlePollVote}
         onOpenImage={(src) => lightboxRef.current?.open(src)}
         time={timeDisplay}
@@ -1702,7 +1681,7 @@ export default function NebulaClientApp() {
         onQuote={quoteMessage}
         onJumpTo={jumpToMessage}
         onContextMenu={(target, at, context) =>
-          setMessageMenu({ message: target, x: at.x, y: at.y, ...context })
+          popupActions.openMessageMenu({ message: target, x: at.x, y: at.y, ...context })
         }
         selected={selection.active && message.message_id ? selection.selected.has(message.message_id) : null}
         onToggleSelected={selection.toggle}
@@ -1831,8 +1810,8 @@ export default function NebulaClientApp() {
     hideEmpty: hideEmpty,
     onToggleHideEmpty: toggleHideEmpty,
     onOpenSettings: openSettings,
-    onOpenProfile: (event) => ownSession !== null && openProfile(ownSession, event),
-    onContextMenuProfile: (event) => openUserMenuFor(ownSession, event),
+    onOpenProfile: (event) => ownSession !== null && popupActions.openProfile(ownSession, event),
+    onContextMenuProfile: (event) => popupActions.openUserMenuFor(ownSession, event),
     onOpenAdmin: canAdminister
       ? () => {
           setAdminPage("users");
@@ -1861,10 +1840,10 @@ export default function NebulaClientApp() {
     offlineLoading: registeredMembers.loading,
     talkingSessions: talkingSessions,
     ownSession: ownSession,
-    onSelect: openProfile,
-    onHover: hovered.hover,
-    onLeave: hovered.clear,
-    onContextMenu: userMenu.open,
+    onSelect: popupActions.openProfile,
+    onHover: popupActions.hoverUser,
+    onLeave: popupActions.leaveUser,
+    onContextMenu: popupActions.openUserMenu,
     onInfo: userInfo.open,
     roleColors,
     onClose: () => memberPanel.setOpen(false),
@@ -1881,9 +1860,9 @@ export default function NebulaClientApp() {
       query={search.channelQuery}
       onQueryChange={search.setChannelQuery}
       searchRef={channelSearchRef}
-      onContextMenuUser={openUserMenuFor}
-      onHoverUser={hovered.hover}
-      onLeaveUser={hovered.clear}
+      onContextMenuUser={popupActions.openUserMenuFor}
+      onHoverUser={popupActions.hoverUser}
+      onLeaveUser={popupActions.leaveUser}
     />
   );
 
@@ -2138,12 +2117,10 @@ export default function NebulaClientApp() {
             setMini(false);
             leave.request(activeSession);
           }}
-          onContextMenuUser={userMenu.open}
+          onContextMenuUser={popupActions.openUserMenu}
           cardRef={miniCardRef}
         />
         <UserMenu
-          target={userMenu.target}
-          onClose={userMenu.close}
           onInfo={userInfo.open}
           onJoinChannel={enterChannel}
         />
@@ -2701,20 +2678,10 @@ export default function NebulaClientApp() {
             }}
           />
 
-          {profileCardUser && (
-            <ProfileCard
-              user={profileCardUser}
-              anchor={selectedUser === null ? (hovered.target?.anchor ?? null) : profileAnchor.anchor}
-              pinned={selectedUser !== null}
-              onClose={() => useAppStore.getState().selectUser(null)}
-              onMessage={openConversation}
-            />
-          )}
+          <HoverProfileCard onMessage={openConversation} />
 
           {/* One menu for every surface that shows a person. */}
           <UserMenu
-            target={userMenu.target}
-            onClose={userMenu.close}
             onMessage={openConversation}
             onInfo={userInfo.open}
             onJoinChannel={enterChannel}
@@ -2730,10 +2697,6 @@ export default function NebulaClientApp() {
           )}
 
           <ChannelMenu
-            target={channelMenu}
-            listening={!!channelMenu && listenedChannels.has(channelMenu.channel.id)}
-            notificationsMuted={!!channelMenu && mutedPushChannels.has(channelMenu.channel.id)}
-            occupantCount={channelMenu ? channelOccupants(users, channelMenu.channel.id).length : 0}
             hideEmpty={hideEmpty}
             onToggleHideEmpty={toggleHideEmpty}
             onJoin={(channel) => enterChannel(channel.id)}
@@ -2760,7 +2723,6 @@ export default function NebulaClientApp() {
             }}
             arranging={arranging}
             onToggleArrange={() => setArrangingChannels(!arranging)}
-            onClose={() => setChannelMenu(null)}
           />
 
           {channelDialog && (
@@ -2883,8 +2845,6 @@ export default function NebulaClientApp() {
           <WatchDock />
 
           <MessageMenu
-            target={messageMenu}
-            onClose={() => setMessageMenu(null)}
             onQuickReact={react}
             onReact={(target, at) => setReactionTarget({ message: target, ...at })}
             onQuote={quoteMessage}

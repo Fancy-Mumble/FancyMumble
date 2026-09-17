@@ -7,6 +7,7 @@ import { applyReadStates, clearReadReceipts } from "@core/features/chat/readrece
 import { resetPrivateBrowsingCache } from "@core/features/elements/privateBrowsing";
 import { withNebulaTheme } from "../../testTheme";
 import { MessageMenu, type MenuImage } from "./MessageMenu";
+import { popupActions, closeAllPopups } from "../../clientState";
 
 const invokeMock = vi.fn<(cmd: string, args?: unknown) => Promise<unknown>>(() => Promise.resolve());
 vi.mock("@tauri-apps/api/core", () => ({
@@ -48,8 +49,8 @@ function open(
   image: MenuImage | null = null,
   link: string | null = null,
 ) {
+  popupActions.openMessageMenu({ message: msg, x: 10, y: 20, editable, selection, image, link });
   const handlers = {
-    onClose: vi.fn(),
     onReact: vi.fn(),
     onQuickReact: vi.fn(),
     onQuote: vi.fn(),
@@ -58,11 +59,7 @@ function open(
   };
   render(
     withNebulaTheme(
-      <MessageMenu
-        target={{ message: msg, x: 10, y: 20, editable, selection, image, link }}
-        allMessageIds={allMessageIds}
-        {...handlers}
-      />,
+      <MessageMenu allMessageIds={allMessageIds} {...handlers} />,
     ),
   );
   return handlers;
@@ -71,6 +68,7 @@ function open(
 describe("MessageMenu", () => {
   beforeEach(() => {
     cleanup();
+    closeAllPopups();
     clearReadReceipts();
     invokeMock.mockClear();
     // The private-window answer is cached for the session, so a test that
@@ -90,8 +88,6 @@ describe("MessageMenu", () => {
     render(
       withNebulaTheme(
         <MessageMenu
-          target={null}
-          onClose={vi.fn()}
           onReact={vi.fn()}
           onQuickReact={vi.fn()}
           onQuote={vi.fn()}
@@ -360,15 +356,19 @@ describe("MessageMenu copy", () => {
     // An open menu lays a sheet over the window, so the next right-click never
     // reaches the message underneath - and what came up was the webview's own
     // Back / Refresh / Inspect menu, drawn on top of this one.
-    const handlers = open();
+    open();
     const root = document.querySelector(".MuiModal-root");
     expect(root).toBeTruthy();
 
     const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
-    root!.dispatchEvent(event);
+    // Dismissing is a store write now, so the render it causes has to be
+    // allowed to happen before the menu is looked for.
+    act(() => {
+      root!.dispatchEvent(event);
+    });
 
     expect(event.defaultPrevented).toBe(true);
-    expect(handlers.onClose).toHaveBeenCalled();
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 });
 

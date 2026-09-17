@@ -17,6 +17,7 @@ import { canDeleteMessages } from "@standard/components/sidebar/channel/ChannelE
 import { EmojiPlusIcon } from "@ui/icons";
 import { Stack, UserAvatar } from "../primitives";
 import { contextMenuRootSlot } from "../contextMenuRoot";
+import { popupActions, useMessageMenuTarget } from "../../clientState";
 import { radius } from "../../tokens";
 import { bodyToCopyText } from "@core/features/chat/bodyText";
 
@@ -70,8 +71,6 @@ export interface MessageMenuTarget {
 }
 
 interface MessageMenuProps {
-  target: MessageMenuTarget | null;
-  onClose: () => void;
   onReact: (message: ChatMessage, at: { x: number; y: number }) => void;
   /** Applies one emoji straight away, toggling it if it is already yours. */
   onQuickReact: (message: ChatMessage, emoji: string) => void;
@@ -115,8 +114,6 @@ const IMAGE_ACTION_LINGER = 900;
  * one is, so the mode cannot be entered to reach an action that will be refused.
  */
 export function MessageMenu({
-  target,
-  onClose,
   onReact,
   onQuickReact,
   onQuote,
@@ -124,6 +121,11 @@ export function MessageMenu({
   onSelect,
   allMessageIds,
 }: Readonly<MessageMenuProps>) {
+  // The message the menu is about is pack state, not a prop - see
+  // `popupActions`. The shell used to hold it, which made a right-click on a
+  // message re-render every other message in the river first.
+  const target = useMessageMenuTarget();
+  const onClose = popupActions.closeMessageMenu;
   const { t } = useTranslation(["nebulaChat", "chat"]);
   const channels = useAppStore((state) => state.channels);
   const users = useAppStore((state) => state.users);

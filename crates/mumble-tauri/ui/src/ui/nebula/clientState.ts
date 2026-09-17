@@ -7,9 +7,12 @@
  * them differently.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { getPreferences, updatePreferences } from "@core/preferencesStorage";
-import type { ServerPingResult, UserEntry } from "@core/types";
+import { useAppStore } from "@core/store";
+import type { ChannelEntry, ServerPingResult, UserEntry } from "@core/types";
+import type { MessageMenuTarget } from "./components/chat/MessageMenu";
 import type { UserMenuTarget } from "./components/user/UserMenu";
 import { pointAnchor, type AnchorRect } from "@shared/profilecard";
 
@@ -198,45 +201,6 @@ export function useMemberPanel() {
   return { open, setOpen, query, setQuery, showOffline, setShowOffline };
 }
 
-/**
- * Which member row the pointer is resting on.
- *
- * Delayed on the way in so sweeping the pointer down a list does not flash a
- * card per row, and cleared immediately on the way out so the card never
- * outlives the row it describes.
- */
-export function useHoverTarget(delayMs = 350) {
-  const [target, setTarget] = useState<{ session: number; anchor: AnchorRect } | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const clear = useCallback(() => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = null;
-    setTarget(null);
-  }, []);
-
-  const hover = useCallback(
-    (session: number, event: HoverEvent) => {
-      if (timer.current) clearTimeout(timer.current);
-      // The row, not the pointer: the card is placed beside the person it is
-      // about, so it needs their row's box rather than wherever the pointer
-      // happened to enter it.
-      const anchor = anchorOf(event);
-      timer.current = setTimeout(() => setTarget({ session, anchor }), delayMs);
-    },
-    [delayMs],
-  );
-
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
-
-  return { target, hover, clear };
-}
-
 /** As much of a mouse event as an anchor can be read from. */
 export type HoverEvent = {
   clientX: number;
@@ -252,29 +216,165 @@ export function anchorOf(event: HoverEvent): AnchorRect {
   return pointAnchor(event.clientX, event.clientY);
 }
 
-/**
- * The person the user menu is open on, and where the click landed.
- *
- * One menu serves the whole client, so the target lives with the shell rather
- * than in each list that can open it: two surfaces cannot then disagree about
- * whether a menu is showing, and the menu keeps its dialogs when the row it
- * came from scrolls away.
- */
-export function useUserMenu() {
-  const [target, setTarget] = useState<UserMenuTarget | null>(null);
+/** The channel a channel menu is open on, and where the click landed. */
+export interface ChannelMenuTarget {
+  channel: ChannelEntry;
+  x: number;
+  y: number;
+}
 
-  const open = useCallback((user: UserEntry, event: React.MouseEvent) => {
+/**
+ * Everything that opens *over* the shell: the three context menus, the card
+ * the pointer raises, and where a pinned card should sit.
+ *
+ * One menu serves the whole client, so the target cannot live in each list that
+ * can open it - two surfaces would disagree about whether a menu is showing,
+ * and a menu would lose its dialogs when the row it came from scrolled away.
+ * That much was always true. What changed is *where* the one copy lives.
+ *
+ * It used to be the shell's own `useState`, and that is what made right-clicking
+ * feel slow. The shell is three thousand lines that assemble every pane's props
+ * on each render, so setting any of this re-rendered the conversation, the
+ * channel tree and every mounted message row - a hundred of them, each one
+ * re-serialising its own styles - before the menu could paint. None of them had
+ * anything to say about a menu. A pointer crossing a roster did it every few
+ * hundred milliseconds.
+ *
+ * Held here, the only thing that renders is whatever draws the surface. The
+ * actions are module-level for the same reason: a row is handed
+ * `popupActions.openUserMenu` itself rather than a closure the shell made this
+ * render, so a row that compares its props sees the same one it saw last time.
+ */
+interface PopupState {
+  userMenu: UserMenuTarget | null;
+  channelMenu: ChannelMenuTarget | null;
+  messageMenu: MessageMenuTarget | null;
+  /** The row the pointer has rested on long enough to raise a card. */
+  hover: { session: number; anchor: AnchorRect } | null;
+  /**
+   * Where a card pinned by a click should sit.
+   *
+   * The selection itself lives in the shared store - every pack agrees on who
+   * is selected - but where the card sits is a fact about this window.
+   */
+  profileAnchor: AnchorRect | null;
+}
+
+const usePopupStore = create<PopupState>(() => ({
+  userMenu: null,
+  channelMenu: null,
+  messageMenu: null,
+  hover: null,
+  profileAnchor: null,
+}));
+
+/** One hook per surface, so opening a menu never wakes the card. */
+export const useUserMenuTarget = () => usePopupStore((state) => state.userMenu);
+export const useChannelMenuTarget = () => usePopupStore((state) => state.channelMenu);
+export const useMessageMenuTarget = () => usePopupStore((state) => state.messageMenu);
+export const useHoverTarget = () => usePopupStore((state) => state.hover);
+export const useProfileAnchor = () => usePopupStore((state) => state.profileAnchor);
+
+/**
+ * How long the pointer rests on a row before its card appears.
+ *
+ * Sweeping down a list would otherwise flash one card per row.
+ */
+const HOVER_DELAY_MS = 350;
+let hoverTimer: ReturnType<typeof setTimeout> | null = null;
+
+export const popupActions = {
+  openUserMenu(user: UserEntry, event: React.MouseEvent): void {
     // Without this the platform's own menu opens on top of ours.
     event.preventDefault();
     // Rows nest - an occupant sits inside a channel row that has its own menu -
     // so the innermost target is the one that answers.
     event.stopPropagation();
-    setTarget({ user, x: event.clientX, y: event.clientY });
-  }, []);
+    usePopupStore.setState({ userMenu: { user, x: event.clientX, y: event.clientY } });
+  },
 
-  const close = useCallback(() => setTarget(null), []);
+  /**
+   * The same menu, from a surface that knows only a session.
+   *
+   * Message authors and the dock have one; the roster is what turns it into the
+   * person the menu is about.
+   */
+  openUserMenuFor(session: number | null, event: React.MouseEvent): void {
+    const user = useAppStore.getState().users.find((entry) => entry.session === session);
+    if (user) popupActions.openUserMenu(user, event);
+  },
 
-  return { target, open, close };
+  closeUserMenu(): void {
+    usePopupStore.setState({ userMenu: null });
+  },
+
+  openChannelMenu(channel: ChannelEntry, event: React.MouseEvent): void {
+    event.preventDefault();
+    usePopupStore.setState({ channelMenu: { channel, x: event.clientX, y: event.clientY } });
+  },
+
+  closeChannelMenu(): void {
+    usePopupStore.setState({ channelMenu: null });
+  },
+
+  openMessageMenu(target: MessageMenuTarget): void {
+    usePopupStore.setState({ messageMenu: target });
+  },
+
+  closeMessageMenu(): void {
+    usePopupStore.setState({ messageMenu: null });
+  },
+
+  /**
+   * Raise a card on the row the pointer is resting on.
+   *
+   * Delayed on the way in, cleared at once on the way out, so the card never
+   * outlives the row it describes.
+   */
+  hoverUser(session: number, event: HoverEvent): void {
+    if (hoverTimer) clearTimeout(hoverTimer);
+    // The row, not the pointer: the card is placed beside the person it is
+    // about, so it needs their row's box rather than wherever the pointer
+    // happened to enter it.
+    const anchor = anchorOf(event);
+    hoverTimer = setTimeout(
+      () => usePopupStore.setState({ hover: { session, anchor } }),
+      HOVER_DELAY_MS,
+    );
+  },
+
+  leaveUser(): void {
+    if (hoverTimer) clearTimeout(hoverTimer);
+    hoverTimer = null;
+    usePopupStore.setState({ hover: null });
+  },
+
+  /** Pin a card open on somebody, beside the row the click came from. */
+  openProfile(session: number, event?: HoverEvent): void {
+    usePopupStore.setState({ profileAnchor: event ? anchorOf(event) : null });
+    useAppStore.getState().selectUser(session);
+  },
+};
+
+/**
+ * Drop every open surface.
+ *
+ * The shell calls this as it goes away. None of this state belongs to a
+ * component any more, so without it a menu left open when a session ends would
+ * still be open in the store when the next one mounts - and would reappear over
+ * a window nobody opened it in. The tests lean on the same call for the same
+ * reason: one file's right-click would otherwise still be showing in the next.
+ */
+export function closeAllPopups(): void {
+  if (hoverTimer) clearTimeout(hoverTimer);
+  hoverTimer = null;
+  usePopupStore.setState({
+    userMenu: null,
+    channelMenu: null,
+    messageMenu: null,
+    hover: null,
+    profileAnchor: null,
+  });
 }
 
 /** Which person's User Information sheet is open, by session. */
@@ -283,21 +383,6 @@ export function useUserInfo() {
   const open = useCallback((session: number) => setSession(session), []);
   const close = useCallback(() => setSession(null), []);
   return { session, open, close };
-}
-
-/**
- * Which user's full card is open, and the row it was opened from.
- *
- * The selection itself lives in the shared store - every pack agrees on who is
- * selected - but where the card should sit is a fact about this window, so it
- * stays here beside the other pack-local placement state.
- */
-export function useProfileAnchor() {
-  const [anchor, setAnchor] = useState<AnchorRect | null>(null);
-  const openFrom = useCallback((event?: HoverEvent | null) => {
-    setAnchor(event ? anchorOf(event) : null);
-  }, []);
-  return { anchor, openFrom };
 }
 
 /**

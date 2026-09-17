@@ -48,6 +48,7 @@ import { userMenuActions } from "../../selectors";
 import { SearchBox, Stack } from "../primitives";
 import { radius } from "../../tokens";
 import { contextMenuRootSlot } from "../contextMenuRoot";
+import { popupActions, useUserMenuTarget } from "../../clientState";
 
 /** The person a right-click landed on, and where it landed. */
 export interface UserMenuTarget {
@@ -65,9 +66,6 @@ const MENU_NS = ["nebulaUser", "sidebar", "common"] as const;
 type MenuT = ReturnType<typeof useTranslation<typeof MENU_NS>>["t"];
 
 interface UserMenuProps {
-  /** The row that was right-clicked, or null when the menu is closed. */
-  target: UserMenuTarget | null;
-  onClose: () => void;
   /** Open the conversation with this person; the menu omits "Message" without it. */
   onMessage?: (session: number) => void;
   /** Open the User Information sheet; omitted from the menu without it. */
@@ -97,7 +95,13 @@ interface UserMenuProps {
  * their own copy of the target so dismissing the menu to show a dialog does
  * not take the dialog's subject with it.
  */
-export function UserMenu({ target, onClose, onMessage, onInfo, onJoinChannel }: Readonly<UserMenuProps>) {
+export function UserMenu({ onMessage, onInfo, onJoinChannel }: Readonly<UserMenuProps>) {
+  // Who the menu is about is the pack's own state rather than a prop: every
+  // surface that lists people opens this one menu, and holding the target in
+  // the shell meant a right-click re-rendered the whole client before the menu
+  // could paint. See `popupActions`.
+  const target = useUserMenuTarget();
+  const onClose = popupActions.closeUserMenu;
   const { t } = useTranslation(MENU_NS);
   const [pending, setPending] = useState<Pending | null>(null);
   const [note, setNote] = useState<Note | null>(null);

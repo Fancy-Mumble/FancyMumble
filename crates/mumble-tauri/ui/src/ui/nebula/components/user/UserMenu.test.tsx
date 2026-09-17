@@ -5,6 +5,7 @@ import type { ChannelEntry, UserEntry } from "@core/types";
 import { PERM_DELETE_MESSAGE, PERM_MOVE, PERM_MUTE_DEAFEN, PERM_REGISTER } from "@core/utils/permissions";
 import { withNebulaTheme } from "../../testTheme";
 import { UserMenu } from "./UserMenu";
+import { popupActions, closeAllPopups } from "../../clientState";
 
 const invokeMock = vi.fn().mockResolvedValue(null);
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }));
@@ -67,30 +68,35 @@ function open(
     ],
   } as never);
 
-  const onClose = vi.fn();
+  popupActions.openUserMenu(target, {
+    preventDefault: () => {},
+    stopPropagation: () => {},
+    clientX: 40,
+    clientY: 60,
+  } as unknown as React.MouseEvent);
+
   const onMessage = vi.fn();
   const onJoinChannel = vi.fn();
   render(
     withNebulaTheme(
       <UserMenu
-        target={{ user: target, x: 40, y: 60 }}
-        onClose={onClose}
         onMessage={options.onMessage === false ? undefined : onMessage}
         onJoinChannel={onJoinChannel}
       />,
     ),
   );
-  return { onClose, onMessage, onJoinChannel };
+  return { onMessage, onJoinChannel };
 }
 
 describe("UserMenu", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    closeAllPopups();
     friends.list = [];
   });
 
   it("shows nothing until a row is right-clicked", () => {
-    render(withNebulaTheme(<UserMenu target={null} onClose={vi.fn()} onJoinChannel={vi.fn()} />));
+    render(withNebulaTheme(<UserMenu onJoinChannel={vi.fn()} />));
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
@@ -133,10 +139,10 @@ describe("UserMenu", () => {
   });
 
   it("mutes through the backend and closes", () => {
-    const { onClose } = open({}, { targetChannelPermissions: PERM_MUTE_DEAFEN });
+    open({}, { targetChannelPermissions: PERM_MUTE_DEAFEN });
     fireEvent.click(screen.getByText("Mute on server"));
     expect(invokeMock).toHaveBeenCalledWith("mute_user", { session: 7, muted: true });
-    expect(onClose).toHaveBeenCalled();
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("offers registration only for an account that does not have one", () => {
@@ -173,9 +179,9 @@ describe("UserMenu", () => {
   });
 
   it("keeps the confirmation open after the menu that raised it has closed", () => {
-    const { onClose } = open({}, { rootPermissions: PERM_REGISTER });
+    open({}, { rootPermissions: PERM_REGISTER });
     fireEvent.click(screen.getByText("Deregister…"));
-    expect(onClose).toHaveBeenCalled();
+    expect(screen.queryByRole("menu")).toBeNull();
     // The menu is gone, but its dialog holds its own copy of the target.
     expect(screen.getByText("Deregister this user?")).toBeTruthy();
   });
