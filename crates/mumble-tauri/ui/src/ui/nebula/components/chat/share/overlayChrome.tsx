@@ -30,7 +30,8 @@ export function OverlayButton({
   children,
 }: Readonly<{
   title: string;
-  onClick: () => void;
+  /** The event comes with it so a button can anchor a popup to itself. */
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
   active?: boolean;
   /** Set on a button that is a toggle rather than an action, so the state
    *  the colour shows is also readable to a screen reader. */

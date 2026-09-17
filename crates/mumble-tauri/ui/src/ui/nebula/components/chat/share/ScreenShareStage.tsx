@@ -10,7 +10,6 @@ import type { ScreenShareHook } from "@standard/components/chat/stream/useScreen
 import { useCaptureExclusion } from "@standard/components/chat/stream/useCaptureExclusion";
 import { getTrackContentMap } from "@standard/components/chat/stream/trackContent";
 import { activeStreamViewerStrategy } from "@standard/components/chat/stream/viewerStrategy";
-import type { MediaFit } from "@standard/components/chat/drawing/DrawingOverlay";
 import {
   CameraIcon,
   EditIcon,
@@ -22,6 +21,8 @@ import {
 import { Stack } from "../../primitives";
 import { radius } from "../../../tokens";
 import { FEED_BADGE, feedSummary, type StreamFeed } from "./feeds";
+import { ANNOTATION_FIT, FIT_LABEL_KEYS, FIT_MODES, MEDIA_STYLE, type FitMode } from "./fitMode";
+import { StageMenu, type StageMenuAnchor } from "./StageMenu";
 import { StreamSurface, usesNativeSurface } from "./StreamSurface";
 import { useFeedStats } from "./useFeedStats";
 import { copyStreamFrame, type ScreenshotOutcome } from "./streamScreenshot";
@@ -36,33 +37,6 @@ import { GLASS_BG, GLASS_BLUR, GLASS_LINE, OverlayButton, WELL_BG } from "./over
 
 // Heavy and off screen at rest: the panel pulls in a chart.
 const StreamStatsPanel = lazy(() => import("@standard/components/chat/stream/StreamStatsPanel"));
-
-/**
- * How the picture is scaled into the well.
- *
- * `actual` is the one that changes the layout rather than just the element: at
- * 1:1 the well scrolls, because that is the whole point of asking for the
- * broadcaster's real pixels on a screen smaller than theirs.
- */
-type FitMode = "fit" | "fill" | "actual";
-
-/** The modes the pill offers, in the order it draws them. */
-const FIT_MODES = ["fit", "fill", "actual"] as const satisfies readonly FitMode[];
-
-/** How each fit mode is named. `1:1` is a ratio, so it is not translated. */
-const FIT_LABEL_KEYS = {
-  fit: "share.fit",
-  fill: "share.fill",
-} as const satisfies Record<Exclude<FitMode, "actual">, string>;
-
-/** How each fit mode lays the source out inside the media element's box -
- *  what the annotation canvas has to know to put a stroke where the pointer
- *  was. See `DrawingOverlay`'s `mediaContentRect`. */
-const ANNOTATION_FIT = {
-  fit: "contain",
-  fill: "cover",
-  actual: "none",
-} as const satisfies Record<FitMode, MediaFit>;
 
 /** Filmstrip width, and the tile height inside it. */
 const RAIL_WIDTH = 116;
@@ -103,7 +77,9 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [fitMode, setFitMode] = useState<FitMode>("fit");
   const [expanded, setExpanded] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  /** Where the stage menu is open, if it is: the pointer a right-click came
+   *  from, or the kebab that asked for it. */
+  const [menuAt, setMenuAt] = useState<StageMenuAnchor | null>(null);
   const [statsOpen, setStatsOpen] = useState(false);
   const [shot, setShot] = useState<ScreenshotOutcome | null>(null);
   // Drawing lives in the shared store rather than here: the desktop overlay
@@ -244,7 +220,6 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
   }, [expanded, stageRoom]);
 
   const popOut = useCallback(() => {
-    setMenuOpen(false);
     if (ownSession === null || !activeServerId) return;
     invoke("open_stream_popout", {
       payload: {
@@ -270,7 +245,6 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
   // whatever this client is sharing. Only the broadcaster is offered it,
   // because only their machine has that source to sit on top of.
   const toggleDesktopOverlay = useCallback(() => {
-    setMenuOpen(false);
     if (desktopOverlay) {
       invoke("close_drawing_overlay").catch(() => {});
       useAppStore.setState({ desktopDrawingOverlayOpen: false });
@@ -353,6 +327,10 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
         }}
       >
         <Box
+          onContextMenu={(event: React.MouseEvent) => {
+            event.preventDefault();
+            setMenuAt({ x: event.clientX, y: event.clientY });
+          }}
           sx={(theme) => ({
             position: "relative",
             borderRadius: radius("md"),
@@ -552,8 +530,14 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
               <OverlayButton
                 title={t("share.streamOptions")}
                 testId={TID.streamConfigMenu}
-                active={menuOpen}
-                onClick={() => setMenuOpen((open) => !open)}
+                active={menuAt !== null}
+                // Read out of the event before the updater runs: React has
+                // cleared `currentTarget` by the time a state updater is
+                // called, so the anchor has to be taken here.
+                onClick={(event) => {
+                  const button = event.currentTarget;
+                  setMenuAt((open) => (open === null ? button : null));
+                }}
               >
                 <KebabMenuIcon width={12} height={12} />
               </OverlayButton>
@@ -601,82 +585,6 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
               )}
             </Stack>
           </Stack>
-
-          {menuOpen && (
-            <>
-              {/* Click-away, inside the well so it covers fullscreen too. */}
-              <Box onClick={() => setMenuOpen(false)} sx={{ position: "absolute", inset: 0, zIndex: 4 }} />
-              <Stack
-                sx={{
-                  position: "absolute",
-                  right: 9,
-                  bottom: 42,
-                  width: 212,
-                  zIndex: 5,
-                  padding: "5px",
-                  borderRadius: radius("lg"),
-                  background: "rgba(14,18,28,.92)",
-                  border: "var(--nebula-line-width, 1px) solid rgba(255,255,255,.1)",
-                  boxShadow: "0 16px 40px rgba(0,0,0,.45)",
-                  backdropFilter: "blur(20px)",
-                }}
-              >
-                {share.isBroadcasting && (
-                  <>
-                    <StreamMenuItem
-                      label={t("chat:screenShare.config.quality")}
-                      value={quality}
-                      onClick={() => {
-                        setMenuOpen(false);
-                        onOpenQuality();
-                      }}
-                    />
-                    <StreamMenuItem
-                      label={t("share.changeSource")}
-                      onClick={() => {
-                        setMenuOpen(false);
-                        share.startSharing();
-                      }}
-                    />
-                    {/* While a screen is shared our own windows hide from every
-                        capture API, the user's own screenshots included. X11
-                        has no such mechanism, so there is nothing to offer. */}
-                    {!isLinux && (
-                      <StreamMenuItem
-                        label={t("share.allowScreenshots")}
-                        value={capture.hidden ? t("share.off") : t("share.on")}
-                        onClick={() => capture.setHidden(!capture.hidden)}
-                      />
-                    )}
-                    <StreamMenuItem
-                      label={t("chat:screenShare.showOverlay")}
-                      value={desktopOverlay ? t("share.on") : t("share.off")}
-                      onClick={toggleDesktopOverlay}
-                      disabled={!overlaySupport.available}
-                      title={
-                        overlaySupport.available
-                          ? undefined
-                          : t(`chat:${overlayReasonKey(overlaySupport.reason)}` as const)
-                      }
-                    />
-                  </>
-                )}
-                <StreamMenuItem
-                  label={t("chat:screenShare.stats.toggle")}
-                  value={statsOpen ? t("share.on") : undefined}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setStatsOpen((open) => !open);
-                  }}
-                />
-                {/* The popout builds its own webview viewer; the native family
-                    has none to build it in, and mobile has no second window. */}
-                {!focused.own && !usesNativeSurface() && !isMobile && (
-                  <StreamMenuItem label={t("share.popOut")} onClick={popOut} />
-                )}
-              </Stack>
-            </>
-          )}
         </Box>
 
         {showRail && (
@@ -687,6 +595,13 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
                 feed={feed}
                 focused={feed.key === focused.key}
                 onSelect={() => selectFeed(feed)}
+                // A right-click acts on what it landed on, so the tile takes
+                // the stage first and the menu is then about the picture the
+                // user is looking at - the same feed either way.
+                onOpenMenu={(event) => {
+                  selectFeed(feed);
+                  setMenuAt({ x: event.clientX, y: event.clientY });
+                }}
               />
             ))}
           </Stack>
@@ -713,6 +628,49 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
         />
       )}
 
+      {menuAt !== null && (
+        <StageMenu
+          anchor={menuAt}
+          onClose={() => setMenuAt(null)}
+          // Fullscreen paints over everything outside the stage, and the
+          // in-window fallback sits above any MUI popup, so while either is on
+          // the menu has to live inside the stage rather than on the body.
+          container={expanded ? wrapper.current : undefined}
+          feed={focused}
+          fit={fitMode}
+          onFit={setFitMode}
+          onCopyFrame={takeScreenshot}
+          annotating={annotating}
+          onToggleAnnotating={currentChannel !== null && ownSession !== null ? toggleAnnotating : null}
+          expanded={expanded}
+          onToggleExpanded={toggleExpanded}
+          statsOpen={statsOpen}
+          onToggleStats={() => setStatsOpen((open) => !open)}
+          // The popout builds its own webview viewer; the native family has
+          // none to build it in, and mobile has no second window.
+          onPopOut={!focused.own && !usesNativeSurface() && !isMobile ? popOut : null}
+          broadcast={
+            share.isBroadcasting
+              ? {
+                  quality,
+                  onOpenQuality,
+                  onChangeSource: share.startSharing,
+                  // X11 has no capture-exclusion mechanism, so there is
+                  // nothing to offer there.
+                  screenshotsAllowed: isLinux ? undefined : !capture.hidden,
+                  onToggleScreenshots: isLinux ? undefined : () => capture.setHidden(!capture.hidden),
+                  overlayOn: desktopOverlay,
+                  onToggleOverlay: toggleDesktopOverlay,
+                  overlayUnavailable: overlaySupport.available
+                    ? undefined
+                    : t(`chat:${overlayReasonKey(overlaySupport.reason)}` as const),
+                  onStop: share.stopSharing,
+                }
+              : null
+          }
+        />
+      )}
+
       <Snackbar
         open={shot !== null}
         autoHideDuration={2600}
@@ -724,95 +682,24 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
   );
 }
 
-/** The mock's three scaling modes, as the style the media element wears. */
-const MEDIA_STYLE: Record<FitMode, React.CSSProperties> = {
-  fit: {
-    display: "block",
-    width: "100%",
-    height: "100%",
-    maxWidth: "100%",
-    maxHeight: "100%",
-    objectFit: "contain",
-  },
-  fill: {
-    display: "block",
-    width: "100%",
-    height: "100%",
-    maxWidth: "100%",
-    maxHeight: "100%",
-    objectFit: "cover",
-  },
-  // Intrinsic size, scrolled by the well: `auto` resolves to the video's or the
-  // canvas's own pixel dimensions, which is what "1:1" means.
-  actual: {
-    display: "block",
-    width: "auto",
-    height: "auto",
-    objectFit: "none",
-    margin: "auto",
-    flex: "none",
-  },
-};
-
-function StreamMenuItem({
-  label,
-  value,
-  onClick,
-  disabled,
-  title,
-}: Readonly<{
-  label: string;
-  value?: string;
-  onClick: () => void;
-  /** Offered but not possible here - the row stays visible and explains
-   *  itself in `title` rather than vanishing, so the feature is still
-   *  discoverable on a machine that cannot run it. */
-  disabled?: boolean;
-  title?: string;
-}>) {
-  return (
-    <Box
-      component="button"
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        gap: "9px",
-        width: "100%",
-        padding: "7px 9px",
-        border: "none",
-        borderRadius: radius("md"),
-        background: "transparent",
-        color: "#e4e8f0",
-        fontSize: 12,
-        fontFamily: "inherit",
-        textAlign: "left",
-        cursor: "pointer",
-        "&:hover": { background: "rgba(255,255,255,.07)" },
-        "&:disabled": { cursor: "not-allowed", opacity: 0.45 },
-      }}
-    >
-      {label}
-      {value !== undefined && (
-        <Box component="span" sx={{ marginLeft: "auto", fontSize: 10, color: "#8f97a5" }}>
-          {value}
-        </Box>
-      )}
-    </Box>
-  );
-}
-
 function FilmstripTile({
   feed,
   focused,
   onSelect,
-}: Readonly<{ feed: StreamFeed; focused: boolean; onSelect: () => void }>) {
+  onOpenMenu,
+}: Readonly<{
+  feed: StreamFeed;
+  focused: boolean;
+  onSelect: () => void;
+  onOpenMenu: (event: React.MouseEvent) => void;
+}>) {
   return (
     <Box
       onClick={onSelect}
+      onContextMenu={(event: React.MouseEvent) => {
+        event.preventDefault();
+        onOpenMenu(event);
+      }}
       data-testid={TID.streamWatchTile}
       data-session={feed.session}
       data-broadcaster-name={feed.name}

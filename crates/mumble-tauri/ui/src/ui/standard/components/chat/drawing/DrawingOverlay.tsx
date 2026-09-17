@@ -818,6 +818,10 @@ export default function DrawingOverlay({
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       if (!drawingActive) return;
+      // Only the primary button draws. A right-click over the picture belongs
+      // to the context menu the pack draws over it, and a stroke started here
+      // as well would leave a dot behind every menu.
+      if (e.button !== 0) return;
       const cr = contentRectRef.current;
       if (cr.w <= 0 || cr.h <= 0) return;
       const rect = e.currentTarget.getBoundingClientRect();
