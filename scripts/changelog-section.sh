@@ -2,6 +2,7 @@
 # Print the section CHANGELOG.md holds for one version, without its heading.
 #
 #   scripts/changelog-section.sh 0.4.0 [CHANGELOG.md]
+#   scripts/changelog-section.sh v0.4.0-beta.202
 #
 # The release job feeds the output to the GitHub release as its notes. A beta
 # (`0.4.0-beta.3`) reads the section of the version it is a beta of. A version
@@ -11,6 +12,7 @@ set -euo pipefail
 
 version="${1:?usage: changelog-section.sh <version> [changelog]}"
 changelog="${2:-CHANGELOG.md}"
+version="${version#v}"
 version="${version%%-*}"
 
 awk -v version="$version" '
