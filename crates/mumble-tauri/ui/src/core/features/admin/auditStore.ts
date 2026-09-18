@@ -57,6 +57,13 @@ interface AuditStoreState {
 
   /** The wire args of the most recent query (for pagination / re-subscribe). */
   lastArgs: AuditQueryArgs | null;
+  /**
+   * Correlation id of the chain verification in flight, if any. Verification
+   * rides the same query channel but carries no entries, so it is tracked
+   * apart from `lastArgs`: its empty response must report the chain status
+   * without replacing the result set.
+   */
+  verifyQueryId: string | null;
 
   // Appliers driven by the tab's event listeners.
   applyResponse: (res: AuditResponse) => void;
@@ -103,30 +110,32 @@ export const useAuditStore = create<AuditStoreState>((set, get) => ({
   configError: null,
   snapshots: {},
   lastArgs: null,
+  verifyQueryId: null,
 
   applyResponse: (res) => {
-    const { lastArgs } = get();
+    const { lastArgs, verifyQueryId } = get();
+
+    // A verification answer carries only the chain outcome; the entry list,
+    // its pagination cursor and the live tail stay exactly as they were.
+    if (verifyQueryId && res.queryId === verifyQueryId) {
+      set({
+        verifyQueryId: null,
+        chain: {
+          verifying: false,
+          ok: res.error ? false : (res.chainOk ?? false),
+          height: res.chainHeight,
+          error: res.error ?? res.chainError,
+        },
+      });
+      return;
+    }
+
     // Correlation: only the response to the most recent query may apply.
     if (!lastArgs || res.queryId !== lastArgs.queryId) return;
 
     set((prev) => {
-      const chain: ChainStatus =
-        res.chainOk != null || res.chainError != null
-          ? {
-              verifying: false,
-              ok: res.chainOk ?? false,
-              height: res.chainHeight,
-              error: res.chainError,
-            }
-          : { ...prev.chain, verifying: false };
-
       if (res.error) {
-        return {
-          loading: false,
-          loadingMore: false,
-          error: res.error,
-          chain,
-        };
+        return { loading: false, loadingMore: false, error: res.error };
       }
 
       const append = lastArgs.beforeId != null;
@@ -138,7 +147,6 @@ export const useAuditStore = create<AuditStoreState>((set, get) => ({
         loading: false,
         loadingMore: false,
         error: null,
-        chain,
       };
     });
   },
@@ -219,17 +227,18 @@ export const useAuditStore = create<AuditStoreState>((set, get) => ({
   },
 
   verifyChain: async () => {
-    set((prev) => ({ chain: { ...prev.chain, verifying: true } }));
     const stamped: AuditQueryArgs = {
       queryId: nextQueryId(),
       limit: 1,
       verifyChain: true,
     };
-    set({ lastArgs: stamped });
+    // Deliberately not `lastArgs`: verification must not become the query the
+    // next page or live-tail toggle is built from.
+    set((prev) => ({ chain: { ...prev.chain, verifying: true }, verifyQueryId: stamped.queryId ?? null }));
     try {
       await sendQuery(stamped);
     } catch (e) {
-      set({ chain: { verifying: false, ok: false, error: String(e) } });
+      set({ verifyQueryId: null, chain: { verifying: false, ok: false, error: String(e) } });
     }
   },
 
@@ -275,5 +284,6 @@ export const useAuditStore = create<AuditStoreState>((set, get) => ({
       configError: null,
       snapshots: {},
       lastArgs: null,
+      verifyQueryId: null,
     }),
 }));

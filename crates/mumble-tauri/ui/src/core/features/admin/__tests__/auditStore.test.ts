@@ -130,6 +130,58 @@ describe("applyResponse", () => {
     });
     expect(useAuditStore.getState().chain).toMatchObject({ verifying: false, ok: true, height: 1234 });
   });
+
+  it("keeps the result set and the pagination cursor across a verification", async () => {
+    await useAuditStore.getState().runQuery({});
+    const queryArgs = lastSentArgs();
+    useAuditStore.getState().applyResponse({
+      queryId: queryArgs.queryId,
+      entries: [entry(5), entry(4)],
+      hasMore: true,
+      nextBeforeId: 4,
+    });
+
+    await useAuditStore.getState().verifyChain();
+    // The verification answer carries no entries at all.
+    useAuditStore.getState().applyResponse({
+      queryId: lastSentArgs().queryId,
+      entries: [],
+      hasMore: false,
+      chainOk: true,
+      chainHeight: 2,
+    });
+
+    const s = useAuditStore.getState();
+    expect(s.entries.map((e) => e.id)).toEqual([5, 4]);
+    expect(s.hasMore).toBe(true);
+    expect(s.nextBeforeId).toBe(4);
+    expect(s.chain).toMatchObject({ verifying: false, ok: true, height: 2 });
+
+    // ...and the next page is still built from the real query, not the verify.
+    await useAuditStore.getState().loadMore();
+    const pageArgs = lastSentArgs();
+    expect(pageArgs.beforeId).toBe(4);
+    expect(pageArgs.verifyChain).toBeUndefined();
+  });
+
+  it("leaves the chain status alone when an ordinary query answers", async () => {
+    await useAuditStore.getState().verifyChain();
+    useAuditStore.getState().applyResponse({
+      queryId: lastSentArgs().queryId,
+      entries: [],
+      hasMore: false,
+      chainOk: true,
+      chainHeight: 9,
+    });
+
+    await useAuditStore.getState().runQuery({});
+    useAuditStore.getState().applyResponse({
+      queryId: lastSentArgs().queryId,
+      entries: [entry(1)],
+      hasMore: false,
+    });
+    expect(useAuditStore.getState().chain).toMatchObject({ verifying: false, ok: true, height: 9 });
+  });
 });
 
 describe("applyEvent (live tail)", () => {
