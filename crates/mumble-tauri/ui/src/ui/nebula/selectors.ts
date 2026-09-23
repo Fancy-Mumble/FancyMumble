@@ -13,6 +13,7 @@ import { bodyToHtml } from "@standard/components/chat/markdown/bodyHtml";
 import { hslToHex } from "@core/utils/colorUtils";
 import { formatTimestamp } from "@core/utils/format";
 import { imageSizeFromSource } from "@core/utils/imageSize";
+import { isLocalMediaSrc, replaceWithLink } from "@core/utils/remoteMedia";
 import { bodyToPlainText } from "@core/features/chat/bodyText";
 import { hueFromKey } from "@shared/profilecard/tint";
 import { primaryRoles } from "@core/features/roster/roles";
@@ -591,6 +592,10 @@ export interface BodyImage {
  *
  * The `src` is handed over exactly as written - the lightbox's gallery is
  * indexed by that string, not by the URL a browser would resolve it to.
+ *
+ * Only pictures the message carries inline are lifted. A remote one would be
+ * fetched the moment it is drawn, telling its host who read the message and
+ * when, so it stays in the text as a link to it instead (see remoteMedia.ts).
  */
 export function splitBodyImages(html: string): { html: string; images: BodyImage[] } {
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -602,6 +607,10 @@ export function splitBodyImages(html: string): { html: string; images: BodyImage
   const images: BodyImage[] = [];
   for (const image of found) {
     const src = image.getAttribute("src") ?? "";
+    if (src && !isLocalMediaSrc(src)) {
+      replaceWithLink(image, src, image.getAttribute("alt") ?? "");
+      continue;
+    }
     // A picture with no source is nothing to show and nothing to enlarge, but
     // it is still markup: drop it rather than leaving a broken tile behind.
     if (src) {

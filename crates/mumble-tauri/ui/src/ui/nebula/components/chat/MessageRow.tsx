@@ -15,6 +15,7 @@ import { decodeFileAttachmentPayload } from "@core/features/chat/fileAttachments
 import { useLinkPreviews } from "@core/features/chat/useLinkPreviews";
 import { getPoll } from "@core/features/chat/poll/model";
 import { useWatchStart } from "@core/features/chat/watch/useWatchStart";
+import { neutraliseRemoteMedia } from "@core/utils/remoteMedia";
 import { readWatchMarker } from "@core/features/chat/watch/watchMarker";
 import { MENTION_CHIP_SELECTOR, readMentionChip } from "@core/utils/mentions";
 import { useInnerHtml } from "@core/utils/innerHtml";
@@ -107,6 +108,10 @@ function sanitizeBody(html: string): string {
     ADD_ATTR: ["target", "rel"],
     RETURN_DOM_FRAGMENT: true,
   }) as unknown as DocumentFragment;
+  // Clips, posters and inline-style images the splitter did not lift: none of
+  // them may fetch on their own. Before the anchor pass, which marks the links
+  // this leaves behind like every other one.
+  neutraliseRemoteMedia(fragment);
 
   for (const anchor of Array.from(fragment.querySelectorAll("a"))) {
     if (!SAFE_URL_RE.test((anchor.getAttribute("href") ?? "").trim())) {

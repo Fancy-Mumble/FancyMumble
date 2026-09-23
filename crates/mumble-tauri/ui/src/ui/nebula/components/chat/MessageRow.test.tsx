@@ -230,7 +230,7 @@ describe("MessageRow", () => {
     const { container } = draw(
       message({
         message_id: "picture-only",
-        body: '<p><img src="https://files.example/dusk.png" alt="dusk"><br></p><!-- FANCY_GALLERY:g1:0:2 -->',
+        body: '<p><img src="dusk.png" alt="dusk"><br></p><!-- FANCY_GALLERY:g1:0:2 -->',
       }),
     );
 
@@ -366,10 +366,10 @@ describe("MessageRow", () => {
 
   it("opens the lightbox on an image in the body", () => {
     const onOpenImage = vi.fn();
-    draw(message({ body: '<img src="https://example/cat.png" alt="cat">' }), { onOpenImage });
+    draw(message({ body: '<img src="cat.png" alt="cat">' }), { onOpenImage });
 
     fireEvent.click(screen.getByAltText("cat"));
-    expect(onOpenImage).toHaveBeenCalledWith("https://example/cat.png");
+    expect(onOpenImage).toHaveBeenCalledWith("cat.png");
   });
 
   it("groups the pictures of one message into a single block", () => {
@@ -392,13 +392,13 @@ describe("MessageRow", () => {
 
   it("hands the lightbox the src as written, not as the browser resolved it", () => {
     // The gallery is indexed by the attribute, so a src the DOM normalises -
-    // here a bare host, which comes back with a slash on the end - has to be
+    // here a relative one, which comes back as an absolute URL - has to be
     // reported the way it was sent or the lookup misses and nothing opens.
     const onOpenImage = vi.fn();
-    draw(message({ body: '<img src="https://example" alt="cat">' }), { onOpenImage });
+    draw(message({ body: '<img src="files/cat.png" alt="cat">' }), { onOpenImage });
 
     fireEvent.click(screen.getByAltText("cat"));
-    expect(onOpenImage).toHaveBeenCalledWith("https://example");
+    expect(onOpenImage).toHaveBeenCalledWith("files/cat.png");
   });
 
   it("offers editing on your own text and sends the re-encoded body", () => {

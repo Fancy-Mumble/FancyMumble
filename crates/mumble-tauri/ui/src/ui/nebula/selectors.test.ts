@@ -974,23 +974,35 @@ describe("reorderIdentities", () => {
 
 describe("splitBodyImages", () => {
   it("lifts the pictures out and leaves the prose behind", () => {
+    const a = "data:image/jpeg;base64,AAAA";
+    const b = "data:image/jpeg;base64,BBBB";
     const { html, images } = splitBodyImages(
-      '<p>the ferry ones</p><img src="a.jpg" alt="ferry"><img src="b.jpg" alt="skyline">',
+      `<p>the ferry ones</p><img src="${a}" alt="ferry"><img src="${b}" alt="skyline">`,
     );
 
     expect(html).toBe("<p>the ferry ones</p>");
     expect(images).toEqual([
-      { src: "a.jpg", alt: "ferry" },
-      { src: "b.jpg", alt: "skyline" },
+      { src: a, alt: "ferry" },
+      { src: b, alt: "skyline" },
     ]);
   });
 
   it("hands back the src exactly as written", () => {
-    // The lightbox's gallery is keyed by the attribute, not by the absolute
-    // URL a browser resolves it to - a bare host comes back with a slash.
-    const { images } = splitBodyImages('<img src="https://example.com">');
+    // The lightbox's gallery is keyed by the attribute, not by the URL a
+    // browser would resolve it to.
+    const { images } = splitBodyImages('<img src=" blob:https://tauri.localhost/1234">');
 
-    expect(images[0]?.src).toBe("https://example.com");
+    expect(images[0]?.src).toBe(" blob:https://tauri.localhost/1234");
+  });
+
+  it("never lifts a remote picture, and leaves a link to it in the text", () => {
+    // Drawing it would fetch it, and tell its host who read the message.
+    const { html, images } = splitBodyImages('<p>look</p><img src="https://t.example/p.gif" alt="GIF">');
+
+    expect(images).toEqual([]);
+    const link = new DOMParser().parseFromString(html, "text/html").querySelector("a");
+    expect(link?.getAttribute("href")).toBe("https://t.example/p.gif");
+    expect(link?.dataset["external"]).toBe("true");
   });
 
   it("leaves a body with no pictures untouched", () => {
