@@ -12,6 +12,7 @@
 import type { ReactNode } from "react";
 import { Box, Typography } from "@mui/material";
 import { NEBULA_MONO, radius } from "../../tokens";
+import { HANDHELD_QUERY } from "../../useIsHandheld";
 import { SectionLabel } from "./SectionLabel";
 import { Stack } from "./Stack";
 
@@ -31,6 +32,12 @@ export function bannerTextShadow(ground: string): string {
  * its cards flow into two columns, rather than one tall stack that scrolls.
  */
 const WIDE_SHEET = "@media (min-width: 1000px)";
+
+/**
+ * Where a sheet has no room for two cards abreast. A phone's dialog is about
+ * 330px inside, and halving that broke "Unlimited" into "Unlimi-ted".
+ */
+const NARROW_SHEET = `@media ${HANDHELD_QUERY}`;
 
 /** Where a card sits in the wide layout: whole, one under the next. */
 const COLUMN_ITEM = { breakInside: "avoid", marginBottom: "12px" };
@@ -108,6 +115,7 @@ export const infoSheetPair = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr",
   gap: "12px",
+  [NARROW_SHEET]: { gridTemplateColumns: "1fr" },
   [WIDE_SHEET]: { display: "contents", "& > *": COLUMN_ITEM },
 };
 

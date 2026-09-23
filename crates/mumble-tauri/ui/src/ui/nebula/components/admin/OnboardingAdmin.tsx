@@ -467,7 +467,7 @@ export function OnboardingAdmin() {
  * hands it the room and the rail pads itself.
  */
 function Reading({ children }: Readonly<{ children: ReactNode }>) {
-  return <Box sx={{ px: "52px", py: "38px" }}>{children}</Box>;
+  return <Box sx={{ px: { xs: "16px", sm: "52px" }, py: { xs: "20px", sm: "38px" } }}>{children}</Box>;
 }
 
 type StepTone = "start" | "open" | "idle" | "add";

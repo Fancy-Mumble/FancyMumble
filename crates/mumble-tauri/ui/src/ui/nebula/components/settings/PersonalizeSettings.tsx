@@ -559,7 +559,10 @@ export function PersonalizeSettings() {
               sx={(muiTheme) => ({
                 all: "unset",
                 cursor: "pointer",
-                width: 118,
+                // Two to a row on a phone, sharing it evenly: at a fixed 118px
+                // the pair left a quarter of a 380px page standing empty.
+                boxSizing: { xs: "border-box", sm: "content-box" },
+                width: { xs: "calc(50% - 4.5px)", sm: 118 },
                 p: "7px",
                 borderRadius: radius("md"),
                 background: active ? muiTheme.palette.nebula.accentSoft : muiTheme.palette.nebula.card,

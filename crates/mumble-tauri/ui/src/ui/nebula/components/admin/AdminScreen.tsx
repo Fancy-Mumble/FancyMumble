@@ -168,8 +168,8 @@ export function AdminScreen({
         // its own bars: a margin here would frame the canvas in a lighter
         // panel, which is the one thing a full-bleed surface must not do.
         // The reading pages keep the wide margin that makes prose legible.
-        px: fullBleed ? 0 : "52px",
-        py: fullBleed ? 0 : "38px",
+        px: fullBleed ? 0 : { xs: "16px", sm: "52px" },
+        py: fullBleed ? 0 : { xs: "20px", sm: "38px" },
         // A canvas page starts at the window's top edge, and on a skin with no
         // title strip that is exactly where the floating window controls sit:
         // the plate covered the editor's Undo, Redo and Reset outright, and the

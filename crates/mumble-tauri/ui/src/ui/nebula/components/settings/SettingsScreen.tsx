@@ -166,7 +166,18 @@ export function SettingsScreen({
   }, [highlight, page, theme]);
 
   return (
-    <Box ref={scrollRef} sx={{ flex: 1, minHeight: 0, overflowY: "auto", px: "52px", py: "38px" }}>
+    <Box
+      ref={scrollRef}
+      // A window's page inset; on a phone it left a 308px column for forms
+      // drawn 340px wide, so they ran into the right-hand margin.
+      sx={{
+        flex: 1,
+        minHeight: 0,
+        overflowY: "auto",
+        px: { xs: "16px", sm: "52px" },
+        py: { xs: "20px", sm: "38px" },
+      }}
+    >
       <Suspense fallback={null}>
         {page === "profile" && (
           <ProfileSettings
