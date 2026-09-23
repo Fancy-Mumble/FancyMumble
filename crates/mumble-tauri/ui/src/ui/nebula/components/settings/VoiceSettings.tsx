@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { Box, Button, MenuItem, TextField, Typography } from "@mui/material";
 import { useAppStore } from "@core/store";
 import { getSavedAudioSettings, saveAudioSettings } from "@core/preferencesStorage";
-import { isWindows } from "@core/utils/platform";
+import { isMobile, isWindows } from "@core/utils/platform";
 import {
   NOISE_SUPPRESSION_LABELS,
   type AudioDevice,
@@ -310,11 +310,16 @@ export function VoiceSettings() {
       <GroupTitle>{t("nebulaSettings:voice.activationMode")}</GroupTitle>
       <ChoiceCards
         ariaLabel={t("nebulaSettings:voice.activationMode")}
-        options={ACTIVATION.map((option) => ({
-          id: option.id,
-          label: t(option.labelKey),
-          hint: t(option.hintKey),
-        }))}
+        // Push to talk is held on a global hotkey, and a phone has none: offered
+        // there, it was a mode that could never transmit. Still listed while it
+        // is the one in force, so a profile carried over can be moved off it.
+        options={ACTIVATION.filter((option) => option.id !== "ptt" || !isMobile || activation === "ptt").map(
+          (option) => ({
+            id: option.id,
+            label: t(option.labelKey),
+            hint: t(option.hintKey),
+          }),
+        )}
         value={activation}
         onChange={setActivation}
       />

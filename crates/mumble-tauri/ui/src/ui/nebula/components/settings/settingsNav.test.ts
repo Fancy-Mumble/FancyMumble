@@ -5,6 +5,7 @@ const NOTHING: SettingsNavContext = {
   accountSupported: false,
   onboardingSupported: false,
   hasPlugins: false,
+  desktop: true,
 };
 
 const ids = (context: SettingsNavContext) => visibleSettingsPages(context).map((entry) => entry.id);
@@ -37,6 +38,11 @@ describe("visibleSettingsPages", () => {
     expect(ids({ ...NOTHING, onboardingSupported: true })).toContain("channels-roles");
   });
 
+  it("hides the hotkeys and the game overlay on a phone, which has neither", () => {
+    expect(ids({ ...NOTHING, desktop: false })).not.toContain("shortcuts");
+    expect(ids({ ...NOTHING, desktop: false })).not.toContain("overlay");
+  });
+
   it("hides Plugins when the server advertises none", () => {
     expect(ids(NOTHING)).not.toContain("plugins");
     expect(ids({ ...NOTHING, hasPlugins: true })).toContain("plugins");
@@ -48,7 +54,8 @@ describe("visibleSettingsPages", () => {
     for (const context of [
       NOTHING,
       { ...NOTHING, accountSupported: true },
-      { accountSupported: true, onboardingSupported: true, hasPlugins: true },
+      { accountSupported: true, onboardingSupported: true, hasPlugins: true, desktop: true },
+      { ...NOTHING, desktop: false },
     ]) {
       const visible = ids(context);
       expect(visible[0]).toBe("profile");
@@ -58,6 +65,6 @@ describe("visibleSettingsPages", () => {
 
   it("gates every page through `available`, so none can be shown by accident", () => {
     const gated = SETTINGS_NAV.filter((entry) => entry.available !== undefined).map((e) => e.id);
-    expect(gated).toEqual(["account", "channels-roles", "plugins"]);
+    expect(gated).toEqual(["account", "shortcuts", "overlay", "channels-roles", "plugins"]);
   });
 });

@@ -47,7 +47,8 @@ interface ChatHeaderProps {
   onJoinVoice: () => void;
   onToggleSearch: () => void;
   onShowMembers: () => void;
-  onShareScreen: () => void;
+  /** Absent where this device cannot broadcast at all - Android, today. */
+  onShareScreen?: () => void;
   /** Why a share cannot start from here, or null when it can. */
   shareBlockedReason?: string | null;
   /** How a share from here reaches viewers, said under the entry. */
@@ -446,32 +447,34 @@ export function ChatHeader({
             peer-to-peer costs the sharer an upload per viewer. Disabled rather
             than hidden while another server holds the capture, so the reason
             is on screen where the share was looked for. */}
-        <MenuItem
-          onClick={run(onShareScreen)}
-          disabled={!!shareBlockedReason}
-          aria-label={t("chat:header.shareScreen")}
-          aria-describedby={shareHint ? shareHintId : undefined}
-          sx={shareHint ? { alignItems: "flex-start" } : undefined}
-        >
-          <MonitorIcon width={13} height={13} />
-          <Stack gap="1px" sx={{ minWidth: 0 }}>
-            {t("chat:header.shareScreen")}
-            {shareHint && (
-              <Typography
-                id={shareHintId}
-                sx={(theme) => ({
-                  fontSize: 11,
-                  lineHeight: 1.35,
-                  maxWidth: 240,
-                  whiteSpace: "normal",
-                  color: theme.palette.nebula.muted,
-                })}
-              >
-                {shareHint}
-              </Typography>
-            )}
-          </Stack>
-        </MenuItem>
+        {onShareScreen && (
+          <MenuItem
+            onClick={run(onShareScreen)}
+            disabled={!!shareBlockedReason}
+            aria-label={t("chat:header.shareScreen")}
+            aria-describedby={shareHint ? shareHintId : undefined}
+            sx={shareHint ? { alignItems: "flex-start" } : undefined}
+          >
+            <MonitorIcon width={13} height={13} />
+            <Stack gap="1px" sx={{ minWidth: 0 }}>
+              {t("chat:header.shareScreen")}
+              {shareHint && (
+                <Typography
+                  id={shareHintId}
+                  sx={(theme) => ({
+                    fontSize: 11,
+                    lineHeight: 1.35,
+                    maxWidth: 240,
+                    whiteSpace: "normal",
+                    color: theme.palette.nebula.muted,
+                  })}
+                >
+                  {shareHint}
+                </Typography>
+              )}
+            </Stack>
+          </MenuItem>
+        )}
         {onShowChannelInfo && (
           <MenuItem onClick={run(onShowChannelInfo)}>
             <HashIcon width={13} height={13} />

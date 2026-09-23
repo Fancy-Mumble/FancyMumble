@@ -15,7 +15,9 @@
     "markRead": "Mark read",
     "new": "New",
     "hint": "Click a pin to jump · right-click a message to pin it",
+    "hintTouch": "Tap a pin to jump · long-press a message to pin it",
     "emptyHint": "Right-click any message and choose Pin to keep it here.",
+    "emptyHintTouch": "Long-press any message and choose Pin to keep it here.",
     "poll": "Poll",
     "attachment": "Attachment",
     "age": {

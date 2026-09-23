@@ -62,6 +62,7 @@ describe("searchSettings", () => {
       accountSupported: false,
       onboardingSupported: false,
       hasPlugins: false,
+      desktop: true,
     }).map((entry) => ({ id: entry.id, label: entry.labelKey }));
 
     expect(pageIds("2fa", visible)).toEqual([]);

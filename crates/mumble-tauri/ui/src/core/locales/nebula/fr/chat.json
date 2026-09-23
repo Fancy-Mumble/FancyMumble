@@ -15,7 +15,9 @@
     "markRead": "Tout marquer comme lu",
     "new": "Nouveau",
     "hint": "Cliquez sur une épingle pour y aller · clic droit sur un message pour l'épingler",
+    "hintTouch": "Touchez une épingle pour y aller · appui long sur un message pour l'épingler",
     "emptyHint": "Faites un clic droit sur un message et choisissez Épingler.",
+    "emptyHintTouch": "Appuyez longuement sur un message et choisissez Épingler.",
     "poll": "Sondage",
     "attachment": "Pièce jointe",
     "age": {

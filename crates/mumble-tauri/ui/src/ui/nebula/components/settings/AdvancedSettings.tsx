@@ -3,6 +3,7 @@ import { Box, Button, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { load } from "@core/utils/store";
+import { isMobile } from "@core/utils/platform";
 import type { UserMode } from "@core/types";
 // Which viewer family receives screen shares is a platform question, not a
 // design one, and the control hides itself where the choice does not exist.
@@ -138,35 +139,41 @@ export function AdvancedSettings() {
 
       {isExpert && (
         <>
-          <ToggleRow
-            title={t("advanced.uiMode")}
-            hint={t("advanced.uiModeHint")}
-            checked={minimalUi}
-            onChange={() => {
-              if (!minimalUi) return setConfirmingMinimal(true);
-              // Turning minimal *off* while the full app is running only has to
-              // correct the marker - there is nothing to relaunch into.
-              void invoke("set_ui_mode", { mode: "full" })
-                .then(() => setMinimalUi(false))
-                .catch(() => undefined);
-            }}
-          >
-            {confirmingMinimal && (
-              <Banner tone="warn">
-                {t("advanced.uiModeConfirmText")}
-                <Stack direction="row" gap={0.75} sx={{ mt: "9px" }}>
-                  <Button size="small" variant="outlined" onClick={() => void switchToMinimal()}>
-                    {t("advanced.uiModeConfirmBtn")}
-                  </Button>
-                  <Button size="small" onClick={() => setConfirmingMinimal(false)}>
-                    {t("common:actions.cancel")}
-                  </Button>
-                </Stack>
-              </Banner>
-            )}
-          </ToggleRow>
+          {/* The minimal client is a desktop Qt binary; Android has none to
+              restart into, so the switch could only fail there. */}
+          {!isMobile && (
+            <>
+              <ToggleRow
+                title={t("advanced.uiMode")}
+                hint={t("advanced.uiModeHint")}
+                checked={minimalUi}
+                onChange={() => {
+                  if (!minimalUi) return setConfirmingMinimal(true);
+                  // Turning minimal *off* while the full app is running only has to
+                  // correct the marker - there is nothing to relaunch into.
+                  void invoke("set_ui_mode", { mode: "full" })
+                    .then(() => setMinimalUi(false))
+                    .catch(() => undefined);
+                }}
+              >
+                {confirmingMinimal && (
+                  <Banner tone="warn">
+                    {t("advanced.uiModeConfirmText")}
+                    <Stack direction="row" gap={0.75} sx={{ mt: "9px" }}>
+                      <Button size="small" variant="outlined" onClick={() => void switchToMinimal()}>
+                        {t("advanced.uiModeConfirmBtn")}
+                      </Button>
+                      <Button size="small" onClick={() => setConfirmingMinimal(false)}>
+                        {t("common:actions.cancel")}
+                      </Button>
+                    </Stack>
+                  </Banner>
+                )}
+              </ToggleRow>
 
-          <GroupRule />
+              <GroupRule />
+            </>
+          )}
 
           <TextRow
             label={t("advanced.klipyApiKey")}
@@ -255,19 +262,22 @@ export function AdvancedSettings() {
             }
           />
 
-          <ActionRow
-            title={t("advanced.translationHelper")}
-            hint={t("advanced.translationHelperHint")}
-            action={
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => void invoke("open_translation_popout").catch(() => undefined)}
-              >
-                {t("advanced.translationHelperOpen")}
-              </Button>
-            }
-          />
+          {/* A popout window, which Android does not have. */}
+          {!isMobile && (
+            <ActionRow
+              title={t("advanced.translationHelper")}
+              hint={t("advanced.translationHelperHint")}
+              action={
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => void invoke("open_translation_popout").catch(() => undefined)}
+                >
+                  {t("advanced.translationHelperOpen")}
+                </Button>
+              }
+            />
+          )}
         </>
       )}
 
@@ -279,18 +289,24 @@ export function AdvancedSettings() {
         checked={prefs.autoReconnect}
         onChange={() => toggle("autoReconnect")}
       />
-      <ToggleRow
-        title={t("advanced.autoUpdate")}
-        hint={t("advanced.autoUpdateHint")}
-        checked={prefs.autoUpdateOnStartup}
-        onChange={() => toggle("autoUpdateOnStartup")}
-      />
-      <ToggleRow
-        title={t("advanced.betaUpdates")}
-        hint={t("advanced.betaUpdatesHint")}
-        checked={prefs.betaUpdates}
-        onChange={() => toggle("betaUpdates")}
-      />
+      {/* The updater ships with the desktop builds only; an APK is updated
+          by whatever installed it. */}
+      {!isMobile && (
+        <>
+          <ToggleRow
+            title={t("advanced.autoUpdate")}
+            hint={t("advanced.autoUpdateHint")}
+            checked={prefs.autoUpdateOnStartup}
+            onChange={() => toggle("autoUpdateOnStartup")}
+          />
+          <ToggleRow
+            title={t("advanced.betaUpdates")}
+            hint={t("advanced.betaUpdatesHint")}
+            checked={prefs.betaUpdates}
+            onChange={() => toggle("betaUpdates")}
+          />
+        </>
+      )}
       <ToggleRow
         title={t("advanced.persistDms")}
         hint={t("advanced.persistDmsHint")}

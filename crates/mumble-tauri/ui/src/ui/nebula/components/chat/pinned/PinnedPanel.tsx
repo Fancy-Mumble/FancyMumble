@@ -16,6 +16,7 @@ import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Box, Tooltip, Typography } from "@mui/material";
 import type { ChatMessage } from "@core/types";
+import { isMobile } from "@core/utils/platform";
 import { CloseIcon, PinIcon, PinOffIcon } from "@ui/icons";
 import { washPanel } from "../../../theme";
 import { NEBULA_MONO, radius } from "../../../tokens";
@@ -182,7 +183,7 @@ export function PinnedPanel({
           <Stack gap={0.5} sx={{ px: "18px", py: "26px", alignItems: "center", textAlign: "center" }}>
             <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{t("chat:pinned.empty")}</Typography>
             <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted })}>
-              {t("nebulaChat:pinned.emptyHint")}
+              {t(isMobile ? "nebulaChat:pinned.emptyHintTouch" : "nebulaChat:pinned.emptyHint")}
             </Typography>
           </Stack>
         ) : (
@@ -220,7 +221,7 @@ export function PinnedPanel({
             color: theme.palette.nebula.muted,
           })}
         >
-          {t("nebulaChat:pinned.hint")}
+          {t(isMobile ? "nebulaChat:pinned.hintTouch" : "nebulaChat:pinned.hint")}
         </Stack>
       </Box>
     </>

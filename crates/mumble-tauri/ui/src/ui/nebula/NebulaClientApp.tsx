@@ -22,6 +22,7 @@ import { meetingRooms } from "@core/utils/channelVisibility";
 import { isE2E } from "@core/utils/e2e";
 import { TID } from "@core/testids";
 import { PERM_WRITE } from "@core/utils/permissions";
+import { isMobile } from "@core/utils/platform";
 import { applyMentionsToHtml, type MentionResolver } from "@core/utils/mentions";
 import { isSpentWatchMarker } from "@core/features/chat/watch/watchMarker";
 import type {
@@ -222,6 +223,14 @@ import type {
  * drawn underneath Android's clock. `dvh` is the unit that follows them, and
  * `vh` stays as the answer for a webview too old to know it.
  */
+/**
+ * Whether this build can send a screen or a camera. The capture commands are
+ * registered on desktop only (`commands/registry.rs`); Android can watch a
+ * share and has nothing to start one with, so every entry that would open the
+ * picker is left out there rather than opening one that lists nothing.
+ */
+const canBroadcast = !isMobile;
+
 const WINDOW_HEIGHT = {
   height: "100vh",
   "@supports (height: 100dvh)": { height: "100dvh" },
@@ -1616,7 +1625,9 @@ export default function NebulaClientApp() {
     onJoinVoice: () => activeChannel && enterChannel(activeChannel.id),
     onToggleSearch: () => search.setChatOpen(!search.chatOpen),
     onShowMembers: () => memberPanel.setOpen(true),
-    onShareScreen: () => setSurface("screen-share"),
+    // Broadcasting is compiled into desktop builds only; a phone can watch a
+    // share but has nothing to send one from, so it is not offered one.
+    onShareScreen: canBroadcast ? () => setSurface("screen-share") : undefined,
     shareBlockedReason: shareAvailability.elsewhere ? t("chat:screenShare.alreadySharingOtherServer") : null,
     shareRoute: shareAvailability.relayed ? t("nebulaChat:share.routeRelayed") : t("nebulaChat:share.routeP2P"),
     onShowPinned: openPinned,
@@ -1849,8 +1860,8 @@ export default function NebulaClientApp() {
     /* Both need a channel to broadcast into; the strip that
      answers them lives on the chat screen, which is the only
      screen this dock is drawn on. */
-    onShareScreen: currentChannel !== null ? () => setSurface("screen-share") : undefined,
-    onShareCamera: currentChannel !== null ? () => setSurface("camera-share") : undefined,
+    onShareScreen: canBroadcast && currentChannel !== null ? () => setSurface("screen-share") : undefined,
+    onShareCamera: canBroadcast && currentChannel !== null ? () => setSurface("camera-share") : undefined,
     onRecord: canRecord || recording.state.is_recording ? () => setRecordingOpen(true) : undefined,
     recordingElapsed: recording.state.is_recording ? recording.state.elapsed_secs : null,
   };
@@ -2239,7 +2250,7 @@ export default function NebulaClientApp() {
               : useAppStore.getState().toggleMute()),
           onToggleDeafen: () => void useAppStore.getState().toggleDeafen(),
           onLeave: () => enterChannel(0),
-          onShareScreen: () => setSurface("screen-share"),
+          onShareScreen: canBroadcast ? () => setSurface("screen-share") : undefined,
         }
       : null,
     serverStrip: serverRail,

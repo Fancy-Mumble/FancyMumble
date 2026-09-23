@@ -15,7 +15,9 @@
     "markRead": "Als gelesen markieren",
     "new": "Neu",
     "hint": "Zum Springen anklicken · Nachricht rechtsklicken zum Anheften",
+    "hintTouch": "Zum Springen antippen · Nachricht lange drücken zum Anheften",
     "emptyHint": "Rechtsklick auf eine Nachricht und „Anheften“ wählen.",
+    "emptyHintTouch": "Eine Nachricht lange drücken und „Anheften“ wählen.",
     "poll": "Umfrage",
     "attachment": "Anhang",
     "age": {

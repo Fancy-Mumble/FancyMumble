@@ -4,6 +4,7 @@ import { Box } from "@mui/material";
 import { useAppStore } from "@core/store";
 import { isAccountSettingsSupported } from "@core/features/settings/accountStore";
 import { isOnboardingSupported } from "@core/features/onboarding/onboardingStore";
+import { isMobile } from "@core/utils/platform";
 import { SectionLabel, Stack } from "../primitives";
 import { radius } from "../../tokens";
 import { TAB_ID_ATTR } from "@core/testids";
@@ -69,6 +70,11 @@ export interface SettingsNavContext {
   onboardingSupported: boolean;
   /** The active server advertises at least one plugin. */
   hasPlugins: boolean;
+  /**
+   * A desktop build: global hotkeys and a window drawn over other apps exist.
+   * Android has neither, so a page configuring them would configure nothing.
+   */
+  desktop: boolean;
 }
 
 /**
@@ -89,9 +95,9 @@ export const SETTINGS_NAV: readonly NavEntry[] = [
   // Standard titles these two; Nebula writes them in sentence case like the
   // rest of its chrome, so they keep keys of their own.
   { id: "localization", labelKey: "nebulaSettings:nav.localization" },
-  { id: "shortcuts", labelKey: "settings:tabs.shortcuts" },
+  { id: "shortcuts", labelKey: "settings:tabs.shortcuts", available: (context) => context.desktop },
   // Desktop-only, and Nebula names it itself - Standard has no such page.
-  { id: "overlay", labelKey: "nebulaSettings:nav.overlay" },
+  { id: "overlay", labelKey: "nebulaSettings:nav.overlay", available: (context) => context.desktop },
   { id: "identities", labelKey: "settings:tabs.identities" },
   {
     id: "channels-roles",
@@ -125,6 +131,7 @@ export function useSettingsNavContext(): SettingsNavContext {
         connected && ownUserId != null && ownUserId > 0 && isAccountSettingsSupported(serverFancyVersion),
       onboardingSupported: isOnboardingSupported(serverFancyVersion),
       hasPlugins,
+      desktop: !isMobile,
     }),
     [connected, hasPlugins, ownUserId, serverFancyVersion],
   );
