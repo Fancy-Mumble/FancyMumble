@@ -563,6 +563,19 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
                 .encode_to_vec(),
             ));
         }
+        // Same reasoning: an old server drops the question unanswered, and the
+        // caller's timeout is what reads that as "no server GIFs".
+        ControlMessage::FancyGifSupportQuery(query) => {
+            return Some((
+                GIFS,
+                fancy::media::GifsEnvelope {
+                    body: Some(fancy::media::gifs_envelope::Body::SupportQuery(
+                        query.clone(),
+                    )),
+                }
+                .encode_to_vec(),
+            ));
+        }
         // The plugin envelope, which is the whole of what a plugin says to
         // its server half or to a peer. Epoch 0 sent it flat at type 200 and
         // the canon nests the same fields in the plugins service, so this is
@@ -1332,9 +1345,16 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 Some(fancy::media::gifs_envelope::Body::Refused(refused)) => {
                     Some(ControlMessage::FancyGifRefused(refused))
                 }
-                // The request arm. A server sending one is either confused or
+                Some(fancy::media::gifs_envelope::Body::Support(support)) => {
+                    Some(ControlMessage::FancyGifSupport(support))
+                }
+                // The request arms. A server sending one is either confused or
                 // newer than this client; either way nothing here handles it.
-                Some(fancy::media::gifs_envelope::Body::Query(_)) | None => None,
+                Some(
+                    fancy::media::gifs_envelope::Body::Query(_)
+                    | fancy::media::gifs_envelope::Body::SupportQuery(_),
+                )
+                | None => None,
             })
         }
         FILES => {
@@ -3504,6 +3524,48 @@ mod tests {
             panic!("a ProfileSnapshot must become a FancyAuditSnapshot");
         };
         assert_eq!(back, kept);
+    }
+
+    #[test]
+    fn a_gif_support_question_and_its_answer_cross_the_canon_unchanged() {
+        let ask = fancy::media::GifSupportQuery {
+            request_id: "g-1".to_owned(),
+        };
+        let (outer, payload) = to_canon(&ControlMessage::FancyGifSupportQuery(ask.clone()))
+            .expect("a support question has a canon home");
+        assert_eq!(outer, GIFS);
+        let envelope = fancy::media::GifsEnvelope::decode(payload.as_slice()).expect("decodes");
+        assert_eq!(
+            envelope.body,
+            Some(fancy::media::gifs_envelope::Body::SupportQuery(ask.clone()))
+        );
+
+        let support = fancy::media::GifSupport {
+            request_id: "g-1".to_owned(),
+            available: true,
+            media_base: "https://chat.example.org/gif?".to_owned(),
+            provider: "klipy".to_owned(),
+        };
+        let reply = fancy::media::GifsEnvelope {
+            body: Some(fancy::media::gifs_envelope::Body::Support(support.clone())),
+        };
+        let decoded = from_canon(GIFS, &reply.encode_to_vec())
+            .expect("decodable")
+            .expect("an answer is translated");
+        let ControlMessage::FancyGifSupport(back) = decoded else {
+            panic!("a GifSupport must become a FancyGifSupport");
+        };
+        assert_eq!(back, support);
+
+        // The question coming the other way is nothing this client answers.
+        let echoed = fancy::media::GifsEnvelope {
+            body: Some(fancy::media::gifs_envelope::Body::SupportQuery(ask)),
+        };
+        assert!(
+            from_canon(GIFS, &echoed.encode_to_vec())
+                .expect("decodable")
+                .is_none()
+        );
     }
 
     #[test]

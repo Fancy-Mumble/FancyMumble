@@ -288,6 +288,12 @@ pub enum TcpMessageType {
     FancyAuditSnapshotQuery = 202,
     /// Fancy Mumble: the kept avatar or comment.
     FancyAuditSnapshot = 203,
+    /// Fancy Mumble: client asks whether this server searches GIFs, and where
+    /// its proxied media lives. Local tags like the three above; the canon
+    /// carries both inside outer type 1018.
+    FancyGifSupportQuery = 204,
+    /// Fancy Mumble: the answer to that.
+    FancyGifSupport = 205,
 }
 
 /// Generates both `TryFrom<u16> for TcpMessageType` and
@@ -626,6 +632,14 @@ pub enum ControlMessage {
     /// user's own is right. Falling back on `THROTTLED` would route around the
     /// server's rate limit using the user's own quota.
     FancyGifRefused(fancy::media::GifRefused),
+    /// Fancy: ask what this server's GIF service can do, once per connection.
+    ///
+    /// A server that predates the question drops it without answering, so the
+    /// silence is the answer there; the caller times out rather than waits.
+    FancyGifSupportQuery(fancy::media::GifSupportQuery),
+    /// Fancy: whether searches would be served, and the prefix the server's
+    /// proxied media URLs start with (empty when the proxy is off).
+    FancyGifSupport(fancy::media::GifSupport),
     /// Fancy: generic plugin envelope (bidirectional).
     PluginMessage(mumble_tcp::PluginMessage),
     /// Fancy: server enumerates loaded plugins.
@@ -678,6 +692,7 @@ message_type_mapping! {
     FancyTypingIndicator,
     FancyLinkPreviewRequest, FancyLinkPreviewResponse,
     FancyGifQuery, FancyGifPage, FancyGifRefused,
+    FancyGifSupportQuery, FancyGifSupport,
     FancyAccountRecordGet, FancyAccountRecordPut, FancyAccountRecordList,
     FancyAccountRecord, FancyAccountRecordKeys,
     FancyEmoteUpload, FancyEmoteForget, FancyEmoteQuery, FancyEmotes,
@@ -866,11 +881,11 @@ mod tests {
         assert!(TcpMessageType::try_from(142u16).is_err());
         assert!(TcpMessageType::try_from(143u16).is_err());
         assert!(TcpMessageType::try_from(169u16).is_err());
-        // 191-199 were free and are now the record and emote types, so the
-        // sentinel moved rather than the types: a gap this test names has to
-        // be a gap the enum actually has.
+        // 191-199 were free and are now the record and emote types, and 204-205
+        // the GIF support pair, so the sentinel moved rather than the types: a
+        // gap this test names has to be a gap the enum actually has.
         assert!(TcpMessageType::try_from(250u16).is_err());
-        assert!(TcpMessageType::try_from(204u16).is_err());
+        assert!(TcpMessageType::try_from(206u16).is_err());
         assert!(TcpMessageType::try_from(u16::MAX).is_err());
     }
 

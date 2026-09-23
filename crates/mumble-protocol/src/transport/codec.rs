@@ -251,6 +251,8 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
         FancyGifQuery(m) => m.encode_to_vec(),
         FancyGifPage(m) => m.encode_to_vec(),
         FancyGifRefused(m) => m.encode_to_vec(),
+        FancyGifSupportQuery(m) => m.encode_to_vec(),
+        FancyGifSupport(m) => m.encode_to_vec(),
         FancyServerSettingsQuery(m) => m.encode_to_vec(),
         FancyLiveryQuery(m) => m.encode_to_vec(),
         FancyServerLivery(m) => m.encode_to_vec(),
@@ -436,6 +438,12 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
         }
         FancyGifRefused => ControlMessage::FancyGifRefused(
             crate::proto::fancy::media::GifRefused::decode(payload)?,
+        ),
+        FancyGifSupportQuery => ControlMessage::FancyGifSupportQuery(
+            crate::proto::fancy::media::GifSupportQuery::decode(payload)?,
+        ),
+        FancyGifSupport => ControlMessage::FancyGifSupport(
+            crate::proto::fancy::media::GifSupport::decode(payload)?,
         ),
         FancyServerSettingsQuery => ControlMessage::FancyServerSettingsQuery(
             crate::proto::fancy::domain::ConfigQuery::decode(payload)?,

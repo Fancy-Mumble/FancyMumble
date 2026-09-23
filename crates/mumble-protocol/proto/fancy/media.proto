@@ -24,7 +24,48 @@ message GifsEnvelope {
     GifQuery query = 1;
     GifPage page = 2;
     GifRefused refused = 3;
+    GifSupportQuery support_query = 4;
+    GifSupport support = 5;
   }
+}
+
+// "What can you do for me?" Asked once per connection, before any search.
+//
+// A client needs to know two things before it draws a picker, and neither is
+// learnable from a search: whether this server searches at all, and whether the
+// pictures it hands back come from here or from the provider's CDN. The second
+// one decides whether showing the picker leaks the viewer's address, and a
+// client that only finds out from the first page of results has already
+// leaked it by drawing that page.
+//
+// Deliberately not a search with an empty body: this costs no quota and
+// never reaches the provider, so asking it on every connect is free.
+message GifSupportQuery {
+  // Echoed on the answer, for the same reason `GifQuery` carries one.
+  string request_id = 1;
+}
+
+// The answer to a GifSupportQuery.
+//
+// A server too old to know the question answers nothing at all, which a client
+// should read the same as `available = false`: there is no `GifRefused` for a
+// message this server has never heard of.
+message GifSupport {
+  string request_id = 1;
+  // Whether a GifQuery would be served at all (a key is configured and the
+  // service is on). False is the UNAVAILABLE refusal, said up front.
+  bool available = 2;
+  // The prefix every proxied `url` and `preview_url` in this server's GifPages
+  // starts with, e.g. "https://chat.example.org/gif?". Empty when the media
+  // proxy is off and results carry the provider's own CDN addresses.
+  //
+  // A prefix rather than a bool so a client can check it: a URL in a page that
+  // does not start with it is one the server did not proxy, and a client that
+  // promised its user no contact with the provider can refuse to load it.
+  string media_base = 3;
+  // Which provider answers, for attribution ("klipy"). Empty when `available`
+  // is false, because then nobody does.
+  string provider = 4;
 }
 
 // "Search the provider for me."
