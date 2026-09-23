@@ -17,10 +17,19 @@
  * there would use the user's own quota to route around the server's rate
  * limit, which is precisely the abuse the limit exists to prevent - so
  * `shouldFallBack` names the kinds rather than treating every failure alike.
+ *
+ * # Why it still wants the user's key
+ *
+ * The answers carry thumbnail *addresses* on the provider's CDN, not the
+ * pictures, so drawing a page of results is the user's own machine asking
+ * Klipy for two dozen images - with their IP address on every one. Until the
+ * server sends thumbnails inline, as it does for link previews, a server search
+ * is only made once the user has opted in to Klipy (see klipyConfig.ts).
  */
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { KLIPY_DISABLED_MESSAGE, klipyEnabled } from "./klipyConfig";
 
 /** One result, as the server describes it. */
 export interface ServerGif {
@@ -155,6 +164,8 @@ let counter = 0;
  * {@link shouldFallBack} rather than deciding at each call site.
  */
 export async function searchServerGifs(query: string, page = 1): Promise<ServerGifPage> {
+  // A plain error, not a refusal: nothing should fall back to anything.
+  if (!klipyEnabled()) throw new Error(KLIPY_DISABLED_MESSAGE);
   if (unavailable) {
     throw new GifRefusedError({
       request_id: "",
