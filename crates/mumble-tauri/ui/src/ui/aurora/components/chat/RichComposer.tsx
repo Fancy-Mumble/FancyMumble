@@ -33,6 +33,7 @@ import {
 } from "@ui/icons";
 import { useEffect, useRef, useState } from "react";
 import { escapeHtml } from "../htmlText";
+import { useKlipyEnabled } from "@core/features/chat/gif/klipyConfig";
 
 /** Human-readable byte limit, so multi-megabyte caps don't read as "10240 KiB". */
 function formatByteLimit(bytes: number): string {
@@ -54,6 +55,8 @@ export function RichComposer({
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [picker, setPicker] = useState<"emoji" | "mention" | null>(null);
   const [showGifPicker, setShowGifPicker] = useState(false);
+  // No Klipy key, no GIFs: every GIF path would reach Klipy from here.
+  const gifsEnabled = useKlipyEnabled();
   const [showFormatting, setShowFormatting] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const serverConfig = useAppStore((state) => state.serverConfig);
@@ -230,7 +233,7 @@ export function RichComposer({
     editor?.isActive(mark) ? extensionStyles.composerToolActive : undefined;
   return (
     <div className={extensionStyles.composer}>
-      {showGifPicker && (
+      {showGifPicker && gifsEnabled && (
         <GifPicker
           onClose={() => setShowGifPicker(false)}
           onSelect={(gif) => {
@@ -395,13 +398,15 @@ export function RichComposer({
             label="Mention someone"
             onClick={() => setPicker((current) => (current === "mention" ? null : "mention"))}
           />
-          <Button
-            variant="bare"
-            className={extensionStyles.composerGif}
-            onClick={() => setShowGifPicker((value) => !value)}
-          >
-            GIF
-          </Button>
+          {gifsEnabled && (
+            <Button
+              variant="bare"
+              className={extensionStyles.composerGif}
+              onClick={() => setShowGifPicker((value) => !value)}
+            >
+              GIF
+            </Button>
+          )}
           <IconButton
             icon={<EmojiPlusIcon />}
             label="Insert emoji"

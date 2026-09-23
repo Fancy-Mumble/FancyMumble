@@ -44,6 +44,11 @@ export default function AdvancedSettingsPanel({
         <TextField
           label="Klipy API key"
           type="password"
+          hint={
+            prefs.klipyApiKey?.trim()
+              ? "With a key set, GIF searches and previews load straight from Klipy, so Klipy can see your IP address and when you use GIFs."
+              : "Without a key, GIFs are turned off: no GIF buttons, and nothing is ever loaded from Klipy."
+          }
           value={prefs.klipyApiKey ?? ""}
           onChange={(event) => onLocalChange({ klipyApiKey: event.target.value })}
           onBlur={() => void onPatch({ klipyApiKey: prefs.klipyApiKey })}
