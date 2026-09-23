@@ -314,12 +314,11 @@ fn handle_own_channel_change(ctx: &HandlerContext, ch: u32) {
             let app = s.conn.tauri_app_handle.clone()?;
             Some((app, host, channel_name))
         });
-        if let Some((app, host, channel_name)) = info {
-            if let Some(handle) =
+        if let Some((app, host, channel_name)) = info
+            && let Some(handle) =
                 app.try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>()
-            {
-                crate::platform::android::connection_service::update_service_channel(&handle, &host, &channel_name);
-            }
+        {
+            crate::platform::android::connection_service::update_service_channel(&handle, &host, &channel_name);
         }
     }
 
