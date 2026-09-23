@@ -65,7 +65,14 @@ export default function KeyShareWarningDialog({
           </div>
 
           <p className={styles.message}>
-            <span dangerouslySetInnerHTML={{ __html: t("keyShare.confirmMessage", { name: peerName }) }} />
+            <span
+              dangerouslySetInnerHTML={{
+                __html: t("keyShare.confirmMessage", {
+                  name: peerName,
+                  interpolation: { escapeValue: true },
+                }),
+              }}
+            />
           </p>
 
           <div className={styles.actions}>

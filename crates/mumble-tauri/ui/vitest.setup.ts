@@ -96,9 +96,20 @@ function resolveKey(data: NestedRecord, key: string): unknown {
   return node;
 }
 
-function interpolate(template: string, vars: Record<string, unknown>): string {
+/** What i18next's own escaping does to a value, for a call that asks for it. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/\//g, "&#x2F;");
+}
+
+function interpolate(template: string, vars: Record<string, unknown>, escape = false): string {
   return template.replace(/{{(\w+)}}/g, (_match, name: string) =>
-    name in vars ? String(vars[name]) : `{{${name}}}`,
+    name in vars ? (escape ? escapeHtml(String(vars[name])) : String(vars[name])) : `{{${name}}}`,
   );
 }
 
@@ -136,13 +147,16 @@ function makeT(ns: string | string[]) {
     const interpVars: Record<string, unknown> = {};
     if (opts) {
       for (const [k, v] of Object.entries(opts)) {
-        if (k !== "returnObjects" && k !== "ns" && k !== "count") {
+        if (k !== "returnObjects" && k !== "ns" && k !== "count" && k !== "interpolation") {
           interpVars[k] = v;
         }
       }
       if (typeof opts.count === "number") interpVars["count"] = opts.count;
     }
-    return interpolate(value, interpVars);
+    // The app turns escaping off globally; a call that sets its HTML switches
+    // it back on for itself, and the mock has to honour that to test it.
+    const interpolation = opts?.interpolation as { escapeValue?: boolean } | undefined;
+    return interpolate(value, interpVars, interpolation?.escapeValue === true);
   };
 }
 

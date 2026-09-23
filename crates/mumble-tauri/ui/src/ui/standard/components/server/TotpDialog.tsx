@@ -75,7 +75,11 @@ export default function TotpDialog({
         <form className={styles.body} onSubmit={handleSubmit}>
           {error && <p className={styles.error}>{error}</p>}
           <p className={styles.message}>
-            <span dangerouslySetInnerHTML={{ __html: t("totp.enterMessage", { target }) }} />
+            <span
+              dangerouslySetInnerHTML={{
+                __html: t("totp.enterMessage", { target, interpolation: { escapeValue: true } }),
+              }}
+            />
           </p>
 
           <div className={styles.field}>

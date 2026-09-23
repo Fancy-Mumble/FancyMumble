@@ -100,7 +100,10 @@ export default function PasswordDialog({
             <p className={styles.message}>
               <span
                 dangerouslySetInnerHTML={{
-                  __html: t("password.differentUser.message", { host: serverHost }),
+                  __html: t("password.differentUser.message", {
+                    host: serverHost,
+                    interpolation: { escapeValue: true },
+                  }),
                 }}
               />
             </p>
@@ -135,9 +138,17 @@ export default function PasswordDialog({
             {error && <p className={styles.error}>{error}</p>}
             <p className={styles.message}>
               {error ? (
-                <span dangerouslySetInnerHTML={{ __html: t("password.retryMessage", { target }) }} />
+                <span
+                  dangerouslySetInnerHTML={{
+                    __html: t("password.retryMessage", { target, interpolation: { escapeValue: true } }),
+                  }}
+                />
               ) : (
-                <span dangerouslySetInnerHTML={{ __html: t("password.enterMessage", { target }) }} />
+                <span
+                  dangerouslySetInnerHTML={{
+                    __html: t("password.enterMessage", { target, interpolation: { escapeValue: true } }),
+                  }}
+                />
               )}
             </p>
 
