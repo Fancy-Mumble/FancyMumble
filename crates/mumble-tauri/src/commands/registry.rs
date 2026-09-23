@@ -295,6 +295,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::game_overlay::game_overlay_diagnostics,
         super::window::set_window_aspect_ratio,
         super::window::set_window_icon,
+        super::window::set_system_bar_style,
         // -- system / diagnostics --------------------------------------
         super::system::reset_app_data,
         super::system::set_log_level,

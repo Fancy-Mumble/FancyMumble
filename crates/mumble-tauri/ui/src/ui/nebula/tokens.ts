@@ -312,3 +312,21 @@ export function opaque(colour: string, over: string): string {
  */
 export const CHAT_COLUMN_MAX_WIDTH = 1360;
 export const CHAT_COLUMN_INSET_PX = 10;
+
+/**
+ * How far the phone's own furniture - status bar, gesture bar, camera cutout -
+ * reaches in from each edge.
+ *
+ * Android's WebView answers `env(safe-area-inset-*)` with the cutout alone,
+ * never the bars, so the gesture bar reads as 0 and the status bar is cleared
+ * only on a phone whose notch happens to be as tall. The app's
+ * `SystemBarsPlugin` measures the bars natively and writes them onto `<html>`
+ * as `--fm-safe-*`; everywhere that never happens - iOS, a desktop window, the
+ * preview page - the platform's own `env()` is the answer.
+ */
+export const SAFE_AREA = {
+  top: "var(--fm-safe-top, env(safe-area-inset-top, 0px))",
+  right: "var(--fm-safe-right, env(safe-area-inset-right, 0px))",
+  bottom: "var(--fm-safe-bottom, env(safe-area-inset-bottom, 0px))",
+  left: "var(--fm-safe-left, env(safe-area-inset-left, 0px))",
+} as const;

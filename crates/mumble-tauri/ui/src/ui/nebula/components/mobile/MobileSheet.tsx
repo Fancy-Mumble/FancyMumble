@@ -13,7 +13,7 @@ import { Box, IconButton, Typography } from "@mui/material";
 import { CloseIcon } from "@ui/icons";
 import { Stack } from "../primitives";
 import { floatingSurface } from "../../theme";
-import { radius } from "../../tokens";
+import { SAFE_AREA, radius } from "../../tokens";
 
 interface MobileSheetProps {
   open: boolean;
@@ -109,7 +109,7 @@ export function MobileSheet({
             display: "flex",
             flexDirection: "column",
             overflowY: "auto",
-            pb: "env(safe-area-inset-bottom, 0px)",
+            pb: SAFE_AREA.bottom,
           }}
         >
           {children}

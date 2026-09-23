@@ -9,6 +9,7 @@
  */
 import { useEffect } from "react";
 import type { Theme } from "@mui/material/styles";
+import { applySystemBarStyle } from "@core/systemBars";
 import { applyWindowIcon } from "@core/windowIcon";
 import { brandMark } from "./brandMark";
 
@@ -31,4 +32,17 @@ export function useThemedWindowIcon(theme: Theme): void {
   useEffect(() => {
     void applyWindowIcon(brandMark(accent, onAccent, radius, chamfered));
   }, [accent, onAccent, radius, chamfered]);
+}
+
+/**
+ * The phone's bars are chrome as well: their icons follow the theme's light or
+ * dark, so the clock stays readable over whichever skin is showing. Keyed on
+ * the mode alone, for the same reason the icon above is keyed on its four
+ * values - the theme object is rebuilt far more often than it changes.
+ */
+export function useThemedSystemBars(theme: Theme): void {
+  const light = theme.palette.mode === "light";
+  useEffect(() => {
+    void applySystemBarStyle(light);
+  }, [light]);
 }

@@ -13,7 +13,7 @@ import {
 } from "@standard/personalizationStorage";
 import { applyTheme, THEMES, type ThemeId } from "@standard/themes";
 import { CheckIcon, SettingsIcon, SparklesIcon } from "@ui/icons";
-import { radius } from "../../tokens";
+import { SAFE_AREA, radius } from "../../tokens";
 import { Stack } from "../primitives";
 
 const STEPS = ["identity", "interface", "appearance", "ready"] as const;
@@ -152,8 +152,8 @@ export function FirstRunSetup({ onComplete }: Readonly<{ onComplete: () => void 
         // needs. Nebula does not load Standard's global.css, so the notch and
         // the home indicator are this page's own to stay clear of.
         padding: { xs: 1.5, sm: 3 },
-        paddingTop: { xs: "calc(12px + env(safe-area-inset-top, 0px))", sm: 3 },
-        paddingBottom: { xs: "calc(12px + env(safe-area-inset-bottom, 0px))", sm: 3 },
+        paddingTop: { xs: `calc(12px + ${SAFE_AREA.top})`, sm: 3 },
+        paddingBottom: { xs: `calc(12px + ${SAFE_AREA.bottom})`, sm: 3 },
         color: muiTheme.palette.nebula.text,
       })}
     >

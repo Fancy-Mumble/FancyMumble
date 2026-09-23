@@ -48,6 +48,20 @@ pub(crate) fn create_base_builder() -> tauri::Builder<tauri::Wry> {
             .build(),
     );
 
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(
+        tauri::plugin::Builder::<tauri::Wry, ()>::new("system-bars")
+            .setup(|app, api| {
+                let handle =
+                    api.register_android_plugin("com.fancymumble.app", "SystemBarsPlugin")?;
+                let _ = app.manage(crate::platform::android::system_bars::SystemBarsHandle(
+                    handle,
+                ));
+                Ok(())
+            })
+            .build(),
+    );
+
     // The plugin only writes its cache on a clean exit; `window_state` also
     // persists it as the geometry changes, so a `tauri dev` restart or a crash
     // doesn't resurrect the geometry from the last graceful shutdown.

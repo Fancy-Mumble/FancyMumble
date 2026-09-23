@@ -100,3 +100,26 @@ fn apply_window_icon(
 ) -> Result<(), String> {
     Ok(())
 }
+
+/// Say what the page paints behind the phone's status and gesture bars, so
+/// their icons can be set to read against it: dark icons when `light`.
+///
+/// An `async` command so the plugin call never runs on the thread Android
+/// draws on. Desktop windows have no system bars and answer `Ok`.
+#[tauri::command]
+pub(crate) async fn set_system_bar_style(app: tauri::AppHandle, light: bool) -> Result<(), String> {
+    apply_system_bar_style(&app, light)
+}
+
+#[cfg(target_os = "android")]
+fn apply_system_bar_style(app: &tauri::AppHandle, light: bool) -> Result<(), String> {
+    use crate::platform::android::system_bars::{SystemBarsHandle, set_style};
+    use tauri::Manager;
+    app.try_state::<SystemBarsHandle>()
+        .map_or(Ok(()), |handle| set_style(&handle, light))
+}
+
+#[cfg(not(target_os = "android"))]
+fn apply_system_bar_style(_app: &tauri::AppHandle, _light: bool) -> Result<(), String> {
+    Ok(())
+}

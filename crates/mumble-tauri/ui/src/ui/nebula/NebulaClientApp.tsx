@@ -194,7 +194,7 @@ import { useNebulaEventBridge } from "./useNebulaEventBridge";
 import { applyStoredGameOverlaySettings } from "@core/features/overlay/gameOverlay";
 import { GameOverlayPrompt } from "./components/overlay/GameOverlayPrompt";
 import { useNebulaTheme } from "./useNebulaAppearance";
-import { useThemedWindowIcon } from "./useBrandMark";
+import { useThemedSystemBars, useThemedWindowIcon } from "./useBrandMark";
 import { useServerLiveries } from "./useServerLivery";
 import { radius } from "./tokens";
 import { MobileShell } from "./components/mobile";
@@ -352,6 +352,7 @@ export default function NebulaClientApp() {
   // than in a provider branch below: there are three of them - loading,
   // connect, client - and the window has one icon whichever is showing.
   useThemedWindowIcon(theme);
+  useThemedSystemBars(theme);
   const channels = useAppStore((state) => state.channels);
   const users = useAppStore((state) => state.users);
   const localNotesOpen = useAppStore((state) => state.localNotesOpen);
