@@ -7,6 +7,7 @@ import { getReadersForMessage } from "@core/features/chat/readreceipt/readReceip
 import { FANCY_FILE_MARKER_RE } from "@core/features/chat/fileAttachments";
 import { useLinkPreviews } from "@core/features/chat/useLinkPreviews";
 import { useInnerHtml } from "@core/utils/innerHtml";
+import { neutraliseRemoteMedia } from "@core/utils/remoteMedia";
 import { CheckIcon, CopyIcon, EditIcon, PinIcon, QuoteIcon, TrashIcon } from "@ui/icons";
 import WatchStartButton from "@ui/standard/components/chat/watch/WatchStartButton";
 import WatchTogetherCard from "@ui/standard/components/chat/watch/WatchTogetherCard";
@@ -24,6 +25,18 @@ function initials(name: string): string {
     .map((part) => part[0] ?? "")
     .join("")
     .toUpperCase();
+}
+/** A message body as this row draws it: sanitised, with nothing that fetches. */
+function sanitizeBody(body: string): string {
+  const fragment = DOMPurify.sanitize(body, {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: ["target", "rel"],
+    RETURN_DOM_FRAGMENT: true,
+  }) as unknown as DocumentFragment;
+  neutraliseRemoteMedia(fragment);
+  const wrapper = document.createElement("div");
+  wrapper.appendChild(fragment);
+  return wrapper.innerHTML;
 }
 function formatTime(timestamp?: number | null): string {
   return timestamp
@@ -63,10 +76,7 @@ export default function MessageItem({
     : [];
   void reactionVersion;
   void readReceiptVersion;
-  const safeBody = useMemo(
-    () => DOMPurify.sanitize(message.body, { USE_PROFILES: { html: true }, ADD_ATTR: ["target", "rel"] }),
-    [message.body],
-  );
+  const safeBody = useMemo(() => sanitizeBody(message.body), [message.body]);
   // Stable across renders, or React rewrites the body's `innerHTML` every
   // time the row re-renders and drops any selection standing in it.
   const bodyHtml = useInnerHtml(safeBody);
