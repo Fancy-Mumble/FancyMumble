@@ -35,12 +35,17 @@ class MainActivity : TauriActivity() {
             )
         }
 
-        // Consume the system back gesture (swipe-from-edge) so the WebView
-        // never receives history.back().  This prevents accidental disconnects
-        // when the user swipes from the left edge on Android.
+        // The last word on the back gesture. The page answers it first - Tauri
+        // hands it over while the page listens, which Nebula does whenever it
+        // has a pane, sheet or dialog to step back from - so this only runs
+        // at the root. There it sends the app to the background, as back does
+        // in every other app, rather than finishing the activity: the
+        // connection lives in ConnectionService and survives, and a finished
+        // activity would have to reload the page. It still never reaches
+        // history.back(), which is what used to disconnect.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                // Intentionally empty: swallow the back event.
+                moveTaskToBack(true)
             }
         })
 
