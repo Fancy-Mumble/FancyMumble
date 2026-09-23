@@ -15,7 +15,7 @@ import { decodeFileAttachmentPayload } from "@core/features/chat/fileAttachments
 import { useLinkPreviews } from "@core/features/chat/useLinkPreviews";
 import { getPoll } from "@core/features/chat/poll/model";
 import { useWatchStart } from "@core/features/chat/watch/useWatchStart";
-import { neutraliseRemoteMedia } from "@core/utils/remoteMedia";
+import { neutraliseRemoteMedia, useTrustedMediaVersion } from "@core/utils/remoteMedia";
 import { readWatchMarker } from "@core/features/chat/watch/watchMarker";
 import { MENTION_CHIP_SELECTOR, readMentionChip } from "@core/utils/mentions";
 import { useInnerHtml } from "@core/utils/innerHtml";
@@ -527,6 +527,9 @@ export const MessageRow = memo(function MessageRow({
   // the same message is mounted, dropped and mounted again while the reader
   // scrolls, and it would otherwise be read apart from scratch each time. See
   // `bodyCache`.
+  // Drawn again when a server's GIF proxy becomes trusted, which empties the
+  // cache below: a GIF read as a link before is a picture now.
+  useTrustedMediaVersion();
   const parsed = parseBody(message.body, sanitizeAndPretty);
   const content = parsed.content;
   const split = parsed;

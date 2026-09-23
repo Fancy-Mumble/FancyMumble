@@ -25,7 +25,7 @@ import { RichTextField, Stack, UserAvatar } from "../primitives";
 import { Banner, Field, GroupTitle, PageTitle, PillGroup, SegmentedGroup } from "./controls";
 import { ExpandableRow } from "./ExpandableRow";
 import { GifPickerDialog } from "./GifPickerDialog";
-import { useKlipyEnabled } from "@core/features/chat/gif/klipyConfig";
+import { useGifsEnabled } from "@core/features/chat/gif/gifAccess";
 import { ProfilePreview } from "./ProfilePreview";
 import { radius } from "../../tokens";
 
@@ -277,8 +277,8 @@ export function ProfileSettings({
   const [cropping, setCropping] = useState<{ src: string; kind: CropKind } | null>(null);
   /** Which GIF browser is open. A GIF skips the cropper, which would flatten it. */
   const [gifFor, setGifFor] = useState<"avatar" | "banner" | null>(null);
-  // No Klipy key, no GIF buttons: every GIF path would reach Klipy from here.
-  const gifsEnabled = useKlipyEnabled();
+  // GIFs only with the user's own Klipy key or from a server that proxies them.
+  const gifsEnabled = useGifsEnabled();
   /** The profile as of the last render, for an edit that lands after a download. */
   const latestData = useRef(data);
   latestData.current = data;

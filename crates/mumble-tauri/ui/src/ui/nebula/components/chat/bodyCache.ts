@@ -17,6 +17,7 @@
  * A message body is an immutable string, so the answer for one is the answer
  * forever. This keeps the last thousand of them.
  */
+import { subscribeTrustedMedia } from "@core/utils/remoteMedia";
 import { messageContent, splitBodyImages, type BodyImage, type MessageContent } from "../../selectors";
 
 /** Everything the row needs from the raw body, in one piece. */
@@ -79,6 +80,10 @@ export function parseBody(body: string, sanitize: (html: string) => string): Par
 export function clearBodyCache(): void {
   cache.clear();
 }
+
+// A GIF read as a link before its server's proxy was trusted is a picture now,
+// so nothing read before that may be handed out again.
+subscribeTrustedMedia(clearBodyCache);
 
 /** How many bodies are being held. For the tests. */
 export function bodyCacheSize(): number {

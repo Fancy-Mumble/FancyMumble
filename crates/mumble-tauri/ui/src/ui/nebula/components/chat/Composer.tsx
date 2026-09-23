@@ -47,7 +47,7 @@ import type { ChatMessage } from "@core/types";
 import type { StagedAttachment, UploadPlaceholder } from "@core/features/chat/useFileUpload";
 import { formatBytes } from "@core/utils/format";
 import { TID } from "@core/testids";
-import { useKlipyEnabled } from "@core/features/chat/gif/klipyConfig";
+import { useGifsEnabled } from "@core/features/chat/gif/gifAccess";
 import { composerHtml, plainText } from "../../selectors";
 import { chamferedSurface, frost, glassChrome } from "../../theme";
 import { CHAT_COLUMN_INSET_PX, CHAT_COLUMN_MAX_WIDTH, NEBULA_MONO, radius } from "../../tokens";
@@ -258,8 +258,8 @@ export function Composer({
    * hangs off the icon that opened it rather than off the panel's edge.
    */
   const [popover, setPopover] = useState<{ kind: PopoverKind; left: number } | null>(null);
-  // No Klipy key, no GIFs: every GIF path would reach Klipy from here.
-  const gifsEnabled = useKlipyEnabled();
+  // GIFs only with the user's own Klipy key or from a server that proxies them.
+  const gifsEnabled = useGifsEnabled();
   /**
    * The element the attach menu hangs off, while it is open.
    *
