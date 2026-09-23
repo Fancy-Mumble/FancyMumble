@@ -7,7 +7,7 @@ import { getReadersForMessage } from "@core/features/chat/readreceipt/readReceip
 import { FANCY_FILE_MARKER_RE } from "@core/features/chat/fileAttachments";
 import { useLinkPreviews } from "@core/features/chat/useLinkPreviews";
 import { useInnerHtml } from "@core/utils/innerHtml";
-import { neutraliseRemoteMedia } from "@core/utils/remoteMedia";
+import { neutraliseRemoteMedia, useTrustedMediaVersion } from "@core/utils/remoteMedia";
 import { CheckIcon, CopyIcon, EditIcon, PinIcon, QuoteIcon, TrashIcon } from "@ui/icons";
 import WatchStartButton from "@ui/standard/components/chat/watch/WatchStartButton";
 import WatchTogetherCard from "@ui/standard/components/chat/watch/WatchTogetherCard";
@@ -27,7 +27,8 @@ function initials(name: string): string {
     .toUpperCase();
 }
 /** A message body as this row draws it: sanitised, with nothing that fetches. */
-function sanitizeBody(body: string): string {
+/** `_trustVersion` only keys the caller's memo. */
+function sanitizeBody(body: string, _trustVersion: number): string {
   const fragment = DOMPurify.sanitize(body, {
     USE_PROFILES: { html: true },
     ADD_ATTR: ["target", "rel"],
@@ -76,7 +77,9 @@ export default function MessageItem({
     : [];
   void reactionVersion;
   void readReceiptVersion;
-  const safeBody = useMemo(() => sanitizeBody(message.body), [message.body]);
+  // Read again when a server's GIF proxy becomes trusted.
+  const trustVersion = useTrustedMediaVersion();
+  const safeBody = useMemo(() => sanitizeBody(message.body, trustVersion), [message.body, trustVersion]);
   // Stable across renders, or React rewrites the body's `innerHTML` every
   // time the row re-renders and drops any selection standing in it.
   const bodyHtml = useInnerHtml(safeBody);

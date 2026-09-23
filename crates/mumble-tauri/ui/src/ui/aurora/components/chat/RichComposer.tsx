@@ -33,7 +33,7 @@ import {
 } from "@ui/icons";
 import { useEffect, useRef, useState } from "react";
 import { escapeHtml } from "../htmlText";
-import { useKlipyEnabled } from "@core/features/chat/gif/klipyConfig";
+import { useGifsEnabled } from "@core/features/chat/gif/gifAccess";
 
 /** Human-readable byte limit, so multi-megabyte caps don't read as "10240 KiB". */
 function formatByteLimit(bytes: number): string {
@@ -55,8 +55,8 @@ export function RichComposer({
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [picker, setPicker] = useState<"emoji" | "mention" | null>(null);
   const [showGifPicker, setShowGifPicker] = useState(false);
-  // No Klipy key, no GIFs: every GIF path would reach Klipy from here.
-  const gifsEnabled = useKlipyEnabled();
+  // GIFs only with the user's own Klipy key or from a server that proxies them.
+  const gifsEnabled = useGifsEnabled();
   const [showFormatting, setShowFormatting] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const serverConfig = useAppStore((state) => state.serverConfig);
