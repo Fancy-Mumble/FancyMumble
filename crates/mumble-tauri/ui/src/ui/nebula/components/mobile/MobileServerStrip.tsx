@@ -10,24 +10,16 @@
  * Two lists of the same servers that could disagree would be a bug waiting for
  * somebody to add a server on a phone.
  */
-import { useCallback, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Box } from "@mui/material";
 import { PlusIcon } from "@ui/icons";
-import { Stack } from "../primitives";
+import { Stack, UserAvatar } from "../primitives";
 import { serverTint, type ServerRailEntry } from "../../selectors";
 import { handheldChrome } from "../../theme";
 import { radius } from "../../tokens";
 import type { ServerStripModel } from "../../shellModel";
 import { ScrollProgress, useStencil } from "./mobileMarks";
-
-/** Two letters, which is what fits a tile at this size. */
-function initials(label: string): string {
-  const words = label.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return "?";
-  if (words.length === 1) return words[0].slice(0, 2).toLocaleUpperCase();
-  return (words[0][0] + words[1][0]).toLocaleUpperCase();
-}
 
 function Tile({
   entry,
@@ -58,30 +50,21 @@ function Tile({
           all: "unset",
           boxSizing: "border-box",
           cursor: "pointer",
-          width: 46,
-          height: 46,
           display: "grid",
-          placeItems: "center",
-          fontSize: 15,
-          fontWeight: 700,
-          color: active ? theme.palette.nebula.railText : theme.palette.nebula.railDim,
-          background: active
-            ? "linear-gradient(150deg," + tint.from + "," + tint.to + ")"
-            : theme.palette.nebula.railTile,
-          border:
-            "var(--nebula-line-width, 1px) solid " +
-            (active ? theme.palette.nebula.accentOnRail : theme.palette.nebula.railLine),
           borderRadius: radius("rail"),
-          ...(icon
-            ? {
-                backgroundImage: "url(" + icon + ")",
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-              }
-            : {}),
+          // The window's rail answers "which one" with a ring round the tile;
+          // recolouring the tile itself put the rail's dark ink on the server's
+          // own tint, and a light skin read as grey initials on mud.
+          outline: active ? "2px solid " + theme.palette.nebula.accentOnRail : "none",
+          outlineOffset: 2,
+          // A server with no session is a bookmark, as on the window's rail.
+          opacity: entry.status === "saved" && !active ? 0.72 : 1,
+          "&:focus-visible": { outline: "2px solid " + theme.palette.nebula.accent },
         })}
       >
-        {icon ? "" : initials(entry.group.label)}
+        {/* The window's rail tile, the same drawing: the server's picture, or
+            its two letters in white on its own tint. */}
+        <UserAvatar name={entry.group.label} size={46} square src={icon} gradient={tint} />
       </Box>
       {/* Which server you are on, said the way the channel list says which
           channel you are in - so the two selections read as one idea. */}
@@ -91,7 +74,8 @@ function Tile({
           data-nebula-mark={stencil ? "underbar" : undefined}
           sx={(theme) => ({
             position: "absolute",
-            bottom: -8,
+            // Below the ring rather than on it: the ring stands 2px off the tile.
+            bottom: -12,
             width: 30,
             height: 4,
             background: theme.palette.nebula.accentOnRail,
@@ -139,14 +123,31 @@ export function MobileServerStrip({
   const stencil = useStencil();
   const track = useRef<HTMLDivElement>(null);
   const [progress, setProgress] = useState(1);
+  // Whether there is more of the row than the screen shows - the only thing
+  // the progress bar is for. Drawn under a row that fits, it was a thick grey
+  // rule across the top of every screen that said nothing.
+  const [overflows, setOverflows] = useState(false);
 
   const measure = useCallback(() => {
     const el = track.current;
     if (!el) return;
     const room = el.scrollWidth - el.clientWidth;
-    // A strip that fits is "all of it", not "none of it".
+    setOverflows(room > 0);
     setProgress(room <= 0 ? 1 : el.scrollLeft / room);
   }, []);
+
+  // Measured before paint and again whenever the row's width or its number of
+  // tiles changes, not only when it is scrolled.
+  const tileCount = model.entries.length;
+  useLayoutEffect(() => {
+    const el = track.current;
+    if (!el) return undefined;
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [measure, tileCount]);
 
   const active = model.entries.find((entry) => entry.group.key === model.activeKey);
   const rest = model.entries.filter((entry) => entry.group.key !== model.activeKey);
@@ -273,7 +274,7 @@ export function MobileServerStrip({
           background: "linear-gradient(90deg,transparent," + theme.palette.nebula.railEdge + ")",
         })}
       />
-      <ScrollProgress value={progress} />
+      {overflows && <ScrollProgress value={progress} />}
     </Stack>
   );
 }
