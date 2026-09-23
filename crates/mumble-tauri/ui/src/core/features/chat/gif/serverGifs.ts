@@ -18,17 +18,22 @@
  * limit, which is precisely the abuse the limit exists to prevent - so
  * `shouldFallBack` names the kinds rather than treating every failure alike.
  *
- * # Why it still wants the user's key
+ * # Private, or only with the user's own key
  *
- * The answers carry thumbnail *addresses* on the provider's CDN, not the
- * pictures, so drawing a page of results is the user's own machine asking
- * Klipy for two dozen images - with their IP address on every one. Until the
- * server sends thumbnails inline, as it does for link previews, a server search
- * is only made once the user has opted in to Klipy (see klipyConfig.ts).
+ * The answers carry thumbnail *addresses*, and drawing a page of results is
+ * this machine fetching two dozen of them. On a server with its media proxy
+ * off those addresses are on the provider's CDN, which then sees the user's IP
+ * on every one - acceptable only for a user who opted in to Klipy with a key of
+ * their own (see klipyConfig.ts). On a server with the proxy on, they are on
+ * the server itself, which already knows it. So before anything else the
+ * client asks what the server offers ({@link askServerGifSupport}); without a
+ * key of the user's own, it searches only a server that proxies, and draws
+ * only results that really are under the prefix that server announced.
  */
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { isMediaBase, isTrustedMediaSrc, trustMediaBase } from "@core/utils/remoteMedia";
 import { KLIPY_DISABLED_MESSAGE, klipyEnabled } from "./klipyConfig";
 
 /** One result, as the server describes it. */
@@ -106,6 +111,37 @@ const pending = new Map<string, { resolve: (page: ServerGifPage) => void; reject
 /** Whether the listeners are attached; they are, from the first search on. */
 let listening: Promise<UnlistenFn[]> | null = null;
 
+/** What the server offers, as it answered a support query. */
+export interface ServerGifSupport {
+  /** Whether it would search at all. */
+  available: boolean;
+  /** The prefix of its proxied media; empty when results are on the provider's CDN. */
+  mediaBase: string;
+  provider: string;
+}
+
+interface GifSupportPayload {
+  request_id: string;
+  available: boolean;
+  media_base: string;
+  provider: string;
+}
+
+/** The active server's answer, or `null` before one has arrived. */
+let support: ServerGifSupport | null = null;
+
+/** Support queries still waiting, by correlation id. */
+const supportPending = new Map<string, (answer: ServerGifSupport) => void>();
+
+/** Components showing or hiding a GIF entry point as the answer comes and goes. */
+const supportListeners = new Set<() => void>();
+
+function setSupport(next: ServerGifSupport | null): void {
+  support = next;
+  if (next?.mediaBase) trustMediaBase(next.mediaBase);
+  for (const listener of supportListeners) listener();
+}
+
 /**
  * What the server said last time, so a picker that opens on trending and then
  * searches does not pay a 12-second timeout per keystroke against a server
@@ -135,6 +171,14 @@ function attach(): Promise<UnlistenFn[]> {
       if (event.payload.kind === "unavailable") unavailable = true;
       waiter.reject(new GifRefusedError(event.payload));
     }),
+    listen<GifSupportPayload>("gif-support", (event) => {
+      const waiter = supportPending.get(event.payload.request_id);
+      if (!waiter) return;
+      supportPending.delete(event.payload.request_id);
+      // A base that is not shaped like one is treated as no proxy at all.
+      const mediaBase = isMediaBase(event.payload.media_base) ? event.payload.media_base : "";
+      waiter({ available: event.payload.available, mediaBase, provider: event.payload.provider });
+    }),
   ]);
   return listening;
 }
@@ -147,6 +191,52 @@ function attach(): Promise<UnlistenFn[]> {
  */
 export function forgetServerGifSupport(): void {
   unavailable = false;
+  setSupport(null);
+}
+
+/** What the server offers, if it has said. */
+export function serverGifSupport(): ServerGifSupport | null {
+  return support;
+}
+
+/** Whether the server searches *and* serves the pictures itself. */
+export function serverGifsPrivate(): boolean {
+  return !!support?.available && support.mediaBase !== "";
+}
+
+export function subscribeServerGifSupport(listener: () => void): () => void {
+  supportListeners.add(listener);
+  return () => supportListeners.delete(listener);
+}
+
+/**
+ * Ask the active server what it offers, and remember the answer.
+ *
+ * Called once a connection is up and again when another server becomes the
+ * active one. A server too old to know the question drops it without a word,
+ * so silence past the timeout reads as "no GIFs", the same way it does for a
+ * search.
+ */
+export async function askServerGifSupport(): Promise<void> {
+  await attach();
+  counter += 1;
+  const requestId = `gif-support-${Date.now().toString(36)}-${counter}`;
+  const answer = await new Promise<ServerGifSupport | null>((resolve) => {
+    const timer = setTimeout(() => {
+      if (supportPending.delete(requestId)) resolve({ available: false, mediaBase: "", provider: "" });
+    }, ANSWER_TIMEOUT_MS);
+    supportPending.set(requestId, (value) => {
+      clearTimeout(timer);
+      resolve(value);
+    });
+    invoke("request_gif_support", { requestId }).catch(() => {
+      // Not connected: there is nothing to know yet.
+      if (!supportPending.delete(requestId)) return;
+      clearTimeout(timer);
+      resolve(null);
+    });
+  });
+  setSupport(answer);
 }
 
 /** Whether the server has already said it cannot do this. */
@@ -164,8 +254,20 @@ let counter = 0;
  * {@link shouldFallBack} rather than deciding at each call site.
  */
 export async function searchServerGifs(query: string, page = 1): Promise<ServerGifPage> {
+  const ownKey = klipyEnabled();
   // A plain error, not a refusal: nothing should fall back to anything.
-  if (!klipyEnabled()) throw new Error(KLIPY_DISABLED_MESSAGE);
+  if (!ownKey && !serverGifsPrivate()) throw new Error(KLIPY_DISABLED_MESSAGE);
+  const answer = await searchServer(query, page);
+  if (ownKey) return answer;
+  // Only what really is on the server's own proxy: a result that is not would
+  // be drawn straight from the provider.
+  return {
+    ...answer,
+    items: answer.items.filter((gif) => isTrustedMediaSrc(gif.url) && isTrustedMediaSrc(gif.preview)),
+  };
+}
+
+async function searchServer(query: string, page: number): Promise<ServerGifPage> {
   if (unavailable) {
     throw new GifRefusedError({
       request_id: "",

@@ -13,22 +13,93 @@
  *
  * Link previews already work this way - the server fetches the page and sends
  * the thumbnail inline - and profile bios strip remote pictures outright.
+ *
+ * # The one kind of remote media that does load
+ *
+ * A server that proxies GIFs (Starling's `gif_proxy_media`) serves them from
+ * an address it announces, and a GIF sent into chat points there. Loading one
+ * tells nobody anything new: it is the server this client is already talking
+ * to. So those addresses are trusted - announced ones only, by exact prefix,
+ * see {@link trustMediaBase}.
  */
+
+import { useSyncExternalStore } from "react";
 
 /** Media a message carries itself, which rendering cannot leak anything by. */
 const LOCAL_MEDIA_RE = /^(?:data:(?:image|video|audio)\/|blob:)/i;
 
+/** Prefixes a connected server announced for its own GIF proxy. */
+const trustedBases = new Set<string>();
+
+/** Renderers that drew a link where a picture may now be allowed. */
+const trustListeners = new Set<() => void>();
+let trustVersion = 0;
+
 /**
- * Whether drawing `src` stays on this machine.
+ * Whether `base` is shaped like a proxy prefix a server may announce:
+ * `http(s)://host[:port]/path?` and nothing else. A bare scheme, a prefix with
+ * a query already in it, or anything the URL parser would read differently is
+ * refused - trusting `"https://"` would be trusting the whole web.
+ */
+export function isMediaBase(base: string): boolean {
+  if (!base.endsWith("?")) return false;
+  try {
+    const url = new URL(base);
+    return (
+      (url.protocol === "https:" || url.protocol === "http:") &&
+      url.hostname !== "" &&
+      url.search === "" &&
+      `${url.origin}${url.pathname}?` === base
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Trust media under `base`, a connected server's GIF proxy. Ignored unless {@link isMediaBase}. */
+export function trustMediaBase(base: string): void {
+  if (!isMediaBase(base) || trustedBases.has(base)) return;
+  trustedBases.add(base);
+  trustVersion += 1;
+  for (const listener of trustListeners) listener();
+}
+
+/** Whether `src` is served by a connected server's own GIF proxy. */
+export function isTrustedMediaSrc(src: string): boolean {
+  const trimmed = src.trim();
+  for (const base of trustedBases) if (trimmed.startsWith(base)) return true;
+  return false;
+}
+
+/** Be told whenever a new proxy is trusted. */
+export function subscribeTrustedMedia(listener: () => void): () => void {
+  trustListeners.add(listener);
+  return () => trustListeners.delete(listener);
+}
+
+/**
+ * A number that changes whenever a new proxy is trusted - a memo dependency
+ * for anything that turned a picture into a link before it was.
+ */
+export function useTrustedMediaVersion(): number {
+  return useSyncExternalStore(
+    subscribeTrustedMedia,
+    () => trustVersion,
+    () => trustVersion,
+  );
+}
+
+/**
+ * Whether drawing `src` reaches nobody new.
  *
- * Inline media does, and so does anything that resolves to the page's own
- * origin - the app's bundled assets. The URL parser decides the second, not a
- * pattern: it is what the webview will do with the string, including turning
- * `\\host\x.png` into a request to `host`.
+ * Inline media does not, nor does anything that resolves to the page's own
+ * origin - the app's bundled assets - nor a connected server's GIF proxy. The
+ * URL parser decides the origin, not a pattern: it is what the webview will do
+ * with the string, including turning `\\host\x.png` into a request to `host`.
  */
 export function isLocalMediaSrc(src: string): boolean {
   const trimmed = src.trim();
-  if (LOCAL_MEDIA_RE.test(trimmed)) return true;
+  if (LOCAL_MEDIA_RE.test(trimmed) || isTrustedMediaSrc(trimmed)) return true;
   try {
     return new URL(trimmed, globalThis.location.href).origin === globalThis.location.origin;
   } catch {

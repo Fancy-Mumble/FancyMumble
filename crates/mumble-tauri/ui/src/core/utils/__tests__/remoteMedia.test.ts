@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { isLocalMediaSrc, neutraliseRemoteMedia, styleValueFetches } from "../remoteMedia";
+import {
+  isLocalMediaSrc,
+  isMediaBase,
+  neutraliseRemoteMedia,
+  styleValueFetches,
+  trustMediaBase,
+} from "../remoteMedia";
 
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
 
@@ -106,5 +112,35 @@ describe("styleValueFetches", () => {
   it("lets ordinary values through", () => {
     expect(styleValueFetches("red")).toBe(false);
     expect(styleValueFetches("1px solid #333")).toBe(false);
+  });
+});
+
+describe("a server's GIF proxy", () => {
+  it("accepts only a base shaped like one", () => {
+    expect(isMediaBase("https://chat.example.org/gif?")).toBe(true);
+    expect(isMediaBase("http://127.0.0.1:8090/gif?")).toBe(true);
+    for (const base of [
+      "https://",
+      "https://?",
+      "https://chat.example.org/gif",
+      "https://chat.example.org/gif?u=",
+      "javascript:alert(1)?",
+      "https://a@chat.example.org/gif?",
+    ]) {
+      expect(isMediaBase(base), base).toBe(false);
+    }
+  });
+
+  it("lets pictures under a trusted base render, and nothing beside it", () => {
+    trustMediaBase("https://proxy.example.net/gif?");
+    const doc = new DOMParser().parseFromString(
+      '<img src="https://proxy.example.net/gif?u=a&amp;sig=b"><img src="https://proxy.example.net/other.png">',
+      "text/html",
+    );
+    neutraliseRemoteMedia(doc.body);
+
+    expect(doc.body.querySelectorAll("img")).toHaveLength(1);
+    expect(doc.body.querySelector("a")?.getAttribute("href")).toBe("https://proxy.example.net/other.png");
+    expect(isLocalMediaSrc("https://proxy.example.net.evil.com/gif?u=a")).toBe(false);
   });
 });

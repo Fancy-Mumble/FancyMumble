@@ -142,7 +142,7 @@
     "expertModeHintExpert": "Full control - advanced audio options, custom ports and labels are visible.",
     "klipyApiKey": "Klipy API Key",
     "klipyApiKeyHintBefore": "Provide your own",
-    "klipyApiKeyHintAfter": "API key for GIF/sticker search. Without one, GIFs are turned off: no GIF buttons, and nothing is ever loaded from Klipy.",
+    "klipyApiKeyHintAfter": "API key for GIF/sticker search. Without one, GIFs come only from a server that serves them itself, and nothing is ever loaded from Klipy.",
     "klipyApiKeyPrivacyWarning": "With a key set, GIF searches and previews load straight from Klipy, so Klipy can see your IP address and when you use GIFs.",
     "developerMode": "Developer Mode",
     "developerModeHint": "Show debug statistics (message counts, offloaded content, memory usage) in the server info panel.",

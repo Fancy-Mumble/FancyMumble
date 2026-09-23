@@ -142,7 +142,7 @@
     "expertModeHintExpert": "完全掌控：可看到高级音频选项、自定义端口和标签。",
     "klipyApiKey": "Klipy API 密钥",
     "klipyApiKeyHintBefore": "提供你自己的",
-    "klipyApiKeyHintAfter": "API 密钥用于 GIF/贴纸搜索。未填写时 GIF 功能关闭：不显示 GIF 按钮，也不会从 Klipy 加载任何内容。",
+    "klipyApiKeyHintAfter": "API 密钥用于 GIF/贴纸搜索。未填写时，GIF 只来自自行提供 GIF 的服务器，也不会从 Klipy 加载任何内容。",
     "klipyApiKeyPrivacyWarning": "设置密钥后，GIF 搜索和预览会直接从 Klipy 加载，Klipy 因此能看到你的 IP 地址以及你使用 GIF 的时间。",
     "developerMode": "开发者模式",
     "developerModeHint": "在服务器信息面板中显示调试统计（消息数、已转存内容、内存占用等）。",

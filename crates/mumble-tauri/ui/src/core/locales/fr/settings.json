@@ -142,7 +142,7 @@
     "expertModeHintExpert": "Contrôle total - options audio avancées, ports personnalisés et libellés sont visibles.",
     "klipyApiKey": "Clé API Klipy",
     "klipyApiKeyHintBefore": "Indiquez votre propre clé API",
-    "klipyApiKeyHintAfter": "pour la recherche de GIFs / stickers. Sans clé, les GIFs sont désactivés : aucun bouton GIF, et rien n'est jamais chargé depuis Klipy.",
+    "klipyApiKeyHintAfter": "pour la recherche de GIFs / stickers. Sans clé, les GIFs ne viennent que d'un serveur qui les sert lui-même, et rien n'est jamais chargé depuis Klipy.",
     "klipyApiKeyPrivacyWarning": "Avec une clé, la recherche et les aperçus de GIFs sont chargés directement depuis Klipy, qui voit alors votre adresse IP et quand vous utilisez les GIFs.",
     "developerMode": "Mode développeur",
     "developerModeHint": "Affiche les statistiques de débogage (nombre de messages, contenu déchargé, utilisation mémoire) dans le panneau d'information du serveur.",

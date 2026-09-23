@@ -142,7 +142,7 @@
     "expertModeHintExpert": "Volle Kontrolle - erweiterte Audiooptionen, eigene Ports und Bezeichnungen sind sichtbar.",
     "klipyApiKey": "Klipy-API-Schlüssel",
     "klipyApiKeyHintBefore": "Trage hier deinen eigenen",
-    "klipyApiKeyHintAfter": "API-Schlüssel für die GIF-/Sticker-Suche ein. Ohne Schlüssel sind GIFs aus: keine GIF-Schaltflächen, und es wird nie etwas von Klipy geladen.",
+    "klipyApiKeyHintAfter": "API-Schlüssel für die GIF-/Sticker-Suche ein. Ohne Schlüssel kommen GIFs nur von einem Server, der sie selbst ausliefert, und es wird nie etwas von Klipy geladen.",
     "klipyApiKeyPrivacyWarning": "Mit Schlüssel werden GIF-Suche und Vorschauen direkt von Klipy geladen - Klipy sieht dadurch deine IP-Adresse und wann du GIFs nutzt.",
     "developerMode": "Entwicklermodus",
     "developerModeHint": "Zeigt Debug-Statistiken (Nachrichtenanzahl, ausgelagerte Inhalte, Speichernutzung) im Server-Info-Panel.",

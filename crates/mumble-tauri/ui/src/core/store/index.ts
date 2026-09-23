@@ -9,7 +9,7 @@ import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-import { forgetServerGifSupport } from "../features/chat/gif/serverGifs";
+import { askServerGifSupport, forgetServerGifSupport } from "../features/chat/gif/serverGifs";
 import { LOADED_WINDOW, LOADED_WINDOW_STEP } from "../features/chat/chatWindowing";
 import { reconnectDelayMs, shouldAutoReconnect } from "../utils/reconnectBackoff";
 import { findSavedPassword } from "../serverStorage";
@@ -1241,6 +1241,9 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
         delete next[`${id}:dm`];
         return { activeServerId: id, sessionUnreadTotals: next };
       });
+      // What the GIF picker may do is a fact about the server it would ask.
+      forgetServerGifSupport();
+      void askServerGifSupport();
       // Sync global status/error from this session's own metadata so the
       // ChatPage overlay reflects the tab the user just switched to,
       // not whatever the previously-active tab's status was.
@@ -2966,6 +2969,9 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
     await listen(TauriEvent.ServerConnected, async () => {
       manualDisconnectRequested = false;
       clearAutoReconnectTimer();
+      // Whether GIFs are on without a key of the user's own depends on what
+      // this server offers; asked now, so the button is right from the start.
+      void askServerGifSupport();
       // Load silenced channels for this server (pendingConnect still available).
       const pending = useAppStore.getState().pendingConnect;
       let silenced = new Set<number>();
@@ -3170,8 +3176,10 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
       async (event) => {
         // Whether a server does GIF search is a fact about that server, and
         // the next one is a different server. A remembered "no" would leave a
-        // perfectly good picker unused for the rest of the run.
+        // perfectly good picker unused for the rest of the run. Asked again
+        // straight away: the server that dropped may not be the active one.
         forgetServerGifSupport();
+        void askServerGifSupport();
         // Normalise: backend now always sends an object payload, but tolerate
         // a bare reason string for forwards/backwards compatibility.
         const payload = event.payload;
