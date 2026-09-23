@@ -69,11 +69,56 @@ function parseCommentImpl(comment: string): ParsedComment {
   const bioStart = end + FANCY_SUFFIX.length;
   const bio = comment.substring(bioStart).replace(/^\n/, "");
   try {
-    return { profile: JSON.parse(json) as FancyProfile, bio };
+    return { profile: withoutRemoteFetches(JSON.parse(json) as FancyProfile), bio };
   } catch {
     return { profile: null, bio: comment };
   }
 }
+
+/** A picture the profile carries itself, which is what the format stores. */
+const INLINE_IMAGE_RE = /^data:image\/[a-z0-9.+-]+;base64,/i;
+
+/** A value that would make a stylesheet fetch: `url(`, `image-set(`, or a CSS escape hiding either. */
+const FETCHING_VALUE_RE = /url\s*\(|image-set\s*\(|\\/i;
+
+/** `src` when it is an inline picture, and nothing otherwise. */
+export function inlineImageOnly(src: unknown): string | undefined {
+  return typeof src === "string" && INLINE_IMAGE_RE.test(src.trim()) ? src : undefined;
+}
+
+/**
+ * Drop anything in a received profile that would make the viewer's client
+ * fetch something.
+ *
+ * The profile is somebody else's, and drawing it must not tell a third party
+ * who looked at it and when. The format stores pictures inline, so a banner or
+ * sticker that is an address instead is dropped as if it were absent; and the
+ * free-form values the card writes into styles (custom backgrounds, borders,
+ * colours) are dropped when they could load an image of their own. The fields
+ * that are prose, and never reach a style, keep whatever they say.
+ */
+export function withoutRemoteFetches<T>(value: T): T {
+  if (typeof value === "string") return (FETCHING_VALUE_RE.test(value) ? undefined : value) as T;
+  if (Array.isArray(value))
+    return value.map((item) => withoutRemoteFetches(item)).filter((item) => item !== undefined) as T;
+  if (value === null || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    let kept: unknown;
+    // Pictures are stored inline, and only an inline one is drawn.
+    if (IMAGE_KEYS.has(key)) kept = inlineImageOnly(item);
+    else if (TEXT_KEYS.has(key)) kept = item;
+    else kept = withoutRemoteFetches(item);
+    if (kept !== undefined) out[key] = kept;
+  }
+  return out as T;
+}
+
+/** Fields holding a picture. */
+const IMAGE_KEYS = new Set(["image", "icon", "decorationImage"]);
+
+/** Fields holding prose, which is printed and never written into a style. */
+const TEXT_KEYS = new Set(["status", "pronouns", "contact"]);
 
 /** Convert a `data:` URL to a plain `number[]` suitable for Tauri `Vec<u8>`. */
 export function dataUrlToBytes(dataUrl: string): number[] {

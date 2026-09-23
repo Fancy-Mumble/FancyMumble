@@ -20,6 +20,8 @@
  */
 
 /** A channel's banner: an image, a flat colour, or neither. */
+import { withoutRemoteFetches } from "@shared/profilecard/profileFormat";
+
 export interface ChannelBanner {
   /** Background colour (hex). */
   color?: string;
@@ -57,7 +59,8 @@ export function parseChannelDescription(description: string): {
   const json = description.substring(PREFIX.length, end);
   const body = description.substring(end + SUFFIX.length).replace(/^\n/, "");
   try {
-    return { profile: JSON.parse(json) as ChannelProfile, body };
+    // Somebody else's, like a user's profile: nothing in it may fetch.
+    return { profile: withoutRemoteFetches(JSON.parse(json) as ChannelProfile), body };
   } catch {
     // A marker we cannot read is somebody else's text, not ours to eat.
     return { profile: null, body: description };

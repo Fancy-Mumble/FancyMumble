@@ -17,6 +17,15 @@ describe("channelProfile", () => {
     expect(parseChannelDescription(plain)).toEqual({ profile: null, body: plain });
   });
 
+  it("never keeps a picture that is an address", () => {
+    // Drawn by everyone who opens the channel, it would tell its host who did.
+    const { profile } = parseChannelDescription(
+      '<!--FANCYCHAN:{"v":1,"icon":"https://t.example/i.png","banner":{"color":"#123456","image":"https://t.example/b.png"}}-->',
+    );
+    expect(profile?.icon).toBeUndefined();
+    expect(profile?.banner).toEqual({ color: "#123456" });
+  });
+
   it("splits a marked description into its look and its text", () => {
     const { profile, body } = parseChannelDescription(
       `<!--FANCYCHAN:{"v":1,"icon":"${ICON}","banner":{"image":"${BANNER}"}}-->\n<p>Hi</p>`,
