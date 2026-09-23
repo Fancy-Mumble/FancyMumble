@@ -190,6 +190,7 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::FancyLinkPreviewResponse(m) => m.handle(ctx),
         ControlMessage::FancyGifPage(m) => m.handle(ctx),
         ControlMessage::FancyGifRefused(m) => m.handle(ctx),
+        ControlMessage::FancyGifSupport(m) => m.handle(ctx),
         ControlMessage::FancyWatchSync(m) => m.handle(ctx),
         ControlMessage::FancyDrawStroke(m) => m.handle(ctx),
         ControlMessage::FancyOnboardingConfig(m) => m.handle(ctx),

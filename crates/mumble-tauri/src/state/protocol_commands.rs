@@ -461,6 +461,23 @@ impl AppState {
         Ok(())
     }
 
+    pub async fn request_gif_support(&self, request_id: String) -> Result<(), String> {
+        let handle = {
+            let __session = self.inner.snapshot();
+            let state = __session.lock().map_err(|e| e.to_string())?;
+            state.conn.client_handle.clone()
+        };
+
+        let handle = handle.ok_or("Not connected")?;
+
+        handle
+            .send(command::RequestGifSupport { request_id })
+            .await
+            .map_err(|e| format!("Failed to request gif support: {e}"))?;
+
+        Ok(())
+    }
+
     /// Ask for the cards for `urls`, and answer from this client's own cache
     /// whatever it already holds.
     ///

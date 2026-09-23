@@ -111,6 +111,18 @@ pub(crate) async fn request_gif_search(
     state.request_gif_search(query, page, request_id).await
 }
 
+/// Ask the server whether it searches GIFs, and where its proxied media lives.
+///
+/// The answer arrives as a `gif-support` event. A server that predates the
+/// question never sends one; the picker's timeout is what reads that.
+#[tauri::command]
+pub(crate) async fn request_gif_support(
+    state: tauri::State<'_, AppState>,
+    request_id: String,
+) -> Result<(), String> {
+    state.request_gif_support(request_id).await
+}
+
 /// Send a drawing stroke for the collaborative screen-share overlay.
 #[tauri::command]
 pub(crate) async fn send_draw_stroke(

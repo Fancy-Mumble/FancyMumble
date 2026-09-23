@@ -85,6 +85,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::messaging::send_draw_stroke,
         super::messaging::request_link_preview,
         super::messaging::request_gif_search,
+        super::messaging::request_gif_support,
         super::messaging::send_reaction,
         super::messaging::pin_message,
         super::messaging::delete_pchat_messages,

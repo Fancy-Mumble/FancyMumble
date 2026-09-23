@@ -2,7 +2,9 @@
 //!
 //! Two events rather than one with an optional error, because the frontend
 //! branches on them differently: a page is rendered, and a refusal decides
-//! whether to fall back to a key the user configured themselves.
+//! whether to fall back to a key the user configured themselves. A third,
+//! `gif-support`, answers the once-per-connection "what can you do" question
+//! before any search is made.
 
 use mumble_protocol::proto::fancy;
 use serde::Serialize;
@@ -50,6 +52,29 @@ struct GifRefusedPayload {
     /// magic number at that decision is how the wrong branch gets taken after a
     /// renumbering nobody noticed.
     kind: &'static str,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+struct GifSupportPayload {
+    request_id: String,
+    /// Whether a search would be served at all.
+    available: bool,
+    /// The prefix the server's proxied `url`s and `preview`s start with, or
+    /// empty when results point at the provider's own CDN.
+    media_base: String,
+    /// Which provider answers, for attribution.
+    provider: String,
+}
+
+impl From<&fancy::media::GifSupport> for GifSupportPayload {
+    fn from(support: &fancy::media::GifSupport) -> Self {
+        Self {
+            request_id: support.request_id.clone(),
+            available: support.available,
+            media_base: support.media_base.clone(),
+            provider: support.provider.clone(),
+        }
+    }
 }
 
 /// The refusal kind, named.
@@ -122,6 +147,19 @@ impl HandleMessage for fancy::media::GifRefused {
     }
 }
 
+impl HandleMessage for fancy::media::GifSupport {
+    fn handle(&self, ctx: &HandlerContext) {
+        debug!(
+            request_id = %self.request_id,
+            available = self.available,
+            media_base = %self.media_base,
+            provider = %self.provider,
+            "the server said what its gif service can do"
+        );
+        ctx.emit("gif-support", GifSupportPayload::from(self));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,5 +175,26 @@ mod tests {
         assert_eq!(kind_of(3), "malformed");
         assert_eq!(kind_of(99), "upstream");
         assert_eq!(kind_of(-1), "upstream");
+    }
+
+    #[test]
+    fn the_support_answer_reaches_the_frontend_under_the_names_it_reads() {
+        let support = fancy::media::GifSupport {
+            request_id: "g-1".to_owned(),
+            available: true,
+            media_base: "https://chat.example.org/gif?".to_owned(),
+            provider: "klipy".to_owned(),
+        };
+        let json = serde_json::to_value(GifSupportPayload::from(&support))
+            .expect("the payload serializes");
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "request_id": "g-1",
+                "available": true,
+                "media_base": "https://chat.example.org/gif?",
+                "provider": "klipy",
+            })
+        );
     }
 }
