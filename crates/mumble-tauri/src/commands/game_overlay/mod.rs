@@ -20,10 +20,13 @@ mod watcher;
 #[cfg(not(target_os = "android"))]
 mod window;
 
+#[cfg(not(target_os = "android"))]
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use fancy_gamedetect::{ProbeNote, Reason, Rule, Rules, ShellState, Verdict};
+#[cfg(not(target_os = "android"))]
+use fancy_gamedetect::{ProbeNote, Reason, ShellState, Verdict};
+use fancy_gamedetect::{Rule, Rules};
 use serde::{Deserialize, Serialize};
 
 use crate::state::AppState;
@@ -34,10 +37,12 @@ pub(crate) use window::GAME_OVERLAY_LABEL;
 
 /// Emitted whenever the detector's conclusion or the overlay's visibility
 /// changes. Drives the settings page's diagnostics panel.
+#[cfg(not(target_os = "android"))]
 pub(crate) const STATE_EVENT: &str = "game-overlay-state";
 
 /// Emitted once per executable that looks like a game but did not clear the
 /// automatic bar, so the client can ask the user about it exactly once.
+#[cfg(not(target_os = "android"))]
 pub(crate) const ASK_EVENT: &str = "game-overlay-ask";
 
 /// Starting size of the widget, in logical pixels. The page measures itself
@@ -47,6 +52,7 @@ pub(crate) const DEFAULT_WIDTH: f64 = 320.0;
 pub(crate) const DEFAULT_HEIGHT: f64 = 132.0;
 
 /// When the overlay is allowed on screen.
+#[cfg(not(target_os = "android"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum OverlayMode {
@@ -62,6 +68,7 @@ pub(crate) enum OverlayMode {
 }
 
 /// Which corner of the game's monitor the widget sits in.
+#[cfg(not(target_os = "android"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum OverlayCorner {
@@ -79,9 +86,14 @@ pub(crate) enum OverlayCorner {
 /// Everything the frontend gets to decide about the overlay.
 #[derive(Debug, Clone)]
 pub(crate) struct GameOverlayConfig {
+    /// When the overlay may appear. Only the desktop watcher consults it.
+    #[cfg(not(target_os = "android"))]
     pub mode: OverlayMode,
+    /// Which corner it sits in.
+    #[cfg(not(target_os = "android"))]
     pub corner: OverlayCorner,
     /// Keep the overlay out of screen captures and streams.
+    #[cfg(not(target_os = "android"))]
     pub hide_from_capture: bool,
     /// Size the page has measured itself at, in logical pixels.
     pub logical_size: (f64, f64),
@@ -92,8 +104,11 @@ pub(crate) struct GameOverlayConfig {
 impl Default for GameOverlayConfig {
     fn default() -> Self {
         Self {
+            #[cfg(not(target_os = "android"))]
             mode: OverlayMode::Off,
+            #[cfg(not(target_os = "android"))]
             corner: OverlayCorner::default(),
+            #[cfg(not(target_os = "android"))]
             hide_from_capture: true,
             logical_size: (DEFAULT_WIDTH, DEFAULT_HEIGHT),
             rules: Rules::new(),
@@ -109,6 +124,7 @@ pub(crate) struct GameOverlayState {
     #[cfg(not(target_os = "android"))]
     watcher: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     /// A hotkey press waiting to be picked up by the next poll tick.
+    #[cfg(not(target_os = "android"))]
     manual_toggle: Mutex<Option<bool>>,
     /// Set once the overlay page has mounted, which is the only proof that the
     /// webview initialised. Hiding the window before that is what leaves a
@@ -118,6 +134,7 @@ pub(crate) struct GameOverlayState {
     page_status: Mutex<Option<PageStatus>>,
     /// The last thing emitted, so a settings page opened mid-session can ask
     /// for the current state instead of waiting for it to change.
+    #[cfg(not(target_os = "android"))]
     last_event: Mutex<Option<GameOverlayEvent>>,
 }
 
@@ -126,6 +143,7 @@ pub(crate) struct GameOverlayState {
 /// A policy that decides on its own when a window appears has to be able to
 /// say what it decided and why; without this the only way to tell "waiting for
 /// someone to speak" from "the window never opened" is to read the source.
+#[cfg(not(target_os = "android"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum HiddenReason {
@@ -163,6 +181,7 @@ pub(crate) struct PageStatus {
 }
 
 /// Where the overlay window actually sits, in physical pixels.
+#[cfg(not(target_os = "android"))]
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WindowRect {
@@ -177,6 +196,7 @@ pub(crate) struct WindowRect {
 }
 
 /// The payload of [`STATE_EVENT`].
+#[cfg(not(target_os = "android"))]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GameOverlayEvent {
@@ -222,6 +242,7 @@ pub(crate) struct GameOverlayEvent {
 }
 
 /// The payload of [`ASK_EVENT`].
+#[cfg(not(target_os = "android"))]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GameOverlayAsk {
@@ -234,6 +255,7 @@ pub(crate) struct GameOverlayAsk {
 }
 
 /// What `game_overlay_configure` accepts.
+#[cfg(not(target_os = "android"))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GameOverlaySettings {
@@ -248,6 +270,7 @@ pub(crate) struct GameOverlaySettings {
     pub rules: HashMap<String, Rule>,
 }
 
+#[cfg(not(target_os = "android"))]
 fn config_of(state: &AppState) -> GameOverlayConfig {
     state
         .game_overlay
@@ -257,6 +280,7 @@ fn config_of(state: &AppState) -> GameOverlayConfig {
         .unwrap_or_default()
 }
 
+#[cfg(not(target_os = "android"))]
 fn take_manual_toggle(state: &AppState) -> Option<bool> {
     state
         .game_overlay
@@ -299,15 +323,12 @@ pub(crate) fn game_overlay_configure(
     Ok(())
 }
 
+/// Android draws no overlay, so there is nothing for the settings to drive.
+/// Accepted rather than refused: the frontend pushes them on every platform at
+/// startup, and a refusal here was a warning in the log on every launch.
 #[cfg(target_os = "android")]
 #[tauri::command]
-pub(crate) fn game_overlay_configure(
-    _app: tauri::AppHandle,
-    _state: tauri::State<'_, AppState>,
-    _settings: GameOverlaySettings,
-) -> Result<(), String> {
-    Err("The game overlay is a desktop feature".to_string())
-}
+pub(crate) fn game_overlay_configure() {}
 
 /// Start the detector task if it is not already running.
 #[cfg(not(target_os = "android"))]
@@ -324,6 +345,7 @@ fn ensure_watcher(app: &tauri::AppHandle, state: &AppState) {
 
 /// Show or hide the overlay for the current game, until the foreground app
 /// changes. This is what the toggle hotkey calls.
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 pub(crate) fn game_overlay_toggle(state: tauri::State<'_, AppState>) -> Result<bool, String> {
     let currently_visible = state
@@ -435,6 +457,7 @@ pub(crate) fn game_overlay_resize(
 
 /// The detector's current conclusion, for a diagnostics panel that has just
 /// opened and has not seen an event yet.
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 pub(crate) fn game_overlay_diagnostics(
     state: tauri::State<'_, AppState>,

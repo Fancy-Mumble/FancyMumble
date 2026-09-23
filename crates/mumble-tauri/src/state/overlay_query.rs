@@ -11,11 +11,13 @@ use super::types::{OverlayMessage, OverlayOccupant, OverlaySnapshot, VoiceState,
 /// How long a message stays "the last message" as far as the overlay's
 /// activity policy is concerned. Longer than the fade in the page itself, so
 /// the window does not vanish the instant the text starts fading.
+#[cfg(not(target_os = "android"))]
 pub(crate) const MESSAGE_FRESHNESS_MS: u64 = 12_000;
 
 /// How long after the microphone last transmitted the local user still counts
 /// as active. Comfortably longer than the overlay's poll interval, so no
 /// utterance can fall between two ticks and go unnoticed.
+#[cfg(not(target_os = "android"))]
 const LOCAL_TALKING_GRACE_MS: u64 = 1_500;
 
 impl AppState {
@@ -107,7 +109,8 @@ impl AppState {
     /// Is there voice or chat activity worth showing the overlay for?
     ///
     /// Drives the "while active" mode: someone is talking, or a message
-    /// arrived in the last few seconds.
+    /// arrived in the last few seconds. Asked only by the desktop watcher.
+    #[cfg(not(target_os = "android"))]
     pub(crate) fn overlay_has_activity(&self, now_ms: u64) -> bool {
         let handle = self.inner.snapshot();
         let Ok(state) = handle.lock() else {
@@ -176,6 +179,7 @@ mod tests {
     /// The regression this file exists to prevent: `talking_sessions` holds
     /// only remote speakers, so a channel where the local user is the one
     /// talking used to read as silent and the overlay never appeared.
+    #[cfg(not(target_os = "android"))]
     #[test]
     fn the_local_user_talking_counts_as_activity() {
         let state = AppState::new();

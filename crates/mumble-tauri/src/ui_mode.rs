@@ -147,7 +147,8 @@ fn find_qt6ui_binary() -> Option<PathBuf> {
 /// Startup dispatch: when the persisted mode is minimal, spawn the qt6ui
 /// client and return `true` (the caller should exit). Returns `false` when
 /// the mode is full or the minimal binary could not be started, so the
-/// user is never locked out of the app.
+/// user is never locked out of the app. There is no qt6ui client on Android.
+#[cfg(not(target_os = "android"))]
 pub(crate) fn dispatch_if_minimal() -> bool {
     if current_mode() != UiMode::Minimal {
         return false;

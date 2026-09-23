@@ -284,12 +284,14 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::draw_overlay::take_drawing_overlay_context,
         super::draw_overlay::drawing_overlay_support,
         super::game_overlay::game_overlay_configure,
+        #[cfg(not(target_os = "android"))]
         super::game_overlay::game_overlay_toggle,
         super::game_overlay::game_overlay_set_rule,
         super::game_overlay::game_overlay_snapshot,
         super::game_overlay::game_overlay_resize,
         super::game_overlay::game_overlay_ready,
         super::game_overlay::game_overlay_page_status,
+        #[cfg(not(target_os = "android"))]
         super::game_overlay::game_overlay_diagnostics,
         super::window::set_window_aspect_ratio,
         super::window::set_window_icon,

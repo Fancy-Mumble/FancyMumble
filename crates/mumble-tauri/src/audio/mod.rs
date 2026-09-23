@@ -48,6 +48,7 @@ mod rodio_desktop;
 #[cfg(not(target_os = "android"))]
 pub(crate) mod stream_audio;
 
+#[cfg(not(target_os = "android"))]
 mod shared_capture;
 
 #[cfg(not(target_os = "android"))]
@@ -97,12 +98,6 @@ pub fn set_exclusive_input(exclusive: bool) {
 /// On Android there is only one capture path; exclusive mode is a no-op.
 #[cfg(target_os = "android")]
 pub fn set_exclusive_input(_exclusive: bool) {}
-
-/// On Android exclusive input is never used.
-#[cfg(target_os = "android")]
-pub fn is_exclusive_input() -> bool {
-    false
-}
 
 /// On Android there is only one backend, so this is a no-op.
 #[cfg(target_os = "android")]

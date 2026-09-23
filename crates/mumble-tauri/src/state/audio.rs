@@ -170,7 +170,9 @@ impl AppState {
     ///
     /// Deafen is not part of [`VoiceState`] (which only tracks the local capture
     /// pipeline), so every surface that shows a deafen indicator must read it
-    /// from here rather than inferring it from the voice state.
+    /// from here rather than inferring it from the voice state. Only the
+    /// desktop tray asks; Android has no tray.
+    #[cfg(not(target_os = "android"))]
     pub fn self_deafened(&self) -> bool {
         self.inner
             .snapshot()
