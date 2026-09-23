@@ -16,6 +16,7 @@
     "chooseConversation": "Gespräch auswählen",
     "directMessage": "Direktnachricht",
     "pickChannel": "Wähle links einen Kanal",
+    "pickChannelHandheld": "Geh zurück und wähle einen Kanal",
     "startWith": "Beginne ein Gespräch mit {{name}}",
     "startOfChannel": "Das ist der Anfang von #{{channel}}",
     "nothingSelected": "Nichts ausgewählt",

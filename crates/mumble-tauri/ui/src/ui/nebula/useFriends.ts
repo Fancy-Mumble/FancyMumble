@@ -61,8 +61,12 @@ export interface FriendsScreen {
   filtered: boolean;
   /** A friend whose server is closed, awaiting an answer about connecting. */
   pendingConnect: Friend | null;
-  /** Open this friend's chat, or ask about connecting to their server. */
-  open: (entry: FriendEntry) => void;
+  /**
+   * Open this friend's chat, or ask about connecting to their server.
+   * `onOpened` runs only when a conversation actually opened - a phone brings
+   * it forward then, and not for the question about connecting.
+   */
+  open: (entry: FriendEntry, onOpened?: () => void) => void;
   /** Connect to the pending friend's server, then open the chat. */
   confirmConnect: () => void;
   cancelConnect: () => void;
@@ -254,10 +258,11 @@ export function useFriends(query: string, labels: FriendsLabels): FriendsScreen 
   );
 
   const open = useCallback(
-    (entry: FriendEntry) => {
+    (entry: FriendEntry, onOpened?: () => void) => {
       void openChat(entry)
         .then((opened) => {
-          if (!opened && entry.canConnect) setPendingConnect(entry.friend);
+          if (opened) onOpened?.();
+          else if (entry.canConnect) setPendingConnect(entry.friend);
         })
         .catch((reason: unknown) => console.error("Nebula open friend chat failed:", reason));
     },

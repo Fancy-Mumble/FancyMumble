@@ -12,6 +12,7 @@ import { GlobeIcon, HashIcon, SettingsIcon, UsersGroupIcon } from "@ui/icons";
 import { Stack } from "../primitives";
 import { glassChrome, handheldChrome } from "../../theme";
 import { useStencil } from "./mobileMarks";
+import { SAFE_AREA } from "../../tokens";
 
 export type MobileTab = "chats" | "people" | "settings";
 
@@ -48,7 +49,9 @@ export function MobileTabBar({
     chats: servers ? t("nebulaCommon:app.servers") : t("sidebar:sidebarTabs.channels"),
     // Before a session there is no roster to be a member of; what that tab
     // leads to is the friends list, which is what it says it is.
-    people: servers ? t("server:tabsBar.friends") : t("sidebar:sidebarTabs.members"),
+    // The tab opens the friends list whether or not a server is open; calling
+    // it "Members" once connected named the roster, which is a sheet elsewhere.
+    people: t("server:tabsBar.friends"),
     settings: t("common:minimal.settings"),
   };
   const badges: Record<MobileTab, number> = { chats: chatsBadge, people: peopleBadge, settings: 0 };
@@ -64,8 +67,8 @@ export function MobileTabBar({
         // The bar's own height, plus whatever the gesture bar is taking. The
         // padding is inside the band so the ink stays where it was drawn and
         // only the ground grows.
-        height: `calc(${handheldChrome(theme).tabBarHeight}px + env(safe-area-inset-bottom, 0px))`,
-        pb: "env(safe-area-inset-bottom, 0px)",
+        height: `calc(${handheldChrome(theme).tabBarHeight}px + ${SAFE_AREA.bottom})`,
+        pb: SAFE_AREA.bottom,
         borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
         ...glassChrome(theme),
       })}

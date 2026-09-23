@@ -381,6 +381,65 @@ describe("the handheld shell", () => {
     const sheet = screen.getByTestId("nebula-mobile-members-sheet");
     expect(within(sheet).getByTestId("member-list")).toBeTruthy();
   });
+
+  it("gives the roster sheet one title and one way out", () => {
+    // The panel's own header stood under the sheet's: two titles, two crosses.
+    mount(skin, "dark", <MobileShell model={model({ membersOpen: true })} />);
+    const sheet = screen.getByTestId("nebula-mobile-members-sheet");
+    expect(within(sheet).getAllByRole("button", { name: /close/i })).toHaveLength(1);
+  });
+
+  it("draws what the window hangs above and below the conversation", () => {
+    // Pins, the share strip, a live document and the search box above the
+    // river; the selection bar, failed sends and who is typing below it. Left
+    // to the window alone, each was a menu entry that opened nothing here.
+    mount(
+      skin,
+      "dark",
+      <MobileShell
+        model={model({ chatUpper: <div>Pinned panel</div>, chatLower: <div>Someone is typing</div> })}
+        initialPane="content"
+      />,
+    );
+    expect(screen.getByText("Pinned panel")).toBeTruthy();
+    expect(screen.getByText("Someone is typing")).toBeTruthy();
+  });
+
+  it("says why a session has no channels rather than listing none", () => {
+    mount(skin, "dark", <MobileShell model={model({ sessionStatus: <div>Connection ended</div> })} />);
+    expect(screen.getByText("Connection ended")).toBeTruthy();
+    expect(screen.queryByText("general")).toBeNull();
+  });
+
+  it("opens a friend's conversation in the pane the channels use, and comes back", () => {
+    const friends = model({ screen: "messages", screenNav: <div>Friends list</div>, openedContent: 0 });
+    const { rerender, theme } = mount(skin, "dark", <MobileShell model={friends} />);
+    expect(screen.getByText("Friends list")).toBeTruthy();
+
+    rerender(
+      <ThemeProvider theme={theme}>
+        <MobileShell model={{ ...friends, openedContent: 1 }} />
+      </ThemeProvider>,
+    );
+    expect(screen.queryByText("Friends list")).toBeNull();
+    expect(screen.getByLabelText("Back")).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Back"));
+    expect(screen.getByText("Friends list")).toBeTruthy();
+  });
+
+  it("calls the second tab Friends, which is what it opens", () => {
+    mount(skin, "dark", <MobileShell model={model()} />);
+    expect(screen.getByTestId("nebula-mobile-tab-people").textContent).toContain("Friends");
+  });
+
+  it("opens a server's menu on a long press of its tile", () => {
+    // A long press is a `contextmenu` in Android's webview; the phone had no
+    // other way to edit, leave or forget a server.
+    mount(skin, "dark", <MobileShell model={model()} />);
+    fireEvent.contextMenu(screen.getByLabelText("Aoba Base"));
+    expect(screen.getByRole("menu")).toBeTruthy();
+  });
 });
 
 describe("the start screen", () => {

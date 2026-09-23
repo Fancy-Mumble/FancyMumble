@@ -18,6 +18,7 @@ import { Stack, TalkingBars, UserAvatar, useIsTalking } from "../primitives";
 import type { VoiceModel } from "../../shellModel";
 import type { UserEntry } from "@core/types";
 import { DisplayText, PlateButton, useStencil } from "./mobileMarks";
+import { SAFE_AREA } from "../../tokens";
 
 export function MobileVoiceScreen({
   model,
@@ -38,7 +39,10 @@ export function MobileVoiceScreen({
         minHeight: 0,
         overflow: "hidden",
         color: nebula.railText,
-        background: `linear-gradient(180deg,${nebula.rail},${nebula.railEdge})`,
+        // Over the window's own ground: the rail's colours are glass on most
+        // skins, and a screen of glass let the conversation beneath read
+        // through the call.
+        background: `linear-gradient(180deg,${nebula.rail},${nebula.railEdge}),${nebula.bg0}`,
       }}
     >
       {/* The artboard's ring and dot grid. Both are decoration and both are
@@ -71,7 +75,9 @@ export function MobileVoiceScreen({
         direction="row"
         alignItems="center"
         gap={1.5}
-        sx={{ position: "relative", px: "20px", pt: "22px", flex: "none" }}
+        // The screen is laid over the shell's padding, not inside it, so it
+        // clears the status bar itself.
+        sx={{ position: "relative", px: "20px", pt: `calc(22px + ${SAFE_AREA.top})`, flex: "none" }}
       >
         <Box
           component="button"
@@ -144,7 +150,7 @@ export function MobileVoiceScreen({
 
       <Stack
         gap={1.75}
-        sx={{ position: "relative", px: "20px", pt: "16px", pb: "calc(24px + env(safe-area-inset-bottom, 0px))" }}
+        sx={{ position: "relative", px: "20px", pt: "16px", pb: `calc(24px + ${SAFE_AREA.bottom})` }}
       >
         <Stack direction="row" gap={1.25}>
           <PlateButton

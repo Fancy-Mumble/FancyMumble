@@ -77,6 +77,7 @@
     "search": "Freunde suchen",
     "noMatch": "Kein Freund passt dazu.",
     "empty": "Noch keine Freunde. Rechtsklicke jemanden und wähle „Freund hinzufügen“.",
+    "emptyTouch": "Noch keine Freunde. Halte jemanden gedrückt und wähle „Freund hinzufügen“.",
     "notepad": "Dein Notizblock",
     "serverNotConnected": "Server nicht verbunden",
     "unreachable": "Nicht erreichbar",

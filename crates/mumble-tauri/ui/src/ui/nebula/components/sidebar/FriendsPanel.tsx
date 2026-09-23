@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Button, Dialog, DialogActions, DialogContent, Typography } from "@mui/material";
 import { useAppStore } from "@core/store";
 import { TID } from "@core/testids";
+import { isMobile } from "@core/utils/platform";
 import { isFriendChatOpen } from "../../friends";
 import { useFriends } from "../../useFriends";
 import { SearchBox } from "../primitives";
@@ -18,6 +19,10 @@ interface FriendsPanelProps {
   onContextMenuUser?: (session: number, event: React.MouseEvent) => void;
   onHoverUser?: (session: number, event: React.MouseEvent) => void;
   onLeaveUser?: () => void;
+  /** Fill the width: a phone has no conversation beside the list. */
+  full?: boolean;
+  /** A friend's conversation opened - on a phone, the cue to bring it forward. */
+  onOpened?: () => void;
 }
 
 /**
@@ -39,6 +44,8 @@ export function FriendsPanel({
   onContextMenuUser,
   onHoverUser,
   onLeaveUser,
+  full = false,
+  onOpened,
 }: Readonly<FriendsPanelProps>) {
   const { t } = useTranslation(["nebulaSidebar", "nebulaSettings", "common", "server"]);
   const friends = useFriends(query, {
@@ -78,6 +85,7 @@ export function FriendsPanel({
   return (
     <>
       <SidebarShell
+        full={full}
         title={t("server:tabsBar.friends")}
         search={
           <SearchBox
@@ -91,13 +99,17 @@ export function FriendsPanel({
         <FriendList
           groups={friends.groups}
           activeId={activeId}
-          onOpen={friends.open}
+          onOpen={(entry) => friends.open(entry, onOpened)}
           onRemove={friends.remove}
           onNotepadOptions={() => setNotepadOpen(true)}
           onContextMenu={onContextMenuUser}
           onHover={onHoverUser}
           onLeave={onLeaveUser}
-          empty={friends.filtered ? t("nebulaSidebar:friends.noMatch") : t("nebulaSidebar:friends.empty")}
+          empty={
+            friends.filtered
+              ? t("nebulaSidebar:friends.noMatch")
+              : t(isMobile ? "nebulaSidebar:friends.emptyTouch" : "nebulaSidebar:friends.empty")
+          }
         />
       </SidebarShell>
 

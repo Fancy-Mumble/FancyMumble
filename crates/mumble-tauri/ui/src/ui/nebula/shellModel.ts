@@ -97,8 +97,29 @@ export interface MobileShellModel {
   members: MemberPanelModel;
   membersOpen: boolean;
   onCloseMembers: () => void;
-  /** Anything the conversation hangs above the message list, unchanged. */
+  /**
+   * The conversation's banners. The list draws them as its own header, so the
+   * pane draws them only where there is no list - an empty conversation, whose
+   * history sentinel is among them and is what fetches the first page.
+   */
   chatBanners?: ReactNode;
+  /**
+   * What the window hangs between the header and the river - pins, the share
+   * strip, a live document, a key request, the search box - and what it keeps
+   * between the river and the composer: the selection bar, failed sends, who is
+   * typing. The same fragments the window draws, so no surface is window-only.
+   */
+  chatUpper?: ReactNode;
+  chatLower?: ReactNode;
+  /** A live document has the pane; the conversation is kept, but put away. */
+  hidesChat?: boolean;
+  /** Said instead of the conversation while the session is still arriving. */
+  loadingLabel?: string;
+  /**
+   * The open session is connecting, reconnecting or gone: said, with the ways
+   * out of it, in place of a channel list that would otherwise just be empty.
+   */
+  sessionStatus?: ReactNode;
   /** Under the conversation's own empty state. */
   emptyLabel: string;
   channelSearch: { value: string; onChange: (next: string) => void; placeholder: string };
@@ -189,6 +210,8 @@ export interface MobileConnectModel {
   selectedIdentity: string | null;
   onSelectIdentity: (id: string) => void;
   onAddIdentity: () => void;
+  /** Change one saved login - the window's pencil, on a long press. */
+  onEditIdentity?: (id: string) => void;
   onConnect: () => void;
   onBack: () => void;
   autoConnect: boolean;

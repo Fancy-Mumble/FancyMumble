@@ -16,6 +16,7 @@
     "chooseConversation": "选择一个对话",
     "directMessage": "私信",
     "pickChannel": "在左侧选择一个频道",
+    "pickChannelHandheld": "返回以选择一个频道",
     "startWith": "与 {{name}} 开始对话",
     "startOfChannel": "这是 #{{channel}} 的开始",
     "nothingSelected": "未选择任何内容",

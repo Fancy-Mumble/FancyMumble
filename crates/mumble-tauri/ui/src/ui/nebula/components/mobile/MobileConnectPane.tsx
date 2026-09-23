@@ -16,7 +16,7 @@ import { useTheme } from "@mui/material/styles";
 import { ChevronLeftIcon, PlusIcon } from "@ui/icons";
 import { Stack, UserAvatar } from "../primitives";
 import { chamferedSurface } from "../../theme";
-import { radius } from "../../tokens";
+import { SAFE_AREA, radius } from "../../tokens";
 import type { MobileConnectModel, MobileIdentity } from "../../shellModel";
 import { DisplayText, HazardRule, PlateButton, useStencil } from "./mobileMarks";
 
@@ -171,7 +171,8 @@ function IdentityRow({
   identity,
   selected,
   onSelect,
-}: Readonly<{ identity: MobileIdentity; selected: boolean; onSelect: () => void }>) {
+  onEdit,
+}: Readonly<{ identity: MobileIdentity; selected: boolean; onSelect: () => void; onEdit?: () => void }>) {
   const nebula = useTheme().palette.nebula;
   return (
     <Box sx={{ position: "relative", flex: "none" }}>
@@ -182,6 +183,15 @@ function IdentityRow({
         aria-checked={selected}
         disabled={identity.disabled}
         onClick={onSelect}
+        onContextMenu={
+          onEdit &&
+          ((event) => {
+            // The webview's own answer to a long press - a selection, then a
+            // click that would pick this login - is not what was asked for.
+            event.preventDefault();
+            onEdit();
+          })
+        }
         data-testid="nebula-mobile-identity"
         sx={(theme) => ({
           all: "unset",
@@ -347,6 +357,7 @@ export function MobileConnectPane({ model }: Readonly<{ model: MobileConnectMode
             identity={identity}
             selected={identity.id === model.selectedIdentity}
             onSelect={() => model.onSelectIdentity(identity.id)}
+            onEdit={model.onEditIdentity && (() => model.onEditIdentity?.(identity.id))}
           />
         ))}
       </Stack>
@@ -359,7 +370,7 @@ export function MobileConnectPane({ model }: Readonly<{ model: MobileConnectMode
             background: nebula.panel,
             px: "18px",
             pt: "14px",
-            pb: "calc(18px + env(safe-area-inset-bottom, 0px))",
+            pb: `calc(18px + ${SAFE_AREA.bottom})`,
           }}
         >
           <PlateButton

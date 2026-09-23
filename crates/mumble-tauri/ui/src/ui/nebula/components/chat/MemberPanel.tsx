@@ -129,17 +129,22 @@ export function MemberPanel({
         background: theme.palette.nebula.panel,
       })}
     >
-      <Stack direction="row" alignItems="center" sx={{ px: "14px", pt: "14px", pb: "8px" }}>
-        <Typography sx={{ fontSize: 15, fontWeight: 600 }}>{t("sidebar:sidebarTabs.members")}</Typography>
-        <IconButton
-          size="small"
-          aria-label={t("nebulaChat:members.close")}
-          sx={{ ml: "auto" }}
-          onClick={onClose}
-        >
-          <CloseIcon width={13} height={13} />
-        </IconButton>
-      </Stack>
+      {/* A sheet carries the title and the close button itself; drawn here as
+          well, the phone showed two headers and two ways out, one above the
+          other. */}
+      {variant === "column" && (
+        <Stack direction="row" alignItems="center" sx={{ px: "14px", pt: "14px", pb: "8px" }}>
+          <Typography sx={{ fontSize: 15, fontWeight: 600 }}>{t("sidebar:sidebarTabs.members")}</Typography>
+          <IconButton
+            size="small"
+            aria-label={t("nebulaChat:members.close")}
+            sx={{ ml: "auto" }}
+            onClick={onClose}
+          >
+            <CloseIcon width={13} height={13} />
+          </IconButton>
+        </Stack>
+      )}
 
       <Box sx={{ px: "12px", pb: "6px" }}>
         <SearchBox value={query} onChange={onQueryChange} placeholder={t("nebulaChat:members.find")} />

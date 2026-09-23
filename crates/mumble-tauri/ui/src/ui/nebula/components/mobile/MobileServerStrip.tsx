@@ -10,7 +10,7 @@
  * Two lists of the same servers that could disagree would be a bug waiting for
  * somebody to add a server on a phone.
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Box } from "@mui/material";
 import { PlusIcon } from "@ui/icons";
@@ -34,11 +34,13 @@ function Tile({
   icon,
   active,
   onSelect,
+  onMenu,
 }: Readonly<{
   entry: ServerRailEntry;
   icon: string | undefined;
   active: boolean;
   onSelect: () => void;
+  onMenu?: (event: MouseEvent) => void;
 }>) {
   const stencil = useStencil();
   const tint = serverTint(entry.group.key);
@@ -48,6 +50,7 @@ function Tile({
         component="button"
         type="button"
         onClick={onSelect}
+        onContextMenu={onMenu}
         aria-current={active ? "true" : undefined}
         aria-label={entry.group.label}
         data-testid="nebula-mobile-server-tile"
@@ -124,7 +127,14 @@ function Tile({
   );
 }
 
-export function MobileServerStrip({ model }: Readonly<{ model: ServerStripModel }>) {
+export function MobileServerStrip({
+  model,
+  onMenu,
+}: Readonly<{
+  model: ServerStripModel;
+  /** A long press on a tile: the server's menu, which the shell draws. */
+  onMenu?: (entry: ServerRailEntry, event: MouseEvent) => void;
+}>) {
   const { t } = useTranslation("nebulaCommon");
   const stencil = useStencil();
   const track = useRef<HTMLDivElement>(null);
@@ -185,6 +195,7 @@ export function MobileServerStrip({ model }: Readonly<{ model: ServerStripModel 
             icon={model.icons?.get(active.group.key)}
             active
             onSelect={() => model.onSelect(active)}
+            onMenu={onMenu && ((event) => onMenu(active, event))}
           />
           {/* The one you are on, and then everything else. */}
           <Box
@@ -223,6 +234,7 @@ export function MobileServerStrip({ model }: Readonly<{ model: ServerStripModel 
             icon={model.icons?.get(entry.group.key)}
             active={false}
             onSelect={() => model.onSelect(entry)}
+            onMenu={onMenu && ((event) => onMenu(entry, event))}
           />
         ))}
         <Box

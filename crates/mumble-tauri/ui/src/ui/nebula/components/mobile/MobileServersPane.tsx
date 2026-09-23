@@ -7,6 +7,7 @@
  * which is doing real work: it is the only thing on screen before a session
  * exists that says which application you have opened.
  */
+import type { MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Box } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
@@ -159,7 +160,13 @@ function ServerRow({
   row,
   active,
   onOpen,
-}: Readonly<{ row: MobileServerRow; active: boolean; onOpen: () => void }>) {
+  onMenu,
+}: Readonly<{
+  row: MobileServerRow;
+  active: boolean;
+  onOpen: () => void;
+  onMenu?: (event: MouseEvent) => void;
+}>) {
   const nebula = useTheme().palette.nebula;
   return (
     <Box sx={{ position: "relative", flex: "none" }}>
@@ -167,6 +174,7 @@ function ServerRow({
         component="button"
         type="button"
         onClick={onOpen}
+        onContextMenu={onMenu}
         data-testid="nebula-mobile-server-row"
         aria-current={active ? "true" : undefined}
         sx={(theme) => ({
@@ -296,7 +304,16 @@ function ServerRow({
   );
 }
 
-export function MobileServersPane({ model, brand }: Readonly<{ model: MobileServersModel; brand: string }>) {
+export function MobileServersPane({
+  model,
+  brand,
+  onMenu,
+}: Readonly<{
+  model: MobileServersModel;
+  brand: string;
+  /** A long press on a row: that server's menu, which the shell draws. */
+  onMenu?: (key: string, event: MouseEvent) => void;
+}>) {
   const { t } = useTranslation(["nebulaCommon", "server"]);
   const stencil = useStencil();
   const nebula = useTheme().palette.nebula;
@@ -352,6 +369,7 @@ export function MobileServersPane({ model, brand }: Readonly<{ model: MobileServ
             row={row}
             active={row.key === model.activeKey}
             onOpen={() => model.onOpen(row.key)}
+            onMenu={onMenu && ((event) => onMenu(row.key, event))}
           />
         ))}
 

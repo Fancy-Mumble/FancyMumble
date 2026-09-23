@@ -77,6 +77,7 @@
     "search": "Rechercher des amis",
     "noMatch": "Aucun ami ne correspond.",
     "empty": "Aucun ami pour l’instant. Faites un clic droit sur quelqu’un et choisissez « Ajouter en ami ».",
+    "emptyTouch": "Aucun ami pour l’instant. Appuyez longuement sur quelqu’un et choisissez « Ajouter en ami ».",
     "notepad": "Votre bloc-notes",
     "serverNotConnected": "Serveur non connecté",
     "unreachable": "Injoignable",

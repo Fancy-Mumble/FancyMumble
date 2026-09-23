@@ -20,6 +20,7 @@
  * bundle `NebulaClientApp` already built for the window.
  */
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Box } from "@mui/material";
 import { Stack } from "../primitives";
 import { ChatBackdrop } from "../chat/ChatBackdrop";
@@ -30,6 +31,8 @@ import { MessageList } from "../chat/MessageList";
 import { ChannelList } from "../sidebar/ChannelList";
 import { SearchBox } from "../primitives/SearchBox";
 import type { MobileShellModel } from "../../shellModel";
+import { useBackStep } from "../../backGesture";
+import { SAFE_AREA } from "../../tokens";
 import { MobileCallBar } from "./MobileCallBar";
 import { MobileConnectPane } from "./MobileConnectPane";
 import { MobileHeader } from "./MobileHeader";
@@ -38,6 +41,7 @@ import { MobileServersPane } from "./MobileServersPane";
 import { MobileSheet } from "./MobileSheet";
 import { MobileTabBar, type MobileTab } from "./MobileTabBar";
 import { MobileVoiceScreen } from "./MobileVoiceScreen";
+import { useServerMenu } from "./useServerMenu";
 import { HazardRule, useStencil } from "./mobileMarks";
 
 /**
@@ -63,10 +67,13 @@ export function MobileShell({
   initialPane = "nav",
   openVoice = false,
 }: Readonly<{ model: MobileShellModel; initialPane?: MobilePane; openVoice?: boolean }>) {
+  const { t } = useTranslation("sidebar");
   const [pane, setPane] = useState<MobilePane>(initialPane);
   // The call is not a pane but a place you go and come back from, so it sits
   // over whichever pane you were on rather than replacing it.
   const [voiceOpen, setVoiceOpen] = useState(openVoice);
+  // One server menu for the strip and the start screen's rows alike.
+  const serverMenu = useServerMenu(model.serverStrip);
 
   // Changing screen lands on that screen's list, never on whatever page the
   // last screen had open - a tab that dropped you into a stale settings page
@@ -91,6 +98,9 @@ export function MobileShell({
   }, [model.openedContent]);
 
   const chat = model.screen === "chat";
+  // Friends is a list beside a conversation too - a friend's chat, a DM, the
+  // notepad - and on a window it opens in the very pane the channels use.
+  const friends = model.screen === "messages";
   // The start screen is the same two halves as the conversation - a list, and
   // the thing a row on it opens - so it rides the same pane switch rather
   // than being a third layout.
@@ -107,11 +117,21 @@ export function MobileShell({
         },
       }}
       brand={model.brand}
+      onMenu={(key, event) => {
+        const entry = model.serverStrip.entries.find((candidate) => candidate.group.key === key);
+        if (entry) serverMenu.open(entry, event);
+      }}
     />
   ) : (
     model.screenNav
   );
+  // A session that is not ready has no conversation to bring forward; the
+  // list half says why instead.
   const content = chat ? (
+    model.sessionStatus ? undefined : (
+      <ChatPane model={model} onBack={() => setPane("nav")} onExpandVoice={() => setVoiceOpen(true)} />
+    )
+  ) : friends ? (
     <ChatPane model={model} onBack={() => setPane("nav")} onExpandVoice={() => setVoiceOpen(true)} />
   ) : start && model.connect ? (
     <MobileConnectPane model={{ ...model.connect, onBack: () => setPane("nav") }} />
@@ -135,7 +155,22 @@ export function MobileShell({
   // simply the pane - which is what the friends list and the empty connect
   // screen are.
   const front = pane === "content" && content ? content : (nav ?? content);
-  const tabs = !((chat || start) && pane === "content" && content);
+  const tabs = !((chat || friends || start) && pane === "content" && content);
+
+  // Back retraces what the shell put in front, newest first; at the home
+  // screen's list there is nothing left, and the gesture leaves the app.
+  const home = chat || model.screen === "connect";
+  useBackStep(
+    model.voice && voiceOpen
+      ? () => setVoiceOpen(false)
+      : model.membersOpen
+        ? model.onCloseMembers
+        : pane === "content" && content
+          ? () => setPane("nav")
+          : !home
+            ? () => model.onScreen("chat")
+            : null,
+  );
 
   return (
     <Stack
@@ -147,15 +182,15 @@ export function MobileShell({
         overflow: "hidden",
         // The status bar and the two rounded corners of the screen. Said once
         // here so no band below has to know the phone's shape.
-        pt: "env(safe-area-inset-top, 0px)",
-        pl: "env(safe-area-inset-left, 0px)",
-        pr: "env(safe-area-inset-right, 0px)",
+        pt: SAFE_AREA.top,
+        pl: SAFE_AREA.left,
+        pr: SAFE_AREA.right,
       }}
     >
       <ChatBackdrop />
       {/* Nothing to switch between before a session exists, and the start
           screen carries its own masthead in that space instead. */}
-      {!start && <MobileServerStrip model={model.serverStrip} />}
+      {!start && <MobileServerStrip model={model.serverStrip} onMenu={serverMenu.open} />}
       <Stack sx={{ flex: 1, minHeight: 0, position: "relative", zIndex: 1 }}>{front}</Stack>
       {/* Not on an open conversation: the artboard gives that the whole
           screen, and the way out of it is the arrow in its own header. Three
@@ -187,9 +222,10 @@ export function MobileShell({
       {model.voice && voiceOpen && (
         <MobileVoiceScreen model={model.voice} onCollapse={() => setVoiceOpen(false)} />
       )}
+      {serverMenu.menu}
       <MobileSheet
         open={model.membersOpen}
-        title={model.serverName}
+        title={t("sidebarTabs.members")}
         onClose={model.onCloseMembers}
         testId="nebula-mobile-members-sheet"
       >
@@ -239,27 +275,31 @@ function ChannelsPane({ model, onOpen }: Readonly<{ model: MobileShellModel; onO
           ) : undefined
         }
       />
-      <Box sx={{ flex: "none", px: "14px", pt: "14px", pb: "4px" }}>
-        <SearchBox
-          value={model.channelSearch.value}
-          onChange={model.channelSearch.onChange}
-          placeholder={model.channelSearch.placeholder}
-        />
-      </Box>
-      {/* The list itself is untouched: it already scrolls, already draws the
-          open channel as a filled plate with the skin's own selection bar, and
-          already stacks the occupants under it. */}
-      <ChannelList
-        {...model.channels}
-        onJoin={(channel) => {
-          model.channels.onJoin(channel);
-          onOpen();
-        }}
-        onSelect={(channel) => {
-          model.channels.onSelect(channel);
-          onOpen();
-        }}
-      />
+      {model.sessionStatus ?? (
+        <>
+          <Box sx={{ flex: "none", px: "14px", pt: "14px", pb: "4px" }}>
+            <SearchBox
+              value={model.channelSearch.value}
+              onChange={model.channelSearch.onChange}
+              placeholder={model.channelSearch.placeholder}
+            />
+          </Box>
+          {/* The list itself is untouched: it already scrolls, already draws the
+              open channel as a filled plate with the skin's own selection bar, and
+              already stacks the occupants under it. */}
+          <ChannelList
+            {...model.channels}
+            onJoin={(channel) => {
+              model.channels.onJoin(channel);
+              onOpen();
+            }}
+            onSelect={(channel) => {
+              model.channels.onSelect(channel);
+              onOpen();
+            }}
+          />
+        </>
+      )}
     </>
   );
 }
@@ -273,32 +313,40 @@ function ChatPane({
   return (
     <>
       <ChatHeader {...model.chatHeader} onBack={onBack} dense />
-      {model.chatBanners}
-      <Stack sx={{ flex: 1, minHeight: 0 }}>
-        {model.messageList ? (
-          <MessageList {...model.messageList} />
-        ) : (
-          <Box
-            sx={(theme) => ({
-              flex: 1,
-              display: "grid",
-              placeItems: "center",
-              px: "24px",
-              textAlign: "center",
-              fontSize: 13,
-              color: theme.palette.nebula.muted,
-            })}
-          >
-            {model.emptyLabel}
-          </Box>
-        )}
+      {model.chatUpper}
+      {/* Put away rather than unmounted while a document has the pane, as on a
+          window: the scroll position and the half-typed draft outlive it. */}
+      <Stack sx={{ flex: 1, minHeight: 0, display: model.hidesChat ? "none" : "flex" }}>
+        <Stack sx={{ flex: 1, minHeight: 0 }}>
+          {model.messageList && !model.loadingLabel ? (
+            <MessageList {...model.messageList} />
+          ) : (
+            <Stack sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+              {!model.loadingLabel && <Box sx={{ px: "14px", pt: "12px" }}>{model.chatBanners}</Box>}
+              <Box
+                sx={(theme) => ({
+                  flex: 1,
+                  display: "grid",
+                  placeItems: "center",
+                  px: "24px",
+                  textAlign: "center",
+                  fontSize: 13,
+                  color: theme.palette.nebula.muted,
+                })}
+              >
+                {model.loadingLabel ?? model.emptyLabel}
+              </Box>
+            </Stack>
+          )}
+        </Stack>
+        {model.chatLower}
+        {model.voice && <MobileCallBar model={model.voice} onExpand={onExpandVoice} />}
+        {/* The tab bar is not drawn on this pane, so the composer is the bottom
+            edge and it is the one that has to clear the gesture bar. */}
+        <Box sx={{ flex: "none", pb: SAFE_AREA.bottom }}>
+          <Composer {...model.composer} dense />
+        </Box>
       </Stack>
-      {model.voice && <MobileCallBar model={model.voice} onExpand={onExpandVoice} />}
-      {/* The tab bar is not drawn on this pane, so the composer is the bottom
-          edge and it is the one that has to clear the gesture bar. */}
-      <Box sx={{ flex: "none", pb: "env(safe-area-inset-bottom, 0px)" }}>
-        <Composer {...model.composer} dense />
-      </Box>
     </>
   );
 }

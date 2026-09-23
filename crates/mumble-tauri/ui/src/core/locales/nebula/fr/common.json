@@ -16,6 +16,7 @@
     "chooseConversation": "Choisissez une conversation",
     "directMessage": "Message privé",
     "pickChannel": "Choisissez un salon à gauche",
+    "pickChannelHandheld": "Revenez en arrière pour choisir un salon",
     "startWith": "Démarrez une conversation avec {{name}}",
     "startOfChannel": "C’est le début de #{{channel}}",
     "nothingSelected": "Rien de sélectionné",

@@ -77,6 +77,7 @@
     "search": "Search friends",
     "noMatch": "No friend matches that.",
     "empty": "No friends yet. Right-click someone and choose Add friend.",
+    "emptyTouch": "No friends yet. Long-press someone and choose Add friend.",
     "notepad": "Your notepad",
     "serverNotConnected": "Server not connected",
     "unreachable": "Unreachable",
