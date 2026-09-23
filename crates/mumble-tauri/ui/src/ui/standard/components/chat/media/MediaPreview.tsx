@@ -18,6 +18,7 @@ import type { TimeFormat } from "@core/types";
 import { formatTimestamp } from "@core/utils/format";
 import { useInnerHtml } from "@core/utils/innerHtml";
 import { imageSizeFromSource, rememberImageSize } from "@core/utils/imageSize";
+import { neutraliseRemoteMedia } from "@core/utils/remoteMedia";
 import { ImageContextMenu } from "../../elements/ImageContextMenu";
 
 // --- Types --------------------------------------------------------
@@ -318,6 +319,10 @@ export function extractMedia(html: string): { cleaned: string; media: MediaItem[
   const doc = parser.parseFromString(html, "text/html");
 
   // Images
+  // Remote pictures and clips never load by themselves (see remoteMedia.ts):
+  // they stay in the text as links, and only inline ones become tiles.
+  neutraliseRemoteMedia(doc.body);
+
   doc.querySelectorAll("img").forEach((img) => {
     const src = img.getAttribute("src") ?? "";
     if (!src) return;

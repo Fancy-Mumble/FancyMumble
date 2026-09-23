@@ -47,7 +47,7 @@ function empty() {
 
 describe("Lightbox", () => {
   it("opens on the src the gallery was built from", () => {
-    open('<img src="https://example.com/cat.png" alt="cat">', "https://example.com/cat.png");
+    open('<img src="cat.png" alt="cat">', "cat.png");
     expect(screen.getByAltText("cat")).toBeTruthy();
   });
 
@@ -57,21 +57,25 @@ describe("Lightbox", () => {
     expect(screen.getByAltText("cat")).toBeTruthy();
   });
 
-  it("still opens when the browser normalised a bare host", () => {
-    open('<img src="https://example.com" alt="cat">', "https://example.com/");
-    expect(screen.getByAltText("cat")).toBeTruthy();
+  it("never gathers a remote picture from a message", () => {
+    // Drawing it would fetch it, telling its host who looked and when - the
+    // message carries it as a link instead (see remoteMedia.ts).
+    open('<img src="https://example.com/cat.png" alt="cat">', "https://example.com/cat.png");
+    expect(screen.queryByAltText("cat")).toBeNull();
   });
 
   it("stays shut for a picture that is in no message", () => {
-    open('<img src="https://example.com/cat.png" alt="cat">', "https://example.com/dog.png");
+    open('<img src="cat.png" alt="cat">', "dog.png");
     expect(screen.queryByAltText("cat")).toBeNull();
   });
 
   it("answers a right-click on the picture with the picture's own menu", () => {
     // What used to happen: nothing here handled it, so the menu that came up
     // belonged to the message underneath - drawn at the message's z-index,
-    // which put it behind this overlay's blur.
-    open('<img src="https://example.com/cat.png" alt="cat">', "https://example.com/cat.png");
+    // which put it behind this overlay's blur. A caller's gallery, because
+    // only a remote picture has link rows and no message carries one.
+    const ref = empty();
+    act(() => ref.current?.openGallery([{ src: "https://example.com/cat.png", alt: "cat" }], 0));
 
     fireEvent.contextMenu(screen.getByAltText("cat"));
 
@@ -87,7 +91,7 @@ describe("Lightbox", () => {
   });
 
   it("keeps the platform's own menu away from the space around the picture", () => {
-    open('<img src="https://example.com/cat.png" alt="cat">', "https://example.com/cat.png");
+    open('<img src="cat.png" alt="cat">', "cat.png");
     const overlay = screen.getByRole("dialog");
 
     const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
@@ -98,10 +102,7 @@ describe("Lightbox", () => {
   });
 
   it("leaves the menu behind when the reader moves to the next picture", () => {
-    open(
-      '<img src="https://example.com/cat.png" alt="cat"><img src="https://example.com/dog.png" alt="dog">',
-      "https://example.com/cat.png",
-    );
+    open('<img src="cat.png" alt="cat"><img src="dog.png" alt="dog">', "cat.png");
     fireEvent.contextMenu(screen.getByAltText("cat"));
     expect(screen.getByRole("menu")).toBeTruthy();
 
@@ -152,7 +153,8 @@ describe("Lightbox", () => {
       configurable: true,
       writable: true,
     });
-    open('<img src="https://example.com/cat.png" alt="cat">', "https://example.com/cat.png");
+    const ref = empty();
+    act(() => ref.current?.openGallery([{ src: "https://example.com/cat.png", alt: "cat" }], 0));
     fireEvent.contextMenu(screen.getByAltText("cat"));
 
     fireEvent.click(screen.getByText("Copy image link"));

@@ -117,8 +117,7 @@ describe("a clip in a message", () => {
 });
 
 describe("a block of pictures", () => {
-  const imgs = (n: number) =>
-    Array.from({ length: n }, (_, i) => `<img src="https://example.invalid/${i}.jpg">`).join("");
+  const imgs = (n: number) => Array.from({ length: n }, (_, i) => `<img src="${i}.jpg">`).join("");
 
   beforeEach(() => {
     // `extractMedia` keys its per-tile state off the message id; keep them apart.
@@ -203,10 +202,7 @@ describe("a picture that has not decoded yet", () => {
 
   it("believes a tag that states its own size", () => {
     const { container } = render(
-      <MediaPreview
-        html='<img src="https://example.invalid/a.jpg" width="400" height="300">'
-        messageId="tagged"
-      />,
+      <MediaPreview html='<img src="a.jpg" width="400" height="300">' messageId="tagged" />,
     );
     const frame = container.querySelector("button")!;
     expect(frame.style.getPropertyValue("--thumb-w")).toBe("400");
@@ -214,9 +210,7 @@ describe("a picture that has not decoded yet", () => {
   });
 
   it("reserves nothing for a picture nobody can measure yet", () => {
-    const { container } = render(
-      <MediaPreview html='<img src="https://example.invalid/unknown.jpg">' messageId="unknown" />,
-    );
+    const { container } = render(<MediaPreview html='<img src="unknown.jpg">' messageId="unknown" />);
     const frame = container.querySelector("button")!;
     expect(frame.style.getPropertyValue("--thumb-w")).toBe("");
     expect(frame.className).not.toContain("thumbWrapSized");
