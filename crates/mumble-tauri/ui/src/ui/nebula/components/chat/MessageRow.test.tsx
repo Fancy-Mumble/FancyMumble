@@ -117,6 +117,26 @@ describe("MessageRow", () => {
     expect(container.textContent).not.toContain("<b>");
   });
 
+  it("keeps a message inside its bubble however it is styled", () => {
+    // A fuzzing bot's message: one inline style, and it lay over the whole
+    // window on every client in the channel and took every tap meant for it.
+    const { container } = draw(
+      message({
+        body: '<div style="position:fixed;inset:0;z-index:2147483647;color:red">OVERLAY</div>',
+      }),
+    );
+
+    // The innermost element holding the text is the one the message styled.
+    const styled = Array.from(container.querySelectorAll<HTMLElement>("div"))
+      .filter((el) => el.textContent === "OVERLAY")
+      .at(-1);
+    expect(styled).toBeDefined();
+    expect(styled?.style.position).toBe("");
+    expect(styled?.style.zIndex).toBe("");
+    // The formatting a message may carry survives.
+    expect(styled?.style.color).toBe("red");
+  });
+
   it("keeps the strip clear of it where the message carries no video", () => {
     draw(message({ body: "just words" }), { alwaysShowActions: true });
     expect(screen.queryByLabelText("Watch together")).toBeNull();

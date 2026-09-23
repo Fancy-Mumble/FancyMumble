@@ -309,7 +309,17 @@ function postProcess(root: DocumentFragment | Element): void {
     }
   }
 
-  // Sanitise inline styles.
+  sanitiseInlineStyles(root);
+}
+
+/**
+ * Filter every inline `style` under `root` to the safe properties above.
+ *
+ * Exported for renderers that run their own DOMPurify pass: DOMPurify keeps a
+ * `style` attribute whole, so without this a message can carry
+ * `position:fixed;inset:0` and lay itself over the entire window.
+ */
+export function sanitiseInlineStyles(root: ParentNode): void {
   for (const el of Array.from(root.querySelectorAll("[style]"))) {
     const raw = el.getAttribute("style") ?? "";
     const safe = sanitiseStyle(raw);

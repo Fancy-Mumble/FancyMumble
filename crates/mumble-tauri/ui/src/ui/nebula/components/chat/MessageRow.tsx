@@ -19,6 +19,7 @@ import { neutraliseRemoteMedia } from "@core/utils/remoteMedia";
 import { readWatchMarker } from "@core/features/chat/watch/watchMarker";
 import { MENTION_CHIP_SELECTOR, readMentionChip } from "@core/utils/mentions";
 import { useInnerHtml } from "@core/utils/innerHtml";
+import { sanitiseInlineStyles } from "@core/utils/sanitizeHtml";
 import { useSelfMention } from "@core/features/chat/selfMention";
 import { linkUnder } from "@core/features/elements/externalLinks";
 import { TID } from "@core/testids";
@@ -121,6 +122,11 @@ function sanitizeBody(html: string): string {
     anchor.setAttribute("rel", "noopener noreferrer");
     anchor.dataset["external"] = "true";
   }
+  // The same property allow-list every other surface renders untrusted HTML
+  // with. DOMPurify alone kept `style` whole, so one message could carry
+  // `position:fixed;inset:0;z-index:...` and cover - and swallow every tap on -
+  // the whole window, on every client in the channel.
+  sanitiseInlineStyles(fragment);
 
   const wrapper = document.createElement("div");
   wrapper.appendChild(fragment);
