@@ -174,6 +174,7 @@ export function AdvancedSettings() {
             value={prefs.klipyApiKey}
             onChange={(klipyApiKey) => set({ klipyApiKey })}
           />
+          {prefs.klipyApiKey.trim() && <Banner tone="warn">{t("advanced.klipyApiKeyPrivacyWarning")}</Banner>}
 
           <StreamViewerBackendSetting />
 

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProfileData } from "@core/features/settings/profileData";
 import { useAppStore } from "@core/store";
+import { setKlipyApiKey } from "@core/features/chat/gif/klipyConfig";
 import { withNebulaTheme } from "../../testTheme";
 import { ProfileSettings } from "./ProfileSettings";
 
@@ -103,10 +104,14 @@ describe("ProfileSettings", () => {
     fetched.length = 0;
     denyListener = null;
     useAppStore.setState({ connectedCertLabel: null, status: "disconnected" });
+    // GIFs are off without a key of the user's own; most of this page's GIF
+    // behaviour is about a user who has one.
+    setKlipyApiKey("klipy_test");
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
   afterEach(() => {
+    setKlipyApiKey(undefined);
     vi.useRealTimers();
   });
 
@@ -280,14 +285,24 @@ describe("ProfileSettings", () => {
     expect(await screen.findByText(/too large for this server/i)).toBeTruthy();
   });
 
-  it("sets a GIF banner by its link, the way Standard's banner editor does", async () => {
+  it("sets a GIF banner as the bytes of its small rendition, never its link", async () => {
+    // A banner that is a Klipy address makes everyone who opens the profile
+    // fetch it from Klipy.
     await renderPage();
     fireEvent.click(screen.getByLabelText("Choose an animated banner"));
     fireEvent.click(await screen.findByLabelText("party parrot"));
 
-    await waitFor(() => expect(saved.at(-1)?.profile.banner?.image).toBe(trendingGif.url));
-    expect(fetched).toEqual([]);
+    await waitFor(() => expect(saved.at(-1)?.profile.banner?.image).toBe("data:image/gif;base64,R0lGODlh"));
+    expect(fetched).toEqual([trendingGif.preview]);
     await waitFor(() => expect(screen.queryByLabelText("party parrot")).toBeNull());
+  });
+
+  it("offers no GIF at all without a Klipy key", async () => {
+    setKlipyApiKey(undefined);
+    await renderPage();
+
+    expect(screen.queryByLabelText("Choose an animated banner")).toBeNull();
+    expect(screen.queryByLabelText("Choose an animated avatar")).toBeNull();
   });
 
   it("sets a GIF avatar as the bytes of its small rendition, uncropped", async () => {

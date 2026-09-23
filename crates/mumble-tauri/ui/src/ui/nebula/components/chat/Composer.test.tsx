@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { setKlipyApiKey } from "@core/features/chat/gif/klipyConfig";
 import { useAppStore } from "@core/store";
 import type { UserEntry } from "@core/types";
 import type { StagedAttachment } from "@core/features/chat/useFileUpload";
@@ -325,7 +326,16 @@ describe("Composer", () => {
     expect(getComputedStyle(shell).marginLeft).toBe("auto");
   });
 
+  it("has no GIF button without a Klipy key", () => {
+    // Every GIF path reaches Klipy from this machine; without the user's own
+    // key there is nothing to press.
+    draw();
+    expect(screen.queryByLabelText("Insert a GIF")).toBeNull();
+  });
+
   it("opens the GIF browser as a popover rather than a modal", () => {
+    setKlipyApiKey("klipy_test");
+    onTestFinished(() => setKlipyApiKey(undefined));
     const { container } = draw();
     fireEvent.click(screen.getByLabelText("Insert a GIF"));
 

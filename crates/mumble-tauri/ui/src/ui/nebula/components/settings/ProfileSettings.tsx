@@ -25,6 +25,7 @@ import { RichTextField, Stack, UserAvatar } from "../primitives";
 import { Banner, Field, GroupTitle, PageTitle, PillGroup, SegmentedGroup } from "./controls";
 import { ExpandableRow } from "./ExpandableRow";
 import { GifPickerDialog } from "./GifPickerDialog";
+import { useKlipyEnabled } from "@core/features/chat/gif/klipyConfig";
 import { ProfilePreview } from "./ProfilePreview";
 import { radius } from "../../tokens";
 
@@ -276,6 +277,8 @@ export function ProfileSettings({
   const [cropping, setCropping] = useState<{ src: string; kind: CropKind } | null>(null);
   /** Which GIF browser is open. A GIF skips the cropper, which would flatten it. */
   const [gifFor, setGifFor] = useState<"avatar" | "banner" | null>(null);
+  // No Klipy key, no GIF buttons: every GIF path would reach Klipy from here.
+  const gifsEnabled = useKlipyEnabled();
   /** The profile as of the last render, for an edit that lands after a download. */
   const latestData = useRef(data);
   latestData.current = data;
@@ -325,26 +328,28 @@ export function ProfileSettings({
   };
 
   /**
-   * A banner GIF is stored as its URL, as Standard stores it: the banner rides
-   * in the comment, and a link is a few bytes where the file is megabytes.
-   *
-   * An avatar is a texture, so it has to be the bytes. The grid-size rendition
-   * is plenty for a 128px circle and keeps it under the texture limit that the
-   * full one would usually be refused by.
+   * Both are stored as the bytes, never as the GIF's address. A banner that is
+   * a Klipy link makes everyone who opens the profile fetch it from Klipy, and
+   * an avatar is a texture anyway. The grid-size rendition is plenty for either
+   * and keeps them under the limits the full one would usually be refused by -
+   * the banner rides in the comment.
    */
   const pickGif = (gif: KlipyGif) => {
     const kind = gifFor;
     setGifFor(null);
-    if (kind === "banner") {
-      patchProfile({ banner: { ...profile.banner, image: gif.url } });
-      return;
-    }
     const identityLabel = loadedIdentity.current;
     fetchAsDataUrl(gif.preview)
       .then((dataUrl) => {
         const current = latestData.current;
         // Switched identity while it downloaded: it was picked for the other one.
         if (!current || loadedIdentity.current !== identityLabel) return;
+        if (kind === "banner") {
+          commit({
+            ...current,
+            profile: { ...current.profile, banner: { ...current.profile.banner, image: dataUrl } },
+          });
+          return;
+        }
         commit({ ...current, avatarDataUrl: dataUrl });
       })
       .catch((reason) => {
@@ -445,12 +450,14 @@ export function ProfileSettings({
               >
                 {t("nebulaSettings:profile.edit")}
               </TextButton>
-              <TextButton
-                label={t("nebulaSettings:profile.chooseAvatarGif")}
-                onClick={() => setGifFor("avatar")}
-              >
-                {t("nebulaSettings:profile.gif")}
-              </TextButton>
+              {gifsEnabled && (
+                <TextButton
+                  label={t("nebulaSettings:profile.chooseAvatarGif")}
+                  onClick={() => setGifFor("avatar")}
+                >
+                  {t("nebulaSettings:profile.gif")}
+                </TextButton>
+              )}
               {data.avatarDataUrl && (
                 <TextButton
                   label={t("nebulaSettings:profile.removeAvatar")}
@@ -492,12 +499,14 @@ export function ProfileSettings({
               >
                 {t("nebulaSettings:profile.image")}
               </TextButton>
-              <TextButton
-                label={t("nebulaSettings:profile.chooseBannerGif")}
-                onClick={() => setGifFor("banner")}
-              >
-                {t("nebulaSettings:profile.gif")}
-              </TextButton>
+              {gifsEnabled && (
+                <TextButton
+                  label={t("nebulaSettings:profile.chooseBannerGif")}
+                  onClick={() => setGifFor("banner")}
+                >
+                  {t("nebulaSettings:profile.gif")}
+                </TextButton>
+              )}
               <ColourWell
                 label={t("nebulaSettings:profile.bannerColour")}
                 value={profile.banner?.color ?? "#2a3350"}
@@ -1011,7 +1020,7 @@ export function ProfileSettings({
         </Suspense>
       )}
 
-      {gifFor && (
+      {gifFor && gifsEnabled && (
         <GifPickerDialog
           title={t(
             gifFor === "avatar"
