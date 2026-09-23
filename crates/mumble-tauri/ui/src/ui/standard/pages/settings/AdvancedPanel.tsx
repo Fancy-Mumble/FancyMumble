@@ -224,6 +224,11 @@ export function AdvancedPanel({
             spellCheck={false}
             aria-label={t("advanced.klipyApiKeyLabel", { defaultValue: "Klipy API key" })}
           />
+          {klipyApiKey.trim() && (
+            <div className={styles.warningBanner}>
+              <p>{t("advanced.klipyApiKeyPrivacyWarning")}</p>
+            </div>
+          )}
         </section>
       )}
 

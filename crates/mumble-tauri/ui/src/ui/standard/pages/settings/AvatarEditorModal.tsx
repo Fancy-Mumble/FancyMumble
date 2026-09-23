@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { KlipyGifBrowser } from "./KlipyGifBrowser";
+import { useKlipyEnabled } from "@core/features/chat/gif/klipyConfig";
 import { ImageEditor } from "./ImageEditor";
 import { FileDropZone } from "../../components/elements/FileDropZone";
 import { fetchAsDataUrl } from "@core/utils/media";
@@ -26,7 +27,9 @@ interface AvatarEditorModalProps {
 
 export function AvatarEditorModal({ avatar, onConfirm, onCancel }: Readonly<AvatarEditorModalProps>) {
   const initialTab = detectInitialTab(avatar);
-  const [tab, setTab] = useState<AvatarTab>(initialTab);
+  // No Klipy key, no GIF tab - and no drawing a saved Klipy address either.
+  const gifsEnabled = useKlipyEnabled();
+  const [tab, setTab] = useState<AvatarTab>(initialTab === "gif" && !gifsEnabled ? "image" : initialTab);
 
   const [localImage, setLocalImage] = useState<string | undefined>(
     initialTab === "image" && avatar ? avatar : undefined,
@@ -122,13 +125,15 @@ export function AvatarEditorModal({ avatar, onConfirm, onCancel }: Readonly<Avat
           >
             {t("avatarEditor.tabImage")}
           </button>
-          <button
-            type="button"
-            className={`${styles.tab} ${tab === "gif" ? styles.tabActive : ""}`}
-            onClick={() => setTab("gif")}
-          >
-            {t("avatarEditor.tabKlipy")}
-          </button>
+          {gifsEnabled && (
+            <button
+              type="button"
+              className={`${styles.tab} ${tab === "gif" ? styles.tabActive : ""}`}
+              onClick={() => setTab("gif")}
+            >
+              {t("avatarEditor.tabKlipy")}
+            </button>
+          )}
         </div>
 
         {/* Tab content */}
@@ -144,7 +149,7 @@ export function AvatarEditorModal({ avatar, onConfirm, onCancel }: Readonly<Avat
             />
           )}
 
-          {tab === "gif" && <KlipyGifBrowser onSelect={handleGifSelect} />}
+          {tab === "gif" && gifsEnabled && <KlipyGifBrowser onSelect={handleGifSelect} />}
         </div>
 
         {/* Actions */}

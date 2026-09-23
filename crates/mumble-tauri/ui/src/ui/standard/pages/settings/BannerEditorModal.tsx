@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { FancyProfile } from "@core/types";
 import { KlipyGifBrowser } from "./KlipyGifBrowser";
+import { useKlipyEnabled } from "@core/features/chat/gif/klipyConfig";
+import { fetchAsDataUrl } from "@core/utils/media";
 import { ImageEditor } from "./ImageEditor";
 import { FileDropZone } from "../../components/elements/FileDropZone";
 import styles from "./BannerEditorModal.module.css";
@@ -28,7 +30,9 @@ interface BannerEditorModalProps {
 
 export function BannerEditorModal({ banner, onConfirm, onCancel }: Readonly<BannerEditorModalProps>) {
   const initialTab = detectInitialTab(banner);
-  const [tab, setTab] = useState<BannerTab>(initialTab);
+  // No Klipy key, no GIF tab - and no drawing a saved Klipy address either.
+  const gifsEnabled = useKlipyEnabled();
+  const [tab, setTab] = useState<BannerTab>(initialTab === "gif" && !gifsEnabled ? "color" : initialTab);
   const [color, setColor] = useState(banner?.color || "#1a1a2e");
 
   const [localImage, setLocalImage] = useState<string | undefined>(
@@ -90,8 +94,14 @@ export function BannerEditorModal({ banner, onConfirm, onCancel }: Readonly<Bann
     setEditorImage(null);
   }, []);
 
-  const handleGifSelect = useCallback((url: string) => {
-    setKlipyGif(url);
+  // Carried as bytes, like an avatar: a banner that is a Klipy address makes
+  // everyone who opens the profile fetch it from Klipy.
+  // The grid-size rendition: the banner rides in the comment, and the full one
+  // is megabytes.
+  const handleGifSelect = useCallback((_url: string, preview: string) => {
+    fetchAsDataUrl(preview)
+      .then((dataUrl) => setKlipyGif(dataUrl))
+      .catch((err) => console.error("Failed to fetch Klipy GIF:", err));
   }, []);
 
   const handleApply = () => {
@@ -134,13 +144,15 @@ export function BannerEditorModal({ banner, onConfirm, onCancel }: Readonly<Bann
           >
             {t("bannerEditor.tabImage")}
           </button>
-          <button
-            type="button"
-            className={`${styles.tab} ${tab === "gif" ? styles.tabActive : ""}`}
-            onClick={() => setTab("gif")}
-          >
-            {t("bannerEditor.tabKlipy")}
-          </button>
+          {gifsEnabled && (
+            <button
+              type="button"
+              className={`${styles.tab} ${tab === "gif" ? styles.tabActive : ""}`}
+              onClick={() => setTab("gif")}
+            >
+              {t("bannerEditor.tabKlipy")}
+            </button>
+          )}
         </div>
 
         {/* Tab content */}
@@ -167,7 +179,7 @@ export function BannerEditorModal({ banner, onConfirm, onCancel }: Readonly<Bann
             />
           )}
 
-          {tab === "gif" && <KlipyGifBrowser onSelect={handleGifSelect} />}
+          {tab === "gif" && gifsEnabled && <KlipyGifBrowser onSelect={handleGifSelect} />}
         </div>
 
         {/* Actions */}

@@ -149,7 +149,8 @@ export async function fetchTrending(page = 1): Promise<PagedResult> {
 // -- Component ---------------------------------------------------
 
 interface KlipyGifBrowserProps {
-  onSelect: (url: string) => void;
+  /** The full rendition, and the grid-size one for a caller that embeds it. */
+  onSelect: (url: string, preview: string) => void;
 }
 
 type View = { kind: "categories" } | { kind: "category"; name: string };
@@ -416,7 +417,7 @@ export function KlipyGifBrowser({ onSelect }: Readonly<KlipyGifBrowserProps>) {
                 key={gif.id}
                 type="button"
                 className={styles.gifCard}
-                onClick={() => onSelect(gif.url)}
+                onClick={() => onSelect(gif.url, gif.preview)}
                 title={gif.title}
               >
                 <img src={gif.preview} alt={gif.title} loading="lazy" className={styles.gifImg} />

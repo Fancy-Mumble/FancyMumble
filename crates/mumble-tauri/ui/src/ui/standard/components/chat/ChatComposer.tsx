@@ -35,6 +35,7 @@ import SlashCommandMenu, { handleSlashKey } from "../plugin/SlashCommandMenu";
 import { collectSlashCommands, filterSlashCommands } from "@core/plugins/tier1/manifest";
 import { extractSlashQuery, parseSlashLine } from "@core/plugins/tier1/slashParser";
 import { TID } from "@core/testids";
+import { useKlipyEnabled } from "@core/features/chat/gif/klipyConfig";
 
 interface ChatComposerProps {
   readonly draft: string;
@@ -71,6 +72,8 @@ export default function ChatComposer({
   onCancelEdit,
 }: ChatComposerProps) {
   const [showGifPicker, setShowGifPicker] = useState(false);
+  // No Klipy key, no GIFs: every GIF path would reach Klipy from here.
+  const gifsEnabled = useKlipyEnabled();
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const { t } = useTranslation("chat");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -299,7 +302,7 @@ export default function ChatComposer({
           </button>
         </div>
       )}
-      {showGifPicker && (
+      {showGifPicker && gifsEnabled && (
         <Suspense fallback={null}>
           <GifPicker onSelect={onGifSelect} onClose={() => setShowGifPicker(false)} />
         </Suspense>
@@ -362,15 +365,17 @@ export default function ChatComposer({
           )}
         </div>
 
-        <button
-          type="button"
-          className={`${styles.attachBtn} ${showGifPicker ? styles.attachBtnActive : ""}`}
-          onClick={() => setShowGifPicker((s) => !s)}
-          disabled={disabled}
-          title={t("composer.gifPickerTooltip")}
-        >
-          <GifIcon width={20} height={20} />
-        </button>
+        {gifsEnabled && (
+          <button
+            type="button"
+            className={`${styles.attachBtn} ${showGifPicker ? styles.attachBtnActive : ""}`}
+            onClick={() => setShowGifPicker((s) => !s)}
+            disabled={disabled}
+            title={t("composer.gifPickerTooltip")}
+          >
+            <GifIcon width={20} height={20} />
+          </button>
+        )}
 
         <div className={styles.composerInputWrap} data-testid={TID.chatComposerInput}>
           {slashOpen && (
