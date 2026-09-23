@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { KlipyGifBrowser } from "./KlipyGifBrowser";
-import { useKlipyEnabled } from "@core/features/chat/gif/klipyConfig";
+import { useGifsEnabled } from "@core/features/chat/gif/gifAccess";
 import { ImageEditor } from "./ImageEditor";
 import { FileDropZone } from "../../components/elements/FileDropZone";
 import { fetchAsDataUrl } from "@core/utils/media";
@@ -27,8 +27,9 @@ interface AvatarEditorModalProps {
 
 export function AvatarEditorModal({ avatar, onConfirm, onCancel }: Readonly<AvatarEditorModalProps>) {
   const initialTab = detectInitialTab(avatar);
-  // No Klipy key, no GIF tab - and no drawing a saved Klipy address either.
-  const gifsEnabled = useKlipyEnabled();
+  // GIFs only with the user's own Klipy key or from a server that proxies them -
+  // and without either, no drawing a saved Klipy address.
+  const gifsEnabled = useGifsEnabled();
   const [tab, setTab] = useState<AvatarTab>(initialTab === "gif" && !gifsEnabled ? "image" : initialTab);
 
   const [localImage, setLocalImage] = useState<string | undefined>(

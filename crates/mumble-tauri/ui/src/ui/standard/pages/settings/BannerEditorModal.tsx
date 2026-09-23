@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { FancyProfile } from "@core/types";
 import { KlipyGifBrowser } from "./KlipyGifBrowser";
-import { useKlipyEnabled } from "@core/features/chat/gif/klipyConfig";
+import { useGifsEnabled } from "@core/features/chat/gif/gifAccess";
 import { fetchAsDataUrl } from "@core/utils/media";
 import { ImageEditor } from "./ImageEditor";
 import { FileDropZone } from "../../components/elements/FileDropZone";
@@ -30,8 +30,9 @@ interface BannerEditorModalProps {
 
 export function BannerEditorModal({ banner, onConfirm, onCancel }: Readonly<BannerEditorModalProps>) {
   const initialTab = detectInitialTab(banner);
-  // No Klipy key, no GIF tab - and no drawing a saved Klipy address either.
-  const gifsEnabled = useKlipyEnabled();
+  // GIFs only with the user's own Klipy key or from a server that proxies them -
+  // and without either, no drawing a saved Klipy address.
+  const gifsEnabled = useGifsEnabled();
   const [tab, setTab] = useState<BannerTab>(initialTab === "gif" && !gifsEnabled ? "color" : initialTab);
   const [color, setColor] = useState(banner?.color || "#1a1a2e");
 

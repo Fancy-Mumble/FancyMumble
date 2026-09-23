@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { extractMedia } from "./MediaPreview";
+import { trustMediaBase } from "@core/utils/remoteMedia";
 
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
 
@@ -30,5 +31,16 @@ describe("extractMedia and remote media", () => {
     const { cleaned } = extractMedia('<span style="background: url(https://t.example/a.png)">x</span>');
 
     expect(cleaned).not.toContain("t.example");
+  });
+});
+
+describe("extractMedia and a server's GIF proxy", () => {
+  it("tiles a GIF its connected server serves, as a GIF", () => {
+    trustMediaBase("https://gifs.example.org/gif?");
+    const src = "https://gifs.example.org/gif?u=x&expires=1&sig=y";
+    const { media } = extractMedia(`<img src="${src.replace(/&/g, "&amp;")}" alt="GIF">`);
+
+    expect(media).toHaveLength(1);
+    expect(media[0]).toMatchObject({ kind: "gif", src });
   });
 });

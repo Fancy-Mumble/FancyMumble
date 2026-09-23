@@ -18,7 +18,7 @@ import type { TimeFormat } from "@core/types";
 import { formatTimestamp } from "@core/utils/format";
 import { useInnerHtml } from "@core/utils/innerHtml";
 import { imageSizeFromSource, rememberImageSize } from "@core/utils/imageSize";
-import { neutraliseRemoteMedia } from "@core/utils/remoteMedia";
+import { isTrustedMediaSrc, neutraliseRemoteMedia, useTrustedMediaVersion } from "@core/utils/remoteMedia";
 import { ImageContextMenu } from "../../elements/ImageContextMenu";
 
 // --- Types --------------------------------------------------------
@@ -313,7 +313,8 @@ function intrinsicSize(element: Element, src: string): { width?: number; height?
 }
 
 /** Parse `<img>` and `<video>` tags out of HTML and classify them. */
-export function extractMedia(html: string): { cleaned: string; media: MediaItem[] } {
+/** `_trustVersion` only keys a caller's memo; see {@link useTrustedMediaVersion}. */
+export function extractMedia(html: string, _trustVersion = 0): { cleaned: string; media: MediaItem[] } {
   const media: MediaItem[] = [];
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
@@ -329,7 +330,9 @@ export function extractMedia(html: string): { cleaned: string; media: MediaItem[
     const isGif =
       src.startsWith("data:image/gif") ||
       src.toLowerCase().endsWith(".gif") ||
-      (src.toLowerCase().endsWith(".webp") && src.includes("klipy.com"));
+      (src.toLowerCase().endsWith(".webp") && src.includes("klipy.com")) ||
+      // A server's GIF proxy serves nothing but GIFs.
+      isTrustedMediaSrc(src);
     media.push({
       kind: isGif ? "gif" : "image",
       src,
@@ -889,7 +892,10 @@ export default function MediaPreview({
 }: Readonly<Props>): ReactNode {
   // Memoised: extractMedia parses + sanitises the HTML, so re-running it on
   // every render (e.g. hover/timestamp state changes) wasted CPU per message.
-  const { cleaned, media } = useMemo(() => extractMedia(html), [html]);
+  // Read again when a server's GIF proxy becomes trusted: a GIF drawn as a
+  // link before the server said so is a picture now.
+  const trustVersion = useTrustedMediaVersion();
+  const { cleaned, media } = useMemo(() => extractMedia(html, trustVersion), [html, trustVersion]);
   // Handed to React as one object: a fresh literal makes it re-assign
   // `innerHTML` on every render, and the rebuilt text nodes take the
   // reader's selection with them.

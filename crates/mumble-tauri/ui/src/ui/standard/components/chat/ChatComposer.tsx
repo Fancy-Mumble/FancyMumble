@@ -35,7 +35,7 @@ import SlashCommandMenu, { handleSlashKey } from "../plugin/SlashCommandMenu";
 import { collectSlashCommands, filterSlashCommands } from "@core/plugins/tier1/manifest";
 import { extractSlashQuery, parseSlashLine } from "@core/plugins/tier1/slashParser";
 import { TID } from "@core/testids";
-import { useKlipyEnabled } from "@core/features/chat/gif/klipyConfig";
+import { useGifsEnabled } from "@core/features/chat/gif/gifAccess";
 
 interface ChatComposerProps {
   readonly draft: string;
@@ -72,8 +72,8 @@ export default function ChatComposer({
   onCancelEdit,
 }: ChatComposerProps) {
   const [showGifPicker, setShowGifPicker] = useState(false);
-  // No Klipy key, no GIFs: every GIF path would reach Klipy from here.
-  const gifsEnabled = useKlipyEnabled();
+  // GIFs only with the user's own Klipy key or from a server that proxies them.
+  const gifsEnabled = useGifsEnabled();
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const { t } = useTranslation("chat");
   const fileInputRef = useRef<HTMLInputElement>(null);

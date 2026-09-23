@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import styles from "./GifPicker.module.css";
-import { getActiveApiKey } from "@core/features/chat/gif/klipyConfig";
+import { getActiveApiKey, useKlipyEnabled } from "@core/features/chat/gif/klipyConfig";
 import { searchServerGifs, shouldFallBack, type ServerGif } from "@core/features/chat/gif/serverGifs";
 import { PickerSearch } from "../../elements/SearchFields";
 
@@ -228,6 +228,9 @@ interface GifPickerProps {
 export default function GifPicker({ onSelect, onClose }: Readonly<GifPickerProps>) {
   const { t } = useTranslation("chat");
   const [tab, setTab] = useState<TabId>("gifs");
+  // Categories and stickers exist only on Klipy's own API. Without the user's
+  // key this picker is the server's GIF search and nothing else.
+  const ownKey = useKlipyEnabled();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<KlipyGif[]>([]);
   const [categories, setCategories] = useState<KlipyCategory[]>([]);
@@ -283,18 +286,20 @@ export default function GifPicker({ onSelect, onClose }: Readonly<GifPickerProps
   // Load categories on mount and when tab changes.
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    fetchCategories(tab)
-      .then((cats) => {
-        if (!cancelled) {
-          setCategories(cats);
-          setShowCategories(true);
-        }
-      })
-      .catch(console.error)
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    if (ownKey) {
+      setLoading(true);
+      fetchCategories(tab)
+        .then((cats) => {
+          if (!cancelled) {
+            setCategories(cats);
+            setShowCategories(true);
+          }
+        })
+        .catch(console.error)
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }
 
     // Also load trending as initial results (page 1).
     trendingGifs(tab, 1)
@@ -310,7 +315,7 @@ export default function GifPicker({ onSelect, onClose }: Readonly<GifPickerProps
     return () => {
       cancelled = true;
     };
-  }, [tab]);
+  }, [tab, ownKey]);
 
   // Debounced search - resets to page 1.
   useEffect(() => {
@@ -389,15 +394,17 @@ export default function GifPicker({ onSelect, onClose }: Readonly<GifPickerProps
           >
             {t("gifPicker.tabGifs")}
           </button>
-          <button
-            className={`${styles.tab} ${tab === "stickers" ? styles.active : ""}`}
-            onClick={() => {
-              setTab("stickers");
-              setQuery("");
-            }}
-          >
-            {t("gifPicker.tabStickers")}
-          </button>
+          {ownKey && (
+            <button
+              className={`${styles.tab} ${tab === "stickers" ? styles.active : ""}`}
+              onClick={() => {
+                setTab("stickers");
+                setQuery("");
+              }}
+            >
+              {t("gifPicker.tabStickers")}
+            </button>
+          )}
         </div>
         <button className={styles.closeBtn} onClick={onClose}>
           <CloseIcon width={16} height={16} />
