@@ -17,10 +17,11 @@
   pointer-events: none;
 }
 
+/* The field chrome is TextInput.module.css's `control` + `md`, applied beside
+   these classes in Autocomplete.tsx rather than by `composes ... from`: the
+   CSS-modules loader parses a composed file without its path, which Vite
+   warns about on every build and which would break a relative url() there. */
 .input {
-  /* One source of truth for field chrome - see TextInput.module.css. */
-  composes: control from "./TextInput.module.css";
-  composes: md from "./TextInput.module.css";
   /* Room for the chevron/clear affordance on the right. */
   padding-right: 2rem;
 }
@@ -120,7 +121,6 @@
    background / padding - `.inputMulti` below resets all of those so
    the input visually dissolves into the wrapper. */
 .inputWrapperMulti {
-  composes: control from "./TextInput.module.css";
   flex-wrap: wrap;
   gap: 0.25rem;
   padding: 4px 1.8rem 4px 6px;

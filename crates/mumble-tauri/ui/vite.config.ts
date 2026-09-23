@@ -92,5 +92,11 @@ export default defineConfig({
     cssTarget: ["chrome108", "safari15"],
     minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
     sourcemap: !!process.env.TAURI_DEBUG,
+    // The default 500 kB is written for pages fetched over a network, where a
+    // big chunk is a slow first paint. This bundle is read from the app's own
+    // files, and the two chunks past 500 kB - the Nebula pack (~720 kB) and the
+    // live-document editor (~1.4 MB) - are already loaded only when used. The
+    // limit sits just above them, so anything that grows past them still says so.
+    chunkSizeWarningLimit: 1500,
   },
 });

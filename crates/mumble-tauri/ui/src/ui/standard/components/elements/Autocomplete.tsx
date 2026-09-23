@@ -11,6 +11,9 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+// Before this module's own sheet, so its rules still override the shared
+// chrome exactly as they did when it was pulled in with `composes`.
+import field from "./TextInput.module.css";
 import styles from "./Autocomplete.module.css";
 
 export interface AutocompleteOption<T> {
@@ -288,7 +291,7 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
     >
       <div
         ref={wrapperRef}
-        className={`${styles.inputWrapper} ${multiple ? styles.inputWrapperMulti : ""}`}
+        className={`${styles.inputWrapper} ${multiple ? `${field.control} ${styles.inputWrapperMulti}` : ""}`}
         // Clicking anywhere in the wrapper focuses the input - important
         // in multi-select where the chips occupy most of the row.
         onMouseDown={(e) => {
@@ -331,6 +334,8 @@ export function Autocomplete<T>(props: Readonly<AutocompleteProps<T>>) {
           ref={inputEl}
           type="text"
           className={[
+            field.control,
+            field.md,
             styles.input,
             !multiple && singleValue?.startAdornment ? styles.inputWithAdornment : "",
             multiple ? styles.inputMulti : "",
