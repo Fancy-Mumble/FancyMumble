@@ -21,6 +21,7 @@
  */
 
 import DOMPurify from "dompurify";
+import { styleValueFetches } from "./remoteMedia";
 
 // -- Regular expressions ------------------------------------------------
 
@@ -250,7 +251,7 @@ function sanitiseStyle(value: string): string {
       if (colonIdx < 0) return false;
       const prop = decl.slice(0, colonIdx).trim().toLowerCase();
       const val = decl.slice(colonIdx + 1);
-      return SAFE_CSS_PROPS.has(prop) && !DANGEROUS_CSS_VALUE_RE.test(val);
+      return SAFE_CSS_PROPS.has(prop) && !DANGEROUS_CSS_VALUE_RE.test(val) && !styleValueFetches(val);
     })
     .join(";");
 }

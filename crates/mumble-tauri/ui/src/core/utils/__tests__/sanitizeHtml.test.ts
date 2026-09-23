@@ -408,6 +408,17 @@ describe("CSS injection", () => {
     expect(out).not.toContain("evil.com");
   });
 
+  it("strips a url() hidden behind a CSS escape", () => {
+    // `\75` is `u`: the browser reads `\75rl(` as `url(` and fetches it.
+    const out = sanitizeHtml('<span style="background-image: \\75rl(https://evil.com/p.png)">x</span>');
+    expect(out).not.toContain("evil.com");
+  });
+
+  it("strips image-set(), which fetches from a bare string", () => {
+    const out = sanitizeHtml('<span style="background-image: image-set(&quot;https://evil.com/p.png&quot; 1x)">x</span>');
+    expect(out).not.toContain("evil.com");
+  });
+
   it("strips expression() from style (IE XSS)", () => {
     const out = sanitizeHtml('<div style="width: expression(alert(1))">x</div>');
     expect(out).not.toContain("expression");
