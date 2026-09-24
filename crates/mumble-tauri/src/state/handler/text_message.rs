@@ -32,6 +32,11 @@ enum DeferredEvent {
         body: String,
     },
     DmUnreads,
+    /// A conversation changed without news: our own message, sent from
+    /// another of our devices, filed where this device will show it.
+    DmSynced {
+        peer_session: u32,
+    },
     NewMessage {
         channel_id: u32,
         sender_session: Option<u32>,
@@ -74,6 +79,14 @@ impl<'a> DeferredEmitter<'a> {
                     self.emit_direct_message(*sender_session, sender_name, body);
                 }
                 DeferredEvent::DmUnreads => self.emit_dm_unreads(),
+                DeferredEvent::DmSynced { peer_session } => {
+                    self.ctx.emit(
+                        "dm-synced",
+                        NewDmPayload {
+                            session: *peer_session,
+                        },
+                    );
+                }
                 DeferredEvent::NewMessage {
                     channel_id,
                     sender_session,
@@ -309,6 +322,32 @@ fn resolve_sender_hash(state: &SharedState, actor: Option<u32>) -> Option<String
         .and_then(|u| u.hash.clone())
 }
 
+/// The conversation a direct message belongs to when it is our own, sent from
+/// another of our devices, or `None` when it is somebody else's.
+///
+/// The server copies a direct message to the sender's other sessions so a
+/// conversation started on one device is on all of them. That copy arrives
+/// from a session that is not ours but is our *account*, and read as an
+/// ordinary message it was a DM from ourselves: a conversation with our own
+/// other device, an unread badge and a notification for words we just typed.
+/// It belongs in the conversation with whoever it was sent to.
+fn own_copy_peer(tm: &mumble_tcp::TextMessage, state: &SharedState) -> Option<u32> {
+    let actor = tm.actor?;
+    let own = state.conn.own_session?;
+    if actor == own {
+        return None;
+    }
+    let account = |session: u32| state.users.get(&session).and_then(|user| user.user_id);
+    let ours = account(own)?;
+    if account(actor) != Some(ours) {
+        return None;
+    }
+    // Addressed to this very session is a note from our other device to this
+    // one, which is news here like any other message.
+    let peer = tm.session.first().copied()?;
+    (peer != own).then_some(peer)
+}
+
 fn handle_direct_message(
     tm: &mumble_tcp::TextMessage,
     state: &mut SharedState,
@@ -317,6 +356,34 @@ fn handle_direct_message(
     let Some(sender_session) = tm.actor else {
         return;
     };
+
+    if let Some(peer) = own_copy_peer(tm, state) {
+        let mut msg = ChatMessage {
+            sender_session: tm.actor,
+            sender_name: resolve_sender_name(state, tm.actor),
+            sender_hash: resolve_sender_hash(state, tm.actor),
+            body: tm.message.clone(),
+            channel_id: 0,
+            // Ours, so no unread and no notification: we wrote it.
+            is_own: true,
+            dm_session: Some(peer),
+            message_id: tm.message_id.clone(),
+            timestamp: tm.timestamp,
+            is_legacy: false,
+            send_failed: false,
+            edited_at: None,
+            pinned: false,
+            pinned_by: None,
+            pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
+        };
+        msg.ensure_id();
+        let bucket = state.msgs.by_dm.entry(peer).or_default();
+        crate::state::push_capped(bucket, msg);
+        deferred.push(DeferredEvent::DmSynced { peer_session: peer });
+        return;
+    }
 
     let sender_name = resolve_sender_name(state, tm.actor);
     let mut msg = ChatMessage {

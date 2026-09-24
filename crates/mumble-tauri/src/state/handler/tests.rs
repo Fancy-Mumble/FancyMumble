@@ -1294,6 +1294,82 @@ fn text_message_dm_always_requests_attention() {
     assert!(emitter.attention_count() > 0);
 }
 
+#[test]
+fn a_dm_we_sent_from_another_device_is_filed_with_its_recipient_as_ours() {
+    // Starling copies a direct message to the sender's other sessions. From
+    // here that copy comes from a session that is not ours but is our account,
+    // and it belongs in the conversation with whoever it was sent to - not in
+    // a conversation with our own phone, with a badge and a notification.
+    let (ctx, emitter) = make_ctx();
+    {
+        let mut state = ctx.shared.lock().unwrap();
+        state.conn.own_session = Some(1);
+        let mut me = make_user(1, "Alice");
+        me.user_id = Some(42);
+        let mut my_phone = make_user(2, "Alice");
+        my_phone.user_id = Some(42);
+        let _ = state.users.insert(1, me);
+        let _ = state.users.insert(2, my_phone);
+        let _ = state.users.insert(10, make_user(10, "Bob"));
+    }
+
+    mumble_tcp::TextMessage {
+        actor: Some(2),
+        session: vec![10],
+        message: "sent from my phone".into(),
+        ..Default::default()
+    }
+    .handle(&ctx);
+
+    let state = ctx.shared.lock().unwrap();
+    let with_bob = state.msgs.by_dm.get(&10).expect("filed with Bob");
+    assert_eq!(with_bob.len(), 1);
+    assert!(with_bob[0].is_own);
+    assert_eq!(with_bob[0].dm_session, Some(10));
+    assert!(
+        !state.msgs.by_dm.contains_key(&2),
+        "not a conversation with ourselves"
+    );
+    assert!(state.msgs.dm_unread.is_empty());
+    drop(state);
+
+    let names = emitter.event_names();
+    assert!(names.contains(&"dm-synced".to_string()));
+    assert!(
+        !names.contains(&"new-dm".to_string()),
+        "no sound for our own words"
+    );
+    assert_eq!(emitter.attention_count(), 0);
+}
+
+#[test]
+fn a_dm_from_our_other_device_to_this_one_is_still_news() {
+    // Addressed to this very session, it is a note from one of our devices to
+    // another, and reads like any other message.
+    let (ctx, emitter) = make_ctx();
+    {
+        let mut state = ctx.shared.lock().unwrap();
+        state.conn.own_session = Some(1);
+        let mut me = make_user(1, "Alice");
+        me.user_id = Some(42);
+        let mut my_phone = make_user(2, "Alice");
+        my_phone.user_id = Some(42);
+        let _ = state.users.insert(1, me);
+        let _ = state.users.insert(2, my_phone);
+    }
+
+    mumble_tcp::TextMessage {
+        actor: Some(2),
+        session: vec![1],
+        message: "note to self".into(),
+        ..Default::default()
+    }
+    .handle(&ctx);
+
+    assert!(ctx.shared.lock().unwrap().msgs.by_dm.contains_key(&2));
+    assert!(emitter.event_names().contains(&"new-dm".to_string()));
+}
+
 // -- TextMessage (group) -------------------------------------------
 // Group chat support has been removed; the related tests were deleted.
 
