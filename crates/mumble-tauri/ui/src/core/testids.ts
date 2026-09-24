@@ -410,6 +410,17 @@ export const TID = {
   accountUnregisterBegin: "account-unregister-begin",
   accountUnregisterConfirmInput: "account-unregister-confirm-input",
   accountUnregisterConfirm: "account-unregister-confirm",
+  /** The list of the account's devices. */
+  accountDevices: "account-devices",
+  /** One device row; carries {@link DEVICE_ID_ATTR}. */
+  accountDevice: "account-device",
+  /** Opens the rename field of the device row it sits in. */
+  accountDeviceRename: "account-device-rename",
+  accountDeviceNameInput: "account-device-name-input",
+  accountDeviceNameSave: "account-device-name-save",
+  /** Asks to sign the device row it sits in out. */
+  accountDeviceSignOut: "account-device-sign-out",
+  accountDeviceSignOutConfirm: "account-device-sign-out-confirm",
   /** TOTP code input on the login (connect) dialog. */
   connectTotpInput: "connect-totp-input",
   /** Submit button of the login TOTP dialog. */
@@ -522,3 +533,6 @@ export const BROADCASTER_NAME_ATTR = "data-broadcaster-name";
 /** Data attribute key carrying a kebab menu entry's stable id, used alongside
  *  {@link TID.kebabMenuItem}. */
 export const KEBAB_ITEM_ATTR = "data-item-id";
+/** Data attribute key carrying a device's id, used alongside
+ *  {@link TID.accountDevice}. */
+export const DEVICE_ID_ATTR = "data-device-id";

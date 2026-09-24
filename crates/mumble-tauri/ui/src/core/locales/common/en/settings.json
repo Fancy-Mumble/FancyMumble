@@ -547,6 +547,25 @@
       "enabledHint": "2FA is enabled. On every sign-in you will be asked for a code from your authenticator app. To disable it, enter a current code.",
       "disable": "Disable 2FA"
     },
+    "devices": {
+      "title": "Devices",
+      "hint": "Where this account is signed in. All of them can be online at the same time.",
+      "thisDevice": "This device",
+      "online": "Online now",
+      "lastSeen": "Last seen {{when}}",
+      "neverSeen": "Not signed in yet",
+      "unnamed": "Unnamed device",
+      "rename": "Rename",
+      "save": "Save",
+      "cancel": "Cancel",
+      "signOut": "Sign out",
+      "signOutConfirm": "Sign out {{name}}?",
+      "signOutPara": "It is disconnected now and refused from then on, even though it still has this account's certificate.",
+      "signOutPasswordPara": "It is disconnected now and refused from then on. If your password is saved there, change it as well: a password still lets a new device in.",
+      "locked": "A device has been signed out, so only the devices listed here can sign in with this account's certificate alone.",
+      "empty": "No devices yet. They appear here once they sign in with a current client.",
+      "rejected": "This device was signed out of the account. Sign in again with the password, or link it from a device that is still signed in."
+    },
     "unregister": {
       "title": "Delete registration",
       "warning": "This cannot be undone",

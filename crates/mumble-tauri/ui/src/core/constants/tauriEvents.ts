@@ -25,6 +25,7 @@ export enum TauriEvent {
   ListenDenied = "listen-denied",
   NavigateToChannel = "navigate-to-channel",
   NewDm = "new-dm",
+  DmSynced = "dm-synced",
   GameOverlayAsk = "game-overlay-ask",
   GameOverlayState = "game-overlay-state",
   NewMessage = "new-message",

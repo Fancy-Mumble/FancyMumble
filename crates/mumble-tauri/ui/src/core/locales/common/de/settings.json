@@ -547,6 +547,25 @@
       "enabledHint": "2FA ist aktiv. Bei jeder Anmeldung wirst du nach einem Code aus deiner Authenticator-App gefragt. Zum Deaktivieren gib einen aktuellen Code ein.",
       "disable": "2FA deaktivieren"
     },
+    "devices": {
+      "title": "Geräte",
+      "hint": "Wo dieses Konto angemeldet ist. Alle können gleichzeitig online sein.",
+      "thisDevice": "Dieses Gerät",
+      "online": "Gerade online",
+      "lastSeen": "Zuletzt gesehen {{when}}",
+      "neverSeen": "Noch nicht angemeldet",
+      "unnamed": "Unbenanntes Gerät",
+      "rename": "Umbenennen",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "signOut": "Abmelden",
+      "signOutConfirm": "{{name}} abmelden?",
+      "signOutPara": "Es wird sofort getrennt und danach abgewiesen, auch wenn es das Zertifikat dieses Kontos noch hat.",
+      "signOutPasswordPara": "Es wird sofort getrennt und danach abgewiesen. Ist dein Passwort dort gespeichert, ändere es ebenfalls: Mit dem Passwort kommt weiterhin ein neues Gerät hinein.",
+      "locked": "Ein Gerät wurde abgemeldet, daher können sich nur noch die hier gelisteten Geräte allein mit dem Zertifikat dieses Kontos anmelden.",
+      "empty": "Noch keine Geräte. Sie erscheinen hier, sobald sie sich mit einem aktuellen Client anmelden.",
+      "rejected": "Dieses Gerät wurde vom Konto abgemeldet. Melde dich mit dem Passwort erneut an oder verknüpfe es von einem Gerät, das noch angemeldet ist."
+    },
     "unregister": {
       "title": "Registrierung löschen",
       "warning": "Das kann nicht rückgängig gemacht werden",

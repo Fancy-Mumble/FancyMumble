@@ -181,6 +181,11 @@ let lastAttemptedPassword: string | null = null;
  *  set so it does not surface a "Connection lost" overlay for what the
  *  user just initiated themselves.  Entries are removed once handled. */
 const intentionallyClosingSessions = new Set<string>();
+
+/** What Starling tells a session it ends because its device was signed out of
+ *  the account (`starling_userdata::selfservice::SIGNED_OUT_REASON`). */
+const DEVICE_SIGNED_OUT_REASON = "this device was signed out of the account";
+
 /** Set by the `connection-rejected` listener when the server itself ended the
  *  session - a kick, a ban, a full server, or the same account signing in
  *  somewhere else.  Read and cleared by the `server-disconnected` listener
@@ -3415,6 +3420,15 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
       }
     }),
 
+    // Something we sent from another of our devices, filed into the
+    // conversation it belongs to. Not news, so no sound and no badge.
+    await listen<{ session: number }>(TauriEvent.DmSynced, async (event) => {
+      const { selectedDmUser } = useAppStore.getState();
+      if (selectedDmUser === event.payload.session) {
+        await useAppStore.getState().refreshDmMessages(event.payload.session);
+      }
+    }),
+
     // Unread counts changed.
     await listen<{ unreads: Record<number, number>; serverId?: string | null }>("unread-changed", (event) => {
       const { activeServerId } = useAppStore.getState();
@@ -3561,9 +3575,14 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
         // auto-reconnect: dialling straight back into a kick re-kicks whoever
         // took our place, and dialling back into a ban just hammers it.
         serverRejectedConnection = true;
+        // This device was signed out of the account, from another of the
+        // owner's devices: refused at login (DeviceNotTrusted = 12), or told
+        // so as the live session is ended. Said in the user's language and
+        // with what to do next, rather than as the server's sentence.
+        const signedOut = rt === 12 || reasonText === DEVICE_SIGNED_OUT_REASON;
         useAppStore.setState({
           status: "disconnected",
-          error: event.payload.reason,
+          error: signedOut ? i18next.t("settings:account.devices.rejected") : event.payload.reason,
           // Keep `pendingConnect` so a manual retry (and the reconnect overlay)
           // still has a target and the attempt counter / backoff are not reset.
           bootstrapStage: null,

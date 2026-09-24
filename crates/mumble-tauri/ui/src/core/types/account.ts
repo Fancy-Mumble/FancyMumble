@@ -23,6 +23,24 @@ export interface AccountSettings {
   /** Whether this session's certificate matches `cert_hash` (precondition
    *  for switching back to certificate-only login). */
   cert_matches_session: boolean;
+  /** The devices the account is used from, most recently seen first. Empty
+   *  on a server that does not keep them. */
+  devices?: AccountDevice[];
+  /** Whether a login by certificate alone must come from a listed device -
+   *  true once any device has been signed out. */
+  devices_locked?: boolean;
+  /** Which of `devices` this session is, if it named one. */
+  this_device?: string | null;
+}
+
+/** One device the own account is used from. */
+export interface AccountDevice {
+  id: string;
+  name: string;
+  added_at_ms: number;
+  /** Zero for a device registered ahead that has not signed in yet. */
+  last_seen_ms: number;
+  online: boolean;
 }
 
 /** Actions understood by `update_account_settings` (snake_case names of
@@ -36,7 +54,10 @@ export type AccountAction =
   | "unregister"
   | "totp_begin"
   | "totp_verify"
-  | "totp_disable";
+  | "totp_disable"
+  | "rename_device"
+  | "remove_device"
+  | "add_device";
 
 /** Numeric `FancyAccountSettingsUpdate.Action` values echoed in acks. */
 export const ACCOUNT_ACTION_IDS: Record<AccountAction, number> = {
@@ -49,6 +70,9 @@ export const ACCOUNT_ACTION_IDS: Record<AccountAction, number> = {
   totp_begin: 6,
   totp_verify: 7,
   totp_disable: 8,
+  rename_device: 9,
+  remove_device: 10,
+  add_device: 11,
 };
 
 /** Result of one account operation (`FancyAccountAck`). */

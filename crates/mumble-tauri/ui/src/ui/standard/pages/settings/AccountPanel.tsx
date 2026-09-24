@@ -7,6 +7,7 @@
  *  - self-rename                             (RENAME)
  *  - contact email                           (SET_EMAIL)
  *  - TOTP two-factor authentication          (TOTP_BEGIN / _VERIFY / _DISABLE)
+ *  - the devices it is signed in on          (RENAME_DEVICE / REMOVE_DEVICE)
  *  - self-unregister (danger zone)           (UNREGISTER)
  */
 
@@ -20,12 +21,14 @@ import { QrCode } from "@ui/QrCode";
 import styles from "./SettingsPage.module.css";
 import { registerSettings } from "@core/features/settings/settingsSearchRegistry";
 import { TextField } from "../../components/elements/TextField";
+import { AccountDevices } from "./AccountDevices";
 
 registerSettings("account")
   .add("account.password.title", ["password", "authentication", "login", "certificate"])
   .add("account.rename.title", ["rename", "username", "account name"])
   .add("account.email.title", ["email", "mail", "recovery"])
   .add("account.totp.title", ["2fa", "totp", "two-factor", "authenticator", "mfa"])
+  .add("account.devices.title", ["devices", "sessions", "sign out", "logged in", "phone", "laptop"])
   .add("account.unregister.title", ["unregister", "delete account", "remove account"]);
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -492,6 +495,16 @@ export function AccountPanel() {
           </>
         )}
       </section>
+
+      {/* -- Devices ---------------------------------------------------- */}
+      <AccountDevices
+        snapshot={snapshot}
+        busy={busy}
+        blocked={blocked}
+        lastSuccessAction={lastSuccessAction}
+        send={(action, value, device) => void send(action, value, currentPassword, device)}
+        feedbackFor={feedbackFor}
+      />
 
       {/* -- Danger zone: unregister ------------------------------------ */}
       <section className={styles.section}>

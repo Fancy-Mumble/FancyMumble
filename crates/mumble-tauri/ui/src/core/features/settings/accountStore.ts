@@ -100,8 +100,16 @@ interface AccountStoreState {
    * `currentPassword` is the account's *existing* password, re-typed by the
    * user. The server refuses every action that changes anything without it,
    * except on an account that has none - there the certificate is the proof.
+   *
+   * `device` names the device a device action acts on; `secret` only for
+   * `add_device`, where it is what the device being linked will log in with.
    */
-  send: (action: AccountAction, value?: string, currentPassword?: string) => Promise<void>;
+  send: (
+    action: AccountAction,
+    value?: string,
+    currentPassword?: string,
+    device?: { id: string; secret?: string },
+  ) => Promise<void>;
 }
 
 export const useAccountStore = create<AccountStoreState>((set) => ({
@@ -185,7 +193,7 @@ export const useAccountStore = create<AccountStoreState>((set) => ({
     }
   },
 
-  send: async (action, value, currentPassword) => {
+  send: async (action, value, currentPassword, device) => {
     clearSendTimeout();
     set({ pending: action, errorCode: null, errorAction: null, lastSuccessAction: null });
     try {
@@ -193,6 +201,8 @@ export const useAccountStore = create<AccountStoreState>((set) => ({
         action,
         value: value ?? null,
         currentPassword: currentPassword ?? null,
+        deviceId: device?.id ?? null,
+        deviceSecret: device?.secret ?? null,
       });
       // Completion is signalled by the matching `account-ack` event (via
       // handleAck, which cancels this timer). If the server drops the

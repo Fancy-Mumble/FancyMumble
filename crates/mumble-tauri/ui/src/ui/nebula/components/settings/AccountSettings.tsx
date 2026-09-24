@@ -8,6 +8,7 @@ import { TID } from "@core/testids";
 import { QrCode } from "@ui/QrCode";
 import { Stack } from "../primitives";
 import { Banner, Field, GroupRule, GroupTitle, PageTitle, SettingsCard, TextRow } from "./controls";
+import { AccountDevices } from "./AccountDevices";
 import { radius } from "../../tokens";
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -481,6 +482,17 @@ export function AccountSettings() {
           {feedbackFor("totp_begin")}
         </>
       )}
+
+      <GroupRule />
+
+      <AccountDevices
+        snapshot={snapshot}
+        busy={busy}
+        blocked={blocked}
+        lastSuccessAction={lastSuccessAction}
+        send={(action, value, device) => void send(action, value, currentPassword, device)}
+        feedbackFor={feedbackFor}
+      />
 
       <GroupRule />
 

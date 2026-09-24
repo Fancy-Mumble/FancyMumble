@@ -547,6 +547,25 @@
       "linkHint": "Copiez le lien de configuration et ouvrez-le sur l’appareil où tourne votre application d’authentification — la plupart enregistrent le compte directement depuis le lien.",
       "revealSecret": "Le lien ne fonctionne pas non plus ? Saisissez la clé à la main"
     },
+    "devices": {
+      "title": "Appareils",
+      "hint": "Où ce compte est connecté. Tous peuvent être en ligne en même temps.",
+      "thisDevice": "Cet appareil",
+      "online": "En ligne",
+      "lastSeen": "Vu {{when}}",
+      "neverSeen": "Pas encore connecté",
+      "unnamed": "Appareil sans nom",
+      "rename": "Renommer",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "signOut": "Déconnecter",
+      "signOutConfirm": "Déconnecter {{name}} ?",
+      "signOutPara": "Il est déconnecté tout de suite et refusé ensuite, même s'il possède encore le certificat de ce compte.",
+      "signOutPasswordPara": "Il est déconnecté tout de suite et refusé ensuite. Si votre mot de passe y est enregistré, changez-le aussi : un mot de passe laisse toujours entrer un nouvel appareil.",
+      "locked": "Un appareil a été déconnecté : seuls les appareils listés ici peuvent se connecter avec le seul certificat de ce compte.",
+      "empty": "Aucun appareil pour l'instant. Ils apparaissent ici dès qu'ils se connectent avec un client récent.",
+      "rejected": "Cet appareil a été déconnecté du compte. Reconnectez-vous avec le mot de passe, ou associez-le depuis un appareil encore connecté."
+    },
     "unregister": {
       "title": "Supprimer l'enregistrement",
       "warning": "Action irréversible",
