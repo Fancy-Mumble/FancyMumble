@@ -28,8 +28,17 @@ impl AppState {
             let __session = self.inner.snapshot();
             let mut state = __session.lock().map_err(|e| e.to_string())?;
             let previous = state.selected_channel.replace(channel_id);
-            state.msgs.selected_dm_user = None;
+            let left_dm = state.msgs.selected_dm_user.take();
             let _ = state.msgs.channel_unread.remove(&channel_id);
+            // Read here, so read everywhere: the channel opened, and whatever
+            // was on screen before it, which was read while it was open.
+            super::read_sync::share(&state, super::read_sync::Read::Channel(channel_id));
+            if let Some(left) = previous.filter(|&left| left != channel_id) {
+                super::read_sync::share(&state, super::read_sync::Read::Channel(left));
+            }
+            if let Some(left) = left_dm {
+                super::read_sync::share(&state, super::read_sync::Read::Direct(left));
+            }
             // The channel just left has no rows any more; its heavy bodies
             // go to cold storage now instead of staying in memory for the
             // rest of the session. They come back the moment it is reopened

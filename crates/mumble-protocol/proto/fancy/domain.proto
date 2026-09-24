@@ -323,7 +323,10 @@ message RecordPut {
   bool remove = 4;
 }
 
-// One record, in answer to a get or a put.
+// One record, in answer to a get or a put - or, with an empty `request_id`,
+// unasked: another session of the same account changed it. That is how a
+// person's devices share what is kept here, what was read on one of them or a
+// setting changed on another, without each asking over and over.
 message Record {
   string request_id = 1;
   string key = 2;

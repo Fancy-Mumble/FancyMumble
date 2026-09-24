@@ -19,6 +19,10 @@ impl AppState {
     pub fn mark_read(&self, channel_id: u32) {
         if let Ok(mut state) = self.inner.snapshot().lock() {
             let _ = state.msgs.channel_unread.remove(&channel_id);
+            crate::state::read_sync::share(
+                &state,
+                crate::state::read_sync::Read::Channel(channel_id),
+            );
         }
         self.emit_unreads();
     }
@@ -41,6 +45,7 @@ impl AppState {
     pub fn mark_dm_read(&self, session: u32) {
         if let Ok(mut state) = self.inner.snapshot().lock() {
             let _ = state.msgs.dm_unread.remove(&session);
+            crate::state::read_sync::share(&state, crate::state::read_sync::Read::Direct(session));
         }
         self.emit_dm_unreads();
     }

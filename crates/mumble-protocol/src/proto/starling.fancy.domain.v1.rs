@@ -465,7 +465,10 @@ pub struct RecordPut {
     #[prost(bool, tag = "4")]
     pub remove: bool,
 }
-/// One record, in answer to a get or a put.
+/// One record, in answer to a get or a put - or, with an empty `request_id`,
+/// unasked: another session of the same account changed it. That is how a
+/// person's devices share what is kept here, what was read on one of them or a
+/// setting changed on another, without each asking over and over.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Record {
     #[prost(string, tag = "1")]

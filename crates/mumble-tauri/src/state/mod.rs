@@ -56,6 +56,7 @@ pub(crate) mod preview_cache;
 mod profile;
 pub(crate) mod protocol_commands;
 mod query;
+mod read_sync;
 #[allow(dead_code, reason = "recording module is work-in-progress")]
 pub(crate) mod recording;
 pub(crate) mod records;
