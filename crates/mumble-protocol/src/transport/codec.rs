@@ -253,6 +253,7 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
         FancyGifRefused(m) => m.encode_to_vec(),
         FancyGifSupportQuery(m) => m.encode_to_vec(),
         FancyGifSupport(m) => m.encode_to_vec(),
+        FancyInvitesRequest(m) | FancyInvites(m) => m.encode_to_vec(),
         FancyVoiceSupportQuery(m) => m.encode_to_vec(),
         FancyVoiceSupport(m) => m.encode_to_vec(),
         FancyServerSettingsQuery(m) => m.encode_to_vec(),
@@ -446,6 +447,12 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
         ),
         FancyGifSupport => ControlMessage::FancyGifSupport(
             crate::proto::fancy::media::GifSupport::decode(payload)?,
+        ),
+        FancyInvitesRequest => ControlMessage::FancyInvitesRequest(
+            crate::proto::fancy::invites::InvitesEnvelope::decode(payload)?,
+        ),
+        FancyInvites => ControlMessage::FancyInvites(
+            crate::proto::fancy::invites::InvitesEnvelope::decode(payload)?,
         ),
         FancyVoiceSupportQuery => ControlMessage::FancyVoiceSupportQuery(
             crate::proto::fancy::files::VoiceSupportQuery::decode(payload)?,

@@ -50,6 +50,7 @@ mod send_fancy_record;
 mod send_fancy_scheduled_message;
 mod send_fancy_server_settings_update;
 mod send_fancy_subscribe_push;
+mod send_invites;
 mod send_pchat_ack;
 mod send_pchat_delete_messages;
 mod send_pchat_epoch_countersig;
@@ -141,6 +142,7 @@ pub use send_fancy_scheduled_message::{
 };
 pub use send_fancy_server_settings_update::SendFancyServerSettingsUpdate;
 pub use send_fancy_subscribe_push::SendFancySubscribePush;
+pub use send_invites::SendInvites;
 pub use send_pchat_ack::SendPchatAck;
 pub use send_pchat_delete_messages::SendPchatDeleteMessages;
 pub use send_pchat_epoch_countersig::SendPchatEpochCountersig;

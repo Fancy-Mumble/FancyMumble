@@ -147,6 +147,12 @@ pub enum TcpMessageType {
     FancyOnboardingResponseQuery = 139,
     /// Fancy Mumble: server delivers a previously-stored onboarding response.
     FancyOnboardingResponseDeliver = 140,
+    /// Fancy Mumble: an invite-link request - support query, create, list or
+    /// revoke. Epoch 0 has no invites, so these two are local tags that never
+    /// reach a wire; the canon carries both inside outer type 1019.
+    FancyInvitesRequest = 141,
+    /// Fancy Mumble: the invites service's answer to one of those.
+    FancyInvites = 142,
     /// Fancy Mumble: client announces a new poll (server-relayed to channel).
     FancyPoll = 144,
     /// Fancy Mumble: client casts a vote on a poll (server-relayed to channel).
@@ -647,6 +653,17 @@ pub enum ControlMessage {
     /// Fancy: whether searches would be served, and the prefix the server's
     /// proxied media URLs start with (empty when the proxy is off).
     FancyGifSupport(fancy::media::GifSupport),
+    /// Fancy: ask the invites service something - what it allows, to mint an
+    /// invite, to list or to revoke them.
+    ///
+    /// The whole envelope rather than one variant per arm: every arm is a
+    /// request/answer pair correlated by `request_id`, the Tauri layer hands
+    /// the answer to the UI unchanged, and there is no epoch-0 twin of any of
+    /// them to translate to.
+    FancyInvitesRequest(fancy::invites::InvitesEnvelope),
+    /// Fancy: the invites service's answer. A server that predates invites
+    /// never sends one, and its silence reads as "no invites here".
+    FancyInvites(fancy::invites::InvitesEnvelope),
     /// Fancy: ask whether voice messages are on here, once per connection.
     ///
     /// A server that predates voice messages drops the question unanswered,
@@ -708,6 +725,7 @@ message_type_mapping! {
     FancyLinkPreviewRequest, FancyLinkPreviewResponse,
     FancyGifQuery, FancyGifPage, FancyGifRefused,
     FancyGifSupportQuery, FancyGifSupport,
+    FancyInvitesRequest, FancyInvites,
     FancyVoiceSupportQuery, FancyVoiceSupport,
     FancyAccountRecordGet, FancyAccountRecordPut, FancyAccountRecordList,
     FancyAccountRecord, FancyAccountRecordKeys,
@@ -893,8 +911,7 @@ mod tests {
     fn tcp_message_type_invalid_returns_error() {
         assert!(TcpMessageType::try_from(27u16).is_err());
         assert!(TcpMessageType::try_from(99u16).is_err());
-        assert!(TcpMessageType::try_from(141u16).is_err());
-        assert!(TcpMessageType::try_from(142u16).is_err());
+        // 141-142 are the invite pair.
         assert!(TcpMessageType::try_from(143u16).is_err());
         assert!(TcpMessageType::try_from(169u16).is_err());
         // 191-199 were free and are now the record and emote types, 204-205

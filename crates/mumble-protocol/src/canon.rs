@@ -56,6 +56,9 @@ const FILES: u16 = 1009;
 /// Outer type for GIF search, which the server runs against a provider whose
 /// key only it holds.
 const GIFS: u16 = 1018;
+/// Outer type for invite links: what a session may do with them, and minting,
+/// listing and revoking them.
+const INVITES: u16 = 1019;
 /// Outer type for the plugin host: the loaded set, and the opaque envelopes
 /// a plugin exchanges with its own half in this client.
 const PLUGINS: u16 = 1010;
@@ -580,6 +583,12 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
                 }
                 .encode_to_vec(),
             ));
+        }
+        // Carried whole: the variant already holds the canon envelope. No
+        // fallback, as for GIFs - a server without invites never answers, and
+        // the menu entries that would ask stay hidden on the timeout.
+        ControlMessage::FancyInvitesRequest(envelope) => {
+            return Some((INVITES, envelope.encode_to_vec()));
         }
         // The plugin envelope, which is the whole of what a plugin says to
         // its server half or to a peer. Epoch 0 sent it flat at type 200 and
@@ -1335,6 +1344,27 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                     }),
                 ),
                 _ => None,
+            })
+        }
+        INVITES => {
+            let Ok(envelope) = fancy::invites::InvitesEnvelope::decode(payload) else {
+                return Ok(None);
+            };
+            // Only the answer arms. A request arm from a server is confused or
+            // newer than this client, and nothing here answers one.
+            use fancy::invites::invites_envelope::Body;
+            Ok(match envelope.body {
+                Some(
+                    Body::Support(_)
+                    | Body::Created(_)
+                    | Body::List(_)
+                    | Body::Revoked(_)
+                    | Body::Refused(_),
+                ) => Some(ControlMessage::FancyInvites(envelope)),
+                Some(
+                    Body::SupportQuery(_) | Body::Create(_) | Body::ListQuery(_) | Body::Revoke(_),
+                )
+                | None => None,
             })
         }
         GIFS => {
@@ -3567,6 +3597,50 @@ mod tests {
             panic!("a VoiceSupport must become a FancyVoiceSupport");
         };
         assert_eq!(back, support);
+    }
+
+    #[test]
+    fn an_invite_request_goes_out_whole_and_only_answers_come_back() {
+        use fancy::invites::{InviteCreate, InviteSupport, InvitesEnvelope, invites_envelope};
+
+        let ask = InvitesEnvelope {
+            body: Some(invites_envelope::Body::Create(InviteCreate {
+                request_id: "i-1".to_owned(),
+                channel_id: 4,
+                max_age_s: 3600,
+                max_uses: 2,
+            })),
+        };
+        let (outer, payload) = to_canon(&ControlMessage::FancyInvitesRequest(ask.clone()))
+            .expect("an invite request has a canon home");
+        assert_eq!(outer, INVITES);
+        assert_eq!(
+            InvitesEnvelope::decode(payload.as_slice()).expect("decodes"),
+            ask
+        );
+
+        let answer = InvitesEnvelope {
+            body: Some(invites_envelope::Body::Support(InviteSupport {
+                request_id: "i-2".to_owned(),
+                available: true,
+                may_create: true,
+                ..InviteSupport::default()
+            })),
+        };
+        let decoded = from_canon(INVITES, &answer.encode_to_vec())
+            .expect("decodable")
+            .expect("an answer is translated");
+        let ControlMessage::FancyInvites(back) = decoded else {
+            panic!("an invites answer must become FancyInvites");
+        };
+        assert_eq!(back, answer);
+
+        // A request coming the other way is nothing this client answers.
+        assert!(
+            from_canon(INVITES, &ask.encode_to_vec())
+                .expect("decodable")
+                .is_none()
+        );
     }
 
     #[test]

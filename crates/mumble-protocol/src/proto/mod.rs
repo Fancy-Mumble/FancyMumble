@@ -91,4 +91,8 @@ pub mod fancy {
     pub mod media {
         include!("starling.fancy.media.v1.rs");
     }
+    /// Outer type 1019 - invite links: minting, listing and revoking them.
+    pub mod invites {
+        include!("starling.fancy.invites.v1.rs");
+    }
 }
