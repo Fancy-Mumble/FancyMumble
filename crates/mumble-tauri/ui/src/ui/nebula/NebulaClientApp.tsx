@@ -43,6 +43,10 @@ import PublicServersSurface from "./components/connect/PublicServersSurface";
 import { PinnedPanel } from "./components/chat/pinned/PinnedPanel";
 import { ScheduledMessagesDialog } from "./components/chat/scheduled/ScheduledMessagesDialog";
 import { RecordingDialog } from "./components/recording/RecordingDialog";
+import { InviteDialog } from "./components/invites/InviteDialog";
+import { JoinInviteDialog } from "./components/invites/JoinInviteDialog";
+import type { ParsedInvite } from "@core/features/invites/inviteLink";
+import { resolveInviteTarget } from "@core/features/invites/inviteTarget";
 import { useRecording } from "./components/recording/useRecording";
 import { useShareAvailability } from "./components/chat/share/useShareAvailability";
 import {
@@ -525,6 +529,10 @@ export default function NebulaClientApp() {
   /** The room being emptied of its occupants, and the one being emptied of its history. */
   const [movingUsersFrom, setMovingUsersFrom] = useState<ChannelEntry | null>(null);
   const [purgingChannel, setPurgingChannel] = useState<ChannelEntry | null>(null);
+  /** Where an invite being minted lands people; the root invites to the server. */
+  const [invitingTo, setInvitingTo] = useState<{ id: number; name: string } | null>(null);
+  /** A followed invite link to a server nothing is saved for yet. */
+  const [joiningInvite, setJoiningInvite] = useState<ParsedInvite | null>(null);
 
   const reloadServers = useCallback(() => {
     void getSavedServers()
@@ -1516,6 +1524,26 @@ export default function NebulaClientApp() {
       openScreen("chat");
     } finally {
       setConnecting(false);
+    }
+  };
+
+  /**
+   * Follow an invite link.
+   *
+   * Already connected there: just go to it - the invite's job is done, and
+   * reconnecting would drop the call the user is in. Saved but not connected:
+   * put the code on that login and connect, which is the one-click case.
+   * Never seen: ask for a name first, which is the one thing a link cannot say.
+   */
+  const followInvite = async (invite: ParsedInvite) => {
+    const target = await resolveInviteTarget(invite);
+    if (target.kind === "live") {
+      await useAppStore.getState().switchServer(target.serverId);
+      openScreen("chat");
+    } else if (target.kind === "saved") {
+      await connectTo(target.server);
+    } else {
+      setJoiningInvite(invite);
     }
   };
 
@@ -2802,6 +2830,7 @@ export default function NebulaClientApp() {
               void useAppStore.getState().selectChannel(channel.id);
               setSurface("channel-info");
             }}
+            onInvite={(channel) => setInvitingTo({ id: channel.id, name: channel.name })}
             onEdit={(channel) => setChannelDialog({ mode: "edit", channel })}
             onCreate={(parent, tempOnly) =>
               setChannelDialog({ mode: "create", parentId: parent.id, tempOnly })
@@ -2906,6 +2935,16 @@ export default function NebulaClientApp() {
             onCancel={() => setPurgingChannel(null)}
           />
 
+          <InviteDialog target={invitingTo} onClose={() => setInvitingTo(null)} />
+          <JoinInviteDialog
+            invite={joiningInvite}
+            onClose={() => setJoiningInvite(null)}
+            onJoin={(server) => {
+              reloadServers();
+              void connectTo(server);
+            }}
+          />
+
           <LeaveServerDialog
             session={leave.pending}
             leaving={leave.leaving}
@@ -2977,6 +3016,7 @@ export default function NebulaClientApp() {
               setAdminPage("marketplace");
               openScreen("settings");
             }}
+            onOpenInvite={(invite) => void followInvite(invite)}
           />
         </Stack>
         {/* Asked at most once per program, and only for something that looks

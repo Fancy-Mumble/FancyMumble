@@ -16,6 +16,7 @@ const AclAdmin = lazy(() => import("./AclAdmin").then((m) => ({ default: m.AclAd
 const AuditAdmin = lazy(() => import("./AuditAdmin").then((m) => ({ default: m.AuditAdmin })));
 const BansAdmin = lazy(() => import("./BansAdmin").then((m) => ({ default: m.BansAdmin })));
 const EmotesAdmin = lazy(() => import("./EmotesAdmin").then((m) => ({ default: m.EmotesAdmin })));
+const InvitesAdmin = lazy(() => import("./InvitesAdmin").then((m) => ({ default: m.InvitesAdmin })));
 const FileServerAdmin = lazy(() => import("./FileServerAdmin").then((m) => ({ default: m.FileServerAdmin })));
 const LiveryAdmin = lazy(() => import("./LiveryAdmin").then((m) => ({ default: m.LiveryAdmin })));
 const MarketplaceAdmin = lazy(() =>
@@ -147,6 +148,9 @@ export function AdminScreen({
         break;
       case "auditLog":
         content = <AuditAdmin />;
+        break;
+      case "invites":
+        content = <InvitesAdmin />;
         break;
     }
   }

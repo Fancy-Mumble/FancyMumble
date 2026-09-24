@@ -4,6 +4,7 @@ import { useAppStore } from "@core/store";
 import type { ChannelEntry } from "@core/types";
 import { TID } from "@core/testids";
 import { requestLeaveMeeting } from "@core/features/chat/calendar/meetings";
+import { useInviteSupport } from "@core/features/invites/useInviteSupport";
 import { isDmChannel } from "@core/utils/channelVisibility";
 import { isStructuralChannel } from "@core/utils/channelAttributes";
 import { PERM_WRITE } from "@core/utils/permissions";
@@ -28,6 +29,7 @@ import {
   PlusIcon,
   RadioIcon,
   TrashIcon,
+  UserPlusIcon,
   UsersGroupIcon,
 } from "@ui/icons";
 import { MenuCheckBox } from "./MenuCheckBox";
@@ -41,6 +43,8 @@ interface ChannelMenuProps {
    *  restricted room has a password to ask for first. */
   onJoin: (channel: ChannelEntry) => void;
   onShowInfo: (channel: ChannelEntry) => void;
+  /** Mint an invite link that lands people here; the root's invites to the server. */
+  onInvite: (channel: ChannelEntry) => void;
   onEdit: (channel: ChannelEntry) => void;
   /** Make a channel under this one. `tempOnly` when that is all they may make. */
   onCreate: (parent: ChannelEntry, tempOnly: boolean) => void;
@@ -89,6 +93,7 @@ function OpenChannelMenu({
   onToggleHideEmpty,
   onJoin,
   onShowInfo,
+  onInvite,
   onEdit,
   onCreate,
   onMoveAllUsers,
@@ -98,7 +103,7 @@ function OpenChannelMenu({
   arranging,
   onToggleArrange,
 }: Readonly<ChannelMenuProps & { target: ChannelMenuTarget }>) {
-  const { t } = useTranslation(["nebulaSidebar", "sidebar", "chat"]);
+  const { t } = useTranslation(["nebulaSidebar", "sidebar", "chat", "server"]);
   const { channel } = target;
   const onClose = popupActions.closeChannelMenu;
   const listening = useAppStore((state) => state.listenedChannels.has(channel.id));
@@ -139,6 +144,9 @@ function OpenChannelMenu({
   // of the list, and the calendar event can re-admit you. A friend chat is
   // detached too, but it is a conversation rather than a room.
   const meeting = !!channel.detached && !isDmChannel(channel);
+  // Offered only once the server has said this session may mint one; the
+  // server checks again, and also that the inviter may enter this channel.
+  const canInvite = useInviteSupport().mayCreate && !meeting && !isDmChannel(channel);
   const run = (action: () => void) => () => {
     action();
     onClose();
@@ -177,6 +185,16 @@ function OpenChannelMenu({
                 ? t("nebulaSidebar:channels.stopListeningIn")
                 : t("nebulaSidebar:channels.listenIn")}
             </MenuItem>,
+            ...(canInvite
+              ? [
+                  <MenuItem key="invite" data-testid={TID.channelInvite} onClick={run(() => onInvite(channel))}>
+                    <Glyph>
+                      <UserPlusIcon width={13} height={13} />
+                    </Glyph>
+                    {t("server:invites.menuItem")}
+                  </MenuItem>,
+                ]
+              : []),
             <Divider key="entry-end" sx={DIVIDER} />,
             <MenuItem
               key="mute"

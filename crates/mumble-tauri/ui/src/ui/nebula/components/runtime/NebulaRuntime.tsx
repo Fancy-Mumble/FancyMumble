@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import i18n, { registerLanguage, type LocaleBundle } from "@core/i18n";
@@ -6,6 +6,7 @@ import { getNotificationSounds, getPreferences, getSavedAudioSettings } from "@c
 import { useAppStore } from "@core/store";
 import { useCalendarReminders } from "@core/features/chat/calendar/useCalendarReminders";
 import { requestJoinMeeting } from "@core/features/chat/calendar/meetings";
+import { parseInviteLink, type ParsedInvite } from "@core/features/invites/inviteLink";
 import { useWatchLifecycle } from "@core/features/chat/watch/useWatchLifecycle";
 import { applyAllGlobalShortcuts, loadShortcuts } from "@core/features/settings/shortcutHelpers";
 import {
@@ -44,7 +45,13 @@ const OnboardingModal = lazy(() => import("../onboarding/OnboardingModal"));
  * and when they mount; the work itself is all shared `@core` behaviour, so
  * nothing here is Nebula-specific beyond the mounting.
  */
-function NebulaRuntimeInner({ onOpenMarketplace }: { onOpenMarketplace: (pluginId?: string) => void }) {
+interface NebulaRuntimeProps {
+  onOpenMarketplace: (pluginId?: string) => void;
+  /** A followed `fancy://invite/...` link. */
+  onOpenInvite: (invite: ParsedInvite) => void;
+}
+
+function NebulaRuntimeInner({ onOpenMarketplace, onOpenInvite }: NebulaRuntimeProps) {
   const [notificationSounds, setNotificationSounds] =
     useState<NotificationSoundSettings>(DEFAULT_NOTIFICATION_SOUNDS);
   useVisualViewport();
@@ -137,6 +144,14 @@ function NebulaRuntimeInner({ onOpenMarketplace }: { onOpenMarketplace: (pluginI
     return () => globalThis.removeEventListener(JUMP_TO_USER_EVENT, jump);
   }, []);
 
+  // Read through refs so the listener below is registered once: the shell
+  // hands these in as fresh arrows every render, and re-subscribing on each
+  // one would also re-ask the backend for a parked launch link every time.
+  const openMarketplace = useRef(onOpenMarketplace);
+  const openInvite = useRef(onOpenInvite);
+  openMarketplace.current = onOpenMarketplace;
+  openInvite.current = onOpenInvite;
+
   useEffect(() => {
     const translation = listen<{ code: string; bundle: Partial<LocaleBundle> | null }>(
       "translation:apply",
@@ -148,25 +163,38 @@ function NebulaRuntimeInner({ onOpenMarketplace }: { onOpenMarketplace: (pluginI
         else i18n.emit("languageChanged", code);
       },
     );
-    const deepLink = listen<string>("deep-link-open", (event) => {
+    const route = (link: string) => {
       let url: URL;
       try {
-        url = new URL(event.payload);
+        url = new URL(link);
       } catch {
         return;
       }
       if (url.protocol !== "fancy:") return;
       const segments = [url.host, ...url.pathname.split("/")].filter(Boolean);
       if (segments[0] === "marketplace" && segments[1] === "plugin" && segments[2])
-        onOpenMarketplace(decodeURIComponent(segments[2]));
+        openMarketplace.current(decodeURIComponent(segments[2]));
       if (segments[0] === "meeting" && segments[1])
         requestJoinMeeting(decodeURIComponent(segments[1]), url.searchParams.get("t") ?? undefined);
-    });
+      if (segments[0] === "invite") {
+        const invite = parseInviteLink(link);
+        if (invite) openInvite.current(invite);
+      }
+    };
+    const deepLink = listen<string>("deep-link-open", (event) => route(event.payload));
+    // A link that launched the app arrived before anything was listening, so
+    // the backend parked it; collected once the listener above is up.
+    void deepLink
+      .then(() => invoke<string | null>("take_pending_deep_link"))
+      .then((pending) => {
+        if (pending) route(pending);
+      })
+      .catch(() => undefined);
     return () => {
       void translation.then((off) => off());
       void deepLink.then((off) => off());
     };
-  }, [onOpenMarketplace]);
+  }, []);
 
   return (
     <Suspense fallback={null}>
@@ -179,7 +207,7 @@ function NebulaRuntimeInner({ onOpenMarketplace }: { onOpenMarketplace: (pluginI
   );
 }
 
-export function NebulaRuntime(props: { onOpenMarketplace: (pluginId?: string) => void }) {
+export function NebulaRuntime(props: NebulaRuntimeProps) {
   // Everything above talks to the Tauri backend; outside the webview (tests,
   // plain browser) there is nothing to bootstrap.
   if (!("__TAURI_INTERNALS__" in globalThis)) return null;

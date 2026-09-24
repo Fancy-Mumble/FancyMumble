@@ -39,7 +39,8 @@ export type AdminPageId =
   | "serverSettings"
   | "livery"
   | "welcome"
-  | "auditLog";
+  | "auditLog"
+  | "invites";
 
 export interface AdminCapabilities {
   canAdminister: boolean;
@@ -143,6 +144,10 @@ export const ADMIN_PAGES: readonly AdminEntry[] = [
     fallback: "Audit log",
     available: (c) => c.canViewAudit,
   },
+  // Offered to the same people who edit the settings that govern invites; a
+  // server without invites says so on the page rather than hiding it, so the
+  // admin learns where to switch them on.
+  { id: "invites", labelKey: "adminTabs.invites", fallback: "Invites", available: (c) => c.canAdminister },
 ];
 
 /** The administration pages to list, already filtered and labelled. */
