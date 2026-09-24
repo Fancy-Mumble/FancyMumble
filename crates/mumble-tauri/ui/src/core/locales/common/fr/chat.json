@@ -1180,5 +1180,20 @@
   },
   "media": {
     "showAll": "Afficher les {{count}} éléments"
+  },
+  "voiceMessage": {
+    "record": "Enregistrer un message vocal",
+    "recording": "Enregistrement d’un message vocal",
+    "send": "Envoyer le message vocal",
+    "cancel": "Supprimer le message vocal",
+    "sending": "Envoi…",
+    "limitReached": "Durée maximale atteinte",
+    "play": "Lire le message vocal",
+    "pause": "Mettre le message vocal en pause",
+    "label": "Message vocal",
+    "seek": "Position dans le message vocal",
+    "speed": "Vitesse de lecture",
+    "failed": "Échec du message vocal : {{detail}}",
+    "unavailable": "Ce message vocal ne peut plus être lu."
   }
 }

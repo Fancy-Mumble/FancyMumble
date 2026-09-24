@@ -1180,5 +1180,20 @@
   },
   "media": {
     "showAll": "Alle {{count}} Elemente anzeigen"
+  },
+  "voiceMessage": {
+    "record": "Sprachnachricht aufnehmen",
+    "recording": "Sprachnachricht wird aufgenommen",
+    "send": "Sprachnachricht senden",
+    "cancel": "Sprachnachricht verwerfen",
+    "sending": "Wird gesendet…",
+    "limitReached": "Maximale Länge erreicht",
+    "play": "Sprachnachricht abspielen",
+    "pause": "Sprachnachricht pausieren",
+    "label": "Sprachnachricht",
+    "seek": "Position in der Sprachnachricht",
+    "speed": "Wiedergabegeschwindigkeit",
+    "failed": "Sprachnachricht fehlgeschlagen: {{detail}}",
+    "unavailable": "Diese Sprachnachricht kann nicht mehr abgespielt werden."
   }
 }

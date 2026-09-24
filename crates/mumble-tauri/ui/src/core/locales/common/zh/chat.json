@@ -1180,5 +1180,20 @@
   },
   "media": {
     "showAll": "显示全部 {{count}} 项"
+  },
+  "voiceMessage": {
+    "record": "录制语音消息",
+    "recording": "正在录制语音消息",
+    "send": "发送语音消息",
+    "cancel": "放弃语音消息",
+    "sending": "正在发送…",
+    "limitReached": "已达到最长时长",
+    "play": "播放语音消息",
+    "pause": "暂停语音消息",
+    "label": "语音消息",
+    "seek": "语音消息播放位置",
+    "speed": "播放速度",
+    "failed": "语音消息失败：{{detail}}",
+    "unavailable": "此语音消息已无法播放。"
   }
 }

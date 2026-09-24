@@ -47,6 +47,22 @@ export interface FileAttachmentInfo {
    */
   readonly width?: number;
   readonly height?: number;
+  /**
+   * Set when the file is a recorded voice message rather than a picked file.
+   *
+   * A card draws it as a voice note - play button, waveform, length - instead
+   * of as an audio file with a name. The length and the shape are the
+   * sender's, measured while recording, so the note can be drawn before a
+   * byte of it is fetched.
+   */
+  readonly voice?: VoiceNote;
+}
+
+/** What a voice message says about itself. */
+export interface VoiceNote {
+  readonly durationMs: number;
+  /** Loudness bars, 0 to 100, oldest first. */
+  readonly waveform: readonly number[];
 }
 
 export const FANCY_FILE_MARKER_RE = /<!-- FANCY_FILE:([A-Za-z0-9+/=]+) -->/;
@@ -66,6 +82,32 @@ export function encodeFileAttachmentMarker(info: FileAttachmentInfo): string {
  * mile of blank column.
  */
 const MAX_STATED_DIMENSION = 65_536;
+
+/** The most bars a stated waveform may carry, and the longest stated clip. */
+const MAX_WAVEFORM_BARS = 128;
+const MAX_VOICE_MS = 24 * 3600 * 1000;
+
+/**
+ * A voice note worth believing, or `undefined`.
+ *
+ * The same reasoning as {@link statedDimension}: the marker is the sender's
+ * word, and a card lays itself out from it. Bars outside 0-100 are clamped
+ * rather than refused, because a slightly wrong bar is a drawing and not a
+ * lie about the file.
+ */
+function statedVoice(value: unknown): VoiceNote | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { durationMs, waveform } = value as { durationMs?: unknown; waveform?: unknown };
+  if (typeof durationMs !== "number" || !Number.isFinite(durationMs) || durationMs < 0 || durationMs > MAX_VOICE_MS) {
+    return undefined;
+  }
+  const bars = Array.isArray(waveform)
+    ? waveform
+        .slice(0, MAX_WAVEFORM_BARS)
+        .map((bar) => (typeof bar === "number" && Number.isFinite(bar) ? Math.min(100, Math.max(0, Math.round(bar))) : 0))
+    : [];
+  return { durationMs: Math.round(durationMs), waveform: bars };
+}
 
 function statedDimension(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value > 0 && value <= MAX_STATED_DIMENSION
@@ -91,6 +133,7 @@ export function decodeFileAttachmentPayload(payload: string): FileAttachmentInfo
         typeof parsed.thumbKey === "string" && parsed.thumbKey.length > 0 ? parsed.thumbKey : undefined,
       width: statedDimension(parsed.width),
       height: statedDimension(parsed.height),
+      voice: statedVoice(parsed.voice),
     };
   } catch {
     return null;

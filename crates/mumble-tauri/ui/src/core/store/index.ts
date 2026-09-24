@@ -10,6 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import { askServerGifSupport, forgetServerGifSupport } from "../features/chat/gif/serverGifs";
+import { askServerVoiceSupport, forgetServerVoiceSupport } from "../features/chat/voice/voiceSupport";
 import { LOADED_WINDOW, LOADED_WINDOW_STEP } from "../features/chat/chatWindowing";
 import { reconnectDelayMs, shouldAutoReconnect } from "../utils/reconnectBackoff";
 import { findSavedPassword } from "../serverStorage";
@@ -1244,6 +1245,8 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
       // What the GIF picker may do is a fact about the server it would ask.
       forgetServerGifSupport();
       void askServerGifSupport();
+      // Kept per server, so this only fills in a tab that never answered.
+      void askServerVoiceSupport();
       // Sync global status/error from this session's own metadata so the
       // ChatPage overlay reflects the tab the user just switched to,
       // not whatever the previously-active tab's status was.
@@ -2972,6 +2975,8 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
       // Whether GIFs are on without a key of the user's own depends on what
       // this server offers; asked now, so the button is right from the start.
       void askServerGifSupport();
+      // The composer's microphone, same reasoning.
+      void askServerVoiceSupport();
       // Load silenced channels for this server (pendingConnect still available).
       const pending = useAppStore.getState().pendingConnect;
       let silenced = new Set<number>();
@@ -3191,6 +3196,8 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
             : typeof payload === "object" && payload !== null
               ? payload.reason
               : null;
+        // The next connection to that server asks again.
+        if (eventServerId) forgetServerVoiceSupport(eventServerId);
 
         const { activeServerId, pendingConnect: pendingForActive } = useAppStore.getState();
         // Only treat the event as affecting the active session if the

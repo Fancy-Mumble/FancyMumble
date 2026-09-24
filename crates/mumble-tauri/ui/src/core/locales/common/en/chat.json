@@ -1180,5 +1180,20 @@
   },
   "media": {
     "showAll": "Show all {{count}} items"
+  },
+  "voiceMessage": {
+    "record": "Record a voice message",
+    "recording": "Recording a voice message",
+    "send": "Send voice message",
+    "cancel": "Discard voice message",
+    "sending": "Sending…",
+    "limitReached": "Maximum length reached",
+    "play": "Play voice message",
+    "pause": "Pause voice message",
+    "label": "Voice message",
+    "seek": "Position in voice message",
+    "speed": "Playback speed",
+    "failed": "Voice message failed: {{detail}}",
+    "unavailable": "This voice message can no longer be played."
   }
 }
