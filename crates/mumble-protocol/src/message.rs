@@ -294,6 +294,13 @@ pub enum TcpMessageType {
     FancyGifSupportQuery = 204,
     /// Fancy Mumble: the answer to that.
     FancyGifSupport = 205,
+    /// Fancy Mumble: client asks whether this server takes voice messages, and
+    /// how long and large one may be. Local tags; the canon carries both inside
+    /// the files service, outer type 1009.
+    FancyVoiceSupportQuery = 206,
+    /// Fancy Mumble: the answer, also pushed unasked when the operator changes
+    /// one of the voice-message settings.
+    FancyVoiceSupport = 207,
 }
 
 /// Generates both `TryFrom<u16> for TcpMessageType` and
@@ -640,6 +647,14 @@ pub enum ControlMessage {
     /// Fancy: whether searches would be served, and the prefix the server's
     /// proxied media URLs start with (empty when the proxy is off).
     FancyGifSupport(fancy::media::GifSupport),
+    /// Fancy: ask whether voice messages are on here, once per connection.
+    ///
+    /// A server that predates voice messages drops the question unanswered,
+    /// which is the same "no" as `available = false`.
+    FancyVoiceSupportQuery(fancy::files::VoiceSupportQuery),
+    /// Fancy: whether voice messages are on and their two ceilings. Arrives
+    /// with an empty `request_id` whenever the operator changes them.
+    FancyVoiceSupport(fancy::files::VoiceSupport),
     /// Fancy: generic plugin envelope (bidirectional).
     PluginMessage(mumble_tcp::PluginMessage),
     /// Fancy: server enumerates loaded plugins.
@@ -693,6 +708,7 @@ message_type_mapping! {
     FancyLinkPreviewRequest, FancyLinkPreviewResponse,
     FancyGifQuery, FancyGifPage, FancyGifRefused,
     FancyGifSupportQuery, FancyGifSupport,
+    FancyVoiceSupportQuery, FancyVoiceSupport,
     FancyAccountRecordGet, FancyAccountRecordPut, FancyAccountRecordList,
     FancyAccountRecord, FancyAccountRecordKeys,
     FancyEmoteUpload, FancyEmoteForget, FancyEmoteQuery, FancyEmotes,
@@ -881,11 +897,12 @@ mod tests {
         assert!(TcpMessageType::try_from(142u16).is_err());
         assert!(TcpMessageType::try_from(143u16).is_err());
         assert!(TcpMessageType::try_from(169u16).is_err());
-        // 191-199 were free and are now the record and emote types, and 204-205
-        // the GIF support pair, so the sentinel moved rather than the types: a
-        // gap this test names has to be a gap the enum actually has.
+        // 191-199 were free and are now the record and emote types, 204-205
+        // the GIF support pair and 206-207 the voice one, so the sentinel moved
+        // rather than the types: a gap this test names has to be a gap the enum
+        // actually has.
         assert!(TcpMessageType::try_from(250u16).is_err());
-        assert!(TcpMessageType::try_from(206u16).is_err());
+        assert!(TcpMessageType::try_from(208u16).is_err());
         assert!(TcpMessageType::try_from(u16::MAX).is_err());
     }
 

@@ -549,6 +549,11 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
         ControlMessage::FancyEmoteQuery(query) => {
             return Some((FILES, files_envelope(Files::EmoteQuery(query.clone()))));
         }
+        // No fallback: a server without voice messages never answers, and the
+        // composer simply never shows a microphone.
+        ControlMessage::FancyVoiceSupportQuery(query) => {
+            return Some((FILES, files_envelope(Files::VoiceQuery(query.clone()))));
+        }
         // No fallback for this one, and that is the point: epoch 0 had no GIF
         // message because the client called the provider itself. A server that
         // cannot read this simply never answers, and the picker falls back to
@@ -1373,6 +1378,9 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 Some(Files::Refused(refused)) => Some(ControlMessage::FancyFileRefused(refused)),
                 Some(Files::Managed(listing)) => Some(ControlMessage::FancyFileManaged(listing)),
                 Some(Files::Emotes(emotes)) => Some(ControlMessage::FancyEmotes(emotes)),
+                Some(Files::VoiceSupport(support)) => {
+                    Some(ControlMessage::FancyVoiceSupport(support))
+                }
                 // The request arms. A server sending one of those is either
                 // confused or newer than this client; either way there is
                 // nothing here that handles it, so it takes the unknown path.
@@ -1384,7 +1392,8 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                     | Files::Forget(_)
                     | Files::EmoteUpload(_)
                     | Files::EmoteForget(_)
-                    | Files::EmoteQuery(_),
+                    | Files::EmoteQuery(_)
+                    | Files::VoiceQuery(_),
                 )
                 | None => None,
             })
@@ -3524,6 +3533,40 @@ mod tests {
             panic!("a ProfileSnapshot must become a FancyAuditSnapshot");
         };
         assert_eq!(back, kept);
+    }
+
+    #[test]
+    fn a_voice_support_question_and_its_answer_cross_the_canon_unchanged() {
+        let ask = fancy::files::VoiceSupportQuery {
+            request_id: "v-1".to_owned(),
+        };
+        let (outer, payload) = to_canon(&ControlMessage::FancyVoiceSupportQuery(ask.clone()))
+            .expect("a voice support question has a canon home");
+        assert_eq!(outer, FILES);
+        let envelope = fancy::files::FilesEnvelope::decode(payload.as_slice()).expect("decodes");
+        assert_eq!(
+            envelope.body,
+            Some(fancy::files::files_envelope::Body::VoiceQuery(ask))
+        );
+
+        let support = fancy::files::VoiceSupport {
+            request_id: String::new(),
+            available: true,
+            max_seconds: 120,
+            max_bytes: 2 * 1024 * 1024,
+        };
+        let pushed = fancy::files::FilesEnvelope {
+            body: Some(fancy::files::files_envelope::Body::VoiceSupport(
+                support.clone(),
+            )),
+        };
+        let decoded = from_canon(FILES, &pushed.encode_to_vec())
+            .expect("decodable")
+            .expect("an answer is translated");
+        let ControlMessage::FancyVoiceSupport(back) = decoded else {
+            panic!("a VoiceSupport must become a FancyVoiceSupport");
+        };
+        assert_eq!(back, support);
     }
 
     #[test]

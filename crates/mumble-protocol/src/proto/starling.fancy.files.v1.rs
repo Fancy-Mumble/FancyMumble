@@ -3,7 +3,7 @@
 pub struct FilesEnvelope {
     #[prost(
         oneof = "files_envelope::Body",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14"
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16"
     )]
     pub body: ::core::option::Option<files_envelope::Body>,
 }
@@ -39,6 +39,10 @@ pub mod files_envelope {
         EmoteQuery(super::EmoteQuery),
         #[prost(message, tag = "14")]
         Emotes(super::Emotes),
+        #[prost(message, tag = "15")]
+        VoiceQuery(super::VoiceSupportQuery),
+        #[prost(message, tag = "16")]
+        VoiceSupport(super::VoiceSupport),
     }
 }
 /// "My shared files", and the operator's view of the same table.
@@ -87,6 +91,14 @@ pub struct ManagedFile {
     /// Whether that person is connected right now, so a dashboard can say so.
     #[prost(bool, tag = "14")]
     pub uploader_online: bool,
+    /// The sibling object holding a small preview of this one, or empty where
+    /// the server derived none: a sealed upload it cannot read, something that
+    /// is not a picture, or a format its decoder did not recognise.
+    ///
+    /// A key rather than a URL, because a URL for it would expire on its own
+    /// schedule; the client signs for it the way it signs for any other object.
+    #[prost(string, tag = "15")]
+    pub thumb_key: ::prost::alloc::string::String,
 }
 /// What the server holds, for the header of an operator's view.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -135,6 +147,12 @@ pub struct UploadRequest {
     pub content_type: ::prost::alloc::string::String,
     #[prost(uint64, tag = "5")]
     pub size: u64,
+    /// The SHA-256 of the bytes about to be uploaded, or empty.
+    ///
+    /// Optional: the server hashes whatever arrives either way. When set it must
+    /// be 32 bytes, and a `PUT` whose bytes hash to anything else is refused with
+    /// `400` and nothing is stored, because a transfer that contradicts the
+    /// uploader's own digest is a corrupted one, not a file to share.
     #[prost(bytes = "vec", tag = "6")]
     pub sha256: ::prost::alloc::vec::Vec<u8>,
     #[prost(enumeration = "Visibility", tag = "7")]
@@ -150,6 +168,22 @@ pub struct UploadRequest {
     /// from the same secret. Losing the password loses the file.
     #[prost(string, tag = "8")]
     pub password: ::prost::alloc::string::String,
+    /// Set when the upload is a recorded voice clip rather than a file somebody
+    /// picked. A clip is checked against the voice-message settings and the
+    /// `SendVoiceMessage` bit *instead of* `ShareFiles`, so a server can allow
+    /// voice notes without allowing arbitrary uploads.
+    #[prost(message, optional, tag = "10")]
+    pub voice: ::core::option::Option<VoiceClip>,
+}
+/// What a voice clip claims to be, checked before a byte moves.
+///
+/// The duration is the client's word for it. The server does not decode the
+/// audio, so a client lying about it can send a longer clip; the byte cap is
+/// the limit it cannot talk its way past.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VoiceClip {
+    #[prost(uint32, tag = "1")]
+    pub duration_ms: u32,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DownloadRequest {
@@ -193,6 +227,9 @@ pub struct Share {
     pub key: ::prost::alloc::string::String,
     #[prost(uint32, tag = "2")]
     pub channel: u32,
+    /// The session of whoever shared it while they are connected, and `0` while
+    /// they are not. Resolved each time the message is built: session ids are
+    /// recycled, so a stored one would name whoever holds that number now.
     #[prost(uint32, tag = "3")]
     pub owner: u32,
     #[prost(string, tag = "4")]
@@ -213,6 +250,23 @@ pub struct Share {
     /// When this share stops answering, or `0` for never.
     #[prost(uint64, tag = "10")]
     pub expires_at_ms: u64,
+    /// The sibling object holding a small preview of this one, or empty where
+    /// the server derived none: a sealed upload it cannot read, something that
+    /// is not a picture, or a format its decoder did not recognise.
+    ///
+    /// A key rather than a URL, because a URL for it would expire on its own
+    /// schedule; the client signs for it the way it signs for any other object.
+    #[prost(string, tag = "11")]
+    pub thumb_key: ::prost::alloc::string::String,
+    /// Who shared it, in terms that outlive their connection, as `ManagedFile`
+    /// carries them. `uploader_account` is `0` for a guest, and `uploader_cert`
+    /// empty for a client that presented none.
+    #[prost(uint64, tag = "12")]
+    pub uploader_account: u64,
+    #[prost(string, tag = "13")]
+    pub uploader_name: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "14")]
+    pub uploader_cert: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListRequest {
@@ -301,6 +355,36 @@ pub struct Emotes {
     pub request_id: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "2")]
     pub emotes: ::prost::alloc::vec::Vec<Emote>,
+}
+/// Voice messages: short recorded clips sent into chat as files.
+///
+/// Asked once per connection, like `GifSupportQuery`, and pushed again to
+/// everyone with an empty `request_id` whenever the operator changes one of the
+/// settings, so a recorder that is already on screen learns its new ceiling
+/// without a reconnect. A server too old to know the question answers nothing,
+/// which a client reads as `available = false`.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VoiceSupportQuery {
+    #[prost(string, tag = "1")]
+    pub request_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VoiceSupport {
+    #[prost(string, tag = "1")]
+    pub request_id: ::prost::alloc::string::String,
+    /// `allow_voice_messages`. Whether this member may send one in a given
+    /// channel is the `SendVoiceMessage` bit on it, which the client already
+    /// learns from its permission queries.
+    #[prost(bool, tag = "2")]
+    pub available: bool,
+    /// The longest clip in seconds, or zero for no limit. The recorder stops
+    /// itself here rather than being refused at the end of a long take.
+    #[prost(uint32, tag = "3")]
+    pub max_seconds: u32,
+    /// The largest clip in bytes, already the smaller of the voice cap and the
+    /// file service's own upload ceiling. Zero for no limit.
+    #[prost(uint64, tag = "4")]
+    pub max_bytes: u64,
 }
 /// Whose files a management listing is about.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

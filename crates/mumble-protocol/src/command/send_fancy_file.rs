@@ -41,6 +41,11 @@ pub struct SendFancyFileUpload {
     /// against and derives the file's encryption key from the same secret, so
     /// nothing here can be asked for a second time.
     pub password: String,
+    /// Set for a recorded voice clip, with its length in milliseconds.
+    ///
+    /// Marks the upload as a voice message, which the server admits by its
+    /// voice-message settings and `SendVoiceMessage` instead of `ShareFiles`.
+    pub voice_duration_ms: Option<u32>,
 }
 
 impl CommandAction for SendFancyFileUpload {
@@ -60,6 +65,9 @@ impl CommandAction for SendFancyFileUpload {
                     visibility: self.visibility as i32,
                     ttl_seconds: self.ttl_seconds,
                     password: self.password.clone(),
+                    voice: self
+                        .voice_duration_ms
+                        .map(|duration_ms| fancy::files::VoiceClip { duration_ms }),
                 },
             )],
             ..Default::default()
