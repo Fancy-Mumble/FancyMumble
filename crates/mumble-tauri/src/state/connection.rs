@@ -96,6 +96,8 @@ impl AppState {
                 (None, None)
             };
 
+            let device = device_for(&app_handle, &host, port);
+
             // Read force_tcp_audio from current audio settings.
             let force_tcp = inner
                 .lock()
@@ -149,6 +151,7 @@ impl AppState {
                     app_handle: &app_handle,
                     username,
                     credentials,
+                    device,
                     registry: &registry,
                     server_id,
                     active_handle: &active_handle,
@@ -411,6 +414,24 @@ fn init_identity(inner: &SharedInner, app_handle: &AppHandle, cert_label: &Optio
     }
 }
 
+/// Which install this is, as the server at `host:port` is to know it.
+///
+/// Derived per server (see `device`), so it is worked out at connect time,
+/// where the target is known, and not once for the whole app.
+fn device_for(
+    app_handle: &AppHandle,
+    host: &str,
+    port: u16,
+) -> Option<command::AuthenticateDevice> {
+    let dir = crate::e2e_data_dir(app_handle).ok()?;
+    let device = super::device::credentials_for(&dir, host, port)?;
+    Some(command::AuthenticateDevice {
+        id: device.id,
+        secret: device.secret,
+        name: device.name,
+    })
+}
+
 /// Bundle of context passed to [`handle_connect_result`] so the
 /// function signature stays within Clippy's `too_many_arguments` limit.
 struct ConnectResultCtx<'a> {
@@ -418,6 +439,7 @@ struct ConnectResultCtx<'a> {
     app_handle: &'a AppHandle,
     username: String,
     credentials: Credentials,
+    device: Option<command::AuthenticateDevice>,
     registry: &'a super::registry::Registry,
     server_id: ServerId,
     active_handle: &'a super::shared_handle::SharedHandle,
@@ -440,6 +462,7 @@ async fn handle_connect_result(
         app_handle,
         username,
         credentials,
+        device,
         registry,
         server_id,
         active_handle,
@@ -459,6 +482,7 @@ async fn handle_connect_result(
                     tokens: credentials.tokens(),
                     password: credentials.password,
                     totp: credentials.totp,
+                    device,
                 })
                 .await
             {

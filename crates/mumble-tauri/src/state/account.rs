@@ -26,12 +26,16 @@ impl AppState {
     /// `FancyAccountSettingsUpdate.Action` variant; `value` carries the
     /// action-specific payload (password, new name, email, TOTP code), and
     /// `current_password` the account's existing password, which the server
-    /// requires for every action that changes anything.
+    /// requires for every action that changes anything. `device_id` names the
+    /// device a device action acts on, and `device_secret` is the secret a
+    /// device being linked will log in with.
     pub async fn update_account_settings(
         &self,
         action: String,
         value: Option<String>,
         current_password: Option<String>,
+        device_id: Option<String>,
+        device_secret: Option<String>,
     ) -> Result<(), String> {
         let action = match action.as_str() {
             "query" => Action::Query,
@@ -43,6 +47,9 @@ impl AppState {
             "totp_begin" => Action::TotpBegin,
             "totp_verify" => Action::TotpVerify,
             "totp_disable" => Action::TotpDisable,
+            "rename_device" => Action::RenameDevice,
+            "remove_device" => Action::RemoveDevice,
+            "add_device" => Action::AddDevice,
             other => return Err(format!("unknown account action: {other}")),
         };
 
@@ -58,6 +65,8 @@ impl AppState {
                 action,
                 value,
                 current_password,
+                device_id,
+                device_secret,
             })
             .await
             .map_err(|e| format!("Failed to send account update: {e}"))?;

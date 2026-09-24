@@ -20,6 +20,7 @@ mod audio_tasks;
 mod calibration;
 mod channels;
 mod connection;
+mod device;
 mod emotes;
 mod voice_replay;
 pub use emotes::{AddEmoteRequest, AddEmoteResponse, RemoveEmoteRequest};

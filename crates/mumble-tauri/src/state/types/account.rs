@@ -32,6 +32,28 @@ pub struct AccountSettings {
     /// (precondition for switching back to certificate-only login).
     #[serde(default)]
     pub cert_matches_session: bool,
+    /// The devices the account is used from, most recently seen first.
+    /// Empty on a server that does not keep them.
+    #[serde(default)]
+    pub devices: Vec<AccountDevice>,
+    /// Whether a login by certificate alone must come from a listed device;
+    /// set once any device has been signed out.
+    #[serde(default)]
+    pub devices_locked: bool,
+    /// Which of `devices` this session is, if it named one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub this_device: Option<String>,
+}
+
+/// One device the own account is used from.
+#[derive(Debug, Clone, Default, Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct AccountDevice {
+    pub id: String,
+    pub name: String,
+    pub added_at_ms: u64,
+    /// Zero for a device registered ahead that has not logged in yet.
+    pub last_seen_ms: u64,
+    pub online: bool,
 }
 
 /// Result of one account operation (`FancyAccountAck`).

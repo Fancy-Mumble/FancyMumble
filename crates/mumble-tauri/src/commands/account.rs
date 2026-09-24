@@ -12,16 +12,19 @@ pub(crate) fn get_account_settings(state: tauri::State<'_, AppState>) -> Option<
 
 /// Send one self-service account operation (`query` / `set_password` /
 /// `clear_password` / `rename` / `set_email` / `unregister` / `totp_begin` /
-/// `totp_verify` / `totp_disable`).  Results arrive as `account-ack` and
-/// `account-settings` events.
+/// `totp_verify` / `totp_disable` / `rename_device` / `remove_device` /
+/// `add_device`).  Results arrive as `account-ack` and `account-settings`
+/// events.
 #[tauri::command]
 pub(crate) async fn update_account_settings(
     state: tauri::State<'_, AppState>,
     action: String,
     value: Option<String>,
     current_password: Option<String>,
+    device_id: Option<String>,
+    device_secret: Option<String>,
 ) -> Result<(), String> {
     state
-        .update_account_settings(action, value, current_password)
+        .update_account_settings(action, value, current_password, device_id, device_secret)
         .await
 }

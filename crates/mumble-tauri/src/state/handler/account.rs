@@ -5,7 +5,7 @@ use serde::Serialize;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
-use crate::state::types::{AccountAck, AccountSettings};
+use crate::state::types::{AccountAck, AccountDevice, AccountSettings};
 
 #[derive(Serialize, Clone)]
 struct AccountSettingsPayload {
@@ -23,6 +23,19 @@ impl HandleMessage for mumble_tcp::FancyAccountSettings {
             totp_enabled: self.totp_enabled.unwrap_or(false),
             cert_hash: self.cert_hash.clone(),
             cert_matches_session: self.cert_matches_session.unwrap_or(false),
+            devices: self
+                .devices
+                .iter()
+                .map(|device| AccountDevice {
+                    id: device.id.clone().unwrap_or_default(),
+                    name: device.name.clone().unwrap_or_default(),
+                    added_at_ms: device.added_at_ms.unwrap_or_default(),
+                    last_seen_ms: device.last_seen_ms.unwrap_or_default(),
+                    online: device.online.unwrap_or(false),
+                })
+                .collect(),
+            devices_locked: self.devices_locked.unwrap_or(false),
+            this_device: self.this_device.clone().filter(|id| !id.is_empty()),
         };
         debug!(
             registered = snapshot.registered,
