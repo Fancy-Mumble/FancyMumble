@@ -22,6 +22,7 @@ mod channels;
 mod connection;
 mod device;
 mod emotes;
+pub(crate) mod link;
 mod voice_replay;
 pub use emotes::{AddEmoteRequest, AddEmoteResponse, RemoveEmoteRequest};
 mod event_handler;

@@ -259,6 +259,10 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         // -- account (self-service) ------------------------------------
         super::account::get_account_settings,
         super::account::update_account_settings,
+        super::link::begin_device_link,
+        super::link::cancel_device_link,
+        super::link::start_device_link,
+        super::link::finish_device_link,
         super::plugin_admin::get_plugin_registry,
         super::plugin_admin::get_plugin_broadcasts,
         super::plugin_admin::request_server_plugins,

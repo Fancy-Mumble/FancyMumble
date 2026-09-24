@@ -278,9 +278,16 @@ impl IdentityStore {
         Ok(())
     }
 
-    /// Export an identity to a JSON bundle at the given `dest` path.
-    pub fn export(&self, label: &str, dest: &Path) -> Result<(), String> {
-        use serde_json::{Map, Value, json};
+    /// An identity as the JSON bundle `export` writes, in memory.
+    ///
+    /// Also what linking a device carries across (`state::link`), which is why
+    /// it exists apart from the file: a bundle written to disk on its way to
+    /// another device is a private key left lying in a temp directory.
+    pub fn export_bundle(
+        &self,
+        label: &str,
+    ) -> Result<serde_json::Map<String, serde_json::Value>, String> {
+        use serde_json::{Map, Value};
 
         let dir = self.identity_dir(label);
         if !dir.exists() {
@@ -306,8 +313,13 @@ impl IdentityStore {
             let hex: String = bytes_to_hex(&data);
             let _ = bundle.insert(SEED_FILE.to_string(), Value::String(hex));
         }
+        Ok(bundle)
+    }
 
-        let json = serde_json::to_string_pretty(&json!(bundle))
+    /// Export an identity to a JSON bundle at the given `dest` path.
+    pub fn export(&self, label: &str, dest: &Path) -> Result<(), String> {
+        let bundle = self.export_bundle(label)?;
+        let json = serde_json::to_string_pretty(&serde_json::Value::Object(bundle))
             .map_err(|e| format!("Serialisation error: {e}"))?;
         std::fs::write(dest, json).map_err(|e| format!("Failed to write export file: {e}"))?;
         info!(label, ?dest, "exported identity");
@@ -329,8 +341,24 @@ impl IdentityStore {
             .and_then(Value::as_str)
             .ok_or("Missing _label in identity file")?
             .to_string();
+        self.import_bundle(&bundle, &label)?;
+        info!(label, ?src, "imported identity");
+        Ok(label)
+    }
 
-        let dir = self.identity_dir(&label);
+    /// Write a bundle's certificate, key and seed under `label`.
+    ///
+    /// The label is the caller's, not the bundle's: a linked identity is
+    /// stored under one that does not exist here yet, so it cannot land on
+    /// this device's own.
+    pub fn import_bundle(
+        &self,
+        bundle: &serde_json::Map<String, serde_json::Value>,
+        label: &str,
+    ) -> Result<(), String> {
+        use serde_json::Value;
+
+        let dir = self.identity_dir(label);
         std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create identity dir: {e}"))?;
 
         for name in [TLS_CERT_FILE, TLS_KEY_FILE] {
@@ -345,9 +373,7 @@ impl IdentityStore {
             std::fs::write(dir.join(SEED_FILE), data)
                 .map_err(|e| format!("Failed to write seed: {e}"))?;
         }
-
-        info!(label, ?src, "imported identity");
-        Ok(label)
+        Ok(())
     }
 }
 

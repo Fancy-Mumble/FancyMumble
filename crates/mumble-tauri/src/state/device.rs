@@ -27,6 +27,16 @@ use sha2::{Digest as _, Sha256};
 /// Where the install's key lives, under the app data directory.
 const KEY_FILE: &str = "device.key";
 
+/// Where linked devices keep the id they were linked as, per server.
+const LINKS_FILE: &str = "device-links.json";
+
+/// One server's linked device, as `LINKS_FILE` stores it.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct LinkedDevice {
+    id: String,
+    secret: String,
+}
+
 /// What the client says at login about the device it is running on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DeviceCredentials {
@@ -43,6 +53,15 @@ pub(crate) struct DeviceCredentials {
 /// `None` only when the key can neither be read nor written, in which case
 /// the client logs in the way it always did, as no device in particular.
 pub(crate) fn credentials_for(data_dir: &Path, host: &str, port: u16) -> Option<DeviceCredentials> {
+    // A device linked to this server keeps the id it was linked as: that is
+    // the row its owner's list already shows, and the one the server admitted.
+    if let Some(linked) = read_links(data_dir).remove(&target(host, port)) {
+        return Some(DeviceCredentials {
+            id: linked.id,
+            secret: linked.secret,
+            name: device_name(),
+        });
+    }
     let key = load_or_generate_key(data_dir)
         .inspect_err(|e| tracing::warn!("no device key, logging in without one: {e}"))
         .ok()?;
@@ -56,7 +75,7 @@ pub(crate) fn credentials_for(data_dir: &Path, host: &str, port: u16) -> Option<
 /// are two devices to it, which costs a second entry in the owner's list and
 /// nothing more.
 pub(crate) fn derive(key: &[u8; 32], host: &str, port: u16) -> DeviceCredentials {
-    let target = format!("{}:{port}", host.trim().to_ascii_lowercase());
+    let target = target(host, port);
     let tagged = |tag: &str| {
         let mut hasher = Sha256::new();
         hasher.update(tag.as_bytes());
@@ -72,6 +91,44 @@ pub(crate) fn derive(key: &[u8; 32], host: &str, port: u16) -> DeviceCredentials
         secret: tagged("fancy-device-secret-v1"),
         name: device_name(),
     }
+}
+
+/// The server a device belongs to, as both halves of this module key it.
+fn target(host: &str, port: u16) -> String {
+    format!("{}:{port}", host.trim().to_ascii_lowercase())
+}
+
+/// Log in to `host:port` as the linked device `id` from now on.
+///
+/// # Errors
+///
+/// When the file cannot be written; the link then cannot complete, since
+/// the first login has to present exactly this device.
+pub(crate) fn remember_link(
+    data_dir: &Path,
+    host: &str,
+    port: u16,
+    id: &str,
+    secret: &str,
+) -> Result<(), String> {
+    let mut links = read_links(data_dir);
+    let _ = links.insert(
+        target(host, port),
+        LinkedDevice {
+            id: id.to_owned(),
+            secret: secret.to_owned(),
+        },
+    );
+    let json = serde_json::to_vec_pretty(&links).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(data_dir).map_err(|e| e.to_string())?;
+    std::fs::write(data_dir.join(LINKS_FILE), json).map_err(|e| format!("write {LINKS_FILE}: {e}"))
+}
+
+fn read_links(data_dir: &Path) -> std::collections::HashMap<String, LinkedDevice> {
+    std::fs::read(data_dir.join(LINKS_FILE))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
 }
 
 /// This install's key, generated from the OS generator the first time.
@@ -145,6 +202,32 @@ mod tests {
         assert_eq!(device.id.len(), 32);
         assert!(device.id.bytes().all(|b| b.is_ascii_hexdigit()));
         assert_eq!(device.secret.len(), 64);
+    }
+
+    #[test]
+    fn a_linked_server_is_logged_in_to_as_the_device_it_was_linked_as() {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let own = credentials_for(dir.path(), "voice.example.org", 64738).expect("derived");
+        remember_link(
+            dir.path(),
+            "Voice.example.org",
+            64738,
+            "linked-id",
+            "linked-secret",
+        )
+        .expect("remembered");
+        let linked = credentials_for(dir.path(), "voice.example.org", 64738).expect("linked");
+        assert_eq!(linked.id, "linked-id");
+        assert_eq!(linked.secret, "linked-secret");
+        assert_ne!(linked.id, own.id);
+        // Every other server is untouched.
+        let key = load_or_generate_key(dir.path()).expect("key");
+        assert_eq!(
+            credentials_for(dir.path(), "other.example.org", 64738)
+                .expect("derived")
+                .id,
+            derive(&key, "other.example.org", 64738).id
+        );
     }
 
     #[test]
