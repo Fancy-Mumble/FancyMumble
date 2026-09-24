@@ -66,12 +66,46 @@ pub(crate) fn init_app_state(app: &mut tauri::App) {
     prefs::hydrate_persisted_prefs(app.handle(), &state);
 }
 
+/// A `fancy://` link the app was launched with, waiting for the UI.
+///
+/// The `deep-link-open` event below only reaches a listener that already
+/// exists, and at launch none does: the webview has not even loaded. Before
+/// this, clicking an invite link with the app closed started the app and
+/// then did nothing at all.
+static PENDING_DEEP_LINK: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// The parked launch link, once. See [`PENDING_DEEP_LINK`].
+pub(crate) fn take_pending_deep_link() -> Option<String> {
+    PENDING_DEEP_LINK
+        .lock()
+        .ok()
+        .and_then(|mut pending| pending.take())
+}
+
+/// The first `fancy://` argument, which is how Windows and Linux hand a
+/// launching link to the process.
+fn launch_link(args: impl IntoIterator<Item = String>) -> Option<String> {
+    args.into_iter()
+        .skip(1)
+        .find(|arg| arg.starts_with("fancy://"))
+}
+
 /// Forward incoming `fancy://` URLs to the frontend as a `deep-link-open`
 /// event. The frontend parses the URL and routes accordingly (e.g.
 /// `fancy://marketplace/plugin/<id>` opens the plugin detail page). Also
 /// focuses the main window so the user sees the result.
+///
+/// A link the app was *launched* with is parked instead, for the frontend to
+/// collect with `take_pending_deep_link` once it is listening.
 pub(crate) fn setup_deep_link_handler(handle: tauri::AppHandle) {
     use tauri_plugin_deep_link::DeepLinkExt;
+
+    if let Some(url) = launch_link(std::env::args()) {
+        tracing::info!("deep-link: launched with {url:?}; parked for the frontend");
+        if let Ok(mut pending) = PENDING_DEEP_LINK.lock() {
+            *pending = Some(url);
+        }
+    }
 
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     match handle.deep_link().register("fancy") {
@@ -101,6 +135,21 @@ pub(crate) fn setup_deep_link_handler(handle: tauri::AppHandle) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_launch_link_is_found_among_the_arguments_and_the_program_is_not() {
+        let args = |list: &[&str]| list.iter().map(|&arg| arg.to_owned()).collect::<Vec<_>>();
+        assert_eq!(
+            super::launch_link(args(&["fancy.exe", "fancy://invite/abc?server=h:1"])),
+            Some("fancy://invite/abc?server=h:1".to_owned())
+        );
+        assert_eq!(
+            super::launch_link(args(&["fancy.exe", "--minimized", "fancy://invite/x"])),
+            Some("fancy://invite/x".to_owned())
+        );
+        assert_eq!(super::launch_link(args(&["fancy://not-an-argument"])), None);
+        assert_eq!(super::launch_link(args(&["fancy.exe"])), None);
+    }
+
     /// Every window named by a capability must be granted `store:default` by
     /// one of them.
     ///

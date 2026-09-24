@@ -36,6 +36,7 @@ mod account;
 mod audit;
 pub(crate) mod canon_emotes;
 pub(crate) mod hash_names;
+mod invites;
 pub(crate) mod local_cache;
 pub(crate) mod media_server;
 mod messaging;
@@ -68,6 +69,7 @@ pub(crate) mod voice_message;
 pub(crate) mod whisper;
 
 // Re-export everything that lib.rs needs.
+pub(crate) use connection::Credentials;
 pub(crate) use event_handler::show_desktop_notification;
 pub(crate) use registry::{HashLookup, UserHashMatch};
 pub use sessions::{ServerId, SessionMeta};

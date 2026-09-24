@@ -24,6 +24,7 @@ pub(crate) mod files;
 pub(crate) mod forum;
 pub(crate) mod game_overlay;
 pub(crate) mod image;
+pub(crate) mod invites;
 pub(crate) mod keyshare;
 pub(crate) mod livery_admin;
 pub(crate) mod livery_patch;

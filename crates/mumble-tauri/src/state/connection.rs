@@ -15,6 +15,28 @@ use super::sessions::ServerId;
 use super::types::*;
 use super::{AppState, SharedState};
 
+/// What a login presents besides the name: the server or account password, a
+/// second factor, and an invite code.
+#[derive(Debug, Default, Clone)]
+pub struct Credentials {
+    pub password: Option<String>,
+    pub totp: Option<String>,
+    /// An invite code from a `fancy://invite/...` link. Sent as the access
+    /// token `invite:<code>`, which is how Starling recognises one and how a
+    /// stock Mumble client could present the same code by hand.
+    pub invite: Option<String>,
+}
+
+impl Credentials {
+    /// The access tokens this login sends.
+    fn tokens(&self) -> Vec<String> {
+        self.invite
+            .iter()
+            .map(|code| format!("invite:{code}"))
+            .collect()
+    }
+}
+
 impl AppState {
     pub async fn connect(
         &self,
@@ -22,8 +44,7 @@ impl AppState {
         port: u16,
         username: String,
         cert_label: Option<String>,
-        password: Option<String>,
-        totp: Option<String>,
+        credentials: Credentials,
     ) -> Result<(), String> {
         let app_handle = self.app_handle().ok_or("App not initialized")?;
 
@@ -127,8 +148,7 @@ impl AppState {
                     inner: &inner,
                     app_handle: &app_handle,
                     username,
-                    password,
-                    totp,
+                    credentials,
                     registry: &registry,
                     server_id,
                     active_handle: &active_handle,
@@ -397,8 +417,7 @@ struct ConnectResultCtx<'a> {
     inner: &'a SharedInner,
     app_handle: &'a AppHandle,
     username: String,
-    password: Option<String>,
-    totp: Option<String>,
+    credentials: Credentials,
     registry: &'a super::registry::Registry,
     server_id: ServerId,
     active_handle: &'a super::shared_handle::SharedHandle,
@@ -420,8 +439,7 @@ async fn handle_connect_result(
         inner,
         app_handle,
         username,
-        password,
-        totp,
+        credentials,
         registry,
         server_id,
         active_handle,
@@ -438,9 +456,9 @@ async fn handle_connect_result(
             if let Err(e) = handle
                 .send(command::Authenticate {
                     username,
-                    password,
-                    tokens: vec![],
-                    totp,
+                    tokens: credentials.tokens(),
+                    password: credentials.password,
+                    totp: credentials.totp,
                 })
                 .await
             {
