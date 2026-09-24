@@ -268,6 +268,26 @@ export const TID = {
   /** Organiser-only "Copy invite link" button on the event detail card. */
   calendarCopyInviteLink: "calendar-copy-invite-link",
 
+  // -- Invite links -----------------------------------------------------------
+  /** "Invite people…" in a channel's context menu (the root's invites to the server). */
+  channelInvite: "channel-invite",
+  /** Lifetime `<select>` in the invite dialog (value: seconds, "0" for never). */
+  inviteLifetime: "invite-lifetime",
+  /** Maximum-uses `<select>` in the invite dialog (value: count, "0" for no limit). */
+  inviteMaxUses: "invite-max-uses",
+  /** "Create link" in the invite dialog. */
+  inviteCreate: "invite-create",
+  /** The read-only field holding the created `fancy://invite/...` link. */
+  inviteLink: "invite-link",
+  /** "Copy" beside the created link. */
+  inviteCopy: "invite-copy",
+  /** "Join" in the dialog a followed invite link opens for a new server. */
+  inviteJoin: "invite-join",
+  /** One row of the admin invite list; carries `data-invite-code`. */
+  inviteRow: "invite-row",
+  /** "Revoke" on an admin invite row. */
+  inviteRevoke: "invite-revoke",
+
   // -- Screen sharing (Rust capture + WebRTC) -------------------------------
   /** Chat-header "Share screen" / "Stop sharing" toggle. Opens the source
    *  picker (when not sharing) or stops the broadcast. */

@@ -376,5 +376,63 @@
       "title": "Alles bereit, {{name}}!",
       "hint": "Leg los und verbinde dich mit deinem ersten Server."
     }
+  },
+  "invites": {
+    "menuItem": "Leute einladen…",
+    "title": "Leute nach {{place}} einladen",
+    "thisServer": "diesen Server",
+    "lifetime": "Läuft ab nach",
+    "lifetime1h": "1 Stunde",
+    "lifetime1d": "1 Tag",
+    "lifetime7d": "7 Tagen",
+    "lifetime30d": "30 Tagen",
+    "never": "Nie",
+    "uses": "Maximale Nutzungen",
+    "noLimit": "Unbegrenzt",
+    "usesCount_one": "{{count}} Person",
+    "usesCount_other": "{{count}} Personen",
+    "create": "Link erstellen",
+    "creating": "Wird erstellt…",
+    "link": "Einladungslink",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "skipsPassword": "Wer diesen Link hat, kommt ohne das Serverpasswort herein.",
+    "needsPassword": "Wer diesem Link folgt, braucht trotzdem das Serverpasswort.",
+    "expiresOn": "Läuft ab {{when}}",
+    "neverExpires": "Läuft nie ab",
+    "usedOf": "{{uses}} von {{max}} genutzt",
+    "usedBy": "Von {{uses}} genutzt",
+    "refused": {
+      "permission": "Du darfst hier keine Einladungen erstellen.",
+      "limit": "Du hast schon so viele offene Einladungen wie erlaubt. Widerrufe zuerst eine.",
+      "unavailable": "Einladungen sind auf diesem Server abgeschaltet.",
+      "other": "Der Server konnte das nicht erledigen.",
+      "noAnswer": "Dieser Server unterstützt keine Einladungslinks."
+    },
+    "join": {
+      "eyebrow": "Einladung",
+      "title": "{{server}} beitreten",
+      "body": "Du wurdest eingeladen. Wähle den Namen, den du dort verwenden willst.",
+      "name": "Dein Name",
+      "certificate": "Zertifikat",
+      "join": "Beitreten",
+      "joining": "Wird beigetreten…",
+      "anonymous": "Anonym",
+      "invalid": "Dieser Einladungslink ist kaputt."
+    },
+    "admin": {
+      "tab": "Einladungen",
+      "intro": "Alle offenen Einladungslinks auf diesem Server. Wer sie erstellen darf, wie lange sie gelten und ob sie das Passwort überspringen, steht unter Servereinstellungen → Invites.",
+      "off": "Einladungen sind abgeschaltet. Schalte sie unter Servereinstellungen → Invites ein.",
+      "empty": "Keine offenen Einladungen.",
+      "code": "Code",
+      "channel": "Kanal",
+      "creator": "Erstellt von",
+      "expires": "Läuft ab",
+      "uses": "Nutzungen",
+      "revoke": "Widerrufen",
+      "anywhere": "Standard-Kanal",
+      "refresh": "Aktualisieren"
+    }
   }
 }

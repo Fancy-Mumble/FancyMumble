@@ -13,7 +13,7 @@ import { askServerGifSupport, forgetServerGifSupport } from "../features/chat/gi
 import { askServerVoiceSupport, forgetServerVoiceSupport } from "../features/chat/voice/voiceSupport";
 import { LOADED_WINDOW, LOADED_WINDOW_STEP } from "../features/chat/chatWindowing";
 import { reconnectDelayMs, shouldAutoReconnect } from "../utils/reconnectBackoff";
-import { findSavedPassword } from "../serverStorage";
+import { findSavedInvite, findSavedPassword } from "../serverStorage";
 import { reconcileList, reconcileSet } from "./reconcile";
 import {
   isPermissionGranted,
@@ -655,6 +655,8 @@ export interface AppState
     certLabel?: string | null,
     password?: string | null,
     totp?: string | null,
+    /** An invite code; absent, the one saved for this login is sent. */
+    invite?: string | null,
   ) => Promise<void>;
   disconnect: () => Promise<void>;
   selectChannel: (id: number) => Promise<void>;
@@ -1353,7 +1355,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     intentionallyClosingSessions.delete(id);
   },
 
-  connect: async (host, port, username, certLabel, password, totp) => {
+  connect: async (host, port, username, certLabel, password, totp, invite) => {
     manualDisconnectRequested = false;
     serverRejectedConnection = false;
     clearAutoReconnectTimer();
@@ -1371,6 +1373,9 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     const resolvedPassword = password ?? (await findSavedPassword(host, port, username).catch(() => null));
     // Remembered so a follow-up TOTP prompt can re-send the same password.
     lastAttemptedPassword = resolvedPassword;
+    // The same for an invite: every reconnect path dials through here, and on
+    // a private server the saved invite is what stands in for a password.
+    const resolvedInvite = invite ?? (await findSavedInvite(host, port, username).catch(() => null));
     try {
       await invoke("connect", {
         host,
@@ -1379,6 +1384,7 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
         certLabel: certLabel ?? null,
         password: resolvedPassword,
         totp: totp ?? null,
+        invite: resolvedInvite,
       });
       // Sync activeServerId before rejection events arrive, so listener
       // routing works even if the new session id isn't known yet.

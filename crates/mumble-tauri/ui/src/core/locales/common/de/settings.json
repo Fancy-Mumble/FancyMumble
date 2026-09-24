@@ -658,7 +658,8 @@
     "fileServer": "Dateiserver",
     "serverSettings": "Servereinstellungen",
     "welcome": "Begrüßungsnachricht",
-    "auditLog": "Audit-Log"
+    "auditLog": "Audit-Log",
+    "invites": "Einladungen"
   },
   "audit": {
     "halfViewer": "Ansicht",

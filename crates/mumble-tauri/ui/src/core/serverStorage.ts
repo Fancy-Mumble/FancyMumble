@@ -100,6 +100,17 @@ export async function findSavedPassword(host: string, port: number, username: st
   return match ? map[match.id] : null;
 }
 
+/**
+ * The invite code saved for a login, looked up by address like
+ * {@link findSavedPassword} and for the same reason.
+ */
+export async function findSavedInvite(host: string, port: number, username: string): Promise<string | null> {
+  const match = (await getSavedServers()).find(
+    (s) => s.host === host && s.port === port && s.username === username && s.invite_code,
+  );
+  return match?.invite_code ?? null;
+}
+
 /** Save a password for a server. Pass null to remove it. */
 export async function setServerPassword(serverId: string, password: string | null): Promise<void> {
   const store = await getPasswordStore();

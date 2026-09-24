@@ -376,5 +376,63 @@
       "title": "You're all set, {{name}}!",
       "hint": "Jump in and connect to your first server."
     }
+  },
+  "invites": {
+    "menuItem": "Invite people…",
+    "title": "Invite people to {{place}}",
+    "thisServer": "this server",
+    "lifetime": "Expires after",
+    "lifetime1h": "1 hour",
+    "lifetime1d": "1 day",
+    "lifetime7d": "7 days",
+    "lifetime30d": "30 days",
+    "never": "Never",
+    "uses": "Maximum uses",
+    "noLimit": "No limit",
+    "usesCount_one": "{{count}} person",
+    "usesCount_other": "{{count}} people",
+    "create": "Create link",
+    "creating": "Creating…",
+    "link": "Invite link",
+    "copy": "Copy",
+    "copied": "Copied",
+    "skipsPassword": "Anyone with this link can join without the server password.",
+    "needsPassword": "People who follow this link still need the server password.",
+    "expiresOn": "Expires {{when}}",
+    "neverExpires": "Never expires",
+    "usedOf": "{{uses}} of {{max}} used",
+    "usedBy": "Used by {{uses}}",
+    "refused": {
+      "permission": "You may not create invites here.",
+      "limit": "You already have as many open invites as you may. Revoke one first.",
+      "unavailable": "Invites are switched off on this server.",
+      "other": "The server could not do that.",
+      "noAnswer": "This server does not support invite links."
+    },
+    "join": {
+      "eyebrow": "Invite",
+      "title": "Join {{server}}",
+      "body": "You've been invited. Pick the name you want to use there.",
+      "name": "Your name",
+      "certificate": "Certificate",
+      "join": "Join",
+      "joining": "Joining…",
+      "anonymous": "Anonymous",
+      "invalid": "That invite link is broken."
+    },
+    "admin": {
+      "tab": "Invites",
+      "intro": "Every open invite link on this server. Who may create them, how long they last and whether they skip the password are set under Server settings → Invites.",
+      "off": "Invites are switched off. Turn them on under Server settings → Invites.",
+      "empty": "No open invites.",
+      "code": "Code",
+      "channel": "Channel",
+      "creator": "Created by",
+      "expires": "Expires",
+      "uses": "Uses",
+      "revoke": "Revoke",
+      "anywhere": "Default landing",
+      "refresh": "Refresh"
+    }
   }
 }

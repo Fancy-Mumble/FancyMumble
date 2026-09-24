@@ -80,6 +80,13 @@ export interface SavedServer {
    * the alphabet, which is the only ordering a saved list can offer otherwise.
    */
   last_joined?: number;
+  /**
+   * The invite code this login came in by, from a `fancy://invite/...` link.
+   * Sent on every connect, because on a server with a password it is what
+   * stands in for one: a reconnect without it would stop on the password
+   * prompt the invite was meant to spare.
+   */
+  invite_code?: string;
 }
 
 /** Result of pinging a server via TCP + UDP. */
