@@ -59,6 +59,7 @@ pub(crate) fn handle_proto_msg_deliver(
         timestamp,
         envelope_bytes,
     );
+    let is_own = is_own_hash(pchat, &sender_hash);
 
     if protocol == PchatProtocol::SignalV1 && decrypted {
         pchat.cache_signal_message(CachedMessage {
@@ -68,7 +69,7 @@ pub(crate) fn handle_proto_msg_deliver(
             sender_hash: sender_hash.clone(),
             sender_name: sender_name.clone(),
             body: body.clone(),
-            is_own: false,
+            is_own,
         });
     }
 
@@ -78,14 +79,16 @@ pub(crate) fn handle_proto_msg_deliver(
         .find(|u| u.hash.as_deref() == Some(&sender_hash))
         .map(|u| u.session);
 
-    // The server never echoes PchatMessageDeliver back to the sender.
+    // The server never echoes PchatMessageDeliver back to the sending
+    // session, but another session on the same certificate gets it like
+    // anyone else - and what that one sent is still yours.
     let chat_msg = ChatMessage {
         sender_session,
         sender_name,
         sender_hash: Some(sender_hash),
         body,
         channel_id,
-        is_own: false,
+        is_own,
         dm_session: None,
         message_id: Some(message_id.clone()),
         timestamp: Some(timestamp),
@@ -106,6 +109,17 @@ pub(crate) fn handle_proto_msg_deliver(
         replaces_id.as_deref(),
         chat_msg,
     );
+}
+
+/// Whether `sender_hash` is this client's own certificate.
+///
+/// By certificate, not by session: a second session on the same identity -
+/// the phone next to this desktop - is still you, and what it sends belongs
+/// on your side of the conversation. The history fetch always decided it this
+/// way; the live paths going by session is what drew your own messages on the
+/// left the moment they arrived from another device.
+fn is_own_hash(pchat: &PchatState, sender_hash: &str) -> bool {
+    !sender_hash.is_empty() && sender_hash == pchat.own_cert_hash
 }
 
 /// Decrypt an envelope, stashing it for later retry on `SignalV1` failure.
@@ -636,6 +650,7 @@ struct DecryptedOfflineMsg {
     sender_hash: String,
     body: String,
     sender_name: String,
+    is_own: bool,
 }
 
 fn decrypt_offline_batch(
@@ -683,6 +698,7 @@ fn decrypt_offline_batch(
                 (PLACEHOLDER_BODY.to_string(), sender_hash.clone(), false)
             }
         };
+        let is_own = is_own_hash(pchat, &sender_hash);
 
         if protocol == PchatProtocol::SignalV1 && decrypted {
             pchat.cache_signal_message(CachedMessage {
@@ -692,7 +708,7 @@ fn decrypt_offline_batch(
                 sender_hash: sender_hash.clone(),
                 sender_name: sender_name.clone(),
                 body: body.clone(),
-                is_own: false,
+                is_own,
             });
         }
 
@@ -702,6 +718,7 @@ fn decrypt_offline_batch(
             sender_hash,
             body,
             sender_name,
+            is_own,
         });
     }
 
@@ -737,7 +754,7 @@ fn insert_offline_messages(
             sender_hash: Some(dm.sender_hash.clone()),
             body: dm.body.clone(),
             channel_id,
-            is_own: false,
+            is_own: dm.is_own,
             dm_session: None,
             message_id: Some(dm.message_id.clone()),
             timestamp: Some(dm.timestamp),
@@ -924,5 +941,32 @@ mod tests {
         );
 
         assert_eq!(bodies(&state).len(), 1);
+    }
+
+    /// A delivery whose sender is this client's certificate, from another
+    /// session: the desktop sees what the phone sent as its own. By session
+    /// it was somebody else's, and was drawn on the left.
+    #[test]
+    fn a_delivery_from_our_own_certificate_is_own() {
+        let shared = Arc::new(Mutex::new(SharedState::default()));
+        shared.lock().unwrap().pchat_ctx.pchat =
+            Some(PchatState::new([0u8; 32], "cert-me".to_owned(), None).unwrap());
+
+        let deliver = |id: &str, sender: &str| mumble_tcp::PchatMessageDeliver {
+            message_id: Some(id.to_owned()),
+            channel_id: Some(4),
+            timestamp: Some(1_000),
+            sender_hash: Some(sender.to_owned()),
+            ..Default::default()
+        };
+        handle_proto_msg_deliver(&shared, &deliver("mine", "cert-me"));
+        handle_proto_msg_deliver(&shared, &deliver("theirs", "cert-other"));
+
+        let state = shared.lock().unwrap();
+        let own: Vec<(Option<&str>, bool)> = state.msgs.by_channel[&4]
+            .iter()
+            .map(|m| (m.message_id.as_deref(), m.is_own))
+            .collect();
+        assert_eq!(own, vec![(Some("mine"), true), (Some("theirs"), false)]);
     }
 }

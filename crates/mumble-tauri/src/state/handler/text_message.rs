@@ -441,7 +441,12 @@ fn handle_channel_message(
     let sender_name = resolve_sender_name(state, tm.actor);
     // Only reaches here for our own session when the server sent the message
     // for us (see `is_unseen_own_channel_message`): ours to read, not news.
-    let is_own = tm.actor.is_some() && tm.actor == state.conn.own_session;
+    // Another session on our certificate is us too - the phone next to this
+    // desktop - so the hash decides as well as the session.
+    let sender_hash = resolve_sender_hash(state, tm.actor);
+    let own_hash = resolve_sender_hash(state, state.conn.own_session);
+    let is_own = tm.actor.is_some()
+        && (tm.actor == state.conn.own_session || (own_hash.is_some() && sender_hash == own_hash));
     let mut unreads_changed = false;
 
     for &ch_id in &target_channels {
@@ -470,7 +475,7 @@ fn handle_channel_message(
         let mut msg = ChatMessage {
             sender_session: tm.actor,
             sender_name: sender_name.clone(),
-            sender_hash: resolve_sender_hash(state, tm.actor),
+            sender_hash: sender_hash.clone(),
             body: tm.message.clone(),
             channel_id: ch_id,
             is_own,

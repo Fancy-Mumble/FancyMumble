@@ -1102,6 +1102,67 @@ fn text_message_own_server_delivered_message_kept() {
     assert_eq!(emitter.attention_count(), 0);
 }
 
+/// A second session on this client's certificate - the phone next to the
+/// desktop - is still you: what it sends is your own message, not news.
+#[test]
+fn text_message_from_own_other_session_is_own() {
+    let (ctx, emitter) = make_ctx();
+    {
+        let mut state = ctx.shared.lock().unwrap();
+        state.conn.own_session = Some(10);
+        let mut me = make_user(10, "Me");
+        me.hash = Some("cert-me".into());
+        let mut phone = make_user(11, "Me");
+        phone.hash = Some("cert-me".into());
+        let _ = state.users.insert(10, me);
+        let _ = state.users.insert(11, phone);
+        state.selected_channel = Some(0);
+        let _ = state.permanently_listened.insert(5);
+    }
+
+    let tm = mumble_tcp::TextMessage {
+        actor: Some(11),
+        channel_id: vec![5],
+        message: "sent from the phone".into(),
+        message_id: Some("phone-1".into()),
+        ..Default::default()
+    };
+    tm.handle(&ctx);
+
+    let state = ctx.shared.lock().unwrap();
+    let msgs = state.msgs.by_channel.get(&5).unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert!(msgs[0].is_own);
+    assert!(!state.msgs.channel_unread.contains_key(&5));
+    drop(state);
+    assert_eq!(emitter.attention_count(), 0);
+}
+
+/// Somebody else without a certificate hash is not matched to one that is
+/// equally missing.
+#[test]
+fn text_message_hashless_sender_is_not_own() {
+    let (ctx, _emitter) = make_ctx();
+    {
+        let mut state = ctx.shared.lock().unwrap();
+        state.conn.own_session = Some(10);
+        let _ = state.users.insert(10, make_user(10, "Me"));
+        let _ = state.users.insert(11, make_user(11, "Other"));
+    }
+
+    let tm = mumble_tcp::TextMessage {
+        actor: Some(11),
+        channel_id: vec![5],
+        message: "hello".into(),
+        message_id: Some("other-1".into()),
+        ..Default::default()
+    };
+    tm.handle(&ctx);
+
+    let state = ctx.shared.lock().unwrap();
+    assert!(!state.msgs.by_channel.get(&5).unwrap()[0].is_own);
+}
+
 #[test]
 fn text_message_no_channel_defaults_to_zero() {
     let (ctx, _) = make_ctx();
