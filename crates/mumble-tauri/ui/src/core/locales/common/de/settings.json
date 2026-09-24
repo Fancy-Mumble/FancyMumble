@@ -241,6 +241,20 @@
     "remove": "Entfernen"
   },
   "identities": {
+    "recovery": {
+      "title": "Wiederherstellungsphrase",
+      "hint": "Vierundzwanzig Wörter, mit denen die verschlüsselten Unterhaltungen dieser Identität auf einer neuen Installation zurückkommen, falls alle Geräte damit verloren gehen.",
+      "identity": "Identität",
+      "show": "Wiederherstellungsphrase anzeigen",
+      "hide": "Ausblenden",
+      "warning": "Wer diese Wörter liest, kann deine verschlüsselten Nachrichten lesen. Schreib sie auf und bewahre sie offline auf.",
+      "restoreTitle": "Aus einer Wiederherstellungsphrase wiederherstellen",
+      "restoreHint": "Ersetzt den Verschlüsselungsschlüssel dieser Identität durch den, für den die Wörter stehen. Verbinde dich danach neu, damit er wirkt.",
+      "restorePlaceholder": "Die 24 Wörter, durch Leerzeichen getrennt",
+      "restore": "Wiederherstellen",
+      "words": "{{count}} von 24 Wörtern",
+      "restored": "Wiederhergestellt. Verbinde dich mit dieser Identität neu, um sie zu verwenden."
+    },
     "panelTitle": "Identitäten",
     "description": "Identitäten sind TLS-Client-Zertifikate, mit denen du dich bei Mumble-Servern authentifizierst. Jede Identität gehört nur dir und bleibt über Sitzungen hinweg erhalten.",
     "noIdentities": "Noch keine Identitäten. Erstelle oder importiere unten eine.",

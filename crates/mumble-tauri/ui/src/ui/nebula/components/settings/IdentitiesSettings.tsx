@@ -8,6 +8,7 @@ import { useAppStore } from "@core/store";
 import { Stack } from "../primitives";
 import { Banner, EmptyState, GroupRule, GroupTitle, PageTitle, SettingsCard } from "./controls";
 import { usePreferenceSettings } from "./usePreferenceSettings";
+import { RecoveryPhraseSection } from "./RecoveryPhraseSection";
 import { radius } from "../../tokens";
 
 /**
@@ -169,6 +170,8 @@ export function IdentitiesSettings({ onEditProfile }: Readonly<{ onEditProfile?:
           })}
         </Stack>
       )}
+
+      <RecoveryPhraseSection identities={identities} preferred={connectedCertLabel} />
 
       <GroupRule />
 

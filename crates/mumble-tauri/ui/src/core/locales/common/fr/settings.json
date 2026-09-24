@@ -241,6 +241,20 @@
     "remove": "Supprimer"
   },
   "identities": {
+    "recovery": {
+      "title": "Phrase de récupération",
+      "hint": "Vingt-quatre mots qui ramènent les conversations chiffrées de cette identité sur une nouvelle installation, si tous les appareils qui l'ont sont perdus.",
+      "identity": "Identité",
+      "show": "Afficher la phrase de récupération",
+      "hide": "Masquer",
+      "warning": "Quiconque lit ces mots peut lire vos messages chiffrés. Notez-les et gardez-les hors ligne.",
+      "restoreTitle": "Restaurer depuis une phrase de récupération",
+      "restoreHint": "Remplace la clé de chiffrement de cette identité par celle que représentent les mots. Reconnectez-vous ensuite pour l'appliquer.",
+      "restorePlaceholder": "Les 24 mots, séparés par des espaces",
+      "restore": "Restaurer",
+      "words": "{{count}} mots sur 24",
+      "restored": "Restauré. Reconnectez-vous avec cette identité pour l'utiliser."
+    },
     "panelTitle": "Identités",
     "description": "Les identités sont des certificats client TLS qui vous authentifient auprès des serveurs Mumble. Chaque identité vous est propre et se conserve d'une session à l'autre.",
     "noIdentities": "Aucune identité pour l'instant. Créez-en une ou importez-en une ci-dessous.",

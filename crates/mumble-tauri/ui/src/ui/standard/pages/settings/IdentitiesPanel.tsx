@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { deleteProfileData } from "@core/features/settings/profileData";
 import styles from "./SettingsPage.module.css";
+import { RecoveryPhraseSection } from "./RecoveryPhraseSection";
 import panelStyles from "./IdentitiesPanel.module.css";
 import { registerSettings } from "@core/features/settings/settingsSearchRegistry";
 
@@ -153,6 +154,8 @@ export function IdentitiesPanel({
           </ul>
         )}
       </section>
+
+      <RecoveryPhraseSection identities={identities} preferred={connectedCertLabel} />
 
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>{t("identities.createNew")}</h3>

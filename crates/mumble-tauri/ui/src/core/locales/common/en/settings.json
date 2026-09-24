@@ -241,6 +241,20 @@
     "remove": "Remove"
   },
   "identities": {
+    "recovery": {
+      "title": "Recovery phrase",
+      "hint": "Twenty-four words that bring this identity's encrypted conversations back on a new install, if every device with it is lost.",
+      "identity": "Identity",
+      "show": "Show recovery phrase",
+      "hide": "Hide",
+      "warning": "Anyone who reads these words can read your encrypted messages. Write them down and keep them somewhere offline.",
+      "restoreTitle": "Restore from a recovery phrase",
+      "restoreHint": "Replaces this identity's encryption key with the one the words stand for. Reconnect afterwards for it to take effect.",
+      "restorePlaceholder": "The 24 words, separated by spaces",
+      "restore": "Restore",
+      "words": "{{count}} of 24 words",
+      "restored": "Restored. Reconnect with this identity to use it."
+    },
     "panelTitle": "Identities",
     "description": "Identities are TLS client certificates used to authenticate with Mumble servers. Each identity is unique to you and persists across sessions.",
     "noIdentities": "No identities yet. Create or import one below.",

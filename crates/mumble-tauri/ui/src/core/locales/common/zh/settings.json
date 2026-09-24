@@ -241,6 +241,20 @@
     "remove": "移除"
   },
   "identities": {
+    "recovery": {
+      "title": "恢复短语",
+      "hint": "如果持有此身份的所有设备都丢失，这24个单词可以在新安装中恢复其加密对话。",
+      "identity": "身份",
+      "show": "显示恢复短语",
+      "hide": "隐藏",
+      "warning": "任何读到这些单词的人都能读取你的加密消息。请将它们写下并离线保存。",
+      "restoreTitle": "从恢复短语恢复",
+      "restoreHint": "用这些单词代表的密钥替换此身份的加密密钥。之后重新连接即可生效。",
+      "restorePlaceholder": "24个单词，用空格分隔",
+      "restore": "恢复",
+      "words": "{{count}} / 24 个单词",
+      "restored": "已恢复。使用此身份重新连接即可使用。"
+    },
     "panelTitle": "身份",
     "description": "身份是用于在 Mumble 服务器上进行身份验证的 TLS 客户端证书。每个身份都是你的专属标识，并在多个会话间保持。",
     "noIdentities": "还没有任何身份。请在下方创建或导入一个。",

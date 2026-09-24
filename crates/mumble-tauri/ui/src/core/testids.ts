@@ -431,6 +431,12 @@ export const TID = {
   accountDeviceLinkCode: "account-device-link-code",
   /** Closes the link panel, withdrawing the link if nobody used it. */
   accountDeviceLinkClose: "account-device-link-close",
+  /** The shown recovery phrase of an identity. */
+  recoveryPhrase: "recovery-phrase",
+  recoveryPhraseShow: "recovery-phrase-show",
+  /** Where a recovery phrase is typed back in. */
+  recoveryPhraseInput: "recovery-phrase-input",
+  recoveryPhraseRestore: "recovery-phrase-restore",
   /** On a new device: where a device link is pasted. */
   connectDeviceLinkInput: "connect-device-link-input",
   connectDeviceLinkSubmit: "connect-device-link-submit",
