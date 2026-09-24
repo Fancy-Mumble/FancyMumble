@@ -8,10 +8,12 @@ import {
   useDeviceEditor,
   type DeviceStatus,
 } from "@core/features/settings/accountDevices";
+import { useDeviceLinkOffer } from "@core/features/devices/useDeviceLinkOffer";
 import { ACCOUNT_ACTION_IDS, type AccountAction, type AccountSettings } from "@core/types";
 import { DEVICE_ID_ATTR, TID } from "@core/testids";
+import { QrCode } from "@ui/QrCode";
 import { Stack } from "../primitives";
-import { Banner, GroupTitle, SettingsCard } from "./controls";
+import { Banner, Field, GroupTitle, SettingsCard } from "./controls";
 
 /**
  * The account's devices: where it is signed in, which are online, and a way to
@@ -40,6 +42,7 @@ export function AccountDevices({
   const { t } = useTranslation("settings");
   const editor = useDeviceEditor();
   const { cancel } = editor;
+  const linking = useDeviceLinkOffer(snapshot);
 
   // Close whatever was open once its action has actually landed.
   useEffect(() => {
@@ -186,6 +189,81 @@ export function AccountDevices({
       )}
       {feedbackFor("rename_device")}
       {feedbackFor("remove_device")}
+
+      <Box sx={{ mt: "12px" }}>
+        {linking.offer ? (
+          <SettingsCard testId={TID.accountDeviceLinkPanel}>
+            {linking.linked ? (
+              <Banner tone="ok" title={t("account.devices.link.done")} />
+            ) : (
+              <>
+                <Typography sx={{ fontSize: 12.5, fontWeight: 600, mb: "4px" }}>
+                  {t("account.devices.link.title")}
+                </Typography>
+                <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.muted })}>
+                  {t("account.devices.link.scan")}
+                </Typography>
+                <Box sx={{ display: "flex", justifyContent: "center", my: "12px" }}>
+                  <QrCode
+                    value={linking.offer.link}
+                    label={t("account.devices.link.qrLabel")}
+                    testId={TID.accountDeviceLinkQr}
+                  />
+                </Box>
+                <Field label={t("account.devices.link.codeLabel")} sx={{ mb: "10px" }}>
+                  <Typography
+                    data-testid={TID.accountDeviceLinkCode}
+                    sx={{ fontFamily: "monospace", fontSize: 15, letterSpacing: "0.06em" }}
+                  >
+                    {linking.offer.code}
+                  </Typography>
+                </Field>
+                <Field label={t("account.devices.link.linkLabel")} sx={{ mb: "10px" }}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    value={linking.offer.link}
+                    onFocus={(event) => (event.target as HTMLInputElement).select()}
+                    slotProps={{
+                      htmlInput: {
+                        readOnly: true,
+                        "data-testid": TID.accountDeviceLinkText,
+                        "aria-label": t("account.devices.link.linkLabel"),
+                      },
+                    }}
+                  />
+                </Field>
+                <Banner tone="warn" title={t("account.devices.link.warning")} />
+              </>
+            )}
+            <Stack direction="row" justifyContent="flex-end" sx={{ mt: "10px" }}>
+              <Button
+                size="small"
+                data-testid={TID.accountDeviceLinkClose}
+                onClick={() => void linking.close()}
+              >
+                {linking.linked ? t("account.devices.link.close") : t("account.devices.cancel")}
+              </Button>
+            </Stack>
+          </SettingsCard>
+        ) : (
+          <Button
+            size="small"
+            variant="outlined"
+            data-testid={TID.accountDeviceLinkBegin}
+            disabled={busy || linking.starting}
+            onClick={() => void linking.begin()}
+          >
+            {t("account.devices.link.begin")}
+          </Button>
+        )}
+        {linking.error && <Banner tone="danger">{linking.error}</Banner>}
+        {linking.expired && (
+          <Typography sx={(theme) => ({ mt: "6px", fontSize: 11.5, color: theme.palette.nebula.muted })}>
+            {t("account.devices.link.expired")}
+          </Typography>
+        )}
+      </Box>
     </>
   );
 }

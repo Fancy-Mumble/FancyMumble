@@ -20,6 +20,7 @@ import PasswordDialog from "../components/server/PasswordDialog";
 import TotpDialog from "../components/server/TotpDialog";
 import { TID } from "@core/testids";
 import styles from "./ConnectPage.module.css";
+import { DeviceLinkEntry } from "../components/server/DeviceLinkEntry";
 import { TextField } from "../components/elements/TextField";
 import { LightbulbIcon } from "../icons";
 
@@ -649,6 +650,7 @@ export default function ConnectPage() {
                 </button>
               )}
             </form>
+            <DeviceLinkEntry />
           </>
         )}
       </div>

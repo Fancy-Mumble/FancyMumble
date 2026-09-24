@@ -564,7 +564,25 @@
       "signOutPasswordPara": "Es wird sofort getrennt und danach abgewiesen. Ist dein Passwort dort gespeichert, ändere es ebenfalls: Mit dem Passwort kommt weiterhin ein neues Gerät hinein.",
       "locked": "Ein Gerät wurde abgemeldet, daher können sich nur noch die hier gelisteten Geräte allein mit dem Zertifikat dieses Kontos anmelden.",
       "empty": "Noch keine Geräte. Sie erscheinen hier, sobald sie sich mit einem aktuellen Client anmelden.",
-      "rejected": "Dieses Gerät wurde vom Konto abgemeldet. Melde dich mit dem Passwort erneut an oder verknüpfe es von einem Gerät, das noch angemeldet ist."
+      "rejected": "Dieses Gerät wurde vom Konto abgemeldet. Melde dich mit dem Passwort erneut an oder verknüpfe es von einem Gerät, das noch angemeldet ist.",
+      "link": {
+        "begin": "Neues Gerät verknüpfen",
+        "title": "Neues Gerät verknüpfen",
+        "scan": "Scanne diesen Code mit der Kamera des neuen Geräts oder öffne den Link dort. Du kannst den Link auch beim Hinzufügen eines Servers unter „Von einem anderen Gerät verknüpfen“ einfügen.",
+        "qrLabel": "Link für ein neues Gerät",
+        "codeLabel": "Code",
+        "linkLabel": "Link",
+        "warning": "Wer diesen Link hat, kann sich die nächsten zehn Minuten als du anmelden. Öffne ihn nur auf deinen eigenen Geräten.",
+        "done": "Das neue Gerät ist angemeldet.",
+        "close": "Fertig",
+        "expired": "Der Link ist abgelaufen. Starte neu, wenn du noch ein Gerät verknüpfen möchtest.",
+        "followTitle": "Von einem anderen Gerät verknüpfen",
+        "followHint": "Füge den Link ein, den ein bereits angemeldetes Gerät unter Konto → Geräte anzeigt.",
+        "followPlaceholder": "fancy://link/…",
+        "follow": "Verknüpfen",
+        "following": "Wird verknüpft…",
+        "followFailed": "Dieses Gerät konnte nicht verknüpft werden: {{reason}}"
+      }
     },
     "unregister": {
       "title": "Registrierung löschen",

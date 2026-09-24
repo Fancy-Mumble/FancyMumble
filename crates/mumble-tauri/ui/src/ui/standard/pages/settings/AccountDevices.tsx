@@ -15,8 +15,10 @@ import {
   useDeviceEditor,
   type DeviceStatus,
 } from "@core/features/settings/accountDevices";
+import { useDeviceLinkOffer } from "@core/features/devices/useDeviceLinkOffer";
 import { ACCOUNT_ACTION_IDS, type AccountAction, type AccountSettings } from "@core/types";
 import { DEVICE_ID_ATTR, TID } from "@core/testids";
+import { QrCode } from "@ui/QrCode";
 import styles from "./SettingsPage.module.css";
 
 export function AccountDevices({
@@ -38,6 +40,7 @@ export function AccountDevices({
   const { t } = useTranslation("settings");
   const editor = useDeviceEditor();
   const { cancel } = editor;
+  const linking = useDeviceLinkOffer(snapshot);
 
   // Close whatever was open once its action has actually landed.
   useEffect(() => {
@@ -167,6 +170,68 @@ export function AccountDevices({
       )}
       {feedbackFor("rename_device")}
       {feedbackFor("remove_device")}
+
+      {linking.offer ? (
+        <div className={styles.enrolCard} data-testid={TID.accountDeviceLinkPanel}>
+          {linking.linked ? (
+            <p className={styles.fieldHint}>{t("account.devices.link.done")}</p>
+          ) : (
+            <>
+              <label className={styles.fieldLabel}>{t("account.devices.link.title")}</label>
+              <p className={styles.fieldHint}>{t("account.devices.link.scan")}</p>
+              <div className={styles.qrCenter}>
+                <div className={styles.qrFrame}>
+                  <QrCode
+                    value={linking.offer.link}
+                    label={t("account.devices.link.qrLabel")}
+                    testId={TID.accountDeviceLinkQr}
+                  />
+                </div>
+              </div>
+              <div className={styles.field}>
+                <label className={styles.fieldLabel}>{t("account.devices.link.codeLabel")}</label>
+                <code data-testid={TID.accountDeviceLinkCode}>{linking.offer.code}</code>
+              </div>
+              <div className={styles.field}>
+                <label className={styles.fieldLabel}>{t("account.devices.link.linkLabel")}</label>
+                <input
+                  className={styles.input}
+                  type="text"
+                  readOnly
+                  data-testid={TID.accountDeviceLinkText}
+                  value={linking.offer.link}
+                  onFocus={(e) => e.target.select()}
+                />
+              </div>
+              <div className={styles.warningBanner}>
+                <span>{t("account.devices.link.warning")}</span>
+              </div>
+            </>
+          )}
+          <div className={styles.confirmBtns}>
+            <button
+              type="button"
+              className={styles.ghostBtn}
+              data-testid={TID.accountDeviceLinkClose}
+              onClick={() => void linking.close()}
+            >
+              {linking.linked ? t("account.devices.link.close") : t("account.devices.cancel")}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className={styles.ghostBtn}
+          data-testid={TID.accountDeviceLinkBegin}
+          disabled={busy || linking.starting}
+          onClick={() => void linking.begin()}
+        >
+          {t("account.devices.link.begin")}
+        </button>
+      )}
+      {linking.error && <p className={styles.error}>{linking.error}</p>}
+      {linking.expired && <p className={styles.fieldHint}>{t("account.devices.link.expired")}</p>}
     </section>
   );
 }

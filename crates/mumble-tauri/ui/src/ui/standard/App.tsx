@@ -27,6 +27,7 @@ import { useNotificationSounds } from "@core/features/notifications/useNotificat
 import { useCalendarReminders } from "@core/features/chat/calendar/useCalendarReminders";
 import { requestJoinMeeting } from "@core/features/chat/calendar/meetings";
 import { parseInviteLink, type ParsedInvite } from "@core/features/invites/inviteLink";
+import { followDeviceLink } from "@core/features/devices/deviceLink";
 import { resolveInviteTarget } from "@core/features/invites/inviteTarget";
 import { getServerPassword, markServerJoined } from "@core/serverStorage";
 import type { SavedServer } from "@core/types";
@@ -186,7 +187,9 @@ export default function App() {
 /** Connect with a saved login, its saved password and (through the store) its invite. */
 async function connectSaved(server: SavedServer): Promise<void> {
   const password = await getServerPassword(server.id).catch(() => null);
-  await useAppStore.getState().connect(server.host, server.port, server.username, server.cert_label, password);
+  await useAppStore
+    .getState()
+    .connect(server.host, server.port, server.username, server.cert_label, password);
   await markServerJoined(server.id).catch(() => undefined);
 }
 
@@ -261,9 +264,7 @@ function MainApp() {
         () => undefined,
       );
       // Inform the Rust updater which release channel to check.
-      invoke("updater_set_beta_channel", { enabled: prefs.betaUpdates ?? false }).catch(
-        () => undefined,
-      );
+      invoke("updater_set_beta_channel", { enabled: prefs.betaUpdates ?? false }).catch(() => undefined);
     });
     getNotificationSounds().then((ns) => {
       if (ns) setNotifSounds(ns);
@@ -421,6 +422,12 @@ function MainApp() {
         const invite = parseInviteLink(raw);
         if (invite) void followInvite(invite, setJoiningInvite);
         else console.warn("deep-link: malformed invite", raw);
+      } else if (segments[0] === "link") {
+        // A link from another of the owner's devices: sign this one in as the
+        // same account.
+        void followDeviceLink(raw).catch((error: unknown) =>
+          console.warn("deep-link: device link failed", error),
+        );
       } else {
         console.warn("deep-link: unhandled route", segments);
       }

@@ -7,6 +7,7 @@ import { useAppStore } from "@core/store";
 import { useCalendarReminders } from "@core/features/chat/calendar/useCalendarReminders";
 import { requestJoinMeeting } from "@core/features/chat/calendar/meetings";
 import { parseInviteLink, type ParsedInvite } from "@core/features/invites/inviteLink";
+import { followDeviceLink } from "@core/features/devices/deviceLink";
 import { useWatchLifecycle } from "@core/features/chat/watch/useWatchLifecycle";
 import { applyAllGlobalShortcuts, loadShortcuts } from "@core/features/settings/shortcutHelpers";
 import {
@@ -179,6 +180,13 @@ function NebulaRuntimeInner({ onOpenMarketplace, onOpenInvite }: NebulaRuntimePr
       if (segments[0] === "invite") {
         const invite = parseInviteLink(link);
         if (invite) openInvite.current(invite);
+      }
+      // A link from another of the owner's devices: sign this one in as the
+      // same account. Errors land where every other connect error does.
+      if (segments[0] === "link") {
+        void followDeviceLink(link).catch((error: unknown) =>
+          console.warn("deep-link: device link failed", error),
+        );
       }
     };
     const deepLink = listen<string>("deep-link-open", (event) => route(event.payload));

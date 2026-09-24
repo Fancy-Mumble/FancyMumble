@@ -15,6 +15,7 @@ import { addServer, getServerPassword, setServerPassword, updateServer } from "@
 import type { SavedServer } from "@core/types";
 import { TID } from "@core/testids";
 import { SectionLabel, Stack } from "../primitives";
+import { DeviceLinkField } from "./DeviceLinkField";
 
 /** The certificate the client generates for a fresh profile. */
 const DEFAULT_CERT = "default";
@@ -91,8 +92,8 @@ export function AddServerDialog({
         // read "Anonymous". Editing an existing server keeps what it stored,
         // including a deliberate anonymous one.
         if (editing) return;
-        setCertLabel((current) =>
-          current || (names.includes(DEFAULT_CERT) ? DEFAULT_CERT : (names[0] ?? "")),
+        setCertLabel(
+          (current) => current || (names.includes(DEFAULT_CERT) ? DEFAULT_CERT : (names[0] ?? "")),
         );
       })
       .catch(() => setCertificates([]));
@@ -233,6 +234,9 @@ export function AddServerDialog({
               {error}
             </Typography>
           )}
+          {/* A new server only: an account already on this device has nothing
+              to be linked to. */}
+          {!editing && <DeviceLinkField onLinked={onClose} />}
         </Stack>
       </DialogContent>
       <DialogActions>

@@ -564,7 +564,25 @@
       "signOutPasswordPara": "Il est déconnecté tout de suite et refusé ensuite. Si votre mot de passe y est enregistré, changez-le aussi : un mot de passe laisse toujours entrer un nouvel appareil.",
       "locked": "Un appareil a été déconnecté : seuls les appareils listés ici peuvent se connecter avec le seul certificat de ce compte.",
       "empty": "Aucun appareil pour l'instant. Ils apparaissent ici dès qu'ils se connectent avec un client récent.",
-      "rejected": "Cet appareil a été déconnecté du compte. Reconnectez-vous avec le mot de passe, ou associez-le depuis un appareil encore connecté."
+      "rejected": "Cet appareil a été déconnecté du compte. Reconnectez-vous avec le mot de passe, ou associez-le depuis un appareil encore connecté.",
+      "link": {
+        "begin": "Associer un nouvel appareil",
+        "title": "Associer un nouvel appareil",
+        "scan": "Sur le nouvel appareil, scannez ce code avec l'appareil photo ou ouvrez le lien. Vous pouvez aussi coller le lien dans « Associer depuis un autre appareil » en y ajoutant un serveur.",
+        "qrLabel": "Lien pour un nouvel appareil",
+        "codeLabel": "Code",
+        "linkLabel": "Lien",
+        "warning": "Toute personne ayant ce lien peut se connecter en votre nom pendant dix minutes. Ne l'ouvrez que sur vos propres appareils.",
+        "done": "Le nouvel appareil est connecté.",
+        "close": "Terminé",
+        "expired": "Le lien a expiré. Recommencez si vous voulez toujours associer un appareil.",
+        "followTitle": "Associer depuis un autre appareil",
+        "followHint": "Collez le lien affiché dans Compte → Appareils sur un appareil déjà connecté.",
+        "followPlaceholder": "fancy://link/…",
+        "follow": "Associer",
+        "following": "Association…",
+        "followFailed": "Impossible d'associer cet appareil : {{reason}}"
+      }
     },
     "unregister": {
       "title": "Supprimer l'enregistrement",

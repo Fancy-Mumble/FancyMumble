@@ -564,7 +564,25 @@
       "signOutPasswordPara": "It is disconnected now and refused from then on. If your password is saved there, change it as well: a password still lets a new device in.",
       "locked": "A device has been signed out, so only the devices listed here can sign in with this account's certificate alone.",
       "empty": "No devices yet. They appear here once they sign in with a current client.",
-      "rejected": "This device was signed out of the account. Sign in again with the password, or link it from a device that is still signed in."
+      "rejected": "This device was signed out of the account. Sign in again with the password, or link it from a device that is still signed in.",
+      "link": {
+        "begin": "Link a new device",
+        "title": "Link a new device",
+        "scan": "On the new device, scan this code with its camera or open the link. You can also paste the link under “Link from another device” when adding a server there.",
+        "qrLabel": "Link for a new device",
+        "codeLabel": "Code",
+        "linkLabel": "Link",
+        "warning": "Anyone with this link can sign in as you for the next ten minutes. Only open it on your own devices.",
+        "done": "The new device is signed in.",
+        "close": "Done",
+        "expired": "The link expired. Start again if you still want to link a device.",
+        "followTitle": "Link from another device",
+        "followHint": "Paste the link shown under Account → Devices on a device that is already signed in.",
+        "followPlaceholder": "fancy://link/…",
+        "follow": "Link",
+        "following": "Linking…",
+        "followFailed": "This device could not be linked: {{reason}}"
+      }
     },
     "unregister": {
       "title": "Delete registration",

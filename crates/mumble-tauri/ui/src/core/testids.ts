@@ -421,6 +421,19 @@ export const TID = {
   /** Asks to sign the device row it sits in out. */
   accountDeviceSignOut: "account-device-sign-out",
   accountDeviceSignOutConfirm: "account-device-sign-out-confirm",
+  /** Starts linking a new device to this account. */
+  accountDeviceLinkBegin: "account-device-link-begin",
+  /** The open link panel: QR code, code and link. */
+  accountDeviceLinkPanel: "account-device-link-panel",
+  accountDeviceLinkQr: "account-device-link-qr",
+  /** The `fancy://link/...` link, read-only, for copying. */
+  accountDeviceLinkText: "account-device-link-text",
+  accountDeviceLinkCode: "account-device-link-code",
+  /** Closes the link panel, withdrawing the link if nobody used it. */
+  accountDeviceLinkClose: "account-device-link-close",
+  /** On a new device: where a device link is pasted. */
+  connectDeviceLinkInput: "connect-device-link-input",
+  connectDeviceLinkSubmit: "connect-device-link-submit",
   /** TOTP code input on the login (connect) dialog. */
   connectTotpInput: "connect-totp-input",
   /** Submit button of the login TOTP dialog. */
