@@ -22,6 +22,7 @@ import {
   SettingsIcon,
   ShieldIcon,
   TrashIcon,
+  UserPlusIcon,
   UsersGroupIcon,
   WarningIcon,
 } from "../../../icons";
@@ -79,6 +80,8 @@ import {
   usersForChannelTree,
 } from "@core/utils/channelVisibility";
 import { requestLeaveMeeting } from "@core/features/chat/calendar/meetings";
+import { useInviteSupport } from "@core/features/invites/useInviteSupport";
+import { InviteDialog } from "../../invites/InviteDialog";
 import { TID } from "@core/testids";
 import { SidebarSearch } from "../../elements/SearchFields";
 
@@ -219,10 +222,13 @@ export default function ChannelSidebar({
   onSearchChannelClear,
   onSelectMessage,
 }: Readonly<ChannelSidebarProps>) {
-  const { t } = useTranslation(["sidebar", "common"]);
+  const { t } = useTranslation(["sidebar", "common", "server"]);
   const channels = useAppStore((s) => s.channels);
   const users = useAppStore((s) => s.users);
   const selectedChannel = useAppStore((s) => s.selectedChannel);
+  const inviteSupport = useInviteSupport();
+  /** Where an invite being minted lands people; the root invites to the server. */
+  const [invitingTo, setInvitingTo] = useState<{ id: number; name: string } | null>(null);
   const currentChannel = useAppStore((s) => s.currentChannel);
   const selectChannel = useAppStore((s) => s.selectChannel);
   const joinChannel = useAppStore((s) => s.joinChannel);
@@ -921,6 +927,10 @@ export default function ChannelSidebar({
               // Meeting rooms (detached, non-DM) offer "leave": the server revokes
               // this user's access and the room drops out of their Meetings list.
               const showLeaveMeeting = !!ctxChannel?.detached && !isDmChannel(ctxChannel);
+              // Only once the server has said this session may mint one; it
+              // checks again, and that the inviter may enter this channel.
+              const showInvite =
+                inviteSupport.mayCreate && !!ctxChannel && !ctxChannel.detached && !isDmChannel(ctxChannel);
 
               return createPortal(
                 <div ref={ctxRef} className={styles.contextMenu} style={{ top: ctxMenu.y, left: ctxMenu.x }}>
@@ -978,6 +988,20 @@ export default function ChannelSidebar({
                     >
                       <LogoutIcon width={14} height={14} />
                       {t("channelSidebar.leaveMeeting")}
+                    </button>
+                  )}
+
+                  {showInvite && (
+                    <button
+                      className={styles.contextMenuItem}
+                      data-testid={TID.channelInvite}
+                      onClick={() => {
+                        setInvitingTo({ id: ctxChannel.id, name: ctxChannel.name });
+                        setCtxMenu(null);
+                      }}
+                    >
+                      <UserPlusIcon width={14} height={14} />
+                      {t("server:invites.menuItem")}
                     </button>
                   )}
 
@@ -1185,6 +1209,8 @@ export default function ChannelSidebar({
               onCancel={() => setPasswordChannel(null)}
             />
           )}
+
+          {invitingTo && <InviteDialog target={invitingTo} onClose={() => setInvitingTo(null)} />}
         </aside>
       </RoleGroupsContext.Provider>
     </RoleColorsContext.Provider>

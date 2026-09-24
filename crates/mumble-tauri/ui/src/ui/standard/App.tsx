@@ -26,6 +26,11 @@ import { useVisualViewport } from "./hooks/useVisualViewport";
 import { useNotificationSounds } from "@core/features/notifications/useNotificationSounds";
 import { useCalendarReminders } from "@core/features/chat/calendar/useCalendarReminders";
 import { requestJoinMeeting } from "@core/features/chat/calendar/meetings";
+import { parseInviteLink, type ParsedInvite } from "@core/features/invites/inviteLink";
+import { resolveInviteTarget } from "@core/features/invites/inviteTarget";
+import { getServerPassword, markServerJoined } from "@core/serverStorage";
+import type { SavedServer } from "@core/types";
+import { JoinInviteDialog } from "./components/invites/JoinInviteDialog";
 import { useSpoilerReveal } from "./hooks/useSpoilerReveal";
 import { useCodeHighlight } from "./hooks/useCodeHighlight";
 import { useWatchLifecycle } from "@core/features/chat/watch/useWatchLifecycle";
@@ -178,9 +183,29 @@ export default function App() {
   return <Suspense fallback={<LoadingSplash />}>{renderWindowContent()}</Suspense>;
 }
 
+/** Connect with a saved login, its saved password and (through the store) its invite. */
+async function connectSaved(server: SavedServer): Promise<void> {
+  const password = await getServerPassword(server.id).catch(() => null);
+  await useAppStore.getState().connect(server.host, server.port, server.username, server.cert_label, password);
+  await markServerJoined(server.id).catch(() => undefined);
+}
+
+/**
+ * Follow an invite link: switch to a session already on that server, connect
+ * a login already saved for it, or ask for a name for a server never seen.
+ */
+async function followInvite(invite: ParsedInvite, askForName: (invite: ParsedInvite) => void): Promise<void> {
+  const target = await resolveInviteTarget(invite);
+  if (target.kind === "live") await useAppStore.getState().switchServer(target.serverId);
+  else if (target.kind === "saved") await connectSaved(target.server);
+  else askForName(invite);
+}
+
 function MainApp() {
   const navigate = useNavigate();
   const [firstRun, setFirstRun] = useState<boolean | null>(null);
+  /** A followed invite link to a server nothing is saved for yet. */
+  const [joiningInvite, setJoiningInvite] = useState<ParsedInvite | null>(null);
   const [notifSounds, setNotifSounds] = useState<NotificationSoundSettings>(DEFAULT_NOTIFICATION_SOUNDS);
 
   // Track visual viewport height on mobile so the layout shrinks
@@ -369,9 +394,9 @@ function MainApp() {
   // Currently supported:
   //   fancy://marketplace/plugin/<id>      -> open plugin detail page
   //   fancy://meeting/<eventId>?t=<token>  -> join a meeting's room
+  //   fancy://invite/<code>?server=<h:p>   -> join a server through an invite
   useEffect(() => {
-    const unlisten = listen<string>("deep-link-open", (e) => {
-      const raw = e.payload;
+    const route = (raw: string) => {
       let url: URL;
       try {
         url = new URL(raw);
@@ -392,10 +417,23 @@ function MainApp() {
         const token = url.searchParams.get("t") ?? undefined;
         requestJoinMeeting(eventId, token);
         navigate("/");
+      } else if (segments[0] === "invite") {
+        const invite = parseInviteLink(raw);
+        if (invite) void followInvite(invite, setJoiningInvite);
+        else console.warn("deep-link: malformed invite", raw);
       } else {
         console.warn("deep-link: unhandled route", segments);
       }
-    });
+    };
+    const unlisten = listen<string>("deep-link-open", (e) => route(e.payload));
+    // A link that launched the app arrived before this listener existed, so
+    // the backend parked it; collected once the listener is up.
+    void unlisten
+      .then(() => invoke<string | null>("take_pending_deep_link"))
+      .then((pending) => {
+        if (pending) route(pending);
+      })
+      .catch(() => undefined);
     return () => {
       unlisten.then((f) => f());
     };
@@ -407,6 +445,13 @@ function MainApp() {
   return (
     <div className="app">
       <TitleBar />
+      {joiningInvite && (
+        <JoinInviteDialog
+          invite={joiningInvite}
+          onClose={() => setJoiningInvite(null)}
+          onJoin={(server) => void connectSaved(server)}
+        />
+      )}
       <Suspense fallback={<LoadingSplash />}>
         <Routes>
           {firstRun ? (

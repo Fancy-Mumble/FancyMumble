@@ -14,6 +14,7 @@ import {
   SlidersIcon,
   PaletteIcon,
   HistoryIcon,
+  UserPlusIcon,
 } from "../../icons";
 import { useAppStore } from "@core/store";
 import { RegisteredUsersTab } from "./RegisteredUsersTab";
@@ -27,6 +28,7 @@ import { FileServerTab } from "./FileServerTab";
 import { ServerSettingsTab } from "./ServerSettingsTab";
 import { LiveryTab } from "./LiveryTab";
 import { AuditLogTab } from "./AuditLogTab";
+import InvitesTab from "./InvitesTab";
 import OnboardingAdminPanel from "../../components/onboarding/OnboardingAdminPanel";
 import { isOnboardingSupported } from "@core/features/onboarding/onboardingStore";
 import { PERM_MANAGE_EMOTES, PERM_WRITE } from "@core/utils/permissions";
@@ -56,7 +58,8 @@ type Tab =
   | "fileServer"
   | "serverSettings"
   | "livery"
-  | "auditLog";
+  | "auditLog"
+  | "invites";
 
 export default function AdminPanel() {
   const navigate = useNavigate();
@@ -75,7 +78,8 @@ export default function AdminPanel() {
       t === "marketplace" ||
       t === "fileServer" ||
       t === "serverSettings" ||
-      t === "auditLog"
+      t === "auditLog" ||
+      t === "invites"
     ) {
       return t;
     }
@@ -113,6 +117,7 @@ export default function AdminPanel() {
     if (tab === "serverSettings" && !canAdminPlugins) setTab("users");
     if (tab === "livery" && !canAdminPlugins) setTab("users");
     if (tab === "auditLog" && !canViewAudit) setTab("users");
+    if (tab === "invites" && !canAdminPlugins) setTab("users");
   }, [tab, canManageFileServer, canAdminPlugins, canViewAudit]);
   const tabs: TabDef<Tab>[] = [
     { id: "users", label: t("adminTabs.users"), icon: <UsersGroupIcon width={16} height={16} /> },
@@ -180,6 +185,12 @@ export default function AdminPanel() {
             label: t("adminTabs.livery", { defaultValue: "Livery" }),
             icon: <PaletteIcon width={16} height={16} />,
           },
+          // The same gate as the settings that govern invites.
+          {
+            id: "invites" as const,
+            label: t("adminTabs.invites", { defaultValue: "Invites" }),
+            icon: <UserPlusIcon width={16} height={16} />,
+          },
         ]
       : []),
     ...(canViewAudit
@@ -219,6 +230,7 @@ export default function AdminPanel() {
         {tab === "serverSettings" && <ServerSettingsTab setFooter={setTabFooter} />}
         {tab === "livery" && <LiveryTab />}
         {tab === "auditLog" && <AuditLogTab />}
+        {tab === "invites" && <InvitesTab />}
       </div>
     </TabbedPage>
   );
