@@ -197,6 +197,13 @@ pub struct AccountAction {
     /// enrolment, and proving the device is still in hand before TOTP comes off.
     #[prost(string, tag = "4")]
     pub totp: ::prost::alloc::string::String,
+    /// The device a device verb acts on.
+    #[prost(string, tag = "5")]
+    pub device_id: ::prost::alloc::string::String,
+    /// Only for ADD_DEVICE: the secret the new device will present. Stored as a
+    /// hash and never sent back.
+    #[prost(string, tag = "6")]
+    pub device_secret: ::prost::alloc::string::String,
 }
 /// Nested message and enum types in `AccountAction`.
 pub mod account_action {
@@ -230,6 +237,18 @@ pub mod account_action {
         /// Back to certificate-only login. Separate from SET_PASSWORD with an empty
         /// value, which is a password every guess matches rather than none.
         ClearPassword = 7,
+        /// Give the device named by `device_id` the name in `value`.
+        RenameDevice = 8,
+        /// Sign the device named by `device_id` out: its sessions end, it is
+        /// refused from then on, and from then on the account admits only devices
+        /// it knows. Never this connection's own device - disconnecting is how a
+        /// device signs itself out.
+        RemoveDevice = 9,
+        /// Register a device before it first connects: `device_id` and
+        /// `device_secret` are what it will log in with, `value` its name. How a
+        /// device being linked by one that is already signed in gets in on an
+        /// account that admits only devices it knows.
+        AddDevice = 10,
     }
     impl Kind {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -246,6 +265,9 @@ pub mod account_action {
                 Self::DisableTotp => "DISABLE_TOTP",
                 Self::Unregister => "UNREGISTER",
                 Self::ClearPassword => "CLEAR_PASSWORD",
+                Self::RenameDevice => "RENAME_DEVICE",
+                Self::RemoveDevice => "REMOVE_DEVICE",
+                Self::AddDevice => "ADD_DEVICE",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -259,6 +281,9 @@ pub mod account_action {
                 "DISABLE_TOTP" => Some(Self::DisableTotp),
                 "UNREGISTER" => Some(Self::Unregister),
                 "CLEAR_PASSWORD" => Some(Self::ClearPassword),
+                "RENAME_DEVICE" => Some(Self::RenameDevice),
+                "REMOVE_DEVICE" => Some(Self::RemoveDevice),
+                "ADD_DEVICE" => Some(Self::AddDevice),
                 _ => None,
             }
         }
@@ -328,7 +353,7 @@ pub struct AccountQuery {}
 /// received. Nothing secret is on it - the password is a hash the server will
 /// not part with, and a TOTP secret is only ever sent once, in the ack that
 /// hands it out.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AccountState {
     /// False for a guest, and false again after a successful UNREGISTER. Every
     /// other field is meaningless while this is false.
@@ -353,6 +378,36 @@ pub struct AccountState {
     /// password is only allowed when it is, or the account locks its owner out.
     #[prost(bool, tag = "8")]
     pub cert_matches_session: bool,
+    /// The devices this account is used from, most recently seen first. A
+    /// device that was signed out is not listed.
+    #[prost(message, repeated, tag = "9")]
+    pub devices: ::prost::alloc::vec::Vec<Device>,
+    /// Whether the account admits only the devices listed above to a login
+    /// proved by certificate alone. Set by the first REMOVE_DEVICE: until then a
+    /// new device is trusted on first use, as a Mumble certificate always was.
+    #[prost(bool, tag = "10")]
+    pub devices_locked: bool,
+    /// The device this connection announced, empty if it announced none. Which
+    /// row of `devices` is "this device".
+    #[prost(string, tag = "11")]
+    pub this_device: ::prost::alloc::string::String,
+}
+/// One device an account is used from.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Device {
+    /// The id the client generated for its install. Opaque.
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "3")]
+    pub added_at_ms: u64,
+    /// The last login from it; now, while `online`.
+    #[prost(uint64, tag = "4")]
+    pub last_seen_ms: u64,
+    /// Whether a session from it is connected right now.
+    #[prost(bool, tag = "5")]
+    pub online: bool,
 }
 /// The account's own record store: one value under one name, kept by the
 /// server and readable back on any connection.

@@ -85,6 +85,20 @@ pub struct Authenticate {
     /// with RejectType TOTPRequired / TOTPInvalid when missing or wrong.
     #[prost(string, optional, tag = "1000")]
     pub totp_code: ::core::option::Option<::prost::alloc::string::String>,
+    /// Client extension (FancyMumble): which install of the client this is.
+    /// Random per install and never shown to anyone else. With it one account
+    /// may be online from several devices at once, and a reconnect replaces
+    /// only the session that came from the same device.
+    #[prost(string, optional, tag = "1001")]
+    pub device_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Client extension (FancyMumble): the secret this install was registered
+    /// with. Proves device_id is not merely copied from another session.
+    #[prost(string, optional, tag = "1002")]
+    pub device_secret: ::core::option::Option<::prost::alloc::string::String>,
+    /// Client extension (FancyMumble): what the owner calls this device, e.g.
+    /// "Laptop", shown in their own device list.
+    #[prost(string, optional, tag = "1003")]
+    pub device_name: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Sent by the client to notify the server that the client is still alive.
 /// Server must reply to the packet with the same timestamp and its own
@@ -177,6 +191,9 @@ pub mod reject {
         TotpRequired = 10,
         /// Fancy extension: the provided TOTP code was wrong.
         TotpInvalid = 11,
+        /// Fancy extension: this device was signed out of the account, or the
+        /// account only admits devices it knows and this is not one of them.
+        DeviceNotTrusted = 12,
     }
     impl RejectType {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -197,6 +214,7 @@ pub mod reject {
                 Self::NoNewConnections => "NoNewConnections",
                 Self::TotpRequired => "TOTPRequired",
                 Self::TotpInvalid => "TOTPInvalid",
+                Self::DeviceNotTrusted => "DeviceNotTrusted",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -214,6 +232,7 @@ pub mod reject {
                 "NoNewConnections" => Some(Self::NoNewConnections),
                 "TOTPRequired" => Some(Self::TotpRequired),
                 "TOTPInvalid" => Some(Self::TotpInvalid),
+                "DeviceNotTrusted" => Some(Self::DeviceNotTrusted),
                 _ => None,
             }
         }
@@ -2855,7 +2874,7 @@ pub struct FancyServerSettingsUpdate {
 /// Server -> Client: snapshot of the sending user's own account state.
 /// Sent in response to a QUERY action and after every successful update.
 /// Wire type ID = 154.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FancyAccountSettings {
     /// True while the sending session belongs to a registered (non-SuperUser)
     /// account.  False after a successful self-unregister.
@@ -2885,6 +2904,34 @@ pub struct FancyAccountSettings {
     /// Clearing the password (cert-only auth) is only allowed in that case.
     #[prost(bool, optional, tag = "8")]
     pub cert_matches_session: ::core::option::Option<bool>,
+    /// The devices the account is used from, most recently seen first. A device
+    /// that was signed out is not listed. Starling only; epoch 0 sends none.
+    #[prost(message, repeated, tag = "9")]
+    pub devices: ::prost::alloc::vec::Vec<FancyAccountDevice>,
+    /// Whether a login proved by the certificate alone must come from a device
+    /// listed above. Set by the first REMOVE_DEVICE.
+    #[prost(bool, optional, tag = "10")]
+    pub devices_locked: ::core::option::Option<bool>,
+    /// The device id this session logged in as, empty if it named none.
+    #[prost(string, optional, tag = "11")]
+    pub this_device: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// One device an account is used from.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyAccountDevice {
+    #[prost(string, optional, tag = "1")]
+    pub id: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "2")]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(uint64, optional, tag = "3")]
+    pub added_at_ms: ::core::option::Option<u64>,
+    /// The last login from it; zero for a device registered ahead that has not
+    /// logged in yet.
+    #[prost(uint64, optional, tag = "4")]
+    pub last_seen_ms: ::core::option::Option<u64>,
+    /// Whether a session from it is connected right now.
+    #[prost(bool, optional, tag = "5")]
+    pub online: ::core::option::Option<bool>,
 }
 /// Client -> Server: perform one self-service account operation.
 /// The server answers every action with a FancyAccountAck and - on success -
@@ -2905,6 +2952,12 @@ pub struct FancyAccountSettingsUpdate {
     /// account, rather than to read it. Absent on QUERY, which changes nothing.
     #[prost(string, optional, tag = "3")]
     pub current_password: ::core::option::Option<::prost::alloc::string::String>,
+    /// The device a device action acts on.
+    #[prost(string, optional, tag = "4")]
+    pub device_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// ADD_DEVICE only: the secret the new device will present.
+    #[prost(string, optional, tag = "5")]
+    pub device_secret: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Nested message and enum types in `FancyAccountSettingsUpdate`.
 pub mod fancy_account_settings_update {
@@ -2944,6 +2997,14 @@ pub mod fancy_account_settings_update {
         TotpVerify = 7,
         /// Disable 2FA.  value = current 6-digit code (proof of possession).
         TotpDisable = 8,
+        /// Give the device named by device_id a new name.  value = the name.
+        RenameDevice = 9,
+        /// Sign the device named by device_id out: its sessions end and it is
+        /// refused from then on.  Never this session's own device.
+        RemoveDevice = 10,
+        /// Register a device before it first connects, as linking does.
+        /// device_id/device_secret = what it will log in with, value = its name.
+        AddDevice = 11,
     }
     impl Action {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -2961,6 +3022,9 @@ pub mod fancy_account_settings_update {
                 Self::TotpBegin => "TOTP_BEGIN",
                 Self::TotpVerify => "TOTP_VERIFY",
                 Self::TotpDisable => "TOTP_DISABLE",
+                Self::RenameDevice => "RENAME_DEVICE",
+                Self::RemoveDevice => "REMOVE_DEVICE",
+                Self::AddDevice => "ADD_DEVICE",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -2975,6 +3039,9 @@ pub mod fancy_account_settings_update {
                 "TOTP_BEGIN" => Some(Self::TotpBegin),
                 "TOTP_VERIFY" => Some(Self::TotpVerify),
                 "TOTP_DISABLE" => Some(Self::TotpDisable),
+                "RENAME_DEVICE" => Some(Self::RenameDevice),
+                "REMOVE_DEVICE" => Some(Self::RemoveDevice),
+                "ADD_DEVICE" => Some(Self::AddDevice),
                 _ => None,
             }
         }

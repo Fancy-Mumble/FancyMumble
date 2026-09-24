@@ -152,6 +152,7 @@ async fn connect_and_authenticate_with_password(
         password: password.map(String::from),
         tokens: vec![],
         totp: None,
+        device: None,
     };
     let auth_output = auth.execute(&ServerState::new());
     for msg in &auth_output.tcp_messages {

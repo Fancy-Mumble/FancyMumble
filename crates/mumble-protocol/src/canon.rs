@@ -660,6 +660,9 @@ fn account_update_to_canon(update: &mumble_tcp::FancyAccountSettingsUpdate) -> O
                 // Handled above; listed so a new variant fails to compile here
                 // rather than silently becoming a password change.
                 Action::Query => return None,
+                Action::RenameDevice => (Kind::RenameDevice, String::new()),
+                Action::RemoveDevice => (Kind::RemoveDevice, String::new()),
+                Action::AddDevice => (Kind::AddDevice, String::new()),
                 Action::SetPassword => (Kind::SetPassword, String::new()),
                 Action::ClearPassword => (Kind::ClearPassword, String::new()),
                 Action::Rename => (Kind::Rename, String::new()),
@@ -683,6 +686,8 @@ fn account_update_to_canon(update: &mumble_tcp::FancyAccountSettingsUpdate) -> O
                     String::new()
                 },
                 totp,
+                device_id: update.device_id.clone().unwrap_or_default(),
+                device_secret: update.device_secret.clone().unwrap_or_default(),
             })
         }
     };
@@ -708,6 +713,9 @@ fn account_ack_action(ack: &fancy::domain::AccountAck) -> u32 {
         Ok(Kind::Unregister) => Action::Unregister,
         Ok(Kind::EnableTotp) if !ack.totp_secret.is_empty() => Action::TotpBegin,
         Ok(Kind::EnableTotp) => Action::TotpVerify,
+        Ok(Kind::RenameDevice) => Action::RenameDevice,
+        Ok(Kind::RemoveDevice) => Action::RemoveDevice,
+        Ok(Kind::AddDevice) => Action::AddDevice,
         // A refusal of something this client did not send - `to_canon` never
         // produces `UNSPECIFIED`. Reported against `QUERY`, the one action that
         // is always in flight when the page is open, so the user sees the
@@ -1153,6 +1161,19 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                         totp_enabled: Some(state.totp_enabled),
                         cert_hash: Some(hex(&state.cert_hash)),
                         cert_matches_session: Some(state.cert_matches_session),
+                        devices: state
+                            .devices
+                            .into_iter()
+                            .map(|device| mumble_tcp::FancyAccountDevice {
+                                id: Some(device.id),
+                                name: Some(device.name),
+                                added_at_ms: Some(device.added_at_ms),
+                                last_seen_ms: Some(device.last_seen_ms),
+                                online: Some(device.online),
+                            })
+                            .collect(),
+                        devices_locked: Some(state.devices_locked),
+                        this_device: Some(state.this_device),
                     },
                 )),
                 Some(Body::Ack(ack)) => Some(ControlMessage::FancyAccountAck(
@@ -2104,6 +2125,8 @@ mod tests {
                 action: action as i32,
                 value: value.map(str::to_owned),
                 current_password: password.map(str::to_owned),
+                device_id: None,
+                device_secret: None,
             },
         ))
         .expect("the account surface has a canon form");
@@ -2233,6 +2256,7 @@ mod tests {
                     totp_enabled: false,
                     cert_hash: vec![0xde, 0xad, 0xbe, 0xef],
                     cert_matches_session: true,
+                    ..fancy::domain::AccountState::default()
                 },
             )),
         }
@@ -2248,6 +2272,82 @@ mod tests {
         assert_eq!(state.name.as_deref(), Some("ada"));
         assert_eq!(state.cert_hash.as_deref(), Some("deadbeef"));
         assert_eq!(state.cert_matches_session, Some(true));
+    }
+
+    #[test]
+    fn a_device_action_names_its_device_on_the_canon_and_is_acked_as_itself() {
+        use fancy::domain::account_action::Kind;
+        use mumble_tcp::fancy_account_settings_update::Action;
+
+        let (_, payload) = to_canon(&ControlMessage::FancyAccountSettingsUpdate(
+            mumble_tcp::FancyAccountSettingsUpdate {
+                action: Action::AddDevice as i32,
+                value: Some("Phone".to_owned()),
+                current_password: None,
+                device_id: Some("abc".to_owned()),
+                device_secret: Some("s3cret".to_owned()),
+            },
+        ))
+        .expect("a canon form");
+        let Some(fancy::domain::userdata_envelope::Body::Action(action)) =
+            fancy::domain::UserdataEnvelope::decode(payload.as_slice())
+                .expect("an envelope")
+                .body
+        else {
+            panic!("expected an action");
+        };
+        assert_eq!(action.kind, Kind::AddDevice as i32);
+        assert_eq!(action.value, "Phone");
+        assert_eq!(action.device_id, "abc");
+        assert_eq!(action.device_secret, "s3cret");
+
+        // And the ack comes back as the same action, not as a query, which is
+        // where an unknown kind lands and where the panel would not look.
+        for (kind, legacy) in [
+            (Kind::RenameDevice, Action::RenameDevice),
+            (Kind::RemoveDevice, Action::RemoveDevice),
+            (Kind::AddDevice, Action::AddDevice),
+        ] {
+            let ack = fancy::domain::AccountAck {
+                kind: kind as i32,
+                ok: true,
+                ..fancy::domain::AccountAck::default()
+            };
+            assert_eq!(account_ack_action(&ack), legacy as u32);
+        }
+    }
+
+    #[test]
+    fn the_account_snapshot_carries_its_devices() {
+        let payload = fancy::domain::UserdataEnvelope {
+            body: Some(fancy::domain::userdata_envelope::Body::Account(
+                fancy::domain::AccountState {
+                    registered: true,
+                    devices: vec![fancy::domain::Device {
+                        id: "laptop".to_owned(),
+                        name: "Windows (DESK)".to_owned(),
+                        added_at_ms: 1,
+                        last_seen_ms: 2,
+                        online: true,
+                    }],
+                    devices_locked: true,
+                    this_device: "laptop".to_owned(),
+                    ..fancy::domain::AccountState::default()
+                },
+            )),
+        }
+        .encode_to_vec();
+        let ControlMessage::FancyAccountSettings(state) = from_canon(USERDATA, &payload)
+            .expect("decodes")
+            .expect("a snapshot")
+        else {
+            panic!("expected a snapshot");
+        };
+        assert_eq!(state.devices.len(), 1);
+        assert_eq!(state.devices[0].id.as_deref(), Some("laptop"));
+        assert_eq!(state.devices[0].online, Some(true));
+        assert_eq!(state.devices_locked, Some(true));
+        assert_eq!(state.this_device.as_deref(), Some("laptop"));
     }
 
     #[test]

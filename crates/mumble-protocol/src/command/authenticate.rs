@@ -14,6 +14,21 @@ pub struct Authenticate {
     pub tokens: Vec<String>,
     /// Optional TOTP code for accounts with 2FA enabled (Fancy extension).
     pub totp: Option<String>,
+    /// Which install this is, so one account can be online from several
+    /// devices at once (Fancy extension, Starling). `None` logs in as no
+    /// device in particular, the way every stock client does.
+    pub device: Option<Device>,
+}
+
+/// A device as `Authenticate` names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Device {
+    /// Stable per install and server.
+    pub id: String,
+    /// Proves the id was not copied off another session.
+    pub secret: String,
+    /// What the owner sees in their device list.
+    pub name: String,
 }
 
 impl CommandAction for Authenticate {
@@ -24,6 +39,9 @@ impl CommandAction for Authenticate {
             tokens: self.tokens.clone(),
             opus: Some(true),
             totp_code: self.totp.clone(),
+            device_id: self.device.as_ref().map(|d| d.id.clone()),
+            device_secret: self.device.as_ref().map(|d| d.secret.clone()),
+            device_name: self.device.as_ref().map(|d| d.name.clone()),
             ..Default::default()
         };
         CommandOutput {

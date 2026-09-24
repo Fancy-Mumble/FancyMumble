@@ -88,7 +88,7 @@ mod update_user_list;
 pub use self::core::{BoxedCommand, CommandAction, CommandOutput};
 
 // Re-export every concrete command for ergonomic access.
-pub use authenticate::Authenticate;
+pub use authenticate::{Authenticate, Device as AuthenticateDevice};
 pub use ban_user::BanUser;
 pub use channel_listen::ChannelListen;
 pub use delete_channel::DeleteChannel;
@@ -238,6 +238,7 @@ mod tests {
             password: Some("secret".into()),
             tokens: vec!["token1".into()],
             totp: None,
+            device: None,
         };
         let state = ServerState::new();
         let output = cmd.execute(&state);

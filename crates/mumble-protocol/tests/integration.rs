@@ -105,6 +105,7 @@ async fn connect_and_authenticate(username: &str) -> (TcpTransport, ServerState)
         password: None,
         tokens: vec![],
         totp: None,
+        device: None,
     };
     let auth_output = auth.execute(&ServerState::new());
     for msg in &auth_output.tcp_messages {
@@ -494,6 +495,7 @@ async fn test_server_config_has_large_limits() {
         password: None,
         tokens: vec![],
         totp: None,
+        device: None,
     };
     for msg in &auth.execute(&ServerState::new()).tcp_messages {
         transport.send(msg).await.unwrap();
@@ -574,6 +576,7 @@ async fn test_channel_description_blob_request() {
         password: Some("testpassword".into()),
         tokens: vec![],
         totp: None,
+        device: None,
     };
     for msg in &auth.execute(&ServerState::new()).tcp_messages {
         su.send(msg).await.unwrap();
@@ -929,6 +932,7 @@ async fn test_fancy_client_is_keyed_for_modern_voice_crypto() {
         password: None,
         tokens: vec![],
         totp: None,
+        device: None,
     };
     for msg in &auth.execute(&ServerState::new()).tcp_messages {
         transport.send(msg).await.unwrap();

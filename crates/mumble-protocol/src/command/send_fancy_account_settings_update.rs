@@ -17,6 +17,10 @@ pub struct SendFancyAccountSettingsUpdate {
     /// The account's current password, re-typed. `None` on `QUERY`, which
     /// changes nothing; the server refuses every other action without it.
     pub current_password: Option<String>,
+    /// The device a device action acts on.
+    pub device_id: Option<String>,
+    /// `ADD_DEVICE` only: the secret the device being linked will present.
+    pub device_secret: Option<String>,
 }
 
 impl CommandAction for SendFancyAccountSettingsUpdate {
@@ -27,6 +31,8 @@ impl CommandAction for SendFancyAccountSettingsUpdate {
                     action: self.action as i32,
                     value: self.value.clone(),
                     current_password: self.current_password.clone(),
+                    device_id: self.device_id.clone(),
+                    device_secret: self.device_secret.clone(),
                 },
             )],
             ..Default::default()

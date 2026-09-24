@@ -78,6 +78,7 @@ impl Peer {
             password: None,
             tokens: vec![],
             totp: None,
+            device: None,
         };
         for msg in &auth.execute(&ServerState::new()).tcp_messages {
             transport.send(msg).await.expect("send auth");

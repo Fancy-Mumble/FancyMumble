@@ -159,6 +159,18 @@ message AccountAction {
     // Back to certificate-only login. Separate from SET_PASSWORD with an empty
     // value, which is a password every guess matches rather than none.
     CLEAR_PASSWORD = 7;
+    // Give the device named by `device_id` the name in `value`.
+    RENAME_DEVICE = 8;
+    // Sign the device named by `device_id` out: its sessions end, it is
+    // refused from then on, and from then on the account admits only devices
+    // it knows. Never this connection's own device - disconnecting is how a
+    // device signs itself out.
+    REMOVE_DEVICE = 9;
+    // Register a device before it first connects: `device_id` and
+    // `device_secret` are what it will log in with, `value` its name. How a
+    // device being linked by one that is already signed in gets in on an
+    // account that admits only devices it knows.
+    ADD_DEVICE = 10;
   }
   Kind kind = 1;
   string current_password = 2;
@@ -166,6 +178,11 @@ message AccountAction {
   // A code from the authenticator, when one is needed: confirming an
   // enrolment, and proving the device is still in hand before TOTP comes off.
   string totp = 4;
+  // The device a device verb acts on.
+  string device_id = 5;
+  // Only for ADD_DEVICE: the secret the new device will present. Stored as a
+  // hash and never sent back.
+  string device_secret = 6;
 }
 
 message AccountAck {
@@ -234,6 +251,28 @@ message AccountState {
   // Whether the certificate on *this* connection is that one. Clearing the
   // password is only allowed when it is, or the account locks its owner out.
   bool cert_matches_session = 8;
+  // The devices this account is used from, most recently seen first. A
+  // device that was signed out is not listed.
+  repeated Device devices = 9;
+  // Whether the account admits only the devices listed above to a login
+  // proved by certificate alone. Set by the first REMOVE_DEVICE: until then a
+  // new device is trusted on first use, as a Mumble certificate always was.
+  bool devices_locked = 10;
+  // The device this connection announced, empty if it announced none. Which
+  // row of `devices` is "this device".
+  string this_device = 11;
+}
+
+// One device an account is used from.
+message Device {
+  // The id the client generated for its install. Opaque.
+  string id = 1;
+  string name = 2;
+  uint64 added_at_ms = 3;
+  // The last login from it; now, while `online`.
+  uint64 last_seen_ms = 4;
+  // Whether a session from it is connected right now.
+  bool online = 5;
 }
 
 // The account's own record store: one value under one name, kept by the
