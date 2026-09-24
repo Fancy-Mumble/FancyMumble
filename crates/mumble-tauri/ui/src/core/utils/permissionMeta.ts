@@ -55,4 +55,9 @@ export const PERMISSION_META: Record<number, PermissionMeta> = {
     description:
       "See a channel marked as hidden (and the users inside it). Without it the channel is invisible in the channel list. No effect on non-hidden channels.",
   },
+  0x2000000: {
+    title: "Send voice messages",
+    description:
+      "Record and send voice messages in the channel's chat. Separate from Share Files, so voice notes can be allowed without arbitrary uploads. The server admin can also turn voice messages off everywhere.",
+  },
 };

@@ -86,6 +86,11 @@ pub const READ_REGISTER: u32 = 0x800000;
 /// Channel-level: may see a channel flagged hidden (and the users inside it).
 /// Without it a hidden channel is absent from the user's channel list entirely.
 pub const SEE_CHANNEL: u32 = 0x1000000;
+/// Channel-level: may send a recorded voice message into the channel's chat.
+/// Separate from `SHARE_FILES` although a clip travels as a file, so a server
+/// can allow voice notes without allowing arbitrary uploads. Granted by
+/// default; the server-wide switch is the `allow_voice_messages` setting.
+pub const SEND_VOICE_MESSAGE: u32 = 0x2000000;
 
 /// Every permission entry, in display order.  This is the data that the
 /// build script walks to generate the TypeScript table.
@@ -238,6 +243,12 @@ pub const ENTRIES: &[PermissionEntry] = &[
         bit: SEE_CHANNEL,
         ident: "SEE_CHANNEL",
         label: "See Hidden Channel",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: SEND_VOICE_MESSAGE,
+        ident: "SEND_VOICE_MESSAGE",
+        label: "Send Voice Message",
         root_only: false,
     },
 ];

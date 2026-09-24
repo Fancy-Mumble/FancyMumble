@@ -227,7 +227,7 @@ describe("ChannelInfoPanel", () => {
     // Two of the channel bits are set, and the rest are named as withheld
     // rather than left to be inferred from the mask.
     expect(screen.getByText("Granted — 2")).toBeTruthy();
-    expect(screen.getByText("Withheld — 15")).toBeTruthy();
+    expect(screen.getByText("Withheld — 16")).toBeTruthy();
   });
 
   it("keeps the offload readout out of the way outside developer mode", async () => {

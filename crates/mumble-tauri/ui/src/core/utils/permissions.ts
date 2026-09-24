@@ -43,6 +43,7 @@ export const PERM_KEY_OWNER = 0x200000;
 export const PERM_MANAGE_EMOTES = 0x400000;
 export const PERM_READ_REGISTER = 0x800000;
 export const PERM_SEE_CHANNEL = 0x1000000;
+export const PERM_SEND_VOICE_MESSAGE = 0x2000000;
 
 /** Complete ordered list of Mumble permission bits. */
 export const PERMISSIONS: readonly PermissionDef[] = [
@@ -71,6 +72,7 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   { bit: PERM_MANAGE_EMOTES, ident: "MANAGE_EMOTES", label: "Manage Emotes", rootOnly: true },
   { bit: PERM_READ_REGISTER, ident: "READ_REGISTER", label: "List Registered Users", rootOnly: true },
   { bit: PERM_SEE_CHANNEL, ident: "SEE_CHANNEL", label: "See Hidden Channel", rootOnly: false },
+  { bit: PERM_SEND_VOICE_MESSAGE, ident: "SEND_VOICE_MESSAGE", label: "Send Voice Message", rootOnly: false },
 ] as const;
 
 /** Subset of permissions that apply to non-root channels. */
