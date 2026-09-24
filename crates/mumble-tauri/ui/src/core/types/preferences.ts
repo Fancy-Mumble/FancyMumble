@@ -198,6 +198,17 @@ export interface UserPreferences {
    *  for an internationalised name. Empty by default: nothing is trusted until
    *  the user says so. */
   trustedLinkHosts?: string[];
+  /**
+   * When the preferences this account's devices share (`accountSync`) last
+   * changed, here or on another device. The newer side wins.
+   */
+  syncedPreferencesAt?: number;
+  /**
+   * Saved servers this device has seen in the account's shared list, as
+   * `host:port:username`. One that is seen and then removed here stays
+   * removed rather than coming back from another device.
+   */
+  syncedServerKeys?: string[];
   /** The game overlay: a small always-on-top card showing who is talking and
    *  the last message, drawn over a detected game. Off by default. */
   gameOverlay?: GameOverlaySettings;

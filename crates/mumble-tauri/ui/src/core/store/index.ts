@@ -135,6 +135,7 @@ import {
 } from "../features/chat/calendar/meetings";
 import { FRIENDS_PLUGIN, FRIENDS_ROOM_EVENT, MSG_FRIENDS_ROOM, parseFriendsRoom } from "../friendsChannel";
 import { watchSelfFriend } from "../selfFriend";
+import { startAccountSync } from "../features/sync/accountSync";
 import {
   createPersistentChatSlice,
   persistentChatInitialState,
@@ -2817,7 +2818,7 @@ const typingExpiry = new Map<string, ReturnType<typeof setTimeout>>();
 
 export async function initEventListeners(navigate: (path: string) => void): Promise<UnlistenFn[]> {
   navigateRef = navigate;
-  const unlisteners: UnlistenFn[] = [watchSelfFriend(useAppStore)];
+  const unlisteners: UnlistenFn[] = [watchSelfFriend(useAppStore), startAccountSync(useAppStore)];
 
   // Bootstrap the multi-server session list once at startup so the
   // sessions slice reflects whatever the backend already has.  When the
