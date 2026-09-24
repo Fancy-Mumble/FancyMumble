@@ -19,6 +19,7 @@ import { imageSizeFromSource, rememberImageSize } from "@core/utils/imageSize";
 import { MediaLightbox } from "../media/MediaPreview";
 import MediaPlayer from "@shared/mediaplayer/MediaPlayer";
 import { FilePasswordDialog } from "./FilePasswordDialog";
+import VoiceMessageCard from "../voice/VoiceMessageCard";
 import styles from "./FileAttachmentCard.module.css";
 
 export type { FileAttachmentInfo, PreviewKind } from "@core/features/chat/fileAttachments";
@@ -171,12 +172,18 @@ function FileFacts({
 /** HTML-comment marker used to embed a file attachment in a chat message
  *  body. Renderers detect the marker and render a {@link FileAttachmentCard}
  *  in place of the raw markdown link. Legacy clients see the inert comment. */
-export default function FileAttachmentCard({
-  info,
-  visibilityBadge,
-  bare: bareProp,
-  tile,
-}: FileAttachmentCardProps) {
+/**
+ * A file shared in chat. A voice message is drawn as a voice note and not as
+ * a file: its marker says what it is, and a name and a Save button are the
+ * wrong answer to "somebody left you a message".
+ */
+export default function FileAttachmentCard(props: FileAttachmentCardProps) {
+  const { info } = props;
+  if (info.voice) return <VoiceMessageCard info={{ ...info, voice: info.voice }} />;
+  return <FileCard {...props} />;
+}
+
+function FileCard({ info, visibilityBadge, bare: bareProp, tile }: FileAttachmentCardProps) {
   const bare = bareProp || tile;
   const { t } = useTranslation("chat");
   const downloadFile = useAppStore((s) => s.downloadFile);

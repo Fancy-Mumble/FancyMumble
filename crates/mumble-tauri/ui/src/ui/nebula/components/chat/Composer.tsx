@@ -15,6 +15,7 @@ import {
   CloseIcon,
   FileTextIcon,
   ImageIcon,
+  MicIcon,
   PollIcon,
   SendIcon,
   UploadIcon,
@@ -48,6 +49,8 @@ import type { StagedAttachment, UploadPlaceholder } from "@core/features/chat/us
 import { formatBytes } from "@core/utils/format";
 import { TID } from "@core/testids";
 import { useGifsEnabled } from "@core/features/chat/gif/gifAccess";
+import type { VoiceRecorder } from "@core/features/chat/voice/useVoiceRecorder";
+import VoiceRecorderBar from "@standard/components/chat/voice/VoiceRecorderBar";
 import { composerHtml, plainText } from "../../selectors";
 import { chamferedSurface, frost, glassChrome } from "../../theme";
 import { CHAT_COLUMN_INSET_PX, CHAT_COLUMN_MAX_WIDTH, NEBULA_MONO, radius } from "../../tokens";
@@ -122,6 +125,12 @@ interface ComposerProps {
    * reachable from the attach menu.
    */
   dense?: boolean;
+  /**
+   * Voice messages, when the server takes them. Send becomes a microphone
+   * while there is nothing to send, and the field becomes the recording strip
+   * while a take runs - Send then sends the take.
+   */
+  voice?: VoiceRecorder;
 }
 
 /**
@@ -238,6 +247,7 @@ export function Composer({
   onCancelUpload,
   dropActive = false,
   dense = false,
+  voice,
 }: Readonly<ComposerProps>) {
   const [draft, setDraft] = useState("");
   /**
@@ -590,6 +600,11 @@ export function Composer({
     (draft.trim().length > 0 || quotes.length > 0 || attachments.length > 0) &&
     shareOptionsReady(shareOptions, attachments);
   const uploading = uploads.some((upload) => upload.state === "uploading");
+  const recordingVoice = !!voice && voice.state.phase !== "idle";
+  // Only while there is nothing to send: a typed message keeps its Send.
+  const offerVoice = !!voice?.available && !recordingVoice && !sendable && !uploading && attachments.length === 0;
+  const voiceBusy = voice?.state.phase === "starting" || voice?.state.phase === "sending";
+  const sendAction = recordingVoice ? () => void voice?.send() : offerVoice ? () => void voice?.start() : submit;
 
   const onKeyDownCapture = (event: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
     // The shortcut the menu prints beside "Browse files…", taken here so the
@@ -1229,24 +1244,34 @@ export function Composer({
                 },
               })}
             >
-              <MarkdownInput
-                apiRef={editor}
-                value={draft}
-                disabled={disabled}
-                placeholder={`Message ${target}`}
-                ariaLabel={`Message ${target}`}
-                keepPlaceholderOnFocus
-                onChange={(next) => {
-                  draftRef.current = next;
-                  setDraft(next);
-                  notifyTyping();
-                }}
-                onSubmit={submit}
-                onSelectionChange={(start, end) => updateTrigger(draftRef.current, start, end)}
-                onKeyDownCapture={onKeyDownCapture}
-                onPaste={handlePaste}
-                mentionResolver={mentionName}
-              />
+              {recordingVoice && voice ? (
+                <VoiceRecorderBar
+                  state={voice.state}
+                  limitMs={voice.limitMs}
+                  onCancel={voice.cancel}
+                  onSend={() => void voice.send()}
+                  showSend={false}
+                />
+              ) : (
+                <MarkdownInput
+                  apiRef={editor}
+                  value={draft}
+                  disabled={disabled}
+                  placeholder={`Message ${target}`}
+                  ariaLabel={`Message ${target}`}
+                  keepPlaceholderOnFocus
+                  onChange={(next) => {
+                    draftRef.current = next;
+                    setDraft(next);
+                    notifyTyping();
+                  }}
+                  onSubmit={submit}
+                  onSelectionChange={(start, end) => updateTrigger(draftRef.current, start, end)}
+                  onKeyDownCapture={onKeyDownCapture}
+                  onPaste={handlePaste}
+                  mentionResolver={mentionName}
+                />
+              )}
             </Box>
 
             {/* A drawn skin names the newline key inside the field, on the
@@ -1273,14 +1298,30 @@ export function Composer({
 
           {/* Send stands outside the field, on a plate of its own. */}
           <Tooltip
-            title={uploading ? t("nebulaChat:composer.waitingForUpload") : t("chat:pendingAttachments.send")}
+            title={
+              offerVoice
+                ? t("chat:voiceMessage.record")
+                : recordingVoice
+                  ? t("chat:voiceMessage.send")
+                  : uploading
+                    ? t("nebulaChat:composer.waitingForUpload")
+                    : t("chat:pendingAttachments.send")
+            }
           >
             <span>
               <IconButton
-                aria-label={t("settings:shortcuts.builtinSendMessage")}
-                data-testid={TID.chatSend}
-                disabled={disabled || !sendable || uploading}
-                onClick={submit}
+                aria-label={
+                  offerVoice
+                    ? t("chat:voiceMessage.record")
+                    : recordingVoice
+                      ? t("chat:voiceMessage.send")
+                      : t("settings:shortcuts.builtinSendMessage")
+                }
+                data-testid={offerVoice ? "voice-record" : recordingVoice ? "voice-recorder-send" : TID.chatSend}
+                disabled={
+                  recordingVoice ? voiceBusy : offerVoice ? disabled : disabled || !sendable || uploading
+                }
+                onClick={sendAction}
                 sx={(theme) => ({
                   flex: "none",
                   ...(stencil
@@ -1331,7 +1372,7 @@ export function Composer({
                     is 60px of a 390px bar - which is the difference between a
                     placeholder that fits on one line and one that does not.
                     The arrow says the same thing in the room it has. */}
-                {stencil && !dense && (
+                {stencil && !dense && !offerVoice && (
                   <Box
                     component="span"
                     sx={{
@@ -1346,7 +1387,7 @@ export function Composer({
                     {t("nebulaChat:composer.send")}
                   </Box>
                 )}
-                <SendIcon width={14} height={14} />
+                {offerVoice ? <MicIcon width={14} height={14} /> : <SendIcon width={14} height={14} />}
               </IconButton>
             </span>
           </Tooltip>

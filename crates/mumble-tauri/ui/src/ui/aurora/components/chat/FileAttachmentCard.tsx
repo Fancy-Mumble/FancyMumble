@@ -14,13 +14,17 @@ import {
 } from "@core/features/chat/starlingFiles";
 import { useAppStore } from "@core/store";
 import MediaPlayer from "@shared/mediaplayer/MediaPlayer";
+import VoiceMessageCard from "@standard/components/chat/voice/VoiceMessageCard";
 import { formatBytes } from "@core/utils/format";
 import { Button, TextField } from "../primitives";
 import styles from "./FileAttachmentCard.module.css";
 
 export function FileAttachmentMarker({ payload }: { payload: string }) {
   const info = useMemo(() => decodeFileAttachmentPayload(payload), [payload]);
-  return info ? <FileAttachmentCard info={info} /> : null;
+  if (!info) return null;
+  // A voice message is a note to play, not a file to save.
+  if (info.voice) return <VoiceMessageCard info={{ ...info, voice: info.voice }} />;
+  return <FileAttachmentCard info={info} />;
 }
 
 export function FileAttachmentCard({ info }: { info: FileAttachmentInfo }) {

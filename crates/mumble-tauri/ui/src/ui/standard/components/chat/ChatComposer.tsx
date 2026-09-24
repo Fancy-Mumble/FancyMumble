@@ -6,6 +6,7 @@ import {
   FileTextIcon,
   GifIcon,
   ImageIcon,
+  MicIcon,
   SendIcon,
 } from "../../icons";
 import {
@@ -36,6 +37,8 @@ import { collectSlashCommands, filterSlashCommands } from "@core/plugins/tier1/m
 import { extractSlashQuery, parseSlashLine } from "@core/plugins/tier1/slashParser";
 import { TID } from "@core/testids";
 import { useGifsEnabled } from "@core/features/chat/gif/gifAccess";
+import type { VoiceRecorder } from "@core/features/chat/voice/useVoiceRecorder";
+import VoiceRecorderBar from "./voice/VoiceRecorderBar";
 
 interface ChatComposerProps {
   readonly draft: string;
@@ -55,6 +58,9 @@ interface ChatComposerProps {
   readonly hasPendingQuotes?: boolean;
   readonly isEditing?: boolean;
   readonly onCancelEdit?: () => void;
+  /** Voice messages, when the server takes them. The microphone stands in
+   *  for Send while the draft is empty, the way a phone's messenger does. */
+  readonly voice?: VoiceRecorder;
 }
 
 export default function ChatComposer({
@@ -70,8 +76,12 @@ export default function ChatComposer({
   hasPendingQuotes = false,
   isEditing = false,
   onCancelEdit,
+  voice,
 }: ChatComposerProps) {
   const [showGifPicker, setShowGifPicker] = useState(false);
+  const recordingVoice = !!voice && voice.state.phase !== "idle";
+  // Only while there is nothing to send: a typed message keeps its Send.
+  const offerVoice = !!voice?.available && !draft.trim() && !hasPendingQuotes && !isEditing;
   // GIFs only with the user's own Klipy key or from a server that proxies them.
   const gifsEnabled = useGifsEnabled();
   const [showAttachMenu, setShowAttachMenu] = useState(false);
@@ -308,117 +318,142 @@ export default function ChatComposer({
         </Suspense>
       )}
       <div className={styles.composer}>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*,video/*"
-          multiple
-          className={styles.hiddenFileInput}
-          onChange={handleFileChange}
-        />
-
-        <div ref={attachMenuRef} className={styles.attachMenuWrap}>
-          <button
-            type="button"
-            className={`${styles.attachBtn} ${showAttachMenu ? styles.attachBtnActive : ""}`}
-            onClick={handleAttachBtnClick}
-            disabled={disabled}
-            title={onAttachFile ? t("composer.attachTooltipImageFile") : t("composer.attachTooltipImageOnly")}
-          >
-            <AttachIcon width={20} height={20} />
-          </button>
-          {showAttachMenu && (
-            <div className={styles.attachMenu} role="menu">
-              <button
-                type="button"
-                className={styles.attachMenuItem}
-                role="menuitem"
-                onClick={handlePickImage}
-              >
-                <ImageIcon width={15} height={15} />
-                {t("composer.attachMenuImage")}
-              </button>
-              {onAttachFile && (
-                <button
-                  type="button"
-                  className={styles.attachMenuItem}
-                  role="menuitem"
-                  onClick={handlePickFile}
-                >
-                  <FileIcon width={15} height={15} />
-                  {t("composer.attachMenuFile")}
-                </button>
-              )}
-              {onOpenLiveDoc && (
-                <button
-                  type="button"
-                  className={styles.attachMenuItem}
-                  role="menuitem"
-                  onClick={handlePickLiveDoc}
-                  title={t("composer.attachMenuLiveDocHint")}
-                >
-                  <FileTextIcon width={15} height={15} />
-                  {t("composer.attachMenuLiveDoc")}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        {gifsEnabled && (
-          <button
-            type="button"
-            className={`${styles.attachBtn} ${showGifPicker ? styles.attachBtnActive : ""}`}
-            onClick={() => setShowGifPicker((s) => !s)}
-            disabled={disabled}
-            title={t("composer.gifPickerTooltip")}
-          >
-            <GifIcon width={20} height={20} />
-          </button>
-        )}
-
-        <div className={styles.composerInputWrap} data-testid={TID.chatComposerInput}>
-          {slashOpen && (
-            <SlashCommandMenu
-              entries={slashEntries}
-              activeIndex={slashActiveIndex}
-              onPick={pickSlashEntry}
-              onActiveIndexChange={setSlashActiveIndex}
-            />
-          )}
-          {!slashOpen && trigger && (
-            <MentionAutocomplete
-              candidates={candidates}
-              activeIndex={activeIndex}
-              onPick={insertCandidate}
-              onActiveIndexChange={setActiveIndex}
-            />
-          )}
-
-          <MarkdownInput
-            value={draft}
-            onChange={onChange}
-            onSubmit={handleSendIntercept}
-            onPaste={onPaste}
-            placeholder={
-              isMobile || isNarrow ? t("composer.placeholderMobile") : t("composer.placeholderDesktop")
-            }
-            disabled={disabled}
-            apiRef={inputApi}
-            onSelectionChange={handleSelectionChange}
-            onKeyDownCapture={handleKeyDownCapture}
-            mentionResolver={mentionResolver}
+        {recordingVoice && voice ? (
+          <VoiceRecorderBar
+            state={voice.state}
+            limitMs={voice.limitMs}
+            onCancel={voice.cancel}
+            onSend={() => void voice.send()}
           />
-        </div>
+        ) : (
+          <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            multiple
+            className={styles.hiddenFileInput}
+            onChange={handleFileChange}
+          />
 
-        <button
-          className={styles.sendBtn}
-          data-testid={TID.chatSend}
-          onClick={handleSendIntercept}
-          disabled={(!draft.trim() && !hasPendingQuotes) || disabled}
-        >
-          <SendIcon width={20} height={20} />
-        </button>
+          <div ref={attachMenuRef} className={styles.attachMenuWrap}>
+            <button
+              type="button"
+              className={`${styles.attachBtn} ${showAttachMenu ? styles.attachBtnActive : ""}`}
+              onClick={handleAttachBtnClick}
+              disabled={disabled}
+              title={onAttachFile ? t("composer.attachTooltipImageFile") : t("composer.attachTooltipImageOnly")}
+            >
+              <AttachIcon width={20} height={20} />
+            </button>
+            {showAttachMenu && (
+              <div className={styles.attachMenu} role="menu">
+                <button
+                  type="button"
+                  className={styles.attachMenuItem}
+                  role="menuitem"
+                  onClick={handlePickImage}
+                >
+                  <ImageIcon width={15} height={15} />
+                  {t("composer.attachMenuImage")}
+                </button>
+                {onAttachFile && (
+                  <button
+                    type="button"
+                    className={styles.attachMenuItem}
+                    role="menuitem"
+                    onClick={handlePickFile}
+                  >
+                    <FileIcon width={15} height={15} />
+                    {t("composer.attachMenuFile")}
+                  </button>
+                )}
+                {onOpenLiveDoc && (
+                  <button
+                    type="button"
+                    className={styles.attachMenuItem}
+                    role="menuitem"
+                    onClick={handlePickLiveDoc}
+                    title={t("composer.attachMenuLiveDocHint")}
+                  >
+                    <FileTextIcon width={15} height={15} />
+                    {t("composer.attachMenuLiveDoc")}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {gifsEnabled && (
+            <button
+              type="button"
+              className={`${styles.attachBtn} ${showGifPicker ? styles.attachBtnActive : ""}`}
+              onClick={() => setShowGifPicker((s) => !s)}
+              disabled={disabled}
+              title={t("composer.gifPickerTooltip")}
+            >
+              <GifIcon width={20} height={20} />
+            </button>
+          )}
+
+          <div className={styles.composerInputWrap} data-testid={TID.chatComposerInput}>
+            {slashOpen && (
+              <SlashCommandMenu
+                entries={slashEntries}
+                activeIndex={slashActiveIndex}
+                onPick={pickSlashEntry}
+                onActiveIndexChange={setSlashActiveIndex}
+              />
+            )}
+            {!slashOpen && trigger && (
+              <MentionAutocomplete
+                candidates={candidates}
+                activeIndex={activeIndex}
+                onPick={insertCandidate}
+                onActiveIndexChange={setActiveIndex}
+              />
+            )}
+
+            <MarkdownInput
+              value={draft}
+              onChange={onChange}
+              onSubmit={handleSendIntercept}
+              onPaste={onPaste}
+              placeholder={
+                isMobile || isNarrow ? t("composer.placeholderMobile") : t("composer.placeholderDesktop")
+              }
+              disabled={disabled}
+              apiRef={inputApi}
+              onSelectionChange={handleSelectionChange}
+              onKeyDownCapture={handleKeyDownCapture}
+              mentionResolver={mentionResolver}
+            />
+          </div>
+
+          {offerVoice && voice ? (
+            <button
+              type="button"
+              className={styles.sendBtn}
+              data-testid="voice-record"
+              onClick={() => void voice.start()}
+              disabled={disabled}
+              title={t("voiceMessage.record")}
+              aria-label={t("voiceMessage.record")}
+            >
+              <MicIcon width={20} height={20} />
+            </button>
+          ) : (
+            <button
+              className={styles.sendBtn}
+              data-testid={TID.chatSend}
+              onClick={handleSendIntercept}
+              disabled={(!draft.trim() && !hasPendingQuotes) || disabled}
+            >
+              <SendIcon width={20} height={20} />
+            </button>
+          )}
+          </>
+        )}
       </div>
     </div>
   );

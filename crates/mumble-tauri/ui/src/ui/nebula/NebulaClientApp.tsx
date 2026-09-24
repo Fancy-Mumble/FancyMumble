@@ -64,6 +64,7 @@ import { usePolls } from "@standard/components/chat/poll/usePolls";
 import { useReadReceipts } from "@core/features/chat/readreceipt/useReadReceipts";
 import { compressStagedImage, stashPastedImage, useFileUpload } from "@core/features/chat/useFileUpload";
 import type { FileShareChoice, StagedAttachment } from "@core/features/chat/useFileUpload";
+import { useVoiceRecorder } from "@core/features/chat/voice/useVoiceRecorder";
 import { MEDIA_EXTENSIONS, previewKindForFilename } from "@core/features/chat/fileAttachments";
 import { DEFAULT_SHARE_OPTIONS, type ShareOptions } from "./components/chat/AttachmentTray";
 import type { AttachKind } from "./components/chat/Composer";
@@ -1730,6 +1731,15 @@ export default function NebulaClientApp() {
 
   // The composer, which is the same bar on a phone - only the inset
   // around it changes.
+  // A friend chat has no channel on this server to route a clip through.
+  const voice = useVoiceRecorder(friendChatName ? null : selectedChannel, activeDmUser?.session ?? null);
+  const { error: voiceError, clearError: clearVoiceError } = voice;
+  useEffect(() => {
+    if (!voiceError) return;
+    setDropNotice(t("chat:voiceMessage.failed", { detail: voiceError }));
+    clearVoiceError();
+  }, [voiceError, clearVoiceError, t]);
+
   const composer: ComposerModel = {
     target:
       activeDmUser || friendChatName
@@ -1737,6 +1747,7 @@ export default function NebulaClientApp() {
         : `#${activeChannel?.name ?? "channel"}`,
     disabled: (!activeChannel && !activeDmUser && !localNotesOpen) || persistent.sendBlocked,
     onSend: send,
+    voice,
     onAttach: canAttach ? (kind) => void pickAttachment(kind) : undefined,
     onAttachFiles: canAttach ? stagePastedFiles : undefined,
     attachBlocked:

@@ -30,6 +30,7 @@ import ConfirmDialog from "../elements/ConfirmDialog";
 import Toast from "../elements/Toast";
 import type { FileShareChoice } from "./file/FileShareDialog";
 import { uploadAttachment } from "@core/features/chat/useFileUpload";
+import { useVoiceRecorder } from "@core/features/chat/voice/useVoiceRecorder";
 const FileShareDialog = lazy(() => import("./file/FileShareDialog"));
 import { encodeFileAttachmentMarker, type FileAttachmentInfo } from "./file/FileAttachmentCard";
 // Which picture a message carries, and which of its words caption it, is the
@@ -739,6 +740,14 @@ export default function ChatView({
     );
     clearLiveDocAnnounce(pendingLiveDocAnnounce.channelId, pendingLiveDocAnnounce.appServerId);
   }, [pendingLiveDocAnnounce, requestOpenLiveDoc, clearLiveDocAnnounce]);
+
+  const voice = useVoiceRecorder(selectedChannel, selectedDmUser);
+  const { error: voiceError, clearError: clearVoiceError } = voice;
+  useEffect(() => {
+    if (!voiceError) return;
+    showToast({ message: t("voiceMessage.failed", { detail: voiceError }), variant: "error" });
+    clearVoiceError();
+  }, [voiceError, clearVoiceError, showToast, t]);
 
   const handleAttachFile = useCallback(async () => {
     if (selectedChannel === null) return;
@@ -1627,6 +1636,7 @@ export default function ChatView({
             hasPendingQuotes={pendingQuotes.length > 0 || pendingAttachments.length > 0}
             isEditing={editingMessage !== null}
             onCancelEdit={cancelEdit}
+            voice={voice}
           />
         </div>
       </div>
