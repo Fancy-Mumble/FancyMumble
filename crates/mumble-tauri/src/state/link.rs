@@ -220,7 +220,8 @@ fn split_server(server: &str) -> Option<(String, u16)> {
     Some((host.to_owned(), port.parse().ok()?))
 }
 
-fn seal(key: &[u8; 32], plaintext: &[u8]) -> Result<String, String> {
+/// AES-256-GCM under `key`, bound to `aad`, as base64 of nonce and ciphertext.
+pub(super) fn seal_with(key: &[u8; 32], aad: &[u8], plaintext: &[u8]) -> Result<String, String> {
     let sealing = LessSafeKey::new(
         UnboundKey::new(&AES_256_GCM, key).map_err(|_| "could not use the link key".to_owned())?,
     );
@@ -231,16 +232,17 @@ fn seal(key: &[u8; 32], plaintext: &[u8]) -> Result<String, String> {
     sealing
         .seal_in_place_append_tag(
             Nonce::assume_unique_for_key(nonce_bytes),
-            Aad::from(AAD),
+            Aad::from(aad),
             &mut data,
         )
-        .map_err(|_| "could not seal the identity".to_owned())?;
+        .map_err(|_| "could not seal".to_owned())?;
     let mut out = nonce_bytes.to_vec();
     out.extend_from_slice(&data);
     Ok(base64::engine::general_purpose::STANDARD.encode(out))
 }
 
-fn open(key: &[u8; 32], sealed: &str) -> Result<Vec<u8>, String> {
+/// The inverse of [`seal_with`].
+pub(super) fn open_with(key: &[u8; 32], aad: &[u8], sealed: &str) -> Result<Vec<u8>, String> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(sealed.trim())
         .map_err(|_| "the parcel is damaged".to_owned())?;
@@ -256,11 +258,19 @@ fn open(key: &[u8; 32], sealed: &str) -> Result<Vec<u8>, String> {
     let plain = opening
         .open_in_place(
             Nonce::assume_unique_for_key(nonce),
-            Aad::from(AAD),
+            Aad::from(aad),
             &mut data,
         )
-        .map_err(|_| "the code does not open this parcel".to_owned())?;
+        .map_err(|_| "the key does not open this parcel".to_owned())?;
     Ok(plain.to_vec())
+}
+
+fn seal(key: &[u8; 32], plaintext: &[u8]) -> Result<String, String> {
+    seal_with(key, AAD, plaintext)
+}
+
+fn open(key: &[u8; 32], sealed: &str) -> Result<Vec<u8>, String> {
+    open_with(key, AAD, sealed)
 }
 
 /// The parcel's contents.

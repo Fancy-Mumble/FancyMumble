@@ -35,6 +35,7 @@ pub use file_server::{
 mod handler;
 pub(crate) use handler::{LiverySnapshot, data_uri, to_snapshot};
 mod account;
+mod account_seal;
 mod audit;
 pub(crate) mod canon_emotes;
 pub(crate) mod hash_names;

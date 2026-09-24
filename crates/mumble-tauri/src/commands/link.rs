@@ -42,3 +42,22 @@ pub(crate) async fn finish_device_link(
 ) -> Result<LinkedIdentity, String> {
     state.finish_device_link().await
 }
+
+/// Seal `plaintext` so only this account's devices can open it (see
+/// `state::account_seal`).
+#[tauri::command]
+pub(crate) fn account_seal(
+    state: tauri::State<'_, AppState>,
+    plaintext: String,
+) -> Result<String, String> {
+    state.account_seal(&plaintext)
+}
+
+/// Open what `account_seal` sealed.
+#[tauri::command]
+pub(crate) fn account_open(
+    state: tauri::State<'_, AppState>,
+    sealed: String,
+) -> Result<String, String> {
+    state.account_open(&sealed)
+}

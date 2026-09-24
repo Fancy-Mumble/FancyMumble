@@ -263,6 +263,8 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::link::cancel_device_link,
         super::link::start_device_link,
         super::link::finish_device_link,
+        super::link::account_seal,
+        super::link::account_open,
         super::plugin_admin::get_plugin_registry,
         super::plugin_admin::get_plugin_broadcasts,
         super::plugin_admin::request_server_plugins,
