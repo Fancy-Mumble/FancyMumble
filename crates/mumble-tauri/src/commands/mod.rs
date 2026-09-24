@@ -45,6 +45,7 @@ pub(crate) mod profile;
 pub(crate) mod public_servers;
 pub(crate) mod realtime;
 mod records;
+pub(crate) mod recovery;
 pub(crate) mod scheduled_message;
 /// Screen-share BROADCASTING needs OS capture APIs unavailable on Android.
 /// Viewing does not live here: it is the webview viewer layer plus the

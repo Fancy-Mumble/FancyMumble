@@ -265,6 +265,8 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::link::finish_device_link,
         super::link::account_seal,
         super::link::account_open,
+        super::recovery::get_recovery_phrase,
+        super::recovery::restore_recovery_phrase,
         super::plugin_admin::get_plugin_registry,
         super::plugin_admin::get_plugin_broadcasts,
         super::plugin_admin::request_server_plugins,

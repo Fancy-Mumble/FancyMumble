@@ -123,6 +123,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png"]
 # the probe has a stub for the platforms with no window manager to ask
 # (`probe/stub.rs`), which is what macOS already uses.
 fancy-gamedetect = { path = "../fancy-gamedetect" }
+bip39 = { version = "3", default-features = false, features = ["std"] }
 
 # Desktop-only dependencies (cpal, global shortcuts, and Opus are not available on Android).
 [target.'cfg(not(target_os = "android"))'.dependencies]
