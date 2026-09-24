@@ -461,6 +461,23 @@ impl AppState {
         Ok(())
     }
 
+    pub async fn request_voice_support(&self, request_id: String) -> Result<(), String> {
+        let handle = {
+            let __session = self.inner.snapshot();
+            let state = __session.lock().map_err(|e| e.to_string())?;
+            state.conn.client_handle.clone()
+        };
+
+        let handle = handle.ok_or("Not connected")?;
+
+        handle
+            .send(command::RequestVoiceSupport { request_id })
+            .await
+            .map_err(|e| format!("Failed to request voice message support: {e}"))?;
+
+        Ok(())
+    }
+
     pub async fn request_gif_support(&self, request_id: String) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();

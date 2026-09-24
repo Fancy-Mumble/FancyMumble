@@ -64,6 +64,7 @@ mod shared_handle;
 pub(crate) mod starling_files;
 pub mod types;
 mod voice_decode;
+pub(crate) mod voice_message;
 pub(crate) mod whisper;
 
 // Re-export everything that lib.rs needs.
@@ -724,6 +725,9 @@ pub struct AppState {
     start_time: Instant,
     http_client: reqwest::Client,
     pub(super) upload_cancels: Mutex<HashMap<String, CancellationToken>>,
+    /// The voice message being recorded, if one is. App-wide rather than per
+    /// session: there is one microphone, whichever server the clip is for.
+    pub(super) voice_message: Mutex<Option<voice_message::Recording>>,
     /// The loopback origin shared media is played from, once something has
     /// asked for a URL. Started on demand rather than at boot: most sessions
     /// never look at a video, and an unused listener is still an open port.
@@ -803,6 +807,7 @@ impl AppState {
             start_time: Instant::now(),
             http_client: file_server::new_http_client(),
             upload_cancels: Mutex::new(HashMap::new()),
+            voice_message: Mutex::new(None),
             media_server: tokio::sync::Mutex::new(None),
             download_url_locks: Mutex::new(HashMap::new()),
             popout_images: Mutex::new(HashMap::new()),

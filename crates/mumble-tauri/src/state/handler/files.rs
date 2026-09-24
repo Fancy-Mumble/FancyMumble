@@ -127,6 +127,43 @@ impl HandleMessage for fancy::files::Listing {
     }
 }
 
+/// What the server allows of voice messages, as the composer reads it.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct VoiceSupportPayload {
+    /// Empty on a push the operator's change caused, rather than an answer.
+    pub request_id: String,
+    pub available: bool,
+    /// Zero for no limit.
+    pub max_seconds: u32,
+    /// Zero for no limit.
+    pub max_bytes: u64,
+}
+
+impl From<&fancy::files::VoiceSupport> for VoiceSupportPayload {
+    fn from(support: &fancy::files::VoiceSupport) -> Self {
+        Self {
+            request_id: support.request_id.clone(),
+            available: support.available,
+            max_seconds: support.max_seconds,
+            max_bytes: support.max_bytes,
+        }
+    }
+}
+
+impl HandleMessage for fancy::files::VoiceSupport {
+    fn handle(&self, ctx: &HandlerContext) {
+        debug!(
+            request_id = %self.request_id,
+            available = self.available,
+            max_seconds = self.max_seconds,
+            max_bytes = self.max_bytes,
+            "the server said what voice messages may be"
+        );
+        ctx.emit("voice-support", VoiceSupportPayload::from(self));
+    }
+}
+
 /// A refusal, for a request that had no waiter of its own.
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct RefusedRequest {
@@ -307,5 +344,26 @@ mod tests {
             retry_after_ms: 0,
         });
         assert!(sentence.contains("not allowed"), "got {sentence}");
+    }
+
+    #[test]
+    fn voice_support_reaches_the_frontend_under_the_names_it_reads() {
+        let support = fancy::files::VoiceSupport {
+            request_id: String::new(),
+            available: true,
+            max_seconds: 120,
+            max_bytes: 2_097_152,
+        };
+        let json = serde_json::to_value(VoiceSupportPayload::from(&support))
+            .expect("the payload serializes");
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "requestId": "",
+                "available": true,
+                "maxSeconds": 120,
+                "maxBytes": 2_097_152,
+            })
+        );
     }
 }

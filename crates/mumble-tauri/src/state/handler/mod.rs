@@ -183,6 +183,7 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::FancyFileListing(m) => m.handle(ctx),
         ControlMessage::FancyFileRefused(m) => m.handle(ctx),
         ControlMessage::FancyFileManaged(m) => m.handle(ctx),
+        ControlMessage::FancyVoiceSupport(m) => m.handle(ctx),
         ControlMessage::WebRtcSignal(m) => m.handle(ctx),
         ControlMessage::FancyCustomReactionsConfig(m) => m.handle(ctx),
         ControlMessage::FancyReadReceiptDeliver(m) => m.handle(ctx),

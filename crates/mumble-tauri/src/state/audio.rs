@@ -216,6 +216,18 @@ impl AppState {
     }
 }
 
+/// The chain a recorded voice message is captured through.
+///
+/// The calibration chain - AGC and the denoiser - and not the live one,
+/// because the live one ends in the noise gate: a clip whose pauses were cut
+/// to silence sounds chopped rather than quiet, and nobody is waiting on the
+/// gate to save bandwidth for a recording.
+pub(super) fn voice_message_filters(
+    settings: &super::types::AudioSettings,
+) -> mumble_protocol::audio::filter::FilterChain {
+    voice_pipeline::build_calibration_filters(settings)
+}
+
 // -- Voice pipeline (all platforms) ---------------------------------
 
 mod voice_pipeline {

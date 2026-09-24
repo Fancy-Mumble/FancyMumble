@@ -59,4 +59,5 @@ pub(crate) mod servers;
 pub(crate) mod stream_view;
 pub(crate) mod system;
 pub(crate) mod ui_mode;
+pub(crate) mod voice_message;
 pub(crate) mod window;

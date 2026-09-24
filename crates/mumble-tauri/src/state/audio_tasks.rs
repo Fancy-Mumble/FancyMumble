@@ -190,6 +190,27 @@ fn process_outbound_tick(
     use tauri::Emitter;
 
     match pipeline.tick() {
+        // A voice message is being recorded: the room does not hear it. The
+        // first held frame ends the utterance properly - it goes out as the
+        // terminator, so listeners hear a sentence stop rather than a stream
+        // that breaks off - and the rest are dropped until the take is over.
+        Ok(OutboundTick::Audio(packet))
+            if super::voice_message::HOLDS_TRANSMISSION.load(Ordering::Relaxed) =>
+        {
+            if guard.is_talking {
+                guard.is_talking = false;
+                if let (Some(app), Some(session)) = (app, own_session) {
+                    let _ = app.emit("user-talking", (session, false));
+                    set_local_talking(app, false);
+                }
+                let _ = tx.try_send(AudioPacketOut {
+                    data: packet.data,
+                    sequence: packet.sequence,
+                    is_terminator: true,
+                });
+            }
+            true
+        }
         Ok(OutboundTick::Audio(packet)) => {
             stats.packets += 1;
             stats.total += 1;

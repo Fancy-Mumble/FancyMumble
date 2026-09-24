@@ -354,6 +354,7 @@ pub(crate) async fn starling_upload_file(
     mode: Option<String>,
     ttl_seconds: Option<u64>,
     password: Option<String>,
+    voice_duration_ms: Option<u32>,
 ) -> Result<crate::state::starling_files::SharedUpload, String> {
     state
         .starling_upload_file(
@@ -364,6 +365,7 @@ pub(crate) async fn starling_upload_file(
             visibility_of(mode.as_deref()),
             ttl_seconds.unwrap_or_default(),
             password.unwrap_or_default(),
+            voice_duration_ms,
             app_handle,
         )
         .await

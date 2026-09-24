@@ -239,6 +239,7 @@ impl AppState {
         visibility: fancy::files::Visibility,
         ttl_seconds: u64,
         password: String,
+        voice_duration_ms: Option<u32>,
         app_handle: tauri::AppHandle,
     ) -> Result<SharedUpload, String> {
         let file = tokio::fs::File::open(&file_path)
@@ -267,6 +268,7 @@ impl AppState {
                 visibility,
                 ttl_seconds,
                 password,
+                voice_duration_ms,
             })
             .await
         {
