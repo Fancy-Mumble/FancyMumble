@@ -1,15 +1,15 @@
 {
-  "version": "0.4.0-beta.203",
-  "notes": "https://github.com/Fancy-Mumble/FancyMumble/releases/tag/v0.4.0-beta.203",
-  "pub_date": "2026-09-24T19:55:18Z",
+  "version": "0.4.0-beta.204",
+  "notes": "https://github.com/Fancy-Mumble/FancyMumble/releases/tag/v0.4.0-beta.204",
+  "pub_date": "2026-09-24T20:13:22Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVReE9MMmxtZEdHZTNWeUtzWDcwbzAyK3EzVHFiSmNKNmVyVUovbXNKTDZvQXo0dmplLzFXc1N5Ry9Rd2xyL0FhN21pT01yaGdoT2hxUnJWM0RDaXF6UVRvVUFIeUxtT0FJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwMjc5NTI0CWZpbGU6RmFuY3lNdW1ibGVfMC40LjAtYmV0YS4yMDNfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuNC4wLWJldGEuMjAzCjZDQWRVMzk0WXVXdit3RUZZN2k5SWlqNmJwYWtiV3A1d2YyK0R0WUNQZXFjeFhOWmUyVUJGYkVZRGE2dWtXNDNnbi9UYVJpZUtLYjFVMzhHeCtNUURBPT0K",
-      "url": "https://github.com/Fancy-Mumble/FancyMumble/releases/download/v0.4.0-beta.203/FancyMumble_0.4.0-beta.203_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVReE9MMmxtZEdHZTNFbGpBdGFtTmR2VFN5dCtwREZRemMwQnBUbmJGczJ0dHFlL3JnK1gyQnlZVnlkUnZZQU02MzdRZTlJbDdzelhXZWl6RmdvbmtFK0dqRmVkQzBiR0FFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwMjgwNzgwCWZpbGU6RmFuY3lNdW1ibGVfMC40LjAtYmV0YS4yMDRfeDY0LXNldHVwLmV4ZQl2ZXJzaW9uOjAuNC4wLWJldGEuMjA0CitpaVFjVjdSSzMxU3cxcGZxNXJzdENWMVBPaWRPUllRUnNpSUdvMnJvQ3RiRjljUUd4QTd5ZmY2WENWRnJlN0plb1ljZ0hicGlVTWJxNXNubUpEUkFBPT0K",
+      "url": "https://github.com/Fancy-Mumble/FancyMumble/releases/download/v0.4.0-beta.204/FancyMumble_0.4.0-beta.204_x64-setup.exe"
     },
     "linux-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVReE9MMmxtZEdHZSt6TkpNSXUvNmx0ck9wbVlrY3pERHJZYlR2RnZHM1YrOENCTlY5MVcyRHFzZzRxcjRrVzl6bk1TVlNXOEpMbk1YYVRZQmpKOEhLRG1qSWJ3VkdSVXd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwMjc5MDAzCWZpbGU6RmFuY3lNdW1ibGVfMC40LjAtYmV0YS4yMDNfYW1kNjQuQXBwSW1hZ2UJdmVyc2lvbjowLjQuMC1iZXRhLjIwMwo2QkNkYzFEYkdTVkt6TXBNU2hUeWhiWFQxb3llckZBZzlNNE9rSEt3SlluVE43SGV1dktLazByQjBrUTF2aTVwVXJYcDdiQXNpWmdnOGVLY0dzakRDUT09Cg==",
-      "url": "https://github.com/Fancy-Mumble/FancyMumble/releases/download/v0.4.0-beta.203/FancyMumble_0.4.0-beta.203_amd64.AppImage"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVReE9MMmxtZEdHZTFBWkRtWHQ4MlZKWjJWKzNHeGNSa3hNNjRVSzl4UGxkVHNBdlB0RktxVmNKM2ZXMnZQSjZaVWc0aW9YOGNQNmhuQS8wbGI5T2xXWjdFdTQwZFZsZmdZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkwMjgwNDAwCWZpbGU6RmFuY3lNdW1ibGVfMC40LjAtYmV0YS4yMDRfYW1kNjQuQXBwSW1hZ2UJdmVyc2lvbjowLjQuMC1iZXRhLjIwNAo1aUdUS2dYaTZXbEJCczNoTU1FL2JFWGoxcDhJcVo4c0ViaGtaOGx0MmVEeHJzL2ZKUTlPY0taNU1EMXJXVVc1ZVZXa1ZVQ0gzbm9PT0dWMVJiSTlCdz09Cg==",
+      "url": "https://github.com/Fancy-Mumble/FancyMumble/releases/download/v0.4.0-beta.204/FancyMumble_0.4.0-beta.204_amd64.AppImage"
     }
   }
 }
