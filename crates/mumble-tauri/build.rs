@@ -104,6 +104,12 @@ fn main() {
         println!("cargo:rustc-link-search=native={out_dir}");
         println!("cargo:rustc-link-lib=c++_shared");
 
+        // Android 15+ devices may run with 16 KB pages, and Play rejects
+        // apps whose native libraries cannot load there. The NDK 27 linker
+        // still defaults to 4 KB LOAD alignment, which a Pixel on
+        // Android 16 flags with a compatibility dialog at every launch.
+        println!("cargo:rustc-link-arg=-Wl,-z,max-page-size=16384");
+
         // The NDK's libclang_rt.builtins contains outlined-atomics
         // helpers whose constructor (init_have_lse_atomics) calls a
         // statically-linked getauxval that crashes with SIGSEGV on
