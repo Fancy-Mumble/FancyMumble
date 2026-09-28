@@ -214,8 +214,23 @@ export function MobileShell({
   // does.
   const contentPane = navPane === undefined && content ? carry(content) : (content ?? undefined);
 
-  // Back retraces what the shell put in front, newest first; at the home
-  // screen's list there is nothing left, and the gesture leaves the app.
+  // The conversation in front of the channel list. With none opened yet it
+  // is the channel you are in - never an empty page, and never nothing.
+  const openConversation = () => {
+    const { selectedChannel, currentChannel, channels } = model.channels;
+    if (selectedChannel === null && currentChannel !== null) {
+      const here = channels.find((entry) => entry.channel.id === currentChannel);
+      if (here) model.channels.onSelect(here.channel);
+    }
+    setPane("content");
+  };
+  const changePane = (next: MobilePane) => (next === "content" && chat ? openConversation() : setPane(next));
+
+  // Back retraces what the shell put in front, newest first. At the channel
+  // list it goes *to* the conversation rather than out of the app: Android's
+  // back is an edge swipe, and a swipe in from the right on the list is the
+  // same motion as the in-app swipe that brings the conversation over it -
+  // ending the app for it read as a crash. Only the start screen leaves.
   const home = chat || model.screen === "connect";
   useBackStep(
     model.voice && voiceOpen
@@ -224,9 +239,11 @@ export function MobileShell({
         ? model.onCloseMembers
         : pane === "content" && content
           ? () => setPane("nav")
-          : !home
-            ? () => model.onScreen("chat")
-            : null,
+          : chat && content
+            ? openConversation
+            : !home
+              ? () => model.onScreen("chat")
+              : null,
   );
 
   return (
@@ -249,7 +266,7 @@ export function MobileShell({
         pane={pane}
         nav={navPane}
         content={contentPane}
-        onPane={setPane}
+        onPane={changePane}
         // Back to the page you left, as a swipe on the list - only where the
         // page is that same conversation rather than whichever settings page
         // happened to be open last.

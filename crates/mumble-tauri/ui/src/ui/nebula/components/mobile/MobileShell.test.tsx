@@ -23,6 +23,7 @@ import { nebulaScheme } from "../../themeScheme";
 import type { NebulaMode } from "../../tokens";
 import type { MobileShellModel } from "../../shellModel";
 import { MobileShell } from "./MobileShell";
+import { handleBack } from "../../backGesture";
 import { PANE_SLIDE_MS } from "./MobilePaneStack";
 
 vi.mock("@core/lazyBlobs", () => ({
@@ -435,6 +436,28 @@ describe("the handheld shell", () => {
     pull(screen.getByText("general"), 300, 100);
     await settle();
     expect(folded()).toBe(false);
+  });
+
+  it("answers back on the channel list with the conversation, not by leaving", async () => {
+    // Android's back is an edge swipe; from the right edge it is the very
+    // motion that brings the conversation over the list in the app.
+    mount(skin, "dark", <MobileShell model={model()} />);
+    act(() => handleBack());
+    await settle();
+    expect(away(screen.getByTestId("nebula-mobile-channels-header"))).toBe(true);
+  });
+
+  it("opens the channel you are in when no conversation was opened yet", async () => {
+    const onSelect = vi.fn();
+    const base = model();
+    mount(
+      skin,
+      "dark",
+      <MobileShell model={{ ...base, channels: { ...base.channels, selectedChannel: null, currentChannel: 2, onSelect } }} />,
+    );
+    act(() => handleBack());
+    await settle();
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 2 }));
   });
 
   it("gives the conversation the whole screen", () => {
