@@ -12,13 +12,16 @@
  */
 import { useTranslation } from "react-i18next";
 import { Box } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
+import { keyframes, useTheme } from "@mui/material/styles";
 import { ChevronDownIcon, HeadphonesIcon, MicIcon, MicOffIcon, MonitorIcon } from "@ui/icons";
 import { Stack, TalkingBars, UserAvatar, useIsTalking } from "../primitives";
 import type { VoiceModel } from "../../shellModel";
 import type { UserEntry } from "@core/types";
 import { DisplayText, PlateButton, useStencil } from "./mobileMarks";
 import { SAFE_AREA } from "../../tokens";
+
+/** The call comes up from the bar it was raised from. */
+const rise = keyframes`from { transform: translate3d(0,24%,0); opacity: 0; } to { transform: none; opacity: 1; }`;
 
 export function MobileVoiceScreen({
   model,
@@ -38,6 +41,8 @@ export function MobileVoiceScreen({
         zIndex: 30,
         minHeight: 0,
         overflow: "hidden",
+        animation: `${rise} 200ms cubic-bezier(.2,.8,.2,1)`,
+        "@media (prefers-reduced-motion: reduce)": { animation: "none" },
         color: nebula.railText,
         // Over the window's own ground: the rail's colours are glass on most
         // skins, and a screen of glass let the conversation beneath read
