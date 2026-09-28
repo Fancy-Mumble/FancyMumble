@@ -138,7 +138,9 @@
   },
   "sidebarTabs": {
     "channels": "频道",
-    "members": "成员"
+    "members": "成员",
+    "showServers": "显示服务器",
+    "hideServers": "隐藏服务器"
   },
   "userProfile": {
     "closeProfile": "关闭资料",

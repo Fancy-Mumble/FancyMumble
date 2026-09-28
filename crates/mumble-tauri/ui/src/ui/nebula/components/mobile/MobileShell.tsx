@@ -19,9 +19,10 @@
  * Nothing here owns application state. Every handler and every list is a
  * bundle `NebulaClientApp` already built for the window.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Box } from "@mui/material";
+import { Box, IconButton } from "@mui/material";
+import { CloseIcon, ServerIcon } from "@ui/icons";
 import { Stack } from "../primitives";
 import { ChatBackdrop } from "../chat/ChatBackdrop";
 import { ChatHeader } from "../chat/ChatHeader";
@@ -32,6 +33,7 @@ import { ChannelList } from "../sidebar/ChannelList";
 import { SearchBox } from "../primitives/SearchBox";
 import type { MobileShellModel } from "../../shellModel";
 import { useBackStep } from "../../backGesture";
+import { floatingSurface } from "../../theme";
 import { SAFE_AREA } from "../../tokens";
 import { MobileCallBar } from "./MobileCallBar";
 import { MobileConnectPane } from "./MobileConnectPane";
@@ -39,7 +41,6 @@ import { MobileHeader } from "./MobileHeader";
 import { MobilePaneStack } from "./MobilePaneStack";
 import { MobileServerStrip } from "./MobileServerStrip";
 import { MobileServersPane } from "./MobileServersPane";
-import { MobileSheet } from "./MobileSheet";
 import { MobileTabBar, type MobileTab } from "./MobileTabBar";
 import { MobileVoiceScreen } from "./MobileVoiceScreen";
 import { useServerMenu } from "./useServerMenu";
@@ -63,6 +64,37 @@ const TAB_FOR_SCREEN: Record<string, MobileTab> = {
 
 const SCREEN_FOR_TAB = { chats: "chat", people: "messages", settings: "settings" } as const;
 
+/** Where the choice to put the server strip away is remembered. */
+const STRIP_HIDDEN_KEY = "nebula.mobile.serverStripHidden";
+
+function readStripHidden(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(STRIP_HIDDEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The server strip, shown or put away - a choice that outlives the session:
+ * someone on one server has no use for a row of one tile at the top of every
+ * list.
+ */
+function useStripHidden(): [boolean, () => void] {
+  const [hidden, setHidden] = useState(readStripHidden);
+  const toggle = () =>
+    setHidden((was) => {
+      try {
+        if (was) globalThis.localStorage?.removeItem(STRIP_HIDDEN_KEY);
+        else globalThis.localStorage?.setItem(STRIP_HIDDEN_KEY, "1");
+      } catch {
+        // Unremembered, but still put away for now.
+      }
+      return !was;
+    });
+  return [hidden, toggle];
+}
+
 export function MobileShell({
   model,
   initialPane = "nav",
@@ -75,6 +107,7 @@ export function MobileShell({
   const [voiceOpen, setVoiceOpen] = useState(openVoice);
   // One server menu for the strip and the start screen's rows alike.
   const serverMenu = useServerMenu(model.serverStrip);
+  const [stripHidden, toggleStrip] = useStripHidden();
 
   // Changing screen lands on that screen's list, never on whatever page the
   // last screen had open - a tab that dropped you into a stale settings page
@@ -107,7 +140,12 @@ export function MobileShell({
   // than being a third layout.
   const start = model.screen === "connect" && model.servers !== undefined;
   const nav = chat ? (
-    <ChannelsPane model={model} onOpen={() => setPane("content")} />
+    <ChannelsPane
+      model={model}
+      onOpen={() => setPane("content")}
+      stripHidden={stripHidden}
+      onToggleStrip={toggleStrip}
+    />
   ) : start ? (
     <MobileServersPane
       model={{
@@ -157,6 +195,32 @@ export function MobileShell({
   // screen are.
   const tabs = !((chat || friends || start) && pane === "content" && content);
 
+  // The strip belongs to the lists, as the rail does to the column on a
+  // window: it slides away with the list when a conversation opens - which
+  // gives the conversation that height back - and comes back with it on a
+  // swipe. Nothing to switch between before a session exists, and the start
+  // screen carries its own masthead in that space instead.
+  const strip =
+    start || stripHidden ? null : <MobileServerStrip model={model.serverStrip} onMenu={serverMenu.open} />;
+  const navPane =
+    nav === undefined || nav === null ? undefined : (
+      <>
+        {strip}
+        {nav}
+      </>
+    );
+  // A screen that is only a page has no list to carry the strip, so the page
+  // does.
+  const contentPane =
+    navPane === undefined && content ? (
+      <>
+        {strip}
+        {content}
+      </>
+    ) : (
+      (content ?? undefined)
+    );
+
   // Back retraces what the shell put in front, newest first; at the home
   // screen's list there is nothing left, and the gesture leaves the app.
   const home = chat || model.screen === "connect";
@@ -188,19 +252,26 @@ export function MobileShell({
       }}
     >
       <ChatBackdrop />
-      {/* Nothing to switch between before a session exists, and the start
-          screen carries its own masthead in that space instead. */}
-      {!start && <MobileServerStrip model={model.serverStrip} onMenu={serverMenu.open} />}
       <MobilePaneStack
         pane={pane}
-        nav={nav ?? undefined}
-        content={content ?? undefined}
+        nav={navPane}
+        content={contentPane}
         onPane={setPane}
         // Back to the page you left, as a swipe on the list - only where the
         // page is that same conversation rather than whichever settings page
         // happened to be open last.
         forward={chat || friends}
-        onSwipeLeft={(chat || friends) && content && model.onOpenMembers ? model.onOpenMembers : undefined}
+        // The roster a window keeps beside the conversation, pulled in from
+        // the side it stands on there rather than up from the bottom.
+        side={
+          chat || friends ? (
+            <MembersDrawer title={t("sidebarTabs.members")} onClose={model.onCloseMembers}>
+              <MemberPanel {...model.members} variant="sheet" />
+            </MembersDrawer>
+          ) : undefined
+        }
+        sideOpen={model.membersOpen}
+        onSide={(open) => (open ? model.onOpenMembers?.() : model.onCloseMembers())}
       />
       {/* Not on an open conversation: the artboard gives that the whole
           screen, and the way out of it is the arrow in its own header. Three
@@ -233,26 +304,88 @@ export function MobileShell({
         <MobileVoiceScreen model={model.voice} onCollapse={() => setVoiceOpen(false)} />
       )}
       {serverMenu.menu}
-      <MobileSheet
-        open={model.membersOpen}
-        title={t("sidebarTabs.members")}
-        onClose={model.onCloseMembers}
-        testId="nebula-mobile-members-sheet"
+    </Stack>
+  );
+}
+
+/** The roster, as the panel that comes in from the right. */
+function MembersDrawer({
+  title,
+  onClose,
+  children,
+}: Readonly<{ title: string; onClose: () => void; children: ReactNode }>) {
+  const { t } = useTranslation("common");
+  return (
+    <Stack
+      role="dialog"
+      aria-label={title}
+      data-testid="nebula-mobile-members-drawer"
+      sx={(theme) => ({
+        flex: 1,
+        minHeight: 0,
+        ...floatingSurface(theme),
+        borderRadius: 0,
+        borderTop: 0,
+        borderBottom: 0,
+        borderRight: 0,
+      })}
+    >
+      <MobileHeader
+        title={title}
+        testId="nebula-mobile-members-header"
+        trailing={
+          <IconButton aria-label={t("actions.close")} onClick={onClose} sx={{ flex: "none" }}>
+            <CloseIcon width={18} height={18} />
+          </IconButton>
+        }
+      />
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          overflowY: "auto",
+          overscrollBehaviorY: "contain",
+          pb: SAFE_AREA.bottom,
+        }}
       >
-        <MemberPanel {...model.members} variant="sheet" />
-      </MobileSheet>
+        {children}
+      </Box>
     </Stack>
   );
 }
 
 /** Artboard A: the servers, the search, and the channel tree. */
-function ChannelsPane({ model, onOpen }: Readonly<{ model: MobileShellModel; onOpen: () => void }>) {
+function ChannelsPane({
+  model,
+  onOpen,
+  stripHidden,
+  onToggleStrip,
+}: Readonly<{
+  model: MobileShellModel;
+  onOpen: () => void;
+  stripHidden: boolean;
+  onToggleStrip: () => void;
+}>) {
   const stencil = useStencil();
+  const { t } = useTranslation("sidebar");
   return (
     <>
       <MobileHeader
         title={model.serverName}
         testId="nebula-mobile-channels-header"
+        trailing={
+          <IconButton
+            aria-label={t(stripHidden ? "sidebarTabs.showServers" : "sidebarTabs.hideServers")}
+            aria-pressed={!stripHidden}
+            data-testid="nebula-mobile-strip-toggle"
+            onClick={onToggleStrip}
+            sx={(theme) => ({ flex: "none", color: stripHidden ? undefined : theme.palette.nebula.accent })}
+          >
+            <ServerIcon width={18} height={18} />
+          </IconButton>
+        }
         leading={
           stencil ? (
             // The wordmark plate the column carries on a window, which is the

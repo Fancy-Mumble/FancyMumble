@@ -377,6 +377,26 @@ describe("the handheld shell", () => {
     expect(away(screen.getByTestId("nebula-mobile-channels-header"))).toBe(true);
   });
 
+  it("takes the server strip away with the list when a conversation opens", () => {
+    mount(skin, "dark", <MobileShell model={model()} initialPane="content" />);
+    expect(away(screen.getByTestId("nebula-mobile-server-strip"))).toBe(true);
+  });
+
+  it("puts the server strip away on request, and remembers it", () => {
+    localStorage.removeItem("nebula.mobile.serverStripHidden");
+    const first = mount(skin, "dark", <MobileShell model={model()} />);
+    expect(screen.getByTestId("nebula-mobile-server-strip")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("nebula-mobile-strip-toggle"));
+    expect(screen.queryByTestId("nebula-mobile-server-strip")).toBeNull();
+    first.unmount();
+
+    mount(skin, "dark", <MobileShell model={model()} />);
+    expect(screen.queryByTestId("nebula-mobile-server-strip")).toBeNull();
+    fireEvent.click(screen.getByTestId("nebula-mobile-strip-toggle"));
+    expect(screen.getByTestId("nebula-mobile-server-strip")).toBeTruthy();
+    localStorage.removeItem("nebula.mobile.serverStripHidden");
+  });
+
   it("gives the conversation the whole screen", () => {
     // The tab bar is the list's, not the conversation's: three more
     // destinations under the composer are three ways to lose a draft.
@@ -436,17 +456,30 @@ describe("the handheld shell", () => {
     expect(screen.getByText("A settings page")).toBeTruthy();
   });
 
-  it("brings the roster up as a sheet rather than a column beside nothing", () => {
-    mount(skin, "dark", <MobileShell model={model({ membersOpen: true })} />);
-    const sheet = screen.getByTestId("nebula-mobile-members-sheet");
-    expect(within(sheet).getByTestId("member-list")).toBeTruthy();
+  it("brings the roster in from the right rather than as a column beside nothing", () => {
+    mount(skin, "dark", <MobileShell model={model({ membersOpen: true })} initialPane="content" />);
+    const drawer = screen.getByTestId("nebula-mobile-members-drawer");
+    expect(within(drawer).getByTestId("member-list")).toBeTruthy();
+    expect(away(drawer)).toBe(false);
   });
 
-  it("gives the roster sheet one title and one way out", () => {
+  it("keeps the roster put away while it is closed", () => {
+    mount(skin, "dark", <MobileShell model={model()} initialPane="content" />);
+    expect(away(screen.getByTestId("nebula-mobile-members-drawer"))).toBe(true);
+  });
+
+  it("gives the roster one title and one way out", () => {
     // The panel's own header stood under the sheet's: two titles, two crosses.
-    mount(skin, "dark", <MobileShell model={model({ membersOpen: true })} />);
-    const sheet = screen.getByTestId("nebula-mobile-members-sheet");
-    expect(within(sheet).getAllByRole("button", { name: /close/i })).toHaveLength(1);
+    mount(skin, "dark", <MobileShell model={model({ membersOpen: true })} initialPane="content" />);
+    const drawer = screen.getByTestId("nebula-mobile-members-drawer");
+    expect(within(drawer).getAllByRole("button", { name: /close/i })).toHaveLength(1);
+  });
+
+  it("puts the roster away on a swipe right across it", () => {
+    const onCloseMembers = vi.fn();
+    mount(skin, "dark", <MobileShell model={model({ membersOpen: true, onCloseMembers })} initialPane="content" />);
+    drag([120, 400], [360, 404]);
+    expect(onCloseMembers).toHaveBeenCalledOnce();
   });
 
   it("draws what the window hangs above and below the conversation", () => {

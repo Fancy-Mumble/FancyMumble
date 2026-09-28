@@ -138,7 +138,9 @@
   },
   "sidebarTabs": {
     "channels": "Channels",
-    "members": "Members"
+    "members": "Members",
+    "showServers": "Show servers",
+    "hideServers": "Hide servers"
   },
   "userProfile": {
     "closeProfile": "Close profile",
