@@ -18,6 +18,7 @@ import PublicServerList from "../components/server/PublicServerList";
 import BrandLogo from "../components/elements/BrandLogo";
 import PasswordDialog from "../components/server/PasswordDialog";
 import { TID } from "../testids";
+import { importIdentity } from "../utils/importIdentity";
 import styles from "./ConnectPage.module.css";
 
 type View = "loading" | "servers" | "wizard" | "public";
@@ -118,6 +119,7 @@ export default function ConnectPage() {
   const [certLabel, setCertLabel] = useState<string>("default");
   const [creatingCert, setCreatingCert] = useState(false);
   const [newCertName, setNewCertName] = useState("");
+  const [certError, setCertError] = useState<string | null>(null);
 
   const refreshCerts = () =>
     invoke<string[]>("list_certificates")
@@ -127,6 +129,18 @@ export default function ConnectPage() {
   useEffect(() => {
     refreshCerts();
   }, []);
+
+  const handleImportCert = async () => {
+    setCertError(null);
+    try {
+      const imported = await importIdentity();
+      if (!imported) return;
+      await refreshCerts();
+      setCertLabel(imported);
+    } catch (e) {
+      setCertError(String(e));
+    }
+  };
 
   const handleCreateCert = async () => {
     const name = newCertName.trim();
@@ -475,6 +489,9 @@ export default function ConnectPage() {
                           onChange={(e) => {
                             if (e.target.value === "__new__") {
                               setCreatingCert(true);
+                            } else if (e.target.value === "__import__") {
+                              setCreatingCert(false);
+                              handleImportCert();
                             } else {
                               setCreatingCert(false);
                               setCertLabel(e.target.value);
@@ -489,7 +506,9 @@ export default function ConnectPage() {
                             </option>
                           ))}
                           <option value="__new__">{t("fields.certCreateNew")}</option>
+                          <option value="__import__">{t("fields.certImport")}</option>
                         </select>
+                        {certError && <div className={styles.error}>{certError}</div>}
                         {creatingCert && (
                           <div className={styles.newCertRow}>
                             <input

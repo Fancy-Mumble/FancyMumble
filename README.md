@@ -82,6 +82,7 @@ For detailed documentation, see [`crates/mumble-protocol/doc/`](crates/mumble-pr
 - **Rust** (stable, edition 2021 or later) - [Install via rustup](https://rustup.rs/)
 - **Node.js** (v22 or later) - [Download from nodejs.org](https://nodejs.org/)
 - **Tauri CLI** - Install with: `cargo install tauri-cli --version "^2"`
+- **protoc** (Protocol Buffers compiler) - needed by the `mumble-protocol` build script. On Linux it is in the `apt` list below; on Windows use `choco install protoc` or `winget install Google.Protobuf`; on macOS use `brew install protobuf`. If it isn't on your `PATH`, set the `PROTOC` environment variable to the binary.
 
 #### Platform-Specific Dependencies
 
@@ -96,7 +97,8 @@ sudo apt-get install -y \
   libasound2-dev \
   libgtk-3-dev \
   libsoup-3.0-dev \
-  libjavascriptcoregtk-4.1-dev
+  libjavascriptcoregtk-4.1-dev \
+  protobuf-compiler
 ```
 
 **Android:**

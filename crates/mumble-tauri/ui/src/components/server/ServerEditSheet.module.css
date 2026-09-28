@@ -85,6 +85,11 @@
   flex: 1;
 }
 
+.certError {
+  font-size: 12px;
+  color: var(--color-error, #f38ba8);
+}
+
 .actions {
   display: flex;
   gap: 8px;
