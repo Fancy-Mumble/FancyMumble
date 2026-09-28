@@ -97,6 +97,8 @@ export interface MobileShellModel {
   members: MemberPanelModel;
   membersOpen: boolean;
   onCloseMembers: () => void;
+  /** The roster sheet, from a swipe left on a conversation. */
+  onOpenMembers?: () => void;
   /**
    * The conversation's banners. The list draws them as its own header, so the
    * pane draws them only where there is no list - an empty conversation, whose

@@ -13,7 +13,7 @@
  * to `DEFAULT_SKIN` - a test written that way passes on the default skin while
  * appearing to cover thirteen.
  */
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@mui/material/styles";
 import type { ReactNode } from "react";
@@ -23,6 +23,7 @@ import { nebulaScheme } from "../../themeScheme";
 import type { NebulaMode } from "../../tokens";
 import type { MobileShellModel } from "../../shellModel";
 import { MobileShell } from "./MobileShell";
+import { PANE_SLIDE_MS } from "./MobilePaneStack";
 
 vi.mock("@core/lazyBlobs", () => ({
   useUserAvatar: () => null,
@@ -304,17 +305,76 @@ describe("the handheld shell, in every skin", () => {
   }
 });
 
+/**
+ * Both panes stay mounted - the one behind is what a swipe drags into view -
+ * so "gone" means the pane holding it is put away: inert and hidden, once the
+ * slide that is carrying it off has finished.
+ */
+function away(element: HTMLElement): boolean {
+  return element.closest("[data-pane]")?.hasAttribute("inert") ?? false;
+}
+
+async function settle(): Promise<void> {
+  await act(() => new Promise((resolve) => setTimeout(resolve, PANE_SLIDE_MS + 30)));
+}
+
 describe("the handheld shell", () => {
   const skin = NEBULA_THEMES[0].skin;
 
-  it("opens a channel into the conversation, and comes back", () => {
+  it("opens a channel into the conversation, and comes back", async () => {
     mount(skin, "dark", <MobileShell model={model()} />);
-    expect(screen.getByTestId("nebula-mobile-channels-header")).toBeTruthy();
+    expect(away(screen.getByTestId("nebula-mobile-channels-header"))).toBe(false);
     fireEvent.click(screen.getByText("general"));
-    expect(screen.queryByTestId("nebula-mobile-channels-header")).toBeNull();
+    await settle();
+    expect(away(screen.getByTestId("nebula-mobile-channels-header"))).toBe(true);
 
     fireEvent.click(screen.getByLabelText("Back"));
-    expect(screen.getByTestId("nebula-mobile-channels-header")).toBeTruthy();
+    await settle();
+    expect(away(screen.getByTestId("nebula-mobile-channels-header"))).toBe(false);
+  });
+
+  /** A one-finger drag across the panes, from one point to another. */
+  function drag(from: [number, number], to: [number, number]) {
+    const panes = screen.getByTestId("nebula-mobile-panes");
+    const target = within(panes).getAllByText(/./)[0];
+    const at = ([clientX, clientY]: [number, number]) => [{ clientX, clientY, identifier: 0, target }];
+    fireEvent.touchStart(target, { touches: at(from), changedTouches: at(from) });
+    const mid: [number, number] = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
+    fireEvent.touchMove(target, { touches: at(mid), changedTouches: at(mid) });
+    fireEvent.touchMove(target, { touches: at(to), changedTouches: at(to) });
+    fireEvent.touchEnd(target, { touches: [], changedTouches: at(to) });
+  }
+
+  it("goes back to the channels on a swipe right across the conversation", async () => {
+    mount(skin, "dark", <MobileShell model={model()} initialPane="content" />);
+    expect(away(screen.getByTestId("nebula-mobile-channels-header"))).toBe(true);
+    drag([60, 400], [320, 410]);
+    await settle();
+    expect(away(screen.getByTestId("nebula-mobile-channels-header"))).toBe(false);
+    expect(screen.getByTestId("nebula-mobile-tabbar")).toBeTruthy();
+  });
+
+  it("brings the conversation back on a swipe left across the channels", async () => {
+    mount(skin, "dark", <MobileShell model={model()} />);
+    drag([320, 400], [40, 405]);
+    await settle();
+    expect(away(screen.getByTestId("nebula-mobile-channels-header"))).toBe(true);
+  });
+
+  it("opens the members on a swipe left across the conversation", () => {
+    const onOpenMembers = vi.fn();
+    mount(skin, "dark", <MobileShell model={model({ onOpenMembers })} initialPane="content" />);
+    drag([320, 400], [120, 404]);
+    expect(onOpenMembers).toHaveBeenCalledOnce();
+  });
+
+  it("leaves a scroll alone", async () => {
+    const onOpenMembers = vi.fn();
+    mount(skin, "dark", <MobileShell model={model({ onOpenMembers })} initialPane="content" />);
+    drag([200, 600], [230, 200]);
+    await settle();
+    expect(onOpenMembers).not.toHaveBeenCalled();
+    expect(away(screen.getByTestId("nebula-mobile-channels-header"))).toBe(true);
   });
 
   it("gives the conversation the whole screen", () => {
@@ -349,7 +409,7 @@ describe("the handheld shell", () => {
 
   it("lands on a screen's own list rather than the last screen's page", () => {
     const { rerender, theme } = mount(skin, "dark", <MobileShell model={model()} initialPane="content" />);
-    expect(screen.queryByTestId("nebula-mobile-channels-header")).toBeNull();
+    expect(away(screen.getByTestId("nebula-mobile-channels-header"))).toBe(true);
     rerender(
       <ThemeProvider theme={theme}>
         <MobileShell model={model({ screen: "settings", screenNav: <div>Settings list</div> })} />
@@ -411,7 +471,7 @@ describe("the handheld shell", () => {
     expect(screen.queryByText("general")).toBeNull();
   });
 
-  it("opens a friend's conversation in the pane the channels use, and comes back", () => {
+  it("opens a friend's conversation in the pane the channels use, and comes back", async () => {
     const friends = model({ screen: "messages", screenNav: <div>Friends list</div>, openedContent: 0 });
     const { rerender, theme } = mount(skin, "dark", <MobileShell model={friends} />);
     expect(screen.getByText("Friends list")).toBeTruthy();
@@ -421,11 +481,13 @@ describe("the handheld shell", () => {
         <MobileShell model={{ ...friends, openedContent: 1 }} />
       </ThemeProvider>,
     );
-    expect(screen.queryByText("Friends list")).toBeNull();
+    await settle();
+    expect(away(screen.getByText("Friends list"))).toBe(true);
     expect(screen.getByLabelText("Back")).toBeTruthy();
 
     fireEvent.click(screen.getByLabelText("Back"));
-    expect(screen.getByText("Friends list")).toBeTruthy();
+    await settle();
+    expect(away(screen.getByText("Friends list"))).toBe(false);
   });
 
   it("calls the second tab Friends, which is what it opens", () => {
@@ -507,7 +569,7 @@ describe("a screen that is a list beside a page", () => {
   it("lands on the list", () => {
     mount(skin, "dark", <MobileShell model={settings()} />);
     expect(screen.getByText("Settings list")).toBeTruthy();
-    expect(screen.queryByText("A settings page")).toBeNull();
+    expect(away(screen.getByText("A settings page"))).toBe(true);
   });
 
   it("brings the page forward when the list opens one", () => {

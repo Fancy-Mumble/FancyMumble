@@ -2312,6 +2312,7 @@ export default function NebulaClientApp() {
     members: memberList,
     membersOpen: memberPanel.open,
     onCloseMembers: () => memberPanel.setOpen(false),
+    onOpenMembers: () => memberPanel.setOpen(true),
     emptyLabel: emptyTitle,
     channelSearch: {
       value: search.channelQuery,

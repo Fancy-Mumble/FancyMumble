@@ -36,6 +36,7 @@ import { SAFE_AREA } from "../../tokens";
 import { MobileCallBar } from "./MobileCallBar";
 import { MobileConnectPane } from "./MobileConnectPane";
 import { MobileHeader } from "./MobileHeader";
+import { MobilePaneStack } from "./MobilePaneStack";
 import { MobileServerStrip } from "./MobileServerStrip";
 import { MobileServersPane } from "./MobileServersPane";
 import { MobileSheet } from "./MobileSheet";
@@ -154,7 +155,6 @@ export function MobileShell({
   // A screen with only one half has nothing to switch to, so its half is
   // simply the pane - which is what the friends list and the empty connect
   // screen are.
-  const front = pane === "content" && content ? content : (nav ?? content);
   const tabs = !((chat || friends || start) && pane === "content" && content);
 
   // Back retraces what the shell put in front, newest first; at the home
@@ -191,7 +191,17 @@ export function MobileShell({
       {/* Nothing to switch between before a session exists, and the start
           screen carries its own masthead in that space instead. */}
       {!start && <MobileServerStrip model={model.serverStrip} onMenu={serverMenu.open} />}
-      <Stack sx={{ flex: 1, minHeight: 0, position: "relative", zIndex: 1 }}>{front}</Stack>
+      <MobilePaneStack
+        pane={pane}
+        nav={nav ?? undefined}
+        content={content ?? undefined}
+        onPane={setPane}
+        // Back to the page you left, as a swipe on the list - only where the
+        // page is that same conversation rather than whichever settings page
+        // happened to be open last.
+        forward={chat || friends}
+        onSwipeLeft={(chat || friends) && content && model.onOpenMembers ? model.onOpenMembers : undefined}
+      />
       {/* Not on an open conversation: the artboard gives that the whole
           screen, and the way out of it is the arrow in its own header. Three
           more destinations under the composer would be three ways to lose a
