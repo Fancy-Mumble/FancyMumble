@@ -37,6 +37,7 @@ describe("admin page gating", () => {
       "serverSettings",
       "livery",
       "welcome",
+      "invites",
     ]);
   });
 

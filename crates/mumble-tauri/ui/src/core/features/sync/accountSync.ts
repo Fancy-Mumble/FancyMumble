@@ -270,12 +270,15 @@ export function startAccountSync(store: AppStore): () => void {
       if (key === PREFS_KEY) void applyPrefs(parse<PrefsRecord>(value));
       if (key === SERVERS_KEY) void syncServers(value);
     },
-  );
+  ).catch((reason) => {
+    console.debug("[accountSync] record listener unavailable:", reason);
+    return undefined;
+  });
 
   return () => {
     if (pushTimer) clearTimeout(pushTimer);
     window.removeEventListener("preferences-changed", onPreferencesChanged);
     unsubscribe();
-    void unlisten.then((off) => off());
+    void unlisten.then((off) => off?.());
   };
 }
