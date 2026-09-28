@@ -57,7 +57,7 @@ import { MentionPopover, type MentionTarget } from "./MentionPopover";
 import { UserAvatar, Stack } from "../primitives";
 import { textColorForBg } from "@shared/profilecard";
 import { chamferedSurface, floatingSurface } from "../../theme";
-import { NEBULA_MONO, radius } from "../../tokens";
+import { NEBULA_MONO, radius, TOUCH } from "../../tokens";
 import type { HoverEvent } from "../../clientState";
 import { bodyToCopyText } from "@core/features/chat/bodyText";
 import type { MenuImage } from "./MessageMenu";
@@ -84,6 +84,7 @@ const stampSx = (theme: Theme) =>
     fontSize: 9.5,
     lineHeight: 1.4,
     letterSpacing: "0.01em",
+    [TOUCH]: { fontSize: 11.5 },
     color: theme.palette.nebula.dim,
     // `flex: none` keeps it off the name's shrink budget: a long display name
     // is what gets truncated, never the four digits beside it.
@@ -184,6 +185,7 @@ function bodyMarkupSx(theme: Theme) {
       borderRadius: radius("sm"),
       background: nebula.card2,
       fontSize: 11.5,
+      [TOUCH]: { fontSize: 13.5 },
     },
     // A block keeps its own indentation, so it takes a real monospace face and
     // scrolls rather than wrapping: a wrapped line of code is a wrong line.
@@ -1107,7 +1109,7 @@ export const MessageRow = memo(function MessageRow({
       data-sender-name={message.sender_name}
       onClick={(event) => message.sender_session != null && onOpenProfile(message.sender_session, event)}
       {...authorHandlers}
-      sx={{ all: "unset", cursor: "pointer", fontWeight: 600, fontSize: 13 }}
+      sx={{ all: "unset", cursor: "pointer", fontWeight: 600, fontSize: 13, [TOUCH]: { fontSize: 15 } }}
     >
       {message.sender_name}
     </Typography>
@@ -1471,6 +1473,7 @@ function BodyEditor({
           py: "9px",
           fontSize: 13,
           lineHeight: 1.55,
+          [TOUCH]: { fontSize: 15 },
           borderRadius: radius("lg"),
           background: theme.palette.nebula.accentSoft,
           border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accent}`,

@@ -271,6 +271,16 @@ export function createNebulaTheme(
             background: "transparent",
             color: nebula.text,
           },
+          // A tap answers at once: no grey flash over what was pressed, no
+          // wait for a second tap that would zoom, and no rubber band past
+          // the ends of the shell.
+          "@media (pointer: coarse)": {
+            html: { WebkitTapHighlightColor: "transparent" },
+            body: { overscrollBehavior: "none", fontSize: 15 },
+            "button, a, [role='button'], [role='tab'], [role='menuitem'], [role='option']": {
+              touchAction: "manipulation",
+            },
+          },
           /*
            * A baseline for bare form controls.
            *
@@ -354,7 +364,13 @@ export function createNebulaTheme(
       MuiButton: {
         defaultProps: { disableElevation: true },
         styleOverrides: {
-          root: { borderRadius: radius("md"), minWidth: 0, padding: "6px 13px", fontWeight: 500 },
+          root: {
+            borderRadius: radius("md"),
+            minWidth: 0,
+            padding: "6px 13px",
+            fontWeight: 500,
+            "@media (pointer: coarse)": { minHeight: 40, fontSize: 14, padding: "8px 16px" },
+          },
           contained: {
             backgroundColor: nebula.accent,
             color: nebula.onAccent,
@@ -379,8 +395,18 @@ export function createNebulaTheme(
             color: nebula.muted,
             padding: 7,
             "&:hover": { backgroundColor: nebula.hover, color: nebula.text },
+            // A 28px square is a mouse's target. A finger gets 40, and the
+            // press itself shows - a hover state is the thing a touch screen
+            // never has, and it sticks after the tap when it is all there is.
+            "@media (pointer: coarse)": {
+              minWidth: 40,
+              minHeight: 40,
+              "& > svg": { width: 20, height: 20 },
+              "&:hover": { backgroundColor: "transparent", color: nebula.muted },
+              "&:active": { backgroundColor: nebula.hover, color: nebula.text },
+            },
           },
-          sizeSmall: { padding: 5 },
+          sizeSmall: { padding: 5, "@media (pointer: coarse)": { minWidth: 36, minHeight: 36 } },
         },
       },
       MuiChip: {
@@ -406,6 +432,7 @@ export function createNebulaTheme(
             color: nebula.muted,
             gap: 10,
             "&:hover": { backgroundColor: nebula.hover },
+            "@media (pointer: coarse)": { minHeight: 48, fontSize: 15, "&:active": { backgroundColor: nebula.hover } },
             "&.Mui-selected": {
               backgroundColor: nebula.card,
               border: `var(--nebula-line-width, 1px) solid ${nebula.line}`,
@@ -416,6 +443,9 @@ export function createNebulaTheme(
         },
       },
       MuiMenu: {
+        // MUI's "auto" grow runs 200-300ms by the menu's height, which a tap
+        // feels as lag. The context menus already said 110; this is the rest.
+        defaultProps: { transitionDuration: { enter: 140, exit: 90 } },
         styleOverrides: {
           paper: {
             minWidth: 210,
@@ -443,6 +473,8 @@ export function createNebulaTheme(
             gap: 9,
             minHeight: 0,
             "&:hover": { backgroundColor: nebula.hover },
+            // A menu on a phone is a list you tap, one row per thumb.
+            "@media (pointer: coarse)": { minHeight: 46, padding: "11px 14px", fontSize: 15, gap: 12 },
           },
         },
       },

@@ -33,7 +33,8 @@ import {
   SpeakingAvatar,
   useIsTalking,
 } from "../primitives";
-import { radius } from "../../tokens";
+import { radius, TOUCH } from "../../tokens";
+import { useCoarsePointer } from "../../useCoarsePointer";
 
 /** How many faces a channel row shows before it starts counting instead. */
 const MAX_STACKED = 5;
@@ -429,6 +430,7 @@ function ChannelRow({
                 px: "10px",
                 py: "8px",
                 cursor: "pointer",
+                [TOUCH]: { minHeight: 48, boxSizing: "border-box" },
                 // The card says "you are here"; on its own it never says "you
                 // are reading this", so the selection mark used to disappear
                 // the moment the channel you were reading was also the one you
@@ -457,12 +459,23 @@ function ChannelRow({
                 // a glow, or a bar down the leading edge. The skin says which.
                 ...selectionStyle(theme, selected),
                 "&:hover": selected ? {} : { background: theme.palette.nebula.hover },
+                // A thumb's row, and the press shows instead of a hover that
+                // would stay lit after the finger has gone.
+                [TOUCH]: {
+                  minHeight: 48,
+                  boxSizing: "border-box",
+                  "&:hover": selected ? {} : { background: "transparent" },
+                  "&:active": { background: theme.palette.nebula.hover },
+                },
               }
         }
       >
         {arranging && <ArrangeGrip shown={arrangeable} />}
         <ChannelGlyph channel={channel} active={joined || selected} filled={filled} />
-        <Typography sx={{ fontSize: 12.5, fontWeight: joined ? 600 : 400 }} noWrap>
+        <Typography
+          sx={{ fontSize: 12.5, fontWeight: joined ? 600 : 400, [TOUCH]: { fontSize: 15.5 } }}
+          noWrap
+        >
           {channel.name}
         </Typography>
         {/* Whether a room keeps its history is a property of the room, so it
@@ -479,7 +492,12 @@ function ChannelRow({
             direction="row"
             alignItems="center"
             gap={0.625}
-            sx={(theme) => ({ ml: "auto", fontSize: 10.5, color: theme.palette.nebula.ok })}
+            sx={(theme) => ({
+              ml: "auto",
+              fontSize: 10.5,
+              color: theme.palette.nebula.ok,
+              [TOUCH]: { fontSize: 13 },
+            })}
           >
             <VolumeIcon width={10} height={10} />
             {occupants.length}
@@ -499,6 +517,7 @@ function ChannelRow({
                     fontSize: 10.5,
                     color: theme.palette.nebula.dim,
                     cursor: "pointer",
+                    [TOUCH]: { fontSize: 13, p: "6px 8px", m: "-6px -8px" },
                     "&:hover": { color: theme.palette.nebula.accent },
                   })}
                 >
@@ -617,8 +636,10 @@ function OccupantRow({
   const talking = useIsTalking(user.session);
   // Your own row goes wherever you may go; anyone else's needs the permission
   // to move them. Touch has no cursor to carry anything with.
-  const carry = useCarryUser(user.session, isMobile || (!own && !canMove));
+  const carryOff = isMobile || (!own && !canMove);
+  const carry = useCarryUser(user.session, carryOff);
   const nameColor = useRoleColor(user.user_id);
+  const touch = useCoarsePointer();
 
   return (
     <Stack
@@ -642,9 +663,17 @@ function OccupantRow({
         // The row owns the gesture, so the browser must not start a selection
         // or a scroll from the same press - nor drag the avatar inside it.
         userSelect: "none",
-        touchAction: "none",
+        // Only while the row can actually be carried: on a phone it cannot,
+        // and "none" there made every scroll that started on a person dead.
+        touchAction: carryOff ? "pan-y" : "none",
         "& img": { WebkitUserDrag: "none" },
         "&:hover": { background: theme.palette.nebula.hover },
+        [TOUCH]: {
+          minHeight: 42,
+          boxSizing: "border-box",
+          "&:hover": { background: "transparent" },
+          "&:active": { background: theme.palette.nebula.hover },
+        },
       })}
     >
       {carry.ghost && <CarriedUser ghost={carry.ghost} elRef={carry.ghostRef} user={user} />}
@@ -652,10 +681,10 @@ function OccupantRow({
         name={user.name}
         session={user.session}
         textureSize={user.texture_size}
-        size={20}
+        size={touch ? 26 : 20}
         talking={talking}
       />
-      <Typography sx={{ fontSize: 12.5, color: nameColor ?? "inherit" }} noWrap>
+      <Typography sx={{ fontSize: 12.5, color: nameColor ?? "inherit", [TOUCH]: { fontSize: 15 } }} noWrap>
         {user.name}
       </Typography>
       <PriorityBadge user={user} />
@@ -670,6 +699,7 @@ function OccupantRow({
             fontSize: 9.5,
             fontWeight: 500,
             color: theme.palette.nebula.dim,
+            [TOUCH]: { fontSize: 12 },
           })}
         >
           {t("channels.you")}

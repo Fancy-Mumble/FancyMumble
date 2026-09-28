@@ -53,7 +53,7 @@ import type { VoiceRecorder } from "@core/features/chat/voice/useVoiceRecorder";
 import VoiceRecorderBar from "@standard/components/chat/voice/VoiceRecorderBar";
 import { composerHtml, plainText } from "../../selectors";
 import { chamferedSurface, frost, glassChrome } from "../../theme";
-import { CHAT_COLUMN_INSET_PX, CHAT_COLUMN_MAX_WIDTH, NEBULA_MONO, radius } from "../../tokens";
+import { CHAT_COLUMN_INSET_PX, CHAT_COLUMN_MAX_WIDTH, NEBULA_MONO, radius, TOUCH } from "../../tokens";
 
 /** What the paperclip asks the picker for. */
 export type AttachKind = "any" | "media";
@@ -1232,7 +1232,15 @@ export function Composer({
                   border: "none",
                   borderRadius: 0,
                 },
-                "& > div > div, & > div > textarea": { padding: 0, fontSize: 14, lineHeight: 1.4 },
+                "& > div > div, & > div > textarea": {
+                  padding: 0,
+                  fontSize: 14,
+                  lineHeight: 1.4,
+                  // A whole pixel: the field sizes itself by `scrollHeight`,
+                  // which is an integer, and 16 x 1.4 = 22.4 left a scrollbar
+                  // standing in a one-line draft.
+                  [TOUCH]: { fontSize: 16, lineHeight: "22px" },
+                },
                 // The panel is the field, so the field inside it must not draw
                 // one of its own. Standard's global sheet writes
                 // `textarea:focus-visible` plainly, which outranks the editor's
@@ -1332,7 +1340,12 @@ export function Composer({
                         gap: "10px",
                         borderRadius: 0,
                       }
-                    : { width: 32, height: 32, borderRadius: radius("pill") }),
+                    : {
+                        width: 32,
+                        height: 32,
+                        borderRadius: radius("pill"),
+                        [TOUCH]: { width: 40, height: 40 },
+                      }),
                   clipPath: "var(--nebula-clip-plate, none)",
                   background: stencil
                     ? `linear-gradient(100deg, ${theme.palette.nebula.accent}, ${lighten(
@@ -1766,6 +1779,14 @@ function BareButton({
             "&:hover": disabled
               ? undefined
               : { background: theme.palette.nebula.hover, color: theme.palette.nebula.text },
+            // A tool in the composer is the thing a thumb hits most often.
+            [TOUCH]: {
+              width: Math.max(size, 40),
+              height: Math.max(size, 40),
+              "& svg": { width: 20, height: 20 },
+              "&:hover": { background: active ? theme.palette.nebula.card2 : "transparent" },
+              "&:active": disabled ? undefined : { background: theme.palette.nebula.hover },
+            },
           }),
           ...(Array.isArray(sx) ? sx : [sx]),
         ]}

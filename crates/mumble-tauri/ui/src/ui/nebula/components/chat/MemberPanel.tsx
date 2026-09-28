@@ -21,7 +21,8 @@ import {
 import { MenuCheckBox } from "../sidebar/MenuCheckBox";
 import type { RosterGroup, RosterMember } from "../../selectors";
 import { cornerControlsClearance } from "../../theme";
-import { radius } from "../../tokens";
+import { radius, TOUCH } from "../../tokens";
+import { useCoarsePointer } from "../../useCoarsePointer";
 
 interface MemberPanelProps {
   /** The roster already split into its groups; see `rosterGroups`. */
@@ -307,6 +308,8 @@ function MemberRow({
     talking ? voiceContextKind(state.voiceContexts.get(user.session)) : null,
   );
 
+  const touch = useCoarsePointer();
+
   return (
     <Stack
       component="li"
@@ -334,24 +337,38 @@ function MemberRow({
         opacity: offline ? 0.6 : 1,
         minWidth: 0,
         "&:hover": { background: offline ? "transparent" : theme.palette.nebula.hover },
+        [TOUCH]: {
+          minHeight: 48,
+          boxSizing: "border-box",
+          "&:hover": { background: "transparent" },
+          "&:active": { background: offline ? "transparent" : theme.palette.nebula.hover },
+        },
       })}
     >
       <UserAvatar
         name={user.name}
         session={user.session}
         textureSize={user.texture_size}
-        size={24}
+        size={touch ? 32 : 24}
         talking={inChannel && talking}
         // The pip answers a question the channel section has already answered:
         // everyone under that heading is here, by definition.
         status={inChannel ? undefined : offline ? "offline" : "online"}
       />
-      <Typography sx={{ fontSize: 12.5, minWidth: 0, color: nameColor ?? "inherit" }} noWrap>
+      <Typography
+        sx={{ fontSize: 12.5, minWidth: 0, color: nameColor ?? "inherit", [TOUCH]: { fontSize: 15 } }}
+        noWrap
+      >
         {user.name}
       </Typography>
       {own && (
         <Typography
-          sx={(theme) => ({ fontSize: 9.5, flex: "none", color: theme.palette.nebula.dim })}
+          sx={(theme) => ({
+            fontSize: 9.5,
+            flex: "none",
+            color: theme.palette.nebula.dim,
+            [TOUCH]: { fontSize: 12 },
+          })}
         >
           {t("nebulaChrome:miniMode.you")}
         </Typography>

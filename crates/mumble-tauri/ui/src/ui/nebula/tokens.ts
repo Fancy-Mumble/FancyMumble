@@ -324,6 +324,14 @@ export const CHAT_COLUMN_INSET_PX = 10;
  * as `--fm-safe-*`; everywhere that never happens - iOS, a desktop window, the
  * preview page - the platform's own `env()` is the answer.
  */
+/**
+ * A finger rather than a mouse. The pack was drawn for a pointer, at 12-13px
+ * type and 28px buttons; under this query the same things grow to what a
+ * thumb can hit and an arm's length can read. Asked of the input, not the
+ * width, so a touch tablet gets it and a narrow desktop window does not.
+ */
+export const TOUCH = "@media (pointer: coarse)";
+
 export const SAFE_AREA = {
   top: "var(--fm-safe-top, env(safe-area-inset-top, 0px))",
   right: "var(--fm-safe-right, env(safe-area-inset-right, 0px))",

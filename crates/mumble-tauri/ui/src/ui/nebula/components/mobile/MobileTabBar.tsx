@@ -101,7 +101,7 @@ export function MobileTabBar({
             })}
           >
             <Box sx={{ position: "relative", display: "flex", opacity: on ? 1 : 0.7 }}>
-              <Icon width={19} height={19} />
+              <Icon width={22} height={22} />
               {badge > 0 && (
                 <Box
                   sx={(theme) => ({
@@ -129,7 +129,7 @@ export function MobileTabBar({
               component="div"
               noWrap
               sx={(theme) => ({
-                fontSize: 10,
+                fontSize: 11.5,
                 fontWeight: on ? 800 : 700,
                 letterSpacing: stencil ? ".12em" : theme.palette.nebulaSkin.track,
                 textTransform: stencil ? "uppercase" : theme.palette.nebulaSkin.caps,
