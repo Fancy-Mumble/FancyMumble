@@ -14,7 +14,7 @@
 
 Built with **Rust** for rock-solid performance and **React** for a sleek, responsive interface.
 
-[Features](#features) • [Screenshots](#screenshots) • [Installing](#installing) • [Getting Started](#getting-started) • [Building](#building) • [Changelog](CHANGELOG.md) • [Server](#related-projects)
+[Features](#features) • [Screenshots](#screenshots) • [Installing](#installing) • [Getting Started](#getting-started) • [Building](#building) • [Changelog](CHANGELOG.md) • [Server](#related-projects) • [Documentation](https://github.com/Fancy-Mumble/docs)
 
 </div>
 
