@@ -1,0 +1,137 @@
+import { useMemo, useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import {
+  decodeFileAttachmentPayload,
+  previewKindForFilename,
+  type FileAttachmentInfo,
+} from "@core/features/chat/fileAttachments";
+import {
+  isCanonAttachment,
+  saveCanonAttachment,
+  useCanonPreviewSrc,
+} from "@core/features/chat/starlingFiles";
+import { useAppStore } from "@core/store";
+import MediaPlayer from "@shared/mediaplayer/MediaPlayer";
+import VoiceMessageCard from "@standard/components/chat/voice/VoiceMessageCard";
+import { formatBytes } from "@core/utils/format";
+import { Button, TextField } from "../primitives";
+import styles from "./FileAttachmentCard.module.css";
+
+export function FileAttachmentMarker({ payload }: { payload: string }) {
+  const info = useMemo(() => decodeFileAttachmentPayload(payload), [payload]);
+  if (!info) return null;
+  // A voice message is a note to play, not a file to save.
+  if (info.voice) return <VoiceMessageCard info={{ ...info, voice: info.voice }} />;
+  return <FileAttachmentCard info={info} />;
+}
+
+export function FileAttachmentCard({ info }: { info: FileAttachmentInfo }) {
+  const downloadFile = useAppStore((state) => state.downloadFile);
+  const addDownload = useAppStore((state) => state.addDownload);
+  const [password, setPassword] = useState("");
+  const [askPassword, setAskPassword] = useState(false);
+  const [savedPath, setSavedPath] = useState<string | null>(null);
+  /** Bumped by Retry, to mount a player that has not already failed. */
+  const [attempt, setAttempt] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const kind = previewKindForFilename(info.filename);
+  const expired = !!info.expiresAt && info.expiresAt * 1000 < Date.now();
+  // A canon attachment has no open link: what is drawn is an address on the
+  // loopback origin, which a player pulls a range at a time and an `<img>`
+  // loads lazily. Saving does not move a player onto the saved copy - a
+  // webview's media stack cannot load `asset:` at all.
+  const canon = isCanonAttachment(info);
+  const canonSource = useCanonPreviewSrc(info);
+  const streams = canon && (kind === "audio" || kind === "video");
+  const previewSource = streams
+    ? canonSource
+    : savedPath
+      ? convertFileSrc(savedPath)
+      : canon
+        ? canonSource
+        : info.mode === "public"
+          ? info.url
+          : null;
+
+  const download = async () => {
+    if (info.mode === "password" && !askPassword) {
+      setAskPassword(true);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const destination = await save({ defaultPath: info.filename });
+      if (!destination) return;
+      const written = canon
+        ? await saveCanonAttachment(info.key ?? "", destination)
+        : await downloadFile({
+            url: info.url,
+            destPath: destination,
+            password: info.mode === "password" ? password : undefined,
+          });
+      addDownload({
+        filename: info.filename,
+        destPath: destination,
+        sizeBytes: written,
+        // The key is the only lasting name a canon attachment has.
+        sourceUrl: canon ? (info.key ?? "") : info.url,
+        mode: info.mode,
+      });
+      setSavedPath(destination);
+      setAskPassword(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className={styles.fileCard}>
+      {previewSource && kind === "image" && <img src={previewSource} alt={info.filename} loading="lazy" />}
+      {previewSource && (kind === "audio" || kind === "video") && (
+        <MediaPlayer
+          key={`${previewSource}#${attempt}`}
+          src={previewSource}
+          kind={kind}
+          label={info.filename}
+          onRetry={() => setAttempt((count) => count + 1)}
+        />
+      )}
+      <div className={styles.fileDetails}>
+        <strong>{info.filename}</strong>
+        <small>
+          {formatBytes(info.sizeBytes)} · {info.mode}
+          {info.expiresAt ? ` · expires ${new Date(info.expiresAt * 1000).toLocaleString()}` : ""}
+        </small>
+      </div>
+      {askPassword && (
+        <TextField
+          label="File password"
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          autoFocus
+        />
+      )}
+      {error && <p role="alert">{error}</p>}
+      <footer>
+        <Button
+          variant="primary"
+          disabled={busy || expired || (askPassword && !password)}
+          onClick={() => void download()}
+        >
+          {expired ? "Expired" : busy ? "Saving…" : savedPath ? "Save another copy" : "Download"}
+        </Button>
+        {/* Never for a canon attachment: there is no address to open. */}
+        {!canon && (info.mode === "public" || info.mode === "password") && !expired && (
+          <Button onClick={() => void openUrl(info.url)}>Open</Button>
+        )}
+      </footer>
+    </section>
+  );
+}

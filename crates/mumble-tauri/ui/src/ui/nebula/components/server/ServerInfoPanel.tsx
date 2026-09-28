@@ -1,0 +1,884 @@
+/**
+ * Nebula's server details, as a sheet over the shell.
+ *
+ * Opened the way the Channel information sheet is - a card over a scrim, with
+ * the same banner, identity row and stack of cards - so the two "what is this"
+ * surfaces read as one kind of thing. The banner and tile are the server's
+ * livery when it sent one, and a tint keyed on the host when it did not.
+ *
+ * Standard's panel shows the same facts; only the frame differs, so the data
+ * lives in `@shared/serverinfo/model` and this file is presentation only.
+ */
+
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  Box,
+  Dialog,
+  IconButton,
+  Tooltip,
+  Typography,
+} from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
+import { formatBandwidth, formatDuration } from "@core/utils/format";
+import { WelcomeMarkup } from "../welcome/WelcomeMarkup";
+import { maskSensitive } from "@core/utils/maskSensitive";
+import { isOfficialPlugin } from "@core/plugins/tier1/official";
+import { useAppStore } from "@core/store";
+import type { FancyProfile, PluginInfoRecord } from "@core/types";
+import { resolveProfilePaint, userTint } from "@shared/profilecard";
+import {
+  activationKind,
+  decodeFancyVersion,
+  useLatencyFeed,
+  useServerInfoModel,
+} from "@shared/serverinfo/model";
+import { LatencyChart, type LatencyPalette } from "@shared/serverinfo/LatencyChart";
+import { useServerFeatures, type FeatureSupport } from "@shared/serverinfo/features";
+import { ChevronDownIcon, CloseIcon, RefreshCwIcon, ServerIcon, ShieldCheckIcon } from "@ui/icons";
+import type { ServerLivery } from "../../livery";
+import { nebulaCardTokens } from "../../profileStyle";
+import { NEBULA_MONO, radius } from "../../tokens";
+import {
+  bannerTextShadow,
+  InfoCard,
+  InfoFact,
+  infoSheetColumns,
+  infoSheetFrame,
+  infoSheetPair,
+  LinkGuard,
+  StatChip,
+  Stack,
+} from "../primitives";
+import { StatusDot } from "../primitives/StatusDot";
+
+/** How each activation mode is named, as `server` keys - the wording is the
+ *  same one Standard's panel uses, so it lives in the shared namespace. */
+const ACTIVATION_KEYS = {
+  ptt: "server:infoPanel.activationPtt",
+  vad: "server:infoPanel.activationVad",
+  continuous: "server:infoPanel.activationContinuous",
+} as const;
+
+/** Two columns of label/value pairs, for the developer folds' dense figures. */
+function Facts({ mono, children }: Readonly<{ mono?: boolean; children: ReactNode }>) {
+  return (
+    <Box
+      sx={{
+        display: "grid",
+        gridTemplateColumns: "auto 1fr",
+        columnGap: "14px",
+        rowGap: mono ? "4px" : "6px",
+        alignItems: "baseline",
+      }}
+    >
+      {children}
+    </Box>
+  );
+}
+
+function Fact({
+  label,
+  value,
+  mono,
+}: Readonly<{
+  label: string;
+  value: string | number | boolean;
+  mono?: boolean;
+}>) {
+  return (
+    <>
+      <Typography
+        component="span"
+        sx={(theme) => ({
+          fontSize: mono ? 11.5 : 12.5,
+          color: theme.palette.nebula.muted,
+          whiteSpace: mono ? "nowrap" : "normal",
+        })}
+      >
+        {label}
+      </Typography>
+      <Typography
+        component="span"
+        sx={{
+          fontSize: mono ? 11.5 : 12.5,
+          fontFamily: mono ? NEBULA_MONO : "inherit",
+          wordBreak: "break-word",
+        }}
+      >
+        {String(value)}
+      </Typography>
+    </>
+  );
+}
+
+/** A collapsible block inside a card: a header that opens onto its body. */
+function Fold({
+  title,
+  defaultExpanded,
+  children,
+}: Readonly<{
+  title: ReactNode;
+  defaultExpanded?: boolean;
+  children: ReactNode;
+}>) {
+  // Controlled, and the body is only rendered while open: the latency fold
+  // starts a ping test on mount, so a collapsed fold must not have mounted it.
+  const [open, setOpen] = useState(defaultExpanded ?? false);
+  return (
+    <Accordion
+      disableGutters
+      expanded={open}
+      onChange={(_event, next) => setOpen(next)}
+      sx={(theme) => ({
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
+        borderRadius: radius("md"),
+        overflow: "hidden",
+        "&::before": { display: "none" },
+      })}
+    >
+      <AccordionSummary
+        expandIcon={<ChevronDownIcon width={13} height={13} />}
+        sx={(theme) => ({
+          minHeight: 0,
+          px: "12px",
+          background: theme.palette.nebula.card2,
+          "&:hover": { background: theme.palette.nebula.hover },
+          "& .MuiAccordionSummary-content": { my: "9px", minWidth: 0 },
+          "& .MuiAccordionSummary-expandIconWrapper": { color: theme.palette.nebula.dim },
+        })}
+      >
+        <Typography component="span" sx={{ fontSize: 12, fontWeight: 600 }} noWrap>
+          {title}
+        </Typography>
+      </AccordionSummary>
+      <AccordionDetails
+        sx={(theme) => ({
+          px: "12px",
+          py: "10px",
+          borderTop: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
+        })}
+      >
+        {open && children}
+      </AccordionDetails>
+    </Accordion>
+  );
+}
+
+/** Vertical rhythm between stacked folds. */
+function Folds({ children }: Readonly<{ children: ReactNode }>) {
+  return <Stack gap={1}>{children}</Stack>;
+}
+
+function PluginFacts({ plugin }: Readonly<{ plugin: PluginInfoRecord }>) {
+  const { t } = useTranslation("server");
+  const info = plugin.info;
+  const rows = Array.isArray(info.debug_rows) ? info.debug_rows : [];
+  const caps = Array.isArray(info.capabilities) ? info.capabilities : [];
+  return (
+    <Facts mono>
+      {typeof info.description === "string" && info.description.length > 0 && (
+        <Fact mono label={t("infoPanel.plugins.description")} value={info.description} />
+      )}
+      {typeof info.author === "string" && info.author.length > 0 && (
+        <Fact mono label={t("infoPanel.plugins.author")} value={info.author} />
+      )}
+      {typeof info.homepage === "string" && info.homepage.length > 0 && (
+        <Fact mono label={t("infoPanel.plugins.homepage")} value={info.homepage} />
+      )}
+      {caps.length > 0 && <Fact mono label={t("infoPanel.plugins.capabilities")} value={caps.join(", ")} />}
+      {rows.map((row, i) => (
+        <Fact mono key={`${row.label}-${i}`} label={row.label} value={row.value} />
+      ))}
+    </Facts>
+  );
+}
+
+/** What this server can do, one row per feature and how it was found out. */
+function ServerFeatures() {
+  const features = useServerFeatures();
+  const { nebula } = useTheme().palette;
+  // Absent is not broken: only a half-working feature earns the warning
+  // colour, and a feature the server simply does not have gets the muted dot.
+  const dot: Record<FeatureSupport, { background: string; border: string }> = {
+    yes: { background: nebula.ok, border: "none" },
+    partial: { background: nebula.warn, border: "none" },
+    no: { background: alpha(nebula.dim, 0.5), border: "none" },
+    unknown: { background: "transparent", border: `var(--nebula-line-width, 1px) solid ${nebula.dim}` },
+  };
+
+  return (
+    <Facts mono>
+      {features.map((feature) => (
+        <Fragment key={feature.id}>
+          <Typography component="span" sx={{ fontSize: 11.5, color: nebula.muted, whiteSpace: "nowrap" }}>
+            {feature.label}
+          </Typography>
+          {/* A value long enough to wrap keeps its dot beside the first line. */}
+          <Stack direction="row" alignItems="flex-start" gap={0.75}>
+            <Box
+              aria-hidden
+              sx={{
+                flex: "none",
+                mt: "4px",
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                ...dot[feature.support],
+              }}
+            />
+            <Typography
+              component="span"
+              sx={{ fontSize: 11.5, fontFamily: NEBULA_MONO, wordBreak: "break-word" }}
+            >
+              {feature.value}
+            </Typography>
+          </Stack>
+        </Fragment>
+      ))}
+    </Facts>
+  );
+}
+
+/**
+ * The server's own message, as HTML it authored - sanitised before it lands.
+ *
+ * `sanitizeHtml` marks the surviving links `data-external`, and `LinkGuard` is
+ * what acts on that: without it a click navigates the app's own window to the
+ * server's link and there is no way back.
+ */
+function WelcomeText({ html }: Readonly<{ html: string }>) {
+  if (!html.trim()) return null;
+  return (
+    <LinkGuard>
+      <WelcomeMarkup
+        html={html}
+        sx={(theme) => ({
+          maxHeight: 200,
+          overflowY: "auto",
+          fontSize: 12.5,
+          lineHeight: 1.5,
+          wordBreak: "break-word",
+          "& a": { color: theme.palette.nebula.accent, textDecoration: "none" },
+          "& a:hover": { textDecoration: "underline" },
+          "& img": { maxWidth: "100%" },
+        })}
+      />
+    </LinkGuard>
+  );
+}
+
+function ActivityLog() {
+  const { t } = useTranslation("nebulaServer");
+  const serverLog = useAppStore((s) => s.serverLog);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Newest lines matter most, so the view sits at the bottom as entries land.
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [serverLog]);
+
+  if (serverLog.length === 0) {
+    return (
+      <Typography sx={(theme) => ({ fontSize: 11.5, color: theme.palette.nebula.dim })}>
+        {t("panel.noActivity")}
+      </Typography>
+    );
+  }
+
+  return (
+    <Box ref={listRef} sx={{ maxHeight: 170, overflowY: "auto", display: "grid", gap: "3px" }}>
+      {serverLog.map((entry, i) => (
+        <Stack direction="row" gap={1} key={`${entry.timestamp_ms}-${i}`}>
+          <Typography
+            component="span"
+            sx={(theme) => ({
+              flex: "none",
+              fontSize: 10.5,
+              fontFamily: NEBULA_MONO,
+              color: theme.palette.nebula.dim,
+            })}
+          >
+            {new Date(entry.timestamp_ms).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            })}
+          </Typography>
+          <Typography component="span" sx={{ fontSize: 11.5, wordBreak: "break-word" }}>
+            {entry.message}
+          </Typography>
+        </Stack>
+      ))}
+    </Box>
+  );
+}
+
+/** The chart in Nebula's own colours rather than a pack-neutral default. */
+function useLatencyPalette(): LatencyPalette {
+  const { nebula } = useTheme().palette;
+  return useMemo(
+    () => ({
+      accent: nebula.accent,
+      surface: nebula.card2,
+      grid: alpha(nebula.text, 0.1),
+      dim: nebula.dim,
+      text: nebula.text,
+      tooltip: nebula.card,
+      tooltipLine: nebula.line,
+      good: nebula.ok,
+      fair: nebula.warn,
+      poor: nebula.bad,
+      radius: radius("md"),
+    }),
+    [nebula],
+  );
+}
+
+function LatencyGraph() {
+  const { samples, error } = useLatencyFeed();
+  const palette = useLatencyPalette();
+  return <LatencyChart samples={samples} error={error} palette={palette} />;
+}
+
+interface ServerInfoPanelProps {
+  /** What the server says it looks like, if it said anything. */
+  readonly livery?: ServerLivery | null;
+  readonly onClose: () => void;
+}
+
+/** The Server information sheet, over the shell. */
+export function ServerInfoPanel({ livery = null, onClose }: Readonly<ServerInfoPanelProps>) {
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth={false}
+      slotProps={{ paper: { sx: { m: "16px", overflow: "hidden" } } }}
+    >
+      <ServerInfoSheet livery={livery} onClose={onClose} />
+    </Dialog>
+  );
+}
+
+function ServerInfoSheet({
+  livery,
+  onClose,
+}: Readonly<{ livery: ServerLivery | null; onClose: () => void }>) {
+  const { t } = useTranslation(["nebulaServer", "server"]);
+  const { nebula } = useTheme().palette;
+  const {
+    info,
+    welcomeText,
+    devMode,
+    debugStats,
+    audioSettings,
+    livePlugins,
+    cspViolations,
+    clearCspViolations,
+    refreshStats,
+    udpActive,
+    udpCipher,
+    capabilities,
+    streamerMode,
+  } = useServerInfoModel();
+
+  const host = info ? (streamerMode ? maskSensitive(info.host) : info.host) : "";
+  const name = livery?.displayName || host;
+  const fancy = info != null && (info.fancy_version != null || (info.fancy_protocol ?? 0) > 0);
+
+  // The same resolver the channel sheet uses: a server's banner photograph gets
+  // the fade, and a server without one gets a tint keyed on its host.
+  const paint = resolveProfilePaint(
+    livery?.bannerSrc ? ({ banner: { image: livery.bannerSrc } } as FancyProfile) : null,
+    userTint(info?.host ?? livery?.displayName ?? ""),
+    nebulaCardTokens(nebula),
+  );
+  const focus = livery?.bannerFocus;
+
+  return (
+    <Box
+      role="document"
+      aria-label={t("nebulaServer:panel.heading")}
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        // The channel and user sheets' width, so the three open as one family.
+        ...infoSheetFrame,
+        maxHeight: "min(860px, 92vh)",
+        minHeight: 0,
+        color: nebula.text,
+      }}
+    >
+      {/* The banner and the identity row stay put; the facts scroll under them. */}
+      <Box sx={{ flex: "none", position: "relative" }}>
+        <Box
+          sx={{
+            height: 96,
+            ...paint.banner,
+            ...(focus ? { backgroundPosition: `${focus.x}% ${focus.y}%` } : {}),
+          }}
+        />
+        <Box sx={{ position: "absolute", top: 0, left: 0, right: 0, height: 96, ...paint.bannerScrim }} />
+        <IconButton
+          size="small"
+          aria-label={t("server:infoPanel.closeAriaLabel")}
+          onClick={onClose}
+          sx={{
+            position: "absolute",
+            top: 12,
+            right: 12,
+            color: "#fff",
+            background: paint.bannerChrome,
+            "&:hover": { background: paint.bannerChrome },
+          }}
+        >
+          <CloseIcon width={12} height={12} />
+        </IconButton>
+
+        {/* Positioned, so the tile and name paint over the scrim they overlap. */}
+        <Stack
+          direction="row"
+          alignItems="flex-end"
+          gap={1.5}
+          sx={{ position: "relative", px: "22px", mt: "-26px", pb: "14px" }}
+        >
+          <Box
+            aria-hidden
+            sx={{
+              flex: "none",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflow: "hidden",
+              width: 56,
+              height: 56,
+              borderRadius: radius("lg"),
+              background: `linear-gradient(${nebula.accentSoft},${nebula.accentSoft}),${nebula.bg0}`,
+              color: nebula.accent,
+              boxShadow: `0 0 0 3px ${nebula.bg0}`,
+            }}
+          >
+            {livery?.iconSrc ? (
+              <Box
+                component="img"
+                src={livery.iconSrc}
+                alt=""
+                sx={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+            ) : (
+              <ServerIcon width={26} height={26} strokeWidth={1.5} />
+            )}
+          </Box>
+          <Box sx={{ minWidth: 0, pb: "2px", textShadow: bannerTextShadow(nebula.bg0) }}>
+            <Stack direction="row" alignItems="center" gap={1}>
+              <Typography sx={{ fontSize: 18, fontWeight: 700, lineHeight: 1.2 }} noWrap>
+                {name || t("nebulaServer:panel.heading")}
+              </Typography>
+              {info && (
+                <StatChip
+                  sx={{
+                    flex: "none",
+                    fontSize: 10,
+                    letterSpacing: ".06em",
+                    py: "2px",
+                    px: "8px",
+                    textShadow: "none",
+                    background: `linear-gradient(${nebula.card2},${nebula.card2}),${nebula.bg0}`,
+                  }}
+                >
+                  {t(fancy ? "nebulaServer:panel.kindFancy" : "nebulaServer:panel.kindMumble")}
+                </StatChip>
+              )}
+            </Stack>
+            {info && (
+              <Stack direction="row" alignItems="center" gap={0.75} sx={{ mt: "4px", minWidth: 0 }}>
+                <StatusDot status="online" />
+                <Typography sx={{ fontSize: 12, color: nebula.muted, flex: "none" }}>
+                  {t("nebulaServer:panel.online", { count: info.user_count })}
+                </Typography>
+                {/* Only when the name is the livery's: otherwise it already is the host. */}
+                {name !== host && (
+                  <Typography sx={{ fontSize: 12, color: nebula.dim }} noWrap>
+                    {host}
+                  </Typography>
+                )}
+              </Stack>
+            )}
+          </Box>
+        </Stack>
+      </Box>
+
+      {info && (
+        <Box sx={{ overflowY: "auto", minHeight: 0, px: "22px", pb: "22px" }}>
+          <Box sx={infoSheetColumns}>
+            <Box sx={infoSheetPair}>
+              <InfoCard title={t("server:infoPanel.sectionConnection")}>
+                <InfoFact label={t("server:infoPanel.labelHost")} value={host} />
+                <InfoFact
+                  label={t("server:infoPanel.labelPort")}
+                  value={streamerMode ? maskSensitive(info.port) : info.port}
+                />
+                <InfoFact
+                  label={t("server:infoPanel.labelUsers")}
+                  value={`${info.user_count}${info.max_users == null ? "" : ` / ${info.max_users}`}`}
+                />
+                {info.max_bandwidth != null && (
+                  <InfoFact
+                    label={t("server:infoPanel.labelMaxBandwidth")}
+                    value={formatBandwidth(info.max_bandwidth)}
+                  />
+                )}
+                <InfoFact label={t("server:infoPanel.labelCodec")} value={info.opus ? "Opus" : "CELT"} />
+              </InfoCard>
+              <InfoCard title={t("server:infoPanel.sectionServer")}>
+                {info.release && <InfoFact label={t("server:infoPanel.labelRelease")} value={info.release} />}
+                {info.os && <InfoFact label={t("server:infoPanel.labelOs")} value={info.os} />}
+                {info.protocol_version && (
+                  <InfoFact label={t("server:infoPanel.labelProtocol")} value={info.protocol_version} />
+                )}
+                <InfoFact
+                  label={t("server:infoPanel.labelFancyMumble")}
+                  value={
+                    info.fancy_version == null
+                      ? t("server:infoPanel.notSupported")
+                      : t("nebulaServer:panel.fancyVersion", {
+                          version: decodeFancyVersion(info.fancy_version),
+                        })
+                  }
+                />
+              </InfoCard>
+            </Box>
+
+            {welcomeText?.trim() && (
+              <InfoCard title={t("server:infoPanel.accordionWelcome")}>
+                <WelcomeText html={welcomeText} />
+              </InfoCard>
+            )}
+
+            {livePlugins.length > 0 && (
+              <InfoCard title={t("server:infoPanel.sectionPlugins")}>
+                <Folds>
+                  {livePlugins.map((plugin) => (
+                    <Fold
+                      key={plugin.name}
+                      title={
+                        <Box
+                          component="span"
+                          sx={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                        >
+                          {t("nebulaServer:panel.pluginTitle", {
+                            name: plugin.name,
+                            version: plugin.version,
+                          })}
+                          {isOfficialPlugin(plugin.name) && (
+                            <Tooltip title={t("nebulaServer:panel.officialPlugin")}>
+                              <Box component="span" sx={{ display: "inline-flex", color: nebula.ok }}>
+                                <ShieldCheckIcon width={11} height={11} />
+                              </Box>
+                            </Tooltip>
+                          )}
+                        </Box>
+                      }
+                    >
+                      <PluginFacts plugin={plugin} />
+                    </Fold>
+                  ))}
+                </Folds>
+              </InfoCard>
+            )}
+
+            <InfoCard title={t("nebulaServer:panel.activityLog")}>
+              <ActivityLog />
+            </InfoCard>
+
+            {devMode && (
+              <InfoCard
+                title={t("server:infoPanel.sectionDeveloper")}
+                chip={
+                  <Tooltip title={t("server:infoPanel.refreshTitle")}>
+                    <IconButton
+                      size="small"
+                      aria-label={t("server:infoPanel.refreshAriaLabel")}
+                      sx={{ ml: "auto" }}
+                      onClick={refreshStats}
+                    >
+                      <RefreshCwIcon width={12} height={12} />
+                    </IconButton>
+                  </Tooltip>
+                }
+              >
+                <Folds>
+                  <Fold title={t("server:infoPanel.accordionFeatures")}>
+                    <ServerFeatures />
+                  </Fold>
+
+                  <Fold title={t("nebulaServer:panel.audioTransport")}>
+                    <Facts mono>
+                      <Fact
+                        mono
+                        label={t("server:infoPanel.debug.transport")}
+                        value={
+                          udpActive ? t("server:infoPanel.transportUdp") : t("server:infoPanel.transportTcp")
+                        }
+                      />
+                      {udpActive && (
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.encryption")}
+                          value={udpCipher ?? t("server:infoPanel.encryptionUnknown")}
+                        />
+                      )}
+                      <Fact
+                        mono
+                        label={t("server:infoPanel.debug.forceTcp")}
+                        value={audioSettings?.force_tcp_audio ?? false}
+                      />
+                    </Facts>
+                  </Fold>
+
+                  {audioSettings && (
+                    <Fold title={t("nebulaServer:panel.audioSettings")}>
+                      <Facts mono>
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.inputDevice")}
+                          value={audioSettings.selected_device ?? t("server:infoPanel.systemDefault")}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.bitrate")}
+                          value={t("nebulaServer:panel.kbps", { value: audioSettings.bitrate_bps / 1000 })}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.frameSize")}
+                          value={t("nebulaServer:panel.milliseconds", {
+                            value: audioSettings.frame_size_ms,
+                          })}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.vadThreshold")}
+                          value={t("nebulaServer:panel.percent", {
+                            value: (audioSettings.vad_threshold * 100).toFixed(1),
+                          })}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.autoGain")}
+                          value={audioSettings.auto_gain}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.maxGain")}
+                          value={t("nebulaServer:panel.decibels", { value: audioSettings.max_gain_db })}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.activation")}
+                          value={t(ACTIVATION_KEYS[activationKind(audioSettings)])}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.gateCloseRatio")}
+                          value={t("nebulaServer:panel.percent", {
+                            value: (audioSettings.noise_gate_close_ratio * 100).toFixed(0),
+                          })}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.holdFrames")}
+                          value={audioSettings.hold_frames}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.pushToTalk")}
+                          value={audioSettings.push_to_talk}
+                        />
+                        {audioSettings.push_to_talk_key && (
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.pttKey")}
+                            value={audioSettings.push_to_talk_key}
+                          />
+                        )}
+                      </Facts>
+                    </Fold>
+                  )}
+
+                  {debugStats && (
+                    <>
+                      <Fold title={t("nebulaServer:panel.connectionState")}>
+                        <Facts mono>
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.voiceState")}
+                            value={debugStats.voice_state}
+                          />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.connectionEpoch")}
+                            value={debugStats.connection_epoch}
+                          />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.appUptime")}
+                            value={formatDuration(debugStats.uptime_seconds)}
+                          />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.users")}
+                            value={debugStats.user_count}
+                          />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.channels")}
+                            value={debugStats.channel_count}
+                          />
+                        </Facts>
+                      </Fold>
+
+                      <Fold title={t("server:infoPanel.accordionMessages")}>
+                        <Facts mono>
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.channelMessages")}
+                            value={debugStats.channel_message_count}
+                          />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.dmMessages")}
+                            value={debugStats.dm_message_count}
+                          />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.totalMessages")}
+                            value={debugStats.total_message_count}
+                          />
+                          <Fact
+                            mono
+                            label={t("server:infoPanel.debug.offloaded")}
+                            value={debugStats.offloaded_count}
+                          />
+                        </Facts>
+                      </Fold>
+
+                      <Fold title={t("nebulaServer:panel.networkLatency")}>
+                        <LatencyGraph />
+                      </Fold>
+                    </>
+                  )}
+
+                  {capabilities && (
+                    <Fold title={t("nebulaServer:panel.fileServer")}>
+                      <Facts mono>
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.plugin")}
+                          value={t("nebulaServer:panel.pluginTitle", {
+                            name: capabilities.plugin.name,
+                            version: capabilities.plugin.version,
+                          })}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.mumbleVersion")}
+                          value={capabilities.mumble_version.display}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.fancyVersion")}
+                          value={capabilities.fancy_version.display}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.maxFileSize")}
+                          value={t("nebulaServer:panel.megabytes", {
+                            value: (capabilities.limits.max_file_size_bytes / 1024 / 1024).toFixed(0),
+                          })}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.maxStorage")}
+                          value={t("nebulaServer:panel.megabytes", {
+                            value: (capabilities.limits.max_total_storage_bytes / 1024 / 1024).toFixed(0),
+                          })}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.fileTtl")}
+                          value={
+                            capabilities.features.file_ttl
+                              ? t("nebulaServer:panel.seconds", {
+                                  value: capabilities.limits.ttl_seconds,
+                                })
+                              : t("server:infoPanel.disabled")
+                          }
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.deleteOnDownload")}
+                          value={capabilities.features.delete_on_download}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.deleteOnDisconnect")}
+                          value={capabilities.features.delete_on_disconnect}
+                        />
+                        <Fact
+                          mono
+                          label={t("server:infoPanel.debug.customEmotes")}
+                          value={capabilities.features.custom_emotes}
+                        />
+                      </Facts>
+                    </Fold>
+                  )}
+
+                  <Fold title={t("nebulaServer:panel.cspViolations")}>
+                    <Stack direction="row" alignItems="center" sx={{ mb: "6px" }}>
+                      <Typography sx={{ fontSize: 11.5, color: nebula.muted }}>
+                        {cspViolations.length === 0
+                          ? t("server:infoPanel.cspNoViolations")
+                          : t("server:infoPanel.cspViolationCount", { count: cspViolations.length })}
+                      </Typography>
+                      {cspViolations.length > 0 && (
+                        <Tooltip title={t("server:infoPanel.cspClearTitle")}>
+                          <IconButton
+                            size="small"
+                            aria-label={t("server:infoPanel.cspClearTitle")}
+                            sx={{ ml: "auto" }}
+                            onClick={clearCspViolations}
+                          >
+                            <CloseIcon width={12} height={12} />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Stack>
+                    {cspViolations.map((violation) => (
+                      <Box
+                        key={violation.id}
+                        sx={{ py: "4px", borderTop: `var(--nebula-line-width, 1px) solid ${nebula.line}` }}
+                      >
+                        <Facts mono>
+                          <Fact mono label="directive" value={violation.directive} />
+                          <Fact mono label="blocked" value={violation.blockedUri || "(empty)"} />
+                          <Fact mono label="source" value={violation.source} />
+                          <Fact mono label="disposition" value={violation.disposition} />
+                        </Facts>
+                      </Box>
+                    ))}
+                  </Fold>
+                </Folds>
+              </InfoCard>
+            )}
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
+}

@@ -1,0 +1,95 @@
+/* Format pickers: a card per option, each showing what it actually produces. */
+
+.group {
+  padding: 12px 0;
+  border-bottom: 1px solid rgb(255 255 255 / 6%);
+}
+
+.groupTitle {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.groupHint {
+  display: block;
+  margin-bottom: 10px;
+  color: #7e8a99;
+  font-size: 10px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 8px;
+}
+
+.card {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 9px;
+  background: #151b23;
+  cursor: pointer;
+}
+
+.card:hover {
+  border-color: rgb(255 255 255 / 18%);
+}
+
+/* Doubled so the selected state survives the hover rule above it. */
+.cardSelected.cardSelected {
+  border-color: #65b8ed;
+  background: rgb(101 184 237 / 10%);
+}
+
+.cardLabel {
+  color: #dce3ea;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.cardPreview {
+  color: #8c96a3;
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+}
+
+.languages {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.language {
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 9px;
+  background: #151b23;
+  color: #dce3ea;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.language:hover {
+  border-color: rgb(255 255 255 / 18%);
+}
+
+.languageSelected.languageSelected {
+  border-color: #65b8ed;
+  background: rgb(101 184 237 / 10%);
+}
+
+.flag {
+  width: 22px;
+  height: 16px;
+  border-radius: 2px;
+  display: block;
+  flex: none;
+}

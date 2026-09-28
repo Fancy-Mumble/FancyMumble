@@ -74,7 +74,13 @@ pub(crate) async fn send_plugin_message(
     channel_id: Option<u32>,
 ) -> Result<(), String> {
     state
-        .send_plugin_message(plugin_name, payload_type, payload, target_sessions, channel_id)
+        .send_plugin_message(
+            plugin_name,
+            payload_type,
+            payload,
+            target_sessions,
+            channel_id,
+        )
         .await
 }
 

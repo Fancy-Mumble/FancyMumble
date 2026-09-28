@@ -79,11 +79,11 @@ const DEEPFILTER_PARAMS: &[DenoiserParamSpec] = &[
     DenoiserParamSpec {
         id: "min_db_thresh",
         label: "Voice-activity floor",
-        description: "Frames whose model-estimated SNR falls below this dB level are passed through untouched, which avoids 'pumping' on near-silent input.",
+        description: "Frames whose model-estimated SNR falls below this dB level are treated as noise only and muted down to the attenuation limit - including soft speech the model misjudges, which then drops out mid-sentence. The model never estimates below -15 dB, so -15 or lower never mutes a frame; raise it only if quiet passages 'pump'.",
         min: -20.0,
         max: 0.0,
         step: 1.0,
-        default: -10.0,
+        default: -15.0,
         unit: "dB",
     },
 ];

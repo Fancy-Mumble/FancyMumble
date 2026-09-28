@@ -12,16 +12,15 @@ use libsignal_protocol::{
     create_sender_key_distribution_message, group_decrypt, group_encrypt,
     process_sender_key_distribution_message,
 };
-use rand::rngs::OsRng;
 use rand::TryRngCore as _;
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// SIGNAL_V1 namespace UUID for deriving deterministic distribution IDs
 /// from channel IDs. Uses UUID v5 (SHA-1 based).
 const NAMESPACE_SIGNAL_V1: Uuid = Uuid::from_bytes([
-    0xfa, 0x6c, 0x79, 0x4d, 0x75, 0x6d, 0x62, 0x6c, 0x65, 0x53, 0x69, 0x67, 0x56, 0x31, 0x00,
-    0x00,
+    0xfa, 0x6c, 0x79, 0x4d, 0x75, 0x6d, 0x62, 0x6c, 0x65, 0x53, 0x69, 0x67, 0x56, 0x31, 0x00, 0x00,
 ]);
 
 /// Device ID used for all FancyMumble users (single-device model).
@@ -68,10 +67,8 @@ impl SenderKeyStore for PersistableSenderKeyStore {
         distribution_id: Uuid,
         record: &SenderKeyRecord,
     ) -> Result<(), libsignal_protocol::error::SignalProtocolError> {
-        self.records.insert(
-            (sender.name().to_owned(), distribution_id),
-            record.clone(),
-        );
+        self.records
+            .insert((sender.name().to_owned(), distribution_id), record.clone());
         Ok(())
     }
 
@@ -204,8 +201,7 @@ impl SignalBridgeCtx {
                 &mut self.store,
             ))
             .map_err(|e| format!("process_distribution: {e}"))?;
-        self.known_keys
-            .insert((sender_hash.to_owned(), channel_id));
+        self.known_keys.insert((sender_hash.to_owned(), channel_id));
         Ok(())
     }
 
@@ -259,7 +255,9 @@ impl SignalBridgeCtx {
             .store
             .iter()
             .map(|(sender_hash, dist_id, record)| {
-                let record_bytes = record.serialize().map_err(|e| format!("serialize record: {e}"))?;
+                let record_bytes = record
+                    .serialize()
+                    .map_err(|e| format!("serialize record: {e}"))?;
                 Ok(ExportedSenderKeyRecord {
                     sender_hash: sender_hash.to_owned(),
                     distribution_id: dist_id.to_string(),
@@ -307,8 +305,8 @@ impl SignalBridgeCtx {
         // Restore sender key records into the store.
         for entry in state.sender_key_records {
             let addr = ProtocolAddress::new(entry.sender_hash, device_id());
-            let dist_id = Uuid::parse_str(&entry.distribution_id)
-                .map_err(|e| format!("bad uuid: {e}"))?;
+            let dist_id =
+                Uuid::parse_str(&entry.distribution_id).map_err(|e| format!("bad uuid: {e}"))?;
             let record = SenderKeyRecord::deserialize(&entry.record_bytes)
                 .map_err(|e| format!("bad record: {e}"))?;
             self.rt
@@ -368,14 +366,14 @@ mod base64_bytes {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
     pub fn serialize<S: Serializer>(bytes: &[u8], s: S) -> Result<S::Ok, S::Error> {
-        use base64::engine::general_purpose::STANDARD;
         use base64::Engine;
+        use base64::engine::general_purpose::STANDARD;
         STANDARD.encode(bytes).serialize(s)
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
-        use base64::engine::general_purpose::STANDARD;
         use base64::Engine;
+        use base64::engine::general_purpose::STANDARD;
         let s = String::deserialize(d)?;
         STANDARD.decode(s).map_err(serde::de::Error::custom)
     }
@@ -571,9 +569,7 @@ mod tests {
 
         // 7. Receiver must be able to decrypt it by deriving forward
         //    from iter=0 (not stuck at iter=5 from old state).
-        let pt = receiver2
-            .group_decrypt("sender_hash", 10, &new_ct)
-            .unwrap();
+        let pt = receiver2.group_decrypt("sender_hash", 10, &new_ct).unwrap();
         assert_eq!(pt, b"after reconnect");
     }
 }

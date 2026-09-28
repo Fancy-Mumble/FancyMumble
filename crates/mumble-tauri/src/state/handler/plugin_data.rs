@@ -43,10 +43,10 @@ impl HandleMessage for mumble_tcp::PluginDataTransmission {
             data_id: data_id.to_owned(),
         };
 
-        if REPLAYABLE_BROADCAST_IDS.contains(&data_id) {
-            if let Ok(mut state) = ctx.shared.lock() {
-                cache_broadcast(&mut state.plugin_broadcasts, &payload);
-            }
+        if REPLAYABLE_BROADCAST_IDS.contains(&data_id)
+            && let Ok(mut state) = ctx.shared.lock()
+        {
+            cache_broadcast(&mut state.plugin_broadcasts, &payload);
         }
 
         ctx.emit("plugin-data", payload);

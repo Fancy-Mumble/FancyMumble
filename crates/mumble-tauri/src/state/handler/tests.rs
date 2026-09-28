@@ -1,17 +1,21 @@
 #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
-#![allow(deprecated, reason = "tests exercise the legacy PluginDataTransmission wire fields")]
+#![allow(
+    deprecated,
+    reason = "tests exercise the legacy PluginDataTransmission wire fields"
+)]
 use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
 
 use mumble_protocol::message::ControlMessage;
-use mumble_protocol::proto::mumble_tcp;
 use mumble_protocol::persistent::PchatProtocol;
+use mumble_protocol::proto::fancy;
+use mumble_protocol::proto::mumble_tcp;
 
-use super::{dispatch, EventEmitter, HandleMessage, HandlerContext};
+use super::{EventEmitter, HandleMessage, HandlerContext, dispatch};
+use crate::state::SharedState;
 use crate::state::hash_names::HashNameResolver;
 use crate::state::types::*;
-use crate::state::SharedState;
 
 // -- Test infrastructure -------------------------------------------
 
@@ -156,14 +160,15 @@ fn version_updates_state() {
         os_version: Some("5.15".into()),
         version_v1: Some(0x0001_0500),
         version_v2: Some(42),
-        fancy_version: Some(mumble_protocol::state::fancy_version_encode(0, 1, 0)),
+        fancy_version: Some(fancy_utils::version::fancy_version_encode(0, 1, 0)),
+        fancy_protocol: None,
     };
     version.handle(&ctx);
 
     let state = ctx.shared.lock().unwrap();
     assert_eq!(
         state.server.fancy_version,
-        Some(mumble_protocol::state::fancy_version_encode(0, 1, 0))
+        Some(fancy_utils::version::fancy_version_encode(0, 1, 0))
     );
     assert_eq!(
         state.server.version_info.release.as_deref(),
@@ -190,7 +195,7 @@ fn version_without_fancy_preserves_known_fancy_version() {
     // A Fancy server announces its extension version.
     let fancy = mumble_tcp::Version {
         release: Some("Fancy Mumble".into()),
-        fancy_version: Some(mumble_protocol::state::fancy_version_encode(0, 4, 0)),
+        fancy_version: Some(fancy_utils::version::fancy_version_encode(0, 4, 0)),
         ..Default::default()
     };
     fancy.handle(&ctx);
@@ -208,12 +213,12 @@ fn version_without_fancy_preserves_known_fancy_version() {
     let state = ctx.shared.lock().unwrap();
     assert_eq!(
         state.server.fancy_version,
-        Some(mumble_protocol::state::fancy_version_encode(0, 4, 0)),
+        Some(fancy_utils::version::fancy_version_encode(0, 4, 0)),
         "a later Version without fancy_version must not clobber a known value"
     );
     assert_eq!(
         state.server.version_info.fancy_version,
-        Some(mumble_protocol::state::fancy_version_encode(0, 4, 0))
+        Some(fancy_utils::version::fancy_version_encode(0, 4, 0))
     );
 }
 
@@ -308,7 +313,14 @@ async fn server_sync_stores_root_channel_permissions() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                pchat_key_custodians: Vec::new(), is_enter_restricted: false,
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
             },
         );
     }
@@ -347,6 +359,34 @@ fn user_state_inserts_new_user() {
     let user = state.users.get(&10).unwrap();
     assert_eq!(user.name, "Alice");
     assert_eq!(user.channel_id, 1);
+}
+
+#[test]
+fn user_state_without_channel_id_stays_in_root_not_presence_hidden() {
+    // The server omits `channel_id` for users sitting in the root channel (id 0).
+    // The client must read that as "in root" and must NOT infer "presence-hidden":
+    // an earlier mitigation that parked every channel-less user in the sentinel
+    // channel swept all root occupants out of the channel tree (root read empty).
+    // Regression guard for that inference - see PRESENCE_HIDDEN_CHANNEL.
+    let (ctx, _) = make_ctx();
+    let us = mumble_tcp::UserState {
+        session: Some(10),
+        name: Some("Alice".into()),
+        // No channel_id - exactly what the server sends for a root occupant.
+        ..Default::default()
+    };
+    us.handle(&ctx);
+
+    let state = ctx.shared.lock().unwrap();
+    let user = state.users.get(&10).unwrap();
+    assert_eq!(
+        user.channel_id, 0,
+        "a channel-less user must default to root (0)"
+    );
+    assert_ne!(
+        user.channel_id, PRESENCE_HIDDEN_CHANNEL,
+        "must not infer presence-hidden from an absent channel_id",
+    );
 }
 
 #[test]
@@ -524,7 +564,10 @@ async fn user_state_texture_hash_records_marker_lazily() {
     let state = ctx.shared.lock().unwrap();
     let user = state.users.get(&10).unwrap();
     assert!(user.texture.is_none(), "bytes must not be fetched eagerly");
-    assert!(user.texture_marker.is_some(), "avatar existence must be recorded");
+    assert!(
+        user.texture_marker.is_some(),
+        "avatar existence must be recorded"
+    );
     drop(state);
 
     // The handler should emit state-changed since we are synced.
@@ -555,8 +598,14 @@ async fn user_state_comment_hash_records_marker_lazily() {
 
     let state = ctx.shared.lock().unwrap();
     let user = state.users.get(&10).unwrap();
-    assert!(user.comment.is_none(), "bio text must not be fetched eagerly");
-    assert!(user.comment_marker.is_some(), "bio existence must be recorded");
+    assert!(
+        user.comment.is_none(),
+        "bio text must not be fetched eagerly"
+    );
+    assert!(
+        user.comment_marker.is_some(),
+        "bio existence must be recorded"
+    );
     drop(state);
 
     assert!(emitter.event_names().contains(&"state-changed".to_string()));
@@ -718,7 +767,10 @@ fn user_remove_clears_pending_key_shares() {
     let state = ctx.shared.lock().unwrap();
     // Alice's pending share removed, Bob's remains.
     assert_eq!(state.pchat_ctx.pending_key_shares.len(), 1);
-    assert_eq!(state.pchat_ctx.pending_key_shares[0].peer_cert_hash, "other_hash");
+    assert_eq!(
+        state.pchat_ctx.pending_key_shares[0].peer_cert_hash,
+        "other_hash"
+    );
     drop(state);
 
     let names = emitter.event_names();
@@ -768,7 +820,15 @@ async fn channel_state_updates_existing_channel() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
+            },
         );
     }
 
@@ -851,7 +911,15 @@ fn channel_remove_clears_channel_and_messages() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
+            },
         );
         let _ = state.msgs.by_channel.insert(5, vec![]);
     }
@@ -958,6 +1026,141 @@ fn text_message_own_message_ignored() {
     assert!(state.msgs.by_channel.is_empty());
     drop(state);
     assert!(emitter.events().is_empty());
+}
+
+#[test]
+fn text_message_own_echo_of_stored_send_ignored() {
+    let (ctx, emitter) = make_ctx();
+    {
+        let mut state = ctx.shared.lock().unwrap();
+        state.conn.own_session = Some(10);
+        state
+            .msgs
+            .by_channel
+            .entry(0)
+            .or_default()
+            .push(ChatMessage {
+                sender_session: Some(10),
+                sender_name: "Me".into(),
+                body: "My message".into(),
+                channel_id: 0,
+                is_own: true,
+                message_id: Some("sent-1".into()),
+                ..Default::default()
+            });
+    }
+
+    let tm = mumble_tcp::TextMessage {
+        actor: Some(10),
+        channel_id: vec![0],
+        message: "My message".into(),
+        message_id: Some("sent-1".into()),
+        ..Default::default()
+    };
+    tm.handle(&ctx);
+
+    let state = ctx.shared.lock().unwrap();
+    assert_eq!(state.msgs.by_channel.get(&0).unwrap().len(), 1);
+    drop(state);
+    assert!(emitter.events().is_empty());
+}
+
+/// A scheduled message comes due as a `TextMessage` attributed to its creator,
+/// with an id the server minted. Dropping it as an echo meant the person who
+/// scheduled it never saw it arrive.
+#[test]
+fn text_message_own_server_delivered_message_kept() {
+    let (ctx, emitter) = make_ctx();
+    {
+        let mut state = ctx.shared.lock().unwrap();
+        state.conn.own_session = Some(10);
+        let _ = state.users.insert(10, make_user(10, "Me"));
+        state.selected_channel = Some(0);
+        let _ = state.permanently_listened.insert(5);
+    }
+
+    let tm = mumble_tcp::TextMessage {
+        actor: Some(10),
+        channel_id: vec![5],
+        message: "Raid starts now".into(),
+        message_id: Some("scheduled-1".into()),
+        ..Default::default()
+    };
+    tm.handle(&ctx);
+
+    let state = ctx.shared.lock().unwrap();
+    let msgs = state.msgs.by_channel.get(&5).unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert!(msgs[0].is_own);
+    assert_eq!(msgs[0].sender_name, "Me");
+    assert!(!state.msgs.channel_unread.contains_key(&5));
+    drop(state);
+
+    let names = emitter.event_names();
+    assert!(names.contains(&"new-message".to_string()));
+    assert!(!names.contains(&"unread-changed".to_string()));
+    assert_eq!(emitter.attention_count(), 0);
+}
+
+/// A second session on this client's certificate - the phone next to the
+/// desktop - is still you: what it sends is your own message, not news.
+#[test]
+fn text_message_from_own_other_session_is_own() {
+    let (ctx, emitter) = make_ctx();
+    {
+        let mut state = ctx.shared.lock().unwrap();
+        state.conn.own_session = Some(10);
+        let mut me = make_user(10, "Me");
+        me.hash = Some("cert-me".into());
+        let mut phone = make_user(11, "Me");
+        phone.hash = Some("cert-me".into());
+        let _ = state.users.insert(10, me);
+        let _ = state.users.insert(11, phone);
+        state.selected_channel = Some(0);
+        let _ = state.permanently_listened.insert(5);
+    }
+
+    let tm = mumble_tcp::TextMessage {
+        actor: Some(11),
+        channel_id: vec![5],
+        message: "sent from the phone".into(),
+        message_id: Some("phone-1".into()),
+        ..Default::default()
+    };
+    tm.handle(&ctx);
+
+    let state = ctx.shared.lock().unwrap();
+    let msgs = state.msgs.by_channel.get(&5).unwrap();
+    assert_eq!(msgs.len(), 1);
+    assert!(msgs[0].is_own);
+    assert!(!state.msgs.channel_unread.contains_key(&5));
+    drop(state);
+    assert_eq!(emitter.attention_count(), 0);
+}
+
+/// Somebody else without a certificate hash is not matched to one that is
+/// equally missing.
+#[test]
+fn text_message_hashless_sender_is_not_own() {
+    let (ctx, _emitter) = make_ctx();
+    {
+        let mut state = ctx.shared.lock().unwrap();
+        state.conn.own_session = Some(10);
+        let _ = state.users.insert(10, make_user(10, "Me"));
+        let _ = state.users.insert(11, make_user(11, "Other"));
+    }
+
+    let tm = mumble_tcp::TextMessage {
+        actor: Some(11),
+        channel_id: vec![5],
+        message: "hello".into(),
+        message_id: Some("other-1".into()),
+        ..Default::default()
+    };
+    tm.handle(&ctx);
+
+    let state = ctx.shared.lock().unwrap();
+    assert!(!state.msgs.by_channel.get(&5).unwrap()[0].is_own);
 }
 
 #[test]
@@ -1152,6 +1355,82 @@ fn text_message_dm_always_requests_attention() {
     assert!(emitter.attention_count() > 0);
 }
 
+#[test]
+fn a_dm_we_sent_from_another_device_is_filed_with_its_recipient_as_ours() {
+    // Starling copies a direct message to the sender's other sessions. From
+    // here that copy comes from a session that is not ours but is our account,
+    // and it belongs in the conversation with whoever it was sent to - not in
+    // a conversation with our own phone, with a badge and a notification.
+    let (ctx, emitter) = make_ctx();
+    {
+        let mut state = ctx.shared.lock().unwrap();
+        state.conn.own_session = Some(1);
+        let mut me = make_user(1, "Alice");
+        me.user_id = Some(42);
+        let mut my_phone = make_user(2, "Alice");
+        my_phone.user_id = Some(42);
+        let _ = state.users.insert(1, me);
+        let _ = state.users.insert(2, my_phone);
+        let _ = state.users.insert(10, make_user(10, "Bob"));
+    }
+
+    mumble_tcp::TextMessage {
+        actor: Some(2),
+        session: vec![10],
+        message: "sent from my phone".into(),
+        ..Default::default()
+    }
+    .handle(&ctx);
+
+    let state = ctx.shared.lock().unwrap();
+    let with_bob = state.msgs.by_dm.get(&10).expect("filed with Bob");
+    assert_eq!(with_bob.len(), 1);
+    assert!(with_bob[0].is_own);
+    assert_eq!(with_bob[0].dm_session, Some(10));
+    assert!(
+        !state.msgs.by_dm.contains_key(&2),
+        "not a conversation with ourselves"
+    );
+    assert!(state.msgs.dm_unread.is_empty());
+    drop(state);
+
+    let names = emitter.event_names();
+    assert!(names.contains(&"dm-synced".to_string()));
+    assert!(
+        !names.contains(&"new-dm".to_string()),
+        "no sound for our own words"
+    );
+    assert_eq!(emitter.attention_count(), 0);
+}
+
+#[test]
+fn a_dm_from_our_other_device_to_this_one_is_still_news() {
+    // Addressed to this very session, it is a note from one of our devices to
+    // another, and reads like any other message.
+    let (ctx, emitter) = make_ctx();
+    {
+        let mut state = ctx.shared.lock().unwrap();
+        state.conn.own_session = Some(1);
+        let mut me = make_user(1, "Alice");
+        me.user_id = Some(42);
+        let mut my_phone = make_user(2, "Alice");
+        my_phone.user_id = Some(42);
+        let _ = state.users.insert(1, me);
+        let _ = state.users.insert(2, my_phone);
+    }
+
+    mumble_tcp::TextMessage {
+        actor: Some(2),
+        session: vec![1],
+        message: "note to self".into(),
+        ..Default::default()
+    }
+    .handle(&ctx);
+
+    assert!(ctx.shared.lock().unwrap().msgs.by_dm.contains_key(&2));
+    assert!(emitter.event_names().contains(&"new-dm".to_string()));
+}
+
 // -- TextMessage (group) -------------------------------------------
 // Group chat support has been removed; the related tests were deleted.
 
@@ -1245,7 +1524,7 @@ fn server_config_updates_state() {
 }
 
 #[test]
-fn server_config_zero_image_length_keeps_default() {
+fn server_config_zero_image_length_means_no_dedicated_limit() {
     let (ctx, _) = make_ctx();
     let sc = mumble_tcp::ServerConfig {
         image_message_length: Some(0),
@@ -1254,7 +1533,9 @@ fn server_config_zero_image_length_keeps_default() {
     sc.handle(&ctx);
 
     let state = ctx.shared.lock().unwrap();
-    assert_eq!(state.server.config.max_image_message_length, 131_072); // default
+    // 0 is preserved so callers can apply the general message limit; clamping
+    // it to the default hid "unlimited" behind a phantom 128 KiB cap.
+    assert_eq!(state.server.config.max_image_message_length, 0);
 }
 
 #[test]
@@ -1299,14 +1580,15 @@ fn server_config_fancy_rest_api_url_set_and_cleared() {
     let (ctx, _) = make_ctx();
 
     // Default: no override.
-    assert!(ctx
-        .shared
-        .lock()
-        .unwrap()
-        .server
-        .config
-        .fancy_rest_api_url
-        .is_none());
+    assert!(
+        ctx.shared
+            .lock()
+            .unwrap()
+            .server
+            .config
+            .fancy_rest_api_url
+            .is_none()
+    );
 
     // Server advertises an override URL (whitespace gets trimmed).
     let sc = mumble_tcp::ServerConfig {
@@ -1315,7 +1597,13 @@ fn server_config_fancy_rest_api_url_set_and_cleared() {
     };
     sc.handle(&ctx);
     assert_eq!(
-        ctx.shared.lock().unwrap().server.config.fancy_rest_api_url.as_deref(),
+        ctx.shared
+            .lock()
+            .unwrap()
+            .server
+            .config
+            .fancy_rest_api_url
+            .as_deref(),
         Some("https://files.example.com")
     );
 
@@ -1325,14 +1613,15 @@ fn server_config_fancy_rest_api_url_set_and_cleared() {
         ..Default::default()
     };
     sc_clear.handle(&ctx);
-    assert!(ctx
-        .shared
-        .lock()
-        .unwrap()
-        .server
-        .config
-        .fancy_rest_api_url
-        .is_none());
+    assert!(
+        ctx.shared
+            .lock()
+            .unwrap()
+            .server
+            .config
+            .fancy_rest_api_url
+            .is_none()
+    );
 }
 
 // -- PermissionDenied ----------------------------------------------
@@ -1457,7 +1746,15 @@ fn permission_query_stores_permissions() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
+            },
         );
     }
 
@@ -1496,7 +1793,15 @@ fn permission_query_flush_clears_all() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
+            },
         );
         let _ = state.channels.insert(
             2,
@@ -1514,7 +1819,15 @@ fn permission_query_flush_clears_all() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
+            },
         );
     }
 
@@ -1562,7 +1875,14 @@ fn permission_query_tracks_subscribe_push_channels() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                pchat_key_custodians: Vec::new(), is_enter_restricted: false,
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
             },
         );
         let _ = state.channels.insert(
@@ -1581,7 +1901,14 @@ fn permission_query_tracks_subscribe_push_channels() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                pchat_key_custodians: Vec::new(), is_enter_restricted: false,
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
             },
         );
     }
@@ -1634,7 +1961,14 @@ fn permission_query_removes_subscribe_push_on_revoke() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                pchat_key_custodians: Vec::new(), is_enter_restricted: false,
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
             },
         );
     }
@@ -1646,7 +1980,13 @@ fn permission_query_removes_subscribe_push_on_revoke() {
         ..Default::default()
     };
     grant.handle(&ctx);
-    assert!(ctx.shared.lock().unwrap().push_subscribed_channels.contains(&1));
+    assert!(
+        ctx.shared
+            .lock()
+            .unwrap()
+            .push_subscribed_channels
+            .contains(&1)
+    );
 
     // Revoke SubscribePush (remove 0x2000 bit).
     let revoke = mumble_tcp::PermissionQuery {
@@ -1656,7 +1996,11 @@ fn permission_query_removes_subscribe_push_on_revoke() {
     };
     revoke.handle(&ctx);
     assert!(
-        !ctx.shared.lock().unwrap().push_subscribed_channels.contains(&1),
+        !ctx.shared
+            .lock()
+            .unwrap()
+            .push_subscribed_channels
+            .contains(&1),
         "channel should be removed from push_subscribed after permission revoked"
     );
 }
@@ -1684,7 +2028,14 @@ fn permission_query_flush_clears_push_subscribed() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                pchat_key_custodians: Vec::new(), is_enter_restricted: false,
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
             },
         );
     }
@@ -1736,6 +2087,50 @@ fn codec_version_opus_defaults_false() {
     assert!(!state.server.opus);
 }
 
+// -- OperatorTicketReply ---------------------------------------------
+
+#[test]
+fn a_granted_ticket_is_emitted_as_the_frontend_expects_it() {
+    let (ctx, emitter) = make_ctx();
+    fancy::domain::OperatorTicketReply {
+        token: "abc123".to_owned(),
+        granted_scopes: vec!["server-config:write".to_owned()],
+        expires_at_ms: 1_750_000_000_000,
+        base_url: "https://ops.example.org".to_owned(),
+        denied_reason: String::new(),
+    }
+    .handle(&ctx);
+
+    let events = emitter.events();
+    let (event, payload) = events.last().expect("one event");
+    assert_eq!(event, "operator-ticket");
+    assert_eq!(payload["ticket"]["token"], "abc123");
+    assert_eq!(payload["ticket"]["grantedScopes"][0], "server-config:write");
+    assert_eq!(payload["ticket"]["baseUrl"], "https://ops.example.org");
+    assert!(payload["ticket"].get("deniedReason").is_none());
+}
+
+#[test]
+fn a_denied_ticket_still_names_the_reason() {
+    let (ctx, emitter) = make_ctx();
+    fancy::domain::OperatorTicketReply {
+        denied_reason: "no requested scope is covered by a permission this session holds"
+            .to_owned(),
+        ..Default::default()
+    }
+    .handle(&ctx);
+
+    let events = emitter.events();
+    let (_, payload) = events.last().expect("one event");
+    assert_eq!(payload["ticket"]["token"], "");
+    assert!(
+        payload["ticket"]["deniedReason"]
+            .as_str()
+            .unwrap()
+            .contains("permission")
+    );
+}
+
 // -- Dispatch ------------------------------------------------------
 
 #[test]
@@ -1765,7 +2160,11 @@ async fn dispatch_routes_server_sync() {
         ..Default::default()
     });
     dispatch(&msg, &ctx);
-    assert!(emitter.event_names().contains(&"server-connected".to_string()));
+    assert!(
+        emitter
+            .event_names()
+            .contains(&"server-connected".to_string())
+    );
 }
 
 // -- TextMessage + pchat interaction ----------------------------------
@@ -1794,7 +2193,15 @@ fn text_message_skipped_for_pchat_enabled_channel() {
                 pchat_protocol: Some(PchatProtocol::FancyV1FullArchive),
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
+            },
         );
     }
 
@@ -1809,7 +2216,12 @@ fn text_message_skipped_for_pchat_enabled_channel() {
     let state = ctx.shared.lock().unwrap();
     // TextMessage should NOT be stored for pchat-enabled channels.
     assert!(
-        state.msgs.by_channel.get(&5).map(Vec::is_empty).unwrap_or(true),
+        state
+            .msgs
+            .by_channel
+            .get(&5)
+            .map(Vec::is_empty)
+            .unwrap_or(true),
         "TextMessage should be skipped for pchat-enabled channel"
     );
     drop(state);
@@ -1846,7 +2258,15 @@ fn text_message_stored_for_non_pchat_channel() {
                 pchat_protocol: Some(PchatProtocol::None),
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
+            },
         );
     }
 
@@ -1888,7 +2308,15 @@ fn text_message_stored_when_pchat_protocol_absent() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
+            },
         );
     }
 
@@ -1930,7 +2358,15 @@ fn text_message_skipped_for_full_archive_channel() {
                 pchat_protocol: Some(PchatProtocol::FancyV1FullArchive),
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
+            },
         );
     }
 
@@ -1944,7 +2380,12 @@ fn text_message_skipped_for_full_archive_channel() {
 
     let state = ctx.shared.lock().unwrap();
     assert!(
-        state.msgs.by_channel.get(&9).map(Vec::is_empty).unwrap_or(true),
+        state
+            .msgs
+            .by_channel
+            .get(&9)
+            .map(Vec::is_empty)
+            .unwrap_or(true),
         "TextMessage should be skipped for FullArchive channel"
     );
 }
@@ -1973,7 +2414,15 @@ fn text_message_mixed_pchat_and_regular_channels() {
                 pchat_protocol: Some(PchatProtocol::FancyV1FullArchive),
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
+            },
         );
         // Channel 4: no pchat
         let _ = state.channels.insert(
@@ -1992,7 +2441,15 @@ fn text_message_mixed_pchat_and_regular_channels() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                    pchat_key_custodians: Vec::new(), is_enter_restricted: false,            },
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
+            },
         );
     }
 
@@ -2008,7 +2465,12 @@ fn text_message_mixed_pchat_and_regular_channels() {
     let state = ctx.shared.lock().unwrap();
     // Channel 2 (pchat) should have no message.
     assert!(
-        state.msgs.by_channel.get(&2).map(Vec::is_empty).unwrap_or(true),
+        state
+            .msgs
+            .by_channel
+            .get(&2)
+            .map(Vec::is_empty)
+            .unwrap_or(true),
         "pchat channel should not store TextMessage"
     );
     // Channel 4 (regular) should have the message.
@@ -2060,7 +2522,10 @@ fn key_holders_server_name_used_when_offline_and_not_hash() {
 
     let state = ctx.shared.lock().unwrap();
     let holders = state.pchat_ctx.key_holders.get(&42).unwrap();
-    assert_eq!(holders[0].name, "Bob", "server-provided name should be used");
+    assert_eq!(
+        holders[0].name, "Bob",
+        "server-provided name should be used"
+    );
     assert!(!holders[0].is_online);
 }
 
@@ -2074,9 +2539,7 @@ fn key_holders_hash_as_name_falls_through_to_resolver() {
         let mut state = ctx.shared.lock().unwrap();
         let tmp = tempfile::NamedTempFile::new().unwrap();
         state.pchat_ctx.hash_name_resolver = Some(Arc::new(
-            crate::state::hash_names::DefaultHashNameResolver::new(
-                tmp.path().to_path_buf(),
-            ),
+            crate::state::hash_names::DefaultHashNameResolver::new(tmp.path().to_path_buf()),
         ));
     }
 
@@ -2111,9 +2574,8 @@ fn key_holders_resolver_returns_recorded_name() {
     {
         let mut state = ctx.shared.lock().unwrap();
         let tmp = tempfile::NamedTempFile::new().unwrap();
-        let resolver = crate::state::hash_names::DefaultHashNameResolver::new(
-            tmp.path().to_path_buf(),
-        );
+        let resolver =
+            crate::state::hash_names::DefaultHashNameResolver::new(tmp.path().to_path_buf());
         resolver.record(hash, "Charlie");
         state.pchat_ctx.hash_name_resolver = Some(Arc::new(resolver));
     }
@@ -2167,9 +2629,7 @@ fn key_holders_empty_server_name_uses_resolver() {
         let mut state = ctx.shared.lock().unwrap();
         let tmp = tempfile::NamedTempFile::new().unwrap();
         state.pchat_ctx.hash_name_resolver = Some(Arc::new(
-            crate::state::hash_names::DefaultHashNameResolver::new(
-                tmp.path().to_path_buf(),
-            ),
+            crate::state::hash_names::DefaultHashNameResolver::new(tmp.path().to_path_buf()),
         ));
     }
 
@@ -2209,7 +2669,11 @@ fn server_log_messages(emitter: &MockEmitter) -> Vec<String> {
         .events()
         .iter()
         .filter(|(name, _)| name == "server-log")
-        .filter_map(|(_, val)| val.get("message").and_then(|m| m.as_str()).map(String::from))
+        .filter_map(|(_, val)| {
+            val.get("message")
+                .and_then(|m| m.as_str())
+                .map(String::from)
+        })
         .collect()
 }
 
@@ -2297,7 +2761,14 @@ fn server_log_channel_move() {
                 pchat_protocol: None,
                 pchat_max_history: None,
                 pchat_retention_days: None,
-                pchat_key_custodians: Vec::new(), is_enter_restricted: false,
+                pchat_key_custodians: Vec::new(),
+                is_enter_restricted: false,
+                hidden: false,
+                detached: false,
+                attributes: 0,
+                expiry_mode: 0,
+                expiry_duration_secs: 0,
+                expires_at: 0,
             },
         );
     }
@@ -2326,7 +2797,10 @@ fn server_log_no_events_before_sync() {
     us.handle(&ctx);
 
     let logs = server_log_messages(&emitter);
-    assert!(logs.is_empty(), "no log events should emit before sync completes");
+    assert!(
+        logs.is_empty(),
+        "no log events should emit before sync completes"
+    );
 }
 
 // -- Lint: no emit under lock (meta-test) --------------------------
@@ -2394,11 +2868,7 @@ fn walk_recursive(dir: &std::path::Path, out: &mut Vec<DirEntry>) {
     }
 }
 
-fn check_emit_under_lock(
-    path: &std::path::Path,
-    contents: &str,
-    violations: &mut Vec<String>,
-) {
+fn check_emit_under_lock(path: &std::path::Path, contents: &str, violations: &mut Vec<String>) {
     let lock_patterns = [".lock()", "shared.lock()", "inner.lock()"];
 
     // Track nested brace depth for each active lock scope.
@@ -2452,7 +2922,18 @@ fn check_emit_under_lock(
                 if rel.to_string_lossy().contains("tests") {
                     continue;
                 }
-                active_locks.push((line_num, brace_depth));
+                // The depth the guard's block body sits at. When the `{` is on
+                // this line, the brace pass above already counted it. In a
+                // let-chain the condition continues onto the next line and the
+                // `{` opens there, so the body is one deeper than this line -
+                // recording `brace_depth` would leave the scope open forever and
+                // flag every `emit()` in the rest of the function.
+                let body_depth = if line.contains('{') {
+                    brace_depth
+                } else {
+                    brace_depth + 1
+                };
+                active_locks.push((line_num, body_depth));
             }
         }
 
@@ -2476,5 +2957,81 @@ fn check_emit_under_lock(
                 lock_lines,
             ));
         }
+    }
+}
+
+// -- livery pushes -------------------------------------------------
+
+/// A server pushing a livery change sends the document without the artwork:
+/// most edits change a word, and sending both images every time is what the
+/// content keys exist to avoid. The client's half of that bargain is asking
+/// for a key it does not hold - without it, an operator replacing the banner
+/// repaints every connected client with no banner until it reconnects.
+mod livery_art {
+    use super::*;
+
+    fn doc(banner_key: &str) -> fancy::domain::LiveryDoc {
+        fancy::domain::LiveryDoc {
+            version: 3,
+            banner_key: banner_key.to_owned(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_pushed_key_the_client_does_not_hold_is_asked_for() {
+        let (ctx, _emitter) = make_ctx();
+        doc("beef").handle(&ctx);
+
+        let state = ctx.shared.lock().unwrap();
+        assert!(state.livery_art_asked.contains("beef"));
+        // The document still arrives at the UI: the words and colours in it are
+        // ready now, and the artwork lands as a second push.
+        assert_eq!(
+            state.livery.as_ref().unwrap().banner_key.as_deref(),
+            Some("beef")
+        );
+        assert!(state.livery.as_ref().unwrap().banner_src.is_none());
+    }
+
+    #[test]
+    fn art_that_arrives_is_cached_and_not_asked_for_again() {
+        let (ctx, _emitter) = make_ctx();
+        let mut with_art = doc("beef");
+        with_art.art = vec![fancy::domain::livery_doc::Art {
+            key: "beef".to_owned(),
+            content_type: "image/webp".to_owned(),
+            bytes: vec![1, 2, 3],
+        }];
+        with_art.handle(&ctx);
+
+        let state = ctx.shared.lock().unwrap();
+        assert!(state.livery_art_asked.is_empty());
+        assert!(state.livery.as_ref().unwrap().banner_src.is_some());
+    }
+
+    #[test]
+    fn a_key_the_server_never_produces_is_asked_about_once() {
+        // A second ask on every reply would be a loop between two machines,
+        // which is the failure mode worth a set rather than a flag.
+        let (ctx, _emitter) = make_ctx();
+        doc("beef").handle(&ctx);
+        doc("beef").handle(&ctx);
+
+        let state = ctx.shared.lock().unwrap();
+        assert_eq!(state.livery_art_asked.len(), 1);
+    }
+
+    #[test]
+    fn replacing_the_picture_asks_again_because_the_key_is_new() {
+        let (ctx, _emitter) = make_ctx();
+        doc("beef").handle(&ctx);
+        doc("cafe").handle(&ctx);
+
+        let state = ctx.shared.lock().unwrap();
+        // The old key is gone with the document that named it, so nothing
+        // accumulates for the life of the session.
+        assert!(!state.livery_art_asked.contains("beef"));
+        assert!(state.livery_art_asked.contains("cafe"));
     }
 }

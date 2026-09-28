@@ -4,12 +4,13 @@ use std::collections::HashMap;
 
 use tauri::Emitter;
 
-use crate::state::types::{DmUnreadPayload, UnreadPayload};
 use crate::state::AppState;
+use crate::state::types::{DmUnreadPayload, UnreadPayload};
 
 impl AppState {
     pub fn unread_counts(&self) -> HashMap<u32, u32> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .map(|s| s.msgs.channel_unread.clone())
             .unwrap_or_default()
@@ -18,6 +19,10 @@ impl AppState {
     pub fn mark_read(&self, channel_id: u32) {
         if let Ok(mut state) = self.inner.snapshot().lock() {
             let _ = state.msgs.channel_unread.remove(&channel_id);
+            crate::state::read_sync::share(
+                &state,
+                crate::state::read_sync::Read::Channel(channel_id),
+            );
         }
         self.emit_unreads();
     }
@@ -30,7 +35,8 @@ impl AppState {
     }
 
     pub fn dm_unread_counts(&self) -> HashMap<u32, u32> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .map(|s| s.msgs.dm_unread.clone())
             .unwrap_or_default()
@@ -39,6 +45,7 @@ impl AppState {
     pub fn mark_dm_read(&self, session: u32) {
         if let Ok(mut state) = self.inner.snapshot().lock() {
             let _ = state.msgs.dm_unread.remove(&session);
+            crate::state::read_sync::share(&state, crate::state::read_sync::Read::Direct(session));
         }
         self.emit_dm_unreads();
     }

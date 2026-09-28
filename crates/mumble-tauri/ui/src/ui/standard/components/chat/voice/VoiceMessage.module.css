@@ -1,0 +1,195 @@
+/* Voice notes and the strip that records them.
+ *
+ * Drawn against the text colour the host gives them and one accent, so the
+ * same component sits in a Standard bubble and a Nebula row without either
+ * restyling it. A host that wants another accent sets `--media-accent`, the
+ * variable the media player already reads. */
+
+.note,
+.recorder {
+  --vm-accent: var(--media-accent, var(--color-accent, #6aa4ff));
+  --vm-dim: color-mix(in srgb, currentColor 38%, transparent);
+  --vm-fill: color-mix(in srgb, currentColor 8%, transparent);
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.note {
+  width: min(100%, 22rem);
+  padding: 0.375rem 0.625rem 0.375rem 0.375rem;
+  border-radius: 999px;
+  background: var(--vm-fill);
+}
+
+.round {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+  color: #fff;
+  background: var(--vm-accent);
+  transition:
+    transform 0.12s ease,
+    opacity 0.12s ease;
+}
+
+.round:hover:not(:disabled) {
+  transform: scale(1.06);
+}
+
+.round:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.round:focus-visible,
+.quiet:focus-visible,
+.wave:focus-visible {
+  outline: 2px solid var(--vm-accent);
+  outline-offset: 2px;
+}
+
+.wave {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 1.75rem;
+  min-width: 0;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.bar {
+  flex: 1 1 0;
+  min-width: 2px;
+  max-width: 4px;
+  border-radius: 2px;
+  background: var(--vm-dim);
+  transition: background-color 0.1s linear;
+}
+
+.played {
+  background: var(--vm-accent);
+}
+
+.time {
+  flex: none;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.quiet {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0.125rem 0.375rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.quiet:hover {
+  opacity: 1;
+  background: var(--vm-fill);
+}
+
+.unavailable {
+  font-size: 0.8125rem;
+  opacity: 0.7;
+}
+
+/* ---- Recording ---- */
+
+.recorder {
+  flex: 1 1 auto;
+  padding: 0 0.25rem;
+}
+
+.discard {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.discard:hover {
+  opacity: 1;
+  color: var(--color-danger, #e5484d);
+  background: var(--vm-fill);
+}
+
+.dot {
+  flex: none;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background: var(--color-danger, #e5484d);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.dotStill {
+  animation: none;
+  opacity: 0.5;
+}
+
+.live {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  height: 1.5rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.live .bar {
+  background: var(--vm-accent);
+}
+
+.limit {
+  flex: none;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot {
+    animation: none;
+  }
+  .round,
+  .bar {
+    transition: none;
+  }
+}

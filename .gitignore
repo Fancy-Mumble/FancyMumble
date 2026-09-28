@@ -12,6 +12,8 @@
 !.env.sample
 
 # ---- Node / frontend (crates/mumble-tauri/ui) ----
+# Any node_modules, including the stray vitest cache a root-level test run leaves.
+node_modules/
 crates/mumble-tauri/ui/node_modules/
 crates/mumble-tauri/ui/dist/
 crates/mumble-tauri/ui/.vite/
@@ -35,10 +37,6 @@ crates/mumble-tauri/signal-bridge/*.dll
 crates/mumble-tauri/signal-bridge/*.so
 crates/mumble-tauri/signal-bridge/*.dylib
 
-# ---- Dioxus ----
-crates/mumble-gui/.dioxus/
-crates/mumble-gui/dist/
-
 # ---- IDE / editor ----
 .vscode/
 .idea/
@@ -58,3 +56,24 @@ google-services.json
 .env.local
 # dhat heap profiler output (cargo run --features dhat-heap)
 dhat-heap*.json
+
+# pnpm's content-addressable store, wherever it is run from. The UI builds with
+# npm, but `pnpm-debug.log*` above shows pnpm does get invoked here sometimes,
+# and the store it leaves behind is a large untracked tree nobody wants staged.
+.pnpm-store/
+
+# flatpak-builder scratch (packaging/flatpak/README.md)
+.flatpak-builder/
+
+# vitest cache, written next to the crate rather than under ui/
+crates/mumble-tauri/node_modules/
+# built preview bundles; the entries beside them are the source
+crates/mumble-tauri/ui/preview/dist-*/
+
+# ---- Tauri ----
+# Rewritten by tauri-build on every compile; an editor aid, nothing reads it.
+crates/mumble-tauri/gen/schemas/
+
+# ---- Benchmarks ----
+# Appended to by scripts/bench-app.ps1 -Save.
+scripts/bench-history.csv

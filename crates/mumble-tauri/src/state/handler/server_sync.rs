@@ -7,13 +7,33 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::{debug, info, warn};
 
 use super::{HandleMessage, HandlerContext};
-use crate::state::local_cache::CachedReaction;
+use crate::state::local_cache::{CachedReaction, CachedTail};
 use crate::state::pchat::{self, PchatState};
 use crate::state::types::{
-    ChatMessage, ConnectionStatus, CurrentChannelPayload, ReactionFetchResponsePayload,
-    StoredReactionPayload,
+    ConnectionStatus, CurrentChannelPayload, ReactionFetchResponsePayload, StoredReactionPayload,
 };
-use crate::state::SharedState;
+use crate::state::{MAX_MESSAGES_PER_THREAD, SharedState};
+
+/// How much of a channel to ask for when probing for the file service.
+///
+/// A page rather than one row: the answer doubles as the channel file list, so
+/// asking for a single entry would mean asking again immediately.
+const FILE_PROBE_LIMIT: u32 = 100;
+
+/// How much of a channel's local cache is worth holding on connect.
+///
+/// Enough to paint the first screen, for a channel whose archive the server
+/// keeps: the fetch on open supplies the authoritative tail, and whatever the
+/// reader scrolls back to comes from the server as they ask for it. A
+/// `SignalV1` channel has no such fallback -- its local cache is the only copy
+/// of what was said -- so it gets whatever the live store would have held.
+const CACHED_TAIL_WITH_SERVER_HISTORY: usize = 100;
+
+/// How often the flusher looks at the local message cache.
+///
+/// The cache's own interval is what decides whether a tick writes anything;
+/// this only has to be no coarser than that.
+const CACHE_FLUSH_TICK: std::time::Duration = std::time::Duration::from_secs(5);
 
 impl HandleMessage for mumble_tcp::ServerSync {
     fn handle(&self, ctx: &HandlerContext) {
@@ -35,6 +55,8 @@ impl HandleMessage for mumble_tcp::ServerSync {
         ctx.request_channel_descriptions();
         ctx.request_channel_permissions();
         ctx.register_push_subscribe();
+        ctx.request_livery();
+        ctx.probe_file_service();
         ctx.init_pchat();
     }
 }
@@ -46,10 +68,7 @@ impl HandleMessage for mumble_tcp::ServerSync {
 impl HandlerContext {
     /// Apply the `ServerSync` fields to `SharedState` and return the
     /// collected user sessions plus the initial channel assignment.
-    fn apply_sync_state(
-        &self,
-        msg: &mumble_tcp::ServerSync,
-    ) -> Option<(Vec<u32>, Option<u32>)> {
+    fn apply_sync_state(&self, msg: &mumble_tcp::ServerSync) -> Option<(Vec<u32>, Option<u32>)> {
         let Ok(mut state) = self.shared.lock() else {
             return None;
         };
@@ -111,7 +130,9 @@ impl HandlerContext {
         {
             crate::platform::android::connection_service::start_service(&handle, &host);
             if let Some(ref ch_name) = channel_name {
-                crate::platform::android::connection_service::update_service_channel(&handle, &host, ch_name);
+                crate::platform::android::connection_service::update_service_channel(
+                    &handle, &host, ch_name,
+                );
             }
         }
 
@@ -122,7 +143,8 @@ impl HandlerContext {
     #[cfg(target_os = "android")]
     fn register_fcm_token(&self, app: &tauri::AppHandle) {
         use tauri::Manager;
-        let Some(fcm) = app.try_state::<crate::platform::android::fcm_service::FcmPluginHandle>() else {
+        let Some(fcm) = app.try_state::<crate::platform::android::fcm_service::FcmPluginHandle>()
+        else {
             info!("FCM: FcmPluginHandle not available (not Android?)");
             return;
         };
@@ -131,7 +153,10 @@ impl HandlerContext {
             warn!("FCM: no device token available, skipping push registration");
             return;
         };
-        info!(len = token.len(), "FCM: device token obtained, sending push registration");
+        info!(
+            len = token.len(),
+            "FCM: device token obtained, sending push registration"
+        );
         let client_handle = self
             .shared
             .lock()
@@ -164,35 +189,135 @@ impl HandlerContext {
 
     /// Request description blobs for channels whose descriptions were
     /// omitted during the initial sync (only a hash was sent).
+    ///
+    /// A few at a time, waiting for each batch to land before asking for the
+    /// next. Asking for all of them in one `RequestBlob` is what the server
+    /// answers in one burst, and a tree whose descriptions carry inline artwork
+    /// answers with megabytes: against a real server (36 channels, 5.75 MiB of
+    /// descriptions) that burst passed the gateway's per-client control budget
+    /// and the connection was reset a few hundred milliseconds after
+    /// `ServerSync` — the client killed by the reply it asked for. Paced, the
+    /// same fetch costs a few round trips and cannot outrun any budget.
+    ///
+    /// Re-deriving what is still missing each round is what makes it also a
+    /// retry: a server that answers only part of a batch (its own reply cap) is
+    /// asked again for the rest on the next pass.
     fn request_channel_descriptions(&self) {
-        let channel_ids: Vec<u32> = self
-            .shared
-            .lock()
-            .ok()
-            .map(|s| {
-                s.channels
-                    .values()
-                    .filter(|ch| ch.description.is_empty() && ch.description_hash.is_some())
-                    .map(|ch| ch.id)
-                    .collect()
-            })
-            .unwrap_or_default();
+        /// Channels per `RequestBlob`. Descriptions are unbounded in principle
+        /// and a few hundred KiB in practice, so a handful in flight stays well
+        /// inside a 4 MiB budget while still costing far fewer round trips than
+        /// one at a time.
+        const BATCH: usize = 4;
+        /// How long a batch is given before the fetch gives up on it. Generous:
+        /// it is a whole-tree transfer on a slow link, not a UI interaction.
+        const BATCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+        /// How long a *partly* answered batch waits for the rest. A server that
+        /// has already replied and then goes quiet has said what it will say --
+        /// its own reply cap -- and the remainder belongs in the next request,
+        /// not in the rest of this timeout.
+        const QUIET_AFTER_PROGRESS: std::time::Duration = std::time::Duration::from_secs(1);
+        const POLL: std::time::Duration = std::time::Duration::from_millis(50);
 
-        if channel_ids.is_empty() {
+        /// Channels that announced a description but have not received one.
+        fn pending(shared: &Mutex<SharedState>) -> Vec<u32> {
+            shared
+                .lock()
+                .ok()
+                .map(|s| {
+                    s.channels
+                        .values()
+                        .filter(|ch| ch.description.is_empty() && ch.description_hash.is_some())
+                        .map(|ch| ch.id)
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
+
+        /// Wait for a requested batch to arrive, and answer how much of it did
+        /// not. Returns early once the batch is whole, and once a batch that
+        /// was answered in part has gone quiet.
+        async fn settle(shared: &Mutex<SharedState>, batch: &[u32]) -> usize {
+            let missing = |ids: &[u32]| {
+                let still = pending(shared);
+                ids.iter().filter(|id| still.contains(id)).count()
+            };
+            let deadline = tokio::time::Instant::now() + BATCH_TIMEOUT;
+            let mut outstanding = batch.len();
+            let mut quiet = std::time::Duration::ZERO;
+            while tokio::time::Instant::now() < deadline {
+                tokio::time::sleep(POLL).await;
+                let left = missing(batch);
+                if left == 0 {
+                    return 0;
+                }
+                if left < outstanding {
+                    outstanding = left;
+                    quiet = std::time::Duration::ZERO;
+                    continue;
+                }
+                quiet += POLL;
+                if outstanding < batch.len() && quiet >= QUIET_AFTER_PROGRESS {
+                    break;
+                }
+            }
+            missing(batch)
+        }
+
+        if pending(&self.shared).is_empty() {
             return;
         }
         let shared = Arc::clone(&self.shared);
+        // The connection this fetch belongs to. A reconnect raises the epoch,
+        // and a fetch that outlived its connection would otherwise keep pacing
+        // requests alongside the new connection's own fetch -- two paced
+        // fetches being exactly the unpaced burst this avoids. Same guard the
+        // event handler uses on a reused `SharedState`.
+        let epoch = self.shared.lock().map(|s| s.conn.epoch).unwrap_or_default();
         let _desc_blob_task = tokio::spawn(async move {
-            let handle = shared.lock().ok().and_then(|s| s.conn.client_handle.clone());
-            if let Some(handle) = handle {
-                let _ = handle
+            loop {
+                let mut batch = pending(&shared);
+                if batch.is_empty() {
+                    break;
+                }
+                batch.sort_unstable();
+                batch.truncate(BATCH);
+
+                // Taken per round rather than held: a disconnect drops the
+                // handle, and this task must end with the connection that
+                // started it rather than fetch into a dead socket.
+                let Some(handle) = shared
+                    .lock()
+                    .ok()
+                    .filter(|s| s.conn.epoch == epoch)
+                    .and_then(|s| s.conn.client_handle.clone())
+                else {
+                    break;
+                };
+                if handle
                     .send(command::RequestBlob {
                         session_texture: Vec::new(),
                         session_comment: Vec::new(),
-                        channel_description: channel_ids,
+                        channel_description: batch.clone(),
                         user_id_comment: Vec::new(),
                     })
-                    .await;
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+
+                // A round that moved nothing means the server is not going to
+                // answer these — a description too large for it to send, or a
+                // server that does not serve the blob at all. Stopping keeps
+                // that from becoming an endless re-request loop; anything still
+                // missing simply renders empty.
+                if settle(&shared, &batch).await == batch.len() {
+                    debug!(
+                        channels = ?batch,
+                        "no channel descriptions arrived for a batch; giving up on the rest"
+                    );
+                    break;
+                }
             }
         });
     }
@@ -209,7 +334,10 @@ impl HandlerContext {
 
         let shared = Arc::clone(&self.shared);
         let _permissions_task = tokio::spawn(async move {
-            let handle = shared.lock().ok().and_then(|s| s.conn.client_handle.clone());
+            let handle = shared
+                .lock()
+                .ok()
+                .and_then(|s| s.conn.client_handle.clone());
             if let Some(handle) = handle {
                 for ch_id in channel_ids {
                     let _ = handle
@@ -226,7 +354,12 @@ impl HandlerContext {
         let (handle, is_fancy) = {
             let state = self.shared.lock().ok();
             state
-                .map(|s| (s.conn.client_handle.clone(), s.server.fancy_version.is_some()))
+                .map(|s| {
+                    (
+                        s.conn.client_handle.clone(),
+                        s.server.fancy_version.is_some(),
+                    )
+                })
                 .unwrap_or_default()
         };
         if !is_fancy {
@@ -251,6 +384,87 @@ impl HandlerContext {
         });
     }
 
+    /// Ask the server what it looks like.
+    ///
+    /// Sent after sync rather than during the handshake, because it is
+    /// presentation: nothing about connecting waits on it, and a server that
+    /// never answers leaves the client on its own colours.
+    ///
+    /// The keys already cached are named, so a reconnect to a server whose
+    /// banner has not changed carries the document and no artwork at all.
+    /// Find out whether this server shares files the canon way.
+    ///
+    /// Asked as a listing of the channel just joined, which is free and
+    /// answers even when the channel has nothing in it. There is no
+    /// capability message to read instead: a server without the service says
+    /// nothing at all, so the only way to know is to ask and see.
+    ///
+    /// A listing also fills the channel file list on the way past, so the
+    /// probe is not a wasted round trip on the servers that do have it.
+    fn probe_file_service(&self) {
+        let (handle, is_fancy, channel) = {
+            let state = self.shared.lock().ok();
+            state
+                .map(|s| {
+                    (
+                        s.conn.client_handle.clone(),
+                        s.server.fancy_version.is_some(),
+                        s.current_channel.unwrap_or_default(),
+                    )
+                })
+                .unwrap_or_default()
+        };
+        if !is_fancy {
+            debug!("files: skipped the probe (non-fancy server)");
+            return;
+        }
+        let Some(handle) = handle else {
+            warn!("files: no client handle to probe on");
+            return;
+        };
+        let _probe_task = tokio::spawn(async move {
+            match handle
+                .send(command::SendFancyFileList {
+                    channel_id: channel,
+                    limit: FILE_PROBE_LIMIT,
+                })
+                .await
+            {
+                Ok(()) => debug!(channel, "files: asked what is shared here"),
+                Err(error) => warn!("files: failed to ask for the listing: {error}"),
+            }
+        });
+    }
+
+    fn request_livery(&self) {
+        let (handle, is_fancy, have_keys) = {
+            let state = self.shared.lock().ok();
+            state
+                .map(|s| {
+                    (
+                        s.conn.client_handle.clone(),
+                        s.server.fancy_version.is_some(),
+                        s.livery_art.keys().cloned().collect::<Vec<_>>(),
+                    )
+                })
+                .unwrap_or_default()
+        };
+        if !is_fancy {
+            debug!("livery: skipped (non-fancy server)");
+            return;
+        }
+        let Some(handle) = handle else {
+            warn!("livery: no client handle");
+            return;
+        };
+        let _livery_task = tokio::spawn(async move {
+            match handle.send(command::RequestLivery { have_keys }).await {
+                Ok(()) => debug!("livery: requested"),
+                Err(e) => warn!("livery: failed to request: {e}"),
+            }
+        });
+    }
+
     /// Initialise `PchatState`, restore cached data, and spawn the async
     /// key-announce + history-fetch task.
     fn init_pchat(&self) {
@@ -258,7 +472,8 @@ impl HandlerContext {
             let state = self.shared.lock().ok();
             if let Some(ref s) = state {
                 let own_hash = s
-                    .conn.own_session
+                    .conn
+                    .own_session
                     .and_then(|sess| s.users.get(&sess))
                     .and_then(|u| u.hash.clone());
                 (
@@ -303,23 +518,60 @@ impl HandlerContext {
 
         if let Ok(mut state) = self.shared.lock() {
             state.pchat_ctx.pchat = Some(pchat_state);
-            for (ch_id, msgs) in cached_messages {
-                if !msgs.is_empty() {
-                    state.msgs.by_channel.entry(ch_id).or_default().extend(msgs);
-                }
-            }
+            restore_cached_tails(&mut state, cached_messages);
         }
 
         self.emit_cached_reactions(cached_reactions);
         self.spawn_key_announce_and_channel_init();
+        self.spawn_cache_flusher();
+    }
+
+    /// Keep the local message cache written down while the session runs.
+    ///
+    /// A `SignalV1` channel has no server-side history, so its local cache is
+    /// the only copy of what was said; until this existed the only writers
+    /// were the disconnect paths, and an end that took neither of them - the
+    /// process killed, the machine losing power - took the whole session's
+    /// messages with it.
+    ///
+    /// A timer rather than a hook on the insert: a channel where one message
+    /// is sent and nothing follows is exactly the case that needs writing,
+    /// and it is the one an insert-driven flush never reaches.
+    fn spawn_cache_flusher(&self) {
+        let shared = Arc::clone(&self.shared);
+        // The connection this flusher belongs to.  A reconnect bumps the
+        // epoch and syncs again, which spawns a new one; without this the old
+        // task would keep ticking against the new session's cache forever.
+        let epoch = shared.lock().map(|s| s.conn.epoch).unwrap_or_default();
+        let _flush_task = tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(CACHE_FLUSH_TICK);
+            loop {
+                let _tick = ticker.tick().await;
+                let Ok(mut state) = shared.lock() else {
+                    continue;
+                };
+                if state.conn.epoch != epoch {
+                    return;
+                }
+                // Before the pchat check, because the link cards are not a
+                // pchat concern: a client with no identity at all still
+                // accumulates them, and its cache still wants writing down.
+                let _ = state.previews.cache.save_if_due();
+                let Some(ref mut pchat) = state.pchat_ctx.pchat else {
+                    // The session ended and took pchat with it; those paths
+                    // save on the way out, so there is nothing left to do.
+                    return;
+                };
+                if let Some(ref mut cache) = pchat.local_cache {
+                    let _ = cache.save_if_due();
+                }
+            }
+        });
     }
 
     /// Emit `pchat-reaction-fetch-response` events for each channel so the
     /// frontend can populate reaction pills for messages restored from disk.
-    fn emit_cached_reactions(
-        &self,
-        cached_reactions: HashMap<u32, Vec<CachedReaction>>,
-    ) {
+    fn emit_cached_reactions(&self, cached_reactions: HashMap<u32, Vec<CachedReaction>>) {
         for (ch_id, reactions) in cached_reactions {
             if reactions.is_empty() {
                 continue;
@@ -345,19 +597,34 @@ impl HandlerContext {
     }
 
     /// Spawn the async task that sends `key-announce` and then initialises
-    /// the encrypted channel (key derivation/exchange + history fetch).
+    /// the persistent channel (key derivation/exchange + history fetch).
     fn spawn_key_announce_and_channel_init(&self) {
         let shared = Arc::clone(&self.shared);
         let _key_announce_task = tokio::spawn(async move {
-            send_key_announce(&shared).await;
+            // The channel we land in on connect; an archive room we join later
+            // announces again on the way in.
+            let landing = shared
+                .lock()
+                .ok()
+                .and_then(|s| s.current_channel)
+                .unwrap_or(0);
+            pchat::send_key_announce(&shared, landing).await;
 
             let (ch, mode) = resolve_initial_channel(&shared);
             debug!(channel = ?ch, mode = ?mode, "pchat: initial channel/mode resolved");
 
-            if let (Some(ch), Some(mode)) = (ch, mode) {
-                if mode.is_encrypted() {
-                    init_encrypted_channel(&shared, ch, mode).await;
-                }
+            // `uses_pchat`, not `is_encrypted`: `ServerManaged` is the one mode
+            // that is deliberately not end-to-end encrypted, and asking about
+            // encryption here excluded it from the only place that fetches the
+            // landing channel's history. The archive existed, the server served
+            // it on request, and the request was never sent - so the mode whose
+            // entire purpose is server-held history opened on an empty channel,
+            // every time. `init_pchat_channel` already handles the keyless case;
+            // this gate was what made that branch unreachable.
+            if let (Some(ch), Some(mode)) = (ch, mode)
+                && mode.uses_pchat()
+            {
+                init_pchat_channel(&shared, ch, mode).await;
             }
         });
     }
@@ -391,10 +658,7 @@ impl PchatState {
     /// decryption can take hundreds of milliseconds.
     fn load_local_cache(
         &mut self,
-    ) -> (
-        HashMap<u32, Vec<ChatMessage>>,
-        HashMap<u32, Vec<CachedReaction>>,
-    ) {
+    ) -> (HashMap<u32, CachedTail>, HashMap<u32, Vec<CachedReaction>>) {
         let Some(ref mut cache) = self.local_cache else {
             return (HashMap::new(), HashMap::new());
         };
@@ -403,10 +667,18 @@ impl PchatState {
             warn!("failed to load local message cache: {e}");
             HashMap::new()
         } else {
-            let cached = cache.all_chat_messages();
-            for (ch_id, msgs) in &cached {
-                if !msgs.is_empty() {
-                    info!(channel_id = ch_id, count = msgs.len(), "restored cached messages");
+            // The tail only, and read out here rather than inside the lock:
+            // the whole archive of every channel used to be decrypted and
+            // handed over, which is the cost this is bounding.
+            let cached = cache.newest_chat_messages(MAX_MESSAGES_PER_THREAD);
+            for (ch_id, tail) in &cached {
+                if !tail.rows.is_empty() {
+                    info!(
+                        channel_id = ch_id,
+                        count = tail.rows.len(),
+                        older_left_behind = tail.truncated,
+                        "restored cached messages"
+                    );
                 }
             }
             cached
@@ -418,7 +690,11 @@ impl PchatState {
         let rxns = cache.all_reactions().clone();
         for (ch_id, reactions) in &rxns {
             if !reactions.is_empty() {
-                info!(channel_id = ch_id, count = reactions.len(), "restored cached reactions");
+                info!(
+                    channel_id = ch_id,
+                    count = reactions.len(),
+                    "restored cached reactions"
+                );
             }
         }
 
@@ -426,44 +702,51 @@ impl PchatState {
     }
 }
 
+/// Seed the message store with what the local cache holds, per channel.
+///
+/// Two questions per channel, both of which used to go unasked while every
+/// cached row of every channel was poured in:
+///
+///  - *does this channel still keep history?* A cache outlives the setting
+///    that filled it, so a channel switched back to volatile still has its
+///    rows on disk. Restoring them regardless is what made messages come back
+///    to a channel whose own editor said it keeps none.
+///  - *how much of it does this client need?* A channel the server archives
+///    needs a screenful; the fetch on open replaces it with the live tail and
+///    paging back goes to the server. Only a channel nobody archives for us
+///    needs its whole cached tail held.
+fn restore_cached_tails(state: &mut SharedState, cached: HashMap<u32, CachedTail>) {
+    for (ch_id, mut tail) in cached {
+        if tail.rows.is_empty() {
+            continue;
+        }
+        let mode = state
+            .channels
+            .get(&ch_id)
+            .and_then(|ch| ch.pchat_protocol)
+            .filter(PchatProtocol::uses_pchat);
+        let Some(mode) = mode else {
+            debug!(
+                channel_id = ch_id,
+                "skipping cached messages for a channel that keeps no history"
+            );
+            continue;
+        };
+        let limit = if mode.has_server_history() {
+            CACHED_TAIL_WITH_SERVER_HISTORY
+        } else {
+            MAX_MESSAGES_PER_THREAD
+        };
+        let from = tail.rows.len().saturating_sub(limit);
+        let older_left_behind = tail.truncated || from > 0;
+        let rows = tail.rows.split_off(from);
+        state.msgs.restore_cached(ch_id, rows, older_left_behind);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Async helpers (used inside tokio::spawn, no access to HandlerContext)
 // ---------------------------------------------------------------------------
-
-/// Build and send the `PchatKeyAnnounce` message to the server.
-async fn send_key_announce(shared: &Arc<Mutex<SharedState>>) {
-    let (announce_proto, cert, handle) = {
-        let state = shared.lock().ok();
-        if let Some(ref s) = state {
-            if let Some(ref p) = s.pchat_ctx.pchat {
-                let wire = p
-                    .key_manager
-                    .build_key_announce(&p.own_cert_hash, pchat::now_millis());
-                let proto = pchat::wire_key_announce_to_proto(&wire);
-                (
-                    Some(proto),
-                    Some(p.own_cert_hash.clone()),
-                    s.conn.client_handle.clone(),
-                )
-            } else {
-                (None, None, None)
-            }
-        } else {
-            (None, None, None)
-        }
-    };
-
-    if let (Some(proto), Some(cert), Some(handle)) = (announce_proto, cert, handle) {
-        if let Err(e) = handle
-            .send(command::SendPchatKeyAnnounce { announce: proto })
-            .await
-        {
-            warn!("failed to send key-announce: {e}");
-        } else {
-            info!(cert_hash = %cert, "sent pchat key-announce");
-        }
-    }
-}
 
 /// Look up the current channel and its pchat protocol mode.
 fn resolve_initial_channel(
@@ -472,22 +755,32 @@ fn resolve_initial_channel(
     let s = shared.lock().ok();
     if let Some(ref s) = s {
         let ch = s.current_channel;
-        let mode =
-            ch.and_then(|c| s.channels.get(&c).and_then(|ce| ce.pchat_protocol));
+        let mode = ch.and_then(|c| s.channels.get(&c).and_then(|ce| ce.pchat_protocol));
         (ch, mode)
     } else {
         (None, None)
     }
 }
 
-/// Set up the encryption key for the initial channel and fetch message
+/// Set up the initial channel's key, where its mode has one, and fetch message
 /// history from the server.
-async fn init_encrypted_channel(
-    shared: &Arc<Mutex<SharedState>>,
-    ch: u32,
-    mode: PchatProtocol,
-) {
+///
+/// Named for pchat rather than for encryption because it serves every mode that
+/// rides the pchat service, including the one that is not encrypted. It was
+/// called `init_encrypted_channel` while its only caller filtered on
+/// `is_encrypted`, which made the keyless branch below unreachable and left
+/// `ServerManaged` with no history fetch at all.
+async fn init_pchat_channel(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: PchatProtocol) {
     pchat::emit_history_loading(shared, ch, true);
+
+    // A mode with no client-side key skips the ladder entirely. Without this
+    // guard a server-managed channel would wait two seconds for a peer's key
+    // that nobody will ever send, then mint one nothing reads, and only then
+    // fetch -- two seconds of an empty chat window, every time.
+    if !mode.is_encrypted() {
+        fetch_channel_history(shared, ch, mode).await;
+        return;
+    }
 
     if !ensure_protocol_key(shared, ch, mode).await {
         return;
@@ -507,21 +800,24 @@ async fn ensure_protocol_key(
 ) -> bool {
     if mode == PchatProtocol::FancyV1FullArchive {
         if let Ok(mut s) = shared.lock() {
-            if let Some(ref mut p) = s.pchat_ctx.pchat {
-                if !p.key_manager.has_key(ch, mode) {
-                    let cert = p.own_cert_hash.clone();
-                    let key = mumble_protocol::persistent::encryption::derive_archive_key(
-                        &p.seed, ch,
-                    );
-                    p.key_manager
-                        .store_archive_key(ch, key, KeyTrustLevel::Verified);
-                    p.key_manager.set_channel_originator(ch, cert.clone());
-                    info!(
-                        channel_id = ch,
-                        cert_hash = %cert,
-                        "derived archive key immediately (no wait needed)"
-                    );
-                }
+            // Gated, and deliberately before the wait below: this used to mint
+            // unconditionally, so `await_or_generate_key`'s 2s window for a
+            // peer's key never had anything left to decide -- the key already
+            // existed, and it was the wrong one.
+            let mint = pchat::should_mint_archive_key(&s, ch);
+            if let Some(ref mut p) = s.pchat_ctx.pchat
+                && mint
+            {
+                let cert = p.own_cert_hash.clone();
+                let key = mumble_protocol::persistent::encryption::derive_archive_key(&p.seed, ch);
+                p.key_manager
+                    .store_archive_key(ch, key, KeyTrustLevel::Verified);
+                p.key_manager.set_channel_originator(ch, cert.clone());
+                info!(
+                    channel_id = ch,
+                    cert_hash = %cert,
+                    "derived archive key immediately (no wait needed)"
+                );
             }
         }
         pchat::send_key_holder_report_async(shared, ch).await;
@@ -546,28 +842,41 @@ async fn ensure_protocol_key(
 }
 
 /// Wait for peers to provide a key, then self-generate one if still needed.
-async fn await_or_generate_key(
-    shared: &Arc<Mutex<SharedState>>,
-    ch: u32,
-    mode: PchatProtocol,
-) {
+async fn await_or_generate_key(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: PchatProtocol) {
     let already_has_key = shared
         .lock()
         .ok()
-        .and_then(|s| s.pchat_ctx.pchat.as_ref().map(|p| p.key_manager.has_key(ch, mode)))
+        .and_then(|s| {
+            s.pchat_ctx
+                .pchat
+                .as_ref()
+                .map(|p| p.key_manager.has_key(ch, mode))
+        })
         .unwrap_or(false);
 
     if already_has_key {
-        debug!(channel_id = ch, "pchat: key already exists, skipping 2s wait");
+        debug!(
+            channel_id = ch,
+            "pchat: key already exists, skipping 2s wait"
+        );
     } else {
-        debug!(channel_id = ch, ?mode, "pchat: waiting 2s for key-exchange before self-gen");
+        debug!(
+            channel_id = ch,
+            ?mode,
+            "pchat: waiting 2s for key-exchange before self-gen"
+        );
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     }
 
     let needs_key = shared
         .lock()
         .ok()
-        .and_then(|s| s.pchat_ctx.pchat.as_ref().map(|p| !p.key_manager.has_key(ch, mode)))
+        .and_then(|s| {
+            s.pchat_ctx
+                .pchat
+                .as_ref()
+                .map(|p| !p.key_manager.has_key(ch, mode))
+        })
         .unwrap_or(false);
 
     debug!(channel_id = ch, needs_key, "pchat: key check after 2s wait");
@@ -583,10 +892,12 @@ fn self_generate_key(shared: &Arc<Mutex<SharedState>>, ch: u32) {
 
     if let Ok(mut s) = shared.lock() {
         let mode = s.channels.get(&ch).and_then(|c| c.pchat_protocol);
+        // Even after waiting, minting is only right when no peer holds a key.
+        let mint = pchat::should_mint_archive_key(&s, ch);
         if let Some(ref mut p) = s.pchat_ctx.pchat {
             let cert = p.own_cert_hash.clone();
             match mode {
-                Some(PchatProtocol::FancyV1FullArchive) => {
+                Some(PchatProtocol::FancyV1FullArchive) if mint => {
                     let key =
                         mumble_protocol::persistent::encryption::derive_archive_key(&p.seed, ch);
                     p.key_manager
@@ -596,7 +907,10 @@ fn self_generate_key(shared: &Arc<Mutex<SharedState>>, ch: u32) {
                 }
                 Some(PchatProtocol::SignalV1) => {
                     signal_bridge_failed = !p.ensure_signal_bridge();
-                    info!(channel_id = ch, "signal bridge ensured on initial join (fallback)");
+                    info!(
+                        channel_id = ch,
+                        "signal bridge ensured on initial join (fallback)"
+                    );
                 }
                 _ => {}
             }
@@ -614,40 +928,51 @@ fn self_generate_key(shared: &Arc<Mutex<SharedState>>, ch: u32) {
 
 /// Mark the channel as fetched and send the `PchatFetch` request, then
 /// schedule a safety-net timeout to clear the loading indicator.
-async fn fetch_channel_history(
-    shared: &Arc<Mutex<SharedState>>,
-    ch: u32,
-    mode: PchatProtocol,
-) {
+async fn fetch_channel_history(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: PchatProtocol) {
+    // SignalV1 keeps no server-side history by design (forward secrecy: a late
+    // joiner must never read what was said before it joined, even once it has
+    // every sender's key). Fetching here would ask the server for exactly that
+    // history, and the server does return it - `pchat_message` stores SignalV1
+    // ciphertext too, for redelivery to a member who was briefly offline, and
+    // the fetch handler does not distinguish "was already a member" from "just
+    // joined". Skipping the request is the guarantee; nothing downstream
+    // re-checks it once fetched.
+    //
+    // Asked as "does this mode have a server history" rather than "is this
+    // SignalV1", so a mode added later has to answer the question rather than
+    // inherit a fetch nobody considered.
+    if !mode.has_server_history() {
+        debug!(
+            channel_id = ch,
+            ?mode,
+            "pchat: skipping fetch for a mode the server keeps no history for"
+        );
+        pchat::emit_history_loading(shared, ch, false);
+        return;
+    }
     debug!(channel_id = ch, "pchat: about to send pchat-fetch");
     {
         let s = shared.lock().ok();
-        if let Some(ref s) = s {
-            if let Some(ref p) = s.pchat_ctx.pchat {
-                let has = p.key_manager.has_key(ch, mode);
-                debug!(channel_id = ch, has_key = has, "pchat: key state before fetch");
-            }
+        if let Some(ref s) = s
+            && let Some(ref p) = s.pchat_ctx.pchat
+        {
+            let has = p.key_manager.has_key(ch, mode);
+            debug!(
+                channel_id = ch,
+                has_key = has,
+                "pchat: key state before fetch"
+            );
         }
     }
-    if let Ok(mut s) = shared.lock() {
-        if let Some(ref mut p) = s.pchat_ctx.pchat {
-            let _ = p.fetched_channels.insert(ch);
-        }
+    if let Ok(mut s) = shared.lock()
+        && let Some(ref mut p) = s.pchat_ctx.pchat
+    {
+        let _ = p.fetched_channels.insert(ch);
     }
-    let fetch = mumble_tcp::PchatFetch {
-        channel_id: Some(ch),
-        before_id: None,
-        limit: Some(50),
-        after_id: None,
-    };
-    let handle = shared.lock().ok().and_then(|s| s.conn.client_handle.clone());
-    let fetch_sent = if let Some(handle) = handle {
-        let _ = handle.send(command::SendPchatFetch { fetch }).await;
+    let fetch_sent = pchat::send_open_fetch(shared, ch).await;
+    if fetch_sent {
         info!(channel_id = ch, "sent initial pchat-fetch");
-        true
-    } else {
-        false
-    };
+    }
 
     if fetch_sent {
         let shared_timeout = Arc::clone(shared);

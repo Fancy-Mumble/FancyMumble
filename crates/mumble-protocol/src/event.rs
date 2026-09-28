@@ -10,7 +10,10 @@ use crate::transport::ocb2::PacketStats;
 ///
 /// All methods have default no-op implementations so you only need
 /// to override the ones you care about.
-#[allow(unused_variables, reason = "default no-op implementations intentionally ignore all parameters")]
+#[allow(
+    unused_variables,
+    reason = "default no-op implementations intentionally ignore all parameters"
+)]
 pub trait EventHandler: Send + 'static {
     /// Called for every inbound TCP control message.
     fn on_control_message(&mut self, msg: &ControlMessage) {}
@@ -25,7 +28,12 @@ pub trait EventHandler: Send + 'static {
     fn on_disconnected(&mut self) {}
 
     /// Called when the audio transport mode changes (e.g. UDP activated or fell back to TCP).
-    fn on_audio_transport_changed(&mut self, udp_active: bool) {}
+    ///
+    /// `cipher` is the UDP cipher that was keyed for this connection
+    /// ([`crate::transport::voice_crypt::VoiceCrypt::name`]), and `None`
+    /// whenever `udp_active` is false - there is nothing encrypting UDP when
+    /// audio rides the TCP tunnel.
+    fn on_audio_transport_changed(&mut self, udp_active: bool, cipher: Option<&'static str>) {}
 
     /// Called on each Ping exchange with updated packet statistics.
     ///

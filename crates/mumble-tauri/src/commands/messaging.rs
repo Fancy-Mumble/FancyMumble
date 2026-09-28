@@ -1,8 +1,11 @@
 //! Channel chat message commands: read/write/edit, reactions, pins,
 //! deletes, search, photos, typing/read receipts and link previews.
 
-use crate::state::{self, AppState, ChatMessage, PhotoEntry, SearchResult};
+use crate::state::preview_cache::CachedHit;
 use crate::state::protocol_commands::{DrawStrokeArgs, WatchSyncEventArg};
+use crate::state::{
+    self, AppState, ChatMessage, MessagePage, PageRequest, PhotoEntry, SearchResult,
+};
 
 #[tauri::command]
 pub(crate) fn super_search(
@@ -11,7 +14,11 @@ pub(crate) fn super_search(
     filter: Option<state::types::SearchFilter>,
     channel_id: Option<u32>,
 ) -> Vec<SearchResult> {
-    state.super_search(&query, filter.unwrap_or(state::types::SearchFilter::All), channel_id)
+    state.super_search(
+        &query,
+        filter.unwrap_or(state::types::SearchFilter::All),
+        channel_id,
+    )
 }
 
 #[tauri::command]
@@ -26,6 +33,19 @@ pub(crate) fn get_photos(
 #[tauri::command]
 pub(crate) fn get_messages(state: tauri::State<'_, AppState>, channel_id: u32) -> Vec<ChatMessage> {
     state.messages(channel_id)
+}
+
+/// One window of a channel's history.
+///
+/// Replaces `get_messages` on the chat path: that returned the whole thread and
+/// was re-invoked on essentially every event, so a long channel was expensive
+/// to look at rather than expensive to open.
+#[tauri::command]
+pub(crate) fn get_messages_page(
+    state: tauri::State<'_, AppState>,
+    request: PageRequest,
+) -> MessagePage {
+    state.messages_page(&request)
 }
 
 #[tauri::command]
@@ -73,8 +93,34 @@ pub(crate) async fn request_link_preview(
     state: tauri::State<'_, AppState>,
     urls: Vec<String>,
     request_id: String,
-) -> Result<(), String> {
+) -> Result<Vec<CachedHit>, String> {
     state.request_link_preview(urls, request_id).await
+}
+
+/// Ask the server to search its GIF provider.
+///
+/// The key lives on the server, so this works for users who have none of their
+/// own. An empty `query` asks for trending.
+#[tauri::command]
+pub(crate) async fn request_gif_search(
+    state: tauri::State<'_, AppState>,
+    query: String,
+    page: u32,
+    request_id: String,
+) -> Result<(), String> {
+    state.request_gif_search(query, page, request_id).await
+}
+
+/// Ask the server whether it searches GIFs, and where its proxied media lives.
+///
+/// The answer arrives as a `gif-support` event. A server that predates the
+/// question never sends one; the picker's timeout is what reads that.
+#[tauri::command]
+pub(crate) async fn request_gif_support(
+    state: tauri::State<'_, AppState>,
+    request_id: String,
+) -> Result<(), String> {
+    state.request_gif_support(request_id).await
 }
 
 /// Send a drawing stroke for the collaborative screen-share overlay.
@@ -116,7 +162,9 @@ pub(crate) async fn send_reaction(
     emoji: String,
     action: String,
 ) -> Result<(), String> {
-    state.send_reaction(channel_id, message_id, emoji, action).await
+    state
+        .send_reaction(channel_id, message_id, emoji, action)
+        .await
 }
 
 /// Inject a plugin-authored chat message into the local channel
@@ -181,4 +229,14 @@ pub(crate) async fn delete_pchat_messages(
     state
         .delete_pchat_messages(channel_id, message_ids, time_from, time_to, sender_hash)
         .await
+}
+
+/// Forget messages this device holds for a channel, without the server.
+#[tauri::command]
+pub(crate) fn forget_local_messages(
+    state: tauri::State<'_, AppState>,
+    channel_id: u32,
+    message_ids: Vec<String>,
+) {
+    state.forget_local_messages(channel_id, message_ids);
 }

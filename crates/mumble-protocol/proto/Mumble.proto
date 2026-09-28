@@ -21,6 +21,35 @@ message Version {
     // (message_id, timestamp, plugin data, etc.).
     optional uint64 fancy_version = 6;
 
+    // Which Fancy *wire* numbering this peer speaks.
+    //
+    // Separate from `fancy_version` on purpose. That field is a product
+    // version: it answers "which features exist", and a peer can infer from it
+    // that some message was implemented. It cannot express "I renumbered the
+    // wire", so a client that trusts it will happily send a type the peer can
+    // route nowhere - which is exactly what happened when Starling kept the
+    // upstream types and moved every Fancy message to a new range.
+    //
+    //   absent / 0  epoch 0: the historical interleaved 100-999 layout, which
+    //               is every Fancy build shipped to date.
+    //   1           epoch 1: upstream 0-99 stays flat and frozen; every Fancy
+    //               service is reached through one outer type >= 1000 carrying
+    //               a service-owned envelope.
+    //
+    // A peer speaks exactly one epoch. When the other side does not know it,
+    // the Fancy extensions are off and the connection degrades to plain
+    // Mumble - plus anything relayable through PluginDataTransmission, which
+    // works through any Mumble server and is therefore epoch-independent.
+    //
+    // 1000, not the next free number: Fancy fields start at 1000 so upstream can
+    // keep growing into 1-999 (see the same note in Starling's copy). And it
+    // must be *this* number in every copy of this file - it is read before any
+    // epoch is known, so the two sides cannot negotiate where to find it. That
+    // is also why moving it off 100 is a hard break rather than a soft one: a
+    // peer built before this change looks at 100, finds nothing, and correctly
+    // concludes it is talking to a plain Mumble server.
+    optional uint32 fancy_protocol = 1000;
+
 	// Client release name.
 	optional string release = 2;
 	// Client OS name.
@@ -48,6 +77,21 @@ message Authenticate {
 	optional bool opus = 5 [default = false];
 	// 0 = REGULAR, 1 = BOT
 	optional int32 client_type = 6 [default = 0];
+	// Client extension (FancyMumble): time-based one-time password (RFC 6238)
+	// for accounts with two-factor authentication enabled. The server rejects
+	// with RejectType TOTPRequired / TOTPInvalid when missing or wrong.
+	optional string totp_code = 1000;
+	// Client extension (FancyMumble): which install of the client this is.
+	// Random per install and never shown to anyone else. With it one account
+	// may be online from several devices at once, and a reconnect replaces
+	// only the session that came from the same device.
+	optional string device_id = 1001;
+	// Client extension (FancyMumble): the secret this install was registered
+	// with. Proves device_id is not merely copied from another session.
+	optional string device_secret = 1002;
+	// Client extension (FancyMumble): what the owner calls this device, e.g.
+	// "Laptop", shown in their own device list.
+	optional string device_name = 1003;
 }
 
 // Sent by the client to notify the server that the client is still alive.
@@ -103,6 +147,14 @@ message Reject {
 		AuthenticatorFail = 8;
 		// The server is currently not accepting new connections
 		NoNewConnections = 9;
+		// Fancy extension: the account has two-factor authentication enabled
+		// and the client must retry with Authenticate.totp_code set.
+		TOTPRequired = 10;
+		// Fancy extension: the provided TOTP code was wrong.
+		TOTPInvalid = 11;
+		// Fancy extension: this device was signed out of the account, or the
+		// account only admits devices it knows and this is not one of them.
+		DeviceNotTrusted = 12;
 	}
 	// Rejection type.
 	optional RejectType type = 1;
@@ -132,6 +184,32 @@ message ChannelRemove {
 	required uint32 channel_id = 1;
 }
 
+// Fancy Mumble extension: a single channel attribute flag. ChannelState carries
+// a repeated set of these (its `attributes` field), describing the channel from
+// the receiving user's perspective. This supersedes the individual `can_enter` /
+// `is_enter_restricted` booleans for Fancy clients (those booleans are still sent
+// for legacy clients). Legacy clients ignore the unknown `attributes` field.
+enum ChannelAttribute {
+	// Zero value, never sent (proto enum default).
+	CHANNEL_ATTRIBUTE_UNSPECIFIED = 0;
+	// The receiving user is permitted to enter this channel.
+	CHANNEL_ATTRIBUTE_CAN_ENTER = 1;
+	// Entry is gated by a password/token: ENTER is denied and the user is not
+	// otherwise granted it by a user-id ACL.
+	CHANNEL_ATTRIBUTE_ENTER_RESTRICTED = 2;
+	// Hidden: only users holding SeeChannel are told the channel exists.
+	CHANNEL_ATTRIBUTE_HIDDEN = 3;
+	// Temporary: auto-removed by the server when it becomes empty.
+	CHANNEL_ATTRIBUTE_TEMPORARY = 4;
+	// Detached: a parentless channel (like the root) that never appears in the
+	// channel tree and is only ever sent to Fancy clients. Used for meeting rooms.
+	CHANNEL_ATTRIBUTE_DETACHED = 5;
+	// Structural: the channel exists only to organise the tree. It cannot be
+	// entered and never holds users; clients render it as a heading for the
+	// channels nested beneath it. Settable by clients with Write on the channel.
+	CHANNEL_ATTRIBUTE_STRUCTURAL = 6;
+}
+
 // Used to communicate channel properties between the client and the server.
 // Sent by the server during the login process or when channel properties are
 // updated. Client may use this message to update said channel properties.
@@ -153,7 +231,8 @@ message ChannelState {
 	// A collection of channel_id values that should be removed from links.
 	repeated uint32 links_remove = 7;
 	// True if the channel is temporary.
-	optional bool temporary = 8 [default = false];
+	// Deprecated for Fancy clients: use CHANNEL_ATTRIBUTE_TEMPORARY in `attributes`.
+	optional bool temporary = 8 [default = false, deprecated = true];
 	// Position weight to tweak the channel position in the channel list.
 	optional int32 position = 9 [default = 0];
 	// SHA1 hash of the description if the description is 128 bytes or more.
@@ -163,31 +242,75 @@ message ChannelState {
 	// server's "usersperchannel" setting.
 	optional uint32 max_users = 11;
 	// Whether this channel has enter restrictions (ACL denying ENTER) set
-	optional bool is_enter_restricted = 12;
+	// Deprecated for Fancy clients: use CHANNEL_ATTRIBUTE_ENTER_RESTRICTED in `attributes`.
+	optional bool is_enter_restricted = 12 [deprecated = true];
 	// Whether the receiver of this msg is considered to be able to enter this channel
-	optional bool can_enter = 13;
+	// Deprecated for Fancy clients: use CHANNEL_ATTRIBUTE_CAN_ENTER in `attributes`.
+	optional bool can_enter = 13 [deprecated = true];
 
 	// Fancy Mumble persistent chat extension.
-	// Field IDs start at 100 to avoid clashing with future upstream
+	// Field IDs start at 1000 to avoid clashing with future upstream
 	// Mumble protocol additions. Legacy clients silently ignore
 	// unknown fields (standard protobuf behaviour).
 	// Protocol and persistence mode for this channel.
 	// Uses the top-level PchatProtocol enum.
-	optional PchatProtocol pchat_protocol = 100;
+	optional PchatProtocol pchat_protocol = 1000;
 	// Maximum number of messages to store (0 = unlimited).
-	optional uint32 pchat_max_history = 101;
+	optional uint32 pchat_max_history = 1001;
 	// Auto-delete messages after this many days (0 = forever).
-	optional uint32 pchat_retention_days = 102;
+	optional uint32 pchat_retention_days = 1002;
 	// Cert hashes of users designated as key custodians for this channel.
 	// Key custodians can countersign epoch transitions and are trusted
 	// authorities for key distribution. Set by channel operators.
-	repeated string pchat_key_custodians = 103;
+	repeated string pchat_key_custodians = 1003;
 	// Channel access password.  Empty string means "remove the password".
 	// When set, the server creates (or updates) an ACL group named
 	// `~pwd_<channel_id>` that grants Enter permission, and denies Enter
 	// to @all.  Clients joining a password-protected channel must include
 	// the password in UserState.temporary_access_tokens.
-	optional string channel_info_password = 104;
+	optional string channel_info_password = 1004;
+
+	// Hidden-channel extension. When true, only users with the SeeChannel
+	// permission are told the channel exists (and see the users inside it).
+	optional bool hidden = 1005;
+
+	// Channel expiry extension. expiry_mode: 0 = none, 1 = absolute (removed at
+	// created_at + duration), 2 = sliding (removed after `duration` seconds of
+	// inactivity). On expiry the channel is deleted and occupants move to parent.
+	optional uint32 expiry_mode = 1006;
+	optional uint32 expiry_duration_secs = 1007;
+	// Server-computed absolute deadline (unix seconds), for client countdown UI.
+	optional uint64 expires_at = 1008;
+	// Meeting-room convenience (input-only, on create): registered user_ids to
+	// invite. The server grants each SeeChannel|Enter|Traverse and denies those to
+	// @all, making the new channel a private room only invitees can see and join.
+	repeated uint32 invitee_user_ids = 1009;
+
+	// Fancy extension: the set of attributes describing this channel from the
+	// receiving user's perspective (see ChannelAttribute). Supersedes `can_enter`
+	// / `is_enter_restricted` for Fancy clients.
+	//
+	// As input this is the generic carrier for every *settable* attribute, so new
+	// channel traits need no new ChannelState field - add the enum value and list
+	// it here. The server partitions ChannelAttribute into:
+	//   - server-computed (CAN_ENTER, ENTER_RESTRICTED, HIDDEN, TEMPORARY):
+	//     ignored as input, always recomputed per recipient;
+	//   - create-only (DETACHED): honoured on create, ignored on edit;
+	//   - settable (STRUCTURAL): honoured on create and edit, requires Write.
+	repeated ChannelAttribute attributes = 1010;
+	// Fancy extension: generic write-mask for `attributes`, so a client can
+	// assign attributes without a dedicated field per trait.
+	//
+	// For every attribute listed here the server assigns the value implied by
+	// `attributes` - set when also present there, cleared when not. Attributes
+	// absent from the mask are left untouched, so a partial update (a rename,
+	// say) never disturbs unrelated traits. A repeated field cannot distinguish
+	// "empty" from "absent", which is exactly why clearing the last remaining
+	// attribute needs this mask rather than an empty `attributes`.
+	//
+	// Omitting the mask keeps the original create-time behaviour: `attributes`
+	// is read additively and nothing is cleared.
+	repeated ChannelAttribute attribute_mask = 1011;
 }
 
 // Used to communicate user leaving or being kicked. May be sent by the client
@@ -279,7 +402,7 @@ message UserState {
 		// Client supports E2EE persistent chat (pchat).
 		FEATURE_PCHAT_E2EE = 0;
 	}
-	repeated ClientFeature client_features = 24;
+	repeated ClientFeature client_features = 1000;
 }
 
 // Relays information on the bans. The client may send the BanList message to
@@ -324,15 +447,15 @@ message TextMessage {
 	// The UTF-8 encoded message. May be HTML if the server allows.
 	required string message = 5;
 	// unique identifier for this message
-	optional string message_id = 6;
+	optional string message_id = 1000;
 	// message timestamp
-	optional uint64 timestamp = 7;
+	optional uint64 timestamp = 1001;
 	// When set, this message is an edit replacing the message with this ID.
-	optional string edit_id = 8;
+	optional string edit_id = 1002;
 	// When set, pin or unpin the message with this ID in the channel.
-	optional string pin_target = 9;
+	optional string pin_target = 1003;
 	// When true combined with pin_target, unpin instead of pin.
-	optional bool unpin = 10;
+	optional bool unpin = 1004;
 }
 
 message PermissionDenied {
@@ -404,13 +527,13 @@ message ACL {
 		// Users inherited, identified by user_id.
 		repeated uint32 inherited_members = 7;
 		// FancyMumble: optional CSS color string for role chip (e.g. "#5865F2").
-		optional string color = 8;
+		optional string color = 1000;
 		// FancyMumble: optional raw icon image bytes (PNG/JPEG) for the role.
-		optional bytes icon = 9;
+		optional bytes icon = 1001;
 		// FancyMumble: optional named visual style preset id.
-		optional string style_preset = 10;
+		optional string style_preset = 1002;
 		// FancyMumble: arbitrary key-value metadata for client-side extensions.
-		repeated KeyValue metadata = 11;
+		repeated KeyValue metadata = 1003;
 	}
 	message ChanACL {
 		// True if this ACL applies to the current channel.
@@ -511,13 +634,13 @@ message UserList {
 		optional string last_seen = 3;
 		optional uint32 last_channel = 4;
 		// Registered user avatar (PNG/JPEG bytes).
-		optional bytes texture = 5;
+		optional bytes texture = 1000;
 		// SHA-1 hash of the comment when len >= 128; empty otherwise.
 		// If set without comment, the client must request the full text
 		// via RequestBlob.user_id_comment.
-		optional bytes comment_hash = 6;
+		optional bytes comment_hash = 1001;
 		// Full comment text when len < 128, or in blob responses.
-		optional string comment = 7;
+		optional string comment = 1002;
 	}
 	// A list of registered users.
 	repeated User users = 1;
@@ -655,7 +778,7 @@ message RequestBlob {
 	// channel_ids of the requested ChannelState descriptions.
 	repeated uint32 channel_description = 3;
 	// registered user_ids whose comment should be fetched (offline support).
-	repeated uint32 user_id_comment = 4;
+	repeated uint32 user_id_comment = 1000;
 }
 
 // Sent by the server when it informs the clients on server configuration
@@ -677,7 +800,7 @@ message ServerConfig {
 	optional bool recording_allowed = 7;
 	// True when the server has a WebRTC SFU module loaded and can
 	// relay screen-share streams server-side.
-	optional bool webrtc_sfu_available = 8;
+	optional bool webrtc_sfu_available = 1000;
 	// Optional public base URL of the Fancy Mumble REST API (file
 	// server, custom emotes, capabilities, ...). Set this when the
 	// server's HTTP interface is exposed under a different hostname
@@ -685,7 +808,7 @@ message ServerConfig {
 	// or Kubernetes ingress. Clients should prefer this URL over any
 	// per-plugin `base_url` when contacting the REST API. Empty /
 	// unset means "no override; use whatever the plugin advertises".
-	optional string fancy_rest_api_url = 9;
+	optional string fancy_rest_api_url = 1001;
 }
 
 // Sent by the server to inform the clients of suggested client configuration
@@ -803,6 +926,14 @@ message PchatKeyAnnounce {
 	optional bytes signature = 6;
 	// TLS signature proving control of the TLS certificate
 	optional bytes tls_signature = 7;
+	// Which channel this announce is for.
+	//
+	// The epoch-1 canon routes and authorises a key announce per channel
+	// (`KeyAnnounce.channel`), which is what lets a server refuse one from a
+	// peer without Enter there. An identity announce carries no channel of its
+	// own, so the sender names the room it is announcing into - one per
+	// archive channel it joins.
+	optional uint32 channel_id = 8;
 }
 
 // Peer-to-peer key exchange relayed through the server.
@@ -1883,3 +2014,416 @@ message FancyServerSettingsUpdate {
 }
 
 // ---------------------------------------------------------------------------
+// Fancy Mumble: self-service account settings (IDs 154-156) - introduced in
+// 0.4.1
+// ---------------------------------------------------------------------------
+//
+// Lets a registered user manage their own account over the wire: enable
+// password authentication (or go back to certificate-only), rename or
+// unregister themselves, set their contact email and enrol a TOTP-based
+// second factor.  All operations act on the *sending* session's own
+// registration; the SuperUser account is excluded entirely.
+
+// Server -> Client: snapshot of the sending user's own account state.
+// Sent in response to a QUERY action and after every successful update.
+// Wire type ID = 154.
+message FancyAccountSettings {
+  // True while the sending session belongs to a registered (non-SuperUser)
+  // account.  False after a successful self-unregister.
+  optional bool registered = 1;
+  // Registered user ID of the account.
+  optional uint32 user_id = 2;
+  // Registered user name (DB casing).
+  optional string name = 3;
+  // Contact email stored for the account (also used by the CA-verified
+  // certificate-renewal fallback during authentication).
+  optional string email = 4;
+  // True when password authentication is enabled.  While set, a password is
+  // REQUIRED to log in under this name - a certificate alone no longer works.
+  optional bool has_password = 5;
+  // True when a TOTP second factor is enrolled for the account.
+  optional bool totp_enabled = 6;
+  // Hex SHA-1 hash of the certificate bound to the account (empty = none).
+  optional string cert_hash = 7;
+  // True when the connecting session's certificate matches cert_hash.
+  // Clearing the password (cert-only auth) is only allowed in that case.
+  optional bool cert_matches_session = 8;
+  // The devices the account is used from, most recently seen first. A device
+  // that was signed out is not listed. Starling only; epoch 0 sends none.
+  repeated FancyAccountDevice devices = 9;
+  // Whether a login proved by the certificate alone must come from a device
+  // listed above. Set by the first REMOVE_DEVICE.
+  optional bool devices_locked = 10;
+  // The device id this session logged in as, empty if it named none.
+  optional string this_device = 11;
+}
+
+// One device an account is used from.
+message FancyAccountDevice {
+  optional string id = 1;
+  optional string name = 2;
+  optional uint64 added_at_ms = 3;
+  // The last login from it; zero for a device registered ahead that has not
+  // logged in yet.
+  optional uint64 last_seen_ms = 4;
+  // Whether a session from it is connected right now.
+  optional bool online = 5;
+}
+
+// Client -> Server: perform one self-service account operation.
+// The server answers every action with a FancyAccountAck and - on success -
+// a fresh FancyAccountSettings snapshot.
+// Wire type ID = 155.
+message FancyAccountSettingsUpdate {
+  enum Action {
+    // Request the current FancyAccountSettings snapshot.
+    QUERY = 0;
+    // Enable password auth / change the password.  value = new password.
+    SET_PASSWORD = 1;
+    // Disable password auth (back to certificate-only login).  Only allowed
+    // when the session's certificate matches the one bound to the account,
+    // otherwise the account could be locked out.
+    CLEAR_PASSWORD = 2;
+    // Rename the own registered account.  value = new user name.
+    RENAME = 3;
+    // Set / change the contact email.  value = new email (empty clears).
+    SET_EMAIL = 4;
+    // Destructive: delete the own registration (ACL entries, stored
+    // properties and the account itself).  Takes full effect on reconnect.
+    UNREGISTER = 5;
+    // Begin TOTP enrolment.  The server generates a secret and returns it
+    // (plus an otpauth:// URI) in the ack; nothing is persisted yet.
+    TOTP_BEGIN = 6;
+    // Prove possession of the enrolment secret.  value = current 6-digit
+    // code.  On success the secret is persisted and 2FA becomes active.
+    TOTP_VERIFY = 7;
+    // Disable 2FA.  value = current 6-digit code (proof of possession).
+    TOTP_DISABLE = 8;
+    // Give the device named by device_id a new name.  value = the name.
+    RENAME_DEVICE = 9;
+    // Sign the device named by device_id out: its sessions end and it is
+    // refused from then on.  Never this session's own device.
+    REMOVE_DEVICE = 10;
+    // Register a device before it first connects, as linking does.
+    // device_id/device_secret = what it will log in with, value = its name.
+    ADD_DEVICE = 11;
+  }
+  required Action action = 1;
+  // Action-specific payload (see Action comments).
+  optional string value = 2;
+  // The account's *current* password, re-typed by the user.
+  //
+  // Asked for on every action that changes something, because an already
+  // authenticated session is exactly what a hijacked session also is: without
+  // this the worst an attacker on a live session could do would be to take the
+  // account, rather than to read it. Absent on QUERY, which changes nothing.
+  optional string current_password = 3;
+  // The device a device action acts on.
+  optional string device_id = 4;
+  // ADD_DEVICE only: the secret the new device will present.
+  optional string device_secret = 5;
+}
+
+// Server -> Client: result of a FancyAccountSettingsUpdate action.
+// Wire type ID = 156.
+message FancyAccountAck {
+  // Echo of FancyAccountSettingsUpdate.Action this ack belongs to.
+  required uint32 action = 1;
+  required bool ok = 2;
+  // Machine-readable error code when ok = false (e.g. "not_registered",
+  // "password_too_short", "name_taken", "cert_mismatch", "totp_wrong_code").
+  optional string error = 3;
+  // TOTP_BEGIN response: base32-encoded shared secret (RFC 3548) for manual
+  // entry into an authenticator app.  Never sent again after enrolment.
+  optional string totp_secret = 4;
+  // TOTP_BEGIN response: otpauth://totp/... provisioning URI containing the
+  // secret, account label and issuer.
+  optional string totp_uri = 5;
+}
+
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Audit log & moderation signals (docs/audit-log.md in the server repo).
+//
+// The server-side record is owned by the mumble-audit plugin: an append-only,
+// hash-chained log of server-authoritative moderation actions (bans, kicks,
+// mutes, ACL/channel/config changes, plugin administration, pchat moderation)
+// plus opt-in client-reported signals.  The client surface below is the query/
+// search protocol (spec section 5) and the admin configuration snapshot
+// (spec sections 9.2 / 10.1).
+//
+// Design-doc deviation: the spec drafted the query trio at wire IDs 157-159,
+// but 157-165 belong to the forum / scheduled-message features (defined at the
+// end of this file), so the audit messages live at 166-168 and 170-171 (169
+// stays reserved for FancyModSignal, spec section 6.5).
+
+// A single audit entry (spec section 4).  Identity fields are snapshots taken
+// at record time - a renamed or deleted user must not rewrite history.
+// Server -> Client only; embedded in FancyAuditResponse / FancyAuditEvent.
+message AuditEntry {
+  // Monotonic per virtual server; the keyset-pagination cursor.
+  optional uint64 id = 1;
+  // Unix epoch milliseconds, server clock.
+  optional uint64 ts = 2;
+  // 'server' (authoritative) | 'client' (reported claim) | 'plugin'.
+  // The UI must render these differently and never conflate them.
+  optional string source = 3;
+  // 'ban','kick','mute','acl','channel','register','config','plugin',
+  // 'pchat','audit.access','flag','signal.report', ...
+  optional string category = 4;
+  // 'info' | 'notice' | 'warning' | 'critical'.
+  optional string severity = 5;
+
+  optional uint32 actor_user_id = 6;
+  optional string actor_hash = 7;
+  optional string actor_name = 8;
+
+  optional uint32 target_user_id = 9;
+  optional string target_hash = 10;
+  optional string target_name = 11;
+
+  optional uint32 channel_id = 12;
+  optional string reason = 13;
+  // Category-specific structured payload (before/after, CIDR, duration, ...).
+  // Known categories render richly; unknown ones as key/value.
+  optional string detail_json = 14;
+  // Id of a related earlier entry (an unban points at its ban - spec 7.4).
+  optional uint64 relates_to = 15;
+  // This entry's chain hash (spec 7.1), for display and offline verification.
+  optional bytes entry_hash = 16;
+}
+
+// Client -> Server: search the audit log, or subscribe to a live tail.
+// Requires ViewAudit (today: Write on the root channel).  Unauthorized
+// queries receive an empty response, never a partial leak.
+// Wire type ID = 166.
+message FancyAuditQuery {
+  // Correlation id, echoed on the response.
+  optional string query_id = 1;
+  // Empty = all categories.
+  repeated string categories = 2;
+  // 'server' | 'client' | 'plugin'.
+  optional string source = 3;
+  optional uint32 actor_user_id = 4;
+  optional uint32 target_user_id = 5;
+  optional uint32 channel_id = 6;
+  // Free-text match on reason / detail (per-backend FTS strategy, spec 4).
+  optional string text = 7;
+  optional uint64 since_ms = 8;
+  optional uint64 until_ms = 9;
+  // Capped server-side (e.g. 200).
+  optional uint32 limit = 10;
+  // Keyset pagination: only entries with id < before_id.
+  optional uint64 before_id = 11;
+  // Stream matching entries as FancyAuditEvent until the session ends or a
+  // new query with subscribe=false replaces the subscription.
+  optional bool subscribe = 12;
+  // 'info' | 'notice' | 'warning' | 'critical'.
+  optional string severity = 13;
+  // Advanced mode (spec 10.4): a full read-only SELECT executed against the
+  // permission-scoped views, engine-enforced.  When set, the structured
+  // filters above are ignored.  Rejected with FancyAuditResponse.error when
+  // advanced SQL is unavailable (sandbox self-test failed) or disabled.
+  optional string sql = 14;
+  // Run the chain verification (spec 7.1) and report via chain_* fields.
+  optional bool verify_chain = 15;
+}
+
+// Server -> Client: response to a FancyAuditQuery.  Entries newest-first.
+// Wire type ID = 167.
+message FancyAuditResponse {
+  optional string query_id = 1;
+  repeated AuditEntry entries = 2;
+  optional bool has_more = 3;
+  // Pass as before_id of the next page query.
+  optional uint64 next_before_id = 4;
+  // Human-readable rejection (bad SQL, advanced mode unavailable, ...).
+  optional string error = 5;
+  // Chain verification result (only when verify_chain was requested).
+  optional bool chain_ok = 6;
+  optional uint64 chain_height = 7;
+  // First detected break, empty when chain_ok.
+  optional string chain_error = 8;
+}
+
+// Server -> Client: pushed to live subscribers for entries matching their
+// subscribed filter (spec 5).
+// Wire type ID = 168.
+message FancyAuditEvent {
+  optional AuditEntry entry = 1;
+}
+
+// Wire type ID 169 is reserved for FancyModSignal (spec 6.5, not yet
+// implemented).
+
+// Server -> Client: snapshot of the audit plugin's configuration schema -
+// the per-part collect/export toggles, retention, OTLP settings and the
+// disclosure switch (spec 9.2), encoded as the same generic `Setting` rows
+// the runtime server settings use so the plugin owns the schema and new
+// parts render automatically.  Sent to ConfigureAudit holders (today: Write
+// on root) after ServerSync and re-broadcast after every accepted update.
+// Wire type ID = 170.
+message FancyAuditConfig {
+  repeated Setting settings = 1;
+  // Monotonic revision so the client can drop stale snapshots.
+  optional uint64 revision = 2;
+  // Whether advanced SQL mode is available (the startup sandbox self-test
+  // passed - spec 10.4).  The client hides the SQL editor otherwise.
+  optional bool advanced_sql_available = 3;
+  // Current chain height, shown in the config half's chain-status card.
+  optional uint64 chain_height = 4;
+  // JSON schema of the queryable views + enum domains for editor
+  // autocomplete (spec 10.5), e.g. {"audit_entries":["id","ts",...],...}.
+  optional string sql_schema_json = 5;
+}
+
+// Admin -> Server: apply changed audit configuration.  Server validates
+// ConfigureAudit, applies, records the change as an audit entry itself
+// (spec 9.2 - the toggle change is the first thing the log shows), then
+// re-broadcasts FancyAuditConfig.
+// Wire type ID = 171.
+message FancyAuditConfigUpdate {
+  repeated Setting settings = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Forums (Fancy Mumble extension, IDs 157-160)
+// ---------------------------------------------------------------------------
+
+// A single forum post. Sent Client -> Server to create or edit a post, and
+// Server -> Client both as a real-time broadcast and as elements of a
+// FancyForumFetchResponse. Identity/timestamp fields are stamped by the
+// server; clients leave them empty on create.
+//
+// A forum is a per-channel, server-persisted, threaded message board. Threads
+// are ordered by their most recent activity; posts within a thread are ordered
+// by creation time.
+//
+// Wire type ID = 157.
+message FancyForumPost {
+  optional uint32 channel_id = 1;
+  // UUID of this post. The server assigns one when empty on create.
+  optional string post_id = 2;
+  // UUID of the thread root this post belongs to. Empty on a new-thread
+  // create; the server then sets thread_id = post_id. Non-empty means the
+  // post is a reply within that thread.
+  optional string thread_id = 3;
+  // Thread title. Only meaningful on a thread's root post.
+  optional string title = 4;
+  // Post body (the server enforces the configured text message length limit).
+  optional string body = 5;
+  // TLS certificate hash of the author (set by the server).
+  optional string author_hash = 6;
+  // Session ID of the author at post time (set by the server).
+  optional uint32 author_session = 7;
+  // Best-effort display name of the author (set by the server).
+  optional string author_name = 8;
+  // Creation time, Unix epoch milliseconds (set by the server).
+  optional uint64 created_at = 9;
+  // Last edit time, Unix epoch milliseconds (set by the server on edit).
+  optional uint64 edited_at = 10;
+  // True on a delete broadcast: the post (or whole thread) has been removed.
+  optional bool deleted = 11;
+  // Number of replies in the thread, excluding the root (set by the server on
+  // thread listings only).
+  optional uint32 reply_count = 12;
+}
+
+// Client -> Server: fetch forum threads for a channel, or the posts within a
+// single thread. Wire type ID = 158.
+message FancyForumFetch {
+  optional uint32 channel_id = 1;
+  // Empty: list thread roots in the channel (most recently active first).
+  // Non-empty: list posts in this thread (root first, then replies by time).
+  optional string thread_id = 2;
+  // Pagination cursor: return items that sort before this post_id.
+  optional string before_id = 3;
+  // Maximum items to return (the server caps this; default 50).
+  optional uint32 limit = 4;
+}
+
+// Server -> Client: response to a FancyForumFetch. Wire type ID = 159.
+message FancyForumFetchResponse {
+  optional uint32 channel_id = 1;
+  // Echoes the requested thread_id (empty for a thread listing).
+  optional string thread_id = 2;
+  repeated FancyForumPost posts = 3;
+  // True when more items exist beyond the returned page.
+  optional bool has_more = 4;
+}
+
+// Client -> Server: delete a forum post. Only the original author or a user
+// with Write permission on the channel may delete. Deleting a thread root
+// deletes the entire thread. The server broadcasts a FancyForumPost with
+// deleted = true to channel members. Wire type ID = 160.
+message FancyForumDelete {
+  optional uint32 channel_id = 1;
+  optional string post_id = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Scheduled messages (Fancy Mumble extension, IDs 161-165)
+// ---------------------------------------------------------------------------
+
+// Lifecycle status of a scheduled message.
+enum FancyScheduledStatus {
+  FANCY_SCHEDULED_PENDING = 0;
+  FANCY_SCHEDULED_DELIVERED = 1;
+  FANCY_SCHEDULED_CANCELLED = 2;
+  FANCY_SCHEDULED_REJECTED = 3;
+}
+
+// A text message the server stores and delivers to its target channel(s) at a
+// future time. Sent Client -> Server to schedule, and Server -> Client as
+// elements of a FancyScheduledMessageListResponse. Identity/timestamp fields
+// are stamped by the server. Wire type ID = 161.
+message FancyScheduledMessage {
+  // UUID. The server assigns one when empty on create.
+  optional string schedule_id = 1;
+  // Target channels; the message is posted to each. At least one channel_id
+  // or tree_id is required.
+  repeated uint32 channel_id = 2 [packed = true];
+  // Target channel trees; the message is posted to the whole tree.
+  repeated uint32 tree_id = 3 [packed = true];
+  // Message body (the server enforces the text message length limit).
+  optional string message = 4;
+  // Delivery time, Unix epoch milliseconds.
+  optional uint64 deliver_at = 5;
+  // Creator session ID at schedule time (set by the server).
+  optional uint32 creator_session = 6;
+  // Creator TLS certificate hash (set by the server); used to key ownership
+  // stably across reconnects.
+  optional string creator_hash = 7;
+  // Creator display name (set by the server).
+  optional string creator_name = 8;
+  // When it was scheduled, Unix epoch milliseconds (set by the server).
+  optional uint64 created_at = 9;
+  // Current status (set by the server in list responses).
+  optional FancyScheduledStatus status = 10;
+}
+
+// Client -> Server: request the caller's own pending scheduled messages.
+// Wire type ID = 162.
+message FancyScheduledMessageList {
+}
+
+// Server -> Client: the caller's scheduled messages. Wire type ID = 163.
+message FancyScheduledMessageListResponse {
+  repeated FancyScheduledMessage messages = 1;
+}
+
+// Client -> Server: cancel a pending scheduled message. Only the creator (by
+// certificate hash) may cancel. Wire type ID = 164.
+message FancyScheduledMessageCancel {
+  optional string schedule_id = 1;
+}
+
+// Server -> Client: acknowledge the outcome of a schedule, cancel, or delivery.
+// Wire type ID = 165.
+message FancyScheduledMessageAck {
+  optional string schedule_id = 1;
+  optional FancyScheduledStatus status = 2;
+  // Human-readable detail on rejection or other outcomes.
+  optional string reason = 3;
+}
+

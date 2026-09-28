@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use crate::error::{Error, Result};
 use crate::persistent::KeyTrustLevel;
 
-use super::types::ChannelKey;
 use super::KeyManager;
+use super::types::ChannelKey;
 
 impl KeyManager {
     // ---- Consensus evaluation ---------------------------------------
@@ -56,9 +56,7 @@ impl KeyManager {
         if key_groups.len() == 1 {
             // All agree
             let (key_bytes, senders) = key_groups.into_iter().next().ok_or_else(|| {
-                Error::InvalidState(
-                    "key_groups unexpectedly empty after len == 1 check".into(),
-                )
+                Error::InvalidState("key_groups unexpectedly empty after len == 1 check".into())
             })?;
             let mut key = [0u8; 32];
             key.copy_from_slice(&key_bytes);
@@ -75,11 +73,12 @@ impl KeyManager {
             Ok((trust, Some(key)))
         } else {
             // Disagreement - check if any custodian key is present
-            if let Some(key) = self.find_custodian_key_in_groups(&key_groups, channel_id, key_custodians) {
-                let _ = self.archive_keys.insert(
-                    channel_id,
-                    (ChannelKey { key }, KeyTrustLevel::Verified),
-                );
+            if let Some(key) =
+                self.find_custodian_key_in_groups(&key_groups, channel_id, key_custodians)
+            {
+                let _ = self
+                    .archive_keys
+                    .insert(channel_id, (ChannelKey { key }, KeyTrustLevel::Verified));
                 return Ok((KeyTrustLevel::Verified, Some(key)));
             }
 
@@ -201,9 +200,9 @@ mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
     use std::time::Instant;
 
+    use super::super::KeyManager;
     use super::super::identity::SeedIdentity;
     use super::super::types::{EpochCandidate, EpochKey};
-    use super::super::KeyManager;
     use super::compute_consensus_threshold;
     use crate::persistent::encryption::epoch_fingerprint;
 

@@ -1,4 +1,4 @@
-﻿//! Legacy Mumble audio packet codec.
+//! Legacy Mumble audio packet codec.
 //!
 //! Before protocol v2 (Mumble 1.5), audio packets use a compact
 //! binary encoding - both over raw UDP and inside `UDPTunnel`.
@@ -39,7 +39,9 @@ impl TryFrom<u8> for AudioType {
         match value {
             0 => Ok(Self::Protobuf),
             4 => Ok(Self::Opus),
-            other => Err(Error::InvalidState(format!("unsupported audio type {other}"  ))),
+            other => Err(Error::InvalidState(format!(
+                "unsupported audio type {other}"
+            ))),
         }
     }
 }
@@ -81,9 +83,7 @@ impl MumbleVarint {
             if buf.len() < 3 {
                 return Err(Error::InvalidState("varint: truncated 3-byte".into()));
             }
-            let val = ((first as u64 & 0x1F) << 16)
-                | (buf[1] as u64) << 8
-                | buf[2] as u64;
+            let val = ((first as u64 & 0x1F) << 16) | (buf[1] as u64) << 8 | buf[2] as u64;
             return Ok((val, 3));
         }
 
@@ -222,7 +222,7 @@ impl AudioPacketCodec for LegacyAudioCodec {
     }
 
     fn decode(data: &[u8]) -> Result<mumble_udp::Audio> {
-                if data.is_empty() {
+        if data.is_empty() {
             return Err(Error::InvalidState("empty audio packet".into()));
         }
 
@@ -294,33 +294,26 @@ impl AudioPacketCodec for ProtobufAudioCodec {
     fn encode(audio: &mumble_udp::Audio) -> Vec<u8> {
         use prost::Message as _;
 
-        let target = match audio.header {
-            Some(mumble_udp::audio::Header::Target(t)) => t as u8 & 0x1F,
-            _ => 0,
-        };
-
-        let header = (AudioType::Protobuf as u8) << 5 | target;
-
-        // Encode the protobuf payload (without the header/target field,
-        // since that's carried in byte 0).
-        let mut wire_audio = audio.clone();
-        wire_audio.header = None; // target goes in the header byte
-        let proto_bytes = wire_audio.encode_to_vec();
-
-        let mut buf = Vec::with_capacity(1 + proto_bytes.len());
-        buf.push(header);
-        buf.extend_from_slice(&proto_bytes);
+        // Byte 0 is `UDPMessageType::Audio` and nothing else; the target rides
+        // inside the protobuf, exactly as on the UDP socket. Packing the target
+        // into byte 0 the legacy way made every whisper and shout arrive as
+        // "packet type <slot>", which a 1.5 server drops, while normal speech
+        // (target 0) happened to look right.
+        let mut buf = Vec::with_capacity(1 + audio.encoded_len());
+        buf.push(AudioType::Protobuf as u8);
+        buf.extend_from_slice(&audio.encode_to_vec());
         buf
     }
 
     fn decode(data: &[u8]) -> Result<mumble_udp::Audio> {
         use prost::Message as _;
-        // Byte 0 is the type/target header; bytes 1..N are the protobuf payload.
+        // Byte 0 is the message type; bytes 1..N are the protobuf payload,
+        // which carries the context itself. Its low bits are only a fallback
+        // for a peer that still packs the target the legacy way.
         let target = (data[0] & 0x1F) as u32;
         let mut audio = mumble_udp::Audio::decode(&data[1..])
             .map_err(|e| Error::InvalidState(format!("protobuf audio decode: {e}")))?;
-        // The target is carried in the header byte, not inside the
-        // protobuf payload on the wire.  Fill it in if missing.
+        // An absent header is context 0, which protobuf does not write.
         if audio.header.is_none() {
             audio.header = Some(mumble_udp::audio::Header::Target(target));
         }
@@ -368,12 +361,27 @@ mod tests {
 
     #[test]
     fn varint_roundtrip_values() {
-        for &val in &[0u64, 1, 0x7F, 0x80, 0x3FFF, 0x4000, 0x1F_FFFF, 0x0FFF_FFFF, 0xFFFF_FFFF, 0x1_0000_0000u64] {
+        for &val in &[
+            0u64,
+            1,
+            0x7F,
+            0x80,
+            0x3FFF,
+            0x4000,
+            0x1F_FFFF,
+            0x0FFF_FFFF,
+            0xFFFF_FFFF,
+            0x1_0000_0000u64,
+        ] {
             let mut buf = Vec::new();
             MumbleVarint::write(&mut buf, val);
             let (decoded, n) = MumbleVarint::read(&buf).unwrap();
             assert_eq!(decoded, val, "varint roundtrip failed for {val}");
-            assert_eq!(n, buf.len(), "varint consumed wrong number of bytes for {val}");
+            assert_eq!(
+                n,
+                buf.len(),
+                "varint consumed wrong number of bytes for {val}"
+            );
         }
     }
 
@@ -382,7 +390,7 @@ mod tests {
         // Build a server-format packet (with session id) and verify decode.
         let mut buf = Vec::new();
         buf.push((AudioType::Opus as u8) << 5); // header: Opus, target 0
-        MumbleVarint::write(&mut buf, 7);  // session = 7
+        MumbleVarint::write(&mut buf, 7); // session = 7
         MumbleVarint::write(&mut buf, 42); // sequence = 42
         let opus = vec![0xDE, 0xAD, 0xBE, 0xEF];
         MumbleVarint::write(&mut buf, opus.len() as u64);
@@ -400,8 +408,8 @@ mod tests {
         // Build a packet as the server would send it (with session id).
         let mut buf = Vec::new();
         buf.push((AudioType::Opus as u8) << 5); // header: Opus, target 0
-        MumbleVarint::write(&mut buf, 5);   // session = 5
-        MumbleVarint::write(&mut buf, 10);  // sequence = 10
+        MumbleVarint::write(&mut buf, 5); // session = 5
+        MumbleVarint::write(&mut buf, 10); // sequence = 10
         let opus = vec![1, 2, 3];
         MumbleVarint::write(&mut buf, opus.len() as u64); // length (no terminator)
         buf.extend_from_slice(&opus);
@@ -418,8 +426,8 @@ mod tests {
         // Build a server-format packet (with session id) that has the terminator bit set.
         let mut buf = Vec::new();
         buf.push((AudioType::Opus as u8) << 5); // header: Opus, target 0
-        MumbleVarint::write(&mut buf, 0);  // session = 0
-        MumbleVarint::write(&mut buf, 1);  // sequence = 1
+        MumbleVarint::write(&mut buf, 0); // session = 0
+        MumbleVarint::write(&mut buf, 1); // sequence = 1
         let opus = vec![0xFF];
         let len_term = opus.len() as u64 | 0x2000; // set terminator bit
         MumbleVarint::write(&mut buf, len_term);
@@ -431,12 +439,40 @@ mod tests {
     }
 
     #[test]
+    fn a_tunnelled_whisper_is_framed_like_one_on_the_udp_socket() {
+        use prost::Message as _;
+        // Slot 3 in byte 0 read as "packet type 3" on a 1.5 server, and the
+        // whisper went to nobody whenever audio fell back to the TCP tunnel.
+        let audio = mumble_udp::Audio {
+            header: Some(mumble_udp::audio::Header::Target(3)),
+            frame_number: 7,
+            opus_data: vec![0xAB, 0xCD],
+            ..Default::default()
+        };
+        let tunnel = encode_tunnel_audio(&audio, true);
+        assert_eq!(
+            tunnel[0], 0,
+            "byte 0 is the Audio message type, not the target"
+        );
+        assert_eq!(
+            mumble_udp::Audio::decode(&tunnel[1..]).unwrap().header,
+            Some(mumble_udp::audio::Header::Target(3)),
+            "the target must travel inside the protobuf"
+        );
+        assert_eq!(
+            tunnel,
+            crate::transport::udp::encode_udp_message(&crate::message::UdpMessage::Audio(audio)),
+            "the tunnel and the socket must agree byte for byte"
+        );
+    }
+
+    #[test]
     fn decode_tunnel_prefers_legacy_when_protobuf_fails() {
         // Craft a legacy packet - not valid protobuf.
         let mut buf = Vec::new();
         buf.push((AudioType::Opus as u8) << 5);
-        MumbleVarint::write(&mut buf, 7);   // session
-        MumbleVarint::write(&mut buf, 99);  // sequence
+        MumbleVarint::write(&mut buf, 7); // session
+        MumbleVarint::write(&mut buf, 99); // sequence
         let opus = vec![0xAA, 0xBB];
         MumbleVarint::write(&mut buf, opus.len() as u64);
         buf.extend_from_slice(&opus);

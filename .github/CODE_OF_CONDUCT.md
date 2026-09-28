@@ -48,7 +48,7 @@ when an individual is officially representing the community in public spaces.
 
 Instances of abusive, harassing, or otherwise unacceptable behaviour may be
 reported to the project maintainers via the
-[GitHub Security Advisories](https://github.com/Fancy-Mumble/FancyMumbleNext/security/advisories)
+[GitHub Security Advisories](https://github.com/Fancy-Mumble/FancyMumble/security/advisories)
 page or by opening a private issue. All complaints will be reviewed and
 investigated promptly and fairly.
 

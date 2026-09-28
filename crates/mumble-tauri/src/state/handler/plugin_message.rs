@@ -12,7 +12,7 @@ use serde::Serialize;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
-use crate::state::types::{serialize_bytes_base64, PluginRegistryEntryPayload};
+use crate::state::types::{PluginRegistryEntryPayload, serialize_bytes_base64};
 
 /// Tauri event payload for an inbound `PluginMessage`.
 ///

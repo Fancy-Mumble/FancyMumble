@@ -1,13 +1,9 @@
-﻿//! Common audio sample types shared across the entire pipeline.
+//! Common audio sample types shared across the entire pipeline.
 //!
 //! Every pipeline stage speaks in terms of [`AudioFrame`] - a time-stamped
 //! buffer of PCM samples with associated format metadata. This keeps all
 //! stages decoupled: they only depend on this shared vocabulary, never on
 //! each other.
-
-// Re-export audio sample conversion utilities from fancy-utils so
-// existing `crate::audio::sample::i16_to_f32` paths keep working.
-pub use fancy_utils::audio::{f32_to_i16, i16_to_f32};
 
 /// PCM sample format used throughout the pipeline.
 ///
@@ -127,18 +123,61 @@ impl AudioFrame {
 
 // -- Minimal safe byte-casting (avoids adding a `bytemuck` dep) -----
 
-#[allow(unsafe_code, reason = "safe byte-reinterpretation guarded by length and alignment assertions")]
+/// Reinterpret a byte buffer as samples.
+///
+/// `from_raw_parts` on `bytes.as_ptr().cast()` would be unsound here: a
+/// `[u8]` is only guaranteed 1-byte aligned, and `T` is not. `align_to`
+/// is what actually establishes the alignment, and the assertion below
+/// turns a buffer that cannot be viewed as `T` into a panic rather than
+/// an unaligned read.
+///
+/// # Panics
+/// Panics if `bytes` is not a whole number of `T`, or does not start on a
+/// `T` boundary.
+#[allow(
+    unsafe_code,
+    reason = "align_to reinterprets bytes as T; sound because every bit pattern of \
+              the sample types this is used with (i16, f32) is a valid value"
+)]
 fn bytemuck_cast_slice<T: Copy>(bytes: &[u8]) -> &[T] {
-    let len = bytes.len() / size_of::<T>();
-    assert_eq!(bytes.len() % size_of::<T>(), 0);
-    unsafe { std::slice::from_raw_parts(bytes.as_ptr() as *const T, len) }
+    assert_eq!(
+        bytes.len() % size_of::<T>(),
+        0,
+        "sample buffer is not a whole number of samples"
+    );
+    // SAFETY: `T` is only ever `i16` or `f32` here, and every bit pattern
+    // of those is a valid value, so no invalid `T` can be produced.
+    let (head, samples, tail) = unsafe { bytes.align_to::<T>() };
+    assert!(
+        head.is_empty() && tail.is_empty(),
+        "sample buffer is not aligned for this sample format"
+    );
+    samples
 }
 
-#[allow(unsafe_code, reason = "safe byte-reinterpretation guarded by length and alignment assertions")]
+/// Mutable twin of [`bytemuck_cast_slice`].
+///
+/// # Panics
+/// Panics if `bytes` is not a whole number of `T`, or does not start on a
+/// `T` boundary.
+#[allow(
+    unsafe_code,
+    reason = "align_to_mut reinterprets bytes as T; sound because every bit pattern \
+              of the sample types this is used with (i16, f32) is a valid value"
+)]
 fn bytemuck_cast_slice_mut<T: Copy>(bytes: &mut [u8]) -> &mut [T] {
-    let len = bytes.len() / size_of::<T>();
-    assert_eq!(bytes.len() % size_of::<T>(), 0);
-    unsafe { std::slice::from_raw_parts_mut(bytes.as_mut_ptr() as *mut T, len) }
+    assert_eq!(
+        bytes.len() % size_of::<T>(),
+        0,
+        "sample buffer is not a whole number of samples"
+    );
+    // SAFETY: as above.
+    let (head, samples, tail) = unsafe { bytes.align_to_mut::<T>() };
+    assert!(
+        head.is_empty() && tail.is_empty(),
+        "sample buffer is not aligned for this sample format"
+    );
+    samples
 }
 
 #[cfg(test)]
@@ -159,7 +198,7 @@ mod tests {
     #[test]
     fn i16_f32_roundtrip() {
         let original: i16 = 16000;
-        let converted = f32_to_i16(i16_to_f32(original));
+        let converted = fancy_utils::audio::f32_to_i16(fancy_utils::audio::i16_to_f32(original));
         assert_eq!(original, converted);
     }
 }

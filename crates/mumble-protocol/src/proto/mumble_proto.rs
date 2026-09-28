@@ -14,6 +14,35 @@ pub struct Version {
     /// (message_id, timestamp, plugin data, etc.).
     #[prost(uint64, optional, tag = "6")]
     pub fancy_version: ::core::option::Option<u64>,
+    /// Which Fancy *wire* numbering this peer speaks.
+    ///
+    /// Separate from `fancy_version` on purpose. That field is a product
+    /// version: it answers "which features exist", and a peer can infer from it
+    /// that some message was implemented. It cannot express "I renumbered the
+    /// wire", so a client that trusts it will happily send a type the peer can
+    /// route nowhere - which is exactly what happened when Starling kept the
+    /// upstream types and moved every Fancy message to a new range.
+    ///
+    ///    absent / 0  epoch 0: the historical interleaved 100-999 layout, which
+    ///                is every Fancy build shipped to date.
+    ///    1           epoch 1: upstream 0-99 stays flat and frozen; every Fancy
+    ///                service is reached through one outer type >= 1000 carrying
+    ///                a service-owned envelope.
+    ///
+    /// A peer speaks exactly one epoch. When the other side does not know it,
+    /// the Fancy extensions are off and the connection degrades to plain
+    /// Mumble - plus anything relayable through PluginDataTransmission, which
+    /// works through any Mumble server and is therefore epoch-independent.
+    ///
+    /// 1000, not the next free number: Fancy fields start at 1000 so upstream can
+    /// keep growing into 1-999 (see the same note in Starling's copy). And it
+    /// must be *this* number in every copy of this file - it is read before any
+    /// epoch is known, so the two sides cannot negotiate where to find it. That
+    /// is also why moving it off 100 is a hard break rather than a soft one: a
+    /// peer built before this change looks at 100, finds nothing, and correctly
+    /// concludes it is talking to a plain Mumble server.
+    #[prost(uint32, optional, tag = "1000")]
+    pub fancy_protocol: ::core::option::Option<u32>,
     /// Client release name.
     #[prost(string, optional, tag = "2")]
     pub release: ::core::option::Option<::prost::alloc::string::String>,
@@ -51,6 +80,25 @@ pub struct Authenticate {
     /// 0 = REGULAR, 1 = BOT
     #[prost(int32, optional, tag = "6", default = "0")]
     pub client_type: ::core::option::Option<i32>,
+    /// Client extension (FancyMumble): time-based one-time password (RFC 6238)
+    /// for accounts with two-factor authentication enabled. The server rejects
+    /// with RejectType TOTPRequired / TOTPInvalid when missing or wrong.
+    #[prost(string, optional, tag = "1000")]
+    pub totp_code: ::core::option::Option<::prost::alloc::string::String>,
+    /// Client extension (FancyMumble): which install of the client this is.
+    /// Random per install and never shown to anyone else. With it one account
+    /// may be online from several devices at once, and a reconnect replaces
+    /// only the session that came from the same device.
+    #[prost(string, optional, tag = "1001")]
+    pub device_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Client extension (FancyMumble): the secret this install was registered
+    /// with. Proves device_id is not merely copied from another session.
+    #[prost(string, optional, tag = "1002")]
+    pub device_secret: ::core::option::Option<::prost::alloc::string::String>,
+    /// Client extension (FancyMumble): what the owner calls this device, e.g.
+    /// "Laptop", shown in their own device list.
+    #[prost(string, optional, tag = "1003")]
+    pub device_name: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Sent by the client to notify the server that the client is still alive.
 /// Server must reply to the packet with the same timestamp and its own
@@ -138,6 +186,14 @@ pub mod reject {
         AuthenticatorFail = 8,
         /// The server is currently not accepting new connections
         NoNewConnections = 9,
+        /// Fancy extension: the account has two-factor authentication enabled
+        /// and the client must retry with Authenticate.totp_code set.
+        TotpRequired = 10,
+        /// Fancy extension: the provided TOTP code was wrong.
+        TotpInvalid = 11,
+        /// Fancy extension: this device was signed out of the account, or the
+        /// account only admits devices it knows and this is not one of them.
+        DeviceNotTrusted = 12,
     }
     impl RejectType {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -156,6 +212,9 @@ pub mod reject {
                 Self::NoCertificate => "NoCertificate",
                 Self::AuthenticatorFail => "AuthenticatorFail",
                 Self::NoNewConnections => "NoNewConnections",
+                Self::TotpRequired => "TOTPRequired",
+                Self::TotpInvalid => "TOTPInvalid",
+                Self::DeviceNotTrusted => "DeviceNotTrusted",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -171,6 +230,9 @@ pub mod reject {
                 "NoCertificate" => Some(Self::NoCertificate),
                 "AuthenticatorFail" => Some(Self::AuthenticatorFail),
                 "NoNewConnections" => Some(Self::NoNewConnections),
+                "TOTPRequired" => Some(Self::TotpRequired),
+                "TOTPInvalid" => Some(Self::TotpInvalid),
+                "DeviceNotTrusted" => Some(Self::DeviceNotTrusted),
                 _ => None,
             }
         }
@@ -232,6 +294,8 @@ pub struct ChannelState {
     #[prost(uint32, repeated, packed = "false", tag = "7")]
     pub links_remove: ::prost::alloc::vec::Vec<u32>,
     /// True if the channel is temporary.
+    /// Deprecated for Fancy clients: use CHANNEL_ATTRIBUTE_TEMPORARY in `attributes`.
+    #[deprecated]
     #[prost(bool, optional, tag = "8", default = "false")]
     pub temporary: ::core::option::Option<bool>,
     /// Position weight to tweak the channel position in the channel list.
@@ -246,37 +310,87 @@ pub struct ChannelState {
     #[prost(uint32, optional, tag = "11")]
     pub max_users: ::core::option::Option<u32>,
     /// Whether this channel has enter restrictions (ACL denying ENTER) set
+    /// Deprecated for Fancy clients: use CHANNEL_ATTRIBUTE_ENTER_RESTRICTED in `attributes`.
+    #[deprecated]
     #[prost(bool, optional, tag = "12")]
     pub is_enter_restricted: ::core::option::Option<bool>,
     /// Whether the receiver of this msg is considered to be able to enter this channel
+    /// Deprecated for Fancy clients: use CHANNEL_ATTRIBUTE_CAN_ENTER in `attributes`.
+    #[deprecated]
     #[prost(bool, optional, tag = "13")]
     pub can_enter: ::core::option::Option<bool>,
     /// Fancy Mumble persistent chat extension.
-    /// Field IDs start at 100 to avoid clashing with future upstream
+    /// Field IDs start at 1000 to avoid clashing with future upstream
     /// Mumble protocol additions. Legacy clients silently ignore
     /// unknown fields (standard protobuf behaviour).
     /// Protocol and persistence mode for this channel.
     /// Uses the top-level PchatProtocol enum.
-    #[prost(enumeration = "PchatProtocol", optional, tag = "100")]
+    #[prost(enumeration = "PchatProtocol", optional, tag = "1000")]
     pub pchat_protocol: ::core::option::Option<i32>,
     /// Maximum number of messages to store (0 = unlimited).
-    #[prost(uint32, optional, tag = "101")]
+    #[prost(uint32, optional, tag = "1001")]
     pub pchat_max_history: ::core::option::Option<u32>,
     /// Auto-delete messages after this many days (0 = forever).
-    #[prost(uint32, optional, tag = "102")]
+    #[prost(uint32, optional, tag = "1002")]
     pub pchat_retention_days: ::core::option::Option<u32>,
     /// Cert hashes of users designated as key custodians for this channel.
     /// Key custodians can countersign epoch transitions and are trusted
     /// authorities for key distribution. Set by channel operators.
-    #[prost(string, repeated, tag = "103")]
+    #[prost(string, repeated, tag = "1003")]
     pub pchat_key_custodians: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// Channel access password.  Empty string means "remove the password".
     /// When set, the server creates (or updates) an ACL group named
     /// `~pwd_<channel_id>` that grants Enter permission, and denies Enter
     /// to @all.  Clients joining a password-protected channel must include
     /// the password in UserState.temporary_access_tokens.
-    #[prost(string, optional, tag = "104")]
+    #[prost(string, optional, tag = "1004")]
     pub channel_info_password: ::core::option::Option<::prost::alloc::string::String>,
+    /// Hidden-channel extension. When true, only users with the SeeChannel
+    /// permission are told the channel exists (and see the users inside it).
+    #[prost(bool, optional, tag = "1005")]
+    pub hidden: ::core::option::Option<bool>,
+    /// Channel expiry extension. expiry_mode: 0 = none, 1 = absolute (removed at
+    /// created_at + duration), 2 = sliding (removed after `duration` seconds of
+    /// inactivity). On expiry the channel is deleted and occupants move to parent.
+    #[prost(uint32, optional, tag = "1006")]
+    pub expiry_mode: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag = "1007")]
+    pub expiry_duration_secs: ::core::option::Option<u32>,
+    /// Server-computed absolute deadline (unix seconds), for client countdown UI.
+    #[prost(uint64, optional, tag = "1008")]
+    pub expires_at: ::core::option::Option<u64>,
+    /// Meeting-room convenience (input-only, on create): registered user_ids to
+    /// invite. The server grants each SeeChannel|Enter|Traverse and denies those to
+    /// @all, making the new channel a private room only invitees can see and join.
+    #[prost(uint32, repeated, packed = "false", tag = "1009")]
+    pub invitee_user_ids: ::prost::alloc::vec::Vec<u32>,
+    /// Fancy extension: the set of attributes describing this channel from the
+    /// receiving user's perspective (see ChannelAttribute). Supersedes `can_enter`
+    /// / `is_enter_restricted` for Fancy clients.
+    ///
+    /// As input this is the generic carrier for every *settable* attribute, so new
+    /// channel traits need no new ChannelState field - add the enum value and list
+    /// it here. The server partitions ChannelAttribute into:
+    ///    - server-computed (CAN_ENTER, ENTER_RESTRICTED, HIDDEN, TEMPORARY):
+    ///      ignored as input, always recomputed per recipient;
+    ///    - create-only (DETACHED): honoured on create, ignored on edit;
+    ///    - settable (STRUCTURAL): honoured on create and edit, requires Write.
+    #[prost(enumeration = "ChannelAttribute", repeated, packed = "false", tag = "1010")]
+    pub attributes: ::prost::alloc::vec::Vec<i32>,
+    /// Fancy extension: generic write-mask for `attributes`, so a client can
+    /// assign attributes without a dedicated field per trait.
+    ///
+    /// For every attribute listed here the server assigns the value implied by
+    /// `attributes` - set when also present there, cleared when not. Attributes
+    /// absent from the mask are left untouched, so a partial update (a rename,
+    /// say) never disturbs unrelated traits. A repeated field cannot distinguish
+    /// "empty" from "absent", which is exactly why clearing the last remaining
+    /// attribute needs this mask rather than an empty `attributes`.
+    ///
+    /// Omitting the mask keeps the original create-time behaviour: `attributes`
+    /// is read additively and nothing is cleared.
+    #[prost(enumeration = "ChannelAttribute", repeated, packed = "false", tag = "1011")]
+    pub attribute_mask: ::prost::alloc::vec::Vec<i32>,
 }
 /// Used to communicate user leaving or being kicked. May be sent by the client
 /// when it attempts to kick a user. Sent by the server when it informs the
@@ -393,7 +507,7 @@ pub struct UserState {
         enumeration = "user_state::ClientFeature",
         repeated,
         packed = "false",
-        tag = "24"
+        tag = "1000"
     )]
     pub client_features: ::prost::alloc::vec::Vec<i32>,
 }
@@ -504,19 +618,19 @@ pub struct TextMessage {
     #[prost(string, required, tag = "5")]
     pub message: ::prost::alloc::string::String,
     /// unique identifier for this message
-    #[prost(string, optional, tag = "6")]
+    #[prost(string, optional, tag = "1000")]
     pub message_id: ::core::option::Option<::prost::alloc::string::String>,
     /// message timestamp
-    #[prost(uint64, optional, tag = "7")]
+    #[prost(uint64, optional, tag = "1001")]
     pub timestamp: ::core::option::Option<u64>,
     /// When set, this message is an edit replacing the message with this ID.
-    #[prost(string, optional, tag = "8")]
+    #[prost(string, optional, tag = "1002")]
     pub edit_id: ::core::option::Option<::prost::alloc::string::String>,
     /// When set, pin or unpin the message with this ID in the channel.
-    #[prost(string, optional, tag = "9")]
+    #[prost(string, optional, tag = "1003")]
     pub pin_target: ::core::option::Option<::prost::alloc::string::String>,
     /// When true combined with pin_target, unpin instead of pin.
-    #[prost(bool, optional, tag = "10")]
+    #[prost(bool, optional, tag = "1004")]
     pub unpin: ::core::option::Option<bool>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -675,16 +789,16 @@ pub mod acl {
         #[prost(uint32, repeated, packed = "false", tag = "7")]
         pub inherited_members: ::prost::alloc::vec::Vec<u32>,
         /// FancyMumble: optional CSS color string for role chip (e.g. "#5865F2").
-        #[prost(string, optional, tag = "8")]
+        #[prost(string, optional, tag = "1000")]
         pub color: ::core::option::Option<::prost::alloc::string::String>,
         /// FancyMumble: optional raw icon image bytes (PNG/JPEG) for the role.
-        #[prost(bytes = "vec", optional, tag = "9")]
+        #[prost(bytes = "vec", optional, tag = "1001")]
         pub icon: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
         /// FancyMumble: optional named visual style preset id.
-        #[prost(string, optional, tag = "10")]
+        #[prost(string, optional, tag = "1002")]
         pub style_preset: ::core::option::Option<::prost::alloc::string::String>,
         /// FancyMumble: arbitrary key-value metadata for client-side extensions.
-        #[prost(message, repeated, tag = "11")]
+        #[prost(message, repeated, tag = "1003")]
         pub metadata: ::prost::alloc::vec::Vec<chan_group::KeyValue>,
     }
     /// Nested message and enum types in `ChanGroup`.
@@ -887,15 +1001,15 @@ pub mod user_list {
         #[prost(uint32, optional, tag = "4")]
         pub last_channel: ::core::option::Option<u32>,
         /// Registered user avatar (PNG/JPEG bytes).
-        #[prost(bytes = "vec", optional, tag = "5")]
+        #[prost(bytes = "vec", optional, tag = "1000")]
         pub texture: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
         /// SHA-1 hash of the comment when len >= 128; empty otherwise.
         /// If set without comment, the client must request the full text
         /// via RequestBlob.user_id_comment.
-        #[prost(bytes = "vec", optional, tag = "6")]
+        #[prost(bytes = "vec", optional, tag = "1001")]
         pub comment_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
         /// Full comment text when len < 128, or in blob responses.
-        #[prost(string, optional, tag = "7")]
+        #[prost(string, optional, tag = "1002")]
         pub comment: ::core::option::Option<::prost::alloc::string::String>,
     }
 }
@@ -1080,7 +1194,7 @@ pub struct RequestBlob {
     #[prost(uint32, repeated, packed = "false", tag = "3")]
     pub channel_description: ::prost::alloc::vec::Vec<u32>,
     /// registered user_ids whose comment should be fetched (offline support).
-    #[prost(uint32, repeated, packed = "false", tag = "4")]
+    #[prost(uint32, repeated, packed = "false", tag = "1000")]
     pub user_id_comment: ::prost::alloc::vec::Vec<u32>,
 }
 /// Sent by the server when it informs the clients on server configuration
@@ -1110,7 +1224,7 @@ pub struct ServerConfig {
     pub recording_allowed: ::core::option::Option<bool>,
     /// True when the server has a WebRTC SFU module loaded and can
     /// relay screen-share streams server-side.
-    #[prost(bool, optional, tag = "8")]
+    #[prost(bool, optional, tag = "1000")]
     pub webrtc_sfu_available: ::core::option::Option<bool>,
     /// Optional public base URL of the Fancy Mumble REST API (file
     /// server, custom emotes, capabilities, ...). Set this when the
@@ -1119,7 +1233,7 @@ pub struct ServerConfig {
     /// or Kubernetes ingress. Clients should prefer this URL over any
     /// per-plugin `base_url` when contacting the REST API. Empty /
     /// unset means "no override; use whatever the plugin advertises".
-    #[prost(string, optional, tag = "9")]
+    #[prost(string, optional, tag = "1001")]
     pub fancy_rest_api_url: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Sent by the server to inform the clients of suggested client configuration
@@ -1260,6 +1374,15 @@ pub struct PchatKeyAnnounce {
     /// TLS signature proving control of the TLS certificate
     #[prost(bytes = "vec", optional, tag = "7")]
     pub tls_signature: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Which channel this announce is for.
+    ///
+    /// The epoch-1 canon routes and authorises a key announce per channel
+    /// (`KeyAnnounce.channel`), which is what lets a server refuse one from a
+    /// peer without Enter there. An identity announce carries no channel of its
+    /// own, so the sender names the room it is announcing into - one per
+    /// archive channel it joins.
+    #[prost(uint32, optional, tag = "8")]
+    pub channel_id: ::core::option::Option<u32>,
 }
 /// Peer-to-peer key exchange relayed through the server.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2748,6 +2871,591 @@ pub struct FancyServerSettingsUpdate {
     #[prost(message, repeated, tag = "1")]
     pub settings: ::prost::alloc::vec::Vec<Setting>,
 }
+/// Server -> Client: snapshot of the sending user's own account state.
+/// Sent in response to a QUERY action and after every successful update.
+/// Wire type ID = 154.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FancyAccountSettings {
+    /// True while the sending session belongs to a registered (non-SuperUser)
+    /// account.  False after a successful self-unregister.
+    #[prost(bool, optional, tag = "1")]
+    pub registered: ::core::option::Option<bool>,
+    /// Registered user ID of the account.
+    #[prost(uint32, optional, tag = "2")]
+    pub user_id: ::core::option::Option<u32>,
+    /// Registered user name (DB casing).
+    #[prost(string, optional, tag = "3")]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    /// Contact email stored for the account (also used by the CA-verified
+    /// certificate-renewal fallback during authentication).
+    #[prost(string, optional, tag = "4")]
+    pub email: ::core::option::Option<::prost::alloc::string::String>,
+    /// True when password authentication is enabled.  While set, a password is
+    /// REQUIRED to log in under this name - a certificate alone no longer works.
+    #[prost(bool, optional, tag = "5")]
+    pub has_password: ::core::option::Option<bool>,
+    /// True when a TOTP second factor is enrolled for the account.
+    #[prost(bool, optional, tag = "6")]
+    pub totp_enabled: ::core::option::Option<bool>,
+    /// Hex SHA-1 hash of the certificate bound to the account (empty = none).
+    #[prost(string, optional, tag = "7")]
+    pub cert_hash: ::core::option::Option<::prost::alloc::string::String>,
+    /// True when the connecting session's certificate matches cert_hash.
+    /// Clearing the password (cert-only auth) is only allowed in that case.
+    #[prost(bool, optional, tag = "8")]
+    pub cert_matches_session: ::core::option::Option<bool>,
+    /// The devices the account is used from, most recently seen first. A device
+    /// that was signed out is not listed. Starling only; epoch 0 sends none.
+    #[prost(message, repeated, tag = "9")]
+    pub devices: ::prost::alloc::vec::Vec<FancyAccountDevice>,
+    /// Whether a login proved by the certificate alone must come from a device
+    /// listed above. Set by the first REMOVE_DEVICE.
+    #[prost(bool, optional, tag = "10")]
+    pub devices_locked: ::core::option::Option<bool>,
+    /// The device id this session logged in as, empty if it named none.
+    #[prost(string, optional, tag = "11")]
+    pub this_device: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// One device an account is used from.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyAccountDevice {
+    #[prost(string, optional, tag = "1")]
+    pub id: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "2")]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(uint64, optional, tag = "3")]
+    pub added_at_ms: ::core::option::Option<u64>,
+    /// The last login from it; zero for a device registered ahead that has not
+    /// logged in yet.
+    #[prost(uint64, optional, tag = "4")]
+    pub last_seen_ms: ::core::option::Option<u64>,
+    /// Whether a session from it is connected right now.
+    #[prost(bool, optional, tag = "5")]
+    pub online: ::core::option::Option<bool>,
+}
+/// Client -> Server: perform one self-service account operation.
+/// The server answers every action with a FancyAccountAck and - on success -
+/// a fresh FancyAccountSettings snapshot.
+/// Wire type ID = 155.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyAccountSettingsUpdate {
+    #[prost(enumeration = "fancy_account_settings_update::Action", required, tag = "1")]
+    pub action: i32,
+    /// Action-specific payload (see Action comments).
+    #[prost(string, optional, tag = "2")]
+    pub value: ::core::option::Option<::prost::alloc::string::String>,
+    /// The account's *current* password, re-typed by the user.
+    ///
+    /// Asked for on every action that changes something, because an already
+    /// authenticated session is exactly what a hijacked session also is: without
+    /// this the worst an attacker on a live session could do would be to take the
+    /// account, rather than to read it. Absent on QUERY, which changes nothing.
+    #[prost(string, optional, tag = "3")]
+    pub current_password: ::core::option::Option<::prost::alloc::string::String>,
+    /// The device a device action acts on.
+    #[prost(string, optional, tag = "4")]
+    pub device_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// ADD_DEVICE only: the secret the new device will present.
+    #[prost(string, optional, tag = "5")]
+    pub device_secret: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Nested message and enum types in `FancyAccountSettingsUpdate`.
+pub mod fancy_account_settings_update {
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration
+    )]
+    #[repr(i32)]
+    pub enum Action {
+        /// Request the current FancyAccountSettings snapshot.
+        Query = 0,
+        /// Enable password auth / change the password.  value = new password.
+        SetPassword = 1,
+        /// Disable password auth (back to certificate-only login).  Only allowed
+        /// when the session's certificate matches the one bound to the account,
+        /// otherwise the account could be locked out.
+        ClearPassword = 2,
+        /// Rename the own registered account.  value = new user name.
+        Rename = 3,
+        /// Set / change the contact email.  value = new email (empty clears).
+        SetEmail = 4,
+        /// Destructive: delete the own registration (ACL entries, stored
+        /// properties and the account itself).  Takes full effect on reconnect.
+        Unregister = 5,
+        /// Begin TOTP enrolment.  The server generates a secret and returns it
+        /// (plus an otpauth:// URI) in the ack; nothing is persisted yet.
+        TotpBegin = 6,
+        /// Prove possession of the enrolment secret.  value = current 6-digit
+        /// code.  On success the secret is persisted and 2FA becomes active.
+        TotpVerify = 7,
+        /// Disable 2FA.  value = current 6-digit code (proof of possession).
+        TotpDisable = 8,
+        /// Give the device named by device_id a new name.  value = the name.
+        RenameDevice = 9,
+        /// Sign the device named by device_id out: its sessions end and it is
+        /// refused from then on.  Never this session's own device.
+        RemoveDevice = 10,
+        /// Register a device before it first connects, as linking does.
+        /// device_id/device_secret = what it will log in with, value = its name.
+        AddDevice = 11,
+    }
+    impl Action {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Self::Query => "QUERY",
+                Self::SetPassword => "SET_PASSWORD",
+                Self::ClearPassword => "CLEAR_PASSWORD",
+                Self::Rename => "RENAME",
+                Self::SetEmail => "SET_EMAIL",
+                Self::Unregister => "UNREGISTER",
+                Self::TotpBegin => "TOTP_BEGIN",
+                Self::TotpVerify => "TOTP_VERIFY",
+                Self::TotpDisable => "TOTP_DISABLE",
+                Self::RenameDevice => "RENAME_DEVICE",
+                Self::RemoveDevice => "REMOVE_DEVICE",
+                Self::AddDevice => "ADD_DEVICE",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "QUERY" => Some(Self::Query),
+                "SET_PASSWORD" => Some(Self::SetPassword),
+                "CLEAR_PASSWORD" => Some(Self::ClearPassword),
+                "RENAME" => Some(Self::Rename),
+                "SET_EMAIL" => Some(Self::SetEmail),
+                "UNREGISTER" => Some(Self::Unregister),
+                "TOTP_BEGIN" => Some(Self::TotpBegin),
+                "TOTP_VERIFY" => Some(Self::TotpVerify),
+                "TOTP_DISABLE" => Some(Self::TotpDisable),
+                "RENAME_DEVICE" => Some(Self::RenameDevice),
+                "REMOVE_DEVICE" => Some(Self::RemoveDevice),
+                "ADD_DEVICE" => Some(Self::AddDevice),
+                _ => None,
+            }
+        }
+    }
+}
+/// Server -> Client: result of a FancyAccountSettingsUpdate action.
+/// Wire type ID = 156.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyAccountAck {
+    /// Echo of FancyAccountSettingsUpdate.Action this ack belongs to.
+    #[prost(uint32, required, tag = "1")]
+    pub action: u32,
+    #[prost(bool, required, tag = "2")]
+    pub ok: bool,
+    /// Machine-readable error code when ok = false (e.g. "not_registered",
+    /// "password_too_short", "name_taken", "cert_mismatch", "totp_wrong_code").
+    #[prost(string, optional, tag = "3")]
+    pub error: ::core::option::Option<::prost::alloc::string::String>,
+    /// TOTP_BEGIN response: base32-encoded shared secret (RFC 3548) for manual
+    /// entry into an authenticator app.  Never sent again after enrolment.
+    #[prost(string, optional, tag = "4")]
+    pub totp_secret: ::core::option::Option<::prost::alloc::string::String>,
+    /// TOTP_BEGIN response: otpauth://totp/... provisioning URI containing the
+    /// secret, account label and issuer.
+    #[prost(string, optional, tag = "5")]
+    pub totp_uri: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// A single audit entry (spec section 4).  Identity fields are snapshots taken
+/// at record time - a renamed or deleted user must not rewrite history.
+/// Server -> Client only; embedded in FancyAuditResponse / FancyAuditEvent.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AuditEntry {
+    /// Monotonic per virtual server; the keyset-pagination cursor.
+    #[prost(uint64, optional, tag = "1")]
+    pub id: ::core::option::Option<u64>,
+    /// Unix epoch milliseconds, server clock.
+    #[prost(uint64, optional, tag = "2")]
+    pub ts: ::core::option::Option<u64>,
+    /// 'server' (authoritative) | 'client' (reported claim) | 'plugin'.
+    /// The UI must render these differently and never conflate them.
+    #[prost(string, optional, tag = "3")]
+    pub source: ::core::option::Option<::prost::alloc::string::String>,
+    /// 'ban','kick','mute','acl','channel','register','config','plugin',
+    /// 'pchat','audit.access','flag','signal.report', ...
+    #[prost(string, optional, tag = "4")]
+    pub category: ::core::option::Option<::prost::alloc::string::String>,
+    /// 'info' | 'notice' | 'warning' | 'critical'.
+    #[prost(string, optional, tag = "5")]
+    pub severity: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(uint32, optional, tag = "6")]
+    pub actor_user_id: ::core::option::Option<u32>,
+    #[prost(string, optional, tag = "7")]
+    pub actor_hash: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "8")]
+    pub actor_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(uint32, optional, tag = "9")]
+    pub target_user_id: ::core::option::Option<u32>,
+    #[prost(string, optional, tag = "10")]
+    pub target_hash: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "11")]
+    pub target_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(uint32, optional, tag = "12")]
+    pub channel_id: ::core::option::Option<u32>,
+    #[prost(string, optional, tag = "13")]
+    pub reason: ::core::option::Option<::prost::alloc::string::String>,
+    /// Category-specific structured payload (before/after, CIDR, duration, ...).
+    /// Known categories render richly; unknown ones as key/value.
+    #[prost(string, optional, tag = "14")]
+    pub detail_json: ::core::option::Option<::prost::alloc::string::String>,
+    /// Id of a related earlier entry (an unban points at its ban - spec 7.4).
+    #[prost(uint64, optional, tag = "15")]
+    pub relates_to: ::core::option::Option<u64>,
+    /// This entry's chain hash (spec 7.1), for display and offline verification.
+    #[prost(bytes = "vec", optional, tag = "16")]
+    pub entry_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+/// Client -> Server: search the audit log, or subscribe to a live tail.
+/// Requires ViewAudit (today: Write on the root channel).  Unauthorized
+/// queries receive an empty response, never a partial leak.
+/// Wire type ID = 166.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyAuditQuery {
+    /// Correlation id, echoed on the response.
+    #[prost(string, optional, tag = "1")]
+    pub query_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Empty = all categories.
+    #[prost(string, repeated, tag = "2")]
+    pub categories: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// 'server' | 'client' | 'plugin'.
+    #[prost(string, optional, tag = "3")]
+    pub source: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(uint32, optional, tag = "4")]
+    pub actor_user_id: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag = "5")]
+    pub target_user_id: ::core::option::Option<u32>,
+    #[prost(uint32, optional, tag = "6")]
+    pub channel_id: ::core::option::Option<u32>,
+    /// Free-text match on reason / detail (per-backend FTS strategy, spec 4).
+    #[prost(string, optional, tag = "7")]
+    pub text: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(uint64, optional, tag = "8")]
+    pub since_ms: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "9")]
+    pub until_ms: ::core::option::Option<u64>,
+    /// Capped server-side (e.g. 200).
+    #[prost(uint32, optional, tag = "10")]
+    pub limit: ::core::option::Option<u32>,
+    /// Keyset pagination: only entries with id < before_id.
+    #[prost(uint64, optional, tag = "11")]
+    pub before_id: ::core::option::Option<u64>,
+    /// Stream matching entries as FancyAuditEvent until the session ends or a
+    /// new query with subscribe=false replaces the subscription.
+    #[prost(bool, optional, tag = "12")]
+    pub subscribe: ::core::option::Option<bool>,
+    /// 'info' | 'notice' | 'warning' | 'critical'.
+    #[prost(string, optional, tag = "13")]
+    pub severity: ::core::option::Option<::prost::alloc::string::String>,
+    /// Advanced mode (spec 10.4): a full read-only SELECT executed against the
+    /// permission-scoped views, engine-enforced.  When set, the structured
+    /// filters above are ignored.  Rejected with FancyAuditResponse.error when
+    /// advanced SQL is unavailable (sandbox self-test failed) or disabled.
+    #[prost(string, optional, tag = "14")]
+    pub sql: ::core::option::Option<::prost::alloc::string::String>,
+    /// Run the chain verification (spec 7.1) and report via chain_* fields.
+    #[prost(bool, optional, tag = "15")]
+    pub verify_chain: ::core::option::Option<bool>,
+}
+/// Server -> Client: response to a FancyAuditQuery.  Entries newest-first.
+/// Wire type ID = 167.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FancyAuditResponse {
+    #[prost(string, optional, tag = "1")]
+    pub query_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, repeated, tag = "2")]
+    pub entries: ::prost::alloc::vec::Vec<AuditEntry>,
+    #[prost(bool, optional, tag = "3")]
+    pub has_more: ::core::option::Option<bool>,
+    /// Pass as before_id of the next page query.
+    #[prost(uint64, optional, tag = "4")]
+    pub next_before_id: ::core::option::Option<u64>,
+    /// Human-readable rejection (bad SQL, advanced mode unavailable, ...).
+    #[prost(string, optional, tag = "5")]
+    pub error: ::core::option::Option<::prost::alloc::string::String>,
+    /// Chain verification result (only when verify_chain was requested).
+    #[prost(bool, optional, tag = "6")]
+    pub chain_ok: ::core::option::Option<bool>,
+    #[prost(uint64, optional, tag = "7")]
+    pub chain_height: ::core::option::Option<u64>,
+    /// First detected break, empty when chain_ok.
+    #[prost(string, optional, tag = "8")]
+    pub chain_error: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Server -> Client: pushed to live subscribers for entries matching their
+/// subscribed filter (spec 5).
+/// Wire type ID = 168.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyAuditEvent {
+    #[prost(message, optional, tag = "1")]
+    pub entry: ::core::option::Option<AuditEntry>,
+}
+/// Server -> Client: snapshot of the audit plugin's configuration schema -
+/// the per-part collect/export toggles, retention, OTLP settings and the
+/// disclosure switch (spec 9.2), encoded as the same generic `Setting` rows
+/// the runtime server settings use so the plugin owns the schema and new
+/// parts render automatically.  Sent to ConfigureAudit holders (today: Write
+/// on root) after ServerSync and re-broadcast after every accepted update.
+/// Wire type ID = 170.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FancyAuditConfig {
+    #[prost(message, repeated, tag = "1")]
+    pub settings: ::prost::alloc::vec::Vec<Setting>,
+    /// Monotonic revision so the client can drop stale snapshots.
+    #[prost(uint64, optional, tag = "2")]
+    pub revision: ::core::option::Option<u64>,
+    /// Whether advanced SQL mode is available (the startup sandbox self-test
+    /// passed - spec 10.4).  The client hides the SQL editor otherwise.
+    #[prost(bool, optional, tag = "3")]
+    pub advanced_sql_available: ::core::option::Option<bool>,
+    /// Current chain height, shown in the config half's chain-status card.
+    #[prost(uint64, optional, tag = "4")]
+    pub chain_height: ::core::option::Option<u64>,
+    /// JSON schema of the queryable views + enum domains for editor
+    /// autocomplete (spec 10.5), e.g. {"audit_entries":\["id","ts",...\],...}.
+    #[prost(string, optional, tag = "5")]
+    pub sql_schema_json: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Admin -> Server: apply changed audit configuration.  Server validates
+/// ConfigureAudit, applies, records the change as an audit entry itself
+/// (spec 9.2 - the toggle change is the first thing the log shows), then
+/// re-broadcasts FancyAuditConfig.
+/// Wire type ID = 171.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FancyAuditConfigUpdate {
+    #[prost(message, repeated, tag = "1")]
+    pub settings: ::prost::alloc::vec::Vec<Setting>,
+}
+/// A single forum post. Sent Client -> Server to create or edit a post, and
+/// Server -> Client both as a real-time broadcast and as elements of a
+/// FancyForumFetchResponse. Identity/timestamp fields are stamped by the
+/// server; clients leave them empty on create.
+///
+/// A forum is a per-channel, server-persisted, threaded message board. Threads
+/// are ordered by their most recent activity; posts within a thread are ordered
+/// by creation time.
+///
+/// Wire type ID = 157.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyForumPost {
+    #[prost(uint32, optional, tag = "1")]
+    pub channel_id: ::core::option::Option<u32>,
+    /// UUID of this post. The server assigns one when empty on create.
+    #[prost(string, optional, tag = "2")]
+    pub post_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// UUID of the thread root this post belongs to. Empty on a new-thread
+    /// create; the server then sets thread_id = post_id. Non-empty means the
+    /// post is a reply within that thread.
+    #[prost(string, optional, tag = "3")]
+    pub thread_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Thread title. Only meaningful on a thread's root post.
+    #[prost(string, optional, tag = "4")]
+    pub title: ::core::option::Option<::prost::alloc::string::String>,
+    /// Post body (the server enforces the configured text message length limit).
+    #[prost(string, optional, tag = "5")]
+    pub body: ::core::option::Option<::prost::alloc::string::String>,
+    /// TLS certificate hash of the author (set by the server).
+    #[prost(string, optional, tag = "6")]
+    pub author_hash: ::core::option::Option<::prost::alloc::string::String>,
+    /// Session ID of the author at post time (set by the server).
+    #[prost(uint32, optional, tag = "7")]
+    pub author_session: ::core::option::Option<u32>,
+    /// Best-effort display name of the author (set by the server).
+    #[prost(string, optional, tag = "8")]
+    pub author_name: ::core::option::Option<::prost::alloc::string::String>,
+    /// Creation time, Unix epoch milliseconds (set by the server).
+    #[prost(uint64, optional, tag = "9")]
+    pub created_at: ::core::option::Option<u64>,
+    /// Last edit time, Unix epoch milliseconds (set by the server on edit).
+    #[prost(uint64, optional, tag = "10")]
+    pub edited_at: ::core::option::Option<u64>,
+    /// True on a delete broadcast: the post (or whole thread) has been removed.
+    #[prost(bool, optional, tag = "11")]
+    pub deleted: ::core::option::Option<bool>,
+    /// Number of replies in the thread, excluding the root (set by the server on
+    /// thread listings only).
+    #[prost(uint32, optional, tag = "12")]
+    pub reply_count: ::core::option::Option<u32>,
+}
+/// Client -> Server: fetch forum threads for a channel, or the posts within a
+/// single thread. Wire type ID = 158.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyForumFetch {
+    #[prost(uint32, optional, tag = "1")]
+    pub channel_id: ::core::option::Option<u32>,
+    /// Empty: list thread roots in the channel (most recently active first).
+    /// Non-empty: list posts in this thread (root first, then replies by time).
+    #[prost(string, optional, tag = "2")]
+    pub thread_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Pagination cursor: return items that sort before this post_id.
+    #[prost(string, optional, tag = "3")]
+    pub before_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Maximum items to return (the server caps this; default 50).
+    #[prost(uint32, optional, tag = "4")]
+    pub limit: ::core::option::Option<u32>,
+}
+/// Server -> Client: response to a FancyForumFetch. Wire type ID = 159.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FancyForumFetchResponse {
+    #[prost(uint32, optional, tag = "1")]
+    pub channel_id: ::core::option::Option<u32>,
+    /// Echoes the requested thread_id (empty for a thread listing).
+    #[prost(string, optional, tag = "2")]
+    pub thread_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, repeated, tag = "3")]
+    pub posts: ::prost::alloc::vec::Vec<FancyForumPost>,
+    /// True when more items exist beyond the returned page.
+    #[prost(bool, optional, tag = "4")]
+    pub has_more: ::core::option::Option<bool>,
+}
+/// Client -> Server: delete a forum post. Only the original author or a user
+/// with Write permission on the channel may delete. Deleting a thread root
+/// deletes the entire thread. The server broadcasts a FancyForumPost with
+/// deleted = true to channel members. Wire type ID = 160.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyForumDelete {
+    #[prost(uint32, optional, tag = "1")]
+    pub channel_id: ::core::option::Option<u32>,
+    #[prost(string, optional, tag = "2")]
+    pub post_id: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// A text message the server stores and delivers to its target channel(s) at a
+/// future time. Sent Client -> Server to schedule, and Server -> Client as
+/// elements of a FancyScheduledMessageListResponse. Identity/timestamp fields
+/// are stamped by the server. Wire type ID = 161.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyScheduledMessage {
+    /// UUID. The server assigns one when empty on create.
+    #[prost(string, optional, tag = "1")]
+    pub schedule_id: ::core::option::Option<::prost::alloc::string::String>,
+    /// Target channels; the message is posted to each. At least one channel_id
+    /// or tree_id is required.
+    #[prost(uint32, repeated, tag = "2")]
+    pub channel_id: ::prost::alloc::vec::Vec<u32>,
+    /// Target channel trees; the message is posted to the whole tree.
+    #[prost(uint32, repeated, tag = "3")]
+    pub tree_id: ::prost::alloc::vec::Vec<u32>,
+    /// Message body (the server enforces the text message length limit).
+    #[prost(string, optional, tag = "4")]
+    pub message: ::core::option::Option<::prost::alloc::string::String>,
+    /// Delivery time, Unix epoch milliseconds.
+    #[prost(uint64, optional, tag = "5")]
+    pub deliver_at: ::core::option::Option<u64>,
+    /// Creator session ID at schedule time (set by the server).
+    #[prost(uint32, optional, tag = "6")]
+    pub creator_session: ::core::option::Option<u32>,
+    /// Creator TLS certificate hash (set by the server); used to key ownership
+    /// stably across reconnects.
+    #[prost(string, optional, tag = "7")]
+    pub creator_hash: ::core::option::Option<::prost::alloc::string::String>,
+    /// Creator display name (set by the server).
+    #[prost(string, optional, tag = "8")]
+    pub creator_name: ::core::option::Option<::prost::alloc::string::String>,
+    /// When it was scheduled, Unix epoch milliseconds (set by the server).
+    #[prost(uint64, optional, tag = "9")]
+    pub created_at: ::core::option::Option<u64>,
+    /// Current status (set by the server in list responses).
+    #[prost(enumeration = "FancyScheduledStatus", optional, tag = "10")]
+    pub status: ::core::option::Option<i32>,
+}
+/// Client -> Server: request the caller's own pending scheduled messages.
+/// Wire type ID = 162.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyScheduledMessageList {}
+/// Server -> Client: the caller's scheduled messages. Wire type ID = 163.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FancyScheduledMessageListResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub messages: ::prost::alloc::vec::Vec<FancyScheduledMessage>,
+}
+/// Client -> Server: cancel a pending scheduled message. Only the creator (by
+/// certificate hash) may cancel. Wire type ID = 164.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyScheduledMessageCancel {
+    #[prost(string, optional, tag = "1")]
+    pub schedule_id: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Server -> Client: acknowledge the outcome of a schedule, cancel, or delivery.
+/// Wire type ID = 165.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FancyScheduledMessageAck {
+    #[prost(string, optional, tag = "1")]
+    pub schedule_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(enumeration = "FancyScheduledStatus", optional, tag = "2")]
+    pub status: ::core::option::Option<i32>,
+    /// Human-readable detail on rejection or other outcomes.
+    #[prost(string, optional, tag = "3")]
+    pub reason: ::core::option::Option<::prost::alloc::string::String>,
+}
+/// Fancy Mumble extension: a single channel attribute flag. ChannelState carries
+/// a repeated set of these (its `attributes` field), describing the channel from
+/// the receiving user's perspective. This supersedes the individual `can_enter` /
+/// `is_enter_restricted` booleans for Fancy clients (those booleans are still sent
+/// for legacy clients). Legacy clients ignore the unknown `attributes` field.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ChannelAttribute {
+    /// Zero value, never sent (proto enum default).
+    Unspecified = 0,
+    /// The receiving user is permitted to enter this channel.
+    CanEnter = 1,
+    /// Entry is gated by a password/token: ENTER is denied and the user is not
+    /// otherwise granted it by a user-id ACL.
+    EnterRestricted = 2,
+    /// Hidden: only users holding SeeChannel are told the channel exists.
+    Hidden = 3,
+    /// Temporary: auto-removed by the server when it becomes empty.
+    Temporary = 4,
+    /// Detached: a parentless channel (like the root) that never appears in the
+    /// channel tree and is only ever sent to Fancy clients. Used for meeting rooms.
+    Detached = 5,
+    /// Structural: the channel exists only to organise the tree. It cannot be
+    /// entered and never holds users; clients render it as a heading for the
+    /// channels nested beneath it. Settable by clients with Write on the channel.
+    Structural = 6,
+}
+impl ChannelAttribute {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "CHANNEL_ATTRIBUTE_UNSPECIFIED",
+            Self::CanEnter => "CHANNEL_ATTRIBUTE_CAN_ENTER",
+            Self::EnterRestricted => "CHANNEL_ATTRIBUTE_ENTER_RESTRICTED",
+            Self::Hidden => "CHANNEL_ATTRIBUTE_HIDDEN",
+            Self::Temporary => "CHANNEL_ATTRIBUTE_TEMPORARY",
+            Self::Detached => "CHANNEL_ATTRIBUTE_DETACHED",
+            Self::Structural => "CHANNEL_ATTRIBUTE_STRUCTURAL",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "CHANNEL_ATTRIBUTE_UNSPECIFIED" => Some(Self::Unspecified),
+            "CHANNEL_ATTRIBUTE_CAN_ENTER" => Some(Self::CanEnter),
+            "CHANNEL_ATTRIBUTE_ENTER_RESTRICTED" => Some(Self::EnterRestricted),
+            "CHANNEL_ATTRIBUTE_HIDDEN" => Some(Self::Hidden),
+            "CHANNEL_ATTRIBUTE_TEMPORARY" => Some(Self::Temporary),
+            "CHANNEL_ATTRIBUTE_DETACHED" => Some(Self::Detached),
+            "CHANNEL_ATTRIBUTE_STRUCTURAL" => Some(Self::Structural),
+            _ => None,
+        }
+    }
+}
 /// Unified pchat protocol indicator.
 /// Each value identifies both the E2EE protocol implementation
 /// and the persistence behaviour for a channel.
@@ -2842,6 +3550,39 @@ impl ReactionAction {
         match value {
             "REACTION_ADD" => Some(Self::ReactionAdd),
             "REACTION_REMOVE" => Some(Self::ReactionRemove),
+            _ => None,
+        }
+    }
+}
+/// Lifecycle status of a scheduled message.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum FancyScheduledStatus {
+    FancyScheduledPending = 0,
+    FancyScheduledDelivered = 1,
+    FancyScheduledCancelled = 2,
+    FancyScheduledRejected = 3,
+}
+impl FancyScheduledStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::FancyScheduledPending => "FANCY_SCHEDULED_PENDING",
+            Self::FancyScheduledDelivered => "FANCY_SCHEDULED_DELIVERED",
+            Self::FancyScheduledCancelled => "FANCY_SCHEDULED_CANCELLED",
+            Self::FancyScheduledRejected => "FANCY_SCHEDULED_REJECTED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "FANCY_SCHEDULED_PENDING" => Some(Self::FancyScheduledPending),
+            "FANCY_SCHEDULED_DELIVERED" => Some(Self::FancyScheduledDelivered),
+            "FANCY_SCHEDULED_CANCELLED" => Some(Self::FancyScheduledCancelled),
+            "FANCY_SCHEDULED_REJECTED" => Some(Self::FancyScheduledRejected),
             _ => None,
         }
     }

@@ -3,9 +3,7 @@ use mumble_protocol::proto::mumble_tcp;
 use super::{HandleMessage, HandlerContext};
 use crate::state::types::{PacketStats, RollingStatsPayload, UserStatsPayload};
 
-fn extract_packet_stats(
-    stats: &Option<mumble_tcp::user_stats::Stats>,
-) -> Option<PacketStats> {
+fn extract_packet_stats(stats: &Option<mumble_tcp::user_stats::Stats>) -> Option<PacketStats> {
     stats.as_ref().map(|s| PacketStats {
         good: s.good.unwrap_or(0),
         late: s.late.unwrap_or(0),
@@ -22,13 +20,7 @@ impl HandleMessage for mumble_tcp::UserStats {
         let (version, os, os_version) = self
             .version
             .as_ref()
-            .map(|v| {
-                (
-                    v.release.clone(),
-                    v.os.clone(),
-                    v.os_version.clone(),
-                )
-            })
+            .map(|v| (v.release.clone(), v.os.clone(), v.os_version.clone()))
             .unwrap_or_default();
 
         let address = self
@@ -36,14 +28,10 @@ impl HandleMessage for mumble_tcp::UserStats {
             .as_ref()
             .map(|a| fancy_utils::net::format_ip_address(a));
 
-        let rolling_stats = self.rolling_stats.as_ref().map(|rs| {
-            RollingStatsPayload {
-                time_window: rs.time_window.unwrap_or(0),
-                from_client: extract_packet_stats(&rs.from_client)
-                    .unwrap_or_default(),
-                from_server: extract_packet_stats(&rs.from_server)
-                    .unwrap_or_default(),
-            }
+        let rolling_stats = self.rolling_stats.as_ref().map(|rs| RollingStatsPayload {
+            time_window: rs.time_window.unwrap_or(0),
+            from_client: extract_packet_stats(&rs.from_client).unwrap_or_default(),
+            from_server: extract_packet_stats(&rs.from_server).unwrap_or_default(),
         });
 
         let payload = UserStatsPayload {
@@ -57,8 +45,12 @@ impl HandleMessage for mumble_tcp::UserStats {
             bandwidth: self.bandwidth,
             onlinesecs: self.onlinesecs,
             idlesecs: self.idlesecs,
-            strong_certificate: self.strong_certificate.unwrap_or(false),
-            opus: self.opus.unwrap_or(false),
+            // Kept as options: the server omits both unless the asker is an
+            // administrator or is asking about themselves, and an absent field
+            // means "not reported", not "no".  Collapsing it here is what made
+            // every peer read as a weak certificate on legacy CELT.
+            strong_certificate: self.strong_certificate,
+            opus: self.opus,
             version,
             os,
             os_version,

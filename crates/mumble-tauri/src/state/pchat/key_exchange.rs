@@ -9,10 +9,12 @@ use mumble_protocol::command;
 use mumble_protocol::persistent::PchatProtocol;
 use mumble_protocol::proto::mumble_tcp;
 
-use crate::state::types;
 use crate::state::SharedState;
+use crate::state::types;
 
-use super::conversion::{proto_to_wire_key_announce, proto_to_wire_key_exchange, proto_to_wire_key_request};
+use super::conversion::{
+    proto_to_wire_key_announce, proto_to_wire_key_exchange, proto_to_wire_key_request,
+};
 use super::key_sharing::{query_key_holders, send_key_holder_report};
 use super::persistence::persist_archive_key;
 use super::settings::PLACEHOLDER_BODY;
@@ -36,6 +38,14 @@ pub(crate) fn handle_proto_key_announce(
     let mut should_push_keys = false;
     let peer_cert_hash = wire.cert_hash.clone();
 
+    // Whether this peer was a stranger a moment ago. Decided before the record
+    // so it cannot be confused with a refresh of a key we already held.
+    let stranger = state
+        .pchat_ctx
+        .pchat
+        .as_ref()
+        .is_some_and(|p| p.key_manager.get_peer(&peer_cert_hash).is_none());
+
     if let Some(ref mut pchat) = state.pchat_ctx.pchat {
         match pchat.key_manager.record_peer_key(&wire) {
             Ok(true) => {
@@ -52,9 +62,11 @@ pub(crate) fn handle_proto_key_announce(
     // Also collect channels that need a key-holder refresh.
     let channels_to_query: Vec<u32>;
 
+    let has_shareable: bool;
     if should_push_keys {
         let channels_for_peer = find_shareable_channels(&state, &peer_cert_hash);
         channels_to_query = channels_for_peer.clone();
+        has_shareable = !channels_for_peer.is_empty();
 
         if !channels_for_peer.is_empty() {
             let peer_name = resolve_peer_name(&state, &peer_cert_hash);
@@ -64,6 +76,7 @@ pub(crate) fn handle_proto_key_announce(
         }
     } else {
         channels_to_query = Vec::new();
+        has_shareable = false;
     }
 
     // Drop the lock before sending network queries.
@@ -71,6 +84,29 @@ pub(crate) fn handle_proto_key_announce(
 
     for ch_id in channels_to_query {
         query_key_holders(shared, ch_id);
+    }
+
+    // Answer a stranger with our own announce. Announces are relayed to the
+    // channel, not stored, so whoever was already in a room never heard the
+    // one we sent on the way in - and a holder who has never seen our public
+    // key cannot be prompted to share theirs, let alone seal it to us. One
+    // reply per new peer, never per refresh: replying to a refresh would
+    // hand them a fresh timestamp, they would refresh back, and the two of
+    // us would announce at each other indefinitely.
+    // Into the channel the announce named, which is the room whose key is at
+    // stake - not our own current channel, which may be somewhere else.
+    //
+    // Only a holder with something to offer replies. Replying to every stranger
+    // announced our key into rooms nobody was waiting on it in, and each hop
+    // emits `state-changed`: enough re-renders to dismiss a context menu the
+    // user (or a test) had open, which is how this surfaced - as channel
+    // creation failing, three suites away from anything to do with keys.
+    if stranger && should_push_keys && has_shareable {
+        let channel = msg.channel_id.unwrap_or_default();
+        let shared = Arc::clone(shared);
+        let _reply = tokio::spawn(async move {
+            super::send_key_announce(&shared, channel).await;
+        });
     }
 }
 
@@ -93,10 +129,7 @@ fn find_shareable_channels(state: &SharedState, peer_cert_hash: &str) -> Vec<u32
     peer_channel_ids
         .into_iter()
         .filter(|&ch_id| {
-            let is_full_archive = state
-                .channels
-                .get(&ch_id)
-                .and_then(|ch| ch.pchat_protocol)
+            let is_full_archive = state.channels.get(&ch_id).and_then(|ch| ch.pchat_protocol)
                 == Some(PchatProtocol::FancyV1FullArchive);
             let has_key = pchat
                 .key_manager
@@ -117,10 +150,7 @@ fn find_shareable_channels(state: &SharedState, peer_cert_hash: &str) -> Vec<u32
 /// Checks whether we hold the archive key for the given `FullArchive`
 /// channel and whether any peers have known public keys. For each
 /// qualifying peer, a consent request is queued (if not already pending).
-pub(crate) fn check_key_share_for_channel(
-    shared: &Arc<Mutex<SharedState>>,
-    channel_id: u32,
-) {
+pub(crate) fn check_key_share_for_channel(shared: &Arc<Mutex<SharedState>>, channel_id: u32) {
     let Ok(mut state) = shared.lock() else { return };
 
     let is_full_archive = state
@@ -132,7 +162,9 @@ pub(crate) fn check_key_share_for_channel(
         return;
     }
 
-    let Some(ref pchat) = state.pchat_ctx.pchat else { return };
+    let Some(ref pchat) = state.pchat_ctx.pchat else {
+        return;
+    };
 
     if !pchat
         .key_manager
@@ -188,7 +220,9 @@ pub(crate) fn handle_proto_key_request(
 
     let Ok(mut state) = shared.lock() else { return };
 
-    let Some(ref pchat) = state.pchat_ctx.pchat else { return };
+    let Some(ref pchat) = state.pchat_ctx.pchat else {
+        return;
+    };
 
     if !pchat
         .key_manager
@@ -216,13 +250,23 @@ pub(crate) fn handle_proto_key_request(
     }
 
     // Skip requests from users who are already known key holders.
-    if pchat.key_manager.key_holders(ch_id).contains(&peer_cert_hash) {
+    if pchat
+        .key_manager
+        .key_holders(ch_id)
+        .contains(&peer_cert_hash)
+    {
         debug!(channel_id = ch_id, peer = %peer_cert_hash, "ignoring key-request from existing holder");
         return;
     }
 
     let peer_name = resolve_peer_name(&state, &peer_cert_hash);
-    queue_key_share_consent(&mut state, ch_id, &peer_cert_hash, &peer_name, Some(request_id));
+    queue_key_share_consent(
+        &mut state,
+        ch_id,
+        &peer_cert_hash,
+        &peer_name,
+        Some(request_id),
+    );
 }
 
 // -- Key exchange -----------------------------------------------------
@@ -259,6 +303,24 @@ pub(crate) fn handle_proto_key_exchange(
     }
 }
 
+/// How many members of `channel_id` could have answered our key request:
+/// everyone in the channel who announced end-to-end encryption, ourselves
+/// excluded, since we are the one asking.
+///
+/// This sets the consensus threshold, so undercounting accepts an archive
+/// key on fewer agreeing answers than the channel could have supplied.
+fn observed_key_capable_members(state: &SharedState, channel_id: u32) -> u32 {
+    let own_session = state.conn.own_session;
+    let count = state
+        .users
+        .values()
+        .filter(|u| {
+            u.channel_id == channel_id && Some(u.session) != own_session && u.has_pchat_e2ee()
+        })
+        .count();
+    u32::try_from(count).unwrap_or(u32::MAX)
+}
+
 /// Attempt to receive a key exchange and determine whether the key was
 /// accepted.  Returns `true` when the key manager has a usable key
 /// after processing.
@@ -268,12 +330,17 @@ fn try_accept_key_exchange(
     protocol: PchatProtocol,
     request_id: &Option<String>,
 ) -> bool {
+    let channel_id = wire_exchange.channel_id;
+    let observed_members = observed_key_capable_members(state, channel_id);
+
     let Some(ref mut pchat) = state.pchat_ctx.pchat else {
         return false;
     };
-    let channel_id = wire_exchange.channel_id;
 
-    match pchat.key_manager.receive_key_exchange(wire_exchange, None) {
+    match pchat
+        .key_manager
+        .receive_key_exchange(wire_exchange, None, observed_members)
+    {
         Ok(()) => {
             debug!(
                 channel_id,
@@ -285,7 +352,7 @@ fn try_accept_key_exchange(
                 .record_key_holder(channel_id, wire_exchange.sender_hash.clone());
 
             if protocol == PchatProtocol::FancyV1FullArchive {
-                if let Some(ref rid) = request_id {
+                if let Some(rid) = request_id {
                     match pchat.key_manager.evaluate_consensus(rid, channel_id, &[]) {
                         Ok((trust, Some(_key))) => {
                             debug!(channel_id, ?trust, "accepted archive key via consensus");
@@ -333,9 +400,10 @@ fn finalize_key_acceptance(
 
     // Remove stale consent prompts for a sender who already has the key.
     let before_len = state.pchat_ctx.pending_key_shares.len();
-    state.pchat_ctx.pending_key_shares.retain(|p| {
-        !(p.channel_id == channel_id && p.peer_cert_hash == sender_hash)
-    });
+    state
+        .pchat_ctx
+        .pending_key_shares
+        .retain(|p| !(p.channel_id == channel_id && p.peer_cert_hash == sender_hash));
 
     if state.pchat_ctx.pending_key_shares.len() != before_len {
         emit_key_share_requests_changed(&state, channel_id);
@@ -383,10 +451,20 @@ fn finalize_key_acceptance(
 fn retry_decrypt_pending_messages(
     state: &mut SharedState,
     channel_id: u32,
-    _protocol: PchatProtocol,
+    protocol: PchatProtocol,
 ) {
+    // SignalV1 never re-fetches: a stashed placeholder from a live message
+    // that outran its sender key is retried in place by
+    // `retry_stashed_signal_envelopes` once the key lands, not by asking the
+    // server for the channel's history again - which for SignalV1 would
+    // hand back exactly the pre-join messages forward secrecy must withhold.
+    if protocol == PchatProtocol::SignalV1 {
+        return;
+    }
+
     let has_placeholders = state
-        .msgs.by_channel
+        .msgs
+        .by_channel
         .get(&channel_id)
         .is_some_and(|msgs| msgs.iter().any(|m| m.body == PLACEHOLDER_BODY));
 
@@ -416,10 +494,13 @@ fn retry_decrypt_pending_messages(
                 limit: Some(50),
                 after_id: None,
             };
-            if let Err(e) = handle.send(command::SendPchatFetch { fetch }).await {
-                warn!(channel_id, "re-fetch after key exchange failed: {e}");
-            } else {
-                debug!(channel_id, "sent pchat re-fetch after key exchange");
+            match handle.send(command::SendPchatFetch { fetch }).await {
+                Err(e) => {
+                    warn!(channel_id, "re-fetch after key exchange failed: {e}");
+                }
+                _ => {
+                    debug!(channel_id, "sent pchat re-fetch after key exchange");
+                }
             }
         });
     }
@@ -440,7 +521,8 @@ fn queue_key_share_consent(
 ) {
     // Avoid duplicate pending requests.
     let already_pending = state
-        .pchat_ctx.pending_key_shares
+        .pchat_ctx
+        .pending_key_shares
         .iter()
         .any(|p| p.channel_id == channel_id && p.peer_cert_hash == peer_cert_hash);
     if already_pending {
@@ -494,7 +576,8 @@ fn emit_key_share_requests_changed(state: &SharedState, channel_id: u32) {
     if let Some(ref app) = state.conn.tauri_app_handle {
         use tauri::Emitter;
         let remaining: Vec<_> = state
-            .pchat_ctx.pending_key_shares
+            .pchat_ctx
+            .pending_key_shares
             .iter()
             .filter(|p| p.channel_id == channel_id)
             .cloned()

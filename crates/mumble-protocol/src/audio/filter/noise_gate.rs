@@ -1,4 +1,4 @@
-﻿//! Simple noise gate that silences audio below a threshold.
+//! Simple noise gate that silences audio below a threshold.
 //!
 //! In the outbound filter chain the noise gate should run **after**
 //! the AGC so that it evaluates the post-gain signal level. Without
@@ -11,8 +11,8 @@ use std::f32::consts::PI;
 
 use tracing::{debug, info};
 
-use crate::audio::sample::AudioFrame;
 use crate::audio::filter::AudioFilter;
+use crate::audio::sample::AudioFrame;
 use crate::error::Result;
 
 /// Gate states for hysteresis behaviour.
@@ -49,7 +49,7 @@ impl Default for NoiseGateConfig {
             close_threshold: 0.008,
             hold_frames: 10,
             attack_samples: 480,  // 10 ms @ 48 kHz
-            release_samples: 480,  // 10 ms @ 48 kHz
+            release_samples: 480, // 10 ms @ 48 kHz
         }
     }
 }
@@ -81,8 +81,19 @@ impl NoiseGate {
         }
     }
 
+    /// Whether the gate is currently passing audio (open, or holding open
+    /// after speech paused).
+    pub fn is_open(&self) -> bool {
+        self.state == GateState::Open
+    }
+
+    /// The RMS level at which a closed gate opens.
+    pub fn open_threshold(&self) -> f32 {
+        self.config.open_threshold
+    }
+
     /// Compute the RMS of a slice of f32 samples.
-    fn rms(samples: &[f32]) -> f32 {
+    pub(crate) fn rms(samples: &[f32]) -> f32 {
         if samples.is_empty() {
             return 0.0;
         }

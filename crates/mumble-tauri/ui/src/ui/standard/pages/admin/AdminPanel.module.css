@@ -1,0 +1,1443 @@
+/* --- Admin Panel - Content Styles -------------------------------- */
+
+.content {
+  min-width: 0;
+  padding: 32px 40px;
+  max-width: 900px;
+}
+/* Wide variant for data-dense tabs (e.g. the File server dashboard) so a big
+   table can use the full available width instead of the 900px reading column. */
+.contentWide {
+  max-width: none;
+}
+
+.panelTitle {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 24px;
+}
+
+/* --- Toolbar ---------------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.refreshBtn,
+.addBtn,
+.removeBtn,
+.saveBtn {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid var(--color-glass-border);
+  background: var(--color-glass);
+  color: var(--color-text-secondary);
+}
+
+.refreshBtn:hover,
+.addBtn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-glass-hover);
+  border-color: var(--color-glass-border-hover);
+}
+
+.refreshBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.removeBtn {
+  color: var(--color-danger);
+  border-color: var(--color-danger-border);
+}
+
+.removeBtn:hover:not(:disabled) {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border-strong);
+}
+
+.removeBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.saveBtn {
+  color: var(--color-accent);
+  border-color: var(--color-accent-glow);
+  background: var(--color-accent-subtle);
+}
+
+.saveBtn:hover {
+  background: var(--color-accent-medium);
+  border-color: rgba(42, 171, 238, 0.4);
+}
+
+/* --- Search ----------------------------------------------------- */
+
+.searchWrap {
+  position: relative;
+  flex: 1;
+  min-width: 180px;
+  max-width: 320px;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  font-family: inherit;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.searchInput:focus {
+  border-color: var(--color-accent);
+}
+
+.searchInput::placeholder {
+  color: var(--color-text-muted);
+}
+
+.clearBtn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+.clearBtn:hover {
+  color: var(--color-text-primary);
+}
+
+/* --- Table ------------------------------------------------------ */
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-glass-border);
+}
+
+.table th {
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  background: var(--color-glass);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sortable:hover {
+  color: var(--color-text-primary);
+}
+
+.table tbody tr:hover {
+  background: var(--color-glass-hover);
+}
+
+.table td {
+  color: var(--color-text-primary);
+}
+
+.dimText {
+  color: var(--color-text-muted);
+}
+
+.emptyRow {
+  text-align: center;
+  padding: 24px 12px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.statusBar {
+  padding: 8px 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* --- Inline edit / action buttons ------------------------------- */
+
+.inlineEdit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.actionBtns {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.confirmText {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-danger);
+}
+
+/* --- Split view (ban list) -------------------------------------- */
+
+.splitView {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 16px;
+  min-height: 300px;
+}
+
+.listPane {
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  overflow-y: auto;
+  max-height: 500px;
+}
+
+.listItem {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-glass-border);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.1s;
+  color: var(--color-text-primary);
+}
+
+.listItem:hover {
+  background: var(--color-glass-hover);
+}
+
+.listItemActive {
+  background: var(--color-glass-hover);
+  border-left: 3px solid var(--color-accent);
+}
+
+.listItemTitle {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.listItemSub {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.detailPane {
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  overflow-y: auto;
+  max-height: 500px;
+}
+
+.detailForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detailEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+/* --- Input fields ----------------------------------------------- */
+
+.fieldLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.input {
+  width: 100%;
+  font-family: inherit;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.input:focus {
+  border-color: var(--color-accent);
+}
+
+.inputSmall {
+  font-family: inherit;
+  transition: border-color 0.2s;
+  min-width: 0;
+}
+
+.inputSmall:focus {
+  border-color: var(--color-accent);
+}
+
+.inputSmall:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* --- ACL editor ------------------------------------------------- */
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.checkboxLabel input[type="checkbox"] {
+  accent-color: var(--color-accent);
+}
+
+.aclSection {
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+}
+
+.aclSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.aclSectionTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.aclCard {
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.aclCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--color-glass);
+  border-bottom: 1px solid var(--color-glass-border);
+}
+
+.aclCardBody {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.aclRuleLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.aclRuleOptions {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.inheritBadge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  margin-left: auto;
+}
+
+.removeSmallBtn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.removeSmallBtn:hover {
+  color: var(--color-danger);
+}
+
+/* --- Permission grid -------------------------------------------- */
+
+.permGrid {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.permHeader {
+  display: grid;
+  grid-template-columns: 1fr 50px 50px;
+  padding: 6px 10px;
+  background: var(--color-glass);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--color-glass-border);
+}
+
+.permHeader span:not(:first-child) {
+  text-align: center;
+}
+
+.permRow {
+  display: grid;
+  grid-template-columns: 1fr 50px 50px;
+  padding: 4px 10px;
+  align-items: center;
+  border-bottom: 1px solid var(--color-glass-border);
+}
+
+.permRow:last-child {
+  border-bottom: none;
+}
+
+.permRow:hover {
+  background: var(--color-glass-hover);
+}
+
+.permLabel {
+  color: var(--color-text-secondary);
+}
+
+.permRow input[type="checkbox"] {
+  justify-self: center;
+  accent-color: var(--color-accent);
+}
+
+/* --- ACL Split View (tree + detail) -------------------------------- */
+
+.aclSplitView {
+  display: grid;
+  grid-template-columns: 260px 1fr 240px;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.aclFiltersPane {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-left: 1px solid var(--color-border);
+  padding-left: 16px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.aclFiltersTitle {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.aclFiltersHint {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.aclTreePane {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--color-border);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.aclTreeSearch {
+  position: relative;
+  padding: 8px;
+  flex-shrink: 0;
+}
+
+.aclTreeSearch .searchInput {
+  width: 100%;
+}
+
+.aclTreeSearch .clearBtn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.aclTreeFilterRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 8px 10px;
+  flex-shrink: 0;
+}
+
+.aclTreeFilterLabel {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.aclTreeList {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+.aclTreeItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  background: none;
+  color: var(--color-text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aclTreeItem:hover {
+  background: var(--color-hover);
+}
+
+.aclTreeItemActive {
+  background: var(--color-active);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.aclTreeChevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  cursor: pointer;
+  color: var(--color-text-dim);
+}
+
+.aclTreeChevronSpacer {
+  display: inline-block;
+  width: 16px;
+  flex-shrink: 0;
+}
+
+.aclTreeLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- ACL Detail pane ---------------------------------------------- */
+
+.aclDetailPane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.aclDetailHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.aclDetailTitle {
+  margin: 0;
+  font-size: 1.1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- ACL Tabs ----------------------------------------------------- */
+
+.aclTabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.aclTabBtn {
+  padding: 8px 16px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--color-text-dim);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.aclTabBtn:hover {
+  color: var(--color-text);
+}
+
+.aclTabActive {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+  font-weight: 600;
+}
+
+.aclTabContent {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* --- ACL Card collapsible header (button variant) ----------------- */
+
+button.aclCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: var(--color-card-header);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  text-align: left;
+}
+
+button.aclCardHeader:hover {
+  background: var(--color-hover);
+}
+
+.aclCardChevron {
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.aclCardHeaderStatic {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--color-card-header);
+  border-radius: 6px 6px 0 0;
+}
+
+/* --- Group member management -------------------------------------- */
+
+.memberSection {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+}
+
+.memberSectionTitle {
+  font-size: 0.78rem;
+  color: var(--color-text-dim);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.memberChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.memberChip,
+.memberChipRemovable {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  background: var(--color-glass-hover);
+  color: var(--color-text);
+}
+
+.memberChipRemovable {
+  padding-right: 4px;
+}
+
+.chipRemoveBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-glass-strong);
+  color: var(--color-text-dim);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.chipRemoveBtn:hover {
+  background: var(--color-danger, #e74c3c);
+  color: #fff;
+}
+
+.memberAddRow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.memberAddRow .inputSmall {
+  flex: 1;
+  min-width: 0;
+}
+
+/* --- Responsive (mobile) ---------------------------------------- */
+
+@media (max-width: 768px) {
+  .content {
+    padding: 16px;
+  }
+
+  .splitView {
+    grid-template-columns: 1fr;
+  }
+
+  .listPane {
+    max-height: 200px;
+  }
+
+  .aclSplitView {
+    grid-template-columns: 1fr;
+  }
+
+  .aclTreePane {
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    max-height: 200px;
+  }
+
+  .aclFiltersPane {
+    border-left: none;
+    border-top: 1px solid var(--color-border);
+    padding-left: 0;
+    padding-top: 12px;
+  }
+}
+
+/* --- Roles management ----------------------------------------- */
+
+.rolesPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rolesToolbar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.rolesToolbar .searchInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+}
+
+.rolesToolbar .addBtn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.rolesList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.roleRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  cursor: pointer;
+  color: var(--color-text-primary, #e7e9ec);
+  transition: background 120ms ease;
+}
+
+.roleRow:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.roleMeta {
+  font-size: 0.78rem;
+  color: var(--color-text-muted, #7a7d83);
+  margin-left: auto;
+}
+
+.rolePreset {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted, #7a7d83);
+}
+
+/* --- Role editor ----------------------------------------------- */
+
+.editorGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+  gap: 1.5rem;
+}
+
+@media (max-width: 720px) {
+  .editorGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.editorMain {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.editorAside {
+  position: sticky;
+  top: 1rem;
+  align-self: flex-start;
+}
+
+.fieldset {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.45rem;
+  padding: 0.75rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.fieldset legend {
+  padding: 0 0.4rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted, #7a7d83);
+}
+
+.input {
+  padding: 0.4rem 0.55rem;
+  border-radius: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--color-text-primary, #e7e9ec);
+  font-size: 0.85rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.metadataList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.metadataRow {
+  display: grid;
+  grid-template-columns: minmax(0, 8rem) minmax(0, 1fr) auto;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.metadataKey {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary, #b6b9bf);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.metadataAddRow {
+  display: grid;
+  grid-template-columns: minmax(0, 8rem) minmax(0, 1fr) auto;
+  gap: 0.4rem;
+  align-items: center;
+  margin-top: 0.4rem;
+}
+
+.inheritedChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.inheritedList {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-family: monospace;
+  font-size: 0.78rem;
+}
+
+.userRoleChips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+/* --- Role editor extras --------------------------------------- */
+
+.select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 100%;
+  box-sizing: border-box;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23b6b9bf' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M1 1.5l5 5 5-5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  background-size: 0.7rem 0.5rem;
+}
+
+.select::-ms-expand {
+  display: none;
+}
+
+/* --- Permissions list (single toggle per permission) ---------- */
+
+.permList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.permItem {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 0.85rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.permItem:last-child {
+  border-bottom: none;
+}
+
+.permItem:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.permText {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.permTitle {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--color-text-primary, #e7e9ec);
+  cursor: pointer;
+}
+
+.permDesc {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #7a7d83);
+  line-height: 1.35;
+}
+
+/* --- Toggle switch ------------------------------------------- */
+
+.toggleSwitch {
+  position: relative;
+  display: inline-block;
+  width: 2.4rem;
+  height: 1.3rem;
+  flex: 0 0 auto;
+}
+
+.toggleSwitch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggleSlider {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.toggleSlider::before {
+  content: "";
+  position: absolute;
+  width: 1.05rem;
+  height: 1.05rem;
+  left: 0.125rem;
+  top: 0.125rem;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 140ms ease;
+}
+
+.toggleSwitch input:checked + .toggleSlider {
+  background: var(--color-accent, #5865f2);
+}
+
+.toggleSwitch input:checked + .toggleSlider::before {
+  transform: translateX(1.1rem);
+}
+
+.toggleSwitch input:disabled + .toggleSlider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- User Role Manager dialog --------------------------------- */
+
+.dialogCard {
+  background: var(--color-bg-elevated, #1f2225);
+  color: inherit;
+  border: 1px solid var(--color-border, #333);
+  border-radius: 0.6rem;
+  width: min(28rem, 100%);
+  max-height: 80vh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+}
+
+.dialogCard::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.dialogHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--color-border, #333);
+}
+
+.dialogTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.dialogClose {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.3rem;
+  border-radius: 0.3rem;
+}
+
+.dialogClose:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dialogBody {
+  padding: 0.8rem 1rem;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.7rem 1rem;
+  border-top: 1px solid var(--color-border, #333);
+}
+
+.roleCheckList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.roleCheckRow {
+  padding: 0.25rem 0.1rem;
+}
+
+.roleCheckLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.errorText {
+  color: var(--color-danger, #e74c3c);
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0;
+}
+
+.emoteForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 480px;
+  margin-bottom: 1.5rem;
+}
+
+.formRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.formRow > span {
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #888);
+}
+
+.emoteFileRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.emoteFilePath {
+  font-family: monospace;
+  font-size: 0.8rem;
+  word-break: break-all;
+  color: var(--color-text-muted, #888);
+}
+
+.emoteList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.emoteItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border, #333);
+  border-radius: 6px;
+}
+
+.emoteThumb {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.emoteMeta {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.emoteDelete {
+  flex-shrink: 0;
+}
+
+/* --- Channel tree: private (detached) channel markers ------------- */
+
+.aclTreePrivateIcon {
+  flex-shrink: 0;
+  color: var(--color-text-dim);
+}
+
+.aclTreePrivateBadge {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--color-active);
+  color: var(--color-text-dim);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* --- Channel tree context menu ------------------------------------ */
+
+.ctxBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: default;
+}
+
+.ctxMenu {
+  position: fixed;
+  z-index: 41;
+  min-width: 180px;
+  padding: 4px;
+  background: var(--color-surface, #23252b);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+
+.ctxMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--color-text);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ctxMenuItem:hover {
+  background: var(--color-hover);
+}
+
+.ctxMenuItemDanger {
+  color: var(--color-danger, #e74c3c);
+}
+
+.ctxConfirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+
+.ctxConfirmText {
+  font-size: 0.8rem;
+  color: var(--color-text);
+}
+
+.ctxConfirmRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ctxDangerBtn {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 5px;
+  background: var(--color-danger, #e74c3c);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ctxCancelBtn {
+  padding: 5px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+/* --- Users-with-access tab ---------------------------------------- */
+
+.accessUsers {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.accessNote {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--color-active);
+  color: var(--color-text);
+  font-size: 0.85rem;
+}
+
+.accessUserList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.accessUserItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  font-size: 0.85rem;
+}
+
+.accessUserItem:hover {
+  background: var(--color-hover);
+}
+
+.accessUserDot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-dim);
+  opacity: 0.4;
+}
+
+.accessUserOnline {
+  background: var(--color-success, #3ba55d);
+  opacity: 1;
+}
+
+.accessUserName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accessUserHint {
+  margin-left: auto;
+  color: var(--color-success, #3ba55d);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.accessGroupBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

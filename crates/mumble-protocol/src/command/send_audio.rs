@@ -25,10 +25,7 @@ impl CommandAction for SendAudio {
             sender_session: 0, // Server ignores this field from clients.
             frame_number: self.frame_number,
             opus_data: self.opus_data.clone(),
-            positional_data: self
-                .positional_data
-                .map(|p| p.to_vec())
-                .unwrap_or_default(),
+            positional_data: self.positional_data.map(|p| p.to_vec()).unwrap_or_default(),
             volume_adjustment: 0.0,
             is_terminator: self.is_terminator,
         };

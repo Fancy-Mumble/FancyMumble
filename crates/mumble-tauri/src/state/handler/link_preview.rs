@@ -1,87 +1,144 @@
 use mumble_protocol::proto::mumble_tcp;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
 
 /// Server-side downscaled preview, ready to render in `<img>`.
-#[derive(Serialize, Clone)]
-struct EmbedPreview {
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+#[serde(default)]
+pub(crate) struct EmbedPreview {
     /// `data:image/jpeg;base64,...` URL the frontend can drop straight into an
     /// `<img src>` without ever performing a network request to the origin
     /// host.
-    data_url: String,
-    mime: String,
-    width: Option<i32>,
-    height: Option<i32>,
+    pub data_url: String,
+    pub mime: String,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
 }
 
-#[derive(Serialize, Clone)]
-struct EmbedMedia {
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+#[serde(default)]
+pub(crate) struct EmbedMedia {
     /// Original (full-resolution) media URL.  Only fetched on explicit user
     /// action so the user's IP isn't leaked to the origin host by default.
-    url: String,
-    width: Option<i32>,
-    height: Option<i32>,
+    pub url: String,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
     /// Bytes the original CDN reported for the source asset.
-    original_size: Option<u32>,
+    pub original_size: Option<u32>,
     /// Inline server-fetched preview.  When present the UI MUST prefer this
     /// over `url` so the user's IP isn't leaked to the origin.
-    preview: Option<EmbedPreview>,
+    pub preview: Option<EmbedPreview>,
 }
 
-#[derive(Serialize, Clone)]
-struct EmbedProvider {
-    name: String,
-    url: Option<String>,
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+#[serde(default)]
+pub(crate) struct EmbedProvider {
+    pub name: String,
+    pub url: Option<String>,
 }
 
-#[derive(Serialize, Clone)]
-struct EmbedAuthor {
-    name: String,
-    url: Option<String>,
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+#[serde(default)]
+pub(crate) struct EmbedAuthor {
+    pub name: String,
+    pub url: Option<String>,
 }
 
-#[derive(Serialize, Clone)]
-struct EmbedField {
-    name: String,
-    value: String,
-    inline: bool,
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+#[serde(default)]
+pub(crate) struct EmbedField {
+    pub name: String,
+    pub value: String,
+    pub inline: bool,
 }
 
-#[derive(Serialize, Clone)]
-struct LinkEmbed {
-    url: Option<String>,
-    r#type: Option<String>,
-    title: Option<String>,
-    description: Option<String>,
-    color: Option<i32>,
-    site_name: Option<String>,
-    thumbnail: Option<EmbedMedia>,
-    image: Option<EmbedMedia>,
-    video: Option<EmbedMedia>,
-    favicon: Option<EmbedMedia>,
-    provider: Option<EmbedProvider>,
-    author: Option<EmbedAuthor>,
-    canonical_url: Option<String>,
-    lang: Option<String>,
-    published_time: Option<String>,
-    modified_time: Option<String>,
-    keywords: Vec<String>,
-    summary: Option<String>,
-    content_type: Option<String>,
-    content_length: Option<u64>,
-    media_duration: Option<String>,
-    nsfw: Option<bool>,
-    reading_time: Option<String>,
-    fields: Vec<EmbedField>,
-    fetched_at: Option<String>,
+/// What a shop listing costs, rebuilt from the `price.*` field rows.
+///
+/// The canon carries a typed price and the epoch-0 `Embed` has no field for
+/// one, so `canon.rs` sends it as four named rows and this reads them back.
+/// The names are the contract between the two, and they are spelled out at
+/// both ends; nothing else may be named `price.*`.
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+#[serde(default)]
+pub(crate) struct EmbedPrice {
+    /// The amount, decimal point and all: "89.99".
+    pub amount: String,
+    /// ISO 4217 where the page named one, empty where it did not.
+    pub currency: String,
+    /// What it cost before, for a listing that advertises a reduction.
+    pub was: String,
+    /// "instock", "oos", "preorder" - as the page wrote it.
+    pub availability: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+#[serde(default)]
+pub(crate) struct LinkEmbed {
+    pub url: Option<String>,
+    pub r#type: Option<String>,
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub color: Option<i32>,
+    pub site_name: Option<String>,
+    pub thumbnail: Option<EmbedMedia>,
+    pub image: Option<EmbedMedia>,
+    pub video: Option<EmbedMedia>,
+    pub favicon: Option<EmbedMedia>,
+    pub provider: Option<EmbedProvider>,
+    pub author: Option<EmbedAuthor>,
+    pub canonical_url: Option<String>,
+    pub lang: Option<String>,
+    pub published_time: Option<String>,
+    pub modified_time: Option<String>,
+    pub keywords: Vec<String>,
+    pub summary: Option<String>,
+    pub content_type: Option<String>,
+    pub content_length: Option<u64>,
+    pub media_duration: Option<String>,
+    pub nsfw: Option<bool>,
+    pub reading_time: Option<String>,
+    pub fields: Vec<EmbedField>,
+    pub price: Option<EmbedPrice>,
+    pub fetched_at: Option<String>,
+}
+
+impl LinkEmbed {
+    /// Roughly what this card costs to keep, for the preview cache's budget.
+    ///
+    /// The two data URLs are the whole of it: a thumbnail and a favicon arrive
+    /// base64-encoded so no viewer ever contacts the origin, which is what
+    /// makes a card two orders of magnitude bigger than its text.
+    pub(crate) fn weight(&self) -> usize {
+        let media = |m: &Option<EmbedMedia>| {
+            m.as_ref()
+                .and_then(|media| media.preview.as_ref())
+                .map_or(0, |preview| preview.data_url.len())
+        };
+        media(&self.thumbnail)
+            + media(&self.image)
+            + media(&self.video)
+            + media(&self.favicon)
+            + self.title.as_ref().map_or(0, String::len)
+            + self.description.as_ref().map_or(0, String::len)
+            + self.summary.as_ref().map_or(0, String::len)
+            + self.url.as_ref().map_or(0, String::len)
+    }
 }
 
 #[derive(Serialize, Clone)]
 struct LinkPreviewResponsePayload {
     request_id: String,
     embeds: Vec<LinkEmbed>,
+    /// The URL each embed answers, in step with `embeds`.
+    ///
+    /// Not the same as `embed.url`, which is where the walk *ended up*: a card
+    /// for a shortened link reports the page behind it. The frontend files
+    /// cards under the string it finds in the message text, so it needs the
+    /// question rather than the answer, and only this side knows which is
+    /// which.
+    requested_urls: Vec<String>,
 }
 
 fn convert_media(media: &mumble_tcp::fancy_link_preview_response::embed::Media) -> EmbedMedia {
@@ -147,25 +204,64 @@ fn convert_embed(embed: &mumble_tcp::fancy_link_preview_response::Embed) -> Link
         media_duration: embed.media_duration.clone(),
         nsfw: embed.nsfw,
         reading_time: embed.reading_time.clone(),
+        // The price rows are the bridge, not something to print: they come
+        // back out as a typed price and are kept out of the fact list, or
+        // every shopping card would carry "price.currency: EUR" under it.
         fields: embed
             .fields
             .iter()
+            .filter(|f| !is_price_row(f))
             .map(|f| EmbedField {
                 name: f.name.clone().unwrap_or_default(),
                 value: f.value.clone().unwrap_or_default(),
                 inline: f.r#inline.unwrap_or(false),
             })
             .collect(),
+        price: convert_price(&embed.fields),
         fetched_at: embed.fetched_at.clone(),
     }
+}
+
+/// Whether a field row is one of the four the price travels in.
+fn is_price_row(field: &mumble_tcp::fancy_link_preview_response::embed::Field) -> bool {
+    field
+        .name
+        .as_deref()
+        .is_some_and(|name| name.starts_with("price."))
+}
+
+/// The typed price the `price.*` rows describe, or `None` where there are none.
+///
+/// The amount is what makes a price: a listing that names a currency and no
+/// number has not stated one, and a card drawing a lone "EUR" is worse than a
+/// card with no price on it.
+fn convert_price(
+    fields: &[mumble_tcp::fancy_link_preview_response::embed::Field],
+) -> Option<EmbedPrice> {
+    let row = |name: &str| {
+        fields
+            .iter()
+            .find(|field| field.name.as_deref() == Some(name))
+            .and_then(|field| field.value.clone())
+            .unwrap_or_default()
+    };
+    let amount = row("price.amount");
+    if amount.is_empty() {
+        return None;
+    }
+    Some(EmbedPrice {
+        amount,
+        currency: row("price.currency"),
+        was: row("price.was"),
+        availability: row("price.availability"),
+    })
 }
 
 /// Minimal RFC 4648 base64 encoder.  Avoids pulling in a new dependency for a
 /// tiny job (the whole point of inlining the preview is to keep the IPC
 /// simple).
 fn base64_encode(input: &[u8]) -> String {
-    const TABLE: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
     let mut i = 0;
     while i + 3 <= input.len() {
@@ -207,11 +303,39 @@ impl HandleMessage for mumble_tcp::FancyLinkPreviewResponse {
             "received link preview response"
         );
 
+        // Which URL each card answers, and the same string it is filed under.
+        // The reply does not carry it - `embed.url` is where the walk *ended
+        // up* - so it is recovered from what this client asked, which only this
+        // side knows. See `preview_cache::Previews::attribute`.
+        let mut requested_urls = Vec::with_capacity(embeds.len());
+        if let Ok(mut state) = ctx.shared.lock() {
+            let now = crate::state::preview_cache::now_ms();
+            for embed in &embeds {
+                let asked = state
+                    .previews
+                    .attribute(&request_id, embed.url.as_deref())
+                    // A card that cannot be attributed is still filed under
+                    // where it landed: the next person to paste *that* link
+                    // gets it, and the one who pasted the shortener pays a
+                    // round-trip the server answers from its own cache.
+                    .or_else(|| embed.url.clone())
+                    .unwrap_or_default();
+                if !asked.is_empty() {
+                    state.previews.cache.insert(&asked, embed, now);
+                }
+                requested_urls.push(asked);
+            }
+            // Not saved here: writing runs on the session's flush ticker, off
+            // this thread. A full save re-encrypts every card in the cache, and
+            // this is the protocol event loop.
+        }
+
         ctx.emit(
             "link-preview-response",
             LinkPreviewResponsePayload {
                 request_id,
                 embeds,
+                requested_urls,
             },
         );
     }

@@ -1,4 +1,4 @@
-﻿//! Automatic gain control (AGC).
+//! Automatic gain control (AGC).
 //!
 //! Normalises the signal level so quiet talkers are brought up and
 //! loud peaks are attenuated. Uses a simple envelope follower with
@@ -8,8 +8,8 @@
 //! curve rather than hard-clamped, which avoids the harsh metallic
 //! distortion typical of hard clipping.
 
-use crate::audio::sample::AudioFrame;
 use crate::audio::filter::AudioFilter;
+use crate::audio::sample::AudioFrame;
 use crate::error::Result;
 
 /// Configuration for the AGC.
@@ -205,10 +205,7 @@ mod tests {
         // Moderate values above knee should be compressed but stay < 1.0
         for v in [1.0_f32, 1.5, 2.0, -1.5] {
             let out = AutomaticGainControl::soft_clip(v);
-            assert!(
-                out.abs() < 1.0,
-                "soft_clip({v}) must be < 1.0, got {out}"
-            );
+            assert!(out.abs() < 1.0, "soft_clip({v}) must be < 1.0, got {out}");
             assert!(
                 out.abs() > 0.8,
                 "soft_clip({v}) must be > knee (0.8), got {out}"
@@ -250,7 +247,10 @@ mod tests {
             let sum: f32 = output.iter().map(|s| s * s).sum();
             (sum / output.len() as f32).sqrt()
         };
-        assert!(out_rms > 0.1, "Signal should still be present after soft-clip");
+        assert!(
+            out_rms > 0.1,
+            "Signal should still be present after soft-clip"
+        );
         Ok(())
     }
 

@@ -1,0 +1,16 @@
+# Pin the formatting style so `cargo fmt --check` is deterministic across
+# developer machines and CI.
+#
+# `max_width` is deliberately left at rustfmt's default (100), matching Starling
+# and the plugin-host workspaces so code moves between the trees without
+# reformatting.
+edition = "2024"
+
+# Pinned separately from `edition`: rustfmt's *style* edition controls how code
+# is wrapped, and letting it follow the language edition silently would reformat
+# the tree on a toolchain bump. Changing this is a decision, not a side effect.
+style_edition = "2024"
+
+# CI runs on Linux while development happens on Windows; normalising to LF keeps
+# `--check` from disagreeing between the two.
+newline_style = "Unix"

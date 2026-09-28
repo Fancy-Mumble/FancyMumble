@@ -10,14 +10,13 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::state::types::{PluginDataPayload, PluginRegistryEntryPayload};
 use crate::state::AppState;
+use crate::state::types::{PluginDataPayload, PluginRegistryEntryPayload};
 
 const DEFAULT_MARKETPLACE_BASE: &str = "https://plugins.fancy-mumble.com/api/v1";
 
 fn marketplace_base() -> String {
-    std::env::var("FANCY_MARKETPLACE_BASE")
-        .unwrap_or_else(|_| DEFAULT_MARKETPLACE_BASE.to_string())
+    std::env::var("FANCY_MARKETPLACE_BASE").unwrap_or_else(|_| DEFAULT_MARKETPLACE_BASE.to_string())
 }
 
 // --- Server-side commands -------------------------------------------------
@@ -39,9 +38,7 @@ pub(crate) fn get_plugin_registry(
 /// calls this on HMR reload to re-hydrate (e.g. the document library)
 /// without forcing a reconnect.
 #[tauri::command]
-pub(crate) fn get_plugin_broadcasts(
-    state: tauri::State<'_, AppState>,
-) -> Vec<PluginDataPayload> {
+pub(crate) fn get_plugin_broadcasts(state: tauri::State<'_, AppState>) -> Vec<PluginDataPayload> {
     state.get_plugin_broadcasts()
 }
 
@@ -62,9 +59,7 @@ pub(crate) async fn set_server_plugin_enabled(
     plugin_name: String,
     enabled: bool,
 ) -> Result<(), String> {
-    state
-        .set_server_plugin_enabled(plugin_name, enabled)
-        .await
+    state.set_server_plugin_enabled(plugin_name, enabled).await
 }
 
 /// Admin: install (or upgrade) a plugin from the marketplace.
@@ -200,10 +195,10 @@ fn resolve_marketplace_base(override_url: Option<&str>) -> String {
     // marketplace base is fixed (env var or the hard-coded default) so a
     // caller cannot redirect marketplace traffic to an arbitrary host.
     #[cfg(debug_assertions)]
-    if let Some(base) = override_url {
-        if !base.is_empty() {
-            return base.trim_end_matches('/').to_owned();
-        }
+    if let Some(base) = override_url
+        && !base.is_empty()
+    {
+        return base.trim_end_matches('/').to_owned();
     }
     #[cfg(not(debug_assertions))]
     let _ = override_url;

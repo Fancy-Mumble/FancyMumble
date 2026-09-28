@@ -1,11 +1,11 @@
-﻿//! Audio decoder trait and Opus implementation.
+//! Audio decoder trait and Opus implementation.
 //!
 //! An [`AudioDecoder`] takes compressed network packets and produces
 //! raw PCM [`AudioFrame`]s for playback. Like the encoder trait, it
 //! is codec-agnostic.
 
-use crate::audio::sample::{AudioFormat, AudioFrame};
 use crate::audio::encoder::EncodedPacket;
+use crate::audio::sample::{AudioFormat, AudioFrame};
 use crate::error::Result;
 
 #[cfg(feature = "opus-codec")]
@@ -46,8 +46,8 @@ pub trait AudioDecoder: Send + 'static {
 #[cfg(feature = "opus-codec")]
 fn f32_slice_to_ne_bytes(pcm: &[f32]) -> Vec<u8> {
     let mut data = vec![0u8; pcm.len() * 4];
-    for (chunk, s) in data.chunks_exact_mut(4).zip(pcm) {
-        chunk.copy_from_slice(&s.to_ne_bytes());
+    for (chunk, s) in data.as_chunks_mut::<4>().0.iter_mut().zip(pcm) {
+        *chunk = s.to_ne_bytes();
     }
     data
 }
@@ -101,8 +101,7 @@ impl OpusDecoder {
             .map_err(|e| Error::OpusCodec(e.to_string()))?;
 
         // 120 ms is the maximum Opus frame duration
-        let max_frame_size =
-            (format.sample_rate as usize / 1000) * 120 * format.channels as usize;
+        let max_frame_size = (format.sample_rate as usize / 1000) * 120 * format.channels as usize;
         let out_buf = vec![0.0f32; max_frame_size];
 
         // Default frame size: 10 ms @ configured sample rate

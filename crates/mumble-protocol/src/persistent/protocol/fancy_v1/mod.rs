@@ -38,17 +38,17 @@ pub const KEY_LEN: usize = 32;
 
 // ---- Re-exports -----------------------------------------------------
 
-pub use aad::{build_aad, uuid_to_bytes, AadBuilder, StandardAadBuilder};
-pub use archive_key::{derive_archive_key, ArchiveKeyDeriver, HkdfArchiveKeyDeriver};
+pub use aad::{AadBuilder, StandardAadBuilder, build_aad, uuid_to_bytes};
+pub use archive_key::{ArchiveKeyDeriver, HkdfArchiveKeyDeriver, derive_archive_key};
 pub use chain_ratchet::{
-    derive_chain_key, derive_key_at_index, derive_message_key, ChainRatchet, HkdfChainRatchet,
+    ChainRatchet, HkdfChainRatchet, derive_chain_key, derive_key_at_index, derive_message_key,
 };
 pub use encryptor::{Encryptor, XChaChaEncryptor};
-pub use fingerprint::{epoch_fingerprint, Fingerprinter, Sha256Fingerprinter};
+pub use fingerprint::{Fingerprinter, Sha256Fingerprinter, epoch_fingerprint};
 pub use identity::{CryptoIdentity, SeedIdentity};
 pub use key_deriver::{HkdfSha256Deriver, KeyDeriver};
 pub use signed_data::{
-    build_countersig_data, build_key_announce_signed_data, build_key_exchange_signed_data,
-    SignedDataBuilder, StandardSignedDataBuilder,
+    SignedDataBuilder, StandardSignedDataBuilder, build_countersig_data,
+    build_key_announce_signed_data, build_key_exchange_signed_data,
 };
 pub use suite::{CryptoSuite, XChaCha20Suite};

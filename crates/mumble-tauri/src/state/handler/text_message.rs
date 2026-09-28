@@ -1,10 +1,10 @@
 use fancy_utils::html::strip_html_tags;
-use mumble_protocol::proto::mumble_tcp;
 use mumble_protocol::persistent::PchatProtocol;
+use mumble_protocol::proto::mumble_tcp;
 
 use super::{HandleMessage, HandlerContext};
-use crate::state::types::*;
 use crate::state::SharedState;
+use crate::state::types::*;
 
 // -- Message classification ----------------------------------------
 
@@ -32,6 +32,11 @@ enum DeferredEvent {
         body: String,
     },
     DmUnreads,
+    /// A conversation changed without news: our own message, sent from
+    /// another of our devices, filed where this device will show it.
+    DmSynced {
+        peer_session: u32,
+    },
     NewMessage {
         channel_id: u32,
         sender_session: Option<u32>,
@@ -74,8 +79,25 @@ impl<'a> DeferredEmitter<'a> {
                     self.emit_direct_message(*sender_session, sender_name, body);
                 }
                 DeferredEvent::DmUnreads => self.emit_dm_unreads(),
-                DeferredEvent::NewMessage { channel_id, sender_session } => {
-                    self.ctx.emit("new-message", NewMessagePayload { channel_id: *channel_id, sender_session: *sender_session });
+                DeferredEvent::DmSynced { peer_session } => {
+                    self.ctx.emit(
+                        "dm-synced",
+                        NewDmPayload {
+                            session: *peer_session,
+                        },
+                    );
+                }
+                DeferredEvent::NewMessage {
+                    channel_id,
+                    sender_session,
+                } => {
+                    self.ctx.emit(
+                        "new-message",
+                        NewMessagePayload {
+                            channel_id: *channel_id,
+                            sender_session: *sender_session,
+                        },
+                    );
                 }
                 DeferredEvent::RequestUserAttention => {
                     self.ctx.request_user_attention();
@@ -85,7 +107,9 @@ impl<'a> DeferredEmitter<'a> {
                     sender_name,
                     body,
                     sender_session,
-                } => self.emit_channel_notification(*channel_id, sender_name, body, *sender_session),
+                } => {
+                    self.emit_channel_notification(*channel_id, sender_name, body, *sender_session)
+                }
                 DeferredEvent::ChannelUnreads => self.emit_channel_unreads(),
             }
         }
@@ -100,8 +124,12 @@ impl<'a> DeferredEmitter<'a> {
         );
         self.ctx.request_user_attention();
         let icon = self.lookup_texture(Some(sender_session));
-        self.ctx
-            .send_notification_with_icon(sender_name, &strip_html_tags(body), icon.as_deref(), None);
+        self.ctx.send_notification_with_icon(
+            sender_name,
+            &strip_html_tags(body),
+            icon.as_deref(),
+            None,
+        );
     }
 
     fn emit_dm_unreads(&self) {
@@ -122,8 +150,7 @@ impl<'a> DeferredEmitter<'a> {
             .lock()
             .map(|s| s.msgs.channel_unread.clone())
             .unwrap_or_default();
-        self.ctx
-            .emit("unread-changed", UnreadPayload { unreads });
+        self.ctx.emit("unread-changed", UnreadPayload { unreads });
     }
 
     fn emit_channel_notification(
@@ -149,8 +176,12 @@ impl<'a> DeferredEmitter<'a> {
             Some(name) => format!("{sender_name} in #{name}"),
             None => sender_name.to_owned(),
         };
-        self.ctx
-            .send_notification_with_icon(&title, &strip_html_tags(body), icon.as_deref(), Some(channel_id));
+        self.ctx.send_notification_with_icon(
+            &title,
+            &strip_html_tags(body),
+            icon.as_deref(),
+            Some(channel_id),
+        );
     }
 
     fn lookup_texture(&self, session: Option<u32>) -> Option<Vec<u8>> {
@@ -170,7 +201,10 @@ impl<'a> DeferredEmitter<'a> {
 
 /// Apply an edit to a message list, returning `true` if the target was found.
 fn apply_edit(messages: &mut [ChatMessage], edit_id: &str, new_body: &str, edited_at: u64) -> bool {
-    if let Some(msg) = messages.iter_mut().find(|m| m.message_id.as_deref() == Some(edit_id)) {
+    if let Some(msg) = messages
+        .iter_mut()
+        .find(|m| m.message_id.as_deref() == Some(edit_id))
+    {
         msg.body = new_body.to_owned();
         msg.edited_at = Some(edited_at);
         true
@@ -193,9 +227,16 @@ fn emit_edit_events(
             }
         }
         MessageKind::Channel => {
-            let ids = if tm.channel_id.is_empty() { &[0u32][..] } else { &tm.channel_id };
+            let ids = if tm.channel_id.is_empty() {
+                &[0u32][..]
+            } else {
+                &tm.channel_id
+            };
             for &ch_id in ids {
-                deferred.push(DeferredEvent::NewMessage { channel_id: ch_id, sender_session: tm.actor });
+                deferred.push(DeferredEvent::NewMessage {
+                    channel_id: ch_id,
+                    sender_session: tm.actor,
+                });
             }
         }
     }
@@ -214,19 +255,56 @@ fn try_apply_edit(
             .as_millis() as u64
     });
     match kind {
-        MessageKind::DirectMessage => {
-            tm.actor
-                .and_then(|sid| state.msgs.by_dm.get_mut(&sid))
-                .is_some_and(|msgs| apply_edit(msgs, edit_id, &tm.message, edited_at))
-        }
+        MessageKind::DirectMessage => tm
+            .actor
+            .and_then(|sid| state.msgs.by_dm.get_mut(&sid))
+            .is_some_and(|msgs| apply_edit(msgs, edit_id, &tm.message, edited_at)),
         MessageKind::Channel => {
-            let channel_ids = if tm.channel_id.is_empty() { vec![0u32] } else { tm.channel_id.clone() };
+            let channel_ids = if tm.channel_id.is_empty() {
+                vec![0u32]
+            } else {
+                tm.channel_id.clone()
+            };
             channel_ids.iter().any(|ch_id| {
-                state.msgs.by_channel.get_mut(ch_id)
+                state
+                    .msgs
+                    .by_channel
+                    .get_mut(ch_id)
                     .is_some_and(|msgs| apply_edit(msgs, edit_id, &tm.message, edited_at))
             })
         }
     }
+}
+
+/// Whether a channel message attributed to this session is one the server
+/// sent on its behalf rather than an echo of a send already stored here.
+///
+/// An echo repeats the id `send_message` stored its local copy under, so only
+/// an id nothing here carries yet qualifies. Without an id the two cannot be
+/// told apart, and the message is treated as the echo it usually is.
+fn is_unseen_own_channel_message(
+    tm: &mumble_tcp::TextMessage,
+    kind: &MessageKind,
+    state: &SharedState,
+) -> bool {
+    let MessageKind::Channel = kind else {
+        return false;
+    };
+    let Some(id) = tm.message_id.as_deref() else {
+        return false;
+    };
+    let channel_ids = if tm.channel_id.is_empty() {
+        &[0u32][..]
+    } else {
+        &tm.channel_id[..]
+    };
+    !channel_ids.iter().any(|ch_id| {
+        state
+            .msgs
+            .by_channel
+            .get(ch_id)
+            .is_some_and(|msgs| msgs.iter().any(|m| m.message_id.as_deref() == Some(id)))
+    })
 }
 
 // -- Per-kind handlers ---------------------------------------------
@@ -244,6 +322,32 @@ fn resolve_sender_hash(state: &SharedState, actor: Option<u32>) -> Option<String
         .and_then(|u| u.hash.clone())
 }
 
+/// The conversation a direct message belongs to when it is our own, sent from
+/// another of our devices, or `None` when it is somebody else's.
+///
+/// The server copies a direct message to the sender's other sessions so a
+/// conversation started on one device is on all of them. That copy arrives
+/// from a session that is not ours but is our *account*, and read as an
+/// ordinary message it was a DM from ourselves: a conversation with our own
+/// other device, an unread badge and a notification for words we just typed.
+/// It belongs in the conversation with whoever it was sent to.
+fn own_copy_peer(tm: &mumble_tcp::TextMessage, state: &SharedState) -> Option<u32> {
+    let actor = tm.actor?;
+    let own = state.conn.own_session?;
+    if actor == own {
+        return None;
+    }
+    let account = |session: u32| state.users.get(&session).and_then(|user| user.user_id);
+    let ours = account(own)?;
+    if account(actor) != Some(ours) {
+        return None;
+    }
+    // Addressed to this very session is a note from our other device to this
+    // one, which is news here like any other message.
+    let peer = tm.session.first().copied()?;
+    (peer != own).then_some(peer)
+}
+
 fn handle_direct_message(
     tm: &mumble_tcp::TextMessage,
     state: &mut SharedState,
@@ -252,6 +356,34 @@ fn handle_direct_message(
     let Some(sender_session) = tm.actor else {
         return;
     };
+
+    if let Some(peer) = own_copy_peer(tm, state) {
+        let mut msg = ChatMessage {
+            sender_session: tm.actor,
+            sender_name: resolve_sender_name(state, tm.actor),
+            sender_hash: resolve_sender_hash(state, tm.actor),
+            body: tm.message.clone(),
+            channel_id: 0,
+            // Ours, so no unread and no notification: we wrote it.
+            is_own: true,
+            dm_session: Some(peer),
+            message_id: tm.message_id.clone(),
+            timestamp: tm.timestamp,
+            is_legacy: false,
+            send_failed: false,
+            edited_at: None,
+            pinned: false,
+            pinned_by: None,
+            pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
+        };
+        msg.ensure_id();
+        let bucket = state.msgs.by_dm.entry(peer).or_default();
+        crate::state::push_capped(bucket, msg);
+        deferred.push(DeferredEvent::DmSynced { peer_session: peer });
+        return;
+    }
 
     let sender_name = resolve_sender_name(state, tm.actor);
     let mut msg = ChatMessage {
@@ -265,6 +397,7 @@ fn handle_direct_message(
         message_id: tm.message_id.clone(),
         timestamp: tm.timestamp,
         is_legacy: false,
+        send_failed: false,
         edited_at: None,
         pinned: false,
         pinned_by: None,
@@ -274,16 +407,14 @@ fn handle_direct_message(
     };
     msg.ensure_id();
     state
-        .msgs.by_dm
+        .msgs
+        .by_dm
         .entry(sender_session)
         .or_default()
         .push(msg);
 
     if state.msgs.selected_dm_user != Some(sender_session) {
-        *state
-            .msgs.dm_unread
-            .entry(sender_session)
-            .or_insert(0) += 1;
+        *state.msgs.dm_unread.entry(sender_session).or_insert(0) += 1;
         deferred.push(DeferredEvent::DmUnreads);
     }
 
@@ -308,6 +439,14 @@ fn handle_channel_message(
     let selected = state.selected_channel;
     let app_focused = state.prefs.app_focused;
     let sender_name = resolve_sender_name(state, tm.actor);
+    // Only reaches here for our own session when the server sent the message
+    // for us (see `is_unseen_own_channel_message`): ours to read, not news.
+    // Another session on our certificate is us too - the phone next to this
+    // desktop - so the hash decides as well as the session.
+    let sender_hash = resolve_sender_hash(state, tm.actor);
+    let own_hash = resolve_sender_hash(state, state.conn.own_session);
+    let is_own = tm.actor.is_some()
+        && (tm.actor == state.conn.own_session || (own_hash.is_some() && sender_hash == own_hash));
     let mut unreads_changed = false;
 
     for &ch_id in &target_channels {
@@ -336,14 +475,15 @@ fn handle_channel_message(
         let mut msg = ChatMessage {
             sender_session: tm.actor,
             sender_name: sender_name.clone(),
-            sender_hash: resolve_sender_hash(state, tm.actor),
+            sender_hash: sender_hash.clone(),
             body: tm.message.clone(),
             channel_id: ch_id,
-            is_own: false,
+            is_own,
             dm_session: None,
             message_id: tm.message_id.clone(),
             timestamp: tm.timestamp,
             is_legacy,
+            send_failed: false,
             edited_at: None,
             pinned: false,
             pinned_by: None,
@@ -355,22 +495,33 @@ fn handle_channel_message(
         let bucket = state.msgs.by_channel.entry(ch_id).or_default();
         crate::state::push_capped(bucket, msg);
 
-        if selected != Some(ch_id) {
+        if selected != Some(ch_id) && !is_own {
             *state.msgs.channel_unread.entry(ch_id).or_insert(0) += 1;
             unreads_changed = true;
+            // Nothing in a channel that is not on screen is being looked at,
+            // so a pasted picture arriving there goes straight to cold
+            // storage rather than sitting in this process until the reader
+            // happens to open the channel and scroll past it. Only the
+            // message that just arrived: this runs on the protocol thread
+            // with the state lock held, and everything older was already
+            // dealt with when it arrived or when the channel was left.
+            crate::state::offload_ops::offload_newest_if_idle(state, ch_id);
         }
 
-        deferred.push(DeferredEvent::NewMessage { channel_id: ch_id, sender_session: tm.actor });
+        deferred.push(DeferredEvent::NewMessage {
+            channel_id: ch_id,
+            sender_session: tm.actor,
+        });
 
         // Flash the taskbar when a permanently-listened channel gets a
         // message while it is not the viewed channel.
-        if state.permanently_listened.contains(&ch_id) && selected != Some(ch_id) {
+        if !is_own && state.permanently_listened.contains(&ch_id) && selected != Some(ch_id) {
             deferred.push(DeferredEvent::RequestUserAttention);
         }
 
         // Native notification for messages arriving in non-viewed channels,
         // or for ANY channel when the app is not focused (backgrounded).
-        if selected != Some(ch_id) || !app_focused {
+        if !is_own && (selected != Some(ch_id) || !app_focused) {
             deferred.push(DeferredEvent::ChannelMessage {
                 channel_id: ch_id,
                 sender_name: sender_name.clone(),
@@ -396,8 +547,14 @@ impl HandleMessage for mumble_tcp::TextMessage {
             // Don't duplicate messages we sent ourselves (regular sends).
             // For edits from ourselves, we *do* need to process them because
             // the local edit_message path already applied the change locally,
-            // and the server won't echo edits back to us.
-            if self.actor == state.conn.own_session && self.actor.is_some() && self.edit_id.is_none() {
+            // and the server won't echo edits back to us. A channel message the
+            // server sent on our behalf - a scheduled message coming due - is
+            // not a duplicate of anything, and is kept.
+            if self.actor == state.conn.own_session
+                && self.actor.is_some()
+                && self.edit_id.is_none()
+                && !is_unseen_own_channel_message(self, &kind, &state)
+            {
                 return;
             }
 
@@ -437,6 +594,7 @@ mod tests {
             channel_id: 0,
             is_own: false,
             is_legacy: false,
+            send_failed: false,
             message_id: Some(id.into()),
             timestamp: Some(1000),
             sender_hash: None,

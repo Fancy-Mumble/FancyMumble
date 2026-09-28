@@ -8,9 +8,10 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
-use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM, NONCE_LEN};
-use ring::hkdf::{self, Salt, HKDF_SHA256};
+use ring::aead::{AES_256_GCM, Aad, LessSafeKey, NONCE_LEN, Nonce, UnboundKey};
+use ring::hkdf::{self, HKDF_SHA256, Salt};
 use ring::rand::{SecureRandom, SystemRandom};
 use serde::{Deserialize, Serialize};
 use tracing::debug;
@@ -25,6 +26,14 @@ const REACTION_CACHE_FILE: &str = "signal_reaction_cache.enc";
 
 /// HKDF info string for deriving the cache encryption key.
 const HKDF_INFO: &[u8] = b"fancy-mumble-local-message-cache-v1";
+
+/// How long [`LocalMessageCache::save_if_due`] lets changes sit unwritten.
+///
+/// The bound on what an abrupt end - a crash, a kill, a lost power cable -
+/// can take with it.  Short enough that the loss is a sentence rather than
+/// an evening; long enough that a busy channel does not re-encrypt its whole
+/// history on every message.
+const SAVE_INTERVAL: Duration = Duration::from_secs(15);
 
 /// Custom key type for HKDF output (32 bytes for AES-256).
 struct CacheKeyLen;
@@ -45,6 +54,39 @@ pub(crate) struct CachedMessage {
     pub sender_name: String,
     pub body: String,
     pub is_own: bool,
+}
+
+/// The newest rows of one channel's cache, and whether it holds more.
+pub(crate) struct CachedTail {
+    pub rows: Vec<ChatMessage>,
+    /// Older rows the cache holds that this tail leaves out.
+    pub truncated: bool,
+}
+
+/// One cached row as the UI's `ChatMessage`.
+///
+/// `sender_session` is left empty on purpose: a session id is only meaningful
+/// while its owner is connected, and these rows come off disk.
+fn to_chat_message(m: &CachedMessage) -> ChatMessage {
+    ChatMessage {
+        sender_session: None,
+        sender_name: m.sender_name.clone(),
+        sender_hash: Some(m.sender_hash.clone()),
+        body: m.body.clone(),
+        channel_id: m.channel_id,
+        is_own: m.is_own,
+        dm_session: None,
+        message_id: Some(m.message_id.clone()),
+        timestamp: Some(m.timestamp),
+        is_legacy: false,
+        send_failed: false,
+        edited_at: None,
+        pinned: false,
+        pinned_by: None,
+        pinned_at: None,
+        plugin_name: None,
+        plugin_components: None,
+    }
 }
 
 /// A single cached reaction entry (serializable plaintext).
@@ -72,6 +114,12 @@ pub(crate) struct LocalMessageCache {
     cache_key: LessSafeKey,
     cache_path: PathBuf,
     reaction_cache_path: PathBuf,
+    /// Set by `insert`, cleared by a successful `save_if_due`.  Keeps the
+    /// throttled save from rewriting a cache nothing has added to.
+    dirty: bool,
+    /// When the throttled save last ran.  Starts at construction so a
+    /// freshly-loaded cache does not write itself straight back out.
+    last_save: Instant,
 }
 
 impl LocalMessageCache {
@@ -85,6 +133,8 @@ impl LocalMessageCache {
             cache_key,
             cache_path: identity_dir.join(CACHE_FILE),
             reaction_cache_path: identity_dir.join(REACTION_CACHE_FILE),
+            dirty: false,
+            last_save: Instant::now(),
         })
     }
 
@@ -120,6 +170,62 @@ impl LocalMessageCache {
         let channel = self.messages.entry(channel_id).or_default();
         let pos = channel.partition_point(|m| m.timestamp <= msg.timestamp);
         channel.insert(pos, msg);
+        self.dirty = true;
+    }
+
+    /// Drop messages from a channel, returning how many were held. A
+    /// `SignalV1` channel has no server-side history, so without this a
+    /// deleted message came back from disk on the next launch.
+    pub fn remove(&mut self, channel_id: u32, message_ids: &[String]) -> usize {
+        let Some(channel) = self.messages.get_mut(&channel_id) else {
+            return 0;
+        };
+        let before = channel.len();
+        channel.retain(|m| !message_ids.contains(&m.message_id));
+        let removed = before - channel.len();
+        if removed > 0 {
+            if let Some(ids) = self.message_ids.get_mut(&channel_id) {
+                for id in message_ids {
+                    let _ = ids.remove(id);
+                }
+            }
+            self.dirty = true;
+        }
+        removed
+    }
+
+    /// Write the cache out if it has changed and the last write is at least
+    /// [`SAVE_INTERVAL`] old.  Returns whether it wrote.
+    ///
+    /// Called from the session's flush timer, which holds the `SharedState`
+    /// lock while it runs; a full save re-serialises and re-encrypts every
+    /// message in the cache, so the interval is what keeps a busy channel
+    /// from paying that on every message.  What it bounds is how much an
+    /// abrupt end can take with it: without it the only writers were the
+    /// disconnect paths and the exit handler, and anything that ended the
+    /// process outside those lost the entire session.  For a `SignalV1`
+    /// channel, which has no server-side history, that loss is permanent.
+    pub fn save_if_due(&mut self) -> bool {
+        self.save_if_older_than(SAVE_INTERVAL)
+    }
+
+    /// [`Self::save_if_due`] with the interval spelled out, so a test can ask
+    /// for the behaviour without waiting out the real one.
+    fn save_if_older_than(&mut self, interval: Duration) -> bool {
+        if !self.dirty || self.last_save.elapsed() < interval {
+            return false;
+        }
+        // Stamped before the attempt, and left stamped if it fails: a disk
+        // that cannot be written to must not turn every later insert into
+        // another failing write.
+        self.last_save = Instant::now();
+        self.dirty = false;
+        if let Err(e) = self.save() {
+            self.dirty = true;
+            debug!("periodic message cache save failed: {e}");
+            return false;
+        }
+        true
     }
 
     /// Rebuild the `message_ids` index from `messages` after load.
@@ -128,40 +234,33 @@ impl LocalMessageCache {
             .messages
             .iter()
             .map(|(&channel_id, msgs)| {
-                let ids: HashSet<String> =
-                    msgs.iter().map(|m| m.message_id.clone()).collect();
+                let ids: HashSet<String> = msgs.iter().map(|m| m.message_id.clone()).collect();
                 (channel_id, ids)
             })
             .collect();
     }
 
-    /// Convert all cached messages into `ChatMessage` format, grouped by channel.
-    pub fn all_chat_messages(&self) -> HashMap<u32, Vec<ChatMessage>> {
+    /// The newest `limit` cached rows of each channel, in `ChatMessage` form.
+    ///
+    /// Only the tail, because only the tail is looked at. The whole of every
+    /// channel's cache used to be handed over on connect and poured into the
+    /// message store - an archive that grows without bound on disk, decrypted
+    /// and held in memory before the reader had opened any of those channels.
+    /// What lies behind the tail is what paging back is for, and
+    /// [`CachedTail::truncated`] is how the store learns there is something
+    /// back there to page to.
+    pub fn newest_chat_messages(&self, limit: usize) -> HashMap<u32, CachedTail> {
         self.messages
             .iter()
             .map(|(&channel_id, msgs)| {
-                let chat_msgs = msgs
-                    .iter()
-                    .map(|m| ChatMessage {
-                        sender_session: None,
-                        sender_name: m.sender_name.clone(),
-                        sender_hash: Some(m.sender_hash.clone()),
-                        body: m.body.clone(),
-                        channel_id: m.channel_id,
-                        is_own: m.is_own,
-                        dm_session: None,
-                        message_id: Some(m.message_id.clone()),
-                        timestamp: Some(m.timestamp),
-                        is_legacy: false,
-                        edited_at: None,
-                        pinned: false,
-                        pinned_by: None,
-                        pinned_at: None,
-                        plugin_name: None,
-                        plugin_components: None,
-                    })
-                    .collect();
-                (channel_id, chat_msgs)
+                // Rows are kept timestamp-ordered by `insert`, so the newest
+                // are simply the last ones.
+                let from = msgs.len().saturating_sub(limit);
+                let tail = CachedTail {
+                    rows: msgs[from..].iter().map(to_chat_message).collect(),
+                    truncated: from > 0,
+                };
+                (channel_id, tail)
             })
             .collect()
     }
@@ -193,9 +292,7 @@ impl LocalMessageCache {
     ) {
         if let Some(channel) = self.reactions.get_mut(&channel_id) {
             channel.retain(|r| {
-                !(r.message_id == message_id
-                    && r.emoji == emoji
-                    && r.sender_hash == sender_hash)
+                !(r.message_id == message_id && r.emoji == emoji && r.sender_hash == sender_hash)
             });
             if channel.is_empty() {
                 let _ = self.reactions.remove(&channel_id);
@@ -215,8 +312,7 @@ impl LocalMessageCache {
         let json =
             serde_json::to_vec(&self.messages).map_err(|e| format!("serialize cache: {e}"))?;
         let encrypted = self.encrypt(&json)?;
-        std::fs::write(&self.cache_path, &encrypted)
-            .map_err(|e| format!("write cache: {e}"))?;
+        std::fs::write(&self.cache_path, &encrypted).map_err(|e| format!("write cache: {e}"))?;
         debug!(
             path = ?self.cache_path,
             messages = self.total_count(),
@@ -246,8 +342,7 @@ impl LocalMessageCache {
             debug!(path = ?self.cache_path, "no local message cache found");
             return Ok(());
         }
-        let encrypted =
-            std::fs::read(&self.cache_path).map_err(|e| format!("read cache: {e}"))?;
+        let encrypted = std::fs::read(&self.cache_path).map_err(|e| format!("read cache: {e}"))?;
         let json = self.decrypt(&encrypted)?;
         self.messages =
             serde_json::from_slice(&json).map_err(|e| format!("deserialize cache: {e}"))?;
@@ -359,6 +454,43 @@ mod tests {
     }
 
     #[test]
+    fn a_removed_message_stays_gone_after_a_reload() {
+        let dir = TempDir::new().unwrap();
+        let seed = test_seed();
+        let message = |id: &str, timestamp| CachedMessage {
+            message_id: id.to_string(),
+            channel_id: 5,
+            timestamp,
+            sender_hash: "abc".to_string(),
+            sender_name: "Alice".to_string(),
+            body: "note".to_string(),
+            is_own: true,
+        };
+
+        let mut cache = LocalMessageCache::new(dir.path(), &seed).unwrap();
+        cache.insert(message("keep", 1000));
+        cache.insert(message("drop", 2000));
+        assert_eq!(
+            cache.remove(5, &["drop".to_string(), "absent".to_string()]),
+            1
+        );
+        cache.save().unwrap();
+
+        let mut reloaded = LocalMessageCache::new(dir.path(), &seed).unwrap();
+        reloaded.load().unwrap();
+        let ids: Vec<_> = reloaded.newest_chat_messages(usize::MAX)[&5]
+            .rows
+            .iter()
+            .filter_map(|m| m.message_id.clone())
+            .collect();
+        assert_eq!(ids, vec!["keep".to_string()]);
+
+        // The dedup index forgot it too, so the same id can be cached again.
+        cache.insert(message("drop", 3000));
+        assert_eq!(cache.newest_chat_messages(usize::MAX)[&5].rows.len(), 2);
+    }
+
+    #[test]
     fn save_load_round_trip() {
         let dir = TempDir::new().unwrap();
         let seed = test_seed();
@@ -387,12 +519,93 @@ mod tests {
         let mut cache2 = LocalMessageCache::new(dir.path(), &seed).unwrap();
         cache2.load().unwrap();
 
-        let msgs = cache2.all_chat_messages();
+        let msgs = cache2.newest_chat_messages(usize::MAX);
         assert_eq!(msgs.len(), 1); // 1 channel
-        let ch5 = &msgs[&5];
+        let ch5 = &msgs[&5].rows;
         assert_eq!(ch5.len(), 2);
         assert_eq!(ch5[0].body, "Hello!");
         assert_eq!(ch5[1].body, "Hi!");
+    }
+
+    /// The bug this file's throttled save exists for: a message that was
+    /// only ever in memory. Nothing wrote the cache between the disconnect
+    /// paths, so a client that ended any other way - the window closed, a
+    /// crash, a kill - came back to an empty `SignalV1` channel, which has no
+    /// server-side history to re-fetch it from.
+    #[test]
+    fn a_due_save_writes_what_only_memory_had() {
+        let dir = TempDir::new().unwrap();
+        let seed = test_seed();
+        let mut cache = LocalMessageCache::new(dir.path(), &seed).unwrap();
+        cache.insert(CachedMessage {
+            message_id: "m-1".to_string(),
+            channel_id: 9,
+            timestamp: 100,
+            sender_hash: "x".to_string(),
+            sender_name: "X".to_string(),
+            body: "https://example.invalid/cat.png".to_string(),
+            is_own: true,
+        });
+
+        assert!(
+            cache.save_if_older_than(Duration::ZERO),
+            "an insert left the cache dirty but no save was made"
+        );
+
+        // Read back through a second cache, as a restarted client would.
+        let mut reopened = LocalMessageCache::new(dir.path(), &seed).unwrap();
+        reopened.load().unwrap();
+        assert_eq!(
+            reopened.newest_chat_messages(usize::MAX)[&9].rows[0].body,
+            "https://example.invalid/cat.png"
+        );
+    }
+
+    #[test]
+    fn an_unchanged_cache_is_not_rewritten() {
+        let dir = TempDir::new().unwrap();
+        let mut cache = LocalMessageCache::new(dir.path(), &test_seed()).unwrap();
+        assert!(
+            !cache.save_if_older_than(Duration::ZERO),
+            "wrote an empty cache"
+        );
+
+        cache.insert(CachedMessage {
+            message_id: "m-1".to_string(),
+            channel_id: 1,
+            timestamp: 1,
+            sender_hash: "x".to_string(),
+            sender_name: "X".to_string(),
+            body: "hi".to_string(),
+            is_own: false,
+        });
+        assert!(cache.save_if_older_than(Duration::ZERO));
+        assert!(
+            !cache.save_if_older_than(Duration::ZERO),
+            "re-encrypted the whole cache with nothing added to it"
+        );
+    }
+
+    #[test]
+    fn a_save_inside_the_interval_waits() {
+        let dir = TempDir::new().unwrap();
+        let mut cache = LocalMessageCache::new(dir.path(), &test_seed()).unwrap();
+        cache.insert(CachedMessage {
+            message_id: "m-1".to_string(),
+            channel_id: 1,
+            timestamp: 1,
+            sender_hash: "x".to_string(),
+            sender_name: "X".to_string(),
+            body: "hi".to_string(),
+            is_own: false,
+        });
+        assert!(!cache.save_if_older_than(Duration::from_secs(3600)));
+        assert!(
+            !cache.cache_path.exists(),
+            "wrote before the interval elapsed"
+        );
+        // Still owed, and taken as soon as one is due.
+        assert!(cache.save_if_older_than(Duration::ZERO));
     }
 
     #[test]
@@ -434,11 +647,46 @@ mod tests {
         cache.insert(make("d", 400));
         cache.insert(make("b", 200));
 
-        let msgs = cache.all_chat_messages();
-        let ch1 = &msgs[&1];
+        let msgs = cache.newest_chat_messages(usize::MAX);
+        let ch1 = &msgs[&1].rows;
         assert_eq!(ch1.len(), 4);
         let bodies: Vec<&str> = ch1.iter().map(|m| m.body.as_str()).collect();
         assert_eq!(bodies, vec!["a", "b", "c", "d"]);
+    }
+
+    /// What connect asks the cache for: the newest rows, and whether there is
+    /// more behind them. The whole of every channel's cache used to be handed
+    /// over and held in memory before the reader had opened any of them.
+    #[test]
+    fn only_the_newest_rows_are_handed_over() {
+        let dir = TempDir::new().unwrap();
+        let mut cache = LocalMessageCache::new(dir.path(), &test_seed()).unwrap();
+        for n in 0..10u64 {
+            cache.insert(CachedMessage {
+                message_id: format!("m-{n}"),
+                channel_id: 1,
+                timestamp: n,
+                sender_hash: "x".to_string(),
+                sender_name: "X".to_string(),
+                body: format!("{n}"),
+                is_own: false,
+            });
+        }
+
+        let tails = cache.newest_chat_messages(3);
+        let tail = &tails[&1];
+        let bodies: Vec<&str> = tail.rows.iter().map(|m| m.body.as_str()).collect();
+        assert_eq!(bodies, vec!["7", "8", "9"], "the newest three, in order");
+        assert!(
+            tail.truncated,
+            "and the seven behind them are still on disk"
+        );
+
+        let whole = cache.newest_chat_messages(10);
+        assert!(
+            !whole[&1].truncated,
+            "a tail that reaches the first row leaves nothing behind"
+        );
     }
 
     #[test]

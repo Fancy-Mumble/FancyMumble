@@ -1,0 +1,108 @@
+.toast {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--color-glass);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+  color: var(--color-text-primary, #e0e0e0);
+  font-size: 13px;
+  font-weight: 500;
+  pointer-events: auto;
+  animation: toastIn 0.2s ease-out;
+  box-shadow: 0 4px 20px var(--color-overlay-heavy);
+  max-width: min(480px, calc(100vw - 32px));
+}
+
+.toast.fadeOut {
+  animation: toastOut 0.3s ease-in forwards;
+}
+
+.message {
+  flex: 1;
+  min-width: 0;
+}
+
+.success {
+  border: 1px solid rgba(46, 160, 67, 0.35);
+  background: linear-gradient(135deg, var(--color-success-gradient-start), var(--color-success-gradient-end));
+}
+
+.success .icon {
+  color: #2ea043;
+}
+
+.error {
+  border: 1px solid var(--color-danger-alt-border-strong);
+  background: linear-gradient(135deg, rgba(237, 66, 69, 0.14), var(--color-danger-alt-subtle));
+}
+
+.error .icon {
+  color: var(--color-danger-alt);
+}
+
+.info {
+  border: 1px solid var(--color-accent-border, rgba(88, 166, 255, 0.35));
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.16), rgba(88, 166, 255, 0.05));
+}
+
+.info .icon {
+  color: var(--color-accent, #58a6ff);
+}
+
+.icon {
+  flex-shrink: 0;
+  display: flex;
+}
+
+.dismissBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.dismissBtn:hover {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes toastOut {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+}

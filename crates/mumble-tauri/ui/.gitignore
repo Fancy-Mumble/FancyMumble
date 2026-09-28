@@ -3,3 +3,6 @@ dist/
 
 # TypeScript compiler trace output (tsc --generateTrace)
 tsc_trace/
+
+# Vite output from the scratch preview entries (see preview/).
+preview/**/dist-*/

@@ -1,0 +1,286 @@
+/* --- Chat Page Layout ------------------------------------------- */
+
+.page {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  z-index: 1;
+}
+
+/* --- Reconnect overlay (shown when active session is disconnected) */
+
+.reconnectPage {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  /* Inherit the global app gradient by leaving the background transparent. */
+  background: transparent;
+}
+
+.reconnectCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 36px 44px;
+  background: var(--color-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-glass-border);
+  box-shadow: 0 8px 32px var(--color-overlay-medium);
+  max-width: 380px;
+  width: 100%;
+  text-align: center;
+}
+
+.reconnectIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border-strong);
+  color: var(--color-danger);
+  font-size: 24px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Radar-style ripple: concentric rings pulsing outward from a steady core,
+   evoking a client "searching" for the server. */
+.reconnectSpinner {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+}
+
+.reconnectSpinner::after {
+  content: "";
+  position: absolute;
+  inset: 42%;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 12px var(--color-accent-glow);
+}
+
+.reconnectSpinner span {
+  position: absolute;
+  inset: 0;
+  border: 3px solid var(--color-accent);
+  border-radius: 50%;
+  opacity: 0;
+  animation: reconnectRipple 1.8s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+}
+
+.reconnectSpinner span:nth-child(2) {
+  animation-delay: -0.6s;
+}
+
+.reconnectSpinner span:nth-child(3) {
+  animation-delay: -1.2s;
+}
+
+@keyframes reconnectRipple {
+  0% {
+    transform: scale(0.2);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reconnectSpinner span {
+    animation-duration: 3s;
+  }
+}
+
+.reconnectTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.reconnectStatus {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.reconnectStats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 16px;
+  margin-top: 2px;
+}
+
+.reconnectStat {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-bg-subtle, rgba(127, 127, 127, 0.12));
+}
+
+.reconnectServer {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.reconnectError {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.reconnectReasonBox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+  width: 100%;
+  padding: 12px 14px;
+  margin-top: 4px;
+  border-radius: var(--radius-md);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  text-align: left;
+}
+
+.reconnectReasonLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-danger);
+}
+
+.reconnectBtn {
+  margin-top: 8px;
+  padding: 10px 28px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--color-accent), var(--color-accent-hover));
+  color: var(--color-text-on-accent);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 16px var(--color-accent-glow);
+  transition:
+    opacity 0.2s,
+    transform 0.1s,
+    box-shadow 0.2s;
+}
+
+.reconnectBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+  box-shadow: none;
+}
+
+.reconnectBtn:not(:disabled):hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.reconnectBtn:not(:disabled):active {
+  transform: translateY(0);
+}
+
+/* --- Sidebar Drawer (narrow / mobile) --------------------------- */
+
+.sidebarContainer {
+  display: contents;
+}
+
+/* On wide desktop, Ctrl+B can collapse the sidebar. */
+.sidebarContainer.sidebarCollapsed {
+  display: none;
+}
+
+/* Hamburger button shown when sidebar is collapsed */
+.menuToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+
+.menuToggle:hover {
+  color: var(--color-text-primary);
+  background: var(--color-glass);
+}
+
+/* Backdrop behind the drawer */
+.backdrop {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .sidebarContainer {
+    display: block;
+    position: fixed;
+    top: var(--titlebar-height);
+    left: 0;
+    bottom: 0;
+    width: 85vw;
+    max-width: 360px;
+    z-index: 200;
+    transform: translate3d(-100%, 0, 0);
+    will-change: transform;
+    transition: transform 0.25s ease;
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+
+  .sidebarContainer.sidebarOpen {
+    transform: translate3d(0, 0, 0);
+  }
+
+  .backdrop {
+    display: block;
+    position: fixed;
+    top: var(--titlebar-height);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 199;
+    background: var(--color-overlay-heavy);
+    border: none;
+  }
+
+  .menuToggle {
+    position: absolute;
+    top: 12px;
+    left: 8px;
+    z-index: 10;
+    width: 44px;
+    height: 44px;
+  }
+}

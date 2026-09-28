@@ -1,4 +1,4 @@
-﻿//! Cpal-based audio capture and mixing playback implementations.
+//! Cpal-based audio capture and mixing playback implementations.
 //!
 //! Bridges the OS audio subsystem (via `cpal`) to the protocol
 //! library's [`AudioCapture`] trait and the [`MixingPlayback`] trait
@@ -12,6 +12,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use tracing::{error, warn};
 
 use mumble_protocol::audio::capture::AudioCapture;
+use mumble_protocol::audio::resampler::StreamResampler;
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use mumble_protocol::error::{Error, Result};
 
@@ -31,8 +32,13 @@ pub struct CpalCapture {
     buffer: Arc<Mutex<VecDeque<f32>>>,
     stream: Option<cpal::Stream>,
     device: cpal::Device,
+    /// Display name of the selected device (or "default"), for errors.
+    label: String,
     /// Number of channels the hardware actually uses.
     hw_channels: u16,
+    /// The device's native sample rate; the stream is opened at this
+    /// rate and resampled to 48 kHz in the callback.
+    hw_rate: u32,
     /// Live input volume multiplier (`f32` bits in `AtomicU32`).
     volume: Arc<AtomicU32>,
     /// Suppresses repeated overflow warnings from the cpal callback.
@@ -44,7 +50,10 @@ pub struct CpalCapture {
 // SAFETY: On Windows / WASAPI the underlying COM objects use the MTA
 // model and are safe to send between threads.  The `!Send` marker in
 // cpal is a conservative cross-platform guard that does not apply here.
-#[allow(unsafe_code, reason = "WASAPI COM objects are MTA-safe; cpal's !Send is a conservative cross-platform guard")]
+#[allow(
+    unsafe_code,
+    reason = "WASAPI COM objects are MTA-safe; cpal's !Send is a conservative cross-platform guard"
+)]
 unsafe impl Send for CpalCapture {}
 
 impl CpalCapture {
@@ -53,33 +62,36 @@ impl CpalCapture {
     /// * `device_name` - choose a specific device, or `None` for default.
     /// * `frame_size` - samples per channel per frame (480 for Mumble).
     /// * `volume` - shared atomic volume multiplier (f32 bits as u32).
-    pub fn new(device_name: Option<&str>, frame_size: usize, volume: Arc<AtomicU32>) -> Result<Self> {
-        let host = cpal::default_host();
-
+    pub fn new(
+        device_name: Option<&str>,
+        frame_size: usize,
+        volume: Arc<AtomicU32>,
+    ) -> Result<Self> {
         let device = if let Some(name) = device_name {
-            host.input_devices()
-                .map_err(|e| Error::InvalidState(e.to_string()))?
-                .find(|d| {
-                    d.description()
-                        .ok()
-                        .map(|desc| desc.name().to_string())
-                        .as_deref()
-                        == Some(name)
-                })
-                .ok_or_else(|| {
-                    Error::InvalidState(format!("Input device '{name}' not found"))
-                })?
+            super::devices::find_input(name)
+                .ok_or_else(|| Error::InvalidState(format!("Input device '{name}' not found")))?
         } else {
-            host.default_input_device()
+            cpal::default_host()
+                .default_input_device()
                 .ok_or_else(|| Error::InvalidState("No default input device".into()))?
         };
+        let label = device_name.unwrap_or("default").to_owned();
 
-        // Use the device's preferred channel count so we don't fail on
-        // devices that only support stereo.
-        let default_cfg = device
-            .default_input_config()
-            .map_err(|e| Error::InvalidState(e.to_string()))?;
+        // Use the device's preferred channel count AND sample rate.
+        // Opening at the native rate and resampling ourselves is
+        // deterministic; requesting 48 kHz instead makes WASAPI's
+        // AUTOCONVERTPCM (or worse, a virtual driver that merely
+        // relabels the rate) responsible for the conversion, which is
+        // exactly what produced mistimed audio on non-48 kHz devices.
+        let default_cfg = device.default_input_config().map_err(|e| {
+            Error::InvalidState(super::devices::describe_open_failure(
+                &label,
+                &device,
+                &e.to_string(),
+            ))
+        })?;
         let hw_channels = default_cfg.channels();
+        let hw_rate = default_cfg.sample_rate();
 
         Ok(Self {
             format: AudioFormat::MONO_48KHZ_F32,
@@ -88,7 +100,9 @@ impl CpalCapture {
             buffer: Arc::new(Mutex::new(VecDeque::with_capacity(9_600))),
             stream: None,
             device,
+            label,
             hw_channels,
+            hw_rate,
             volume,
             overflow_warned: Arc::new(AtomicBool::new(false)),
         })
@@ -100,16 +114,28 @@ fn handle_cpal_input(
     data: &[f32],
     hw_channels: u16,
     overflow_warned: &Arc<AtomicBool>,
+    resampler: &mut StreamResampler,
+    mono_scratch: &mut Vec<f32>,
+    out_scratch: &mut Vec<f32>,
 ) {
-    let Ok(mut buf) = buffer.lock() else { return };
+    // Downmix to mono at the device rate...
+    mono_scratch.clear();
     if hw_channels == 1 {
-        buf.extend(data.iter().copied());
+        mono_scratch.extend_from_slice(data);
     } else {
         for chunk in data.chunks(hw_channels as usize) {
             let sum: f32 = chunk.iter().sum();
-            buf.push_back(sum / hw_channels as f32);
+            mono_scratch.push(sum / hw_channels as f32);
         }
     }
+
+    // ...then convert to the pipeline's 48 kHz world (passthrough when
+    // the device already runs at 48 kHz).
+    out_scratch.clear();
+    resampler.process_into(mono_scratch, out_scratch);
+
+    let Ok(mut buf) = buffer.lock() else { return };
+    buf.extend(out_scratch.iter().copied());
     const MAX_SAMPLES: usize = 9_600;
     if buf.len() > MAX_SAMPLES {
         if !overflow_warned.swap(true, Ordering::Relaxed) {
@@ -170,25 +196,48 @@ impl AudioCapture for CpalCapture {
     fn start(&mut self) -> Result<()> {
         let buffer = self.buffer.clone();
         let hw_channels = self.hw_channels;
+        let hw_rate = self.hw_rate;
         let overflow_warned = self.overflow_warned.clone();
 
         let stream_config = cpal::StreamConfig {
             channels: hw_channels,
-            sample_rate: 48_000,
+            sample_rate: hw_rate,
             buffer_size: cpal::BufferSize::Default,
         };
+        warn!(
+            "cpal capture: opening input at native {hw_rate} Hz, {hw_channels} ch (resampling to 48 kHz)"
+        );
+
+        let mut resampler = StreamResampler::new(f64::from(hw_rate), 48_000.0)
+            .map_err(|e| Error::InvalidState(format!("resampler init: {e}")))?;
+        let mut mono_scratch: Vec<f32> = Vec::new();
+        let mut out_scratch: Vec<f32> = Vec::new();
 
         let stream = self
             .device
             .build_input_stream(
                 &stream_config,
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                    handle_cpal_input(&buffer, data, hw_channels, &overflow_warned);
+                    handle_cpal_input(
+                        &buffer,
+                        data,
+                        hw_channels,
+                        &overflow_warned,
+                        &mut resampler,
+                        &mut mono_scratch,
+                        &mut out_scratch,
+                    );
                 },
                 |err| error!("cpal input error: {err}"),
                 None,
             )
-            .map_err(|e| Error::InvalidState(e.to_string()))?;
+            .map_err(|e| {
+                Error::InvalidState(super::devices::describe_open_failure(
+                    &self.label,
+                    &self.device,
+                    &e.to_string(),
+                ))
+            })?;
 
         stream
             .play()
@@ -243,13 +292,20 @@ impl super::AudioDeviceFactory for CpalAudioFactory {
 /// Per-speaker volume is applied from `speaker_vols` (0.0-2.0,
 /// defaulting to 1.0 when absent).
 ///
+/// Priming is per speaker and lives in
+/// [`SpeakerBuffer::drain_into`](mumble_protocol::audio::mixer::SpeakerBuffer::drain_into):
+/// a speaker that has not reached its target depth yet contributes nothing,
+/// and one whose talkspurt has ended plays out whatever it has. There is no
+/// longer a global pre-buffer gate here - one speaker starting mid-sentence
+/// used to make everybody wait for it.
+///
 /// Returns `(had_data, valid_count, max_buf_before)`: whether any
 /// speaker contributed, the number of valid mixed samples (max drained
 /// from any single speaker), and the maximum buffer level across all
 /// speakers before draining.  Positions beyond `valid_count` in
 /// `mixed_buf` are zero and should be treated as underrun by the caller.
 pub(super) fn batch_drain_speakers(
-    bufs: &mut HashMap<u32, VecDeque<f32>>,
+    bufs: &mut HashMap<u32, mumble_protocol::audio::mixer::SpeakerBuffer>,
     speaker_vols: &HashMap<u32, f32>,
     mixed_buf: &mut Vec<f32>,
     mono_needed: usize,
@@ -264,23 +320,15 @@ pub(super) fn batch_drain_speakers(
         if buf.is_empty() {
             continue;
         }
-        any = true;
         max_buf_before = max_buf_before.max(buf.len());
         let vol = speaker_vols.get(session).copied().unwrap_or(1.0);
-        let n = buf.len().min(mono_needed);
-        max_drained = max_drained.max(n);
-        let (a, b) = buf.as_slices();
-        let from_a = n.min(a.len());
-        for (dst, src) in mixed_buf[..from_a].iter_mut().zip(&a[..from_a]) {
-            *dst += *src * vol;
+        // The buffer decides whether it is deep enough to start; a speaker
+        // still filling to its target contributes nothing this callback.
+        let n = buf.drain_into(mixed_buf, vol);
+        if n > 0 {
+            any = true;
+            max_drained = max_drained.max(n);
         }
-        if from_a < n {
-            let from_b = n - from_a;
-            for (dst, src) in mixed_buf[from_a..n].iter_mut().zip(&b[..from_b]) {
-                *dst += *src * vol;
-            }
-        }
-        let _ = buf.drain(..n);
     }
 
     (any, max_drained, max_buf_before)
@@ -310,24 +358,19 @@ struct PlaybackState {
 
 /// Try to drain speaker buffers into `mixed_buf`. Returns
 /// `Some((had_data, valid_count, buf_depth))` on success, or `None`
-/// when the caller should fill zeros and return early (not yet primed
-/// or lock failure).
+/// when the caller should fill zeros and return early (lock failure).
+///
+/// Priming is per speaker inside the buffers themselves, so there is no
+/// stream-wide primed flag to consult here any more.
 fn try_drain_speakers_checked(
     buffers: &mumble_protocol::audio::mixer::SpeakerBuffers,
     speaker_volumes: &mumble_protocol::audio::mixer::SpeakerVolumes,
-    primed_cb: &AtomicBool,
     mixed_buf: &mut Vec<f32>,
     mono_needed: usize,
 ) -> Option<(bool, usize, usize)> {
-    const PRE_BUFFER_SAMPLES: usize = 4800;
-    let Ok(mut bufs) = buffers.lock() else { return None };
-    if !primed_cb.load(Ordering::Relaxed) {
-        let max_available = bufs.values().map(VecDeque::len).max().unwrap_or(0);
-        if max_available < PRE_BUFFER_SAMPLES {
-            return None;
-        }
-        primed_cb.store(true, Ordering::Relaxed);
-    }
+    let Ok(mut bufs) = buffers.lock() else {
+        return None;
+    };
     // try_lock avoids blocking the real-time audio thread on a second
     // mutex; on contention we fall back to default volumes (1.0).
     // Borrow the guard instead of cloning the HashMap - this runs on
@@ -379,8 +422,47 @@ fn resample_linear(
     }
     let frac = (src_pos - idx as f64) as f32;
     let s0 = mixed_buf[idx];
-    let s1 = if idx + 1 < valid_count { mixed_buf[idx + 1] } else { s0 };
+    let s1 = if idx + 1 < valid_count {
+        mixed_buf[idx + 1]
+    } else {
+        s0
+    };
     Some(s0 + (s1 - s0) * frac)
+}
+
+/// Fill a whole callback buffer with silence in one go when nothing is
+/// playing and the anti-pop decay has already reached zero.
+///
+/// Sitting in a channel with nobody speaking, the output callback still ran
+/// the per-sample resample-and-clip path a hundred times a second to write
+/// zeros - about one percent of a core, and the largest cost left in an idle
+/// client. A buffer of zeros is the same result without the arithmetic.
+///
+/// Returns `false` while the last sample is still decaying: those frames go
+/// through [`write_output_frame`] one at a time so the tail of the previous
+/// audio fades rather than cuts, exactly as before.
+fn write_silence_fast(data: &mut [f32], out_channels: usize, state: &mut PlaybackState) -> bool {
+    if state.last_sample != 0.0 {
+        return false;
+    }
+    data.fill(0.0);
+    state.in_underrun = true;
+    state.ramp_pos = 0;
+    state.underrun_samples = state
+        .underrun_samples
+        .saturating_add(data.len() / out_channels.max(1));
+    true
+}
+
+/// Write a callback's worth of silence: in one go once the anti-pop decay
+/// has reached zero, frame by frame while it is still fading out.
+fn write_silence(data: &mut [f32], out_channels: usize, state: &mut PlaybackState, vol: f32) {
+    if write_silence_fast(data, out_channels, state) {
+        return;
+    }
+    for frame in data.chunks_exact_mut(out_channels) {
+        write_output_frame(frame, None, state, vol);
+    }
 }
 
 /// Write one output frame (mono sample duplicated to all channels) with
@@ -415,7 +497,10 @@ fn write_output_frame(
 }
 
 // SAFETY: See CpalCapture.
-#[allow(unsafe_code, reason = "WASAPI COM objects are MTA-safe; cpal's !Send is a conservative cross-platform guard")]
+#[allow(
+    unsafe_code,
+    reason = "WASAPI COM objects are MTA-safe; cpal's !Send is a conservative cross-platform guard"
+)]
 unsafe impl Send for CpalMixingPlayback {}
 
 impl CpalMixingPlayback {
@@ -425,21 +510,12 @@ impl CpalMixingPlayback {
         buffers: mumble_protocol::audio::mixer::SpeakerBuffers,
         speaker_volumes: mumble_protocol::audio::mixer::SpeakerVolumes,
     ) -> Result<Self> {
-        let host = cpal::default_host();
         let device = if let Some(name) = device_name {
-            host.output_devices()
-                .map_err(|e| Error::InvalidState(e.to_string()))?
-                .find(|d| {
-                    d.description()
-                        .ok()
-                        .map(|desc| desc.name() == name)
-                        .unwrap_or(false)
-                })
-                .ok_or_else(|| {
-                    Error::InvalidState(format!("Output device not found: {name}"))
-                })?
+            super::devices::find_output(name)
+                .ok_or_else(|| Error::InvalidState(format!("Output device not found: {name}")))?
         } else {
-            host.default_output_device()
+            cpal::default_host()
+                .default_output_device()
                 .ok_or_else(|| Error::InvalidState("No default output device".into()))?
         };
 
@@ -470,9 +546,16 @@ impl CallbackDiag {
                 "audio diag: cb={}, none={}, underrun={}, partial={}, \
                  src_needed={}, valid={}, out_frames={}, ratio={:.4}, \
                  peak={:.4}, buf={}",
-                self.callbacks, self.none, self.underrun, self.partial,
-                src_needed, valid_count, out_frames, src_ratio,
-                self.peak, self.buf_depth,
+                self.callbacks,
+                self.none,
+                self.underrun,
+                self.partial,
+                src_needed,
+                valid_count,
+                out_frames,
+                src_ratio,
+                self.peak,
+                self.buf_depth,
             );
         }
     }
@@ -498,7 +581,9 @@ impl super::MixingPlayback for CpalMixingPlayback {
 
         warn!(
             "cpal output device: rate={} Hz, channels={}, format={:?}",
-            device_rate, device_channels, default_config.sample_format()
+            device_rate,
+            device_channels,
+            default_config.sample_format()
         );
 
         let stream_config = cpal::StreamConfig {
@@ -512,10 +597,14 @@ impl super::MixingPlayback for CpalMixingPlayback {
         let src_ratio: f64 = 48_000.0 / device_rate as f64;
         let out_channels = device_channels as usize;
 
-        let primed = Arc::new(AtomicBool::new(false));
-        let primed_cb = primed.clone();
-
-        let mut diag = CallbackDiag { callbacks: 0, underrun: 0, partial: 0, none: 0, peak: 0.0, buf_depth: 0 };
+        let mut diag = CallbackDiag {
+            callbacks: 0,
+            underrun: 0,
+            partial: 0,
+            none: 0,
+            peak: 0.0,
+            buf_depth: 0,
+        };
         let mut pb_state = PlaybackState {
             last_sample: 0.0,
             in_underrun: false,
@@ -523,7 +612,6 @@ impl super::MixingPlayback for CpalMixingPlayback {
             underrun_samples: 0,
         };
         let mut mixed_buf: Vec<f32> = Vec::new();
-        let mut consecutive_empty: u32 = 0;
 
         let stream = self
             .device
@@ -532,50 +620,42 @@ impl super::MixingPlayback for CpalMixingPlayback {
                 move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                     let vol = f32::from_bits(volume.load(Ordering::Relaxed));
                     let out_frames = data.len() / out_channels;
-                    let src_needed =
-                        ((out_frames as f64 * src_ratio).ceil() as usize).max(1);
+                    let src_needed = ((out_frames as f64 * src_ratio).ceil() as usize).max(1);
 
                     diag.callbacks += 1;
 
                     let drain_result = try_drain_speakers_checked(
                         &buffers,
                         &speaker_volumes,
-                        &primed_cb,
                         &mut mixed_buf,
                         src_needed,
                     );
                     let Some((drained, valid_count, buf_depth)) = drain_result else {
                         diag.none += 1;
-                        for frame in data.chunks_exact_mut(out_channels) {
-                            write_output_frame(frame, None, &mut pb_state, vol);
-                        }
+                        write_silence(data, out_channels, &mut pb_state, vol);
                         return;
                     };
                     diag.buf_depth = buf_depth;
 
                     if !drained || valid_count == 0 {
                         diag.underrun += 1;
-                        consecutive_empty += 1;
-                        // Only reprime after sustained silence (1.5 s).
-                        // Natural speech pauses (100-500 ms) are absorbed
-                        // by the buffer; repriming during those pauses
-                        // would introduce ~100 ms audible gaps.
-                        const REPRIME_AFTER: u32 = 150;
-                        if consecutive_empty >= REPRIME_AFTER {
-                            primed_cb.store(false, Ordering::Relaxed);
-                        }
-                    } else {
-                        consecutive_empty = 0;
-                        if valid_count < src_needed {
-                            diag.partial += 1;
-                        }
+                    } else if valid_count < src_needed {
+                        diag.partial += 1;
                     }
                     diag.log_if_due(src_needed, valid_count, out_frames, src_ratio);
 
+                    // Nothing to play: every frame would resample to `None`
+                    // anyway, so skip straight to silence - one memset once
+                    // the fade-out is done, instead of a resample and a
+                    // soft-clip per sample for as long as the channel is quiet.
+                    if !drained || valid_count == 0 {
+                        write_silence(data, out_channels, &mut pb_state, vol);
+                        return;
+                    }
+
                     for (i, frame) in data.chunks_exact_mut(out_channels).enumerate() {
-                        let sample_opt = resample_linear(
-                            &mixed_buf, valid_count, drained, i, src_ratio,
-                        );
+                        let sample_opt =
+                            resample_linear(&mixed_buf, valid_count, drained, i, src_ratio);
                         if let Some(s) = &sample_opt {
                             diag.peak = diag.peak.max(s.abs());
                         }
@@ -606,7 +686,11 @@ impl super::MixingPlayback for CpalMixingPlayback {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, unused_results, reason = "acceptable in test code")]
+    #![allow(
+        clippy::unwrap_used,
+        unused_results,
+        reason = "acceptable in test code"
+    )]
     use super::*;
     use mumble_protocol::audio::sample::AudioFormat;
 
@@ -625,9 +709,8 @@ mod tests {
     #[ignore = "requires audio hardware - run with --ignored"]
     fn mixing_playback_can_be_created() {
         let vol = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
-        let bufs: mumble_protocol::audio::mixer::SpeakerBuffers = Arc::new(
-            Mutex::new(HashMap::new()),
-        );
+        let bufs: mumble_protocol::audio::mixer::SpeakerBuffers =
+            Arc::new(Mutex::new(HashMap::new()));
         let svols: mumble_protocol::audio::mixer::SpeakerVolumes =
             Arc::new(Mutex::new(HashMap::new()));
         let Ok(_p) = CpalMixingPlayback::new(None, vol, bufs, svols) else {
@@ -640,7 +723,9 @@ mod tests {
     #[ignore = "requires audio hardware - run with --ignored"]
     fn capture_read_before_start_returns_error() {
         let vol = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
-        let Ok(mut capture) = CpalCapture::new(None, 960, vol) else { return };
+        let Ok(mut capture) = CpalCapture::new(None, 960, vol) else {
+            return;
+        };
         // Without calling start(), the buffer is empty so read_frame should fail.
         assert!(capture.read_frame().is_err());
     }
@@ -648,8 +733,8 @@ mod tests {
     #[test]
     fn batch_drain_sums_multiple_speakers() {
         let mut bufs = HashMap::new();
-        bufs.insert(1u32, VecDeque::from(vec![0.5_f32; 10]));
-        bufs.insert(2, VecDeque::from(vec![0.25; 10]));
+        bufs.insert(1u32, ready_buffer(&[0.5_f32; 10]));
+        bufs.insert(2, ready_buffer(&[0.25; 10]));
         let speaker_vols: HashMap<u32, f32> = HashMap::new();
         let mut mixed = Vec::new();
 
@@ -669,7 +754,7 @@ mod tests {
     #[test]
     fn batch_drain_partial_speaker() {
         let mut bufs = HashMap::new();
-        bufs.insert(1u32, VecDeque::from(vec![1.0_f32; 5]));
+        bufs.insert(1u32, ready_buffer(&[1.0_f32; 5]));
         let speaker_vols: HashMap<u32, f32> = HashMap::new();
         let mut mixed = Vec::new();
 
@@ -688,7 +773,7 @@ mod tests {
 
     #[test]
     fn batch_drain_empty_returns_false() {
-        let mut bufs: HashMap<u32, VecDeque<f32>> = HashMap::new();
+        let mut bufs: HashMap<u32, mumble_protocol::audio::mixer::SpeakerBuffer> = HashMap::new();
         let speaker_vols: HashMap<u32, f32> = HashMap::new();
         let mut mixed = Vec::new();
         assert!(!batch_drain_speakers(&mut bufs, &speaker_vols, &mut mixed, 10).0);
@@ -697,7 +782,7 @@ mod tests {
     #[test]
     fn batch_drain_retains_leftover_samples() {
         let mut bufs = HashMap::new();
-        bufs.insert(1u32, VecDeque::from(vec![0.5_f32; 20]));
+        bufs.insert(1u32, ready_buffer(&[0.5_f32; 20]));
         let speaker_vols: HashMap<u32, f32> = HashMap::new();
         let mut mixed = Vec::new();
 
@@ -709,8 +794,8 @@ mod tests {
     #[test]
     fn batch_drain_applies_per_speaker_volume() {
         let mut bufs = HashMap::new();
-        bufs.insert(1u32, VecDeque::from(vec![1.0_f32; 4]));
-        bufs.insert(2u32, VecDeque::from(vec![1.0_f32; 4]));
+        bufs.insert(1u32, ready_buffer(&[1.0_f32; 4]));
+        bufs.insert(2u32, ready_buffer(&[1.0_f32; 4]));
 
         let mut speaker_vols = HashMap::new();
         speaker_vols.insert(1u32, 0.5_f32); // speaker 1 at 50%
@@ -729,9 +814,8 @@ mod tests {
     #[test]
     fn batch_drain_default_volume_is_unity() {
         let mut bufs = HashMap::new();
-        bufs.insert(1u32, VecDeque::from(vec![0.8_f32; 4]));
-
-        // No entry for speaker 1 means default volume (1.0)
+        bufs.insert(1u32, ready_buffer(&[0.8_f32; 4]));
+        // No entry for speaker 1 -> defaults to 1.0
         let speaker_vols: HashMap<u32, f32> = HashMap::new();
         let mut mixed = Vec::new();
         batch_drain_speakers(&mut bufs, &speaker_vols, &mut mixed, 4);
@@ -741,8 +825,31 @@ mod tests {
         }
     }
 
+    /// A buffer holding `samples`, as a talkspurt that has already ended so
+    /// the jitter target does not gate it. Tests that want the target to
+    /// apply push through [`SpeakerBuffer::push`] instead.
+    fn ready_buffer(samples: &[f32]) -> mumble_protocol::audio::mixer::SpeakerBuffer {
+        let mut buf = mumble_protocol::audio::mixer::SpeakerBuffer::new(
+            mumble_protocol::audio::sample::AudioFormat::MONO_48KHZ_F32,
+            mumble_protocol::audio::mixer::JitterConfig::default(),
+        );
+        buf.push_complete(samples);
+        buf
+    }
+
+    /// A buffer holding `samples` from a speaker who is still talking, so
+    /// the jitter target decides whether it plays.
+    fn live_buffer(samples: &[f32]) -> mumble_protocol::audio::mixer::SpeakerBuffer {
+        let mut buf = mumble_protocol::audio::mixer::SpeakerBuffer::new(
+            mumble_protocol::audio::sample::AudioFormat::MONO_48KHZ_F32,
+            mumble_protocol::audio::mixer::JitterConfig::default(),
+        );
+        buf.push(samples);
+        buf
+    }
+
     fn make_speaker_buffers(
-        data: HashMap<u32, VecDeque<f32>>,
+        data: HashMap<u32, mumble_protocol::audio::mixer::SpeakerBuffer>,
     ) -> mumble_protocol::audio::mixer::SpeakerBuffers {
         Arc::new(Mutex::new(data))
     }
@@ -754,73 +861,81 @@ mod tests {
     }
 
     #[test]
-    fn try_drain_returns_none_before_primed() {
-        let bufs = make_speaker_buffers(HashMap::from([(1, VecDeque::from(vec![1.0; 100]))]));
+    fn a_speaker_below_its_target_contributes_nothing() {
+        // There is no global pre-buffer any more: the buffer itself decides.
+        // 100 samples is ~2 ms, far below the 40 ms target.
+        let bufs = make_speaker_buffers(HashMap::from([(1, live_buffer(&[1.0; 100]))]));
         let vols = make_speaker_volumes(HashMap::new());
-        let primed = AtomicBool::new(false);
         let mut mixed = Vec::new();
 
-        // 100 samples is below PRE_BUFFER_SAMPLES (4800) -> returns None
-        let result = try_drain_speakers_checked(&bufs, &vols, &primed, &mut mixed, 100);
-        assert!(result.is_none());
-        assert!(!primed.load(Ordering::Relaxed));
+        let (had_data, valid, _depth) =
+            try_drain_speakers_checked(&bufs, &vols, &mut mixed, 100).expect("lock held");
+        assert!(!had_data, "a speaker still filling must not contribute");
+        assert_eq!(valid, 0);
     }
 
     #[test]
-    fn try_drain_primes_when_buffer_sufficient() {
-        let bufs = make_speaker_buffers(HashMap::from([(1, VecDeque::from(vec![1.0; 5000]))]));
+    fn a_speaker_at_its_target_drains() {
+        let bufs = make_speaker_buffers(HashMap::from([(1, live_buffer(&[1.0; 5000]))]));
         let vols = make_speaker_volumes(HashMap::new());
-        let primed = AtomicBool::new(false);
         let mut mixed = Vec::new();
 
-        let result = try_drain_speakers_checked(&bufs, &vols, &primed, &mut mixed, 480);
-        assert!(result.is_some());
-        assert!(primed.load(Ordering::Relaxed));
-        let (had_data, valid, _depth) = result.unwrap();
+        let (had_data, valid, _depth) =
+            try_drain_speakers_checked(&bufs, &vols, &mut mixed, 480).expect("lock held");
         assert!(had_data);
         assert_eq!(valid, 480);
     }
 
     #[test]
-    fn try_drain_stays_primed_when_empty() {
-        let bufs = make_speaker_buffers(HashMap::from([(1, VecDeque::from(vec![1.0; 5000]))]));
+    fn a_speaker_that_ran_dry_refills_before_it_plays_again() {
+        // Draining a live speaker to empty re-primes it: the next callback
+        // gets nothing until it has filled back to the (now larger) target,
+        // rather than dribbling out partial chunks.
+        let bufs = make_speaker_buffers(HashMap::from([(1, live_buffer(&[1.0; 2000]))]));
         let vols = make_speaker_volumes(HashMap::new());
-        let primed = AtomicBool::new(false);
         let mut mixed = Vec::new();
 
-        // Prime the buffer
-        let _ = try_drain_speakers_checked(&bufs, &vols, &primed, &mut mixed, 480);
-        assert!(primed.load(Ordering::Relaxed));
+        while try_drain_speakers_checked(&bufs, &vols, &mut mixed, 480)
+            .expect("lock held")
+            .1
+            > 0
+        {}
 
-        // Drain all remaining data
-        {
-            let mut locked = bufs.lock().unwrap();
-            locked.get_mut(&1).unwrap().clear();
-        }
-
-        // Once primed, stays primed even when empty (returns zero-filled data)
-        let result = try_drain_speakers_checked(&bufs, &vols, &primed, &mut mixed, 480);
-        assert!(result.is_some());
-        assert!(primed.load(Ordering::Relaxed));
-        let (had_data, _valid, _depth) = result.unwrap();
-        assert!(!had_data);
+        let (had_data, valid, _depth) =
+            try_drain_speakers_checked(&bufs, &vols, &mut mixed, 480).expect("lock held");
+        assert!(!had_data, "an emptied live speaker must re-prime");
+        assert_eq!(valid, 0);
     }
 
     #[test]
-    fn try_drain_stays_primed_with_data() {
-        let bufs = make_speaker_buffers(HashMap::from([(1, VecDeque::from(vec![1.0; 10000]))]));
-        let vols = make_speaker_volumes(HashMap::new());
-        let primed = AtomicBool::new(false);
-        let mut mixed = Vec::new();
+    fn silence_fast_path_waits_for_the_decay_to_finish() {
+        let mut state = PlaybackState {
+            last_sample: 0.2,
+            in_underrun: false,
+            ramp_pos: 0,
+            underrun_samples: 0,
+        };
+        let mut data = vec![0.5_f32; 8];
+        assert!(!write_silence_fast(&mut data, 2, &mut state));
+        // Untouched: the caller fades these frames one by one.
+        assert!(data.iter().all(|&s| s == 0.5));
+    }
 
-        // Prime
-        let _ = try_drain_speakers_checked(&bufs, &vols, &primed, &mut mixed, 480);
-        assert!(primed.load(Ordering::Relaxed));
-
-        // Drain again - still has data, should stay primed
-        let result = try_drain_speakers_checked(&bufs, &vols, &primed, &mut mixed, 480);
-        assert!(result.is_some());
-        assert!(primed.load(Ordering::Relaxed));
+    #[test]
+    fn silence_fast_path_zero_fills_once_decayed() {
+        let mut state = PlaybackState {
+            last_sample: 0.0,
+            in_underrun: false,
+            ramp_pos: 3,
+            underrun_samples: 5,
+        };
+        let mut data = vec![0.5_f32; 8];
+        assert!(write_silence_fast(&mut data, 2, &mut state));
+        assert!(data.iter().all(|&s| s == 0.0));
+        assert!(state.in_underrun);
+        assert_eq!(state.ramp_pos, 0);
+        // Four stereo frames of silence, counted like the slow path counts them.
+        assert_eq!(state.underrun_samples, 9);
     }
 
     #[test]
@@ -834,7 +949,11 @@ mod tests {
         let buf = vec![0.0, 0.25, 0.5, 0.75, 1.0];
         for i in 0..5 {
             let s = resample_linear(&buf, 5, true, i, 1.0).unwrap();
-            assert!((s - buf[i]).abs() < 1e-6, "index {i}: expected {}, got {s}", buf[i]);
+            assert!(
+                (s - buf[i]).abs() < 1e-6,
+                "index {i}: expected {}, got {s}",
+                buf[i]
+            );
         }
     }
 

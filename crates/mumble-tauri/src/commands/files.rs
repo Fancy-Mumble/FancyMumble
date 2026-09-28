@@ -83,6 +83,16 @@ pub(crate) async fn fileserver_admin_list_documents(
     state.admin_list_documents(request).await
 }
 
+/// Admin dashboard: list each user's stored calendar blob and its size.
+/// Gated server-side on the caller's session JWT granting admin rights.
+#[tauri::command]
+pub(crate) async fn fileserver_admin_list_calendars(
+    state: tauri::State<'_, AppState>,
+    request: AdminListRequest,
+) -> Result<serde_json::Value, String> {
+    state.admin_list_calendars(request).await
+}
+
 /// Admin dashboard: delete a single stored file (blob + metadata).
 #[tauri::command]
 pub(crate) async fn fileserver_admin_delete_file(
@@ -281,4 +291,177 @@ pub(crate) fn write_translation_files(
         std::fs::write(&dest, f.content.as_bytes()).map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+/// Read a local file and return its contents base64-encoded.
+///
+/// Used for files dropped onto the window, which reach the webview as a bare
+/// path. The webview cannot read that path itself: `convertFileSrc` turns it
+/// into an `asset://` URL, and on Linux the `WebKitGTK` backend registers that
+/// custom scheme as secure but never as CORS-enabled, so a `fetch()` against it
+/// yields an empty body rather than the file. Reading here and handing the
+/// bytes back over IPC is the same detour [`upload_bytes`] takes.
+#[tauri::command]
+pub(crate) async fn read_file_base64(path: String) -> Result<String, String> {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+
+    let bytes = tokio::fs::read(&path)
+        .await
+        .map_err(|e| format!("read {path}: {e}"))?;
+    if bytes.is_empty() {
+        return Err(format!("file is empty: {path}"));
+    }
+    Ok(STANDARD.encode(bytes))
+}
+
+/// The size of a local file, in bytes.
+///
+/// A composer that stages a file before uploading it says how big it is, and
+/// that is the one thing about a bare path the webview cannot work out for
+/// itself. Reading the whole file back through [`read_file_base64`] just to
+/// measure it would pull a video through IPC to print "84 MB".
+#[tauri::command]
+pub(crate) async fn file_size(path: String) -> Result<u64, String> {
+    let meta = tokio::fs::metadata(&path)
+        .await
+        .map_err(|e| format!("stat {path}: {e}"))?;
+    Ok(meta.len())
+}
+
+// -- the canon file service --------------------------------------------
+//
+// A server running the plugin and a server running the canon service both
+// share files; the difference is who authorises the transfer. These commands
+// are the canon half, and the frontend picks between them on what the server
+// turned out to speak - see `starling_files_available`.
+
+/// Share one local file with a channel over the canon handshake.
+///
+/// Progress arrives on the same `upload-progress` events as the plugin path,
+/// keyed by `upload_id`, and `cancel_upload` stops it the same way.
+#[tauri::command]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one upload, and every one of these is a property of it"
+)]
+pub(crate) async fn starling_upload_file(
+    state: tauri::State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+    file_path: String,
+    channel_id: u32,
+    mime_type: Option<String>,
+    upload_id: Option<String>,
+    mode: Option<String>,
+    ttl_seconds: Option<u64>,
+    password: Option<String>,
+    voice_duration_ms: Option<u32>,
+) -> Result<crate::state::starling_files::SharedUpload, String> {
+    state
+        .starling_upload_file(
+            file_path,
+            channel_id,
+            mime_type,
+            upload_id.unwrap_or_default(),
+            visibility_of(mode.as_deref()),
+            ttl_seconds.unwrap_or_default(),
+            password.unwrap_or_default(),
+            voice_duration_ms,
+            app_handle,
+        )
+        .await
+}
+
+/// The frontend's word for how a file may be shared, as the canon's enum.
+///
+/// The names are the ones every pack's share dialog has always used, so the
+/// two halves do not need a translation table anywhere else. Anything
+/// unrecognised is the narrowest of the three: a mode this build does not know
+/// must not turn into a public link.
+fn visibility_of(mode: Option<&str>) -> mumble_protocol::proto::fancy::files::Visibility {
+    use mumble_protocol::proto::fancy::files::Visibility;
+    match mode {
+        Some("public") => Visibility::Public,
+        Some("password") => Visibility::Password,
+        _ => Visibility::Session,
+    }
+}
+
+/// The URL a media element can load one shared object from.
+///
+/// Nothing shown in a message is fetched whole through IPC: a player asks the
+/// loopback origin for the ranges it wants, which is the only way a file
+/// bigger than memory is playable and the only way seeking works, and an
+/// `<img>` loads its picture from the same origin - lazily, once, and into
+/// the webview's own cache - instead of receiving it as base64.
+#[tauri::command]
+pub(crate) async fn starling_media_url(
+    state: tauri::State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+    key: String,
+) -> Result<String, String> {
+    state.starling_media_url(key, app_handle).await
+}
+
+/// `share` is present only for a password share, whose bytes the signed route
+/// cannot open - see `redeem_share`.
+#[tauri::command]
+pub(crate) async fn starling_download_to_file(
+    state: tauri::State<'_, AppState>,
+    key: String,
+    dest_path: String,
+    share: Option<crate::state::starling_files::PasswordShare>,
+) -> Result<u64, String> {
+    state.starling_download_to_file(key, dest_path, share).await
+}
+
+/// List the caller's own shared files, or every file on the server.
+///
+/// Returns the request id the answer will carry; the answer itself arrives as
+/// the `starling-files-managed` event. `everyone` needs `Write` on the root
+/// channel, and the server refuses rather than quietly narrowing the answer.
+#[tauri::command]
+pub(crate) async fn starling_manage_files(
+    state: tauri::State<'_, AppState>,
+    everyone: Option<bool>,
+    limit: Option<u32>,
+) -> Result<String, String> {
+    state
+        .starling_manage_files(everyone.unwrap_or(false), limit.unwrap_or(200))
+        .await
+}
+
+/// Remove one shared file, rows and bytes together.
+///
+/// Your own needs no permission; anyone else's needs `ResetUserContent` on the
+/// root. The outcome arrives as `starling-files-managed` or as a refusal.
+#[tauri::command]
+pub(crate) async fn starling_forget_file(
+    state: tauri::State<'_, AppState>,
+    key: String,
+) -> Result<String, String> {
+    state.starling_forget_file(key).await
+}
+
+/// Ask what has been shared in a channel.
+///
+/// The listing arrives as the `starling-file-listing` event rather than as a
+/// return value, because the same event is what an unprompted refresh uses.
+#[tauri::command]
+pub(crate) async fn starling_list_files(
+    state: tauri::State<'_, AppState>,
+    channel_id: u32,
+    limit: Option<u32>,
+) -> Result<(), String> {
+    state
+        .starling_list_files(channel_id, limit.unwrap_or(100))
+        .await
+}
+
+/// Whether this server does files the canon way.
+///
+/// `None` means nobody has asked yet. The frontend treats that as "try it":
+/// the first attempt is what settles the question.
+#[tauri::command]
+pub(crate) fn starling_files_available(state: tauri::State<'_, AppState>) -> Option<bool> {
+    state.starling_files_available()
 }

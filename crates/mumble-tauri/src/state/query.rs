@@ -1,20 +1,22 @@
 //! Read-only query methods: status, users, channels, messages, server
 //! info, debug stats, and welcome text.
 
+use super::AppState;
 use super::offload::OffloadStore;
 use super::types::*;
-use super::AppState;
 
 impl AppState {
     pub fn status(&self) -> ConnectionStatus {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .map(|s| s.conn.status)
             .unwrap_or(ConnectionStatus::Disconnected)
     }
 
     pub fn channels(&self) -> Vec<ChannelEntry> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .map(|mut s| {
                 Self::refresh_user_counts(&mut s);
@@ -32,7 +34,8 @@ impl AppState {
     }
 
     pub fn users(&self) -> Vec<UserEntry> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .map(|s| s.users.values().cloned().collect())
             .unwrap_or_default()
@@ -43,7 +46,8 @@ impl AppState {
     /// lazily fetch avatars after `get_users` returned only the byte
     /// length (`texture_size`).
     pub fn user_texture(&self, session: u32) -> Option<Vec<u8>> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .ok()
             .and_then(|s| s.users.get(&session).and_then(|u| u.texture.clone()))
@@ -53,7 +57,8 @@ impl AppState {
     /// cached from the `UserList` response.  The frontend fetches these on
     /// demand after the bulk `user-list` event delivered only `texture_size`.
     pub fn registered_user_texture(&self, user_id: u32) -> Option<Vec<u8>> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .ok()
             .and_then(|s| s.registered_user_textures.get(&user_id).cloned())
@@ -110,7 +115,8 @@ impl AppState {
 
     /// Cached comment/bio text for a user (no fetch).
     pub fn user_comment(&self, session: u32) -> Option<String> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .ok()
             .and_then(|s| s.users.get(&session).and_then(|u| u.comment.clone()))
@@ -157,7 +163,8 @@ impl AppState {
     /// lazily fetch descriptions after `get_channels` returned only the
     /// byte length (`description_size`).
     pub fn channel_description(&self, channel_id: u32) -> Option<String> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .ok()
             .and_then(|s| s.channels.get(&channel_id).map(|c| c.description.clone()))
@@ -165,53 +172,157 @@ impl AppState {
     }
 
     pub fn messages(&self, channel_id: u32) -> Vec<ChatMessage> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
-            .map(|s| s.msgs.by_channel.get(&channel_id).cloned().unwrap_or_default())
+            .map(|s| {
+                s.msgs
+                    .by_channel
+                    .get(&channel_id)
+                    .cloned()
+                    .unwrap_or_default()
+            })
             .unwrap_or_default()
     }
 
+    /// One window of a channel's history, plus where its edges are.
+    ///
+    /// The UI asks for this instead of the whole thread. `get_messages` cloned
+    /// every row on every event, which is the cost that made a long channel
+    /// expensive to *look at* rather than expensive to load.
+    ///
+    /// Evicting is done here rather than on a timer because this is the one
+    /// place that learns what the reader is actually looking at. Only for a
+    /// thread the server can re-serve: a volatile channel has nowhere to fetch
+    /// a dropped row back from, so its rows stay.
+    pub fn messages_page(&self, request: &PageRequest) -> MessagePage {
+        let session = self.inner.snapshot();
+        let Ok(mut state) = session.lock() else {
+            return MessagePage::default();
+        };
+
+        let persistent = state
+            .channels
+            .get(&request.channel_id)
+            .and_then(|c| c.pchat_protocol)
+            .is_some_and(|p| p.has_server_history());
+
+        let total = state
+            .msgs
+            .by_channel
+            .get(&request.channel_id)
+            .map_or(0, Vec::len);
+        if total == 0 {
+            let window = state.msgs.window(request.channel_id);
+            return MessagePage {
+                rows: Vec::new(),
+                more_before: window.more_before,
+                more_after: window.more_after,
+                at_tail: !window.more_after,
+            };
+        }
+
+        // The window is expressed from the tail, because that is where a chat
+        // opens and what "scrolled up by N" means to the reader.
+        // No ceiling of its own: what the caller asks for is what it is about
+        // to render, and a reader who has paged a long way back holds more
+        // than the live cap -- paging back is what grew the range past it.
+        // Clamped to `MAX_MESSAGES_PER_THREAD`, their next page came back
+        // outside the window and the way further back stopped existing.
+        let limit = request.limit.max(1);
+        let end = total.saturating_sub(request.offset_from_tail);
+        let start = end.saturating_sub(limit);
+
+        if persistent {
+            // Keep a margin either side so the reader can move without every
+            // step costing a round trip.
+            let margin = limit;
+            state.msgs.evict_outside(
+                request.channel_id,
+                start.saturating_sub(margin),
+                (end + margin).min(total),
+            );
+        }
+
+        let rows = state
+            .msgs
+            .by_channel
+            .get(&request.channel_id)
+            .map(|held| {
+                let end = end.min(held.len());
+                let start = start.min(end);
+                held[start..end].to_vec()
+            })
+            .unwrap_or_default();
+        let window = state.msgs.window(request.channel_id);
+        MessagePage {
+            rows,
+            // `start > 0` as well as the window's own flag: rows this client
+            // is holding but did not put in the page are history the reader
+            // can still be shown, and the caller has no other way to learn
+            // they are there. Without it a thread with five hundred rows in
+            // memory and a hundred in the page read as complete, and the way
+            // back through the other four hundred did not exist.
+            more_before: window.more_before || start > 0,
+            more_after: window.more_after,
+            at_tail: !window.more_after && request.offset_from_tail == 0,
+        }
+    }
+
     pub fn dm_messages(&self, session: u32) -> Vec<ChatMessage> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .map(|s| s.msgs.by_dm.get(&session).cloned().unwrap_or_default())
             .unwrap_or_default()
     }
 
     pub fn get_own_session(&self) -> Option<u32> {
-        self.inner.snapshot().lock().ok().and_then(|s| s.conn.own_session)
+        self.inner
+            .snapshot()
+            .lock()
+            .ok()
+            .and_then(|s| s.conn.own_session)
     }
 
     pub fn push_subscribed_channels(&self) -> Vec<u32> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .map(|s| s.push_subscribed_channels.iter().copied().collect())
             .unwrap_or_default()
     }
 
     pub fn server_config(&self) -> ServerConfig {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .map(|s| s.server.config.clone())
             .unwrap_or_default()
     }
 
     pub fn server_info(&self) -> ServerInfo {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .map(|s| {
                 let vi = &s.server.version_info;
-                let protocol_version = vi.version_v2.map(|v| {
-                    let major = (v >> 48) & 0xFFFF;
-                    let minor = (v >> 32) & 0xFFFF;
-                    let patch = (v >> 16) & 0xFFFF;
-                    format!("{major}.{minor}.{patch}")
-                }).or_else(|| vi.version_v1.map(|v| {
-                    let major = (v >> 16) & 0xFF;
-                    let minor = (v >> 8) & 0xFF;
-                    let patch = v & 0xFF;
-                    format!("{major}.{minor}.{patch}")
-                }));
+                let protocol_version = vi
+                    .version_v2
+                    .map(|v| {
+                        let major = (v >> 48) & 0xFFFF;
+                        let minor = (v >> 32) & 0xFFFF;
+                        let patch = (v >> 16) & 0xFFFF;
+                        format!("{major}.{minor}.{patch}")
+                    })
+                    .or_else(|| {
+                        vi.version_v1.map(|v| {
+                            let major = (v >> 16) & 0xFF;
+                            let minor = (v >> 8) & 0xFF;
+                            let patch = v & 0xFF;
+                            format!("{major}.{minor}.{patch}")
+                        })
+                    });
 
                 let os = match (vi.os.as_deref(), vi.os_version.as_deref()) {
                     (Some(name), Some(ver)) if !ver.is_empty() => Some(format!("{name} ({ver})")),
@@ -226,6 +337,7 @@ impl AppState {
                     max_users: s.server.max_users,
                     protocol_version,
                     fancy_version: s.server.fancy_version,
+                    fancy_protocol: s.server.fancy_protocol,
                     release: vi.release.clone(),
                     os,
                     max_bandwidth: s.server.max_bandwidth,
@@ -239,6 +351,7 @@ impl AppState {
                 max_users: None,
                 protocol_version: None,
                 fancy_version: None,
+                fancy_protocol: None,
                 release: None,
                 os: None,
                 max_bandwidth: None,
@@ -247,7 +360,8 @@ impl AppState {
     }
 
     pub fn debug_stats(&self) -> DebugStats {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .map(|s| {
                 let channel_msgs: usize = s.msgs.by_channel.values().map(Vec::len).sum();
@@ -283,7 +397,8 @@ impl AppState {
     }
 
     pub fn welcome_text(&self) -> Option<String> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .ok()
             .and_then(|s| s.server.welcome_text.clone())

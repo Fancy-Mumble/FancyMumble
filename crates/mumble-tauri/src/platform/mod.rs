@@ -7,16 +7,16 @@
 //! - [`desktop`]  - system tray icon (all desktop OSes).
 //! - [`badge`]    - taskbar badge overlay and system clock detection.
 
-pub(crate) mod badge;
-#[cfg(target_os = "linux")]
-mod linux;
-#[cfg(target_os = "windows")]
-mod windows;
 #[cfg(target_os = "android")]
 pub(crate) mod android;
+pub(crate) mod badge;
 #[cfg(not(target_os = "android"))]
 pub(crate) mod desktop;
+#[cfg(target_os = "linux")]
+pub(crate) mod linux;
 pub(crate) mod window;
+#[cfg(target_os = "windows")]
+mod windows;
 
 /// Lifecycle hooks invoked at fixed points in the application startup sequence.
 ///
@@ -71,6 +71,9 @@ impl PlatformHooks for LinuxPlatform {
     }
 
     fn setup(handle: tauri::AppHandle) {
+        // Runs on the main thread with GTK up, which is the only place the
+        // display can be asked what it is.
+        linux::display::detect_on_main_thread();
         linux::desktop::install_desktop_entry();
         linux::desktop::start_action_listener(handle);
     }
@@ -149,4 +152,34 @@ pub fn setup(handle: tauri::AppHandle) {
 /// Calls [`PlatformHooks::teardown`] for the active platform.
 pub fn teardown() {
     <Active as PlatformHooks>::teardown();
+}
+
+/// Installs the mark the frontend drew into the desktop's icon theme.
+///
+/// Only Linux has anywhere to put it, and only Linux needs it: GNOME draws the
+/// icon named by the app's `.desktop` entry and ignores the one the window
+/// sets, so on that desktop this is the only route a themed icon has. Windows
+/// and macOS take the window icon itself, and get a no-op here.
+pub fn install_themed_icon(rgba: &[u8], width: u32, height: u32) {
+    #[cfg(target_os = "linux")]
+    if let Err(e) = linux::desktop::install_themed_icon(rgba, width, height) {
+        tracing::warn!("Could not install the themed app icon: {e}");
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (rgba, width, height);
+}
+
+/// Strips the system-drawn corner rounding, border and shadow from an
+/// undecorated, transparent window.
+///
+/// Our frameless windows paint and clip their own outer corner, which is
+/// rounder than the one the compositor assumes.  Where the compositor keeps
+/// drawing a frame at *its* radius the leftovers show up outside ours; see
+/// the Windows implementation for the detail.  A no-op everywhere else: no
+/// other platform decorates a window we told it not to decorate.
+pub fn strip_system_chrome(win: &tauri::WebviewWindow) {
+    #[cfg(target_os = "windows")]
+    windows::strip_system_chrome(win);
+    #[cfg(not(target_os = "windows"))]
+    let _ = win;
 }

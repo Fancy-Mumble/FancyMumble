@@ -16,14 +16,14 @@
 //! - `key_sharing`   -- key challenges, holder reporting, takeover
 //! - `signal_bridge` -- Signal Protocol bridge loading and distribution
 
-mod settings;
 mod conversion;
 pub(crate) mod identity;
-mod persistence;
-mod outbound;
 mod inbound;
 mod key_exchange;
 mod key_sharing;
+mod outbound;
+mod persistence;
+mod settings;
 mod signal_bridge;
 
 // -- Re-exports -------------------------------------------------------
@@ -33,37 +33,38 @@ pub(crate) use conversion::{wire_key_announce_to_proto, wire_key_exchange_to_pro
 
 // Identity
 pub(crate) use identity::IdentityStore;
+pub(crate) use settings::{IDENTITIES_DIR, LEGACY_CERTS_DIR, SEED_FILE};
 
 // Persistence
-pub(crate) use persistence::{persist_archive_key, delete_persisted_archive_key, load_persisted_archive_keys};
+pub(crate) use persistence::{
+    delete_persisted_archive_key, load_persisted_archive_keys, persist_archive_key,
+};
 
 // Outbound
-pub(crate) use outbound::{send_fetch, OutboundMessage};
+pub(crate) use outbound::{Anchor, OutboundMessage, send_fetch, send_open_fetch};
 
 // Inbound
 pub(crate) use inbound::{
-    handle_proto_msg_deliver, handle_proto_fetch_resp, handle_proto_ack,
-    handle_proto_delete_messages, handle_proto_offline_queue_drain,
+    handle_proto_ack, handle_proto_delete_messages, handle_proto_fetch_resp,
+    handle_proto_msg_deliver, handle_proto_offline_queue_drain,
 };
 
 // Key exchange
 pub(crate) use key_exchange::{
-    handle_proto_key_announce, handle_proto_key_request,
-    handle_proto_key_exchange, check_key_share_for_channel,
+    check_key_share_for_channel, handle_proto_key_announce, handle_proto_key_exchange,
+    handle_proto_key_request,
 };
 
 // Key sharing
 pub(crate) use key_sharing::{
-    handle_proto_key_challenge, handle_proto_key_challenge_result,
-    send_key_holder_report_async,
-    send_key_takeover, query_key_holders,
+    handle_proto_key_challenge, handle_proto_key_challenge_result, handle_proto_key_holder_report,
+    handle_proto_key_holders_query, query_key_holders, send_key_announce,
+    send_key_holder_report_async, send_key_takeover, should_mint_archive_key,
 };
 
 // Signal bridge
 pub(crate) use signal_bridge::{
-    ensure_signal_bridge_unlocked,
-    send_signal_distribution,
-    handle_signal_sender_key_by_hash,
+    ensure_signal_bridge_unlocked, handle_signal_sender_key_by_hash, send_signal_distribution,
 };
 
 // -- Core types -------------------------------------------------------
@@ -74,14 +75,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tracing::warn;
 
+use mumble_protocol::persistent::PchatProtocol;
 use mumble_protocol::persistent::keys::{EncryptedPayload, KeyManager, SeedIdentity};
 use mumble_protocol::persistent::protocol::signal_v1::SignalBridge;
 use mumble_protocol::persistent::wire::{MessageEnvelope, MsgPackCodec, WireCodec};
-use mumble_protocol::persistent::PchatProtocol;
 
+use super::SharedState;
 use super::local_cache::{CachedMessage, LocalMessageCache};
 use super::types::{PchatHistoryLoadingPayload, SignalBridgeErrorPayload};
-use super::SharedState;
 
 use settings::MAX_STASHED_ENVELOPES;
 
@@ -110,6 +111,14 @@ pub(crate) struct PchatState {
     pub seed: [u8; 32],
     /// Channels where we've already sent a fetch request (avoid duplicates).
     pub fetched_channels: std::collections::HashSet<u32>,
+    /// Channels this bridge has minted our own `SignalV1` sender key for.
+    ///
+    /// Tracked here rather than asked of the bridge, because the answer has to
+    /// survive nothing: a fresh `PchatState` carries a fresh bridge context,
+    /// and both start empty together. It is what lets the send path notice a
+    /// channel whose distribution no join ever created and mint one before
+    /// encrypting, instead of failing with "missing sender key state".
+    pub signal_distributed: std::collections::HashSet<u32>,
     /// Path to the per-identity storage directory (for persisting archive keys).
     pub identity_dir: Option<PathBuf>,
     /// Signal Protocol bridge (loaded from external DLL, AGPL-isolated).
@@ -141,12 +150,10 @@ impl InboundEnvelope<'_> {
     ///
     /// Works for both `FancyV1` and `SignalV1` protocols, dispatching to
     /// the appropriate decryption path inside `KeyManager`.
-    pub(crate) fn decrypt(
-        &self,
-        pchat: &mut PchatState,
-    ) -> Result<MessageEnvelope, String> {
+    pub(crate) fn decrypt(&self, pchat: &mut PchatState) -> Result<MessageEnvelope, String> {
         let plaintext = if self.protocol == PchatProtocol::SignalV1 {
-            pchat.key_manager
+            pchat
+                .key_manager
                 .decrypt_signal(self.sender_hash, self.channel_id, self.envelope_bytes)
                 .map_err(|e| format!("{e}"))?
         } else {
@@ -156,12 +163,20 @@ impl InboundEnvelope<'_> {
                 chain_index: self.chain_index,
                 epoch_fingerprint: self.epoch_fingerprint,
             };
-            pchat.key_manager
-                .decrypt(self.protocol, self.channel_id, self.message_id, self.timestamp, &payload)
+            pchat
+                .key_manager
+                .decrypt(
+                    self.protocol,
+                    self.channel_id,
+                    self.message_id,
+                    self.timestamp,
+                    &payload,
+                )
                 .map_err(|e| format!("{e}"))?
         };
 
-        pchat.codec
+        pchat
+            .codec
             .decode::<MessageEnvelope>(&plaintext)
             .map_err(|e| format!("decode envelope: {e}"))
     }
@@ -196,6 +211,7 @@ impl PchatState {
             codec,
             seed,
             fetched_channels: std::collections::HashSet::new(),
+            signal_distributed: std::collections::HashSet::new(),
             identity_dir,
             signal_bridge: None,
             signal_bridge_load_failed: false,
@@ -205,6 +221,8 @@ impl PchatState {
     }
 
     /// Insert a decrypted message into the local cache (for `SignalV1`).
+    ///
+    /// Marks the cache dirty; the session's flush timer is what writes it.
     pub(crate) fn cache_signal_message(&mut self, msg: CachedMessage) {
         if let Some(ref mut cache) = self.local_cache {
             cache.insert(msg);
@@ -258,10 +276,7 @@ pub(crate) fn emit_history_loading(
 }
 
 /// Emit a `pchat-signal-bridge-error` event to the frontend.
-pub(crate) fn emit_signal_bridge_error(
-    shared: &Arc<Mutex<SharedState>>,
-    message: &str,
-) {
+pub(crate) fn emit_signal_bridge_error(shared: &Arc<Mutex<SharedState>>, message: &str) {
     use tauri::Emitter;
 
     let app = shared

@@ -1,0 +1,339 @@
+/**
+ * Lazy-fetched user avatar and channel description blobs.
+ *
+ * The bulk endpoints `get_users` and `get_channels` only return the byte
+ * length of these fields (`texture_size`, `description_size`) to keep the
+ * IPC payload small.  Components that need to display the actual content
+ * pull it on demand through these hooks.
+ *
+ * Caching strategy: keyed by `(id, size)`.  If the size changes (i.e. the
+ * underlying blob was updated server-side) we re-fetch automatically.
+ * The cache is bounded by an LRU eviction so long-running sessions do
+ * not accumulate megabytes of stale data.
+ */
+
+import { useEffect, useMemo, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import {
+  bytesToAvatarUrl,
+  bytesToObjectUrl,
+  revokeDisplayUrl,
+  TEXTURE_DOWNSCALE_THRESHOLD,
+} from "./utils/imageBlobs";
+
+interface CachedBlob<T> {
+  size: number;
+  value: T;
+}
+
+const CACHE_MAX = 200;
+const avatarCache = new Map<number, CachedBlob<string>>();
+const descriptionCache = new Map<number, CachedBlob<string>>();
+const commentCache = new Map<number, CachedBlob<string>>();
+const avatarPending = new Map<number, Promise<string | null>>();
+const descriptionPending = new Map<number, Promise<string | null>>();
+const commentPending = new Map<number, Promise<string | null>>();
+
+function lruTouch(cache: Map<number, CachedBlob<string>>, key: number, entry: CachedBlob<string>): void {
+  // Avatars are blob object URLs - release the handle of a replaced or
+  // evicted entry so the underlying bytes can be collected.  No-op for
+  // the text caches (descriptions / comments).
+  const replaced = cache.get(key);
+  if (replaced && replaced.value !== entry.value) revokeDisplayUrl(replaced.value);
+  cache.delete(key);
+  cache.set(key, entry);
+  if (cache.size > CACHE_MAX) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey !== undefined) {
+      revokeDisplayUrl(cache.get(oldestKey)?.value);
+      cache.delete(oldestKey);
+    }
+  }
+}
+
+/** Synchronously returns a cached avatar URL if present (and matches size). */
+export function getCachedUserAvatar(session: number, textureSize: number | null): string | null {
+  if (textureSize == null || textureSize === 0) return null;
+  const cached = avatarCache.get(session);
+  return cached && cached.size === textureSize ? cached.value : null;
+}
+
+/** Synchronously returns a cached description if present (and matches size). */
+export function getCachedChannelDescription(
+  channelId: number,
+  descriptionSize: number | null,
+): string | null {
+  if (descriptionSize == null || descriptionSize === 0) return null;
+  const cached = descriptionCache.get(channelId);
+  return cached && cached.size === descriptionSize ? cached.value : null;
+}
+
+async function fetchUserAvatar(session: number, expectedSize: number): Promise<string | null> {
+  if (session === 0) return null;
+  const existing = avatarPending.get(session);
+  if (existing) return existing;
+  const promise = (async () => {
+    try {
+      // Offline registered users use a negative pseudo-session
+      // `-(user_id + 1)` (see roster/registeredMembers.synthesiseOfflineEntry); their avatar
+      // lives in the per-user_id cache, fetched via a separate command.
+      const bytes =
+        session < 0
+          ? await invoke<number[] | null>("get_registered_user_texture", { userId: -session - 1 })
+          : await invoke<number[] | null>("get_user_texture", { session });
+      if (!bytes || bytes.length === 0) return null;
+      // Blob object URL (downscaled if oversized) instead of a data:
+      // URL - a data: URL would put the full base64 image into every
+      // <img> attribute and the JS heap (see utils/imageBlobs.ts).
+      const url = await bytesToAvatarUrl(bytes);
+      lruTouch(avatarCache, session, { size: expectedSize, value: url });
+      return url;
+    } catch (e) {
+      console.error("fetchUserAvatar failed", session, e);
+      return null;
+    } finally {
+      avatarPending.delete(session);
+    }
+  })();
+  avatarPending.set(session, promise);
+  return promise;
+}
+
+async function fetchChannelDescription(channelId: number, expectedSize: number): Promise<string | null> {
+  const existing = descriptionPending.get(channelId);
+  if (existing) return existing;
+  const promise = (async () => {
+    try {
+      const text = await invoke<string | null>("get_channel_description", { channelId });
+      if (!text) return null;
+      lruTouch(descriptionCache, channelId, { size: expectedSize, value: text });
+      return text;
+    } catch (e) {
+      console.error("get_channel_description failed", channelId, e);
+      return null;
+    } finally {
+      descriptionPending.delete(channelId);
+    }
+  })();
+  descriptionPending.set(channelId, promise);
+  return promise;
+}
+
+/** React hook: returns the avatar data-URL for a user, or `null` while loading or unset. */
+export function useUserAvatar(
+  session: number | null | undefined,
+  textureSize: number | null | undefined,
+): string | null {
+  const initial = session != null && textureSize != null ? getCachedUserAvatar(session, textureSize) : null;
+  const [url, setUrl] = useState<string | null>(initial);
+
+  useEffect(() => {
+    // Negative sessions are offline registered users (-(user_id + 1)); their
+    // avatars are fetched via `get_registered_user_texture`, so only `0` (no
+    // user) is excluded here.
+    if (session == null || session === 0 || textureSize == null || textureSize === 0) {
+      setUrl(null);
+      return;
+    }
+    const cached = getCachedUserAvatar(session, textureSize);
+    if (cached) {
+      setUrl(cached);
+      return;
+    }
+    setUrl(null);
+    let cancelled = false;
+    fetchUserAvatar(session, textureSize).then((u) => {
+      if (!cancelled) setUrl(u);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session, textureSize]);
+
+  return url;
+}
+
+/** Synchronously returns a cached comment/bio if present (and matches size). */
+export function getCachedUserComment(session: number, commentSize: number | null): string | null {
+  if (commentSize == null || commentSize === 0) return null;
+  const cached = commentCache.get(session);
+  return cached && cached.size === commentSize ? cached.value : null;
+}
+
+async function fetchUserComment(session: number, expectedSize: number): Promise<string | null> {
+  if (session <= 0) return null;
+  const existing = commentPending.get(session);
+  if (existing) return existing;
+  const promise = (async () => {
+    try {
+      const text = await invoke<string | null>("get_user_comment", { session });
+      if (!text) return null;
+      lruTouch(commentCache, session, { size: expectedSize, value: text });
+      return text;
+    } catch (e) {
+      console.error("get_user_comment failed", session, e);
+      return null;
+    } finally {
+      commentPending.delete(session);
+    }
+  })();
+  commentPending.set(session, promise);
+  return promise;
+}
+
+/**
+ * React hook: returns the user's comment/bio text, or `null` while loading,
+ * unset, or disabled.  `enabled` gates the (lazy) fetch so hover cards only
+ * load a bio when actually shown - otherwise rendering a user list would
+ * eagerly fetch every member's bio.
+ */
+export function useUserComment(
+  session: number | null | undefined,
+  commentSize: number | null | undefined,
+  enabled = true,
+): string | null {
+  const initial =
+    enabled && session != null && commentSize != null ? getCachedUserComment(session, commentSize) : null;
+  const [text, setText] = useState<string | null>(initial);
+
+  useEffect(() => {
+    if (!enabled || session == null || session <= 0 || commentSize == null || commentSize === 0) {
+      setText(null);
+      return;
+    }
+    const cached = getCachedUserComment(session, commentSize);
+    if (cached) {
+      setText(cached);
+      return;
+    }
+    setText(null);
+    let cancelled = false;
+    fetchUserComment(session, commentSize).then((t) => {
+      if (!cancelled) setText(t);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session, commentSize, enabled]);
+
+  return text;
+}
+
+/** React hook: returns the description text for a channel, or `null` while loading or empty. */
+export function useChannelDescription(
+  channelId: number | null | undefined,
+  descriptionSize: number | null | undefined,
+): string | null {
+  const initial =
+    channelId != null && descriptionSize != null
+      ? getCachedChannelDescription(channelId, descriptionSize)
+      : null;
+  const [text, setText] = useState<string | null>(initial);
+
+  useEffect(() => {
+    if (channelId == null || descriptionSize == null || descriptionSize === 0) {
+      setText(null);
+      return;
+    }
+    const cached = getCachedChannelDescription(channelId, descriptionSize);
+    if (cached) {
+      setText(cached);
+      return;
+    }
+    setText(null);
+    let cancelled = false;
+    fetchChannelDescription(channelId, descriptionSize).then((t) => {
+      if (!cancelled) setText(t);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [channelId, descriptionSize]);
+
+  return text;
+}
+
+/** Imperatively prefetch an avatar (for use outside React, e.g. from a store action). */
+export function prefetchUserAvatar(session: number, textureSize: number | null): void {
+  if (session <= 0 || textureSize == null || textureSize === 0) return;
+  if (getCachedUserAvatar(session, textureSize)) return;
+  void fetchUserAvatar(session, textureSize);
+}
+
+/**
+ * Synchronously install raw avatar bytes (e.g. from `UserList` admin
+ * response, where the bytes are sent inline) into the cache so that
+ * `useUserAvatar(session, bytes.length)` resolves without an IPC call.
+ *
+ * If the cache already holds an entry of the same size for this session
+ * the call is a no-op so we don't redo the blob conversion on every
+ * re-render.  Oversized textures skip the synchronous path and are
+ * installed once their downscaled version is ready.
+ */
+export function setUserAvatarBytes(session: number, bytes: number[] | null): void {
+  if (!bytes || bytes.length === 0) return;
+  const cached = avatarCache.get(session);
+  if (cached && cached.size === bytes.length) return;
+  const size = bytes.length;
+  if (size <= TEXTURE_DOWNSCALE_THRESHOLD) {
+    lruTouch(avatarCache, session, { size, value: bytesToObjectUrl(bytes) });
+    return;
+  }
+  void bytesToAvatarUrl(bytes).then((url) => {
+    if (url) lruTouch(avatarCache, session, { size, value: url });
+  });
+}
+
+/**
+ * React hook: returns `Map<session, dataUrl>` for many users at once.
+ * Triggers lazy fetches for any user whose avatar isn't cached yet, then
+ * re-renders as each one resolves.  Cheaper than mounting many
+ * `useUserAvatar` hooks for hundreds of message rows.
+ */
+export function useUserAvatars(
+  users: ReadonlyArray<{ session: number; texture_size: number | null }>,
+): Map<number, string> {
+  const [version, bump] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    for (const u of users) {
+      if (u.texture_size == null || u.texture_size === 0) continue;
+      if (getCachedUserAvatar(u.session, u.texture_size)) continue;
+      void fetchUserAvatar(u.session, u.texture_size).then(() => {
+        if (!cancelled) bump((v) => v + 1);
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [users]);
+
+  return useMemo(() => {
+    void version;
+    const map = new Map<number, string>();
+    for (const u of users) {
+      const cached = getCachedUserAvatar(u.session, u.texture_size);
+      if (cached) map.set(u.session, cached);
+    }
+    return map;
+  }, [users, version]);
+}
+
+/** Imperatively prefetch a channel description. */
+export function prefetchChannelDescription(channelId: number, descriptionSize: number | null): void {
+  if (descriptionSize == null || descriptionSize === 0) return;
+  if (getCachedChannelDescription(channelId, descriptionSize)) return;
+  void fetchChannelDescription(channelId, descriptionSize);
+}
+
+/** Test helper: clear all caches. */
+export function _clearLazyBlobsForTests(): void {
+  for (const entry of avatarCache.values()) revokeDisplayUrl(entry.value);
+  avatarCache.clear();
+  descriptionCache.clear();
+  commentCache.clear();
+  avatarPending.clear();
+  descriptionPending.clear();
+  commentPending.clear();
+}

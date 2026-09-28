@@ -29,3 +29,97 @@ pub(crate) fn set_window_aspect_ratio(
         Err(e) => Err(e.to_string()),
     }
 }
+
+/// Replace the calling window's icon with pixels drawn by the frontend.
+///
+/// The mark in the title bar is the theme's accent and every theme moves
+/// it; the icon Windows shows in the taskbar and in Alt-Tab was a PNG
+/// shipped with the build that never did, so a squared acid-yellow skin
+/// still sat behind a rounded cyan tile.  The frontend draws the mark it
+/// already draws in the chrome and hands the pixels here, which keeps one
+/// drawing rather than two that drift apart.
+///
+/// `rgba` is RGBA8 and must be exactly `width * height * 4` bytes.  A
+/// short buffer is refused here rather than passed on: the platform layer
+/// reads the length it was promised, so a wrong one is a crash and not a
+/// wrong picture.
+///
+/// Windows takes the window icon.  Linux is given it too, but a GNOME
+/// session shows the icon its `.desktop` entry names and never the
+/// window's, so on Linux the pixels also go into the user's icon theme -
+/// see [`crate::platform::install_themed_icon`], which is best-effort and
+/// only ever logs.  macOS draws its icon from the app bundle and ignores
+/// this, and mobile has no window icon at all; both answer `Ok`, because a
+/// themed icon is decoration and there is nothing a caller could do about a
+/// platform that has no such concept.
+#[tauri::command]
+pub(crate) fn set_window_icon(
+    window: tauri::WebviewWindow,
+    rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+) -> Result<(), String> {
+    let expected = usize::try_from(width)
+        .ok()
+        .zip(usize::try_from(height).ok())
+        .and_then(|(w, h)| w.checked_mul(h))
+        .and_then(|area| area.checked_mul(4))
+        .ok_or_else(|| format!("an icon of {width}x{height} does not fit in memory"))?;
+    if rgba.len() != expected {
+        return Err(format!(
+            "an icon of {width}x{height} needs {expected} bytes, got {}",
+            rgba.len()
+        ));
+    }
+    crate::platform::install_themed_icon(&rgba, width, height);
+    apply_window_icon(&window, rgba, width, height)
+}
+
+/// Hand the pixels to the window manager.
+#[cfg(not(target_os = "android"))]
+fn apply_window_icon(
+    window: &tauri::WebviewWindow,
+    rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+) -> Result<(), String> {
+    window
+        .set_icon(tauri::image::Image::new_owned(rgba, width, height))
+        .map_err(|e| e.to_string())
+}
+
+/// Android has no window icon, so Tauri gives `WebviewWindow` no `set_icon`
+/// there at all - this is the `Ok` the doc comment above promises mobile,
+/// not a stub standing in for something that could work.
+#[cfg(target_os = "android")]
+fn apply_window_icon(
+    _window: &tauri::WebviewWindow,
+    _rgba: Vec<u8>,
+    _width: u32,
+    _height: u32,
+) -> Result<(), String> {
+    Ok(())
+}
+
+/// Say what the page paints behind the phone's status and gesture bars, so
+/// their icons can be set to read against it: dark icons when `light`.
+///
+/// An `async` command so the plugin call never runs on the thread Android
+/// draws on. Desktop windows have no system bars and answer `Ok`.
+#[tauri::command]
+pub(crate) async fn set_system_bar_style(app: tauri::AppHandle, light: bool) -> Result<(), String> {
+    apply_system_bar_style(&app, light)
+}
+
+#[cfg(target_os = "android")]
+fn apply_system_bar_style(app: &tauri::AppHandle, light: bool) -> Result<(), String> {
+    use crate::platform::android::system_bars::{SystemBarsHandle, set_style};
+    use tauri::Manager;
+    app.try_state::<SystemBarsHandle>()
+        .map_or(Ok(()), |handle| set_style(&handle, light))
+}
+
+#[cfg(not(target_os = "android"))]
+fn apply_system_bar_style(_app: &tauri::AppHandle, _light: bool) -> Result<(), String> {
+    Ok(())
+}

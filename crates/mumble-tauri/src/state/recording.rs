@@ -9,14 +9,14 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use hound::{SampleFormat as HoundSampleFormat, WavSpec, WavWriter};
 use tracing::{debug, info, warn};
 
-use mumble_protocol::audio::mixer::{AudioMixer, SpeakerBuffers};
+use mumble_protocol::audio::mixer::SpeakerBuffers;
 
 use super::AppState;
 
@@ -44,12 +44,7 @@ pub enum RecordingFormat {
 /// - `{host}`     - server hostname
 /// - `{user}`     - own username
 /// - `{channel}`  - current channel name
-pub fn expand_filename_template(
-    template: &str,
-    host: &str,
-    user: &str,
-    channel: &str,
-) -> String {
+pub fn expand_filename_template(template: &str, host: &str, user: &str, channel: &str) -> String {
     let now = chrono::Local::now();
     let date = now.format("%Y-%m-%d").to_string();
     let time = now.format("%H-%M-%S").to_string();
@@ -84,10 +79,10 @@ impl AppState {
         format: RecordingFormat,
     ) -> Result<String, String> {
         // Only one recording at a time.
-        if let Ok(state) = self.inner.snapshot().lock() {
-            if state.audio.recording_handle.is_some() {
-                return Err("Recording already in progress".into());
-            }
+        if let Ok(state) = self.inner.snapshot().lock()
+            && state.audio.recording_handle.is_some()
+        {
+            return Err("Recording already in progress".into());
         }
 
         // Gather template context.
@@ -102,9 +97,9 @@ impl AppState {
                 .map(|c| c.name.clone())
                 .unwrap_or_default();
             let buffers = state
-                .audio.mixer
-                .as_ref()
-                .map(AudioMixer::buffers)
+                .audio
+                .speaker_buffers
+                .clone()
                 .ok_or("Voice is not active - cannot record")?;
             (host, user, channel, buffers)
         };
@@ -134,9 +129,7 @@ impl AppState {
         let path_clone = file_path.clone();
 
         let task = tauri::async_runtime::spawn(async move {
-            if let Err(e) =
-                recording_loop(&path_clone, speaker_buffers, stop_clone, format).await
-            {
+            if let Err(e) = recording_loop(&path_clone, speaker_buffers, stop_clone, format).await {
                 warn!("Recording task failed: {e}");
             }
         });
@@ -163,7 +156,8 @@ impl AppState {
             let __session = self.inner.snapshot();
             let mut state = __session.lock().map_err(|e| e.to_string())?;
             state
-                .audio.recording_handle
+                .audio
+                .recording_handle
                 .take()
                 .ok_or("No recording in progress")?
         };
@@ -180,12 +174,14 @@ impl AppState {
     pub fn recording_state(&self) -> RecordingState {
         let __session = self.inner.snapshot();
         let state = __session.lock().ok();
-        match state.and_then(|s| s.audio.recording_handle.as_ref().map(|h| {
-            (
-                h.file_path.to_string_lossy().to_string(),
-                h.started_at.elapsed().as_secs_f64(),
-            )
-        })) {
+        match state.and_then(|s| {
+            s.audio.recording_handle.as_ref().map(|h| {
+                (
+                    h.file_path.to_string_lossy().to_string(),
+                    h.started_at.elapsed().as_secs_f64(),
+                )
+            })
+        }) {
             Some((path, elapsed)) => RecordingState {
                 is_recording: true,
                 file_path: Some(path),
@@ -247,7 +243,10 @@ async fn recording_loop(
         .finalize()
         .map_err(|e| format!("WAV finalize error: {e}"))?;
 
-    info!("Recording loop finished, file finalized: {}", path.display());
+    info!(
+        "Recording loop finished, file finalized: {}",
+        path.display()
+    );
     Ok(())
 }
 
@@ -322,7 +321,7 @@ fn snapshot_and_mix(
 mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
     use super::*;
-    use std::collections::{HashMap, VecDeque};
+    use std::collections::HashMap;
 
     #[test]
     fn test_expand_filename_template_basic() {
@@ -353,6 +352,16 @@ mod tests {
         assert_eq!(result, "static_name");
     }
 
+    /// A speaker buffer holding `samples`, for the recording tap's tests.
+    fn buffer_of(samples: &[f32]) -> mumble_protocol::audio::mixer::SpeakerBuffer {
+        let mut buf = mumble_protocol::audio::mixer::SpeakerBuffer::new(
+            mumble_protocol::audio::sample::AudioFormat::MONO_48KHZ_F32,
+            mumble_protocol::audio::mixer::JitterConfig::default(),
+        );
+        buf.push_complete(samples);
+        buf
+    }
+
     #[test]
     fn test_snapshot_and_mix_empty() {
         let buffers: SpeakerBuffers = Arc::new(std::sync::Mutex::new(HashMap::new()));
@@ -365,10 +374,7 @@ mod tests {
     #[test]
     fn test_snapshot_and_mix_single_speaker() {
         let mut map = HashMap::new();
-        let mut deque = VecDeque::new();
-        deque.push_back(0.5_f32);
-        deque.push_back(-0.3);
-        let _ = map.insert(1u32, deque);
+        let _ = map.insert(1u32, buffer_of(&[0.5, -0.3]));
 
         let buffers: SpeakerBuffers = Arc::new(std::sync::Mutex::new(map));
         let mut mix = Vec::new();
@@ -382,15 +388,8 @@ mod tests {
     #[test]
     fn test_snapshot_and_mix_multiple_speakers_summed() {
         let mut map = HashMap::new();
-        let mut d1 = VecDeque::new();
-        d1.push_back(0.4_f32);
-        d1.push_back(0.3);
-        let _ = map.insert(1u32, d1);
-
-        let mut d2 = VecDeque::new();
-        d2.push_back(0.3_f32);
-        d2.push_back(0.2);
-        let _ = map.insert(2u32, d2);
+        let _ = map.insert(1u32, buffer_of(&[0.4, 0.3]));
+        let _ = map.insert(2u32, buffer_of(&[0.3, 0.2]));
 
         let buffers: SpeakerBuffers = Arc::new(std::sync::Mutex::new(map));
         let mut mix = Vec::new();
@@ -404,7 +403,7 @@ mod tests {
     #[test]
     fn test_snapshot_advances_cursors() {
         let mut map = HashMap::new();
-        let _ = map.insert(1u32, VecDeque::from(vec![0.1_f32, 0.2, 0.3, 0.4]));
+        let _ = map.insert(1u32, buffer_of(&[0.1_f32, 0.2, 0.3, 0.4]));
         let buffers: SpeakerBuffers = Arc::new(std::sync::Mutex::new(map));
         let mut mix = Vec::new();
         let mut cursors = HashMap::new();
@@ -421,7 +420,7 @@ mod tests {
     #[test]
     fn test_snapshot_cursor_skips_on_drain() {
         let mut map = HashMap::new();
-        let _ = map.insert(1u32, VecDeque::from(vec![0.1_f32, 0.2, 0.3, 0.4, 0.5]));
+        let _ = map.insert(1u32, buffer_of(&[0.1_f32, 0.2, 0.3, 0.4, 0.5]));
         let buffers: SpeakerBuffers = Arc::new(std::sync::Mutex::new(map));
         let mut mix = Vec::new();
         let mut cursors = HashMap::new();
@@ -435,9 +434,10 @@ mod tests {
         {
             let mut locked = buffers.lock().unwrap();
             let buf = locked.get_mut(&1).unwrap();
-            let _ = buf.drain(..3); // [0.4, 0.5]
-            buf.push_back(0.6);     // [0.4, 0.5, 0.6]
-            buf.push_back(0.7);     // [0.4, 0.5, 0.6, 0.7]
+            // Playback consumes 3 from the front.
+            let mut consumed = [0.0_f32; 3];
+            assert_eq!(buf.drain_into(&mut consumed, 1.0), 3); // [0.4, 0.5]
+            buf.push_complete(&[0.6, 0.7]); // [0.4, 0.5, 0.6, 0.7]
         }
 
         // cursor=5 > buf.len()=4 -> cursor skips to 4 (end), no re-read
@@ -448,7 +448,7 @@ mod tests {
         // Push one more sample
         {
             let mut locked = buffers.lock().unwrap();
-            locked.get_mut(&1).unwrap().push_back(0.8); // [0.4, 0.5, 0.6, 0.7, 0.8]
+            locked.get_mut(&1).unwrap().push_complete(&[0.8]); // [0.4, 0.5, 0.6, 0.7, 0.8]
         }
 
         // Now reads only the new sample

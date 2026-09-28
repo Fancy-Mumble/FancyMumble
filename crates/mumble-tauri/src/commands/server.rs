@@ -14,6 +14,13 @@ pub(crate) struct PingResult {
     max_user_count: Option<u32>,
     /// Server version string (e.g. "1.5.634"), None if unavailable.
     server_version: Option<String>,
+    /// The server's livery digest as lowercase hex, when it sent one.
+    ///
+    /// `None` from a server that does not speak Fancy and from the legacy ping
+    /// format, which is fixed-width and has nowhere to put it. `Some("")` means
+    /// a Fancy server that has no livery set, which is a different answer: the
+    /// first leaves a cached livery alone, the second clears it.
+    livery_digest: Option<String>,
 }
 
 #[tauri::command]
@@ -33,6 +40,14 @@ pub(crate) fn get_welcome_text(state: tauri::State<'_, AppState>) -> Option<Stri
     state.welcome_text()
 }
 
+/// What the open server says it looks like, or `None` when it has said nothing.
+#[tauri::command]
+pub(crate) fn get_livery(
+    state: tauri::State<'_, AppState>,
+) -> Option<crate::state::LiverySnapshot> {
+    state.get_livery()
+}
+
 /// Ping a Mumble server to measure latency and retrieve server info.
 ///
 /// Performs two concurrent probes:
@@ -43,7 +58,7 @@ pub(crate) fn get_welcome_text(state: tauri::State<'_, AppState>) -> Option<Stri
 pub(crate) async fn ping_server(host: String, port: u16) -> PingResult {
     use std::time::Instant;
     use tokio::net::TcpStream;
-    use tokio::time::{timeout, Duration};
+    use tokio::time::{Duration, timeout};
 
     let addr = format!("{host}:{port}");
     let start = Instant::now();
@@ -56,8 +71,8 @@ pub(crate) async fn ping_server(host: String, port: u16) -> PingResult {
     };
 
     // UDP ping for user count + version (best-effort, does not affect online status)
-    let (user_count, max_user_count, server_version) =
-        udp_ping_server_info(&addr).await.unwrap_or((None, None, None));
+    let (user_count, max_user_count, server_version, livery_digest) =
+        udp_ping_server_info(&addr).await.unwrap_or_default();
 
     PingResult {
         online,
@@ -65,6 +80,7 @@ pub(crate) async fn ping_server(host: String, port: u16) -> PingResult {
         user_count,
         max_user_count,
         server_version,
+        livery_digest,
     }
 }
 
@@ -96,13 +112,18 @@ fn format_version_legacy(v: u32) -> Option<String> {
 
 /// Send a Mumble UDP ping to retrieve extended server information.
 ///
-/// Returns `(user_count, max_user_count, server_version)` on success.
+/// Returns `(user_count, max_user_count, server_version, livery_digest)`.
 /// Tries the protobuf format first; falls back to the legacy 12-byte
 /// format if the server doesn't respond to protobuf within the timeout.
-async fn udp_ping_server_info(addr: &str) -> Result<(Option<u32>, Option<u32>, Option<String>), ()> {
+/// The protobuf UDP packet type for a ping, as `MumbleUDP` defines it.
+const PROTOBUF_PING: u8 = 0x01;
+
+type PingInfo = (Option<u32>, Option<u32>, Option<String>, Option<String>);
+
+async fn udp_ping_server_info(addr: &str) -> Result<PingInfo, ()> {
     use prost::Message;
     use tokio::net::UdpSocket;
-    use tokio::time::{timeout, Duration};
+    use tokio::time::{Duration, timeout};
 
     let sock = UdpSocket::bind("0.0.0.0:0").await.map_err(|_| ())?;
     sock.connect(addr).await.map_err(|_| ())?;
@@ -112,37 +133,67 @@ async fn udp_ping_server_info(addr: &str) -> Result<(Option<u32>, Option<u32>, O
         .unwrap_or_default()
         .as_millis() as u64;
 
-    // Try protobuf ping first (Mumble 1.5+ servers)
+    // Framed by the protocol crate rather than by hand.
+    //
+    // This built the packet itself and pushed `0x20`, which is the *legacy*
+    // header (type 1, target 0), not the protobuf marker `0x01`. Every 1.5+
+    // server answered nothing, the code fell through to the legacy probe below,
+    // and the ping "worked" -- so the bug was invisible for as long as the
+    // legacy reply carried everything anyone read. It does not carry the livery
+    // digest, and cannot: it is six fixed big-endian u32s.
     let ping = mumble_protocol::proto::mumble_udp::Ping {
         timestamp: ts,
         request_extended_information: true,
         ..Default::default()
     };
-    let mut buf = Vec::with_capacity(16);
-    buf.push(0x20); // UDP Ping type marker
-    ping.encode(&mut buf).map_err(|_| ())?;
+    let buf = mumble_protocol::transport::udp::encode_udp_message(
+        &mumble_protocol::message::UdpMessage::Ping(ping),
+    );
     let _sent = sock.send(&buf).await.map_err(|_| ())?;
 
     let mut recv_buf = [0u8; 128];
     if let Ok(Ok(n)) = timeout(Duration::from_secs(2), sock.recv(&mut recv_buf)).await {
-        if n > 1 && recv_buf[0] == 0x20 {
+        if n > 1 && recv_buf[0] == PROTOBUF_PING {
             // Protobuf response
-            if let Ok(resp) =
-                mumble_protocol::proto::mumble_udp::Ping::decode(&recv_buf[1..n])
+            if let Ok(resp) = mumble_protocol::proto::mumble_udp::Ping::decode(&recv_buf[1..n])
+                && (resp.user_count > 0 || resp.max_user_count > 0 || resp.server_version_v2 > 0)
             {
-                if resp.user_count > 0 || resp.max_user_count > 0 || resp.server_version_v2 > 0 {
-                    let version = format_version_v2(resp.server_version_v2);
-                    return Ok((Some(resp.user_count), Some(resp.max_user_count), version));
-                }
+                let version = format_version_v2(resp.server_version_v2);
+                // Always `Some` on this path, empty when the server set no
+                // livery: a Fancy server saying "none" has to clear a
+                // cached one, and a plain Mumble server saying nothing must
+                // not.
+                let digest = Some(
+                    resp.livery_digest
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect::<String>(),
+                );
+                return Ok((
+                    Some(resp.user_count),
+                    Some(resp.max_user_count),
+                    version,
+                    digest,
+                ));
             }
         }
         // Legacy 24-byte response: 6 x u32 big-endian
         // [version, ts_hi, ts_lo, users, max_users, bandwidth]
         if n >= 24 {
             let ver = u32::from_be_bytes([recv_buf[0], recv_buf[1], recv_buf[2], recv_buf[3]]);
-            let users = u32::from_be_bytes([recv_buf[12], recv_buf[13], recv_buf[14], recv_buf[15]]);
-            let max_users = u32::from_be_bytes([recv_buf[16], recv_buf[17], recv_buf[18], recv_buf[19]]);
-            return Ok((Some(users), Some(max_users), format_version_legacy(ver)));
+            let users =
+                u32::from_be_bytes([recv_buf[12], recv_buf[13], recv_buf[14], recv_buf[15]]);
+            let max_users =
+                u32::from_be_bytes([recv_buf[16], recv_buf[17], recv_buf[18], recv_buf[19]]);
+            // The legacy reply is six fixed big-endian u32s with no extension
+            // point, so a client that falls back this far stays unbranded until
+            // it connects.
+            return Ok((
+                Some(users),
+                Some(max_users),
+                format_version_legacy(ver),
+                None,
+            ));
         }
     }
 
@@ -151,14 +202,67 @@ async fn udp_ping_server_info(addr: &str) -> Result<(Option<u32>, Option<u32>, O
     legacy[4..12].copy_from_slice(&ts.to_be_bytes());
     let _ = sock.send(&legacy).await;
 
-    if let Ok(Ok(n)) = timeout(Duration::from_secs(2), sock.recv(&mut recv_buf)).await {
-        if n >= 24 {
-            let ver = u32::from_be_bytes([recv_buf[0], recv_buf[1], recv_buf[2], recv_buf[3]]);
-            let users = u32::from_be_bytes([recv_buf[12], recv_buf[13], recv_buf[14], recv_buf[15]]);
-            let max_users = u32::from_be_bytes([recv_buf[16], recv_buf[17], recv_buf[18], recv_buf[19]]);
-            return Ok((Some(users), Some(max_users), format_version_legacy(ver)));
-        }
+    if let Ok(Ok(n)) = timeout(Duration::from_secs(2), sock.recv(&mut recv_buf)).await
+        && n >= 24
+    {
+        let ver = u32::from_be_bytes([recv_buf[0], recv_buf[1], recv_buf[2], recv_buf[3]]);
+        let users = u32::from_be_bytes([recv_buf[12], recv_buf[13], recv_buf[14], recv_buf[15]]);
+        let max_users =
+            u32::from_be_bytes([recv_buf[16], recv_buf[17], recv_buf[18], recv_buf[19]]);
+        // The legacy reply is six fixed big-endian u32s with no extension
+        // point, so a client that falls back this far stays unbranded until
+        // it connects.
+        return Ok((
+            Some(users),
+            Some(max_users),
+            format_version_legacy(ver),
+            None,
+        ));
     }
 
-    Ok((None, None, None))
+    Ok((None, None, None, None))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Drive the real probe against a running server.
+    ///
+    /// Ignored by default because it needs one. `STARLING_PING_ADDR=host:port
+    /// cargo test -p mumble-tauri -- --ignored livery_probe` runs it, and it is
+    /// how the marker-byte bug was caught: every assertion below passed against
+    /// the legacy fallback except the digest, which that format cannot carry.
+    #[tokio::test]
+    #[ignore = "needs a live server; set STARLING_PING_ADDR"]
+    async fn livery_probe_against_a_live_server() {
+        let Ok(addr) = std::env::var("STARLING_PING_ADDR") else {
+            panic!("set STARLING_PING_ADDR=host:port");
+        };
+        let (users, max_users, version, digest) = udp_ping_server_info(&addr)
+            .await
+            .expect("the server answered");
+
+        assert!(max_users.is_some(), "no extended information came back");
+        println!("users={users:?} max={max_users:?} version={version:?} digest={digest:?}");
+        let digest = digest.expect("a Fancy server always says, even if it says nothing");
+        assert_eq!(digest.len(), 16, "eight bytes as lowercase hex");
+    }
+}
+
+/// The name the resolver has for an address, for the User Information sheet.
+///
+/// `None` when there is no PTR record - the resolver hands the address back
+/// in that case, which is not a name. The lookup blocks, so it runs on the
+/// blocking pool rather than on the runtime.
+#[tauri::command]
+pub(crate) async fn reverse_dns(address: String) -> Result<Option<String>, String> {
+    let ip: std::net::IpAddr = address.trim().parse().map_err(|e| format!("{e}"))?;
+    tokio::task::spawn_blocking(move || {
+        dns_lookup::lookup_addr(&ip)
+            .ok()
+            .filter(|name| name.parse::<std::net::IpAddr>().is_err())
+    })
+    .await
+    .map_err(|e| e.to_string())
 }

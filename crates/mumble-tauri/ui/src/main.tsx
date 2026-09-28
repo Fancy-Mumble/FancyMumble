@@ -1,28 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import App from "./App";
-import { isMobile } from "./utils/platform";
-import { detectBackdropFilterSupport } from "./utils/platform";
-import { loadPersonalization } from "./personalizationStorage";
-import { applyTheme, DEFAULT_THEME } from "./themes";
-import { applyFont } from "./utils/fonts";
-import "./i18n";
-import { bootstrapCustomTranslations } from "./translations/storage";
-import "./global.css";
-
-if (isMobile) {
-  document.documentElement.style.setProperty("--titlebar-height", "0px");
-}
-
-detectBackdropFilterSupport();
-
-loadPersonalization()
-  .then((p) => {
-    applyTheme(p.theme);
-    applyFont(p.fontFamily);
-  })
-  .catch(() => applyTheme(DEFAULT_THEME));
+import UiRoot from "@ui/UiRoot";
+import "@core/i18n";
+import { bootstrapCustomTranslations } from "@core/translations/storage";
 
 // Fire-and-forget: register any saved user-authored language bundles with
 // i18next so they become switchable.  Failures only mean the user-side UI
@@ -32,7 +13,7 @@ bootstrapCustomTranslations().catch(() => undefined);
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <App />
+      <UiRoot />
     </BrowserRouter>
   </React.StrictMode>,
 );

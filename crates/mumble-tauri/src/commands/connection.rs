@@ -1,6 +1,6 @@
 //! Connection lifecycle commands.
 
-use crate::state::{AppState, ConnectionStatus};
+use crate::state::{AppState, ConnectionStatus, Credentials};
 
 /// Reject certificate labels that could escape the identity directory.
 ///
@@ -16,13 +16,34 @@ fn validate_cert_label(label: Option<&str>) -> Result<(), String> {
     if label == "." || label == ".." {
         return Err("invalid certificate label".into());
     }
-    if !label.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')) {
+    if !label
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+    {
         return Err("certificate label may only contain letters, digits, '.', '_' and '-'".into());
     }
     Ok(())
 }
 
+/// Reject an invite code that could not be one Starling minted.
+///
+/// It becomes an access token, and the token list is the client's proof of
+/// channel passwords too: a "code" smuggling a comma or a second token in is
+/// refused here rather than sent. Starling's own codes are twelve lower-case
+/// letters and digits; the bound is looser so a future length still passes.
+fn validate_invite(invite: Option<&str>) -> Result<(), String> {
+    let Some(code) = invite else { return Ok(()) };
+    if code.is_empty() || code.len() > 64 || !code.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err("that invite code is not valid".into());
+    }
+    Ok(())
+}
+
 #[tauri::command]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Tauri command mirrors the connect dialog's fields one to one"
+)]
 pub(crate) async fn connect(
     state: tauri::State<'_, AppState>,
     host: String,
@@ -30,9 +51,26 @@ pub(crate) async fn connect(
     username: String,
     cert_label: Option<String>,
     password: Option<String>,
+    totp: Option<String>,
+    invite: Option<String>,
 ) -> Result<(), String> {
     validate_cert_label(cert_label.as_deref())?;
-    state.connect(host, port, username, cert_label, password).await
+    // An empty string from a form is "no invite", not an invalid one.
+    let invite = invite.filter(|code| !code.trim().is_empty());
+    validate_invite(invite.as_deref())?;
+    state
+        .connect(
+            host,
+            port,
+            username,
+            cert_label,
+            Credentials {
+                password,
+                totp,
+                invite,
+            },
+        )
+        .await
 }
 
 #[tauri::command]

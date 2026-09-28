@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="addon">
+  <id>com.fancy_mumble.FancyMumble.SignalBridge</id>
+  <extends>com.fancy_mumble.FancyMumble</extends>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <!-- The whole reason this is a separate ref: libsignal-protocol is
+       AGPL-3.0-only and Fancy Mumble itself is MIT. -->
+  <project_license>AGPL-3.0-only</project_license>
+
+  <name>Signal Bridge</name>
+  <summary>End-to-end encrypted private chat for Fancy Mumble</summary>
+
+  <developer id="com.fancy_mumble">
+    <name>Fancy Mumble</name>
+  </developer>
+
+  <description>
+    <p>
+      Adds end-to-end encrypted private chat to Fancy Mumble, using the Signal
+      Protocol's Sender Keys for group messages. With this add-on installed,
+      private conversations are encrypted on your machine and the server
+      relays ciphertext it cannot read.
+    </p>
+    <p>
+      It is packaged separately because it builds on libsignal-protocol, which
+      is licensed under the GNU Affero General Public License, version 3, while
+      Fancy Mumble itself is MIT-licensed. Installing this add-on is what puts
+      AGPL-licensed code on your system; without it, Fancy Mumble runs normally
+      and encrypted private chat is simply unavailable.
+    </p>
+  </description>
+
+  <url type="homepage">https://fancy-mumble.com/</url>
+  <url type="bugtracker">https://github.com/Fancy-Mumble/FancyMumble/issues</url>
+  <url type="vcs-browser">https://github.com/Fancy-Mumble/FancyMumble/tree/main/crates/signal-bridge</url>
+
+  <releases>
+    <release version="0.3.0" date="2026-06-14"/>
+  </releases>
+</component>

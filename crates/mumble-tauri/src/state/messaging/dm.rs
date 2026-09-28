@@ -3,8 +3,8 @@
 use mumble_protocol::command;
 
 use super::own_session_hash;
-use crate::state::types::ChatMessage;
 use crate::state::AppState;
+use crate::state::types::ChatMessage;
 
 impl AppState {
     pub async fn send_dm(&self, target_session: u32, body: String) -> Result<(), String> {
@@ -59,6 +59,7 @@ impl AppState {
                 message_id,
                 timestamp,
                 is_legacy: false,
+                send_failed: false,
                 edited_at: None,
                 pinned: false,
                 pinned_by: None,
@@ -78,9 +79,19 @@ impl AppState {
         {
             let __session = self.inner.snapshot();
             let mut state = __session.lock().map_err(|e| e.to_string())?;
-            state.msgs.selected_dm_user = Some(session);
-            state.selected_channel = None;
+            let left_dm = state.msgs.selected_dm_user.replace(session);
+            let left_channel = state.selected_channel.take();
             let _ = state.msgs.dm_unread.remove(&session);
+            // As with a channel: the conversation opened, and whatever was
+            // open before it, are read on every device of this account.
+            use crate::state::read_sync::{Read, share};
+            share(&state, Read::Direct(session));
+            if let Some(left) = left_dm.filter(|&left| left != session) {
+                share(&state, Read::Direct(left));
+            }
+            if let Some(left) = left_channel {
+                share(&state, Read::Channel(left));
+            }
         }
         self.emit_dm_unreads();
         Ok(())

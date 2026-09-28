@@ -30,10 +30,7 @@ mod tests {
 
     #[test]
     fn strip_nested_tags() {
-        assert_eq!(
-            strip_html_tags("<div><p>text</p></div>"),
-            "text"
-        );
+        assert_eq!(strip_html_tags("<div><p>text</p></div>"), "text");
     }
 
     #[test]

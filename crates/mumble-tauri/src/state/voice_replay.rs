@@ -10,9 +10,8 @@
 //! state-management glue that wires it into the rest of the Tauri
 //! audio module.
 
-use std::collections::VecDeque;
-use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 use std::time::{Duration, Instant};
 
 use tauri::Emitter;
@@ -20,7 +19,8 @@ use tracing::{debug, warn};
 
 use mumble_protocol::audio::capture::AudioCapture;
 use mumble_protocol::audio::filter::FilterChain;
-use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes};
+use mumble_protocol::audio::mixer::{JitterConfig, SpeakerBuffer, SpeakerBuffers, SpeakerVolumes};
+use mumble_protocol::audio::sample::AudioFormat;
 
 use crate::audio::{AudioDeviceFactory, MixingPlayback, PlatformAudioFactory};
 
@@ -28,6 +28,11 @@ use super::types::{AudioSettings, VoiceReplayState};
 
 /// Maximum recording length for the voice replay feature, in seconds.
 pub(super) const VOICE_REPLAY_CAPACITY_SECS: u32 = 20;
+
+/// Samples a full-length replay occupies, which is what its buffer must hold.
+fn replay_capacity_samples() -> usize {
+    VOICE_REPLAY_CAPACITY_SECS as usize * VOICE_REPLAY_SAMPLE_RATE as usize
+}
 
 /// Reserved speaker-buffer key for replay playback.  Picked to be far
 /// outside any plausible Mumble session id so it cannot collide.
@@ -80,9 +85,11 @@ pub(super) async fn voice_replay_loop(
     let _ = ctx.playback.start();
     if let Err(e) = ctx.capture.start() {
         warn!("voice_replay: capture start failed: {e}");
+        super::audio::emit_capture_error(Some(&app), &e.to_string());
         emit_state(&app, VoiceReplayState::Idle);
         return;
     }
+    super::audio::clear_capture_error(Some(&app));
 
     let buffer = record(&mut ctx, &app, &mut stop_rx).await;
     let _ = ctx.capture.stop();
@@ -108,8 +115,7 @@ async fn record(
     app: &tauri::AppHandle,
     stop_rx: &mut tokio::sync::watch::Receiver<bool>,
 ) -> Vec<f32> {
-    let capacity_samples =
-        VOICE_REPLAY_CAPACITY_SECS as usize * VOICE_REPLAY_SAMPLE_RATE as usize;
+    let capacity_samples = VOICE_REPLAY_CAPACITY_SECS as usize * VOICE_REPLAY_SAMPLE_RATE as usize;
     let mut buffer: Vec<f32> = Vec::with_capacity(capacity_samples);
 
     let mut interval = tokio::time::interval(Duration::from_millis(20));
@@ -117,8 +123,19 @@ async fn record(
 
     // Drop a placeholder entry so the mixing callback owns a buffer
     // before playback begins; this avoids a first-frame underrun pop.
+    //
+    // Sized for the whole recording, because this is the entry playback finds:
+    // a default-sized one here would hold the replay to the 400 ms live cap no
+    // matter what playback asked for.
     if let Ok(mut bufs) = ctx.speaker_buffers.lock() {
-        let _ = bufs.insert(VOICE_REPLAY_SESSION_KEY, VecDeque::new());
+        let _ = bufs.insert(
+            VOICE_REPLAY_SESSION_KEY,
+            SpeakerBuffer::with_cap(
+                AudioFormat::MONO_48KHZ_F32,
+                JitterConfig::default(),
+                replay_capacity_samples(),
+            ),
+        );
     }
 
     let start = Instant::now();
@@ -170,8 +187,19 @@ async fn playback(
     let total_ms = (buffer.len() as u64 * 1000 / VOICE_REPLAY_SAMPLE_RATE as u64) as u32;
 
     if let Ok(mut bufs) = ctx.speaker_buffers.lock() {
-        let entry = bufs.entry(VOICE_REPLAY_SESSION_KEY).or_default();
-        entry.extend(buffer.iter().copied());
+        // Sized for the whole recording, not the live-speaker cap: a replay is
+        // complete before playout starts, so there is no latency to bound, and
+        // the 400 ms live cap would keep only the tail of it. Installed rather
+        // than looked up, so the size cannot depend on who created the entry.
+        let mut entry = SpeakerBuffer::with_cap(
+            AudioFormat::MONO_48KHZ_F32,
+            JitterConfig::default(),
+            replay_capacity_samples(),
+        );
+        // The whole recording is here at once, so there is nothing to wait
+        // for: hand it over as a finished talkspurt.
+        entry.push_complete(&buffer);
+        let _ = bufs.insert(VOICE_REPLAY_SESSION_KEY, entry);
     }
 
     let playback_start = Instant::now();
@@ -189,7 +217,7 @@ async fn playback(
             .speaker_buffers
             .lock()
             .ok()
-            .and_then(|bufs| bufs.get(&VOICE_REPLAY_SESSION_KEY).map(VecDeque::len))
+            .and_then(|bufs| bufs.get(&VOICE_REPLAY_SESSION_KEY).map(SpeakerBuffer::len))
             .unwrap_or(0);
 
         let elapsed = elapsed_ms(playback_start).min(total_ms);

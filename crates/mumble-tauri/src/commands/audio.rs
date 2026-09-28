@@ -6,83 +6,89 @@ use crate::state::{self, AppState, AudioDevice, AudioSettings, VoiceState};
 
 /// List available audio input devices (microphones).
 /// Only available on desktop (cpal is not supported on Android).
+///
+/// Runs the enumeration on the blocking pool: WASAPI/COM device enumeration
+/// takes tens of milliseconds, and the Settings page fires this (plus
+/// [`get_output_devices`]) on every mount. Done inline it ties up runtime
+/// workers the protocol event loop needs, which starves `mixer.feed()` and
+/// surfaces as bursts of "dropped oldest samples" playback glitches.
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-pub(crate) fn get_audio_devices() -> Vec<AudioDevice> {
-    use cpal::traits::{DeviceTrait, HostTrait};
-
-    let host = cpal::default_host();
-    let default_name = host
-        .default_input_device()
-        .and_then(|d| {
-            d.description()
-                .ok()
-                .map(|desc| desc.name().to_string())
-        });
-
-    host.input_devices()
-        .map(|devices| {
-            devices
-                .filter_map(|d| {
-                    let name = d
-                        .description()
-                        .ok()
-                        .map(|desc| desc.name().to_string())?;
-                    Some(AudioDevice {
-                        name: name.clone(),
-                        is_default: default_name.as_deref() == Some(&name),
-                    })
-                })
-                .collect()
-        })
+pub(crate) async fn get_audio_devices() -> Vec<AudioDevice> {
+    tauri::async_runtime::spawn_blocking(enumerate_input_devices)
+        .await
         .unwrap_or_default()
+}
+
+#[cfg(not(target_os = "android"))]
+fn enumerate_input_devices() -> Vec<AudioDevice> {
+    #[cfg(target_os = "linux")]
+    if audio::pipewire::available() {
+        return pipewire_devices(audio::pipewire::Kind::Source);
+    }
+    audio::devices::inputs()
+        .into_iter()
+        .map(|d| AudioDevice {
+            name: d.name,
+            is_default: d.is_default,
+        })
+        .collect()
+}
+
+/// The PipeWire half of the graph as the picker's device list.
+///
+/// These are the nodes the desktop's own sound settings show, and unlike
+/// the ALSA hint list every entry names a distinct device that can
+/// actually be selected - see [`audio::pipewire`].
+#[cfg(target_os = "linux")]
+fn pipewire_devices(kind: audio::pipewire::Kind) -> Vec<AudioDevice> {
+    audio::pipewire::nodes(kind)
+        .into_iter()
+        .map(|n| AudioDevice {
+            name: n.name,
+            is_default: n.is_default,
+        })
+        .collect()
 }
 
 /// Stub: on Android, return an empty device list.
 #[cfg(target_os = "android")]
 #[tauri::command]
-pub(crate) fn get_audio_devices() -> Vec<AudioDevice> {
+pub(crate) async fn get_audio_devices() -> Vec<AudioDevice> {
     Vec::new()
 }
 
 /// List available audio output devices (speakers/headphones).
 /// Only available on desktop (cpal is not supported on Android).
+///
+/// Blocking-pool for the same reason as [`get_audio_devices`].
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-pub(crate) fn get_output_devices() -> Vec<AudioDevice> {
-    use cpal::traits::{DeviceTrait, HostTrait};
-
-    let host = cpal::default_host();
-    let default_name = host
-        .default_output_device()
-        .and_then(|d| {
-            d.description()
-                .ok()
-                .map(|desc| desc.name().to_string())
-        });
-
-    host.output_devices()
-        .map(|devices| {
-            devices
-                .filter_map(|d| {
-                    let name = d
-                        .description()
-                        .ok()
-                        .map(|desc| desc.name().to_string())?;
-                    Some(AudioDevice {
-                        name: name.clone(),
-                        is_default: default_name.as_deref() == Some(&name),
-                    })
-                })
-                .collect()
-        })
+pub(crate) async fn get_output_devices() -> Vec<AudioDevice> {
+    tauri::async_runtime::spawn_blocking(enumerate_output_devices)
+        .await
         .unwrap_or_default()
+}
+
+#[cfg(not(target_os = "android"))]
+fn enumerate_output_devices() -> Vec<AudioDevice> {
+    #[cfg(target_os = "linux")]
+    if audio::pipewire::available() {
+        return pipewire_devices(audio::pipewire::Kind::Sink);
+    }
+    audio::devices::outputs()
+        .into_iter()
+        .map(|d| AudioDevice {
+            name: d.name,
+            is_default: d.is_default,
+        })
+        .collect()
 }
 
 /// Stub: on Android, return an empty device list.
 #[cfg(target_os = "android")]
 #[tauri::command]
-pub(crate) fn get_output_devices() -> Vec<AudioDevice> {
+pub(crate) async fn get_output_devices() -> Vec<AudioDevice> {
     Vec::new()
 }
 
@@ -107,8 +113,7 @@ pub(crate) fn get_denoiser_param_specs(
 /// compiled into this build.
 #[tauri::command]
 pub(crate) fn get_available_denoiser_algorithms()
- -> Vec<mumble_protocol::audio::filter::denoiser::NoiseSuppressionAlgorithm>
-{
+-> Vec<mumble_protocol::audio::filter::denoiser::NoiseSuppressionAlgorithm> {
     mumble_protocol::audio::filter::denoiser::NoiseSuppressionAlgorithm::available()
 }
 
@@ -122,6 +127,9 @@ pub(crate) async fn set_audio_settings(
     settings: AudioSettings,
 ) -> Result<(), String> {
     let force_tcp = settings.force_tcp_audio;
+    // Apply the exclusive-input selection before any pipeline restart below
+    // so the (re)opened capture uses the new mode.
+    audio::set_exclusive_input(settings.exclusive_input);
     let (needs_outbound, needs_inbound, force_tcp_changed) = state
         .set_audio_settings(settings)
         .unwrap_or((false, false, false));
@@ -132,12 +140,11 @@ pub(crate) async fn set_audio_settings(
     if needs_inbound {
         state.restart_inbound()?;
     }
-    if force_tcp_changed {
-        if let Ok(inner) = state.inner.snapshot().lock() {
-            if let Some(ref handle) = inner.conn.client_handle {
-                handle.set_force_tcp(force_tcp);
-            }
-        }
+    if force_tcp_changed
+        && let Ok(inner) = state.inner.snapshot().lock()
+        && let Some(ref handle) = inner.conn.client_handle
+    {
+        handle.set_force_tcp(force_tcp);
     }
 
     Ok(())
@@ -156,6 +163,25 @@ pub(crate) fn set_audio_backend(use_rodio: bool) {
 #[tauri::command]
 pub(crate) fn get_audio_backend() -> bool {
     audio::is_rodio_backend()
+}
+
+/// Probe microphone availability with the current settings, emitting a
+/// `capture-error` event (device-in-use, with the holding app named) or
+/// clearing it. The audio settings page calls this on load so a persisted
+/// exclusive-mode / device-busy state is shown without waiting for the
+/// user to enable voice.
+#[tauri::command]
+pub(crate) fn probe_microphone(state: tauri::State<'_, AppState>) {
+    state.probe_microphone();
+}
+
+/// Return the last known microphone capture state (device-in-use, with the
+/// holding app named, or none). A newly-mounted view (e.g. the sidebar
+/// after returning from the settings route) queries this so it reflects a
+/// busy device it may have missed the live event for.
+#[tauri::command]
+pub(crate) fn get_capture_state() -> Option<state::audio::CaptureState> {
+    state::audio::current_capture_state()
 }
 
 /// Get the current voice state.
@@ -225,6 +251,52 @@ pub(crate) async fn voice_priority_end(state: tauri::State<'_, AppState>) -> Res
     state.push_to_talk_end().await
 }
 
+/// Start whispering to `targets` (whisper key down).
+///
+/// The frontend resolves its configured target to sessions and channel ids at
+/// the moment of the press, because that is the only time the answer is known:
+/// a user bound by certificate hash has a different session on every
+/// reconnect, and a shortcut that whispered to yesterday's session number
+/// would reach whoever holds it today.
+#[tauri::command]
+pub(crate) async fn whisper_start(
+    state: tauri::State<'_, AppState>,
+    slot: u8,
+    targets: Vec<state::WhisperEntry>,
+) -> Result<(), String> {
+    state.whisper_start(slot, targets).await
+}
+
+/// Keep a whisper slot registered ahead of its key, so a press only switches
+/// slots. Returns whether a `VoiceTarget` actually went out.
+#[tauri::command]
+pub(crate) async fn whisper_register(
+    state: tauri::State<'_, AppState>,
+    slot: u8,
+    targets: Vec<state::WhisperEntry>,
+) -> Result<bool, String> {
+    state.whisper_register(slot, targets).await
+}
+
+/// Stop whispering (whisper key up).
+#[tauri::command]
+pub(crate) async fn whisper_end(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.whisper_end().await
+}
+
+/// Whether a whisper is in progress, for a view that mounted after the key
+/// went down.
+#[tauri::command]
+pub(crate) fn get_whisper_active(state: tauri::State<'_, AppState>) -> bool {
+    state.whisper_active()
+}
+
+/// Channels the server currently refuses whispers into.
+#[tauri::command]
+pub(crate) fn get_whisper_denials(state: tauri::State<'_, AppState>) -> Vec<u32> {
+    state.whisper_denials()
+}
+
 /// Set the local playback volume for a specific remote user.
 ///
 /// `volume` is a multiplier (0.0 = muted, 1.0 = normal, 2.0 = 200%).
@@ -248,7 +320,9 @@ pub(crate) fn stop_mic_test(state: tauri::State<'_, AppState>) {
 /// Calibrate the voice activation threshold by measuring the ambient
 /// noise floor for ~2 seconds (with AGC applied).  Returns the new threshold.
 #[tauri::command]
-pub(crate) async fn calibrate_voice_threshold(state: tauri::State<'_, AppState>) -> Result<f32, String> {
+pub(crate) async fn calibrate_voice_threshold(
+    state: tauri::State<'_, AppState>,
+) -> Result<f32, String> {
     state.calibrate_voice_threshold().await
 }
 
@@ -300,6 +374,8 @@ pub(crate) fn stop_recording(state: tauri::State<'_, AppState>) -> Result<String
 
 /// Get the current recording state.
 #[tauri::command]
-pub(crate) fn get_recording_state(state: tauri::State<'_, AppState>) -> state::recording::RecordingState {
+pub(crate) fn get_recording_state(
+    state: tauri::State<'_, AppState>,
+) -> state::recording::RecordingState {
     state.recording_state()
 }

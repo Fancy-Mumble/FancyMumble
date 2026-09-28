@@ -1,10 +1,22 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath, URL } from "node:url";
 
 const port = Number(process.env.VITE_PORT) || 1420;
 
 export default defineConfig({
   plugins: [react()],
+
+  resolve: {
+    alias: {
+      "@core": fileURLToPath(new URL("./src/core", import.meta.url)),
+      "@shared": fileURLToPath(new URL("./src/shared", import.meta.url)),
+      "@standard": fileURLToPath(new URL("./src/ui/standard", import.meta.url)),
+      "@aurora": fileURLToPath(new URL("./src/ui/aurora", import.meta.url)),
+      "@nebula": fileURLToPath(new URL("./src/ui/nebula", import.meta.url)),
+      "@ui": fileURLToPath(new URL("./src/ui", import.meta.url)),
+    },
+  },
 
   // Prevent Vite from clearing the terminal so Tauri logs stay visible.
   clearScreen: false,
@@ -27,7 +39,9 @@ export default defineConfig({
         "object-src 'none'",
         "style-src 'self' 'unsafe-inline'",
         "img-src * data: blob: asset: http://asset.localhost",
-        "media-src * data: blob:",
+        // `asset:` is spelled out because `*` does not cover a custom scheme
+        // in WebKit; a saved file played from one is refused under a bare `*`.
+        "media-src * data: blob: asset: http://asset.localhost",
         "font-src 'self' data:",
         "connect-src * ws: wss: ipc: http://ipc.localhost",
         "frame-src 'none'",
@@ -78,5 +92,11 @@ export default defineConfig({
     cssTarget: ["chrome108", "safari15"],
     minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
     sourcemap: !!process.env.TAURI_DEBUG,
+    // The default 500 kB is written for pages fetched over a network, where a
+    // big chunk is a slow first paint. This bundle is read from the app's own
+    // files, and the two chunks past 500 kB - the Nebula pack (~720 kB) and the
+    // live-document editor (~1.4 MB) - are already loaded only when used. The
+    // limit sits just above them, so anything that grows past them still says so.
+    chunkSizeWarningLimit: 1500,
   },
 });

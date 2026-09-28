@@ -1,0 +1,78 @@
+{
+  "_comment": [
+    "Golden canon frames: what an epoch-1 client puts on the wire, and what",
+    "Starling's services must read back. Checked in as bytes rather than",
+    "generated at test time, deliberately, a fixture both sides build from",
+    "their own encoder agrees with itself while disagreeing with the wire,",
+    "which is exactly the failure D1 was.",
+    "",
+    "Each entry is one complete frame: type:u16 BE, len:u32 BE, payload.",
+    "The client asserts it *produces* these; Starling asserts it *consumes*",
+    "them. Either side drifting fails on its own side, with a name.",
+    "",
+    "A frame only belongs here if its bytes are the same everywhere. Push",
+    "registration is the counter-example and the reason this is written down:",
+    "the client fills `platform` from std::env::consts::OS, so the frame it",
+    "produces on Windows is not the one it produces in CI. That is fine on the",
+    "wire and fatal in a fixture.",
+    "",
+    "Regenerate only when the canon deliberately changes, and update both",
+    "sides in the same commit, see PROTOCOL-MIGRATION.md M6."
+  ],
+  "frames": [
+    {
+      "name": "social: typing indicator in channel 4",
+      "outer": 1015,
+      "hex": "03f700000006120408041801",
+      "means": "SocialEnvelope{ Typing{ channel: 4, typing: true } }"
+    },
+    {
+      "name": "social: thumbs-up reaction on message m-1 in channel 4",
+      "outer": 1015,
+      "hex": "03f7000000110a0f080412036d2d311a060a04f09f918d",
+      "means": "SocialEnvelope{ Reaction{ channel: 4, message_id: 'm-1', unicode emoji } }"
+    },
+    {
+      "name": "social: a poll with two options in channel 4",
+      "outer": 1015,
+      "hex": "03f70000001a22180a03702d3110041a066c756e63683f220379657322026e6f",
+      "means": "SocialEnvelope{ Poll{ poll_id: 'p-1', channel: 4, question: 'lunch?', options: ['yes', 'no'] } }"
+    },
+    {
+      "name": "pchat: an encrypted message in channel 4",
+      "outer": 1006,
+      "hex": "03ee0000001a0a180a036d2d3710042204deadbeef2880d095ffbc3138025009",
+      "means": "PchatEnvelope{ Message{ message_id: 'm-7', channel: 4, ciphertext: deadbeef, sent_at_ms: 1700000000000, epoch: 2, chain_index: 9, sender_cert: empty } }"
+    },
+    {
+      "name": "pchat: fetch the last 50 messages of channel 4",
+      "outer": 1006,
+      "hex": "03ee000000081206080412021832",
+      "means": "PchatEnvelope{ Fetch{ channel: 4, page: Cursor{ limit: 50 } } }"
+    },
+    {
+      "name": "pchat: a fancy_v1 key announce into channel 4",
+      "outer": 1006,
+      "hex": "03ee000000a42aa10108041a2011111111111111111111111111111111111111111111111111111111111111112204aabbccdd2a2022222222222222222222222222222222222222222222222222222222222222223240333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333a08444444444444444440014880d095ffbc31",
+      "means": "PchatEnvelope{ KeyAnnounce{ channel: 4, public_key: 32x11, holder_cert: aabbccdd, signing_public: 32x22, signature: 64x33, tls_signature: 8x44, algorithm_version: 1, announced_at_ms: 1700000000000 } } -- the identity proof must survive whole: a recipient refuses an announce whose self-signature does not verify over exactly these fields"
+    },
+    {
+      "name": "pchat: a fancy_v1 key delivery sealed to one recipient",
+      "outer": 1006,
+      "hex": "03ee0000008f3a8c01080410032204deadbeef2a0888888888888888883204112233443a04aabbccdd4240555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555554a03722d31520877777777777777775a086666666666666666620455667788680170027880d095ffbc31",
+      "means": "PchatEnvelope{ KeyDeliver{ channel: 4, epoch: 3, recipient: 0 (server resolves from recipient_cert), sealed_key: deadbeef, countersignature: 8x88, recipient_cert: 11223344, sender_cert: aabbccdd, signature: 64x55, request_id: 'r-1', epoch_fingerprint: 8x77, parent_fingerprint: 8x66, countersigner_cert: 55667788, algorithm_version: 1, protocol: 2, delivered_at_ms: 1700000000000 } } -- without sender_cert the recipient cannot resolve the sealer's keys and the envelope is unopenable"
+    },
+    {
+      "name": "files: a file upload request in channel 4",
+      "outer": 1009,
+      "hex": "03f1000000230a210a03722d3110041a0a73756e7365742e706e672209696d6167652f706e67288020",
+      "means": "FilesEnvelope{ Upload{ request_id: 'r-1', channel: 4, filename: 'sunset.png', content_type: 'image/png', size: 4096, sha256: empty } } -- the ask for a URL; the bytes never travel on the control connection"
+    },
+    {
+      "name": "files: a file upload request in channel 4 with a password",
+      "outer": 1009,
+      "hex": "03f1000000320a300a03722d3110041a0a73756e7365742e706e672209696d6167652f706e672880203802420768756e746572324880f524",
+      "means": "FilesEnvelope{ Upload{ request_id: 'r-1', channel: 4, filename: 'sunset.png', content_type: 'image/png', size: 4096, visibility: PASSWORD, password: 'hunter2', ttl_seconds: 604800 } } -- the two fields that decide who may reach the file; absent from the frame above, which is a session share"
+    }
+  ]
+}

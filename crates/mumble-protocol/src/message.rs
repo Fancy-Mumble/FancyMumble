@@ -3,7 +3,7 @@
 //! [`TcpMessageType`] maps numeric wire IDs to their protobuf types.
 //! [`ControlMessage`] and [`UdpMessage`] carry fully decoded payloads.
 //! [`ServerMessage`] is the unified inbound type used by the work queue.
-use crate::proto::{mumble_tcp, mumble_udp};
+use crate::proto::{fancy, mumble_tcp, mumble_udp};
 
 /// Mumble TCP message type IDs as defined by the protocol.
 /// Each variant maps to a protobuf message with a fixed numeric ID
@@ -147,6 +147,12 @@ pub enum TcpMessageType {
     FancyOnboardingResponseQuery = 139,
     /// Fancy Mumble: server delivers a previously-stored onboarding response.
     FancyOnboardingResponseDeliver = 140,
+    /// Fancy Mumble: an invite-link request - support query, create, list or
+    /// revoke. Epoch 0 has no invites, so these two are local tags that never
+    /// reach a wire; the canon carries both inside outer type 1019.
+    FancyInvitesRequest = 141,
+    /// Fancy Mumble: the invites service's answer to one of those.
+    FancyInvites = 142,
     /// Fancy Mumble: client announces a new poll (server-relayed to channel).
     FancyPoll = 144,
     /// Fancy Mumble: client casts a vote on a poll (server-relayed to channel).
@@ -167,10 +173,140 @@ pub enum TcpMessageType {
     FancyServerSettings = 152,
     /// Fancy Mumble: admin submits changed server settings.
     FancyServerSettingsUpdate = 153,
+    /// Fancy Mumble: server snapshot of the own registered account's settings.
+    FancyAccountSettings = 154,
+    /// Fancy Mumble: user submits a self-service account operation.
+    FancyAccountSettingsUpdate = 155,
+    /// Fancy Mumble: server status reply for an account operation.
+    FancyAccountAck = 156,
+    /// Fancy Mumble: create/edit or broadcast of a forum post.
+    FancyForumPost = 157,
+    /// Fancy Mumble: fetch forum threads or a thread's posts.
+    FancyForumFetch = 158,
+    /// Fancy Mumble: response to a forum fetch.
+    FancyForumFetchResponse = 159,
+    /// Fancy Mumble: delete a forum post (or thread).
+    FancyForumDelete = 160,
+    /// Fancy Mumble: schedule a message for future delivery.
+    FancyScheduledMessage = 161,
+    /// Fancy Mumble: request the caller's pending scheduled messages.
+    FancyScheduledMessageList = 162,
+    /// Fancy Mumble: the caller's scheduled messages.
+    FancyScheduledMessageListResponse = 163,
+    /// Fancy Mumble: cancel a pending scheduled message.
+    FancyScheduledMessageCancel = 164,
+    /// Fancy Mumble: acknowledge a schedule/cancel/delivery outcome.
+    FancyScheduledMessageAck = 165,
+    // 169 is reserved for FancyModSignal (audit spec section 6.5).
+    /// Fancy Mumble: auditor searches the audit log / subscribes to a tail.
+    FancyAuditQuery = 166,
+    /// Fancy Mumble: server replies with a page of audit entries.
+    FancyAuditResponse = 167,
+    /// Fancy Mumble: server pushes a live-tail audit entry to a subscriber.
+    FancyAuditEvent = 168,
+    /// Fancy Mumble: server advertises the audit configuration schema.
+    FancyAuditConfig = 170,
+    /// Fancy Mumble: admin submits changed audit configuration.
+    FancyAuditConfigUpdate = 171,
+    /// Fancy Mumble: client asks for the server's livery.
+    ///
+    /// Epoch-0 has no livery message and never will; these two ids are local
+    /// tags that never reach a wire. The canon carries both inside outer type
+    /// 1013, which is the service that owns the document.
+    FancyLiveryQuery = 172,
+    /// Fancy Mumble: server sends what it looks like.
+    FancyServerLivery = 173,
+    /// Fancy Mumble: an admin changes the livery from a connected client.
+    FancyLiveryUpdate = 174,
+    /// Fancy Mumble: a connected session asks for a short-lived operator
+    /// credential, carried on the same outer type 1013 as livery.
+    FancyOperatorTicketRequest = 175,
+    /// Fancy Mumble: the server's answer to a ticket request.
+    FancyOperatorTicketReply = 176,
+    /// Fancy Mumble: client asks to share a file, naming what it is sending.
+    ///
+    /// Epoch-0 has no file message: the plugin did this over plugin-data and
+    /// its own HTTP API, so there is nothing to translate from. These ids are
+    /// local tags that never reach a wire; the canon carries all seven inside
+    /// outer type 1009.
+    FancyFileUpload = 177,
+    /// Fancy Mumble: client asks for a URL to read an object it knows the key of.
+    FancyFileDownload = 178,
+    /// Fancy Mumble: client asks what has been shared in a channel.
+    FancyFileList = 179,
+    /// Fancy Mumble: the server's short-lived signed URL for one request.
+    FancyFileGrant = 180,
+    /// Fancy Mumble: a file has been shared with the channel.
+    FancyFileShare = 181,
+    /// Fancy Mumble: the files shared in a channel.
+    FancyFileListing = 182,
+    /// Fancy Mumble: the server declined a file request, and why.
+    FancyFileRefused = 183,
+    /// Fancy Mumble: client asks for its own uploads, or for every one of them.
+    FancyFileManage = 184,
+    /// Fancy Mumble: the answer to that, with the disk stats for an operator.
+    FancyFileManaged = 185,
+    /// Fancy Mumble: client asks for one stored file to be removed.
+    FancyFileForget = 186,
+    /// Fancy Mumble: admin asks which settings this server may be told to
+    /// change at run time.
+    ///
+    /// Epoch-0 pushed the schema unasked to whoever held root Write, so it
+    /// never needed a question and has no wire form for one; this is a local
+    /// tag that never reaches a wire. The canon carries it inside outer type
+    /// 1013, the same envelope as `FancyServerSettingsUpdate`.
+    FancyServerSettingsQuery = 187,
+    /// Fancy Mumble: client asks the server to search a GIF provider.
+    ///
+    /// Epoch 0 has no GIF message at all - the client called the provider
+    /// itself, with a key each user had to obtain - so there is nothing to
+    /// translate from. These three are local tags that never reach a wire; the
+    /// canon carries all of them inside outer type 1018.
+    FancyGifQuery = 188,
+    /// Fancy Mumble: one page of results.
+    FancyGifPage = 189,
+    /// Fancy Mumble: the server declined a search, and why.
+    FancyGifRefused = 190,
+    /// Fancy Mumble: client asks to add or replace a server emote.
+    FancyEmoteUpload = 196,
+    /// Fancy Mumble: client asks for a server emote to be removed.
+    FancyEmoteForget = 197,
+    /// Fancy Mumble: client asks for this server's emotes.
+    FancyEmoteQuery = 198,
+    /// Fancy Mumble: the server's emotes, sent on request and on every change.
+    FancyEmotes = 199,
+    /// Fancy Mumble: client asks for one of its own stored records.
+    FancyAccountRecordGet = 191,
+    /// Fancy Mumble: client stores or removes one of its own records.
+    FancyAccountRecordPut = 192,
+    /// Fancy Mumble: client asks which of its records start with a prefix.
+    FancyAccountRecordList = 193,
+    /// Fancy Mumble: one stored record, or why it could not be had.
+    FancyAccountRecord = 194,
+    /// Fancy Mumble: the keys under a prefix.
+    FancyAccountRecordKeys = 195,
     /// Fancy Mumble: generic plugin envelope (bidirectional).
     PluginMessage = 200,
     /// Fancy Mumble: server enumerates loaded plugins after `ServerSync`.
     PluginRegistry = 201,
+    /// Fancy Mumble: an admin asks for the avatar or comment an audit entry
+    /// kept. A local tag; the canon carries it inside outer type 1012.
+    FancyAuditSnapshotQuery = 202,
+    /// Fancy Mumble: the kept avatar or comment.
+    FancyAuditSnapshot = 203,
+    /// Fancy Mumble: client asks whether this server searches GIFs, and where
+    /// its proxied media lives. Local tags like the three above; the canon
+    /// carries both inside outer type 1018.
+    FancyGifSupportQuery = 204,
+    /// Fancy Mumble: the answer to that.
+    FancyGifSupport = 205,
+    /// Fancy Mumble: client asks whether this server takes voice messages, and
+    /// how long and large one may be. Local tags; the canon carries both inside
+    /// the files service, outer type 1009.
+    FancyVoiceSupportQuery = 206,
+    /// Fancy Mumble: the answer, also pushed unasked when the operator changes
+    /// one of the voice-message settings.
+    FancyVoiceSupport = 207,
 }
 
 /// Generates both `TryFrom<u16> for TcpMessageType` and
@@ -364,6 +500,178 @@ pub enum ControlMessage {
     FancyServerSettings(mumble_tcp::FancyServerSettings),
     /// Fancy: admin submits changed server settings.
     FancyServerSettingsUpdate(mumble_tcp::FancyServerSettingsUpdate),
+    /// Fancy: admin asks for the editable server-settings schema.
+    FancyServerSettingsQuery(fancy::domain::ConfigQuery),
+    /// Fancy: server snapshot of the own registered account's settings.
+    FancyAccountSettings(mumble_tcp::FancyAccountSettings),
+    /// Fancy: user submits a self-service account operation.
+    FancyAccountSettingsUpdate(mumble_tcp::FancyAccountSettingsUpdate),
+    /// Fancy: server status reply for an account operation.
+    FancyAccountAck(mumble_tcp::FancyAccountAck),
+    /// Fancy: create/edit or broadcast of a forum post.
+    FancyForumPost(mumble_tcp::FancyForumPost),
+    /// Fancy: fetch forum threads or a thread's posts.
+    FancyForumFetch(mumble_tcp::FancyForumFetch),
+    /// Fancy: response to a forum fetch.
+    FancyForumFetchResponse(mumble_tcp::FancyForumFetchResponse),
+    /// Fancy: delete a forum post (or thread).
+    FancyForumDelete(mumble_tcp::FancyForumDelete),
+    /// Fancy: schedule a message for future delivery.
+    FancyScheduledMessage(mumble_tcp::FancyScheduledMessage),
+    /// Fancy: request the caller's pending scheduled messages.
+    FancyScheduledMessageList(mumble_tcp::FancyScheduledMessageList),
+    /// Fancy: the caller's scheduled messages.
+    FancyScheduledMessageListResponse(mumble_tcp::FancyScheduledMessageListResponse),
+    /// Fancy: cancel a pending scheduled message.
+    FancyScheduledMessageCancel(mumble_tcp::FancyScheduledMessageCancel),
+    /// Fancy: acknowledge a schedule/cancel/delivery outcome.
+    FancyScheduledMessageAck(mumble_tcp::FancyScheduledMessageAck),
+    /// Fancy: auditor searches the audit log / subscribes to a live tail.
+    FancyAuditQuery(mumble_tcp::FancyAuditQuery),
+    /// Fancy: server replies with a page of audit entries.
+    FancyAuditResponse(mumble_tcp::FancyAuditResponse),
+    /// Fancy: server pushes a live-tail audit entry to a subscriber.
+    FancyAuditEvent(mumble_tcp::FancyAuditEvent),
+    /// Fancy: server advertises the audit configuration schema.
+    FancyAuditConfig(mumble_tcp::FancyAuditConfig),
+    /// Fancy: admin submits changed audit configuration.
+    FancyAuditConfigUpdate(mumble_tcp::FancyAuditConfigUpdate),
+    /// Fancy: ask for the avatar or comment an `audit.profile` entry kept.
+    FancyAuditSnapshotQuery(fancy::feature::SnapshotQuery),
+    /// Fancy: the kept copy, or `found = false` once it was pruned.
+    FancyAuditSnapshot(fancy::feature::ProfileSnapshot),
+    /// Fancy: client asks for the server's livery, naming the artwork it holds.
+    ///
+    /// Carries the canon type rather than a hand-written twin. Every other
+    /// variant here wraps an epoch-0 message because one exists; livery has no
+    /// epoch-0 form at all, so a second identical struct would be translation
+    /// between a shape and itself.
+    FancyLiveryQuery(fancy::domain::LiveryQuery),
+    /// Fancy: server sends what it looks like - banner, mark, motto, palette.
+    FancyServerLivery(fancy::domain::LiveryDoc),
+    /// Fancy: an admin changes the livery from a connected client.
+    ///
+    /// Authorised server-side by `Write` on the root channel, against the
+    /// session this frame arrives on. Artwork is not carried here: a banner is
+    /// half a megabyte and the control channel is the wrong pipe for it.
+    FancyLiveryUpdate(fancy::domain::LiveryUpdate),
+    /// Fancy: a connected session asks for a short-lived operator credential,
+    /// naming the scopes it wants - a livery image upload, today, and meant
+    /// to widen to whatever else this replaces from Ice's admin console.
+    FancyOperatorTicketRequest(fancy::domain::OperatorTicketRequest),
+    /// Fancy: the server's answer to a ticket request. `granted_scopes` may
+    /// be a subset of what was asked for, or empty; see `denied_reason` when
+    /// it is.
+    FancyOperatorTicketReply(fancy::domain::OperatorTicketReply),
+    /// Fancy: client asks to share a file.
+    ///
+    /// Carries the canon type for the same reason livery does: files have no
+    /// epoch-0 form, so a hand-written twin would be translation between a
+    /// shape and itself. The bytes never travel here - this asks for a URL,
+    /// and [`Self::FancyFileGrant`] answers with one.
+    FancyFileUpload(fancy::files::UploadRequest),
+    /// Fancy: client asks for a URL to read an object.
+    FancyFileDownload(fancy::files::DownloadRequest),
+    /// Fancy: client asks what has been shared in a channel.
+    FancyFileList(fancy::files::ListRequest),
+    /// Fancy: a short-lived signed URL, correlated by `request_id`.
+    FancyFileGrant(fancy::files::Grant),
+    /// Fancy: a file has been shared with the channel.
+    ///
+    /// Sent to everyone in it including the uploader, which is how the
+    /// uploader learns the final key and the size that actually arrived.
+    FancyFileShare(fancy::files::Share),
+    /// Fancy: the files shared in a channel.
+    FancyFileListing(fancy::files::Listing),
+    /// Fancy: ask for the caller's own uploads, or for every one of them.
+    FancyFileManage(fancy::files::ManageRequest),
+    /// Fancy: the answer to that, with the disk stats for an operator.
+    FancyFileManaged(fancy::files::ManageListing),
+    /// Fancy: ask for one stored file to be removed.
+    FancyFileForget(fancy::files::ForgetRequest),
+    /// Fancy: ask for one of the caller's own stored records.
+    ///
+    /// The account's private key/value store, which is where a document
+    /// library, a citation list and a calendar live. Carries the canon type
+    /// for the same reason files do: there is no epoch-0 form to translate to.
+    ///
+    /// **Nothing here names an account.** The server answers about whoever
+    /// sent it, so this cannot be pointed at somebody else's records.
+    FancyAccountRecordGet(fancy::domain::RecordGet),
+    /// Fancy: store or remove one of the caller's own records.
+    FancyAccountRecordPut(fancy::domain::RecordPut),
+    /// Fancy: ask which of the caller's records start with a prefix.
+    FancyAccountRecordList(fancy::domain::RecordList),
+    /// Fancy: add or replace a server emote.
+    ///
+    /// The image does not travel here: this asks for a URL to `PUT` it to,
+    /// answered with a [`Self::FancyFileGrant`] like any other upload. The
+    /// shortcode becomes the name the stored object is reached by, so
+    /// replacing an emote keeps the shortcode and swaps the picture.
+    FancyEmoteUpload(fancy::files::EmoteUpload),
+    /// Fancy: remove a server emote, image and all.
+    FancyEmoteForget(fancy::files::EmoteForget),
+    /// Fancy: ask for this server's emotes.
+    FancyEmoteQuery(fancy::files::EmoteQuery),
+    /// Fancy: the server's emotes.
+    ///
+    /// Sent in answer to a query and again to everyone whenever the set
+    /// changes, so a client that never asked still stops showing one somebody
+    /// deleted.
+    FancyEmotes(fancy::files::Emotes),
+    /// Fancy: one stored record, correlated by `request_id`.
+    ///
+    /// `found` false with no `refused` is an absent record, which is the
+    /// ordinary first-run answer; `refused` set is the server declining, and a
+    /// guest asking at all gets `PERMISSION` rather than silence.
+    FancyAccountRecord(fancy::domain::Record),
+    /// Fancy: the keys under a prefix.
+    FancyAccountRecordKeys(fancy::domain::RecordKeys),
+    /// Fancy: the server declined a file request, carrying a reason.
+    FancyFileRefused(fancy::files::Refused),
+    /// Fancy: ask the server to search a GIF provider on the caller's behalf.
+    ///
+    /// Carries the canon type for the same reason files do: there is no
+    /// epoch-0 twin to translate to, because in epoch 0 this did not go over
+    /// the wire at all - the client held a provider key and called the API
+    /// directly. An empty `query` means trending.
+    FancyGifQuery(fancy::media::GifQuery),
+    /// Fancy: one page of results, correlated by `request_id`.
+    FancyGifPage(fancy::media::GifPage),
+    /// Fancy: the server declined a search.
+    ///
+    /// `kind` is the field that matters: `UNAVAILABLE` means this server does
+    /// not do GIFs, and is the only one on which falling back to a key of the
+    /// user's own is right. Falling back on `THROTTLED` would route around the
+    /// server's rate limit using the user's own quota.
+    FancyGifRefused(fancy::media::GifRefused),
+    /// Fancy: ask what this server's GIF service can do, once per connection.
+    ///
+    /// A server that predates the question drops it without answering, so the
+    /// silence is the answer there; the caller times out rather than waits.
+    FancyGifSupportQuery(fancy::media::GifSupportQuery),
+    /// Fancy: whether searches would be served, and the prefix the server's
+    /// proxied media URLs start with (empty when the proxy is off).
+    FancyGifSupport(fancy::media::GifSupport),
+    /// Fancy: ask the invites service something - what it allows, to mint an
+    /// invite, to list or to revoke them.
+    ///
+    /// The whole envelope rather than one variant per arm: every arm is a
+    /// request/answer pair correlated by `request_id`, the Tauri layer hands
+    /// the answer to the UI unchanged, and there is no epoch-0 twin of any of
+    /// them to translate to.
+    FancyInvitesRequest(fancy::invites::InvitesEnvelope),
+    /// Fancy: the invites service's answer. A server that predates invites
+    /// never sends one, and its silence reads as "no invites here".
+    FancyInvites(fancy::invites::InvitesEnvelope),
+    /// Fancy: ask whether voice messages are on here, once per connection.
+    ///
+    /// A server that predates voice messages drops the question unanswered,
+    /// which is the same "no" as `available = false`.
+    FancyVoiceSupportQuery(fancy::files::VoiceSupportQuery),
+    /// Fancy: whether voice messages are on and their two ceilings. Arrives
+    /// with an empty `request_id` whenever the operator changes them.
+    FancyVoiceSupport(fancy::files::VoiceSupport),
     /// Fancy: generic plugin envelope (bidirectional).
     PluginMessage(mumble_tcp::PluginMessage),
     /// Fancy: server enumerates loaded plugins.
@@ -374,7 +682,22 @@ pub enum ControlMessage {
 
 /// First Fancy Mumble extension type ID. All IDs at or above this
 /// threshold are Fancy-specific and unknown to legacy Mumble servers.
+///
+/// On the epoch-1 wire these numbers are no longer outer types - every Fancy
+/// message is framed under its service instead (see [`fancy_services`]). They
+/// survive as the identity of a message inside a `PluginDataTransmission`
+/// relay, which is how a Fancy client keeps working against vanilla Mumble.
 pub const FANCY_EXTENSION_TYPE_THRESHOLD: u16 = TcpMessageType::PchatMessage as u16;
+
+/// First service outer type. Epoch 1 gives every Fancy service exactly one
+/// outer type from here up, and nests its messages in that service's envelope.
+///
+/// What travels under one is the proto3 canon, translated by [`crate::canon`].
+/// The proto2 envelopes that used to live in `Mumble.proto` are deleted (M3):
+/// they were a second, incompatible definition of these same outer types, and
+/// keeping them meant every frame had two possible readings - which is exactly
+/// how the two ends silently disagreed.
+pub const FANCY_SERVICE_TYPE_MIN: u16 = 1000;
 
 message_type_mapping! {
     Version, UdpTunnel, Authenticate, Ping, Reject, ServerSync,
@@ -388,6 +711,11 @@ message_type_mapping! {
     PchatEpochCountersig, PchatKeyHolderReport, PchatKeyHoldersQuery,
     PchatKeyHoldersList, PchatKeyChallenge, PchatKeyChallengeResponse,
     PchatKeyChallengeResult, PchatDeleteMessages, PchatOfflineQueueDrain,
+    FancyLiveryQuery, FancyServerLivery, FancyLiveryUpdate,
+    FancyFileUpload, FancyFileDownload, FancyFileList,
+    FancyFileGrant, FancyFileShare, FancyFileListing, FancyFileRefused,
+    FancyFileManage, FancyFileManaged, FancyFileForget,
+    FancyOperatorTicketRequest, FancyOperatorTicketReply,
     PchatReaction, PchatReactionDeliver, PchatReactionFetchResponse,
     WebRtcSignal, PchatSenderKeyDistribution,
     FancyPushRegister, FancyPushUpdate, FancyCustomReactionsConfig,
@@ -395,6 +723,13 @@ message_type_mapping! {
     PchatPin, PchatPinDeliver, PchatPinFetchResponse,
     FancyTypingIndicator,
     FancyLinkPreviewRequest, FancyLinkPreviewResponse,
+    FancyGifQuery, FancyGifPage, FancyGifRefused,
+    FancyGifSupportQuery, FancyGifSupport,
+    FancyInvitesRequest, FancyInvites,
+    FancyVoiceSupportQuery, FancyVoiceSupport,
+    FancyAccountRecordGet, FancyAccountRecordPut, FancyAccountRecordList,
+    FancyAccountRecord, FancyAccountRecordKeys,
+    FancyEmoteUpload, FancyEmoteForget, FancyEmoteQuery, FancyEmotes,
     FancyWatchSync, FancyDrawStroke,
     FancyOnboardingConfig, FancyOnboardingConfigUpdate,
     FancyOnboardingResponse, FancyOnboardingResponseQuery,
@@ -403,7 +738,15 @@ message_type_mapping! {
     FancyPluginAdminListRequest, FancyPluginAdminList,
     FancyPluginAdminSetEnabled, FancyPluginAdminInstall,
     FancyPluginAdminUninstall, FancyPluginAdminAck,
-    FancyServerSettings, FancyServerSettingsUpdate,
+    FancyServerSettings, FancyServerSettingsUpdate, FancyServerSettingsQuery,
+    FancyAccountSettings, FancyAccountSettingsUpdate, FancyAccountAck,
+    FancyForumPost, FancyForumFetch, FancyForumFetchResponse, FancyForumDelete,
+    FancyScheduledMessage, FancyScheduledMessageList,
+    FancyScheduledMessageListResponse, FancyScheduledMessageCancel,
+    FancyScheduledMessageAck,
+    FancyAuditQuery, FancyAuditResponse, FancyAuditEvent,
+    FancyAuditConfig, FancyAuditConfigUpdate,
+    FancyAuditSnapshotQuery, FancyAuditSnapshot,
     PluginMessage, PluginRegistry,
 }
 
@@ -418,7 +761,10 @@ pub enum UdpMessage {
 
 /// Unified inbound message from either transport.
 #[derive(Debug, Clone)]
-#[allow(clippy::large_enum_variant, reason = "Control variant must hold a full ControlMessage; boxing would add heap allocation on the hot audio path")]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "Control variant must hold a full ControlMessage; boxing would add heap allocation on the hot audio path"
+)]
 pub enum ServerMessage {
     /// Control-plane message received over TCP.
     Control(ControlMessage),
@@ -486,6 +832,9 @@ mod tests {
             (128, TcpMessageType::PchatPin),
             (129, TcpMessageType::PchatPinDeliver),
             (130, TcpMessageType::PchatPinFetchResponse),
+            (154, TcpMessageType::FancyAccountSettings),
+            (155, TcpMessageType::FancyAccountSettingsUpdate),
+            (156, TcpMessageType::FancyAccountAck),
         ];
 
         for (id, expected_type) in &expected {
@@ -562,12 +911,15 @@ mod tests {
     fn tcp_message_type_invalid_returns_error() {
         assert!(TcpMessageType::try_from(27u16).is_err());
         assert!(TcpMessageType::try_from(99u16).is_err());
-        assert!(TcpMessageType::try_from(141u16).is_err());
-        assert!(TcpMessageType::try_from(142u16).is_err());
+        // 141-142 are the invite pair.
         assert!(TcpMessageType::try_from(143u16).is_err());
-        assert!(TcpMessageType::try_from(154u16).is_err());
-        assert!(TcpMessageType::try_from(199u16).is_err());
-        assert!(TcpMessageType::try_from(202u16).is_err());
+        assert!(TcpMessageType::try_from(169u16).is_err());
+        // 191-199 were free and are now the record and emote types, 204-205
+        // the GIF support pair and 206-207 the voice one, so the sentinel moved
+        // rather than the types: a gap this test names has to be a gap the enum
+        // actually has.
+        assert!(TcpMessageType::try_from(250u16).is_err());
+        assert!(TcpMessageType::try_from(208u16).is_err());
         assert!(TcpMessageType::try_from(u16::MAX).is_err());
     }
 
@@ -635,5 +987,48 @@ mod tests {
             ServerMessage::Udp(UdpMessage::Ping(_)) => {}
             _ => panic!("expected Udp(Ping)"),
         }
+    }
+
+    #[test]
+    fn a_service_outer_type_only_ever_carries_the_canon() {
+        // What replaced `every_fancy_message_has_a_service_home`, which asserted
+        // totality over the proto2 service mapping that M3 deleted.
+        //
+        // The surviving property is the one that matters, and it is the D1
+        // invariant stated as code: a frame goes out under a service outer type
+        // **only** when `canon` produced it. Anything else with a service type
+        // would be a shape no epoch-1 peer can read - which is what the proto2
+        // envelopes were, framed under exactly these numbers.
+        use crate::transport::codec::encode;
+
+        // Carried by the canon: a service type, and the payload is canon.
+        let carried = ControlMessage::FancyTypingIndicator(mumble_tcp::FancyTypingIndicator {
+            channel_id: Some(4),
+            actor: None,
+        });
+        let framed = encode(&carried).expect("encodes");
+        let outer = u16::from_be_bytes([framed[0], framed[1]]);
+        assert!(outer >= FANCY_SERVICE_TYPE_MIN, "expected a service type");
+        assert!(
+            crate::canon::from_canon(outer, &framed[6..])
+                .expect("canon payload")
+                .is_some(),
+            "a service-typed frame must be readable as the canon"
+        );
+
+        // Not carried: it must not acquire a service type on the way out. The
+        // codec above turns these into a relay before they reach `encode`; what
+        // is asserted here is that `encode` itself invents no framing for one.
+        // Untranslated today; the sample is here for that property alone.
+        // `WebRtcSignal` stood here until the canon grew a home for it.
+        let uncarried = ControlMessage::FancyWatchSync(mumble_tcp::FancyWatchSync {
+            session_id: Some("sess-4".into()),
+            ..Default::default()
+        });
+        assert!(crate::canon::to_canon(&uncarried).is_none(), "premise");
+        assert!(
+            encode(&uncarried).is_err(),
+            "an untranslated Fancy message must be refused, not given a framing              that no peer reads"
+        );
     }
 }

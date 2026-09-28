@@ -9,8 +9,8 @@ use tracing::{debug, warn};
 use fancy_utils::hex::{bytes_to_hex, hex_decode};
 use mumble_protocol::persistent::protocol::signal_v1::SignalBridge;
 
-use super::settings::*;
 use super::PchatState;
+use super::settings::*;
 
 // -- Archive key persistence ------------------------------------------
 
@@ -148,6 +148,37 @@ impl PchatState {
             }
             if let Err(e) = cache.save_reactions() {
                 warn!("failed to save local reaction cache: {e}");
+            }
+        }
+    }
+}
+
+impl crate::state::AppState {
+    /// Write every session's pchat state to disk.
+    ///
+    /// Called from the exit handler.  Until it was, the only writers were
+    /// the three disconnect paths, so closing the window - the ordinary way
+    /// to quit - dropped the process with the session's messages still only
+    /// in memory.  A `SignalV1` channel keeps no server-side history by
+    /// design, which made the local cache the sole copy and the loss
+    /// permanent.
+    ///
+    /// Runs on the main thread during `RunEvent::Exit`, so it stays
+    /// synchronous: a lock and a file write per session, nothing awaited.
+    pub fn flush_pchat_state(&self) {
+        for shared in self.registry.all_sessions() {
+            let Ok(state) = shared.lock() else {
+                continue;
+            };
+            if let Some(ref pchat) = state.pchat_ctx.pchat {
+                pchat.save_signal_state();
+                pchat.save_local_cache();
+            }
+            // Not inside the `pchat` check: the link cards are collected by any
+            // client, identity or no identity, and closing the window is the
+            // ordinary way to quit.
+            if let Err(e) = state.previews.cache.save() {
+                warn!("failed to save the local preview cache: {e}");
             }
         }
     }

@@ -1,14 +1,12 @@
 //! Onboarding-workflow Tauri commands.
 
-use crate::state::types::{OnboardingConfig, OnboardingResponse};
 use crate::state::AppState;
+use crate::state::types::{OnboardingConfig, OnboardingResponse};
 
 /// Read the cached onboarding config (or `None` if the server has not
 /// announced one yet).
 #[tauri::command]
-pub(crate) fn get_onboarding_config(
-    state: tauri::State<'_, AppState>,
-) -> Option<OnboardingConfig> {
+pub(crate) fn get_onboarding_config(state: tauri::State<'_, AppState>) -> Option<OnboardingConfig> {
     state.get_onboarding_config()
 }
 

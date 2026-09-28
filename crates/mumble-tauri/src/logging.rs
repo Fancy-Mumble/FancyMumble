@@ -19,6 +19,10 @@
 //! `.log.zst` stream concatenating every log (decompressing archived
 //! ones first) so a developer receives the full history in one file.
 //!
+//! Whatever level is asked for, a handful of third-party crates are
+//! capped at `warn` unless the caller names them explicitly - see
+//! [`NOISY_TARGETS`].
+//!
 //! Both sinks share the same level filter, so the existing "Log Level"
 //! control governs what is captured in either place.  Each sink is
 //! gated by its own cheap switch (an atomic flag for stdout, an
@@ -35,7 +39,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::{reload, EnvFilter, Registry};
+use tracing_subscriber::{EnvFilter, Registry, reload};
 
 /// Reload handle for the global level filter (shared by both sinks).
 static LEVEL_RELOAD: OnceLock<reload::Handle<EnvFilter, Registry>> = OnceLock::new();
@@ -113,18 +117,18 @@ struct FileSink {
 
 impl Write for FileSink {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if let Ok(mut guard) = self.file.lock() {
-            if let Some(file) = guard.as_mut() {
-                return file.write(buf);
-            }
+        if let Ok(mut guard) = self.file.lock()
+            && let Some(file) = guard.as_mut()
+        {
+            return file.write(buf);
         }
         Ok(buf.len())
     }
     fn flush(&mut self) -> io::Result<()> {
-        if let Ok(mut guard) = self.file.lock() {
-            if let Some(file) = guard.as_mut() {
-                return file.flush();
-            }
+        if let Ok(mut guard) = self.file.lock()
+            && let Some(file) = guard.as_mut()
+        {
+            return file.flush();
         }
         Ok(())
     }
@@ -137,6 +141,43 @@ impl<'a> MakeWriter<'a> for FileWriter {
             file: self.file.clone(),
         }
     }
+}
+
+// -- Noise suppression ----------------------------------------------
+
+/// Third-party crates whose `debug`/`trace` output drowns out our own.
+/// Building the `DeepFilterNet` model runs the `tract` optimiser, which
+/// logs a line per axis change it considers - thousands of them per
+/// model load - so a user who turns on debug logging sees nothing else.
+const NOISY_TARGETS: &[&str] = &[
+    "tract_core",
+    "tract_data",
+    "tract_hir",
+    "tract_linalg",
+    "tract_nnef",
+    "tract_onnx",
+    "tract_pulse",
+];
+
+/// Level the noisy targets are capped at.
+const NOISE_CAP: &str = "warn";
+
+/// Cap [`NOISY_TARGETS`] at [`NOISE_CAP`] in `filter`, leaving alone any
+/// target the caller named themselves - so `RUST_LOG=tract_core=debug`
+/// still gets the optimiser trace when that is what is being debugged.
+fn with_noise_caps(filter: &str) -> String {
+    let mut directives: Vec<String> = filter
+        .split(',')
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+        .map(str::to_owned)
+        .collect();
+    for target in NOISY_TARGETS {
+        if !directives.iter().any(|d| d.starts_with(target)) {
+            directives.push(format!("{target}={NOISE_CAP}"));
+        }
+    }
+    directives.join(",")
 }
 
 // -- Init -----------------------------------------------------------
@@ -153,8 +194,10 @@ fn terminal_enabled() -> bool {
 /// back to `info`); file logging starts disabled until
 /// [`set_file_logging`] is called.
 pub(crate) fn init() {
-    let default_filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into());
-    let filter = EnvFilter::try_new(&default_filter).unwrap_or_else(|_| EnvFilter::new("info"));
+    let default_filter =
+        with_noise_caps(&std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()));
+    let filter = EnvFilter::try_new(&default_filter)
+        .unwrap_or_else(|_| EnvFilter::new(with_noise_caps("info")));
     let (filter_layer, reload_handle) = reload::Layer::new(filter);
 
     let file_handle: Arc<Mutex<Option<File>>> = Arc::new(Mutex::new(None));
@@ -205,8 +248,8 @@ pub(crate) fn set_log_level(filter: &str) -> Result<String, String> {
     let handle = LEVEL_RELOAD
         .get()
         .ok_or_else(|| "logging not initialised".to_string())?;
-    let new_filter =
-        EnvFilter::try_new(filter).map_err(|e| format!("invalid filter '{filter}': {e}"))?;
+    let new_filter = EnvFilter::try_new(with_noise_caps(filter))
+        .map_err(|e| format!("invalid filter '{filter}': {e}"))?;
     let applied = format!("{new_filter}");
     handle
         .reload(new_filter)
@@ -249,10 +292,10 @@ pub(crate) fn set_file_logging(enabled: bool) -> Result<(), String> {
         .ok_or_else(|| "log directory not configured yet".to_string())?;
     std::fs::create_dir_all(dir).map_err(|e| format!("create log dir: {e}"))?;
 
-    if AUTO_ZIP.load(Ordering::Relaxed) {
-        if let Err(e) = compress_old_logs(dir) {
-            tracing::warn!("auto-compression of old logs failed: {e}");
-        }
+    if AUTO_ZIP.load(Ordering::Relaxed)
+        && let Err(e) = compress_old_logs(dir)
+    {
+        tracing::warn!("auto-compression of old logs failed: {e}");
     }
 
     let path = current_log_path(dir);
@@ -322,8 +365,7 @@ fn compress_file_zstd(path: &Path) -> Result<(), String> {
     let zst_path = path.with_extension("log.zst");
     let source = File::open(path).map_err(|e| format!("open log: {e}"))?;
     let dest = File::create(&zst_path).map_err(|e| format!("create zst: {e}"))?;
-    zstd::stream::copy_encode(source, dest, ZSTD_LEVEL)
-        .map_err(|e| format!("zstd encode: {e}"))?;
+    zstd::stream::copy_encode(source, dest, ZSTD_LEVEL).map_err(|e| format!("zstd encode: {e}"))?;
     Ok(())
 }
 
@@ -337,12 +379,11 @@ pub(crate) fn export_logs(dest: &Path) -> Result<(), String> {
     let dir = dir.as_path();
 
     // Flush the live file so in-progress lines make it into the export.
-    if let Some(handle) = FILE_HANDLE.get() {
-        if let Ok(mut guard) = handle.lock() {
-            if let Some(file) = guard.as_mut() {
-                let _ = file.flush();
-            }
-        }
+    if let Some(handle) = FILE_HANDLE.get()
+        && let Ok(mut guard) = handle.lock()
+        && let Some(file) = guard.as_mut()
+    {
+        let _ = file.flush();
     }
 
     // Collect sources sorted by name so days come out in order.
@@ -394,4 +435,71 @@ pub(crate) fn export_logs(dest: &Path) -> Result<(), String> {
     // `finish` returns the inner file handle, which we don't need.
     let _ = encoder.finish().map_err(|e| format!("zstd finish: {e}"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn noise_caps_are_appended_to_a_bare_level() {
+        let filter = with_noise_caps("debug");
+        assert!(filter.starts_with("debug,"));
+        assert!(filter.contains("tract_core=warn"));
+        assert!(EnvFilter::try_new(&filter).is_ok());
+    }
+
+    #[test]
+    fn an_explicit_target_is_left_alone() {
+        let filter = with_noise_caps("info,tract_core::optim=trace");
+        assert!(filter.contains("tract_core::optim=trace"));
+        assert!(!filter.contains("tract_core=warn"));
+    }
+
+    /// The cap has to swallow `tract`'s submodule targets, not just the
+    /// crate root: every spammed line comes from `tract_core::optim::*`.
+    #[test]
+    fn a_capped_target_is_filtered_out_by_module_path() {
+        #[derive(Clone, Default)]
+        struct Buf(Arc<Mutex<Vec<u8>>>);
+        impl Write for Buf {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(buf);
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        impl<'a> MakeWriter<'a> for Buf {
+            type Writer = Self;
+            fn make_writer(&'a self) -> Self::Writer {
+                self.clone()
+            }
+        }
+
+        let buf = Buf::default();
+        let subscriber = tracing_subscriber::registry()
+            .with(EnvFilter::try_new(with_noise_caps("debug")).unwrap())
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_ansi(false)
+                    .with_writer(buf.clone()),
+            );
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::debug!(target: "tract_core::optim::change_axes", "considering change");
+            tracing::debug!(target: "mumble_tauri::audio", "denoiser ready");
+        });
+
+        let out = String::from_utf8(buf.0.lock().unwrap().clone()).unwrap();
+        assert!(!out.contains("considering change"), "{out}");
+        assert!(out.contains("denoiser ready"), "{out}");
+    }
+
+    #[test]
+    fn an_empty_filter_yields_only_caps() {
+        let filter = with_noise_caps("");
+        assert!(!filter.starts_with(','));
+        assert!(EnvFilter::try_new(&filter).is_ok());
+    }
 }

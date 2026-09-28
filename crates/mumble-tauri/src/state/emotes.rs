@@ -78,10 +78,7 @@ fn endpoint(base_url: &str, suffix: &str) -> String {
 
 impl AppState {
     /// Upload a new custom emote to the server.
-    pub async fn add_custom_emote(
-        &self,
-        req: AddEmoteRequest,
-    ) -> Result<AddEmoteResponse, String> {
+    pub async fn add_custom_emote(&self, req: AddEmoteRequest) -> Result<AddEmoteResponse, String> {
         let bytes = tokio::fs::read(&req.file_path)
             .await
             .map_err(|e| format!("read emote file: {e}"))?;
@@ -121,14 +118,13 @@ impl AppState {
             .json()
             .await
             .map_err(|e| format!("emote response parse: {e}"))?;
-        Ok(AddEmoteResponse { shortcode: parsed.shortcode })
+        Ok(AddEmoteResponse {
+            shortcode: parsed.shortcode,
+        })
     }
 
     /// Delete a custom emote from the server by shortcode.
-    pub async fn remove_custom_emote(
-        &self,
-        req: RemoveEmoteRequest,
-    ) -> Result<(), String> {
+    pub async fn remove_custom_emote(&self, req: RemoveEmoteRequest) -> Result<(), String> {
         // Shortcodes are restricted server-side to `[A-Za-z0-9_-]{1,64}` so
         // they need no URL encoding.
         let suffix = format!("/{}", req.shortcode);

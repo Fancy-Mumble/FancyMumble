@@ -1,7 +1,10 @@
 [package]
 name = "mumble-tauri"
-version = "0.3.0"
-edition = "2021"
+version = "0.4.0"
+edition = "2024"
+# Internal workspace crate - never published to crates.io (this also lets
+# cargo-deny's wildcard gate exempt the path dependencies).
+publish = false
 description = "Tauri desktop & mobile GUI for mumble-protocol"
 license = "MIT"
 
@@ -14,7 +17,25 @@ name = "mumble-tauri"
 path = "src/main.rs"
 
 [features]
-default = []
+default = ["self-updater"]
+# The bundled auto-updater: checks GitHub releases on launch, and can download
+# and swap the binary in place. On by default, because that is how the .deb,
+# the AppImage and the Windows installer are expected to behave.
+#
+# Turn it OFF for any build whose updates are somebody else's job - Flathub
+# above all, where a self-updating app is both against the submission rules and
+# impossible against a read-only /app. Distro packages (AUR, deb repos) want it
+# off for the same reason.
+#
+#   cargo build --release --no-default-features --features custom-protocol
+#
+# Dropping it takes `updater/{commands,manager}.rs`, the six `updater_*`
+# commands and both plugins out of the binary, and build.rs stops feeding
+# `capabilities/self-updater/` to the ACL so the now-absent `updater:` and
+# `process:` permissions are not referenced. What stays is the window plumbing
+# in `updater/window.rs` (`MAIN_WINDOW_LABEL`, `show_main_window`), which the
+# rest of the app uses to reveal the main window on launch.
+self-updater = ["dep:tauri-plugin-updater", "dep:tauri-plugin-process", "dep:semver"]
 deepfilternet-denoiser = ["mumble-protocol/deepfilternet-denoiser"]
 # Production asset mode: serve the embedded `ui/dist` via the custom Tauri
 # protocol instead of loading `devUrl` (localhost:1420). The Tauri CLI enables
@@ -34,14 +55,36 @@ dhat-heap = ["dep:dhat"]
 
 [dependencies]
 fancy-utils = { path = "../fancy-utils" }
-tauri = { version = "2.10.1", features = ["protocol-asset", "tray-icon", "image-png"] }
+tauri = { version = "2.10.1", features = [
+    "protocol-asset",
+    "tray-icon",
+    "image-png",
+] }
 tauri-plugin-store = "2"
 tauri-plugin-opener = "2"
+# The loopback origin shared media is played from: a small HTTP server of our
+# own, and the percent-decoding of a key out of a request path. A media element
+# will not load a custom scheme, so it has to be real HTTP - see
+# `state::media_server`.
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+percent-encoding = "2"
+# Parsing a link before it is handed to a browser as a process argument. What
+# comes back out of the parser is what gets spawned, which is what keeps a
+# message body from becoming a browser switch - see `commands::browser`.
+url = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time"] }
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "sync",
+    "macros",
+    "time",
+] }
 futures-util = { version = "0.3", default-features = false }
 tokio-util = { version = "0.7", features = ["io"] }
+dns-lookup = "2"
 rustls = { version = "0.23", features = ["ring"] }
 rcgen = "0.14.7"
 tracing = "0.1"
@@ -54,13 +97,33 @@ base64 = "0.22"
 prost = "0.14"
 zstd = "0.13"
 sha2 = "0.10"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "gzip", "brotli", "deflate", "multipart", "stream", "json"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "gzip",
+    "brotli",
+    "deflate",
+    "multipart",
+    "stream",
+    "json",
+] }
 quick-xml = { version = "0.39.2", features = ["serialize"] }
 tauri-plugin-notification = "2.3.3"
 tauri-plugin-dialog = "2"
 tauri-plugin-deep-link = "2"
 hound = "3.5"
 chrono = "0.4"
+mp4 = "0.14"
+openh264 = "0.8"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+# Decides whether the foreground window is a game worth overlaying. Not in the
+# desktop-only block below, even though only a desktop can *have* a foreground
+# window: `commands/game_overlay` gates the watcher and the overlay window
+# itself on non-Android and keeps its configuration types either way, so the
+# module needs this crate's types to compile everywhere. It builds anywhere -
+# the probe has a stub for the platforms with no window manager to ask
+# (`probe/stub.rs`), which is what macOS already uses.
+fancy-gamedetect = { path = "../fancy-gamedetect" }
+bip39 = { version = "3", default-features = false, features = ["std"] }
 
 # Desktop-only dependencies (cpal, global shortcuts, and Opus are not available on Android).
 [target.'cfg(not(target_os = "android"))'.dependencies]
@@ -71,34 +134,80 @@ mimalloc = { version = "0.1", default-features = false }
 # Optional heap profiler, enabled only via the `dhat-heap` feature.
 dhat = { version = "0.3", optional = true }
 png = "0.18"
-mumble-protocol = { path = "../mumble-protocol", features = ["opus-codec", "persistent-chat", "rnnoise-denoiser"] }
+mumble-protocol = { path = "../mumble-protocol", features = [
+    "opus-codec",
+    "persistent-chat",
+    "rnnoise-denoiser",
+] }
 cpal = "0.17.3"
+# Screen sharing core (source enumeration, capture, encode, WebRTC broadcast).
+fancy-screenshare = { path = "../fancy-screenshare" }
+# Discord Rich Presence listener. Desktop only: it hosts the Discord IPC
+# endpoint (Unix socket / named pipe), which has no Android equivalent.
+fancy-presence = { path = "../fancy-presence" }
 rodio = { version = "0.22", features = ["recording"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-window-state = "2"
 # Auto-updater (desktop only). All updater logic lives in `src/updater/`.
-tauri-plugin-updater = "2"
-tauri-plugin-process = "2"
+# Optional so a distro/Flathub build can drop it - see the `self-updater`
+# feature above. `process` is only here for the bootstrapper's relaunch, so it
+# is gated by the same feature.
+tauri-plugin-updater = { version = "2", optional = true }
+tauri-plugin-process = { version = "2", optional = true }
+# Version ordering for the release channels: the updater compares a stable and
+# a beta manifest itself (see `updater/channel.rs`), so it needs the same
+# semver semantics the plugin uses internally. Optional for the same reason the
+# plugins are - a build without `self-updater` never compares anything.
+semver = { version = "1", optional = true }
 # Android: mumble-protocol with Opus codec + oboe for native audio I/O.
 [target.'cfg(target_os = "android")'.dependencies]
-mumble-protocol = { path = "../mumble-protocol", features = ["opus-codec", "persistent-chat", "rnnoise-denoiser"] }
+mumble-protocol = { path = "../mumble-protocol", features = [
+    "opus-codec",
+    "persistent-chat",
+    "rnnoise-denoiser",
+] }
 oboe = "0.6.1"
 
 # Windows-only: native window subclassing for aspect-ratio constraints
 # (see crates/mumble-tauri/src/platform/window/windows.rs).
 [target.'cfg(target_os = "windows")'.dependencies]
+# Native WASAPI capture with exclusive-mode support (the "take the device"
+# path used by the exclusive-input setting), shared with the Qt client.
+fancy-audio-device = { path = "../fancy-audio-device" }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
+    "Win32_Globalization",
+    "Win32_Graphics_Dwm",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Shell",
     "Win32_Graphics_Gdi",
     "Win32_System_Threading",
+    "Win32_System_SystemInformation",
 ] }
 # WebView2 COM bindings for ICoreWebView2_19::SetMemoryUsageTargetLevel
 # (trim browser memory while minimized).  Versions must match the ones
 # tauri/wry pull in so the COM interface types are identical.
 webview2-com = "0.38"
 windows-core = "0.61"
+# Reading which browser owns `https`, for "open in a private window". A safe
+# wrapper rather than the raw Win32 calls: `unsafe_code` is denied here.
+windows-registry = "0.5"
+
+# DeepFilterNet3, on top of the features the desktop block above already asks
+# for - cargo unions the matching target tables, so this adds the backend
+# rather than replacing the set.
+#
+# The desktops only, and deliberately: it costs ~5 MiB of embedded ONNX model
+# plus the `tract` runtime in the binary, which Android has no headroom for.
+# `NoiseSuppressionAlgorithm::is_available` reports per-build availability and
+# the UI dropdown is populated from it, so a build without the feature offers
+# RNNoise and never shows a choice it cannot honour - which is exactly what a
+# Linux build did until now, and what `denoiser-deepfilternet.multiclient` in
+# the e2e suite was failing on.
+[target.'cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))'.dependencies]
+mumble-protocol = { path = "../mumble-protocol", features = [
+    "deepfilternet-denoiser",
+] }
 
 # macOS-only: NSWindow.setContentAspectRatio: for native aspect-ratio
 # constraints (see crates/mumble-tauri/src/platform/window/macos.rs).
@@ -114,6 +223,26 @@ objc2-foundation = { version = "0.2", features = ["NSGeometry"] }
 [target.'cfg(all(unix, not(any(target_os = "android", target_os = "macos", target_os = "ios"))))'.dependencies]
 gtk = { version = "0.18", default-features = false }
 
+# Linux-only: flip WebKitGTK's enable-webrtc / enable-media-stream settings on
+# (they default to OFF and wry never sets them - without this the webview has
+# no RTCPeerConnection and stream viewing cannot work; see app/webview_linux.rs).
+# Same crate/version line wry uses; v2_38 gates the set_enable_webrtc binding.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = { version = "2.0.1", features = ["v2_38"] }
+# dlopen for libgtk-layer-shell (see platform/linux/layer_shell.rs). Loaded at
+# runtime, never linked: the library is an optional distro package, and its
+# absence has to degrade to "unsupported", not to a binary that will not start.
+libloading = "0.8"
+# Same version the notification plugin uses; see event_handler.rs for why
+# Linux notifications bypass the plugin.
+notify-rust = "4"
+# Direct ALSA access for the PipeWire device layer (`audio/pipewire.rs`).
+# cpal's ALSA host can only open the PCMs it finds in ALSA's hint list, and
+# the per-node PCM this needs - `pipewire:NODE=<name>` - is not one of them.
+# Already in the tree as a cpal dependency, so this adds no new system
+# requirement beyond the libasound headers cpal already needs.
+alsa = "0.11"
+
 [lints]
 workspace = true
 
@@ -123,3 +252,4 @@ tempfile = "3"
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 cc = "1"
+serde_json = "1"

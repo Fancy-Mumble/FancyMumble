@@ -13,15 +13,21 @@
 //! * **cpal** (legacy) - low-level callback-based API exposed as a
 //!   fallback via the advanced settings toggle.
 //!
+//! Linux takes a third path ahead of both when PipeWire is running: the
+//! device list comes from PipeWire's own registry and each node is opened
+//! directly, because neither backend above can name one. See
+//! [`pipewire`] for why that matters - through cpal's ALSA host a Linux
+//! user cannot choose a microphone at all.
+//!
 //! The [`AudioDeviceFactory`] trait abstracts over platform-specific
 //! device creation. [`PlatformAudioFactory`] dispatches to the
 //! currently-selected backend at runtime so callers never need `cfg`
 //! gates or backend checks.
 
+use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 #[cfg(not(target_os = "android"))]
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 use mumble_protocol::audio::capture::AudioCapture;
 use mumble_protocol::audio::mixer::{SpeakerBuffers, SpeakerVolumes};
@@ -31,7 +37,22 @@ use mumble_protocol::error::Result;
 mod desktop;
 
 #[cfg(not(target_os = "android"))]
+pub(crate) mod devices;
+
+#[cfg(target_os = "linux")]
+pub(crate) mod pipewire;
+
+#[cfg(not(target_os = "android"))]
 mod rodio_desktop;
+
+#[cfg(not(target_os = "android"))]
+pub(crate) mod stream_audio;
+
+#[cfg(not(target_os = "android"))]
+mod shared_capture;
+
+#[cfg(not(target_os = "android"))]
+mod virtual_mic;
 
 #[cfg(target_os = "android")]
 mod android;
@@ -59,6 +80,24 @@ pub fn set_use_rodio_backend(use_rodio: bool) {
 pub fn is_rodio_backend() -> bool {
     USE_RODIO_BACKEND.load(Ordering::Relaxed)
 }
+
+/// When `true` (Windows only), capture opens the microphone in WASAPI
+/// exclusive mode via the native backend. Off by default.
+#[cfg(not(target_os = "android"))]
+static EXCLUSIVE_INPUT: AtomicBool = AtomicBool::new(false);
+
+/// Enable/disable WASAPI exclusive-mode microphone capture (Windows).
+///
+/// Applied from `AudioSettings::exclusive_input`; takes effect on the next
+/// capture cold-start (connect / voice toggle / mic test).
+#[cfg(not(target_os = "android"))]
+pub fn set_exclusive_input(exclusive: bool) {
+    EXCLUSIVE_INPUT.store(exclusive, Ordering::Relaxed);
+}
+
+/// On Android there is only one capture path; exclusive mode is a no-op.
+#[cfg(target_os = "android")]
+pub fn set_exclusive_input(_exclusive: bool) {}
 
 /// On Android there is only one backend, so this is a no-op.
 #[cfg(target_os = "android")]
@@ -124,11 +163,68 @@ impl AudioDeviceFactory for PlatformAudioFactory {
         frame_size: usize,
         volume: Arc<AtomicU32>,
     ) -> std::result::Result<Box<dyn AudioCapture>, String> {
-        if USE_RODIO_BACKEND.load(Ordering::Relaxed) {
-            rodio_desktop::RodioAudioFactory::create_capture(device_name, frame_size, volume)
-        } else {
-            desktop::CpalAudioFactory::create_capture(device_name, frame_size, volume)
-        }
+        // All consumers (voice pipeline, mic test, voice replay) go
+        // through the shared-capture broker: ONE real device stream per
+        // device, fanned out per consumer. Some drivers only admit a
+        // single capture client (Komplete Audio 1 at non-48 kHz endpoint
+        // rates), so per-consumer opens would fail with "device in use".
+        //
+        // The factory below runs at each cold start (first active
+        // consumer) and picks the real backend then: the e2e virtual mic
+        // (wall-clock-paced synthetic device, arbitrary sample rate), the
+        // PipeWire node path on Linux, rodio (default) or legacy cpal. It
+        // always captures 10 ms
+        // frames at neutral volume - the broker handle applies each
+        // consumer's own volume and frame size.
+        let device = device_name.map(str::to_owned);
+        let factory: shared_capture::CaptureFactory = Box::new(move || {
+            const PUMP_FRAME: usize = 480;
+            let neutral = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
+            if let Ok(spec) = std::env::var(virtual_mic::ENV_VIRTUAL_MIC) {
+                return virtual_mic::VirtualCapture::from_spec(&spec, PUMP_FRAME, neutral)
+                    .map(|c| Box::new(c) as _)
+                    .map_err(|e| format!("virtual mic init: {e}"));
+            }
+            // Windows exclusive mode: the native WASAPI backend "takes" the
+            // device (exclusive open with shared fallback), the same way the
+            // official Mumble client does - the only reliable capture path on
+            // interfaces that admit a single client at non-48 kHz rates.
+            #[cfg(target_os = "windows")]
+            if EXCLUSIVE_INPUT.load(Ordering::Relaxed) {
+                return Ok(Box::new(fancy_audio_device::WasapiCapture::new(
+                    device.as_deref(),
+                    PUMP_FRAME,
+                    neutral,
+                    true,
+                )) as _);
+            }
+            // Linux: open the chosen PipeWire node directly. cpal's ALSA
+            // host cannot name one (see `pipewire.rs`), so this is the only
+            // path on which picking a microphone means anything.
+            #[cfg(target_os = "linux")]
+            if pipewire::available() {
+                return Ok(Box::new(pipewire::PwCapture::new(
+                    device.as_deref(),
+                    PUMP_FRAME,
+                    neutral,
+                )) as _);
+            }
+            if USE_RODIO_BACKEND.load(Ordering::Relaxed) {
+                rodio_desktop::RodioAudioFactory::create_capture(
+                    device.as_deref(),
+                    PUMP_FRAME,
+                    neutral,
+                )
+            } else {
+                desktop::CpalAudioFactory::create_capture(device.as_deref(), PUMP_FRAME, neutral)
+            }
+        });
+        Ok(shared_capture::acquire(
+            device_name,
+            frame_size,
+            volume,
+            factory,
+        ))
     }
 
     fn create_mixing_playback(
@@ -137,13 +233,28 @@ impl AudioDeviceFactory for PlatformAudioFactory {
         buffers: SpeakerBuffers,
         speaker_volumes: SpeakerVolumes,
     ) -> std::result::Result<Box<dyn MixingPlayback>, String> {
+        #[cfg(target_os = "linux")]
+        if pipewire::available() {
+            return Ok(Box::new(pipewire::PwMixingPlayback::new(
+                device_name,
+                volume,
+                buffers,
+                speaker_volumes,
+            )) as _);
+        }
         if USE_RODIO_BACKEND.load(Ordering::Relaxed) {
             rodio_desktop::RodioAudioFactory::create_mixing_playback(
-                device_name, volume, buffers, speaker_volumes,
+                device_name,
+                volume,
+                buffers,
+                speaker_volumes,
             )
         } else {
             desktop::CpalAudioFactory::create_mixing_playback(
-                device_name, volume, buffers, speaker_volumes,
+                device_name,
+                volume,
+                buffers,
+                speaker_volumes,
             )
         }
     }
@@ -177,6 +288,61 @@ mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
     use super::*;
 
+    /// Reproduces the client's exact runtime scenario against REAL
+    /// hardware: a "voice" capture and a "mic test" capture on the same
+    /// device, concurrently, both via `PlatformAudioFactory::create_capture`
+    /// (the brokered path). The second must NOT do a real device open -
+    /// on single-client devices (Komplete Audio 1 at non-48 kHz) that
+    /// would fail with 0x800700AA "resource in use".
+    ///
+    /// `cargo test -p mumble-tauri double_capture_hw -- --ignored --nocapture`
+    #[test]
+    #[ignore = "requires audio hardware; run with --ignored --nocapture"]
+    #[cfg(not(target_os = "android"))]
+    fn double_capture_hw_shares_one_device() {
+        use mumble_protocol::audio::capture::AudioCapture;
+        use std::sync::Arc;
+        use std::sync::atomic::AtomicU32;
+
+        let v1 = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
+        let v2 = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
+
+        // Consumer 1 = voice pipeline (960-sample frames).
+        let mut voice =
+            PlatformAudioFactory::create_capture(None, 960, v1).expect("create voice capture");
+        voice.start().expect("voice start");
+        println!("voice capture started");
+
+        // Consumer 2 = mic test, same device, WHILE voice is active.
+        let mut mic_test =
+            PlatformAudioFactory::create_capture(None, 960, v2).expect("create mic-test capture");
+        match mic_test.start() {
+            Ok(()) => println!("mic-test capture started (shared) - OK"),
+            Err(e) => panic!("mic-test start collided with voice: {e}"),
+        }
+
+        // Both must actually receive audio.
+        let pull = |c: &mut Box<dyn AudioCapture>, who: &str| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+            let mut n = 0;
+            while n < 10 && std::time::Instant::now() < deadline {
+                match c.read_frame() {
+                    Ok(_) => n += 1,
+                    Err(mumble_protocol::error::Error::NotEnoughSamples) => {
+                        std::thread::sleep(std::time::Duration::from_millis(5));
+                    }
+                    Err(e) => panic!("{who} read_frame: {e}"),
+                }
+            }
+            n
+        };
+        assert!(pull(&mut voice, "voice") >= 10, "voice starved");
+        assert!(pull(&mut mic_test, "mic_test") >= 10, "mic_test starved");
+        let _ = voice.stop();
+        let _ = mic_test.stop();
+        println!("both consumers shared one device and received audio - PASS");
+    }
+
     #[test]
     fn soft_clip_passes_through_below_knee() {
         for &v in &[0.0, 0.5, -0.5, 0.89, -0.89] {
@@ -207,7 +373,8 @@ mod tests {
             let neg = soft_clip(-v);
             assert!(
                 (pos + neg).abs() < 1e-6,
-                "asymmetric: soft_clip({v})={pos}, soft_clip({})={neg}", -v
+                "asymmetric: soft_clip({v})={pos}, soft_clip({})={neg}",
+                -v
             );
         }
     }

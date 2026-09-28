@@ -22,12 +22,7 @@ impl HandleMessage for mumble_tcp::Acl {
                 metadata: g
                     .metadata
                     .iter()
-                    .map(|kv| {
-                        (
-                            kv.key.clone(),
-                            kv.value.clone().unwrap_or_default(),
-                        )
-                    })
+                    .map(|kv| (kv.key.clone(), kv.value.clone().unwrap_or_default()))
                     .collect(),
             })
             .collect();

@@ -8,9 +8,10 @@
 
 use std::sync::{Arc, Mutex};
 
-use tauri::{AppHandle, Emitter};
 #[cfg(target_os = "windows")]
 use tauri::Manager;
+use tauri::{AppHandle, Emitter};
+#[cfg(not(target_os = "linux"))]
 use tauri_plugin_notification::NotificationExt;
 use tracing::{debug, info, warn};
 
@@ -18,9 +19,9 @@ use mumble_protocol::audio::encoder::EncodedPacket;
 use mumble_protocol::event::EventHandler;
 use mumble_protocol::message::{ControlMessage, UdpMessage};
 
+use super::SharedState;
 use super::handler::{self, EventEmitter, HandlerContext};
 use super::types::*;
-use super::SharedState;
 
 /// Tauri-backed event emitter forwarding to `AppHandle::emit`.
 ///
@@ -53,9 +54,7 @@ impl EventEmitter for TauriEmitter {
     fn request_user_attention(&self) {
         #[cfg(target_os = "windows")]
         if let Some(window) = self.app.get_webview_window("main") {
-            let _ = window.request_user_attention(Some(
-                tauri::UserAttentionType::Informational,
-            ));
+            let _ = window.request_user_attention(Some(tauri::UserAttentionType::Informational));
         }
     }
 
@@ -70,30 +69,64 @@ impl EventEmitter for TauriEmitter {
         icon: Option<&[u8]>,
         channel_id: Option<u32>,
     ) {
-        // On Android, route through our ConnectionServicePlugin so we can
-        // decode the sender avatar as a Bitmap for the notification large-icon.
-        #[cfg(target_os = "android")]
+        show_desktop_notification(&self.app, title, body, icon, channel_id);
+    }
+}
+
+/// Show a desktop notification through the platform-appropriate channel.
+///
+/// Shared by the protocol emitter above and the `show_desktop_notification`
+/// command (the webview's calendar reminders), so every caller gets the same
+/// platform routing - in particular the Linux branch, which nothing may
+/// bypass.
+pub(crate) fn show_desktop_notification(
+    app: &AppHandle,
+    title: &str,
+    body: &str,
+    icon: Option<&[u8]>,
+    channel_id: Option<u32>,
+) {
+    // On Android, route through our ConnectionServicePlugin so we can
+    // decode the sender avatar as a Bitmap for the notification large-icon.
+    #[cfg(target_os = "android")]
+    {
+        use tauri::Manager;
+        if let Some(cs_handle) =
+            app.try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>()
         {
-            use tauri::Manager;
-            if let Some(cs_handle) = self
-                .app
-                .try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>()
-            {
-                crate::platform::android::connection_service::show_chat_notification(
-                    &cs_handle,
-                    title,
-                    body,
-                    icon,
-                    channel_id,
-                );
-                return;
-            }
+            crate::platform::android::connection_service::show_chat_notification(
+                &cs_handle, title, body, icon, channel_id,
+            );
+            return;
         }
-        // Non-Android fallback: standard Tauri notification API (no avatar).
-        let _ = icon;
-        let _ = channel_id;
-        let _ = self
-            .app
+    }
+    // Non-Android fallback: standard Tauri notification API (no avatar).
+    let _ = icon;
+    let _ = channel_id;
+    // On Linux, NOT the notification plugin: its show() spawns notify-rust's
+    // BLOCKING zbus call onto the tokio runtime (async_runtime::spawn in the
+    // plugin's desktop.rs), where zbus's tokio flavor (forced by ashpd)
+    // block_on's a private runtime and panics "Cannot start a runtime from
+    // within a runtime" - with panic=abort that kills the app whenever a
+    // notification fires. Drive notify-rust from a blocking thread.
+    #[cfg(target_os = "linux")]
+    {
+        let _ = app;
+        let title = title.to_owned();
+        let body = body.to_owned();
+        // Dropped, not awaited: `spawn_blocking` runs the closure to
+        // completion whether or not anyone holds the handle, and nothing here
+        // has a use for its result.
+        drop(tauri::async_runtime::spawn_blocking(move || {
+            let _ = notify_rust::Notification::new()
+                .summary(&title)
+                .body(&body)
+                .show();
+        }));
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app
             .notification()
             .builder()
             .channel_id("messages")
@@ -128,7 +161,12 @@ impl EventHandler for TauriEventHandler {
         // this, in-flight messages from a dying TCP stream could mutate the
         // reused `SharedState` and emit events stamped with the new server's
         // id. Mirrors the guard in `on_disconnected`.
-        if self.shared.lock().map(|s| s.conn.epoch != self.epoch).unwrap_or(true) {
+        if self
+            .shared
+            .lock()
+            .map(|s| s.conn.epoch != self.epoch)
+            .unwrap_or(true)
+        {
             return;
         }
         let ctx = HandlerContext {
@@ -152,7 +190,23 @@ impl EventHandler for TauriEventHandler {
             }
             let session = audio.sender_session;
             let is_terminator = audio.is_terminator;
+            let context = super::voice_decode::packet_context(audio);
 
+            // e2e decoded-audio dump (no-op unless FANCY_E2E_AUDIO_DUMP_DIR is
+            // set). Started here rather than at audio init because this is the
+            // first point that is guaranteed to run before any audio is
+            // decoded; the call is idempotent.
+            crate::e2e_stats::start_audio_dump();
+
+            // e2e timing assertions (no-op unless FANCY_E2E_AUDIO_STATS_FILE
+            // is set): tallies wire-level packet stats per sender.
+            crate::e2e_stats::record_packet(
+                session,
+                audio.frame_number,
+                &audio.opus_data,
+                is_terminator,
+                context,
+            );
             self.inbound_audio_count += 1;
             if self.inbound_audio_count == 1 || self.inbound_audio_count.is_multiple_of(500) {
                 debug!(
@@ -204,7 +258,11 @@ impl EventHandler for TauriEventHandler {
                     // moment to free decoders with lost terminators and
                     // drained buffers of past streams (~77 KB each).
                     mixer.remove_inactive_speakers();
-                    state.audio.talking_sessions.remove(&session).then_some(false)
+                    state
+                        .audio
+                        .talking_sessions
+                        .remove(&session)
+                        .then_some(false)
                 } else {
                     state.audio.talking_sessions.insert(session).then_some(true)
                 }
@@ -213,6 +271,14 @@ impl EventHandler for TauriEventHandler {
 
             if let Some(talking) = emit_action {
                 let _ = self.app.emit("user-talking", (session, talking));
+                // On the talking edge only: this path has nowhere to remember a
+                // mid-utterance change, and runs only with the decode thread
+                // switched off.
+                if talking {
+                    let _ = self
+                        .app
+                        .emit(super::voice_decode::VOICE_CONTEXT_EVENT, (session, context));
+                }
             }
         }
     }
@@ -238,25 +304,25 @@ impl EventHandler for TauriEventHandler {
             state.conn.client_handle = None;
             state.conn.event_loop_handle = None;
             // Stop audio pipelines on disconnect.
-            if let Some(handle) = state.audio.outbound_task_handle.take() {
-                handle.abort();
-            }
+            state.audio.stop_outbound();
             if let Some(mut playback) = state.audio.mixing_playback.take() {
                 let _ = playback.stop();
             }
-            state.audio.mixer = None;
+            state.audio.uninstall_mixer();
+            state.audio.decode = None;
             state.audio.voice_state = VoiceState::Inactive;
             state.audio.talking_sessions.clear();
-            state.server.fancy_version = None;
-            state.server.version_info = ServerVersionInfo::default();
-            state.server.max_users = None;
-            state.server.max_bandwidth = None;
-            state.server.opus = false;
-            state.server.root_permissions = None;
+            // The roster, the tree and the messages go too. A link that drops
+            // is the common way a session ends, and leaving that half standing
+            // is what made a lost connection look like a server still there.
+            state.clear_session_data();
             // Save signal state before dropping pchat.
             if let Some(ref pchat) = state.pchat_ctx.pchat {
                 pchat.save_signal_state();
                 pchat.save_local_cache();
+            }
+            if let Err(e) = state.previews.cache.save() {
+                tracing::debug!("could not write the preview cache: {e}");
             }
             state.pchat_ctx.pchat = None;
             state.pchat_ctx.seed = None;
@@ -272,7 +338,10 @@ impl EventHandler for TauriEventHandler {
         };
         let _ = self.app.emit(
             "server-disconnected",
-            DisconnectedPayload { server_id: Some(self.server_id.to_string()), reason },
+            DisconnectedPayload {
+                server_id: Some(self.server_id.to_string()),
+                reason,
+            },
         );
 
         // Stop Android foreground service now that we are disconnected.
@@ -292,11 +361,12 @@ impl EventHandler for TauriEventHandler {
         }
     }
 
-    fn on_audio_transport_changed(&mut self, udp_active: bool) {
-        info!(udp_active, "audio transport changed");
-        let _ = self
-            .app
-            .emit("audio-transport-changed", udp_active);
+    fn on_audio_transport_changed(&mut self, udp_active: bool, cipher: Option<&'static str>) {
+        info!(udp_active, cipher, "audio transport changed");
+        let _ = self.app.emit(
+            "audio-transport-changed",
+            AudioTransportPayload { udp_active, cipher },
+        );
     }
 
     fn on_ping_stats(
@@ -337,7 +407,10 @@ fn stamp_server_id(payload: &mut serde_json::Value, id: &str) {
         .map(serde_json::Value::is_null)
         .unwrap_or(true);
     if needs_stamp {
-        let _ = obj.insert("serverId".to_string(), serde_json::Value::String(id.to_string()));
+        let _ = obj.insert(
+            "serverId".to_string(),
+            serde_json::Value::String(id.to_string()),
+        );
     }
 }
 

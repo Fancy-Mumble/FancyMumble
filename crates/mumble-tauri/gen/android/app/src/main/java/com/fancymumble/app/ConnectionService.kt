@@ -114,6 +114,10 @@ class ConnectionService : Service() {
                     or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             )
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Below API 34 a type is optional and NONE is how it is left out.
+            // The deprecation is API 34's, when types became mandatory - and
+            // that API is the branch above, which names real ones.
+            @Suppress("DEPRECATION")
             startForeground(
                 NOTIFICATION_ID,
                 notification,

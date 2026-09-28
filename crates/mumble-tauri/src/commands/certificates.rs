@@ -16,18 +16,23 @@ pub(crate) async fn generate_certificate(
 }
 
 /// List the labels of all identities stored in `{app_data_dir}/identities/`.
+///
+/// The directory scan runs on the blocking pool: Settings fires this on
+/// every mount, and synchronous fs I/O on a runtime worker delays the
+/// protocol event loop (audio glitches - see `get_audio_devices`).
 #[tauri::command]
 pub(crate) async fn list_certificates(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     let data_dir = crate::e2e_data_dir(&app)?;
-    Ok(state::pchat::IdentityStore::new(data_dir).list_labels())
+    tauri::async_runtime::spawn_blocking(move || {
+        state::pchat::IdentityStore::new(data_dir).list_labels()
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Delete an identity (TLS cert + pchat seed) by label.
 #[tauri::command]
-pub(crate) async fn delete_certificate(
-    app: tauri::AppHandle,
-    label: String,
-) -> Result<(), String> {
+pub(crate) async fn delete_certificate(app: tauri::AppHandle, label: String) -> Result<(), String> {
     let data_dir = crate::e2e_data_dir(&app)?;
     state::pchat::IdentityStore::new(data_dir).delete(&label)
 }

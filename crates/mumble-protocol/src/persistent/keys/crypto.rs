@@ -1,11 +1,11 @@
 //! Message encryption and decryption for persistent chat.
 
 use crate::error::{Error, Result};
-use crate::persistent::encryption;
 use crate::persistent::PchatProtocol;
+use crate::persistent::encryption;
 
-use super::types::EncryptedPayload;
 use super::KeyManager;
+use super::types::EncryptedPayload;
 
 impl KeyManager {
     // ---- Encryption / Decryption ------------------------------------
@@ -29,7 +29,10 @@ impl KeyManager {
                     .get(&channel_id)
                     .ok_or_else(|| Error::InvalidState("no archive key for channel".into()))?;
 
-                let ciphertext = self.suite.encryptor().encrypt(&channel_key.key, plaintext, &aad)?;
+                let ciphertext =
+                    self.suite
+                        .encryptor()
+                        .encrypt(&channel_key.key, plaintext, &aad)?;
                 let fp = channel_key.fingerprint();
 
                 Ok(EncryptedPayload {
@@ -54,6 +57,16 @@ impl KeyManager {
                     epoch_fingerprint: [0u8; 8],
                 })
             }
+            // Not end-to-end: the server holds the key and seals the row at
+            // rest, so the client hands over the envelope as it is. Sending
+            // ciphertext here would make the archive unreadable to exactly the
+            // party the mode exists to let read it.
+            PchatProtocol::ServerManaged => Ok(EncryptedPayload {
+                ciphertext: plaintext.to_vec(),
+                epoch: None,
+                chain_index: None,
+                epoch_fingerprint: [0u8; 8],
+            }),
             _ => Err(Error::InvalidState(format!(
                 "cannot encrypt for protocol {protocol:?}"
             ))),
@@ -79,9 +92,12 @@ impl KeyManager {
                     .get(&channel_id)
                     .ok_or_else(|| Error::InvalidState("no archive key for channel".into()))?;
 
-                self.suite.encryptor()
+                self.suite
+                    .encryptor()
                     .decrypt(&channel_key.key, &payload.ciphertext, &aad)
             }
+            // The server already unsealed it on the way out.
+            PchatProtocol::ServerManaged => Ok(payload.ciphertext.clone()),
             _ => Err(Error::InvalidState(format!(
                 "cannot decrypt for protocol {protocol:?}"
             ))),
@@ -110,8 +126,8 @@ impl KeyManager {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
-    use super::super::identity::SeedIdentity;
     use super::super::KeyManager;
+    use super::super::identity::SeedIdentity;
     use crate::persistent::{KeyTrustLevel, PchatProtocol};
 
     fn make_key_manager() -> KeyManager {
@@ -128,11 +144,23 @@ mod tests {
         let msg_id = uuid::Uuid::new_v4().to_string();
         let plaintext = b"Hello, world!";
         let payload = km
-            .encrypt(PchatProtocol::FancyV1FullArchive, 1, &msg_id, 1000, plaintext)
+            .encrypt(
+                PchatProtocol::FancyV1FullArchive,
+                1,
+                &msg_id,
+                1000,
+                plaintext,
+            )
             .unwrap();
 
         let decrypted = km
-            .decrypt(PchatProtocol::FancyV1FullArchive, 1, &msg_id, 1000, &payload)
+            .decrypt(
+                PchatProtocol::FancyV1FullArchive,
+                1,
+                &msg_id,
+                1000,
+                &payload,
+            )
             .unwrap();
         assert_eq!(decrypted, plaintext);
     }

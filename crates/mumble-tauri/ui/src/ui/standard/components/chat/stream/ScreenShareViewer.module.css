@@ -1,0 +1,439 @@
+/* --- Screen Share Viewer ----------------------------------------- */
+
+.broadcastArea {
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+/* --- Video viewport --------------------------------------------- */
+
+.streamViewport {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.videoElement {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  pointer-events: none;
+}
+
+/* Camera picture-in-picture tile (screen + camera shares): floats over the
+   bottom-right of the viewport, above the video but below the controls. */
+.cameraPipWrap {
+  position: absolute;
+  right: 12px;
+  bottom: 52px; /* clears the controls bar */
+  width: clamp(120px, 24%, 280px);
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  /* The tile itself is non-interactive so it never blocks the video or the
+     controls beneath it; only the × button opts back into pointer events. */
+  pointer-events: none;
+}
+
+.cameraPip {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+  display: block;
+}
+
+.cameraPipClose {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0.75;
+  transition:
+    opacity 0.15s,
+    background 0.15s;
+  pointer-events: auto;
+}
+
+.cameraPipClose:hover {
+  opacity: 1;
+  background: var(--color-danger, #d9534f);
+}
+
+/* --- Stream controls overlay ------------------------------------ */
+
+.streamControls {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  /* Sit above the DrawingOverlay canvas (z-index 3) so the toggle
+     buttons remain clickable while drawing mode is active. */
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: linear-gradient(transparent, var(--color-overlay-dark));
+  opacity: 1;
+  transition: opacity 0.2s;
+}
+
+.controlBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: var(--color-glass-medium);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.controlBtn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.controlBtnActive {
+  background: rgba(88, 101, 242, 0.85);
+}
+
+.controlBtnActive:hover {
+  background: rgba(88, 101, 242, 1);
+}
+
+.volumeGroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.volumeSlider {
+  width: 80px;
+  height: 4px;
+  accent-color: #fff;
+  cursor: pointer;
+}
+
+.controlsSpacer {
+  flex: 1;
+}
+
+.streamPlaceholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+  color: var(--color-text-muted);
+  width: 100%;
+}
+
+.streamPlaceholderIcon {
+  width: 48px;
+  height: 48px;
+  opacity: 0.4;
+}
+
+.streamPlaceholderText {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* --- Badges & buttons ------------------------------------------- */
+
+.screenShareBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(237, 66, 69, 0.15);
+  color: var(--color-danger-alt);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.screenShareBadgeIcon {
+  width: 10px;
+  height: 10px;
+}
+
+.shareScreenBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.shareScreenBtn:hover {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+}
+
+.shareScreenBtnActive {
+  color: var(--color-danger-alt);
+  background: var(--color-danger-alt-light);
+}
+
+.shareScreenBtnActive:hover {
+  background: var(--color-danger-alt-border);
+  color: var(--color-danger-alt);
+}
+
+/* --- Broadcast notification banner ------------------------------ */
+
+.broadcastBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, var(--color-danger-alt-light), var(--color-danger-alt-subtle));
+  border-bottom: 1px solid var(--color-danger-alt-border);
+  flex-shrink: 0;
+}
+
+/* P2P variant - amber background */
+.broadcastBannerP2P {
+  background: linear-gradient(135deg, rgba(240, 160, 30, 0.12), rgba(240, 160, 30, 0.06));
+  border-bottom-color: rgba(240, 160, 30, 0.25);
+}
+
+.broadcastBannerDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-danger-alt);
+  flex-shrink: 0;
+  animation: bannerDotPulse 1.5s ease-in-out infinite;
+}
+
+/* P2P dot - amber */
+.broadcastBannerDotP2P {
+  background: #f0a01e;
+  animation: bannerDotPulseP2P 1.5s ease-in-out infinite;
+}
+
+@keyframes bannerDotPulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 var(--color-danger-alt-glow);
+  }
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 6px 2px rgba(237, 66, 69, 0.3);
+  }
+}
+
+@keyframes bannerDotPulseP2P {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(240, 160, 30, 0.4);
+  }
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 6px 2px rgba(240, 160, 30, 0.3);
+  }
+}
+
+/* P2P label pill shown in banner */
+.broadcastBannerP2PLabel {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(240, 160, 30, 0.18);
+  color: #f0a01e;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.broadcastBannerText {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+
+.broadcastBannerName {
+  font-weight: 600;
+}
+
+.broadcastBannerWatchBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--color-danger-alt-border-strong);
+  background: var(--color-danger-alt-light);
+  color: var(--color-danger-alt);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.broadcastBannerWatchBtn:hover {
+  background: rgba(237, 66, 69, 0.22);
+  border-color: rgba(237, 66, 69, 0.5);
+}
+
+.broadcastBannerDismiss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.broadcastBannerDismiss:hover {
+  background: var(--color-glass-border);
+  color: var(--color-text-primary);
+}
+
+.shareScreenBtnIcon {
+  width: 18px;
+  height: 18px;
+}
+
+/* --- WebRTC error banner icon ----------------------------------- */
+
+.broadcastBannerErrorIcon {
+  color: var(--color-danger-alt);
+  flex-shrink: 0;
+}
+
+/* --- Connecting overlay (own broadcast, waiting for ICE) -------- */
+
+.connectingOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(0, 0, 0, 0.65);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+.connectingDots {
+  display: flex;
+  gap: 7px;
+}
+
+.connectingDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  animation: dotBounce 1.2s ease-in-out infinite;
+}
+
+.connectingDot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.connectingDot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes dotBounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  40% {
+    transform: translateY(-9px);
+    opacity: 1;
+  }
+}
+
+.connectingText {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Advisory hint for the GNOME/NVIDIA fullscreen direct-scanout capture
+   stall: a non-blocking banner across the top of the live (but frozen)
+   own-preview - the broadcast keeps running underneath it. */
+.stallHint {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  padding: 9px 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: center;
+  color: #fff;
+  background: rgba(196, 120, 20, 0.92);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}

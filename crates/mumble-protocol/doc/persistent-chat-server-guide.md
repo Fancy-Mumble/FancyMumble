@@ -12,6 +12,15 @@
 > **Companion document**: See `persistent-chat.md` for the full
 > architecture, encryption scheme, and client-side design.
 
+> **Transport superseded.** The chapters on the wire describe how the extension
+> was first built: `PluginDataTransmission` envelopes told apart by `dataID`,
+> carrying MessagePack. Since the epoch-1 wire canon the same messages travel as
+> first-class protobuf control messages - the `Pchat*` entries in
+> [`src/fancy_message_support.rs`](../src/fancy_message_support.rs), defined in
+> [`proto/fancy/pchat.proto`](../proto/fancy/pchat.proto). The encryption scheme,
+> key management and trust chapters still describe the code; read the transport
+> chapters as history.
+
 ---
 
 ## Table of Contents
@@ -293,10 +302,10 @@ message ChannelState {
         PCHAT_FULL_ARCHIVE   = 2;
         PCHAT_SERVER_MANAGED = 3;
     }
-    optional PchatMode pchat_mode        = 100; // persistence mode for this channel
-    optional uint32 pchat_max_history    = 101; // max stored messages (0=unlimited)
-    optional uint32 pchat_retention_days = 102; // auto-delete after N days (0=forever)
-    repeated string pchat_key_custodians = 103; // cert hashes of key custodians
+    optional PchatMode pchat_mode        = 1000; // persistence mode for this channel
+    optional uint32 pchat_max_history    = 1001; // max stored messages (0=unlimited)
+    optional uint32 pchat_retention_days = 1002; // auto-delete after N days (0=forever)
+    repeated string pchat_key_custodians = 1003; // cert hashes of key custodians
 }
 ```
 

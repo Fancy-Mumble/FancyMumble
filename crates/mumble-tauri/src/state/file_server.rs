@@ -15,11 +15,11 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use futures_util::StreamExt as _;
-use reqwest::multipart::{Form, Part};
 use reqwest::Client;
+use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tokio::io::AsyncWriteExt;
@@ -373,7 +373,7 @@ async fn emit_progress_events(
     }
 }
 
-fn build_progress_stream(
+pub(super) fn build_progress_stream(
     file: tokio::fs::File,
     file_size: u64,
     upload_id: String,
@@ -381,7 +381,9 @@ fn build_progress_stream(
 ) -> impl futures_util::Stream<Item = Result<tokio_util::bytes::Bytes, std::io::Error>> {
     let tx = if !upload_id.is_empty() && file_size > 0 {
         let (tx, rx) = mpsc::unbounded_channel::<u64>();
-        drop(tokio::spawn(emit_progress_events(upload_id, file_size, app_handle, rx)));
+        drop(tokio::spawn(emit_progress_events(
+            upload_id, file_size, app_handle, rx,
+        )));
         Some(tx)
     } else {
         drop(upload_id);
@@ -392,23 +394,21 @@ fn build_progress_stream(
     // 64 KiB read chunks dramatically reduce spawn_blocking overhead on
     // Windows compared to ReaderStream's default 8 KiB.
     let mut bytes_accumulated: u64 = 0;
-    ReaderStream::with_capacity(file, 64 * 1024).inspect(move |r| {
-        match r {
-            Ok(chunk) => {
-                if let Some(tx) = tx.as_ref() {
-                    bytes_accumulated += chunk.len() as u64;
-                    let _ = tx.send(bytes_accumulated);
-                }
-                tracing::trace!(
-                    chunk_bytes = chunk.len(),
-                    sent = bytes_accumulated,
-                    total = file_size,
-                    "upload stream chunk"
-                );
+    ReaderStream::with_capacity(file, 64 * 1024).inspect(move |r| match r {
+        Ok(chunk) => {
+            if let Some(tx) = tx.as_ref() {
+                bytes_accumulated += chunk.len() as u64;
+                let _ = tx.send(bytes_accumulated);
             }
-            Err(e) => {
-                tracing::error!(error = %e, sent = bytes_accumulated, "upload stream read error");
-            }
+            tracing::trace!(
+                chunk_bytes = chunk.len(),
+                sent = bytes_accumulated,
+                total = file_size,
+                "upload stream chunk"
+            );
+        }
+        Err(e) => {
+            tracing::error!(error = %e, sent = bytes_accumulated, "upload stream read error");
         }
     })
 }
@@ -495,10 +495,10 @@ impl AppState {
             .len();
 
         let cancel_token = CancellationToken::new();
-        if !req.upload_id.is_empty() {
-            if let Ok(mut map) = self.upload_cancels.lock() {
-                let _ = map.insert(req.upload_id.clone(), cancel_token.clone());
-            }
+        if !req.upload_id.is_empty()
+            && let Ok(mut map) = self.upload_cancels.lock()
+        {
+            let _ = map.insert(req.upload_id.clone(), cancel_token.clone());
         }
 
         let body = reqwest::Body::wrap_stream(build_progress_stream(
@@ -523,17 +523,17 @@ impl AppState {
 
         let resp = tokio::select! {
             result = send_fut => {
-                result.map_err(|e| format!("upload request failed: {e}"))?  
+                result.map_err(|e| format!("upload request failed: {e}"))?
             }
             () = cancel_token.cancelled() => {
                 return Err("upload cancelled".to_owned());
             }
         };
 
-        if !req.upload_id.is_empty() {
-            if let Ok(mut map) = self.upload_cancels.lock() {
-                let _ = map.remove(&req.upload_id);
-            }
+        if !req.upload_id.is_empty()
+            && let Ok(mut map) = self.upload_cancels.lock()
+        {
+            let _ = map.remove(&req.upload_id);
         }
 
         if !resp.status().is_success() {
@@ -706,7 +706,10 @@ impl AppState {
             return Err(format!("forbidden: {}", read_error_body(resp).await));
         }
         if !resp.status().is_success() {
-            return Err(format!("private get failed: {}", read_error_body(resp).await));
+            return Err(format!(
+                "private get failed: {}",
+                read_error_body(resp).await
+            ));
         }
         resp.text()
             .await
@@ -731,7 +734,10 @@ impl AppState {
             .await
             .map_err(|e| format!("private put request failed: {e}"))?;
         if !resp.status().is_success() {
-            return Err(format!("private put failed: {}", read_error_body(resp).await));
+            return Err(format!(
+                "private put failed: {}",
+                read_error_body(resp).await
+            ));
         }
         Ok(())
     }
@@ -753,7 +759,10 @@ impl AppState {
             .await
             .map_err(|e| format!("admin list request failed: {e}"))?;
         if !resp.status().is_success() {
-            return Err(format!("admin list failed: {}", read_error_body(resp).await));
+            return Err(format!(
+                "admin list failed: {}",
+                read_error_body(resp).await
+            ));
         }
         resp.json::<serde_json::Value>()
             .await
@@ -785,6 +794,35 @@ impl AppState {
         resp.json::<serde_json::Value>()
             .await
             .map_err(|e| format!("admin documents parse: {e}"))
+    }
+
+    /// List per-user private-storage usage filtered to calendars (each user's
+    /// `calendar` blob and its size). Admin-only (`GET /admin/private-storage`,
+    /// gated by the session JWT). Returned verbatim as JSON.
+    pub async fn admin_list_calendars(
+        &self,
+        req: AdminListRequest,
+    ) -> Result<serde_json::Value, String> {
+        let endpoint = format!(
+            "{}/admin/private-storage?prefix=calendar",
+            req.base_url.trim_end_matches('/')
+        );
+        let resp = self
+            .http_client
+            .get(endpoint)
+            .bearer_auth(req.session_jwt)
+            .send()
+            .await
+            .map_err(|e| format!("admin calendars request failed: {e}"))?;
+        if !resp.status().is_success() {
+            return Err(format!(
+                "admin calendars failed: {}",
+                read_error_body(resp).await
+            ));
+        }
+        resp.json::<serde_json::Value>()
+            .await
+            .map_err(|e| format!("admin calendars parse: {e}"))
     }
 
     /// Delete one persisted live-doc document and all its revisions (blobs +
@@ -934,7 +972,10 @@ impl AppState {
             .await
             .map_err(|e| format!("my preview request failed: {e}"))?;
         if !resp.status().is_success() {
-            return Err(format!("my preview failed: {}", read_error_body(resp).await));
+            return Err(format!(
+                "my preview failed: {}",
+                read_error_body(resp).await
+            ));
         }
 
         let mut buf: Vec<u8> = Vec::new();

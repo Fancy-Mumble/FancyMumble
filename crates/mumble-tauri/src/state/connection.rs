@@ -15,6 +15,28 @@ use super::sessions::ServerId;
 use super::types::*;
 use super::{AppState, SharedState};
 
+/// What a login presents besides the name: the server or account password, a
+/// second factor, and an invite code.
+#[derive(Debug, Default, Clone)]
+pub struct Credentials {
+    pub password: Option<String>,
+    pub totp: Option<String>,
+    /// An invite code from a `fancy://invite/...` link. Sent as the access
+    /// token `invite:<code>`, which is how Starling recognises one and how a
+    /// stock Mumble client could present the same code by hand.
+    pub invite: Option<String>,
+}
+
+impl Credentials {
+    /// The access tokens this login sends.
+    fn tokens(&self) -> Vec<String> {
+        self.invite
+            .iter()
+            .map(|code| format!("invite:{code}"))
+            .collect()
+    }
+}
+
 impl AppState {
     pub async fn connect(
         &self,
@@ -22,7 +44,7 @@ impl AppState {
         port: u16,
         username: String,
         cert_label: Option<String>,
-        password: Option<String>,
+        credentials: Credentials,
     ) -> Result<(), String> {
         let app_handle = self.app_handle().ok_or("App not initialized")?;
 
@@ -74,11 +96,27 @@ impl AppState {
                 (None, None)
             };
 
+            let device = device_for(&app_handle, &host, port);
+
             // Read force_tcp_audio from current audio settings.
             let force_tcp = inner
                 .lock()
                 .map(|s| s.audio.settings.force_tcp_audio)
                 .unwrap_or(false);
+
+            // Take inbound decoding off the protocol event loop: the socket
+            // reader hands audio straight to this thread through the sink.
+            let epoch = inner.lock().map(|s| s.conn.epoch).unwrap_or(0);
+            let audio_sink =
+                match super::voice_decode::start(inner.clone(), app_handle.clone(), epoch) {
+                    Some((decode, sink)) => {
+                        if let Ok(mut state) = inner.lock() {
+                            state.audio.attach_decode(decode);
+                        }
+                        Some(sink)
+                    }
+                    None => None,
+                };
 
             let config = ClientConfig {
                 tcp: TcpConfig {
@@ -93,10 +131,10 @@ impl AppState {
                     server_port: port,
                 },
                 force_tcp,
+                audio_sink,
                 ..ClientConfig::default()
             };
 
-            let epoch = inner.lock().map(|s| s.conn.epoch).unwrap_or(0);
             let handler = TauriEventHandler {
                 shared: inner.clone(),
                 app: app_handle.clone(),
@@ -112,7 +150,8 @@ impl AppState {
                     inner: &inner,
                     app_handle: &app_handle,
                     username,
-                    password,
+                    credentials,
+                    device,
                     registry: &registry,
                     server_id,
                     active_handle: &active_handle,
@@ -200,6 +239,11 @@ impl AppState {
                 pchat.save_signal_state();
                 pchat.save_local_cache();
             }
+            // Outside the `pchat` check: a client with no identity still
+            // collected cards, and they are as worth keeping.
+            if let Err(e) = state.previews.cache.save() {
+                tracing::debug!("could not write the preview cache: {e}");
+            }
 
             state.conn.status = ConnectionStatus::Disconnected;
             state.server_id = None;
@@ -230,7 +274,11 @@ impl AppState {
         // `inner` to whichever session (if any) becomes active next.
         let _ = self.registry.remove(id);
         if is_active {
-            match self.registry.active_id().and_then(|nid| self.registry.session(nid)) {
+            match self
+                .registry
+                .active_id()
+                .and_then(|nid| self.registry.session(nid))
+            {
                 Some(next_arc) => {
                     let _ = self.inner.swap(next_arc);
                 }
@@ -244,8 +292,14 @@ impl AppState {
     #[cfg(target_os = "android")]
     fn stop_android_foreground_service(&self) {
         use tauri::Manager; // brings `try_state` into scope (android-only path)
-        let Some(app_handle) = self.app_handle() else { return };
-        let Some(handle) = app_handle.try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>() else { return };
+        let Some(app_handle) = self.app_handle() else {
+            return;
+        };
+        let Some(handle) = app_handle
+            .try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>(
+        ) else {
+            return;
+        };
         crate::platform::android::connection_service::stop_service(&handle);
     }
 }
@@ -304,6 +358,9 @@ fn reset_state_for_connect(
         pchat.save_signal_state();
         pchat.save_local_cache();
     }
+    if let Err(e) = state.previews.cache.save() {
+        tracing::debug!("could not write the preview cache: {e}");
+    }
     state.pchat_ctx.pchat = None;
     state.pchat_ctx.seed = None;
     state.pchat_ctx.identity_dir = None;
@@ -315,11 +372,7 @@ fn reset_state_for_connect(
 
 /// Initialise the cert-hash resolver, migrate legacy storage, and load
 /// the identity seed for the given certificate label.
-fn init_identity(
-    inner: &SharedInner,
-    app_handle: &AppHandle,
-    cert_label: &Option<String>,
-) {
+fn init_identity(inner: &SharedInner, app_handle: &AppHandle, cert_label: &Option<String>) {
     // Cert-hash-to-username resolver (persisted across sessions).
     if let Ok(data_dir) = crate::e2e_data_dir(app_handle) {
         let hash_names_path = data_dir.join("hash_names.json");
@@ -342,8 +395,16 @@ fn init_identity(
         match store.load_or_generate_seed(identity_label) {
             Ok(seed) => {
                 if let Ok(mut state) = inner.lock() {
+                    let dir = store.identity_dir(identity_label);
+                    // The earliest point both halves of the key exist. The
+                    // preview cache is not a pchat concern - a plain text
+                    // channel accumulates cards too - but this is where the
+                    // seed that encrypts it becomes known.
+                    if let Err(e) = state.previews.cache.attach(&dir, &seed) {
+                        tracing::warn!("failed to open the local preview cache: {e}");
+                    }
                     state.pchat_ctx.seed = Some(seed);
-                    state.pchat_ctx.identity_dir = Some(store.identity_dir(identity_label));
+                    state.pchat_ctx.identity_dir = Some(dir);
                 }
             }
             Err(e) => {
@@ -353,13 +414,32 @@ fn init_identity(
     }
 }
 
+/// Which install this is, as the server at `host:port` is to know it.
+///
+/// Derived per server (see `device`), so it is worked out at connect time,
+/// where the target is known, and not once for the whole app.
+fn device_for(
+    app_handle: &AppHandle,
+    host: &str,
+    port: u16,
+) -> Option<command::AuthenticateDevice> {
+    let dir = crate::e2e_data_dir(app_handle).ok()?;
+    let device = super::device::credentials_for(&dir, host, port)?;
+    Some(command::AuthenticateDevice {
+        id: device.id,
+        secret: device.secret,
+        name: device.name,
+    })
+}
+
 /// Bundle of context passed to [`handle_connect_result`] so the
 /// function signature stays within Clippy's `too_many_arguments` limit.
 struct ConnectResultCtx<'a> {
     inner: &'a SharedInner,
     app_handle: &'a AppHandle,
     username: String,
-    password: Option<String>,
+    credentials: Credentials,
+    device: Option<command::AuthenticateDevice>,
     registry: &'a super::registry::Registry,
     server_id: ServerId,
     active_handle: &'a super::shared_handle::SharedHandle,
@@ -369,7 +449,10 @@ struct ConnectResultCtx<'a> {
 /// send Authenticate, or emit rejection events on failure.
 async fn handle_connect_result(
     result: Result<
-        (mumble_protocol::client::ClientHandle, tokio::task::JoinHandle<()>),
+        (
+            mumble_protocol::client::ClientHandle,
+            tokio::task::JoinHandle<()>,
+        ),
         mumble_protocol::error::Error,
     >,
     ctx: ConnectResultCtx<'_>,
@@ -378,7 +461,8 @@ async fn handle_connect_result(
         inner,
         app_handle,
         username,
-        password,
+        credentials,
+        device,
         registry,
         server_id,
         active_handle,
@@ -395,8 +479,10 @@ async fn handle_connect_result(
             if let Err(e) = handle
                 .send(command::Authenticate {
                     username,
-                    password,
-                    tokens: vec![],
+                    tokens: credentials.tokens(),
+                    password: credentials.password,
+                    totp: credentials.totp,
+                    device,
                 })
                 .await
             {
@@ -420,10 +506,7 @@ async fn handle_connect_result(
             // Start deaf+muted so the user does not transmit or
             // hear audio until they explicitly enable voice calling.
             // (SetSelfDeaf already carries self_mute=true.)
-            if let Err(e) = handle
-                .send(command::SetSelfDeaf { deafened: true })
-                .await
-            {
+            if let Err(e) = handle.send(command::SetSelfDeaf { deafened: true }).await {
                 tracing::warn!("failed to send initial self-deaf: {e}");
             }
         }
@@ -457,7 +540,10 @@ fn emit_session_rejected(app_handle: &AppHandle, server_id: ServerId, reason: St
     );
     let _ = app_handle.emit(
         "server-disconnected",
-        DisconnectedPayload { server_id: Some(id), reason: Some(reason) },
+        DisconnectedPayload {
+            server_id: Some(id),
+            reason: Some(reason),
+        },
     );
 }
 
@@ -480,10 +566,7 @@ fn rebind_active(
     active_handle: &super::shared_handle::SharedHandle,
     registry: &super::registry::Registry,
 ) {
-    if let Some(arc) = registry
-        .active_id()
-        .and_then(|id| registry.session(id))
-    {
+    if let Some(arc) = registry.active_id().and_then(|id| registry.session(id)) {
         let _ = active_handle.swap(arc);
     }
 }

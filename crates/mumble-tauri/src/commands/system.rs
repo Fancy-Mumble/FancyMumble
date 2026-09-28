@@ -11,13 +11,30 @@ pub(crate) fn get_system_clock_format() -> Option<&'static str> {
     platform::badge::system_clock_format()
 }
 
+/// Show a native OS notification on behalf of the webview.
+///
+/// The frontend must use this rather than the notification plugin's own
+/// `notify` command: on Linux that command drives notify-rust's blocking
+/// D-Bus call from the async runtime, which panics the process (see
+/// `state::show_desktop_notification`).
+#[tauri::command]
+pub(crate) fn show_desktop_notification(app: tauri::AppHandle, title: String, body: String) {
+    crate::state::show_desktop_notification(&app, &title, &body, None, None);
+}
+
 /// Enable or disable native OS notifications.
 #[tauri::command]
 pub(crate) fn set_notifications_enabled(
     state: tauri::State<'_, AppState>,
     enabled: bool,
 ) -> Result<(), String> {
-    state.inner.snapshot().lock().map_err(|e| e.to_string())?.prefs.notifications_enabled = enabled;
+    state
+        .inner
+        .snapshot()
+        .lock()
+        .map_err(|e| e.to_string())?
+        .prefs
+        .notifications_enabled = enabled;
     Ok(())
 }
 
@@ -30,7 +47,13 @@ pub(crate) fn set_disable_dual_path(
     state: tauri::State<'_, AppState>,
     disabled: bool,
 ) -> Result<(), String> {
-    state.inner.snapshot().lock().map_err(|e| e.to_string())?.prefs.disable_dual_path = disabled;
+    state
+        .inner
+        .snapshot()
+        .lock()
+        .map_err(|e| e.to_string())?
+        .prefs
+        .disable_dual_path = disabled;
     Ok(())
 }
 
@@ -85,23 +108,44 @@ pub(crate) fn export_logs(dest_path: String) -> Result<(), String> {
     logging::export_logs(std::path::Path::new(&dest_path))
 }
 
-/// Reset all app data to factory defaults (preferences, saved servers, certs).
+/// Reset all app data to factory defaults (preferences, saved servers,
+/// identities).
+///
+/// This clears the live `identities/` directory as well as the pre-migration
+/// `certs/` one. Clearing only the latter left every certificate and pchat
+/// seed in place, so a "reset" that promised to remove them did not.
 #[tauri::command]
 pub(crate) async fn reset_app_data(app: tauri::AppHandle) -> Result<(), String> {
     let data_dir = crate::e2e_data_dir(&app)?;
-    // Remove known data files.
+
     for name in &["preferences.json", "servers.json", "passwords.json"] {
-        let path = data_dir.join(name);
-        if path.exists() {
-            std::fs::remove_file(&path).map_err(|e| e.to_string())?;
-        }
+        remove_if_present(&data_dir.join(name), false)?;
     }
-    // Remove certs directory.
-    let certs = data_dir.join("certs");
-    if certs.exists() {
-        std::fs::remove_dir_all(&certs).map_err(|e| e.to_string())?;
+
+    for dir in &[
+        crate::state::pchat::IDENTITIES_DIR,
+        crate::state::pchat::LEGACY_CERTS_DIR,
+    ] {
+        remove_if_present(&data_dir.join(dir), true)?;
     }
     Ok(())
+}
+
+/// Delete a path, treating "it was not there" as success.
+///
+/// Checking `exists()` first and then deleting races anything that removes
+/// the path in between, and reports that race as a hard failure.
+fn remove_if_present(path: &std::path::Path, recursive: bool) -> Result<(), String> {
+    let result = if recursive {
+        std::fs::remove_dir_all(path)
+    } else {
+        std::fs::remove_file(path)
+    };
+    match result {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!("could not remove {}: {e}", path.display())),
+    }
 }
 
 /// Set the taskbar badge count.

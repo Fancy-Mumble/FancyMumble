@@ -6,8 +6,9 @@ use mumble_protocol::command;
 use mumble_protocol::proto::mumble_tcp;
 use serde::Deserialize;
 
-use super::types::DeleteAckResult;
 use super::AppState;
+use super::preview_cache::{self, CachedHit};
+use super::types::{DeleteAckResult, PendingDeleteAck};
 
 /// Parameters for a single drawing-stroke packet sent to the server.
 ///
@@ -59,20 +60,25 @@ pub enum WatchSyncEventArg {
         host_session: Option<u32>,
     },
     #[serde(rename_all = "camelCase")]
-    Join { session: Option<u32> },
+    Join {
+        session: Option<u32>,
+    },
     #[serde(rename_all = "camelCase")]
-    Leave { session: Option<u32> },
+    Leave {
+        session: Option<u32>,
+    },
     StateRequest,
     End,
     #[serde(rename_all = "camelCase")]
-    HostTransfer { new_host_session: Option<u32> },
+    HostTransfer {
+        new_host_session: Option<u32>,
+    },
 }
 
 impl WatchSyncEventArg {
     fn into_proto(self) -> mumble_tcp::fancy_watch_sync::Event {
         use mumble_tcp::fancy_watch_sync::{
-            Event, HostTransfer, Member, Start, State,
-            StateRequest as PStateRequest, End as PEnd,
+            End as PEnd, Event, HostTransfer, Member, Start, State, StateRequest as PStateRequest,
         };
         match self {
             Self::Start {
@@ -197,10 +203,111 @@ impl AppState {
             .map_err(|e| format!("Failed to send FancyPollVote: {e}"))
     }
 
+    /// Create a new forum thread, reply to a thread, or edit a post.
+    /// Leave `thread_id`/`post_id` empty to start a new thread.
+    pub async fn send_fancy_forum_post(
+        &self,
+        channel_id: u32,
+        post_id: Option<String>,
+        thread_id: Option<String>,
+        title: Option<String>,
+        body: String,
+    ) -> Result<(), String> {
+        let handle = self.client_handle()?;
+        handle
+            .send(command::SendFancyForumPost {
+                channel_id,
+                post_id: post_id.filter(|s| !s.is_empty()),
+                thread_id: thread_id.filter(|s| !s.is_empty()),
+                title: title.filter(|s| !s.is_empty()),
+                body,
+            })
+            .await
+            .map_err(|e| format!("Failed to send FancyForumPost: {e}"))
+    }
+
+    /// Fetch forum threads for a channel, or the posts within one thread.
+    pub async fn fetch_fancy_forum(
+        &self,
+        channel_id: u32,
+        thread_id: Option<String>,
+        before_id: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<(), String> {
+        let handle = self.client_handle()?;
+        handle
+            .send(command::SendFancyForumFetch {
+                channel_id,
+                thread_id: thread_id.filter(|s| !s.is_empty()),
+                before_id: before_id.filter(|s| !s.is_empty()),
+                limit,
+            })
+            .await
+            .map_err(|e| format!("Failed to send FancyForumFetch: {e}"))
+    }
+
+    /// Delete a forum post (or thread, when the id is a thread root).
+    pub async fn delete_fancy_forum_post(
+        &self,
+        channel_id: u32,
+        post_id: String,
+    ) -> Result<(), String> {
+        let handle = self.client_handle()?;
+        handle
+            .send(command::SendFancyForumDelete {
+                channel_id,
+                post_id,
+            })
+            .await
+            .map_err(|e| format!("Failed to send FancyForumDelete: {e}"))
+    }
+
+    /// Schedule a text message for delivery to channels at a future time.
+    pub async fn send_fancy_scheduled_message(
+        &self,
+        channel_ids: Vec<u32>,
+        tree_ids: Vec<u32>,
+        message: String,
+        deliver_at: u64,
+    ) -> Result<(), String> {
+        let handle = self.client_handle()?;
+        handle
+            .send(command::SendFancyScheduledMessage {
+                channel_ids,
+                tree_ids,
+                message,
+                deliver_at,
+            })
+            .await
+            .map_err(|e| format!("Failed to send FancyScheduledMessage: {e}"))
+    }
+
+    /// Request the caller's own pending scheduled messages.
+    pub async fn request_fancy_scheduled_messages(&self) -> Result<(), String> {
+        let handle = self.client_handle()?;
+        handle
+            .send(command::RequestFancyScheduledMessages)
+            .await
+            .map_err(|e| format!("Failed to request scheduled messages: {e}"))
+    }
+
+    /// Cancel a pending scheduled message.
+    pub async fn cancel_fancy_scheduled_message(&self, schedule_id: String) -> Result<(), String> {
+        let handle = self.client_handle()?;
+        handle
+            .send(command::SendFancyScheduledMessageCancel { schedule_id })
+            .await
+            .map_err(|e| format!("Failed to cancel scheduled message: {e}"))
+    }
+
     fn client_handle(&self) -> Result<mumble_protocol::client::ClientHandle, String> {
         let __session = self.inner.snapshot();
         let state = __session.lock().map_err(|e| e.to_string())?;
-        state.conn.client_handle.clone().ok_or_else(|| "Not connected".to_string())
+        state
+            .conn
+            .client_handle
+            .clone()
+            .ok_or_else(|| "Not connected".to_string())
     }
 
     pub async fn send_push_update(&self, muted_channels: Vec<u32>) -> Result<(), String> {
@@ -220,19 +327,14 @@ impl AppState {
             .map_err(|e| format!("Failed to send push update: {e}"))?;
 
         handle
-            .send(command::SendFancySubscribePush {
-                muted_channels,
-            })
+            .send(command::SendFancySubscribePush { muted_channels })
             .await
             .map_err(|e| format!("Failed to send subscribe push update: {e}"))?;
 
         Ok(())
     }
 
-    pub async fn send_subscribe_push(
-        &self,
-        muted_channels: Vec<u32>,
-    ) -> Result<(), String> {
+    pub async fn send_subscribe_push(&self, muted_channels: Vec<u32>) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
             let state = __session.lock().map_err(|e| e.to_string())?;
@@ -333,9 +435,10 @@ impl AppState {
         Ok(())
     }
 
-    pub async fn request_link_preview(
+    pub async fn request_gif_search(
         &self,
-        urls: Vec<String>,
+        query: String,
+        page: u32,
         request_id: String,
     ) -> Result<(), String> {
         let handle = {
@@ -347,11 +450,102 @@ impl AppState {
         let handle = handle.ok_or("Not connected")?;
 
         handle
-            .send(command::RequestLinkPreview { urls, request_id })
+            .send(command::RequestGifSearch {
+                query,
+                page,
+                request_id,
+            })
+            .await
+            .map_err(|e| format!("Failed to request gif search: {e}"))?;
+
+        Ok(())
+    }
+
+    pub async fn request_voice_support(&self, request_id: String) -> Result<(), String> {
+        let handle = {
+            let __session = self.inner.snapshot();
+            let state = __session.lock().map_err(|e| e.to_string())?;
+            state.conn.client_handle.clone()
+        };
+
+        let handle = handle.ok_or("Not connected")?;
+
+        handle
+            .send(command::RequestVoiceSupport { request_id })
+            .await
+            .map_err(|e| format!("Failed to request voice message support: {e}"))?;
+
+        Ok(())
+    }
+
+    pub async fn request_gif_support(&self, request_id: String) -> Result<(), String> {
+        let handle = {
+            let __session = self.inner.snapshot();
+            let state = __session.lock().map_err(|e| e.to_string())?;
+            state.conn.client_handle.clone()
+        };
+
+        let handle = handle.ok_or("Not connected")?;
+
+        handle
+            .send(command::RequestGifSupport { request_id })
+            .await
+            .map_err(|e| format!("Failed to request gif support: {e}"))?;
+
+        Ok(())
+    }
+
+    /// Ask for the cards for `urls`, and answer from this client's own cache
+    /// whatever it already holds.
+    ///
+    /// The hits come back from the call itself rather than as an event: they
+    /// are already here, and a cache hit that arrives asynchronously is a card
+    /// that still pops in a frame late. Only the misses go to the server.
+    ///
+    /// A rejoin where every link is cached therefore sends nothing at all -
+    /// which is the case this exists for, and the reason it does not fail when
+    /// there is no connection.
+    pub async fn request_link_preview(
+        &self,
+        urls: Vec<String>,
+        request_id: String,
+    ) -> Result<Vec<CachedHit>, String> {
+        let (handle, hits, misses) = {
+            let __session = self.inner.snapshot();
+            let mut state = __session.lock().map_err(|e| e.to_string())?;
+            let now = preview_cache::now_ms();
+            let mut hits = Vec::new();
+            let mut misses = Vec::new();
+            for url in urls {
+                match state.previews.cache.get(&url, now) {
+                    Some(embed) => hits.push(CachedHit {
+                        requested_url: url,
+                        embed,
+                    }),
+                    None => misses.push(url),
+                }
+            }
+            // Recorded before the send, so an answer that arrives while this is
+            // still awaiting has something to be attributed against.
+            state.previews.asked(&request_id, &misses);
+            (state.conn.client_handle.clone(), hits, misses)
+        };
+
+        if misses.is_empty() {
+            return Ok(hits);
+        }
+
+        let handle = handle.ok_or("Not connected")?;
+
+        handle
+            .send(command::RequestLinkPreview {
+                urls: misses,
+                request_id,
+            })
             .await
             .map_err(|e| format!("Failed to request link preview: {e}"))?;
 
-        Ok(())
+        Ok(hits)
     }
 
     pub async fn send_read_receipt(
@@ -467,21 +661,17 @@ impl AppState {
 
         let emoji_oneof = if emoji.starts_with(':') && emoji.ends_with(':') && emoji.len() > 2 {
             let shortcode = emoji[1..emoji.len() - 1].to_owned();
-            Some(
-                mumble_tcp::pchat_reaction::Emoji::ServerEmoji(
-                    mumble_tcp::ServerEmoji {
-                        shortcode: Some(shortcode.into_bytes()),
-                    },
-                ),
-            )
+            Some(mumble_tcp::pchat_reaction::Emoji::ServerEmoji(
+                mumble_tcp::ServerEmoji {
+                    shortcode: Some(shortcode.into_bytes()),
+                },
+            ))
         } else {
-            Some(
-                mumble_tcp::pchat_reaction::Emoji::UnicodeEmoji(
-                    mumble_tcp::UnicodeEmoji {
-                        grapheme: Some(emoji),
-                    },
-                ),
-            )
+            Some(mumble_tcp::pchat_reaction::Emoji::UnicodeEmoji(
+                mumble_tcp::UnicodeEmoji {
+                    grapheme: Some(emoji),
+                },
+            ))
         };
 
         let msg = mumble_tcp::PchatReaction {
@@ -545,7 +735,11 @@ impl AppState {
             let h = state.conn.client_handle.clone().ok_or("Not connected")?;
 
             let (tx, rx) = tokio::sync::oneshot::channel::<DeleteAckResult>();
-            state.pchat_ctx.pending_delete_acks.push(tx);
+            state.pchat_ctx.pending_delete_acks.push(PendingDeleteAck {
+                channel_id,
+                message_ids: message_ids.clone(),
+                tx,
+            });
             (h, rx)
         };
 
@@ -574,10 +768,23 @@ impl AppState {
             Ok(Ok(ack)) if ack.success => Ok(()),
             Ok(Ok(ack)) => Err(format!(
                 "Server rejected deletion: {}",
-                ack.reason.unwrap_or_else(|| "permission denied".to_string())
+                ack.reason
+                    .unwrap_or_else(|| "permission denied".to_string())
             )),
             Ok(Err(_)) => Err("Delete acknowledgement channel closed".to_string()),
             Err(_) => Err("Delete request timed out".to_string()),
         }
+    }
+
+    /// Forget messages this device holds for a channel without asking the
+    /// server. A `SignalV1` channel keeps no server-side copy, so there is
+    /// nothing there to delete and nobody to ask.
+    pub fn forget_local_messages(&self, channel_id: u32, message_ids: Vec<String>) {
+        let message = mumble_tcp::PchatDeleteMessages {
+            channel_id: Some(channel_id),
+            message_ids,
+            ..Default::default()
+        };
+        crate::state::pchat::handle_proto_delete_messages(&self.inner.snapshot(), &message);
     }
 }

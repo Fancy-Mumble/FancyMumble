@@ -1,0 +1,4 @@
+# rustfmt.toml pins `newline_style = "Unix"`, so a checkout that converts Rust
+# sources to CRLF (core.autocrlf on Windows, which is also what the Windows CI
+# runner does) fails `cargo fmt --check` on every file. Keep them LF everywhere.
+*.rs text eol=lf

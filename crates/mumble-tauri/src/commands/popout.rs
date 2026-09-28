@@ -50,7 +50,7 @@ pub(crate) async fn open_image_popout(
     let w = width.unwrap_or(720.0).clamp(160.0, 4096.0);
     let h = height.unwrap_or(480.0).clamp(120.0, 4096.0);
 
-    let _window = tauri::WebviewWindowBuilder::new(
+    let window = tauri::WebviewWindowBuilder::new(
         &app,
         &label,
         tauri::WebviewUrl::App(std::path::PathBuf::from("index.html")),
@@ -65,6 +65,9 @@ pub(crate) async fn open_image_popout(
     .skip_taskbar(false)
     .build()
     .map_err(|e: tauri::Error| e.to_string())?;
+    crate::platform::strip_system_chrome(&window);
+    #[cfg(target_os = "linux")]
+    crate::app::webview_linux::enable_webrtc(&window);
 
     Ok(())
 }
@@ -141,7 +144,7 @@ pub(crate) async fn open_stream_popout(
     if let Ok(mut map) = state.popout_stream_sessions.lock() {
         let _ = map.insert(label.clone(), session);
     }
-    let _window = tauri::WebviewWindowBuilder::new(
+    let window = tauri::WebviewWindowBuilder::new(
         &app,
         &label,
         tauri::WebviewUrl::App(std::path::PathBuf::from("index.html")),
@@ -156,6 +159,9 @@ pub(crate) async fn open_stream_popout(
     .skip_taskbar(false)
     .build()
     .map_err(|e: tauri::Error| e.to_string())?;
+    crate::platform::strip_system_chrome(&window);
+    #[cfg(target_os = "linux")]
+    crate::app::webview_linux::enable_webrtc(&window);
     Ok(())
 }
 
@@ -217,7 +223,7 @@ pub(crate) async fn open_dm_popout(
         let _ = map.insert(id.clone(), payload);
     }
     let label = format!("popout-dm-{id}");
-    let _window = tauri::WebviewWindowBuilder::new(
+    let window = tauri::WebviewWindowBuilder::new(
         &app,
         &label,
         tauri::WebviewUrl::App(std::path::PathBuf::from("index.html")),
@@ -232,6 +238,9 @@ pub(crate) async fn open_dm_popout(
     .skip_taskbar(false)
     .build()
     .map_err(|e: tauri::Error| e.to_string())?;
+    crate::platform::strip_system_chrome(&window);
+    #[cfg(target_os = "linux")]
+    crate::app::webview_linux::enable_webrtc(&window);
     Ok(())
 }
 
@@ -252,11 +261,7 @@ pub(crate) fn take_popout_dm(
     state: tauri::State<'_, AppState>,
     id: String,
 ) -> Option<PopoutDmPayload> {
-    state
-        .popout_dms
-        .lock()
-        .ok()
-        .and_then(|mut m| m.remove(&id))
+    state.popout_dms.lock().ok().and_then(|mut m| m.remove(&id))
 }
 
 /// Open the translation helper popout window.
@@ -274,7 +279,7 @@ pub(crate) async fn open_translation_popout(app: tauri::AppHandle) -> Result<(),
         let _ = win.set_focus();
         return Ok(());
     }
-    let _window = tauri::WebviewWindowBuilder::new(
+    let window = tauri::WebviewWindowBuilder::new(
         &app,
         label,
         tauri::WebviewUrl::App(std::path::PathBuf::from("index.html")),
@@ -290,6 +295,9 @@ pub(crate) async fn open_translation_popout(app: tauri::AppHandle) -> Result<(),
     .skip_taskbar(false)
     .build()
     .map_err(|e: tauri::Error| e.to_string())?;
+    crate::platform::strip_system_chrome(&window);
+    #[cfg(target_os = "linux")]
+    crate::app::webview_linux::enable_webrtc(&window);
     Ok(())
 }
 

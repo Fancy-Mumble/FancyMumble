@@ -8,7 +8,7 @@ use mumble_protocol::command;
 use mumble_protocol::persistent::PchatProtocol;
 
 use super::types::ChatMessage;
-use super::{pchat, AppState, SharedState};
+use super::{AppState, FetchWalk, SharedState, pchat};
 
 struct OwnMessageData {
     channel_id: u32,
@@ -56,19 +56,23 @@ fn apply_plugin_message_update(
 
 fn own_session_hash(state: &SharedState) -> Option<String> {
     state
-        .conn.own_session
+        .conn
+        .own_session
         .and_then(|sid| state.users.get(&sid))
         .and_then(|u| u.hash.clone())
 }
 
 fn cache_own_signal_message(state: &mut SharedState, msg: &ChatMessage, channel_id: u32) {
     let own_cert_hash = state
-        .pchat_ctx.pchat
+        .pchat_ctx
+        .pchat
         .as_ref()
         .map(|ps| ps.own_cert_hash.clone())
         .unwrap_or_default();
-    if let Some(cache) = state.pchat_ctx.pchat.as_mut().and_then(|ps| ps.local_cache.as_mut()) {
-        cache.insert(super::local_cache::CachedMessage {
+    if let Some(pchat) = state.pchat_ctx.pchat.as_mut() {
+        // Through the same helper the inbound path uses, so a message the
+        // user sent gets the same throttled write-out as one they received.
+        pchat.cache_signal_message(super::local_cache::CachedMessage {
             message_id: msg.message_id.clone().unwrap_or_default(),
             channel_id,
             timestamp: msg.timestamp.unwrap_or(0),
@@ -80,20 +84,49 @@ fn cache_own_signal_message(state: &mut SharedState, msg: &ChatMessage, channel_
     }
 }
 
+/// Which way a fetch for `anchor` walks the archive.
+fn walk_of(anchor: &pchat::Anchor) -> FetchWalk {
+    match anchor {
+        pchat::Anchor::Newest => FetchWalk::Newest,
+        pchat::Anchor::Before(_) => FetchWalk::Older,
+        pchat::Anchor::After(_) => FetchWalk::Newer,
+    }
+}
+
 impl AppState {
+    /// Ask the server for a page of history in either direction.
+    ///
+    /// `fetch_older_messages` keeps its name and its meaning for the callers
+    /// that only ever walk backwards; [`Self::fetch_message_page`] is the one
+    /// that takes a direction.
     pub async fn fetch_older_messages(
         &self,
         channel_id: u32,
         before_id: Option<String>,
         limit: u32,
     ) -> Result<(), String> {
+        let anchor = before_id.map_or(pchat::Anchor::Newest, pchat::Anchor::Before);
+        self.fetch_message_page(channel_id, anchor, limit).await
+    }
+
+    /// Ask the server for a page of history anchored where the caller says.
+    pub async fn fetch_message_page(
+        &self,
+        channel_id: u32,
+        anchor: pchat::Anchor,
+        limit: u32,
+    ) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
-            let state = __session.lock().map_err(|e| e.to_string())?;
+            let mut state = __session.lock().map_err(|e| e.to_string())?;
+            // The response does not echo the direction it was asked in, and
+            // `has_more` means the opposite thing each way, so the asker
+            // records it while it still knows.
+            state.msgs.note_fetch(channel_id, walk_of(&anchor));
             state.conn.client_handle.clone()
         };
         let handle = handle.ok_or("Not connected")?;
-        pchat::send_fetch(&handle, channel_id, before_id, limit).await
+        pchat::send_fetch(&handle, channel_id, anchor, limit).await
     }
 
     pub async fn send_message(&self, channel_id: u32, body: String) -> Result<(), String> {
@@ -124,8 +157,7 @@ impl AppState {
         let message_id = is_fancy.then(|| uuid::Uuid::new_v4().to_string());
         let timestamp = is_fancy.then_some(now_ms);
 
-        let disable_dual = pchat_protocol
-            .is_some_and(|p| p.is_encrypted())
+        let disable_dual = pchat_protocol.is_some_and(|p| p.is_encrypted())
             && self
                 .inner
                 .snapshot()
@@ -139,7 +171,12 @@ impl AppState {
         };
 
         let prebuilt_pchat = self.prebuilt_pchat_message(
-            pchat_protocol, &message_id, channel_id, &body, &own_name, now_ms,
+            pchat_protocol,
+            &message_id,
+            channel_id,
+            &body,
+            &own_name,
+            now_ms,
         )?;
 
         handle
@@ -155,18 +192,23 @@ impl AppState {
             .await
             .map_err(|e| format!("Failed to send message: {e}"))?;
 
-        if let Some((proto_msg, client)) = prebuilt_pchat {
-            if let Err(e) = client
+        if let Some((proto_msg, client)) = prebuilt_pchat
+            && let Err(e) = client
                 .send(command::SendPchatMessage { message: proto_msg })
                 .await
-            {
-                tracing::warn!("send pchat-msg failed: {e}");
-            }
+        {
+            tracing::warn!("send pchat-msg failed: {e}");
         }
 
         self.store_own_message(OwnMessageData {
-            channel_id, own_session, own_name, own_hash,
-            body, message_id, timestamp, pchat_protocol,
+            channel_id,
+            own_session,
+            own_name,
+            own_hash,
+            body,
+            message_id,
+            timestamp,
+            pchat_protocol,
         });
         Ok(())
     }
@@ -179,15 +221,28 @@ impl AppState {
         body: &str,
         own_name: &str,
         now_ms: u64,
-    ) -> Result<Option<(mumble_protocol::proto::mumble_tcp::PchatMessage, ClientHandle)>, String> {
-        let Some(protocol) = pchat_protocol.filter(PchatProtocol::is_encrypted) else {
+    ) -> Result<
+        Option<(
+            mumble_protocol::proto::mumble_tcp::PchatMessage,
+            ClientHandle,
+        )>,
+        String,
+    > {
+        // `uses_pchat`, not `is_encrypted`: a server-managed channel's messages
+        // ride the same service and land in the same archive, they are simply
+        // not sealed by this client on the way. Filtering on encryption here
+        // would leave that mode with no persisted history at all.
+        let Some(protocol) = pchat_protocol.filter(PchatProtocol::uses_pchat) else {
             return Ok(None);
         };
-        let Some(ref msg_id) = message_id else {
+        let Some(msg_id) = message_id else {
             return Ok(None);
         };
+        self.ensure_signal_sender_key(protocol, channel_id);
         let __session = self.inner.snapshot();
-        let session = __session.lock().ok()
+        let session = __session
+            .lock()
+            .ok()
             .and_then(|s| s.conn.own_session)
             .unwrap_or(0);
         self.build_pchat_encrypted(&pchat::OutboundMessage {
@@ -201,9 +256,49 @@ impl AppState {
         })
     }
 
+    /// Mint and hand out our `SignalV1` sender key for `channel_id` if sending
+    /// is the first thing that has needed it.
+    ///
+    /// Every other call site of `create_distribution` hangs off a channel
+    /// *move*, so a room we never moved into - one that turned encrypted under
+    /// us, or one being read without joining - reached the send path with no
+    /// sender key, and `group_encrypt` failed with "missing sender key state
+    /// for distribution ID ...". `send_message` returns that as an error before
+    /// it has sent anything, and a plain text body has no placeholder to fail
+    /// visibly, so the message simply vanished.
+    ///
+    /// Cheap and idempotent: after the first mint the flag is set and this is a
+    /// map lookup.
+    fn ensure_signal_sender_key(&self, protocol: PchatProtocol, channel_id: u32) {
+        if protocol != PchatProtocol::SignalV1 {
+            return;
+        }
+        let shared = self.inner.snapshot();
+        let minted = shared
+            .lock()
+            .ok()
+            .and_then(|s| {
+                s.pchat_ctx
+                    .pchat
+                    .as_ref()
+                    .map(|p| p.signal_distributed.contains(&channel_id))
+            })
+            .unwrap_or(false);
+        if minted {
+            return;
+        }
+        tracing::info!(
+            channel_id,
+            "pchat: no signal sender key for this channel yet, minting one for the send"
+        );
+        pchat::send_signal_distribution(&shared, channel_id);
+    }
+
     fn store_own_message(&self, msg_data: OwnMessageData) {
         let __session = self.inner.snapshot();
-        let Ok(mut state) = __session.lock() else { return };
+        let Ok(mut state) = __session.lock() else {
+            return;
+        };
         let mut msg = ChatMessage {
             sender_session: msg_data.own_session,
             sender_name: msg_data.own_name,
@@ -215,6 +310,7 @@ impl AppState {
             message_id: msg_data.message_id,
             timestamp: msg_data.timestamp,
             is_legacy: false,
+            send_failed: false,
             edited_at: None,
             pinned: false,
             pinned_by: None,
@@ -224,11 +320,18 @@ impl AppState {
         };
         msg.ensure_id();
 
-        if msg_data.pchat_protocol.is_some_and(|p| p == PchatProtocol::SignalV1) {
+        if msg_data
+            .pchat_protocol
+            .is_some_and(|p| p == PchatProtocol::SignalV1)
+        {
             cache_own_signal_message(&mut state, &msg, msg_data.channel_id);
         }
 
-        let bucket = state.msgs.by_channel.entry(msg_data.channel_id).or_default();
+        let bucket = state
+            .msgs
+            .by_channel
+            .entry(msg_data.channel_id)
+            .or_default();
         super::push_capped(bucket, msg);
     }
 
@@ -292,6 +395,7 @@ impl AppState {
                     message_id: Some(message_id.clone()),
                     timestamp: Some(now_ms),
                     is_legacy: false,
+                    send_failed: false,
                     edited_at: None,
                     pinned: false,
                     pinned_by: None,
@@ -414,13 +518,14 @@ impl AppState {
             .await
             .map_err(|e| format!("Failed to send edit: {e}"))?;
 
-        if let Ok(mut state) = self.inner.snapshot().lock() {
-            if let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id) {
-                if let Some(msg) = msgs.iter_mut().find(|m| m.message_id.as_deref() == Some(&message_id)) {
-                    msg.body = new_body;
-                    msg.edited_at = Some(now_ms);
-                }
-            }
+        if let Ok(mut state) = self.inner.snapshot().lock()
+            && let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id)
+            && let Some(msg) = msgs
+                .iter_mut()
+                .find(|m| m.message_id.as_deref() == Some(&message_id))
+        {
+            msg.body = new_body;
+            msg.edited_at = Some(now_ms);
         }
 
         Ok(())
@@ -430,27 +535,34 @@ impl AppState {
     pub(super) fn build_pchat_encrypted(
         &self,
         outbound: &pchat::OutboundMessage<'_>,
-    ) -> Result<Option<(mumble_protocol::proto::mumble_tcp::PchatMessage, ClientHandle)>, String> {
+    ) -> Result<
+        Option<(
+            mumble_protocol::proto::mumble_tcp::PchatMessage,
+            ClientHandle,
+        )>,
+        String,
+    > {
         let __session = self.inner.snapshot();
         let mut state = __session.lock().map_err(|e| e.to_string())?;
         let client = state.conn.client_handle.clone();
-        if let (Some(ref mut pchat_state), Some(client)) = (&mut state.pchat_ctx.pchat, client) {
-            if outbound.protocol == PchatProtocol::SignalV1
-                && pchat_state.signal_bridge.is_none()
-                && !pchat_state.signal_bridge_load_failed
-            {
-                tracing::info!("send_message: lazy-loading signal bridge");
-                let _ = pchat_state.ensure_signal_bridge();
-            }
-            match pchat_state.build_encrypted_message(outbound) {
-                Ok(proto_msg) => Ok(Some((proto_msg, client))),
-                Err(e) => {
-                    tracing::warn!("pchat encrypt failed: {e}");
-                    Err(format!("Encryption failed: {e}"))
+        match (&mut state.pchat_ctx.pchat, client) {
+            (Some(pchat_state), Some(client)) => {
+                if outbound.protocol == PchatProtocol::SignalV1
+                    && pchat_state.signal_bridge.is_none()
+                    && !pchat_state.signal_bridge_load_failed
+                {
+                    tracing::info!("send_message: lazy-loading signal bridge");
+                    let _ = pchat_state.ensure_signal_bridge();
+                }
+                match pchat_state.build_encrypted_message(outbound) {
+                    Ok(proto_msg) => Ok(Some((proto_msg, client))),
+                    Err(e) => {
+                        tracing::warn!("pchat encrypt failed: {e}");
+                        Err(format!("Encryption failed: {e}"))
+                    }
                 }
             }
-        } else {
-            Ok(None)
+            _ => Ok(None),
         }
     }
 }

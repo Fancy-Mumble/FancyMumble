@@ -12,35 +12,66 @@
 //! The branded bootstrapper UI lives in `ui/src/updater/` and is loaded
 //! into a dedicated [`tauri::WebviewWindow`] with the label
 //! [`UPDATER_WINDOW_LABEL`].
+//!
+//! Updates come from one of two channels - see the `channel` module for how
+//! they are ordered against each other. Stable is the default, and is all a
+//! client ever sees unless the user opts into betas.
 
 #![cfg(not(target_os = "android"))]
 
+#[cfg(feature = "self-updater")]
+pub(crate) mod channel;
+#[cfg(feature = "self-updater")]
 pub(crate) mod commands;
+#[cfg(feature = "self-updater")]
 mod manager;
 mod window;
 
+#[cfg(feature = "self-updater")]
 pub(crate) use manager::UpdaterState;
-pub(crate) use window::{show_main_window, MAIN_WINDOW_LABEL, UPDATER_WINDOW_LABEL};
+pub(crate) use window::{MAIN_WINDOW_LABEL, UPDATER_WINDOW_LABEL, show_main_window};
 
-use tauri::{Manager, Wry};
+#[cfg(feature = "self-updater")]
+use tauri::Manager;
+use tauri::Wry;
 
 /// Register the `updater` and `process` Tauri plugins on the builder.
 ///
 /// `process` is needed so the bootstrapper UI can call `relaunch()`
 /// after a successful update on macOS / Linux (Windows relaunches
-/// automatically as part of the installer flow).
+/// automatically as part of the installer flow). Both go away together
+/// when `self-updater` is off - `process` has no other consumer.
 pub(crate) fn register_plugins(builder: tauri::Builder<Wry>) -> tauri::Builder<Wry> {
-    builder
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+    #[cfg(not(feature = "self-updater"))]
+    {
+        builder
+    }
+    #[cfg(feature = "self-updater")]
+    {
+        builder
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .plugin(tauri_plugin_process::init())
+    }
 }
 
 /// Install the shared [`UpdaterState`] and kick off the background
 /// check-on-startup task. Safe to call once from the main `setup` hook.
+///
+/// With `self-updater` off there is nothing to check, but the main window
+/// still starts hidden (`visible: false` in `tauri.conf.json`) and this is
+/// what reveals it - so the no-op path has to show it immediately, or the
+/// app launches to no window at all.
 pub(crate) fn init(app: &tauri::AppHandle) {
-    let _ = app.manage(UpdaterState::default());
-    load_persisted_prefs(app);
-    spawn_startup_check(app.clone());
+    #[cfg(not(feature = "self-updater"))]
+    {
+        show_main_window(app);
+    }
+    #[cfg(feature = "self-updater")]
+    {
+        let _ = app.manage(UpdaterState::default());
+        load_persisted_prefs(app);
+        spawn_startup_check(app.clone());
+    }
 }
 
 /// Read `preferences.json` (written by `@tauri-apps/plugin-store`) and
@@ -48,29 +79,35 @@ pub(crate) fn init(app: &tauri::AppHandle) {
 /// avoids a race where the JS in the main webview hasn't yet pushed
 /// the user's preferences via the `updater_set_*` commands by the time
 /// `spawn_startup_check` decides whether to auto-install.
+#[cfg(feature = "self-updater")]
 fn load_persisted_prefs(app: &tauri::AppHandle) {
     let Some(state) = app.try_state::<UpdaterState>() else {
         return;
     };
-    let Ok(config_dir) = app.path().app_config_dir() else {
-        return;
-    };
-    let path = config_dir.join("preferences.json");
-    let Ok(bytes) = std::fs::read(&path) else {
-        tracing::debug!("Updater: no persisted preferences at {}", path.display());
+    let Some((path, bytes)) = crate::app::prefs::read_preferences_file(app) else {
         return;
     };
     let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
-        tracing::warn!("Updater: preferences.json is not valid JSON");
+        tracing::warn!("Updater: {} is not valid JSON", path.display());
         return;
     };
     let prefs = json.get("preferences").unwrap_or(&json);
-    if let Some(b) = prefs.get("autoUpdateOnStartup").and_then(serde_json::Value::as_bool) {
+    if let Some(b) = prefs
+        .get("autoUpdateOnStartup")
+        .and_then(serde_json::Value::as_bool)
+    {
         state.set_auto_install(b);
         tracing::info!("Updater: auto-install on startup = {b}");
     }
     if let Some(v) = prefs.get("skippedUpdateVersion").and_then(|v| v.as_str()) {
         state.set_skipped_version(Some(v.to_string()));
+    }
+    if let Some(b) = prefs
+        .get("betaUpdates")
+        .and_then(serde_json::Value::as_bool)
+    {
+        state.set_beta_channel(b);
+        tracing::info!("Updater: beta channel = {b}");
     }
 }
 
@@ -79,14 +116,22 @@ fn load_persisted_prefs(app: &tauri::AppHandle) {
 /// * If an update is available and not skipped: open the branded
 ///   bootstrapper window and keep the main window hidden.
 /// * Otherwise: reveal the main window immediately.
+#[cfg(feature = "self-updater")]
 fn spawn_startup_check(app: tauri::AppHandle) {
     drop(tauri::async_runtime::spawn(async move {
         // Tiny delay so the main webview has a chance to register its
         // `updater_set_auto_install` and `updater_set_skipped_version`
         // preferences before we open the window.
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-        match commands::run_check(&app).await {
-            Ok(true) => {
+        // Bound the update check: it hits GitHub over HTTPS, and on a slow,
+        // captive or offline network `updater.check()` can hang indefinitely.
+        // The main window is `visible: false` and is only revealed after this
+        // returns, so an unbounded check would leave the app (and the
+        // onboarding flow) permanently invisible. Always fall through to
+        // showing the window.
+        const STARTUP_CHECK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(6);
+        match tokio::time::timeout(STARTUP_CHECK_TIMEOUT, commands::run_check(&app)).await {
+            Ok(Ok(true)) => {
                 let auto = app
                     .try_state::<UpdaterState>()
                     .map(|s| s.auto_install())
@@ -96,12 +141,19 @@ fn spawn_startup_check(app: tauri::AppHandle) {
                     show_main_window(&app);
                 }
             }
-            Ok(false) => {
+            Ok(Ok(false)) => {
                 tracing::debug!("Updater: no update available");
                 show_main_window(&app);
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 tracing::info!("Updater: startup check failed: {e}");
+                show_main_window(&app);
+            }
+            Err(_) => {
+                tracing::warn!(
+                    "Updater: startup check timed out after {}s; showing main window",
+                    STARTUP_CHECK_TIMEOUT.as_secs()
+                );
                 show_main_window(&app);
             }
         }

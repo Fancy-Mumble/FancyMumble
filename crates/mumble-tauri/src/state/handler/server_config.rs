@@ -10,11 +10,12 @@ impl HandleMessage for mumble_tcp::ServerConfig {
                 state.server.config.max_message_length = len;
             }
             if let Some(len) = self.image_message_length {
-                // 0 means "no special limit" in the Mumble protocol;
-                // keep the default (131072) rather than storing 0.
-                if len > 0 {
-                    state.server.config.max_image_message_length = len;
-                }
+                // 0 means "no dedicated image limit" in the Mumble protocol, so
+                // store it verbatim and let callers fall back to the general
+                // message limit. Rewriting it to the default made "unlimited"
+                // indistinguishable from a real 128 KiB cap, which silently
+                // recompressed images the server would have accepted intact.
+                state.server.config.max_image_message_length = len;
             }
             if let Some(allow) = self.allow_html {
                 state.server.config.allow_html = allow;

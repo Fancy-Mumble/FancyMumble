@@ -7,7 +7,7 @@
 
 use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tauri::Manager;
 use tracing::{info, warn};
@@ -16,10 +16,16 @@ use crate::state::AppState;
 
 /// XDG base directory for application launchers.
 const APPLICATIONS_DIR: &str = "applications";
-/// XDG base directory for icons (hicolor theme, 256x256).
-const ICON_SUBDIR: &str = "icons/hicolor/256x256/apps";
+/// The user's copy of the hicolor icon theme, where our icon is installed.
+const ICON_THEME_DIR: &str = "icons/hicolor";
 /// Desktop file name (must match the GTK application ID).
 const DESKTOP_FILE_NAME: &str = "com.fancymumble.app.desktop";
+/// Desktop file name for a build running straight out of `target/`.
+///
+/// A separate file, so a working copy and an installed Fancy Mumble - a
+/// Flatpak, a `.deb`, the AUR package - show up as two clearly different
+/// launcher entries instead of two identical ones.
+const DEV_DESKTOP_FILE_NAME: &str = "com.fancymumble.app.dev.desktop";
 /// Icon name (without extension) referenced by the desktop file.
 const ICON_NAME: &str = "com.fancymumble.app";
 
@@ -28,16 +34,33 @@ const SOCKET_NAME: &str = "com.fancymumble.app.sock";
 
 // -- Desktop file template ------------------------------------------------
 
+/// Is this binary running out of a cargo build directory?
+///
+/// `cfg!(debug_assertions)` is the wrong test: a local `cargo build --release`
+/// is still a working copy, and that is precisely the case that used to install
+/// a launcher entry indistinguishable from a packaged one. The install path is
+/// what actually separates them - a packaged build lives in `/usr/bin`,
+/// `/app/bin` or an `AppImage` mount, never in `target/`.
+fn is_dev_build(exec_path: &str) -> bool {
+    exec_path.contains("/target/debug/") || exec_path.contains("/target/release/")
+}
+
 /// Render the `.desktop` file contents.
 ///
 /// `exec_path` is substituted into the `Exec` lines so that quick actions
-/// work regardless of where the binary is installed.
-fn desktop_file_contents(exec_path: &str) -> String {
+/// work regardless of where the binary is installed. `dev` marks the entry as
+/// a working copy so it is tellable apart from an installed Fancy Mumble.
+fn desktop_file_contents(exec_path: &str, dev: bool) -> String {
+    let name = if dev {
+        "Fancy Mumble (Dev)"
+    } else {
+        "Fancy Mumble"
+    };
     format!(
         "\
 [Desktop Entry]
 Type=Application
-Name=Fancy Mumble
+Name={name}
 GenericName=Mumble Client
 Comment=Modern Mumble voice chat client
 Exec={exec_path} %U
@@ -117,8 +140,30 @@ pub fn install_desktop_entry() {
         return;
     }
 
-    let desktop_path = apps_dir.join(DESKTOP_FILE_NAME);
-    let contents = desktop_file_contents(&exec_path);
+    let dev = is_dev_build(&exec_path);
+    let desktop_path = apps_dir.join(if dev {
+        DEV_DESKTOP_FILE_NAME
+    } else {
+        DESKTOP_FILE_NAME
+    });
+    let contents = desktop_file_contents(&exec_path, dev);
+
+    // Earlier versions wrote the plain name from a working copy too, so a
+    // machine that has ever run one carries a stale entry pointing into
+    // `target/` - the duplicate this split exists to remove. Only ever touches
+    // the per-user copy; a packaged install owns /usr/share and is untouched.
+    if dev {
+        let stale = apps_dir.join(DESKTOP_FILE_NAME);
+        if std::fs::read_to_string(&stale)
+            .map(|c| c.contains("/target/debug/") || c.contains("/target/release/"))
+            .unwrap_or(false)
+        {
+            match std::fs::remove_file(&stale) {
+                Ok(()) => info!("Removed stale dev desktop file: {}", stale.display()),
+                Err(e) => warn!("Failed to remove {}: {e}", stale.display()),
+            }
+        }
+    }
 
     // Only write when changed (avoids unnecessary inotify churn).
     let needs_write = std::fs::read_to_string(&desktop_path)
@@ -133,26 +178,141 @@ pub fn install_desktop_entry() {
     }
 
     // -- Icon ------------------------------------------------------------
-    let icon_dir = data_home.join(ICON_SUBDIR);
-    if let Err(e) = std::fs::create_dir_all(&icon_dir) {
-        warn!("Failed to create {}: {e}", icon_dir.display());
+    install_shipped_icon(&data_home);
+}
+
+// -- Icon theme -----------------------------------------------------------
+
+/// The sizes the hicolor theme declares.
+///
+/// A directory hicolor does not declare is not searched, so an icon dropped
+/// into one is not a worse match - it is never found at all.
+const HICOLOR_SIZES: &[u32] = &[16, 22, 24, 32, 36, 48, 64, 72, 96, 128, 192, 256, 512];
+
+/// Where an icon `size` pixels on a side belongs in the user's hicolor theme.
+fn icon_path(data_home: &Path, size: u32) -> PathBuf {
+    data_home
+        .join(ICON_THEME_DIR)
+        .join(format!("{size}x{size}"))
+        .join("apps")
+        .join(format!("{ICON_NAME}.png"))
+}
+
+/// Every copy of our icon already sitting in the user's hicolor theme.
+fn installed_icons(data_home: &Path) -> Vec<PathBuf> {
+    HICOLOR_SIZES
+        .iter()
+        .map(|&size| icon_path(data_home, size))
+        .filter(|path| path.is_file())
+        .collect()
+}
+
+/// The edge length of a square PNG; `None` if it is neither square nor a PNG.
+fn square_png_size(png: &[u8]) -> Option<u32> {
+    let (width, height) = image::ImageReader::new(std::io::Cursor::new(png))
+        .with_guessed_format()
+        .ok()?
+        .into_dimensions()
+        .ok()?;
+    (width == height).then_some(width)
+}
+
+/// Install `png` as the icon for `size`, and remove the copies at every other
+/// size.
+///
+/// One file at a time on purpose: a leftover at a size closer to what the shell
+/// asked for wins the lookup, so an old icon would outrank the new one rather
+/// than sit harmlessly beside it.
+fn write_icon(data_home: &Path, size: u32, png: &[u8]) {
+    if !HICOLOR_SIZES.contains(&size) {
+        warn!("hicolor declares no {size}x{size} directory; skipping icon install");
         return;
     }
-    let icon_dest = icon_dir.join(format!("{ICON_NAME}.png"));
+    let dest = icon_path(data_home, size);
 
-    // Ship the icon embedded in the binary so it works in dev mode too.
-    let icon_bytes = include_bytes!("../../../icons/icon.png");
+    // Writing identical bytes would wake every icon-theme watcher for nothing,
+    // and the themed icon is rewritten on each theme change.
+    if std::fs::read(&dest).is_ok_and(|existing| existing == png) {
+        return;
+    }
 
-    let needs_icon = std::fs::metadata(&icon_dest)
-        .map(|m| m.len() != icon_bytes.len() as u64)
-        .unwrap_or(true);
-
-    if needs_icon {
-        match std::fs::write(&icon_dest, icon_bytes) {
-            Ok(()) => info!("Installed app icon: {}", icon_dest.display()),
-            Err(e) => warn!("Failed to write app icon: {e}"),
+    if let Some(dir) = dest.parent()
+        && let Err(e) = std::fs::create_dir_all(dir)
+    {
+        warn!("Failed to create {}: {e}", dir.display());
+        return;
+    }
+    match std::fs::write(&dest, png) {
+        Ok(()) => info!("Installed app icon: {}", dest.display()),
+        Err(e) => {
+            warn!("Failed to write app icon: {e}");
+            return;
         }
     }
+
+    for stale in installed_icons(data_home) {
+        if stale != dest {
+            match std::fs::remove_file(&stale) {
+                Ok(()) => info!("Removed app icon at another size: {}", stale.display()),
+                Err(e) => warn!("Failed to remove {}: {e}", stale.display()),
+            }
+        }
+    }
+}
+
+/// Put the icon shipped with the build into the user's icon theme, unless one
+/// is already installed.
+///
+/// "Unless" is the whole point: [`install_themed_icon`] replaces that file with
+/// the mark the running theme draws, and that has to survive the next start.
+/// What the shipped icon covers is the first run, and the app grid before this
+/// build has ever drawn a window.
+fn install_shipped_icon(data_home: &Path) {
+    if !installed_icons(data_home).is_empty() {
+        return;
+    }
+    // Embedded rather than read from the install prefix, so a dev build out of
+    // `target/` gets an icon too.
+    let png = include_bytes!("../../../icons/icon.png");
+    let Some(size) = square_png_size(png) else {
+        warn!("The icon shipped with this build is not a square PNG; skipping install");
+        return;
+    };
+    write_icon(data_home, size, png);
+}
+
+/// Install the mark the frontend drew as the app's icon.
+///
+/// GNOME never shows the icon a window sets: under Wayland GTK has no way to
+/// hand one to the compositor, and even on X11 the shell matches the window to
+/// its `.desktop` entry by `StartupWMClass` and draws that entry's `Icon=`,
+/// keeping `_NET_WM_ICON` for windows it cannot match. So the themed mark has
+/// to arrive where the shell actually looks for it: the file that icon name
+/// resolves to.
+///
+/// Which makes it the *app's* icon rather than the window's - the one thing
+/// this cannot express. Several windows in different themes share one taskbar
+/// icon, and it wears whichever theme drew last; so does a working copy run
+/// beside an installed Fancy Mumble, which shares the icon name. Giving a dev
+/// build its own name was tried and is worse: the shell keeps serving the icon
+/// name it already read, so renaming leaves it resolving a name that no longer
+/// exists and it falls back to a generic cog until it is restarted.
+pub(crate) fn install_themed_icon(rgba: &[u8], width: u32, height: u32) -> Result<(), String> {
+    use image::ImageEncoder as _;
+
+    if width != height {
+        return Err(format!("an icon of {width}x{height} is not square"));
+    }
+    let data_home =
+        xdg_data_home().ok_or_else(|| "could not determine XDG_DATA_HOME".to_string())?;
+
+    let mut png = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut png)
+        .write_image(rgba, width, height, image::ExtendedColorType::Rgba8)
+        .map_err(|e| format!("could not encode the icon: {e}"))?;
+
+    write_icon(&data_home, width, &png);
+    Ok(())
 }
 
 // -- GTK prgname ----------------------------------------------------------
@@ -166,10 +326,13 @@ pub fn set_gtk_identifiers() {
     // Safety: g_set_prgname / g_set_application_name are thread-safe glib
     // functions that take a NUL-terminated C string.  We call them before
     // any GTK/GLib threads are spawned.
-    #[allow(unsafe_code, reason = "calling well-defined glib C API before GTK init")]
+    #[allow(
+        unsafe_code,
+        reason = "calling well-defined glib C API before GTK init"
+    )]
     {
         use std::ffi::CString;
-        extern "C" {
+        unsafe extern "C" {
             fn g_set_prgname(prgname: *const std::ffi::c_char);
             fn g_set_application_name(name: *const std::ffi::c_char);
         }
@@ -249,10 +412,7 @@ pub fn try_send_quick_action() -> bool {
 /// Read a single incoming connection and dispatch the action it carries.
 ///
 /// Returns `true` to keep listening, `false` to stop.
-fn handle_incoming(
-    app_handle: &tauri::AppHandle,
-    stream: std::io::Result<UnixStream>,
-) -> bool {
+fn handle_incoming(app_handle: &tauri::AppHandle, stream: std::io::Result<UnixStream>) -> bool {
     let mut s = match stream {
         Ok(s) => s,
         Err(e) => {
@@ -365,8 +525,28 @@ mod tests {
     }
 
     #[test]
+    fn dev_build_is_detected_by_cargo_target_path() {
+        assert!(is_dev_build(
+            "/home/u/src/client/target/release/mumble-tauri"
+        ));
+        assert!(is_dev_build("/home/u/src/client/target/debug/mumble-tauri"));
+        // Packaged installs, which must keep the plain entry.
+        assert!(!is_dev_build("/usr/bin/mumble-tauri"));
+        assert!(!is_dev_build("/app/bin/mumble-tauri"));
+    }
+
+    #[test]
+    fn dev_entry_is_named_apart_from_an_installed_one() {
+        let dev = desktop_file_contents("/home/u/src/client/target/release/mumble-tauri", true);
+        assert!(dev.contains("Name=Fancy Mumble (Dev)"));
+        let packaged = desktop_file_contents("/usr/bin/mumble-tauri", false);
+        assert!(packaged.contains("Name=Fancy Mumble\n"));
+        assert_ne!(DESKTOP_FILE_NAME, DEV_DESKTOP_FILE_NAME);
+    }
+
+    #[test]
     fn desktop_file_contains_required_fields() {
-        let content = desktop_file_contents("/usr/bin/fancy-mumble");
+        let content = desktop_file_contents("/usr/bin/fancy-mumble", false);
         assert!(content.contains("Name=Fancy Mumble"));
         assert!(content.contains("Exec=/usr/bin/fancy-mumble %U"));
         assert!(content.contains("[Desktop Action mute]"));
@@ -375,6 +555,69 @@ mod tests {
         assert!(content.contains("StartupWMClass=com.fancymumble.app"));
         assert!(content.contains("Icon=com.fancymumble.app"));
         assert!(content.contains("Actions=mute;deafen;disconnect;"));
+    }
+
+    #[test]
+    fn the_shipped_icon_is_a_square_png() {
+        // What decides which hicolor directory it is installed into, so a
+        // replacement of the wrong shape must not go in silently.
+        assert_eq!(
+            square_png_size(include_bytes!("../../../icons/icon.png")),
+            Some(128)
+        );
+    }
+
+    #[test]
+    fn installing_an_icon_clears_the_copies_at_other_sizes() {
+        let home = tempfile::tempdir().expect("tempdir");
+        let stale = icon_path(home.path(), 256);
+        std::fs::create_dir_all(stale.parent().expect("parent")).expect("mkdir");
+        std::fs::write(&stale, b"old").expect("write");
+
+        write_icon(home.path(), 128, b"new");
+
+        assert_eq!(
+            std::fs::read(icon_path(home.path(), 128)).expect("read"),
+            b"new"
+        );
+        assert!(
+            !stale.exists(),
+            "the 256x256 copy would outrank the new one"
+        );
+    }
+
+    #[test]
+    fn an_undeclared_size_is_refused_rather_than_written_where_nothing_looks() {
+        let home = tempfile::tempdir().expect("tempdir");
+        write_icon(home.path(), 100, b"new");
+        assert!(installed_icons(home.path()).is_empty());
+    }
+
+    #[test]
+    fn the_shipped_icon_does_not_replace_a_themed_one() {
+        let home = tempfile::tempdir().expect("tempdir");
+        let themed = icon_path(home.path(), 128);
+        std::fs::create_dir_all(themed.parent().expect("parent")).expect("mkdir");
+        std::fs::write(&themed, b"themed").expect("write");
+
+        install_shipped_icon(home.path());
+
+        assert_eq!(std::fs::read(&themed).expect("read"), b"themed");
+    }
+
+    #[test]
+    fn the_shipped_icon_is_installed_when_the_theme_has_none() {
+        let home = tempfile::tempdir().expect("tempdir");
+        install_shipped_icon(home.path());
+        assert_eq!(
+            installed_icons(home.path()),
+            vec![icon_path(home.path(), 128)]
+        );
+    }
+
+    #[test]
+    fn a_themed_icon_that_is_not_square_is_refused() {
+        assert!(install_themed_icon(&[0; 4 * 2 * 3], 2, 3).is_err());
     }
 
     #[test]

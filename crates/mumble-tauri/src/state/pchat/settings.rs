@@ -16,7 +16,7 @@ pub(crate) const ARCHIVE_KEYS_FILE: &str = "archive_keys.json";
 /// Legacy paths used before per-identity storage was introduced.
 pub(super) const LEGACY_PCHAT_DIR: &str = "pchat";
 pub(super) const LEGACY_SEED_FILE: &str = "identity_seed.bin";
-pub(super) const LEGACY_CERTS_DIR: &str = "certs";
+pub(crate) const LEGACY_CERTS_DIR: &str = "certs";
 
 /// Maximum number of `SignalV1` envelopes to stash while awaiting a
 /// sender key distribution.

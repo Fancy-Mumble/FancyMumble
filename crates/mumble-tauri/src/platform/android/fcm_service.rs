@@ -1,7 +1,7 @@
 //! Bridge to the Android `FcmPlugin` for FCM device token retrieval.
 
-use tauri::plugin::PluginHandle;
 use tauri::Wry;
+use tauri::plugin::PluginHandle;
 
 /// Managed state holding the Tauri mobile plugin handle for
 /// `FcmPlugin` (Kotlin).
@@ -17,10 +17,7 @@ pub fn get_token(handle: &FcmPluginHandle) -> Option<String> {
         .run_mobile_plugin::<serde_json::Value>("getToken", serde_json::json!({}))
     {
         Ok(val) => {
-            let token = val
-                .get("token")
-                .and_then(|t| t.as_str())
-                .map(String::from);
+            let token = val.get("token").and_then(|t| t.as_str()).map(String::from);
             if let Some(ref t) = token {
                 tracing::info!(len = t.len(), "FCM: device token obtained");
             }

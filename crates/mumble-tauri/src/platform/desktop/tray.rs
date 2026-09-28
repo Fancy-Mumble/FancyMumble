@@ -8,8 +8,7 @@ use std::sync::OnceLock;
 
 use tauri::image::Image;
 use tauri::menu::{
-    CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItem, MenuItemBuilder,
-    PredefinedMenuItem,
+    CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItem, MenuItemBuilder, PredefinedMenuItem,
 };
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Listener, Manager};
@@ -87,11 +86,10 @@ pub fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
                 button: MouseButton::Left,
                 ..
             } = event
+                && let Some(w) = tray.app_handle().get_webview_window("main")
             {
-                if let Some(w) = tray.app_handle().get_webview_window("main") {
-                    let _ = w.show();
-                    let _ = w.set_focus();
-                }
+                let _ = w.show();
+                let _ = w.set_focus();
             }
         })
         .build(app)?;
@@ -161,7 +159,9 @@ fn sync_tray_checks(app: &AppHandle) {
     let state = app.state::<AppState>();
     let vs = state.voice_state();
     let muted = matches!(vs, crate::state::VoiceState::Muted);
-    let deafened = matches!(vs, crate::state::VoiceState::Inactive);
+    // Deafen is a server-side flag, not a voice state: reading it from
+    // `VoiceState::Inactive` ticked "Deafen" whenever voice was merely off.
+    let deafened = state.self_deafened();
 
     if let Some(item) = MUTE_ITEM.get() {
         let _ = item.set_checked(muted);
@@ -266,9 +266,9 @@ fn render_talking_icon_inner() -> Option<Vec<u8>> {
             if dist <= radius {
                 let i = (y * width + x) * 4;
                 if i + 3 < buf.len() {
-                    buf[i] = 76;      // R
+                    buf[i] = 76; // R
                     buf[i + 1] = 175; // G
-                    buf[i + 2] = 80;  // B
+                    buf[i + 2] = 80; // B
                     buf[i + 3] = 255; // A
                 }
             } else if dist <= radius + 1.5 {

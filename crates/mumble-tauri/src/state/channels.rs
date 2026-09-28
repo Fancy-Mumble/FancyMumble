@@ -4,48 +4,102 @@ use mumble_protocol::command;
 use mumble_protocol::persistent::PchatProtocol;
 use tracing::debug;
 
-use super::parse_pchat_protocol_str;
 use super::AppState;
+use super::parse_pchat_protocol_str;
+
+/// Maps raw `ChannelAttribute` discriminants sent by the frontend onto the proto
+/// enum, dropping any value the current protocol does not define.
+///
+/// Kept generic on purpose: a new settable channel trait becomes usable from the
+/// UI without touching this command surface.
+fn parse_channel_attributes(
+    raw: &[i32],
+) -> Vec<mumble_protocol::proto::mumble_tcp::ChannelAttribute> {
+    raw.iter()
+        .filter_map(|&value| {
+            mumble_protocol::proto::mumble_tcp::ChannelAttribute::try_from(value).ok()
+        })
+        .collect()
+}
 
 impl AppState {
     pub async fn select_channel(&self, channel_id: u32) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
             let mut state = __session.lock().map_err(|e| e.to_string())?;
-            state.selected_channel = Some(channel_id);
-            state.msgs.selected_dm_user = None;
+            let previous = state.selected_channel.replace(channel_id);
+            let left_dm = state.msgs.selected_dm_user.take();
             let _ = state.msgs.channel_unread.remove(&channel_id);
+            // Read here, so read everywhere: the channel opened, and whatever
+            // was on screen before it, which was read while it was open.
+            super::read_sync::share(&state, super::read_sync::Read::Channel(channel_id));
+            if let Some(left) = previous.filter(|&left| left != channel_id) {
+                super::read_sync::share(&state, super::read_sync::Read::Channel(left));
+            }
+            if let Some(left) = left_dm {
+                super::read_sync::share(&state, super::read_sync::Read::Direct(left));
+            }
+            // The channel just left has no rows any more; its heavy bodies
+            // go to cold storage now instead of staying in memory for the
+            // rest of the session. They come back the moment it is reopened
+            // and a row asks for them.
+            if previous != Some(channel_id) {
+                let _ =
+                    crate::state::offload_ops::offload_idle_channels(&mut state, Some(channel_id));
+            }
             state.conn.client_handle.clone()
         };
         self.emit_unreads();
 
-        if let Some(handle) = handle {
-            let _ = handle
-                .send(command::PermissionQuery { channel_id })
-                .await;
+        // Selecting the channel has already succeeded locally, so a failed
+        // permission query is logged rather than failing the selection.
+        if let Some(handle) = handle
+            && let Err(e) = handle.send(command::PermissionQuery { channel_id }).await
+        {
+            tracing::warn!(channel_id, "could not send the permission query: {e}");
         }
 
         Ok(())
     }
 
-    pub async fn join_channel(&self, channel_id: u32, password: Option<String>) -> Result<(), String> {
+    /// Read a persistent-chat channel WITHOUT joining it (no voice move): fetch
+    /// its history and run the key challenge so live messages are delivered.
+    /// Used to open a 1:1 private chat room (friend chat / self-notepad) you're a
+    /// participant of - the server serves pchat history and relays new messages
+    /// to any key-verified session, so channel membership is not required.
+    /// Idempotent: a no-op once the channel's history has been fetched.
+    pub fn peek_pchat_channel(&self, channel_id: u32) {
+        crate::state::handler::user_state::ensure_pchat_history(&self.inner.snapshot(), channel_id);
+    }
+
+    pub async fn join_channel(
+        &self,
+        channel_id: u32,
+        password: Option<String>,
+    ) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
             let state = __session.lock().map_err(|e| e.to_string())?;
             state.conn.client_handle.clone()
         };
 
-        if let Some(handle) = handle {
-            let _ = handle
-                .send(command::JoinChannel { channel_id, password })
-                .await;
-        }
-
-        Ok(())
+        let Some(handle) = handle else {
+            return Err("Not connected".to_owned());
+        };
+        // Reporting success for a join that never left the client is how a
+        // dropped connection turns into a UI that shows the wrong channel.
+        handle
+            .send(command::JoinChannel {
+                channel_id,
+                password,
+            })
+            .await
+            .map_err(|e| format!("could not send the channel join: {e}"))
     }
 
     pub fn current_channel(&self) -> Option<u32> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .ok()
             .and_then(|s| s.current_channel)
@@ -65,9 +119,7 @@ impl AppState {
                     .and_then(|ch| ch.permissions)
                     .is_some_and(|p| p & 0x800 == 0);
                 if no_listen_perm {
-                    return Err(
-                        "You do not have permission to listen to this channel".into(),
-                    );
+                    return Err("You do not have permission to listen to this channel".into());
                 }
             }
 
@@ -116,16 +168,21 @@ impl AppState {
     }
 
     pub fn listened_channels(&self) -> Vec<u32> {
-        self.inner.snapshot()
+        self.inner
+            .snapshot()
             .lock()
             .map(|s| s.permanently_listened.iter().copied().collect())
             .unwrap_or_default()
     }
 
-    #[allow(clippy::too_many_arguments, reason = "channel update mirrors the full server-side parameter surface as optional fields")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "channel update mirrors the full server-side parameter surface as optional fields"
+    )]
     pub async fn update_channel(
         &self,
         channel_id: u32,
+        parent_id: Option<u32>,
         name: Option<String>,
         description: Option<String>,
         position: Option<i32>,
@@ -135,6 +192,11 @@ impl AppState {
         pchat_max_history: Option<u32>,
         pchat_retention_days: Option<u32>,
         password: Option<String>,
+        hidden: Option<bool>,
+        expiry_mode: Option<u32>,
+        expiry_duration_secs: Option<u32>,
+        attributes: Vec<i32>,
+        attribute_mask: Vec<i32>,
     ) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
@@ -156,7 +218,7 @@ impl AppState {
                 );
                 h.send(command::SetChannelState {
                     channel_id: Some(channel_id),
-                    parent: None,
+                    parent: parent_id,
                     name,
                     description,
                     position,
@@ -166,6 +228,12 @@ impl AppState {
                     pchat_max_history,
                     pchat_retention_days,
                     channel_info_password: password,
+                    hidden,
+                    expiry_mode,
+                    expiry_duration_secs,
+                    invitee_user_ids: Vec::new(),
+                    attributes: parse_channel_attributes(&attributes),
+                    attribute_mask: parse_channel_attributes(&attribute_mask),
                 })
                 .await
                 .map_err(|e| e.to_string())
@@ -189,7 +257,10 @@ impl AppState {
         }
     }
 
-    #[allow(clippy::too_many_arguments, reason = "channel creation mirrors the full server-side parameter surface as optional fields")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "channel creation mirrors the full server-side parameter surface as optional fields"
+    )]
     pub async fn create_channel(
         &self,
         parent_id: u32,
@@ -202,6 +273,11 @@ impl AppState {
         pchat_max_history: Option<u32>,
         pchat_retention_days: Option<u32>,
         password: Option<String>,
+        hidden: Option<bool>,
+        expiry_mode: Option<u32>,
+        expiry_duration_secs: Option<u32>,
+        invitees: Vec<u32>,
+        attributes: Vec<i32>,
     ) -> Result<(), String> {
         let handle = {
             let __session = self.inner.snapshot();
@@ -209,8 +285,8 @@ impl AppState {
             state.conn.client_handle.clone()
         };
         match handle {
-            Some(h) => {
-                h.send(command::SetChannelState {
+            Some(h) => h
+                .send(command::SetChannelState {
                     channel_id: None,
                     parent: Some(parent_id),
                     name: Some(name),
@@ -222,10 +298,17 @@ impl AppState {
                     pchat_max_history,
                     pchat_retention_days,
                     channel_info_password: password,
+                    hidden,
+                    expiry_mode,
+                    expiry_duration_secs,
+                    invitee_user_ids: invitees,
+                    // Create honours the listed attributes directly; no mask is
+                    // needed because a new channel has nothing to clear.
+                    attributes: parse_channel_attributes(&attributes),
+                    attribute_mask: Vec::new(),
                 })
                 .await
-                .map_err(|e| e.to_string())
-            }
+                .map_err(|e| e.to_string()),
             None => Err("Not connected".into()),
         }
     }

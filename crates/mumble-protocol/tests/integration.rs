@@ -29,8 +29,7 @@
 use std::time::Duration;
 
 use mumble_protocol::command::{
-    Authenticate, CommandAction, RequestBlob, SendTextMessage,
-    SetComment, SetSelfDeaf, SetSelfMute,
+    Authenticate, CommandAction, RequestBlob, SendTextMessage, SetComment, SetSelfDeaf, SetSelfMute,
 };
 use mumble_protocol::message::ControlMessage;
 use mumble_protocol::proto::mumble_tcp;
@@ -87,9 +86,7 @@ async fn ensure_server_available() -> bool {
 
 /// Helper: connect TLS + send Version + Authenticate, wait for `ServerSync`.
 /// Returns the transport and collected state.
-async fn connect_and_authenticate(
-    username: &str,
-) -> (TcpTransport, ServerState) {
+async fn connect_and_authenticate(username: &str) -> (TcpTransport, ServerState) {
     let mut transport = TcpTransport::connect(&tcp_config()).await.unwrap();
 
     // Send Version
@@ -107,6 +104,8 @@ async fn connect_and_authenticate(
         username: username.into(),
         password: None,
         tokens: vec![],
+        totp: None,
+        device: None,
     };
     let auth_output = auth.execute(&ServerState::new());
     for msg in &auth_output.tcp_messages {
@@ -277,9 +276,7 @@ async fn test_send_large_image_message() {
     let image_bytes = vec![0xAAu8; 512 * 1024]; // 512 KiB raw
     let base64_image = base64_encode(&image_bytes);
 
-    let html_message = format!(
-        "<img src=\"data:image/png;base64,{base64_image}\" />"
-    );
+    let html_message = format!("<img src=\"data:image/png;base64,{base64_image}\" />");
 
     let cmd = SendTextMessage {
         channel_ids: vec![0],
@@ -497,6 +494,8 @@ async fn test_server_config_has_large_limits() {
         username: "ConfigCheckUser".into(),
         password: None,
         tokens: vec![],
+        totp: None,
+        device: None,
     };
     for msg in &auth.execute(&ServerState::new()).tcp_messages {
         transport.send(msg).await.unwrap();
@@ -545,7 +544,6 @@ async fn test_server_config_has_large_limits() {
 // travel through the generic `PluginMessage` envelope (wire ID 200)
 // routed by the server-side plugin host.
 
-
 /// When the server has a channel with a large description it sends only
 /// `description_hash` during the initial handshake.  A subsequent
 /// `RequestBlob` with the channel ID should cause the server to send
@@ -577,6 +575,8 @@ async fn test_channel_description_blob_request() {
         username: "SuperUser".into(),
         password: Some("testpassword".into()),
         tokens: vec![],
+        totp: None,
+        device: None,
     };
     for msg in &auth.execute(&ServerState::new()).tcp_messages {
         su.send(msg).await.unwrap();
@@ -599,6 +599,10 @@ async fn test_channel_description_blob_request() {
         return;
     }
 
+    #[allow(
+        deprecated,
+        reason = "test creates a channel via the legacy `temporary` wire field"
+    )]
     su.send(&ControlMessage::ChannelState(mumble_tcp::ChannelState {
         parent: Some(0),
         name: Some(channel_name.into()),
@@ -888,4 +892,111 @@ fn base64_encode(data: &[u8]) -> String {
         }
     }
     result
+}
+
+/// A Fancy 0.4.0 client must be keyed with `XChaCha20-Poly1305`.
+///
+/// The negotiation has no message of its own: the server picks a cipher from the
+/// Fancy version the *client* announced and expresses the choice in the shape of
+/// the key material it sends. This walks that whole path against a live server -
+/// announce 0.4.0, read `CryptSetup`, and key the cipher from what arrived.
+///
+/// The cipher axis only exists against a Fancy server: stock murmur always keys
+/// OCB2-AES128, correctly. So this reads the server's own `Version` first and
+/// skips loudly when it announces no Fancy version, rather than asserting
+/// something the peer was never able to satisfy - the same shape as
+/// `ensure_server_available` above. `docker-compose.test.yml` starts stock
+/// murmur, so that is the CI path today; point `MUMBLE_TEST_PORT` at a Starling
+/// to actually exercise it.
+#[tokio::test]
+async fn test_fancy_client_is_keyed_for_modern_voice_crypto() {
+    if !ensure_server_available().await {
+        return;
+    }
+
+    let mut transport = TcpTransport::connect(&tcp_config()).await.unwrap();
+
+    // 1.5.0 so the audio framing is protobuf: a legacy-framed peer is
+    // legitimately downgraded to OCB2, and this test would then be measuring
+    // that rather than the cipher axis.
+    let version_msg = ControlMessage::Version(mumble_tcp::Version {
+        version_v2: Some(0x0001_0005_0000_0000),
+        release: Some("mumble-protocol-test".into()),
+        fancy_version: Some(mumble_protocol::FANCY_VERSION),
+        ..Default::default()
+    });
+    transport.send(&version_msg).await.unwrap();
+
+    let auth = Authenticate {
+        username: "e2e-modern-crypto".into(),
+        password: None,
+        tokens: vec![],
+        totp: None,
+        device: None,
+    };
+    for msg in &auth.execute(&ServerState::new()).tcp_messages {
+        transport.send(msg).await.unwrap();
+    }
+
+    // `CryptSetup` arrives after `ServerSync`, so read until it does. The
+    // server's own `Version` comes first, unprompted, and carries the Fancy
+    // version that decides whether the cipher axis exists at all.
+    let deadline = tokio::time::Instant::now() + TIMEOUT;
+    let mut crypt_setup = None;
+    let mut server_fancy: Option<u64> = None;
+    while crypt_setup.is_none() && tokio::time::Instant::now() < deadline {
+        let Ok(Ok(msg)) = tokio::time::timeout(Duration::from_secs(5), transport.recv()).await
+        else {
+            break;
+        };
+        match msg {
+            ControlMessage::Version(v) => server_fancy = v.fancy_version,
+            ControlMessage::CryptSetup(cs) => crypt_setup = Some(cs),
+            _ => {}
+        }
+    }
+
+    if server_fancy.unwrap_or(0) == 0 {
+        eprintln!(
+            "WARNING: the server at {HOST}:{} announced no Fancy version, so it can only \
+             key OCB2-AES128 and there is no cipher choice to assert. Skipping. \
+             `docker-compose.test.yml` starts stock murmur; run this against a Fancy \
+             server with:\n  MUMBLE_TEST_PORT=<starling port> cargo test -p mumble-protocol \
+             --test integration",
+            port()
+        );
+        return;
+    }
+
+    let cs = crypt_setup.expect(
+        "the server never sent CryptSetup; without it a client never opens its UDP \
+         socket and every frame tunnels over TCP for the whole session",
+    );
+    let (key, client_nonce, server_nonce) = (
+        cs.key.expect("CryptSetup carried no key"),
+        cs.client_nonce.expect("CryptSetup carried no client_nonce"),
+        cs.server_nonce.expect("CryptSetup carried no server_nonce"),
+    );
+
+    // The whole selection rule, exercised rather than asserted: hand the
+    // material to the same code the connection path uses.
+    let crypt = mumble_protocol::transport::voice_crypt::VoiceCrypt::negotiate(
+        &fancy_utils::gate::Gate::stock(),
+        &key,
+        &client_nonce,
+        &server_nonce,
+    )
+    .expect("the server's key material did not key any cipher we support");
+
+    assert_eq!(
+        crypt.name(),
+        "XChaCha20-Poly1305",
+        "a Fancy {} client was keyed with {} ({} byte key). Against stock murmur \
+         that is correct and expected; against a Fancy server it means the modern \
+         cipher is not being selected, and the session falls back to OCB2's \
+         three-byte tag while still carrying audio perfectly.",
+        fancy_utils::version::fancy_version_string(mumble_protocol::FANCY_VERSION),
+        crypt.name(),
+        key.len(),
+    );
 }

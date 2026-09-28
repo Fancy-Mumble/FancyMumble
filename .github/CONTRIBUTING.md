@@ -5,7 +5,7 @@ explains how to get started.
 
 ## Code of Conduct
 
-This project follows the [Contributor Covenant Code of Conduct](.github/CODE_OF_CONDUCT.md).
+This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
 By participating you agree to abide by its terms.
 
 ## Getting Started
@@ -14,14 +14,18 @@ By participating you agree to abide by its terms.
 2. Install prerequisites (see [README](../README.md#prerequisites)).
 3. Create a feature branch: `git checkout -b feat/my-feature`
 4. Make your changes.
-5. Run tests to make sure nothing is broken:
+5. Run the checks CI runs, so the pull request does not find out for you:
    ```bash
    # Frontend
-   cd crates/mumble-tauri/ui && npm test
+   cd crates/mumble-tauri/ui
+   npm test
+   npm run lint
+   npx tsc --noEmit
 
    # Rust
-   cargo test --package mumble-protocol --features opus-codec --lib
+   cargo fmt --all -- --check
    cargo clippy --workspace --all-targets -- -D warnings
+   cargo test --package mumble-protocol --features opus-codec --lib
    ```
 6. Commit and push your branch, then open a pull request.
 
@@ -44,14 +48,14 @@ npm run dev
   (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`).
 - **Add tests** when adding new functionality.
 - **Follow existing style** - Rust uses Clippy, TypeScript uses strict mode.
-  See the [copilot instructions](.github/copilot-instructions.md) for
+  See the [copilot instructions](copilot-instructions.md) for
   conventions.
 - **Boy Scout Rule** - leave files cleaner than you found them.  Fix lint
   warnings, unused imports, and small issues in files you touch.
 
 ## Reporting Bugs
 
-Use the [Bug Report](https://github.com/Fancy-Mumble/FancyMumbleNext/issues/new?template=bug_report.yml)
+Use the [Bug Report](https://github.com/Fancy-Mumble/FancyMumble/issues/new?template=bug_report.yml)
 issue template. Include:
 
 - Steps to reproduce
@@ -61,13 +65,15 @@ issue template. Include:
 
 ## Suggesting Features
 
-Use the [Feature Request](https://github.com/Fancy-Mumble/FancyMumbleNext/issues/new?template=feature_request.yml)
+Use the [Feature Request](https://github.com/Fancy-Mumble/FancyMumble/issues/new?template=feature_request.yml)
 issue template. Describe the use case and why it would be valuable.
 
 ## Project Structure
 
-See the [copilot instructions](.github/copilot-instructions.md) for a
-detailed workspace layout and architecture overview.
+The [README](../README.md#architecture) lists the crates, and
+[`ui/src/README.md`](../crates/mumble-tauri/ui/src/README.md) explains how the
+frontend is split into a shared core and its UI packs. The
+[copilot instructions](copilot-instructions.md) hold the coding conventions.
 
 ## License
 

@@ -1,0 +1,289 @@
+/**
+ * MySharedFilesPanel - a chat-splitting bar (like Downloads / Pinned) that
+ * lists the *current user's own* uploaded files, styled like the admin file
+ * table.  The server scopes every request to the caller's session JWT, so a
+ * normal user only ever sees their own files; cross-user access stays
+ * admin-only.  Reuses the shared file-server presentation components.
+ */
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { message, confirm as askConfirm } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { useAppStore } from "@core/store";
+import { formatBytes } from "@core/utils/format";
+import type { AdminFileEntry } from "@core/types";
+import { FolderIcon, RefreshCwIcon, ImageIcon, TrashIcon, LinkIcon } from "../../icons";
+import { categorize, isPreviewable } from "@core/features/fileserver/fileTypes";
+import { CategoryIcon, FileThumb, PreviewModal, ExpiryBadge } from "../fileserver/FilePreview";
+import {
+  myListFiles,
+  deleteMyFile,
+  myFileLink,
+  myFilesAvailable,
+  myFileLinkSupported,
+  makeMyFilesSource,
+  dropPreview,
+} from "../fileserver/fileServerMe";
+import styles from "./MySharedFilesPanel.module.css";
+
+/**
+ * Short, locale-aware "date, time" for the Uploaded column.
+ *
+ * `toLocaleString()` spends ~40px on seconds and a four-digit year nobody
+ * reads in a file list, and that was part of what pushed the actions column
+ * off the right edge.  The full stamp stays one hover away.
+ */
+const shortStamp = new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" });
+
+export default function MySharedFilesPanel() {
+  const { t } = useTranslation(["chat", "settings"]);
+  const config = useAppStore((s) => s.fileServerConfig);
+  const kind = useAppStore((s) => s.fileServerKind);
+  const channels = useAppStore((s) => s.channels);
+
+  const baseUrl = config?.baseUrl ?? "";
+  const sessionJwt = config?.sessionJwt ?? "";
+  // The canon carries neither of those and still serves this panel, so what
+  // gates the work is whether the server can answer, not whether it handed
+  // over HTTP credentials.
+  const available = myFilesAvailable(kind, config);
+
+  const [files, setFiles] = useState<AdminFileEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<AdminFileEntry | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!available) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const resp = await myListFiles({ baseUrl, sessionJwt });
+      setFiles(resp.files);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [available, baseUrl, sessionJwt]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const source = useMemo(
+    () => (available ? makeMyFilesSource({ baseUrl, sessionJwt }) : null),
+    [available, baseUrl, sessionJwt],
+  );
+
+  const channelName = useCallback(
+    (id: number) =>
+      channels.find((c) => c.id === id)?.name ||
+      t("fileServer.root", { ns: "settings", defaultValue: "Root" }),
+    [channels, t],
+  );
+
+  /** Name, channel and upload time in one hover - the fallback for whatever
+   *  the narrow layout dropped. */
+  const fileTooltip = useCallback(
+    (f: AdminFileEntry) =>
+      [f.filename, `${channelName(f.channel_id)} · ${new Date(f.uploaded_at).toLocaleString()}`].join("\n"),
+    [channelName],
+  );
+
+  const handleShareLink = useCallback(
+    async (f: AdminFileEntry) => {
+      if (!baseUrl || !sessionJwt) return;
+      try {
+        const url = await myFileLink({ baseUrl, sessionJwt }, f.id);
+        await openUrl(url);
+      } catch (e) {
+        await message(e instanceof Error ? e.message : String(e), {
+          title: t("mySharedFiles.linkFailed", { defaultValue: "Couldn't open share link" }),
+          kind: "error",
+        });
+      }
+    },
+    [baseUrl, sessionJwt, t],
+  );
+
+  const handleDelete = useCallback(
+    async (f: AdminFileEntry) => {
+      if (!available) return;
+      const ok = await askConfirm(
+        t("mySharedFiles.confirmDelete", {
+          defaultValue: 'Delete "{{name}}"? The shared link will stop working.',
+          name: f.filename,
+        }),
+        { title: t("mySharedFiles.deleteTitle", { defaultValue: "Delete file" }), kind: "warning" },
+      );
+      if (!ok) return;
+      setDeleting(f.id);
+      try {
+        await deleteMyFile({ baseUrl, sessionJwt }, f.id);
+        dropPreview(f.id);
+        setFiles((prev) => prev.filter((x) => x.id !== f.id));
+      } catch (e) {
+        await message(e instanceof Error ? e.message : String(e), {
+          title: t("mySharedFiles.deleteFailed", { defaultValue: "Delete failed" }),
+          kind: "error",
+        });
+      } finally {
+        setDeleting(null);
+      }
+    },
+    [available, baseUrl, sessionJwt, t],
+  );
+
+  let body: React.ReactNode;
+  if (!source) {
+    body = (
+      <p className={styles.empty}>
+        {t("mySharedFiles.unavailable", { defaultValue: "File sharing is not enabled on this server." })}
+      </p>
+    );
+  } else if (loading && files.length === 0) {
+    body = (
+      <p className={styles.empty}>{t("mySharedFiles.loading", { defaultValue: "Loading your files…" })}</p>
+    );
+  } else if (error) {
+    body = (
+      <p className={styles.empty}>
+        {t("mySharedFiles.error", { defaultValue: "Could not load your files" })}: {error}
+      </p>
+    );
+  } else if (files.length === 0) {
+    body = (
+      <p className={styles.empty}>
+        {t("mySharedFiles.empty", { defaultValue: "You haven't shared any files yet." })}
+      </p>
+    );
+  } else {
+    body = (
+      <table className={styles.table}>
+        <thead>
+          <tr>
+            <th className={styles.colThumb} />
+            <th>{t("mySharedFiles.colName", { defaultValue: "Name" })}</th>
+            <th className={styles.colType}>{t("mySharedFiles.colType", { defaultValue: "Type" })}</th>
+            <th className={styles.colSize}>{t("mySharedFiles.colSize", { defaultValue: "Size" })}</th>
+            <th className={styles.colAccess}>{t("mySharedFiles.colAccess", { defaultValue: "Access" })}</th>
+            <th className={styles.colChannel}>
+              {t("mySharedFiles.colChannel", { defaultValue: "Channel" })}
+            </th>
+            <th className={styles.colUploaded}>
+              {t("mySharedFiles.colUploaded", { defaultValue: "Uploaded" })}
+            </th>
+            <th className={styles.colExpires}>
+              {t("mySharedFiles.colExpires", { defaultValue: "Expires" })}
+            </th>
+            <th className={styles.colActions} />
+          </tr>
+        </thead>
+        <tbody>
+          {files.map((f) => (
+            <tr key={f.id}>
+              <td className={styles.colThumb}>
+                <FileThumb file={f} source={source} onOpen={setPreview} />
+              </td>
+              <td>
+                {/* The tooltip repeats what a narrow split hides, so dropping
+                    a column never makes its value unreachable. */}
+                <span className={styles.ellipsis} title={fileTooltip(f)}>
+                  {f.filename}
+                </span>
+              </td>
+              <td className={styles.colType}>
+                <CategoryIcon cat={categorize(f.mime_type)} size={14} />{" "}
+                <span title={f.mime_type}>
+                  {t(`fileServer.category.${categorize(f.mime_type)}`, {
+                    ns: "settings",
+                    defaultValue: categorize(f.mime_type),
+                  })}
+                </span>
+              </td>
+              <td className={styles.colSize}>{formatBytes(f.size_bytes)}</td>
+              <td className={styles.colAccess}>
+                <span className={`${styles.accessBadge} ${styles[`access_${f.access_mode}`]}`}>
+                  {t(`fileServer.access.${f.access_mode}`, { ns: "settings", defaultValue: f.access_mode })}
+                </span>
+              </td>
+              <td className={styles.colChannel} title={`#${f.channel_id}`}>
+                <span className={styles.ellipsis}>{channelName(f.channel_id)}</span>
+              </td>
+              <td className={styles.colUploaded} title={new Date(f.uploaded_at).toLocaleString()}>
+                {shortStamp.format(f.uploaded_at)}
+              </td>
+              <td className={styles.colExpires}>
+                {f.expires_at != null ? (
+                  <ExpiryBadge expiresAt={f.expires_at} />
+                ) : (
+                  <span className={styles.noExpiry}>
+                    {t("mySharedFiles.neverExpires", { defaultValue: "Never" })}
+                  </span>
+                )}
+              </td>
+              <td className={styles.colActions}>
+                {f.access_mode === "public" && myFileLinkSupported(kind) && (
+                  <button
+                    type="button"
+                    className={styles.iconBtn}
+                    onClick={() => void handleShareLink(f)}
+                    title={t("mySharedFiles.openLink", { defaultValue: "Open share link in browser" })}
+                  >
+                    <LinkIcon width={15} height={15} />
+                  </button>
+                )}
+                {isPreviewable(f.mime_type) && f.access_mode !== "password" && (
+                  <button
+                    type="button"
+                    className={styles.iconBtn}
+                    onClick={() => setPreview(f)}
+                    title={t("mySharedFiles.preview", { defaultValue: "Preview" })}
+                  >
+                    <ImageIcon width={15} height={15} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={`${styles.iconBtn} ${styles.deleteBtn}`}
+                  onClick={() => void handleDelete(f)}
+                  disabled={deleting === f.id}
+                  title={t("mySharedFiles.delete", { defaultValue: "Delete" })}
+                >
+                  <TrashIcon width={15} height={15} />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+
+  return (
+    <div className={styles.panel}>
+      <div className={styles.header}>
+        <span className={styles.title}>
+          <FolderIcon width={14} height={14} />{" "}
+          {t("mySharedFiles.title", { defaultValue: "My shared files" })}
+        </span>
+        {files.length > 0 && <span className={styles.count}>{files.length}</span>}
+        <div className={styles.headerActions}>
+          <button
+            type="button"
+            className={styles.refreshBtn}
+            onClick={() => void refresh()}
+            disabled={loading}
+          >
+            <RefreshCwIcon width={14} height={14} /> {t("mySharedFiles.refresh", { defaultValue: "Refresh" })}
+          </button>
+        </div>
+      </div>
+      <div className={styles.body}>{body}</div>
+      {preview && source && <PreviewModal file={preview} source={source} onClose={() => setPreview(null)} />}
+    </div>
+  );
+}

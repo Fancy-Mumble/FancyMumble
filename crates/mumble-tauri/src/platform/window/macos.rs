@@ -46,7 +46,13 @@ impl AspectRatioConstraint for MacosAspectRatio {
     fn uninstall(&self, win: &WebviewWindow) -> Result<(), WindowExtError> {
         let ns_window = Self::ns_window(win)?;
         // NSSize::ZERO removes the constraint per Apple docs.
-        Self::set_aspect_ratio(ns_window, NSSize { width: 0.0, height: 0.0 });
+        Self::set_aspect_ratio(
+            ns_window,
+            NSSize {
+                width: 0.0,
+                height: 0.0,
+            },
+        );
         Ok(())
     }
 }

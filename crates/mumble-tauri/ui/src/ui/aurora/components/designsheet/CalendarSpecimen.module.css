@@ -1,0 +1,130 @@
+/* Design sheet: dataCalendar. Split from AuroraApp.module.css. */
+
+.calendar {
+  max-width: 360px;
+}
+
+.calendar > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.calendar header strong {
+  font-size: 11px;
+}
+
+.calendar header button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+}
+
+.calendar header svg {
+  width: 12px;
+}
+
+.weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  margin-top: 15px;
+}
+
+.days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.weekdays b {
+  padding: 6px 0;
+  color: #59616e;
+  font-size: 7px;
+  text-align: center;
+}
+
+.days button {
+  position: relative;
+  height: 31px;
+  color: #8d94a1;
+  font-size: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.days .today {
+  color: var(--ink);
+  font-weight: 800;
+  background: #72b6df;
+  box-shadow: none;
+}
+
+.days .hasEvent::after {
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  content: "";
+  border-radius: 50%;
+  background: var(--iris);
+  transform: translateX(-50%);
+}
+
+.nextEvent {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  border-color: rgb(255 255 255 / 8%);
+  background: rgb(255 255 255 / 3%);
+  box-shadow: none;
+  backdrop-filter: blur(20px) saturate(105%);
+}
+
+.nextEvent > span {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  color: #adc3d2;
+  background: rgb(255 255 255 / 5%);
+}
+
+.nextEvent svg {
+  width: 14px;
+}
+
+.nextEvent > div {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.nextEvent small {
+  color: #428eff;
+  font-size: var(--type-caption);
+}
+
+.nextEvent strong {
+  margin-top: 3px;
+  font-size: var(--type-label);
+}
+
+.nextEventAvatar.nextEventAvatar {
+  width: 28px;
+  height: 28px;
+  font-size: 7px;
+  border-radius: 9px;
+}

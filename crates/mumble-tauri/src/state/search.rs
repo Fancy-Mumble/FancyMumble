@@ -2,8 +2,10 @@
 
 use fancy_utils::fuzzy;
 
-use super::types::{ChatMessage, PhotoEntry, SearchCategory, SearchFilter, SearchResult};
 use super::AppState;
+use super::types::{
+    ChatMessage, MessageContext, PhotoEntry, SearchCategory, SearchFilter, SearchResult,
+};
 
 /// Maximum number of results to return per category.
 const MAX_PER_CATEGORY: usize = 10;
@@ -35,7 +37,12 @@ impl AppState {
     /// - `"photos"` - only messages containing images
     /// - `"users"` - only users
     /// - `"links"` - only messages containing links
-    pub fn super_search(&self, query: &str, filter: SearchFilter, channel_id: Option<u32>) -> Vec<SearchResult> {
+    pub fn super_search(
+        &self,
+        query: &str,
+        filter: SearchFilter,
+        channel_id: Option<u32>,
+    ) -> Vec<SearchResult> {
         let query_lower = query.to_lowercase();
         if query_lower.is_empty() {
             return Vec::new();
@@ -50,7 +57,10 @@ impl AppState {
         let scoped = channel_id.is_some();
         let search_channels = !scoped && filter == SearchFilter::All;
         let search_users = !scoped && matches!(filter, SearchFilter::All | SearchFilter::Users);
-        let search_messages = matches!(filter, SearchFilter::All | SearchFilter::Messages | SearchFilter::Photos | SearchFilter::Links);
+        let search_messages = matches!(
+            filter,
+            SearchFilter::All | SearchFilter::Messages | SearchFilter::Photos | SearchFilter::Links
+        );
 
         let mut results = Vec::new();
 
@@ -61,7 +71,14 @@ impl AppState {
             results.extend(search_users_fuzzy(&state, &query_lower));
         }
         if search_messages {
-            results.extend(search_messages_fuzzy(&state, &query_lower, query, filter, channel_id, scoped));
+            results.extend(search_messages_fuzzy(
+                &state,
+                &query_lower,
+                query,
+                filter,
+                channel_id,
+                scoped,
+            ));
         }
 
         results.sort_by_key(|r| r.score);
@@ -139,8 +156,13 @@ fn search_channels_fuzzy(state: &super::SharedState, query_lower: &str) -> Vec<S
         .filter_map(|ch| {
             let score = fuzzy::fuzzy_score(query_lower, &ch.name.to_lowercase(), SCORE_CUTOFF)?;
             Some(SearchResult {
-                category: SearchCategory::Channel, score, title: ch.name.clone(),
-                subtitle: None, id: Some(ch.id), string_id: None,
+                category: SearchCategory::Channel,
+                score,
+                title: ch.name.clone(),
+                subtitle: None,
+                id: Some(ch.id),
+                string_id: None,
+                message: None,
             })
         })
         .collect();
@@ -157,8 +179,13 @@ fn search_users_fuzzy(state: &super::SharedState, query_lower: &str) -> Vec<Sear
             let score = fuzzy::fuzzy_score(query_lower, &u.name.to_lowercase(), SCORE_CUTOFF)?;
             let ch_name = state.channels.get(&u.channel_id).map(|c| c.name.clone());
             Some(SearchResult {
-                category: SearchCategory::User, score, title: u.name.clone(),
-                subtitle: ch_name, id: Some(u.session), string_id: None,
+                category: SearchCategory::User,
+                score,
+                title: u.name.clone(),
+                subtitle: ch_name,
+                id: Some(u.session),
+                string_id: None,
+                message: None,
             })
         })
         .collect();
@@ -183,16 +210,30 @@ fn search_messages_fuzzy(
         if channel_id.is_some_and(|scope| *ch_id != scope) {
             continue;
         }
-        let ch_name = state.channels.get(ch_id).map(|c| c.name.as_str()).unwrap_or("Unknown");
+        let ch_name = state
+            .channels
+            .get(ch_id)
+            .map(|c| c.name.as_str())
+            .unwrap_or("Unknown");
         msg_results.extend(collect_channel_message_results(
-            msgs.iter(), *ch_id, ch_name, filter_photos, filter_links, query_lower, query,
+            msgs.iter(),
+            *ch_id,
+            ch_name,
+            filter_photos,
+            filter_links,
+            query_lower,
+            query,
         ));
     }
 
     if !scoped {
         for msgs in state.msgs.by_dm.values() {
             msg_results.extend(collect_dm_message_results(
-                msgs.iter(), filter_photos, filter_links, query_lower, query,
+                msgs.iter(),
+                filter_photos,
+                filter_links,
+                query_lower,
+                query,
             ));
         }
     }
@@ -214,10 +255,10 @@ fn extract_img_srcs(html: &str) -> Vec<String> {
             None => break,
         };
         let tag = &html[abs_pos..=tag_end];
-        if let Some(src) = extract_attr(tag, "src") {
-            if !src.is_empty() {
-                srcs.push(src);
-            }
+        if let Some(src) = extract_attr(tag, "src")
+            && !src.is_empty()
+        {
+            srcs.push(src);
         }
         search_from = tag_end + 1;
     }
@@ -261,7 +302,12 @@ fn collect_photos_from_message(
     }
 }
 
-fn score_one_message(body: &str, filter_photos: bool, filter_links: bool, query_lower: &str) -> Option<u32> {
+fn score_one_message(
+    body: &str,
+    filter_photos: bool,
+    filter_links: bool,
+    query_lower: &str,
+) -> Option<u32> {
     if filter_photos && !body_has_image(body) {
         return None;
     }
@@ -289,6 +335,13 @@ fn collect_channel_message_results<'a>(
             subtitle: Some(format!("{} in #{ch_name}", msg.sender_name)),
             id: Some(ch_id),
             string_id: msg.message_id.clone(),
+            message: Some(MessageContext {
+                sender_session: msg.sender_session,
+                sender_name: msg.sender_name.clone(),
+                context: format!("in #{ch_name}"),
+                timestamp: msg.timestamp,
+                dm: false,
+            }),
         })
     })
     .collect()
@@ -310,6 +363,13 @@ fn collect_dm_message_results<'a>(
             subtitle: Some(format!("DM with {}", msg.sender_name)),
             id: msg.dm_session,
             string_id: msg.message_id.clone(),
+            message: Some(MessageContext {
+                sender_session: msg.sender_session,
+                sender_name: msg.sender_name.clone(),
+                context: format!("DM with {}", msg.sender_name),
+                timestamp: msg.timestamp,
+                dm: true,
+            }),
         })
     })
     .collect()

@@ -1,0 +1,76 @@
+/* Identity list: one certificate per row, with the connected one called out. */
+
+.intro {
+  margin: 0 0 12px;
+  color: #8c96a3;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.error {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-left: 2px solid #e05f6a;
+  border-radius: 0 8px 8px 0;
+  background: rgb(224 95 106 / 8%);
+  color: #f0919a;
+  font-size: 10px;
+}
+
+.empty {
+  padding: 12px 0;
+  color: #7e8a99;
+  font-size: 10px;
+  font-style: italic;
+}
+
+.row {
+  padding: 11px 2px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgb(255 255 255 / 6%);
+}
+
+.label {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  color: #eef3f8;
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
+.connected {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgb(88 190 130 / 16%);
+  color: #7fd3a3;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.actions {
+  flex: none;
+  display: flex;
+  gap: 6px;
+}
+
+.createRow {
+  padding: 14px 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.createRow > label {
+  flex: 1;
+}
+
+.footer {
+  padding: 4px 0 12px;
+}

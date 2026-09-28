@@ -89,6 +89,20 @@ pub(crate) async fn join_channel(
     state.join_channel(channel_id, password).await
 }
 
+/// Read a 1:1 private chat room (friend chat / self-notepad) WITHOUT joining it:
+/// fetch its persistent-chat history and pass the key challenge so live messages
+/// are delivered. Lets the user stay in their current (voice) channel instead of
+/// being moved into the detached chat room. Async so `tokio::spawn` (inside) has
+/// a runtime; returns immediately (the fetch resolves via events).
+#[tauri::command]
+pub(crate) async fn peek_pchat_channel(
+    state: tauri::State<'_, AppState>,
+    channel_id: u32,
+) -> Result<(), ()> {
+    state.peek_pchat_channel(channel_id);
+    Ok(())
+}
+
 #[tauri::command]
 pub(crate) fn get_current_channel(state: tauri::State<'_, AppState>) -> Option<u32> {
     state.current_channel()
@@ -124,10 +138,14 @@ pub(crate) fn mark_channel_read(state: tauri::State<'_, AppState>, channel_id: u
 
 /// Update a channel on the server.
 #[tauri::command]
-#[allow(clippy::too_many_arguments, reason = "Tauri command mirrors the full channel update parameter surface")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Tauri command mirrors the full channel update parameter surface"
+)]
 pub(crate) async fn update_channel(
     state: tauri::State<'_, AppState>,
     channel_id: u32,
+    parent_id: Option<u32>,
     name: Option<String>,
     description: Option<String>,
     position: Option<i32>,
@@ -137,10 +155,16 @@ pub(crate) async fn update_channel(
     pchat_max_history: Option<u32>,
     pchat_retention_days: Option<u32>,
     password: Option<String>,
+    hidden: Option<bool>,
+    expiry_mode: Option<u32>,
+    expiry_duration_secs: Option<u32>,
+    attributes: Option<Vec<i32>>,
+    attribute_mask: Option<Vec<i32>>,
 ) -> Result<(), String> {
     state
         .update_channel(
             channel_id,
+            parent_id,
             name,
             description,
             position,
@@ -150,6 +174,11 @@ pub(crate) async fn update_channel(
             pchat_max_history,
             pchat_retention_days,
             password,
+            hidden,
+            expiry_mode,
+            expiry_duration_secs,
+            attributes.unwrap_or_default(),
+            attribute_mask.unwrap_or_default(),
         )
         .await
 }
@@ -165,7 +194,10 @@ pub(crate) async fn delete_channel(
 
 /// Create a new sub-channel on the server.
 #[tauri::command]
-#[allow(clippy::too_many_arguments, reason = "Tauri command mirrors the full channel creation parameter surface")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Tauri command mirrors the full channel creation parameter surface"
+)]
 pub(crate) async fn create_channel(
     state: tauri::State<'_, AppState>,
     parent_id: u32,
@@ -178,6 +210,11 @@ pub(crate) async fn create_channel(
     pchat_max_history: Option<u32>,
     pchat_retention_days: Option<u32>,
     password: Option<String>,
+    hidden: Option<bool>,
+    expiry_mode: Option<u32>,
+    expiry_duration_secs: Option<u32>,
+    invitees: Option<Vec<u32>>,
+    attributes: Option<Vec<i32>>,
 ) -> Result<(), String> {
     state
         .create_channel(
@@ -191,6 +228,11 @@ pub(crate) async fn create_channel(
             pchat_max_history,
             pchat_retention_days,
             password,
+            hidden,
+            expiry_mode,
+            expiry_duration_secs,
+            invitees.unwrap_or_default(),
+            attributes.unwrap_or_default(),
         )
         .await
 }

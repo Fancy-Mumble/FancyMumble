@@ -1,16 +1,14 @@
 //! Trust authority checks, custodian TOFU management, countersignature
 //! verification, dispute resolution, and trust level queries.
 
-use std::collections::HashSet;
-
 use ed25519_dalek::Verifier;
 
 use crate::error::{Error, Result};
 use crate::persistent::encryption::build_countersig_data;
-use crate::persistent::{KeyTrustLevel, PchatProtocol, StoredMessage};
+use crate::persistent::{KeyTrustLevel, PchatProtocol};
 
-use super::types::{CustodianPinState, EncryptedPayload, COUNTERSIG_FRESHNESS_MS};
 use super::KeyManager;
+use super::types::{COUNTERSIG_FRESHNESS_MS, CustodianPinState};
 
 impl KeyManager {
     // ---- Trust authority checks -------------------------------------
@@ -62,7 +60,10 @@ impl KeyManager {
     // ---- Countersignature verification ------------------------------
 
     /// Verify an epoch countersignature (standalone or inline).
-    #[allow(clippy::too_many_arguments, reason = "countersignature verification requires all cryptographic parameters")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "countersignature verification requires all cryptographic parameters"
+    )]
     pub fn verify_countersignature(
         &mut self,
         channel_id: u32,
@@ -94,16 +95,19 @@ impl KeyManager {
         }
 
         // Promote epoch key to Verified
-        if let Some(epochs) = self.epoch_keys.get_mut(&channel_id) {
-            if let Some((_key, trust)) = epochs.get_mut(&epoch) {
-                *trust = KeyTrustLevel::Verified;
-            }
+        if let Some(epochs) = self.epoch_keys.get_mut(&channel_id)
+            && let Some((_key, trust)) = epochs.get_mut(&epoch)
+        {
+            *trust = KeyTrustLevel::Verified;
         }
 
         Ok(KeyTrustLevel::Verified)
     }
 
-    #[allow(clippy::too_many_arguments, reason = "internal verification helper requires all cryptographic parameters")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "internal verification helper requires all cryptographic parameters"
+    )]
     pub(super) fn verify_countersignature_internal(
         &self,
         channel_id: u32,
@@ -128,9 +132,10 @@ impl KeyManager {
         }
 
         // Verify Ed25519 signature
-        let peer = self.peer_keys.get(signer_hash).ok_or_else(|| {
-            Error::InvalidState(format!("unknown countersigner: {signer_hash}"))
-        })?;
+        let peer = self
+            .peer_keys
+            .get(signer_hash)
+            .ok_or_else(|| Error::InvalidState(format!("unknown countersigner: {signer_hash}")))?;
 
         let data = build_countersig_data(
             channel_id,
@@ -196,42 +201,6 @@ impl KeyManager {
         self.pinned_custodians.get(&channel_id)
     }
 
-    // ---- Key trial decryption (supplementary check) -----------------
-
-    /// Attempt to verify a key by decrypting recent messages.
-    ///
-    /// Returns true if decryption succeeds for messages from 2+ distinct
-    /// senders. This is a diagnostic signal only and does NOT promote
-    /// trust level.
-    pub fn check_key_by_decryption(
-        &self,
-        channel_id: u32,
-        mode: PchatProtocol,
-        messages: &[StoredMessage],
-    ) -> bool {
-        let mut successful_senders = HashSet::new();
-
-        for msg in messages {
-            if !msg.encrypted {
-                continue;
-            }
-            let payload = EncryptedPayload {
-                ciphertext: msg.body.as_bytes().to_vec(),
-                epoch: msg.epoch,
-                chain_index: msg.chain_index,
-                epoch_fingerprint: [0; 8], // not checked here
-            };
-            if self
-                .decrypt(mode, channel_id, &msg.message_id, msg.timestamp, &payload)
-                .is_ok()
-            {
-                let _ = successful_senders.insert(&msg.sender_hash);
-            }
-        }
-
-        successful_senders.len() >= 2
-    }
-
     // ---- Dispute resolution -----------------------------------------
 
     /// Resolve a dispute by manually selecting a trusted peer's key.
@@ -270,8 +239,8 @@ impl KeyManager {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
-    use super::super::identity::SeedIdentity;
     use super::super::KeyManager;
+    use super::super::identity::SeedIdentity;
     use crate::persistent::{KeyTrustLevel, PchatProtocol};
 
     fn make_key_manager() -> KeyManager {
@@ -282,7 +251,10 @@ mod tests {
     #[test]
     fn trust_level_query() {
         let mut km = make_key_manager();
-        assert!(km.trust_level(1, PchatProtocol::FancyV1FullArchive).is_none());
+        assert!(
+            km.trust_level(1, PchatProtocol::FancyV1FullArchive)
+                .is_none()
+        );
 
         km.store_archive_key(1, [0; 32], KeyTrustLevel::Unverified);
         assert_eq!(

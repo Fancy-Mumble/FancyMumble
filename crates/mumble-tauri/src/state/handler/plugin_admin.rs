@@ -11,36 +11,38 @@ use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
 
-#[derive(Serialize, Clone)]
-struct PluginAdminEntryPayload {
-    plugin_name: String,
-    version: String,
-    enabled: bool,
-    loaded: bool,
-    path: Option<String>,
-    info_json: Option<String>,
-    marketplace_id: Option<String>,
-    installed_at: Option<u64>,
-    builtin: bool,
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub(crate) struct PluginAdminEntryPayload {
+    pub plugin_name: String,
+    pub version: String,
+    pub enabled: bool,
+    pub loaded: bool,
+    pub path: Option<String>,
+    pub info_json: Option<String>,
+    pub marketplace_id: Option<String>,
+    pub installed_at: Option<u64>,
+    pub builtin: bool,
+    /// Why the server could not load it. Only Starling reports this.
+    pub load_error: Option<String>,
 }
 
-#[derive(Serialize, Clone)]
-struct PluginAdminListPayload {
-    plugins: Vec<PluginAdminEntryPayload>,
-    plugins_dir: Option<String>,
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub(crate) struct PluginAdminListPayload {
+    pub plugins: Vec<PluginAdminEntryPayload>,
+    pub plugins_dir: Option<String>,
     /// Plugin ABI version the connected server's host was compiled
     /// against.  The UI compares this with a marketplace plugin's
     /// required ABI version to gate installs.
-    host_abi_version: Option<u32>,
+    pub host_abi_version: Option<u32>,
 }
 
-#[derive(Serialize, Clone)]
-struct PluginAdminAckPayload {
-    plugin_name: Option<String>,
-    ok: bool,
-    error: Option<String>,
-    request_id: Option<String>,
-    verb: Option<String>,
+#[derive(Serialize, Clone, Debug)]
+pub(crate) struct PluginAdminAckPayload {
+    pub plugin_name: Option<String>,
+    pub ok: bool,
+    pub error: Option<String>,
+    pub request_id: Option<String>,
+    pub verb: Option<String>,
 }
 
 fn verb_to_str(v: i32) -> &'static str {
@@ -69,6 +71,7 @@ impl HandleMessage for mumble_tcp::FancyPluginAdminList {
                 marketplace_id: p.marketplace_id.clone(),
                 installed_at: p.installed_at,
                 builtin: p.builtin.unwrap_or(false),
+                load_error: None,
             })
             .collect();
         ctx.emit(

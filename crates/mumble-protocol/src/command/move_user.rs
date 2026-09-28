@@ -41,7 +41,10 @@ mod tests {
 
     #[test]
     fn move_user_emits_user_state_with_session_and_channel() {
-        let cmd = MoveUser { session: 7, channel_id: 42 };
+        let cmd = MoveUser {
+            session: 7,
+            channel_id: 42,
+        };
         let state = ServerState::new();
         let out = cmd.execute(&state);
         assert_eq!(out.tcp_messages.len(), 1);

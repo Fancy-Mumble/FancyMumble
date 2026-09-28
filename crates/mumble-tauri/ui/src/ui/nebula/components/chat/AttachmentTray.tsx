@@ -1,0 +1,780 @@
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Box, InputBase, Tooltip, Typography } from "@mui/material";
+import type { FileAccessMode } from "@core/types";
+import type { StagedAttachment } from "@core/features/chat/useFileUpload";
+import { formatBytes } from "@core/utils/format";
+import { ChevronDownIcon, CloseIcon, Link2Icon, LockIcon, PlusIcon, UsersGroupIcon } from "@ui/icons";
+import { Stack } from "../primitives";
+import { NEBULA_MONO, radius } from "../../tokens";
+
+/**
+ * The square a staged file is previewed in, and the disc that removes it.
+ *
+ * Two sizes, because the tray owns the same strip either way: with the
+ * options folded away there is nothing else in it, so the picture takes the
+ * room and can actually be recognised; unfolding the rows puts three lines of
+ * chips underneath, and the tiles shrink back rather than push the composer
+ * off the bottom of the window.
+ */
+const TILE_PX = 150;
+const TILE_COMPACT_PX = 54;
+const TILE_CLOSE_PX = 17;
+const TILE_CLOSE_LARGE_PX = 22;
+
+export type AttachmentQuality = "compressed" | "full";
+
+/** A lifetime a share can be given, in seconds; `0` means it never expires. */
+export const TTL_NEVER = 0;
+export const TTL_24_HOURS = 24 * 60 * 60;
+export const TTL_7_DAYS = 7 * 24 * 60 * 60;
+
+/**
+ * How the message's files go up, as chosen on the tray.
+ *
+ * One answer for the batch rather than one per file: the canvas draws the
+ * options once, beside the tiles, because "who may see this" is a property
+ * of the message being written and not of the third photograph in it.
+ */
+export interface ShareOptions {
+  readonly mode: FileAccessMode;
+  /** Only read when `mode` is `"password"`. */
+  readonly password: string;
+  readonly quality: AttachmentQuality;
+  /** Seconds until the share expires; `0` = never. */
+  readonly ttlSeconds: number;
+}
+
+export const DEFAULT_SHARE_OPTIONS: ShareOptions = {
+  mode: "session",
+  password: "",
+  quality: "compressed",
+  // A share defaults to outliving neither the conversation nor the sender's
+  // memory of having sent it - seven days is long enough to be useful and
+  // short enough that a link is not a permanent liability by accident.
+  ttlSeconds: TTL_7_DAYS,
+};
+
+/**
+ * Whether the options make the batch sendable.
+ *
+ * A password link with no password is the one combination the uploader
+ * cannot take, so the composer holds send until one is typed or generated.
+ */
+export function shareOptionsReady(options: ShareOptions, attachments: readonly StagedAttachment[]): boolean {
+  return attachments.length === 0 || options.mode !== "password" || options.password.length > 0;
+}
+
+/**
+ * The files a message is about to carry, and how.
+ *
+ * Tiles on one scrolling line, because what you need to check about a picked
+ * file is that it is the right one - which is a look at the picture, not a
+ * filename in a list. The line ends in a dashed square rather than sending
+ * you back to the paperclip. Beside it sit the two things worth deciding
+ * before send - how big a photo goes up, and who can reach the link - folded
+ * away under one button, because most messages take the defaults.
+ */
+export function AttachmentTray({
+  attachments,
+  disabled = false,
+  target,
+  canSharePublic,
+  canExpire,
+  options,
+  onOptionsChange,
+  onRemove,
+  onAddMore,
+  onPreview,
+}: Readonly<{
+  attachments: readonly StagedAttachment[];
+  disabled?: boolean;
+  /** Where the message goes, e.g. "#Gaming" or "@Lorelando" - it names the narrowest audience. */
+  target: string;
+  /** Whether this server lets a file be reached by link at all, rather than only by channel. */
+  canSharePublic: boolean;
+  /** Whether this server honours a lifetime on a share at all. */
+  canExpire: boolean;
+  options: ShareOptions;
+  onOptionsChange: (next: ShareOptions) => void;
+  onRemove: (id: string) => void;
+  onAddMore: () => void;
+  /** Open the staged pictures full size, starting on this one. Absent = tiles are not clickable. */
+  onPreview?: (id: string) => void;
+}>) {
+  const [open, setOpen] = useState(false);
+
+  // The quality row is only worth drawing while there is a copy to choose:
+  // a batch of PDFs has nothing to compress, and a photo that came out no
+  // smaller has nothing to offer either.
+  const photos = attachments.filter((file) => file.compressed !== undefined);
+  const compressing = photos.some((file) => file.compressed === "pending");
+  const { t } = useTranslation(TRAY_NS);
+  const qualityRow = photos.some((file) => file.compressed === "pending" || !!file.compressed);
+  // Visibility and expiry are always drawn, even on a server that can only
+  // do one thing - a row that vanishes the moment it would say "no" reads as
+  // a bug the first time someone goes looking for the option. Locked, each
+  // collapses to the one choice that is real and says why the rest are not.
+  const visibilityLocked = !canSharePublic;
+  const expiryLocked = !canExpire;
+  // The strip is the only thing in the tray until the options are folded out,
+  // so that is when a preview can afford to be a preview.
+  const tilePx = open ? TILE_COMPACT_PX : TILE_PX;
+
+  // Scoped to the photos, not the whole batch: a video or a PDF sent
+  // alongside them does not shrink, and folding its bytes into both figures
+  // would bury whatever the toggle actually buys - two totals a few hundred
+  // KB apart, both rounding to the same "5.7 MiB" next to a 5.4 MiB video.
+  const fullBytes = totalBytes(photos, false);
+  const compressedBytes = totalBytes(photos, true);
+  const isChannel = !target.startsWith("@");
+  const here = isChannel ? t("attachment.thisChannel") : t("attachment.thisConversation");
+  // The channel or person's name alone, for a note that says who "here" is
+  // rather than the chip's own generic label.
+  const audience = target.replace(/^[#@]/, "");
+  const visibilityLabel = {
+    session: here,
+    public: t("attachment.anyoneWithLink"),
+    password: t("chat:fileShare.passwordLabel"),
+  }[options.mode];
+  const qualityLabel =
+    options.quality === "compressed" ? t("attachment.compressed") : t("attachment.fullQuality");
+  const summary = [qualityRow ? qualityLabel : null, visibilityLabel].filter(Boolean).join(" · ");
+
+  return (
+    <>
+      <Stack direction="row" alignItems="flex-start" gap="12px" sx={{ px: "4px", py: "6px" }}>
+        <Stack direction="row" alignItems="center" gap="8px" sx={{ flex: 1, minWidth: 0, overflowX: "auto" }}>
+          {attachments.map((file) => (
+            <AttachmentTile
+              key={file.id}
+              file={file}
+              size={tilePx}
+              onRemove={() => onRemove(file.id)}
+              onOpen={onPreview && file.previewUrl ? () => onPreview(file.id) : undefined}
+            />
+          ))}
+          <Tooltip title={t("attachment.addAnotherFile")}>
+            <Box
+              component="button"
+              type="button"
+              aria-label={t("attachment.addAnotherFile")}
+              disabled={disabled}
+              onClick={onAddMore}
+              sx={(theme) => ({
+                all: "unset",
+                cursor: "pointer",
+                flex: "none",
+                boxSizing: "border-box",
+                width: tilePx < TILE_PX ? 44 : 72,
+                height: tilePx,
+                display: "grid",
+                placeItems: "center",
+                borderRadius: radius("md"),
+                border: `1px dashed ${theme.palette.nebula.line2}`,
+                color: theme.palette.nebula.dim,
+                "&:hover": {
+                  borderColor: theme.palette.nebula.accentLine,
+                  color: theme.palette.nebula.accent,
+                },
+              })}
+            >
+              <PlusIcon width={14} height={14} />
+            </Box>
+          </Tooltip>
+        </Stack>
+
+        <Stack alignItems="flex-end" gap="3px" sx={{ flex: "none", pt: "2px" }}>
+          <Stack
+            component="button"
+            direction="row"
+            alignItems="center"
+            gap="5px"
+            aria-expanded={open}
+            aria-label={t("attachment.sendingOptions")}
+            onClick={() => setOpen((was) => !was)}
+            sx={(theme) => ({
+              // `all: unset` lands after the `Stack` shim's own `direction`/
+              // `alignItems`/`gap` entry in the merged sx array, so it wins
+              // and resets the row back to inline - restated below rather
+              // than left to the props, which is what actually broke it.
+              all: "unset",
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "center",
+              gap: "5px",
+              cursor: "pointer",
+              boxSizing: "border-box",
+              padding: "4px 9px",
+              borderRadius: radius("md"),
+              fontSize: 10.5,
+              fontWeight: 600,
+              color: theme.palette.nebula.muted,
+              background: theme.palette.nebula.card2,
+              border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
+              "&:hover": {
+                background: theme.palette.nebula.hover,
+                color: theme.palette.nebula.text,
+                borderColor: theme.palette.nebula.line2,
+              },
+            })}
+          >
+            {t("attachment.options")}
+            <Box
+              aria-hidden
+              sx={{
+                display: "flex",
+                transition: "transform .14s ease",
+                transform: open ? "rotate(180deg)" : "none",
+              }}
+            >
+              <ChevronDownIcon width={9} height={9} strokeWidth={2.2} />
+            </Box>
+          </Stack>
+          <Typography
+            sx={(theme) => ({
+              fontSize: 10,
+              whiteSpace: "nowrap",
+              pr: "2px",
+              color: theme.palette.nebula.dim,
+            })}
+          >
+            {summary}
+          </Typography>
+        </Stack>
+      </Stack>
+
+      {open && (
+        <>
+          {qualityRow && (
+            <OptionRow label={t("attachment.sendingAs")} note={t(QUALITY_NOTE_KEYS[options.quality])} first>
+              <Chip
+                selected={options.quality === "compressed"}
+                onClick={() => onOptionsChange({ ...options, quality: "compressed" })}
+                icon={<ShrinkGlyph />}
+                detail={compressing ? "…" : formatBytes(compressedBytes)}
+              >
+                {t("attachment.compressed")}
+              </Chip>
+              <Chip
+                selected={options.quality === "full"}
+                onClick={() => onOptionsChange({ ...options, quality: "full" })}
+                icon={<ExpandGlyph />}
+                detail={formatBytes(fullBytes)}
+              >
+                {t("attachment.fullQuality")}
+              </Chip>
+            </OptionRow>
+          )}
+
+          {/* Locked collapses to the one real choice rather than three grey
+              chips: a row of disabled buttons invites clicking to see what
+              happens, and nothing does. */}
+          <OptionRow
+            label={t("attachment.visibleTo")}
+            note={
+              visibilityLocked
+                ? t("attachment.onlyOption")
+                : visibilityNote(t, options.mode, audience, isChannel)
+            }
+            first={!qualityRow}
+          >
+            <Chip
+              selected={visibilityLocked || options.mode === "session"}
+              onClick={() => onOptionsChange({ ...options, mode: "session" })}
+              icon={<UsersGroupIcon width={12} height={12} />}
+            >
+              {here}
+            </Chip>
+            {!visibilityLocked && (
+              <>
+                <Chip
+                  selected={options.mode === "public"}
+                  onClick={() => onOptionsChange({ ...options, mode: "public" })}
+                  icon={<Link2Icon width={12} height={12} />}
+                >
+                  {t("attachment.anyoneWithLink")}
+                </Chip>
+                <Chip
+                  selected={options.mode === "password"}
+                  onClick={() => onOptionsChange({ ...options, mode: "password" })}
+                  icon={<LockIcon width={12} height={12} />}
+                >
+                  {t("chat:fileShare.passwordLabel")}
+                </Chip>
+              </>
+            )}
+          </OptionRow>
+          {!visibilityLocked && options.mode === "password" && (
+            <Stack direction="row" alignItems="center" gap="8px" sx={{ px: "4px", pt: "2px", pb: "6px" }}>
+              <InputBase
+                autoFocus
+                value={options.password}
+                onChange={(event) => onOptionsChange({ ...options, password: event.target.value })}
+                placeholder={t("attachment.passwordForLink")}
+                inputProps={{ "aria-label": t("attachment.passwordForLink") }}
+                sx={(theme) => ({
+                  flex: 1,
+                  minWidth: 0,
+                  height: 30,
+                  px: "10px",
+                  borderRadius: "9px",
+                  background: theme.palette.nebula.card2,
+                  border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.accentLine}`,
+                  fontFamily: NEBULA_MONO,
+                  fontSize: 12,
+                  letterSpacing: "0.14em",
+                  "& .MuiInputBase-input": { padding: 0 },
+                  "& .MuiInputBase-input::placeholder": { letterSpacing: 0 },
+                })}
+              />
+              <Box
+                component="button"
+                type="button"
+                onClick={() => onOptionsChange({ ...options, password: generatePassword() })}
+                sx={(theme) => ({
+                  all: "unset",
+                  cursor: "pointer",
+                  flex: "none",
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  color: theme.palette.nebula.accent,
+                  "&:hover": { textDecoration: "underline" },
+                })}
+              >
+                {t("attachment.generate")}
+              </Box>
+            </Stack>
+          )}
+
+          <OptionRow
+            label={t("chat:mySharedFiles.colExpires")}
+            note={
+              expiryLocked ? t("attachment.notSupportedHere") : expiryNote(t, options.ttlSeconds)
+            }
+            first={false}
+          >
+            <Chip
+              selected={expiryLocked || options.ttlSeconds === TTL_NEVER}
+              onClick={() => onOptionsChange({ ...options, ttlSeconds: TTL_NEVER })}
+            >
+              {t("attachment.never")}
+            </Chip>
+            {!expiryLocked && (
+              <>
+                <Chip
+                  selected={options.ttlSeconds === TTL_24_HOURS}
+                  onClick={() => onOptionsChange({ ...options, ttlSeconds: TTL_24_HOURS })}
+                >
+                  {t("attachment.hours24")}
+                </Chip>
+                <Chip
+                  selected={options.ttlSeconds === TTL_7_DAYS}
+                  onClick={() => onOptionsChange({ ...options, ttlSeconds: TTL_7_DAYS })}
+                >
+                  {t("attachment.days7")}
+                </Chip>
+              </>
+            )}
+          </OptionRow>
+        </>
+      )}
+    </>
+  );
+}
+
+const QUALITY_NOTE_KEYS = {
+  compressed: "attachment.photosFit",
+  full: "attachment.sentExactly",
+} as const satisfies Record<AttachmentQuality, string>;
+
+/** The namespaces this tray reads, so the notes below take the same `t`. */
+const TRAY_NS = ["nebulaChat", "chat"] as const;
+type TrayT = ReturnType<typeof useTranslation<typeof TRAY_NS>>["t"];
+
+function visibilityNote(
+  t: TrayT,
+  mode: FileAccessMode,
+  audience: string,
+  isChannel: boolean,
+): string {
+  if (mode === "public") return t("nebulaChat:attachment.publicUrl");
+  if (mode === "password") return t("nebulaChat:attachment.passwordUnlocks");
+  // A boolean rather than the label it came from: comparing against the
+  // English wording would stop being true the moment it is translated.
+  return isChannel
+    ? t("nebulaChat:attachment.membersOnly", { channel: audience })
+    : t("nebulaChat:attachment.justTheTwoOfYou");
+}
+
+/** What the "Expires" chip row says about the choice, once it can be honoured. */
+function expiryNote(t: TrayT, ttlSeconds: number): string {
+  if (ttlSeconds === TTL_NEVER) return t("nebulaChat:attachment.neverExpires");
+  const at = new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(Date.now() + ttlSeconds * 1000));
+  return t("nebulaChat:attachment.expiresAt", { at });
+}
+
+/**
+ * The photos' size, as they would go up under one quality or the other.
+ *
+ * Takes the photos alone, never the whole batch: a file this toggle cannot
+ * touch has nothing to say about which quality is picked.
+ */
+function totalBytes(photos: readonly StagedAttachment[], compressed: boolean): number {
+  let total = 0;
+  for (const file of photos) {
+    const copy = compressed && file.compressed && file.compressed !== "pending" ? file.compressed : null;
+    total += copy?.sizeBytes ?? file.sizeBytes ?? 0;
+  }
+  return total;
+}
+
+/** Twelve characters nobody has to think up, from the browser's own entropy. */
+function generatePassword(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const bytes = new Uint8Array(12);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
+}
+
+/** One line of the folded-out options: a label, its chips, and a note about the choice. */
+function OptionRow({
+  label,
+  note,
+  first,
+  children,
+}: Readonly<{ label: string; note: string; first: boolean; children: React.ReactNode }>) {
+  return (
+    <Stack
+      direction="row"
+      alignItems="center"
+      gap="10px"
+      sx={(theme) => ({
+        px: "4px",
+        pt: first ? "7px" : "6px",
+        pb: "4px",
+        mt: first ? "2px" : 0,
+        borderTop: first ? `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}` : "none",
+      })}
+    >
+      <Typography
+        sx={(theme) => ({ flex: "none", fontSize: 11, fontWeight: 600, color: theme.palette.nebula.muted })}
+      >
+        {label}
+      </Typography>
+      <Stack direction="row" gap="6px" sx={{ flexWrap: "wrap", minWidth: 0 }}>
+        {children}
+      </Stack>
+      <Typography
+        sx={(theme) => ({
+          ml: "auto",
+          flex: "none",
+          fontSize: 10.5,
+          textAlign: "right",
+          whiteSpace: "nowrap",
+          color: theme.palette.nebula.dim,
+        })}
+      >
+        {note}
+      </Typography>
+    </Stack>
+  );
+}
+
+/** A choice on an option row: lit in accent while it is the one taken. */
+function Chip({
+  selected,
+  onClick,
+  icon,
+  detail,
+  children,
+}: Readonly<{
+  selected: boolean;
+  onClick: () => void;
+  /** Absent for a row whose choices don't each have their own glyph, e.g. expiry. */
+  icon?: React.ReactNode;
+  /** A figure beside the label, e.g. the size the batch would be. */
+  detail?: string;
+  children: React.ReactNode;
+}>) {
+  return (
+    <Stack
+      component="button"
+      direction="row"
+      alignItems="center"
+      gap="5px"
+      aria-pressed={selected}
+      onClick={onClick}
+      sx={(theme) => ({
+        all: "unset",
+        // Same reset-then-restate as the "Options" toggle above - without
+        // this the icon, label and detail stack into one unreadable line.
+        display: "flex",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: "5px",
+        cursor: "pointer",
+        boxSizing: "border-box",
+        padding: "4px 9px",
+        borderRadius: radius("md"),
+        fontSize: 10.5,
+        fontWeight: 600,
+        whiteSpace: "nowrap",
+        background: selected ? theme.palette.nebula.accentSoft : theme.palette.nebula.card2,
+        border: `var(--nebula-line-width, 1px) solid ${selected ? theme.palette.nebula.accentLine : theme.palette.nebula.line}`,
+        color: selected ? theme.palette.nebula.text : theme.palette.nebula.muted,
+        "&:hover": { background: selected ? theme.palette.nebula.accentSoft : theme.palette.nebula.hover },
+      })}
+    >
+      {icon && (
+        <Box aria-hidden sx={{ display: "flex", flex: "none" }}>
+          {icon}
+        </Box>
+      )}
+      {children}
+      {detail && (
+        <Box component="span" sx={{ fontWeight: 500, opacity: 0.7, fontVariantNumeric: "tabular-nums" }}>
+          {detail}
+        </Box>
+      )}
+    </Stack>
+  );
+}
+
+/** The two quality glyphs, as the canvas draws them: arrows in, arrows out. */
+function ShrinkGlyph() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M9 2.5h2.5V5M5 11.5H2.5V9M11.5 2.5L8 6M2.5 11.5L6 8" />
+    </svg>
+  );
+}
+
+function ExpandGlyph() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M5 2.5H2.5V5M9 11.5h2.5V9M2.5 2.5L6 6M11.5 11.5L8 8" />
+    </svg>
+  );
+}
+
+/**
+ * One staged file, drawn as what it is.
+ *
+ * An image is its own label, so it gets the square and nothing else - and,
+ * where the tray was given somewhere to send it, opens full size in the same
+ * lightbox a sent picture does, because the tile is a thumbnail and checking
+ * you picked the right photograph is exactly what it is there for. Anything
+ * without a picture gets the opposite treatment - a type badge, the name and
+ * the size - because for those, three facts *are* the file.
+ */
+function AttachmentTile({
+  file,
+  size,
+  onRemove,
+  onOpen,
+}: Readonly<{
+  file: StagedAttachment;
+  size: number;
+  onRemove: () => void;
+  /** Absent when there is no picture to enlarge, or nowhere to enlarge it. */
+  onOpen?: () => void;
+}>) {
+  const remove = `Remove ${file.filename}`;
+  const { t } = useTranslation(TRAY_NS);
+  // Everything on a tile is drawn from its side: the disc, the type badge and
+  // the room kept clear for the disc all follow the square rather than sitting
+  // at one size that is right for only one of the two.
+  const large = size >= TILE_PX;
+  const closePx = large ? TILE_CLOSE_LARGE_PX : TILE_CLOSE_PX;
+
+  if (file.previewUrl) {
+    const picture = (
+      <Box
+        component="img"
+        src={file.previewUrl}
+        alt={file.filename}
+        sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+      />
+    );
+    return (
+      <Box
+        sx={(theme) => ({
+          position: "relative",
+          flex: "none",
+          width: size,
+          height: size,
+          borderRadius: radius("md"),
+          overflow: "hidden",
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
+        })}
+      >
+        {onOpen ? (
+          // The picture is the button and the cross stays outside it: a
+          // button inside a button is not markup a browser will honour, and
+          // the disc has to keep taking its own clicks.
+          <Tooltip title={t("attachment.enlarge")}>
+            <Box
+              component="button"
+              type="button"
+              aria-label={file.filename}
+              onClick={onOpen}
+              sx={(theme) => ({
+                all: "unset",
+                display: "block",
+                cursor: "zoom-in",
+                width: "100%",
+                height: "100%",
+                "&:focus-visible": { outline: `2px solid ${theme.palette.nebula.accent}`, outlineOffset: "-2px" },
+                "&:hover img": { transform: "scale(1.05)" },
+                "& img": { transition: "transform .16s ease" },
+              })}
+            >
+              {picture}
+            </Box>
+          </Tooltip>
+        ) : (
+          picture
+        )}
+        <TileClose label={remove} onClick={onRemove} px={closePx} />
+      </Box>
+    );
+  }
+
+  return (
+    <Stack
+      direction="row"
+      alignItems="center"
+      gap="9px"
+      sx={(theme) => ({
+        position: "relative",
+        flex: "none",
+        boxSizing: "border-box",
+        height: size,
+        pl: large ? "12px" : "8px",
+        // Room for the disc on the corner, so a long name never runs under it.
+        pr: large ? "38px" : "30px",
+        borderRadius: radius("md"),
+        background: theme.palette.nebula.card2,
+        border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
+      })}
+    >
+      <Box
+        aria-hidden
+        sx={(theme) => ({
+          width: large ? 52 : 34,
+          height: large ? 60 : 38,
+          flex: "none",
+          display: "grid",
+          placeItems: "center",
+          borderRadius: radius("sm"),
+          background: theme.palette.nebula.panel,
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
+          fontFamily: NEBULA_MONO,
+          fontSize: large ? 11 : 8.5,
+          fontWeight: 600,
+          color: theme.palette.nebula.muted,
+        })}
+      >
+        {extension(file.filename)}
+      </Box>
+      <Stack sx={{ minWidth: 0 }}>
+        <Typography
+          sx={{
+            fontSize: 11.5,
+            fontWeight: 500,
+            maxWidth: 130,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {file.filename}
+        </Typography>
+        {file.sizeBytes !== undefined && (
+          <Typography sx={(theme) => ({ fontSize: 10, mt: "1px", color: theme.palette.nebula.dim })}>
+            {formatBytes(file.sizeBytes)}
+          </Typography>
+        )}
+      </Stack>
+      <TileClose label={remove} onClick={onRemove} px={closePx} />
+    </Stack>
+  );
+}
+
+/**
+ * The cross that sits *on* a tile rather than beside it.
+ *
+ * A staged file is a picture, and a picture has no margin to put a button in -
+ * so this one is a disc on the corner, dark enough to stay a cross over
+ * whatever the photograph happens to be doing underneath it.
+ */
+function TileClose({
+  label,
+  onClick,
+  px = TILE_CLOSE_PX,
+}: Readonly<{ label: string; onClick: () => void; px?: number }>) {
+  return (
+    <Box
+      component="button"
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      sx={{
+        all: "unset",
+        cursor: "pointer",
+        position: "absolute",
+        right: "4px",
+        top: "4px",
+        width: px,
+        height: px,
+        display: "grid",
+        placeItems: "center",
+        borderRadius: "50%",
+        background: "rgba(8,11,18,.78)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+        color: "#dfe4ec",
+        "&:hover": { background: "rgba(8,11,18,.92)", color: "#ffffff" },
+      }}
+    >
+      <CloseIcon width={px > TILE_CLOSE_PX ? 11 : 9} height={px > TILE_CLOSE_PX ? 11 : 9} />
+    </Box>
+  );
+}
+
+/** The file's kind, for a tray's type badge. */
+export function extension(filename: string): string {
+  const dot = filename.lastIndexOf(".");
+  return dot === -1
+    ? "FILE"
+    : filename
+        .slice(dot + 1)
+        .toUpperCase()
+        .slice(0, 4);
+}

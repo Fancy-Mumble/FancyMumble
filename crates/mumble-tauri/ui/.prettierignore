@@ -1,0 +1,8 @@
+node_modules
+dist
+build
+coverage
+*.min.*
+# Written by crates/mumble-tauri/build.rs, which compares byte for byte.
+src/core/utils/appConstants.ts
+src/core/utils/permissions.ts

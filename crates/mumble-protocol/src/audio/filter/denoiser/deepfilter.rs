@@ -4,7 +4,7 @@
 
 use fancy_denoiser_deepfilter::{DeepFilterConfig, DeepFilterDenoiser};
 
-use super::params::{algorithm_param_specs, read_param, DenoiserParams};
+use super::params::{DenoiserParams, algorithm_param_specs, read_param};
 use super::{DenoiserBackend, NoiseSuppressionAlgorithm};
 
 /// Thread-ownership wrapper around [`DeepFilterDenoiser`].
@@ -43,7 +43,7 @@ fn build_config(params: &DenoiserParams) -> DeepFilterConfig {
         attenuation: 1.0,
         attenuation_limit_db: lookup("atten_lim_db", 24.0),
         post_filter_beta: lookup("post_filter_beta", 0.02),
-        min_db_thresh: lookup("min_db_thresh", -10.0),
+        min_db_thresh: lookup("min_db_thresh", -15.0),
     }
 }
 
@@ -114,4 +114,3 @@ mod tests {
         assert!((cfg.post_filter_beta - 0.03).abs() < f32::EPSILON);
     }
 }
-

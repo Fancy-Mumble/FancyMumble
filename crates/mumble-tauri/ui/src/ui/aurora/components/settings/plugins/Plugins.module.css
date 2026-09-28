@@ -1,0 +1,159 @@
+/* Plugin cards: identity, what it may do, its own settings, and the trust
+   decision. Capability tags are deliberately loud - they are the thing the
+   user is actually consenting to. */
+
+.empty {
+  padding: 24px 2px;
+  color: #7e8a99;
+  font-size: 11px;
+}
+
+.card {
+  margin-bottom: 10px;
+  padding: 14px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 11px;
+  background: rgb(255 255 255 / 2%);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.identity {
+  min-width: 0;
+  flex: 1;
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #eef3f8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.version {
+  color: #7e8a99;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.official {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgb(101 184 237 / 16%);
+  color: #8fcbf2;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.description {
+  margin: 4px 0 0;
+  color: #8c96a3;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.state {
+  flex: none;
+  padding: 4px 9px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.allowed {
+  background: rgb(88 190 130 / 14%);
+  color: #7fd3a3;
+}
+
+.denied {
+  background: rgb(224 95 106 / 14%);
+  color: #f0919a;
+}
+
+.untrusted {
+  background: rgb(255 255 255 / 6%);
+  color: #97a2af;
+}
+
+.scope {
+  font-size: 9px;
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+.capabilities {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.tag {
+  padding: 2px 7px;
+  border: 1px solid rgb(217 164 65 / 35%);
+  border-radius: 999px;
+  background: rgb(217 164 65 / 10%);
+  color: #e7c07a;
+  font-size: 9px;
+}
+
+.actions {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* A settings panel the plugin itself declared. */
+.panel {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 9px;
+  background: #151b23;
+}
+
+.panelTitle {
+  color: #dce3ea;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.panelRow {
+  padding: 5px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid rgb(255 255 255 / 5%);
+  font-size: 10px;
+}
+
+.panelRow:first-of-type {
+  border-top: 0;
+}
+
+.panelLabel {
+  color: #8c96a3;
+}
+
+.panelValue {
+  color: #dce3ea;
+  text-align: right;
+}
+
+.emptyPanel {
+  padding-top: 6px;
+  color: #7e8a99;
+  font-size: 10px;
+}

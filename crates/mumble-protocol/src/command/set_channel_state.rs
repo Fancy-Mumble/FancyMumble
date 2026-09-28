@@ -13,7 +13,7 @@ use crate::state::{PchatProtocol, ServerState};
 /// the server ignores absent fields.  The caller must ensure the
 /// user has the required permissions (Write / `MakeChannel`) before
 /// sending.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SetChannelState {
     /// Target channel ID.  `None` when creating a new channel.
     pub channel_id: Option<u32>,
@@ -38,10 +38,32 @@ pub struct SetChannelState {
     /// Channel access password.  `Some("")` removes the password;
     /// `None` leaves the existing password unchanged.
     pub channel_info_password: Option<String>,
+    /// Whether the channel is hidden (only users with `SeeChannel` see it).
+    pub hidden: Option<bool>,
+    /// Channel expiry mode: 0 = none, 1 = absolute, 2 = sliding.
+    pub expiry_mode: Option<u32>,
+    /// Expiry lifetime / idle window in seconds.
+    pub expiry_duration_secs: Option<u32>,
+    /// Meeting-room invitees (registered `user_id`s). On create the server grants
+    /// each `SeeChannel|Enter|Traverse` and denies them to `@all`. Empty = no-op.
+    pub invitee_user_ids: Vec<u32>,
+    /// Channel attributes to assign, paired with [`Self::attribute_mask`].
+    ///
+    /// Generic on purpose: any settable `ChannelAttribute` travels through here,
+    /// so a new channel trait needs no new field on this command. An attribute
+    /// named in the mask is set when listed here and cleared when not.
+    pub attributes: Vec<mumble_tcp::ChannelAttribute>,
+    /// Which attributes this message asserts. Empty leaves every attribute
+    /// untouched, which is what unrelated partial updates (a rename, say) want.
+    pub attribute_mask: Vec<mumble_tcp::ChannelAttribute>,
 }
 
 impl CommandAction for SetChannelState {
     fn execute(&self, _state: &ServerState) -> CommandOutput {
+        #[allow(
+            deprecated,
+            reason = "the legacy `temporary` wire field must still be sent for server compatibility"
+        )]
         let msg = mumble_tcp::ChannelState {
             channel_id: self.channel_id,
             parent: self.parent,
@@ -54,6 +76,12 @@ impl CommandAction for SetChannelState {
             pchat_max_history: self.pchat_max_history,
             pchat_retention_days: self.pchat_retention_days,
             channel_info_password: self.channel_info_password.clone(),
+            hidden: self.hidden,
+            expiry_mode: self.expiry_mode,
+            expiry_duration_secs: self.expiry_duration_secs,
+            invitee_user_ids: self.invitee_user_ids.clone(),
+            attributes: self.attributes.iter().map(|&a| a as i32).collect(),
+            attribute_mask: self.attribute_mask.iter().map(|&a| a as i32).collect(),
             ..Default::default()
         };
         tracing::debug!(

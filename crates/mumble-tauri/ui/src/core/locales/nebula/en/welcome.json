@@ -1,0 +1,466 @@
+{
+  "matches": "matches {{condition}}",
+  "admin": {
+    "saved": "Greeting saved.",
+    "notSaved": "Not saved: {{error}}",
+    "viewBlocks": "Blocks",
+    "viewCanvas": "Node canvas",
+    "testGreeting": "Test greeting",
+    "saving": "Saving…",
+    "saveBroadcast": "Save & broadcast",
+    "reading": "Reading this server's greeting…",
+    "readFailed": "Could not read this server's greeting: {{error}}",
+    "retry": "Try again",
+    "greetingNumber": "Greeting #{{number}}",
+    "thisGreeting": "This greeting",
+    "nothingWired": "nothing wired to WHEN",
+    "summary": {
+      "empty": "No greeting on the canvas yet.",
+      "shows": "Shows when {{condition}}",
+      "unwired": "Nothing is wired to WHEN — this greeting shows to nobody.",
+      "greetings_one": "{{count}} greeting, tried in the order they are drawn",
+      "greetings_other": "{{count}} greetings, tried in the order they are drawn",
+      "withoutWhen_one": "{{count}} with nothing wired to WHEN",
+      "withoutWhen_other": "{{count}} with nothing wired to WHEN",
+      "shadowed_one": "{{count}} that reach nobody",
+      "shadowed_other": "{{count}} that reach nobody"
+    },
+    "blocksView": {
+      "greetings": "Greetings",
+      "noneOnCanvas": "— none on the canvas —",
+      "greeting": "Greeting",
+      "shownWhen": "Shown when",
+      "nothingWired": "— nothing wired —",
+      "theyRead": "They read",
+      "empty": "— empty —",
+      "plusText": "Plus text",
+      "dismissal": "Dismissal",
+      "once": "Shown once, then remembered per account.",
+      "everyConnect": "Shown on every connect."
+    }
+  },
+  "editor": {
+    "add": "+ add",
+    "browse": "Browse blocks",
+    "search": "Search blocks",
+    "favorites": "Favorites",
+    "noMatches": "No block matches that.",
+    "complete": "Graph complete",
+    "toFix_one": "{{count}} to fix",
+    "toFix_other": "{{count}} to fix",
+    "reset": "Reset",
+    "live": "LIVE",
+    "idle": "UNWIRED",
+    "enabled": "enabled"
+  },
+  "gallery": {
+    "open": "Templates",
+    "empty": "No template matches that.",
+    "add": "Add to canvas",
+    "replace": "Start over with this",
+    "replaceHint": "Removes everything already on the canvas."
+  },
+  "categories": {
+    "who": "Who is connecting",
+    "logic": "Logic",
+    "message": "The message"
+  },
+  "portTypes": {
+    "condition": "condition",
+    "text": "text",
+    "designInputs": "one per input the design declares"
+  },
+  "ports": {
+    "when": "WHEN",
+    "plus": "PLUS",
+    "text": "TEXT",
+    "condition": "CONDITION"
+  },
+  "blocks": {
+    "everyone": {
+      "label": "Everyone",
+      "description": "True of every arrival. Wire it straight into a greeting to show that greeting to everybody - the simplest rule there is."
+    },
+    "country": {
+      "label": "Country",
+      "description": "True when the member connects from one of the picked countries."
+    },
+    "tenure": {
+      "label": "On server since",
+      "description": "Compares how long the account has existed on this server."
+    },
+    "clientVersion": {
+      "label": "Client version",
+      "description": "Matches the Mumble version the client announces."
+    },
+    "fancyVersion": {
+      "label": "Fancy version",
+      "description": "Matches the fork's own version - or any build of it, which stock Mumble never is."
+    },
+    "account": {
+      "label": "Account",
+      "description": "True for a specific registered user or certificate."
+    },
+    "group": {
+      "label": "Group",
+      "description": "True when the member belongs to an ACL group."
+    },
+    "os": {
+      "label": "OS",
+      "description": "Matches the operating system reported by the client."
+    },
+    "gates": {
+      "and": "True when both inputs are true.",
+      "or": "True when either input is true.",
+      "xor": "True when exactly one input is true.",
+      "nand": "True unless both inputs are true.",
+      "nor": "True when neither input is true.",
+      "xnor": "True when both inputs agree.",
+      "not": "Inverts a single condition."
+    },
+    "filter": {
+      "label": "Filter",
+      "description": "Settles an undecided answer into a plain yes or no, so a gate can use it."
+    },
+    "text": {
+      "label": "Reusable text",
+      "description": "One line of prose, appended to a greeting and to every other greeting that wires it in."
+    },
+    "textRich": {
+      "label": "Reusable text, formatted",
+      "description": "The same snippet with a WYSIWYG editor on it: headings, lists, colour. For house rules rather than for one sentence."
+    },
+    "greeting": {
+      "label": "Show this greeting",
+      "description": "The message itself: what it says, and the condition that decides who reads it."
+    },
+    "greetingRich": {
+      "label": "Show this greeting, formatted",
+      "description": "The greeting written the way it will be read: a heading, a paragraph, a list. Wired exactly like the plain one."
+    },
+    "greetingScreen": {
+      "label": "Welcome screen",
+      "description": "A greeting built from bands - a hero, a button, a row of links - which each client draws in its own type scale."
+    },
+    "greetingDesign": {
+      "label": "Design block",
+      "description": "A greeting laid out in the design editor: blocks placed on a sheet, with named text slots and on/off conditions wired in from the canvas."
+    },
+    "greetingLegacy": {
+      "label": "Welcome screen for Classic Mumble",
+      "description": "The same bands compiled for Qt: tables, inline colour, no rounded corners. Wire it behind a client version condition; the modern one collapses on those clients."
+    }
+  },
+  "nodes": {
+    "country": "COUNTRY IS ONE OF",
+    "tenure": "ON SERVER SINCE",
+    "clientVersion": "CLIENT VERSION",
+    "fancyVersion": "FANCY VERSION",
+    "account": "ACCOUNT",
+    "group": "GROUP",
+    "os": "OS",
+    "filter": "FILTER",
+    "text": "REUSABLE TEXT",
+    "greeting": "SHOW THIS GREETING",
+    "greetingClassic": "GREETING · CLASSIC",
+    "everyone": "EVERYONE",
+    "undecided": "May be undecided — wire it through a FILTER to settle it"
+  },
+  "body": {
+    "joinedLess": "joined less than",
+    "joinedMore": "joined more than",
+    "is": "is",
+    "any": "any",
+    "groupName": "group name",
+    "unknown": "unknown →",
+    "no": "no",
+    "yes": "yes",
+    "snippetName": "name this snippet",
+    "snippetNameLabel": "Snippet name",
+    "snippetText": "Text appended to a greeting",
+    "snippetTextLabel": "Snippet text",
+    "theyRead": "They read",
+    "greetingText": "What they read on arrival",
+    "greetingTextLabel": "Greeting text",
+    "plusText": "Plus text",
+    "wireSnippet": "wire a reusable text here",
+    "unnamed": "unnamed",
+    "once": "Shown once, centered"
+  },
+  "windows": {
+    "day": "1 day ago",
+    "week": "1 week ago",
+    "month": "1 month ago",
+    "halfYear": "6 months ago",
+    "year": "1 year ago"
+  },
+  "accountStates": {
+    "guest": "guest",
+    "registered": "registered",
+    "strongCertificate": "strong certificate"
+  },
+  "phrases": {
+    "country": "country in {{codes}}",
+    "countryAny": "country in …",
+    "joinedLess": "joined less than {{window}}",
+    "joinedMore": "joined more than {{window}}",
+    "version": "version {{op}} {{version}}",
+    "fancyAny": "on the Fancy client",
+    "fancyVersion": "Fancy version {{op}} {{version}}",
+    "account": "account is {{state}}",
+    "group": "in group {{group}}",
+    "groupAny": "in group …",
+    "os": "os is {{os}}",
+    "everyone": "everyone who arrives",
+    "unknownYes": "{{condition}} (unknown counts as yes)",
+    "not": "not {{condition}}",
+    "gates": {
+      "and": "and",
+      "or": "or",
+      "xor": "xor",
+      "nand": "nand",
+      "nor": "nor",
+      "xnor": "xnor"
+    }
+  },
+  "problems": {
+    "noGreeting": "No greeting node - add one to say what people see.",
+    "emptyScreen": "The welcome screen has no bands with anything in them.",
+    "badLink": "A link on the welcome screen is not http:// or https://: {{url}}",
+    "noText": "The greeting has no text.",
+    "notWired": "Nothing is wired to WHEN, so the greeting would never show.",
+    "emptyInput": "{{node}} has an empty {{port}} input.",
+    "noCountries": "A country node names no countries.",
+    "noGroup": "A group node names no group.",
+    "emptySnippet": "A reusable text node is empty.",
+    "tooLong": "{{node}} is {{length}} characters; the server takes {{max}}."
+  },
+  "views": {
+    "plain": "Plain",
+    "rich": "Rich",
+    "html": "HTML",
+    "screen": "Screen",
+    "classic": "Classic",
+    "classicHint": "The same bands, compiled for the original Mumble client - 1.5 and older",
+    "classicNote": "Compiled for Qt: tables, inline colour, no rounded corners. Wire it behind a client version condition so only the old clients get it.",
+    "lossy": "This markup uses tags the editor cannot hold without rewriting them - tables, most likely. Editing it here as HTML keeps it exactly as it is."
+  },
+  "bands": {
+    "header": {
+      "label": "Header strip",
+      "hint": "A small line across the top: the server, a version."
+    },
+    "hero": {
+      "label": "Hero",
+      "hint": "The badge, the big title, and the line under it."
+    },
+    "image": {
+      "label": "Server artwork",
+      "hint": "This server's own icon or banner, from its livery."
+    },
+    "prose": {
+      "label": "Paragraph",
+      "hint": "Formatted text, written the way every other body is."
+    },
+    "action": {
+      "label": "Button",
+      "hint": "One thing to do, with a caption under it."
+    },
+    "cards": {
+      "label": "Link row",
+      "hint": "Small cards side by side, each pointing somewhere."
+    },
+    "divider": {
+      "label": "Divider",
+      "hint": "A rule between two bands."
+    }
+  },
+  "screen": {
+    "addBand": "+ band",
+    "noBands": "A screen with no bands shows nothing. Start with a hero.",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "remove": "Remove {{label}}",
+    "compact": "A list, not cards",
+    "glyph": "badge, one character",
+    "glyphLabel": "Hero badge",
+    "buttonTitle": "what the button says",
+    "title": "the line people read",
+    "titleLabel": "{{label}} title",
+    "buttonLink": "Button link",
+    "webOnly": "Only http:// and https:// links are sent.",
+    "buttonSubtitle": "the small line underneath",
+    "subtitle": "the second line",
+    "subtitleLabel": "{{label}} subtitle",
+    "primary": "The main thing to do",
+    "paragraph": "Paragraph",
+    "paragraphPlaceholder": "What this part says",
+    "eyebrow": "BROWSE",
+    "eyebrowLabel": "Card eyebrow",
+    "removeCard": "Remove card",
+    "cardPlaceholder": "Channel Viewer",
+    "cardLabel": "Card label",
+    "cardLink": "Card link",
+    "addCard": "+ card",
+    "anotherLink": "Another link",
+    "align": {
+      "default": "default",
+      "left": "left",
+      "center": "center"
+    },
+    "tones": {
+      "none": "none",
+      "accent": "accent",
+      "muted": "muted",
+      "warn": "warn",
+      "danger": "danger"
+    },
+    "pictures": {
+      "icon": "icon",
+      "banner": "banner"
+    }
+  },
+  "picture": {
+    "noRoom": "No room: {{room}} left, and this will not go under it.",
+    "unreadable": "That file is not a picture this can read.",
+    "fitting": "Fitting…",
+    "drop": "Drop a picture, or click to choose",
+    "held": "{{size}} · {{w}}×{{h}} · {{room}} left",
+    "room": "{{room}} of room · sent to Fancy clients only",
+    "remove": "Remove"
+  },
+  "preview": {
+    "heading": "PREVIEW · WHAT THEY SEE",
+    "unwired": "nothing is wired to WHEN — shown to nobody",
+    "dismissed": "Dismissed for good",
+    "everyConnect": "Shown on every connect",
+    "gotIt": "Got it",
+    "legacy": "Drawn as Mumble 1.5 and older will: tables, inline colour, square corners. Their rich text is a subset of HTML 4, so this is close to what Qt renders rather than to this client.",
+    "htmlOff": "This server has allow_html switched off, so it sends the plain half of every greeting. The formatting is kept, and starts being sent the moment the setting is on.",
+    "unmatchable": "No visitor can match this condition, so this greeting shows to nobody.",
+    "shadowed": "This greeting shows to nobody: every visitor it matches is taken by a greeting the server reaches first. Drag it above that one, or narrow the other's condition.",
+    "overlap": "Overlaps with the greeting before it — {{visitor}} matches both, and the earlier one wins. Deliberate if this is the general case behind a specific one.",
+    "undecided": "Too many combinations of conditions to check whether the greetings overlap."
+  },
+  "canvas": {
+    "undo": "Undo",
+    "redo": "Redo",
+    "undoTitle": "Undo (Ctrl+Z)",
+    "redoTitle": "Redo (Ctrl+Shift+Z)",
+    "annotate": "Annotate",
+    "annotations": {
+      "title": "Title",
+      "note": "Note",
+      "frame": "Frame around a region",
+      "label": "Small label"
+    },
+    "annotationFields": {
+      "title": "title annotation",
+      "note": "note annotation",
+      "frame": "frame annotation",
+      "label": "label annotation"
+    },
+    "placeholders": {
+      "title": "Section",
+      "note": "What this part of the graph is for, and why it is drawn this way.",
+      "frame": "Region",
+      "label": "label"
+    },
+    "removeNode": "Remove node",
+    "resizeNode": "Resize node",
+    "removeAnnotation": "Remove annotation",
+    "resizeAnnotation": "Resize annotation",
+    "colour": "Colour {{tone}}",
+    "tones": {
+      "muted": "muted",
+      "accent": "accent",
+      "ok": "ok",
+      "warn": "warn"
+    },
+    "addChip": "+ add",
+    "removeTag": "Remove {{label}}"
+  },
+  "templateCategories": {
+    "arriving": "For people arriving",
+    "housekeeping": "Housekeeping",
+    "occasion": "For an occasion"
+  },
+  "templates": {
+    "warm-welcome": {
+      "label": "Warm welcome, with the rules",
+      "description": "A formatted greeting for anyone who has just joined, plus the house rules as a reusable snippet you can wire into later greetings too.",
+      "shows": "Shown to accounts less than a week old."
+    },
+    "quiet-welcome": {
+      "label": "One short line",
+      "description": "The smallest greeting worth sending: a sentence, no heading, shown once. Start here when the formatted ones feel like too much.",
+      "shows": "Shown to accounts less than a month old."
+    },
+    "german-welcome": {
+      "label": "German-speaking welcome",
+      "description": "A greeting in German for people connecting from DE, AT or CH. The pattern to copy for any other language: change the countries, change the words.",
+      "shows": "Shown when the country is DE, AT or CH - and to nobody whose country the server cannot determine."
+    },
+    "guest-nudge": {
+      "label": "Nudge guests to register",
+      "description": "For people connecting without an account: what registering gets them, and who to ask. Shown once, so it is not a monthly reminder.",
+      "shows": "Shown to guests."
+    },
+    "outdated-client": {
+      "label": "Ask outdated clients to update",
+      "description": "For anyone on a client older than 1.5: what will not work, and that updating is quick. The filter is set to warn on a maybe rather than stay quiet.",
+      "shows": "Shown when the client is older than 1.5.0, including when the server cannot tell."
+    },
+    "event-night": {
+      "label": "Announce a regular night",
+      "description": "A centred announcement with the time and where to turn up, shown on every connect rather than once - which is what an announcement is for.",
+      "shows": "Shown to registered members, on every connect."
+    },
+    "designed-modern": {
+      "label": "A modern welcome",
+      "description": "The one to start from: a display line set large and tight on the left, a small tinted badge above it, the rules in a hairline box, and one button in the reader's accent. Restrained rather than colourful, and it follows each reader's theme and their light or dark mode.",
+      "shows": "Shown to accounts less than a month old, once."
+    },
+    "designed-front-page": {
+      "label": "A designed front page",
+      "description": "The same welcome, laid out in the design editor instead of written as prose: a badge, a heading, two link columns, a notice, your house rules in a slot, and one button. Every block on it is one the old Qt clients can draw too.",
+      "shows": "Shown to accounts less than a month old, once."
+    },
+    "designed-notice": {
+      "label": "A designed notice",
+      "description": "The short kind of design: a heading, a bordered card, the date it matters by, and a quiet button for the people with accounts. Start here when the front page is more than the occasion needs.",
+      "shows": "Shown to everyone with an account, once."
+    },
+    "front-door": {
+      "label": "A front door",
+      "description": "The full welcome screen: a badge, a title, a paragraph, one button that matters, and a row of links. Built from bands, so it is drawn in the client's own type scale rather than as pasted-in HTML.",
+      "shows": "Shown to guests, once."
+    },
+    "server-front-page": {
+      "label": "The full front page",
+      "description": "Everything a welcome screen can be: a painted title bar, the server's own artwork, a centred introduction, a version line, a list of links, the button, and a notice bar at the bottom. Start here and delete what you do not want.",
+      "shows": "Shown to guests, once."
+    },
+    "old-and-new": {
+      "label": "One screen for new clients, one for old",
+      "description": "The same welcome twice: bands for clients that draw them, and the identical bands compiled to Qt tables for Mumble 1.5 and older. Split on client version, so nobody gets the wrong one.",
+      "shows": "Two rules - clients newer than 1.5.0, and 1.5.0 or older."
+    },
+    "newcomer-and-regular": {
+      "label": "Newcomers here, regulars there",
+      "description": "Two greetings on one canvas: the long welcome for the first week, the short announcement for everybody else. The shape most servers end up with.",
+      "shows": "Two rules - under a week old, and everyone registered."
+    }
+  },
+  "visitor": {
+    "os": "on {{os}}",
+    "country": "from {{country}}",
+    "elsewhere": "from anywhere else",
+    "client": "client {{version}}",
+    "daysHere_one": "{{count}} day here",
+    "daysHere_other": "{{count}} days here",
+    "groups": "in {{groups}}",
+    "separator": ", ",
+    "anybody": "anybody at all"
+  }
+}

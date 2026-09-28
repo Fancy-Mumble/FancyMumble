@@ -1,0 +1,500 @@
+/* ---- Channel Info Side Panel ----------------------------------- */
+
+.panel {
+  position: relative;
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--color-bg-secondary);
+  border-left: 1px solid var(--color-glass-border);
+}
+
+/* -- Close button ------------------------------------------------ */
+
+.closeBtn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.closeBtn:hover {
+  background: var(--color-overlay-dark);
+  color: var(--color-text-primary);
+}
+
+/* -- Header ------------------------------------------------------ */
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 20px 16px;
+  border-bottom: 1px solid var(--color-glass-border);
+}
+
+.channelIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--color-glass-hover);
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+/* -- Sections ---------------------------------------------------- */
+
+.section {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-glass-border);
+}
+
+.section:last-child {
+  border-bottom: none;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+/* -- Edit button ------------------------------------------------- */
+
+.editBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--color-glass-border);
+  border-radius: 6px;
+  background: var(--color-glass);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.editBtn:hover {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+  border-color: var(--color-glass-heavy);
+}
+
+/* -- Info grid --------------------------------------------------- */
+
+.infoGrid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  font-size: 13px;
+}
+
+.infoLabel {
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.infoValue {
+  color: var(--color-text-primary);
+  word-break: break-word;
+}
+
+/* -- Description ------------------------------------------------- */
+
+.descriptionSection {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.descriptionContent {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  word-break: break-word;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.descriptionContent p {
+  margin: 0 0 0.5em;
+}
+
+.descriptionContent p:last-child {
+  margin-bottom: 0;
+}
+
+.descriptionContent img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  display: block;
+  margin: 4px 0;
+}
+
+.descriptionContent a {
+  color: var(--color-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.descriptionContent a:hover {
+  color: #93c5fd;
+}
+
+/* -- Edit form --------------------------------------------------- */
+
+.editForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.editLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.editInput {
+  font: inherit;
+  transition: border-color 0.2s;
+}
+
+.editInput:focus {
+  border-color: var(--color-accent);
+}
+
+.editTextarea {
+  padding: 8px 10px;
+  border: 1px solid var(--color-glass-border);
+  border-radius: 6px;
+  background: var(--color-glass);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+  min-height: 80px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.editTextarea:focus {
+  border-color: var(--color-accent);
+}
+
+.editActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.cancelBtn {
+  padding: 6px 14px;
+  border: 1px solid var(--color-glass-border);
+  border-radius: 6px;
+  background: var(--color-glass);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.cancelBtn:hover {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+}
+
+.saveBtn {
+  padding: 6px 14px;
+  border: 1px solid var(--color-accent-border-strong);
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--color-accent-medium), var(--color-accent-gradient-end));
+  color: var(--color-accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.saveBtn:hover {
+  background: linear-gradient(135deg, var(--color-accent-fill), rgba(34, 158, 217, 0.18));
+  border-color: rgba(42, 171, 238, 0.55);
+}
+
+.saveBtn:disabled,
+.cancelBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* -- Welcome text ------------------------------------------------ */
+
+.welcomeText {
+  font-size: 13px;
+  color: var(--color-text-primary);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.welcomeText a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.welcomeText a:hover {
+  text-decoration: underline;
+}
+
+/* -- Members list --------------------------------------------------------- */
+
+.subsectionLabel {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  margin: 8px 0 4px;
+}
+
+.membersList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.memberRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.memberKeyIcon {
+  flex-shrink: 0;
+  color: var(--color-success);
+}
+
+.memberWarningIcon {
+  flex-shrink: 0;
+  color: var(--color-warning);
+}
+
+.emptyMembers {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.holdersList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.holderItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.holderItem.holderOffline {
+  opacity: 0.5;
+}
+
+.holderAvatarWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.holderAvatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+}
+
+.holderName {
+  font-size: 13px;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* When rendered inside a MobileBottomSheet, fill the available width. */
+@media (max-width: 768px) {
+  .panel {
+    position: static;
+    width: 100%;
+    height: auto;
+    max-width: none;
+    border-left: none;
+    box-shadow: none;
+    overflow-y: visible;
+  }
+}
+
+/* -- Permission bits (developer mode) --------------------------- */
+
+.permBits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.permBitOn,
+.permBitOff {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: monospace;
+  line-height: 1.4;
+}
+
+.permBitOn {
+  background: var(--color-online-bg);
+  color: var(--color-online);
+}
+
+.permBitOff {
+  background: var(--color-glass-subtle);
+  color: var(--color-text-muted);
+}
+
+/* -- Key ownership takeover ------------------------------------- */
+
+.keyTakeoverSection {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-glass-border);
+}
+
+.dangerBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--color-danger-strong), rgba(220, 38, 38, 0.1));
+  color: var(--color-danger);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.dangerBtn:hover {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(220, 38, 38, 0.18));
+  border-color: rgba(239, 68, 68, 0.55);
+}
+
+.keyTakeoverConfirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.keyTakeoverLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.keyTakeoverOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.keyTakeoverOption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.keyTakeoverOption input[type="radio"] {
+  accent-color: var(--color-danger);
+}
+
+.keyTakeoverHint {
+  width: 100%;
+  padding-left: 20px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}

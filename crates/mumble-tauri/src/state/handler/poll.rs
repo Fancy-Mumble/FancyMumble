@@ -19,7 +19,9 @@ struct PollPayload {
 
 impl HandleMessage for mumble_tcp::FancyPoll {
     fn handle(&self, ctx: &HandlerContext) {
-        let Some(channel_id) = self.channel_id else { return; };
+        let Some(channel_id) = self.channel_id else {
+            return;
+        };
         let poll_id = self.poll_id.clone().unwrap_or_default();
         if poll_id.is_empty() {
             return;
@@ -57,7 +59,9 @@ struct PollVotePayload {
 
 impl HandleMessage for mumble_tcp::FancyPollVote {
     fn handle(&self, ctx: &HandlerContext) {
-        let Some(channel_id) = self.channel_id else { return; };
+        let Some(channel_id) = self.channel_id else {
+            return;
+        };
         let poll_id = self.poll_id.clone().unwrap_or_default();
         if poll_id.is_empty() {
             return;

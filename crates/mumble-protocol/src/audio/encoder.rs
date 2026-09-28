@@ -1,4 +1,4 @@
-﻿//! Audio encoder trait and real Opus implementation.
+//! Audio encoder trait and real Opus implementation.
 //!
 //! An [`AudioEncoder`] takes raw PCM [`AudioFrame`]s and produces
 //! compressed packets ready for network transmission. The trait is
@@ -15,7 +15,16 @@ use crate::error::Error;
 pub struct EncodedPacket {
     /// The compressed payload bytes.
     pub data: Vec<u8>,
-    /// Monotonically increasing sequence number.
+    /// Mumble `frame_number` for this packet, counted in 10 ms frames
+    /// (480 samples @ 48 kHz), NOT in packets.
+    ///
+    /// This mirrors the official client, whose `iFrameCounter` advances
+    /// once per 10 ms frame and which sends `iFrameCounter - frames` per
+    /// packet. The distinction matters because official receivers place
+    /// packets in their jitter buffer at `timestamp = frame_number *
+    /// 480`: a sender that increments by one per 20 ms packet makes its
+    /// timestamps advance at half real-time, and the receiver's jitter
+    /// buffer perpetually starves - heard as laggy, glitchy audio.
     pub sequence: u64,
     /// Duration of audio this packet represents, in samples.
     pub frame_samples: u32,
@@ -54,6 +63,12 @@ pub enum OpusApplication {
     /// artifacts with narrow-bandwidth microphone input.
     Audio,
     /// Lowest possible latency (at the cost of quality).
+    ///
+    /// CELT-only with the 4 ms Opus otherwise reserves for switching down to
+    /// SILK removed. **Not** a free 4 ms at the bitrates this client uses: at
+    /// 72 kbps fullband the encoder is in hybrid SILK+CELT mode (see
+    /// `low_delay_would_change_the_coding_mode`), so this would drop SILK's
+    /// speech modelling and its in-band FEC along with the delay.
     LowDelay,
 }
 
@@ -163,12 +178,8 @@ impl OpusEncoder {
             }
         };
 
-        let mut inner = opus::Encoder::new(
-            format.sample_rate,
-            channels,
-            config.application.into(),
-        )
-        .map_err(|e| Error::OpusCodec(e.to_string()))?;
+        let mut inner = opus::Encoder::new(format.sample_rate, channels, config.application.into())
+            .map_err(|e| Error::OpusCodec(e.to_string()))?;
 
         Self::configure_encoder(&mut inner, &config)?;
 
@@ -182,10 +193,7 @@ impl OpusEncoder {
     }
 
     /// Apply all quality-relevant settings to an Opus encoder instance.
-    fn configure_encoder(
-        enc: &mut opus::Encoder,
-        config: &OpusEncoderConfig,
-    ) -> Result<()> {
+    fn configure_encoder(enc: &mut opus::Encoder, config: &OpusEncoderConfig) -> Result<()> {
         enc.set_bitrate(opus::Bitrate::Bits(config.bitrate))
             .map_err(|e| Error::OpusCodec(e.to_string()))?;
         enc.set_vbr(config.vbr)
@@ -221,7 +229,11 @@ impl AudioEncoder for OpusEncoder {
             sequence: self.sequence,
             frame_samples: self.config.frame_size as u32,
         };
-        self.sequence += 1;
+        // Advance in Mumble sequence units: one per 10 ms frame (480
+        // samples @ 48 kHz), i.e. 2 for a 20 ms packet, 4 for 40 ms.
+        // See the `EncodedPacket::sequence` docs for why this must not
+        // be a plain per-packet increment.
+        self.sequence += (self.config.frame_size as u64 / 480).max(1);
         Ok(packet)
     }
 
@@ -249,10 +261,35 @@ mod tests {
     use super::*;
     use crate::audio::sample::AudioFormat;
 
+    /// A 440 Hz tone: silence can encode to a degenerate packet, and the TOC
+    /// tests below need a packet the encoder actually made a mode decision for.
+    fn tone_frame(format: AudioFormat, frame_size: usize) -> AudioFrame {
+        let mut data = Vec::with_capacity(frame_size * 4);
+        for i in 0..frame_size {
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "a frame is at most 2880 samples"
+            )]
+            let t = i as f32 / 48_000.0;
+            let s = (std::f32::consts::TAU * 440.0 * t).sin() * 0.5;
+            data.extend_from_slice(&s.to_le_bytes());
+        }
+        AudioFrame {
+            data,
+            format,
+            sequence: 0,
+            is_silent: false,
+        }
+    }
+
+    /// The Opus mode a packet was encoded in, from its TOC byte: configs 0-11
+    /// are SILK-only, 12-15 hybrid, 16-31 CELT-only (RFC 6716 section 3.1).
+    fn is_celt_only(packet: &[u8]) -> bool {
+        packet.first().is_some_and(|toc| (toc >> 3) >= 16)
+    }
+
     fn silent_frame(format: AudioFormat, frame_size: usize) -> AudioFrame {
-        let bytes = frame_size
-            * format.channels as usize
-            * format.sample_format.byte_width();
+        let bytes = frame_size * format.channels as usize * format.sample_format.byte_width();
         AudioFrame {
             data: vec![0u8; bytes],
             format,
@@ -269,7 +306,10 @@ mod tests {
         let mut enc = OpusEncoder::new(config, fmt)?;
         let frame = silent_frame(fmt, frame_size);
         let packet = enc.encode(&frame)?;
-        assert!(!packet.data.is_empty(), "Opus should produce at least 1 byte");
+        assert!(
+            !packet.data.is_empty(),
+            "Opus should produce at least 1 byte"
+        );
         assert_eq!(packet.sequence, 0);
         Ok(())
     }
@@ -291,16 +331,27 @@ mod tests {
     }
 
     #[test]
-    fn sequence_increments() -> Result<()> {
-        let fmt = AudioFormat::MONO_48KHZ_F32;
-        let config = OpusEncoderConfig::default();
-        let frame_size = config.frame_size;
-        let mut enc = OpusEncoder::new(config, fmt)?;
-        let frame = silent_frame(fmt, frame_size);
-        let p0 = enc.encode(&frame)?;
-        let p1 = enc.encode(&frame.clone())?;
-        assert_eq!(p0.sequence, 0);
-        assert_eq!(p1.sequence, 1);
+    fn sequence_advances_in_10ms_frame_units() -> Result<()> {
+        // Mumble's frame_number counts 10 ms frames (480 samples @48 kHz),
+        // exactly like the official client's iFrameCounter. Official
+        // receivers compute jitter-buffer timestamps as frame_number*480,
+        // so a per-packet increment would desync them for any packet
+        // duration other than 10 ms.
+        for (frame_size, expected_step) in [(480usize, 1u64), (960, 2), (1920, 4), (2880, 6)] {
+            let fmt = AudioFormat::MONO_48KHZ_F32;
+            let config = OpusEncoderConfig {
+                frame_size,
+                ..OpusEncoderConfig::default()
+            };
+            let mut enc = OpusEncoder::new(config, fmt)?;
+            let frame = silent_frame(fmt, frame_size);
+            let p0 = enc.encode(&frame)?;
+            let p1 = enc.encode(&frame.clone())?;
+            let p2 = enc.encode(&frame.clone())?;
+            assert_eq!(p0.sequence, 0, "frame_size {frame_size}");
+            assert_eq!(p1.sequence, expected_step, "frame_size {frame_size}");
+            assert_eq!(p2.sequence, expected_step * 2, "frame_size {frame_size}");
+        }
         Ok(())
     }
 
@@ -315,6 +366,31 @@ mod tests {
         enc.reset();
         let p = enc.encode(&frame)?;
         assert_eq!(p.sequence, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn low_delay_would_change_the_coding_mode() -> Result<()> {
+        // The cheap-looking latency win of RESTRICTED_LOWDELAY rests on the
+        // stream already being CELT-only, and at this client's default bitrate
+        // it is not: 72 kbps fullband encodes as hybrid SILK+CELT. Switching
+        // would trade SILK and a live in-band FEC for 4 ms, which is a quality
+        // decision rather than a free one. This test is what says so.
+        let fmt = AudioFormat::MONO_48KHZ_F32;
+        let config = OpusEncoderConfig::default();
+        assert_eq!(config.bitrate, 72_000);
+        let frame_size = config.frame_size;
+        let mut enc = OpusEncoder::new(config, fmt)?;
+        // The first packets prime the encoder's mode decision.
+        let mut packet = enc.encode(&tone_frame(fmt, frame_size))?;
+        for _ in 0..4 {
+            packet = enc.encode(&tone_frame(fmt, frame_size))?;
+        }
+        assert!(
+            !is_celt_only(&packet.data),
+            "TOC {:#04x} is CELT-only; RESTRICTED_LOWDELAY may now be free              and worth revisiting",
+            packet.data[0]
+        );
         Ok(())
     }
 }

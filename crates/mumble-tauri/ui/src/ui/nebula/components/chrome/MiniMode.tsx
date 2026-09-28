@@ -1,0 +1,164 @@
+import { useTranslation } from "react-i18next";
+import { Box, Button, IconButton, Typography } from "@mui/material";
+import { useAppStore } from "@core/store";
+import { selectMicLive, selectSelfDeafened } from "@core/store/voiceSelectors";
+import type { UserEntry } from "@core/types";
+import { HeadphonesIcon, HeadphonesOffIcon, MicIcon, MicOffIcon } from "@ui/icons";
+import { NebulaSurface, SpeakingAvatar, SpeakingBars, Stack } from "../primitives";
+import { radius } from "../../tokens";
+
+interface MiniModeProps {
+  serverLabel: string;
+  channelName: string;
+  occupants: readonly UserEntry[];
+  ownSession: number | null;
+  latencyMs: number | null;
+  onExpand: () => void;
+  /** Leave the server. Restores the full window first - see NebulaClientApp. */
+  onLeave: () => void;
+  /** Right-click on someone in the call - the same menu the full window opens. */
+  onContextMenuUser?: (user: UserEntry, event: React.MouseEvent) => void;
+  /** Measured so the window can be shrunk onto the card. */
+  cardRef?: React.Ref<HTMLDivElement>;
+}
+
+/**
+ * The compact overlay window: who is in the call and the three controls that
+ * matter while you are doing something else. Everything here is a shortcut
+ * into state the full window already owns - no mini-only behaviour.
+ */
+export function MiniMode({
+  serverLabel,
+  channelName,
+  occupants,
+  ownSession,
+  latencyMs,
+  onExpand,
+  onLeave,
+  onContextMenuUser,
+  cardRef,
+}: Readonly<MiniModeProps>) {
+  const { t } = useTranslation(["nebulaChrome", "common", "chat"]);
+  const micLive = useAppStore(selectMicLive);
+  const deafened = useAppStore(selectSelfDeafened);
+
+  return (
+    // No margin: the window is resized onto this card, so any space around it
+    // would be client area with nothing in it, sitting over whatever the user
+    // went to mini mode to keep watching.
+    <NebulaSurface ref={cardRef} sx={{ width: 320, borderRadius: radius("xl") }}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        gap={1.125}
+        data-tauri-drag-region
+        sx={(theme) => ({ px: "13px", py: "11px", borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}` })}
+      >
+        <Box
+          aria-hidden
+          sx={(theme) => ({
+            width: 20,
+            height: 20,
+            borderRadius: radius("sm"),
+            display: "grid",
+            placeItems: "center",
+            background: theme.palette.nebula.accent,
+            color: theme.palette.nebula.onAccent,
+            fontWeight: 700,
+            fontSize: 11,
+          })}
+        >
+          M
+        </Box>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontWeight: 600, fontSize: 12.5 }} noWrap>
+            {channelName}
+          </Typography>
+          <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.muted })} noWrap>
+            {serverLabel}
+            {latencyMs != null && ` · ${t("nebulaChrome:miniMode.latency", { ms: latencyMs })}`}
+          </Typography>
+        </Box>
+        <IconButton
+          size="small"
+          aria-label={t("nebulaChrome:miniMode.expand")}
+          sx={{ ml: "auto" }}
+          onClick={onExpand}
+        >
+          ⤢
+        </IconButton>
+      </Stack>
+
+      <Stack sx={{ px: "10px", py: "8px", gap: "1px" }}>
+        {occupants.map((user) => (
+          <Stack
+            key={user.session}
+            direction="row"
+            alignItems="center"
+            gap={1.125}
+            onContextMenu={onContextMenuUser ? (event) => onContextMenuUser(user, event) : undefined}
+            sx={{ px: "8px", py: "6px" }}
+          >
+            <SpeakingAvatar
+              name={user.name}
+              session={user.session}
+              textureSize={user.texture_size}
+              size={22}
+            />
+            <Typography sx={{ fontSize: 12.5 }} noWrap>
+              {user.name}
+            </Typography>
+            {user.session === ownSession ? (
+              <Typography sx={(theme) => ({ ml: "auto", fontSize: 9.5, color: theme.palette.nebula.dim })}>
+                {t("nebulaChrome:miniMode.you")}
+              </Typography>
+            ) : (
+              <Box sx={{ ml: "auto", display: "flex" }}>
+                <SpeakingBars session={user.session} />
+              </Box>
+            )}
+          </Stack>
+        ))}
+      </Stack>
+
+      <Stack direction="row" gap={0.75} sx={{ px: "10px", pt: "8px", pb: "12px" }}>
+        <IconButton
+          aria-label={micLive ? t("chat:callControls.mute") : t("chat:callControls.unmute")}
+          onClick={() => void useAppStore.getState().toggleMute()}
+          sx={(theme) => ({
+            flex: 1,
+            height: 30,
+            borderRadius: radius("md"),
+            background: theme.palette.nebula.card2,
+          })}
+        >
+          {micLive ? <MicIcon width={13} height={13} /> : <MicOffIcon width={13} height={13} />}
+        </IconButton>
+        <IconButton
+          aria-label={deafened ? t("chat:callControls.undeafen") : t("chat:callControls.deafen")}
+          onClick={() => void useAppStore.getState().toggleDeafen()}
+          sx={(theme) => ({
+            flex: 1,
+            height: 30,
+            borderRadius: radius("md"),
+            background: theme.palette.nebula.card2,
+          })}
+        >
+          {deafened ? (
+            <HeadphonesOffIcon width={13} height={13} />
+          ) : (
+            <HeadphonesIcon width={13} height={13} />
+          )}
+        </IconButton>
+        <Button
+          variant="outlined"
+          // Same meaning as the sidebar dock's: leave the server.
+          onClick={onLeave}
+          sx={(theme) => ({ flex: 1.8, height: 30, fontSize: 11.5, color: theme.palette.nebula.bad })}
+        >
+          {t("common:actions.leave")}
+        </Button>
+      </Stack>
+    </NebulaSurface>
+  );
+}

@@ -67,6 +67,11 @@ impl IdentityStore {
     /// {app_data}/identities/{label}/tls.key.pem
     /// {app_data}/identities/{label}/pchat_seed.bin
     /// ```
+    /// The legacy directories are removed only once every identity in them
+    /// has been copied across. A private TLS key that failed to copy is the
+    /// user's only one, so a partial migration keeps the originals and
+    /// retries on the next start rather than deleting what it could not
+    /// reproduce.
     pub fn migrate_legacy_storage(&self) {
         let legacy_certs = self.app_data_dir.join(LEGACY_CERTS_DIR);
         if !legacy_certs.exists() {
@@ -74,14 +79,22 @@ impl IdentityStore {
         }
 
         let global_seed: Option<[u8; 32]> = std::fs::read(
-            self.app_data_dir.join(LEGACY_PCHAT_DIR).join(LEGACY_SEED_FILE),
+            self.app_data_dir
+                .join(LEGACY_PCHAT_DIR)
+                .join(LEGACY_SEED_FILE),
         )
         .ok()
         .and_then(|data| <[u8; 32]>::try_from(data.as_slice()).ok());
 
-        let Ok(entries) = std::fs::read_dir(&legacy_certs) else {
-            return;
+        let entries = match std::fs::read_dir(&legacy_certs) {
+            Ok(entries) => entries,
+            Err(e) => {
+                warn!("cannot read the legacy identity directory, keeping it: {e}");
+                return;
+            }
         };
+
+        let mut all_migrated = true;
         for entry in entries.flatten() {
             let name = entry.file_name();
             let name = name.to_string_lossy();
@@ -92,27 +105,57 @@ impl IdentityStore {
             if new_dir.exists() {
                 continue;
             }
-            if std::fs::create_dir_all(&new_dir).is_err() {
-                continue;
+
+            match self.migrate_one_identity(&legacy_certs, &new_dir, label, global_seed) {
+                Ok(()) => info!(label, "migrated legacy identity to per-identity storage"),
+                Err(e) => {
+                    warn!(label, "could not migrate legacy identity, keeping it: {e}");
+                    // Leave nothing half-written for the next attempt to
+                    // mistake for a completed migration.
+                    let _ = std::fs::remove_dir_all(&new_dir);
+                    all_migrated = false;
+                }
             }
-
-            let old_cert = legacy_certs.join(format!("{label}.cert.pem"));
-            let old_key = legacy_certs.join(format!("{label}.key.pem"));
-            let _ = std::fs::copy(&old_cert, new_dir.join(TLS_CERT_FILE));
-            let _ = std::fs::copy(&old_key, new_dir.join(TLS_KEY_FILE));
-
-            if let Some(seed) = global_seed {
-                let _ = std::fs::write(new_dir.join(SEED_FILE), seed);
-            }
-
-            info!(label, "migrated legacy identity to per-identity storage");
         }
 
-        let _ = std::fs::remove_dir_all(&legacy_certs);
+        if !all_migrated {
+            warn!("legacy identity storage kept: at least one identity did not migrate");
+            return;
+        }
+
+        if let Err(e) = std::fs::remove_dir_all(&legacy_certs) {
+            warn!("could not remove the legacy certificate directory: {e}");
+        }
         let pchat_dir = self.app_data_dir.join(LEGACY_PCHAT_DIR);
-        if pchat_dir.exists() {
-            let _ = std::fs::remove_dir_all(&pchat_dir);
+        if pchat_dir.exists()
+            && let Err(e) = std::fs::remove_dir_all(&pchat_dir)
+        {
+            warn!("could not remove the legacy pchat directory: {e}");
         }
+    }
+
+    /// Copy one identity's certificate, key and seed into `new_dir`.
+    ///
+    /// Fails on the first copy that does not go through, so the caller can
+    /// tell a complete migration from a partial one.
+    fn migrate_one_identity(
+        &self,
+        legacy_certs: &Path,
+        new_dir: &Path,
+        label: &str,
+        global_seed: Option<[u8; 32]>,
+    ) -> std::io::Result<()> {
+        std::fs::create_dir_all(new_dir)?;
+
+        let old_cert = legacy_certs.join(format!("{label}.cert.pem"));
+        let old_key = legacy_certs.join(format!("{label}.key.pem"));
+        let _copied = std::fs::copy(&old_cert, new_dir.join(TLS_CERT_FILE))?;
+        let _copied = std::fs::copy(&old_key, new_dir.join(TLS_KEY_FILE))?;
+
+        if let Some(seed) = global_seed {
+            std::fs::write(new_dir.join(SEED_FILE), seed)?;
+        }
+        Ok(())
     }
 
     /// Load or generate the 32-byte identity seed for a specific identity.
@@ -140,8 +183,7 @@ impl IdentityStore {
         }
 
         let seed: [u8; 32] = rand::random();
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("Failed to create identity dir: {e}"))?;
+        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create identity dir: {e}"))?;
         std::fs::write(&seed_path, seed).map_err(|e| format!("Failed to write seed: {e}"))?;
         info!(label, "generated new pchat identity seed");
         Ok(seed)
@@ -156,8 +198,7 @@ impl IdentityStore {
             return Ok(());
         }
 
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("Failed to create identity dir: {e}"))?;
+        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create identity dir: {e}"))?;
 
         let certified = rcgen::generate_simple_self_signed(vec![label.to_string()])
             .map_err(|e| e.to_string())?;
@@ -237,9 +278,16 @@ impl IdentityStore {
         Ok(())
     }
 
-    /// Export an identity to a JSON bundle at the given `dest` path.
-    pub fn export(&self, label: &str, dest: &Path) -> Result<(), String> {
-        use serde_json::{json, Map, Value};
+    /// An identity as the JSON bundle `export` writes, in memory.
+    ///
+    /// Also what linking a device carries across (`state::link`), which is why
+    /// it exists apart from the file: a bundle written to disk on its way to
+    /// another device is a private key left lying in a temp directory.
+    pub fn export_bundle(
+        &self,
+        label: &str,
+    ) -> Result<serde_json::Map<String, serde_json::Value>, String> {
+        use serde_json::{Map, Value};
 
         let dir = self.identity_dir(label);
         if !dir.exists() {
@@ -260,13 +308,18 @@ impl IdentityStore {
 
         let seed_path = dir.join(SEED_FILE);
         if seed_path.exists() {
-            let data = std::fs::read(&seed_path)
-                .map_err(|e| format!("Failed to read seed: {e}"))?;
+            let data =
+                std::fs::read(&seed_path).map_err(|e| format!("Failed to read seed: {e}"))?;
             let hex: String = bytes_to_hex(&data);
             let _ = bundle.insert(SEED_FILE.to_string(), Value::String(hex));
         }
+        Ok(bundle)
+    }
 
-        let json = serde_json::to_string_pretty(&json!(bundle))
+    /// Export an identity to a JSON bundle at the given `dest` path.
+    pub fn export(&self, label: &str, dest: &Path) -> Result<(), String> {
+        let bundle = self.export_bundle(label)?;
+        let json = serde_json::to_string_pretty(&serde_json::Value::Object(bundle))
             .map_err(|e| format!("Serialisation error: {e}"))?;
         std::fs::write(dest, json).map_err(|e| format!("Failed to write export file: {e}"))?;
         info!(label, ?dest, "exported identity");
@@ -278,8 +331,8 @@ impl IdentityStore {
     pub fn import(&self, src: &Path) -> Result<String, String> {
         use serde_json::Value;
 
-        let json = std::fs::read_to_string(src)
-            .map_err(|e| format!("Failed to read import file: {e}"))?;
+        let json =
+            std::fs::read_to_string(src).map_err(|e| format!("Failed to read import file: {e}"))?;
         let bundle: serde_json::Map<String, Value> =
             serde_json::from_str(&json).map_err(|e| format!("Invalid identity file: {e}"))?;
 
@@ -288,10 +341,25 @@ impl IdentityStore {
             .and_then(Value::as_str)
             .ok_or("Missing _label in identity file")?
             .to_string();
+        self.import_bundle(&bundle, &label)?;
+        info!(label, ?src, "imported identity");
+        Ok(label)
+    }
 
-        let dir = self.identity_dir(&label);
-        std::fs::create_dir_all(&dir)
-            .map_err(|e| format!("Failed to create identity dir: {e}"))?;
+    /// Write a bundle's certificate, key and seed under `label`.
+    ///
+    /// The label is the caller's, not the bundle's: a linked identity is
+    /// stored under one that does not exist here yet, so it cannot land on
+    /// this device's own.
+    pub fn import_bundle(
+        &self,
+        bundle: &serde_json::Map<String, serde_json::Value>,
+        label: &str,
+    ) -> Result<(), String> {
+        use serde_json::Value;
+
+        let dir = self.identity_dir(label);
+        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create identity dir: {e}"))?;
 
         for name in [TLS_CERT_FILE, TLS_KEY_FILE] {
             if let Some(text) = bundle.get(name).and_then(Value::as_str) {
@@ -305,8 +373,92 @@ impl IdentityStore {
             std::fs::write(dir.join(SEED_FILE), data)
                 .map_err(|e| format!("Failed to write seed: {e}"))?;
         }
+        Ok(())
+    }
+}
 
-        info!(label, ?src, "imported identity");
-        Ok(label)
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
+
+    use super::*;
+
+    /// Build an app-data dir holding one legacy identity plus the global seed.
+    fn legacy_layout(labels: &[&str]) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let certs = dir.path().join(LEGACY_CERTS_DIR);
+        std::fs::create_dir_all(&certs).unwrap();
+        for label in labels {
+            std::fs::write(certs.join(format!("{label}.cert.pem")), b"cert").unwrap();
+            std::fs::write(certs.join(format!("{label}.key.pem")), b"key").unwrap();
+        }
+        let pchat = dir.path().join(LEGACY_PCHAT_DIR);
+        std::fs::create_dir_all(&pchat).unwrap();
+        std::fs::write(pchat.join(LEGACY_SEED_FILE), [7u8; 32]).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_complete_migration_moves_the_files_and_clears_the_old_layout() {
+        let dir = legacy_layout(&["alice"]);
+        let store = IdentityStore::new(dir.path().to_path_buf());
+
+        store.migrate_legacy_storage();
+
+        let new_dir = store.identity_dir("alice");
+        assert_eq!(std::fs::read(new_dir.join(TLS_CERT_FILE)).unwrap(), b"cert");
+        assert_eq!(std::fs::read(new_dir.join(TLS_KEY_FILE)).unwrap(), b"key");
+        assert_eq!(std::fs::read(new_dir.join(SEED_FILE)).unwrap(), [7u8; 32]);
+        assert!(!dir.path().join(LEGACY_CERTS_DIR).exists());
+        assert!(!dir.path().join(LEGACY_PCHAT_DIR).exists());
+    }
+
+    /// The legacy directory used to be deleted whether or not the copies
+    /// worked, so a failed copy destroyed the only copy of a TLS key.
+    #[test]
+    fn a_failed_migration_keeps_the_originals() {
+        let dir = legacy_layout(&["alice"]);
+        // No matching `.key.pem`, so copying the key fails.
+        std::fs::remove_file(dir.path().join(LEGACY_CERTS_DIR).join("alice.key.pem")).unwrap();
+        let store = IdentityStore::new(dir.path().to_path_buf());
+
+        store.migrate_legacy_storage();
+
+        assert!(
+            dir.path()
+                .join(LEGACY_CERTS_DIR)
+                .join("alice.cert.pem")
+                .exists(),
+            "the legacy certificate must survive a failed migration"
+        );
+        assert!(dir.path().join(LEGACY_PCHAT_DIR).exists());
+        assert!(
+            !store.identity_dir("alice").exists(),
+            "a half-written identity must not look migrated on the next start"
+        );
+    }
+
+    #[test]
+    fn one_failure_does_not_delete_another_identity_s_originals() {
+        let dir = legacy_layout(&["alice", "bob"]);
+        std::fs::remove_file(dir.path().join(LEGACY_CERTS_DIR).join("bob.key.pem")).unwrap();
+        let store = IdentityStore::new(dir.path().to_path_buf());
+
+        store.migrate_legacy_storage();
+
+        assert!(store.identity_dir("alice").join(TLS_KEY_FILE).exists());
+        assert!(dir.path().join(LEGACY_CERTS_DIR).exists());
+    }
+
+    #[test]
+    fn migrating_twice_is_a_no_op() {
+        let dir = legacy_layout(&["alice"]);
+        let store = IdentityStore::new(dir.path().to_path_buf());
+        store.migrate_legacy_storage();
+        store.migrate_legacy_storage();
+        assert_eq!(
+            std::fs::read(store.identity_dir("alice").join(TLS_KEY_FILE)).unwrap(),
+            b"key"
+        );
     }
 }

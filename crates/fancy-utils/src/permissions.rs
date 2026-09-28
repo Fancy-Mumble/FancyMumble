@@ -80,33 +80,177 @@ pub const RESET_USER_CONTENT: u32 = 0x100000;
 pub const KEY_OWNER: u32 = 0x200000;
 /// Root-only: may add and remove custom server emotes.
 pub const MANAGE_EMOTES: u32 = 0x400000;
+/// Root-only: read-only counterpart to `REGISTER` - may view the registered-user
+/// directory (e.g. to invite offline users) but not register/unregister them.
+pub const READ_REGISTER: u32 = 0x800000;
+/// Channel-level: may see a channel flagged hidden (and the users inside it).
+/// Without it a hidden channel is absent from the user's channel list entirely.
+pub const SEE_CHANNEL: u32 = 0x1000000;
+/// Channel-level: may send a recorded voice message into the channel's chat.
+/// Separate from `SHARE_FILES` although a clip travels as a file, so a server
+/// can allow voice notes without allowing arbitrary uploads. Granted by
+/// default; the server-wide switch is the `allow_voice_messages` setting.
+pub const SEND_VOICE_MESSAGE: u32 = 0x2000000;
 
 /// Every permission entry, in display order.  This is the data that the
 /// build script walks to generate the TypeScript table.
 pub const ENTRIES: &[PermissionEntry] = &[
-    PermissionEntry { bit: WRITE,              ident: "WRITE",              label: "Write",               root_only: false },
-    PermissionEntry { bit: TRAVERSE,           ident: "TRAVERSE",           label: "Traverse",            root_only: false },
-    PermissionEntry { bit: ENTER,              ident: "ENTER",              label: "Enter",               root_only: false },
-    PermissionEntry { bit: SPEAK,              ident: "SPEAK",              label: "Speak",               root_only: false },
-    PermissionEntry { bit: MUTE_DEAFEN,        ident: "MUTE_DEAFEN",        label: "Mute/Deafen",         root_only: false },
-    PermissionEntry { bit: MOVE,               ident: "MOVE",               label: "Move",                root_only: false },
-    PermissionEntry { bit: MAKE_CHANNEL,       ident: "MAKE_CHANNEL",       label: "Make Channel",        root_only: false },
-    PermissionEntry { bit: LINK_CHANNEL,       ident: "LINK_CHANNEL",       label: "Link Channel",        root_only: false },
-    PermissionEntry { bit: WHISPER,            ident: "WHISPER",            label: "Whisper",             root_only: false },
-    PermissionEntry { bit: TEXT_MESSAGE,       ident: "TEXT_MESSAGE",       label: "Text Message",        root_only: false },
-    PermissionEntry { bit: MAKE_TEMP_CHANNEL,  ident: "MAKE_TEMP_CHANNEL",  label: "Make Temp Channel",   root_only: false },
-    PermissionEntry { bit: LISTEN,             ident: "LISTEN",             label: "Listen",              root_only: false },
-    PermissionEntry { bit: DELETE_MESSAGE,     ident: "DELETE_MESSAGE",     label: "Delete Message",      root_only: false },
-    PermissionEntry { bit: SUBSCRIBE_PUSH,     ident: "SUBSCRIBE_PUSH",     label: "Subscribe Push",      root_only: false },
-    PermissionEntry { bit: SHARE_FILES,        ident: "SHARE_FILES",        label: "Share Files",         root_only: false },
-    PermissionEntry { bit: SHARE_FILES_PUBLIC, ident: "SHARE_FILES_PUBLIC", label: "Share Files (Public)", root_only: false },
-    PermissionEntry { bit: KICK,               ident: "KICK",               label: "Kick",                root_only: true  },
-    PermissionEntry { bit: BAN,                ident: "BAN",                label: "Ban",                 root_only: true  },
-    PermissionEntry { bit: REGISTER,           ident: "REGISTER",           label: "Register",            root_only: true  },
-    PermissionEntry { bit: SELF_REGISTER,      ident: "SELF_REGISTER",      label: "Self-Register",       root_only: true  },
-    PermissionEntry { bit: RESET_USER_CONTENT, ident: "RESET_USER_CONTENT", label: "Reset User Content",  root_only: true  },
-    PermissionEntry { bit: KEY_OWNER,          ident: "KEY_OWNER",          label: "Key Owner",           root_only: true  },
-    PermissionEntry { bit: MANAGE_EMOTES,      ident: "MANAGE_EMOTES",      label: "Manage Emotes",       root_only: true  },
+    PermissionEntry {
+        bit: WRITE,
+        ident: "WRITE",
+        label: "Write",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: TRAVERSE,
+        ident: "TRAVERSE",
+        label: "Traverse",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: ENTER,
+        ident: "ENTER",
+        label: "Enter",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: SPEAK,
+        ident: "SPEAK",
+        label: "Speak",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: MUTE_DEAFEN,
+        ident: "MUTE_DEAFEN",
+        label: "Mute/Deafen",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: MOVE,
+        ident: "MOVE",
+        label: "Move",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: MAKE_CHANNEL,
+        ident: "MAKE_CHANNEL",
+        label: "Make Channel",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: LINK_CHANNEL,
+        ident: "LINK_CHANNEL",
+        label: "Link Channel",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: WHISPER,
+        ident: "WHISPER",
+        label: "Whisper",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: TEXT_MESSAGE,
+        ident: "TEXT_MESSAGE",
+        label: "Text Message",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: MAKE_TEMP_CHANNEL,
+        ident: "MAKE_TEMP_CHANNEL",
+        label: "Make Temp Channel",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: LISTEN,
+        ident: "LISTEN",
+        label: "Listen",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: DELETE_MESSAGE,
+        ident: "DELETE_MESSAGE",
+        label: "Delete Message",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: SUBSCRIBE_PUSH,
+        ident: "SUBSCRIBE_PUSH",
+        label: "Subscribe Push",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: SHARE_FILES,
+        ident: "SHARE_FILES",
+        label: "Share Files",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: SHARE_FILES_PUBLIC,
+        ident: "SHARE_FILES_PUBLIC",
+        label: "Share Files (Public)",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: KICK,
+        ident: "KICK",
+        label: "Kick",
+        root_only: true,
+    },
+    PermissionEntry {
+        bit: BAN,
+        ident: "BAN",
+        label: "Ban",
+        root_only: true,
+    },
+    PermissionEntry {
+        bit: REGISTER,
+        ident: "REGISTER",
+        label: "Register",
+        root_only: true,
+    },
+    PermissionEntry {
+        bit: SELF_REGISTER,
+        ident: "SELF_REGISTER",
+        label: "Self-Register",
+        root_only: true,
+    },
+    PermissionEntry {
+        bit: RESET_USER_CONTENT,
+        ident: "RESET_USER_CONTENT",
+        label: "Reset User Content",
+        root_only: true,
+    },
+    PermissionEntry {
+        bit: KEY_OWNER,
+        ident: "KEY_OWNER",
+        label: "Key Owner",
+        root_only: true,
+    },
+    PermissionEntry {
+        bit: MANAGE_EMOTES,
+        ident: "MANAGE_EMOTES",
+        label: "Manage Emotes",
+        root_only: true,
+    },
+    PermissionEntry {
+        bit: READ_REGISTER,
+        ident: "READ_REGISTER",
+        label: "List Registered Users",
+        root_only: true,
+    },
+    PermissionEntry {
+        bit: SEE_CHANNEL,
+        ident: "SEE_CHANNEL",
+        label: "See Hidden Channel",
+        root_only: false,
+    },
+    PermissionEntry {
+        bit: SEND_VOICE_MESSAGE,
+        ident: "SEND_VOICE_MESSAGE",
+        label: "Send Voice Message",
+        root_only: false,
+    },
 ];
 
 #[cfg(test)]

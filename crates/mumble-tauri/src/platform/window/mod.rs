@@ -41,13 +41,19 @@ mod windows;
 #[cfg(target_os = "macos")]
 mod macos;
 
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos", target_os = "ios"))))]
+#[cfg(all(
+    unix,
+    not(any(target_os = "android", target_os = "macos", target_os = "ios"))
+))]
 mod linux;
 
 #[cfg(not(any(
     target_os = "windows",
     target_os = "macos",
-    all(unix, not(any(target_os = "android", target_os = "macos", target_os = "ios"))),
+    all(
+        unix,
+        not(any(target_os = "android", target_os = "macos", target_os = "ios"))
+    ),
 )))]
 mod unsupported;
 
@@ -110,14 +116,20 @@ pub fn platform_constraints() -> impl AspectRatioConstraint {
     {
         macos::MacosAspectRatio
     }
-    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos", target_os = "ios"))))]
+    #[cfg(all(
+        unix,
+        not(any(target_os = "android", target_os = "macos", target_os = "ios"))
+    ))]
     {
         linux::LinuxAspectRatio
     }
     #[cfg(not(any(
         target_os = "windows",
         target_os = "macos",
-        all(unix, not(any(target_os = "android", target_os = "macos", target_os = "ios"))),
+        all(
+            unix,
+            not(any(target_os = "android", target_os = "macos", target_os = "ios"))
+        ),
     )))]
     {
         unsupported::Noop

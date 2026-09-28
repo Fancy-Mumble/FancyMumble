@@ -4,33 +4,44 @@
 //! implements `HandleMessage` for the corresponding protobuf struct.
 //! This keeps each handler focused and testable in isolation.
 
+mod account;
 mod acl;
+mod audit;
 mod ban_list;
 mod channel_remove;
 mod channel_state;
 mod codec_version;
 mod custom_reactions_config;
 mod draw_stroke;
-mod link_preview;
+mod files;
+mod forum;
+mod gifs;
+mod invites;
+pub(crate) mod link_preview;
+mod livery;
+mod records;
+pub(crate) use livery::{LiverySnapshot, data_uri, to_snapshot};
 mod onboarding;
-mod server_settings;
+pub(super) mod operator_ticket;
 mod pchat;
 mod permission_denied;
 mod permission_query;
 mod ping;
+pub(super) mod plugin_admin;
 mod plugin_data;
 mod plugin_message;
-mod plugin_admin;
 mod poll;
 mod read_receipt;
 mod reject;
+mod scheduled_message;
 mod server_config;
+mod server_settings;
 mod server_sync;
 mod text_message;
 mod typing_indicator;
 mod user_list;
 mod user_remove;
-mod user_state;
+pub(crate) mod user_state;
 mod user_stats;
 mod version;
 mod watch_sync;
@@ -153,6 +164,8 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::PchatKeyExchange(m) => m.handle(ctx),
         ControlMessage::PchatKeyRequest(m) => m.handle(ctx),
         ControlMessage::PchatAck(m) => m.handle(ctx),
+        ControlMessage::PchatKeyHolderReport(m) => m.handle(ctx),
+        ControlMessage::PchatKeyHoldersQuery(m) => m.handle(ctx),
         ControlMessage::PchatKeyHoldersList(m) => m.handle(ctx),
         ControlMessage::PchatKeyChallenge(m) => m.handle(ctx),
         ControlMessage::PchatKeyChallengeResult(m) => m.handle(ctx),
@@ -163,22 +176,47 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::PchatReactionFetchResponse(m) => m.handle(ctx),
         ControlMessage::PchatPinDeliver(m) => m.handle(ctx),
         ControlMessage::PchatPinFetchResponse(m) => m.handle(ctx),
+        ControlMessage::FancyFileGrant(m) => m.handle(ctx),
+        ControlMessage::FancyEmotes(m) => m.handle(ctx),
+        ControlMessage::FancyAccountRecord(m) => m.handle(ctx),
+        ControlMessage::FancyAccountRecordKeys(m) => m.handle(ctx),
+        ControlMessage::FancyFileShare(m) => m.handle(ctx),
+        ControlMessage::FancyFileListing(m) => m.handle(ctx),
+        ControlMessage::FancyFileRefused(m) => m.handle(ctx),
+        ControlMessage::FancyFileManaged(m) => m.handle(ctx),
+        ControlMessage::FancyVoiceSupport(m) => m.handle(ctx),
         ControlMessage::WebRtcSignal(m) => m.handle(ctx),
         ControlMessage::FancyCustomReactionsConfig(m) => m.handle(ctx),
         ControlMessage::FancyReadReceiptDeliver(m) => m.handle(ctx),
         ControlMessage::FancyTypingIndicator(m) => m.handle(ctx),
         ControlMessage::FancyLinkPreviewResponse(m) => m.handle(ctx),
+        ControlMessage::FancyGifPage(m) => m.handle(ctx),
+        ControlMessage::FancyGifRefused(m) => m.handle(ctx),
+        ControlMessage::FancyGifSupport(m) => m.handle(ctx),
+        ControlMessage::FancyInvites(m) => m.handle(ctx),
         ControlMessage::FancyWatchSync(m) => m.handle(ctx),
         ControlMessage::FancyDrawStroke(m) => m.handle(ctx),
         ControlMessage::FancyOnboardingConfig(m) => m.handle(ctx),
         ControlMessage::FancyOnboardingResponseDeliver(m) => m.handle(ctx),
         ControlMessage::FancyServerSettings(m) => m.handle(ctx),
+        ControlMessage::FancyAccountSettings(m) => m.handle(ctx),
+        ControlMessage::FancyAccountAck(m) => m.handle(ctx),
+        ControlMessage::FancyAuditResponse(m) => m.handle(ctx),
+        ControlMessage::FancyAuditEvent(m) => m.handle(ctx),
+        ControlMessage::FancyAuditConfig(m) => m.handle(ctx),
+        ControlMessage::FancyAuditSnapshot(m) => m.handle(ctx),
+        ControlMessage::FancyServerLivery(m) => m.handle(ctx),
+        ControlMessage::FancyOperatorTicketReply(m) => m.handle(ctx),
         ControlMessage::FancyPluginAdminList(m) => m.handle(ctx),
         ControlMessage::FancyPluginAdminAck(m) => m.handle(ctx),
         ControlMessage::PluginMessage(m) => m.handle(ctx),
         ControlMessage::PluginRegistry(m) => m.handle(ctx),
         ControlMessage::FancyPoll(m) => m.handle(ctx),
         ControlMessage::FancyPollVote(m) => m.handle(ctx),
+        ControlMessage::FancyForumPost(m) => m.handle(ctx),
+        ControlMessage::FancyForumFetchResponse(m) => m.handle(ctx),
+        ControlMessage::FancyScheduledMessageListResponse(m) => m.handle(ctx),
+        ControlMessage::FancyScheduledMessageAck(m) => m.handle(ctx),
         ControlMessage::BanList(m) => m.handle(ctx),
         ControlMessage::UserList(m) => m.handle(ctx),
         ControlMessage::Acl(m) => m.handle(ctx),

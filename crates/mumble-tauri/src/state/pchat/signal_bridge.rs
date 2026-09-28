@@ -10,11 +10,11 @@ use mumble_protocol::command;
 use mumble_protocol::persistent::protocol::signal_v1::SignalBridge;
 use mumble_protocol::persistent::wire::{MessageEnvelope, WireCodec};
 
-use crate::state::local_cache::CachedMessage;
 use crate::state::SharedState;
+use crate::state::local_cache::CachedMessage;
 
-use super::persistence::load_signal_state;
 use super::PchatState;
+use super::persistence::load_signal_state;
 
 // -- Bridge loading ---------------------------------------------------
 
@@ -51,10 +51,15 @@ pub(crate) fn load_signal_bridge(
             candidates.push(dir.join(lib_name));
             candidates.push(dir.join("signal-bridge").join(lib_name));
             candidates.push(dir.join("../lib/fancy-mumble").join(lib_name));
-            candidates.push(
-                dir.join("../lib/fancy-mumble/signal-bridge")
-                    .join(lib_name),
-            );
+            candidates.push(dir.join("../lib/fancy-mumble/signal-bridge").join(lib_name));
+            // Tauri's Linux .deb/AppImage install bundled resources under the
+            // PRODUCT name from tauri.conf.json (productName = "FancyMumble"),
+            // which is case-sensitive and differs from the /usr/bin binary
+            // name (mumble-tauri). The resource lands at
+            // /usr/lib/FancyMumble/signal-bridge/<lib>, so the /usr/bin binary
+            // resolves it via ../lib/FancyMumble/signal-bridge/.
+            candidates.push(dir.join("../lib/FancyMumble/signal-bridge").join(lib_name));
+            candidates.push(dir.join("../lib/FancyMumble").join(lib_name));
         }
     }
 
@@ -213,10 +218,7 @@ pub(crate) fn ensure_signal_bridge_unlocked(shared: &Arc<Mutex<SharedState>>) ->
 /// The server stores the latest SKDM per (sender, channel) and relays
 /// it to online members.  On offline queue drain the server bundles the
 /// relevant distributions so reconnecting clients can decrypt.
-pub(crate) fn send_signal_distribution(
-    shared: &Arc<Mutex<SharedState>>,
-    channel_id: u32,
-) {
+pub(crate) fn send_signal_distribution(shared: &Arc<Mutex<SharedState>>, channel_id: u32) {
     {
         let s = shared.lock().ok();
         let bridge_unavailable = s
@@ -228,18 +230,24 @@ pub(crate) fn send_signal_distribution(
         }
     }
 
-    let (handle, distribution) = {
+    let (handle, distribution, sender_hash) = {
         let Ok(mut state) = shared.lock() else { return };
 
         let Some(ref mut pchat) = state.pchat_ctx.pchat else {
             return;
         };
         if !pchat.ensure_signal_bridge() {
-            warn!(channel_id, "cannot send signal distribution: bridge not loaded");
+            warn!(
+                channel_id,
+                "cannot send signal distribution: bridge not loaded"
+            );
             return;
         }
         let Some(ref bridge) = pchat.signal_bridge else {
-            warn!(channel_id, "cannot send signal distribution: bridge not loaded");
+            warn!(
+                channel_id,
+                "cannot send signal distribution: bridge not loaded"
+            );
             return;
         };
 
@@ -250,23 +258,37 @@ pub(crate) fn send_signal_distribution(
                 return;
             }
         };
+        // Our own sender key for this channel now exists in the bridge context,
+        // which is the thing `group_encrypt` looks for. Recorded before the
+        // network send, because it is the mint that makes encryption possible
+        // and the relay that makes it *readable* - a distribution the server
+        // never forwarded still leaves us able to send.
+        let _ = pchat.signal_distributed.insert(channel_id);
 
-        (state.conn.client_handle.clone(), dist)
+        // Taken here, while `pchat` is still borrowed; reading `state.conn`
+        // below ends that borrow.
+        let own_hash = pchat.own_cert_hash.clone();
+
+        (state.conn.client_handle.clone(), dist, own_hash)
     };
 
     let Some(handle) = handle else { return };
 
     let _dist_task = tokio::spawn(async move {
-        if let Err(e) = handle
+        match handle
             .send(command::SendPchatSenderKeyDistribution {
                 channel_id,
                 distribution,
+                sender_hash,
             })
             .await
         {
-            warn!(channel_id, "failed to send signal distribution: {e}");
-        } else {
-            debug!(channel_id, "sent signal sender key distribution");
+            Err(e) => {
+                warn!(channel_id, "failed to send signal distribution: {e}");
+            }
+            _ => {
+                debug!(channel_id, "sent signal sender key distribution");
+            }
         }
     });
 }
@@ -312,9 +334,11 @@ fn retry_stashed_signal_envelopes(
         let mut still_pending = Vec::new();
 
         for env in matched {
-            let decrypt_result = pchat
-                .key_manager
-                .decrypt_signal(&env.sender_hash, env.channel_id, &env.envelope_bytes);
+            let decrypt_result = pchat.key_manager.decrypt_signal(
+                &env.sender_hash,
+                env.channel_id,
+                &env.envelope_bytes,
+            );
 
             match decrypt_result {
                 Ok(plaintext) => match pchat.codec.decode::<MessageEnvelope>(&plaintext) {
@@ -361,15 +385,14 @@ fn retry_stashed_signal_envelopes(
     let mut replaced_count = 0usize;
     for (message_id, channel_id, sender_name, body) in &decoded {
         let mid: &str = message_id;
-        if let Some(msgs) = state.msgs.by_channel.get_mut(channel_id) {
-            if let Some(msg) = msgs
+        if let Some(msgs) = state.msgs.by_channel.get_mut(channel_id)
+            && let Some(msg) = msgs
                 .iter_mut()
                 .find(|m| m.message_id.as_deref() == Some(mid))
-            {
-                msg.body.clone_from(body);
-                msg.sender_name.clone_from(sender_name);
-                replaced_count += 1;
-            }
+        {
+            msg.body.clone_from(body);
+            msg.sender_name.clone_from(sender_name);
+            replaced_count += 1;
         }
     }
 
@@ -455,8 +478,7 @@ mod tests {
 
     #[test]
     fn ensure_signal_bridge_caches_failure() {
-        let mut pchat =
-            PchatState::new([0u8; 32], "test_cert_hash".to_string(), None).unwrap();
+        let mut pchat = PchatState::new([0u8; 32], "test_cert_hash".to_string(), None).unwrap();
 
         assert!(!pchat.signal_bridge_load_failed);
         assert!(pchat.signal_bridge.is_none());

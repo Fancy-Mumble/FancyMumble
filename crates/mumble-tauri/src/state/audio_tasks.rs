@@ -4,23 +4,24 @@
 //! Extracted from `audio.rs` to keep file sizes manageable.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Duration;
 
 use tracing::{debug, warn};
 
 use mumble_protocol::audio::capture::AudioCapture;
-use mumble_protocol::audio::filter::automatic_gain::AutomaticGainControl;
+use mumble_protocol::audio::filter::FilterChain;
 use mumble_protocol::audio::pipeline::{OutboundPipeline, OutboundTick};
 use mumble_protocol::client::ClientHandle;
 use mumble_protocol::command;
 use mumble_protocol::message::UdpMessage;
 use mumble_protocol::proto::mumble_udp;
 
+use super::SharedState;
 use super::calibration::{
-    frame_peak, frame_rms, CalibrationResult, Calibrator, AUTO_CALIBRATION_WINDOW,
+    AUTO_CALIBRATION_WINDOW, CalibrationResult, Calibrator, frame_peak, frame_rms,
 };
 use super::types::{MicAmplitudePayload, VoiceActivationCalibrationPayload};
-use super::SharedState;
 
 // -----------------------------------------------------------------------
 //  Outbound audio
@@ -43,13 +44,33 @@ struct TalkingGuard {
 
 impl Drop for TalkingGuard {
     fn drop(&mut self) {
-        if self.is_talking {
-            if let (Some(app), Some(session)) = (&self.app, self.session) {
-                use tauri::Emitter;
-                let _ = app.emit("user-talking", (session, false));
-            }
+        if self.is_talking
+            && let (Some(app), Some(session)) = (&self.app, self.session)
+        {
+            use tauri::Emitter;
+            let _ = app.emit("user-talking", (session, false));
+            set_local_talking(app, false);
         }
     }
+}
+
+/// Mirror the local talking edge into [`AppState`].
+///
+/// One relaxed atomic store on the edges that already emit the event, so the
+/// audio loop pays a few nanoseconds once per utterance and never a lock.
+fn set_local_talking(app: &tauri::AppHandle, talking: bool) {
+    use std::sync::atomic::Ordering;
+    use tauri::Manager;
+    let Some(state) = app.try_state::<super::AppState>() else {
+        return;
+    };
+    state.local_talking.store(talking, Ordering::Relaxed);
+    // Stamped on both edges: a poller that only ever sees "not talking now"
+    // still has to be able to tell a moment ago from a minute ago.
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
+    state.local_talking_at.store(now_ms, Ordering::Relaxed);
 }
 
 /// Background task that reads from the microphone, encodes, and queues
@@ -66,6 +87,7 @@ pub(super) async fn outbound_audio_loop(
     handle: ClientHandle,
     app: Option<tauri::AppHandle>,
     own_session: Option<u32>,
+    voice_target: Arc<AtomicU8>,
 ) {
     debug!("outbound_audio_loop: task started");
 
@@ -73,18 +95,24 @@ pub(super) async fn outbound_audio_loop(
     // stream only begins producing samples when we are ready to consume.
     if let Err(e) = pipeline.start() {
         warn!("outbound_audio_loop: capture start failed: {e}");
+        super::audio::emit_capture_error(app.as_ref(), &e.to_string());
         return;
     }
+    // Microphone opened - clear any previously shown capture error.
+    super::audio::clear_capture_error(app.as_ref());
 
     // Bounded channel: 50 packets ~ 1 second of audio at 20ms/frame.
     let (tx, rx) = tokio::sync::mpsc::channel::<AudioPacketOut>(50);
 
-    let _outbound_send_task = tokio::spawn(outbound_send_task(rx, handle));
+    let _outbound_send_task = tokio::spawn(outbound_send_task(rx, handle, voice_target));
 
     // Brief yield so the cpal callback can deliver an initial batch of
     // samples, then drain any that accumulated during startup.
     tokio::task::yield_now().await;
-    while pipeline.tick().is_ok_and(|t| !matches!(t, OutboundTick::NoData)) {}
+    while pipeline
+        .tick()
+        .is_ok_and(|t| !matches!(t, OutboundTick::NoData))
+    {}
 
     debug!("outbound_audio_loop: entering encoding loop");
 
@@ -116,7 +144,10 @@ pub(super) async fn outbound_audio_loop(
                 "outbound_audio: tick delayed by {:.0} ms, skipping to discard stale audio",
                 elapsed.as_millis()
             );
-            while pipeline.tick().is_ok_and(|t| !matches!(t, OutboundTick::NoData)) {}
+            while pipeline
+                .tick()
+                .is_ok_and(|t| !matches!(t, OutboundTick::NoData))
+            {}
             continue;
         }
 
@@ -159,6 +190,27 @@ fn process_outbound_tick(
     use tauri::Emitter;
 
     match pipeline.tick() {
+        // A voice message is being recorded: the room does not hear it. The
+        // first held frame ends the utterance properly - it goes out as the
+        // terminator, so listeners hear a sentence stop rather than a stream
+        // that breaks off - and the rest are dropped until the take is over.
+        Ok(OutboundTick::Audio(packet))
+            if super::voice_message::HOLDS_TRANSMISSION.load(Ordering::Relaxed) =>
+        {
+            if guard.is_talking {
+                guard.is_talking = false;
+                if let (Some(app), Some(session)) = (app, own_session) {
+                    let _ = app.emit("user-talking", (session, false));
+                    set_local_talking(app, false);
+                }
+                let _ = tx.try_send(AudioPacketOut {
+                    data: packet.data,
+                    sequence: packet.sequence,
+                    is_terminator: true,
+                });
+            }
+            true
+        }
         Ok(OutboundTick::Audio(packet)) => {
             stats.packets += 1;
             stats.total += 1;
@@ -166,6 +218,7 @@ fn process_outbound_tick(
                 guard.is_talking = true;
                 if let (Some(app), Some(session)) = (app, own_session) {
                     let _ = app.emit("user-talking", (session, true));
+                    set_local_talking(app, true);
                 }
             }
             if stats.packets == 1 || stats.packets.is_multiple_of(500) {
@@ -194,6 +247,7 @@ fn process_outbound_tick(
                 guard.is_talking = false;
                 if let (Some(app), Some(session)) = (app, own_session) {
                     let _ = app.emit("user-talking", (session, false));
+                    set_local_talking(app, false);
                 }
             }
             debug!(
@@ -235,15 +289,23 @@ fn process_outbound_tick(
 
 /// Drains encoded audio packets from the channel and sends them to
 /// the server via the high-priority audio path.
+///
+/// `voice_target` is the slot each packet is addressed to: `0` for the
+/// channel, or the whisper slot while the whisper key is held.
 async fn outbound_send_task(
     mut rx: tokio::sync::mpsc::Receiver<AudioPacketOut>,
     handle: ClientHandle,
+    voice_target: Arc<AtomicU8>,
 ) {
     let mut sent: u64 = 0;
     let mut dropped: u64 = 0;
     while let Some(pkt) = rx.recv().await {
+        // Read per packet, not per utterance: the whisper key can go down and
+        // up inside one, and the target is what decides who hears each frame.
         let audio = mumble_udp::Audio {
-            header: Some(mumble_udp::audio::Header::Target(0)),
+            header: Some(mumble_udp::audio::Header::Target(u32::from(
+                voice_target.load(Ordering::Relaxed),
+            ))),
             sender_session: 0,
             frame_number: pkt.sequence,
             opus_data: pkt.data,
@@ -261,9 +323,7 @@ async fn outbound_send_task(
             Err(e) => {
                 dropped += 1;
                 if dropped == 1 || dropped.is_multiple_of(100) {
-                    warn!(
-                        "outbound_audio: send failed (dropped={dropped}, sent={sent}): {e}",
-                    );
+                    warn!("outbound_audio: send failed (dropped={dropped}, sent={sent}): {e}",);
                 }
             }
         }
@@ -277,19 +337,21 @@ async fn outbound_send_task(
 
 /// Background loop for the mic test.
 ///
-/// Reads frames from the capture device, computes RMS/peak, and
-/// emits `mic-amplitude` events to the frontend.  When
-/// `auto_sensitivity` is enabled, applies AGC to measure
-/// post-gain levels for noise floor estimation and writes the
-/// auto-computed `vad_threshold` back into `AudioSettings`.
+/// Reads frames from the capture device, runs them through `filters` -
+/// the AGC and denoiser the live pipeline puts in front of the noise
+/// gate - and emits the resulting RMS/peak as `mic-amplitude` events,
+/// so the meter shows the level the gate judges.  When
+/// `auto_sensitivity` is enabled, the same levels feed the calibrator
+/// and the auto-computed `vad_threshold` is written back into
+/// `AudioSettings`.
 pub(super) async fn mic_test_loop(
     mut capture: Box<dyn AudioCapture>,
     app: tauri::AppHandle,
     auto_sensitivity: bool,
     inner: Arc<std::sync::Mutex<SharedState>>,
-    mut agc_filter: Option<AutomaticGainControl>,
+    mut filters: FilterChain,
+    frame_size_ms: u32,
 ) {
-    use mumble_protocol::audio::filter::AudioFilter as _;
     use tauri::Emitter;
 
     let mut interval = tokio::time::interval(Duration::from_millis(33));
@@ -311,14 +373,8 @@ pub(super) async fn mic_test_loop(
             continue;
         };
 
-        let pre_agc_rms = frame_rms(&frame);
-
-        // Apply AGC so the emitted RMS/peak match what the noise gate
-        // sees in the live pipeline.  No-op when AGC is disabled.
-        if let Some(ref mut agc) = agc_filter {
-            let _ = agc.process(&mut frame);
-        }
-
+        let raw_rms = frame_rms(&frame);
+        let _ = filters.process(&mut frame);
         let rms = frame_rms(&frame);
         let peak = frame_peak(&frame);
 
@@ -332,7 +388,7 @@ pub(super) async fn mic_test_loop(
             continue;
         }
 
-        calibrator.push(rms, pre_agc_rms);
+        calibrator.push(rms, raw_rms);
         frames_since_emit += 1;
 
         if frames_since_emit < EMIT_INTERVAL_FRAMES {
@@ -340,7 +396,7 @@ pub(super) async fn mic_test_loop(
         }
         frames_since_emit = 0;
 
-        let Some(calibration) = calibrator.compute() else {
+        let Some(calibration) = calibrator.compute(frame_size_ms) else {
             continue;
         };
 
@@ -413,4 +469,3 @@ fn update_voice_activation_if_changed(
         max_gain_db: settings.max_gain_db,
     })
 }
-

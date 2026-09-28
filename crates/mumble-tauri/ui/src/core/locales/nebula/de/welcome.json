@@ -1,0 +1,466 @@
+{
+  "matches": "Bedingung: {{condition}}",
+  "admin": {
+    "saved": "Begrüßung gespeichert.",
+    "notSaved": "Nicht gespeichert: {{error}}",
+    "viewBlocks": "Bausteine",
+    "viewCanvas": "Knoten-Editor",
+    "testGreeting": "Begrüßung testen",
+    "saving": "Wird gespeichert…",
+    "saveBroadcast": "Speichern & senden",
+    "reading": "Begrüßung dieses Servers wird gelesen…",
+    "readFailed": "Die Begrüßung dieses Servers konnte nicht gelesen werden: {{error}}",
+    "retry": "Erneut versuchen",
+    "greetingNumber": "Begrüßung #{{number}}",
+    "thisGreeting": "Diese Begrüßung",
+    "nothingWired": "nichts mit WENN verbunden",
+    "summary": {
+      "empty": "Noch keine Begrüßung im Editor.",
+      "shows": "Wird angezeigt bei: {{condition}}",
+      "unwired": "Nichts ist mit WENN verbunden — diese Begrüßung sieht niemand.",
+      "greetings_one": "{{count}} Begrüßung, in der gezeichneten Reihenfolge geprüft",
+      "greetings_other": "{{count}} Begrüßungen, in der gezeichneten Reihenfolge geprüft",
+      "withoutWhen_one": "{{count}} ohne Verbindung zu WENN",
+      "withoutWhen_other": "{{count}} ohne Verbindung zu WENN",
+      "shadowed_one": "{{count}} erreicht niemanden",
+      "shadowed_other": "{{count}} erreichen niemanden"
+    },
+    "blocksView": {
+      "greetings": "Begrüßungen",
+      "noneOnCanvas": "— keine im Editor —",
+      "greeting": "Begrüßung",
+      "shownWhen": "Angezeigt bei",
+      "nothingWired": "— nichts verbunden —",
+      "theyRead": "Sie lesen",
+      "empty": "— leer —",
+      "plusText": "Zusatztext",
+      "dismissal": "Ausblenden",
+      "once": "Einmal angezeigt, dann pro Konto gemerkt.",
+      "everyConnect": "Bei jeder Verbindung angezeigt."
+    }
+  },
+  "editor": {
+    "add": "+ hinzufügen",
+    "browse": "Bausteine",
+    "search": "Bausteine suchen",
+    "favorites": "Favoriten",
+    "noMatches": "Kein Baustein passt dazu.",
+    "complete": "Graph vollständig",
+    "toFix_one": "{{count}} zu beheben",
+    "toFix_other": "{{count}} zu beheben",
+    "reset": "Zurücksetzen",
+    "live": "LIVE",
+    "idle": "UNVERBUNDEN",
+    "enabled": "aktiviert"
+  },
+  "gallery": {
+    "open": "Vorlagen",
+    "empty": "Keine Vorlage passt dazu.",
+    "add": "Zum Editor hinzufügen",
+    "replace": "Damit neu beginnen",
+    "replaceHint": "Entfernt alles, was bereits im Editor ist."
+  },
+  "categories": {
+    "who": "Wer sich verbindet",
+    "logic": "Logik",
+    "message": "Die Nachricht"
+  },
+  "portTypes": {
+    "condition": "Bedingung",
+    "text": "Text",
+    "designInputs": "je einer pro Eingabe, die das Design festlegt"
+  },
+  "ports": {
+    "when": "WENN",
+    "plus": "PLUS",
+    "text": "TEXT",
+    "condition": "BEDINGUNG"
+  },
+  "blocks": {
+    "everyone": {
+      "label": "Alle",
+      "description": "Trifft auf jede Ankunft zu. Direkt mit einer Begrüßung verbunden, sieht diese Begrüßung jeder – die einfachste Regel überhaupt."
+    },
+    "country": {
+      "label": "Land",
+      "description": "Trifft zu, wenn sich das Mitglied aus einem der gewählten Länder verbindet."
+    },
+    "tenure": {
+      "label": "Auf dem Server seit",
+      "description": "Vergleicht, wie lange das Konto schon auf diesem Server besteht."
+    },
+    "clientVersion": {
+      "label": "Client-Version",
+      "description": "Prüft die Mumble-Version, die der Client meldet."
+    },
+    "fancyVersion": {
+      "label": "Fancy-Version",
+      "description": "Prüft die eigene Version des Forks – oder irgendeinen Build davon, was Standard-Mumble nie ist."
+    },
+    "account": {
+      "label": "Konto",
+      "description": "Trifft auf einen bestimmten registrierten Benutzer oder ein bestimmtes Zertifikat zu."
+    },
+    "group": {
+      "label": "Gruppe",
+      "description": "Trifft zu, wenn das Mitglied zu einer ACL-Gruppe gehört."
+    },
+    "os": {
+      "label": "Betriebssystem",
+      "description": "Prüft das Betriebssystem, das der Client meldet."
+    },
+    "gates": {
+      "and": "Wahr, wenn beide Eingänge wahr sind.",
+      "or": "Wahr, wenn mindestens ein Eingang wahr ist.",
+      "xor": "Wahr, wenn genau ein Eingang wahr ist.",
+      "nand": "Wahr, außer wenn beide Eingänge wahr sind.",
+      "nor": "Wahr, wenn keiner der Eingänge wahr ist.",
+      "xnor": "Wahr, wenn beide Eingänge übereinstimmen.",
+      "not": "Kehrt eine einzelne Bedingung um."
+    },
+    "filter": {
+      "label": "Filter",
+      "description": "Macht aus einer unentschiedenen Antwort ein klares Ja oder Nein, damit ein Gatter sie verwenden kann."
+    },
+    "text": {
+      "label": "Wiederverwendbarer Text",
+      "description": "Eine Zeile Text, angehängt an eine Begrüßung und an jede weitere Begrüßung, die ihn verbindet."
+    },
+    "textRich": {
+      "label": "Wiederverwendbarer Text, formatiert",
+      "description": "Derselbe Textbaustein mit WYSIWYG-Editor: Überschriften, Listen, Farbe. Eher für Hausregeln als für einen einzelnen Satz."
+    },
+    "greeting": {
+      "label": "Diese Begrüßung zeigen",
+      "description": "Die Nachricht selbst: was sie sagt, und die Bedingung, die entscheidet, wer sie liest."
+    },
+    "greetingRich": {
+      "label": "Diese Begrüßung zeigen, formatiert",
+      "description": "Die Begrüßung so geschrieben, wie sie gelesen wird: eine Überschrift, ein Absatz, eine Liste. Genauso verbunden wie die schlichte."
+    },
+    "greetingScreen": {
+      "label": "Willkommensbildschirm",
+      "description": "Eine Begrüßung aus Bändern – ein Titelbereich, eine Schaltfläche, eine Reihe Links –, die jeder Client in seiner eigenen Schriftskala zeichnet."
+    },
+    "greetingDesign": {
+      "label": "Design-Baustein",
+      "description": "Eine im Design-Editor gestaltete Begrüßung: Blöcke auf einem Blatt, mit benannten Textplätzen und Ein/Aus-Bedingungen, die im Knoten-Editor verbunden werden."
+    },
+    "greetingLegacy": {
+      "label": "Willkommensbildschirm für Classic Mumble",
+      "description": "Dieselben Bänder, für Qt kompiliert: Tabellen, Inline-Farben, keine abgerundeten Ecken. Hinter eine Client-Versions-Bedingung schalten; die moderne Variante fällt auf diesen Clients in sich zusammen."
+    }
+  },
+  "nodes": {
+    "country": "LAND IST EINES VON",
+    "tenure": "AUF DEM SERVER SEIT",
+    "clientVersion": "CLIENT-VERSION",
+    "fancyVersion": "FANCY-VERSION",
+    "account": "KONTO",
+    "group": "GRUPPE",
+    "os": "BETRIEBSSYSTEM",
+    "filter": "FILTER",
+    "text": "WIEDERVERWENDBARER TEXT",
+    "greeting": "DIESE BEGRÜSSUNG ZEIGEN",
+    "greetingClassic": "BEGRÜSSUNG · CLASSIC",
+    "everyone": "ALLE",
+    "undecided": "Kann unentschieden sein — über einen FILTER leiten, um es festzulegen"
+  },
+  "body": {
+    "joinedLess": "beigetreten vor weniger als",
+    "joinedMore": "beigetreten vor mehr als",
+    "is": "ist",
+    "any": "beliebig",
+    "groupName": "Gruppenname",
+    "unknown": "unbekannt →",
+    "no": "nein",
+    "yes": "ja",
+    "snippetName": "Textbaustein benennen",
+    "snippetNameLabel": "Name des Textbausteins",
+    "snippetText": "Text, der an eine Begrüßung angehängt wird",
+    "snippetTextLabel": "Text des Textbausteins",
+    "theyRead": "Sie lesen",
+    "greetingText": "Was sie bei der Ankunft lesen",
+    "greetingTextLabel": "Begrüßungstext",
+    "plusText": "Zusatztext",
+    "wireSnippet": "wiederverwendbaren Text hierher verbinden",
+    "unnamed": "unbenannt",
+    "once": "Einmal angezeigt, zentriert"
+  },
+  "windows": {
+    "day": "1 Tag",
+    "week": "1 Woche",
+    "month": "1 Monat",
+    "halfYear": "6 Monaten",
+    "year": "1 Jahr"
+  },
+  "accountStates": {
+    "guest": "Gast",
+    "registered": "registriert",
+    "strongCertificate": "starkes Zertifikat"
+  },
+  "phrases": {
+    "country": "Land in {{codes}}",
+    "countryAny": "Land in …",
+    "joinedLess": "beigetreten vor weniger als {{window}}",
+    "joinedMore": "beigetreten vor mehr als {{window}}",
+    "version": "Version {{op}} {{version}}",
+    "fancyAny": "im Fancy-Client",
+    "fancyVersion": "Fancy-Version {{op}} {{version}}",
+    "account": "Konto ist {{state}}",
+    "group": "in Gruppe {{group}}",
+    "groupAny": "in Gruppe …",
+    "os": "Betriebssystem ist {{os}}",
+    "everyone": "alle, die ankommen",
+    "unknownYes": "{{condition}} (unbekannt zählt als ja)",
+    "not": "nicht {{condition}}",
+    "gates": {
+      "and": "und",
+      "or": "oder",
+      "xor": "xor",
+      "nand": "nand",
+      "nor": "nor",
+      "xnor": "xnor"
+    }
+  },
+  "problems": {
+    "noGreeting": "Kein Begrüßungs-Knoten — füge einen hinzu, der sagt, was die Leute sehen.",
+    "emptyScreen": "Der Willkommensbildschirm hat keine Bänder mit Inhalt.",
+    "badLink": "Ein Link auf dem Willkommensbildschirm ist nicht http:// oder https://: {{url}}",
+    "noText": "Die Begrüßung hat keinen Text.",
+    "notWired": "Nichts ist mit WENN verbunden, also würde die Begrüßung nie angezeigt.",
+    "emptyInput": "{{node}} hat einen leeren Eingang {{port}}.",
+    "noCountries": "Ein Länder-Knoten nennt keine Länder.",
+    "noGroup": "Ein Gruppen-Knoten nennt keine Gruppe.",
+    "emptySnippet": "Ein Knoten mit wiederverwendbarem Text ist leer.",
+    "tooLong": "{{node}} hat {{length}} Zeichen; der Server nimmt {{max}}."
+  },
+  "views": {
+    "plain": "Schlicht",
+    "rich": "Formatiert",
+    "html": "HTML",
+    "screen": "Bildschirm",
+    "classic": "Classic",
+    "classicHint": "Dieselben Bänder, kompiliert für den ursprünglichen Mumble-Client – 1.5 und älter",
+    "classicNote": "Für Qt kompiliert: Tabellen, Inline-Farben, keine abgerundeten Ecken. Hinter eine Client-Versions-Bedingung schalten, damit nur die alten Clients es bekommen.",
+    "lossy": "Dieses Markup nutzt Tags, die der Editor nicht halten kann, ohne sie umzuschreiben – vermutlich Tabellen. Hier als HTML bearbeitet, bleibt es genau so, wie es ist."
+  },
+  "bands": {
+    "header": {
+      "label": "Kopfleiste",
+      "hint": "Eine kleine Zeile oben: der Server, eine Version."
+    },
+    "hero": {
+      "label": "Titelbereich",
+      "hint": "Das Abzeichen, der große Titel und die Zeile darunter."
+    },
+    "image": {
+      "label": "Server-Grafik",
+      "hint": "Das eigene Icon oder Banner dieses Servers, aus seiner Livery."
+    },
+    "prose": {
+      "label": "Absatz",
+      "hint": "Formatierter Text, geschrieben wie jeder andere Text auch."
+    },
+    "action": {
+      "label": "Schaltfläche",
+      "hint": "Eine Sache, die man tun soll, mit einer Beschriftung darunter."
+    },
+    "cards": {
+      "label": "Linkreihe",
+      "hint": "Kleine Karten nebeneinander, jede verweist irgendwohin."
+    },
+    "divider": {
+      "label": "Trennlinie",
+      "hint": "Eine Linie zwischen zwei Bändern."
+    }
+  },
+  "screen": {
+    "addBand": "+ Band",
+    "noBands": "Ein Bildschirm ohne Bänder zeigt nichts. Beginne mit einem Titelbereich.",
+    "moveUp": "Nach oben",
+    "moveDown": "Nach unten",
+    "remove": "{{label}} entfernen",
+    "compact": "Eine Liste statt Karten",
+    "glyph": "Abzeichen, ein Zeichen",
+    "glyphLabel": "Abzeichen des Titelbereichs",
+    "buttonTitle": "was auf der Schaltfläche steht",
+    "title": "die Zeile, die man liest",
+    "titleLabel": "Titel: {{label}}",
+    "buttonLink": "Link der Schaltfläche",
+    "webOnly": "Nur http://- und https://-Links werden gesendet.",
+    "buttonSubtitle": "die kleine Zeile darunter",
+    "subtitle": "die zweite Zeile",
+    "subtitleLabel": "Untertitel: {{label}}",
+    "primary": "Das Wichtigste, was zu tun ist",
+    "paragraph": "Absatz",
+    "paragraphPlaceholder": "Was dieser Teil sagt",
+    "eyebrow": "STÖBERN",
+    "eyebrowLabel": "Überzeile der Karte",
+    "removeCard": "Karte entfernen",
+    "cardPlaceholder": "Kanalübersicht",
+    "cardLabel": "Titel der Karte",
+    "cardLink": "Link der Karte",
+    "addCard": "+ Karte",
+    "anotherLink": "Weiterer Link",
+    "align": {
+      "default": "Standard",
+      "left": "links",
+      "center": "zentriert"
+    },
+    "tones": {
+      "none": "keine",
+      "accent": "Akzent",
+      "muted": "gedämpft",
+      "warn": "Warnung",
+      "danger": "Gefahr"
+    },
+    "pictures": {
+      "icon": "Icon",
+      "banner": "Banner"
+    }
+  },
+  "picture": {
+    "noRoom": "Kein Platz: noch {{room}} frei, und kleiner wird dieses Bild nicht.",
+    "unreadable": "Diese Datei ist kein Bild, das hier gelesen werden kann.",
+    "fitting": "Wird angepasst…",
+    "drop": "Bild hier ablegen oder zum Auswählen klicken",
+    "held": "{{size}} · {{w}}×{{h}} · noch {{room}} frei",
+    "room": "{{room}} Platz · wird nur an Fancy-Clients gesendet",
+    "remove": "Entfernen"
+  },
+  "preview": {
+    "heading": "VORSCHAU · WAS SIE SEHEN",
+    "unwired": "nichts ist mit WENN verbunden — wird niemandem angezeigt",
+    "dismissed": "Dauerhaft ausgeblendet",
+    "everyConnect": "Bei jeder Verbindung angezeigt",
+    "gotIt": "Verstanden",
+    "legacy": "So gezeichnet, wie es Mumble 1.5 und älter tut: Tabellen, Inline-Farben, eckige Ecken. Deren Rich Text ist eine Teilmenge von HTML 4, daher ist dies nah an dem, was Qt darstellt, und nicht an diesem Client.",
+    "htmlOff": "Auf diesem Server ist allow_html ausgeschaltet, daher sendet er von jeder Begrüßung die Klartext-Hälfte. Die Formatierung bleibt erhalten und wird gesendet, sobald die Einstellung eingeschaltet ist.",
+    "unmatchable": "Kein Besucher kann diese Bedingung erfüllen, also sieht niemand diese Begrüßung.",
+    "shadowed": "Diese Begrüßung sieht niemand: Jeden passenden Besucher übernimmt eine Begrüßung, die der Server zuerst erreicht. Ziehe sie über jene oder schränke deren Bedingung ein.",
+    "overlap": "Überschneidet sich mit der Begrüßung davor — {{visitor}} passt auf beide, und die frühere gewinnt. Gewollt, wenn dies der allgemeine Fall hinter einem speziellen ist.",
+    "undecided": "Zu viele Kombinationen von Bedingungen, um zu prüfen, ob sich die Begrüßungen überschneiden."
+  },
+  "canvas": {
+    "undo": "Rückgängig",
+    "redo": "Wiederholen",
+    "undoTitle": "Rückgängig (Strg+Z)",
+    "redoTitle": "Wiederholen (Strg+Umschalt+Z)",
+    "annotate": "Anmerken",
+    "annotations": {
+      "title": "Titel",
+      "note": "Notiz",
+      "frame": "Rahmen um einen Bereich",
+      "label": "Kleine Beschriftung"
+    },
+    "annotationFields": {
+      "title": "Titel-Anmerkung",
+      "note": "Notiz-Anmerkung",
+      "frame": "Rahmen-Anmerkung",
+      "label": "Beschriftungs-Anmerkung"
+    },
+    "placeholders": {
+      "title": "Abschnitt",
+      "note": "Wofür dieser Teil des Graphen da ist und warum er so gezeichnet ist.",
+      "frame": "Bereich",
+      "label": "Beschriftung"
+    },
+    "removeNode": "Knoten entfernen",
+    "resizeNode": "Knotengröße ändern",
+    "removeAnnotation": "Anmerkung entfernen",
+    "resizeAnnotation": "Anmerkungsgröße ändern",
+    "colour": "Farbe {{tone}}",
+    "tones": {
+      "muted": "gedämpft",
+      "accent": "Akzent",
+      "ok": "gut",
+      "warn": "Warnung"
+    },
+    "addChip": "+ hinzufügen",
+    "removeTag": "{{label}} entfernen"
+  },
+  "templateCategories": {
+    "arriving": "Für Neuankömmlinge",
+    "housekeeping": "Organisatorisches",
+    "occasion": "Für einen Anlass"
+  },
+  "templates": {
+    "warm-welcome": {
+      "label": "Herzliches Willkommen, mit den Regeln",
+      "description": "Eine formatierte Begrüßung für alle, die gerade beigetreten sind, dazu die Hausregeln als wiederverwendbarer Textbaustein, den du auch in spätere Begrüßungen einbinden kannst.",
+      "shows": "Wird Konten angezeigt, die jünger als eine Woche sind."
+    },
+    "quiet-welcome": {
+      "label": "Eine kurze Zeile",
+      "description": "Die kleinste Begrüßung, die sich lohnt: ein Satz, keine Überschrift, einmal angezeigt. Fang hier an, wenn die formatierten zu viel wirken.",
+      "shows": "Wird Konten angezeigt, die jünger als ein Monat sind."
+    },
+    "german-welcome": {
+      "label": "Deutschsprachiges Willkommen",
+      "description": "Eine Begrüßung auf Deutsch für Leute, die sich aus DE, AT oder CH verbinden. Das Muster für jede andere Sprache: Länder ändern, Worte ändern.",
+      "shows": "Wird angezeigt, wenn das Land DE, AT oder CH ist – und niemandem, dessen Land der Server nicht bestimmen kann."
+    },
+    "guest-nudge": {
+      "label": "Gäste zur Registrierung ermuntern",
+      "description": "Für Leute ohne Konto: was ihnen eine Registrierung bringt und an wen sie sich wenden können. Einmal angezeigt, also keine monatliche Erinnerung.",
+      "shows": "Wird Gästen angezeigt."
+    },
+    "outdated-client": {
+      "label": "Veraltete Clients um ein Update bitten",
+      "description": "Für alle mit einem Client älter als 1.5: was nicht funktioniert und dass ein Update schnell geht. Der Filter warnt im Zweifel, statt zu schweigen.",
+      "shows": "Wird angezeigt, wenn der Client älter als 1.5.0 ist, auch wenn der Server es nicht erkennen kann."
+    },
+    "event-night": {
+      "label": "Einen regelmäßigen Abend ankündigen",
+      "description": "Eine zentrierte Ankündigung mit Uhrzeit und Treffpunkt, bei jeder Verbindung angezeigt statt nur einmal – genau dafür ist eine Ankündigung da.",
+      "shows": "Wird registrierten Mitgliedern bei jeder Verbindung angezeigt."
+    },
+    "designed-modern": {
+      "label": "Ein modernes Willkommen",
+      "description": "Der beste Startpunkt: eine große, eng gesetzte Titelzeile links, darüber ein kleines getöntes Abzeichen, die Regeln in einem feinen Rahmen und eine Schaltfläche in der Akzentfarbe des Lesers. Zurückhaltend statt bunt, und es folgt dem Theme und dem Hell- oder Dunkelmodus jedes Lesers.",
+      "shows": "Wird Konten angezeigt, die jünger als ein Monat sind, einmalig."
+    },
+    "designed-front-page": {
+      "label": "Eine gestaltete Startseite",
+      "description": "Dasselbe Willkommen, im Design-Editor gestaltet statt als Fließtext geschrieben: ein Abzeichen, eine Überschrift, zwei Linkspalten, ein Hinweis, deine Hausregeln in einem Platzhalter und eine Schaltfläche. Jeden Block darauf können auch die alten Qt-Clients zeichnen.",
+      "shows": "Wird Konten angezeigt, die jünger als ein Monat sind, einmalig."
+    },
+    "designed-notice": {
+      "label": "Ein gestalteter Hinweis",
+      "description": "Die kurze Art von Design: eine Überschrift, eine umrandete Karte, das Datum, bis zu dem es zählt, und eine dezente Schaltfläche für die Leute mit Konto. Fang hier an, wenn die Startseite mehr ist, als der Anlass braucht.",
+      "shows": "Wird allen mit Konto angezeigt, einmalig."
+    },
+    "front-door": {
+      "label": "Eine Eingangstür",
+      "description": "Der vollständige Willkommensbildschirm: ein Abzeichen, ein Titel, ein Absatz, eine Schaltfläche, auf die es ankommt, und eine Reihe Links. Aus Bändern gebaut, also in der eigenen Schriftskala des Clients gezeichnet statt als eingefügtes HTML.",
+      "shows": "Wird Gästen angezeigt, einmalig."
+    },
+    "server-front-page": {
+      "label": "Die vollständige Startseite",
+      "description": "Alles, was ein Willkommensbildschirm sein kann: eine farbige Titelleiste, die eigene Grafik des Servers, eine zentrierte Einleitung, eine Versionszeile, eine Liste von Links, die Schaltfläche und unten eine Hinweisleiste. Fang hier an und lösche, was du nicht willst.",
+      "shows": "Wird Gästen angezeigt, einmalig."
+    },
+    "old-and-new": {
+      "label": "Ein Bildschirm für neue Clients, einer für alte",
+      "description": "Dasselbe Willkommen zweimal: Bänder für Clients, die sie zeichnen, und dieselben Bänder als Qt-Tabellen für Mumble 1.5 und älter. Nach Client-Version aufgeteilt, damit niemand die falsche bekommt.",
+      "shows": "Zwei Regeln – Clients neuer als 1.5.0 sowie 1.5.0 oder älter."
+    },
+    "newcomer-and-regular": {
+      "label": "Neulinge hier, Stammgäste dort",
+      "description": "Zwei Begrüßungen in einem Editor: das lange Willkommen für die erste Woche, die kurze Ankündigung für alle anderen. Die Form, bei der die meisten Server landen.",
+      "shows": "Zwei Regeln – jünger als eine Woche und alle Registrierten."
+    }
+  },
+  "visitor": {
+    "os": "mit {{os}}",
+    "country": "aus {{country}}",
+    "elsewhere": "von irgendwo sonst",
+    "client": "Client {{version}}",
+    "daysHere_one": "seit {{count}} Tag hier",
+    "daysHere_other": "seit {{count}} Tagen hier",
+    "groups": "in {{groups}}",
+    "separator": ", ",
+    "anybody": "wirklich jeder"
+  }
+}

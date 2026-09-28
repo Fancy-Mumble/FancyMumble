@@ -1,4 +1,4 @@
-﻿//! TLS-encrypted TCP transport for Mumble control messages.
+//! TLS-encrypted TCP transport for Mumble control messages.
 //!
 //! Mumble uses TLS 1.2+ for its TCP control channel. This module handles
 //! connecting, framing, and sending/receiving [`ControlMessage`]s.
@@ -8,9 +8,9 @@ use std::sync::Arc;
 use bytes::BytesMut;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio_rustls::client::TlsStream;
 use tokio_rustls::TlsConnector;
-use tracing::{debug, trace};
+use tokio_rustls::client::TlsStream;
+use tracing::{debug, trace, warn};
 
 use crate::error::{Error, Result};
 use crate::message::ControlMessage;
@@ -75,6 +75,14 @@ impl TcpTransport {
             Err(_) => return Err(Error::Other(format!("connection to {addr} timed out"))),
         };
 
+        // Tunnelled audio is a 20 ms frame per write. Without this, Nagle holds a
+        // frame until the server ACKs the previous one, which on a LAN is the
+        // difference between 20 ms and a round trip. Both Starling and murmur set
+        // it on their side; the client never did.
+        if let Err(e) = tcp_stream.set_nodelay(true) {
+            warn!(error = %e, "could not disable Nagle on the control stream");
+        }
+
         let tls_config = build_tls_config(
             config.accept_invalid_certs,
             config.client_cert_pem.as_deref(),
@@ -82,13 +90,16 @@ impl TcpTransport {
         )?;
         let connector = TlsConnector::from(Arc::new(tls_config));
 
-        let server_name = match rustls::pki_types::ServerName::try_from(config.server_host.clone()) {
+        let server_name = match rustls::pki_types::ServerName::try_from(config.server_host.clone())
+        {
             Ok(name) => name,
             Err(_) => {
-                let ip: std::net::IpAddr = config
-                    .server_host
-                    .parse()
-                    .map_err(|e| Error::Other(format!("invalid server address '{}': {e}", config.server_host)))?;
+                let ip: std::net::IpAddr = config.server_host.parse().map_err(|e| {
+                    Error::Other(format!(
+                        "invalid server address '{}': {e}",
+                        config.server_host
+                    ))
+                })?;
                 rustls::pki_types::ServerName::IpAddress(ip.into())
             }
         };

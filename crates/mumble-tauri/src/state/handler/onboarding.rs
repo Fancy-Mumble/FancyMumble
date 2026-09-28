@@ -6,8 +6,7 @@ use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
 use crate::state::types::{
-    OnboardingAnswer, OnboardingConfig, OnboardingQuestion, OnboardingResponse,
-    OnboardingSelection,
+    OnboardingAnswer, OnboardingConfig, OnboardingQuestion, OnboardingResponse, OnboardingSelection,
 };
 
 #[derive(Serialize, Clone)]
@@ -86,9 +85,7 @@ fn decode_config(proto: &mumble_tcp::FancyOnboardingConfig) -> OnboardingConfig 
     }
 }
 
-fn decode_question(
-    proto: &mumble_tcp::fancy_onboarding_config::Question,
-) -> OnboardingQuestion {
+fn decode_question(proto: &mumble_tcp::fancy_onboarding_config::Question) -> OnboardingQuestion {
     OnboardingQuestion {
         id: proto.id.clone().unwrap_or_default(),
         text: proto.text.clone().unwrap_or_default(),
@@ -99,9 +96,7 @@ fn decode_question(
     }
 }
 
-fn decode_answer(
-    proto: &mumble_tcp::fancy_onboarding_config::Answer,
-) -> OnboardingAnswer {
+fn decode_answer(proto: &mumble_tcp::fancy_onboarding_config::Answer) -> OnboardingAnswer {
     OnboardingAnswer {
         id: proto.id.clone().unwrap_or_default(),
         label: proto.label.clone().unwrap_or_default(),
