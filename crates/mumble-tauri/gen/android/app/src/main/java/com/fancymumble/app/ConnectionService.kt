@@ -25,6 +25,7 @@ import android.os.PowerManager
 class ConnectionService : Service() {
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var audioRoute: VoiceAudioRoute? = null
 
     companion object {
         private const val CHANNEL_ID = "connection"
@@ -69,9 +70,12 @@ class ConnectionService : Service() {
         super.onCreate()
         createNotificationChannel()
         acquireWakeLock()
+        audioRoute = VoiceAudioRoute(this).also { it.acquire() }
     }
 
     override fun onDestroy() {
+        audioRoute?.release()
+        audioRoute = null
         releaseWakeLock()
         super.onDestroy()
     }

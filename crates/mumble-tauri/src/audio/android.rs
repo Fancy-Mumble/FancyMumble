@@ -161,7 +161,7 @@ impl AudioCapture for OboeCapture {
             .set_format::<f32>()
             .set_channel_count::<Mono>()
             .set_sample_rate(48_000)
-            .set_input_preset(InputPreset::VoiceRecognition)
+            .set_input_preset(InputPreset::VoiceCommunication)
             .set_session_id(SessionId::None)
             .set_callback(callback)
             .open_stream()
