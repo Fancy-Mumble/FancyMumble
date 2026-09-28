@@ -7,6 +7,7 @@ import { encodeFileAttachmentMarker } from "@core/features/chat/fileAttachments"
 import { applyReaction, resetReactions } from "@core/features/chat/reaction/reactionStore";
 import type { ChatMessage, UserEntry } from "@core/types";
 import { withNebulaTheme } from "../../testTheme";
+import { LONG_PRESS_MS } from "./useLongPress";
 import { MessageRow } from "./MessageRow";
 import { LinkGuard } from "../primitives";
 import { resetSelfMentionNotifications } from "@core/features/chat/selfMention";
@@ -1074,7 +1075,7 @@ describe("MessageRow self-mention", () => {
       const { container } = draw(message(), { onContextMenu });
       const row = container.querySelector('[data-msg-id="m1"]')!;
       fireEvent.touchStart(row, { touches: [{ clientX: 30, clientY: 40 }] });
-      act(() => vi.advanceTimersByTime(499));
+      act(() => vi.advanceTimersByTime(LONG_PRESS_MS - 1));
       expect(onContextMenu).not.toHaveBeenCalled();
       act(() => vi.advanceTimersByTime(1));
       expect(onContextMenu).toHaveBeenCalledWith(message(), { x: 30, y: 40 }, expect.objectContaining({ editable: true }));

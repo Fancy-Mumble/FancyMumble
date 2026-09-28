@@ -8,8 +8,11 @@
  */
 import { useEffect, useRef } from "react";
 
-/** How long the finger has to stay down. Standard's figure. */
-export const LONG_PRESS_MS = 500;
+/**
+ * How long the finger has to stay down. Standard's 500 read as the app not
+ * answering; 400 is what the chat apps a phone user knows settle on.
+ */
+export const LONG_PRESS_MS = 400;
 /** How far it may drift first: a scroll that starts on a message is not a hold. */
 const MOVE_TOLERANCE_PX = 10;
 /**
