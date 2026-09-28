@@ -188,6 +188,7 @@ impl AppCore {
                         password,
                         tokens: vec![],
                         totp: None,
+                        device: None,
                     })
                     .await;
                 // Start muted (don't transmit) but NOT deafened, so the user
