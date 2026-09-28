@@ -41,6 +41,7 @@ import { MobileHeader } from "./MobileHeader";
 import { MobilePaneStack } from "./MobilePaneStack";
 import { MobileServerStrip } from "./MobileServerStrip";
 import { MobileServersPane } from "./MobileServersPane";
+import { MobileStripHost } from "./MobileStripHost";
 import { MobileTabBar, type MobileTab } from "./MobileTabBar";
 import { MobileVoiceScreen } from "./MobileVoiceScreen";
 import { useServerMenu } from "./useServerMenu";
@@ -80,19 +81,18 @@ function readStripHidden(): boolean {
  * someone on one server has no use for a row of one tile at the top of every
  * list.
  */
-function useStripHidden(): [boolean, () => void] {
+function useStripHidden(): [boolean, (hidden: boolean) => void] {
   const [hidden, setHidden] = useState(readStripHidden);
-  const toggle = () =>
-    setHidden((was) => {
-      try {
-        if (was) globalThis.localStorage?.removeItem(STRIP_HIDDEN_KEY);
-        else globalThis.localStorage?.setItem(STRIP_HIDDEN_KEY, "1");
-      } catch {
-        // Unremembered, but still put away for now.
-      }
-      return !was;
-    });
-  return [hidden, toggle];
+  const set = (next: boolean) => {
+    try {
+      if (next) globalThis.localStorage?.setItem(STRIP_HIDDEN_KEY, "1");
+      else globalThis.localStorage?.removeItem(STRIP_HIDDEN_KEY);
+    } catch {
+      // Unremembered, but still put away for now.
+    }
+    setHidden(next);
+  };
+  return [hidden, set];
 }
 
 export function MobileShell({
@@ -107,7 +107,7 @@ export function MobileShell({
   const [voiceOpen, setVoiceOpen] = useState(openVoice);
   // One server menu for the strip and the start screen's rows alike.
   const serverMenu = useServerMenu(model.serverStrip);
-  const [stripHidden, toggleStrip] = useStripHidden();
+  const [stripHidden, setStripHidden] = useStripHidden();
 
   // Changing screen lands on that screen's list, never on whatever page the
   // last screen had open - a tab that dropped you into a stale settings page
@@ -144,7 +144,7 @@ export function MobileShell({
       model={model}
       onOpen={() => setPane("content")}
       stripHidden={stripHidden}
-      onToggleStrip={toggleStrip}
+      onToggleStrip={() => setStripHidden(!stripHidden)}
     />
   ) : start ? (
     <MobileServersPane
@@ -200,26 +200,19 @@ export function MobileShell({
   // gives the conversation that height back - and comes back with it on a
   // swipe. Nothing to switch between before a session exists, and the start
   // screen carries its own masthead in that space instead.
-  const strip =
-    start || stripHidden ? null : <MobileServerStrip model={model.serverStrip} onMenu={serverMenu.open} />;
-  const navPane =
-    nav === undefined || nav === null ? undefined : (
-      <>
-        {strip}
-        {nav}
-      </>
-    );
+  //
+  // Put away, it is folded rather than dropped: a swipe down on the header
+  // pulls the same strip back out.
+  const strip = start ? null : <MobileServerStrip model={model.serverStrip} onMenu={serverMenu.open} />;
+  const carry = (pane: ReactNode) => (
+    <MobileStripHost strip={strip} hidden={stripHidden} onHidden={setStripHidden}>
+      {pane}
+    </MobileStripHost>
+  );
+  const navPane = nav === undefined || nav === null ? undefined : carry(nav);
   // A screen that is only a page has no list to carry the strip, so the page
   // does.
-  const contentPane =
-    navPane === undefined && content ? (
-      <>
-        {strip}
-        {content}
-      </>
-    ) : (
-      (content ?? undefined)
-    );
+  const contentPane = navPane === undefined && content ? carry(content) : (content ?? undefined);
 
   // Back retraces what the shell put in front, newest first; at the home
   // screen's list there is nothing left, and the gesture leaves the app.

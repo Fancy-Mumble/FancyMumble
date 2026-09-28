@@ -382,19 +382,59 @@ describe("the handheld shell", () => {
     expect(away(screen.getByTestId("nebula-mobile-server-strip"))).toBe(true);
   });
 
-  it("puts the server strip away on request, and remembers it", () => {
+  /** Whether the strip is folded away - kept, but out of sight and reach. */
+  function folded(): boolean {
+    return (
+      screen.getByTestId("nebula-mobile-server-strip").closest("[data-strip-fold]")?.hasAttribute("inert") ?? false
+    );
+  }
+
+  /** A one-finger vertical drag, starting on `element`. */
+  function pull(element: HTMLElement, fromY: number, toY: number) {
+    const at = (clientY: number) => [{ clientX: 200, clientY, identifier: 0, target: element }];
+    fireEvent.touchStart(element, { touches: at(fromY), changedTouches: at(fromY) });
+    fireEvent.touchMove(element, { touches: at((fromY + toY) / 2), changedTouches: at((fromY + toY) / 2) });
+    fireEvent.touchMove(element, { touches: at(toY), changedTouches: at(toY) });
+    fireEvent.touchEnd(element, { touches: [], changedTouches: at(toY) });
+  }
+
+  it("puts the server strip away on request, and remembers it", async () => {
     localStorage.removeItem("nebula.mobile.serverStripHidden");
     const first = mount(skin, "dark", <MobileShell model={model()} />);
-    expect(screen.getByTestId("nebula-mobile-server-strip")).toBeTruthy();
+    expect(folded()).toBe(false);
     fireEvent.click(screen.getByTestId("nebula-mobile-strip-toggle"));
-    expect(screen.queryByTestId("nebula-mobile-server-strip")).toBeNull();
+    await settle();
+    expect(folded()).toBe(true);
     first.unmount();
 
     mount(skin, "dark", <MobileShell model={model()} />);
-    expect(screen.queryByTestId("nebula-mobile-server-strip")).toBeNull();
+    expect(folded()).toBe(true);
     fireEvent.click(screen.getByTestId("nebula-mobile-strip-toggle"));
-    expect(screen.getByTestId("nebula-mobile-server-strip")).toBeTruthy();
+    await settle();
+    expect(folded()).toBe(false);
     localStorage.removeItem("nebula.mobile.serverStripHidden");
+  });
+
+  it("folds the server strip on a swipe up, and pulls it back on a swipe down the header", async () => {
+    localStorage.removeItem("nebula.mobile.serverStripHidden");
+    mount(skin, "dark", <MobileShell model={model()} />);
+    pull(screen.getByTestId("nebula-mobile-server-strip"), 80, 10);
+    await settle();
+    expect(folded()).toBe(true);
+    expect(localStorage.getItem("nebula.mobile.serverStripHidden")).toBe("1");
+
+    pull(screen.getByTestId("nebula-mobile-channels-header"), 20, 140);
+    await settle();
+    expect(folded()).toBe(false);
+    localStorage.removeItem("nebula.mobile.serverStripHidden");
+  });
+
+  it("leaves the strip alone when the list under it is scrolled", async () => {
+    localStorage.removeItem("nebula.mobile.serverStripHidden");
+    mount(skin, "dark", <MobileShell model={model()} />);
+    pull(screen.getByText("general"), 300, 100);
+    await settle();
+    expect(folded()).toBe(false);
   });
 
   it("gives the conversation the whole screen", () => {
