@@ -14,7 +14,8 @@
  * the body would be invisible in both.
  */
 import { useTranslation } from "react-i18next";
-import { Box, ListSubheader, Menu, MenuItem } from "@mui/material";
+import { Box, ListSubheader, MenuItem } from "@mui/material";
+import { Menu } from "../../primitives";
 import {
   AppWindowIcon,
   CameraIcon,

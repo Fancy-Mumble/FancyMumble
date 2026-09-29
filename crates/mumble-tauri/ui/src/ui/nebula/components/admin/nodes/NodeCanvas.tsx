@@ -8,7 +8,8 @@ import {
   type MutableRefObject,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Box, Divider, ListSubheader, Menu, MenuItem, alpha } from "@mui/material";
+import { Box, Divider, ListSubheader, MenuItem, alpha } from "@mui/material";
+import { Menu } from "../../primitives";
 import { useTranslation } from "react-i18next";
 import { NodeCard } from "./NodeCard";
 import { AnnotationLayer, minimumOf } from "./AnnotationLayer";

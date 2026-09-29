@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { Box, Divider, Menu, MenuItem } from "@mui/material";
+import { Box, Divider, MenuItem } from "@mui/material";
+import { Menu } from "../primitives";
 import { useAppStore } from "@core/store";
 import type { ChannelEntry } from "@core/types";
 import { TID } from "@core/testids";

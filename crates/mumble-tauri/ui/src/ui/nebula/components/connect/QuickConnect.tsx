@@ -1,9 +1,9 @@
 import { useTranslation } from "react-i18next";
-import { Box, Divider, Menu, MenuItem, Typography } from "@mui/material";
+import { Box, Divider, MenuItem, Typography } from "@mui/material";
 import type { ServerPingResult } from "@core/types";
 import { PlusIcon, SearchIcon } from "@ui/icons";
 import { formatLastJoined, serverTint, type QuickConnectTarget } from "../../selectors";
-import { SectionLabel, StatusDot, UserAvatar, Stack } from "../primitives";
+import { SectionLabel, StatusDot, UserAvatar, Stack, Menu } from "../primitives";
 import { radius } from "../../tokens";
 
 interface QuickConnectProps {

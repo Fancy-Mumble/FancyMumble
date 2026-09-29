@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Box, Menu, MenuItem, Typography } from "@mui/material";
+import { Box, MenuItem, Typography } from "@mui/material";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { canOpenPrivately, openPrivatelyOrExplain } from "@core/features/elements/privateBrowsing";
@@ -15,7 +15,7 @@ import { useImageActions, type ImageActionKind } from "@core/features/chat/useIm
 import { useWatchStart } from "@core/features/chat/watch/useWatchStart";
 import { canDeleteMessages } from "@standard/components/sidebar/channel/ChannelEditorDialog";
 import { EmojiPlusIcon } from "@ui/icons";
-import { Stack, UserAvatar } from "../primitives";
+import { Stack, UserAvatar, Menu } from "../primitives";
 import { contextMenuRootSlot, CONTEXT_MENU_PROPS } from "../contextMenuRoot";
 import { popupActions, useMessageMenuTarget } from "../../clientState";
 import { radius } from "../../tokens";

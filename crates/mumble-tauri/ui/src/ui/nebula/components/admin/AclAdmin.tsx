@@ -7,7 +7,7 @@ import {
   type InputHTMLAttributes,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { Box, Button, Checkbox, IconButton, Menu, MenuItem, TextField, Typography } from "@mui/material";
+import { Box, Button, Checkbox, IconButton, MenuItem, TextField, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -25,7 +25,7 @@ import {
 } from "@core/features/admin/channelAclModel";
 import type { AclData, AclEntry, AclGroup, ChannelEntry, RegisteredUser } from "@core/types";
 import { ChevronRightIcon, CloseIcon, LockIcon, TrashIcon } from "@ui/icons";
-import { SearchBox, Stack, StatusDot } from "../primitives";
+import { SearchBox, Stack, StatusDot, Menu } from "../primitives";
 import { EmptyState, SegmentedGroup, SettingsCard } from "../settings/controls";
 import { AdminPage, DetailPlaceholder } from "./controls";
 import { radius } from "../../tokens";

@@ -8,7 +8,6 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
-  Menu,
   MenuItem,
   TextField,
   Typography,
@@ -23,7 +22,7 @@ import { formatRelativeDate } from "@core/utils/format";
 import { TID } from "@core/testids";
 import type { AclData, AclGroup, RegisteredUser, RegisteredUserUpdate, UserEntry } from "@core/types";
 import { KebabMenuIcon } from "@ui/icons";
-import { RoleChip, SearchBox, Stack } from "../primitives";
+import { RoleChip, SearchBox, Stack, Menu } from "../primitives";
 import { Banner } from "../settings/controls";
 import { AdminPage, DataTable, type Column } from "./controls";
 

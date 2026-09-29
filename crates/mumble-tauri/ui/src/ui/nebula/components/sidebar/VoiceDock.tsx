@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Box, Divider, Menu, MenuItem, Switch, Tooltip, Typography } from "@mui/material";
+import { Box, Divider, MenuItem, Switch, Tooltip, Typography } from "@mui/material";
 import { useTheme, type Theme } from "@mui/material/styles";
 import { useAppStore } from "@core/store";
 import { selectMicLive, selectSelfDeafened } from "@core/store/voiceSelectors";
@@ -23,7 +23,7 @@ import {
   UserXIcon,
   WebcamIcon,
 } from "@ui/icons";
-import { Stack, UserAvatar } from "../primitives";
+import { Stack, UserAvatar, Menu } from "../primitives";
 import { chamferedSurface, frost } from "../../theme";
 import { radius } from "../../tokens";
 import { formatElapsed } from "../recording/useRecording";

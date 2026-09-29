@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { Box, Divider, ListSubheader, Menu, MenuItem } from "@mui/material";
+import { Box, Divider, ListSubheader, MenuItem } from "@mui/material";
+import { Menu } from "../primitives";
 import { useCalendarStore } from "@core/features/chat/calendar/calendarStore";
 import { CALENDAR_COLORS, SHOW_AS_OPTIONS } from "@core/features/chat/calendar/types";
 import { CheckIcon, EditIcon, TrashIcon } from "@ui/icons";

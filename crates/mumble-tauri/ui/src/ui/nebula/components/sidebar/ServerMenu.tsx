@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { Box, Divider, Menu, MenuItem } from "@mui/material";
+import { Box, Divider, MenuItem } from "@mui/material";
+import { Menu } from "../primitives";
 import type { SavedServer } from "@core/types";
 import { CopyIcon, EditIcon, Link2Icon, LogOutIcon, StarIcon, TrashIcon } from "@ui/icons";
 import type { ServerGroup, ServerRailEntry } from "../../selectors";

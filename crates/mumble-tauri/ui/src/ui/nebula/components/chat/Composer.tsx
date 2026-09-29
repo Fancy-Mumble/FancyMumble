@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Stack } from "../primitives";
-import { Box, IconButton, Menu, MenuItem, Tooltip, Typography } from "@mui/material";
+import { Stack, Menu } from "../primitives";
+import { Box, IconButton, MenuItem, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { alpha, lighten, type SxProps, type Theme } from "@mui/material/styles";
 import { useTypingIndicator } from "@core/features/chat/typing/useTypingIndicator";

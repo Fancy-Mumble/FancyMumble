@@ -1,4 +1,5 @@
 export { Stack, type StackProps } from "./Stack";
+export { Menu } from "./Menu";
 export { NebulaSurface } from "./NebulaSurface";
 export { SectionLabel } from "./SectionLabel";
 export { StatusDot } from "./StatusDot";

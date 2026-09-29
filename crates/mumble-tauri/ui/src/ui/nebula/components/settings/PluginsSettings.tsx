@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Box, Button, Chip, Menu, MenuItem, Typography } from "@mui/material";
+import { Box, Button, Chip, MenuItem, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import {
   allowPlugin,
@@ -19,7 +19,7 @@ import {
   type TrustRecord,
 } from "@core/plugins/tier1/trust";
 import { isOfficialPlugin } from "@core/plugins/tier1/official";
-import { OfficialBadge, Stack } from "../primitives";
+import { OfficialBadge, Stack, Menu } from "../primitives";
 import { EmptyState, PageTitle, SettingsCard } from "./controls";
 
 interface PluginRow {

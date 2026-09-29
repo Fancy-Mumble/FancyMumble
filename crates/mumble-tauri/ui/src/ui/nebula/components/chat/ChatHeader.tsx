@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Box, IconButton, Menu, MenuItem, Tooltip, Typography } from "@mui/material";
+import { Box, IconButton, MenuItem, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import type { KeyTrustLevel } from "@core/types";
 import { KEBAB_ITEM_ATTR, TID } from "@core/testids";
@@ -25,7 +25,7 @@ import {
 } from "@ui/icons";
 import { chamferedSurface, cornerControlsClearance, glassChrome, handheldChrome } from "../../theme";
 import { radius } from "../../tokens";
-import { UserAvatar, Stack } from "../primitives";
+import { UserAvatar, Stack, Menu } from "../primitives";
 import { HistoryBadge, KeyTrustBadge } from "./KeyTrustBadge";
 
 interface ChatHeaderProps {

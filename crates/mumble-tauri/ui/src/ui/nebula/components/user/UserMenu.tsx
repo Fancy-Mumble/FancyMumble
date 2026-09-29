@@ -8,7 +8,6 @@ import {
   DialogActions,
   DialogContent,
   Divider,
-  Menu,
   MenuItem,
   Slider,
   Snackbar,
@@ -45,7 +44,7 @@ import {
 } from "@ui/icons";
 import { canDeleteMessages } from "@standard/components/sidebar/channel/ChannelEditorDialog";
 import { userMenuActions } from "../../selectors";
-import { SearchBox, Stack } from "../primitives";
+import { SearchBox, Stack, Menu } from "../primitives";
 import { radius } from "../../tokens";
 import { contextMenuRootSlot, CONTEXT_MENU_PROPS } from "../contextMenuRoot";
 import { popupActions, useUserMenuTarget } from "../../clientState";

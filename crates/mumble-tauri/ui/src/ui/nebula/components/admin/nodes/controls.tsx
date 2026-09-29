@@ -1,9 +1,9 @@
 import { useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { Box, Button, Menu, MenuItem, Typography, alpha } from "@mui/material";
+import { Box, Button, MenuItem, Typography, alpha } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { CloseIcon } from "@ui/icons";
 import { radius } from "../../../tokens";
-import { Stack } from "../../primitives";
+import { Stack, Menu } from "../../primitives";
 import type { Tone } from "./spec";
 
 /**
