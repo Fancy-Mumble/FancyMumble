@@ -35,7 +35,12 @@ default = ["self-updater"]
 # `process:` permissions are not referenced. What stays is the window plumbing
 # in `updater/window.rs` (`MAIN_WINDOW_LABEL`, `show_main_window`), which the
 # rest of the app uses to reveal the main window on launch.
-self-updater = ["dep:tauri-plugin-updater", "dep:tauri-plugin-process", "dep:semver"]
+self-updater = [
+    "dep:tauri-plugin-updater",
+    "dep:tauri-plugin-process",
+    "dep:semver",
+    "dep:minisign-verify",
+]
 deepfilternet-denoiser = ["mumble-protocol/deepfilternet-denoiser"]
 # Production asset mode: serve the embedded `ui/dist` via the custom Tauri
 # protocol instead of loading `devUrl` (localhost:1420). The Tauri CLI enables
@@ -159,6 +164,11 @@ tauri-plugin-process = { version = "2", optional = true }
 # semver semantics the plugin uses internally. Optional for the same reason the
 # plugins are - a build without `self-updater` never compares anything.
 semver = { version = "1", optional = true }
+# Checks the signal-bridge add-on against the updater key before it is
+# installed (`state/pchat/bridge_addon.rs`); the updater plugin verifies
+# its own downloads with the same crate. Same feature: a distro build
+# packages the bridge itself and never downloads it.
+minisign-verify = { version = "0.2", optional = true }
 # Android: mumble-protocol with Opus codec + oboe for native audio I/O.
 [target.'cfg(target_os = "android")'.dependencies]
 mumble-protocol = { path = "../mumble-protocol", features = [

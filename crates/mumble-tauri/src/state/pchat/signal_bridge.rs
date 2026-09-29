@@ -2,7 +2,7 @@
 //! stashed envelope retry.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use tracing::{debug, info, warn};
 
@@ -18,27 +18,37 @@ use super::persistence::load_signal_state;
 
 // -- Bridge loading ---------------------------------------------------
 
-/// Attempt to load the Signal Protocol bridge DLL.
-///
-/// Searches for the platform-specific library name in several locations:
-/// 1. Next to the executable (Windows installers, `AppImage`, dev mode)
-/// 2. `../lib/fancy-mumble/` relative to the exe (Linux deb packages)
-/// 3. Extra search directory (e.g. Android `nativeLibraryDir`)
-/// 4. On Android, bare filename as fallback (`dlopen` resolves it)
-///
-/// Returns `None` (with a warning) if the library is not found anywhere.
-pub(crate) fn load_signal_bridge(
-    own_cert_hash: &str,
-    extra_search_dir: Option<&Path>,
-) -> Option<Arc<SignalBridge>> {
-    let lib_name = if cfg!(windows) {
-        "signal_bridge.dll"
-    } else if cfg!(target_os = "macos") {
-        "libsignal_bridge.dylib"
-    } else {
-        "libsignal_bridge.so"
-    };
+/// File name of the bridge library on this platform.
+pub(crate) const LIB_NAME: &str = if cfg!(windows) {
+    "signal_bridge.dll"
+} else if cfg!(target_os = "macos") {
+    "libsignal_bridge.dylib"
+} else {
+    "libsignal_bridge.so"
+};
 
+/// Where a downloaded bridge add-on lives (`<app data>/addons/signal-bridge`).
+/// Set once at startup; unset on Android, which bundles the bridge.
+static ADDON_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+#[cfg(not(target_os = "android"))]
+pub(crate) fn set_addon_dir(dir: PathBuf) {
+    let _ = ADDON_DIR.set(dir);
+}
+
+pub(crate) fn addon_dir() -> Option<&'static Path> {
+    ADDON_DIR.get().map(PathBuf::as_path)
+}
+
+/// Every place the bridge library may be, in the order they are tried.
+///
+/// 1. Next to the executable (dev builds, where build.rs copies it)
+/// 2. `../lib/...` relative to the exe (distro packages and the Flatpak
+///    extension, which ship the bridge as a package of its own)
+/// 3. The downloaded add-on ([`addon_dir`])
+/// 4. Extra search directory (e.g. Android `nativeLibraryDir`)
+/// 5. The bare filename, for the platform loader's own search
+fn bridge_candidates(extra_search_dir: Option<&Path>) -> Vec<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
     #[cfg(not(target_os = "android"))]
@@ -48,26 +58,48 @@ pub(crate) fn load_signal_bridge(
             .and_then(|p| p.parent().map(Path::to_path_buf));
 
         if let Some(ref dir) = exe_dir {
-            candidates.push(dir.join(lib_name));
-            candidates.push(dir.join("signal-bridge").join(lib_name));
-            candidates.push(dir.join("../lib/fancy-mumble").join(lib_name));
-            candidates.push(dir.join("../lib/fancy-mumble/signal-bridge").join(lib_name));
+            candidates.push(dir.join(LIB_NAME));
+            candidates.push(dir.join("signal-bridge").join(LIB_NAME));
+            candidates.push(dir.join("../lib/fancy-mumble").join(LIB_NAME));
+            candidates.push(dir.join("../lib/fancy-mumble/signal-bridge").join(LIB_NAME));
             // Tauri's Linux .deb/AppImage install bundled resources under the
             // PRODUCT name from tauri.conf.json (productName = "FancyMumble"),
             // which is case-sensitive and differs from the /usr/bin binary
             // name (mumble-tauri). The resource lands at
             // /usr/lib/FancyMumble/signal-bridge/<lib>, so the /usr/bin binary
             // resolves it via ../lib/FancyMumble/signal-bridge/.
-            candidates.push(dir.join("../lib/FancyMumble/signal-bridge").join(lib_name));
-            candidates.push(dir.join("../lib/FancyMumble").join(lib_name));
+            candidates.push(dir.join("../lib/FancyMumble/signal-bridge").join(LIB_NAME));
+            candidates.push(dir.join("../lib/FancyMumble").join(LIB_NAME));
         }
     }
 
-    if let Some(dir) = extra_search_dir {
-        candidates.push(dir.join(lib_name));
+    if let Some(dir) = addon_dir() {
+        candidates.push(dir.join(LIB_NAME));
     }
 
-    candidates.push(PathBuf::from(lib_name));
+    if let Some(dir) = extra_search_dir {
+        candidates.push(dir.join(LIB_NAME));
+    }
+
+    candidates.push(PathBuf::from(LIB_NAME));
+    candidates
+}
+
+/// The bridge library that [`load_signal_bridge`] would pick, if any.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn find_bridge_library() -> Option<PathBuf> {
+    bridge_candidates(None).into_iter().find(|p| p.exists())
+}
+
+/// Attempt to load the Signal Protocol bridge DLL from the first of
+/// [`bridge_candidates`] that exists.
+///
+/// Returns `None` (with a warning) if the library is not found anywhere.
+pub(crate) fn load_signal_bridge(
+    own_cert_hash: &str,
+    extra_search_dir: Option<&Path>,
+) -> Option<Arc<SignalBridge>> {
+    let candidates = bridge_candidates(extra_search_dir);
 
     info!(?candidates, "signal bridge: searching for library");
 
@@ -114,6 +146,21 @@ pub(crate) fn load_signal_bridge(
     }
 
     None
+}
+
+/// Try loading the bridge again after an earlier attempt failed.
+///
+/// A failed load is sticky ([`PchatState::signal_bridge_load_failed`]) so a
+/// missing library is searched for once per session, not on every message.
+/// Installing the add-on is the one event that can change the answer.
+#[cfg(all(feature = "self-updater", not(target_os = "android")))]
+pub(crate) fn retry_signal_bridge(shared: &Arc<Mutex<SharedState>>) -> bool {
+    if let Ok(mut s) = shared.lock()
+        && let Some(pchat) = s.pchat_ctx.pchat.as_mut()
+    {
+        pchat.signal_bridge_load_failed = false;
+    }
+    ensure_signal_bridge_unlocked(shared)
 }
 
 // -- Ensure bridge is loaded (PchatState methods) ---------------------

@@ -4277,6 +4277,7 @@ dependencies = [
  "image",
  "libloading 0.8.9",
  "mimalloc",
+ "minisign-verify",
  "mp4",
  "mumble-protocol",
  "notify-rust",

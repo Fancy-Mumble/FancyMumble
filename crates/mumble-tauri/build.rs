@@ -3,7 +3,9 @@
 //! Invokes `tauri-build` and configures platform-specific linker flags.
 //! On desktop, also builds the AGPL-isolated `signal-bridge` cdylib from
 //! its separate workspace and copies the resulting library next to the
-//! executable so `load_signal_bridge` finds it at runtime.
+//! executable so `load_signal_bridge` finds it at runtime. That copy is for
+//! dev runs only: installers do not bundle the bridge, which users download
+//! as an add-on (`state/pchat/bridge_addon.rs`).
 //!
 //! Also regenerates `ui/src/core/utils/permissions.ts` from the canonical
 //! Rust permission table in `crates/fancy-utils/src/permissions.rs` so
@@ -32,9 +34,7 @@ fn main() {
     generate_permissions_ts();
     generate_shared_constants();
 
-    // Build signal-bridge BEFORE tauri_build::build() so that the
-    // library file exists when Tauri validates bundle resource globs
-    // (TAURI_CONFIG -> bundle.resources -> "signal-bridge/*.dll" etc.).
+    export_signal_bridge_version();
     if target_os != "android" && std::env::var("SKIP_SIGNAL_BRIDGE").is_err() {
         build_signal_bridge();
     }
@@ -157,36 +157,6 @@ fn main() {
 fn build_tauri() {
     println!("cargo:rerun-if-changed=capabilities");
 
-    // `tauri.linux.conf.json` declares `bundle.resources: ["signal-bridge/*.so"]`,
-    // and tauri-build fails outright when a resource glob matches nothing:
-    //
-    //   glob pattern signal-bridge/*.so path not found or didn't match any files
-    //
-    // With SKIP_SIGNAL_BRIDGE set, `build_signal_bridge()` above never runs, so
-    // nothing ever produces that file and the build cannot succeed from a clean
-    // checkout. It only appears to work in a tree where an earlier unskipped
-    // build happened to leave the .so behind.
-    //
-    // Every packaging path that skips the bridge hits this - the AUR
-    // `fancy-mumble` package and the Flatpak both build with SKIP_SIGNAL_BRIDGE=1
-    // and ship the bridge separately, for the AGPL boundary. So clear the list:
-    // TAURI_CONFIG is a JSON document deep-merged over the config files, and an
-    // empty `resources` leaves nothing to glob.
-    if std::env::var_os("SKIP_SIGNAL_BRIDGE").is_some() {
-        println!("cargo:rerun-if-env-changed=SKIP_SIGNAL_BRIDGE");
-        // Unsafe since Rust 2024: `set_var` races any other thread reading the
-        // environment. Nothing here has spawned one, and cargo reads
-        // `TAURI_CONFIG` only after this script exits.
-        #[allow(
-            unsafe_code,
-            reason = "std::env::set_var is unsafe in Rust 2024; this build script is \
-                      single-threaded and sets it before anything reads it"
-        )]
-        unsafe {
-            std::env::set_var("TAURI_CONFIG", r#"{"bundle":{"resources":[]}}"#);
-        }
-    }
-
     let self_updater = std::env::var_os("CARGO_FEATURE_SELF_UPDATER").is_some();
     let pattern = if self_updater {
         "./capabilities/**/*"
@@ -240,7 +210,7 @@ fn qt6ui_prerequisites() -> Option<(String, String, std::path::PathBuf)> {
 ///
 /// Build scripts run on every fingerprint change; blind `fs::copy` bumps the
 /// destination mtime each time, and destinations inside the crate directory
-/// (e.g. `signal-bridge/`) are watched by `cargo tauri dev` - which then
+/// are watched by `cargo tauri dev` - which then
 /// restarts the build, killing it mid-run and re-triggering the copy in an
 /// endless rebuild loop.
 fn copy_if_changed(src: &std::path::Path, dest: &std::path::Path) -> std::io::Result<bool> {
@@ -252,6 +222,34 @@ fn copy_if_changed(src: &std::path::Path, dest: &std::path::Path) -> std::io::Re
     }
     std::fs::write(dest, src_bytes)?;
     Ok(true)
+}
+
+/// Expose the signal-bridge crate's version as `SIGNAL_BRIDGE_VERSION`.
+///
+/// The add-on download is pinned to it (release tag `signal-bridge-v<ver>`),
+/// so a client only ever fetches the bridge it was built against: the C ABI
+/// has no version handshake, and a newer bridge on an older client would load
+/// and then fail in ways nobody could diagnose.
+fn export_signal_bridge_version() {
+    println!("cargo:rerun-if-changed=../signal-bridge/Cargo.toml");
+    let version = std::fs::read_to_string("../signal-bridge/Cargo.toml")
+        .ok()
+        .and_then(|toml| {
+            toml.lines()
+                .skip_while(|l| l.trim() != "[package]")
+                .find_map(|l| {
+                    let rest = l.trim().strip_prefix("version")?.trim_start();
+                    let quoted = rest.strip_prefix('=')?.trim();
+                    Some(quoted.trim_matches('"').to_owned())
+                })
+        })
+        .unwrap_or_else(|| {
+            // Same leniency as `build_signal_bridge`: a checkout without the
+            // crate still builds, it just has no add-on to offer.
+            println!("cargo:warning=signal-bridge version not found, add-on download disabled");
+            String::new()
+        });
+    println!("cargo:rustc-env=SIGNAL_BRIDGE_VERSION={version}");
 }
 
 /// Build the signal-bridge cdylib from its separate workspace and copy
@@ -346,25 +344,6 @@ fn build_signal_bridge() {
     });
     if copied {
         eprintln!("copied signal-bridge to {}", dest.display());
-    }
-
-    // Also copy into the signal-bridge/ subdirectory next to the crate
-    // root so that `cargo tauri build` can include it as a bundled
-    // resource (bundle.resources: ["signal-bridge/*.dll"]). Content-compared:
-    // this path is inside the tauri-dev watch root, so a blind copy would
-    // restart the dev loop on every build-script run.
-    let bundle_dir = std::path::Path::new(&manifest_dir).join("signal-bridge");
-    let _ = std::fs::create_dir_all(&bundle_dir);
-    let bundle_dest = bundle_dir.join(lib_name);
-    let copied = copy_if_changed(&bridge_lib, &bundle_dest).unwrap_or_else(|e| {
-        panic!(
-            "failed to copy {} -> {}: {e}",
-            bridge_lib.display(),
-            bundle_dest.display()
-        );
-    });
-    if copied {
-        eprintln!("copied signal-bridge to {}", bundle_dest.display());
     }
 }
 

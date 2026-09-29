@@ -56,6 +56,7 @@ pub(crate) mod screenshare;
 pub(crate) mod server;
 pub(crate) mod server_settings;
 pub(crate) mod servers;
+pub(crate) mod signal_bridge;
 /// Native stream viewer commands (Linux + opt-in Windows); loud stubs on
 /// every other platform, Android included, so a stray invoke fails with a
 /// message instead of "command not found".

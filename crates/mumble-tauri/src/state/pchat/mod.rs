@@ -16,6 +16,8 @@
 //! - `key_sharing`   -- key challenges, holder reporting, takeover
 //! - `signal_bridge` -- Signal Protocol bridge loading and distribution
 
+#[cfg(all(feature = "self-updater", not(target_os = "android")))]
+pub(crate) mod bridge_addon;
 mod conversion;
 pub(crate) mod identity;
 mod inbound;
@@ -63,6 +65,13 @@ pub(crate) use key_sharing::{
 };
 
 // Signal bridge
+#[cfg(all(feature = "self-updater", not(target_os = "android")))]
+pub(crate) use signal_bridge::retry_signal_bridge;
+#[cfg(not(target_os = "android"))]
+pub(crate) use signal_bridge::{
+    addon_dir as signal_bridge_addon_dir, find_bridge_library,
+    set_addon_dir as set_signal_bridge_addon_dir,
+};
 pub(crate) use signal_bridge::{
     ensure_signal_bridge_unlocked, handle_signal_sender_key_by_hash, send_signal_distribution,
 };

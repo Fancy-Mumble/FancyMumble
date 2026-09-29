@@ -64,6 +64,15 @@ pub(crate) fn init_app_state(app: &mut tauri::App) {
         tracing::warn!("Failed to initialise offload store: {e}");
     }
     prefs::hydrate_persisted_prefs(app.handle(), &state);
+    #[cfg(not(target_os = "android"))]
+    match crate::e2e_data_dir(app.handle()) {
+        Ok(dir) => crate::state::pchat::set_signal_bridge_addon_dir(
+            dir.join("addons")
+                .join("signal-bridge")
+                .join(env!("SIGNAL_BRIDGE_VERSION")),
+        ),
+        Err(e) => tracing::warn!("no app data dir for the signal bridge add-on: {e}"),
+    }
 }
 
 /// A `fancy://` link the app was launched with, waiting for the UI.

@@ -326,6 +326,8 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::system::set_notifications_enabled,
         super::system::show_desktop_notification,
         super::system::set_disable_dual_path,
+        super::signal_bridge::signal_bridge_status,
+        super::signal_bridge::install_signal_bridge,
         super::system::update_badge_count,
         super::system::get_system_clock_format,
         // -- external links --------------------------------------------

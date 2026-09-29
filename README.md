@@ -81,7 +81,7 @@ Fancy Mumble is built as a Rust workspace with multiple crates:
 | [`fancy-gamedetect`](crates/fancy-gamedetect) | Finds the game in the foreground and the launchers that installed it |
 | [`fancy-presence`](crates/fancy-presence) | Rich presence over Discord's IPC endpoint |
 | [`fancy-utils`](crates/fancy-utils) | Shared utility functions |
-| [`signal-bridge`](crates/signal-bridge) | Signal sender keys for encrypted chat. AGPL-3.0, built on its own and loaded at runtime, so the client stays MIT |
+| [`signal-bridge`](crates/signal-bridge) | Signal sender keys for encrypted chat. AGPL-3.0, built on its own and loaded at runtime, so the client stays MIT. Installers leave it out; the client downloads it from the `signal-bridge-v*` release when a Signal channel needs it |
 | [`qt6ui`](crates/qt6ui) | Minimal native Qt 6 / QML client. LGPL-3.0, built outside the workspace |
 
 **Tech Stack:** Rust 2024 + Tauri 2 + React 19 + TypeScript 5 + MUI + Tokio async runtime
