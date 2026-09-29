@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Box, Button, Chip, MenuItem, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import {
@@ -19,8 +19,10 @@ import {
   type TrustRecord,
 } from "@core/plugins/tier1/trust";
 import { isOfficialPlugin } from "@core/plugins/tier1/official";
+import { useSignalBridgeAddon, type SignalBridgeStatus } from "@core/signalBridgeAddon";
+import { TID } from "@core/testids";
 import { OfficialBadge, Stack, Menu } from "../primitives";
-import { EmptyState, PageTitle, SettingsCard } from "./controls";
+import { ActionRow, EmptyState, PageTitle, SettingsCard } from "./controls";
 
 interface PluginRow {
   readonly entry: PluginRegistryEntry;
@@ -71,6 +73,7 @@ export function PluginsSettings() {
   return (
     <Box sx={{ maxWidth: 640 }}>
       <PageTitle title={t("tabs.plugins")} />
+      <SignalBridgeCard />
       {rows.length === 0 ? (
         <EmptyState>{t("plugins.empty")}</EmptyState>
       ) : (
@@ -227,6 +230,58 @@ function PluginCard({ row }: Readonly<{ row: PluginRow }>) {
           )}
         </Stack>
       )}
+    </SettingsCard>
+  );
+}
+
+type BridgeHint = "hintAddon" | "hintPackaged" | "hintMissing" | "hintUnavailable";
+
+function bridgeHint(status: SignalBridgeStatus): BridgeHint {
+  if (status.installed) return status.source === "addon" ? "hintAddon" : "hintPackaged";
+  return status.downloadable ? "hintMissing" : "hintUnavailable";
+}
+
+/**
+ * The client-side Signal Protocol add-on. It is not a server plugin, but this
+ * is where people look for "things I can add to the client", and a Signal
+ * channel's install prompt is easy to dismiss.
+ */
+function SignalBridgeCard() {
+  const { t } = useTranslation("settings");
+  const { status, installing, progress, error, refresh, install } = useSignalBridgeAddon();
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  if (!status) return null;
+
+  const busyLabel =
+    progress === null ? t("signalBridge.installing") : t("signalBridge.downloading", { percent: progress });
+
+  return (
+    <SettingsCard sx={{ mb: 1.25 }}>
+      <ActionRow
+        title={`${t("signalBridge.title")} v${status.version}`}
+        hint={
+          error
+            ? t("signalBridge.failed", { error })
+            : t(`signalBridge.${bridgeHint(status)}`, { version: status.version })
+        }
+        action={
+          !status.installed && status.downloadable ? (
+            <Button
+              size="small"
+              variant="contained"
+              data-testid={TID.signalBridgeSettingsInstall}
+              disabled={installing}
+              onClick={() => void install()}
+            >
+              {installing ? busyLabel : t("signalBridge.install")}
+            </Button>
+          ) : null
+        }
+      />
     </SettingsCard>
   );
 }

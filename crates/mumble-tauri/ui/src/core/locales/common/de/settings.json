@@ -1592,5 +1592,16 @@
     "summaryCurrent": "Rufen in deinen aktuellen Kanal",
     "summaryUnset": "Kein Ziel festgelegt",
     "noActiveServer": "Verbinde dich mit einem Server, um Benutzer und Kanäle auszuwählen."
+  },
+  "signalBridge": {
+    "title": "Signal-Protocol-Add-on",
+    "hintMissing": "Wird für Signal-Kanäle (Ende-zu-Ende-verschlüsselt) benötigt. Wird von GitHub heruntergeladen und gegen den Signaturschlüssel der App geprüft.",
+    "hintAddon": "Installiert (Version {{version}}).",
+    "hintPackaged": "In dieser Installation enthalten.",
+    "hintUnavailable": "Für diesen Build nicht verfügbar. Installiere es über deinen Paketmanager.",
+    "install": "Installieren",
+    "installing": "Wird installiert…",
+    "downloading": "{{percent}} %",
+    "failed": "Installation fehlgeschlagen: {{error}}"
   }
 }

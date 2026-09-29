@@ -1587,5 +1587,16 @@
     "summaryCurrent": "喊话到你当前的频道",
     "summaryUnset": "未设置目标",
     "noActiveServer": "连接服务器后才能选择用户和频道。"
+  },
+  "signalBridge": {
+    "title": "Signal Protocol 附加组件",
+    "hintMissing": "Signal（端到端加密）频道需要此组件。从 GitHub 下载，并使用应用的签名密钥校验。",
+    "hintAddon": "已安装（版本 {{version}}）。",
+    "hintPackaged": "已包含在此安装中。",
+    "hintUnavailable": "此版本不可用。请通过软件包管理器安装。",
+    "install": "安装",
+    "installing": "正在安装…",
+    "downloading": "{{percent}}%",
+    "failed": "安装失败：{{error}}"
   }
 }

@@ -1591,5 +1591,16 @@
     "summaryCurrent": "Crier dans votre salon actuel",
     "summaryUnset": "Aucune cible définie",
     "noActiveServer": "Connectez-vous à un serveur pour choisir des utilisateurs et des salons."
+  },
+  "signalBridge": {
+    "title": "Module Signal Protocol",
+    "hintMissing": "Requis pour les salons Signal (chiffrés de bout en bout). Téléchargé depuis GitHub et vérifié avec la clé de signature de l'application.",
+    "hintAddon": "Installé (version {{version}}).",
+    "hintPackaged": "Inclus dans cette installation.",
+    "hintUnavailable": "Indisponible pour cette version. Installez-le avec votre gestionnaire de paquets.",
+    "install": "Installer",
+    "installing": "Installation…",
+    "downloading": "{{percent}} %",
+    "failed": "Échec de l'installation : {{error}}"
   }
 }

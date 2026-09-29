@@ -328,5 +328,11 @@ export async function registerPersistentChatEvents(unlisteners: UnlistenFn[]): P
     await listen<{ message: string }>(TauriEvent.PchatSignalBridgeError, (event) => {
       useAppStore.setState({ signalBridgeError: event.payload.message });
     }),
+
+    // The add-on was installed and loaded into every session, so the channel
+    // can send again.
+    await listen(TauriEvent.SignalBridgeInstalled, () => {
+      useAppStore.setState({ signalBridgeError: null });
+    }),
   );
 }

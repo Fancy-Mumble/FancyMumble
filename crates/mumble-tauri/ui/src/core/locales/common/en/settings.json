@@ -1592,5 +1592,16 @@
     "summaryCurrent": "Shout to your current channel",
     "summaryUnset": "No target set",
     "noActiveServer": "Connect to a server to pick users and channels."
+  },
+  "signalBridge": {
+    "title": "Signal Protocol add-on",
+    "hintMissing": "Needed for Signal (end-to-end encrypted) channels. Downloaded from GitHub and checked against the app's signing key.",
+    "hintAddon": "Installed (version {{version}}).",
+    "hintPackaged": "Included with this installation.",
+    "hintUnavailable": "Not available for this build. Install it with your package manager.",
+    "install": "Install",
+    "installing": "Installing…",
+    "downloading": "{{percent}}%",
+    "failed": "Install failed: {{error}}"
   }
 }

@@ -44,6 +44,8 @@ export enum TauriEvent {
   PchatReactionDeliver = "pchat-reaction-deliver",
   PchatReactionFetchResponse = "pchat-reaction-fetch-response",
   PchatSignalBridgeError = "pchat-signal-bridge-error",
+  SignalBridgeDownloadProgress = "signal-bridge-download-progress",
+  SignalBridgeInstalled = "signal-bridge-installed",
   PersistenceConfigChanged = "persistence-config-changed",
   PluginData = "plugin-data",
   PluginMessage = "plugin-message",

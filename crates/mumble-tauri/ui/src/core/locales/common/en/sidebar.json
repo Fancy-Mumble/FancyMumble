@@ -397,7 +397,15 @@
     "resetChannelKeyBody": "Take over key ownership of \"{{channel}}\" and establish a fresh encryption key? Messages encrypted with the lost key remain unreadable, but the channel becomes usable again. Other members will need the new key shared with them.",
     "resetChannelKeyConfirm": "Reset key",
     "encryptionUnavailable": "Encryption unavailable",
-    "encryptionUnavailableDetail": "You will not be able to send or read encrypted messages in this channel."
+    "encryptionUnavailableDetail": "You will not be able to send or read encrypted messages in this channel.",
+    "signalAddonInstall": "Install add-on",
+    "signalAddonMissing": "the Signal add-on is not installed.",
+    "signalAddonBannerHint": "Signal channels need the Signal Protocol add-on. It is a separate download because it is licensed differently from the app.",
+    "signalAddonTitle": "Install the Signal add-on?",
+    "signalAddonBody": "This channel uses the Signal Protocol, which lives in a separate add-on (signal-bridge {{version}}, AGPL-3.0). It will be downloaded from the Fancy Mumble releases on GitHub and checked against the app's signing key before it is installed.",
+    "signalAddonFailed": "The add-on could not be installed: {{error}}",
+    "signalAddonInstalling": "Installing…",
+    "signalAddonDownloading": "Downloading… {{percent}}%"
   },
   "keyTrust": {
     "labelVerified": "Verified",

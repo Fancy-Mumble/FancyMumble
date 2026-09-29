@@ -397,7 +397,15 @@
     "resetChannelKeyBody": "接管“{{channel}}”的密钥所有权并建立新的加密密钥？使用旧密钥加密的消息将无法读取，但频道可以恢复使用。其他成员之后需要获得新密钥的共享。",
     "resetChannelKeyConfirm": "重置密钥",
     "encryptionUnavailable": "加密不可用",
-    "encryptionUnavailableDetail": "你将无法在此频道中收发加密消息。"
+    "encryptionUnavailableDetail": "你将无法在此频道中收发加密消息。",
+    "signalAddonInstall": "安装附加组件",
+    "signalAddonMissing": "未安装 Signal 附加组件。",
+    "signalAddonBannerHint": "Signal 频道需要 Signal Protocol 附加组件。由于其许可证与应用不同，需要单独下载。",
+    "signalAddonTitle": "安装 Signal 附加组件？",
+    "signalAddonBody": "此频道使用 Signal Protocol，它位于单独的附加组件中（signal-bridge {{version}}，AGPL-3.0）。将从 GitHub 上的 Fancy Mumble 发布页下载，并在安装前使用应用的签名密钥进行校验。",
+    "signalAddonFailed": "无法安装附加组件：{{error}}",
+    "signalAddonInstalling": "正在安装…",
+    "signalAddonDownloading": "正在下载… {{percent}}%"
   },
   "keyTrust": {
     "labelVerified": "已验证",

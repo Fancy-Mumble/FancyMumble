@@ -165,6 +165,8 @@ export const TID = {
   /** The "Reset channel key" action on the key-challenge-failed banner
    *  (shown to KeyOwner admins; performs a key takeover). */
   pchatResetKey: "pchat-reset-key",
+  signalBridgeInstall: "signal-bridge-install",
+  signalBridgeSettingsInstall: "signal-bridge-settings-install",
   /** Root of the generic ConfirmDialog modal (register/unregister user,
    *  delete messages, ...). */
   confirmDialog: "confirm-dialog",

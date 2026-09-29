@@ -15,6 +15,7 @@ import KeyVerificationDialog from "./KeyVerificationDialog";
 import CustodianPrompt from "./CustodianPrompt";
 import KeyShareWarningDialog from "./KeyShareWarningDialog";
 import ConfirmDialog from "../elements/ConfirmDialog";
+import { useSignalBridgeAddon } from "@core/signalBridgeAddon";
 interface PersistentChatResult {
   trustLevel: KeyTrustLevel | undefined;
   onVerifyClick: (() => void) | undefined;
@@ -109,6 +110,8 @@ export function usePersistentChat(channelId: number | null, channelName: string)
   const [showCustodianPrompt, setShowCustodianPrompt] = useState(false);
   const [keyShareConfirm, setKeyShareConfirm] = useState<{ hash: string; name: string } | null>(null);
   const [confirmTakeover, setConfirmTakeover] = useState(false);
+  const [showBridgeInstall, setShowBridgeInstall] = useState(false);
+  const bridge = useSignalBridgeAddon();
   const [userMode, setUserMode] = useState<UserMode>("normal");
   const { t } = useTranslation("sidebar");
   const tStr = t as (k: string) => string;
@@ -160,6 +163,32 @@ export function usePersistentChat(channelId: number | null, channelName: string)
     }
   }, [custodian]);
 
+  // A Signal channel needs the bridge add-on. The host reports a failed load
+  // as `signalBridgeError`; the status check catches the missing library
+  // before anything has tried to load it.
+  const isSignal = persistenceMode === "SIGNAL_V1";
+  const refreshBridge = bridge.refresh;
+  useEffect(() => {
+    if (isSignal) void refreshBridge();
+  }, [isSignal, refreshBridge]);
+  const bridgeMissing = isSignal && (!!signalBridgeError || bridge.status?.installed === false);
+  const canInstallBridge = bridgeMissing && !!bridge.status?.downloadable;
+
+  // Offer the add-on the first time a Signal channel is opened without it.
+  const { prompted, markPrompted } = bridge;
+  useEffect(() => {
+    if (canInstallBridge && !prompted) {
+      markPrompted();
+      setShowBridgeInstall(true);
+    }
+  }, [canInstallBridge, prompted, markPrompted]);
+
+  const handleBridgeInstall = useCallback(() => {
+    void bridge.install().then((ok) => {
+      if (ok) setShowBridgeInstall(false);
+    });
+  }, [bridge]);
+
   const showBanner = channelId !== null && ((persistence && persistence.mode !== "NONE") || isLoading);
 
   const keyShareRequests = (channelId !== null && pendingKeyShares[channelId]) || [];
@@ -202,16 +231,32 @@ export function usePersistentChat(channelId: number | null, channelName: string)
       </InfoBanner>
     ) : null,
     keyRevoked,
-    sendBlocked: keyRevoked || (persistenceMode === "SIGNAL_V1" && !!signalBridgeError),
-    signalBridgeErrorBanner:
-      persistenceMode === "SIGNAL_V1" && signalBridgeError ? (
-        <InfoBanner variant="danger" icon={warningIcon}>
-          <p className={infoBannerStyles.description}>
-            <strong>{t("overlays.encryptionUnavailable")}</strong> - {signalBridgeError}
-          </p>
-          <p className={infoBannerStyles.description}>{t("overlays.encryptionUnavailableDetail")}</p>
-        </InfoBanner>
-      ) : null,
+    sendBlocked: keyRevoked || bridgeMissing,
+    signalBridgeErrorBanner: bridgeMissing ? (
+      <InfoBanner
+        variant="danger"
+        icon={warningIcon}
+        actions={
+          canInstallBridge ? (
+            <button
+              className={infoBannerStyles.dangerAction}
+              data-testid={TID.signalBridgeInstall}
+              onClick={() => setShowBridgeInstall(true)}
+            >
+              {t("overlays.signalAddonInstall")}
+            </button>
+          ) : undefined
+        }
+      >
+        <p className={infoBannerStyles.description}>
+          <strong>{t("overlays.encryptionUnavailable")}</strong> -{" "}
+          {signalBridgeError ?? t("overlays.signalAddonMissing")}
+        </p>
+        <p className={infoBannerStyles.description}>
+          {canInstallBridge ? t("overlays.signalAddonBannerHint") : t("overlays.encryptionUnavailableDetail")}
+        </p>
+      </InfoBanner>
+    ) : null,
     dialogs: (
       <>
         {trust && channelId !== null && (
@@ -259,6 +304,26 @@ export function usePersistentChat(channelId: number | null, channelName: string)
           onConfirm={handleShareConfirm}
           onCancel={() => setKeyShareConfirm(null)}
         />
+        {showBridgeInstall && (
+          <ConfirmDialog
+            title={t("overlays.signalAddonTitle")}
+            body={
+              bridge.error
+                ? t("overlays.signalAddonFailed", { error: bridge.error })
+                : t("overlays.signalAddonBody", { version: bridge.status?.version ?? "" })
+            }
+            confirmLabel={
+              bridge.installing
+                ? bridge.progress === null
+                  ? t("overlays.signalAddonInstalling")
+                  : t("overlays.signalAddonDownloading", { percent: bridge.progress })
+                : t("overlays.signalAddonInstall")
+            }
+            isConfirming={bridge.installing}
+            onConfirm={handleBridgeInstall}
+            onCancel={() => setShowBridgeInstall(false)}
+          />
+        )}
         {confirmTakeover && channelId !== null && (
           <ConfirmDialog
             title={t("overlays.resetChannelKeyTitle")}

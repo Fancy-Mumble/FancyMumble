@@ -21,6 +21,7 @@ import { parseClientManifest } from "@core/plugins/tier1/manifest";
 import { SplitButton } from "../../components/elements/SplitButton";
 import type { SplitButtonOption } from "../../components/elements/SplitButton";
 import { OfficialBadge, isOfficialPlugin } from "../../components/elements/OfficialBadge";
+import SignalBridgeAddonCard from "./SignalBridgeAddonCard";
 import styles from "./PluginsPanel.module.css";
 
 interface PluginRow {
@@ -57,15 +58,14 @@ export default function PluginsPanel() {
     [registry, pluginManifests, pluginTrust, pluginPanels],
   );
 
-  if (rows.length === 0) {
-    return <div className={styles.empty}>{t("plugins.empty")}</div>;
-  }
-
   return (
     <div>
-      {rows.map((row) => (
-        <PluginCard key={row.entry.pluginName} row={row} />
-      ))}
+      <SignalBridgeAddonCard />
+      {rows.length === 0 ? (
+        <div className={styles.empty}>{t("plugins.empty")}</div>
+      ) : (
+        rows.map((row) => <PluginCard key={row.entry.pluginName} row={row} />)
+      )}
     </div>
   );
 }

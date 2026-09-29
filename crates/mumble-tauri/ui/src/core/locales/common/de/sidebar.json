@@ -397,7 +397,15 @@
     "resetChannelKeyBody": "Schlüsselinhaberschaft für „{{channel}}“ übernehmen und einen neuen Verschlüsselungsschlüssel einrichten? Mit dem verlorenen Schlüssel verschlüsselte Nachrichten bleiben unlesbar, aber der Kanal ist wieder nutzbar. Andere Mitglieder benötigen anschließend den neuen Schlüssel.",
     "resetChannelKeyConfirm": "Schlüssel zurücksetzen",
     "encryptionUnavailable": "Verschlüsselung nicht verfügbar",
-    "encryptionUnavailableDetail": "Du wirst keine verschlüsselten Nachrichten in diesem Kanal senden oder lesen können."
+    "encryptionUnavailableDetail": "Du wirst keine verschlüsselten Nachrichten in diesem Kanal senden oder lesen können.",
+    "signalAddonInstall": "Add-on installieren",
+    "signalAddonMissing": "das Signal-Add-on ist nicht installiert.",
+    "signalAddonBannerHint": "Signal-Kanäle brauchen das Signal-Protocol-Add-on. Es wird separat heruntergeladen, weil es anders lizenziert ist als die App.",
+    "signalAddonTitle": "Signal-Add-on installieren?",
+    "signalAddonBody": "Dieser Kanal nutzt das Signal Protocol, das in einem separaten Add-on steckt (signal-bridge {{version}}, AGPL-3.0). Es wird aus den Fancy-Mumble-Releases auf GitHub heruntergeladen und vor der Installation gegen den Signaturschlüssel der App geprüft.",
+    "signalAddonFailed": "Das Add-on konnte nicht installiert werden: {{error}}",
+    "signalAddonInstalling": "Wird installiert…",
+    "signalAddonDownloading": "Wird heruntergeladen… {{percent}} %"
   },
   "keyTrust": {
     "labelVerified": "Verifiziert",
