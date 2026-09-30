@@ -6,6 +6,8 @@ import { useAppStore } from "@core/store";
 import type { UserEntry } from "@core/types";
 import { MicOffGlyph, ProfileCard as SharedProfileCard, type AnchorRect } from "@shared/profilecard";
 import { nebulaCardTokens } from "../../profileStyle";
+import { useIsHandheld } from "../../useIsHandheld";
+import { PROFILE_SHEET_CARD_STYLE, ProfileCardSheet } from "./ProfileCardSheet";
 import { useUserCardModel } from "./userCardModel";
 
 interface ProfileCardProps {
@@ -67,7 +69,10 @@ export function ProfileCard({ user, anchor, pinned = true, onClose, onMessage }:
   const { t } = useTranslation("nebulaUser");
   const tokens = nebulaCardTokens(useTheme().palette.nebula);
   const model = useUserCardModel(user, tokens);
-  useDismissOnOutsideClick(pinned, onClose);
+  // A phone gets the card as a bottom sheet, which has its own backdrop to
+  // tap away; the outside-click listener is the floating card's.
+  const asSheet = useIsHandheld() && pinned;
+  useDismissOnOutsideClick(pinned && !asSheet, onClose);
   const storedVolume = useAppStore((state) => (user.hash ? (state.userVolumes[user.hash] ?? 100) : 100));
   const [volume, setVolume] = useState(storedVolume);
 
@@ -77,23 +82,27 @@ export function ProfileCard({ user, anchor, pinned = true, onClose, onMessage }:
     void invoke("set_user_volume", { session: user.session, volume: next / 100 });
   };
 
-  return (
+  const card = (close: () => void, floating: boolean) => (
     <SharedProfileCard
       model={model}
       tokens={tokens}
-      onClose={onClose}
-      anchor={anchor}
+      onClose={close}
+      anchor={floating ? anchor : null}
       className={CARD_CLASS}
       placement={{ prefer: "left" }}
-      style={{
-        // Above the window's own furniture, below the full-window surfaces
-        // settings and administration open at 30.
-        zIndex: 8,
-        ...(pinned ? null : { pointerEvents: "none" }),
-        // Without an anchor - opened from something that is not a row - the
-        // card keeps the mock's resting place at the window's top right.
-        ...(anchor ? null : { position: "absolute" as const, right: 22, top: 78 }),
-      }}
+      style={
+        floating
+          ? {
+              // Above the window's own furniture, below the full-window
+              // surfaces settings and administration open at 30.
+              zIndex: 8,
+              ...(pinned ? null : { pointerEvents: "none" }),
+              // Without an anchor - opened from something that is not a row -
+              // the card keeps the mock's resting place at the window's top right.
+              ...(anchor ? null : { position: "absolute" as const, right: 22, top: 78 }),
+            }
+          : PROFILE_SHEET_CARD_STYLE
+      }
       volume={{ value: volume, onChange: setVolume, onCommit: applyVolume }}
       // The mock ends the card on a composer, not a button: the thing you most
       // often want a profile card for is to say something to the person on it.
@@ -113,4 +122,7 @@ export function ProfileCard({ user, anchor, pinned = true, onClose, onMessage }:
       }}
     />
   );
+
+  if (asSheet) return <ProfileCardSheet onClose={onClose}>{(dismiss) => card(dismiss, false)}</ProfileCardSheet>;
+  return card(onClose, true);
 }

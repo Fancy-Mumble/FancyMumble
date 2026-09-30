@@ -197,4 +197,23 @@ describe("ProfileCard", () => {
     expect(painted.overflow).toBe("hidden");
     expect(painted.backgroundImage).not.toContain("165deg");
   });
+  it("comes up from the bottom on a phone, and slides away before it closes", () => {
+    vi.useFakeTimers();
+    document.documentElement.setAttribute("data-nebula-handheld", "on");
+    try {
+      const onClose = vi.fn();
+      renderCard(null, "hi", true, onClose);
+      const sheet = screen.getByTestId("nebula-profile-sheet");
+      expect(sheet.querySelector("aside")?.style.width).toBe("100%");
+
+      fireEvent.click(screen.getByLabelText("Close profile"));
+      expect(sheet.style.transform).toBe("translate3d(0,100%,0)");
+      expect(onClose).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(200);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    } finally {
+      document.documentElement.removeAttribute("data-nebula-handheld");
+      vi.useRealTimers();
+    }
+  });
 });
