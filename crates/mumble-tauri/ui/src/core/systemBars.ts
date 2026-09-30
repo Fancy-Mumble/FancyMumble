@@ -25,3 +25,37 @@ export async function applySystemBarStyle(light: boolean): Promise<void> {
     // it had before, and there is nothing a caller could do about it.
   }
 }
+
+/** Whether a CSS colour string is closer to white than to black. */
+export function isLightColor(color: string): boolean | null {
+  const match = /rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+))?/.exec(color);
+  // Transparent says nothing about what shows through it.
+  if (!match || match[4] === "0") return null;
+  const [r, g, b] = match.slice(1, 4).map(Number);
+  // Rec. 709 luma: good enough to pick between two icon colours.
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 140;
+}
+
+/**
+ * For a pack that themes through CSS rather than a JS theme object: read the
+ * colour the page actually paints and keep the bar icons in step with it,
+ * re-reading when the root's theme attributes or the OS scheme change.
+ */
+export function followPageSystemBars(): void {
+  if (!isMobile) return;
+  let last: boolean | null = null;
+  const sync = () => {
+    const light = isLightColor(getComputedStyle(document.body).backgroundColor);
+    if (light === null || light === last) return;
+    last = light;
+    void applySystemBarStyle(light);
+  };
+  const schedule = () => requestAnimationFrame(sync);
+  new MutationObserver(schedule).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme", "data-color-mode", "class", "style"],
+  });
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", schedule);
+  if (document.body) schedule();
+  else document.addEventListener("DOMContentLoaded", schedule, { once: true });
+}
