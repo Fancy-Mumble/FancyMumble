@@ -27,6 +27,7 @@ import {
   InfoFact,
   infoSheetFrame,
   infoSheetSide,
+  infoCardHalves,
   infoSheetSidePair,
   infoSheetSides,
   Stack,
@@ -432,7 +433,7 @@ export function UserInfoSheet({
                   </Stack>
                   <RoundTripChart samples={samples} />
 
-                  <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", mt: "14px" }}>
+                  <Box sx={{ ...infoCardHalves, gap: "16px", mt: "14px" }}>
                     <Box>
                       <Stack direction="row" alignItems="center" sx={{ mb: "6px" }}>
                         <InfoCaps>{t("sidebar:userInfo.bandwidth")}</InfoCaps>

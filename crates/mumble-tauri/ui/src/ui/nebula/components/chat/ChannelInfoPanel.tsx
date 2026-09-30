@@ -13,6 +13,7 @@
 import { useEffect } from "react";
 import { Dialog } from "@mui/material";
 import { useAppStore } from "@core/store";
+import { useInfoSheetDialogProps } from "../primitives";
 import { ChannelInfoSheet } from "./ChannelInfoSheet";
 
 interface ChannelInfoPanelProps {
@@ -27,13 +28,13 @@ export function ChannelInfoPanel({ channelId, onClose }: Readonly<ChannelInfoPan
   useEffect(() => {
     if (!known) onClose();
   }, [known, onClose]);
+  const dialog = useInfoSheetDialogProps();
 
   return (
     <Dialog
       open={known}
       onClose={onClose}
-      maxWidth={false}
-      slotProps={{ paper: { sx: { m: "16px", overflow: "hidden" } } }}
+      {...dialog}
     >
       {known && <ChannelInfoSheet channelId={channelId} onClose={onClose} />}
     </Dialog>

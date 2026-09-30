@@ -52,6 +52,7 @@ import {
   LinkGuard,
   StatChip,
   Stack,
+  useInfoSheetDialogProps,
 } from "../primitives";
 import { StatusDot } from "../primitives/StatusDot";
 
@@ -353,12 +354,12 @@ interface ServerInfoPanelProps {
 
 /** The Server information sheet, over the shell. */
 export function ServerInfoPanel({ livery = null, onClose }: Readonly<ServerInfoPanelProps>) {
+  const dialog = useInfoSheetDialogProps();
   return (
     <Dialog
       open
       onClose={onClose}
-      maxWidth={false}
-      slotProps={{ paper: { sx: { m: "16px", overflow: "hidden" } } }}
+      {...dialog}
     >
       <ServerInfoSheet livery={livery} onClose={onClose} />
     </Dialog>

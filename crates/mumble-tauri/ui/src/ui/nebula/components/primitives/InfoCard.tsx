@@ -42,7 +42,11 @@ const NARROW_SHEET = `@media ${HANDHELD_QUERY}`;
 /** Where a card sits in the wide layout: whole, one under the next. */
 const COLUMN_ITEM = { breakInside: "avoid", marginBottom: "12px" };
 
-/** A sheet's width: the mock's 560, and 900 where the window allows. */
+/**
+ * A sheet's width: the mock's 560, and 900 where the window allows. On a
+ * handheld the dialog goes full screen and stretches the sheet to fill it
+ * (`useInfoSheetDialogProps`).
+ */
 export const infoSheetFrame = { width: 560, maxWidth: "100%", [WIDE_SHEET]: { width: 900 } };
 
 /** The cards: stacked, and in two balanced columns on a wide sheet. */
@@ -96,15 +100,23 @@ export const infoSheetSide = {
 };
 
 /**
- * The pair inside a side: side by side while the sheet is narrow, and one
- * under the other once a side is only half of it, where they share whatever
- * height the side has been given.
+ * The pair inside a side: side by side on a mid-sized sheet, and one under
+ * the other where there is no room for two - on a phone, and once a side is
+ * only half of a wide sheet, where they share whatever height it was given.
  */
 export const infoSheetSidePair = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr",
   gap: "12px",
+  [NARROW_SHEET]: { gridTemplateColumns: "1fr" },
   [WIDE_SHEET]: { gridTemplateColumns: "1fr" },
+};
+
+/** Two small figures abreast inside one card, stacked where a card is phone-narrow. */
+export const infoCardHalves = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  [NARROW_SHEET]: { gridTemplateColumns: "1fr" },
 };
 
 /**

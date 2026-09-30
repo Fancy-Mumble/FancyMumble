@@ -9,6 +9,7 @@ import { useAppStore } from "@core/store";
 import type { BanEntry, UserEntry } from "@core/types";
 import { useAclGroups } from "@ui/standard/hooks/useAclGroups";
 import { userMenuActions, withoutModeration } from "../../selectors";
+import { useInfoSheetDialogProps } from "../primitives";
 import { groupsOf } from "./userCardModel";
 import { describeBans, plainViewerStats, viewerIsAdmin, type BanNote } from "./userInfoModel";
 import { useLiveUserStats } from "./useLiveUserStats";
@@ -40,13 +41,13 @@ export function UserInfoDialog({ session, onClose }: Readonly<UserInfoDialogProp
   useEffect(() => {
     if (session !== null && !user) onClose();
   }, [session, user, onClose]);
+  const dialog = useInfoSheetDialogProps();
 
   return (
     <Dialog
       open={!!user}
       onClose={onClose}
-      maxWidth={false}
-      slotProps={{ paper: { sx: { m: "16px", overflow: "hidden" } } }}
+      {...dialog}
     >
       {user && <UserInfoContent user={user} onClose={onClose} />}
     </Dialog>

@@ -27,8 +27,10 @@ export {
   infoSheetFrame,
   infoSheetPair,
   infoSheetSide,
+  infoCardHalves,
   infoSheetSidePair,
   infoSheetSides,
 } from "./InfoCard";
+export { useInfoSheetDialogProps } from "./infoSheetDialog";
 export { MakeRoom } from "./MakeRoom";
 export { RoleColorsContext, useRoleColor } from "./roleColors";
