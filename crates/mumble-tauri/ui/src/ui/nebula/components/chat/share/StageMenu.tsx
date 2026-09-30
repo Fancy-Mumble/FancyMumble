@@ -29,6 +29,7 @@ import {
   PopoutIcon,
   ScreenShareIcon,
   SettingsIcon,
+  WebcamIcon,
 } from "@ui/icons";
 import { radius } from "../../../tokens";
 import { contextMenuRootSlot } from "../../contextMenuRoot";
@@ -69,6 +70,9 @@ export interface StageMenuProps {
   readonly fit: FitMode;
   readonly onFit: (mode: FitMode) => void;
   readonly onCopyFrame: () => void;
+  /** Share our camera too. Only given where the stage has no button of its own
+   *  for it - a phone, whose stage keeps a single button for everything. */
+  readonly onShareCamera?: (() => void) | null;
   readonly annotating: boolean;
   /** Null until the channel and our own session are both known, which is what
    *  an annotation is addressed by. */
@@ -91,6 +95,7 @@ export function StageMenu({
   fit,
   onFit,
   onCopyFrame,
+  onShareCamera = null,
   annotating,
   onToggleAnnotating,
   expanded,
@@ -165,6 +170,12 @@ export function StageMenu({
         <CameraIcon width={13} height={13} />
         {t("nebulaChat:share.copyFrame")}
       </MenuItem>
+      {onShareCamera && (
+        <MenuItem sx={ITEM} onClick={run(onShareCamera)}>
+          <WebcamIcon width={13} height={13} />
+          {t("nebulaChat:share.shareCamera")}
+        </MenuItem>
+      )}
       {onToggleAnnotating && (
         <MenuItem
           sx={ITEM}

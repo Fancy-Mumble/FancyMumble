@@ -20,6 +20,7 @@ import {
 } from "@ui/icons";
 import { Stack } from "../../primitives";
 import { radius } from "../../../tokens";
+import { useIsHandheld } from "../../../useIsHandheld";
 import { FEED_BADGE, feedSummary, type StreamFeed } from "./feeds";
 import { ANNOTATION_FIT, FIT_LABEL_KEYS, FIT_MODES, MEDIA_STYLE, type FitMode } from "./fitMode";
 import { StageMenu, type StageMenuAnchor } from "./StageMenu";
@@ -73,6 +74,10 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
   const activeServerId = useAppStore((state) => state.activeServerId);
   const currentChannel = useAppStore((state) => state.currentChannel);
   const capture = useCaptureExclusion();
+  // A phone gets the picture edge to edge, no caption strip over it, and one
+  // thumb-sized button that brings every control up as a sheet - the row of
+  // 26px glass buttons the window draws is too small to hit there.
+  const handheld = useIsHandheld();
 
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [fitMode, setFitMode] = useState<FitMode>("fit");
@@ -305,15 +310,21 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
               gap: "10px",
               background: theme.palette.nebula.bg0,
             }
-          : {
-              flex: "none",
-              margin: "12px 20px 0",
-              padding: "6px",
-              borderRadius: radius("lg"),
-              border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
-              background: theme.palette.nebula.panel,
-              backdropFilter: "blur(18px)",
-            }),
+          : handheld
+            ? {
+                flex: "none",
+                borderBottom: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
+                background: theme.palette.nebula.panel,
+              }
+            : {
+                flex: "none",
+                margin: "12px 20px 0",
+                padding: "6px",
+                borderRadius: radius("lg"),
+                border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
+                background: theme.palette.nebula.panel,
+                backdropFilter: "blur(18px)",
+              }),
       })}
     >
       <Box
@@ -333,10 +344,14 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
           }}
           sx={(theme) => ({
             position: "relative",
-            borderRadius: radius("md"),
             background: WELL_BG,
-            border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
             overflow: "hidden",
+            ...(handheld
+              ? null
+              : {
+                  borderRadius: radius("md"),
+                  border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line2}`,
+                }),
           })}
         >
           <Box
@@ -376,17 +391,19 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
           )}
 
           {/* The picture is arbitrary, so the chrome brings its own contrast. */}
-          <Box
-            sx={{
-              position: "absolute",
-              left: 0,
-              right: 0,
-              top: 0,
-              height: 52,
-              background: "linear-gradient(180deg,rgba(6,9,16,.62),transparent)",
-              pointerEvents: "none",
-            }}
-          />
+          {!handheld && (
+            <Box
+              sx={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                top: 0,
+                height: 52,
+                background: "linear-gradient(180deg,rgba(6,9,16,.62),transparent)",
+                pointerEvents: "none",
+              }}
+            />
+          )}
           <Box
             sx={{
               position: "absolute",
@@ -399,192 +416,229 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
             }}
           />
 
-          <Stack
-            direction="row"
-            alignItems="center"
-            gap="8px"
-            sx={{ position: "absolute", left: 9, right: 9, top: 8, zIndex: 4 }}
-          >
+          {!handheld && (
             <Stack
               direction="row"
               alignItems="center"
-              gap="5px"
-              sx={{
-                flex: "none",
-                padding: "2px 7px 2px 5px",
-                borderRadius: radius("sm"),
-                background: "rgba(217,87,87,.22)",
-                border: "var(--nebula-line-width, 1px) solid rgba(217,87,87,.4)",
-                color: "#f3adad",
-                fontSize: 9.5,
-                fontWeight: 600,
-                letterSpacing: ".04em",
-                backdropFilter: "blur(8px)",
-              }}
+              gap="8px"
+              sx={{ position: "absolute", left: 9, right: 9, top: 8, zIndex: 4 }}
             >
-              <Box sx={{ width: 5, height: 5, borderRadius: "50%", background: "#e06b6b" }} />
-              {t("chat:streamFocus.liveBadge")}
-            </Stack>
-            <Typography
-              sx={{
-                fontSize: 11,
-                fontWeight: 500,
-                color: "#e9ecf3",
-                textShadow: "0 1px 3px rgba(0,0,0,.5)",
-                minWidth: 0,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {`${focused.name} · ${focused.kind}`}
-            </Typography>
-            {stats.width !== null && stats.height !== null && (
-              <Typography
-                sx={{ flex: "none", fontSize: 10, color: "#aeb6c4", fontVariantNumeric: "tabular-nums" }}
+              <Stack
+                direction="row"
+                alignItems="center"
+                gap="5px"
+                sx={{
+                  flex: "none",
+                  padding: "2px 7px 2px 5px",
+                  borderRadius: radius("sm"),
+                  background: "rgba(217,87,87,.22)",
+                  border: "var(--nebula-line-width, 1px) solid rgba(217,87,87,.4)",
+                  color: "#f3adad",
+                  fontSize: 9.5,
+                  fontWeight: 600,
+                  letterSpacing: ".04em",
+                  backdropFilter: "blur(8px)",
+                }}
               >
-                {`${stats.width}×${stats.height}`}
+                <Box sx={{ width: 5, height: 5, borderRadius: "50%", background: "#e06b6b" }} />
+                {t("chat:streamFocus.liveBadge")}
+              </Stack>
+              <Typography
+                sx={{
+                  fontSize: 11,
+                  fontWeight: 500,
+                  color: "#e9ecf3",
+                  textShadow: "0 1px 3px rgba(0,0,0,.5)",
+                  minWidth: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {`${focused.name} · ${focused.kind}`}
               </Typography>
-            )}
-            <Typography
-              sx={{
-                marginLeft: "auto",
-                flex: "none",
-                fontSize: 10,
-                color: "#aeb6c4",
-                fontVariantNumeric: "tabular-nums",
-                textShadow: "0 1px 3px rgba(0,0,0,.5)",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {caption}
-            </Typography>
-          </Stack>
+              {stats.width !== null && stats.height !== null && (
+                <Typography
+                  sx={{ flex: "none", fontSize: 10, color: "#aeb6c4", fontVariantNumeric: "tabular-nums" }}
+                >
+                  {`${stats.width}×${stats.height}`}
+                </Typography>
+              )}
+              <Typography
+                sx={{
+                  marginLeft: "auto",
+                  flex: "none",
+                  fontSize: 10,
+                  color: "#aeb6c4",
+                  fontVariantNumeric: "tabular-nums",
+                  textShadow: "0 1px 3px rgba(0,0,0,.5)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {caption}
+              </Typography>
+            </Stack>
+          )}
 
           {/* Above the annotation canvas (z-index 3), which covers the whole
               well while drawing is on - including the button that ends it. */}
-          <Stack
-            direction="row"
-            alignItems="center"
-            gap="6px"
-            sx={{ position: "absolute", left: 9, right: 9, bottom: 8, zIndex: 4 }}
-          >
-            <Stack
-              direction="row"
-              gap="2px"
+          {handheld ? (
+            <Box
+              component="button"
+              type="button"
+              aria-label={t("share.streamOptions")}
+              aria-haspopup="menu"
+              aria-expanded={menuAt !== null}
+              data-testid={TID.streamConfigMenu}
+              onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
+                const button = event.currentTarget;
+                setMenuAt((open) => (open === null ? button : null));
+              }}
               sx={{
-                padding: "2px",
-                borderRadius: radius("md"),
+                position: "absolute",
+                right: 10,
+                bottom: 10,
+                zIndex: 4,
+                width: 44,
+                height: 44,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 0,
+                borderRadius: "50%",
+                color: "#e9ecf3",
                 background: GLASS_BG,
                 border: GLASS_LINE,
                 backdropFilter: GLASS_BLUR,
+                cursor: "pointer",
               }}
             >
-              {FIT_MODES.map((mode) => (
-                <Box
-                  key={mode}
-                  component="button"
-                  type="button"
-                  onClick={() => setFitMode(mode)}
-                  sx={{
-                    padding: "0 8px",
-                    height: 20,
-                    border: "none",
-                    borderRadius: radius("sm"),
-                    display: "flex",
-                    alignItems: "center",
-                    fontSize: 10,
-                    fontWeight: 500,
-                    fontFamily: "inherit",
-                    cursor: "pointer",
-                    background: fitMode === mode ? "rgba(52,168,235,.3)" : "transparent",
-                    color: fitMode === mode ? "#d3ebfb" : "#b3bbc8",
-                  }}
-                >
-                  {mode === "actual" ? "1:1" : t(FIT_LABEL_KEYS[mode])}
-                </Box>
-              ))}
-            </Stack>
-
-            <Stack direction="row" alignItems="center" gap="5px" sx={{ marginLeft: "auto" }}>
-              <OverlayButton title={t("share.copyScreenshot")} onClick={takeScreenshot}>
-                <CameraIcon width={12} height={12} />
-              </OverlayButton>
-              <OverlayButton
-                title={t("share.shareCamera")}
-                testId={TID.cameraShareToggle}
-                onClick={share.startCameraSharing}
-              >
-                <WebcamIcon width={12} height={12} />
-              </OverlayButton>
-              {currentChannel !== null && ownSession !== null && (
-                <OverlayButton
-                  title={annotating ? t("chat:screenShare.drawOff") : t("chat:screenShare.drawOn")}
-                  active={annotating}
-                  pressed={annotating}
-                  onClick={toggleAnnotating}
-                >
-                  <EditIcon width={12} height={12} />
-                </OverlayButton>
-              )}
-              <OverlayButton
-                title={t("share.streamOptions")}
-                testId={TID.streamConfigMenu}
-                active={menuAt !== null}
-                // Read out of the event before the updater runs: React has
-                // cleared `currentTarget` by the time a state updater is
-                // called, so the anchor has to be taken here.
-                onClick={(event) => {
-                  const button = event.currentTarget;
-                  setMenuAt((open) => (open === null ? button : null));
+              <KebabMenuIcon width={20} height={20} />
+            </Box>
+          ) : (
+            <Stack
+              direction="row"
+              alignItems="center"
+              gap="6px"
+              sx={{ position: "absolute", left: 9, right: 9, bottom: 8, zIndex: 4 }}
+            >
+              <Stack
+                direction="row"
+                gap="2px"
+                sx={{
+                  padding: "2px",
+                  borderRadius: radius("md"),
+                  background: GLASS_BG,
+                  border: GLASS_LINE,
+                  backdropFilter: GLASS_BLUR,
                 }}
               >
-                <KebabMenuIcon width={12} height={12} />
-              </OverlayButton>
-              <OverlayButton
-                title={expanded ? t("chat:screenShare.exitFullscreen") : t("chat:screenShare.fullscreen")}
-                onClick={toggleExpanded}
-              >
-                {expanded ? (
-                  <FullscreenExitIcon width={12} height={12} />
-                ) : (
-                  <FullscreenIcon width={12} height={12} />
+                {FIT_MODES.map((mode) => (
+                  <Box
+                    key={mode}
+                    component="button"
+                    type="button"
+                    onClick={() => setFitMode(mode)}
+                    sx={{
+                      padding: "0 8px",
+                      height: 20,
+                      border: "none",
+                      borderRadius: radius("sm"),
+                      display: "flex",
+                      alignItems: "center",
+                      fontSize: 10,
+                      fontWeight: 500,
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      background: fitMode === mode ? "rgba(52,168,235,.3)" : "transparent",
+                      color: fitMode === mode ? "#d3ebfb" : "#b3bbc8",
+                    }}
+                  >
+                    {mode === "actual" ? "1:1" : t(FIT_LABEL_KEYS[mode])}
+                  </Box>
+                ))}
+              </Stack>
+
+              <Stack direction="row" alignItems="center" gap="5px" sx={{ marginLeft: "auto" }}>
+                <OverlayButton title={t("share.copyScreenshot")} onClick={takeScreenshot}>
+                  <CameraIcon width={12} height={12} />
+                </OverlayButton>
+                <OverlayButton
+                  title={t("share.shareCamera")}
+                  testId={TID.cameraShareToggle}
+                  onClick={share.startCameraSharing}
+                >
+                  <WebcamIcon width={12} height={12} />
+                </OverlayButton>
+                {currentChannel !== null && ownSession !== null && (
+                  <OverlayButton
+                    title={annotating ? t("chat:screenShare.drawOff") : t("chat:screenShare.drawOn")}
+                    active={annotating}
+                    pressed={annotating}
+                    onClick={toggleAnnotating}
+                  >
+                    <EditIcon width={12} height={12} />
+                  </OverlayButton>
                 )}
-              </OverlayButton>
-              {/* The only stream this client can end is its own, so the red
-                  button means that and nothing else - a viewer watching
-                  someone else is not offered a stop they cannot perform. */}
-              {share.isBroadcasting && (
-                <Box
-                  component="button"
-                  type="button"
-                  onClick={share.stopSharing}
-                  title={t("chat:screenShare.stopSharing")}
-                  data-testid={TID.screenShareToggle}
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "5px",
-                    padding: "0 9px",
-                    height: 26,
-                    flex: "none",
-                    borderRadius: radius("md"),
-                    background: "rgba(217,87,87,.2)",
-                    border: "var(--nebula-line-width, 1px) solid rgba(217,87,87,.42)",
-                    color: "#f0b0b0",
-                    fontSize: 10.5,
-                    fontWeight: 500,
-                    fontFamily: "inherit",
-                    cursor: "pointer",
-                    backdropFilter: GLASS_BLUR,
-                    "&:hover": { background: "rgba(217,87,87,.3)" },
+                <OverlayButton
+                  title={t("share.streamOptions")}
+                  testId={TID.streamConfigMenu}
+                  active={menuAt !== null}
+                  // Read out of the event before the updater runs: React has
+                  // cleared `currentTarget` by the time a state updater is
+                  // called, so the anchor has to be taken here.
+                  onClick={(event) => {
+                    const button = event.currentTarget;
+                    setMenuAt((open) => (open === null ? button : null));
                   }}
                 >
-                  {t("share.stop")}
-                </Box>
-              )}
+                  <KebabMenuIcon width={12} height={12} />
+                </OverlayButton>
+                <OverlayButton
+                  title={expanded ? t("chat:screenShare.exitFullscreen") : t("chat:screenShare.fullscreen")}
+                  onClick={toggleExpanded}
+                >
+                  {expanded ? (
+                    <FullscreenExitIcon width={12} height={12} />
+                  ) : (
+                    <FullscreenIcon width={12} height={12} />
+                  )}
+                </OverlayButton>
+                {/* The only stream this client can end is its own, so the red
+                  button means that and nothing else - a viewer watching
+                  someone else is not offered a stop they cannot perform. */}
+                {share.isBroadcasting && (
+                  <Box
+                    component="button"
+                    type="button"
+                    onClick={share.stopSharing}
+                    title={t("chat:screenShare.stopSharing")}
+                    data-testid={TID.screenShareToggle}
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "5px",
+                      padding: "0 9px",
+                      height: 26,
+                      flex: "none",
+                      borderRadius: radius("md"),
+                      background: "rgba(217,87,87,.2)",
+                      border: "var(--nebula-line-width, 1px) solid rgba(217,87,87,.42)",
+                      color: "#f0b0b0",
+                      fontSize: 10.5,
+                      fontWeight: 500,
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      backdropFilter: GLASS_BLUR,
+                      "&:hover": { background: "rgba(217,87,87,.3)" },
+                    }}
+                  >
+                    {t("share.stop")}
+                  </Box>
+                )}
+              </Stack>
             </Stack>
-          </Stack>
+          )}
         </Box>
 
         {showRail && (
@@ -640,6 +694,7 @@ export function ScreenShareStage({ feeds, share, onOpenQuality }: Readonly<Scree
           fit={fitMode}
           onFit={setFitMode}
           onCopyFrame={takeScreenshot}
+          onShareCamera={handheld ? share.startCameraSharing : null}
           annotating={annotating}
           onToggleAnnotating={currentChannel !== null && ownSession !== null ? toggleAnnotating : null}
           expanded={expanded}

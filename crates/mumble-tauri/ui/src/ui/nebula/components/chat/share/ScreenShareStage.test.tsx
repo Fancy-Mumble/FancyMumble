@@ -122,4 +122,18 @@ describe("ScreenShareStage", () => {
     expect(screen.getByRole("menu")).toBeTruthy();
     expect(screen.getByText("Stats for Nerds")).toBeTruthy();
   });
+  it("gives a phone one button for every control, and no caption over the picture", () => {
+    document.documentElement.setAttribute("data-nebula-handheld", "on");
+    try {
+      mount();
+      expect(screen.queryByText("LIVE")).toBeNull();
+      expect(screen.queryByLabelText("Share your camera")).toBeNull();
+      fireEvent.click(screen.getByTestId(TID.streamConfigMenu));
+      const menu = within(screen.getByRole("menu"));
+      expect(menu.getByText("Share your camera")).toBeTruthy();
+      expect(menu.getByText("Stats for Nerds")).toBeTruthy();
+    } finally {
+      document.documentElement.removeAttribute("data-nebula-handheld");
+    }
+  });
 });
