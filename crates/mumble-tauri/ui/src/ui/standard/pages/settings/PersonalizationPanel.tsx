@@ -21,6 +21,7 @@ import {
 } from "../../icons";
 import { THEMES, applyTheme } from "../../themes";
 import type { ThemeId } from "../../themes";
+import { EXTERNAL_THEME, useExternalThemeAvailable } from "../../externalTheme";
 import {
   clearChatBackgroundStore,
   isStoreRef,
@@ -322,6 +323,7 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
   // or a `bgstore:` reference to a file in the backend's store.
   const previewImage = useResolvedBackgroundSource(data.chatBgBlurred ?? data.chatBgOriginal);
 
+  const externalThemeAvailable = useExternalThemeAvailable();
   const handleThemeChange = useCallback(
     (id: ThemeId) => {
       applyTheme(id);
@@ -347,7 +349,7 @@ export function PersonalizationPanel({ data, onChange, isExpert }: Personalizati
         <h3 className={styles.sectionTitle}>{t("personalize.theme")}</h3>
         <p className={styles.fieldHint}>{t("personalize.themeHint")}</p>
         <div className={styles.optionGrid}>
-          {THEMES.map((theme) => (
+          {(externalThemeAvailable ? [...THEMES, EXTERNAL_THEME] : THEMES).map((theme) => (
             <button
               key={theme.id}
               type="button"

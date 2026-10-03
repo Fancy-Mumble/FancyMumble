@@ -17,6 +17,7 @@
 
   /* -- Text (neutral greys) -------------------------------------- */
   --color-text-primary: #d0d0d0;
+  --color-text-rgb: 208, 208, 208;
   --color-text-secondary: rgba(208, 208, 208, 0.65);
   --color-text-muted: rgba(208, 208, 208, 0.4);
   --color-text-on-accent: #ffffff;
