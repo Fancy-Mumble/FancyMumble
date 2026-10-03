@@ -21,23 +21,32 @@
 //! unaffected). `enable-media-stream` does take effect there, which the
 //! viewer layer needs the day the platform can do `WebRTC`.
 
-/// Enable WebRTC on every webview window that exists at setup time (the
-/// main window; popouts run [`enable_webrtc`] individually on creation).
-pub(crate) fn enable_webrtc_on_startup_windows(app: &tauri::App) {
+use std::cell::Cell;
+use std::time::{Duration, Instant};
+
+/// A web process that dies again this soon after a reload is crash-looping;
+/// reloading once more would only spin.
+const RELOAD_BACKOFF: Duration = Duration::from_secs(30);
+
+/// Configure every webview window that exists at setup time (the main
+/// window; popouts run [`configure_webview`] individually on creation).
+pub(crate) fn configure_startup_webviews(app: &tauri::App) {
     use tauri::Manager;
     for window in app.webview_windows().values() {
-        enable_webrtc(window);
+        configure_webview(window);
     }
 }
 
 /// Enable WebRTC (and the `MediaStream` API the viewer builds its streams
-/// with) on one webview window. Best effort: on failure the window still
-/// works, minus stream viewing, and says why in the log.
-pub(crate) fn enable_webrtc(window: &tauri::WebviewWindow) {
+/// with) on one webview window, and reload it if its web process exits.
+/// Best effort: on failure the window still works, minus stream viewing,
+/// and says why in the log.
+pub(crate) fn configure_webview(window: &tauri::WebviewWindow) {
     let label = window.label().to_owned();
     let result = window.with_webview(move |platform_webview| {
         use webkit2gtk::{SettingsExt, WebViewExt};
         let webview = platform_webview.inner();
+        reload_when_web_process_exits(&webview, label.clone());
         let Some(settings) = webview.settings() else {
             tracing::warn!(%label, "webkit settings unavailable; WebRTC stays off");
             return;
@@ -53,6 +62,23 @@ pub(crate) fn enable_webrtc(window: &tauri::WebviewWindow) {
         tracing::info!(%label, "webkit webview: WebRTC + MediaStream enabled");
     });
     if let Err(e) = result {
-        tracing::warn!("enabling WebRTC on a webview failed: {e}");
+        tracing::warn!("configuring a webview failed: {e}");
     }
+}
+
+/// The windows are transparent, so a webview whose web process has gone
+/// draws nothing at all: the window turns invisible while the backend (and
+/// any voice session) keeps running. Reloading starts a fresh web process.
+fn reload_when_web_process_exits(webview: &webkit2gtk::WebView, label: String) {
+    use webkit2gtk::WebViewExt;
+    let last_reload: Cell<Option<Instant>> = Cell::new(None);
+    let _ = webview.connect_web_process_terminated(move |webview, reason| {
+        if last_reload.get().is_some_and(|t| t.elapsed() < RELOAD_BACKOFF) {
+            tracing::error!(%label, ?reason, "webkit web process exited again right after a reload; not reloading");
+            return;
+        }
+        tracing::error!(%label, ?reason, "webkit web process exited; reloading the page");
+        last_reload.set(Some(Instant::now()));
+        webview.reload();
+    });
 }

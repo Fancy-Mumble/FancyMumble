@@ -134,9 +134,10 @@ pub fn run() {
         .setup(move |app| {
             app::init_app_state(app);
             // WebKitGTK ships WebRTC off; without this no Linux webview has
-            // RTCPeerConnection and stream viewing/previews cannot work.
+            // RTCPeerConnection and stream viewing/previews cannot work. Also
+            // reloads a webview whose web process exits.
             #[cfg(target_os = "linux")]
-            app::webview_linux::enable_webrtc_on_startup_windows(app);
+            app::webview_linux::configure_startup_webviews(app);
             platform::setup(app.handle().clone());
             app::setup_deep_link_handler(app.handle().clone());
             #[cfg(not(target_os = "android"))]

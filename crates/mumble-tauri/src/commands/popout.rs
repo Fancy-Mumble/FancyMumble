@@ -67,7 +67,7 @@ pub(crate) async fn open_image_popout(
     .map_err(|e: tauri::Error| e.to_string())?;
     crate::platform::strip_system_chrome(&window);
     #[cfg(target_os = "linux")]
-    crate::app::webview_linux::enable_webrtc(&window);
+    crate::app::webview_linux::configure_webview(&window);
 
     Ok(())
 }
@@ -161,7 +161,7 @@ pub(crate) async fn open_stream_popout(
     .map_err(|e: tauri::Error| e.to_string())?;
     crate::platform::strip_system_chrome(&window);
     #[cfg(target_os = "linux")]
-    crate::app::webview_linux::enable_webrtc(&window);
+    crate::app::webview_linux::configure_webview(&window);
     Ok(())
 }
 
@@ -240,7 +240,7 @@ pub(crate) async fn open_dm_popout(
     .map_err(|e: tauri::Error| e.to_string())?;
     crate::platform::strip_system_chrome(&window);
     #[cfg(target_os = "linux")]
-    crate::app::webview_linux::enable_webrtc(&window);
+    crate::app::webview_linux::configure_webview(&window);
     Ok(())
 }
 
@@ -297,7 +297,7 @@ pub(crate) async fn open_translation_popout(app: tauri::AppHandle) -> Result<(),
     .map_err(|e: tauri::Error| e.to_string())?;
     crate::platform::strip_system_chrome(&window);
     #[cfg(target_os = "linux")]
-    crate::app::webview_linux::enable_webrtc(&window);
+    crate::app::webview_linux::configure_webview(&window);
     Ok(())
 }
 
