@@ -10,6 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import type { SavedServer } from "../../types";
 import { getServerPassword, setServerPassword } from "../../serverStorage";
+import { importIdentity } from "../../utils/importIdentity";
 import { isMobile } from "../../utils/platform";
 import MobileBottomSheet from "../elements/MobileBottomSheet";
 import styles from "./ServerEditSheet.module.css";
@@ -33,6 +34,7 @@ function EditForm({ server, onSave, onClose }: Readonly<Props>) {
   const [availableCerts, setAvailableCerts] = useState<string[]>([]);
   const [creatingCert, setCreatingCert] = useState(false);
   const [newCertName, setNewCertName] = useState("");
+  const [certError, setCertError] = useState<string | null>(null);
 
   const refreshCerts = useCallback(() => {
     invoke<string[]>("list_certificates")
@@ -48,6 +50,18 @@ function EditForm({ server, onSave, onClose }: Readonly<Props>) {
       }
     });
   }, [server.id, refreshCerts]);
+
+  const handleImportCert = async () => {
+    setCertError(null);
+    try {
+      const imported = await importIdentity();
+      if (!imported) return;
+      await refreshCerts();
+      setCertLabel(imported);
+    } catch (e) {
+      setCertError(String(e));
+    }
+  };
 
   const handleCreateCert = async () => {
     const name = newCertName.trim();
@@ -136,6 +150,9 @@ function EditForm({ server, onSave, onClose }: Readonly<Props>) {
           onChange={(e) => {
             if (e.target.value === "__new__") {
               setCreatingCert(true);
+            } else if (e.target.value === "__import__") {
+              setCreatingCert(false);
+              handleImportCert();
             } else {
               setCreatingCert(false);
               setCertLabel(e.target.value);
@@ -149,7 +166,9 @@ function EditForm({ server, onSave, onClose }: Readonly<Props>) {
             </option>
           ))}
           <option value="__new__">{t("edit.certCreateNew")}</option>
+          <option value="__import__">{t("edit.certImport")}</option>
         </select>
+        {certError && <span className={styles.certError}>{certError}</span>}
         {creatingCert && (
           <div className={styles.newCertRow}>
             <input

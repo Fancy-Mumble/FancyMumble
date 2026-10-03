@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { save, open } from "@tauri-apps/plugin-dialog";
+import { save } from "@tauri-apps/plugin-dialog";
+import { importIdentity } from "../../utils/importIdentity";
 import { deleteProfileData } from "./profileData";
 import styles from "./SettingsPage.module.css";
 import panelStyles from "./IdentitiesPanel.module.css";
@@ -73,12 +74,7 @@ export function IdentitiesPanel({
   const handleImport = useCallback(async () => {
     setError(null);
     try {
-      const selected = await open({
-        multiple: false,
-        filters: [{ name: "Fancy Mumble Identity", extensions: ["fmid"] }],
-      });
-      if (!selected) return;
-      await invoke("import_certificate", { srcPath: selected });
+      if (!(await importIdentity())) return;
       onRefresh();
     } catch (e) {
       setError(String(e));

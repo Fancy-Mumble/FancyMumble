@@ -12,13 +12,19 @@ CMAKE_POLICY_VERSION_MINIMUM = "3.5"
 # On Windows, CMake defaults to the Visual Studio generator which cannot
 # cross-compile for Android. Force Ninja for every Android target triple so
 # the NDK toolchain is used correctly regardless of host OS.
-# The actual CMAKE_TOOLCHAIN_FILE is set per-target by android-dev.ps1 using
-# wrapper files (scripts/cmake/*-android.toolchain.cmake) that pre-set
-# ANDROID_ABI before including the real NDK toolchain.
 CMAKE_GENERATOR_aarch64_linux_android     = "Ninja"
 CMAKE_GENERATOR_armv7_linux_androideabi   = "Ninja"
 CMAKE_GENERATOR_x86_64_linux_android      = "Ninja"
 CMAKE_GENERATOR_i686_linux_android        = "Ninja"
+
+# Per-target toolchain wrappers (scripts/cmake/*-android.toolchain.cmake)
+# pre-set ANDROID_ABI and include the real NDK toolchain via $ENV{NDK_HOME},
+# so they are machine-independent and a plain `cargo tauri android build`
+# works from any shell without running android-dev.ps1 first.
+CMAKE_TOOLCHAIN_FILE_aarch64_linux_android   = { value = "scripts/cmake/aarch64-android.toolchain.cmake", relative = true }
+CMAKE_TOOLCHAIN_FILE_armv7_linux_androideabi = { value = "scripts/cmake/armv7-android.toolchain.cmake",   relative = true }
+CMAKE_TOOLCHAIN_FILE_x86_64_linux_android    = { value = "scripts/cmake/x86_64-android.toolchain.cmake",  relative = true }
+CMAKE_TOOLCHAIN_FILE_i686_linux_android      = { value = "scripts/cmake/i686-android.toolchain.cmake",    relative = true }
 
 # Disable outlined atomics on aarch64 Android.  The outlined-atomics
 # helpers (init_have_lse_atomics -> getauxval) from libclang_rt.builtins

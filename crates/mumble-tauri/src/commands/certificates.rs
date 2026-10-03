@@ -44,14 +44,22 @@ pub(crate) async fn export_certificate(
 }
 
 /// Import an identity from a user-chosen file via the native open dialog.
+/// `src_path` may be a plain path or, on Android, a `content://` URI.
 /// Returns the label of the imported identity.
 #[tauri::command]
 pub(crate) async fn import_certificate(
     app: tauri::AppHandle,
     src_path: String,
 ) -> Result<String, String> {
+    use tauri_plugin_fs::{FilePath, FsExt};
+
     let data_dir = crate::e2e_data_dir(&app)?;
-    state::pchat::IdentityStore::new(data_dir).import(std::path::Path::new(&src_path))
+    let src: FilePath = src_path.parse().map_err(|e| format!("{e:?}"))?;
+    let json = app
+        .fs()
+        .read_to_string(src)
+        .map_err(|e| format!("Failed to read import file: {e}"))?;
+    state::pchat::IdentityStore::new(data_dir).import(&json)
 }
 
 /// Detached signature produced with an identity's real Mumble client key.

@@ -273,15 +273,13 @@ impl IdentityStore {
         Ok(())
     }
 
-    /// Import an identity from a JSON bundle at `src`.
+    /// Import an identity from the contents of a JSON bundle.
     /// Returns the label embedded in the bundle.
-    pub fn import(&self, src: &Path) -> Result<String, String> {
+    pub fn import(&self, json: &str) -> Result<String, String> {
         use serde_json::Value;
 
-        let json = std::fs::read_to_string(src)
-            .map_err(|e| format!("Failed to read import file: {e}"))?;
         let bundle: serde_json::Map<String, Value> =
-            serde_json::from_str(&json).map_err(|e| format!("Invalid identity file: {e}"))?;
+            serde_json::from_str(json).map_err(|e| format!("Invalid identity file: {e}"))?;
 
         let label = bundle
             .get("_label")
@@ -306,7 +304,56 @@ impl IdentityStore {
                 .map_err(|e| format!("Failed to write seed: {e}"))?;
         }
 
-        info!(label, ?src, "imported identity");
+        info!(label, "imported identity");
         Ok(label)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
+
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn exported_identity_imports_into_another_store() {
+        let desktop_dir = TempDir::new().unwrap();
+        let desktop = IdentityStore::new(desktop_dir.path().to_path_buf());
+        desktop.generate_cert("me").unwrap();
+        let seed = desktop.load_or_generate_seed("me").unwrap();
+        let bundle = desktop_dir.path().join("me.fmid");
+        desktop.export("me", &bundle).unwrap();
+
+        let phone_dir = TempDir::new().unwrap();
+        let phone = IdentityStore::new(phone_dir.path().to_path_buf());
+        let json = std::fs::read_to_string(&bundle).unwrap();
+        let label = phone.import(&json).unwrap();
+
+        assert_eq!(label, "me");
+        assert_eq!(phone.load_cert("me"), desktop.load_cert("me"));
+        assert_eq!(phone.load_or_generate_seed("me").unwrap(), seed);
+    }
+
+    #[test]
+    fn import_rejects_invalid_json() {
+        let dir = TempDir::new().unwrap();
+        let store = IdentityStore::new(dir.path().to_path_buf());
+
+        let err = store.import("not json").unwrap_err();
+
+        assert!(err.starts_with("Invalid identity file"), "{err}");
+        assert!(store.list_labels().is_empty());
+    }
+
+    #[test]
+    fn import_rejects_bundle_without_label() {
+        let dir = TempDir::new().unwrap();
+        let store = IdentityStore::new(dir.path().to_path_buf());
+
+        let err = store.import(r#"{"tls.cert.pem": "x"}"#).unwrap_err();
+
+        assert_eq!(err, "Missing _label in identity file");
+        assert!(store.list_labels().is_empty());
     }
 }
