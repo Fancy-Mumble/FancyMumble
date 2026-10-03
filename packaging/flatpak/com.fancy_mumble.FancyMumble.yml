@@ -50,6 +50,16 @@ finish-args:
   # Wayland first, X11 for an actual X session, which keeps both working.
   - --env=GDK_BACKEND=wayland,x11
 
+  # Native Wayland on NVIDIA, verified against the GNOME 50 runtime's WebKitGTK
+  # 2.54. NVIDIA's EGL attaches an explicit-sync object to the toplevel, GTK
+  # then commits an SHM buffer to it, and Mutter disconnects the client:
+  # "Explicit Sync only supported on dmabuf buffers" (Gdk Error 71). Turning
+  # explicit sync off fixes that; the variable is ignored by other drivers.
+  # pre_init() disables WebKit compositing unless told otherwise, and with it
+  # off this WebKit paints a fully transparent window, so opt back in.
+  - --env=__NV_DISABLE_EXPLICIT_SYNC=1
+  - --env=WEBKIT_DISABLE_COMPOSITING_MODE=0
+
   # The whole point of the app: reaching a Mumble server, plus the file-server
   # and live-doc plugin endpoints alongside it.
   - --share=network
@@ -264,10 +274,15 @@ modules:
       #    imports it. Do not "fix" this with --omit=optional: esbuild's own
       #    per-arch binary is an optional dependency too, and dropping it breaks
       #    the build outright.
+      #
+      #    --legacy-peer-deps: the @tiptap menu extensions are locked one minor
+      #    ahead of @tiptap/core, and settling their exact peer pins needs
+      #    registry metadata that an offline install doesn't have. It installs
+      #    the same locked tree.
       - |
         set -e
         cd crates/mumble-tauri/ui
-        npm ci --offline
+        npm ci --offline --legacy-peer-deps
         npm run build
 
       # 2. The binary.
@@ -283,8 +298,15 @@ modules:
       #                     .SignalBridge extension instead, so this ref stays
       #                     MIT - see that manifest for the full reasoning.
       #      qt6ui          is a Windows/MinGW-Qt build; it cannot happen here.
+      #
+      #    deep_filter's `default-model` feature does
+      #    include_bytes!("../../models/..."), but only libDF/ gets vendored, so
+      #    the model is copied from the git checkout to where that path lands.
       - |
         set -e
+        for model in flatpak-cargo/git/deepfilternet-*/models/DeepFilterNet3_onnx.tar.gz; do
+          [ -e "$model" ] && install -Dm644 "$model" cargo/vendor/models/DeepFilterNet3_onnx.tar.gz
+        done
         export SKIP_SIGNAL_BRIDGE=1 SKIP_QT6UI=1
         cargo build --offline --release --locked \
           --no-default-features --features custom-protocol \
