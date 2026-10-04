@@ -402,6 +402,17 @@ pub(crate) async fn starling_media_url(
     state.starling_media_url(key, app_handle).await
 }
 
+/// A loopback URL that frames the third-party player at `src` (an `https`
+/// embed URL), so the player is asked for with a referrer it accepts.
+#[tauri::command]
+pub(crate) async fn embed_player_url(
+    state: tauri::State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+    src: String,
+) -> Result<String, String> {
+    state.embed_player_url(src, app_handle).await
+}
+
 /// `share` is present only for a password share, whose bytes the signed route
 /// cannot open - see `redeem_share`.
 #[tauri::command]

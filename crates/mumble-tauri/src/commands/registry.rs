@@ -170,6 +170,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::files::starling_upload_file,
         super::files::starling_download_to_file,
         super::files::starling_media_url,
+        super::files::embed_player_url,
         super::files::starling_list_files,
         super::files::starling_manage_files,
         super::files::starling_forget_file,

@@ -5,6 +5,7 @@ import { useTheme, type Theme } from "@mui/material/styles";
 
 import { useWatchStart } from "@core/features/chat/watch/useWatchStart";
 import type { EmbedMedia, LinkEmbed } from "@core/types";
+import { useEmbedPlayerUrl } from "@core/features/chat/embedPlayer";
 import { PlayIcon } from "@ui/icons";
 import { LinkGuard, Stack } from "../primitives";
 
@@ -793,6 +794,7 @@ function Poster({
     return undefined;
   })();
   const hasVideo = !!player;
+  const frameSrc = useEmbedPlayerUrl(player?.frame ? player.src : undefined);
 
   const kind = kindOf(embed, hasVideo);
   const shape = shapeOf(embed, picture, kind);
@@ -994,9 +996,9 @@ function Poster({
           }}
         >
           {player.frame ? (
-            <Box
+            frameSrc && <Box
               component="iframe"
-              src={player.src}
+              src={frameSrc}
               title={embed.title ?? label}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen

@@ -1,6 +1,7 @@
 import { memo, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { EmbedMedia, LinkEmbed } from "@core/types";
+import { useEmbedPlayerUrl } from "@core/features/chat/embedPlayer";
 import styles from "./LinkPreviewCard.module.css";
 
 /**
@@ -139,6 +140,7 @@ function VideoEmbed({
   onConsent: () => void;
 }>) {
   const { t } = useTranslation("chat");
+  const frameSrc = useEmbedPlayerUrl(embed.video?.url);
   if (!embed.video?.url) return null;
 
   const containerStyle = videoContainerStyle(embed);
@@ -190,16 +192,16 @@ function VideoEmbed({
       className={`${styles.videoContainer} ${!spotify ? styles.videoContainerDefault : ""}`}
       style={containerStyle}
     >
-      <iframe
+      {frameSrc && <iframe
         className={styles.videoIframe}
-        src={embed.video.url}
+        src={frameSrc}
         title={embed.title ?? "Embedded video"}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
         loading="lazy"
         sandbox="allow-scripts allow-same-origin allow-popups"
         style={{ background: "transparent" }}
-      />
+      />}
     </div>
   );
 }

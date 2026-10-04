@@ -66,7 +66,22 @@ impl MediaServer {
         let path = percent_encoding::utf8_percent_encode(key, percent_encoding::NON_ALPHANUMERIC);
         format!("{}/{path}", self.base_url)
     }
+
+    /// The URL of a page on this origin that frames one third-party player.
+    ///
+    /// The webview's own pages live on `tauri://localhost`, which is no
+    /// referrer YouTube accepts: since mid-2025 its embed refuses to play
+    /// without an http(s) one and shows "Error 153" instead. Framed from here
+    /// it is asked for by `http://127.0.0.1`, which it does accept.
+    pub(crate) fn player_url(&self, src: &str) -> String {
+        let src = percent_encoding::utf8_percent_encode(src, percent_encoding::NON_ALPHANUMERIC);
+        format!("{}/{PLAYER_SEGMENT}/{src}", self.base_url)
+    }
 }
+
+/// The path segment, after the token, that asks for a player page rather than
+/// a stored object. No key starts with it: keys start with a channel id.
+const PLAYER_SEGMENT: &str = "~player";
 
 /// Bring the origin up, on a port the OS picks.
 ///
@@ -218,6 +233,9 @@ where
     let Some(key) = key_of(path, token) else {
         return refuse(StatusCode::NOT_FOUND);
     };
+    if let Some(src) = key.strip_prefix(PLAYER_SEGMENT).and_then(|rest| rest.strip_prefix('/')) {
+        return player_page(src, method == Method::HEAD);
+    }
     let range = upstream_range(range_header);
 
     match fetch(key.clone(), range).await {
@@ -284,6 +302,56 @@ impl FetchedSpan {
     }
 }
 
+/// A page that does nothing but frame the player at `src`.
+///
+/// Only an `https` player is framed, and the address is escaped into the
+/// attribute, so the route cannot be talked into running anything of its own.
+fn player_page(src: &str, head_only: bool) -> Response<Full<Bytes>> {
+    if !src.starts_with("https://") {
+        return refuse(StatusCode::NOT_FOUND);
+    }
+    let src = escape_attribute(src);
+    let page = format!(
+        "<!doctype html><html><head><meta charset=\"utf-8\">\
+         <meta name=\"referrer\" content=\"strict-origin-when-cross-origin\">\
+         <style>html,body{{margin:0;height:100%;overflow:hidden;background:#000}}\
+         iframe{{border:0;width:100%;height:100%;display:block}}</style></head><body>\
+         <iframe src=\"{src}\" referrerpolicy=\"strict-origin-when-cross-origin\" \
+         allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen\" \
+         allowfullscreen></iframe></body></html>"
+    );
+    let body = if head_only {
+        Bytes::new()
+    } else {
+        Bytes::from(page)
+    };
+    Response::builder()
+        .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+        // Nothing of its own may run or load; the player is the only frame.
+        .header(
+            header::CONTENT_SECURITY_POLICY,
+            "default-src 'none'; style-src 'unsafe-inline'; frame-src https:",
+        )
+        .header(header::CACHE_CONTROL, "no-store")
+        .body(Full::new(body))
+        .unwrap_or_else(|_| refuse(StatusCode::INTERNAL_SERVER_ERROR))
+}
+
+/// `value`, safe to put between double quotes in an HTML attribute.
+fn escape_attribute(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for c in value.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '"' => out.push_str("&quot;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 /// An answer with no body, for everything that did not work.
 fn refuse(status: StatusCode) -> Response<Full<Bytes>> {
     Response::builder()
@@ -319,6 +387,31 @@ mod tests {
         assert_eq!(key_of("/wrong-token/7%2Fclip.mp4", TOKEN), None);
         assert_eq!(key_of("/7%2Fclip.mp4", TOKEN), None);
         assert_eq!(key_of(&format!("/{TOKEN}/"), TOKEN), None);
+    }
+
+    #[tokio::test]
+    async fn a_player_page_frames_an_https_player_and_nothing_else() {
+        let src = "https://www.youtube-nocookie.com/embed/abc?x=1&y=\"2\"";
+        let path = format!(
+            "/{TOKEN}/{PLAYER_SEGMENT}/{}",
+            percent_encoding::utf8_percent_encode(src, percent_encoding::NON_ALPHANUMERIC)
+        );
+        let response = serve(&Method::GET, &path, None, TOKEN, |_, _| async {
+            Err::<FetchedSpan, _>("not a stored object".to_owned())
+        })
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let page = String::from_utf8(body_of(response).await).expect("utf-8");
+        assert!(page.contains(
+            r#"src="https://www.youtube-nocookie.com/embed/abc?x=1&amp;y=&quot;2&quot;""#
+        ));
+
+        let path = format!("/{TOKEN}/{PLAYER_SEGMENT}/javascript%3Aalert(1)");
+        let response = serve(&Method::GET, &path, None, TOKEN, |_, _| async {
+            Err::<FetchedSpan, _>("not a stored object".to_owned())
+        })
+        .await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[test]

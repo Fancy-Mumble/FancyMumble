@@ -42,6 +42,7 @@ import { RibbonButton } from "./liveDocRibbonWidgets";
 import { SHAPES, shapeDataUrl } from "@core/features/chat/livedoc/liveDocInsertSvg";
 import { type LiveDocChartType } from "@core/features/chat/livedoc/liveDocChart";
 import { toVideoEmbedUrl } from "@core/features/chat/livedoc/liveDocInsert";
+import { useEmbedPlayerUrl } from "@core/features/chat/embedPlayer";
 import { signDocument } from "@core/features/chat/livedoc/liveDocSignature";
 import { useAppStore } from "@core/store";
 import { formatBytes } from "@core/utils/format";
@@ -433,6 +434,7 @@ export function OnlineVideoButton({ editor, compact }: WidgetProps) {
   const [url, setUrl] = useState("");
   const [frame, setFrame] = useState<(typeof VIDEO_FRAMES)[number]>("rounded");
   const preview = useMemo(() => toVideoEmbedUrl(url), [url]);
+  const previewSrc = useEmbedPlayerUrl(preview ?? undefined);
   const label = t("liveDoc.insert.onlineVideo", { defaultValue: "Online Video" });
 
   return (
@@ -456,7 +458,7 @@ export function OnlineVideoButton({ editor, compact }: WidgetProps) {
           </label>
           <div className={`${styles.videoPreview} ${styles[`frame_${frame}`] ?? ""}`}>
             {preview ? (
-              <iframe src={preview} title="preview" allow="encrypted-media" loading="lazy" />
+              previewSrc && <iframe src={previewSrc} title="preview" allow="encrypted-media" loading="lazy" />
             ) : (
               <span className={styles.previewEmpty}>
                 {t("liveDoc.insert.videoPreviewEmpty", { defaultValue: "Preview appears here" })}

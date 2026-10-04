@@ -13,6 +13,7 @@ import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { toVideoEmbedUrl, type LiveDocEmbedAttrs } from "@core/features/chat/livedoc/liveDocInsert";
+import { useEmbedPlayerUrl } from "@core/features/chat/embedPlayer";
 import { hashDocument, verifySignature } from "@core/features/chat/livedoc/liveDocSignature";
 import { useAppStore } from "@core/store";
 import { rebaseFileServerUrl } from "@core/store/fileServer";
@@ -202,23 +203,28 @@ function SignatureCard({ attrs, editor }: { attrs: LiveDocEmbedAttrs; editor: No
   );
 }
 
+function VideoEmbed({ attrs }: { attrs: LiveDocEmbedAttrs }) {
+  const src = useEmbedPlayerUrl(toVideoEmbedUrl(attrs.src ?? "") ?? attrs.src ?? "");
+  const frame = attrs.frame && attrs.frame !== "plain" ? ` ld-embed-frame-${attrs.frame}` : "";
+  return (
+    <div className={`ld-embed-video${frame}`}>
+      {src && (
+        <iframe
+          src={src}
+          title={attrs.title || "video"}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          loading="lazy"
+        />
+      )}
+    </div>
+  );
+}
+
 function EmbedBody({ attrs, editor }: { attrs: LiveDocEmbedAttrs; editor: NodeViewProps["editor"] }) {
   switch (attrs.kind) {
-    case "video": {
-      const src = toVideoEmbedUrl(attrs.src ?? "") ?? attrs.src ?? "";
-      const frame = attrs.frame && attrs.frame !== "plain" ? ` ld-embed-frame-${attrs.frame}` : "";
-      return (
-        <div className={`ld-embed-video${frame}`}>
-          <iframe
-            src={src}
-            title={attrs.title || "video"}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            loading="lazy"
-          />
-        </div>
-      );
-    }
+    case "video":
+      return <VideoEmbed attrs={attrs} />;
     case "model3d":
       return <ModelEmbed attrs={attrs} />;
     case "object":

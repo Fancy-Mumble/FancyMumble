@@ -377,13 +377,36 @@ impl AppState {
         key: String,
         app_handle: tauri::AppHandle,
     ) -> Result<String, String> {
+        self.with_media_origin(app_handle, |server| server.url_for(&key))
+            .await
+    }
+
+    /// The URL of a loopback page framing the third-party player at `src`.
+    ///
+    /// See [`super::media_server::MediaServer::player_url`] for why a player
+    /// cannot simply be framed by the webview's own page.
+    pub(crate) async fn embed_player_url(
+        &self,
+        src: String,
+        app_handle: tauri::AppHandle,
+    ) -> Result<String, String> {
+        self.with_media_origin(app_handle, |server| server.player_url(&src))
+            .await
+    }
+
+    /// Run `f` against the loopback origin, bringing it up on first use.
+    async fn with_media_origin<T>(
+        &self,
+        app_handle: tauri::AppHandle,
+        f: impl FnOnce(&super::media_server::MediaServer) -> T,
+    ) -> Result<T, String> {
         let mut running = self.media_server.lock().await;
         if running.is_none() {
             *running = Some(super::media_server::start(app_handle).await?);
         }
         running
             .as_ref()
-            .map(|server| server.url_for(&key))
+            .map(f)
             .ok_or_else(|| "the media origin is not running".to_owned())
     }
 

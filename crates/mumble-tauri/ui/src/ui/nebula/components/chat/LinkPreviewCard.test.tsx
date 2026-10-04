@@ -85,7 +85,7 @@ describe("LinkPreviewCard", () => {
     expect(document.querySelector("img")?.getAttribute("src")).toBe("https://img.example/t.jpg");
   });
 
-  it("asks before loading a player the reader has not allowed", () => {
+  it("asks before loading a player the reader has not allowed", async () => {
     draw(
       embed({
         thumbnail: { url: "https://img.example/t.jpg", preview: { data_url: DATA_URL, mime: "image/png" } },
@@ -96,8 +96,11 @@ describe("LinkPreviewCard", () => {
     expect(document.querySelector("iframe")).toBeNull();
 
     fireEvent.click(screen.getByText("Load content"));
-    expect(document.querySelector("iframe")?.getAttribute("src")).toBe(
-      "https://www.youtube.com/embed/eKqZWVcYs7E",
+    // No backend answers in a test, so the player is framed as it is.
+    await waitFor(() =>
+      expect(document.querySelector("iframe")?.getAttribute("src")).toBe(
+        "https://www.youtube.com/embed/eKqZWVcYs7E",
+      ),
     );
   });
 
@@ -435,7 +438,7 @@ describe("LinkPreviewCard", () => {
     expect(screen.getByText("Watch together")).toBeTruthy();
     expect(screen.queryByText("Best and Funniest Air Traffic Control from mostly the USA.")).toBeNull();
   });
-  it("plays a video the server said nothing about, from the link itself", () => {
+  it("plays a video the server said nothing about, from the link itself", async () => {
     // Nothing fills `embed.video`: the canon carries what a crawler reads off
     // a page, and an embeddable player URL is not that. Without deriving one
     // here the blue block appeared on the pill and did nothing.
@@ -448,9 +451,30 @@ describe("LinkPreviewCard", () => {
     );
 
     fireEvent.click(screen.getByLabelText("Play video"));
-    expect(document.querySelector("iframe")?.getAttribute("src")).toBe(
-      "https://www.youtube-nocookie.com/embed/eKqZWVcYs7E",
+    await waitFor(() =>
+      expect(document.querySelector("iframe")?.getAttribute("src")).toBe(
+        "https://www.youtube-nocookie.com/embed/eKqZWVcYs7E",
+      ),
     );
+  });
+
+  it("frames a YouTube player from the loopback origin, which YouTube accepts as a referrer", async () => {
+    // Framed straight from `tauri://localhost` it shows "Error 153".
+    const { invoke } = await import("@tauri-apps/api/core");
+    vi.mocked(invoke).mockImplementation(async (cmd, args) =>
+      cmd === "embed_player_url"
+        ? `http://127.0.0.1:1/t/~player/${encodeURIComponent((args as { src: string }).src)}`
+        : undefined,
+    );
+    draw(embed({ video: undefined }), true);
+
+    fireEvent.click(screen.getByLabelText("Play video"));
+    await waitFor(() =>
+      expect(document.querySelector("iframe")?.getAttribute("src")).toBe(
+        `http://127.0.0.1:1/t/~player/${encodeURIComponent("https://www.youtube-nocookie.com/embed/eKqZWVcYs7E")}`,
+      ),
+    );
+    vi.mocked(invoke).mockResolvedValue(undefined);
   });
   /** Which poster the card decided on. */
   const shape = () => document.querySelector("[data-preview-shape]")?.getAttribute("data-preview-shape");
