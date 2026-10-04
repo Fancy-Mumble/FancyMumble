@@ -1,0 +1,232 @@
+﻿{
+  "brand": "Fancy Mumble",
+  "actions": {
+    "minimize": "Riduci a icona",
+    "maximize": "Ingrandisci",
+    "close": "Chiudi",
+    "cancel": "Annulla",
+    "dismiss": "Ignora",
+    "retry": "Riprova",
+    "hide": "Nascondi",
+    "open": "Apri",
+    "collapse": "Comprimi",
+    "optional": "(facoltativo)"
+  },
+  "confirmDialog": {
+    "confirmLabel": "Conferma",
+    "cancelLabel": "Annulla"
+  },
+  "externalLinkGuard": {
+    "title": "Link esterno",
+    "body": "Stai per lasciare Fancy Mumble e visitare un sito web esterno:",
+    "disclaimer": "Questo sito web non è affiliato a Fancy Mumble né approvato da Fancy Mumble. I link esterni possono portare a siti con contenuti dannosi, fuorvianti o indesiderati. Procedi solo se ti fidi della fonte.",
+    "cancelBtn": "Annulla",
+    "openBtn": "Apri link"
+  },
+  "fileDropZone": {
+    "defaultLabel": "Trascina qui un file o clicca per sfogliare",
+    "draggingOverlay": "Rilascia il file qui",
+    "removeBtn": "Rimuovi"
+  },
+  "kebabMenu": {
+    "ariaLabel": "Altre opzioni",
+    "closeMenu": "Chiudi menu"
+  },
+  "lightbox": {
+    "ariaLabel": "Visualizzatore multimediale",
+    "prevAriaLabel": "Immagine precedente",
+    "nextAriaLabel": "Immagine successiva",
+    "closeAriaLabel": "Chiudi",
+    "counter": "Foto {{n}} / {{total}}",
+    "loading": "Caricamento dell'immagine..."
+  },
+  "loadingSplash": {
+    "messages": [
+      "Reticolando le spline...",
+      "Scaldando i microfoni...",
+      "Regolando la manopola dello squelch...",
+      "Convincendo i pacchetti ad arrivare in ordine...",
+      "Chiedendo a Opus con molta gentilezza...",
+      "Negoziando con gli handshake TLS...",
+      "Lucidando il tuo avatar...",
+      "Cercando il pulsante muto...",
+      "Contando i bit, e poi ricontandoli...",
+      "Mettendo su una moka fresca di UDP...",
+      "Traducendo dal server all'umano...",
+      "Sbrogliando i cavi audio...",
+      "Cercando utenti smarriti sotto il tappeto...",
+      "Coccolando il denoiser...",
+      "Ricordando alla GPU che non è invitata...",
+      "Caricamento sospettosamente veloce...",
+      "Ci siamo quasi. Forse."
+    ]
+  },
+  "memberPicker": {
+    "placeholder": "Aggiungi un utente per nome o ID",
+    "emptyLabel": "Nessun membro",
+    "removeChipAriaLabel": "Rimuovi {{name}}",
+    "userFallbackName": "Utente n. {{userId}}"
+  },
+  "messageActionBar": {
+    "moreReactions": "Altre reazioni",
+    "quote": "Cita",
+    "quoteAriaLabel": "Cita messaggio",
+    "copy": "Copia testo",
+    "copyAriaLabel": "Copia il testo del messaggio",
+    "moreOptions": "Altre opzioni",
+    "watchTogether": "Guarda insieme",
+    "watchTogetherStarting": "Avvio in corso…",
+    "delete": "Elimina"
+  },
+  "mobileBottomSheet": {
+    "closeAriaLabel": "Chiudi"
+  },
+  "quoteBlock": {
+    "unavailable": "Messaggio non disponibile",
+    "scrollTitle": "Clicca per andare al messaggio",
+    "photoFallback": "Foto",
+    "emptyFallback": "Messaggio vuoto"
+  },
+  "toast": {
+    "dismissAriaLabel": "Ignora"
+  },
+  "autocomplete": {
+    "placeholder": "Cerca...",
+    "noOptions": "Nessuna opzione",
+    "removeChipAriaLabel": "Rimuovi {{name}}",
+    "clearSelectionAriaLabel": "Cancella selezione"
+  },
+  "officialBadge": {
+    "label": "Ufficiale",
+    "title": "Plugin ufficiale di FancyMumble"
+  },
+  "cardColorPicker": {
+    "randomTitle": "Colori casuali",
+    "roleBg": "sfondo",
+    "roleBorder": "bordo",
+    "roleAccent": "accento",
+    "removeTitle": "Rimuovi colore",
+    "addTitle": "Aggiungi colore",
+    "glassLabel": "Effetto vetro",
+    "accentTitle": "Colore d'accento"
+  },
+  "splitButton": {
+    "moreOptionsAriaLabel": "Altre opzioni"
+  },
+  "pluginTrust": {
+    "bulkAllowServer": "Consenti tutti per questo server",
+    "bulkAllowOnce": "Consenti tutti una volta",
+    "bulkAllowAlways": "Consenti sempre tutti",
+    "scopeServer": "Consenti per questo server",
+    "scopeOnce": "Consenti una volta",
+    "scopeAlways": "Consenti sempre",
+    "scopeServerHint": "Ricordato per questo server",
+    "scopeOnceHint": "Solo per questa sessione",
+    "scopeGlobalHint": "Attendibile su ogni server",
+    "singleTitle": "Il server vuole attivare un plugin",
+    "multiTitle": "Il server vuole attivare {{count}} plugin",
+    "singleSubtitle": "Controlla il plugin e scegli se consentirlo.",
+    "multiSubtitle": "Espandi un plugin per vedere cosa può fare, poi decidi singolarmente oppure usa i pulsanti qui sotto per applicare la stessa scelta a tutti.",
+    "blockAll": "Blocca tutti",
+    "capNone": "nessuna funzionalità",
+    "capCount_one": "{{count}} funzionalità",
+    "capCount_other": "{{count}} funzionalità",
+    "updatedBadge": "aggiornato",
+    "repromptWarning": "La versione o l'insieme di funzionalità di questo plugin è cambiato dall'ultima volta che l'hai controllato. Conferma di nuovo prima di riattivarlo.",
+    "capabilitiesHeading": "Questo plugin potrà",
+    "capEmpty": "Niente: il manifest non dichiara alcuna funzionalità",
+    "advancedSummary": "Avanzate",
+    "fieldPlugin": "Plugin",
+    "fieldVersion": "Versione",
+    "fieldAuthor": "Autore",
+    "fieldHomepage": "Sito web",
+    "fieldCapabilities": "Funzionalità",
+    "fieldTags": "Tag",
+    "fieldLastReviewed": "Ultimo controllo",
+    "fieldSchema": "Schema",
+    "fieldFingerprint": "Impronta digitale",
+    "block": "Blocca"
+  },
+  "pluginModalForm": {
+    "addFiles": "Aggiungi file",
+    "chooseFile": "Scegli file",
+    "filesAttached_one": "{{count}} file allegato",
+    "filesAttached_other": "{{count}} file allegati"
+  },
+  "klipyFooter": "Realizzato con Klipy",
+  "emojiPicker": {
+    "searchPlaceholder": "Cerca emoji...",
+    "empty": "Nessuna emoji trovata",
+    "catPeople": "Faccine e persone",
+    "catNature": "Animali e natura",
+    "catFood": "Cibo e bevande",
+    "catActivity": "Attività",
+    "catObjects": "Oggetti",
+    "catSymbols": "Simboli",
+    "catFlags": "Bandiere",
+    "catCustom": "Personalizzate"
+  },
+  "infoBanner": {
+    "dismissAriaLabel": "Chiudi banner"
+  },
+  "tabbedPage": {
+    "backAriaLabel": "Torna indietro",
+    "back": "Indietro"
+  },
+  "pages": {
+    "drawOverlay": {
+      "contextUnavailable": "Contesto dell'overlay di disegno non disponibile"
+    },
+    "popout": {
+      "imageUnavailable": "Sorgente dell'immagine non disponibile",
+      "missingId": "ID della finestra separata mancante",
+      "mediaLabel": "Immagine"
+    },
+    "streamPopout": {
+      "connectionLost": "Connessione allo stream persa",
+      "contextUnavailable": "Contesto dello stream non disponibile",
+      "missingId": "ID della finestra separata mancante",
+      "connecting": "Connessione allo stream...",
+      "screenshare": "Condivisione schermo",
+      "caption": "Condivisione schermo in diretta",
+      "mediaLabel": "Stream"
+    }
+  },
+  "updater": {
+    "heading": {
+      "available": "Aggiornamento disponibile",
+      "downloading": "Download dell'aggiornamento",
+      "installing": "Installazione dell'aggiornamento",
+      "restarting": "Riavvio in corso...",
+      "failed": "Aggiornamento non riuscito"
+    },
+    "subtitle": {
+      "restarting": "Fancy Mumble si riavvierà automaticamente al termine.",
+      "checking": "Ricerca di aggiornamenti...",
+      "autoInstall": "Preparazione all'installazione dell'ultima versione di Fancy Mumble...",
+      "ready": "Una nuova versione di Fancy Mumble è pronta per essere installata."
+    },
+    "progress": {
+      "installing": "Verifica e installazione...",
+      "starting": "Avvio del download..."
+    },
+    "closeAriaLabel": "Chiudi",
+    "busyTitle": "Aggiornamento in corso...",
+    "skipActive": "✓ Salto la v{{version}} - clicca per annullare",
+    "skipInactive": "Salta la v{{version}}",
+    "closeBtn": "Chiudi",
+    "laterBtn": "Più tardi",
+    "retryBtn": "Riprova",
+    "updateNowBtn": "Aggiorna ora"
+  },
+  "plugins": {
+    "fileServer": "File server",
+    "liveDoc": "Documenti live",
+    "disabledLog": "Il plugin “{{name}}” è stato disattivato dal server",
+    "disabledTitle": "{{name}} è stato disattivato",
+    "disabledBody": "Il server ha disattivato questo plugin. Tutte le viste di {{name}} aperte verranno chiuse.",
+    "disabledSave": "Salva una copia locale",
+    "disabledSaving": "Salvataggio…",
+    "disabledClose": "Chiudi"
+  }
+}

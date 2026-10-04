@@ -4,6 +4,7 @@ import GB from "country-flag-icons/react/3x2/GB";
 import DE from "country-flag-icons/react/3x2/DE";
 import FR from "country-flag-icons/react/3x2/FR";
 import CN from "country-flag-icons/react/3x2/CN";
+import IT from "country-flag-icons/react/3x2/IT";
 import { BUILT_IN_LANGUAGES, type BuiltInLanguage } from "../../i18n";
 import type { TimeFormat, DateFormat, NumberFormat } from "../../types";
 import { Autocomplete, type AutocompleteOption } from "../../components/elements/Autocomplete";
@@ -25,6 +26,7 @@ const NATIVE_LANGUAGE_NAMES: Record<BuiltInLanguage, string> = {
   de: "Deutsch",
   fr: "Français",
   zh: "中文",
+  it: "Italiano",
 };
 
 /** Flag chosen per language. Where multiple regions share a language
@@ -36,6 +38,7 @@ const LANGUAGE_FLAGS: Record<BuiltInLanguage, typeof GB> = {
   de: DE,
   fr: FR,
   zh: CN,
+  it: IT,
 };
 
 const FLAG_STYLE: React.CSSProperties = { width: 22, height: 16, borderRadius: 2, display: "block" };
