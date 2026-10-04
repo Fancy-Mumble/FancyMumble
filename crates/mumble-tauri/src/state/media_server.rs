@@ -70,7 +70,7 @@ impl MediaServer {
     /// The URL of a page on this origin that frames one third-party player.
     ///
     /// The webview's own pages live on `tauri://localhost`, which is no
-    /// referrer YouTube accepts: since mid-2025 its embed refuses to play
+    /// referrer `YouTube` accepts: since mid-2025 its embed refuses to play
     /// without an http(s) one and shows "Error 153" instead. Framed from here
     /// it is asked for by `http://127.0.0.1`, which it does accept.
     pub(crate) fn player_url(&self, src: &str) -> String {
