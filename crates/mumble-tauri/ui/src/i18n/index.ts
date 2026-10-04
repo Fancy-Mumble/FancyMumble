@@ -2,7 +2,7 @@ import i18n from "i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
 import { initReactI18next } from "react-i18next";
 
-// Only the source/fallback language (en) is bundled eagerly.  de/fr/zh (and any
+// Only the source/fallback language (en) is bundled eagerly.  de/fr/zh/it (and any
 // custom languages) load on demand via the backend below, keeping ~200 kB of
 // inactive-language JSON off the startup heap.  The full 4-language set for the
 // translation editor lives in `./builtInBundles.ts` (loaded with that lazy page).
@@ -12,7 +12,7 @@ import enChat from "../locales/en/chat.json";
 import enServer from "../locales/en/server.json";
 import enSidebar from "../locales/en/sidebar.json";
 
-export const BUILT_IN_LANGUAGES = ["en", "de", "fr", "zh"] as const;
+export const BUILT_IN_LANGUAGES = ["en", "de", "fr", "zh", "it"] as const;
 export type BuiltInLanguage = (typeof BUILT_IN_LANGUAGES)[number];
 
 /** Public list of namespaces shipped with the app. */

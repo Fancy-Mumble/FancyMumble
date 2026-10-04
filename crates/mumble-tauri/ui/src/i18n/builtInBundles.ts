@@ -1,8 +1,8 @@
 /**
- * Full built-in language bundles (en + de + fr + zh), eagerly imported.
+ * Full built-in language bundles (en + de + fr + zh + it), eagerly imported.
  *
  * This module is imported ONLY by the lazy translation editor
- * (`TranslationPopoutPage`), so all four languages land in the translator
+ * (`TranslationPopoutPage`), so all built-in languages land in the translator
  * chunk instead of the startup bundle/heap.  The running app never imports it:
  * it preloads only `en` (fallback/source) and fetches the active language on
  * demand through the i18n backend (see `./index.ts`).  The editor, by contrast,
@@ -29,10 +29,16 @@ import zhSettings from "../locales/zh/settings.json";
 import zhChat from "../locales/zh/chat.json";
 import zhServer from "../locales/zh/server.json";
 import zhSidebar from "../locales/zh/sidebar.json";
+import itCommon from "../locales/it/common.json";
+import itSettings from "../locales/it/settings.json";
+import itChat from "../locales/it/chat.json";
+import itServer from "../locales/it/server.json";
+import itSidebar from "../locales/it/sidebar.json";
 
 export const BUILT_IN_RESOURCES = {
   en: { common: enCommon, settings: enSettings, chat: enChat, server: enServer, sidebar: enSidebar },
   de: { common: deCommon, settings: deSettings, chat: deChat, server: deServer, sidebar: deSidebar },
   fr: { common: frCommon, settings: frSettings, chat: frChat, server: frServer, sidebar: frSidebar },
   zh: { common: zhCommon, settings: zhSettings, chat: zhChat, server: zhServer, sidebar: zhSidebar },
+  it: { common: itCommon, settings: itSettings, chat: itChat, server: itServer, sidebar: itSidebar },
 } as const;
