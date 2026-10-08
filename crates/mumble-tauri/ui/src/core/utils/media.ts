@@ -87,11 +87,25 @@ export function fileToDataUrl(file: File): Promise<string> {
 }
 
 /**
+ * The largest picture an inline image is sent at - the same box legacy Mumble
+ * scales its own pasted images into.
+ *
+ * Bytes are not the only limit. A legacy client lays the message out before
+ * drawing it and refuses any message whose layout covers more than 2048x2048
+ * pixels, showing "Text object too large to display" instead. A phone photo
+ * squeezed under the byte limit by quality alone is still 12 megapixels, so
+ * the box is enforced whether or not the bytes already fit.
+ */
+const INLINE_MAX_WIDTH = 1600;
+const INLINE_MAX_HEIGHT = 1000;
+
+/**
  * Compress / downscale an image so its base64 data-URL fits within
- * `maxBytes`.  Returns the data-URL string.
+ * `maxBytes`, and its pixels within `INLINE_MAX_WIDTH` x `INLINE_MAX_HEIGHT`.
+ * Returns the data-URL string.
  *
  * Strategy - maximize visual quality:
- *   1. Original fits -> return untouched (lossless).
+ *   1. Original fits both limits -> return untouched (lossless).
  *   2. Re-encode as JPEG at full resolution.
  *      Binary-search quality 0.1-0.95 to find the highest quality
  *      that fits.  Keeping original pixel dimensions is almost always
@@ -111,13 +125,18 @@ export async function fitImage(file: File, maxBytes: number): Promise<string> {
 
   const dataUrl = await fileToDataUrl(file);
 
-  // 1. Original fits -> return as-is.
-  if (dataUrl.length <= maxBytes) return dataUrl;
-
   const img = await loadImage(dataUrl);
-  const srcW = img.naturalWidth || img.width;
-  const srcH = img.naturalHeight || img.height;
-  if (srcW === 0 || srcH === 0) throw new Error("Image has zero dimensions");
+  const naturalW = img.naturalWidth || img.width;
+  const naturalH = img.naturalHeight || img.height;
+  if (naturalW === 0 || naturalH === 0) throw new Error("Image has zero dimensions");
+
+  // 1. Original fits -> return as-is.
+  const boxScale = Math.min(1, INLINE_MAX_WIDTH / naturalW, INLINE_MAX_HEIGHT / naturalH);
+  if (boxScale === 1 && dataUrl.length <= maxBytes) return dataUrl;
+
+  // Every scale below is relative to the picture already fitted into the box.
+  const srcW = naturalW * boxScale;
+  const srcH = naturalH * boxScale;
 
   // Leave room for the HTML wrapper (<img src="..." alt="..." />)
   const budget = maxBytes - 100;
