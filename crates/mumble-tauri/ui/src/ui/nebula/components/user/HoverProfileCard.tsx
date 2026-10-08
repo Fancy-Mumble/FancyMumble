@@ -1,5 +1,6 @@
 import { useAppStore } from "@core/store";
 import { useHoverTarget, useProfileAnchor } from "../../clientState";
+import { useIsHandheld } from "../../useIsHandheld";
 import { ProfileCard } from "./ProfileCard";
 
 interface HoverProfileCardProps {
@@ -22,7 +23,12 @@ interface HoverProfileCardProps {
  * only thing that renders.
  */
 export function HoverProfileCard({ onMessage }: Readonly<HoverProfileCardProps>) {
-  const hover = useHoverTarget();
+  // A finger has no hover. A tap still reports one, though, and it outlives
+  // the tap - so on a phone, closing the pinned card used to drop straight to
+  // the pointer-following card for the same person instead of closing.
+  const handheld = useIsHandheld();
+  const hoverTarget = useHoverTarget();
+  const hover = handheld ? null : hoverTarget;
   const pinnedAnchor = useProfileAnchor();
   const selectedUser = useAppStore((state) => state.selectedUser);
   const session = selectedUser ?? hover?.session ?? null;
