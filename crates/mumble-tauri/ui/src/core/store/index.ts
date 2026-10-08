@@ -2928,7 +2928,10 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
   setTimeout(async () => {
     try {
       let granted = await isPermissionGranted();
-      if (!granted) {
+      // On Android the activity asks for this together with the microphone
+      // at launch (MainActivity). Asking again from here raced that dialog,
+      // and Android drops a request made while another is showing.
+      if (!granted && !/Android/i.test(navigator.userAgent)) {
         const result = await requestPermission();
         granted = result === "granted";
       }

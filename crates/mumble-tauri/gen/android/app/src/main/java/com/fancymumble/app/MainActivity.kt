@@ -3,6 +3,7 @@ package com.fancymumble.app
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.webkit.WebView
 import androidx.activity.OnBackPressedCallback
@@ -12,7 +13,7 @@ import androidx.core.content.ContextCompat
 class MainActivity : TauriActivity() {
 
     companion object {
-        private const val REQUEST_RECORD_AUDIO = 1
+        private const val REQUEST_LAUNCH_PERMISSIONS = 1
         const val EXTRA_CHANNEL_ID = "channel_id"
     }
 
@@ -23,16 +24,23 @@ class MainActivity : TauriActivity() {
         // FCM message can arrive (required on Android 8+).
         FcmService.ensureChannel(this)
 
-        // Request microphone permission at launch so the Oboe audio
-        // capture stream can be opened when the user unmutes.
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.RECORD_AUDIO),
-                REQUEST_RECORD_AUDIO
-            )
+        // Ask for everything the app needs from the start in one request: the
+        // microphone, so the Oboe capture stream can open when the user
+        // unmutes, and on Android 13+ notifications. Android shows one
+        // permission dialog at a time and silently drops a second request
+        // made while it is up - which is what happened to the notification
+        // prompt the page used to raise a moment after this one, so a fresh
+        // install never got to allow notifications at all.
+        val wanted = buildList {
+            add(Manifest.permission.RECORD_AUDIO)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (wanted.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, wanted.toTypedArray(), REQUEST_LAUNCH_PERMISSIONS)
         }
 
         // The last word on the back gesture. The page answers it first - Tauri
