@@ -663,6 +663,24 @@ export default function NebulaClientApp() {
     [channels],
   );
 
+  /**
+   * "Join voice": move into the room *and* start talking and listening there.
+   *
+   * Moving alone leaves a client that never enabled voice deaf and muted - in
+   * the room, hearing nothing, with only the call bar's microphone to turn it
+   * on, which is what a first-time user met. A room behind a password only
+   * opens its dialog here; voice waits until they are actually in.
+   */
+  const joinVoice = useCallback(
+    (id: number) => {
+      const channel = channels.find((entry) => entry.id === id);
+      enterChannel(id);
+      if (channel?.is_enter_restricted && !channel.hidden) return;
+      if (useAppStore.getState().voiceState === "inactive") void useAppStore.getState().enableVoice();
+    },
+    [channels, enterChannel],
+  );
+
   // Arranging needs the whole tree: a filter that hid a sibling would leave a
   // channel dropped "next to" a room nobody could see. Nor does it outlive the
   // connection whose tree it was arranging.
@@ -1651,7 +1669,7 @@ export default function NebulaClientApp() {
      it would take the user out of the channel they are
      actually in - so it is never offered as voice. */
     canJoinVoice: !!activeChannel && friendChatName === null && activeChannel.id !== currentChannel,
-    onJoinVoice: () => activeChannel && enterChannel(activeChannel.id),
+    onJoinVoice: () => activeChannel && joinVoice(activeChannel.id),
     onToggleSearch: () => search.setChatOpen(!search.chatOpen),
     onShowMembers: () => memberPanel.setOpen(true),
     // Broadcasting is compiled into desktop builds only; a phone can watch a
