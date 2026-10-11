@@ -8,6 +8,9 @@
 pub(crate) mod builder;
 pub(crate) mod prefs;
 
+#[cfg(any(target_os = "windows", target_os = "android"))]
+pub(crate) mod navigation_guard;
+
 #[cfg(not(target_os = "android"))]
 pub(crate) mod window_state;
 

@@ -14,6 +14,11 @@ pub(crate) fn create_base_builder() -> tauri::Builder<tauri::Wry> {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init());
 
+    // Refuses any top-level navigation off the app, whichever window it is in;
+    // see the module for why it is not on every platform.
+    #[cfg(any(target_os = "windows", target_os = "android"))]
+    let builder = builder.plugin(crate::app::navigation_guard::plugin());
+
     #[cfg(target_os = "android")]
     let builder = builder.plugin(
         tauri::plugin::Builder::<tauri::Wry, ()>::new("connection-service")
