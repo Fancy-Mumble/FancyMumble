@@ -79,7 +79,9 @@ export function imageSizeFromSource(src: string): ImageSize | null {
 
   const comma = src.indexOf(",");
   if (comma < 0) return null;
-  const meta = src.slice(5, comma);
+  // Lowercased: a stock client names the type the way Qt spells the format,
+  // `image/JPEG`, and a media type is case-insensitive.
+  const meta = src.slice(5, comma).toLowerCase();
   const payload = src.slice(comma + 1);
 
   if (meta.startsWith("image/svg+xml")) {
@@ -108,9 +110,71 @@ export function sizeFromBytes(bytes: Uint8Array): ImageSize | null {
 
 // --- Bounded base64 ------------------------------------------------
 
+/**
+ * A `data:` URL's base64 payload as plain base64, or as much of it as `limit`
+ * asks for.
+ *
+ * A stock Mumble client does not write the payload the way `atob` wants it.
+ * `Log::imageToImg` percent-encodes it through `QUrl::toPercentEncoding`, so
+ * every `+`, `/` and `=` arrives as `%2B`, `%2F` and `%3D`, and it breaks the
+ * text into 72-character lines with a literal newline between them. `atob`
+ * throws on the first `%`, and a newline counted as a character throws off
+ * the quartet arithmetic - so no stock picture ever had its size read, and
+ * every one laid its row out at nothing and jumped when it decoded.
+ *
+ * `limit` bounds the work: only a header is ever needed. The raw slice taken
+ * before decoding is three times longer than the base64 it has to yield (plus
+ * the line breaks), which is enough even if every character came escaped.
+ */
+export function normaliseBase64Payload(payload: string, limit = Infinity): string {
+  const bounded = Number.isFinite(limit);
+  let raw = bounded ? payload.slice(0, limit * 3 + Math.ceil(limit / 36)) : payload;
+  if (raw.includes("%")) {
+    // A slice can end half-way through an escape; that fragment is dropped
+    // rather than letting it make the whole decode throw.
+    raw = raw.replace(/%[0-9a-fA-F]?$/, "");
+    try {
+      raw = decodeURIComponent(raw);
+    } catch {
+      return "";
+    }
+  }
+  const clean = raw.replace(/\s+/g, "");
+  return bounded ? clean.slice(0, limit) : clean;
+}
+
+/**
+ * How many bytes the base64 in `text` from `start` decodes to, or null for none.
+ *
+ * Counted rather than decoded or copied: a photograph's payload is a megabyte
+ * of text and a size chip asks on every render. Counted the way a stock client
+ * writes it, too - an escape is one character, a newline is none, and `%3D` is
+ * padding just as `=` is.
+ */
+export function base64PayloadBytes(text: string, start = 0): number | null {
+  let chars = 0;
+  let padding = 0;
+  for (let i = start; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    // Whitespace is line wrapping, not data.
+    if (code === 0x20 || code === 0x0a || code === 0x0d || code === 0x09) continue;
+    let isPad = code === 0x3d;
+    if (code === 0x25 && i + 2 < text.length) {
+      isPad = text.slice(i + 1, i + 3).toUpperCase() === "3D";
+      i += 2;
+    }
+    // Padding only counts at the very end; anything after it means it was not.
+    padding = isPad ? padding + 1 : 0;
+    chars++;
+  }
+  if (chars === 0) return null;
+  return Math.floor((chars * 3) / 4) - Math.min(padding, 2);
+}
+
 /** Decode at most {@link HEADER_BYTES} of a base64 payload. */
-function decodeHeader(payload: string): Uint8Array | null {
+function decodeHeader(rawPayload: string): Uint8Array | null {
   const wanted = Math.ceil(HEADER_BYTES / 3) * 4;
+  const payload = normaliseBase64Payload(rawPayload, wanted);
   const take = Math.min(payload.length, wanted);
   // atob wants whole quartets; a trailing partial one is dropped rather than
   // padded, since three bytes at the end of a 64 KiB window decide nothing.
@@ -128,8 +192,9 @@ function decodeHeader(payload: string): Uint8Array | null {
 
 /** Decode a base64 payload as text (SVG markup). */
 function decodeBase64Text(payload: string): string {
+  const clean = normaliseBase64Payload(payload, Math.ceil(HEADER_BYTES / 3) * 4);
   try {
-    return atob(payload.slice(0, Math.ceil(HEADER_BYTES / 3) * 4));
+    return atob(clean.slice(0, clean.length - (clean.length % 4)));
   } catch {
     return "";
   }

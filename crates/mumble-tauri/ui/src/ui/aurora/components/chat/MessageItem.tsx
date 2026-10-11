@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react";
-import DOMPurify from "dompurify";
 import { useAppStore } from "@core/store";
 import type { ChatMessage } from "@core/types";
 import { getReactions, hasReacted } from "@core/features/chat/reaction/reactionStore";
@@ -7,7 +6,9 @@ import { getReadersForMessage } from "@core/features/chat/readreceipt/readReceip
 import { FANCY_FILE_MARKER_RE } from "@core/features/chat/fileAttachments";
 import { useLinkPreviews } from "@core/features/chat/useLinkPreviews";
 import { useInnerHtml } from "@core/utils/innerHtml";
-import { neutraliseRemoteMedia, useTrustedMediaVersion } from "@core/utils/remoteMedia";
+import { isEditableBody, prepareBodyHtml } from "@core/utils/bodyMarkup";
+import { useTrustedMediaVersion } from "@core/utils/remoteMedia";
+import { sanitizeMessageHtml } from "@core/utils/sanitizeHtml";
 import { CheckIcon, CopyIcon, EditIcon, PinIcon, QuoteIcon, TrashIcon } from "@ui/icons";
 import WatchStartButton from "@ui/standard/components/chat/watch/WatchStartButton";
 import WatchTogetherCard from "@ui/standard/components/chat/watch/WatchTogetherCard";
@@ -26,18 +27,17 @@ function initials(name: string): string {
     .join("")
     .toUpperCase();
 }
-/** A message body as this row draws it: sanitised, with nothing that fetches. */
-/** `_trustVersion` only keys the caller's memo. */
+/**
+ * A message body as this row draws it: core's shared message sanitiser, the
+ * same pass Nebula renders through, so no `<style>`, forms, image maps or
+ * frames, nothing that fetches, and inline styles cut to the safe list.
+ *
+ * `_trustVersion` only keys the caller's memo.
+ */
 function sanitizeBody(body: string, _trustVersion: number): string {
-  const fragment = DOMPurify.sanitize(body, {
-    USE_PROFILES: { html: true },
-    ADD_ATTR: ["target", "rel"],
-    RETURN_DOM_FRAGMENT: true,
-  }) as unknown as DocumentFragment;
-  neutraliseRemoteMedia(fragment);
-  const wrapper = document.createElement("div");
-  wrapper.appendChild(fragment);
-  return wrapper.innerHTML;
+  // Repaired first: stock-client quirks (a break above a pasted picture,
+  // text that cannot wrap) are shared with the other packs, see bodyMarkup.ts.
+  return sanitizeMessageHtml(prepareBodyHtml(body));
 }
 function formatTime(timestamp?: number | null): string {
   return timestamp
@@ -242,7 +242,11 @@ export default function MessageItem({
           )}
           {message.is_own && message.message_id && (
             <>
-              <IconButton icon={<EditIcon />} label="Edit message" onClick={() => setEditing(true)} />
+              {/* A pasted picture is part of the body; the edit box would show it
+                  as raw markup, and is no place to edit one. */}
+              {isEditableBody(message.body) && (
+                <IconButton icon={<EditIcon />} label="Edit message" onClick={() => setEditing(true)} />
+              )}
               <IconButton
                 icon={<TrashIcon />}
                 label="Delete message"
@@ -307,16 +311,18 @@ export default function MessageItem({
           )}
           {message.is_own && (
             <>
-              <Button
-                variant="bare"
-                leadingIcon={<EditIcon />}
-                onClick={() => {
-                  setEditing(true);
-                  setContextMenu(null);
-                }}
-              >
-                Edit
-              </Button>
+              {isEditableBody(message.body) && (
+                <Button
+                  variant="bare"
+                  leadingIcon={<EditIcon />}
+                  onClick={() => {
+                    setEditing(true);
+                    setContextMenu(null);
+                  }}
+                >
+                  Edit
+                </Button>
+              )}
               <Button
                 variant="danger"
                 leadingIcon={<TrashIcon />}

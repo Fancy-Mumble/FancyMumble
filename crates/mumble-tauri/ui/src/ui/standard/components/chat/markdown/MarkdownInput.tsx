@@ -20,6 +20,7 @@ import {
 } from "react";
 import { flattenHljs } from "@core/features/chat/markdown/hljsTokens";
 import { loadHljs, loadedHljs, type HljsApi } from "@core/features/chat/markdown/lazyHljs";
+import { decodeHtmlEntities } from "@core/utils/visibleText";
 import styles from "./MarkdownInput.module.css";
 
 // --- Markdown -> decorated spans -----------------------------------
@@ -626,9 +627,11 @@ export function htmlToMarkdown(html: string): string {
   text = text.replaceAll(/<span\s+class="spoiler"[^>]*>([^<]*)<\/span>/gi, "||$1||");
   text = text.replaceAll(/<!--[\s\S]*?-->/g, "");
   text = text.replaceAll(/<[^>]*>/g, "");
-  text = text.replaceAll("&lt;", "<");
-  text = text.replaceAll("&gt;", ">");
-  text = text.replaceAll("&amp;", "&");
+  // Every entity, not only the three the composer writes: a body holding
+  // `&quot;` or `&nbsp;` opened for editing with them spelled out, and saving
+  // sent the spelling. A non-breaking space comes back as the space it stood
+  // for - the draft is plain text, where it means nothing a space does not.
+  text = decodeHtmlEntities(text).replaceAll("\u00a0", " ");
   return text;
 }
 

@@ -13,6 +13,7 @@ import {
   previewKindForFilename,
   type FileAttachmentInfo,
 } from "./fileAttachments";
+import { bodyVisibleText } from "@core/utils/visibleText";
 
 /** How much of the surrounding message the info bar will show. */
 const MAX_CAPTION_LENGTH = 280;
@@ -156,17 +157,11 @@ async function sealedPopOutImage(
  *
  * Markers, the image itself and every remaining tag come out; line breaks
  * survive as newlines, because a caption sent as two lines was written as two.
- * Null when nothing is left, so the bar draws no empty row.
+ * Paragraph and block ends count as line breaks too, and every entity is
+ * decoded - a stock client writes `&quot;` and `&nbsp;`, which printed as
+ * written here. Null when nothing is left, so the bar draws no empty row.
  */
 export function imagePopoutCaption(body: string): string | null {
-  const text = body
-    .replaceAll(/<!--[\s\S]*?-->/g, "")
-    .replaceAll(/<img\b[^>]*>/gi, "")
-    .replaceAll(/<br\s*\/?>/gi, "\n")
-    .replaceAll(/<[^>]*>/g, "")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&amp;", "&")
-    .trim();
+  const text = bodyVisibleText(body, { multiline: true });
   return text.length > 0 ? text.slice(0, MAX_CAPTION_LENGTH) : null;
 }

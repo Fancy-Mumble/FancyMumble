@@ -15,6 +15,7 @@ import type { ChatMessage } from "@core/types";
 import type { ReactionSummary } from "@core/features/chat/reaction/reactionStore";
 import { getReadersForMessage } from "@core/features/chat/readreceipt/readReceiptStore";
 import { useAppStore } from "@core/store";
+import { isEditableBody } from "@core/utils/bodyMarkup";
 import { QUICK_REACTIONS } from "../../elements/MessageActionBar";
 import MobileBottomSheet from "../../elements/MobileBottomSheet";
 import { useWatchStart } from "@core/features/chat/watch/useWatchStart";
@@ -251,7 +252,8 @@ export default function MobileMessageActionSheet({
             {t("contextMenu.copyText")}
           </button>
         )}
-        {onEdit && message.is_own && message.message_id && (
+        {/* Same bar as the desktop menu: a picture cannot survive the edit box. */}
+        {onEdit && message.is_own && message.message_id && isEditableBody(message.body) && (
           <button type="button" className={styles.actionItem} onClick={act((m) => onEdit(m))}>
             <span className={styles.actionIcon}>
               <EditIcon width={16} height={16} />

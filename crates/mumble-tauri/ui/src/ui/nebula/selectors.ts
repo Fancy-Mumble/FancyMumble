@@ -13,6 +13,7 @@ import { bodyToHtml } from "@standard/components/chat/markdown/bodyHtml";
 import { hslToHex } from "@core/utils/colorUtils";
 import { formatTimestamp } from "@core/utils/format";
 import { imageSizeFromSource } from "@core/utils/imageSize";
+import { prepareBodyHtml, trimBodyEdges } from "@core/utils/bodyMarkup";
 import { isLocalMediaSrc, replaceWithLink } from "@core/utils/remoteMedia";
 import { bodyToPlainText } from "@core/features/chat/bodyText";
 import { hueFromKey } from "@shared/profilecard/tint";
@@ -618,7 +619,10 @@ export function splitBodyImages(html: string): { html: string; images: BodyImage
     }
     image.remove();
   }
-  return { html: doc.body.innerHTML.trim(), images };
+  // Trimmed at the edges once the pictures are out: a stock client sends a
+  // pasted picture as `<br /><img …/>`, and the break it sat behind would
+  // otherwise be all that was left of the text.
+  return { html: trimBodyEdges(doc.body.innerHTML.trim()), images };
 }
 
 /**
@@ -668,7 +672,7 @@ export function messageContent(body: string): MessageContent {
 
   const poll = POLL_MARKER.exec(rest);
   if (poll) {
-    const html = bodyToHtml(rest.replace(POLL_MARKER, "").trim());
+    const html = prepareBodyHtml(bodyToHtml(rest.replace(POLL_MARKER, "").trim()));
     return { kind: "poll", pollId: poll[1], quoteIds, html };
   }
 
@@ -677,11 +681,13 @@ export function messageContent(body: string): MessageContent {
   // the first picture and silently drop the rest.
   const files = [...rest.matchAll(FILE_MARKER)].map((match) => match[1]!);
   if (files.length > 0) {
-    const html = bodyToHtml(rest.replaceAll(FILE_MARKER, "").trim());
+    const html = prepareBodyHtml(bodyToHtml(rest.replaceAll(FILE_MARKER, "").trim()));
     return { kind: "file", payloads: files, quoteIds, html };
   }
 
-  return { kind: "text", quoteIds, html: bodyToHtml(rest) };
+  // `prepareBodyHtml` is the shared repair for what a stock client writes
+  // (see bodyMarkup.ts), done here so every place that draws a body gets it.
+  return { kind: "text", quoteIds, html: prepareBodyHtml(bodyToHtml(rest)) };
 }
 
 /**

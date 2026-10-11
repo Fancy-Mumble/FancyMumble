@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useAppStore } from "@core/store";
 import type { ChatMessage } from "@core/types";
 import { colorFor, formatTimestamp } from "@core/utils/format";
+import { bodyVisibleText } from "@core/utils/visibleText";
 import styles from "./QuoteBlock.module.css";
 
 interface QuoteBlockProps {
@@ -10,19 +11,15 @@ interface QuoteBlockProps {
   readonly onScrollTo?: (messageId: string) => void;
 }
 
-/** Decode common HTML entities back to their characters. */
-function decodeEntities(text: string): string {
-  return text.replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
-}
-
-/** Strip HTML tags and comment markers, decode entities, then truncate. */
+/**
+ * The quoted body as one line of text, truncated.
+ *
+ * Read by the shared walk rather than a tag-stripping regex: that decoded only
+ * the three entities this client writes, so a stock client's message quoted
+ * as `say&nbsp;&quot;hi&quot;`, and its paragraphs ran together as one word.
+ */
 function previewText(html: string, maxLen = 120): string {
-  const text = decodeEntities(
-    html
-      .replaceAll(/<!--[\s\S]*?-->/g, "")
-      .replaceAll(/<[^>]*>/g, "")
-      .trim(),
-  );
+  const text = bodyVisibleText(html);
   if (text.length <= maxLen) return text;
   return text.slice(0, maxLen) + "\u2026";
 }

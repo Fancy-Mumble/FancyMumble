@@ -2,7 +2,6 @@
 import { useTranslation } from "react-i18next";
 import { Box, InputBase, Tooltip, Typography } from "@mui/material";
 import type { Theme } from "@mui/material/styles";
-import DOMPurify from "dompurify";
 import { parseBody } from "./bodyCache";
 import { useAppStore } from "@core/store";
 import { selectOwnHash } from "@core/store/selectors";
@@ -15,11 +14,12 @@ import { decodeFileAttachmentPayload } from "@core/features/chat/fileAttachments
 import { useLinkPreviews } from "@core/features/chat/useLinkPreviews";
 import { getPoll } from "@core/features/chat/poll/model";
 import { useWatchStart } from "@core/features/chat/watch/useWatchStart";
-import { neutraliseRemoteMedia, useTrustedMediaVersion } from "@core/utils/remoteMedia";
+import { useTrustedMediaVersion } from "@core/utils/remoteMedia";
 import { readWatchMarker } from "@core/features/chat/watch/watchMarker";
 import { MENTION_CHIP_SELECTOR, readMentionChip } from "@core/utils/mentions";
 import { useInnerHtml } from "@core/utils/innerHtml";
-import { sanitiseInlineStyles } from "@core/utils/sanitizeHtml";
+import { isEditableBody } from "@core/utils/bodyMarkup";
+import { sanitizeMessageHtml } from "@core/utils/sanitizeHtml";
 import { useSelfMention } from "@core/features/chat/selfMention";
 import { linkUnder } from "@core/features/elements/externalLinks";
 import { TID } from "@core/testids";
@@ -65,10 +65,6 @@ import { useLongPress } from "./useLongPress";
 import { useRowHover } from "./rowHover";
 import { alpha } from "@mui/material/styles";
 
-/** The schemes a link in a message may point at; standard's renderer allows
- *  exactly these, and anything else loses its `href` rather than its text. */
-const SAFE_URL_RE = /^(?:https?:|mailto:|#)/i;
-
 /**
  * The clock reading, wherever it is drawn.
  *
@@ -92,46 +88,17 @@ const stampSx = (theme: Theme) =>
   }) as const;
 
 /**
- * Sanitise a message body and mark its links for the conversation's guard.
+ * The row's own reading of a body: sanitised, then its links shortened.
  *
- * DOMPurify keeps anchors but leaves them live, and a live anchor in a webview
- * navigates the app itself: the window becomes the target page with no way
- * back. Tagging each one `data-external` is what standard's renderer does, and
- * what the guard watches for before it hands the URL to the system browser.
+ * The sanitising is core's `sanitizeMessageHtml`, the pass every design's
+ * message row shares: it strips what a message must never carry (`<style>`,
+ * forms, image maps, frames), keeps anything from fetching on its own, cuts
+ * inline styles to the safe list, and marks every link `data-external` - a
+ * live anchor in a webview navigates the app itself, and the mark is what the
+ * guard watches for before it hands the URL to the system browser.
  */
-/** The row's own reading of a body: sanitised, then its links shortened. */
 function sanitizeAndPretty(html: string): string {
-  return prettyLinks(sanitizeBody(html));
-}
-
-function sanitizeBody(html: string): string {
-  const fragment = DOMPurify.sanitize(html, {
-    USE_PROFILES: { html: true },
-    ADD_ATTR: ["target", "rel"],
-    RETURN_DOM_FRAGMENT: true,
-  }) as unknown as DocumentFragment;
-  // Clips, posters and inline-style images the splitter did not lift: none of
-  // them may fetch on their own. Before the anchor pass, which marks the links
-  // this leaves behind like every other one.
-  neutraliseRemoteMedia(fragment);
-
-  for (const anchor of Array.from(fragment.querySelectorAll("a"))) {
-    if (!SAFE_URL_RE.test((anchor.getAttribute("href") ?? "").trim())) {
-      anchor.removeAttribute("href");
-    }
-    anchor.setAttribute("target", "_blank");
-    anchor.setAttribute("rel", "noopener noreferrer");
-    anchor.dataset["external"] = "true";
-  }
-  // The same property allow-list every other surface renders untrusted HTML
-  // with. DOMPurify alone kept `style` whole, so one message could carry
-  // `position:fixed;inset:0;z-index:...` and cover - and swallow every tap on -
-  // the whole window, on every client in the channel.
-  sanitiseInlineStyles(fragment);
-
-  const wrapper = document.createElement("div");
-  wrapper.appendChild(fragment);
-  return wrapper.innerHTML;
+  return prettyLinks(sanitizeMessageHtml(html));
 }
 
 /**
@@ -208,6 +175,40 @@ function bodyMarkupSx(theme: Theme) {
     // far that it starts a column of its own.
     "& ul, & ol": { my: "4px", pl: "22px" },
     "& li": { my: "2px" },
+    // Paragraphs sit flush. Nebula runs on MUI's baseline rather than
+    // standard's reset, so a bare `<p>` kept the browser's 1em above and below
+    // - and a stock Mumble client's Send-Message dialog wraps every line after
+    // the first in one, so its messages came out double-spaced with a gap
+    // after the opening line. Flush is also how the stock client draws them;
+    // an empty paragraph (`<p><br /></p>`, its blank line) still holds one
+    // line's height on its own.
+    "& p": { m: 0 },
+    // Headings are sized for a bubble, not a page. A stock `# title` arrives as
+    // an `<h1>`, which the browser draws at twice the body size with a 0.67em
+    // margin - a banner in the middle of a conversation.
+    "& h1, & h2, & h3, & h4, & h5, & h6": {
+      m: "6px 0 2px",
+      fontWeight: 600,
+      lineHeight: 1.3,
+    },
+    "& h1": { fontSize: "1.3em" },
+    "& h2": { fontSize: "1.18em" },
+    "& h3": { fontSize: "1.08em" },
+    "& h4, & h5, & h6": { fontSize: "1em" },
+    // A quotation keeps a rule down its side rather than the browser's 40px
+    // indent, which in a narrow bubble left the quoted words a column of
+    // their own.
+    "& blockquote": {
+      m: "4px 0",
+      pl: "10px",
+      borderLeft: `3px solid ${nebula.line}`,
+      color: nebula.dim,
+    },
+    // Nothing above the first block or below the last: the bubble's own
+    // padding is the margin there, and a heading or quote that opens a message
+    // should not push it off-centre.
+    "& > :first-child": { mt: 0 },
+    "& > :last-child": { mb: 0 },
   } as const;
 }
 
@@ -582,10 +583,13 @@ export const MessageRow = memo(function MessageRow({
   // drawn from. Nor one that is in cold storage - the text on hand is the
   // placeholder, and committing that would send it in place of the picture.
   // A local note never reached a server, so there is nothing there to edit.
+  // Nor a picture pasted into the text: it has no markdown form, so the draft
+  // opened as an empty line and saving it sent that in the picture's place.
   const canEdit =
     message.is_own &&
     !!message.message_id &&
     content.kind === "text" &&
+    isEditableBody(message.body) &&
     !offloaded &&
     message.channel_id !== LOCAL_NOTES_CHANNEL_ID;
 
@@ -615,8 +619,7 @@ export const MessageRow = memo(function MessageRow({
     if (chip && chipElement) {
       event.preventDefault();
       const stillHere =
-        chip.kind === "user" &&
-        useAppStore.getState().users.some((user) => user.session === chip.session);
+        chip.kind === "user" && useAppStore.getState().users.some((user) => user.session === chip.session);
       if (stillHere) {
         // The card is placed beside the word that named them, not beside the
         // whole message - `currentTarget` here is the body, which is neither.
@@ -729,7 +732,7 @@ export const MessageRow = memo(function MessageRow({
     // Same bar the row's own Edit is held to: a body in cold storage has no
     // text to edit, only the placeholder standing in for it.
     onContextMenu(message, point, {
-      editable: content.kind === "text" && !offloaded,
+      editable: content.kind === "text" && isEditableBody(message.body) && !offloaded,
       selection: selectionTouching(row),
       image: pictureUnder(target),
       link: linkUnder(target),
@@ -971,71 +974,71 @@ export const MessageRow = memo(function MessageRow({
           // pair would open the lightbox on it.
           hasBody && (
             <BubbleShell
-                sx={
-                  embedsInBubble
-                    ? (theme) => ({
-                        ...ownSurfaceSx(theme),
-                        // A floor, not a width: sized to the sentence above
-                        // it, the same preview is a different shape on every
-                        // message that quotes the same link - and a long one
-                        // still gets to run out to the bubble's full width.
-                        minWidth: "min(460px, 78%)",
-                        // The nine points under a line of prose are not
-                        // enough under a card: the thumbnail and the button
-                        // are hard edges, and they sit on the bubble's rim
-                        // without this.
-                        pb: `${BUBBLE_PAD.bottom}px`,
-                        // With no text above it the poster is the whole
-                        // bubble, so there is nothing left to pad: the
-                        // padding would be a bare strip of the accent above
-                        // the picture, which is what a bubble with its
-                        // sentence removed looks like.
-                        ...(showBodyText ? {} : { p: 0 }),
-                      })
-                    : undefined
-                }
-                below={bubbleEmbeds}
-              >
-                {showBodyText && (
-                  <Box
-                    onClick={onBodyClick}
-                    sx={(theme) => ({
-                      ...(embedsInBubble ? {} : ownSurfaceSx(theme)),
-                      lineHeight: 1.55,
-                      wordBreak: "break-word",
-                      "& img": {
-                        maxWidth: "100%",
-                        borderRadius: radius("lg"),
-                        display: "block",
-                        cursor: "zoom-in",
-                      },
-                      "& a": {
-                        color:
-                          theme.palette.nebulaSkin.bubbleOwn === "solid"
-                            ? theme.palette.nebula.onAccent
-                            : theme.palette.nebula.accent,
-                        // No underline: at this size, in the accent, on its own
-                        // line, a link is already unmistakably a link, and the
-                        // rule under a trimmed URL is what made it shout.
-                        textDecoration: "none",
-                        "&:hover": { textDecoration: "underline" },
-                        // One line, always: even trimmed, a link next to a long
-                        // word can be pushed past the bubble, and a URL that
-                        // wraps is the noise this was trimmed to stop.
-                        display: "inline-block",
-                        maxWidth: "100%",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        verticalAlign: "bottom",
-                      },
-                      ...bodyMarkupSx(theme),
-                      ...mentionSx(theme),
-                    })}
-                    dangerouslySetInnerHTML={bodyHtml}
-                  />
-                )}
-              </BubbleShell>
+              sx={
+                embedsInBubble
+                  ? (theme) => ({
+                      ...ownSurfaceSx(theme),
+                      // A floor, not a width: sized to the sentence above
+                      // it, the same preview is a different shape on every
+                      // message that quotes the same link - and a long one
+                      // still gets to run out to the bubble's full width.
+                      minWidth: "min(460px, 78%)",
+                      // The nine points under a line of prose are not
+                      // enough under a card: the thumbnail and the button
+                      // are hard edges, and they sit on the bubble's rim
+                      // without this.
+                      pb: `${BUBBLE_PAD.bottom}px`,
+                      // With no text above it the poster is the whole
+                      // bubble, so there is nothing left to pad: the
+                      // padding would be a bare strip of the accent above
+                      // the picture, which is what a bubble with its
+                      // sentence removed looks like.
+                      ...(showBodyText ? {} : { p: 0 }),
+                    })
+                  : undefined
+              }
+              below={bubbleEmbeds}
+            >
+              {showBodyText && (
+                <Box
+                  onClick={onBodyClick}
+                  sx={(theme) => ({
+                    ...(embedsInBubble ? {} : ownSurfaceSx(theme)),
+                    lineHeight: 1.55,
+                    wordBreak: "break-word",
+                    "& img": {
+                      maxWidth: "100%",
+                      borderRadius: radius("lg"),
+                      display: "block",
+                      cursor: "zoom-in",
+                    },
+                    "& a": {
+                      color:
+                        theme.palette.nebulaSkin.bubbleOwn === "solid"
+                          ? theme.palette.nebula.onAccent
+                          : theme.palette.nebula.accent,
+                      // No underline: at this size, in the accent, on its own
+                      // line, a link is already unmistakably a link, and the
+                      // rule under a trimmed URL is what made it shout.
+                      textDecoration: "none",
+                      "&:hover": { textDecoration: "underline" },
+                      // One line, always: even trimmed, a link next to a long
+                      // word can be pushed past the bubble, and a URL that
+                      // wraps is the noise this was trimmed to stop.
+                      display: "inline-block",
+                      maxWidth: "100%",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      verticalAlign: "bottom",
+                    },
+                    ...bodyMarkupSx(theme),
+                    ...mentionSx(theme),
+                  })}
+                  dangerouslySetInnerHTML={bodyHtml}
+                />
+              )}
+            </BubbleShell>
           )
         )}
         {gallery}
@@ -1269,92 +1272,92 @@ export const MessageRow = memo(function MessageRow({
           coldBody
         ) : (
           hasBody && (
-              <BubbleShell
-                sx={
-                  embedsInBubble
-                    ? (theme) => ({
-                        mt: grouped ? 0 : "2px",
-                        // Wide enough for the card, and no wider than any
-                        // other bubble - see the own side for why it is a
-                        // floor rather than a width.
-                        width: "fit-content",
-                        minWidth: "min(460px, 100%)",
-                        maxWidth: "min(620px, 100%)",
-                        px: `${BUBBLE_PAD.x}px`,
-                        pt: "9px",
-                        // See the own side: a card wants more under it than
-                        // a sentence does.
-                        pb: `${BUBBLE_PAD.bottom}px`,
-                        // And no padding at all where the poster is the whole
-                        // bubble; see the own side.
-                        ...(showBodyText ? {} : { p: 0 }),
-                        borderRadius: `${radius("lg")} ${radius("lg")} ${radius("lg")} ${radius("sm")}`,
-                        ...bubbleSurface(theme, theme.palette.nebula.card, theme.palette.nebula.line, picked),
-                      })
-                    : undefined
-                }
-                below={bubbleEmbeds}
-              >
-                {showBodyText && (
-                  <Box
-                    onClick={onBodyClick}
-                    sx={(theme) => ({
-                      ...(embedsInBubble ? {} : { mt: grouped || inlineName ? 0 : "2px" }),
-                      lineHeight: 1.55,
-                      wordBreak: "break-word",
-                      // "Bubbles" means every message in a rounded card, not only
-                      // yours: this one takes the surface colour and hangs its tail
-                      // on the left, mirroring the accent bubble on the right.
-                      // With a preview inside, the shell above is that card and
-                      // the body is only the text in it.
-                      ...(carded && !embedsInBubble
-                        ? {
-                            width: "fit-content",
-                            maxWidth: "min(620px, 100%)",
-                            px: "14px",
-                            py: "9px",
-                            borderRadius: `${radius("lg")} ${radius("lg")} ${radius("lg")} ${radius("sm")}`,
-                            ...bubbleSurface(
-                              theme,
-                              theme.palette.nebula.card,
-                              theme.palette.nebula.line,
-                              picked,
-                            ),
-                          }
-                        : {}),
-                      // Compact runs the body into the name above it.
-                      ...(inlineName ? { display: "inline" } : {}),
-                      // Pictures are lifted out before this renders, so this is
-                      // only a floor under anything that somehow arrives as markup
-                      // the splitter did not see - and it matches the gallery
-                      // rather than the cramped thumbnail it used to be.
-                      "& img": {
-                        maxWidth: "min(420px, 100%)",
-                        maxHeight: 320,
-                        borderRadius: radius("lg"),
-                        display: "block",
-                        mt: "8px",
-                        cursor: "zoom-in",
-                      },
-                      "& a": {
-                        color: theme.palette.nebula.accent,
-                        // One line, always: even trimmed, a link next to a long
-                        // word can be pushed past the bubble, and a URL that
-                        // wraps is the noise this was trimmed to stop.
-                        display: "inline-block",
-                        maxWidth: "100%",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        verticalAlign: "bottom",
-                      },
-                      ...bodyMarkupSx(theme),
-                      ...mentionSx(theme),
-                    })}
-                    dangerouslySetInnerHTML={bodyHtml}
-                  />
-                )}
-              </BubbleShell>
+            <BubbleShell
+              sx={
+                embedsInBubble
+                  ? (theme) => ({
+                      mt: grouped ? 0 : "2px",
+                      // Wide enough for the card, and no wider than any
+                      // other bubble - see the own side for why it is a
+                      // floor rather than a width.
+                      width: "fit-content",
+                      minWidth: "min(460px, 100%)",
+                      maxWidth: "min(620px, 100%)",
+                      px: `${BUBBLE_PAD.x}px`,
+                      pt: "9px",
+                      // See the own side: a card wants more under it than
+                      // a sentence does.
+                      pb: `${BUBBLE_PAD.bottom}px`,
+                      // And no padding at all where the poster is the whole
+                      // bubble; see the own side.
+                      ...(showBodyText ? {} : { p: 0 }),
+                      borderRadius: `${radius("lg")} ${radius("lg")} ${radius("lg")} ${radius("sm")}`,
+                      ...bubbleSurface(theme, theme.palette.nebula.card, theme.palette.nebula.line, picked),
+                    })
+                  : undefined
+              }
+              below={bubbleEmbeds}
+            >
+              {showBodyText && (
+                <Box
+                  onClick={onBodyClick}
+                  sx={(theme) => ({
+                    ...(embedsInBubble ? {} : { mt: grouped || inlineName ? 0 : "2px" }),
+                    lineHeight: 1.55,
+                    wordBreak: "break-word",
+                    // "Bubbles" means every message in a rounded card, not only
+                    // yours: this one takes the surface colour and hangs its tail
+                    // on the left, mirroring the accent bubble on the right.
+                    // With a preview inside, the shell above is that card and
+                    // the body is only the text in it.
+                    ...(carded && !embedsInBubble
+                      ? {
+                          width: "fit-content",
+                          maxWidth: "min(620px, 100%)",
+                          px: "14px",
+                          py: "9px",
+                          borderRadius: `${radius("lg")} ${radius("lg")} ${radius("lg")} ${radius("sm")}`,
+                          ...bubbleSurface(
+                            theme,
+                            theme.palette.nebula.card,
+                            theme.palette.nebula.line,
+                            picked,
+                          ),
+                        }
+                      : {}),
+                    // Compact runs the body into the name above it.
+                    ...(inlineName ? { display: "inline" } : {}),
+                    // Pictures are lifted out before this renders, so this is
+                    // only a floor under anything that somehow arrives as markup
+                    // the splitter did not see - and it matches the gallery
+                    // rather than the cramped thumbnail it used to be.
+                    "& img": {
+                      maxWidth: "min(420px, 100%)",
+                      maxHeight: 320,
+                      borderRadius: radius("lg"),
+                      display: "block",
+                      mt: "8px",
+                      cursor: "zoom-in",
+                    },
+                    "& a": {
+                      color: theme.palette.nebula.accent,
+                      // One line, always: even trimmed, a link next to a long
+                      // word can be pushed past the bubble, and a URL that
+                      // wraps is the noise this was trimmed to stop.
+                      display: "inline-block",
+                      maxWidth: "100%",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      verticalAlign: "bottom",
+                    },
+                    ...bodyMarkupSx(theme),
+                    ...mentionSx(theme),
+                  })}
+                  dangerouslySetInnerHTML={bodyHtml}
+                />
+              )}
+            </BubbleShell>
           )
         )}
         {gallery}

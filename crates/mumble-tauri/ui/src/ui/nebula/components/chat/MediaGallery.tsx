@@ -5,7 +5,7 @@ import FileAttachmentCard from "@standard/components/chat/file/FileAttachmentCar
 import { previewKindForFilename, type FileAttachmentInfo } from "@core/features/chat/fileAttachments";
 import { useAppStore } from "@core/store";
 import { formatBytes } from "@core/utils/format";
-import { rememberImageSize, type ImageSize } from "@core/utils/imageSize";
+import { base64PayloadBytes, rememberImageSize, type ImageSize } from "@core/utils/imageSize";
 import { AttachmentVisibilityBadge } from "./AttachmentVisibilityBadge";
 import type { BodyImage } from "../../selectors";
 import { radius } from "../../tokens";
@@ -46,10 +46,10 @@ function bodyImageBytes(src: string): number | null {
   const comma = src.indexOf(",");
   if (!src.startsWith("data:") || comma < 0) return null;
   if (!src.slice(0, comma).includes(";base64")) return null;
-  const payload = src.slice(comma + 1);
-  if (payload.length === 0) return null;
-  const padding = payload.endsWith("==") ? 2 : payload.endsWith("=") ? 1 : 0;
-  return Math.floor((payload.length * 3) / 4) - padding;
+  // Counted by the shared reader, which knows a stock client's payload is
+  // percent-encoded and line-wrapped; measured by string length, a stock
+  // picture's chip overstated its weight by a third.
+  return base64PayloadBytes(src, comma + 1);
 }
 /** The tiled block is one object, so it has one width whatever it holds. */
 const GRID_W = 460;

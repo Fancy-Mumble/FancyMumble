@@ -17,6 +17,7 @@ import type { ChatMessage } from "@core/types";
 import type { ReactionSummary } from "@core/features/chat/reaction/reactionStore";
 import { getReadersForMessage } from "@core/features/chat/readreceipt/readReceiptStore";
 import { useAppStore } from "@core/store";
+import { isEditableBody } from "@core/utils/bodyMarkup";
 import { QUICK_REACTIONS } from "../../elements/MessageActionBar";
 import { useWatchStart } from "@core/features/chat/watch/useWatchStart";
 import { canOpenPrivately, openPrivatelyOrExplain } from "@core/features/elements/privateBrowsing";
@@ -291,7 +292,9 @@ export default function MessageContextMenu({
             {t("contextMenu.copyText")}
           </button>
         )}
-        {onEdit && menu.message.is_own && menu.message.message_id && (
+        {/* A body with a picture in it has no markdown form to edit: the draft
+            opened without it, and saving sent the message minus the picture. */}
+        {onEdit && menu.message.is_own && menu.message.message_id && isEditableBody(menu.message.body) && (
           <button
             type="button"
             className={styles.menuItem}

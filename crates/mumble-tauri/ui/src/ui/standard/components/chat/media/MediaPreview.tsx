@@ -18,6 +18,7 @@ import type { TimeFormat } from "@core/types";
 import { formatTimestamp } from "@core/utils/format";
 import { useInnerHtml } from "@core/utils/innerHtml";
 import { imageSizeFromSource, rememberImageSize } from "@core/utils/imageSize";
+import { prepareBodyHtml } from "@core/utils/bodyMarkup";
 import { isTrustedMediaSrc, neutraliseRemoteMedia, useTrustedMediaVersion } from "@core/utils/remoteMedia";
 import { ImageContextMenu } from "../../elements/ImageContextMenu";
 
@@ -98,6 +99,9 @@ const ALLOWED_TAGS = new Set([
   "i",
   "u",
   "s",
+  // A stock client's chat bar writes a `> quote` as `<div><i>…</i></div>`;
+  // without this the quote lost its line breaks along with the wrapper.
+  "div",
   "em",
   "strong",
   "br",
@@ -174,18 +178,69 @@ const SAFE_CSS_PROPS = new Set([
 ]);
 
 /**
+ * Tags whose content is not prose, removed together with everything in them.
+ *
+ * Unwrapping is right for a wrapper this renderer merely does not know - its
+ * text is the message - but wrong for these: a `<style>` or `<script>` block's
+ * text is code, a `<textarea>`'s belongs to a form, and an `<svg>`'s is drawing
+ * instructions. Kept as text they printed the code into the message, which is
+ * what a stylesheet sent along by a rich-text client used to look like here.
+ */
+const DROPPED_TAGS = new Set([
+  "script",
+  "style",
+  "template",
+  "noscript",
+  "head",
+  "title",
+  "meta",
+  "link",
+  "base",
+  "iframe",
+  "frame",
+  "frameset",
+  "object",
+  "embed",
+  "applet",
+  "svg",
+  "math",
+  "canvas",
+  "audio",
+  "video",
+  "source",
+  "track",
+  "textarea",
+  "select",
+  "option",
+  "input",
+  "button",
+]);
+
+/**
  * Walk the DOM tree produced by DOMParser and strip anything
  * not on the whitelist.  Mutates `root` in place.
+ *
+ * An element that is not allowed is unwrapped: it goes, its (sanitised)
+ * children stay where it was. It used to be replaced by its `textContent`,
+ * which flattened everything inside it - a quote whose lines were split by
+ * `<br>` inside a `<div>` read as one welded run, and any formatting within
+ * was lost along with the tag that happened to hold it.
  */
 function sanitiseTree(root: Element): void {
   for (const child of Array.from(root.children)) {
     const tag = child.tagName.toLowerCase();
+    if (DROPPED_TAGS.has(tag)) {
+      child.remove();
+      continue;
+    }
+    // Children first, so what is lifted out of an unwrapped element has been
+    // through the same filter as everything else.
+    sanitiseTree(child);
     if (!ALLOWED_TAGS.has(tag)) {
-      child.replaceWith(document.createTextNode(child.textContent ?? ""));
+      child.replaceWith(...Array.from(child.childNodes));
       continue;
     }
     sanitiseAttrs(child, tag);
-    sanitiseTree(child);
   }
 }
 
@@ -363,7 +418,10 @@ export function extractMedia(html: string, _trustVersion = 0): { cleaned: string
 
   // NOTE: math spans are left as-is here and rendered post-mount (see
   // `renderMathNodes` in MediaPreview) so KaTeX can be lazy-loaded.
-  const cleaned = doc.body.innerHTML.trim();
+  // Edges trimmed and non-breaking spaces relaxed (see bodyMarkup.ts). A
+  // stock client's pasted picture is `<br /><img …/>`, so without the trim the
+  // break was all that was left and drew an empty line above the thumbnail.
+  const cleaned = prepareBodyHtml(doc.body.innerHTML.trim());
   return { cleaned, media };
 }
 
