@@ -21,7 +21,7 @@
  */
 
 import DOMPurify from "dompurify";
-import { styleValueFetches } from "./remoteMedia";
+import { neutraliseRemoteMedia, styleValueFetches } from "./remoteMedia";
 
 // -- Regular expressions ------------------------------------------------
 
@@ -274,10 +274,13 @@ function sanitiseStyle(value: string): string {
 export function sanitizeHtml(html: string): string {
   if (!html) return "";
 
-  const fragment = DOMPurify.sanitize(html, {
-    ...PURIFY_CONFIG,
-    RETURN_DOM_FRAGMENT: true,
-  }) as unknown as DocumentFragment;
+  // A body that parses as a `<frameset>` document has no `<body>`, and
+  // DOMPurify hands back null for it rather than an empty fragment.
+  const fragment =
+    (DOMPurify.sanitize(html, {
+      ...PURIFY_CONFIG,
+      RETURN_DOM_FRAGMENT: true,
+    }) as unknown as DocumentFragment | null) ?? document.createDocumentFragment();
 
   postProcess(fragment);
 
@@ -310,6 +313,136 @@ function postProcess(root: DocumentFragment | Element): void {
   }
 
   sanitiseInlineStyles(root);
+}
+
+// -- Chat message bodies ------------------------------------------------
+
+/**
+ * Elements a chat message may never carry, however it was written.
+ *
+ * Message bodies are purified with DOMPurify's whole HTML profile rather than
+ * the allow-list above - they carry video, spoilers, mention chips, details
+ * blocks and whatever a stock Mumble client's source tab produces - and that
+ * profile keeps a good deal that is not formatting:
+ *
+ *  - `<style>` applies to the whole document, not the message:
+ *    `x<style>*{display:none}</style>` blanks the app for everyone in the
+ *    channel. `<link>`, `<meta>` and `<base>` reach the document the same way.
+ *  - A `<form>` or `<button formaction>` submits by navigating the window
+ *    itself, and an `<area>` is a link the anchor guard never sees: either
+ *    replaces the app with a page of the sender's choosing, and a password
+ *    `<input>` beside a "Log in" button is exactly the page they would choose.
+ *  - Frames, plugins and SVG/MathML (`<foreignObject>` re-enters HTML from
+ *    inside them) are whole documents of their own.
+ *  - `<dialog>` and the other form controls have no place in a chat line and
+ *    only exist to be the pieces of the above.
+ */
+const MESSAGE_FORBID_TAGS = [
+  "style",
+  "link",
+  "meta",
+  "base",
+  "form",
+  "input",
+  "button",
+  "textarea",
+  "select",
+  "option",
+  "optgroup",
+  "datalist",
+  "fieldset",
+  "legend",
+  "label",
+  "output",
+  "map",
+  "area",
+  "iframe",
+  "frame",
+  "frameset",
+  "object",
+  "embed",
+  "applet",
+  "param",
+  "portal",
+  "dialog",
+  "template",
+  "noscript",
+  "svg",
+  "math",
+  "foreignobject",
+];
+
+/** Attributes that submit, navigate or embed on a message's behalf. */
+const MESSAGE_FORBID_ATTR = [
+  "action",
+  "formaction",
+  "form",
+  "method",
+  "enctype",
+  "srcdoc",
+  "usemap",
+  "ping",
+  "http-equiv",
+];
+
+/** Link schemes a message may use; anything else loses its `href`, not its text. */
+const MESSAGE_URL_RE = /^(?:https?:|mailto:|#)/i;
+
+/**
+ * Purify a chat message body for rendering, and return it as a fragment.
+ *
+ * The one pass every design's message row renders through, so the packs
+ * cannot drift apart on what a message may contain:
+ *
+ * 1. DOMPurify's HTML profile, minus {@link MESSAGE_FORBID_TAGS} and
+ *    {@link MESSAGE_FORBID_ATTR}.
+ * 2. Nothing fetches on its own ({@link neutraliseRemoteMedia}).
+ * 3. Every anchor is marked `data-external` and opens in a new context, so the
+ *    link guard - not the webview - decides where it goes; an anchor with an
+ *    unsafe scheme keeps its text and loses its `href`.
+ * 4. Inline styles are cut to the safe property list
+ *    ({@link sanitiseInlineStyles}).
+ *
+ * A fragment rather than a string because callers usually keep working on the
+ * tree (shortening links, lifting media) before serialising it.
+ */
+export function purifyMessageBody(html: string): DocumentFragment {
+  // A body that parses as a `<frameset>` document has no `<body>` at all, and
+  // DOMPurify hands back null for it rather than an empty fragment: without the
+  // fallback, one such message threw out of every row that tried to draw it.
+  const fragment =
+    (DOMPurify.sanitize(html ?? "", {
+      USE_PROFILES: { html: true },
+      ADD_ATTR: ["target", "rel"],
+      FORBID_TAGS: MESSAGE_FORBID_TAGS,
+      FORBID_ATTR: MESSAGE_FORBID_ATTR,
+      RETURN_DOM_FRAGMENT: true,
+    }) as unknown as DocumentFragment | null) ?? document.createDocumentFragment();
+  // Clips, posters and inline-style images the splitter did not lift: none of
+  // them may fetch on their own. Before the anchor pass, which marks the links
+  // this leaves behind like every other one.
+  neutraliseRemoteMedia(fragment);
+
+  for (const anchor of Array.from(fragment.querySelectorAll("a"))) {
+    if (!MESSAGE_URL_RE.test((anchor.getAttribute("href") ?? "").trim())) {
+      anchor.removeAttribute("href");
+    }
+    anchor.setAttribute("target", "_blank");
+    anchor.setAttribute("rel", "noopener noreferrer");
+    anchor.dataset["external"] = "true";
+  }
+  // DOMPurify keeps `style` whole, so without this one message could carry
+  // `position:fixed;inset:0;z-index:...` and cover - and swallow every tap on -
+  // the whole window, on every client in the channel.
+  sanitiseInlineStyles(fragment);
+  return fragment;
+}
+
+/** {@link purifyMessageBody}, serialised. */
+export function sanitizeMessageHtml(html: string): string {
+  const wrapper = document.createElement("div");
+  wrapper.appendChild(purifyMessageBody(html));
+  return wrapper.innerHTML;
 }
 
 /**

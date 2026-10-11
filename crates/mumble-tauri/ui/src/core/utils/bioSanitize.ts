@@ -46,10 +46,13 @@ const BIO_SANITIZE_CONFIG = {
 export function sanitizeBio(html: string): string {
   if (!html) return "";
 
-  const fragment = DOMPurify.sanitize(html, {
-    ...BIO_SANITIZE_CONFIG,
-    RETURN_DOM_FRAGMENT: true,
-  }) as unknown as DocumentFragment;
+  // A body that parses as a `<frameset>` document has no `<body>`, and
+  // DOMPurify hands back null for it rather than an empty fragment.
+  const fragment =
+    (DOMPurify.sanitize(html, {
+      ...BIO_SANITIZE_CONFIG,
+      RETURN_DOM_FRAGMENT: true,
+    }) as unknown as DocumentFragment | null) ?? document.createDocumentFragment();
 
   // Validate every img src - any external URL is stripped.
   const imgs = fragment.querySelectorAll("img");
