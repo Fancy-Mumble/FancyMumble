@@ -1,5 +1,6 @@
 //! Direct message (DM) operations.
 
+use fancy_utils::html::strip_legacy_fallback;
 use mumble_protocol::command;
 
 use super::own_session_hash;
@@ -52,7 +53,8 @@ impl AppState {
                 sender_session: own_session,
                 sender_name: own_name,
                 sender_hash: own_hash,
-                body,
+                // The legacy-only part is for the other end; we draw the card.
+                body: strip_legacy_fallback(&body),
                 channel_id: 0,
                 is_own: true,
                 dm_session: Some(target_session),

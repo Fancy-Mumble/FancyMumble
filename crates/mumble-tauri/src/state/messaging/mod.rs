@@ -3,6 +3,7 @@
 mod dm;
 mod unreads;
 
+use fancy_utils::html::strip_legacy_fallback;
 use mumble_protocol::client::ClientHandle;
 use mumble_protocol::command;
 use mumble_protocol::persistent::PchatProtocol;
@@ -164,11 +165,15 @@ impl AppState {
                 .lock()
                 .map(|s| s.prefs.disable_dual_path)
                 .unwrap_or(false);
+        // The legacy-only part rides the plain `TextMessage` alone: the sealed
+        // copy and our own row are read by Fancy clients, which draw the card.
+        let fancy_body = strip_legacy_fallback(&body);
         let text_body = if disable_dual {
             "[Encrypted message]".to_string()
         } else {
-            body.clone()
+            body
         };
+        let body = fancy_body;
 
         let prebuilt_pchat = self.prebuilt_pchat_message(
             pchat_protocol,

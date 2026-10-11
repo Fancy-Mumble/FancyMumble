@@ -1,4 +1,4 @@
-use fancy_utils::html::strip_html_tags;
+use fancy_utils::html::{strip_html_tags, strip_legacy_fallback};
 use mumble_protocol::persistent::PchatProtocol;
 use mumble_protocol::proto::mumble_tcp;
 
@@ -362,7 +362,7 @@ fn handle_direct_message(
             sender_session: tm.actor,
             sender_name: resolve_sender_name(state, tm.actor),
             sender_hash: resolve_sender_hash(state, tm.actor),
-            body: tm.message.clone(),
+            body: strip_legacy_fallback(&tm.message),
             channel_id: 0,
             // Ours, so no unread and no notification: we wrote it.
             is_own: true,
@@ -390,7 +390,7 @@ fn handle_direct_message(
         sender_session: tm.actor,
         sender_name,
         sender_hash: resolve_sender_hash(state, tm.actor),
-        body: tm.message.clone(),
+        body: strip_legacy_fallback(&tm.message),
         channel_id: 0,
         is_own: false,
         dm_session: Some(sender_session),
@@ -421,7 +421,7 @@ fn handle_direct_message(
     deferred.push(DeferredEvent::DirectMessage {
         sender_session,
         sender_name: resolve_sender_name(state, tm.actor),
-        body: tm.message.clone(),
+        body: strip_legacy_fallback(&tm.message),
     });
 }
 
@@ -476,7 +476,7 @@ fn handle_channel_message(
             sender_session: tm.actor,
             sender_name: sender_name.clone(),
             sender_hash: sender_hash.clone(),
-            body: tm.message.clone(),
+            body: strip_legacy_fallback(&tm.message),
             channel_id: ch_id,
             is_own,
             dm_session: None,
@@ -525,7 +525,7 @@ fn handle_channel_message(
             deferred.push(DeferredEvent::ChannelMessage {
                 channel_id: ch_id,
                 sender_name: sender_name.clone(),
-                body: tm.message.clone(),
+                body: strip_legacy_fallback(&tm.message),
                 sender_session: tm.actor,
             });
         }
