@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use tauri::Manager;
 
-use super::offload::OffloadStore;
+use super::offload::{BodySummary, OffloadStore};
 use super::types::ChatMessage;
 use super::{AppState, SharedState};
 
@@ -40,7 +40,7 @@ impl AppState {
 
         let body = find_message_body(&state, &scope, &scope_id, &message_id)?;
 
-        if body.starts_with("<!-- OFFLOADED:") {
+        if body.starts_with(OFFLOADED_PREFIX) {
             return Ok(());
         }
 
@@ -155,10 +155,42 @@ pub(super) fn is_heavy_body(body: &str) -> bool {
         && (body.contains("src=\"data:image/") || body.contains("src=\"data:video/"))
 }
 
+/// How every offload marker starts. The frontend parses the same shape.
+pub(super) const OFFLOADED_PREFIX: &str = "<!-- OFFLOADED:";
+
 /// The marker a put-away body leaves behind, carrying its size so a row can
 /// hold the right amount of room open for it.
 pub(super) fn offload_placeholder(message_id: &str, content_len: usize) -> String {
-    format!("<!-- OFFLOADED:{message_id}:{content_len} -->")
+    format!("{OFFLOADED_PREFIX}{message_id}:{content_len} -->")
+}
+
+/// The summary of `msg`'s body when that body is put away, `None` when the
+/// body is in memory.
+///
+/// Anything host-side that reads bodies (search, the photo grid, the
+/// overlay) has to ask this first: the marker itself has no text and no
+/// picture in it.
+pub(super) fn offloaded_summary<'a>(
+    msg: &ChatMessage,
+    store: Option<&'a OffloadStore>,
+) -> Option<&'a BodySummary> {
+    if !msg.body.starts_with(OFFLOADED_PREFIX) {
+        return None;
+    }
+    store?.summary(msg.message_id.as_deref()?)
+}
+
+/// One line saying what `msg` shows, for surfaces outside the chat view
+/// (the overlay), whether its body is in memory or put away.
+pub(super) fn message_preview(msg: &ChatMessage, store: Option<&OffloadStore>) -> String {
+    let Some(summary) = offloaded_summary(msg, store) else {
+        return fancy_utils::html::message_preview(&msg.body);
+    };
+    if summary.visible_text.is_empty() && summary.has_image {
+        // Same wording as `fancy_utils::html::message_preview`.
+        return "sent an image".to_owned();
+    }
+    summary.visible_text.clone()
 }
 
 /// Put away every heavy body in `messages` except the newest `keep_newest`.
@@ -445,6 +477,31 @@ mod tests {
                 .starts_with("<!-- OFFLOADED:left:")
         );
         assert_eq!(state.msgs.by_channel[&2][0].body, heavy);
+    }
+
+    #[test]
+    fn an_offloaded_body_still_says_what_it_shows() {
+        let (_dir, mut store) = store();
+        let mut messages = vec![message("a", &picture()), message("b", "<b>hi</b>")];
+        let _ = offload_idle_bodies(&mut messages, &mut store, 0);
+        assert!(messages[0].body.starts_with(OFFLOADED_PREFIX));
+
+        let summary = offloaded_summary(&messages[0], Some(&store)).unwrap();
+        assert_eq!(summary.visible_text, "look");
+        assert_eq!(summary.image_count, 1);
+        assert_eq!(message_preview(&messages[0], Some(&store)), "look");
+        // A body in memory has no summary; its preview is read off the body.
+        assert!(offloaded_summary(&messages[1], Some(&store)).is_none());
+        assert_eq!(message_preview(&messages[1], Some(&store)), "hi");
+    }
+
+    #[test]
+    fn an_offloaded_picture_without_text_previews_as_an_image() {
+        let (_dir, mut store) = store();
+        let body = format!("<img src=\"data:image/png;base64,{}\">", "A".repeat(70_000));
+        let mut messages = vec![message("a", &body)];
+        let _ = offload_idle_bodies(&mut messages, &mut store, 0);
+        assert_eq!(message_preview(&messages[0], Some(&store)), "sent an image");
     }
 
     #[test]

@@ -30,7 +30,9 @@ pub fn fuzzy_score(pattern: &str, text: &str, score_cutoff: u32) -> Option<u32> 
     if text.contains(pattern) {
         // Score based on how much "extra" text surrounds the match.
         // Shorter texts matching fully get better scores.
-        let len_diff = text.len().saturating_sub(pattern.len()) as u32;
+        // Counted in characters, so a text in a script that takes several
+        // bytes per letter does not rank below the same text in ASCII.
+        let len_diff = text.chars().count().saturating_sub(pattern.chars().count()) as u32;
         return Some(len_diff);
     }
 
@@ -132,21 +134,28 @@ pub fn is_boundary(c: char) -> bool {
 /// Extract a snippet of `text` around the first occurrence of `query`,
 /// capped at `max_len` characters.
 ///
-/// HTML tags are stripped from the text before extracting the snippet.
+/// `text` is HTML; the snippet is cut from its visible text (see
+/// [`crate::html::visible_text`]), so markup, entities and inline image
+/// payloads never show up in it.
 pub fn snippet(text: &str, query: &str, max_len: usize) -> String {
-    let plain = crate::html::strip_html_tags(text);
+    snippet_plain(&crate::html::visible_text(text), query, max_len)
+}
 
-    let lower = plain.to_lowercase();
-    let query_lower = query.to_lowercase();
-
-    // Find approximate position of the query in the plain text.
-    let pos = lower.find(&query_lower).unwrap_or(0);
+/// Like [`snippet`], for text that is already plain.
+///
+/// Works in characters throughout. Byte offsets used to be sliced
+/// straight into the text, and any window edge that fell inside a
+/// multibyte character ("a" followed by sixty 'ä', say) panicked - in a
+/// build that aborts on panic, the whole client went down on a search.
+pub fn snippet_plain(plain: &str, query: &str, max_len: usize) -> String {
+    let chars: Vec<char> = plain.chars().collect();
+    let pos = find_char_ignore_case(&chars, query).unwrap_or(0);
 
     // Center the snippet around the match.
     let half = max_len / 2;
     let start = pos.saturating_sub(half);
-    let end = (start + max_len).min(plain.len());
-    let start = if end == plain.len() {
+    let end = (start + max_len).min(chars.len());
+    let start = if end == chars.len() {
         end.saturating_sub(max_len)
     } else {
         start
@@ -156,11 +165,29 @@ pub fn snippet(text: &str, query: &str, max_len: usize) -> String {
     if start > 0 {
         s.push_str("...");
     }
-    s.push_str(&plain[start..end]);
-    if end < plain.len() {
+    s.extend(&chars[start..end]);
+    if end < chars.len() {
         s.push_str("...");
     }
     s
+}
+
+/// Character index of the first case-insensitive occurrence of `query`
+/// in `chars`.
+///
+/// Compares character by character, lowercasing each side as it goes,
+/// rather than searching a lowercased copy: `to_lowercase` changes the
+/// length of some characters ('İ' becomes two), so an offset found in the
+/// copy does not point at the same place in the original.
+fn find_char_ignore_case(chars: &[char], query: &str) -> Option<usize> {
+    let query: Vec<char> = query.chars().flat_map(char::to_lowercase).collect();
+    if query.is_empty() {
+        return None;
+    }
+    (0..chars.len()).find(|&start| {
+        let mut lowered = chars[start..].iter().flat_map(|c| c.to_lowercase());
+        query.iter().all(|q| lowered.next() == Some(*q))
+    })
 }
 
 #[cfg(test)]
@@ -218,5 +245,51 @@ mod tests {
         let s = snippet(text, "hello", 50);
         assert!(s.contains("hello"));
         assert!(!s.contains("<b>"));
+    }
+
+    #[test]
+    fn snippet_never_cuts_a_multibyte_character() {
+        // Used to panic: "end byte index 80 is not a char boundary".
+        let text = format!("a{}", "ä".repeat(60));
+        let s = snippet(&text, "a", 80);
+        assert_eq!(s, text);
+        let s = snippet(&text, "a", 20);
+        assert_eq!(s, format!("a{}...", "ä".repeat(19)));
+    }
+
+    #[test]
+    fn snippet_window_is_counted_in_characters() {
+        let text = format!("{}needle{}", "ü".repeat(100), "ö".repeat(100));
+        let s = snippet(&text, "NEEDLE", 20);
+        assert_eq!(
+            s,
+            format!("...{}needle{}...", "ü".repeat(10), "ö".repeat(4))
+        );
+    }
+
+    #[test]
+    fn snippet_finds_the_match_after_case_changing_characters() {
+        // 'İ' lowercases to two characters; a position found in a lowercased
+        // copy would land past the real match.
+        let text = format!("{}target{}", "İ".repeat(50), "x".repeat(50));
+        let s = snippet(&text, "target", 10);
+        assert_eq!(s, "...İİİİİtarge...");
+    }
+
+    #[test]
+    fn snippet_decodes_entities_and_drops_markup() {
+        let s = snippet("<p>fish&nbsp;&amp;&nbsp;chips</p><br>", "chips", 50);
+        assert_eq!(s, "fish & chips");
+    }
+
+    #[test]
+    fn snippet_without_a_match_starts_at_the_beginning() {
+        assert_eq!(snippet_plain("ääääää", "zz", 3), "äää...");
+        assert_eq!(snippet_plain("", "zz", 3), "");
+    }
+
+    #[test]
+    fn exact_match_length_penalty_counts_characters() {
+        assert_eq!(fuzzy_score("a", "aää", DEFAULT_SCORE_CUTOFF), Some(2));
     }
 }

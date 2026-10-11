@@ -252,10 +252,35 @@ impl OffloadProvider for EncryptedFileProvider {
 
 // --- OffloadStore (facade) ----------------------------------------
 
+/// What search and the photo grid need to know about a body that is put
+/// away, kept in memory while the body itself sits in the store.
+///
+/// Without it an offloaded message is only its `<!-- OFFLOADED -->` marker
+/// to everything host-side: no text to match, no picture to list. A stock
+/// Mumble client pastes images inline up to 128 KiB, most of them over the
+/// offload threshold, so every one of those vanished from Photos and from
+/// search once its channel went idle. The summary holds no media - only
+/// the visible text, which is no more than a text-only message keeps in
+/// memory anyway - so the memory the offload saves stays saved.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BodySummary {
+    /// The body as a reader sees it (see `fancy_utils::html::visible_text`).
+    pub visible_text: String,
+    /// Whether the body shows a picture (an `<img>` or a `data:image` URL).
+    pub has_image: bool,
+    /// Whether the body carries a link.
+    pub has_link: bool,
+    /// How many `<img>` sources the body has; the photo grid lists one
+    /// entry per source and loads the body back only for the page shown.
+    pub image_count: usize,
+}
+
 /// Wraps an [`OffloadProvider`] and exposes it as the public API used
 /// by the rest of the application.
 pub struct OffloadStore {
     provider: Box<dyn OffloadProvider + Send>,
+    /// A [`BodySummary`] for every key currently stored.
+    summaries: HashMap<String, BodySummary>,
 }
 
 impl OffloadStore {
@@ -266,6 +291,7 @@ impl OffloadStore {
         let provider = EncryptedFileProvider::new(base_dir)?;
         Ok(Self {
             provider: Box::new(provider),
+            summaries: HashMap::new(),
         })
     }
 
@@ -275,11 +301,28 @@ impl OffloadStore {
         reason = "alternative constructor for testing with custom providers"
     )]
     pub fn with_provider(provider: Box<dyn OffloadProvider + Send>) -> Self {
-        Self { provider }
+        Self {
+            provider,
+            summaries: HashMap::new(),
+        }
     }
 
+    /// Put `content` away under `key`, keeping its [`BodySummary`] at hand.
+    ///
+    /// Every path that offloads a body comes through here - the viewport
+    /// window and the idle-channel sweep alike - so no offloaded message is
+    /// ever without one.
     pub fn store(&mut self, key: &str, content: &str) -> Result<(), String> {
-        self.provider.store(key, content)
+        self.provider.store(key, content)?;
+        let _ = self
+            .summaries
+            .insert(key.to_owned(), super::search::summarize_body(content));
+        Ok(())
+    }
+
+    /// The summary of the body stored under `key`, if one is.
+    pub fn summary(&self, key: &str) -> Option<&BodySummary> {
+        self.summaries.get(key)
     }
 
     pub fn load(&self, key: &str) -> Result<String, String> {
@@ -293,6 +336,7 @@ impl OffloadStore {
     }
 
     pub fn remove(&mut self, key: &str) {
+        let _ = self.summaries.remove(key);
         self.provider.remove(key);
     }
 
@@ -310,10 +354,12 @@ impl OffloadStore {
     }
 
     pub fn clear(&mut self) {
+        self.summaries.clear();
         self.provider.clear();
     }
 
     pub fn cleanup_dir(&mut self) {
+        self.summaries.clear();
         self.provider.cleanup();
     }
 
@@ -508,5 +554,28 @@ mod tests {
 
         store.remove("k");
         assert!(!store.is_offloaded("k"));
+    }
+
+    #[test]
+    fn a_stored_body_keeps_its_summary_until_it_comes_back() {
+        let mut store = isolated_store("summary");
+        let body = "see <b>this</b> <img src=\"data:image/png;base64,AAAA\"> https://x.y";
+        store.store("s1", body).unwrap();
+
+        let summary = store.summary("s1").unwrap();
+        assert_eq!(summary.visible_text, "see this https://x.y");
+        assert!(summary.has_image);
+        assert!(summary.has_link);
+        assert_eq!(summary.image_count, 1);
+
+        // Restored bodies are back in memory; the summary goes with the file.
+        store.remove("s1");
+        assert!(store.summary("s1").is_none());
+
+        store.store("s2", "x").unwrap();
+        store.clear();
+        assert!(store.summary("s2").is_none());
+
+        store.cleanup_dir();
     }
 }

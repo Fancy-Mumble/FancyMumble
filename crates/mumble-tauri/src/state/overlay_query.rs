@@ -72,7 +72,7 @@ impl AppState {
                 sender: message.sender_name.clone(),
                 // Plain text only: nothing a peer sends can style or script
                 // the overlay window.
-                text: fancy_utils::html::strip_html_tags(&message.body),
+                text: super::offload_ops::message_preview(message, state.offload_store.as_ref()),
                 timestamp: message.timestamp,
             });
 

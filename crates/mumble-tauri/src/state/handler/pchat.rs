@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use fancy_utils::html::strip_html_tags;
+use fancy_utils::html::message_preview;
 use mumble_protocol::proto::mumble_tcp;
 use tracing::{debug, warn};
 
@@ -95,7 +95,7 @@ impl HandleMessage for mumble_tcp::PchatMessageDeliver {
                 .and_then(|sid| ctx.shared.lock().ok()?.users.get(&sid)?.texture.clone());
             ctx.send_notification_with_icon(
                 &title,
-                &strip_html_tags(&body),
+                &message_preview(&body),
                 icon.as_deref(),
                 Some(channel_id),
             );
