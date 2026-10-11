@@ -254,11 +254,12 @@ fn try_apply_edit(
             .unwrap_or_default()
             .as_millis() as u64
     });
+    let body = strip_legacy_fallback(&tm.message);
     match kind {
         MessageKind::DirectMessage => tm
             .actor
             .and_then(|sid| state.msgs.by_dm.get_mut(&sid))
-            .is_some_and(|msgs| apply_edit(msgs, edit_id, &tm.message, edited_at)),
+            .is_some_and(|msgs| apply_edit(msgs, edit_id, &body, edited_at)),
         MessageKind::Channel => {
             let channel_ids = if tm.channel_id.is_empty() {
                 vec![0u32]
@@ -270,7 +271,7 @@ fn try_apply_edit(
                     .msgs
                     .by_channel
                     .get_mut(ch_id)
-                    .is_some_and(|msgs| apply_edit(msgs, edit_id, &tm.message, edited_at))
+                    .is_some_and(|msgs| apply_edit(msgs, edit_id, &body, edited_at))
             })
         }
     }

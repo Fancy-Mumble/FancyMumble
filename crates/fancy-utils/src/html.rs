@@ -32,10 +32,11 @@ pub const LEGACY_FALLBACK_CLOSE: &str = "<!-- /FANCY_LEGACY -->";
 /// for those clients alone - a Fancy client already draws the card, and
 /// drawing the copy as well would show the picture twice.
 ///
-/// An opening comment without its close is left alone rather than eating the
-/// rest of the message.
+/// Only beside a `FANCY_FILE` marker: a fence anywhere else is text somebody
+/// wrapped to hide it from Fancy clients, and it stays. An opening comment
+/// without its close is left alone rather than eating the rest of the message.
 pub fn strip_legacy_fallback(body: &str) -> String {
-    if !body.contains(LEGACY_FALLBACK_OPEN) {
+    if !body.contains(LEGACY_FALLBACK_OPEN) || !body.contains("<!-- FANCY_FILE:") {
         return body.to_owned();
     }
     let mut out = String::with_capacity(body.len());
@@ -63,13 +64,19 @@ mod tests {
 
     #[test]
     fn every_legacy_fallback_is_cut_out() {
-        let body = "<!-- FANCY_LEGACY -->a<!-- /FANCY_LEGACY -->x<!-- FANCY_LEGACY -->b<!-- /FANCY_LEGACY -->";
-        assert_eq!(strip_legacy_fallback(body), "x");
+        let body = "<!-- FANCY_FILE:a --><!-- FANCY_LEGACY -->a<!-- /FANCY_LEGACY -->x<!-- FANCY_LEGACY -->b<!-- /FANCY_LEGACY -->";
+        assert_eq!(strip_legacy_fallback(body), "<!-- FANCY_FILE:a -->x");
     }
 
     #[test]
     fn unclosed_legacy_fallback_is_kept() {
-        let body = "x<!-- FANCY_LEGACY -->y";
+        let body = "<!-- FANCY_FILE:a -->x<!-- FANCY_LEGACY -->y";
+        assert_eq!(strip_legacy_fallback(body), body);
+    }
+
+    #[test]
+    fn fence_without_a_file_is_kept() {
+        let body = "<!-- FANCY_LEGACY -->hidden<!-- /FANCY_LEGACY -->";
         assert_eq!(strip_legacy_fallback(body), body);
     }
 
