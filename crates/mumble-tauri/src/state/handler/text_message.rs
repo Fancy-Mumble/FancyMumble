@@ -1,4 +1,4 @@
-use fancy_utils::html::{strip_html_tags, strip_legacy_fallback};
+use fancy_utils::html::{message_preview, strip_legacy_fallback};
 use mumble_protocol::persistent::PchatProtocol;
 use mumble_protocol::proto::mumble_tcp;
 
@@ -126,7 +126,7 @@ impl<'a> DeferredEmitter<'a> {
         let icon = self.lookup_texture(Some(sender_session));
         self.ctx.send_notification_with_icon(
             sender_name,
-            &strip_html_tags(body),
+            &message_preview(body),
             icon.as_deref(),
             None,
         );
@@ -178,7 +178,7 @@ impl<'a> DeferredEmitter<'a> {
         };
         self.ctx.send_notification_with_icon(
             &title,
-            &strip_html_tags(body),
+            &message_preview(body),
             icon.as_deref(),
             Some(channel_id),
         );
@@ -199,18 +199,93 @@ impl<'a> DeferredEmitter<'a> {
 
 // -- Helpers -------------------------------------------------------
 
-/// Apply an edit to a message list, returning `true` if the target was found.
-fn apply_edit(messages: &mut [ChatMessage], edit_id: &str, new_body: &str, edited_at: u64) -> bool {
-    if let Some(msg) = messages
+/// Who sent an edit, as far as this client can tell.
+struct Editor<'a> {
+    session: Option<u32>,
+    /// The certificate hash behind `session`, when it is known.
+    hash: Option<&'a str>,
+}
+
+impl Editor<'_> {
+    /// Whether this editor wrote `original`.
+    ///
+    /// By certificate hash whenever both sides have one: it is the identity
+    /// that survives a reconnect, where the session id changes, and that a
+    /// reused session id does not inherit. By session only when a hash is
+    /// missing, because then it is all there is. An edit used to be matched by
+    /// message id alone, so anybody could rewrite anybody's message on every
+    /// Fancy client by naming its id.
+    fn wrote(&self, original: &ChatMessage) -> bool {
+        let theirs = original.sender_hash.as_deref().filter(|h| !h.is_empty());
+        match (theirs, self.hash.filter(|h| !h.is_empty())) {
+            (Some(theirs), Some(mine)) => theirs == mine,
+            _ => self.session.is_some() && original.sender_session == self.session,
+        }
+    }
+}
+
+/// Apply an edit to a message list, returning `true` if it was applied.
+///
+/// Refused when `editor` is not the author of the target. Also refused, in a
+/// channel that runs persistent chat (`sealed_channel`), when the target is
+/// not a legacy message: such a message arrived sealed, the sender's edit
+/// arrives sealed too, and the plain copy beside it is for stock clients. In
+/// an encrypted channel with dual path off that copy is the "[Encrypted
+/// message]" placeholder, which must never overwrite the words it stands in
+/// for.
+fn apply_edit(
+    messages: &mut [ChatMessage],
+    edit_id: &str,
+    new_body: &str,
+    edited_at: u64,
+    editor: &Editor<'_>,
+    sealed_channel: bool,
+) -> bool {
+    let Some(msg) = messages
         .iter_mut()
         .find(|m| m.message_id.as_deref() == Some(edit_id))
-    {
-        msg.body = new_body.to_owned();
-        msg.edited_at = Some(edited_at);
-        true
-    } else {
-        false
+    else {
+        return false;
+    };
+    if !editor.wrote(msg) {
+        tracing::warn!(
+            edit_id,
+            editor = ?editor.session,
+            "rejected an edit of somebody else's message"
+        );
+        return false;
     }
+    if sealed_channel && !msg.is_legacy {
+        return false;
+    }
+    msg.body = new_body.to_owned();
+    msg.edited_at = Some(edited_at);
+    true
+}
+
+/// Cut the legacy-only "(edited)" note off the front of an edit's body.
+///
+/// The sender puts it there for stock clients, which ignore `edit_id` and
+/// draw an edit as a new message (`messaging::LEGACY_EDITED_MARK`). Cut here
+/// as well as by `strip_legacy_fallback`, which only cuts a fence when a Fancy
+/// marker vouches for it, so a sender that left the tag off is still read
+/// right; and only at the very front, where the sender put it, so a fence
+/// somebody wrote into their text stays.
+/// Whatever is inside the fence goes, so a server with HTML off that rewrote
+/// `<i>(edited)</i>` to `(edited)` is handled the same, and so does the
+/// fallback tag in front of it.
+fn strip_legacy_edit_mark(body: &str) -> String {
+    use fancy_utils::html::{LEGACY_FALLBACK_CLOSE, LEGACY_FALLBACK_OPEN, LEGACY_FALLBACK_TAG};
+    let lead = body.trim_start();
+    let lead = lead.strip_prefix(LEGACY_FALLBACK_TAG).unwrap_or(lead);
+    if let Some(rest) = lead.trim_start().strip_prefix(LEGACY_FALLBACK_OPEN)
+        && let Some(end) = rest.find(LEGACY_FALLBACK_CLOSE)
+    {
+        return rest[end + LEGACY_FALLBACK_CLOSE.len()..]
+            .trim_start()
+            .to_owned();
+    }
+    body.to_owned()
 }
 
 fn emit_edit_events(
@@ -254,12 +329,17 @@ fn try_apply_edit(
             .unwrap_or_default()
             .as_millis() as u64
     });
-    let body = strip_legacy_fallback(&tm.message);
+    let body = strip_legacy_edit_mark(&strip_legacy_fallback(&tm.message));
+    let editor_hash = resolve_sender_hash(state, tm.actor);
+    let editor = Editor {
+        session: tm.actor,
+        hash: editor_hash.as_deref(),
+    };
     match kind {
         MessageKind::DirectMessage => tm
             .actor
             .and_then(|sid| state.msgs.by_dm.get_mut(&sid))
-            .is_some_and(|msgs| apply_edit(msgs, edit_id, &body, edited_at)),
+            .is_some_and(|msgs| apply_edit(msgs, edit_id, &body, edited_at, &editor, false)),
         MessageKind::Channel => {
             let channel_ids = if tm.channel_id.is_empty() {
                 vec![0u32]
@@ -267,11 +347,14 @@ fn try_apply_edit(
                 tm.channel_id.clone()
             };
             channel_ids.iter().any(|ch_id| {
-                state
-                    .msgs
-                    .by_channel
-                    .get_mut(ch_id)
-                    .is_some_and(|msgs| apply_edit(msgs, edit_id, &body, edited_at))
+                let sealed = state
+                    .channels
+                    .get(ch_id)
+                    .and_then(|c| c.pchat_protocol)
+                    .is_some_and(|p| p.uses_pchat());
+                state.msgs.by_channel.get_mut(ch_id).is_some_and(|msgs| {
+                    apply_edit(msgs, edit_id, &body, edited_at, &editor, sealed)
+                })
             })
         }
     }
@@ -609,13 +692,19 @@ mod tests {
         }
     }
 
+    /// Session 1, the author in [`make_message`], with no known hash.
+    const AUTHOR: Editor<'static> = Editor {
+        session: Some(1),
+        hash: None,
+    };
+
     #[test]
     fn apply_edit_updates_existing_message() {
         let mut messages = vec![
             make_message("msg-1", "original body"),
             make_message("msg-2", "other message"),
         ];
-        let result = apply_edit(&mut messages, "msg-1", "updated body", 2000);
+        let result = apply_edit(&mut messages, "msg-1", "updated body", 2000, &AUTHOR, false);
         assert!(result);
         assert_eq!(messages[0].body, "updated body");
         assert_eq!(messages[0].edited_at, Some(2000));
@@ -626,7 +715,14 @@ mod tests {
     #[test]
     fn apply_edit_returns_false_for_unknown_id() {
         let mut messages = vec![make_message("msg-1", "original body")];
-        let result = apply_edit(&mut messages, "nonexistent", "new body", 2000);
+        let result = apply_edit(
+            &mut messages,
+            "nonexistent",
+            "new body",
+            2000,
+            &AUTHOR,
+            false,
+        );
         assert!(!result);
         assert_eq!(messages[0].body, "original body");
         assert!(messages[0].edited_at.is_none());
@@ -635,7 +731,132 @@ mod tests {
     #[test]
     fn apply_edit_on_empty_list() {
         let mut messages: Vec<ChatMessage> = vec![];
-        let result = apply_edit(&mut messages, "any-id", "body", 1000);
+        let result = apply_edit(&mut messages, "any-id", "body", 1000, &AUTHOR, false);
         assert!(!result);
+    }
+
+    #[test]
+    fn apply_edit_refuses_somebody_elses_edit() {
+        // The finding: an edit was matched by message id alone, so any member
+        // could rewrite anybody's words on every Fancy client.
+        let mut messages = vec![make_message("msg-1", "alice's words")];
+        let mallory = Editor {
+            session: Some(2),
+            hash: None,
+        };
+        assert!(!apply_edit(
+            &mut messages,
+            "msg-1",
+            "forged",
+            2000,
+            &mallory,
+            false
+        ));
+        assert_eq!(messages[0].body, "alice's words");
+        assert!(messages[0].edited_at.is_none());
+    }
+
+    #[test]
+    fn apply_edit_goes_by_certificate_across_a_reconnect() {
+        // Same person on a new session: the hash decides, not the session.
+        let mut messages = vec![make_message("msg-1", "before")];
+        messages[0].sender_hash = Some("alice-hash".into());
+        let alice_again = Editor {
+            session: Some(9),
+            hash: Some("alice-hash"),
+        };
+        assert!(apply_edit(
+            &mut messages,
+            "msg-1",
+            "after",
+            2000,
+            &alice_again,
+            false
+        ));
+        assert_eq!(messages[0].body, "after");
+    }
+
+    #[test]
+    fn apply_edit_refuses_a_reused_session_with_another_certificate() {
+        let mut messages = vec![make_message("msg-1", "before")];
+        messages[0].sender_hash = Some("alice-hash".into());
+        let newcomer = Editor {
+            session: Some(1),
+            hash: Some("mallory-hash"),
+        };
+        assert!(!apply_edit(
+            &mut messages,
+            "msg-1",
+            "forged",
+            2000,
+            &newcomer,
+            false
+        ));
+        assert_eq!(messages[0].body, "before");
+    }
+
+    #[test]
+    fn a_plain_edit_copy_never_overwrites_a_sealed_message() {
+        // In a persistent channel the sealed edit is the authoritative one, and
+        // the plain copy may be the "[Encrypted message]" placeholder.
+        let mut messages = vec![make_message("msg-1", "the real words")];
+        assert!(!apply_edit(
+            &mut messages,
+            "msg-1",
+            "[Encrypted message]",
+            2000,
+            &AUTHOR,
+            true
+        ));
+        assert_eq!(messages[0].body, "the real words");
+
+        // A legacy message in the same channel only ever had the plain copy.
+        messages[0].is_legacy = true;
+        assert!(apply_edit(
+            &mut messages,
+            "msg-1",
+            "fixed",
+            2000,
+            &AUTHOR,
+            true
+        ));
+        assert_eq!(messages[0].body, "fixed");
+    }
+
+    #[test]
+    fn the_legacy_edited_note_is_cut_from_an_edit() {
+        let sent = format!("{}fixed words", crate::state::messaging::LEGACY_EDITED_MARK);
+        assert_eq!(strip_legacy_edit_mark(&sent), "fixed words");
+        // As a server with HTML off delivers it: the fence's markup stripped.
+        assert_eq!(
+            strip_legacy_edit_mark(
+                "<!-- FANCY_FALLBACK --><!-- FANCY_LEGACY -->(edited) <!-- /FANCY_LEGACY -->fixed words"
+            ),
+            "fixed words"
+        );
+        // And from a sender that put no tag in front of the fence.
+        assert_eq!(
+            strip_legacy_edit_mark(
+                "<!-- FANCY_LEGACY --><i>(edited)</i> <!-- /FANCY_LEGACY -->fixed words"
+            ),
+            "fixed words"
+        );
+    }
+
+    #[test]
+    fn the_edited_note_is_cut_on_the_receive_path() {
+        // The receive path runs both cuts; whichever of them finds the note,
+        // nothing of it is left.
+        let sent = format!("{}fixed", crate::state::messaging::LEGACY_EDITED_MARK);
+        assert_eq!(
+            strip_legacy_edit_mark(&strip_legacy_fallback(&sent)),
+            "fixed"
+        );
+    }
+
+    #[test]
+    fn a_fence_inside_the_text_is_not_an_edited_note() {
+        let body = "see <!-- FANCY_LEGACY -->this<!-- /FANCY_LEGACY -->";
+        assert_eq!(strip_legacy_edit_mark(body), body);
     }
 }

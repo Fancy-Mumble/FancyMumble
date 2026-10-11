@@ -31,7 +31,9 @@ pub(crate) fn handle_proto_msg_deliver(
     let sender_hash = msg.sender_hash.clone().unwrap_or_default();
     let protocol = proto_to_protocol(msg.protocol);
     let envelope_bytes = msg.envelope.clone().unwrap_or_default();
-    let replaces_id = msg.replaces_id.clone();
+    // The canonical wire carries "not an edit" as an empty string rather than
+    // an absent field, so empty is filtered out here once.
+    let replaces_id = msg.replaces_id.clone().filter(|id| !id.is_empty());
 
     debug!(
         data_len = envelope_bytes.len(),
@@ -61,7 +63,11 @@ pub(crate) fn handle_proto_msg_deliver(
     );
     let is_own = is_own_hash(pchat, &sender_hash);
 
-    if protocol == PchatProtocol::SignalV1 && decrypted {
+    let cache_signal = protocol == PchatProtocol::SignalV1 && decrypted;
+    // An edit is cached once it has been applied, under the id of the message
+    // it replaced; cached here it would sit beside the original as a second
+    // message the next time the channel is restored from disk.
+    if cache_signal && replaces_id.is_none() {
         pchat.cache_signal_message(CachedMessage {
             message_id: message_id.clone(),
             channel_id,
@@ -102,13 +108,38 @@ pub(crate) fn handle_proto_msg_deliver(
         plugin_components: None,
     };
 
-    insert_or_replace_message(
+    let edited = insert_or_replace_message(
         &mut state,
         channel_id,
         &message_id,
         replaces_id.as_deref(),
         chat_msg,
     );
+    if cache_signal
+        && let Some(edited) = edited
+        && let Some(pchat) = state.pchat_ctx.pchat.as_mut()
+    {
+        pchat.recache_signal_message(CachedMessage {
+            message_id: edited.message_id.clone().unwrap_or_default(),
+            channel_id,
+            timestamp: edited.timestamp.unwrap_or(0),
+            sender_hash: edited.sender_hash.clone().unwrap_or_default(),
+            sender_name: edited.sender_name.clone(),
+            body: edited.body.clone(),
+            is_own: edited.is_own,
+        });
+    }
+}
+
+/// Whether `edit` comes from the certificate that wrote `original`.
+///
+/// Both hashes must be present: a message with no known author is nobody's
+/// to rewrite, and two missing hashes are not the same person.
+fn same_author(original: &ChatMessage, edit: &ChatMessage) -> bool {
+    original
+        .sender_hash
+        .as_deref()
+        .is_some_and(|hash| !hash.is_empty() && edit.sender_hash.as_deref() == Some(hash))
 }
 
 /// Whether `sender_hash` is this client's own certificate.
@@ -174,28 +205,52 @@ fn decrypt_or_stash(
 
 /// Insert a message into the channel history, replacing an existing one
 /// if `replaces_id` matches, or deduplicating by `message_id`.
+///
+/// Returns the row an edit produced, when this was an edit that applied.
 fn insert_or_replace_message(
     state: &mut SharedState,
     channel_id: u32,
     message_id: &str,
     replaces_id: Option<&str>,
     mut chat_msg: ChatMessage,
-) {
-    if let Some(replaces_id) = replaces_id
-        && let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id)
-        && let Some(pos) = msgs
-            .iter()
-            .position(|m| m.message_id.as_deref() == Some(replaces_id))
-    {
+) -> Option<ChatMessage> {
+    if let Some(replaces_id) = replaces_id.filter(|id| !id.is_empty()) {
+        let Some(pos) = state.msgs.by_channel.get(&channel_id).and_then(|msgs| {
+            msgs.iter()
+                .position(|m| m.message_id.as_deref() == Some(replaces_id))
+        }) else {
+            // An edit of a message this client does not hold: scrolled out
+            // of the window, or from before it joined. Appended, it would be
+            // a second copy of a message nobody here has the first of; the
+            // archive has the edited row in place for when it is paged in.
+            debug!(
+                channel_id,
+                message_id = %message_id,
+                replaces_id = %replaces_id,
+                "pchat: an edit of a message not held here was not appended"
+            );
+            return None;
+        };
+        let msgs = state.msgs.by_channel.get_mut(&channel_id)?;
         // Only the original author may replace their message. The
         // server can't vouch for replaces_id on protocols without
         // server-side storage (SignalV1), so an unmatched sender here
         // is a forged edit - keep the original and fall through to a
         // plain insert of the new message instead.
-        if msgs[pos].sender_hash == chat_msg.sender_hash {
+        if same_author(&msgs[pos], &chat_msg) {
+            // Filed under the id it replaced, not the edit's own: that is
+            // the id every later edit, pin, reaction and delete names, and
+            // the one the sender's own row kept. It also stays where it was
+            // said, with the time it was said.
+            let original = &msgs[pos];
             chat_msg.edited_at = Some(chat_msg.timestamp.unwrap_or(0));
-            msgs[pos] = chat_msg;
-            return;
+            chat_msg.message_id = Some(replaces_id.to_owned());
+            chat_msg.timestamp = original.timestamp;
+            chat_msg.pinned = original.pinned;
+            chat_msg.pinned_by = original.pinned_by.clone();
+            chat_msg.pinned_at = original.pinned_at;
+            msgs[pos] = chat_msg.clone();
+            return Some(chat_msg);
         }
         warn!(
             channel_id,
@@ -233,7 +288,7 @@ fn insert_or_replace_message(
             chat_msg.pinned_at = msgs[pos].pinned_at;
             msgs[pos] = chat_msg;
         }
-        return;
+        return None;
     }
 
     // Refused when this client has dropped the thread's tail: the message
@@ -244,12 +299,13 @@ fn insert_or_replace_message(
             channel_id,
             "pchat: an arrival for a thread detached from its tail was not appended"
         );
-        return;
+        return None;
     }
 
     // Same as a plain text message: a picture landing in a channel that is
     // not on screen goes to cold storage straight away.
     crate::state::offload_ops::offload_newest_if_idle(state, channel_id);
+    None
 }
 
 // -- Fetch response ---------------------------------------------------
@@ -300,7 +356,73 @@ pub(crate) fn handle_proto_fetch_resp(
     };
     state.pchat_ctx.pchat = Some(pchat);
 
+    let decrypted_msgs = match state.msgs.by_channel.get_mut(&channel_id) {
+        Some(held) => fold_fetched_edits(held, decrypted_msgs),
+        None => fold_fetched_edits(&mut [], decrypted_msgs),
+    };
     merge_decrypted_messages(&mut state, channel_id, decrypted_msgs, has_more);
+}
+
+/// Settle the edits in a fetched page, returning the rows to join.
+///
+/// The archive rewrites an edited message in place, so a page usually carries
+/// it once, under the edit's id and naming the original in `replaces_id`. It
+/// is filed here under the original id, the identity every client uses for
+/// it, and marked edited; a held copy of the original takes the new words too,
+/// because the joins keep a row they already hold over the page's.
+///
+/// An archive written before that stored the edit as a row of its own beside
+/// the original, and a page can carry both. Then the original takes the
+/// newest edit's words and the edit row goes, rather than reading as a second
+/// message. An edit whose sender did not write its target is left standing as
+/// a message of its own, as the live path does.
+fn fold_fetched_edits(
+    held: &mut [ChatMessage],
+    page: Vec<(ChatMessage, Option<String>)>,
+) -> Vec<ChatMessage> {
+    let (mut rows, replaces): (Vec<ChatMessage>, Vec<Option<String>>) = page
+        .into_iter()
+        .map(|(msg, replaces)| (msg, replaces.filter(|id| !id.is_empty())))
+        .unzip();
+    let mut folded = vec![false; rows.len()];
+    let take_edit = |target: &mut ChatMessage, body: &str, edited_at: u64| {
+        if target.edited_at.is_none_or(|at| at <= edited_at) {
+            body.clone_into(&mut target.body);
+            target.edited_at = Some(edited_at);
+        }
+    };
+    for (i, target_id) in replaces.iter().enumerate() {
+        let Some(target_id) = target_id else {
+            continue;
+        };
+        let edited_at = rows[i].timestamp.unwrap_or(0);
+        let in_page = rows.iter().enumerate().position(|(j, m)| {
+            j != i && replaces[j].is_none() && m.message_id.as_deref() == Some(target_id.as_str())
+        });
+        if let Some(j) = in_page {
+            if same_author(&rows[j], &rows[i]) {
+                let body = rows[i].body.clone();
+                take_edit(&mut rows[j], &body, edited_at);
+                folded[i] = true;
+            }
+            continue;
+        }
+        if let Some(original) = held
+            .iter_mut()
+            .find(|m| m.message_id.as_deref() == Some(target_id.as_str()))
+        {
+            if !same_author(original, &rows[i]) {
+                continue;
+            }
+            take_edit(original, &rows[i].body, edited_at);
+        }
+        rows[i].message_id = Some(target_id.clone());
+        rows[i].edited_at = Some(edited_at);
+    }
+    rows.into_iter()
+        .zip(folded)
+        .filter_map(|(row, folded)| (!folded).then_some(row))
+        .collect()
 }
 
 /// Decrypt a batch of fetched messages outside the state lock.
@@ -309,8 +431,8 @@ fn decrypt_fetched_messages(
     own_cert_hash: &str,
     user_hashes: &HashMap<String, u32>,
     messages: &[mumble_tcp::PchatMessage],
-) -> Vec<ChatMessage> {
-    let mut decrypted_msgs: Vec<ChatMessage> = Vec::with_capacity(messages.len());
+) -> Vec<(ChatMessage, Option<String>)> {
+    let mut decrypted_msgs: Vec<(ChatMessage, Option<String>)> = Vec::with_capacity(messages.len());
 
     for proto_msg in messages {
         let msg_id = proto_msg.message_id.clone().unwrap_or_default();
@@ -387,25 +509,28 @@ fn decrypt_fetched_messages(
 
         let sender_session = user_hashes.get(&msg_sender_hash).copied();
 
-        decrypted_msgs.push(ChatMessage {
-            sender_session,
-            sender_name,
-            sender_hash: Some(msg_sender_hash),
-            body,
-            channel_id: msg_channel_id,
-            is_own,
-            dm_session: None,
-            message_id: Some(msg_id),
-            timestamp: Some(msg_timestamp),
-            is_legacy: false,
-            send_failed: false,
-            edited_at: None,
-            pinned: false,
-            pinned_by: None,
-            pinned_at: None,
-            plugin_name: None,
-            plugin_components: None,
-        });
+        decrypted_msgs.push((
+            ChatMessage {
+                sender_session,
+                sender_name,
+                sender_hash: Some(msg_sender_hash),
+                body,
+                channel_id: msg_channel_id,
+                is_own,
+                dm_session: None,
+                message_id: Some(msg_id),
+                timestamp: Some(msg_timestamp),
+                is_legacy: false,
+                send_failed: false,
+                edited_at: None,
+                pinned: false,
+                pinned_by: None,
+                pinned_at: None,
+                plugin_name: None,
+                plugin_components: None,
+            },
+            proto_msg.replaces_id.clone(),
+        ));
     }
 
     decrypted_msgs
@@ -855,7 +980,7 @@ mod tests {
             .or_default()
             .push(half("m-1", PLACEHOLDER_BODY, true));
 
-        insert_or_replace_message(
+        let _ = insert_or_replace_message(
             &mut state,
             4,
             "m-1",
@@ -883,7 +1008,7 @@ mod tests {
             .or_default()
             .push(half("m-1", "the real body", false));
 
-        insert_or_replace_message(
+        let _ = insert_or_replace_message(
             &mut state,
             4,
             "m-1",
@@ -905,7 +1030,7 @@ mod tests {
         pinned.pinned_at = Some(99);
         state.msgs.by_channel.entry(4).or_default().push(pinned);
 
-        insert_or_replace_message(
+        let _ = insert_or_replace_message(
             &mut state,
             4,
             "m-1",
@@ -920,6 +1045,117 @@ mod tests {
         assert_eq!(msgs[0].pinned_at, Some(99));
     }
 
+    /// An edit of `of` by `sender_hash`, under its own id `e-1`.
+    fn edit(of: &str, body: &str, sender_hash: &str) -> (ChatMessage, Option<String>) {
+        let mut msg = half("e-1", body, false);
+        msg.sender_hash = Some(sender_hash.to_owned());
+        msg.timestamp = Some(2_000);
+        (msg, Some(of.to_owned()))
+    }
+
+    #[test]
+    fn a_live_edit_rewrites_the_original_under_its_own_id() {
+        let mut state = SharedState::default();
+        state
+            .msgs
+            .by_channel
+            .entry(4)
+            .or_default()
+            .push(half("m-1", "teh words", false));
+
+        let (msg, of) = edit("m-1", "the words", "abcd");
+        let edited = insert_or_replace_message(&mut state, 4, "e-1", of.as_deref(), msg);
+
+        assert!(edited.is_some());
+        let msgs = state.msgs.by_channel.get(&4).unwrap();
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].body, "the words");
+        assert_eq!(
+            msgs[0].message_id.as_deref(),
+            Some("m-1"),
+            "a later edit names the original id, so the row keeps it"
+        );
+        assert_eq!(msgs[0].edited_at, Some(2_000));
+        assert_eq!(
+            msgs[0].timestamp,
+            Some(1_000),
+            "and stays where it was said"
+        );
+    }
+
+    #[test]
+    fn a_live_edit_from_another_certificate_rewrites_nothing() {
+        let mut state = SharedState::default();
+        state
+            .msgs
+            .by_channel
+            .entry(4)
+            .or_default()
+            .push(half("m-1", "alice's words", false));
+
+        let (msg, of) = edit("m-1", "forged", "mallory");
+        let edited = insert_or_replace_message(&mut state, 4, "e-1", of.as_deref(), msg);
+
+        assert!(edited.is_none());
+        let msgs = state.msgs.by_channel.get(&4).unwrap();
+        assert_eq!(msgs[0].body, "alice's words");
+        assert!(msgs[0].edited_at.is_none());
+    }
+
+    #[test]
+    fn a_live_edit_of_a_message_not_held_is_not_appended() {
+        let mut state = SharedState::default();
+        let (msg, of) = edit("m-gone", "fixed", "abcd");
+        let _ = insert_or_replace_message(&mut state, 4, "e-1", of.as_deref(), msg);
+        assert!(bodies(&state).is_empty());
+    }
+
+    #[test]
+    fn an_archived_edit_is_filed_under_the_original_id() {
+        // The archive rewrites the row in place: the page has it once, under
+        // the edit's id, naming what it replaced.
+        let mut held = vec![half("m-1", "teh words", false)];
+        let page = vec![edit("m-1", "the words", "abcd")];
+
+        let rows = fold_fetched_edits(&mut held, page);
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].message_id.as_deref(), Some("m-1"));
+        assert_eq!(rows[0].edited_at, Some(2_000));
+        assert_eq!(
+            held[0].body, "the words",
+            "the held copy is brought up to date"
+        );
+    }
+
+    #[test]
+    fn an_older_archive_that_kept_both_rows_shows_one_message() {
+        let page = vec![
+            (half("m-1", "teh words", false), None),
+            edit("m-1", "the words", "abcd"),
+        ];
+
+        let rows = fold_fetched_edits(&mut [], page);
+
+        assert_eq!(rows.len(), 1, "the edit row folds into the original");
+        assert_eq!(rows[0].message_id.as_deref(), Some("m-1"));
+        assert_eq!(rows[0].body, "the words");
+    }
+
+    #[test]
+    fn a_fetched_edit_from_another_certificate_stands_alone() {
+        let page = vec![
+            (half("m-1", "alice's words", false), None),
+            edit("m-1", "forged", "mallory"),
+        ];
+
+        let rows = fold_fetched_edits(&mut [], page);
+
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].body, "alice's words");
+        assert_eq!(rows[1].message_id.as_deref(), Some("e-1"));
+    }
+
     #[test]
     fn a_genuine_duplicate_is_still_dropped() {
         // The dedup this rule sits inside still has to hold: two copies of the
@@ -932,7 +1168,7 @@ mod tests {
             .or_default()
             .push(half("m-1", "the real body", false));
 
-        insert_or_replace_message(
+        let _ = insert_or_replace_message(
             &mut state,
             4,
             "m-1",

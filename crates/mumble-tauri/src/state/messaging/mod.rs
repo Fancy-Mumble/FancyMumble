@@ -22,6 +22,37 @@ struct OwnMessageData {
     pchat_protocol: Option<PchatProtocol>,
 }
 
+/// What the plain copy of a sealed message says when dual path is off.
+const ENCRYPTED_PLACEHOLDER: &str = "[Encrypted message]";
+
+/// What a stock Mumble client is shown in front of an edit's new words.
+///
+/// A stock client ignores `edit_id` and draws an edit as a brand new message,
+/// so without a word of explanation a corrected typo reads as the sender
+/// saying the same thing twice. Fenced as legacy-only: a Fancy client applies
+/// the edit in place and marks it edited itself, and cuts this out on receipt.
+/// Led by the fallback tag, because `strip_legacy_fallback` only cuts a fence
+/// when the body carries a Fancy marker to vouch for it, and an edit of plain
+/// words has none of its own.
+pub(crate) const LEGACY_EDITED_MARK: &str =
+    "<!-- FANCY_FALLBACK --><!-- FANCY_LEGACY --><i>(edited)</i> <!-- /FANCY_LEGACY -->";
+
+/// The body of an edit's plain `TextMessage`, the copy stock clients read.
+///
+/// The same dual-path decision [`AppState::send_message`] makes: in an
+/// encrypted channel whose user turned dual path off, the plain copy is the
+/// placeholder and never the words. An edit used to send the new words in the
+/// clear whatever the channel was, so editing a message in an end-to-end
+/// channel published it.
+fn legacy_edit_body(body: &str, disable_dual: bool) -> String {
+    let shown = if disable_dual {
+        ENCRYPTED_PLACEHOLDER
+    } else {
+        body
+    };
+    format!("{LEGACY_EDITED_MARK}{shown}")
+}
+
 /// Search `bucket` for the first message whose `plugin_name` and `message_id`
 /// match, apply the requested update fields to it, and return whether a match
 /// was found.
@@ -64,24 +95,39 @@ fn own_session_hash(state: &SharedState) -> Option<String> {
 }
 
 fn cache_own_signal_message(state: &mut SharedState, msg: &ChatMessage, channel_id: u32) {
-    let own_cert_hash = state
-        .pchat_ctx
-        .pchat
-        .as_ref()
-        .map(|ps| ps.own_cert_hash.clone())
-        .unwrap_or_default();
     if let Some(pchat) = state.pchat_ctx.pchat.as_mut() {
         // Through the same helper the inbound path uses, so a message the
         // user sent gets the same throttled write-out as one they received.
-        pchat.cache_signal_message(super::local_cache::CachedMessage {
-            message_id: msg.message_id.clone().unwrap_or_default(),
-            channel_id,
-            timestamp: msg.timestamp.unwrap_or(0),
-            sender_hash: own_cert_hash,
-            sender_name: msg.sender_name.clone(),
-            body: msg.body.clone(),
-            is_own: true,
-        });
+        let cached = own_cached_message(pchat, msg, channel_id);
+        pchat.cache_signal_message(cached);
+    }
+}
+
+/// [`cache_own_signal_message`] for a message the user has just edited.
+///
+/// The cache dedups by id, so the edited body would otherwise lose to the
+/// original, and a `SignalV1` channel, which has no server history to put it
+/// right, reopened on the words the user retracted.
+fn recache_own_signal_message(state: &mut SharedState, msg: &ChatMessage, channel_id: u32) {
+    if let Some(pchat) = state.pchat_ctx.pchat.as_mut() {
+        let cached = own_cached_message(pchat, msg, channel_id);
+        pchat.recache_signal_message(cached);
+    }
+}
+
+fn own_cached_message(
+    pchat: &pchat::PchatState,
+    msg: &ChatMessage,
+    channel_id: u32,
+) -> super::local_cache::CachedMessage {
+    super::local_cache::CachedMessage {
+        message_id: msg.message_id.clone().unwrap_or_default(),
+        channel_id,
+        timestamp: msg.timestamp.unwrap_or(0),
+        sender_hash: pchat.own_cert_hash.clone(),
+        sender_name: msg.sender_name.clone(),
+        body: msg.body.clone(),
+        is_own: true,
     }
 }
 
@@ -169,7 +215,7 @@ impl AppState {
         // copy and our own row are read by Fancy clients, which draw the card.
         let fancy_body = strip_legacy_fallback(&body);
         let text_body = if disable_dual {
-            "[Encrypted message]".to_string()
+            ENCRYPTED_PLACEHOLDER.to_string()
         } else {
             body
         };
@@ -485,18 +531,39 @@ impl AppState {
         Ok(())
     }
 
+    /// Replace the body of one of our channel messages.
+    ///
+    /// An edit travels the way the message did: a plain `TextMessage` naming
+    /// the original in `edit_id`, for the server's relay and for stock
+    /// clients, and in a persistent channel a sealed `PchatMessage` naming it
+    /// in `replaces_id`, which is what Fancy clients apply there and what the
+    /// archive rewrites its row with. Both are sent under one fresh id of the
+    /// edit's own, because the sealed copy is authenticated against its own
+    /// id and clock, and the archive keeps one row per sender id. The original
+    /// id stays the message's identity everywhere: every later edit, pin and
+    /// delete names it.
+    ///
+    /// The edit used to be the plain copy alone, with the new words in the
+    /// clear whatever the channel was, so in an end-to-end channel an edit
+    /// published what it said and the sealed archive kept the old text.
     pub async fn edit_message(
         &self,
         channel_id: u32,
         message_id: String,
         new_body: String,
     ) -> Result<(), String> {
-        let (handle, is_fancy) = {
+        let (handle, is_fancy, own_name, pchat_protocol, dual_path_off) = {
             let __session = self.inner.snapshot();
             let state = __session.lock().map_err(|e| e.to_string())?;
             (
                 state.conn.client_handle.clone(),
                 state.server.fancy_version.is_some(),
+                state.conn.own_name.clone(),
+                state
+                    .channels
+                    .get(&channel_id)
+                    .and_then(|ch| ch.pchat_protocol),
+                state.prefs.disable_dual_path,
             )
         };
 
@@ -509,31 +576,79 @@ impl AppState {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
+        let edit_message_id = uuid::Uuid::new_v4().to_string();
+
+        let disable_dual = pchat_protocol.is_some_and(|p| p.is_encrypted()) && dual_path_off;
+        // As in `send_message`: the legacy-only part rides the plain copy
+        // alone, and the sealed copy and our own row get the Fancy body.
+        let fancy_body = strip_legacy_fallback(&new_body);
+        let text_body = legacy_edit_body(&new_body, disable_dual);
+
+        let prebuilt_pchat = self
+            .prebuilt_pchat_message(
+                pchat_protocol,
+                &Some(edit_message_id.clone()),
+                channel_id,
+                &fancy_body,
+                &own_name,
+                now_ms,
+            )?
+            .map(|(mut proto_msg, client)| {
+                proto_msg.replaces_id = Some(message_id.clone());
+                (proto_msg, client)
+            });
 
         handle
             .send(command::SendTextMessage {
                 channel_ids: vec![channel_id],
                 user_sessions: vec![],
                 tree_ids: vec![],
-                message: new_body.clone(),
-                message_id: Some(uuid::Uuid::new_v4().to_string()),
+                message: text_body,
+                message_id: Some(edit_message_id),
                 timestamp: Some(now_ms),
                 edit_id: Some(message_id.clone()),
             })
             .await
             .map_err(|e| format!("Failed to send edit: {e}"))?;
 
-        if let Ok(mut state) = self.inner.snapshot().lock()
-            && let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id)
-            && let Some(msg) = msgs
-                .iter_mut()
-                .find(|m| m.message_id.as_deref() == Some(&message_id))
+        if let Some((proto_msg, client)) = prebuilt_pchat
+            && let Err(e) = client
+                .send(command::SendPchatMessage { message: proto_msg })
+                .await
         {
-            msg.body = new_body;
-            msg.edited_at = Some(now_ms);
+            tracing::warn!("send pchat edit failed: {e}");
         }
 
+        self.apply_own_edit(channel_id, &message_id, fancy_body, now_ms, pchat_protocol);
         Ok(())
+    }
+
+    /// Show our own edit locally: the server echoes neither copy back to the
+    /// session that sent it.
+    fn apply_own_edit(
+        &self,
+        channel_id: u32,
+        message_id: &str,
+        body: String,
+        edited_at: u64,
+        pchat_protocol: Option<PchatProtocol>,
+    ) {
+        let __session = self.inner.snapshot();
+        let Ok(mut state) = __session.lock() else {
+            return;
+        };
+        let Some(msg) = state.msgs.by_channel.get_mut(&channel_id).and_then(|msgs| {
+            msgs.iter_mut()
+                .find(|m| m.message_id.as_deref() == Some(message_id))
+        }) else {
+            return;
+        };
+        msg.body = body;
+        msg.edited_at = Some(edited_at);
+        let edited = msg.clone();
+        if pchat_protocol == Some(PchatProtocol::SignalV1) {
+            recache_own_signal_message(&mut state, &edited, channel_id);
+        }
     }
 
     /// Build an encrypted `PchatMessage` proto without sending it.
@@ -569,5 +684,48 @@ impl AppState {
             }
             _ => Ok(None),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_edit_in_a_channel_with_dual_path_off_sends_no_plaintext() {
+        // The leak: an edit's plain copy carried the new words whatever the
+        // channel, so editing in an end-to-end channel published them.
+        let body = legacy_edit_body("the secret plan", true);
+        assert!(
+            !body.contains("secret"),
+            "plaintext in the legacy copy: {body}"
+        );
+        assert!(body.ends_with(ENCRYPTED_PLACEHOLDER));
+    }
+
+    #[test]
+    fn an_edit_with_dual_path_on_shows_stock_clients_the_words() {
+        assert_eq!(
+            legacy_edit_body("fixed", false),
+            format!("{LEGACY_EDITED_MARK}fixed")
+        );
+    }
+
+    #[test]
+    fn the_edited_note_is_fenced_for_stock_clients_only() {
+        use fancy_utils::html::{
+            LEGACY_FALLBACK_CLOSE, LEGACY_FALLBACK_OPEN, LEGACY_FALLBACK_TAG, strip_legacy_fallback,
+        };
+        assert_eq!(
+            LEGACY_EDITED_MARK,
+            format!(
+                "{LEGACY_FALLBACK_TAG}{LEGACY_FALLBACK_OPEN}<i>(edited)</i> {LEGACY_FALLBACK_CLOSE}"
+            )
+        );
+        // What a Fancy client does with it on receipt: nothing of it is left.
+        assert_eq!(
+            strip_legacy_fallback(&legacy_edit_body("fixed", false)),
+            "fixed"
+        );
     }
 }

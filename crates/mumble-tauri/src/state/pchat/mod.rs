@@ -238,6 +238,18 @@ impl PchatState {
         }
     }
 
+    /// Replace a cached message with its edited version.
+    ///
+    /// The cache dedups by id, so inserting the edit over the original was a
+    /// no-op, and a `SignalV1` channel - which has no server history to put it
+    /// right - reopened on the words that were retracted.
+    pub(crate) fn recache_signal_message(&mut self, msg: CachedMessage) {
+        if let Some(ref mut cache) = self.local_cache {
+            let _ = cache.remove(msg.channel_id, std::slice::from_ref(&msg.message_id));
+            cache.insert(msg);
+        }
+    }
+
     /// Stash an undecryptable `SignalV1` envelope for later retry.
     pub(crate) fn stash_signal_envelope(&mut self, env: PendingSignalEnvelope) {
         if self.pending_signal_envelopes.len() >= MAX_STASHED_ENVELOPES {
