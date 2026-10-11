@@ -69,6 +69,7 @@ import type { InteractionResponse } from "../plugins/tier1/types";
 import { parseClientManifest } from "../plugins/tier1/manifest";
 import { applyReadStates, clearReadReceipts } from "../features/chat/readreceipt/readReceiptStore";
 import { canonFileServerConfig } from "../features/chat/starlingFiles";
+import { stripLegacyFallback } from "../features/chat/legacyFallbackMarker";
 import { useOnboardingStore } from "../features/onboarding/onboardingStore";
 import type { OnboardingConfigEvent, OnboardingResponseEvent } from "../types";
 import { offloadManager } from "../messageOffload";
@@ -1148,7 +1149,11 @@ async function loadMessageWindow(channelId: number, limit?: number): Promise<voi
 const LARGE_MESSAGE_THRESHOLD = 4096;
 
 /** Whether a message body should show an optimistic upload-progress UI. */
-export function bodyNeedsProgressUI(body: string): boolean {
+export function bodyNeedsProgressUI(rawBody: string): boolean {
+  // Judged by what this client will draw: a file message's legacy copy is an
+  // `<img>`, but the row it becomes is a card, and a placeholder for it would
+  // be an empty bubble.
+  const body = stripLegacyFallback(rawBody);
   if (body.includes("<img")) return true;
   if (body.includes("<video")) return true;
   return body.length > LARGE_MESSAGE_THRESHOLD;

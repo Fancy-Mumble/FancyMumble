@@ -12,22 +12,13 @@
  * receives (`fancy_utils::html::strip_legacy_fallback`), so a Fancy client
  * draws the card and nothing else.
  */
-import { useAppStore } from "@core/store";
 import type { FileAccessMode } from "@core/types";
 import { fitDataUrl, mediaToHtml } from "@core/utils/media";
 import { previewKindForFilename } from "./fileAttachments";
+import { LEGACY_FALLBACK_CLOSE, LEGACY_FALLBACK_OPEN } from "./legacyFallbackMarker";
 import { mimeForFilename } from "./starlingFiles";
 
-export const LEGACY_FALLBACK_OPEN = "<!-- FANCY_LEGACY -->";
-export const LEGACY_FALLBACK_CLOSE = "<!-- /FANCY_LEGACY -->";
-
-const LEGACY_FALLBACK_RE = /<!-- FANCY_LEGACY -->[\s\S]*?<!-- \/FANCY_LEGACY -->/g;
-
-/** The same cut the backend makes, for a body that has not been through it yet. */
-export function stripLegacyFallback(body: string): string {
-  if (!body.includes(LEGACY_FALLBACK_OPEN)) return body;
-  return body.replace(LEGACY_FALLBACK_RE, "").trimEnd();
-}
+export { stripLegacyFallback } from "./legacyFallbackMarker";
 
 /**
  * Below this a copy is not worth sending.
@@ -37,8 +28,16 @@ export function stripLegacyFallback(body: string): string {
  */
 const MIN_FALLBACK_BYTES = 8_000;
 
-/** The fence and the `<img ... />` around the data-URL. */
-const FALLBACK_OVERHEAD = LEGACY_FALLBACK_OPEN.length + LEGACY_FALLBACK_CLOSE.length + 200;
+/**
+ * Above this the original is not read again for a copy.
+ *
+ * The upload streamed it from disk; a copy means reading all of it into the
+ * webview as base64 and decoding it, while the message waits to be sent.
+ */
+const MAX_SOURCE_BYTES = 25 * 1024 * 1024;
+
+/** The longest name a copy's `alt` carries, so the name cannot eat the budget. */
+const MAX_ALT_CHARS = 64;
 
 /** The default `imagemessagelength`, for a server that did not say. */
 const DEFAULT_IMAGE_MESSAGE_LENGTH = 131_072;
@@ -47,6 +46,13 @@ const DEFAULT_IMAGE_MESSAGE_LENGTH = 131_072;
 export interface LegacyFallbackSource {
   readonly filePath: string;
   readonly filename: string;
+  readonly sizeBytes?: number;
+}
+
+/** How the batch was shared, as far as the fallback cares. */
+export interface LegacyFallbackShare {
+  readonly mode: FileAccessMode;
+  readonly ttlSeconds?: number;
 }
 
 /**
@@ -62,18 +68,22 @@ export async function legacyImageFallbacks(
   body: string,
   imageMessageLength: number,
 ): Promise<string[]> {
-  const images = sources.filter((source) => previewKindForFilename(source.filename) === "image");
+  const images = sources.filter(
+    (source) =>
+      previewKindForFilename(source.filename) === "image" &&
+      (source.sizeBytes === undefined || source.sizeBytes <= MAX_SOURCE_BYTES),
+  );
   if (images.length === 0) return [];
   const limit = imageMessageLength > 0 ? imageMessageLength : DEFAULT_IMAGE_MESSAGE_LENGTH;
+  // Every block after the body costs the newline that joins it on.
   let remaining = limit - body.length;
   const out: string[] = [];
   for (const [index, image] of images.entries()) {
-    const share = Math.floor(remaining / (images.length - index)) - FALLBACK_OVERHEAD;
-    if (share < MIN_FALLBACK_BYTES) continue;
+    const share = Math.floor(remaining / (images.length - index)) - 1;
     const block = await legacyImageFallback(image, share);
     if (!block) continue;
     out.push(block);
-    remaining -= block.length;
+    remaining -= block.length + 1;
   }
   return out;
 }
@@ -81,29 +91,42 @@ export async function legacyImageFallbacks(
 /**
  * `body` with legacy copies of the pictures in `sources` appended.
  *
- * The one call every file-server send goes through. A password share gets
- * none: it is sealed so the server cannot read it, and an inline copy beside
- * it would hand over exactly what the password withholds.
+ * The one call every file-server send goes through. Two kinds of share get
+ * none. A password share is sealed so the server cannot read it, and an
+ * inline copy beside it would hand over exactly what the password withholds.
+ * A share that expires would outlive itself: the copy sits in every legacy
+ * client's log, and in the server's archive, long after the link is dead.
  */
 export async function withLegacyFallback(
   body: string,
   sources: readonly LegacyFallbackSource[],
-  mode: FileAccessMode,
+  share: LegacyFallbackShare,
 ): Promise<string> {
-  if (mode === "password") return body;
+  if (share.mode === "password" || (share.ttlSeconds ?? 0) > 0) return body;
+  const { useAppStore } = await import("@core/store");
   const { serverConfig } = useAppStore.getState();
   const fallbacks = await legacyImageFallbacks(sources, body, serverConfig.max_image_message_length);
   return [body, ...fallbacks].join("\n");
 }
 
-async function legacyImageFallback(source: LegacyFallbackSource, maxBytes: number): Promise<string | null> {
+/** One fenced copy no longer than `maxChars`, or `null`. */
+async function legacyImageFallback(source: LegacyFallbackSource, maxChars: number): Promise<string | null> {
+  const wrap = (src: string) =>
+    `${LEGACY_FALLBACK_OPEN}${mediaToHtml(src, "image", source.filename.slice(0, MAX_ALT_CHARS))}${LEGACY_FALLBACK_CLOSE}`;
+  // `fitDataUrl` reserves 100 for an `<img>` of its own; whatever the fence
+  // and the name cost beyond that comes off the picture.
+  const overhead = Math.max(0, wrap("").length - 100);
+  if (maxChars - overhead < MIN_FALLBACK_BYTES) return null;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
     const base64 = await invoke<string>("read_file_base64", { path: source.filePath });
-    const fitted = await fitDataUrl(`data:${mimeForFilename(source.filename)};base64,${base64}`, maxBytes);
+    const fitted = await fitDataUrl(
+      `data:${mimeForFilename(source.filename)};base64,${base64}`,
+      maxChars - overhead,
+    );
+    const block = wrap(fitted);
     // `fitDataUrl`'s last resort can still overshoot a small budget.
-    if (fitted.length > maxBytes) return null;
-    return `${LEGACY_FALLBACK_OPEN}${mediaToHtml(fitted, "image", source.filename)}${LEGACY_FALLBACK_CLOSE}`;
+    return block.length <= maxChars ? block : null;
   } catch (e) {
     console.warn("legacy copy of a picture failed:", e);
     return null;

@@ -391,7 +391,7 @@ export function useFileUpload({ channelId, dmSession }: FileUploadTarget) {
         if (markers.length === 0) return;
         const joined = markers.join(NEWLINE);
         const announced = choice.message ? `${choice.message}${NEWLINE}${joined}` : joined;
-        const body = await withLegacyFallback(announced, sent, choice.mode);
+        const body = await withLegacyFallback(announced, sent, choice);
         const store = useAppStore.getState();
         if (dmSession !== null) await store.sendDm(dmSession, body);
         else await store.sendMessage(channelId, body);

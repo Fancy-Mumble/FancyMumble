@@ -223,7 +223,7 @@ export function RichComposer({
         choice: { mode: "session" },
       });
       await onSend(
-        await withLegacyFallback(encodeFileAttachmentMarker(info), [{ filePath: selected, filename }], "session"),
+        await withLegacyFallback(encodeFileAttachmentMarker(info), [{ filePath: selected, filename }], { mode: "session" }),
       );
     } catch (reason) {
       setAttachmentError(reason instanceof Error ? reason.message : String(reason));

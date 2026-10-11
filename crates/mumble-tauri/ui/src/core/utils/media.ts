@@ -131,8 +131,9 @@ export async function fitImage(file: File, maxBytes: number): Promise<string> {
  *
  * Qt draws an inline image through its image plugins, and the ones every
  * Mumble build ships are these. A WebP, AVIF or SVG that fits the byte limit
- * still reaches a legacy client as a broken-image box, so anything else is
- * re-encoded as JPEG rather than passed through.
+ * still reaches a legacy client as a broken-image box - and an inline image
+ * is seen by every client in the channel, legacy ones included - so anything
+ * else is redrawn rather than passed through.
  */
 const LEGACY_DECODABLE = /^data:image\/(png|jpeg|gif|bmp);/;
 
@@ -149,6 +150,14 @@ export async function fitDataUrl(dataUrl: string, maxBytes: number): Promise<str
   // 1. Original fits -> return as-is.
   const boxScale = Math.min(1, INLINE_MAX_WIDTH / naturalW, INLINE_MAX_HEIGHT / naturalH);
   if (boxScale === 1 && dataUrl.length <= budget && LEGACY_DECODABLE.test(dataUrl)) return dataUrl;
+  // A type stock Mumble cannot read, small enough to keep: redrawn as PNG
+  // first, which keeps its transparency, where JPEG would paint it black.
+  if (boxScale === 1 && !LEGACY_DECODABLE.test(dataUrl)) {
+    const canvas = new OffscreenCanvas(naturalW, naturalH);
+    canvas.getContext("2d")?.drawImage(img, 0, 0);
+    const png = await blobToDataUrl(await canvas.convertToBlob({ type: "image/png" }));
+    if (png.length <= budget) return png;
+  }
 
   // Every scale below is relative to the picture already fitted into the box.
   const srcW = naturalW * boxScale;

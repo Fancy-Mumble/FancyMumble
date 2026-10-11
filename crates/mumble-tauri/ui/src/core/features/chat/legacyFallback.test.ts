@@ -29,7 +29,32 @@ describe("legacy fallback", () => {
     expect(blocks[0]).toMatch(
       /^<!-- FANCY_LEGACY --><img src="data:image\/jpeg;base64,AAAA" alt="a.png" \/><!-- \/FANCY_LEGACY -->$/,
     );
-    expect(stripLegacyFallback(`x\n${blocks[0]}`)).toBe("x");
+    expect(stripLegacyFallback(`<!-- FANCY_FILE:abc -->\n${blocks[0]}`)).toBe("<!-- FANCY_FILE:abc -->");
+  });
+
+  it("is not cut out of a body that carries no file", () => {
+    const body = "<!-- FANCY_LEGACY -->hidden<!-- /FANCY_LEGACY -->";
+    expect(stripLegacyFallback(body)).toBe(body);
+  });
+
+  it("carries a long name without going over the limit", async () => {
+    const [block] = await legacyImageFallbacks(
+      [{ filePath: "a.png", filename: `${"&".repeat(500)}.png` }],
+      "<!-- FANCY_FILE:abc -->",
+      131_072,
+    );
+    expect(block).toBeDefined();
+    expect(block!.length).toBeLessThan(131_072 - 30);
+    expect(block).not.toContain("&amp;".repeat(65));
+  });
+
+  it("skips a picture too large to read again", async () => {
+    const blocks = await legacyImageFallbacks(
+      [{ filePath: "a.png", filename: "a.png", sizeBytes: 200 * 1024 * 1024 }],
+      "<!-- FANCY_FILE:abc -->",
+      131_072,
+    );
+    expect(blocks).toEqual([]);
   });
 
   it("is left out when the server's limit leaves no room for it", async () => {

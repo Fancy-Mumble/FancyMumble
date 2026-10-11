@@ -822,7 +822,7 @@ export default function ChatView({
         const body = await withLegacyFallback(
           choice.message ? `${choice.message}\n${marker}` : marker,
           [{ filePath, filename }],
-          choice.mode,
+          choice,
         );
         if (selectedDmUser !== null) {
           await sendDmAction(selectedDmUser, body);

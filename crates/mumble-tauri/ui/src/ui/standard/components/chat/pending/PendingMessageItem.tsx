@@ -10,7 +10,7 @@
 
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@core/store";
-import { stripLegacyFallback } from "@core/features/chat/legacyFallback";
+import { stripLegacyFallback } from "@core/features/chat/legacyFallbackMarker";
 import { SafeHtml } from "../../elements/SafeHtml";
 import { CloseIcon } from "../../../icons";
 import type { PendingMessage } from "@core/types";
