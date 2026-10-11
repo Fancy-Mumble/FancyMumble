@@ -30,6 +30,7 @@ import ConfirmDialog from "../elements/ConfirmDialog";
 import Toast from "../elements/Toast";
 import type { FileShareChoice } from "./file/FileShareDialog";
 import { uploadAttachment } from "@core/features/chat/useFileUpload";
+import { withLegacyFallback } from "@core/features/chat/legacyFallback";
 import { useVoiceRecorder } from "@core/features/chat/voice/useVoiceRecorder";
 const FileShareDialog = lazy(() => import("./file/FileShareDialog"));
 import { encodeFileAttachmentMarker, type FileAttachmentInfo } from "./file/FileAttachmentCard";
@@ -818,7 +819,11 @@ export default function ChatView({
           choice,
         });
         const marker = encodeFileAttachmentMarker(info);
-        const body = choice.message ? `${choice.message}\n${marker}` : marker;
+        const body = await withLegacyFallback(
+          choice.message ? `${choice.message}\n${marker}` : marker,
+          [{ filePath, filename }],
+          choice.mode,
+        );
         if (selectedDmUser !== null) {
           await sendDmAction(selectedDmUser, body);
         } else {

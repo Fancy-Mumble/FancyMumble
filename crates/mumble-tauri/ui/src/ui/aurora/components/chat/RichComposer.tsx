@@ -9,6 +9,7 @@ import {
 } from "../../components";
 import { encodeFileAttachmentMarker } from "@core/features/chat/fileAttachments";
 import { uploadAttachment } from "@core/features/chat/useFileUpload";
+import { withLegacyFallback } from "@core/features/chat/legacyFallback";
 import { useTypingIndicator } from "@core/features/chat/typing/useTypingIndicator";
 import { useAppStore } from "@core/store";
 import type { ChannelEntry } from "@core/types";
@@ -221,7 +222,9 @@ export function RichComposer({
         uploadId: "",
         choice: { mode: "session" },
       });
-      await onSend(encodeFileAttachmentMarker(info));
+      await onSend(
+        await withLegacyFallback(encodeFileAttachmentMarker(info), [{ filePath: selected, filename }], "session"),
+      );
     } catch (reason) {
       setAttachmentError(reason instanceof Error ? reason.message : String(reason));
     } finally {

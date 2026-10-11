@@ -10,6 +10,7 @@
 
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@core/store";
+import { stripLegacyFallback } from "@core/features/chat/legacyFallback";
 import { SafeHtml } from "../../elements/SafeHtml";
 import { CloseIcon } from "../../../icons";
 import type { PendingMessage } from "@core/types";
@@ -28,7 +29,7 @@ export default function PendingMessageItem({ pending }: PendingMessageItemProps)
   return (
     <div className={styles.wrapper}>
       <div className={`${styles.bubble} ${isFailed ? styles.bubbleFailed : styles.bubbleSending}`}>
-        <SafeHtml html={pending.body} className={styles.body} />
+        <SafeHtml html={stripLegacyFallback(pending.body)} className={styles.body} />
 
         {!isFailed && (
           <div

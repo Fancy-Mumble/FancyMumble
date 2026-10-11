@@ -20,6 +20,7 @@ import {
   previewKindForFilename,
   type FileAttachmentInfo,
 } from "./fileAttachments";
+import { withLegacyFallback } from "./legacyFallback";
 import { mimeForFilename } from "./starlingFiles";
 
 /** How the uploader wants this file shared, as answered by the pack's dialog. */
@@ -317,6 +318,7 @@ export function useFileUpload({ channelId, dmSession }: FileUploadTarget) {
       if (channelId === null || files.length === 0) return;
       uploading.current = true;
       const markers: string[] = [];
+      const sent: StagedUpload[] = [];
 
       try {
         for (const file of files) {
@@ -365,6 +367,7 @@ export function useFileUpload({ channelId, dmSession }: FileUploadTarget) {
               choice,
             });
             markers.push(encodeFileAttachmentMarker(info));
+            sent.push(file);
             setPlaceholders((prev) => prev.filter((entry) => entry.id !== id));
           } catch (e) {
             const detail = e instanceof Error ? e.message : String(e);
@@ -387,7 +390,8 @@ export function useFileUpload({ channelId, dmSession }: FileUploadTarget) {
 
         if (markers.length === 0) return;
         const joined = markers.join(NEWLINE);
-        const body = choice.message ? `${choice.message}${NEWLINE}${joined}` : joined;
+        const announced = choice.message ? `${choice.message}${NEWLINE}${joined}` : joined;
+        const body = await withLegacyFallback(announced, sent, choice.mode);
         const store = useAppStore.getState();
         if (dmSession !== null) await store.sendDm(dmSession, body);
         else await store.sendMessage(channelId, body);

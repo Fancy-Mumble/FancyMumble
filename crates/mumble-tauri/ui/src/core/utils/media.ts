@@ -123,23 +123,36 @@ export async function fitImage(file: File, maxBytes: number): Promise<string> {
   // as an empty image.
   if (file.size === 0) throw new Error(`${file.name || "image"} is empty`);
 
-  const dataUrl = await fileToDataUrl(file);
+  return fitDataUrl(await fileToDataUrl(file), maxBytes);
+}
 
+/**
+ * The types a stock Mumble client can decode out of the box.
+ *
+ * Qt draws an inline image through its image plugins, and the ones every
+ * Mumble build ships are these. A WebP, AVIF or SVG that fits the byte limit
+ * still reaches a legacy client as a broken-image box, so anything else is
+ * re-encoded as JPEG rather than passed through.
+ */
+const LEGACY_DECODABLE = /^data:image\/(png|jpeg|gif|bmp);/;
+
+/** {@link fitImage} for a picture already read into a data-URL. */
+export async function fitDataUrl(dataUrl: string, maxBytes: number): Promise<string> {
   const img = await loadImage(dataUrl);
   const naturalW = img.naturalWidth || img.width;
   const naturalH = img.naturalHeight || img.height;
   if (naturalW === 0 || naturalH === 0) throw new Error("Image has zero dimensions");
 
+  // Leave room for the HTML wrapper (<img src="..." alt="..." />)
+  const budget = maxBytes - 100;
+
   // 1. Original fits -> return as-is.
   const boxScale = Math.min(1, INLINE_MAX_WIDTH / naturalW, INLINE_MAX_HEIGHT / naturalH);
-  if (boxScale === 1 && dataUrl.length <= maxBytes) return dataUrl;
+  if (boxScale === 1 && dataUrl.length <= budget && LEGACY_DECODABLE.test(dataUrl)) return dataUrl;
 
   // Every scale below is relative to the picture already fitted into the box.
   const srcW = naturalW * boxScale;
   const srcH = naturalH * boxScale;
-
-  // Leave room for the HTML wrapper (<img src="..." alt="..." />)
-  const budget = maxBytes - 100;
 
   /** Render at `scale` x original dimensions with given JPEG `quality`. */
   async function tryEncode(scale: number, quality: number): Promise<string> {
