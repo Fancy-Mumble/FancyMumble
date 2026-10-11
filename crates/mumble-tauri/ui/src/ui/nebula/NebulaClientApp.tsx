@@ -24,6 +24,7 @@ import { TID } from "@core/testids";
 import { PERM_WRITE } from "@core/utils/permissions";
 import { isMobile } from "@core/utils/platform";
 import { applyMentionsToHtml, type MentionResolver } from "@core/utils/mentions";
+import { hideSpoilersFromLegacy, withQuoteFallback } from "@core/features/chat/legacyFallback";
 import { isSpentWatchMarker } from "@core/features/chat/watch/watchMarker";
 import type {
   AudioSettings,
@@ -1470,20 +1471,25 @@ export default function NebulaClientApp() {
   };
 
   const send = async (html: string) => {
-    const markers = pendingQuotes
-      .filter((quote) => quote.message_id)
-      .map((quote) => `<!-- FANCY_QUOTE:${quote.message_id} -->`)
-      .join("");
-    const body = markers + applyMentionsToHtml(html.trim(), mentionResolver);
-    if (!body.trim() && staged.length === 0) return;
+    const quoted = pendingQuotes.filter((quote) => quote.message_id);
+    const markers = quoted.map((quote) => `<!-- FANCY_QUOTE:${quote.message_id} -->`).join("");
+    const fancyBody = markers + applyMentionsToHtml(html.trim(), mentionResolver);
+    if (!fancyBody.trim() && staged.length === 0) return;
     setPendingQuotes([]);
 
     if (localNotesOpen) {
       await useAppStore
         .getState()
-        .addLocalNote(body, { name: friendChatName ?? ownUser?.name ?? "", hash: ownUser?.hash ?? null });
+        .addLocalNote(fancyBody, { name: friendChatName ?? ownUser?.name ?? "", hash: ownUser?.hash ?? null });
       return;
     }
+
+    // What goes on the wire also carries stand-ins for legacy Mumble: its
+    // spoilers hidden from a renderer that would show them in the clear, and
+    // the messages it replies to quoted. A local note never leaves this
+    // client, so it keeps the bare body; a Fancy reader never sees either.
+    const limits = useAppStore.getState().serverConfig;
+    const body = fancyBody.trim() ? withQuoteFallback(hideSpoilersFromLegacy(fancyBody, limits), quoted, limits) : "";
 
     // Files that were staged go up now, and the batch becomes one message
     // carrying a marker each - what was staged together arrives together, and

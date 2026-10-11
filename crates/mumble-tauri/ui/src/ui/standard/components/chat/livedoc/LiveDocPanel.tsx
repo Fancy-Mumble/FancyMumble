@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { CloseIcon, FileIcon } from "../../../icons";
 import { setLiveDocLocalSave } from "@core/features/chat/livedoc/liveDocLocalSave";
-import { useAppStore, encodeLiveDocInviteMarker, sendPluginMessage } from "@core/store";
+import { useAppStore, liveDocInviteBody, sendPluginMessage } from "@core/store";
 import {
   useLiveDoc,
   useLiveDocTitle,
@@ -105,7 +105,8 @@ export default function LiveDocPanel({
       slug: session.slug,
       title: session.title,
     }).catch((e) => console.warn("plugin-message Announce failed:", e));
-    const body = encodeLiveDocInviteMarker(session.slug, session.title);
+    // The marker and a line for legacy clients, which draw the marker as nothing.
+    const body = liveDocInviteBody(session.slug, session.title);
     void sendMessage(session.channelId, body).catch((e) =>
       console.warn("live-doc publish message failed:", e),
     );

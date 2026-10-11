@@ -96,8 +96,24 @@ export function fileToDataUrl(file: File): Promise<string> {
  * squeezed under the byte limit by quality alone is still 12 megapixels, so
  * the box is enforced whether or not the bytes already fit.
  */
-const INLINE_MAX_WIDTH = 1600;
-const INLINE_MAX_HEIGHT = 1000;
+export const INLINE_MAX_WIDTH = 1600;
+export const INLINE_MAX_HEIGHT = 1000;
+
+/** How a picture is fitted, beyond its byte budget. */
+export interface FitOptions {
+  /**
+   * Characters of the budget the markup around the picture will take.
+   *
+   * Defaults to 100, an `<img>` with a short name. A caller that knows what
+   * else rides in the message - a gallery marker, a caption, a spoiler
+   * wrapper - says so, or the server measures a body that was fitted as if
+   * those were not there and refuses it.
+   */
+  readonly reserve?: number;
+  /** A smaller box than the default, for a picture that shares the layout. */
+  readonly maxWidth?: number;
+  readonly maxHeight?: number;
+}
 
 /**
  * Compress / downscale an image so its base64 data-URL fits within
@@ -115,7 +131,7 @@ const INLINE_MAX_HEIGHT = 1000;
  *      binary-search to maximize dimensions.  Finally sweep quality
  *      upward at the chosen scale to use any remaining budget.
  */
-export async function fitImage(file: File, maxBytes: number): Promise<string> {
+export async function fitImage(file: File, maxBytes: number, options: FitOptions = {}): Promise<string> {
   if (maxBytes < 5000) maxBytes = 131072; // guard against bogus limits
 
   // An unreadable source would otherwise encode to a well-formed but payloadless
@@ -123,7 +139,7 @@ export async function fitImage(file: File, maxBytes: number): Promise<string> {
   // as an empty image.
   if (file.size === 0) throw new Error(`${file.name || "image"} is empty`);
 
-  return fitDataUrl(await fileToDataUrl(file), maxBytes);
+  return fitDataUrl(await fileToDataUrl(file), maxBytes, options);
 }
 
 /**
@@ -138,17 +154,23 @@ export async function fitImage(file: File, maxBytes: number): Promise<string> {
 const LEGACY_DECODABLE = /^data:image\/(png|jpeg|gif|bmp);/;
 
 /** {@link fitImage} for a picture already read into a data-URL. */
-export async function fitDataUrl(dataUrl: string, maxBytes: number): Promise<string> {
+export async function fitDataUrl(
+  dataUrl: string,
+  maxBytes: number,
+  options: FitOptions = {},
+): Promise<string> {
   const img = await loadImage(dataUrl);
   const naturalW = img.naturalWidth || img.width;
   const naturalH = img.naturalHeight || img.height;
   if (naturalW === 0 || naturalH === 0) throw new Error("Image has zero dimensions");
 
   // Leave room for the HTML wrapper (<img src="..." alt="..." />)
-  const budget = maxBytes - 100;
+  const budget = maxBytes - (options.reserve ?? 100);
+  const boxW = options.maxWidth ?? INLINE_MAX_WIDTH;
+  const boxH = options.maxHeight ?? INLINE_MAX_HEIGHT;
 
   // 1. Original fits -> return as-is.
-  const boxScale = Math.min(1, INLINE_MAX_WIDTH / naturalW, INLINE_MAX_HEIGHT / naturalH);
+  const boxScale = Math.min(1, boxW / naturalW, boxH / naturalH);
   if (boxScale === 1 && dataUrl.length <= budget && LEGACY_DECODABLE.test(dataUrl)) return dataUrl;
   // A type stock Mumble cannot read, small enough to keep: redrawn as PNG
   // first, which keeps its transparency, where JPEG would paint it black.
@@ -265,6 +287,73 @@ export function mediaToHtml(dataUrl: string, kind: MediaKind, fileName: string, 
   }
 }
 
+/**
+ * Whether a picture already sits inside the inline box.
+ *
+ * The question a GIF passthrough has to ask before skipping the redraw: its
+ * bytes may fit while its pixels do not, and a legacy client refuses to lay
+ * out a message that covers more than 2048x2048.
+ */
+export async function fitsInlineBox(dataUrl: string): Promise<boolean> {
+  const img = await loadImage(dataUrl);
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  return w > 0 && h > 0 && w <= INLINE_MAX_WIDTH && h <= INLINE_MAX_HEIGHT;
+}
+
+/**
+ * A still of a video, fitted into `maxBytes`, or `null` when there is none.
+ *
+ * What a legacy client is shown for an inline `<video>`: Qt drops the tag and
+ * draws its text, so without this a clip arrives as its file name.
+ */
+export async function videoPosterDataUrl(
+  file: File,
+  maxBytes: number,
+  options: FitOptions = {},
+): Promise<string | null> {
+  try {
+    const frame = await extractVideoFrame(file);
+    return await fitDataUrl(await blobToDataUrl(frame), maxBytes, options);
+  } catch (e) {
+    console.warn("video poster failed:", e);
+    return null;
+  }
+}
+
+/** The inline pictures in a body: the attribute before each, its data URL, the quote after. */
+const INLINE_IMAGE_RE = /(<img\b[^>]*?\ssrc=")(data:image\/[^"]+)(")/gi;
+
+/**
+ * `html` with its inline pictures shrunk until the whole body fits `maxChars`.
+ *
+ * Each picture was fitted on its own when it was inserted, but the server
+ * measures the message: three pictures that each fit the limit are a body
+ * three times over it, refused for everybody. The pictures share what the
+ * rest of the body leaves, and only those over their share are redrawn.
+ * Throws when the share is too small for any picture worth sending, so the
+ * composer can say so instead of posting smears.
+ */
+export async function fitInlineImages(html: string, maxChars: number): Promise<string> {
+  if (html.length <= maxChars) return html;
+  const sources = Array.from(html.matchAll(INLINE_IMAGE_RE), (match) => match[2]);
+  if (sources.length === 0) return html;
+  const fixed = html.length - sources.reduce((total, src) => total + src.length, 0);
+  const share = Math.floor((maxChars - fixed) / sources.length);
+  if (share < 5000) throw new Error("Too many pictures for one message on this server.");
+  const fitted: string[] = [];
+  for (const src of sources)
+    fitted.push(src.length <= share ? src : await fitDataUrl(src, share, { reserve: 0 }));
+  let index = 0;
+  const out = html.replace(INLINE_IMAGE_RE, (_match, before: string, _src: string, after: string) => {
+    const src = fitted[index];
+    index += 1;
+    return `${before}${src}${after}`;
+  });
+  if (out.length > maxChars) throw new Error("Too many pictures for one message on this server.");
+  return out;
+}
+
 /** Per-image quality for a gallery: `"full"` uses the whole image-size limit
  *  per image; `"compressed"` targets a smaller per-image budget. */
 export type GalleryQuality = "full" | "compressed";
@@ -281,11 +370,17 @@ export const MAX_GALLERY_IMAGES = 10;
  * Returns `{ dataUrl, kind }` - `kind` will be `"video"` when the
  * original was kept, or `"image"` when a still frame was extracted.
  */
-export async function fitVideo(file: File, maxBytes: number): Promise<{ dataUrl: string; kind: MediaKind }> {
+export async function fitVideo(
+  file: File,
+  maxBytes: number,
+  options: FitOptions = {},
+): Promise<{ dataUrl: string; kind: MediaKind }> {
   const dataUrl = await fileToDataUrl(file);
 
-  // If the raw video fits, return as-is.
-  if (dataUrl.length <= maxBytes) {
+  // If the raw video fits, return as-is. "Fits" includes the markup around
+  // it: a clip that filled the limit by itself was refused once its tag and
+  // name were added.
+  if (dataUrl.length <= maxBytes - (options.reserve ?? 100)) {
     return { dataUrl, kind: "video" };
   }
 
@@ -297,7 +392,7 @@ export async function fitVideo(file: File, maxBytes: number): Promise<{ dataUrl:
   const frameFile = new File([frameBlob], "frame.jpg", {
     type: "image/jpeg",
   });
-  const frameDataUrl = await fitImage(frameFile, maxBytes);
+  const frameDataUrl = await fitImage(frameFile, maxBytes, options);
   return { dataUrl: frameDataUrl, kind: "image" };
 }
 
@@ -359,7 +454,7 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-function escapeAttr(s: string): string {
+export function escapeAttr(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 

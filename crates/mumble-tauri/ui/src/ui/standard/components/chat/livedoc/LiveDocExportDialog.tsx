@@ -22,6 +22,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "@core/store";
 import { encodeFileAttachmentMarker, type FileAttachmentInfo } from "../file/FileAttachmentCard";
 import type { FileShareChoice } from "../file/FileShareDialog";
+import { hideSpoilersFromLegacy, withLegacyFallback } from "@core/features/chat/legacyFallback";
+import { markdownToHtml } from "../markdown/MarkdownInput";
 import { Modal } from "../../elements/Modal";
 import styles from "../file/FileShareDialog.module.css";
 
@@ -155,7 +157,14 @@ export default function LiveDocExportDialog({
           expiresAt: json.expires_at,
         };
         const marker = encodeFileAttachmentMarker(info);
-        const body = choice.message ? `${choice.message}\n${marker}` : marker;
+        // The caption goes through the composer's converter rather than in
+        // raw - a "<3" in it would otherwise open a tag - and the message
+        // through the same fallback as any other shared file, so a legacy
+        // client is told a document was shared instead of seeing nothing.
+        const caption = choice.message
+          ? hideSpoilersFromLegacy(markdownToHtml(choice.message), useAppStore.getState().serverConfig)
+          : "";
+        const body = await withLegacyFallback(caption ? `${caption}\n${marker}` : marker, [{ info }], choice);
         await sendMessage(channelId, body);
         setStatus("done");
         setTimeout(onClose, 600);

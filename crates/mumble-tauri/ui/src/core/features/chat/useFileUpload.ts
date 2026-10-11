@@ -20,7 +20,7 @@ import {
   previewKindForFilename,
   type FileAttachmentInfo,
 } from "./fileAttachments";
-import { withLegacyFallback } from "./legacyFallback";
+import { withLegacyFallback, type LegacyFallbackFile } from "./legacyFallback";
 import { mimeForFilename } from "./starlingFiles";
 
 /** How the uploader wants this file shared, as answered by the pack's dialog. */
@@ -318,7 +318,7 @@ export function useFileUpload({ channelId, dmSession }: FileUploadTarget) {
       if (channelId === null || files.length === 0) return;
       uploading.current = true;
       const markers: string[] = [];
-      const sent: StagedUpload[] = [];
+      const sent: LegacyFallbackFile[] = [];
 
       try {
         for (const file of files) {
@@ -367,7 +367,7 @@ export function useFileUpload({ channelId, dmSession }: FileUploadTarget) {
               choice,
             });
             markers.push(encodeFileAttachmentMarker(info));
-            sent.push(file);
+            sent.push({ info, filePath: file.filePath });
             setPlaceholders((prev) => prev.filter((entry) => entry.id !== id));
           } catch (e) {
             const detail = e instanceof Error ? e.message : String(e);

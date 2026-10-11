@@ -12,6 +12,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "@core/store";
 import { encodeFileAttachmentMarker, type FileAttachmentInfo } from "../fileAttachments";
+import { withLegacyFallback } from "../legacyFallback";
 
 /** A finished take, as `finish_voice_message` hands it over. */
 export interface RecordedVoiceClip {
@@ -65,10 +66,13 @@ export async function uploadVoiceClip(
 export async function sendVoiceMessage(clip: RecordedVoiceClip, target: VoiceMessageTarget): Promise<void> {
   try {
     const info = await uploadVoiceClip(clip, target.channelId);
-    const marker = encodeFileAttachmentMarker(info);
+    // A legacy client draws the marker as nothing; the fallback tells it a
+    // voice message was sent, and how long it is. There is no link to give:
+    // a voice clip is a session share, which no browser can open.
+    const body = await withLegacyFallback(encodeFileAttachmentMarker(info), [{ info }], { mode: "session" });
     const store = useAppStore.getState();
-    if (target.dmSession !== null) await store.sendDm(target.dmSession, marker);
-    else await store.sendMessage(target.channelId, marker);
+    if (target.dmSession !== null) await store.sendDm(target.dmSession, body);
+    else await store.sendMessage(target.channelId, body);
   } finally {
     await discardVoiceClip(clip);
   }

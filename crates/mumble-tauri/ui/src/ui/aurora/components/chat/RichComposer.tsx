@@ -9,11 +9,11 @@ import {
 } from "../../components";
 import { encodeFileAttachmentMarker } from "@core/features/chat/fileAttachments";
 import { uploadAttachment } from "@core/features/chat/useFileUpload";
-import { withLegacyFallback } from "@core/features/chat/legacyFallback";
+import { withLegacyFallback, withRemoteImageLinks } from "@core/features/chat/legacyFallback";
 import { useTypingIndicator } from "@core/features/chat/typing/useTypingIndicator";
 import { useAppStore } from "@core/store";
 import type { ChannelEntry } from "@core/types";
-import { fileToDataUrl, fitImage } from "@core/utils/media";
+import { fileToDataUrl, fitImage, fitInlineImages } from "@core/utils/media";
 import { open } from "@tauri-apps/plugin-dialog";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
@@ -129,10 +129,19 @@ export function RichComposer({
       return;
     }
     setSending(true);
+    setAttachmentError(null);
     try {
-      await onSend(editor.getHTML());
+      // Each picture was fitted on its own as it went in, but the server
+      // measures the whole message: several that each fit are one body over
+      // the limit, refused for everybody. They share the limit here.
+      const fitted = await fitInlineImages(editor.getHTML(), maxImageBytes);
+      // A picked GIF is a remote picture, which legacy Mumble does not load;
+      // it gets a link in a part only legacy clients draw.
+      await onSend(withRemoteImageLinks(fitted, useAppStore.getState().serverConfig));
       editor.commands.clearContent();
       resetTyping();
+    } catch (reason) {
+      setAttachmentError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setSending(false);
     }
@@ -156,17 +165,8 @@ export function RichComposer({
       // Inline images ride inside the text message, so they are bound by the
       // server's imagemessagelength - not the (much larger) file-server limit.
       const original = await fileToDataUrl(file);
-      if (original.length <= maxImageBytes) {
-        // Insert the node directly: a base64 <img> string round-tripped through
-        // HTML parsing lands in the document as literal text.
-        editor
-          .chain()
-          .focus()
-          .insertContent({ type: "image", attrs: { src: original, alt } })
-          .run();
-        return;
-      }
-      if (canShareFiles) {
+      const overLimit = original.length > maxImageBytes;
+      if (overLimit && canShareFiles) {
         // Re-encoding down to the inline cap would visibly wreck the image;
         // the file-server path keeps it intact, so point there instead.
         setAttachmentError(
@@ -174,17 +174,26 @@ export function RichComposer({
         );
         return;
       }
-      // No file-server on this channel: recompressing is the only way to send
-      // it at all, so do that but say so rather than silently degrading it.
+      // Always through `fitImage`, even when the bytes already fit: it also
+      // holds the picture to the box a legacy client can lay out (a phone
+      // photo under the byte limit is still 12 megapixels, and a legacy
+      // client refuses anything over 2048x2048) and redraws a type it cannot
+      // decode, such as WebP. A picture that passes both comes back as it was.
       const fitted = await fitImage(file, maxImageBytes);
+      // Insert the node directly: a base64 <img> string round-tripped through
+      // HTML parsing lands in the document as literal text.
       editor
         .chain()
         .focus()
         .insertContent({ type: "image", attrs: { src: fitted, alt } })
         .run();
-      setAttachmentError(
-        `Image recompressed to fit this server's ${formatByteLimit(maxImageBytes)} inline limit.`,
-      );
+      // No file-server on this channel: recompressing is the only way to send
+      // it at all, so do that but say so rather than silently degrading it.
+      if (overLimit) {
+        setAttachmentError(
+          `Image recompressed to fit this server's ${formatByteLimit(maxImageBytes)} inline limit.`,
+        );
+      }
     } catch (reason) {
       setAttachmentError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -223,7 +232,9 @@ export function RichComposer({
         choice: { mode: "session" },
       });
       await onSend(
-        await withLegacyFallback(encodeFileAttachmentMarker(info), [{ filePath: selected, filename }], { mode: "session" }),
+        await withLegacyFallback(encodeFileAttachmentMarker(info), [{ info, filePath: selected }], {
+          mode: "session",
+        }),
       );
     } catch (reason) {
       setAttachmentError(reason instanceof Error ? reason.message : String(reason));

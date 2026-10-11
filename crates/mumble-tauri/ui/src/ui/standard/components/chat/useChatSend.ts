@@ -5,13 +5,22 @@ import type { ToastData } from "../elements/Toast";
 import { markdownToHtml } from "./markdown/MarkdownInput";
 import {
   mediaKind,
+  escapeAttr,
   fileToDataUrl,
   fitImage,
+  fitsInlineBox,
   fitVideo,
   mediaToHtml,
   MAX_GALLERY_IMAGES,
   type GalleryQuality,
 } from "@core/utils/media";
+import {
+  hideSpoilersFromLegacy,
+  spoilerOverhead,
+  withQuoteFallback,
+  withRemoteImageLink,
+  withVideoFallback,
+} from "@core/features/chat/legacyFallback";
 import { galleryMarker, newGalleryId } from "@core/utils/gallery";
 import { applyMentionsToHtml, type MentionResolver } from "@core/utils/mentions";
 import { useAclGroups } from "../../hooks/useAclGroups";
@@ -96,13 +105,15 @@ export function useChatSend({
     }
 
     // Build quote markers and convert draft to HTML.
-    const quoteMarkers = pendingQuotes
-      .filter((q) => q.message_id)
-      .map((q) => `<!-- FANCY_QUOTE:${q.message_id} -->`)
-      .join("");
+    const quoted = pendingQuotes.filter((q) => q.message_id);
+    const quoteMarkers = quoted.map((q) => `<!-- FANCY_QUOTE:${q.message_id} -->`).join("");
     const htmlBody = text ? renderBody(text) : "";
-    const html = quoteMarkers + htmlBody;
-    if (!html) return;
+    if (!quoteMarkers && !htmlBody) return;
+    // What legacy Mumble cannot draw gets a stand-in it can: a spoiler is
+    // hidden from it, and a reply quotes what it answers. Neither changes
+    // what a Fancy client draws (see `legacyFallback.ts`).
+    const limits = useAppStore.getState().serverConfig;
+    const html = withQuoteFallback(hideSpoilersFromLegacy(quoteMarkers + htmlBody, limits), quoted, limits);
 
     if (isDmMode && selectedDmUser !== null) {
       clearDraft();
@@ -162,23 +173,32 @@ export function useChatSend({
       try {
         let dataUrl: string;
         let sendKind = kind;
+        const name = file.name || "clipboard.png";
+        // The tag and its name ride in the same message as the picture.
+        const reserve = Math.max(
+          mediaToHtml("", "image", name).length,
+          mediaToHtml("", "video", name).length,
+        );
 
         if (kind === "image") {
-          dataUrl = await fitImage(file, maxBytes);
+          dataUrl = await fitImage(file, maxBytes, { reserve });
         } else if (kind === "video") {
-          const result = await fitVideo(file, maxBytes);
+          const result = await fitVideo(file, maxBytes, { reserve });
           dataUrl = result.dataUrl;
           sendKind = result.kind; // may become "image" if poster extracted
         } else {
-          // GIF - pass through if it fits, otherwise re-encode as JPEG
+          // GIF - pass through if it fits, otherwise re-encode as JPEG. Its
+          // pixels have to fit as well as its bytes: a legacy client will not
+          // lay out a message larger than 2048x2048.
           dataUrl = await fileToDataUrl(file);
-          if (dataUrl.length > maxBytes) {
-            dataUrl = await fitImage(file, maxBytes);
+          if (dataUrl.length > maxBytes - reserve || !(await fitsInlineBox(dataUrl))) {
+            dataUrl = await fitImage(file, maxBytes, { reserve });
             sendKind = "image";
           }
         }
 
-        const html = mediaToHtml(dataUrl, sendKind, file.name || "clipboard.png");
+        let html = mediaToHtml(dataUrl, sendKind, name);
+        if (sendKind === "video") html = await withVideoFallback(html, file, name, serverConfig);
         // Hand off to the real send path; it will create its own pending
         // placeholder for the network phase.
         dismissPendingMessage(placeholderId);
@@ -250,6 +270,7 @@ export function useChatSend({
 
       const trimmed = caption.trim();
       const captionHtml = trimmed ? renderBody(trimmed) : "";
+      const limits = serverConfig;
 
       const channelTarget = isDmMode ? null : selectedChannel;
       const dmTarget = isDmMode ? selectedDmUser : null;
@@ -280,27 +301,41 @@ export function useChatSend({
         // stays a uniform image; a single image keeps its caption inline.
         if (!single && captionHtml) {
           clearPlaceholderOnce();
-          await send(captionHtml);
+          await send(hideSpoilersFromLegacy(captionHtml, limits));
         }
 
         for (let index = 0; index < files.length; index += 1) {
           const file = files[index];
           const kind = mediaKind(file.type) ?? "image";
+          const name = file.name || "image";
+          const spoiler = spoilers?.[index] ?? false;
+          const marker = single ? "" : galleryMarker(groupId, index, files.length);
+          const cap = single ? captionHtml : "";
+          // Everything that rides beside the picture comes off its budget:
+          // the gallery marker, the caption (with its spoilers hidden), the
+          // tag and its name, and a spoiler's own wrapper. Fitted against
+          // the bare limit, a captioned picture was refused for everybody.
+          const shell = [mediaToHtml("", "image", name, spoiler), mediaToHtml("", "video", name, spoiler)]
+            .map((tag) => tag.length + (spoiler ? spoilerOverhead(tag) : 0))
+            .reduce((a, b) => Math.max(a, b));
+          const reserve = marker.length + hideSpoilersFromLegacy(cap, limits).length + shell;
           let dataUrl: string;
           let sendKind = kind;
           if (kind === "video") {
-            const result = await fitVideo(file, perImageBudget);
+            const result = await fitVideo(file, perImageBudget, { reserve });
             dataUrl = result.dataUrl;
             sendKind = result.kind;
           } else {
-            dataUrl = await fitImage(file, perImageBudget);
+            dataUrl = await fitImage(file, perImageBudget, { reserve });
             sendKind = "image";
           }
-          const media = mediaToHtml(dataUrl, sendKind, file.name || "image", spoilers?.[index] ?? false);
-          const marker = single ? "" : galleryMarker(groupId, index, files.length);
-          const cap = single ? captionHtml : "";
+          const media = mediaToHtml(dataUrl, sendKind, name, spoiler);
+          let body = hideSpoilersFromLegacy(marker + cap + media, limits);
+          // A spoiler clip gets no still: the still would show what the
+          // spoiler hides. It reads "[spoiler]" like any other.
+          if (sendKind === "video" && !spoiler) body = await withVideoFallback(body, file, name, limits);
           clearPlaceholderOnce();
-          await send(marker + cap + media);
+          await send(body);
         }
       } catch (err) {
         console.error("gallery send error:", err);
@@ -445,7 +480,11 @@ export function useChatSend({
 
   const handleGifSelect = useCallback(
     async (url: string, alt: string) => {
-      const html = `<img src="${url}" alt="${alt}" />`;
+      // Escaped: a GIF title with a quote in it ended the attribute early and
+      // spilled the rest of the tag into the message.
+      const tag = `<img src="${escapeAttr(url)}" alt="${escapeAttr(alt)}" />`;
+      // Legacy Mumble loads no remote picture; it gets a link to this one.
+      const html = withRemoteImageLink(tag, url, alt, useAppStore.getState().serverConfig);
       if (isDmMode && selectedDmUser !== null) {
         await sendDm(selectedDmUser, html);
       } else if (selectedChannel !== null) {

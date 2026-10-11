@@ -69,7 +69,7 @@ import type { InteractionResponse } from "../plugins/tier1/types";
 import { parseClientManifest } from "../plugins/tier1/manifest";
 import { applyReadStates, clearReadReceipts } from "../features/chat/readreceipt/readReceiptStore";
 import { canonFileServerConfig } from "../features/chat/starlingFiles";
-import { stripLegacyFallback } from "../features/chat/legacyFallbackMarker";
+import { escapeLegacyText, stripLegacyFallback, withLegacyBlock } from "../features/chat/legacyFallbackMarker";
 import { useOnboardingStore } from "../features/onboarding/onboardingStore";
 import type { OnboardingConfigEvent, OnboardingResponseEvent } from "../types";
 import { offloadManager } from "../messageOffload";
@@ -2249,7 +2249,7 @@ function dispatchLiveDocInvite(p: LiveDocInviteEvent): void {
     }).catch((e) => console.warn("plugin-message Announce failed:", e));
     // Post a persistent chat invite so users who were not in the channel
     // when the announce flew can still join.
-    const payload = encodeLiveDocInviteMarker(p.slug, p.title);
+    const payload = liveDocInviteBody(p.slug, p.title);
     void state
       .sendMessage(p.channelId, payload)
       .catch((e) => console.warn("live-doc auto-invite message failed:", e));
@@ -2499,7 +2499,26 @@ function pickLiveDocCursorColor(session: number): string {
 /** Encode a live-doc invite marker for use in a chat message body.
  *  Recognised by `MessageItem` and rendered as a `LiveDocInviteCard`
  *  with a Join button.  The format is opaque to legacy clients (HTML
- *  comment); they will simply see an empty message body. */
+ *  comment), which draw it as nothing - send {@link liveDocInviteBody},
+ *  which says what was shared to them as well. */
+/**
+ * The whole invite message: the marker, and a line for legacy clients.
+ *
+ * Without the line a stock Mumble client draws an empty message. With it, it
+ * learns a document was shared and what it is called - there is nothing it
+ * can open, the editor is a Fancy feature, so it gets no link. A Fancy client
+ * never sees the line (see `legacyFallbackMarker.ts`).
+ */
+export function liveDocInviteBody(slug: string, title: string): string {
+  const marker = encodeLiveDocInviteMarker(slug, title);
+  const name = title.replaceAll("\n", " ").trim().slice(0, 200) || "Untitled";
+  return withLegacyBlock(
+    marker,
+    `📝 shared a document: ${escapeLegacyText(name)}`,
+    useAppStore.getState().serverConfig,
+  );
+}
+
 export function encodeLiveDocInviteMarker(slug: string, title: string): string {
   const t = title.replaceAll("\n", " ").slice(0, 200);
   // Encode via URI percent-encoding to keep `btoa` ASCII-safe for

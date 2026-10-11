@@ -30,7 +30,7 @@ import ConfirmDialog from "../elements/ConfirmDialog";
 import Toast from "../elements/Toast";
 import type { FileShareChoice } from "./file/FileShareDialog";
 import { uploadAttachment } from "@core/features/chat/useFileUpload";
-import { withLegacyFallback } from "@core/features/chat/legacyFallback";
+import { hideSpoilersFromLegacy, withLegacyFallback } from "@core/features/chat/legacyFallback";
 import { useVoiceRecorder } from "@core/features/chat/voice/useVoiceRecorder";
 const FileShareDialog = lazy(() => import("./file/FileShareDialog"));
 import { encodeFileAttachmentMarker, type FileAttachmentInfo } from "./file/FileAttachmentCard";
@@ -57,7 +57,7 @@ import { useTypingIndicator } from "@core/features/chat/typing/useTypingIndicato
 import TypingIndicator from "./typing/TypingIndicator";
 import { isMobile } from "@core/utils/platform";
 import { channelDisplayName, dmPeerUserId } from "@core/utils/channelVisibility";
-import { htmlToMarkdown } from "./markdown/MarkdownInput";
+import { htmlToMarkdown, markdownToHtml } from "./markdown/MarkdownInput";
 import type { MessageScope } from "@core/messageOffload";
 import { useScreenShare } from "./stream/useScreenShare";
 const ScreenSharePickerDialog = lazy(() => import("./stream/ScreenSharePickerDialog"));
@@ -819,11 +819,13 @@ export default function ChatView({
           choice,
         });
         const marker = encodeFileAttachmentMarker(info);
-        const body = await withLegacyFallback(
-          choice.message ? `${choice.message}\n${marker}` : marker,
-          [{ filePath, filename }],
-          choice,
-        );
+        // The caption is what the user typed, and a body is HTML: spliced in
+        // raw, a "<3" opened a tag and ate the rest of the line. It goes
+        // through the composer's own converter, as Nebula's caption does.
+        const caption = choice.message
+          ? hideSpoilersFromLegacy(markdownToHtml(choice.message), useAppStore.getState().serverConfig)
+          : "";
+        const body = await withLegacyFallback(caption ? `${caption}\n${marker}` : marker, [{ info, filePath }], choice);
         if (selectedDmUser !== null) {
           await sendDmAction(selectedDmUser, body);
         } else {

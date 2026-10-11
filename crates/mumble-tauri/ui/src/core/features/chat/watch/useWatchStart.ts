@@ -21,6 +21,21 @@ import { detectVideoSource, type DetectedVideoSource } from "../../../utils/watc
 import { useWatchSend } from "./useWatchSend";
 import { applyWatchSyncEvent } from "./watchStore";
 import { markPendingAutoStart } from "./watchAutoStart";
+import { escapeLegacyText, withLegacyBlock } from "../legacyFallbackMarker";
+import { escapeAttr } from "../../../utils/media";
+
+/**
+ * What a legacy client reads for a watch-together card.
+ *
+ * The card is a `FANCY_WATCH` marker, drawn by a stock client as nothing.
+ * The line says what started and links the video itself where it is an
+ * `https` one: a legacy reader cannot join the session, but can still watch.
+ */
+export function watchLegacyLine(url: string, title: string | null | undefined): string {
+  const label = escapeLegacyText((title ?? "").trim() || url);
+  const target = /^https:\/\/\S+$/i.test(url) ? `<a href="${escapeAttr(url)}">${label}</a>` : label;
+  return `📺 started Watch Together: ${target}`;
+}
 
 export interface UseWatchStartResult {
   readonly detected: DetectedVideoSource | null;
@@ -64,7 +79,14 @@ export function useWatchStart(
       // even though everyone else already shows the session as live.
       markPendingAutoStart(sessionId);
       await sendStart(sessionId, startEvent);
-      await sendMessage(channelId, `<!-- FANCY_WATCH:${sessionId} -->`);
+      await sendMessage(
+        channelId,
+        withLegacyBlock(
+          `<!-- FANCY_WATCH:${sessionId} -->`,
+          watchLegacyLine(detected.url, detected.title),
+          useAppStore.getState().serverConfig,
+        ),
+      );
     } finally {
       setBusy(false);
     }

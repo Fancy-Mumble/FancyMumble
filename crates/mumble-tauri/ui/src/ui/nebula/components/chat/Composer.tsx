@@ -49,6 +49,8 @@ import type { StagedAttachment, UploadPlaceholder } from "@core/features/chat/us
 import { formatBytes } from "@core/utils/format";
 import { TID } from "@core/testids";
 import { useGifsEnabled } from "@core/features/chat/gif/gifAccess";
+import { withRemoteImageLink } from "@core/features/chat/legacyFallback";
+import { escapeAttr } from "@core/utils/media";
 import type { VoiceRecorder } from "@core/features/chat/voice/useVoiceRecorder";
 import VoiceRecorderBar from "@standard/components/chat/voice/VoiceRecorderBar";
 import { composerHtml, plainText } from "../../selectors";
@@ -602,9 +604,14 @@ export function Composer({
   const uploading = uploads.some((upload) => upload.state === "uploading");
   const recordingVoice = !!voice && voice.state.phase !== "idle";
   // Only while there is nothing to send: a typed message keeps its Send.
-  const offerVoice = !!voice?.available && !recordingVoice && !sendable && !uploading && attachments.length === 0;
+  const offerVoice =
+    !!voice?.available && !recordingVoice && !sendable && !uploading && attachments.length === 0;
   const voiceBusy = voice?.state.phase === "starting" || voice?.state.phase === "sending";
-  const sendAction = recordingVoice ? () => void voice?.send() : offerVoice ? () => void voice?.start() : submit;
+  const sendAction = recordingVoice
+    ? () => void voice?.send()
+    : offerVoice
+      ? () => void voice?.start()
+      : submit;
 
   const onKeyDownCapture = (event: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
     // The shortcut the menu prints beside "Browse files…", taken here so the
@@ -915,49 +922,49 @@ export function Composer({
                   }),
             })}
           >
-          <BareButton
-            label={attachBlocked ?? t("nebulaChat:composer.attachFiles")}
-            disabled={disabled}
-            muted={!!attachBlocked}
-            sx={stencil ? plateTool : toolFill}
-            buttonRef={attachButton}
-            onClick={(event) => {
-              if (attachBlocked) openPopover("notice", event, NOTICE_POPOVER_WIDTH);
-              else onAttach?.("any");
-            }}
-            onContextMenu={(event) => {
-              // Blocked stops files, not the menu: neither a poll nor a
-              // document is a file, and a server with nothing to say about
-              // file sharing still has both.
-              if (hasAttachMenu) {
-                event.preventDefault();
-                setAttachMenu(event.currentTarget);
-              }
-            }}
-          >
-            <AttachIcon width={16} height={16} />
-          </BareButton>
-          {hasAttachMenu && !dense && (
             <BareButton
-              label={t("nebulaChat:composer.moreWaysToAttach")}
-              testId={TID.chatAttachMenu}
+              label={attachBlocked ?? t("nebulaChat:composer.attachFiles")}
               disabled={disabled}
-              active={!!attachMenu}
-              size={16}
-              sx={
-                stencil
-                  ? // Pulled back onto the clip's leaning right edge, which is
-                    // its own leaning left edge: cut from the same silhouette
-                    // at the same height, the two interlock exactly, so the
-                    // plate is tiled without a seam of dead plate between them.
-                    { ...plateTool, ml: "-10px" }
-                  : { ...toolFill, ml: "-6px", borderRadius: radius("sm") }
-              }
-              onClick={(event) => setAttachMenu(event.currentTarget)}
+              muted={!!attachBlocked}
+              sx={stencil ? plateTool : toolFill}
+              buttonRef={attachButton}
+              onClick={(event) => {
+                if (attachBlocked) openPopover("notice", event, NOTICE_POPOVER_WIDTH);
+                else onAttach?.("any");
+              }}
+              onContextMenu={(event) => {
+                // Blocked stops files, not the menu: neither a poll nor a
+                // document is a file, and a server with nothing to say about
+                // file sharing still has both.
+                if (hasAttachMenu) {
+                  event.preventDefault();
+                  setAttachMenu(event.currentTarget);
+                }
+              }}
             >
-              <ChevronDownIcon width={10} height={10} strokeWidth={2.2} />
+              <AttachIcon width={16} height={16} />
             </BareButton>
-          )}
+            {hasAttachMenu && !dense && (
+              <BareButton
+                label={t("nebulaChat:composer.moreWaysToAttach")}
+                testId={TID.chatAttachMenu}
+                disabled={disabled}
+                active={!!attachMenu}
+                size={16}
+                sx={
+                  stencil
+                    ? // Pulled back onto the clip's leaning right edge, which is
+                      // its own leaning left edge: cut from the same silhouette
+                      // at the same height, the two interlock exactly, so the
+                      // plate is tiled without a seam of dead plate between them.
+                      { ...plateTool, ml: "-10px" }
+                    : { ...toolFill, ml: "-6px", borderRadius: radius("sm") }
+                }
+                onClick={(event) => setAttachMenu(event.currentTarget)}
+              >
+                <ChevronDownIcon width={10} height={10} strokeWidth={2.2} />
+              </BareButton>
+            )}
           </Box>
           {/* The field itself: on a stencil skin this is the white plate the
               mock draws, with the clip outside it on the left and Send outside
@@ -1068,7 +1075,10 @@ export function Composer({
                         },
                       }
                     : {
-                        "&:hover": { background: theme.palette.nebula.hover, color: theme.palette.nebula.text },
+                        "&:hover": {
+                          background: theme.palette.nebula.hover,
+                          color: theme.palette.nebula.text,
+                        },
                       }),
                 })}
               >
@@ -1325,7 +1335,9 @@ export function Composer({
                       ? t("chat:voiceMessage.send")
                       : t("settings:shortcuts.builtinSendMessage")
                 }
-                data-testid={offerVoice ? "voice-record" : recordingVoice ? "voice-recorder-send" : TID.chatSend}
+                data-testid={
+                  offerVoice ? "voice-record" : recordingVoice ? "voice-recorder-send" : TID.chatSend
+                }
                 disabled={
                   recordingVoice ? voiceBusy : offerVoice ? disabled : disabled || !sendable || uploading
                 }
@@ -1472,7 +1484,16 @@ export function Composer({
               left={popover.left}
               onSelect={(url) => {
                 setPopover(null);
-                void onSend(`<img src="${url}" alt="GIF">`);
+                // Legacy Mumble loads no remote picture, so it is handed a
+                // link to this one; a Fancy client never sees the link.
+                void onSend(
+                  withRemoteImageLink(
+                    `<img src="${escapeAttr(url)}" alt="GIF">`,
+                    url,
+                    "",
+                    useAppStore.getState().serverConfig,
+                  ),
+                );
               }}
               onClose={() => setPopover(null)}
             />
