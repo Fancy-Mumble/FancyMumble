@@ -1,5 +1,6 @@
 import { loadPersonalization } from "./personalizationStorage";
 import { applyColorMode, applyTheme, DEFAULT_THEME } from "./themes";
+import { bootstrapExternalTheme } from "./externalTheme";
 import { applyFont } from "@core/utils/fonts";
 import { detectBackdropFilterSupport, isMobile } from "@core/utils/platform";
 
@@ -15,6 +16,7 @@ export function initializeStandardAppearance(): void {
     document.documentElement.style.setProperty("--titlebar-height", "0px");
   }
   detectBackdropFilterSupport();
+  bootstrapExternalTheme().catch(() => undefined);
   void loadPersonalization()
     .then((personalization) => {
       applyTheme(personalization.theme);

@@ -932,7 +932,7 @@
   border: none;
   border-radius: 3px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(var(--color-text-rgb), 0.45);
   cursor: pointer;
   flex-shrink: 0;
   transition:

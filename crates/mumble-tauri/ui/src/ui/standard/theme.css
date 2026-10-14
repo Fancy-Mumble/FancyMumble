@@ -20,6 +20,7 @@
 @import "./themes/guardbase.css";
 @import "./themes/aurora.css";
 @import "./themes/nimbus.css";
+@import "./externalTheme.css";
 
 :root {
   /* -- Glass effect ---------------------------------------------- */
