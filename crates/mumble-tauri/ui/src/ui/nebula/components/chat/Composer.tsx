@@ -49,6 +49,8 @@ import type { StagedAttachment, UploadPlaceholder } from "@core/features/chat/us
 import { formatBytes } from "@core/utils/format";
 import { TID } from "@core/testids";
 import { useGifsEnabled } from "@core/features/chat/gif/gifAccess";
+import { useDraftLinkPreview, type DraftLinkPreview } from "@core/features/chat/useDraftLinkPreview";
+import { pictureOf, sourceLabel } from "./LinkPreviewCard";
 import { withRemoteImageLink } from "@core/features/chat/legacyFallback";
 import { escapeAttr } from "@core/utils/media";
 import type { VoiceRecorder } from "@core/features/chat/voice/useVoiceRecorder";
@@ -595,6 +597,8 @@ export function Composer({
     void onSend(composerHtml(text));
   };
 
+  const linkPreview = useDraftLinkPreview(draft);
+
   const dropping = dropActive;
   // The border lights up while there is something to send, which is also when
   // the panel has grown a row it did not have at rest.
@@ -822,6 +826,14 @@ export function Composer({
                 </Stack>
               </Fragment>
             ))}
+          </Tray>
+        )}
+
+        {/* The card the first link will get, drawn while the message is still
+            a draft - small, because the poster itself belongs to the river. */}
+        {linkPreview && (
+          <Tray>
+            <LinkRow preview={linkPreview} />
           </Tray>
         )}
 
@@ -1668,6 +1680,101 @@ function UploadRow({ upload, onCancel }: Readonly<{ upload: UploadPlaceholder; o
       />
     </Stack>
   );
+}
+
+/**
+ * The preview of the link in the draft: picture, source and title on one row.
+ *
+ * The same tile and the same two lines an upload draws, so a link waiting to
+ * be sent looks like the other things waiting to be sent. Until the card
+ * arrives the row says so under the host, which is all that is known yet.
+ */
+function LinkRow({ preview }: Readonly<{ preview: DraftLinkPreview }>) {
+  const { t } = useTranslation(COMPOSER_NS);
+  const allowExternal = useAppStore((state) => state.enableExternalEmbeds);
+  const { embed } = preview;
+  const picture = embed ? pictureOf(embed, allowExternal) : undefined;
+  const label = embed ? sourceLabel(embed) : hostOf(preview.url);
+  const title = embed?.title?.trim() || embed?.description?.trim();
+
+  return (
+    <Stack
+      data-nebula-draft-link
+      direction="row"
+      alignItems="center"
+      gap="10px"
+      sx={{ px: "4px", py: "6px" }}
+    >
+      <Box
+        aria-hidden
+        sx={(theme) => ({
+          width: 64,
+          height: 40,
+          flex: "none",
+          display: "grid",
+          placeItems: "center",
+          overflow: "hidden",
+          borderRadius: radius("md"),
+          border: `var(--nebula-line-width, 1px) solid ${theme.palette.nebula.line}`,
+          background: theme.palette.nebula.tile,
+          fontFamily: NEBULA_MONO,
+          fontSize: 9,
+          fontWeight: 600,
+          textTransform: "uppercase",
+          color: theme.palette.nebula.muted,
+        })}
+      >
+        {picture ? (
+          <Box
+            component="img"
+            src={picture.src}
+            alt=""
+            sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+        ) : (
+          label.slice(0, 2)
+        )}
+      </Box>
+      <Stack sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          sx={(theme) => ({
+            fontSize: 10,
+            fontWeight: 600,
+            letterSpacing: ".04em",
+            color: theme.palette.nebula.accent,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          })}
+        >
+          {label}
+        </Typography>
+        <Typography
+          sx={(theme) => ({
+            fontSize: 11.5,
+            fontWeight: 500,
+            mt: "2px",
+            color: embed ? undefined : theme.palette.nebula.dim,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          })}
+        >
+          {embed ? (title ?? preview.url) : t("nebulaChat:composer.linkPreviewLoading")}
+        </Typography>
+      </Stack>
+      <TrayClose label={t("nebulaChat:composer.hideLinkPreview")} onClick={preview.dismiss} />
+    </Stack>
+  );
+}
+
+/** The host of a link, for the row while its card is on the way. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
 }
 
 /**

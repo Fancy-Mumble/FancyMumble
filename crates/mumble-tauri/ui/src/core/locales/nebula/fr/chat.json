@@ -89,6 +89,8 @@
   },
   "composer": {
     "stopReplying": "Ne plus répondre à {{name}}",
+    "linkPreviewLoading": "Chargement de l’aperçu…",
+    "hideLinkPreview": "Masquer l’aperçu du lien",
     "attachFiles": "Joindre des fichiers",
     "moreWaysToAttach": "Autres façons de joindre",
     "insertGif": "Insérer un GIF",

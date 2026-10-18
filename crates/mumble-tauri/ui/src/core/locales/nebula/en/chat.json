@@ -35,6 +35,8 @@
   },
   "composer": {
     "stopReplying": "Stop replying to {{name}}",
+    "linkPreviewLoading": "Fetching a preview…",
+    "hideLinkPreview": "Hide link preview",
     "attachFiles": "Attach files",
     "moreWaysToAttach": "More ways to attach",
     "insertGif": "Insert a GIF",

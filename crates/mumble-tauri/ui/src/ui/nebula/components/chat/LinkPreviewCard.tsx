@@ -162,7 +162,7 @@ type Shape = "full" | "contained" | "native" | "row" | "shop" | "shopRow";
  * returning `undefined` is the privacy-preserving answer, and the caller draws
  * a poster without a picture rather than reaching for the network.
  */
-function pictureOf(embed: LinkEmbed, allowExternal: boolean): Picture | undefined {
+export function pictureOf(embed: LinkEmbed, allowExternal: boolean): Picture | undefined {
   const media: EmbedMedia | undefined = embed.image ?? embed.thumbnail;
   if (!media) return undefined;
   const src = media.preview?.data_url ?? (allowExternal ? media.url : undefined);
@@ -409,7 +409,7 @@ function contextOf(embed: LinkEmbed, label: string): string | undefined {
  * asking of that line is *where does this go*, which only the host answers.
  * `www.` goes because nobody says it.
  */
-function sourceLabel(embed: LinkEmbed): string {
+export function sourceLabel(embed: LinkEmbed): string {
   try {
     return new URL(embed.url).hostname.replace(/^www\./, "");
   } catch {

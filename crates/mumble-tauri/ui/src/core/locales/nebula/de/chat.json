@@ -89,6 +89,8 @@
   },
   "composer": {
     "stopReplying": "Antwort an {{name}} verwerfen",
+    "linkPreviewLoading": "Vorschau wird geladen…",
+    "hideLinkPreview": "Linkvorschau ausblenden",
     "attachFiles": "Dateien anhängen",
     "moreWaysToAttach": "Weitere Anhang-Optionen",
     "insertGif": "GIF einfügen",
