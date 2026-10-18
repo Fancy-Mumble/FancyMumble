@@ -17,6 +17,7 @@
 
   /* -- Text ------------------------------------------------------ */
   --color-text-primary: #d5ccba;
+  --color-text-rgb: 213, 204, 186;
   --color-text-secondary: rgba(213, 204, 186, 0.6);
   --color-text-muted: rgba(213, 204, 186, 0.38);
   --color-text-on-accent: #20111b;

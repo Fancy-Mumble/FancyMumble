@@ -11,7 +11,8 @@ export type ThemeId =
   | "ply"
   | "guardbase"
   | "aurora"
-  | "nimbus";
+  | "nimbus"
+  | "omarchy";
 
 export interface ThemeOption {
   readonly id: ThemeId;

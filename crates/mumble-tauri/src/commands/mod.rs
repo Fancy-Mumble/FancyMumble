@@ -62,6 +62,7 @@ pub(crate) mod signal_bridge;
 /// message instead of "command not found".
 pub(crate) mod stream_view;
 pub(crate) mod system;
+pub(crate) mod user_theme;
 pub(crate) mod ui_mode;
 pub(crate) mod voice_message;
 pub(crate) mod window;

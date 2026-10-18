@@ -133,6 +133,7 @@ pub fn run() {
         .manage(AppState::new())
         .setup(move |app| {
             app::init_app_state(app);
+            commands::user_theme::spawn_watcher(app.handle().clone());
             // WebKitGTK ships WebRTC off; without this no Linux webview has
             // RTCPeerConnection and stream viewing/previews cannot work. Also
             // reloads a webview whose web process exits.

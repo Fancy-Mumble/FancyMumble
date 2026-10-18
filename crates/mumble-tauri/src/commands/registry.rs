@@ -48,6 +48,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::public_servers::fetch_file_server_capabilities,
         // -- certificates ----------------------------------------------
         super::certificates::generate_certificate,
+        super::user_theme::get_user_theme_css,
         super::certificates::list_certificates,
         super::certificates::delete_certificate,
         super::certificates::export_certificate,
