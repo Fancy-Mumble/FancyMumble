@@ -92,6 +92,7 @@ pub(crate) struct RollingStatsPayload {
 
 /// Payload emitted when a `UserStats` response arrives from the server.
 #[derive(Clone, Serialize)]
+#[cfg_attr(test, derive(Default))]
 pub(crate) struct UserStatsPayload {
     pub session: u32,
     pub tcp_packets: u32,

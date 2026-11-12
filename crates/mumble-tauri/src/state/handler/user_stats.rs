@@ -1,6 +1,7 @@
 use mumble_protocol::proto::mumble_tcp;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::types::{PacketStats, RollingStatsPayload, UserStatsPayload};
 
 fn extract_packet_stats(stats: &Option<mumble_tcp::user_stats::Stats>) -> Option<PacketStats> {
@@ -60,6 +61,6 @@ impl HandleMessage for mumble_tcp::UserStats {
             rolling_stats,
         };
 
-        ctx.emit("user-stats", payload);
+        ctx.send(CoreEvent::UserStats(payload));
     }
 }

@@ -2,14 +2,15 @@ use mumble_protocol::proto::mumble_tcp;
 use serde::Serialize;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::types::ServerVersionInfo;
 
 /// Payload for the `server-version` event used to keep the frontend's
 /// cached `serverFancyVersion` in sync with the backend reactively.
 #[derive(Serialize)]
-struct ServerVersionPayload {
-    fancy_version: Option<u64>,
-    fancy_protocol: Option<u32>,
+pub(crate) struct ServerVersionPayload {
+    pub fancy_version: Option<u64>,
+    pub fancy_protocol: Option<u32>,
 }
 
 impl HandleMessage for mumble_tcp::Version {
@@ -49,12 +50,9 @@ impl HandleMessage for mumble_tcp::Version {
         // Emit outside the lock so the frontend refreshes its cached
         // `serverFancyVersion` even when the Fancy version is learned after
         // the initial bootstrap read of `get_server_info`.
-        ctx.emit(
-            "server-version",
-            ServerVersionPayload {
-                fancy_version,
-                fancy_protocol,
-            },
-        );
+        ctx.send(CoreEvent::ServerVersion(ServerVersionPayload {
+            fancy_version,
+            fancy_protocol,
+        }));
     }
 }

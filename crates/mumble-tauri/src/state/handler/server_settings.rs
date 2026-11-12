@@ -1,16 +1,11 @@
 //! Inbound handler for the editable server-settings schema broadcast.
 
 use mumble_protocol::proto::mumble_tcp;
-use serde::Serialize;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::types::{ServerSetting, ServerSettingsSnapshot};
-
-#[derive(Serialize, Clone)]
-struct ServerSettingsPayload {
-    settings: ServerSettingsSnapshot,
-}
 
 impl HandleMessage for mumble_tcp::FancyServerSettings {
     fn handle(&self, ctx: &HandlerContext) {
@@ -34,10 +29,7 @@ impl HandleMessage for mumble_tcp::FancyServerSettings {
             state.server_settings = Some(snapshot.clone());
         }
 
-        ctx.emit(
-            "server-settings",
-            ServerSettingsPayload { settings: snapshot },
-        );
+        ctx.send(CoreEvent::ServerSettings(snapshot));
     }
 }
 

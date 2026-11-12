@@ -15,21 +15,26 @@ use serde_json::value::RawValue;
 
 use super::canon_emotes::CanonEmote;
 use super::handler::audit::{AuditResponsePayload, AuditSnapshotPayload};
+use super::handler::custom_reactions_config::CustomReactionPayload;
 use super::handler::files::{
     ChannelFiles, ManagedFiles, RefusedRequest, SharedFile, VoiceSupportPayload,
 };
+use super::handler::livery::LiverySnapshot;
 use super::handler::operator_ticket::OperatorTicket;
 use super::handler::plugin_admin::{PluginAdminAckPayload, PluginAdminListPayload};
 use super::handler::plugin_message::PluginMessagePayload;
+use super::handler::version::ServerVersionPayload;
 use super::sessions::ServerId;
 use super::types::{
-    AclPayload, AuditConfigSnapshot, AuditEntryPayload, BanEntryPayload, CurrentChannelPayload,
-    DisconnectedPayload, DmUnreadPayload, KeyHoldersChangedPayload, KeyShareRequestPayload,
-    KeyShareRequestsChangedPayload, NewDmPayload, NewMessagePayload, PchatFetchCompletePayload,
+    AclPayload, AudioTransportPayload, AuditConfigSnapshot, AuditEntryPayload, BanEntryPayload,
+    CryptoStatsPayload, CurrentChannelPayload, DisconnectedPayload, DmUnreadPayload,
+    KeyHoldersChangedPayload, KeyShareRequestPayload, KeyShareRequestsChangedPayload,
+    LatencyPayload, NewDmPayload, NewMessagePayload, PchatFetchCompletePayload,
     PchatHistoryLoadingPayload, PchatKeyRevokedPayload, PchatSendRejectedPayload,
     PinDeliverPayload, PinFetchResponsePayload, PluginDataPayload, PluginRegistryEntryPayload,
     ReactionDeliverPayload, ReactionFetchResponsePayload, RegisteredUserPayload, RejectedPayload,
-    SignalBridgeErrorPayload, UnreadPayload, UploadProgressPayload, UserCommentPayload, VoiceState,
+    ServerLogEntry, ServerSettingsSnapshot, SignalBridgeErrorPayload, UnreadPayload,
+    UploadProgressPayload, UserCommentPayload, UserStatsPayload, VoiceState,
 };
 
 /// Something that happened in the engine that a view may want to show.
@@ -132,6 +137,26 @@ pub(crate) enum CoreEvent {
     PluginData(PluginDataPayload),
     /// The plugins the server runs, and the slot each one answers on.
     PluginRegistry(Vec<PluginRegistryEntryPayload>),
+    /// The server's configuration changed; a view that shows it should read it again.
+    ServerConfigChanged,
+    /// Which Fancy version and protocol the server speaks, once known.
+    ServerVersion(ServerVersionPayload),
+    /// A line for the server's activity log.
+    ServerLog(ServerLogEntry),
+    /// The round trip of the latest control-channel ping.
+    PingLatency(LatencyPayload),
+    /// The reactions this server defines, all of them.
+    CustomReactionsConfig(Vec<CustomReactionPayload>),
+    /// How many voice packets arrived well, late or not at all.
+    CryptoStats(CryptoStatsPayload),
+    /// Voice moved between UDP and the TCP tunnel, or changed cipher.
+    AudioTransportChanged(AudioTransportPayload),
+    /// Connection statistics for one user, in answer to a request.
+    UserStats(UserStatsPayload),
+    /// The server's editable settings, as it now has them.
+    ServerSettings(ServerSettingsSnapshot),
+    /// How the server presents itself: name, colours, artwork.
+    ServerLivery(LiverySnapshot),
     /// An event that has not been given a variant yet: its wire name and its
     /// payload, already written out as JSON.
     Untyped {
@@ -207,6 +232,16 @@ impl CoreEvent {
             Self::PluginMessage(_) => "plugin-message",
             Self::PluginData(_) => "plugin-data",
             Self::PluginRegistry(_) => "plugin-registry",
+            Self::ServerConfigChanged => "server-config",
+            Self::ServerVersion(_) => "server-version",
+            Self::ServerLog(_) => "server-log",
+            Self::PingLatency(_) => "ping-latency",
+            Self::CustomReactionsConfig(_) => "custom-reactions-config",
+            Self::CryptoStats(_) => "crypto-stats",
+            Self::AudioTransportChanged(_) => "audio-transport-changed",
+            Self::UserStats(_) => "user-stats",
+            Self::ServerSettings(_) => "server-settings",
+            Self::ServerLivery(_) => "server-livery",
             Self::Untyped { name, .. } => name,
         }
     }
@@ -254,6 +289,14 @@ impl CoreEvent {
                 | Self::PluginMessage(_)
                 | Self::PluginData(_)
                 | Self::PluginRegistry(_)
+                | Self::ServerVersion(_)
+                | Self::ServerLog(_)
+                | Self::PingLatency(_)
+                | Self::CryptoStats(_)
+                | Self::AudioTransportChanged(_)
+                | Self::UserStats(_)
+                | Self::ServerSettings(_)
+                | Self::ServerLivery(_)
         )
     }
 }
@@ -264,7 +307,9 @@ impl Serialize for CoreEvent {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
             Self::Connecting => "connecting".serialize(serializer),
-            Self::Connected | Self::StateChanged => ().serialize(serializer),
+            Self::Connected | Self::StateChanged | Self::ServerConfigChanged => {
+                ().serialize(serializer)
+            }
             Self::Disconnected(payload) => payload.serialize(serializer),
             Self::ConnectionRejected(payload) => payload.serialize(serializer),
             Self::CurrentChannelChanged(payload) => payload.serialize(serializer),
@@ -308,6 +353,15 @@ impl Serialize for CoreEvent {
             Self::PluginMessage(payload) => payload.serialize(serializer),
             Self::PluginData(payload) => payload.serialize(serializer),
             Self::PluginRegistry(plugins) => keyed(serializer, "plugins", plugins),
+            Self::ServerVersion(payload) => payload.serialize(serializer),
+            Self::ServerLog(payload) => payload.serialize(serializer),
+            Self::PingLatency(payload) => payload.serialize(serializer),
+            Self::CustomReactionsConfig(payload) => payload.serialize(serializer),
+            Self::CryptoStats(payload) => payload.serialize(serializer),
+            Self::AudioTransportChanged(payload) => payload.serialize(serializer),
+            Self::UserStats(payload) => payload.serialize(serializer),
+            Self::ServerSettings(settings) => keyed(serializer, "settings", settings),
+            Self::ServerLivery(livery) => keyed(serializer, "livery", livery),
             Self::Untyped { payload, .. } => payload.serialize(serializer),
         }
     }
@@ -399,6 +453,32 @@ mod tests {
     fn wire(server: Option<ServerId>, kind: CoreEvent) -> (&'static str, serde_json::Value) {
         let (name, payload) = Event { server, kind }.into_wire().unwrap();
         (name, serde_json::from_str(payload.get()).unwrap())
+    }
+
+    /// A variant that wraps a payload must write out exactly that payload:
+    /// it is what the untyped emit it replaced sent.
+    fn assert_carries<P: Serialize + Clone>(
+        name: &str,
+        payload: &P,
+        variant: impl FnOnce(P) -> CoreEvent,
+    ) {
+        assert_eq!(
+            wire(None, variant(payload.clone())),
+            (name, serde_json::to_value(payload).unwrap())
+        );
+    }
+
+    /// A variant whose JSON wraps its value in a one-field object.
+    fn assert_carries_keyed<P: Serialize + Clone>(
+        name: &str,
+        key: &str,
+        payload: &P,
+        variant: impl FnOnce(P) -> CoreEvent,
+    ) {
+        assert_eq!(
+            wire(None, variant(payload.clone())),
+            (name, serde_json::json!({ key: payload }))
+        );
     }
 
     /// The frontend listens for these exact names and shapes. A typed variant
@@ -1339,6 +1419,133 @@ mod tests {
                     "verb": "install",
                 })
             )
+        );
+    }
+
+    #[test]
+    fn server_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        assert_eq!(
+            wire(None, CoreEvent::ServerConfigChanged),
+            ("server-config", json!(null))
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::ServerVersion(ServerVersionPayload {
+                    fancy_version: Some(7),
+                    fancy_protocol: None,
+                })
+            ),
+            (
+                "server-version",
+                json!({ "fancy_version": 7, "fancy_protocol": null })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::ServerLog(ServerLogEntry {
+                    timestamp_ms: 17,
+                    message: "Ada connected".to_owned(),
+                })
+            ),
+            (
+                "server-log",
+                json!({ "timestamp_ms": 17, "message": "Ada connected" })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PingLatency(LatencyPayload { rtt_ms: 12.0 })
+            ),
+            ("ping-latency", json!({ "rtt_ms": 12.0 }))
+        );
+        assert_eq!(
+            wire(
+                Some(ServerId::new()),
+                CoreEvent::CustomReactionsConfig(vec![CustomReactionPayload {
+                    shortcode: "wave".to_owned(),
+                    display: "w".to_owned(),
+                    label: None,
+                }])
+            ),
+            (
+                "custom-reactions-config",
+                json!([{ "shortcode": "wave", "display": "w" }])
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::AudioTransportChanged(AudioTransportPayload {
+                    udp_active: true,
+                    cipher: Some("aes"),
+                })
+            ),
+            (
+                "audio-transport-changed",
+                json!({ "udp_active": true, "cipher": "aes" })
+            )
+        );
+        let stats = || crate::state::types::PacketStats {
+            good: 1,
+            late: 2,
+            lost: 3,
+            resync: 4,
+        };
+        let stats_json = json!({ "good": 1, "late": 2, "lost": 3, "resync": 4 });
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::CryptoStats(CryptoStatsPayload {
+                    from_client: stats(),
+                    to_client: stats(),
+                })
+            ),
+            (
+                "crypto-stats",
+                json!({ "from_client": stats_json.clone(), "to_client": stats_json })
+            )
+        );
+    }
+
+    #[test]
+    fn bulky_server_events_carry_their_payload_unchanged() {
+        assert_carries(
+            "user-stats",
+            &UserStatsPayload {
+                session: 9,
+                tcp_packets: 4,
+                opus: Some(true),
+                ..UserStatsPayload::default()
+            },
+            CoreEvent::UserStats,
+        );
+        assert_carries_keyed(
+            "server-settings",
+            "settings",
+            &ServerSettingsSnapshot {
+                settings: vec![crate::state::types::ServerSetting {
+                    key: "motd".to_owned(),
+                    ..Default::default()
+                }],
+                revision: 3,
+            },
+            CoreEvent::ServerSettings,
+        );
+        assert_carries_keyed(
+            "server-livery",
+            "livery",
+            &LiverySnapshot {
+                version: 2,
+                digest: "ab".to_owned(),
+                display_name: Some("Home".to_owned()),
+                ..LiverySnapshot::default()
+            },
+            CoreEvent::ServerLivery,
         );
     }
 

@@ -3,13 +3,14 @@ use serde::Serialize;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 
 #[derive(Serialize, Clone)]
-struct CustomReactionPayload {
-    shortcode: String,
-    display: String,
+pub(crate) struct CustomReactionPayload {
+    pub shortcode: String,
+    pub display: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    label: Option<String>,
+    pub label: Option<String>,
 }
 
 impl HandleMessage for mumble_tcp::FancyCustomReactionsConfig {
@@ -29,6 +30,6 @@ impl HandleMessage for mumble_tcp::FancyCustomReactionsConfig {
             "received FancyCustomReactionsConfig"
         );
 
-        ctx.emit("custom-reactions-config", reactions);
+        ctx.send(CoreEvent::CustomReactionsConfig(reactions));
     }
 }

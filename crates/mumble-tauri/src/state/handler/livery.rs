@@ -28,6 +28,7 @@ use serde::Serialize;
 use tracing::{debug, warn};
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 
 /// One chip beside the server's name.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -67,6 +68,7 @@ pub(crate) struct LiveryFocus {
 
 /// A server's livery as the frontend receives it.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[cfg_attr(test, derive(Default))]
 pub(crate) struct LiverySnapshot {
     pub version: u64,
     /// Lowercase hex, the same value the UDP ping carries.
@@ -95,6 +97,7 @@ pub(crate) struct LiverySnapshot {
 
 /// One palette per mode, because the viewer picks light or dark, not the server.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[cfg_attr(test, derive(Default))]
 pub(crate) struct LiveryPalettes {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dark: Option<LiveryPalette>,
@@ -183,11 +186,6 @@ pub(crate) fn to_snapshot(
     }
 }
 
-#[derive(Serialize)]
-struct LiveryPayload {
-    livery: LiverySnapshot,
-}
-
 impl HandleMessage for fancy::domain::LiveryDoc {
     fn handle(&self, ctx: &HandlerContext) {
         let Ok(mut state) = ctx.shared.lock() else {
@@ -240,7 +238,7 @@ impl HandleMessage for fancy::domain::LiveryDoc {
 
         // Emitted first: the words and colours in this document are ready now,
         // and the artwork lands as a second push a moment later.
-        ctx.emit("server-livery", LiveryPayload { livery: snapshot });
+        ctx.send(CoreEvent::ServerLivery(snapshot));
 
         if wanted.is_empty() {
             return;

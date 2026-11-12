@@ -2,6 +2,7 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::info;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 
 impl HandleMessage for mumble_tcp::ServerConfig {
     fn handle(&self, ctx: &HandlerContext) {
@@ -44,6 +45,6 @@ impl HandleMessage for mumble_tcp::ServerConfig {
                 "server config received"
             );
         }
-        ctx.emit_empty("server-config");
+        ctx.send(CoreEvent::ServerConfigChanged);
     }
 }

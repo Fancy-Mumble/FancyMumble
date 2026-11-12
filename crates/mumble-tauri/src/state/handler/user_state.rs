@@ -282,7 +282,7 @@ fn emit_activity_logs(
     }
     build_mute_deaf_log(user_name, old_snapshot, new_snapshot, &mut logs);
     for entry in logs {
-        ctx.emit("server-log", entry);
+        ctx.send(CoreEvent::ServerLog(entry));
     }
 }
 

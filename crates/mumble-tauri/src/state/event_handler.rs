@@ -322,10 +322,11 @@ impl EventHandler for SessionEventHandler {
 
     fn on_audio_transport_changed(&mut self, udp_active: bool, cipher: Option<&'static str>) {
         info!(udp_active, cipher, "audio transport changed");
-        let _ = self.app.emit(
-            "audio-transport-changed",
-            AudioTransportPayload { udp_active, cipher },
-        );
+        self.app
+            .send(CoreEvent::AudioTransportChanged(AudioTransportPayload {
+                udp_active,
+                cipher,
+            }));
     }
 
     fn on_ping_stats(
@@ -347,6 +348,6 @@ impl EventHandler for SessionEventHandler {
                 resync: to_client.resync,
             },
         };
-        let _ = self.app.emit("crypto-stats", payload);
+        self.app.send(CoreEvent::CryptoStats(payload));
     }
 }

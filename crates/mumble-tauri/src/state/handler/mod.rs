@@ -11,14 +11,14 @@ mod ban_list;
 mod channel_remove;
 mod channel_state;
 mod codec_version;
-mod custom_reactions_config;
+pub(super) mod custom_reactions_config;
 mod draw_stroke;
 pub(super) mod files;
 mod forum;
 mod gifs;
 mod invites;
 pub(crate) mod link_preview;
-mod livery;
+pub(super) mod livery;
 mod records;
 pub(crate) use livery::{LiverySnapshot, data_uri, to_snapshot};
 mod onboarding;
@@ -43,7 +43,7 @@ mod user_list;
 mod user_remove;
 pub(crate) mod user_state;
 mod user_stats;
-mod version;
+pub(super) mod version;
 mod watch_sync;
 mod webrtc_signal;
 
@@ -124,11 +124,6 @@ impl HandlerContext {
         if let Ok(val) = serde_json::to_value(payload) {
             self.emitter.emit_json(event, val);
         }
-    }
-
-    /// Emit an event with an empty (`null`) payload.
-    pub fn emit_empty(&self, event: &'static str) {
-        self.emitter.emit_json(event, serde_json::Value::Null);
     }
 
     /// Tell the view that `event` happened.

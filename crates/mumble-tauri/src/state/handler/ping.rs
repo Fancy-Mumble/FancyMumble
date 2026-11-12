@@ -1,6 +1,7 @@
 use mumble_protocol::proto::mumble_tcp;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::types::LatencyPayload;
 
 impl HandleMessage for mumble_tcp::Ping {
@@ -11,7 +12,7 @@ impl HandleMessage for mumble_tcp::Ping {
                 .unwrap_or_default()
                 .as_millis() as u64;
             let rtt_ms = now.saturating_sub(ts) as f64;
-            ctx.emit("ping-latency", LatencyPayload { rtt_ms });
+            ctx.send(CoreEvent::PingLatency(LatencyPayload { rtt_ms }));
         }
     }
 }

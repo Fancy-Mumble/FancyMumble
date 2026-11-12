@@ -128,10 +128,9 @@ fn handle_user_departed(msg: &mumble_tcp::UserRemove, ctx: &HandlerContext) {
     if let Some(name) = departing_name
         && !name.is_empty()
     {
-        ctx.emit(
-            "server-log",
-            ServerLogEntry::now(format!("{name} disconnected")),
-        );
+        ctx.send(CoreEvent::ServerLog(ServerLogEntry::now(format!(
+            "{name} disconnected"
+        ))));
     }
 }
 
