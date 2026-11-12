@@ -291,13 +291,13 @@ fn plugin_url(base: &str, plugin_name: &str) -> Result<String, String> {
     Ok(url.into())
 }
 
-fn succeeded(verb: &str, plugin_name: String) -> PluginAdminAckPayload {
+fn succeeded(verb: &'static str, plugin_name: String) -> PluginAdminAckPayload {
     PluginAdminAckPayload {
         plugin_name: Some(plugin_name),
         ok: true,
         error: None,
         request_id: None,
-        verb: Some(verb.to_owned()),
+        verb: Some(verb),
     }
 }
 

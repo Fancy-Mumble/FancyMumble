@@ -43,7 +43,7 @@ pub(crate) struct PluginAdminAckPayload {
     pub ok: bool,
     pub error: Option<String>,
     pub request_id: Option<String>,
-    pub verb: Option<String>,
+    pub verb: Option<&'static str>,
 }
 
 fn verb_to_str(v: i32) -> &'static str {
@@ -91,7 +91,7 @@ impl HandleMessage for mumble_tcp::FancyPluginAdminAck {
             ok: self.ok,
             error: self.error.clone(),
             request_id: self.request_id.clone(),
-            verb: self.verb.map(|v| verb_to_str(v).to_string()),
+            verb: self.verb.map(verb_to_str),
         }));
     }
 }

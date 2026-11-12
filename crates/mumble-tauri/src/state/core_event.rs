@@ -1326,7 +1326,7 @@ mod tests {
                     ok: false,
                     error: Some("no".to_owned()),
                     request_id: None,
-                    verb: Some("install".to_owned()),
+                    verb: Some("install"),
                 })
             ),
             (
