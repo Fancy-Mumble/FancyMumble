@@ -256,7 +256,6 @@ mod voice_pipeline {
     use crate::audio::{AudioDeviceFactory, PlatformAudioFactory};
 
     use crate::state::AppState;
-    use crate::state::host::Host;
     use crate::state::types::{AudioSettings, VoiceState};
 
     impl AppState {
@@ -377,7 +376,7 @@ mod voice_pipeline {
             &self,
             arc: &Arc<std::sync::Mutex<crate::state::SharedState>>,
         ) {
-            let stopped_sessions: Vec<(u32, Host)> = match arc.lock() {
+            let (host, stopped_sessions) = match arc.lock() {
                 Ok(mut state) => {
                     state.audio.stop_outbound();
                     if let Some(handle) = state.audio.mic_test_handle.take() {
@@ -393,30 +392,21 @@ mod voice_pipeline {
                     state.audio.input_volume_handle = None;
                     state.audio.output_volume_handle = None;
 
-                    // Collect sessions to notify OUTSIDE the lock.
-                    let sessions: Vec<(u32, Host)> = state
-                        .conn
-                        .host
-                        .as_ref()
-                        .filter(|_| !state.audio.talking_sessions.is_empty())
-                        .map(|app| {
-                            state
-                                .audio
-                                .talking_sessions
-                                .iter()
-                                .map(|&s| (s, app.clone()))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    state.audio.talking_sessions.clear();
-                    sessions
+                    // Take the sessions to notify OUTSIDE the lock: the set
+                    // itself, and the host once rather than once per speaker.
+                    (
+                        state.conn.host.clone(),
+                        std::mem::take(&mut state.audio.talking_sessions),
+                    )
                 }
-                _ => Vec::new(),
+                _ => (None, Default::default()),
             };
 
-            // Emit outside the lock to avoid deadlock with Tauri IPC.
-            for (session, app) in stopped_sessions {
-                super::emit_user_talking(&app, session, false);
+            // Emit outside the lock: the view may call straight back in.
+            if let Some(host) = host {
+                for session in stopped_sessions {
+                    super::emit_user_talking(&host, session, false);
+                }
             }
         }
 

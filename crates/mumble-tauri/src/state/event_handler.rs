@@ -41,8 +41,10 @@ impl HostEmitter {
 
 impl EventEmitter for HostEmitter {
     fn emit_json(&self, event: &str, mut payload: serde_json::Value) {
-        if let Some(id) = self.active_server_id() {
-            stamp_server_id(&mut payload, &id);
+        if lacks_server_id(&payload)
+            && let Some(id) = self.active_server_id()
+        {
+            stamp_server_id(&mut payload, id);
         }
         let _ = self.host.emit(event, payload);
     }
@@ -82,6 +84,36 @@ pub(super) struct SessionEventHandler {
     pub server_id: super::sessions::ServerId,
     /// Running count of inbound audio packets (for periodic diagnostics).
     pub(super) inbound_audio_count: u64,
+    /// What every message handler is given. Built once per connection: a
+    /// busy server sends hundreds of control messages a second, and each used
+    /// to allocate a fresh context.
+    ctx: HandlerContext,
+}
+
+impl SessionEventHandler {
+    /// A handler for the session behind `shared`, reporting to `app`.
+    pub(super) fn new(
+        shared: Arc<Mutex<SharedState>>,
+        app: Host,
+        epoch: u64,
+        server_id: super::sessions::ServerId,
+    ) -> Self {
+        let ctx = HandlerContext {
+            shared: Arc::clone(&shared),
+            emitter: Box::new(HostEmitter {
+                host: app.clone(),
+                shared: Arc::clone(&shared),
+            }),
+        };
+        Self {
+            shared,
+            app,
+            epoch,
+            server_id,
+            inbound_audio_count: 0,
+            ctx,
+        }
+    }
 }
 
 impl EventHandler for SessionEventHandler {
@@ -99,14 +131,7 @@ impl EventHandler for SessionEventHandler {
         {
             return;
         }
-        let ctx = HandlerContext {
-            shared: Arc::clone(&self.shared),
-            emitter: Box::new(HostEmitter {
-                host: self.app.clone(),
-                shared: Arc::clone(&self.shared),
-            }),
-        };
-        handler::dispatch(msg, &ctx);
+        handler::dispatch(msg, &self.ctx);
     }
 
     fn on_connected(&mut self) {
@@ -323,20 +348,22 @@ impl EventHandler for SessionEventHandler {
 /// serialised from `Option<String>::None` produce `"serverId": null`,
 /// which would otherwise prevent the frontend from routing the event
 /// to the correct tab.
-fn stamp_server_id(payload: &mut serde_json::Value, id: &str) {
-    let Some(obj) = payload.as_object_mut() else {
+fn stamp_server_id(payload: &mut serde_json::Value, id: impl Into<String>) {
+    if !lacks_server_id(payload) {
         return;
-    };
-    let needs_stamp = obj
-        .get("serverId")
-        .map(serde_json::Value::is_null)
-        .unwrap_or(true);
-    if needs_stamp {
-        let _ = obj.insert(
-            "serverId".to_string(),
-            serde_json::Value::String(id.to_string()),
-        );
     }
+    if let Some(obj) = payload.as_object_mut() {
+        let _ = obj.insert("serverId".to_owned(), serde_json::Value::String(id.into()));
+    }
+}
+
+/// Whether `payload` is an object that does not yet say which server it is
+/// about. Anything else is forwarded as it is, so there is nothing to look up
+/// for it.
+fn lacks_server_id(payload: &serde_json::Value) -> bool {
+    payload
+        .as_object()
+        .is_some_and(|obj| obj.get("serverId").is_none_or(serde_json::Value::is_null))
 }
 
 #[cfg(test)]

@@ -136,13 +136,8 @@ impl AppState {
                 ..ClientConfig::default()
             };
 
-            let handler = SessionEventHandler {
-                shared: inner.clone(),
-                app: app_handle.clone(),
-                epoch,
-                server_id,
-                inbound_audio_count: 0,
-            };
+            let handler =
+                SessionEventHandler::new(inner.clone(), app_handle.clone(), epoch, server_id);
 
             let result = mumble_protocol::client::run(config, handler).await;
             handle_connect_result(
