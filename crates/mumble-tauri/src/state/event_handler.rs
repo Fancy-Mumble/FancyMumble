@@ -16,16 +16,14 @@ use mumble_protocol::event::EventHandler;
 use mumble_protocol::message::{ControlMessage, UdpMessage};
 
 use super::SharedState;
-use super::core_event::{CoreEvent, lacks_server_id, stamp_server_id};
+use super::core_event::CoreEvent;
 use super::handler::{self, EventEmitter, HandlerContext};
 use super::types::*;
 
 /// Emitter the message handlers use: forwards to the host application.
 ///
-/// Stamps every JSON object payload with a `serverId` field identifying
-/// the active session at emit time so the view can route events to
-/// the correct server tab.  Non-object payloads (strings, arrays) are
-/// forwarded unchanged.
+/// Sends every event with the session that is active at that moment, so a
+/// view showing several servers can route it to the right one.
 struct HostEmitter {
     host: Host,
     shared: Arc<Mutex<SharedState>>,
@@ -38,15 +36,6 @@ impl HostEmitter {
 }
 
 impl EventEmitter for HostEmitter {
-    fn emit_json(&self, event: &'static str, mut payload: serde_json::Value) {
-        if lacks_server_id(&payload)
-            && let Some(id) = self.active_server()
-        {
-            stamp_server_id(&mut payload, id.to_string());
-        }
-        let _ = self.host.emit(event, payload);
-    }
-
     fn emit_event(&self, event: CoreEvent) {
         self.host.send_for(self.active_server(), event);
     }

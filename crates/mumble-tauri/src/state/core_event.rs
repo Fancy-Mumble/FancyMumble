@@ -5,10 +5,6 @@
 //! the payload as the Rust value it is. A view that speaks JSON (the webview)
 //! calls [`Event::into_wire`], which writes the event out under the name and
 //! in the shape its frontend has always listened for.
-//!
-//! Not every event is typed yet. Those that are not travel as
-//! [`CoreEvent::Untyped`] - a name and its JSON - so they can be moved over
-//! one group at a time without the wire format changing under the frontend.
 
 use serde::{Serialize, Serializer};
 use serde_json::value::RawValue;
@@ -254,32 +250,9 @@ pub(crate) enum CoreEvent {
     /// What the user is playing, as Discord-style rich presence reports it.
     #[cfg(not(target_os = "android"))]
     RichPresenceChanged(PresenceSnapshot),
-    /// An event that has not been given a variant yet: its wire name and its
-    /// payload, already written out as JSON.
-    Untyped {
-        /// The name the frontend listens for.
-        name: &'static str,
-        /// The payload as JSON.
-        payload: Box<RawValue>,
-    },
 }
 
 impl CoreEvent {
-    /// An event that has no variant yet, from its wire name and payload.
-    ///
-    /// # Errors
-    ///
-    /// When `payload` cannot be represented as JSON.
-    pub(crate) fn untyped<S: Serialize>(
-        name: &'static str,
-        payload: S,
-    ) -> Result<Self, serde_json::Error> {
-        Ok(Self::Untyped {
-            name,
-            payload: serde_json::value::to_raw_value(&payload)?,
-        })
-    }
-
     /// The name a JSON-speaking view listens for.
     pub(crate) fn name(&self) -> &'static str {
         match self {
@@ -376,7 +349,6 @@ impl CoreEvent {
             Self::WhisperState(_) => super::whisper::WHISPER_STATE_EVENT,
             #[cfg(not(target_os = "android"))]
             Self::RichPresenceChanged(_) => super::presence::PRESENCE_EVENT,
-            Self::Untyped { name, .. } => name,
         }
     }
 
@@ -565,7 +537,6 @@ impl Serialize for CoreEvent {
             Self::WhisperState(active) => active.serialize(serializer),
             #[cfg(not(target_os = "android"))]
             Self::RichPresenceChanged(snapshot) => snapshot.serialize(serializer),
-            Self::Untyped { payload, .. } => payload.serialize(serializer),
         }
     }
 }
@@ -608,9 +579,6 @@ impl Event {
     /// When the payload cannot be represented as JSON.
     pub(crate) fn into_wire(self) -> Result<(&'static str, Box<RawValue>), serde_json::Error> {
         let name = self.kind.name();
-        if let CoreEvent::Untyped { payload, .. } = self.kind {
-            return Ok((name, payload));
-        }
         let payload = match self.server {
             Some(server) if self.kind.payload_is_object() => {
                 let mut value = serde_json::to_value(&self.kind)?;
@@ -629,22 +597,13 @@ impl Event {
 /// serialised from `Option<String>::None` produce `"serverId": null`,
 /// which would otherwise prevent the frontend from routing the event
 /// to the correct tab.
-pub(crate) fn stamp_server_id(payload: &mut serde_json::Value, id: impl Into<String>) {
-    if !lacks_server_id(payload) {
+fn stamp_server_id(payload: &mut serde_json::Value, id: impl Into<String>) {
+    let Some(obj) = payload.as_object_mut() else {
         return;
-    }
-    if let Some(obj) = payload.as_object_mut() {
+    };
+    if obj.get("serverId").is_none_or(serde_json::Value::is_null) {
         let _ = obj.insert("serverId".to_owned(), serde_json::Value::String(id.into()));
     }
-}
-
-/// Whether `payload` is an object that does not yet say which server it is
-/// about. Anything else is forwarded as it is, so there is nothing to look up
-/// for it.
-pub(crate) fn lacks_server_id(payload: &serde_json::Value) -> bool {
-    payload
-        .as_object()
-        .is_some_and(|obj| obj.get("serverId").is_none_or(serde_json::Value::is_null))
 }
 
 #[cfg(test)]
@@ -2489,15 +2448,6 @@ mod tests {
             .1,
             serde_json::json!([1, false])
         );
-    }
-
-    #[test]
-    fn an_untyped_event_passes_through_unchanged() {
-        let event =
-            CoreEvent::untyped("server-log", serde_json::json!({ "message": "hi" })).unwrap();
-        let (name, payload) = wire(Some(ServerId::new()), event);
-        assert_eq!(name, "server-log");
-        assert_eq!(payload, serde_json::json!({ "message": "hi" }));
     }
 
     #[test]

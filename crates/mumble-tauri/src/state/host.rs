@@ -12,8 +12,6 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use serde::Serialize;
-
 use super::SharedState;
 use super::core_event::{CoreEvent, Event};
 use super::sessions::ServerId;
@@ -214,22 +212,6 @@ impl Host {
             server,
             kind: event,
         });
-    }
-
-    /// Deliver an event that has no [`CoreEvent`] variant yet, under its wire
-    /// name `event`.
-    ///
-    /// # Errors
-    ///
-    /// When `payload` cannot be represented as JSON. Delivery itself is best
-    /// effort and never fails.
-    pub(crate) fn emit<S: Serialize>(
-        &self,
-        event: &'static str,
-        payload: S,
-    ) -> Result<(), serde_json::Error> {
-        self.send(CoreEvent::untyped(event, payload)?);
-        Ok(())
     }
 
     /// The directory certificates, identities and message keys live in.

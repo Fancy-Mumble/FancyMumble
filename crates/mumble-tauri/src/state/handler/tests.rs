@@ -14,6 +14,7 @@ use mumble_protocol::proto::mumble_tcp;
 
 use super::{EventEmitter, HandleMessage, HandlerContext, dispatch};
 use crate::state::SharedState;
+use crate::state::core_event::CoreEvent;
 use crate::state::hash_names::HashNameResolver;
 use crate::state::types::*;
 
@@ -52,11 +53,14 @@ impl MockEmitter {
 }
 
 impl EventEmitter for MockEmitter {
-    fn emit_json(&self, event: &'static str, payload: Value) {
+    /// Recorded the way a JSON-speaking view receives it: the wire name and
+    /// the payload.
+    fn emit_event(&self, event: CoreEvent) {
+        let payload = serde_json::to_value(&event).unwrap();
         self.events
             .lock()
             .unwrap()
-            .push((event.to_string(), payload));
+            .push((event.name().to_string(), payload));
     }
 
     fn request_user_attention(&self) {
@@ -72,8 +76,8 @@ impl EventEmitter for MockEmitter {
 struct ArcEmitter(Arc<MockEmitter>);
 
 impl EventEmitter for ArcEmitter {
-    fn emit_json(&self, event: &'static str, payload: Value) {
-        self.0.emit_json(event, payload);
+    fn emit_event(&self, event: CoreEvent) {
+        self.0.emit_event(event);
     }
 
     fn request_user_attention(&self) {

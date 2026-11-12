@@ -62,20 +62,8 @@ use super::core_event::CoreEvent;
 /// In production this wraps a `Host`; in tests it records
 /// emitted events for assertion.
 pub(crate) trait EventEmitter: Send + Sync {
-    /// Emit an event that has no [`CoreEvent`] variant yet, as its wire name
-    /// and JSON payload.
-    fn emit_json(&self, event: &'static str, payload: serde_json::Value);
-
-    /// Emit a typed event.
-    ///
-    /// The default writes it out under its wire name, which is all an emitter
-    /// that records or forwards JSON needs; the emitter that talks to the
-    /// host passes the event on as it is.
-    fn emit_event(&self, event: CoreEvent) {
-        if let Ok(payload) = serde_json::to_value(&event) {
-            self.emit_json(event.name(), payload);
-        }
-    }
+    /// Tell the view that `event` happened.
+    fn emit_event(&self, event: CoreEvent);
 
     /// Flash the taskbar / request user attention (desktop-only, no-op elsewhere).
     fn request_user_attention(&self);
