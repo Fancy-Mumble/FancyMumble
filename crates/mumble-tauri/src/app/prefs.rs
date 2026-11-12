@@ -134,10 +134,7 @@ fn start_rich_presence(app: tauri::AppHandle, resolve_artwork: bool) {
         let Some(state) = app.try_state::<AppState>() else {
             return;
         };
-        match state
-            .set_presence_enabled(&app, true, resolve_artwork)
-            .await
-        {
+        match state.set_presence_enabled(true, resolve_artwork).await {
             Ok(status) => tracing::info!(?status, "rich presence restored from preferences"),
             Err(e) => tracing::warn!("hydrate_persisted_prefs: rich presence failed to start: {e}"),
         }

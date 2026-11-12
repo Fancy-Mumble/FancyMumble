@@ -65,7 +65,7 @@ pub(crate) struct RecordingHandle {
     pub file_path: PathBuf,
     pub started_at: std::time::Instant,
     /// Keep the task alive; aborted on drop if needed.
-    _task: tauri::async_runtime::JoinHandle<()>,
+    _task: crate::state::runtime::JoinHandle<()>,
 }
 
 impl AppState {
@@ -128,7 +128,7 @@ impl AppState {
         let stop_clone = stop_flag.clone();
         let path_clone = file_path.clone();
 
-        let task = tauri::async_runtime::spawn(async move {
+        let task = crate::state::runtime::spawn(async move {
             if let Err(e) = recording_loop(&path_clone, speaker_buffers, stop_clone, format).await {
                 warn!("Recording task failed: {e}");
             }

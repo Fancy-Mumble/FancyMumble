@@ -406,7 +406,6 @@ impl AppState {
         components: Option<serde_json::Value>,
     ) -> Result<(), String> {
         use crate::state::types::NewMessagePayload;
-        use tauri::Emitter;
 
         let (targets, app_handle) = {
             let __session = self.inner.snapshot();
@@ -416,7 +415,7 @@ impl AppState {
             } else {
                 channel_ids
             };
-            (targets, state.conn.tauri_app_handle.clone())
+            (targets, state.conn.host.clone())
         };
 
         if targets.is_empty() {
@@ -490,7 +489,6 @@ impl AppState {
         clear_components: bool,
     ) -> Result<(), String> {
         use crate::state::types::NewMessagePayload;
-        use tauri::Emitter;
 
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -514,7 +512,7 @@ impl AppState {
                     touched.push(*channel_id);
                 }
             }
-            (touched, state.conn.tauri_app_handle.clone())
+            (touched, state.conn.host.clone())
         };
 
         if let Some(app) = app_handle {

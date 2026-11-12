@@ -2,8 +2,6 @@
 
 use std::collections::HashMap;
 
-use tauri::Emitter;
-
 use crate::state::AppState;
 use crate::state::types::{DmUnreadPayload, UnreadPayload};
 
@@ -28,7 +26,7 @@ impl AppState {
     }
 
     pub(in crate::state) fn emit_unreads(&self) {
-        if let Some(handle) = self.app_handle() {
+        if let Some(handle) = self.host() {
             let unreads = self.unread_counts();
             let _ = handle.emit("unread-changed", UnreadPayload { unreads });
         }
@@ -51,7 +49,7 @@ impl AppState {
     }
 
     pub(in crate::state) fn emit_dm_unreads(&self) {
-        if let Some(handle) = self.app_handle() {
+        if let Some(handle) = self.host() {
             let unreads = self.dm_unread_counts();
             let _ = handle.emit("dm-unread-changed", DmUnreadPayload { unreads });
         }

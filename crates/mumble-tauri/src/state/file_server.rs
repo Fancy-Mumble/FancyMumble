@@ -21,13 +21,13 @@ use futures_util::StreamExt as _;
 use reqwest::Client;
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
-use tauri::Emitter;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 use tokio_util::io::ReaderStream;
 use tokio_util::sync::CancellationToken;
 
 use super::AppState;
+use crate::state::host::Host;
 
 const USER_AGENT: &str = concat!("FancyMumble/", env!("CARGO_PKG_VERSION"));
 
@@ -353,7 +353,7 @@ fn parse_file_id_from_url(url: &str) -> Result<String, String> {
 async fn emit_progress_events(
     upload_id: String,
     file_size: u64,
-    app_handle: tauri::AppHandle,
+    app_handle: Host,
     mut rx: mpsc::UnboundedReceiver<u64>,
 ) {
     let mut last_pct: u8 = u8::MAX;
@@ -377,7 +377,7 @@ pub(super) fn build_progress_stream(
     file: tokio::fs::File,
     file_size: u64,
     upload_id: String,
-    app_handle: tauri::AppHandle,
+    app_handle: Host,
 ) -> impl futures_util::Stream<Item = Result<tokio_util::bytes::Bytes, std::io::Error>> {
     let tx = if !upload_id.is_empty() && file_size > 0 {
         let (tx, rx) = mpsc::unbounded_channel::<u64>();
@@ -476,11 +476,8 @@ async fn obtain_ticket(
 impl AppState {
     /// Upload a local file to the file-server plugin and return the
     /// signed download URL.
-    pub async fn upload_file(
-        &self,
-        req: UploadRequest,
-        app_handle: tauri::AppHandle,
-    ) -> Result<UploadResponse, String> {
+    pub async fn upload_file(&self, req: UploadRequest) -> Result<UploadResponse, String> {
+        let host = self.host().ok_or("App not initialized")?;
         if matches!(req.mode, FileAccessMode::Password) && req.password.is_none() {
             return Err("mode=password requires `password`".to_owned());
         }
@@ -505,7 +502,7 @@ impl AppState {
             file,
             file_size,
             req.upload_id.clone(),
-            app_handle,
+            host,
         ));
 
         let client = &self.http_client;

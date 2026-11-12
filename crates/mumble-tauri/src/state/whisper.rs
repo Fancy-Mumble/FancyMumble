@@ -39,7 +39,6 @@
 use std::collections::BTreeSet;
 use std::sync::atomic::Ordering;
 
-use tauri::Emitter;
 use tracing::{debug, info};
 
 use mumble_protocol::command;
@@ -317,13 +316,13 @@ impl AppState {
     /// press often lands while the window that draws the indicator is not the
     /// focused one.
     fn emit_whisper_state(&self, active: bool) {
-        if let Some(app) = self.app_handle() {
+        if let Some(app) = self.host() {
             let _ = app.emit(WHISPER_STATE_EVENT, active);
         }
     }
 
     fn emit_whisper_denials(&self, payload: WhisperDenials) {
-        if let Some(app) = self.app_handle() {
+        if let Some(app) = self.host() {
             let _ = app.emit(WHISPER_DENIALS_EVENT, payload);
         }
     }

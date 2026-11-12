@@ -16,10 +16,10 @@ pub(crate) fn get_system_clock_format() -> Option<&'static str> {
 /// The frontend must use this rather than the notification plugin's own
 /// `notify` command: on Linux that command drives notify-rust's blocking
 /// D-Bus call from the async runtime, which panics the process (see
-/// `state::show_desktop_notification`).
+/// `adapter::show_desktop_notification`).
 #[tauri::command]
 pub(crate) fn show_desktop_notification(app: tauri::AppHandle, title: String, body: String) {
-    crate::state::show_desktop_notification(&app, &title, &body, None, None);
+    crate::adapter::show_desktop_notification(&app, &title, &body, None, None);
 }
 
 /// Enable or disable native OS notifications.

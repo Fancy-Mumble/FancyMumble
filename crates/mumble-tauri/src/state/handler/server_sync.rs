@@ -7,6 +7,8 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::{debug, info, warn};
 
 use super::{HandleMessage, HandlerContext};
+#[cfg(target_os = "android")]
+use crate::state::host::Host;
 use crate::state::local_cache::{CachedReaction, CachedTail};
 use crate::state::pchat::{self, PchatState};
 use crate::state::types::{
@@ -107,49 +109,35 @@ impl HandlerContext {
     /// Start the Android foreground service and register FCM push token.
     #[cfg(target_os = "android")]
     fn start_android_service(&self, initial_channel: Option<u32>) {
-        use tauri::Manager;
-        let (app_handle, host, channel_name) = {
+        use crate::state::host::VoiceService;
+        let (host, server, channel_name) = {
             let state = self.shared.lock().ok();
             state
                 .map(|s| {
                     let ch_name = initial_channel
                         .and_then(|ch| s.channels.get(&ch))
                         .map(|c| c.name.clone());
-                    (
-                        s.conn.tauri_app_handle.clone(),
-                        s.server.host.clone(),
-                        ch_name,
-                    )
+                    (s.conn.host.clone(), s.server.host.clone(), ch_name)
                 })
                 .unwrap_or_default()
         };
-        let Some(app) = app_handle else { return };
+        let Some(host) = host else { return };
 
-        if let Some(handle) =
-            app.try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>()
-        {
-            crate::platform::android::connection_service::start_service(&handle, &host);
-            if let Some(ref ch_name) = channel_name {
-                crate::platform::android::connection_service::update_service_channel(
-                    &handle, &host, ch_name,
-                );
-            }
+        host.voice_service(VoiceService::Started { server: &server });
+        if let Some(ref channel) = channel_name {
+            host.voice_service(VoiceService::ChannelChanged {
+                server: &server,
+                channel,
+            });
         }
 
-        self.register_fcm_token(&app);
+        self.register_fcm_token(&host);
     }
 
     /// Send the FCM device token to the server for push notifications.
     #[cfg(target_os = "android")]
-    fn register_fcm_token(&self, app: &tauri::AppHandle) {
-        use tauri::Manager;
-        let Some(fcm) = app.try_state::<crate::platform::android::fcm_service::FcmPluginHandle>()
-        else {
-            info!("FCM: FcmPluginHandle not available (not Android?)");
-            return;
-        };
-        info!("FCM: FcmPluginHandle found, requesting device token");
-        let Some(token) = crate::platform::android::fcm_service::get_token(&fcm) else {
+    fn register_fcm_token(&self, host: &Host) {
+        let Some(token) = host.push_token() else {
             warn!("FCM: no device token available, skipping push registration");
             return;
         };

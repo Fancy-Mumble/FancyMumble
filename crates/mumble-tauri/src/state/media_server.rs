@@ -42,10 +42,9 @@ use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode, header};
 use hyper_util::rt::TokioIo;
-use tauri::Manager as _;
 use tokio::net::TcpListener;
 
-use super::AppState;
+use crate::state::host::Host;
 
 /// The most this hands back in one response.
 ///
@@ -88,7 +87,7 @@ const PLAYER_SEGMENT: &str = "~player";
 /// Returns the running server, or the reason it could not start - which is a
 /// preview that does not appear rather than anything worse: the card below it
 /// still names the file and still offers to save it.
-pub(crate) async fn start(app: tauri::AppHandle) -> Result<MediaServer, String> {
+pub(crate) async fn start(app: Host) -> Result<MediaServer, String> {
     let token = mint_token();
     let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
         .await
@@ -99,12 +98,12 @@ pub(crate) async fn start(app: tauri::AppHandle) -> Result<MediaServer, String> 
         .port();
 
     let served_token = token.clone();
-    drop(tauri::async_runtime::spawn(async move {
+    drop(crate::state::runtime::spawn(async move {
         loop {
             let Ok((stream, _)) = listener.accept().await else {
                 continue;
             };
-            drop(tauri::async_runtime::spawn(converse(
+            drop(crate::state::runtime::spawn(converse(
                 stream,
                 app.clone(),
                 served_token.clone(),
@@ -121,7 +120,7 @@ pub(crate) async fn start(app: tauri::AppHandle) -> Result<MediaServer, String> 
 ///
 /// A player keeps a connection open across the pieces it asks for, so this
 /// outlives any single range.
-async fn converse(stream: tokio::net::TcpStream, app: tauri::AppHandle, token: String) {
+async fn converse(stream: tokio::net::TcpStream, app: Host, token: String) {
     let service = service_fn(move |request| {
         let app = app.clone();
         let token = token.clone();
@@ -188,12 +187,8 @@ pub(crate) fn upstream_range(header: Option<&str>) -> Option<String> {
 }
 
 /// Serve one request, against whatever this app is connected to.
-async fn answer(
-    app: &tauri::AppHandle,
-    token: &str,
-    request: Request<Incoming>,
-) -> Response<Full<Bytes>> {
-    let Some(state) = app.try_state::<AppState>() else {
+async fn answer(app: &Host, token: &str, request: Request<Incoming>) -> Response<Full<Bytes>> {
+    let Some(state) = app.app_state() else {
         return refuse(StatusCode::SERVICE_UNAVAILABLE);
     };
     serve(
@@ -233,7 +228,10 @@ where
     let Some(key) = key_of(path, token) else {
         return refuse(StatusCode::NOT_FOUND);
     };
-    if let Some(src) = key.strip_prefix(PLAYER_SEGMENT).and_then(|rest| rest.strip_prefix('/')) {
+    if let Some(src) = key
+        .strip_prefix(PLAYER_SEGMENT)
+        .and_then(|rest| rest.strip_prefix('/'))
+    {
         return player_page(src, method == Method::HEAD);
     }
     let range = upstream_range(range_header);

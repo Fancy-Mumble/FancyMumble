@@ -33,6 +33,7 @@ pub use file_server::{
     UploadBytesRequest, UploadRequest, UploadResponse,
 };
 mod handler;
+pub(crate) mod host;
 pub(crate) use handler::{LiverySnapshot, data_uri, to_snapshot};
 mod account;
 mod account_seal;
@@ -63,6 +64,7 @@ pub(crate) mod recording;
 pub(crate) mod records;
 pub(crate) mod recovery;
 mod registry;
+pub(crate) mod runtime;
 mod search;
 mod server_settings;
 mod sessions;
@@ -75,7 +77,6 @@ pub(crate) mod whisper;
 
 // Re-export everything that lib.rs needs.
 pub(crate) use connection::Credentials;
-pub(crate) use event_handler::show_desktop_notification;
 pub(crate) use registry::{HashLookup, UserHashMatch};
 pub use sessions::{ServerId, SessionMeta};
 pub use types::{
@@ -90,7 +91,7 @@ use std::sync::atomic::{AtomicU8, AtomicU32};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use tauri::AppHandle;
+use host::Host;
 use tokio_util::sync::CancellationToken;
 
 use offload::OffloadStore;
@@ -165,9 +166,9 @@ pub(super) struct AudioPipelineState {
     pub input_volume_handle: Option<Arc<AtomicU32>>,
     pub output_volume_handle: Option<Arc<AtomicU32>>,
     pub speaker_volumes: SpeakerVolumes,
-    pub mic_test_handle: Option<tauri::async_runtime::JoinHandle<()>>,
-    pub latency_test_handle: Option<tauri::async_runtime::JoinHandle<()>>,
-    pub voice_replay_handle: Option<tauri::async_runtime::JoinHandle<()>>,
+    pub mic_test_handle: Option<runtime::JoinHandle<()>>,
+    pub latency_test_handle: Option<runtime::JoinHandle<()>>,
+    pub voice_replay_handle: Option<runtime::JoinHandle<()>>,
     pub voice_replay_stop: Option<tokio::sync::watch::Sender<bool>>,
     pub recording_handle: Option<recording::RecordingHandle>,
     pub talking_sessions: HashSet<u32>,
@@ -580,7 +581,7 @@ pub(super) struct ConnectionFields {
     pub own_session: Option<u32>,
     pub own_name: String,
     pub user_initiated_disconnect: bool,
-    pub tauri_app_handle: Option<AppHandle>,
+    pub host: Option<Host>,
 }
 
 // --- Shared interior state (composed) -----------------------------
@@ -728,7 +729,7 @@ pub struct AppState {
     /// so commands can always lock something and observe a sensible
     /// disconnected view instead of failing.
     default_inner: Arc<Mutex<SharedState>>,
-    app_handle: Mutex<Option<AppHandle>>,
+    host: Mutex<Option<Host>>,
     start_time: Instant,
     http_client: reqwest::Client,
     pub(super) upload_cancels: Mutex<HashMap<String, CancellationToken>>,
@@ -810,7 +811,7 @@ impl AppState {
             registry: registry::Registry::default(),
             inner: shared_handle::SharedHandle::new(Arc::clone(&default_inner)),
             default_inner,
-            app_handle: Mutex::new(None),
+            host: Mutex::new(None),
             start_time: Instant::now(),
             http_client: file_server::new_http_client(),
             upload_cancels: Mutex::new(HashMap::new()),
@@ -924,16 +925,18 @@ impl AppState {
         let _ = self.inner.swap(Arc::clone(&self.default_inner));
     }
 
-    /// Inject the Tauri `AppHandle` during setup.
-    pub fn set_app_handle(&self, handle: AppHandle) {
+    /// Connect the engine to the application hosting it. Called once,
+    /// during startup, before anything can ask the engine to do work.
+    pub(crate) fn set_host(&self, host: Host) {
         *self
-            .app_handle
+            .host
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(handle);
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(host);
     }
 
-    pub(super) fn app_handle(&self) -> Option<AppHandle> {
-        self.app_handle.lock().ok().and_then(|h| h.clone())
+    /// The application hosting the engine, once [`Self::set_host`] has run.
+    pub(crate) fn host(&self) -> Option<Host> {
+        self.host.lock().ok().and_then(|h| h.clone())
     }
 
     /// Cancel an in-progress upload by its `upload_id`.

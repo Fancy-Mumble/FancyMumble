@@ -30,11 +30,11 @@ use mumble_protocol::audio::encoder::{
 use mumble_protocol::audio::filter::FilterChain;
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use serde::Serialize;
-use tauri::Emitter;
 use tracing::{debug, warn};
 
 use super::AppState;
 use crate::audio::{AudioDeviceFactory, PlatformAudioFactory};
+use crate::state::host::Host;
 
 /// The event the recorder reports its progress on.
 const STATE_EVENT: &str = "voice-message-state";
@@ -135,7 +135,7 @@ struct Take {
     encoder: OpusEncoder,
     limit_ms: u32,
     dir: PathBuf,
-    app: tauri::AppHandle,
+    app: Host,
     stop: Arc<AtomicBool>,
     cancel: Arc<AtomicBool>,
 }
@@ -214,7 +214,7 @@ fn millis(samples: u64) -> u32 {
     u32::try_from(samples * 1000 / SAMPLE_RATE).unwrap_or(u32::MAX)
 }
 
-fn emit(app: &tauri::AppHandle, state: &RecorderState) {
+fn emit(app: &Host, state: &RecorderState) {
     let _ = app.emit(STATE_EVENT, state);
 }
 
@@ -379,7 +379,7 @@ impl AppState {
                 limit_ms.min(HARD_LIMIT_MS)
             },
             dir,
-            app: self.app_handle().ok_or("No app handle")?,
+            app: self.host().ok_or("No app handle")?,
             stop: Arc::clone(&stop),
             cancel: Arc::clone(&cancel),
         };
@@ -406,7 +406,7 @@ impl AppState {
             .take()
             .ok_or("Not recording a voice message")?;
         recording.stop.store(true, Ordering::Relaxed);
-        tauri::async_runtime::spawn_blocking(move || recording.thread.join())
+        crate::state::runtime::spawn_blocking(move || recording.thread.join())
             .await
             .map_err(|e| e.to_string())?
             .map_err(|_| "the recorder stopped unexpectedly".to_owned())?

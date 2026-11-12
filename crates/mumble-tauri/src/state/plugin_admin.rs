@@ -16,7 +16,6 @@ use std::time::Duration;
 use mumble_protocol::command;
 use mumble_protocol::fancy_codec::FANCY_PROTOCOL_EPOCH;
 use serde::Deserialize;
-use tauri::Emitter as _;
 
 use super::AppState;
 use super::handler::operator_ticket::OperatorTicket;
@@ -245,7 +244,7 @@ impl AppState {
     }
 
     fn emit_plugin_admin<S: serde::Serialize + Clone>(&self, event: &str, payload: S) {
-        if let Some(app) = self.app_handle() {
+        if let Some(app) = self.host() {
             let _ = app.emit(event, payload);
         }
     }

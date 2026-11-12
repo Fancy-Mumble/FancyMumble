@@ -49,6 +49,7 @@ static DHAT_PROFILER: std::sync::Mutex<Option<dhat::Profiler>> = std::sync::Mute
 #[cfg(all(not(target_os = "android"), feature = "dhat-heap"))]
 use mimalloc as _;
 
+mod adapter;
 mod app;
 mod audio;
 pub(crate) mod commands;
@@ -74,10 +75,8 @@ use tauri::Manager;
 /// isolation for the e2e suite requires this explicit hook. Production runs
 /// (no env var set) behave exactly as before.
 pub(crate) fn e2e_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
-    if let Ok(dir) = std::env::var(constants::ENV_E2E_DATA_DIR)
-        && !dir.trim().is_empty()
-    {
-        return Ok(std::path::PathBuf::from(dir));
+    if let Some(dir) = state::host::data_dir_override() {
+        return Ok(dir);
     }
     app.path().app_data_dir().map_err(|e| e.to_string())
 }

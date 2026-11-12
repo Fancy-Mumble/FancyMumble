@@ -3,8 +3,6 @@
 
 use std::collections::HashMap;
 
-use tauri::Manager;
-
 use super::offload::{BodySummary, OffloadStore};
 use super::types::ChatMessage;
 use super::{AppState, SharedState};
@@ -21,9 +19,7 @@ impl AppState {
     }
 
     pub(super) fn offload_base_dir(&self) -> Result<std::path::PathBuf, String> {
-        if let Some(app) = self.app_handle()
-            && let Ok(cache) = app.path().cache_dir()
-        {
+        if let Some(cache) = self.host().and_then(|host| host.cache_dir()) {
             return Ok(cache);
         }
         Ok(std::env::temp_dir())

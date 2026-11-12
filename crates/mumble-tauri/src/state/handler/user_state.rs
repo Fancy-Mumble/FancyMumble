@@ -307,18 +307,17 @@ fn handle_own_channel_change(ctx: &HandlerContext, ch: u32) {
 
     #[cfg(target_os = "android")]
     {
-        use tauri::Manager;
         let info = ctx.shared.lock().ok().and_then(|s| {
             let channel_name = s.channels.get(&ch).map(|c| c.name.clone())?;
-            let host = s.server.host.clone();
-            let app = s.conn.tauri_app_handle.clone()?;
-            Some((app, host, channel_name))
+            let server = s.server.host.clone();
+            let host = s.conn.host.clone()?;
+            Some((host, server, channel_name))
         });
-        if let Some((app, host, channel_name)) = info
-            && let Some(handle) =
-                app.try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>()
-        {
-            crate::platform::android::connection_service::update_service_channel(&handle, &host, &channel_name);
+        if let Some((host, server, channel_name)) = info {
+            host.voice_service(crate::state::host::VoiceService::ChannelChanged {
+                server: &server,
+                channel: &channel_name,
+            });
         }
     }
 

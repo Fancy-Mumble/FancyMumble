@@ -62,7 +62,7 @@ fn set_env_if_unset(key: &str, value: &str) {
 /// the offload store, and hydrate persisted preferences.
 pub(crate) fn init_app_state(app: &mut tauri::App) {
     let state = app.state::<AppState>();
-    state.set_app_handle(app.handle().clone());
+    crate::adapter::TauriHost::attach(app.handle(), &state);
     if let Err(e) = state.init_offload_store() {
         tracing::warn!("Failed to initialise offload store: {e}");
     }

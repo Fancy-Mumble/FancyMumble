@@ -60,7 +60,7 @@ use super::SharedState;
 
 /// Abstraction over frontend event emission.
 ///
-/// In production this wraps a `tauri::AppHandle`; in tests it records
+/// In production this wraps a `Host`; in tests it records
 /// emitted events for assertion.
 pub(crate) trait EventEmitter: Send + Sync {
     /// Emit a serialised event to the frontend.

@@ -1,5 +1,5 @@
 //! `EventHandler` implementation that bridges mumble-protocol events
-//! to the React frontend via Tauri's event system.
+//! to the view, through the application hosting the engine.
 //!
 //! Control message handling is delegated to the `handler` module,
 //! where each protobuf message type has its own file implementing
@@ -8,11 +8,7 @@
 
 use std::sync::{Arc, Mutex};
 
-#[cfg(target_os = "windows")]
-use tauri::Manager;
-use tauri::{AppHandle, Emitter};
-#[cfg(not(target_os = "linux"))]
-use tauri_plugin_notification::NotificationExt;
+use crate::state::host::Host;
 use tracing::{debug, info, warn};
 
 use mumble_protocol::audio::encoder::EncodedPacket;
@@ -23,18 +19,18 @@ use super::SharedState;
 use super::handler::{self, EventEmitter, HandlerContext};
 use super::types::*;
 
-/// Tauri-backed event emitter forwarding to `AppHandle::emit`.
+/// Emitter the message handlers use: forwards to the host application.
 ///
 /// Stamps every JSON object payload with a `serverId` field identifying
-/// the active session at emit time so the frontend can route events to
+/// the active session at emit time so the view can route events to
 /// the correct server tab.  Non-object payloads (strings, arrays) are
 /// forwarded unchanged.
-struct TauriEmitter {
-    app: AppHandle,
+struct HostEmitter {
+    host: Host,
     shared: Arc<Mutex<SharedState>>,
 }
 
-impl TauriEmitter {
+impl HostEmitter {
     fn active_server_id(&self) -> Option<String> {
         self.shared
             .lock()
@@ -43,19 +39,16 @@ impl TauriEmitter {
     }
 }
 
-impl EventEmitter for TauriEmitter {
+impl EventEmitter for HostEmitter {
     fn emit_json(&self, event: &str, mut payload: serde_json::Value) {
         if let Some(id) = self.active_server_id() {
             stamp_server_id(&mut payload, &id);
         }
-        let _ = self.app.emit(event, payload);
+        let _ = self.host.emit(event, payload);
     }
 
     fn request_user_attention(&self) {
-        #[cfg(target_os = "windows")]
-        if let Some(window) = self.app.get_webview_window("main") {
-            let _ = window.request_user_attention(Some(tauri::UserAttentionType::Informational));
-        }
+        self.host.request_user_attention();
     }
 
     fn send_notification(&self, title: &str, body: &str) {
@@ -69,78 +62,15 @@ impl EventEmitter for TauriEmitter {
         icon: Option<&[u8]>,
         channel_id: Option<u32>,
     ) {
-        show_desktop_notification(&self.app, title, body, icon, channel_id);
-    }
-}
-
-/// Show a desktop notification through the platform-appropriate channel.
-///
-/// Shared by the protocol emitter above and the `show_desktop_notification`
-/// command (the webview's calendar reminders), so every caller gets the same
-/// platform routing - in particular the Linux branch, which nothing may
-/// bypass.
-pub(crate) fn show_desktop_notification(
-    app: &AppHandle,
-    title: &str,
-    body: &str,
-    icon: Option<&[u8]>,
-    channel_id: Option<u32>,
-) {
-    // On Android, route through our ConnectionServicePlugin so we can
-    // decode the sender avatar as a Bitmap for the notification large-icon.
-    #[cfg(target_os = "android")]
-    {
-        use tauri::Manager;
-        if let Some(cs_handle) =
-            app.try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>()
-        {
-            crate::platform::android::connection_service::show_chat_notification(
-                &cs_handle, title, body, icon, channel_id,
-            );
-            return;
-        }
-    }
-    // Non-Android fallback: standard Tauri notification API (no avatar).
-    let _ = icon;
-    let _ = channel_id;
-    // On Linux, NOT the notification plugin: its show() spawns notify-rust's
-    // BLOCKING zbus call onto the tokio runtime (async_runtime::spawn in the
-    // plugin's desktop.rs), where zbus's tokio flavor (forced by ashpd)
-    // block_on's a private runtime and panics "Cannot start a runtime from
-    // within a runtime" - with panic=abort that kills the app whenever a
-    // notification fires. Drive notify-rust from a blocking thread.
-    #[cfg(target_os = "linux")]
-    {
-        let _ = app;
-        let title = title.to_owned();
-        let body = body.to_owned();
-        // Dropped, not awaited: `spawn_blocking` runs the closure to
-        // completion whether or not anyone holds the handle, and nothing here
-        // has a use for its result.
-        drop(tauri::async_runtime::spawn_blocking(move || {
-            let _ = notify_rust::Notification::new()
-                .summary(&title)
-                .body(&body)
-                .show();
-        }));
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = app
-            .notification()
-            .builder()
-            .channel_id("messages")
-            .title(title)
-            .body(body)
-            .show();
+        self.host.show_notification(title, body, icon, channel_id);
     }
 }
 
 /// Implements `EventHandler` to receive protocol events and push them
-/// to the React frontend via Tauri's event system.
-pub(super) struct TauriEventHandler {
+/// to the view.
+pub(super) struct SessionEventHandler {
     pub shared: Arc<Mutex<SharedState>>,
-    pub app: AppHandle,
+    pub app: Host,
     /// Snapshot of `SharedState::connection_epoch` at construction time.
     /// `on_disconnected` only acts when this matches the current epoch,
     /// preventing stale callbacks from orphaned tasks.
@@ -154,7 +84,7 @@ pub(super) struct TauriEventHandler {
     pub(super) inbound_audio_count: u64,
 }
 
-impl EventHandler for TauriEventHandler {
+impl EventHandler for SessionEventHandler {
     fn on_control_message(&mut self, msg: &ControlMessage) {
         // Drop messages from an orphaned/aborted event loop whose session has
         // since been reclaimed by a newer `connect()` (epoch bump). Without
@@ -171,8 +101,8 @@ impl EventHandler for TauriEventHandler {
         }
         let ctx = HandlerContext {
             shared: Arc::clone(&self.shared),
-            emitter: Box::new(TauriEmitter {
-                app: self.app.clone(),
+            emitter: Box::new(HostEmitter {
+                host: self.app.clone(),
                 shared: Arc::clone(&self.shared),
             }),
         };
@@ -347,12 +277,7 @@ impl EventHandler for TauriEventHandler {
         // Stop Android foreground service now that we are disconnected.
         #[cfg(target_os = "android")]
         {
-            use tauri::Manager;
-            if let Some(handle) =
-                self.app.try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>()
-            {
-                crate::platform::android::connection_service::stop_service(&handle);
-            }
+            self.app.voice_service(super::host::VoiceService::Stopped);
 
             // Keep FCM topic subscriptions active after disconnect so the
             // device continues to receive push notifications while offline.

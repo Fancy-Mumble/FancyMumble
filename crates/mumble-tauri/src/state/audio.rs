@@ -5,10 +5,9 @@
 //! (`create_capture` / `create_playback`) that return trait objects.
 //! On desktop, cpal is used; on Android, oboe.
 
-use tauri::Emitter;
-
 use super::AppState;
 use super::types::VoiceState;
+use crate::state::host::Host;
 
 // -- Capture-error surfacing ---------------------------------------
 
@@ -58,7 +57,7 @@ pub(crate) fn current_capture_state() -> Option<CaptureState> {
 /// Emit a capture-start failure to the UI (best-effort) and record it so
 /// late-mounting views can query it. When the device is busy, includes the
 /// name(s) of the other application(s) holding the microphone.
-pub(crate) fn emit_capture_error(app: Option<&tauri::AppHandle>, err: &str) {
+pub(crate) fn emit_capture_error(app: Option<&Host>, err: &str) {
     #[cfg(target_os = "windows")]
     let holders: Vec<String> = if is_device_busy(err) {
         fancy_audio_device::capture_device_users()
@@ -87,7 +86,7 @@ pub(crate) fn emit_capture_error(app: Option<&tauri::AppHandle>, err: &str) {
 }
 
 /// Clear any shown capture error (microphone opened successfully).
-pub(crate) fn clear_capture_error(app: Option<&tauri::AppHandle>) {
+pub(crate) fn clear_capture_error(app: Option<&Host>) {
     if let Ok(mut slot) = capture_state_slot().lock() {
         *slot = None;
     }
@@ -188,7 +187,7 @@ impl AppState {
 
     /// Emit voice-state-changed event to the frontend.
     pub(super) fn emit_voice_state(&self) {
-        if let Some(app) = self.app_handle() {
+        if let Some(app) = self.host() {
             let vs = self.voice_state();
             let _ = app.emit("voice-state-changed", vs);
         }
@@ -235,7 +234,6 @@ mod voice_pipeline {
     use std::sync::atomic::AtomicU32;
     use std::time::Duration;
 
-    use tauri::Emitter;
     use tracing::info;
 
     use mumble_protocol::audio::encoder::{OpusEncoder, OpusEncoderConfig};
@@ -253,6 +251,7 @@ mod voice_pipeline {
     use crate::audio::{AudioDeviceFactory, PlatformAudioFactory};
 
     use crate::state::AppState;
+    use crate::state::host::Host;
     use crate::state::types::{AudioSettings, VoiceState};
 
     impl AppState {
@@ -373,7 +372,7 @@ mod voice_pipeline {
             &self,
             arc: &Arc<std::sync::Mutex<crate::state::SharedState>>,
         ) {
-            let stopped_sessions: Vec<(u32, tauri::AppHandle)> = match arc.lock() {
+            let stopped_sessions: Vec<(u32, Host)> = match arc.lock() {
                 Ok(mut state) => {
                     state.audio.stop_outbound();
                     if let Some(handle) = state.audio.mic_test_handle.take() {
@@ -390,9 +389,9 @@ mod voice_pipeline {
                     state.audio.output_volume_handle = None;
 
                     // Collect sessions to notify OUTSIDE the lock.
-                    let sessions: Vec<(u32, tauri::AppHandle)> = state
+                    let sessions: Vec<(u32, Host)> = state
                         .conn
-                        .tauri_app_handle
+                        .host
                         .as_ref()
                         .filter(|_| !state.audio.talking_sessions.is_empty())
                         .map(|app| {
@@ -522,7 +521,7 @@ mod voice_pipeline {
                 (
                     state.audio.begin_outbound(),
                     state.audio.input_volume_handle.clone(),
-                    state.conn.tauri_app_handle.clone(),
+                    state.conn.host.clone(),
                     state.conn.own_session,
                     state.server.max_bandwidth,
                     // Handed to the loop rather than re-read through the lock:
@@ -884,7 +883,7 @@ mod voice_pipeline {
 
             let input_vol = Arc::new(AtomicU32::new(audio_settings.input_volume.to_bits()));
 
-            let app_for_err = self.app_handle();
+            let app_for_err = self.host();
             let mut capture = match PlatformAudioFactory::create_capture(
                 audio_settings.selected_device.as_deref(),
                 960, // 20ms @ 48kHz
@@ -908,12 +907,12 @@ mod voice_pipeline {
             // and the calibrator measure the signal the noise gate will see.
             let filters = build_calibration_filters(&audio_settings);
 
-            let app = self.app_handle().ok_or("No app handle")?;
+            let app = self.host().ok_or("No app handle")?;
             let auto_sensitivity = audio_settings.auto_input_sensitivity;
             let frame_size_ms = audio_settings.frame_size_ms;
             let inner = self.inner.clone_arc();
 
-            let handle = tauri::async_runtime::spawn(async move {
+            let handle = crate::state::runtime::spawn(async move {
                 mic_test_loop(
                     capture,
                     app,
@@ -951,7 +950,7 @@ mod voice_pipeline {
         /// briefly opens and closes the device (a no-op share when voice is
         /// already active, thanks to the shared-capture broker).
         pub fn probe_microphone(&self) {
-            let app = self.app_handle();
+            let app = self.host();
             let settings = self.audio_settings();
             let _probe = std::thread::spawn(move || {
                 // Ensure the atomic reflects the persisted choice before the
@@ -1013,7 +1012,7 @@ mod voice_pipeline {
                     speaker_volumes,
                 )?;
 
-            let app = self.app_handle().ok_or("No app handle")?;
+            let app = self.host().ok_or("No app handle")?;
             let (stop_tx, stop_rx) = tokio::sync::watch::channel(true);
 
             let context = super::super::voice_replay::VoiceReplayContext {
@@ -1023,7 +1022,7 @@ mod voice_pipeline {
                 speaker_buffers,
             };
 
-            let handle = tauri::async_runtime::spawn(async move {
+            let handle = crate::state::runtime::spawn(async move {
                 super::super::voice_replay::voice_replay_loop(context, app, stop_rx).await;
             });
 
@@ -1070,7 +1069,7 @@ mod voice_pipeline {
                     .ok_or_else(|| "Not connected".to_string())?
             };
 
-            let handle = tauri::async_runtime::spawn(async move {
+            let handle = crate::state::runtime::spawn(async move {
                 latency_ping_loop(client_handle).await;
             });
 
@@ -1178,8 +1177,7 @@ mod voice_pipeline {
                 _ => None,
             };
 
-            if let (Some(app), Some(payload)) = (self.app_handle(), payload) {
-                use tauri::Emitter as _;
+            if let (Some(app), Some(payload)) = (self.host(), payload) {
                 let _ = app.emit("voice-activation-calibrated", payload);
             }
 

@@ -1,7 +1,6 @@
 //! User profile management: set/update comment and avatar texture.
 
 use mumble_protocol::command;
-use tauri::Emitter;
 
 use super::AppState;
 
@@ -28,7 +27,7 @@ impl AppState {
                         user.comment = (!comment.is_empty()).then_some(comment);
                         Some(())
                     });
-                    if let Some(app) = self.app_handle() {
+                    if let Some(app) = self.host() {
                         let _ = app.emit("state-changed", ());
                     }
                 }
@@ -60,7 +59,7 @@ impl AppState {
                         user.texture = (!texture.is_empty()).then_some(texture);
                         Some(())
                     });
-                    if let Some(app) = self.app_handle() {
+                    if let Some(app) = self.host() {
                         let _ = app.emit("state-changed", ());
                     }
                 }

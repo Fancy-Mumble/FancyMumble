@@ -14,14 +14,11 @@ use crate::state::presence::{PresenceSnapshot, PresenceStatus};
 /// feature stays entirely local.
 #[tauri::command]
 pub(crate) async fn presence_set_enabled(
-    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     enabled: bool,
     resolve_artwork: bool,
 ) -> Result<PresenceStatus, String> {
-    state
-        .set_presence_enabled(&app, enabled, resolve_artwork)
-        .await
+    state.set_presence_enabled(enabled, resolve_artwork).await
 }
 
 /// The current listener status and every activity being advertised.

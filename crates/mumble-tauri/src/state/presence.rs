@@ -13,10 +13,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
+use crate::state::host::Host;
 use fancy_presence::assets::{self, ImageSource};
 use fancy_presence::{BridgeState, PresenceConfig, PresenceEntry, PresenceEvent, PresenceService};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
 
 /// Event carrying the full presence picture to the frontend.
 pub(crate) const PRESENCE_EVENT: &str = "rich-presence-changed";
@@ -78,7 +78,7 @@ pub(crate) struct PresenceSnapshot {
 struct Shared {
     service: tokio::sync::Mutex<Option<PresenceService>>,
     metadata: Mutex<HashMap<String, ApplicationMetadata>>,
-    pump: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+    pump: Mutex<Option<crate::state::runtime::JoinHandle<()>>>,
     resolve_artwork: std::sync::atomic::AtomicBool,
 }
 
@@ -95,7 +95,7 @@ impl PresenceManager {
     /// running listener only updates the artwork preference.
     pub(crate) async fn set_enabled(
         &self,
-        app: &AppHandle,
+        app: &Host,
         http: reqwest::Client,
         enabled: bool,
         resolve_artwork: bool,
@@ -207,10 +207,10 @@ impl PresenceManager {
             .collect()
     }
 
-    fn spawn_pump(&self, app: AppHandle, http: reqwest::Client, service: &PresenceService) {
+    fn spawn_pump(&self, app: Host, http: reqwest::Client, service: &PresenceService) {
         let events = service.subscribe();
         let manager = self.clone();
-        let handle = tauri::async_runtime::spawn(async move {
+        let handle = crate::state::runtime::spawn(async move {
             manager.run_pump(app, http, events).await;
         });
         let mut pump = self
@@ -237,7 +237,7 @@ impl PresenceManager {
 
     async fn run_pump(
         self,
-        app: AppHandle,
+        app: Host,
         http: reqwest::Client,
         mut events: tokio::sync::broadcast::Receiver<PresenceEvent>,
     ) {
@@ -304,14 +304,14 @@ impl crate::state::AppState {
     /// Start or stop the Rich Presence listener.
     pub(crate) async fn set_presence_enabled(
         &self,
-        app: &AppHandle,
         enabled: bool,
         resolve_artwork: bool,
     ) -> Result<PresenceStatus, String> {
+        let host = self.host().ok_or("App not initialized")?;
         let manager = self.presence.clone();
         let http = self.http_client.clone();
         manager
-            .set_enabled(app, http, enabled, resolve_artwork)
+            .set_enabled(&host, http, enabled, resolve_artwork)
             .await
     }
 
@@ -424,6 +424,6 @@ async fn fetch_json(http: &reqwest::Client, url: &str) -> Option<serde_json::Val
     response.json().await.ok()
 }
 
-fn emit(app: &AppHandle, snapshot: PresenceSnapshot) {
+fn emit(app: &Host, snapshot: PresenceSnapshot) {
     let _ = app.emit(PRESENCE_EVENT, snapshot);
 }

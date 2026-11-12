@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter};
+use crate::state::host::Host;
 use tracing::info;
 
 use mumble_protocol::client::ClientConfig;
@@ -10,7 +10,7 @@ use mumble_protocol::command;
 use mumble_protocol::transport::tcp::TcpConfig;
 use mumble_protocol::transport::udp::UdpConfig;
 
-use super::event_handler::TauriEventHandler;
+use super::event_handler::SessionEventHandler;
 use super::sessions::ServerId;
 use super::types::*;
 use super::{AppState, SharedState};
@@ -46,7 +46,7 @@ impl AppState {
         cert_label: Option<String>,
         credentials: Credentials,
     ) -> Result<(), String> {
-        let app_handle = self.app_handle().ok_or("App not initialized")?;
+        let app_handle = self.host().ok_or("App not initialized")?;
 
         // Reuse the existing session slot for this exact `(host, port,
         // username)` target so an automatic reconnect re-binds the *same*
@@ -88,7 +88,8 @@ impl AppState {
         let connect_task = tokio::spawn(async move {
             // Load client certificate from the per-identity folder.
             let (client_cert_pem, client_key_pem) = if let Some(ref label) = cert_label {
-                crate::e2e_data_dir(&app_handle)
+                app_handle
+                    .data_dir()
                     .ok()
                     .map(|d| super::pchat::IdentityStore::new(d).load_cert(label))
                     .unwrap_or((None, None))
@@ -135,7 +136,7 @@ impl AppState {
                 ..ClientConfig::default()
             };
 
-            let handler = TauriEventHandler {
+            let handler = SessionEventHandler {
                 shared: inner.clone(),
                 app: app_handle.clone(),
                 epoch,
@@ -291,16 +292,9 @@ impl AppState {
 
     #[cfg(target_os = "android")]
     fn stop_android_foreground_service(&self) {
-        use tauri::Manager; // brings `try_state` into scope (android-only path)
-        let Some(app_handle) = self.app_handle() else {
-            return;
-        };
-        let Some(handle) = app_handle
-            .try_state::<crate::platform::android::connection_service::ConnectionServiceHandle>(
-        ) else {
-            return;
-        };
-        crate::platform::android::connection_service::stop_service(&handle);
+        if let Some(host) = self.host() {
+            host.voice_service(super::host::VoiceService::Stopped);
+        }
     }
 }
 
@@ -319,7 +313,7 @@ fn reset_state_for_connect(
     port: u16,
     cert_label: Option<&str>,
     server_id: ServerId,
-    app_handle: &AppHandle,
+    app_handle: &Host,
 ) -> Result<(), String> {
     let mut state = inner.lock().map_err(|e| e.to_string())?;
 
@@ -365,16 +359,16 @@ fn reset_state_for_connect(
     state.pchat_ctx.seed = None;
     state.pchat_ctx.identity_dir = None;
     state.pchat_ctx.pending_key_shares.clear();
-    state.conn.tauri_app_handle = Some(app_handle.clone());
+    state.conn.host = Some(app_handle.clone());
 
     Ok(())
 }
 
 /// Initialise the cert-hash resolver, migrate legacy storage, and load
 /// the identity seed for the given certificate label.
-fn init_identity(inner: &SharedInner, app_handle: &AppHandle, cert_label: &Option<String>) {
+fn init_identity(inner: &SharedInner, app_handle: &Host, cert_label: &Option<String>) {
     // Cert-hash-to-username resolver (persisted across sessions).
-    if let Ok(data_dir) = crate::e2e_data_dir(app_handle) {
+    if let Ok(data_dir) = app_handle.data_dir() {
         let hash_names_path = data_dir.join("hash_names.json");
         let resolver = super::hash_names::DefaultHashNameResolver::new(hash_names_path);
         if let Ok(mut state) = inner.lock() {
@@ -384,13 +378,13 @@ fn init_identity(inner: &SharedInner, app_handle: &AppHandle, cert_label: &Optio
 
     // Migrate legacy storage layout (certs/ + pchat/) to per-identity
     // folders on first connect after the update.  Idempotent.
-    if let Ok(data_dir) = crate::e2e_data_dir(app_handle) {
+    if let Ok(data_dir) = app_handle.data_dir() {
         super::pchat::IdentityStore::new(data_dir).migrate_legacy_storage();
     }
 
     // Load (or generate) the persistent chat identity seed.
     let identity_label = cert_label.as_deref().unwrap_or("default");
-    if let Ok(data_dir) = crate::e2e_data_dir(app_handle) {
+    if let Ok(data_dir) = app_handle.data_dir() {
         let store = super::pchat::IdentityStore::new(data_dir);
         match store.load_or_generate_seed(identity_label) {
             Ok(seed) => {
@@ -418,12 +412,8 @@ fn init_identity(inner: &SharedInner, app_handle: &AppHandle, cert_label: &Optio
 ///
 /// Derived per server (see `device`), so it is worked out at connect time,
 /// where the target is known, and not once for the whole app.
-fn device_for(
-    app_handle: &AppHandle,
-    host: &str,
-    port: u16,
-) -> Option<command::AuthenticateDevice> {
-    let dir = crate::e2e_data_dir(app_handle).ok()?;
+fn device_for(app_handle: &Host, host: &str, port: u16) -> Option<command::AuthenticateDevice> {
+    let dir = app_handle.data_dir().ok()?;
     let device = super::device::credentials_for(&dir, host, port)?;
     Some(command::AuthenticateDevice {
         id: device.id,
@@ -436,7 +426,7 @@ fn device_for(
 /// function signature stays within Clippy's `too_many_arguments` limit.
 struct ConnectResultCtx<'a> {
     inner: &'a SharedInner,
-    app_handle: &'a AppHandle,
+    app_handle: &'a Host,
     username: String,
     credentials: Credentials,
     device: Option<command::AuthenticateDevice>,
@@ -528,7 +518,7 @@ async fn handle_connect_result(
 /// Emit `connection-rejected` (and matching `server-disconnected`) for
 /// a specific session id, ensuring the frontend can route the events
 /// to the correct tab without affecting other sessions.
-fn emit_session_rejected(app_handle: &AppHandle, server_id: ServerId, reason: String) {
+fn emit_session_rejected(app_handle: &Host, server_id: ServerId, reason: String) {
     let id = server_id.to_string();
     let _ = app_handle.emit(
         "connection-rejected",

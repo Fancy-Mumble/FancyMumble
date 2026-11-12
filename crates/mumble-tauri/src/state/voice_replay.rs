@@ -14,7 +14,6 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU32;
 use std::time::{Duration, Instant};
 
-use tauri::Emitter;
 use tracing::{debug, warn};
 
 use mumble_protocol::audio::capture::AudioCapture;
@@ -25,6 +24,7 @@ use mumble_protocol::audio::sample::AudioFormat;
 use crate::audio::{AudioDeviceFactory, MixingPlayback, PlatformAudioFactory};
 
 use super::types::{AudioSettings, VoiceReplayState};
+use crate::state::host::Host;
 
 /// Maximum recording length for the voice replay feature, in seconds.
 pub(super) const VOICE_REPLAY_CAPACITY_SECS: u32 = 20;
@@ -79,7 +79,7 @@ pub(super) fn make_voice_replay_playback(
 /// recording buffer reaches `VOICE_REPLAY_CAPACITY_SECS` of audio.
 pub(super) async fn voice_replay_loop(
     mut ctx: VoiceReplayContext,
-    app: tauri::AppHandle,
+    app: Host,
     mut stop_rx: tokio::sync::watch::Receiver<bool>,
 ) {
     let _ = ctx.playback.start();
@@ -112,7 +112,7 @@ pub(super) async fn voice_replay_loop(
 /// Record phase: capture frames, run the filter chain, append to the buffer.
 async fn record(
     ctx: &mut VoiceReplayContext,
-    app: &tauri::AppHandle,
+    app: &Host,
     stop_rx: &mut tokio::sync::watch::Receiver<bool>,
 ) -> Vec<f32> {
     let capacity_samples = VOICE_REPLAY_CAPACITY_SECS as usize * VOICE_REPLAY_SAMPLE_RATE as usize;
@@ -180,7 +180,7 @@ async fn record(
 /// and tick until the speaker buffer drains.
 async fn playback(
     ctx: &mut VoiceReplayContext,
-    app: &tauri::AppHandle,
+    app: &Host,
     stop_rx: &mut tokio::sync::watch::Receiver<bool>,
     buffer: Vec<f32>,
 ) {
@@ -247,6 +247,6 @@ fn elapsed_ms(start: Instant) -> u32 {
     u32::try_from(start.elapsed().as_millis()).unwrap_or(u32::MAX)
 }
 
-fn emit_state(app: &tauri::AppHandle, state: VoiceReplayState) {
+fn emit_state(app: &Host, state: VoiceReplayState) {
     let _ = app.emit("voice-replay-state", state);
 }

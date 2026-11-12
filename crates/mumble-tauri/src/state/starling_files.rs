@@ -240,8 +240,8 @@ impl AppState {
         ttl_seconds: u64,
         password: String,
         voice_duration_ms: Option<u32>,
-        app_handle: tauri::AppHandle,
     ) -> Result<SharedUpload, String> {
+        let host = self.host().ok_or("App not initialized")?;
         let file = tokio::fs::File::open(&file_path)
             .await
             .map_err(|e| format!("open file: {e}"))?;
@@ -290,7 +290,7 @@ impl AppState {
             file,
             size,
             upload_id.clone(),
-            app_handle,
+            host,
         ));
         let send = self
             .http_client
@@ -372,37 +372,28 @@ impl AppState {
     /// Brings the loopback origin up on first use. The URL is only an address:
     /// it carries this run's token, while the signed URL the bytes actually
     /// come from is minted per request and never leaves the backend.
-    pub(crate) async fn starling_media_url(
-        &self,
-        key: String,
-        app_handle: tauri::AppHandle,
-    ) -> Result<String, String> {
-        self.with_media_origin(app_handle, |server| server.url_for(&key))
-            .await
+    pub(crate) async fn starling_media_url(&self, key: String) -> Result<String, String> {
+        self.with_media_origin(|server| server.url_for(&key)).await
     }
 
     /// The URL of a loopback page framing the third-party player at `src`.
     ///
     /// See [`super::media_server::MediaServer::player_url`] for why a player
     /// cannot simply be framed by the webview's own page.
-    pub(crate) async fn embed_player_url(
-        &self,
-        src: String,
-        app_handle: tauri::AppHandle,
-    ) -> Result<String, String> {
-        self.with_media_origin(app_handle, |server| server.player_url(&src))
+    pub(crate) async fn embed_player_url(&self, src: String) -> Result<String, String> {
+        self.with_media_origin(|server| server.player_url(&src))
             .await
     }
 
     /// Run `f` against the loopback origin, bringing it up on first use.
     async fn with_media_origin<T>(
         &self,
-        app_handle: tauri::AppHandle,
         f: impl FnOnce(&super::media_server::MediaServer) -> T,
     ) -> Result<T, String> {
         let mut running = self.media_server.lock().await;
         if running.is_none() {
-            *running = Some(super::media_server::start(app_handle).await?);
+            let host = self.host().ok_or("App not initialized")?;
+            *running = Some(super::media_server::start(host).await?);
         }
         running
             .as_ref()

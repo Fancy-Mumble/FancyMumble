@@ -279,12 +279,7 @@ pub(crate) fn emit_history_loading(
     channel_id: u32,
     loading: bool,
 ) {
-    use tauri::Emitter;
-
-    let app = shared
-        .lock()
-        .ok()
-        .and_then(|s| s.conn.tauri_app_handle.clone());
+    let app = shared.lock().ok().and_then(|s| s.conn.host.clone());
     if let Some(app) = app {
         let _ = app.emit(
             "pchat-history-loading",
@@ -298,12 +293,7 @@ pub(crate) fn emit_history_loading(
 
 /// Emit a `pchat-signal-bridge-error` event to the frontend.
 pub(crate) fn emit_signal_bridge_error(shared: &Arc<Mutex<SharedState>>, message: &str) {
-    use tauri::Emitter;
-
-    let app = shared
-        .lock()
-        .ok()
-        .and_then(|s| s.conn.tauri_app_handle.clone());
+    let app = shared.lock().ok().and_then(|s| s.conn.host.clone());
     if let Some(app) = app {
         let _ = app.emit(
             "pchat-signal-bridge-error",

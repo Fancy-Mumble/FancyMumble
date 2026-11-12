@@ -303,7 +303,7 @@ impl HandleMessage for mumble_tcp::PchatKeyHoldersList {
 
             // Collect payload for deferred emit outside the lock.
             let share_requests_payload = if state.pchat_ctx.pending_key_shares.len() != before_len {
-                state.conn.tauri_app_handle.as_ref().map(|app| {
+                state.conn.host.as_ref().map(|app| {
                     let remaining: Vec<_> = state
                         .pchat_ctx
                         .pending_key_shares
@@ -328,7 +328,6 @@ impl HandleMessage for mumble_tcp::PchatKeyHoldersList {
 
         // Emit outside the lock to avoid deadlock with Tauri IPC.
         if let Some((app, payload)) = share_requests_payload {
-            use tauri::Emitter;
             let _ = app.emit("pchat-key-share-requests-changed", payload);
         }
 

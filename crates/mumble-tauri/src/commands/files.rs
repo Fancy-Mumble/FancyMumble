@@ -14,10 +14,9 @@ use crate::state::{
 #[tauri::command]
 pub(crate) async fn upload_file(
     state: tauri::State<'_, AppState>,
-    app_handle: tauri::AppHandle,
     request: UploadRequest,
 ) -> Result<UploadResponse, String> {
-    state.upload_file(request, app_handle).await
+    state.upload_file(request).await
 }
 
 /// Upload in-memory UTF-8 content (e.g. a markdown export) to the
@@ -346,7 +345,6 @@ pub(crate) async fn file_size(path: String) -> Result<u64, String> {
 )]
 pub(crate) async fn starling_upload_file(
     state: tauri::State<'_, AppState>,
-    app_handle: tauri::AppHandle,
     file_path: String,
     channel_id: u32,
     mime_type: Option<String>,
@@ -366,7 +364,6 @@ pub(crate) async fn starling_upload_file(
             ttl_seconds.unwrap_or_default(),
             password.unwrap_or_default(),
             voice_duration_ms,
-            app_handle,
         )
         .await
 }
@@ -396,10 +393,9 @@ fn visibility_of(mode: Option<&str>) -> mumble_protocol::proto::fancy::files::Vi
 #[tauri::command]
 pub(crate) async fn starling_media_url(
     state: tauri::State<'_, AppState>,
-    app_handle: tauri::AppHandle,
     key: String,
 ) -> Result<String, String> {
-    state.starling_media_url(key, app_handle).await
+    state.starling_media_url(key).await
 }
 
 /// A loopback URL that frames the third-party player at `src` (an `https`
@@ -407,10 +403,9 @@ pub(crate) async fn starling_media_url(
 #[tauri::command]
 pub(crate) async fn embed_player_url(
     state: tauri::State<'_, AppState>,
-    app_handle: tauri::AppHandle,
     src: String,
 ) -> Result<String, String> {
-    state.embed_player_url(src, app_handle).await
+    state.embed_player_url(src).await
 }
 
 /// `share` is present only for a password share, whose bytes the signed route

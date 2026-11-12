@@ -425,8 +425,7 @@ fn finalize_key_acceptance(
     };
 
     // Notify the frontend that the revoked key has been replaced.
-    if let Some(ref app) = state.conn.tauri_app_handle {
-        use tauri::Emitter;
+    if let Some(ref app) = state.conn.host {
         let _ = app.emit(
             "pchat-key-restored",
             types::PchatKeyRevokedPayload { channel_id },
@@ -542,8 +541,7 @@ fn queue_key_share_consent(
     };
     state.pchat_ctx.pending_key_shares.push(pending);
 
-    if let Some(ref app) = state.conn.tauri_app_handle {
-        use tauri::Emitter;
+    if let Some(ref app) = state.conn.host {
         let _ = app.emit(
             "pchat-key-share-request",
             types::KeyShareRequestPayload {
@@ -573,8 +571,7 @@ fn resolve_peer_name(state: &SharedState, peer_cert_hash: &str) -> String {
 
 /// Emit `pchat-key-share-requests-changed` for a channel.
 fn emit_key_share_requests_changed(state: &SharedState, channel_id: u32) {
-    if let Some(ref app) = state.conn.tauri_app_handle {
-        use tauri::Emitter;
+    if let Some(ref app) = state.conn.host {
         let remaining: Vec<_> = state
             .pchat_ctx
             .pending_key_shares

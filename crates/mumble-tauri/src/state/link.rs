@@ -338,8 +338,8 @@ impl AppState {
             )
         };
         let label = label.ok_or("this connection has no identity to copy to another device")?;
-        let app = self.app_handle().ok_or("App not initialized")?;
-        let store = IdentityStore::new(crate::e2e_data_dir(&app)?);
+        let app = self.host().ok_or("App not initialized")?;
+        let store = IdentityStore::new(app.data_dir()?);
         let parcel = Parcel {
             identity: store.export_bundle(&label)?,
             password: password.filter(|p| !p.is_empty()),
@@ -397,9 +397,9 @@ impl AppState {
     pub fn start_device_link(&self, link: String) -> Result<LinkTarget, String> {
         let target = parse_link(&link)?;
         let derived = derive(&target.code);
-        let app = self.app_handle().ok_or("App not initialized")?;
+        let app = self.host().ok_or("App not initialized")?;
         super::device::remember_link(
-            &crate::e2e_data_dir(&app)?,
+            &app.data_dir()?,
             &target.host,
             target.port,
             &derived.device_id,
@@ -433,8 +433,8 @@ impl AppState {
         let parcel: Parcel = serde_json::from_slice(&open(&derived.key, &sealed)?)
             .map_err(|_| "the parcel is damaged".to_owned())?;
 
-        let app = self.app_handle().ok_or("App not initialized")?;
-        let store = IdentityStore::new(crate::e2e_data_dir(&app)?);
+        let app = self.host().ok_or("App not initialized")?;
+        let store = IdentityStore::new(app.data_dir()?);
         let label = fresh_label(&store, &target.username, &target.host);
         store.import_bundle(&parcel.identity, &label)?;
         // Used once. Left behind, it would be a copy of the identity waiting

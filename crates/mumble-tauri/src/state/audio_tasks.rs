@@ -22,6 +22,7 @@ use super::calibration::{
     AUTO_CALIBRATION_WINDOW, CalibrationResult, Calibrator, frame_peak, frame_rms,
 };
 use super::types::{MicAmplitudePayload, VoiceActivationCalibrationPayload};
+use crate::state::host::Host;
 
 // -----------------------------------------------------------------------
 //  Outbound audio
@@ -37,7 +38,7 @@ pub(super) struct AudioPacketOut {
 /// When dropped, emits a `user-talking` = false event so the frontend
 /// clears the self-talking indicator if the task is cancelled.
 struct TalkingGuard {
-    app: Option<tauri::AppHandle>,
+    app: Option<Host>,
     session: Option<u32>,
     is_talking: bool,
 }
@@ -47,7 +48,6 @@ impl Drop for TalkingGuard {
         if self.is_talking
             && let (Some(app), Some(session)) = (&self.app, self.session)
         {
-            use tauri::Emitter;
             let _ = app.emit("user-talking", (session, false));
             set_local_talking(app, false);
         }
@@ -58,10 +58,9 @@ impl Drop for TalkingGuard {
 ///
 /// One relaxed atomic store on the edges that already emit the event, so the
 /// audio loop pays a few nanoseconds once per utterance and never a lock.
-fn set_local_talking(app: &tauri::AppHandle, talking: bool) {
+fn set_local_talking(app: &Host, talking: bool) {
     use std::sync::atomic::Ordering;
-    use tauri::Manager;
-    let Some(state) = app.try_state::<super::AppState>() else {
+    let Some(state) = app.app_state() else {
         return;
     };
     state.local_talking.store(talking, Ordering::Relaxed);
@@ -85,7 +84,7 @@ fn set_local_talking(app: &tauri::AppHandle, talking: bool) {
 pub(super) async fn outbound_audio_loop(
     mut pipeline: OutboundPipeline,
     handle: ClientHandle,
-    app: Option<tauri::AppHandle>,
+    app: Option<Host>,
     own_session: Option<u32>,
     voice_target: Arc<AtomicU8>,
 ) {
@@ -182,13 +181,11 @@ struct OutboundStats {
 fn process_outbound_tick(
     pipeline: &mut OutboundPipeline,
     tx: &tokio::sync::mpsc::Sender<AudioPacketOut>,
-    app: &Option<tauri::AppHandle>,
+    app: &Option<Host>,
     own_session: Option<u32>,
     guard: &mut TalkingGuard,
     stats: &mut OutboundStats,
 ) -> bool {
-    use tauri::Emitter;
-
     match pipeline.tick() {
         // A voice message is being recorded: the room does not hear it. The
         // first held frame ends the utterance properly - it goes out as the
@@ -346,14 +343,12 @@ async fn outbound_send_task(
 /// `AudioSettings`.
 pub(super) async fn mic_test_loop(
     mut capture: Box<dyn AudioCapture>,
-    app: tauri::AppHandle,
+    app: Host,
     auto_sensitivity: bool,
     inner: Arc<std::sync::Mutex<SharedState>>,
     mut filters: FilterChain,
     frame_size_ms: u32,
 ) {
-    use tauri::Emitter;
-
     let mut interval = tokio::time::interval(Duration::from_millis(33));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 

@@ -18,11 +18,11 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 
+use crate::state::host::Host;
 use mumble_protocol::audio::encoder::EncodedPacket;
 use mumble_protocol::audio::mixer::{AudioMixer, JitterConfig};
 use mumble_protocol::message::UdpMessage;
 use mumble_protocol::work_queue::AudioSink;
-use tauri::{AppHandle, Emitter};
 use tracing::{debug, warn};
 
 use super::SharedState;
@@ -122,7 +122,7 @@ impl Drop for DecodeHandle {
 /// decoded on the event loop exactly as it used to be.
 pub(crate) fn start(
     shared: Arc<Mutex<SharedState>>,
-    app: AppHandle,
+    app: Host,
     epoch: u64,
 ) -> Option<(DecodeHandle, AudioSink)> {
     // A kill switch for the whole thread: with it off, audio is decoded on the
@@ -222,7 +222,7 @@ fn feed(
 /// The thread's own state. None of it is shared, which is the point.
 struct Decoder {
     shared: Arc<Mutex<SharedState>>,
-    app: AppHandle,
+    app: Host,
     /// The connection this decoder belongs to. A later `connect()` bumps the
     /// epoch, and an orphaned decoder must not write over the new session.
     epoch: u64,

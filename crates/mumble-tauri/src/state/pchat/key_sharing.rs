@@ -172,7 +172,7 @@ pub(crate) fn handle_proto_key_holder_report(
             .pending_key_shares
             .retain(|p| !(p.channel_id == channel_id && p.peer_cert_hash == cert_hash));
 
-        state.conn.tauri_app_handle.as_ref().map(|app| {
+        state.conn.host.as_ref().map(|app| {
             (
                 app.clone(),
                 types::KeyHoldersChangedPayload {
@@ -188,7 +188,6 @@ pub(crate) fn handle_proto_key_holder_report(
         })
     };
     if let Some((app, payload)) = payload {
-        use tauri::Emitter;
         let _ = app.emit("pchat-key-holders-changed", payload);
     }
 }
@@ -284,7 +283,7 @@ pub(crate) fn handle_proto_key_challenge_result(
             .as_ref()
             .and_then(|s| s.pchat_ctx.pchat.as_ref())
             .and_then(|p| p.identity_dir.clone());
-        let app_handle = s.as_ref().and_then(|s| s.conn.tauri_app_handle.clone());
+        let app_handle = s.as_ref().and_then(|s| s.conn.host.clone());
         // Remove all keying material for the channel from memory.
         let mut should_emit_shares = false;
         if let Some(ref mut s) = s {
@@ -318,7 +317,6 @@ pub(crate) fn handle_proto_key_challenge_result(
 
     // Emit outside the lock to avoid deadlock with Tauri IPC.
     if let Some((app, payload)) = share_requests_emit {
-        use tauri::Emitter;
         let _ = app.emit("pchat-key-share-requests-changed", payload);
     }
 
@@ -327,7 +325,6 @@ pub(crate) fn handle_proto_key_challenge_result(
     }
 
     if let Some(app) = app {
-        use tauri::Emitter;
         let _ = app.emit(
             "pchat-key-revoked",
             types::PchatKeyRevokedPayload { channel_id },
@@ -445,7 +442,7 @@ pub(crate) fn send_key_takeover(
     let (handle, hash, app, persist_info) = {
         let mut s = shared.lock().ok();
         let h = s.as_ref().and_then(|s| s.conn.client_handle.clone());
-        let app = s.as_ref().and_then(|s| s.conn.tauri_app_handle.clone());
+        let app = s.as_ref().and_then(|s| s.conn.host.clone());
         let mut hash = None;
         let mut persist_info = None;
         if let Some(ref mut s) = s
@@ -479,7 +476,6 @@ pub(crate) fn send_key_takeover(
         // The channel had no key (post-purge takeover): tell the UI the key
         // is re-established so the revoked banner clears once verified.
         if let Some(app) = app {
-            use tauri::Emitter;
             let _ = app.emit(
                 "pchat-key-restored",
                 types::PchatKeyRevokedPayload { channel_id },

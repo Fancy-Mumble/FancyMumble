@@ -57,7 +57,7 @@ pub(crate) async fn approve_key_share(
         let request_id = removed.request_id;
 
         // Collect payload for deferred emit outside the lock.
-        let share_requests_emit = shared.conn.tauri_app_handle.as_ref().map(|app| {
+        let share_requests_emit = shared.conn.host.as_ref().map(|app| {
             let remaining: Vec<_> = shared
                 .pchat_ctx
                 .pending_key_shares
@@ -115,7 +115,6 @@ pub(crate) async fn approve_key_share(
 
     // Emit outside the lock to avoid deadlock with Tauri IPC.
     if let Some((app, payload)) = share_requests_emit {
-        use tauri::Emitter;
         let _ = app.emit("pchat-key-share-requests-changed", payload);
     }
 
@@ -165,7 +164,7 @@ pub(crate) fn dismiss_key_share(
             .retain(|p| !(p.channel_id == channel_id && p.peer_cert_hash == peer_cert_hash));
 
         // Collect payload for deferred emit outside the lock.
-        shared.conn.tauri_app_handle.as_ref().map(|app| {
+        shared.conn.host.as_ref().map(|app| {
             let remaining: Vec<_> = shared
                 .pchat_ctx
                 .pending_key_shares
@@ -185,7 +184,6 @@ pub(crate) fn dismiss_key_share(
 
     // Emit outside the lock to avoid deadlock with Tauri IPC.
     if let Some((app, payload)) = share_requests_emit {
-        use tauri::Emitter;
         let _ = app.emit("pchat-key-share-requests-changed", payload);
     }
 

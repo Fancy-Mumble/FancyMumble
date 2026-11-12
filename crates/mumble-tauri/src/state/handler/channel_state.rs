@@ -191,7 +191,6 @@ fn emit_custodian_pin_changed(
     pin: mumble_protocol::persistent::keys::CustodianPinState,
 ) {
     use serde::Serialize;
-    use tauri::Emitter;
     #[derive(Serialize, Clone)]
     struct CustodianPinPayload {
         channel_id: u32,
@@ -204,11 +203,7 @@ fn emit_custodian_pin_changed(
         confirmed: bool,
         pending_update: Option<Vec<String>>,
     }
-    let app = ctx
-        .shared
-        .lock()
-        .ok()
-        .and_then(|s| s.conn.tauri_app_handle.clone());
+    let app = ctx.shared.lock().ok().and_then(|s| s.conn.host.clone());
     if let Some(app) = app {
         let _ = app.emit(
             "custodian-pin-changed",
