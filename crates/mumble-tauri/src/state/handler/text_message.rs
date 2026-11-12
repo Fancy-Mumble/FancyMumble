@@ -81,12 +81,9 @@ impl<'a> DeferredEmitter<'a> {
                 }
                 DeferredEvent::DmUnreads => self.emit_dm_unreads(),
                 DeferredEvent::DmSynced { peer_session } => {
-                    self.ctx.emit(
-                        "dm-synced",
-                        NewDmPayload {
-                            session: *peer_session,
-                        },
-                    );
+                    self.ctx.send(CoreEvent::DmSynced(NewDmPayload {
+                        session: *peer_session,
+                    }));
                 }
                 DeferredEvent::NewMessage {
                     channel_id,
@@ -294,7 +291,7 @@ fn emit_edit_events(
     match kind {
         MessageKind::DirectMessage => {
             if let Some(sid) = tm.actor {
-                ctx.emit("dm-edited", NewDmPayload { session: sid });
+                ctx.send(CoreEvent::DmEdited(NewDmPayload { session: sid }));
             }
         }
         MessageKind::Channel => {

@@ -16,14 +16,19 @@ use serde_json::value::RawValue;
 use super::canon_emotes::CanonEmote;
 use super::handler::audit::{AuditResponsePayload, AuditSnapshotPayload};
 use super::handler::custom_reactions_config::CustomReactionPayload;
+use super::handler::draw_stroke::DrawStrokePayload;
 use super::handler::files::{
     ChannelFiles, ManagedFiles, RefusedRequest, SharedFile, VoiceSupportPayload,
 };
+use super::handler::link_preview::LinkPreviewResponsePayload;
 use super::handler::livery::LiverySnapshot;
 use super::handler::operator_ticket::OperatorTicket;
 use super::handler::plugin_admin::{PluginAdminAckPayload, PluginAdminListPayload};
 use super::handler::plugin_message::PluginMessagePayload;
+use super::handler::read_receipt::ReadReceiptDeliverPayload;
+use super::handler::typing_indicator::TypingIndicatorPayload;
 use super::handler::version::ServerVersionPayload;
+use super::handler::watch_sync::WatchSyncPayload;
 use super::sessions::ServerId;
 use super::types::{
     AclPayload, AudioTransportPayload, AuditConfigSnapshot, AuditEntryPayload, BanEntryPayload,
@@ -35,7 +40,7 @@ use super::types::{
     PinFetchResponsePayload, PluginDataPayload, PluginRegistryEntryPayload, ReactionDeliverPayload,
     ReactionFetchResponsePayload, RegisteredUserPayload, RejectedPayload, ServerLogEntry,
     ServerSettingsSnapshot, SignalBridgeErrorPayload, UnreadPayload, UploadProgressPayload,
-    UserCommentPayload, UserStatsPayload, VoiceState,
+    UserCommentPayload, UserStatsPayload, VoiceState, WebRtcSignalPayload,
 };
 
 /// Something that happened in the engine that a view may want to show.
@@ -166,6 +171,22 @@ pub(crate) enum CoreEvent {
     ListenDenied(ListenDeniedPayload),
     /// The custodians a channel's key is pinned to changed.
     CustodianPinChanged(CustodianPinPayload),
+    /// A user is typing in a channel.
+    TypingIndicator(TypingIndicatorPayload),
+    /// How far each member has read a channel.
+    ReadReceipts(ReadReceiptDeliverPayload),
+    /// The server's preview cards for the links it was asked about.
+    LinkPreviews(LinkPreviewResponsePayload),
+    /// A direct message was edited or deleted.
+    DmEdited(NewDmPayload),
+    /// A direct message sent from another of the user's own sessions arrived.
+    DmSynced(NewDmPayload),
+    /// A stroke on a shared drawing surface.
+    DrawStroke(DrawStrokePayload),
+    /// A watch-together session started, moved or ended.
+    WatchSync(WatchSyncPayload),
+    /// WebRTC signalling the view's own peers must answer.
+    WebRtcSignal(WebRtcSignalPayload),
     /// An event that has not been given a variant yet: its wire name and its
     /// payload, already written out as JSON.
     Untyped {
@@ -255,6 +276,14 @@ impl CoreEvent {
             Self::ChannelDenied(_) => "channel-denied",
             Self::ListenDenied(_) => "listen-denied",
             Self::CustodianPinChanged(_) => "custodian-pin-changed",
+            Self::TypingIndicator(_) => "typing-indicator",
+            Self::ReadReceipts(_) => "read-receipt-deliver",
+            Self::LinkPreviews(_) => "link-preview-response",
+            Self::DmEdited(_) => "dm-edited",
+            Self::DmSynced(_) => "dm-synced",
+            Self::DrawStroke(_) => "draw-stroke",
+            Self::WatchSync(_) => "watch-sync",
+            Self::WebRtcSignal(_) => "webrtc-signal",
             Self::Untyped { name, .. } => name,
         }
     }
@@ -314,6 +343,14 @@ impl CoreEvent {
                 | Self::ChannelDenied(_)
                 | Self::ListenDenied(_)
                 | Self::CustodianPinChanged(_)
+                | Self::TypingIndicator(_)
+                | Self::ReadReceipts(_)
+                | Self::LinkPreviews(_)
+                | Self::DmEdited(_)
+                | Self::DmSynced(_)
+                | Self::DrawStroke(_)
+                | Self::WatchSync(_)
+                | Self::WebRtcSignal(_)
         )
     }
 }
@@ -383,6 +420,14 @@ impl Serialize for CoreEvent {
             Self::ChannelDenied(payload) => payload.serialize(serializer),
             Self::ListenDenied(payload) => payload.serialize(serializer),
             Self::CustodianPinChanged(payload) => payload.serialize(serializer),
+            Self::TypingIndicator(payload) => payload.serialize(serializer),
+            Self::ReadReceipts(payload) => payload.serialize(serializer),
+            Self::LinkPreviews(payload) => payload.serialize(serializer),
+            Self::DmEdited(payload) => payload.serialize(serializer),
+            Self::DmSynced(payload) => payload.serialize(serializer),
+            Self::DrawStroke(payload) => payload.serialize(serializer),
+            Self::WatchSync(payload) => payload.serialize(serializer),
+            Self::WebRtcSignal(payload) => payload.serialize(serializer),
             Self::Untyped { payload, .. } => payload.serialize(serializer),
         }
     }
@@ -1620,6 +1665,153 @@ mod tests {
                 json!({
                     "channel_id": 3,
                     "pin": { "pinned": ["abc"], "confirmed": true, "pendingUpdate": null },
+                })
+            )
+        );
+    }
+
+    #[test]
+    fn messaging_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        use crate::state::handler::read_receipt::ReadStatePayload;
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::TypingIndicator(TypingIndicatorPayload {
+                    session: 9,
+                    channel_id: 3,
+                })
+            ),
+            ("typing-indicator", json!({ "session": 9, "channel_id": 3 }))
+        );
+        assert_eq!(
+            wire(None, CoreEvent::DmEdited(NewDmPayload { session: 9 })),
+            ("dm-edited", json!({ "session": 9 }))
+        );
+        assert_eq!(
+            wire(None, CoreEvent::DmSynced(NewDmPayload { session: 9 })),
+            ("dm-synced", json!({ "session": 9 }))
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::ReadReceipts(ReadReceiptDeliverPayload {
+                    channel_id: 3,
+                    read_states: vec![ReadStatePayload {
+                        cert_hash: "abc".to_owned(),
+                        name: "Ada".to_owned(),
+                        is_online: true,
+                        last_read_message_id: "m1".to_owned(),
+                        timestamp: 17,
+                    }],
+                    query_message_id: None,
+                })
+            ),
+            (
+                "read-receipt-deliver",
+                json!({
+                    "channel_id": 3,
+                    "read_states": [{
+                        "cert_hash": "abc",
+                        "name": "Ada",
+                        "is_online": true,
+                        "last_read_message_id": "m1",
+                        "timestamp": 17,
+                    }],
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::LinkPreviews(LinkPreviewResponsePayload {
+                    request_id: "r1".to_owned(),
+                    embeds: Vec::new(),
+                    requested_urls: vec!["https://x".to_owned()],
+                })
+            ),
+            (
+                "link-preview-response",
+                json!({ "request_id": "r1", "embeds": [], "requested_urls": ["https://x"] })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::WebRtcSignal(WebRtcSignalPayload {
+                    sender_session: Some(9),
+                    target_session: None,
+                    signal_type: 2,
+                    payload: "sdp".to_owned(),
+                })
+            ),
+            (
+                "webrtc-signal",
+                json!({
+                    "sender_session": 9,
+                    "target_session": null,
+                    "signal_type": 2,
+                    "payload": "sdp",
+                })
+            )
+        );
+    }
+
+    #[test]
+    fn shared_surface_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        use crate::state::handler::watch_sync::WatchSyncEvent;
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::DrawStroke(DrawStrokePayload {
+                    sender_session: 9,
+                    channel_id: 3,
+                    stroke_id: "s1".to_owned(),
+                    color: 255,
+                    width: 2.0,
+                    width_frac: None,
+                    points: vec![0.5, 1.0],
+                    is_end: true,
+                    is_clear: false,
+                    clear_all: false,
+                })
+            ),
+            (
+                "draw-stroke",
+                json!({
+                    "senderSession": 9,
+                    "channelId": 3,
+                    "strokeId": "s1",
+                    "color": 255,
+                    "width": 2.0,
+                    "widthFrac": null,
+                    "points": [0.5, 1.0],
+                    "isEnd": true,
+                    "isClear": false,
+                    "clearAll": false,
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::WatchSync(WatchSyncPayload {
+                    session_id: Some("w1".to_owned()),
+                    actor: Some(9),
+                    event: WatchSyncEvent::Join { session: Some(9) },
+                })
+            ),
+            (
+                "watch-sync",
+                json!({
+                    "sessionId": "w1",
+                    "actor": 9,
+                    "event": { "type": "join", "session": 9 },
                 })
             )
         );

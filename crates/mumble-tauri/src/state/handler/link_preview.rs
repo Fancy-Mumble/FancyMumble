@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 
 /// Server-side downscaled preview, ready to render in `<img>`.
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
@@ -128,9 +129,9 @@ impl LinkEmbed {
 }
 
 #[derive(Serialize, Clone)]
-struct LinkPreviewResponsePayload {
-    request_id: String,
-    embeds: Vec<LinkEmbed>,
+pub(crate) struct LinkPreviewResponsePayload {
+    pub request_id: String,
+    pub embeds: Vec<LinkEmbed>,
     /// The URL each embed answers, in step with `embeds`.
     ///
     /// Not the same as `embed.url`, which is where the walk *ended up*: a card
@@ -138,7 +139,7 @@ struct LinkPreviewResponsePayload {
     /// cards under the string it finds in the message text, so it needs the
     /// question rather than the answer, and only this side knows which is
     /// which.
-    requested_urls: Vec<String>,
+    pub requested_urls: Vec<String>,
 }
 
 fn convert_media(media: &mumble_tcp::fancy_link_preview_response::embed::Media) -> EmbedMedia {
@@ -330,14 +331,11 @@ impl HandleMessage for mumble_tcp::FancyLinkPreviewResponse {
             // this is the protocol event loop.
         }
 
-        ctx.emit(
-            "link-preview-response",
-            LinkPreviewResponsePayload {
-                request_id,
-                embeds,
-                requested_urls,
-            },
-        );
+        ctx.send(CoreEvent::LinkPreviews(LinkPreviewResponsePayload {
+            request_id,
+            embeds,
+            requested_urls,
+        }));
     }
 }
 

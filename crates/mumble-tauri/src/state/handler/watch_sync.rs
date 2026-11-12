@@ -8,6 +8,7 @@ use serde::Serialize;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 
 /// Frontend-facing tagged union mirroring [`fancy_watch_sync::Event`].
 #[derive(Serialize, Clone)]
@@ -66,7 +67,7 @@ impl HandleMessage for mumble_tcp::FancyWatchSync {
             actor = ?payload.actor,
             "watch-sync event received"
         );
-        ctx.emit("watch-sync", payload);
+        ctx.send(CoreEvent::WatchSync(payload));
     }
 }
 

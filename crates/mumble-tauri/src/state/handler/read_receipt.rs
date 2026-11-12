@@ -4,22 +4,23 @@ use tracing::debug;
 
 use super::pchat::resolve_entry_name;
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 
 #[derive(Serialize, Clone)]
-struct ReadStatePayload {
-    cert_hash: String,
-    name: String,
-    is_online: bool,
-    last_read_message_id: String,
-    timestamp: u64,
+pub(crate) struct ReadStatePayload {
+    pub cert_hash: String,
+    pub name: String,
+    pub is_online: bool,
+    pub last_read_message_id: String,
+    pub timestamp: u64,
 }
 
 #[derive(Serialize, Clone)]
-struct ReadReceiptDeliverPayload {
-    channel_id: u32,
-    read_states: Vec<ReadStatePayload>,
+pub(crate) struct ReadReceiptDeliverPayload {
+    pub channel_id: u32,
+    pub read_states: Vec<ReadStatePayload>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    query_message_id: Option<String>,
+    pub query_message_id: Option<String>,
 }
 
 impl HandleMessage for mumble_tcp::FancyReadReceiptDeliver {
@@ -86,6 +87,6 @@ impl HandleMessage for mumble_tcp::FancyReadReceiptDeliver {
             query_message_id: self.query_message_id.clone(),
         };
 
-        ctx.emit("read-receipt-deliver", payload);
+        ctx.send(CoreEvent::ReadReceipts(payload));
     }
 }

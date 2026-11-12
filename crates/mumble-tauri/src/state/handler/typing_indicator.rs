@@ -3,11 +3,12 @@ use serde::Serialize;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 
 #[derive(Serialize, Clone)]
-struct TypingIndicatorPayload {
-    session: u32,
-    channel_id: u32,
+pub(crate) struct TypingIndicatorPayload {
+    pub session: u32,
+    pub channel_id: u32,
 }
 
 impl HandleMessage for mumble_tcp::FancyTypingIndicator {
@@ -30,12 +31,9 @@ impl HandleMessage for mumble_tcp::FancyTypingIndicator {
 
         debug!(session, channel_id, "received typing indicator");
 
-        ctx.emit(
-            "typing-indicator",
-            TypingIndicatorPayload {
-                session,
-                channel_id,
-            },
-        );
+        ctx.send(CoreEvent::TypingIndicator(TypingIndicatorPayload {
+            session,
+            channel_id,
+        }));
     }
 }
