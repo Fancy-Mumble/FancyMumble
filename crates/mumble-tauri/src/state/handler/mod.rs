@@ -72,6 +72,17 @@ pub(crate) trait EventEmitter: Send + Sync {
     /// Send a native OS notification (e.g. Android notification when backgrounded).
     fn send_notification(&self, title: &str, body: &str);
 
+    /// Whether a native media peer took this WebRTC signal for itself, so
+    /// the view must not be told about it. Must never block.
+    fn claim_webrtc_signal(
+        &self,
+        _sender_session: Option<u32>,
+        _signal_type: i32,
+        _payload: &str,
+    ) -> bool {
+        false
+    }
+
     /// Send a notification with the sender's avatar as the large icon.
     ///
     /// `channel_id` is passed to the notification intent on Android so
@@ -105,6 +116,17 @@ impl HandlerContext {
     /// Emit an event with an empty (`null`) payload.
     pub fn emit_empty(&self, event: &str) {
         self.emitter.emit_json(event, serde_json::Value::Null);
+    }
+
+    /// Whether a native media peer took this WebRTC signal for itself.
+    pub fn claim_webrtc_signal(
+        &self,
+        sender_session: Option<u32>,
+        signal_type: i32,
+        payload: &str,
+    ) -> bool {
+        self.emitter
+            .claim_webrtc_signal(sender_session, signal_type, payload)
     }
 
     /// Flash the taskbar / request user attention.

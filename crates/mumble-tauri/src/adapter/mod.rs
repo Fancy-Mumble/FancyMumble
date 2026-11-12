@@ -14,7 +14,8 @@ use tauri_plugin_notification::NotificationExt;
 
 use crate::state::AppState;
 use crate::state::host::{
-    AppDirs, BackgroundService, EngineLookup, EventSink, Host, Notifier, VoiceService,
+    AppDirs, BackgroundService, EngineLookup, EventSink, Host, Notifier, SignalInterceptor,
+    VoiceService,
 };
 
 /// The engine's host when the view is a Tauri webview.
@@ -34,6 +35,43 @@ impl TauriHost {
 impl EventSink for TauriHost {
     fn emit_json(&self, event: &str, payload: Box<serde_json::value::RawValue>) {
         let _ = self.app.emit(event, payload);
+    }
+}
+
+impl SignalInterceptor for TauriHost {
+    fn claim_webrtc_signal(
+        &self,
+        sender_session: Option<u32>,
+        signal_type: i32,
+        payload: &str,
+    ) -> bool {
+        // When the Rust broadcaster is waiting for the SFU's answer, that
+        // answer belongs to it, not to the webview's viewer dispatcher.
+        #[cfg(not(target_os = "android"))]
+        if crate::commands::screenshare::try_intercept_answer(signal_type, payload) {
+            return true;
+        }
+
+        // Native viewer peers (always on Linux, where the webview has no
+        // WebRTC; opt-in on Windows via the viewer-strategy setting): their
+        // answers are claimed here as well. Ordering matters: the
+        // broadcaster's (all-recvonly) answer was already taken above, and
+        // this only claims answers carrying sendonly m-lines - so it can
+        // never swallow a broadcaster answer even when both await at once
+        // (the loopback preview case, where both arrive with sender = self).
+        // With no native viewers running (the Windows default) the registry
+        // is empty and this claims nothing.
+        #[cfg(native_stream_viewer)]
+        if crate::commands::stream_view::try_intercept_viewer_answer(
+            sender_session,
+            signal_type,
+            payload,
+        ) {
+            return true;
+        }
+
+        let _ = (sender_session, signal_type, payload);
+        false
     }
 }
 

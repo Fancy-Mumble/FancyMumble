@@ -3,8 +3,8 @@
 //! Everything under `state/` reaches the outside world through a [`Host`],
 //! which is assembled from one small trait per concern: [`EventSink`] for the
 //! view, [`AppDirs`] for where data lives, [`Notifier`] for the user's
-//! attention and [`BackgroundService`] for what keeps a voice connection
-//! alive off screen. The desktop and mobile app supplies them all from one
+//! attention, [`BackgroundService`] for what keeps a voice connection alive
+//! off screen and [`SignalInterceptor`] for native media peers. The desktop and mobile app supplies them all from one
 //! object (see `crate::adapter`); a native view can bring its own event sink
 //! and share the rest. Nothing in `state/` names a UI toolkit, and a test in
 //! this module keeps it that way.
@@ -97,6 +97,21 @@ pub(crate) trait BackgroundService: Send + Sync + 'static {
     fn push_token(&self) -> Option<String>;
 }
 
+/// Native media peers that answer WebRTC signalling themselves.
+pub(crate) trait SignalInterceptor: Send + Sync + 'static {
+    /// Whether a native peer took this signal for itself, in which case the
+    /// view must not see it.
+    ///
+    /// Runs on the protocol's receive thread, so it must never block: an
+    /// implementation that cannot decide at once leaves the signal unclaimed.
+    fn claim_webrtc_signal(
+        &self,
+        sender_session: Option<u32>,
+        signal_type: i32,
+        payload: &str,
+    ) -> bool;
+}
+
 /// How long-running engine work finds the engine again.
 ///
 /// The loopback media origin and the audio loop outlive the call that started
@@ -135,6 +150,18 @@ impl BackgroundService for NoBackgroundService {
     }
 }
 
+/// A [`SignalInterceptor`] for an application whose view does all its own
+/// WebRTC.
+#[derive(Debug, Clone, Copy, Default)]
+#[allow(dead_code, reason = "for views without native media peers")]
+pub(crate) struct NoSignalInterceptor;
+
+impl SignalInterceptor for NoSignalInterceptor {
+    fn claim_webrtc_signal(&self, _: Option<u32>, _: i32, _: &str) -> bool {
+        false
+    }
+}
+
 /// Everything the engine needs from the application that hosts it, one part
 /// per concern.
 ///
@@ -150,6 +177,8 @@ pub(crate) struct HostParts {
     pub notifier: Arc<dyn Notifier>,
     /// What runs while the app is in the background.
     pub background: Arc<dyn BackgroundService>,
+    /// Who else may answer WebRTC signalling.
+    pub signals: Arc<dyn SignalInterceptor>,
     /// How detached engine work finds the engine.
     pub engine: Arc<dyn EngineLookup>,
 }
@@ -170,7 +199,7 @@ impl Host {
     /// A host whose every part is the same object.
     pub(crate) fn from_single<H>(host: H) -> Self
     where
-        H: EventSink + AppDirs + Notifier + BackgroundService + EngineLookup,
+        H: EventSink + AppDirs + Notifier + BackgroundService + SignalInterceptor + EngineLookup,
     {
         let host = Arc::new(host);
         Self::new(HostParts {
@@ -178,6 +207,7 @@ impl Host {
             dirs: host.clone(),
             notifier: host.clone(),
             background: host.clone(),
+            signals: host.clone(),
             engine: host,
         })
     }
@@ -252,6 +282,19 @@ impl Host {
         self.0.background.push_token()
     }
 
+    /// Whether a native media peer took this WebRTC signal for itself; see
+    /// [`SignalInterceptor`].
+    pub(crate) fn claim_webrtc_signal(
+        &self,
+        sender_session: Option<u32>,
+        signal_type: i32,
+        payload: &str,
+    ) -> bool {
+        self.0
+            .signals
+            .claim_webrtc_signal(sender_session, signal_type, payload)
+    }
+
     /// The engine this application runs; see [`EngineLookup`].
     pub(crate) fn app_state(&self) -> Option<&AppState> {
         self.0.engine.app_state()
@@ -294,6 +337,19 @@ mod tests {
     /// Code tokens that tie a file to one UI toolkit.
     const TOOLKIT_TOKENS: &[&str] = &["tauri::", "tauri_plugin_", "AppHandle"];
 
+    /// Modules of this crate that belong to the Tauri view. The engine may not
+    /// reach into them, or it could not be built without that view.
+    const VIEW_MODULES: &[&str] = &[
+        "crate::adapter",
+        "crate::app::",
+        "crate::commands",
+        "crate::logging",
+        "crate::platform",
+        "crate::ui_mode",
+        "crate::updater",
+        "crate::view_state",
+    ];
+
     fn offending_lines(dir: &Path, root: &Path, found: &mut Vec<String>) {
         let Ok(entries) = std::fs::read_dir(dir) else {
             return;
@@ -323,25 +379,34 @@ mod tests {
                 if code.starts_with("//") {
                     continue;
                 }
-                if TOOLKIT_TOKENS.iter().any(|token| code.contains(token)) {
+                if TOOLKIT_TOKENS
+                    .iter()
+                    .chain(VIEW_MODULES)
+                    .any(|token| code.contains(token))
+                {
                     found.push(format!("{relative}:{}: {}", number + 1, code));
                 }
             }
         }
     }
 
-    /// The engine must not name a UI toolkit: that is what lets more than one
-    /// view sit on top of it. Reach the outside world through `Host`.
+    /// The engine must not name a UI toolkit or reach into this view's
+    /// modules: that is what lets more than one view sit on top of it. Reach
+    /// the outside world through `Host`.
     #[test]
-    fn state_layer_names_no_ui_toolkit() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("src")
-            .join("state");
+    fn engine_names_no_ui_toolkit_and_no_view_module() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let mut found = Vec::new();
-        offending_lines(&root, &root, &mut found);
+        // `state/` is scanned relative to itself so `host.rs`, which has to
+        // name the things it forbids, can be told apart.
+        let state = src.join("state");
+        offending_lines(&state, &state, &mut found);
+        for module in ["audio", "media"] {
+            offending_lines(&src.join(module), &src, &mut found);
+        }
         assert!(
             found.is_empty(),
-            "state/ must stay independent of the UI toolkit; go through `Host` instead:\n{}",
+            "the engine must stay independent of the UI toolkit and of this view's modules; go through `Host` instead:\n{}",
             found.join("\n")
         );
     }

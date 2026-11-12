@@ -53,6 +53,16 @@ impl EventEmitter for HostEmitter {
         self.host.request_user_attention();
     }
 
+    fn claim_webrtc_signal(
+        &self,
+        sender_session: Option<u32>,
+        signal_type: i32,
+        payload: &str,
+    ) -> bool {
+        self.host
+            .claim_webrtc_signal(sender_session, signal_type, payload)
+    }
+
     fn send_notification(&self, title: &str, body: &str) {
         self.send_notification_with_icon(title, body, None, None);
     }

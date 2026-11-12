@@ -29,8 +29,8 @@ use fancy_gamedetect::{ProbeNote, Reason, ShellState, Verdict};
 use fancy_gamedetect::{Rule, Rules};
 use serde::{Deserialize, Serialize};
 
-use crate::view_state::ViewState;
 use crate::state::types::OverlaySnapshot;
+use crate::view_state::ViewState;
 
 #[cfg(not(target_os = "android"))]
 pub(crate) use window::GAME_OVERLAY_LABEL;
