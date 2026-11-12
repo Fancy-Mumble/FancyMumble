@@ -303,22 +303,7 @@ impl HandleMessage for mumble_tcp::PchatKeyHoldersList {
 
             // Collect payload for deferred emit outside the lock.
             let share_requests_payload = if state.pchat_ctx.pending_key_shares.len() != before_len {
-                state.conn.host.as_ref().map(|app| {
-                    let remaining: Vec<_> = state
-                        .pchat_ctx
-                        .pending_key_shares
-                        .iter()
-                        .filter(|p| p.channel_id == channel_id)
-                        .cloned()
-                        .collect();
-                    (
-                        app.clone(),
-                        crate::state::types::KeyShareRequestsChangedPayload {
-                            channel_id,
-                            pending: remaining,
-                        },
-                    )
-                })
+                pchat::KeyShareRequestsChanged::pending(&state, channel_id)
             } else {
                 None
             };
@@ -326,9 +311,9 @@ impl HandleMessage for mumble_tcp::PchatKeyHoldersList {
             (holders, share_requests_payload)
         };
 
-        // Emit outside the lock to avoid deadlock with Tauri IPC.
-        if let Some((app, payload)) = share_requests_payload {
-            let _ = app.emit("pchat-key-share-requests-changed", payload);
+        // Emit outside the lock: the view may call straight back in.
+        if let Some(event) = share_requests_payload {
+            event.emit();
         }
 
         ctx.emit(

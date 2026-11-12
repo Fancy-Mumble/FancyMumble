@@ -939,6 +939,13 @@ impl AppState {
         self.host.lock().ok().and_then(|h| h.clone())
     }
 
+    /// Send `event` to the view, if the engine is attached to one yet.
+    pub(crate) fn emit_to_view<S: serde::Serialize>(&self, event: &str, payload: S) {
+        if let Some(host) = self.host() {
+            let _ = host.emit(event, payload);
+        }
+    }
+
     /// Cancel an in-progress upload by its `upload_id`.
     /// Returns `true` if a matching upload was found and cancelled.
     pub fn cancel_upload(&self, upload_id: &str) -> bool {

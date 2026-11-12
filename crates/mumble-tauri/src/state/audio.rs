@@ -57,6 +57,14 @@ pub(crate) fn current_capture_state() -> Option<CaptureState> {
 /// Emit a capture-start failure to the UI (best-effort) and record it so
 /// late-mounting views can query it. When the device is busy, includes the
 /// name(s) of the other application(s) holding the microphone.
+/// The event every view listens to for the talking indicators.
+pub(crate) const USER_TALKING_EVENT: &str = "user-talking";
+
+/// Tell the view that `session` started or stopped talking.
+pub(crate) fn emit_user_talking(host: &Host, session: u32, talking: bool) {
+    let _ = host.emit(USER_TALKING_EVENT, (session, talking));
+}
+
 pub(crate) fn emit_capture_error(app: Option<&Host>, err: &str) {
     #[cfg(target_os = "windows")]
     let holders: Vec<String> = if is_device_busy(err) {
@@ -187,10 +195,7 @@ impl AppState {
 
     /// Emit voice-state-changed event to the frontend.
     pub(super) fn emit_voice_state(&self) {
-        if let Some(app) = self.host() {
-            let vs = self.voice_state();
-            let _ = app.emit("voice-state-changed", vs);
-        }
+        self.emit_to_view("voice-state-changed", self.voice_state());
     }
 
     /// Set the local playback volume for a specific remote user.
@@ -411,7 +416,7 @@ mod voice_pipeline {
 
             // Emit outside the lock to avoid deadlock with Tauri IPC.
             for (session, app) in stopped_sessions {
-                let _ = app.emit("user-talking", (session, false));
+                super::emit_user_talking(&app, session, false);
             }
         }
 
@@ -1177,8 +1182,8 @@ mod voice_pipeline {
                 _ => None,
             };
 
-            if let (Some(app), Some(payload)) = (self.host(), payload) {
-                let _ = app.emit("voice-activation-calibrated", payload);
+            if let Some(payload) = payload {
+                self.emit_to_view("voice-activation-calibrated", payload);
             }
 
             Ok(calibration.vad_threshold)

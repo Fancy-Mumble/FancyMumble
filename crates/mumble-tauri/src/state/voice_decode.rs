@@ -351,7 +351,7 @@ impl Decoder {
                 let _ = state.audio.talking_sessions.remove(&session);
             }
         }
-        let _ = self.app.emit("user-talking", (session, talking));
+        super::audio::emit_user_talking(&self.app, session, talking);
     }
 }
 

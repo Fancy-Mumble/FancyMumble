@@ -26,10 +26,8 @@ impl AppState {
     }
 
     pub(in crate::state) fn emit_unreads(&self) {
-        if let Some(handle) = self.host() {
-            let unreads = self.unread_counts();
-            let _ = handle.emit("unread-changed", UnreadPayload { unreads });
-        }
+        let unreads = self.unread_counts();
+        self.emit_to_view("unread-changed", UnreadPayload { unreads });
     }
 
     pub fn dm_unread_counts(&self) -> HashMap<u32, u32> {
@@ -49,9 +47,7 @@ impl AppState {
     }
 
     pub(in crate::state) fn emit_dm_unreads(&self) {
-        if let Some(handle) = self.host() {
-            let unreads = self.dm_unread_counts();
-            let _ = handle.emit("dm-unread-changed", DmUnreadPayload { unreads });
-        }
+        let unreads = self.dm_unread_counts();
+        self.emit_to_view("dm-unread-changed", DmUnreadPayload { unreads });
     }
 }

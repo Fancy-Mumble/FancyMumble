@@ -27,9 +27,7 @@ impl AppState {
                         user.comment = (!comment.is_empty()).then_some(comment);
                         Some(())
                     });
-                    if let Some(app) = self.host() {
-                        let _ = app.emit("state-changed", ());
-                    }
+                    self.emit_to_view("state-changed", ());
                 }
                 Ok(())
             }
@@ -59,9 +57,7 @@ impl AppState {
                         user.texture = (!texture.is_empty()).then_some(texture);
                         Some(())
                     });
-                    if let Some(app) = self.host() {
-                        let _ = app.emit("state-changed", ());
-                    }
+                    self.emit_to_view("state-changed", ());
                 }
                 Ok(())
             }

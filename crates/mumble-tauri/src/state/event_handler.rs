@@ -200,7 +200,7 @@ impl EventHandler for SessionEventHandler {
             // SharedState lock is released here.
 
             if let Some(talking) = emit_action {
-                let _ = self.app.emit("user-talking", (session, talking));
+                super::audio::emit_user_talking(&self.app, session, talking);
                 // On the talking edge only: this path has nowhere to remember a
                 // mid-utterance change, and runs only with the decode thread
                 // switched off.

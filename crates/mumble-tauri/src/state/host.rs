@@ -10,12 +10,12 @@
 //! this module keeps it that way.
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use serde_json::value::RawValue;
 
-use super::AppState;
+use super::{AppState, SharedState};
 
 /// A change to the service that keeps a voice connection alive while the app
 /// is in the background.
@@ -261,6 +261,21 @@ impl Host {
 impl std::fmt::Debug for Host {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("Host")
+    }
+}
+
+/// The host of the session behind `shared`.
+///
+/// Takes the session lock only to read the handle, so the caller emits with
+/// the lock released: a view may call straight back into the engine.
+pub(crate) fn host_of(shared: &Mutex<SharedState>) -> Option<Host> {
+    shared.lock().ok().and_then(|state| state.conn.host.clone())
+}
+
+/// Send `event` to the view of the session behind `shared`, if it has one.
+pub(crate) fn emit_for<S: Serialize>(shared: &Mutex<SharedState>, event: &str, payload: S) {
+    if let Some(host) = host_of(shared) {
+        let _ = host.emit(event, payload);
     }
 }
 

@@ -10,6 +10,7 @@ use mumble_protocol::persistent::PchatProtocol;
 
 use super::types::ChatMessage;
 use super::{AppState, FetchWalk, SharedState, pchat};
+use crate::state::host::Host;
 
 struct OwnMessageData {
     channel_id: u32,
@@ -51,6 +52,23 @@ fn legacy_edit_body(body: &str, disable_dual: bool) -> String {
         body
     };
     format!("{LEGACY_EDITED_MARK}{shown}")
+}
+
+/// Tell the view that a plugin added or changed a message in each of
+/// `channels`.
+fn emit_plugin_messages(host: Option<&Host>, channels: Vec<u32>) {
+    let Some(host) = host else {
+        return;
+    };
+    for channel_id in channels {
+        let _ = host.emit(
+            "new-message",
+            crate::state::types::NewMessagePayload {
+                channel_id,
+                sender_session: None,
+            },
+        );
+    }
 }
 
 /// Search `bucket` for the first message whose `plugin_name` and `message_id`
@@ -405,8 +423,6 @@ impl AppState {
         content: String,
         components: Option<serde_json::Value>,
     ) -> Result<(), String> {
-        use crate::state::types::NewMessagePayload;
-
         let (targets, app_handle) = {
             let __session = self.inner.snapshot();
             let state = __session.lock().map_err(|e| e.to_string())?;
@@ -458,17 +474,7 @@ impl AppState {
             }
         }
 
-        if let Some(app) = app_handle {
-            for &channel_id in &targets {
-                let _ = app.emit(
-                    "new-message",
-                    NewMessagePayload {
-                        channel_id,
-                        sender_session: None,
-                    },
-                );
-            }
-        }
+        emit_plugin_messages(app_handle.as_ref(), targets);
         Ok(())
     }
 
@@ -488,8 +494,6 @@ impl AppState {
         components: Option<serde_json::Value>,
         clear_components: bool,
     ) -> Result<(), String> {
-        use crate::state::types::NewMessagePayload;
-
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -515,17 +519,7 @@ impl AppState {
             (touched, state.conn.host.clone())
         };
 
-        if let Some(app) = app_handle {
-            for channel_id in touched {
-                let _ = app.emit(
-                    "new-message",
-                    NewMessagePayload {
-                        channel_id,
-                        sender_session: None,
-                    },
-                );
-            }
-        }
+        emit_plugin_messages(app_handle.as_ref(), touched);
         Ok(())
     }
 

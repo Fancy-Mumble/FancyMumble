@@ -23,6 +23,7 @@ pub(crate) mod identity;
 mod inbound;
 mod key_exchange;
 mod key_sharing;
+pub(crate) use key_sharing::KeyShareRequestsChanged;
 mod outbound;
 mod persistence;
 mod settings;
@@ -279,27 +280,23 @@ pub(crate) fn emit_history_loading(
     channel_id: u32,
     loading: bool,
 ) {
-    let app = shared.lock().ok().and_then(|s| s.conn.host.clone());
-    if let Some(app) = app {
-        let _ = app.emit(
-            "pchat-history-loading",
-            PchatHistoryLoadingPayload {
-                channel_id,
-                loading,
-            },
-        );
-    }
+    crate::state::host::emit_for(
+        shared,
+        "pchat-history-loading",
+        PchatHistoryLoadingPayload {
+            channel_id,
+            loading,
+        },
+    );
 }
 
 /// Emit a `pchat-signal-bridge-error` event to the frontend.
 pub(crate) fn emit_signal_bridge_error(shared: &Arc<Mutex<SharedState>>, message: &str) {
-    let app = shared.lock().ok().and_then(|s| s.conn.host.clone());
-    if let Some(app) = app {
-        let _ = app.emit(
-            "pchat-signal-bridge-error",
-            SignalBridgeErrorPayload {
-                message: message.to_string(),
-            },
-        );
-    }
+    crate::state::host::emit_for(
+        shared,
+        "pchat-signal-bridge-error",
+        SignalBridgeErrorPayload {
+            message: message.to_string(),
+        },
+    );
 }

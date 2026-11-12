@@ -571,20 +571,7 @@ fn resolve_peer_name(state: &SharedState, peer_cert_hash: &str) -> String {
 
 /// Emit `pchat-key-share-requests-changed` for a channel.
 fn emit_key_share_requests_changed(state: &SharedState, channel_id: u32) {
-    if let Some(ref app) = state.conn.host {
-        let remaining: Vec<_> = state
-            .pchat_ctx
-            .pending_key_shares
-            .iter()
-            .filter(|p| p.channel_id == channel_id)
-            .cloned()
-            .collect();
-        let _ = app.emit(
-            "pchat-key-share-requests-changed",
-            types::KeyShareRequestsChangedPayload {
-                channel_id,
-                pending: remaining,
-            },
-        );
+    if let Some(event) = super::key_sharing::KeyShareRequestsChanged::pending(state, channel_id) {
+        event.emit();
     }
 }

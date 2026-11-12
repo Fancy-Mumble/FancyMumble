@@ -57,22 +57,8 @@ pub(crate) async fn approve_key_share(
         let request_id = removed.request_id;
 
         // Collect payload for deferred emit outside the lock.
-        let share_requests_emit = shared.conn.host.as_ref().map(|app| {
-            let remaining: Vec<_> = shared
-                .pchat_ctx
-                .pending_key_shares
-                .iter()
-                .filter(|p| p.channel_id == channel_id)
-                .cloned()
-                .collect();
-            (
-                app.clone(),
-                state::types::KeyShareRequestsChangedPayload {
-                    channel_id,
-                    pending: remaining,
-                },
-            )
-        });
+        let share_requests_emit =
+            state::pchat::KeyShareRequestsChanged::pending(&shared, channel_id);
 
         let pchat = shared
             .pchat_ctx
@@ -113,9 +99,9 @@ pub(crate) async fn approve_key_share(
         (handle, proto, share_requests_emit)
     };
 
-    // Emit outside the lock to avoid deadlock with Tauri IPC.
-    if let Some((app, payload)) = share_requests_emit {
-        let _ = app.emit("pchat-key-share-requests-changed", payload);
+    // Emit outside the lock: the view may call straight back in.
+    if let Some(event) = share_requests_emit {
+        event.emit();
     }
 
     // Send the key exchange to the peer.
@@ -164,27 +150,12 @@ pub(crate) fn dismiss_key_share(
             .retain(|p| !(p.channel_id == channel_id && p.peer_cert_hash == peer_cert_hash));
 
         // Collect payload for deferred emit outside the lock.
-        shared.conn.host.as_ref().map(|app| {
-            let remaining: Vec<_> = shared
-                .pchat_ctx
-                .pending_key_shares
-                .iter()
-                .filter(|p| p.channel_id == channel_id)
-                .cloned()
-                .collect();
-            (
-                app.clone(),
-                state::types::KeyShareRequestsChangedPayload {
-                    channel_id,
-                    pending: remaining,
-                },
-            )
-        })
+        state::pchat::KeyShareRequestsChanged::pending(&shared, channel_id)
     };
 
-    // Emit outside the lock to avoid deadlock with Tauri IPC.
-    if let Some((app, payload)) = share_requests_emit {
-        let _ = app.emit("pchat-key-share-requests-changed", payload);
+    // Emit outside the lock: the view may call straight back in.
+    if let Some(event) = share_requests_emit {
+        event.emit();
     }
 
     Ok(())

@@ -80,7 +80,7 @@ impl AppState {
                 .await
                 .map_err(|error| format!("request failed: {error}"))?;
             let listed = list_from_operator_json(&operator_http::body(response, &url).await?)?;
-            self.emit_plugin_admin("plugin-admin-list", listed);
+            self.emit_to_view("plugin-admin-list", listed);
             return Ok(());
         }
         let handle = {
@@ -112,7 +112,7 @@ impl AppState {
                 .await
                 .map_err(|error| format!("request failed: {error}"))?;
             let _ = operator_http::body(response, &url).await?;
-            self.emit_plugin_admin("plugin-admin-ack", succeeded("set_enabled", plugin_name));
+            self.emit_to_view("plugin-admin-ack", succeeded("set_enabled", plugin_name));
             return Ok(());
         }
         let handle = {
@@ -164,7 +164,7 @@ impl AppState {
                         .map(ToOwned::to_owned)
                 })
                 .unwrap_or(marketplace_id);
-            self.emit_plugin_admin("plugin-admin-ack", succeeded("install", installed));
+            self.emit_to_view("plugin-admin-ack", succeeded("install", installed));
             return Ok(());
         }
         let handle = {
@@ -196,7 +196,7 @@ impl AppState {
                 .await
                 .map_err(|error| format!("request failed: {error}"))?;
             let _ = operator_http::body(response, &url).await?;
-            self.emit_plugin_admin("plugin-admin-ack", succeeded("uninstall", plugin_name));
+            self.emit_to_view("plugin-admin-ack", succeeded("uninstall", plugin_name));
             return Ok(());
         }
         let handle = {
@@ -241,12 +241,6 @@ impl AppState {
             })?
             .map_err(|_| "the connection closed before the server answered".to_owned())?;
         operator_from_ticket(ticket, scope)
-    }
-
-    fn emit_plugin_admin<S: serde::Serialize + Clone>(&self, event: &str, payload: S) {
-        if let Some(app) = self.host() {
-            let _ = app.emit(event, payload);
-        }
     }
 }
 

@@ -115,7 +115,10 @@ fn handle_user_departed(msg: &mumble_tcp::UserRemove, ctx: &HandlerContext) {
 
     // Emit outside the lock to avoid deadlock with Tauri IPC.
     if was_talking {
-        ctx.emit("user-talking", (msg.session, false));
+        ctx.emit(
+            crate::state::audio::USER_TALKING_EVENT,
+            (msg.session, false),
+        );
     }
     for (ch_id, remaining) in deferred_share_events {
         ctx.emit(

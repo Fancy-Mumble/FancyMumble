@@ -203,20 +203,18 @@ fn emit_custodian_pin_changed(
         confirmed: bool,
         pending_update: Option<Vec<String>>,
     }
-    let app = ctx.shared.lock().ok().and_then(|s| s.conn.host.clone());
-    if let Some(app) = app {
-        let _ = app.emit(
-            "custodian-pin-changed",
-            CustodianPinPayload {
-                channel_id,
-                pin: CustodianPinPayloadInner {
-                    pinned: pin.pinned,
-                    confirmed: pin.confirmed,
-                    pending_update: pin.pending_update,
-                },
+    crate::state::host::emit_for(
+        &ctx.shared,
+        "custodian-pin-changed",
+        CustodianPinPayload {
+            channel_id,
+            pin: CustodianPinPayloadInner {
+                pinned: pin.pinned,
+                confirmed: pin.confirmed,
+                pending_update: pin.pending_update,
             },
-        );
-    }
+        },
+    );
 }
 
 fn spawn_description_fetch(shared: Arc<Mutex<SharedState>>, id: u32) {

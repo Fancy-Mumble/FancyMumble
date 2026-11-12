@@ -12,9 +12,50 @@ use mumble_protocol::proto::mumble_tcp;
 use mumble_protocol::persistent::PchatProtocol;
 
 use crate::state::SharedState;
+use crate::state::host::Host;
 use crate::state::types;
 
 use super::persistence::delete_persisted_archive_key;
+
+/// A `pchat-key-share-requests-changed` event: prepared while the session is
+/// locked, sent once it is not.
+///
+/// The view answers this event by asking the engine for more, so sending it
+/// with the session still locked can deadlock. Build it under the lock, drop
+/// the lock, then [`emit`](Self::emit).
+pub(crate) struct KeyShareRequestsChanged {
+    host: Host,
+    payload: types::KeyShareRequestsChangedPayload,
+}
+
+impl KeyShareRequestsChanged {
+    /// The requests still waiting on `channel_id`, as they stand right now.
+    /// `None` when the session has no view to tell.
+    pub(crate) fn pending(state: &SharedState, channel_id: u32) -> Option<Self> {
+        let host = state.conn.host.clone()?;
+        let pending = state
+            .pchat_ctx
+            .pending_key_shares
+            .iter()
+            .filter(|p| p.channel_id == channel_id)
+            .cloned()
+            .collect();
+        Some(Self {
+            host,
+            payload: types::KeyShareRequestsChangedPayload {
+                channel_id,
+                pending,
+            },
+        })
+    }
+
+    /// Send the event to the view.
+    pub(crate) fn emit(self) {
+        let _ = self
+            .host
+            .emit("pchat-key-share-requests-changed", self.payload);
+    }
+}
 
 // -- Archive key ownership --------------------------------------------
 
@@ -300,24 +341,17 @@ pub(crate) fn handle_proto_key_challenge_result(
             should_emit_shares = s.pchat_ctx.pending_key_shares.len() != before_len;
         }
         let share_requests_emit = if should_emit_shares {
-            app_handle.as_ref().map(|app| {
-                (
-                    app.clone(),
-                    types::KeyShareRequestsChangedPayload {
-                        channel_id,
-                        pending: vec![],
-                    },
-                )
-            })
+            s.as_deref()
+                .and_then(|s| KeyShareRequestsChanged::pending(s, channel_id))
         } else {
             None
         };
         (dir, app_handle, share_requests_emit)
     };
 
-    // Emit outside the lock to avoid deadlock with Tauri IPC.
-    if let Some((app, payload)) = share_requests_emit {
-        let _ = app.emit("pchat-key-share-requests-changed", payload);
+    // Emit outside the lock: the view may call straight back in.
+    if let Some(event) = share_requests_emit {
+        event.emit();
     }
 
     if let Some(dir) = identity_dir {

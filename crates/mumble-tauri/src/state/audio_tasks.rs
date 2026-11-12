@@ -48,8 +48,7 @@ impl Drop for TalkingGuard {
         if self.is_talking
             && let (Some(app), Some(session)) = (&self.app, self.session)
         {
-            let _ = app.emit("user-talking", (session, false));
-            set_local_talking(app, false);
+            report_local_talking(app, session, false);
         }
     }
 }
@@ -70,6 +69,13 @@ fn set_local_talking(app: &Host, talking: bool) {
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
     state.local_talking_at.store(now_ms, Ordering::Relaxed);
+}
+
+/// The local user started or stopped transmitting: tell the view, and record
+/// it for anything that polls instead of listening.
+fn report_local_talking(app: &Host, session: u32, talking: bool) {
+    super::audio::emit_user_talking(app, session, talking);
+    set_local_talking(app, talking);
 }
 
 /// Background task that reads from the microphone, encodes, and queues
@@ -197,8 +203,7 @@ fn process_outbound_tick(
             if guard.is_talking {
                 guard.is_talking = false;
                 if let (Some(app), Some(session)) = (app, own_session) {
-                    let _ = app.emit("user-talking", (session, false));
-                    set_local_talking(app, false);
+                    report_local_talking(app, session, false);
                 }
                 let _ = tx.try_send(AudioPacketOut {
                     data: packet.data,
@@ -214,8 +219,7 @@ fn process_outbound_tick(
             if !guard.is_talking {
                 guard.is_talking = true;
                 if let (Some(app), Some(session)) = (app, own_session) {
-                    let _ = app.emit("user-talking", (session, true));
-                    set_local_talking(app, true);
+                    report_local_talking(app, session, true);
                 }
             }
             if stats.packets == 1 || stats.packets.is_multiple_of(500) {
@@ -243,8 +247,7 @@ fn process_outbound_tick(
             if guard.is_talking {
                 guard.is_talking = false;
                 if let (Some(app), Some(session)) = (app, own_session) {
-                    let _ = app.emit("user-talking", (session, false));
-                    set_local_talking(app, false);
+                    report_local_talking(app, session, false);
                 }
             }
             debug!(
