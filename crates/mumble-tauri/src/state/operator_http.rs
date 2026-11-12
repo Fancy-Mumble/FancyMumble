@@ -9,13 +9,30 @@
 //! than a status code. Those messages name the field and the rule it broke, and
 //! "Bad Request" would throw away the only part an operator can act on.
 
-use std::time::Duration;
+use std::sync::OnceLock;
 
-pub(crate) fn client(timeout: Duration) -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .timeout(timeout)
-        .build()
-        .map_err(|error| format!("HTTP client init failed: {error}"))
+/// The client every operator call goes through; each request sets its own
+/// timeout.
+///
+/// Built once. Constructing a client loads the platform's root certificates,
+/// which costs far more than the request it is built for, and every call used
+/// to build its own. Idle connections are not kept, so each call still opens a
+/// fresh one, exactly as before.
+///
+/// # Errors
+///
+/// When the TLS backend cannot be initialised.
+pub(crate) fn client() -> Result<&'static reqwest::Client, String> {
+    static CLIENT: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
+    CLIENT
+        .get_or_init(|| {
+            reqwest::Client::builder()
+                .pool_max_idle_per_host(0)
+                .build()
+                .map_err(|error| format!("HTTP client init failed: {error}"))
+        })
+        .as_ref()
+        .map_err(Clone::clone)
 }
 
 /// `https://host:port` without a trailing slash, and nothing else.

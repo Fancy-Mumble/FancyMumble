@@ -47,6 +47,7 @@ mod messaging;
 pub mod offload;
 mod offload_ops;
 mod onboarding;
+pub(crate) mod operator_http;
 mod overlay_query;
 pub(crate) mod pchat;
 mod plugin_admin;

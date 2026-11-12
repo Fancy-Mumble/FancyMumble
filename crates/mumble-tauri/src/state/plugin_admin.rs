@@ -22,8 +22,8 @@ use super::handler::operator_ticket::OperatorTicket;
 use super::handler::plugin_admin::{
     PluginAdminAckPayload, PluginAdminEntryPayload, PluginAdminListPayload,
 };
+use super::operator_http;
 use super::types::{PluginDataPayload, PluginRegistryEntryPayload};
-use crate::commands::operator_http;
 
 /// How long to wait for the server to answer a ticket request.
 const TICKET_TIMEOUT: Duration = Duration::from_secs(8);
@@ -73,8 +73,9 @@ impl AppState {
         if self.plugin_admin_via_operator_api()? {
             let operator = self.plugin_operator("plugins:read").await?;
             let url = format!("{}/v1/plugins", operator.base);
-            let response = operator_http::client(CALL_TIMEOUT)?
+            let response = operator_http::client()?
                 .get(&url)
+                .timeout(CALL_TIMEOUT)
                 .bearer_auth(&operator.token)
                 .send()
                 .await
@@ -104,8 +105,9 @@ impl AppState {
         if self.plugin_admin_via_operator_api()? {
             let operator = self.plugin_operator("plugins:write").await?;
             let url = plugin_url(&operator.base, &plugin_name)?;
-            let response = operator_http::client(CALL_TIMEOUT)?
+            let response = operator_http::client()?
                 .patch(&url)
+                .timeout(CALL_TIMEOUT)
                 .bearer_auth(&operator.token)
                 .json(&serde_json::json!({ "enabled": enabled }))
                 .send()
@@ -141,8 +143,9 @@ impl AppState {
         if self.plugin_admin_via_operator_api()? {
             let operator = self.plugin_operator("plugins:write").await?;
             let url = format!("{}/v1/plugins", operator.base);
-            let response = operator_http::client(INSTALL_TIMEOUT)?
+            let response = operator_http::client()?
                 .post(&url)
+                .timeout(INSTALL_TIMEOUT)
                 .bearer_auth(&operator.token)
                 .json(&serde_json::json!({
                     "marketplace_id": marketplace_id,
@@ -189,8 +192,9 @@ impl AppState {
         if self.plugin_admin_via_operator_api()? {
             let operator = self.plugin_operator("plugins:write").await?;
             let url = plugin_url(&operator.base, &plugin_name)?;
-            let response = operator_http::client(CALL_TIMEOUT)?
+            let response = operator_http::client()?
                 .delete(&url)
+                .timeout(CALL_TIMEOUT)
                 .bearer_auth(&operator.token)
                 .send()
                 .await

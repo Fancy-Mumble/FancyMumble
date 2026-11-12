@@ -1,13 +1,13 @@
 //! Proxy commands for the Starling operator API's livery surface.
 //!
-//! Proxied through the backend for the reasons in [`super::operator_http`].
+//! Proxied through the backend for the reasons in [`crate::state::operator_http`].
 //! Every handler returns the operator API's own refusal text — "tagline is
 //! longer than 120 characters", "dark.accent is red;…, which is not #rrggbb".
 
 use std::time::Duration;
 
-use super::operator_http::{base, body};
 use crate::AppState;
+use crate::state::operator_http::{base, body, client};
 
 /// How long any one operator call may take.
 ///
@@ -26,13 +26,10 @@ fn image_path(which: &str) -> Result<&'static str, String> {
     }
 }
 
-fn client() -> Result<reqwest::Client, String> {
-    super::operator_http::client(TIMEOUT)
-}
-
 async fn get_json(url: &str, token: &str) -> Result<serde_json::Value, String> {
     let response = client()?
         .get(url)
+        .timeout(TIMEOUT)
         .bearer_auth(token)
         .send()
         .await
@@ -64,6 +61,7 @@ pub(crate) async fn livery_set(
     let url = format!("{}/v1/livery", base(&base_url)?);
     let response = client()?
         .post(&url)
+        .timeout(TIMEOUT)
         .bearer_auth(&token)
         .json(&patch)
         .send()
@@ -99,6 +97,7 @@ pub(crate) async fn greeting_set(
     let url = format!("{}/v1/greeting", base(&base_url)?);
     let response = client()?
         .post(&url)
+        .timeout(TIMEOUT)
         .bearer_auth(&token)
         .json(&graph)
         .send()
@@ -133,6 +132,7 @@ pub(crate) async fn livery_upload_image(
     let url = format!("{}/v1/livery/{}", base(&base_url)?, image_path(&which)?);
     let response = client()?
         .put(&url)
+        .timeout(TIMEOUT)
         .bearer_auth(&token)
         .body(bytes)
         .send()
@@ -151,6 +151,7 @@ pub(crate) async fn livery_clear_image(
     let url = format!("{}/v1/livery/{}", base(&base_url)?, image_path(&which)?);
     let response = client()?
         .delete(&url)
+        .timeout(TIMEOUT)
         .bearer_auth(&token)
         .send()
         .await
@@ -174,6 +175,7 @@ pub(crate) async fn livery_image_data_uri(
     let url = format!("{}/v1/livery/{}", base(&base_url)?, image_path(&which)?);
     let response = client()?
         .get(&url)
+        .timeout(TIMEOUT)
         .bearer_auth(&token)
         .send()
         .await
