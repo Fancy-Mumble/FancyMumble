@@ -175,6 +175,11 @@ impl DenoiserBackend for OmlsaBackend {
 fn exp_int_approx(v: f32) -> f32 {
     let v = v.max(1e-6);
     if v < 0.1 {
+        // Spelled out: `f32::consts::EULER_GAMMA` is too new to rely on.
+        #[allow(
+            clippy::approx_constant,
+            reason = "the std constant is not in every toolchain this builds with"
+        )]
         const EULER_MASCHERONI: f32 = 0.577_215_7;
         -0.5 * (EULER_MASCHERONI + v.ln())
     } else {
