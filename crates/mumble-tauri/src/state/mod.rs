@@ -927,14 +927,6 @@ impl AppState {
         self.host.lock().ok().and_then(|h| h.clone())
     }
 
-    /// Send an event that has no [`core_event::CoreEvent`] variant yet to
-    /// the view, if the engine is attached to one.
-    pub(crate) fn emit_to_view<S: serde::Serialize>(&self, event: &'static str, payload: S) {
-        if let Some(host) = self.host() {
-            let _ = host.emit(event, payload);
-        }
-    }
-
     /// Tell the view that `event` happened, if the engine is attached to one
     /// yet.
     pub(crate) fn tell_view(&self, event: core_event::CoreEvent) {

@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
+use crate::state::core_event::CoreEvent;
 use crate::state::host::Host;
 use fancy_presence::assets::{self, ImageSource};
 use fancy_presence::{BridgeState, PresenceConfig, PresenceEntry, PresenceEvent, PresenceService};
@@ -57,11 +58,11 @@ pub(crate) struct PresenceView {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PresenceStatus {
     /// Whether the listener is running at all.
-    enabled: bool,
+    pub(crate) enabled: bool,
     /// How the listener relates to a running Discord client.
-    bridge_state: Option<BridgeState>,
+    pub(crate) bridge_state: Option<BridgeState>,
     /// Which IPC slot was taken. Anything but 0 means we see nothing.
-    slot: Option<u8>,
+    pub(crate) slot: Option<u8>,
 }
 
 /// The payload of every [`PRESENCE_EVENT`].
@@ -425,5 +426,5 @@ async fn fetch_json(http: &reqwest::Client, url: &str) -> Option<serde_json::Val
 }
 
 fn emit(app: &Host, snapshot: PresenceSnapshot) {
-    let _ = app.emit(PRESENCE_EVENT, snapshot);
+    app.send(CoreEvent::RichPresenceChanged(snapshot));
 }

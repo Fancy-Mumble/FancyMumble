@@ -22,6 +22,7 @@ use mumble_protocol::audio::mixer::{JitterConfig, SpeakerBuffer, SpeakerBuffers,
 use mumble_protocol::audio::sample::AudioFormat;
 
 use crate::audio::{AudioDeviceFactory, MixingPlayback, PlatformAudioFactory};
+use crate::state::core_event::CoreEvent;
 
 use super::types::{AudioSettings, VoiceReplayState};
 use crate::state::host::Host;
@@ -248,5 +249,5 @@ fn elapsed_ms(start: Instant) -> u32 {
 }
 
 fn emit_state(app: &Host, state: VoiceReplayState) {
-    let _ = app.emit("voice-replay-state", state);
+    app.send(CoreEvent::VoiceReplayState(state));
 }

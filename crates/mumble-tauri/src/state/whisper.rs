@@ -45,6 +45,7 @@ use mumble_protocol::command;
 
 use super::AppState;
 use super::types::VoiceState;
+use crate::state::core_event::CoreEvent;
 
 /// The highest slot a client may register. 0 is normal speech and 31 the
 /// server loopback; neither can be reassigned.
@@ -316,11 +317,11 @@ impl AppState {
     /// press often lands while the window that draws the indicator is not the
     /// focused one.
     fn emit_whisper_state(&self, active: bool) {
-        self.emit_to_view(WHISPER_STATE_EVENT, active);
+        self.tell_view(CoreEvent::WhisperState(active));
     }
 
     fn emit_whisper_denials(&self, payload: WhisperDenials) {
-        self.emit_to_view(WHISPER_DENIALS_EVENT, payload);
+        self.tell_view(CoreEvent::WhisperDenials(payload));
     }
 }
 

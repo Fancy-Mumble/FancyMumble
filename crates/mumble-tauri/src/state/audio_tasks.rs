@@ -23,6 +23,7 @@ use super::calibration::{
 };
 use super::local_talking::LocalTalking;
 use super::types::{MicAmplitudePayload, VoiceActivationCalibrationPayload};
+use crate::state::core_event::CoreEvent;
 use crate::state::host::Host;
 
 // -----------------------------------------------------------------------
@@ -366,7 +367,7 @@ pub(super) async fn mic_test_loop(
             continue;
         }
 
-        let _ = app.emit("mic-amplitude", MicAmplitudePayload { rms, peak });
+        app.send(CoreEvent::MicAmplitude(MicAmplitudePayload { rms, peak }));
 
         if !auto_sensitivity {
             continue;
@@ -385,7 +386,7 @@ pub(super) async fn mic_test_loop(
         };
 
         if let Some(payload) = update_voice_activation_if_changed(&inner, calibration) {
-            let _ = app.emit("voice-activation-calibrated", payload);
+            app.send(CoreEvent::VoiceActivationCalibrated(payload));
         }
     }
 }

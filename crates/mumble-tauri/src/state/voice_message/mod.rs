@@ -34,10 +34,11 @@ use tracing::{debug, warn};
 
 use super::AppState;
 use crate::audio::{AudioDeviceFactory, PlatformAudioFactory};
+use crate::state::core_event::CoreEvent;
 use crate::state::host::Host;
 
 /// The event the recorder reports its progress on.
-const STATE_EVENT: &str = "voice-message-state";
+pub(crate) const STATE_EVENT: &str = "voice-message-state";
 
 /// Samples per Opus packet: 20 ms at 48 kHz.
 const FRAME: usize = 960;
@@ -92,7 +93,7 @@ impl Drop for TransmissionHold {
 /// What the recorder is doing, for the frontend's recording bar.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(tag = "state", rename_all = "camelCase")]
-enum RecorderState {
+pub(crate) enum RecorderState {
     /// Capturing. `level` is the last frame's loudness, 0 to 1.
     #[serde(rename_all = "camelCase")]
     Recording { elapsed_ms: u32, level: f32 },
@@ -214,8 +215,8 @@ fn millis(samples: u64) -> u32 {
     u32::try_from(samples * 1000 / SAMPLE_RATE).unwrap_or(u32::MAX)
 }
 
-fn emit(app: &Host, state: &RecorderState) {
-    let _ = app.emit(STATE_EVENT, state);
+fn emit(app: &Host, state: RecorderState) {
+    app.send(CoreEvent::VoiceMessageState(state));
 }
 
 impl Take {
@@ -227,7 +228,7 @@ impl Take {
             super::audio::emit_capture_error(Some(&self.app), &reason);
             emit(
                 &self.app,
-                &RecorderState::Failed {
+                RecorderState::Failed {
                     reason: reason.clone(),
                 },
             );
@@ -275,7 +276,7 @@ impl Take {
                 last_report = Instant::now();
                 emit(
                     &self.app,
-                    &RecorderState::Recording {
+                    RecorderState::Recording {
                         elapsed_ms: millis(samples),
                         level: levels.last().copied().unwrap_or(0.0),
                     },
@@ -293,7 +294,7 @@ impl Take {
         if reached_limit {
             emit(
                 &self.app,
-                &RecorderState::Limit {
+                RecorderState::Limit {
                     elapsed_ms: millis(samples),
                 },
             );

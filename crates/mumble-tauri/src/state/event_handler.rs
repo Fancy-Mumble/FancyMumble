@@ -242,9 +242,8 @@ impl EventHandler for SessionEventHandler {
                 // mid-utterance change, and runs only with the decode thread
                 // switched off.
                 if talking {
-                    let _ = self
-                        .app
-                        .emit(super::voice_decode::VOICE_CONTEXT_EVENT, (session, context));
+                    self.app
+                        .send(CoreEvent::UserVoiceContext { session, context });
                 }
             }
         }

@@ -13,6 +13,7 @@
 use serde::{Serialize, Serializer};
 use serde_json::value::RawValue;
 
+use super::audio::CaptureState;
 use super::canon_emotes::CanonEmote;
 use super::handler::audit::{AuditResponsePayload, AuditSnapshotPayload};
 use super::handler::custom_reactions_config::CustomReactionPayload;
@@ -35,20 +36,25 @@ use super::handler::scheduled_message::{ScheduledMessageAckPayload, ScheduledMes
 use super::handler::typing_indicator::TypingIndicatorPayload;
 use super::handler::version::ServerVersionPayload;
 use super::handler::watch_sync::WatchSyncPayload;
+#[cfg(not(target_os = "android"))]
+use super::presence::PresenceSnapshot;
 use super::sessions::ServerId;
 use super::types::{
     AccountAck, AccountSettings, AclPayload, AudioTransportPayload, AuditConfigSnapshot,
     AuditEntryPayload, BanEntryPayload, ChannelDeniedPayload, CryptoStatsPayload,
     CurrentChannelPayload, CustodianPinPayload, DisconnectedPayload, DmUnreadPayload,
     KeyHoldersChangedPayload, KeyShareRequestPayload, KeyShareRequestsChangedPayload,
-    LatencyPayload, ListenDeniedPayload, NewDmPayload, NewMessagePayload, OnboardingConfig,
-    OnboardingResponse, PchatFetchCompletePayload, PchatHistoryLoadingPayload,
+    LatencyPayload, ListenDeniedPayload, MicAmplitudePayload, NewDmPayload, NewMessagePayload,
+    OnboardingConfig, OnboardingResponse, PchatFetchCompletePayload, PchatHistoryLoadingPayload,
     PchatKeyRevokedPayload, PchatSendRejectedPayload, PermissionDeniedPayload, PinDeliverPayload,
     PinFetchResponsePayload, PluginDataPayload, PluginRegistryEntryPayload, ReactionDeliverPayload,
     ReactionFetchResponsePayload, RegisteredUserPayload, RejectedPayload, ServerLogEntry,
     ServerSettingsSnapshot, SignalBridgeErrorPayload, UnreadPayload, UploadProgressPayload,
-    UserCommentPayload, UserStatsPayload, VoiceState, WebRtcSignalPayload,
+    UserCommentPayload, UserStatsPayload, VoiceActivationCalibrationPayload, VoiceReplayState,
+    VoiceState, WebRtcSignalPayload,
 };
+use super::voice_message::RecorderState;
+use super::whisper::WhisperDenials;
 
 /// Something that happened in the engine that a view may want to show.
 pub(crate) enum CoreEvent {
@@ -224,6 +230,30 @@ pub(crate) enum CoreEvent {
     OnboardingConfig(OnboardingConfig),
     /// The user's own onboarding answers, or `None` if they gave none.
     OnboardingResponse(Option<OnboardingResponse>),
+    /// How loud the microphone is, while a view is testing it.
+    MicAmplitude(MicAmplitudePayload),
+    /// Voice activation settled on new thresholds for this microphone.
+    VoiceActivationCalibrated(VoiceActivationCalibrationPayload),
+    /// The "hear yourself" replay started recording, started playing or stopped.
+    VoiceReplayState(VoiceReplayState),
+    /// The channels the server will not let the user whisper to.
+    WhisperDenials(WhisperDenials),
+    /// How a voice message recording is going.
+    VoiceMessageState(RecorderState),
+    /// Which voice target a talking user is speaking to (a whisper, a shout).
+    UserVoiceContext {
+        /// The session that is talking.
+        session: u32,
+        /// The voice target of its current utterance.
+        context: u8,
+    },
+    /// The microphone could not be opened; `None` once it opens again.
+    CaptureError(Option<CaptureState>),
+    /// The whisper key went down or came up.
+    WhisperState(bool),
+    /// What the user is playing, as Discord-style rich presence reports it.
+    #[cfg(not(target_os = "android"))]
+    RichPresenceChanged(PresenceSnapshot),
     /// An event that has not been given a variant yet: its wire name and its
     /// payload, already written out as JSON.
     Untyped {
@@ -336,6 +366,16 @@ impl CoreEvent {
             Self::AccountSettings(_) => "account-settings",
             Self::OnboardingConfig(_) => "onboarding-config",
             Self::OnboardingResponse(_) => "onboarding-response",
+            Self::MicAmplitude(_) => "mic-amplitude",
+            Self::VoiceActivationCalibrated(_) => "voice-activation-calibrated",
+            Self::VoiceReplayState(_) => "voice-replay-state",
+            Self::WhisperDenials(_) => super::whisper::WHISPER_DENIALS_EVENT,
+            Self::VoiceMessageState(_) => super::voice_message::STATE_EVENT,
+            Self::UserVoiceContext { .. } => super::voice_decode::VOICE_CONTEXT_EVENT,
+            Self::CaptureError(_) => super::audio::CAPTURE_ERROR_EVENT,
+            Self::WhisperState(_) => super::whisper::WHISPER_STATE_EVENT,
+            #[cfg(not(target_os = "android"))]
+            Self::RichPresenceChanged(_) => super::presence::PRESENCE_EVENT,
             Self::Untyped { name, .. } => name,
         }
     }
@@ -418,6 +458,11 @@ impl CoreEvent {
                 | Self::AccountSettings(_)
                 | Self::OnboardingConfig(_)
                 | Self::OnboardingResponse(_)
+                | Self::MicAmplitude(_)
+                | Self::VoiceActivationCalibrated(_)
+                | Self::VoiceReplayState(_)
+                | Self::WhisperDenials(_)
+                | Self::VoiceMessageState(_)
         )
     }
 }
@@ -510,6 +555,16 @@ impl Serialize for CoreEvent {
             Self::AccountSettings(settings) => keyed(serializer, "settings", settings),
             Self::OnboardingConfig(config) => keyed(serializer, "config", config),
             Self::OnboardingResponse(response) => keyed(serializer, "response", response),
+            Self::MicAmplitude(payload) => payload.serialize(serializer),
+            Self::VoiceActivationCalibrated(payload) => payload.serialize(serializer),
+            Self::VoiceReplayState(payload) => payload.serialize(serializer),
+            Self::WhisperDenials(payload) => payload.serialize(serializer),
+            Self::VoiceMessageState(payload) => payload.serialize(serializer),
+            Self::UserVoiceContext { session, context } => (session, context).serialize(serializer),
+            Self::CaptureError(state) => state.serialize(serializer),
+            Self::WhisperState(active) => active.serialize(serializer),
+            #[cfg(not(target_os = "android"))]
+            Self::RichPresenceChanged(snapshot) => snapshot.serialize(serializer),
             Self::Untyped { payload, .. } => payload.serialize(serializer),
         }
     }
@@ -2223,6 +2278,172 @@ mod tests {
         assert_eq!(
             wire(None, CoreEvent::OnboardingResponse(None)),
             ("onboarding-response", json!({ "response": null }))
+        );
+    }
+
+    #[test]
+    fn voice_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        use crate::state::whisper::WhisperRefusal;
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::MicAmplitude(MicAmplitudePayload {
+                    rms: 0.5,
+                    peak: 1.0,
+                })
+            ),
+            ("mic-amplitude", json!({ "rms": 0.5, "peak": 1.0 }))
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::VoiceActivationCalibrated(VoiceActivationCalibrationPayload {
+                    vad_threshold: 0.5,
+                    noise_gate_close_ratio: 0.25,
+                    hold_frames: 8,
+                    max_gain_db: 12.0,
+                })
+            ),
+            (
+                "voice-activation-calibrated",
+                json!({
+                    "vad_threshold": 0.5,
+                    "noise_gate_close_ratio": 0.25,
+                    "hold_frames": 8,
+                    "max_gain_db": 12.0,
+                })
+            )
+        );
+        assert_eq!(
+            wire(None, CoreEvent::VoiceReplayState(VoiceReplayState::Idle)),
+            ("voice-replay-state", json!({ "phase": "idle" }))
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::VoiceReplayState(VoiceReplayState::Playing {
+                    elapsed_ms: 5,
+                    total_ms: 10,
+                })
+            ),
+            (
+                "voice-replay-state",
+                json!({ "phase": "playing", "elapsed_ms": 5, "total_ms": 10 })
+            )
+        );
+        assert_eq!(
+            wire(
+                Some(ServerId::new()),
+                CoreEvent::UserVoiceContext {
+                    session: 9,
+                    context: 2,
+                }
+            ),
+            ("user-voice-context", json!([9, 2]))
+        );
+        assert_eq!(
+            wire(None, CoreEvent::WhisperState(true)),
+            ("whisper-state", json!(true))
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::WhisperDenials(WhisperDenials {
+                    denied_channels: vec![3],
+                    latest: Some(WhisperRefusal {
+                        channel_id: 3,
+                        reason: None,
+                    }),
+                })
+            ),
+            (
+                "whisper-denials",
+                json!({
+                    "deniedChannels": [3],
+                    "latest": { "channelId": 3, "reason": null },
+                })
+            )
+        );
+    }
+
+    #[test]
+    fn recorder_and_capture_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        assert_eq!(
+            wire(None, CoreEvent::CaptureError(None)),
+            ("capture-error", json!(null))
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::CaptureError(Some(CaptureState {
+                    kind: "device_busy".to_owned(),
+                    message: "in use".to_owned(),
+                    holders: vec!["obs".to_owned()],
+                }))
+            ),
+            (
+                "capture-error",
+                json!({ "kind": "device_busy", "message": "in use", "holders": ["obs"] })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::VoiceMessageState(RecorderState::Recording {
+                    elapsed_ms: 5,
+                    level: 0.5,
+                })
+            ),
+            (
+                "voice-message-state",
+                json!({ "state": "recording", "elapsedMs": 5, "level": 0.5 })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::VoiceMessageState(RecorderState::Failed {
+                    reason: "no mic".to_owned(),
+                })
+            ),
+            (
+                "voice-message-state",
+                json!({ "state": "failed", "reason": "no mic" })
+            )
+        );
+    }
+
+    #[cfg(not(target_os = "android"))]
+    #[test]
+    fn the_presence_event_keeps_its_wire_format() {
+        use serde_json::json;
+
+        use crate::state::presence::PresenceStatus;
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::RichPresenceChanged(PresenceSnapshot {
+                    status: PresenceStatus {
+                        enabled: true,
+                        bridge_state: None,
+                        slot: Some(0),
+                    },
+                    entries: Vec::new(),
+                })
+            ),
+            (
+                "rich-presence-changed",
+                json!({
+                    "status": { "enabled": true, "bridgeState": null, "slot": 0 },
+                    "entries": [],
+                })
+            )
         );
     }
 

@@ -52,8 +52,6 @@ mod tests;
 
 use std::sync::{Arc, Mutex};
 
-use serde::Serialize;
-
 use mumble_protocol::message::ControlMessage;
 
 use super::SharedState;
@@ -119,13 +117,6 @@ pub(crate) struct HandlerContext {
 }
 
 impl HandlerContext {
-    /// Emit a typed event payload to the frontend.
-    pub fn emit<S: Serialize>(&self, event: &'static str, payload: S) {
-        if let Ok(val) = serde_json::to_value(payload) {
-            self.emitter.emit_json(event, val);
-        }
-    }
-
     /// Tell the view that `event` happened.
     pub fn send(&self, event: CoreEvent) {
         self.emitter.emit_event(event);

@@ -34,11 +34,11 @@ pub(crate) fn is_device_busy(err: &str) -> bool {
 #[derive(Clone, serde::Serialize)]
 pub(crate) struct CaptureState {
     /// `"device_busy"` or `"other"`.
-    kind: String,
+    pub(crate) kind: String,
     /// Raw error message.
-    message: String,
+    pub(crate) message: String,
     /// Other apps holding the microphone (best-effort, Windows + Linux).
-    holders: Vec<String>,
+    pub(crate) holders: Vec<String>,
 }
 
 /// Process-wide slot holding the latest capture state, so a component that
@@ -90,7 +90,7 @@ pub(crate) fn emit_capture_error(app: Option<&Host>, err: &str) {
         *slot = Some(state.clone());
     }
     if let Some(app) = app {
-        let _ = app.emit(CAPTURE_ERROR_EVENT, &state);
+        app.send(CoreEvent::CaptureError(Some(state)));
     }
 }
 
@@ -100,7 +100,7 @@ pub(crate) fn clear_capture_error(app: Option<&Host>) {
         *slot = None;
     }
     if let Some(app) = app {
-        let _ = app.emit(CAPTURE_ERROR_EVENT, serde_json::Value::Null);
+        app.send(CoreEvent::CaptureError(None));
     }
 }
 
@@ -238,6 +238,8 @@ pub(super) fn voice_message_filters(
 mod voice_pipeline {
     use std::sync::Arc;
     use std::sync::atomic::AtomicU32;
+
+    use crate::state::core_event::CoreEvent;
     use std::time::Duration;
 
     use tracing::info;
@@ -1176,7 +1178,7 @@ mod voice_pipeline {
             };
 
             if let Some(payload) = payload {
-                self.emit_to_view("voice-activation-calibrated", payload);
+                self.tell_view(CoreEvent::VoiceActivationCalibrated(payload));
             }
 
             Ok(calibration.vad_threshold)

@@ -4,7 +4,7 @@ use tracing::info;
 use super::{HandleMessage, HandlerContext};
 use crate::state::core_event::CoreEvent;
 use crate::state::types::{ChannelDeniedPayload, ListenDeniedPayload, PermissionDeniedPayload};
-use crate::state::whisper::{WHISPER_DENIALS_EVENT, WhisperDenials, WhisperRefusal};
+use crate::state::whisper::{WhisperDenials, WhisperRefusal};
 
 impl HandleMessage for mumble_tcp::PermissionDenied {
     fn handle(&self, ctx: &HandlerContext) {
@@ -32,16 +32,13 @@ impl HandleMessage for mumble_tcp::PermissionDenied {
                 }
                 Err(_) => vec![ch_id],
             };
-            ctx.emit(
-                WHISPER_DENIALS_EVENT,
-                WhisperDenials {
-                    denied_channels,
-                    latest: Some(WhisperRefusal {
-                        channel_id: ch_id,
-                        reason: self.reason.clone(),
-                    }),
-                },
-            );
+            ctx.send(CoreEvent::WhisperDenials(WhisperDenials {
+                denied_channels,
+                latest: Some(WhisperRefusal {
+                    channel_id: ch_id,
+                    reason: self.reason.clone(),
+                }),
+            }));
             ctx.send(CoreEvent::PermissionDenied(PermissionDeniedPayload {
                 deny_type: self.r#type,
                 reason: self.reason.clone(),

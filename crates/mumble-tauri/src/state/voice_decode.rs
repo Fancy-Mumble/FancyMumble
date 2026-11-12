@@ -18,6 +18,7 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
 
+use crate::state::core_event::CoreEvent;
 use crate::state::host::Host;
 use mumble_protocol::audio::encoder::EncodedPacket;
 use mumble_protocol::audio::mixer::{AudioMixer, JitterConfig};
@@ -328,7 +329,8 @@ impl Decoder {
             return;
         }
         if self.contexts.insert(session, context) != Some(context) {
-            let _ = self.app.emit(VOICE_CONTEXT_EVENT, (session, context));
+            self.app
+                .send(CoreEvent::UserVoiceContext { session, context });
         }
     }
 
