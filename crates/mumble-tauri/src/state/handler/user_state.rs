@@ -6,6 +6,7 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::info;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::types::{
     CurrentChannelPayload, PRESENCE_HIDDEN_CHANNEL, ServerLogEntry, UserEntry, VoiceState,
     blob_marker,
@@ -57,7 +58,7 @@ impl HandleMessage for mumble_tcp::UserState {
             // Avatars and comments are both fetched lazily on first view
             // (`get_user_texture` / `get_user_comment`), so a post-sync update
             // just records the existence markers (above) and notifies the UI.
-            ctx.emit_empty("state-changed");
+            ctx.send(CoreEvent::StateChanged);
         }
     }
 }
@@ -300,10 +301,9 @@ fn handle_remote_channel_move(shared: &Arc<Mutex<SharedState>>, ch: u32) {
 }
 
 fn handle_own_channel_change(ctx: &HandlerContext, ch: u32) {
-    ctx.emit(
-        "current-channel-changed",
-        CurrentChannelPayload { channel_id: ch },
-    );
+    ctx.send(CoreEvent::CurrentChannelChanged(CurrentChannelPayload {
+        channel_id: ch,
+    }));
 
     #[cfg(target_os = "android")]
     {

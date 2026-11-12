@@ -10,6 +10,7 @@ use mumble_protocol::persistent::PchatProtocol;
 
 use super::types::ChatMessage;
 use super::{AppState, FetchWalk, SharedState, pchat};
+use crate::state::core_event::CoreEvent;
 use crate::state::host::Host;
 
 struct OwnMessageData {
@@ -61,13 +62,12 @@ fn emit_plugin_messages(host: Option<&Host>, channels: Vec<u32>) {
         return;
     };
     for channel_id in channels {
-        let _ = host.emit(
-            "new-message",
+        host.send(CoreEvent::NewMessage(
             crate::state::types::NewMessagePayload {
                 channel_id,
                 sender_session: None,
             },
-        );
+        ));
     }
 }
 

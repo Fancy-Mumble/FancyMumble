@@ -16,6 +16,7 @@ use mumble_protocol::event::EventHandler;
 use mumble_protocol::message::{ControlMessage, UdpMessage};
 
 use super::SharedState;
+use super::core_event::{CoreEvent, lacks_server_id, stamp_server_id};
 use super::handler::{self, EventEmitter, HandlerContext};
 use super::types::*;
 
@@ -31,22 +32,23 @@ struct HostEmitter {
 }
 
 impl HostEmitter {
-    fn active_server_id(&self) -> Option<String> {
-        self.shared
-            .lock()
-            .ok()
-            .and_then(|g| g.server_id.map(|id| id.to_string()))
+    fn active_server(&self) -> Option<super::sessions::ServerId> {
+        self.shared.lock().ok().and_then(|g| g.server_id)
     }
 }
 
 impl EventEmitter for HostEmitter {
-    fn emit_json(&self, event: &str, mut payload: serde_json::Value) {
+    fn emit_json(&self, event: &'static str, mut payload: serde_json::Value) {
         if lacks_server_id(&payload)
-            && let Some(id) = self.active_server_id()
+            && let Some(id) = self.active_server()
         {
-            stamp_server_id(&mut payload, id);
+            stamp_server_id(&mut payload, id.to_string());
         }
         let _ = self.host.emit(event, payload);
+    }
+
+    fn emit_event(&self, event: CoreEvent) {
+        self.host.send_for(self.active_server(), event);
     }
 
     fn request_user_attention(&self) {
@@ -301,13 +303,10 @@ impl EventHandler for SessionEventHandler {
         } else {
             Some("Connection to server was lost.".to_string())
         };
-        let _ = self.app.emit(
-            "server-disconnected",
-            DisconnectedPayload {
-                server_id: Some(self.server_id.to_string()),
-                reason,
-            },
-        );
+        self.app.send(CoreEvent::Disconnected(DisconnectedPayload {
+            server_id: Some(self.server_id.to_string()),
+            reason,
+        }));
 
         // Stop Android foreground service now that we are disconnected.
         #[cfg(target_os = "android")]
@@ -349,67 +348,5 @@ impl EventHandler for SessionEventHandler {
             },
         };
         let _ = self.app.emit("crypto-stats", payload);
-    }
-}
-
-/// Stamp the active session's `serverId` onto a JSON object payload.
-///
-/// Replaces missing OR explicitly-null `serverId` fields.  Payloads
-/// serialised from `Option<String>::None` produce `"serverId": null`,
-/// which would otherwise prevent the frontend from routing the event
-/// to the correct tab.
-fn stamp_server_id(payload: &mut serde_json::Value, id: impl Into<String>) {
-    if !lacks_server_id(payload) {
-        return;
-    }
-    if let Some(obj) = payload.as_object_mut() {
-        let _ = obj.insert("serverId".to_owned(), serde_json::Value::String(id.into()));
-    }
-}
-
-/// Whether `payload` is an object that does not yet say which server it is
-/// about. Anything else is forwarded as it is, so there is nothing to look up
-/// for it.
-fn lacks_server_id(payload: &serde_json::Value) -> bool {
-    payload
-        .as_object()
-        .is_some_and(|obj| obj.get("serverId").is_none_or(serde_json::Value::is_null))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::stamp_server_id;
-    use serde_json::json;
-
-    #[test]
-    fn stamps_when_field_missing() {
-        let mut payload = json!({ "reason": "boom" });
-        stamp_server_id(&mut payload, "srv-1");
-        assert_eq!(payload["serverId"], json!("srv-1"));
-    }
-
-    #[test]
-    fn stamps_when_field_is_null() {
-        // Reproduces the kick-path bug: payload was serialised from
-        // `Option<String>::None`, producing `"serverId": null`.  The
-        // emitter must overwrite the null with the active server id so
-        // the frontend can route the event to the correct tab.
-        let mut payload = json!({ "serverId": null, "reason": "kicked" });
-        stamp_server_id(&mut payload, "srv-1");
-        assert_eq!(payload["serverId"], json!("srv-1"));
-    }
-
-    #[test]
-    fn preserves_existing_non_null_id() {
-        let mut payload = json!({ "serverId": "srv-2", "reason": "x" });
-        stamp_server_id(&mut payload, "srv-1");
-        assert_eq!(payload["serverId"], json!("srv-2"));
-    }
-
-    #[test]
-    fn ignores_non_object_payload() {
-        let mut payload = json!("just a string");
-        stamp_server_id(&mut payload, "srv-1");
-        assert_eq!(payload, json!("just a string"));
     }
 }

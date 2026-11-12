@@ -2,6 +2,7 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::{debug, warn};
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 
 /// `SubscribePush` permission bit (0x2000).
 const PERM_SUBSCRIBE_PUSH: u32 = 0x2000;
@@ -41,7 +42,7 @@ impl HandleMessage for mumble_tcp::PermissionQuery {
                 }
             }
             // Notify the frontend that channel data changed.
-            ctx.emit_empty("state-changed");
+            ctx.send(CoreEvent::StateChanged);
         } else if self.channel_id.is_some() && self.permissions.is_none() {
             warn!(
                 channel_id = ?self.channel_id,

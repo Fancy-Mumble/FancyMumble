@@ -57,14 +57,27 @@ use serde::Serialize;
 use mumble_protocol::message::ControlMessage;
 
 use super::SharedState;
+use super::core_event::CoreEvent;
 
 /// Abstraction over frontend event emission.
 ///
 /// In production this wraps a `Host`; in tests it records
 /// emitted events for assertion.
 pub(crate) trait EventEmitter: Send + Sync {
-    /// Emit a serialised event to the frontend.
-    fn emit_json(&self, event: &str, payload: serde_json::Value);
+    /// Emit an event that has no [`CoreEvent`] variant yet, as its wire name
+    /// and JSON payload.
+    fn emit_json(&self, event: &'static str, payload: serde_json::Value);
+
+    /// Emit a typed event.
+    ///
+    /// The default writes it out under its wire name, which is all an emitter
+    /// that records or forwards JSON needs; the emitter that talks to the
+    /// host passes the event on as it is.
+    fn emit_event(&self, event: CoreEvent) {
+        if let Ok(payload) = serde_json::to_value(&event) {
+            self.emit_json(event.name(), payload);
+        }
+    }
 
     /// Flash the taskbar / request user attention (desktop-only, no-op elsewhere).
     fn request_user_attention(&self);
@@ -107,15 +120,20 @@ pub(crate) struct HandlerContext {
 
 impl HandlerContext {
     /// Emit a typed event payload to the frontend.
-    pub fn emit<S: Serialize>(&self, event: &str, payload: S) {
+    pub fn emit<S: Serialize>(&self, event: &'static str, payload: S) {
         if let Ok(val) = serde_json::to_value(payload) {
             self.emitter.emit_json(event, val);
         }
     }
 
     /// Emit an event with an empty (`null`) payload.
-    pub fn emit_empty(&self, event: &str) {
+    pub fn emit_empty(&self, event: &'static str) {
         self.emitter.emit_json(event, serde_json::Value::Null);
+    }
+
+    /// Tell the view that `event` happened.
+    pub fn send(&self, event: CoreEvent) {
+        self.emitter.emit_event(event);
     }
 
     /// Whether a native media peer took this WebRTC signal for itself.

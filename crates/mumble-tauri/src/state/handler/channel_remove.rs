@@ -2,6 +2,7 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::pchat;
 
 impl HandleMessage for mumble_tcp::ChannelRemove {
@@ -40,6 +41,6 @@ impl HandleMessage for mumble_tcp::ChannelRemove {
                 .retain(|p| p.channel_id != self.channel_id);
         }
 
-        ctx.emit_empty("state-changed");
+        ctx.send(CoreEvent::StateChanged);
     }
 }

@@ -13,8 +13,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
-use serde_json::value::RawValue;
 
+use super::core_event::{CoreEvent, Event};
+use super::sessions::ServerId;
 use super::{AppState, SharedState};
 
 /// A change to the service that keeps a voice connection alive while the app
@@ -46,14 +47,15 @@ pub(crate) enum VoiceService<'a> {
 
 /// Where the engine's events go: the view.
 pub(crate) trait EventSink: Send + Sync + 'static {
-    /// Deliver `event` to the view. `payload` is its JSON, already written
-    /// out: the engine serialises each payload exactly once, and a sink that
-    /// forwards JSON passes it on without parsing it again.
+    /// Deliver `event` to the view.
+    ///
+    /// A native view matches on [`Event::kind`] and takes the payload as the
+    /// value it is; a view that speaks JSON calls [`Event::into_wire`].
     ///
     /// Delivery is best effort. A view that is not listening, or not up yet,
     /// simply misses the event, exactly as a webview that has not mounted
     /// does.
-    fn emit_json(&self, event: &str, payload: Box<RawValue>);
+    fn emit(&self, event: Event);
 }
 
 /// Where the application keeps its files.
@@ -212,7 +214,24 @@ impl Host {
         })
     }
 
-    /// Serialise `payload` and deliver it to the view as `event`.
+    /// Tell the view that `event` happened.
+    pub(crate) fn send(&self, event: CoreEvent) {
+        self.0.events.emit(Event {
+            server: None,
+            kind: event,
+        });
+    }
+
+    /// Tell the view that `event` happened on the session `server`.
+    pub(crate) fn send_for(&self, server: Option<ServerId>, event: CoreEvent) {
+        self.0.events.emit(Event {
+            server,
+            kind: event,
+        });
+    }
+
+    /// Deliver an event that has no [`CoreEvent`] variant yet, under its wire
+    /// name `event`.
     ///
     /// # Errors
     ///
@@ -220,12 +239,10 @@ impl Host {
     /// effort and never fails.
     pub(crate) fn emit<S: Serialize>(
         &self,
-        event: &str,
+        event: &'static str,
         payload: S,
     ) -> Result<(), serde_json::Error> {
-        self.0
-            .events
-            .emit_json(event, serde_json::value::to_raw_value(&payload)?);
+        self.send(CoreEvent::untyped(event, payload)?);
         Ok(())
     }
 
@@ -315,8 +332,9 @@ pub(crate) fn host_of(shared: &Mutex<SharedState>) -> Option<Host> {
     shared.lock().ok().and_then(|state| state.conn.host.clone())
 }
 
-/// Send `event` to the view of the session behind `shared`, if it has one.
-pub(crate) fn emit_for<S: Serialize>(shared: &Mutex<SharedState>, event: &str, payload: S) {
+/// Send an event that has no [`CoreEvent`] variant yet to the view of the
+/// session behind `shared`, if it has one.
+pub(crate) fn emit_for<S: Serialize>(shared: &Mutex<SharedState>, event: &'static str, payload: S) {
     if let Some(host) = host_of(shared) {
         let _ = host.emit(event, payload);
     }

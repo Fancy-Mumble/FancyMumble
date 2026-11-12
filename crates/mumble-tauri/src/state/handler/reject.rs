@@ -1,6 +1,7 @@
 use mumble_protocol::proto::mumble_tcp;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::types::{ConnectionStatus, RejectedPayload};
 
 impl HandleMessage for mumble_tcp::Reject {
@@ -18,13 +19,10 @@ impl HandleMessage for mumble_tcp::Reject {
             }
             _ => None,
         };
-        ctx.emit(
-            "connection-rejected",
-            RejectedPayload {
-                server_id,
-                reason,
-                reject_type: self.r#type,
-            },
-        );
+        ctx.send(CoreEvent::ConnectionRejected(RejectedPayload {
+            server_id,
+            reason,
+            reject_type: self.r#type,
+        }));
     }
 }

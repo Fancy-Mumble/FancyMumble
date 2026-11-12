@@ -9,6 +9,7 @@ use mumble_protocol::proto::fancy;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::read_sync::{self, Read};
 use crate::state::records::RecordOutcome;
 use crate::state::types::{DmUnreadPayload, UnreadPayload};
@@ -76,10 +77,12 @@ fn changed_elsewhere(record: &fancy::domain::Record, ctx: &HandlerContext) {
         });
         match cleared {
             Some((Read::Channel(_), (channel, _))) => {
-                ctx.emit("unread-changed", UnreadPayload { unreads: channel });
+                ctx.send(CoreEvent::UnreadChanged(UnreadPayload { unreads: channel }));
             }
             Some((Read::Direct(_), (_, direct))) => {
-                ctx.emit("dm-unread-changed", DmUnreadPayload { unreads: direct });
+                ctx.send(CoreEvent::DmUnreadChanged(DmUnreadPayload {
+                    unreads: direct,
+                }));
             }
             None => {}
         }

@@ -7,6 +7,7 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::{debug, info, warn};
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 #[cfg(target_os = "android")]
 use crate::state::host::Host;
 use crate::state::local_cache::{CachedReaction, CachedTail};
@@ -42,16 +43,15 @@ impl HandleMessage for mumble_tcp::ServerSync {
         let Some((_sessions, initial_channel)) = ctx.apply_sync_state(self) else {
             return;
         };
-        ctx.emit_empty("server-connected");
+        ctx.send(CoreEvent::Connected);
 
         #[cfg(target_os = "android")]
         ctx.start_android_service(initial_channel);
 
         if let Some(ch) = initial_channel {
-            ctx.emit(
-                "current-channel-changed",
-                CurrentChannelPayload { channel_id: ch },
-            );
+            ctx.send(CoreEvent::CurrentChannelChanged(CurrentChannelPayload {
+                channel_id: ch,
+            }));
         }
 
         ctx.request_channel_descriptions();

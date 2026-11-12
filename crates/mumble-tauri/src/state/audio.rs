@@ -7,6 +7,7 @@
 
 use super::AppState;
 use super::types::VoiceState;
+use crate::state::core_event::CoreEvent;
 use crate::state::host::Host;
 
 // -- Capture-error surfacing ---------------------------------------
@@ -62,7 +63,7 @@ pub(crate) const USER_TALKING_EVENT: &str = "user-talking";
 
 /// Tell the view that `session` started or stopped talking.
 pub(crate) fn emit_user_talking(host: &Host, session: u32, talking: bool) {
-    let _ = host.emit(USER_TALKING_EVENT, (session, talking));
+    host.send(CoreEvent::UserTalking { session, talking });
 }
 
 pub(crate) fn emit_capture_error(app: Option<&Host>, err: &str) {
@@ -195,7 +196,7 @@ impl AppState {
 
     /// Emit voice-state-changed event to the frontend.
     pub(super) fn emit_voice_state(&self) {
-        self.emit_to_view("voice-state-changed", self.voice_state());
+        self.tell_view(CoreEvent::VoiceStateChanged(self.voice_state()));
     }
 
     /// Set the local playback volume for a specific remote user.

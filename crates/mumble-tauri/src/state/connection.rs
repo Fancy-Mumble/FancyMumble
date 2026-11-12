@@ -14,6 +14,7 @@ use super::event_handler::SessionEventHandler;
 use super::sessions::ServerId;
 use super::types::*;
 use super::{AppState, SharedState};
+use crate::state::core_event::CoreEvent;
 
 /// What a login presents besides the name: the server or account password, a
 /// second factor, and an invite code.
@@ -79,7 +80,7 @@ impl AppState {
         init_identity(&inner, &app_handle, &cert_label);
 
         // Emit status change so the frontend can show a loading screen immediately.
-        let _ = app_handle.emit("status-changed", "connecting");
+        app_handle.send(CoreEvent::Connecting);
 
         // Spawn the actual connection work in the background so we don't
         // block the Tauri command (which freezes the webview).
@@ -515,21 +516,15 @@ async fn handle_connect_result(
 /// to the correct tab without affecting other sessions.
 fn emit_session_rejected(app_handle: &Host, server_id: ServerId, reason: String) {
     let id = server_id.to_string();
-    let _ = app_handle.emit(
-        "connection-rejected",
-        serde_json::json!({
-            "serverId": id.clone(),
-            "reason": reason.clone(),
-            "reject_type": serde_json::Value::Null,
-        }),
-    );
-    let _ = app_handle.emit(
-        "server-disconnected",
-        DisconnectedPayload {
-            server_id: Some(id),
-            reason: Some(reason),
-        },
-    );
+    app_handle.send(CoreEvent::ConnectionRejected(RejectedPayload {
+        server_id: Some(id.clone()),
+        reason: reason.clone(),
+        reject_type: None,
+    }));
+    app_handle.send(CoreEvent::Disconnected(DisconnectedPayload {
+        server_id: Some(id),
+        reason: Some(reason),
+    }));
 }
 
 /// Clear connection handles and set status to `Disconnected`.

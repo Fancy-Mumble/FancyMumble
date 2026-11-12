@@ -33,8 +33,15 @@ impl TauriHost {
 }
 
 impl EventSink for TauriHost {
-    fn emit_json(&self, event: &str, payload: Box<serde_json::value::RawValue>) {
-        let _ = self.app.emit(event, payload);
+    fn emit(&self, event: crate::state::core_event::Event) {
+        // The webview listens for names and JSON, so every event is written
+        // out in the shape its frontend has always received.
+        match event.into_wire() {
+            Ok((name, payload)) => {
+                let _ = self.app.emit(name, payload);
+            }
+            Err(error) => tracing::warn!("an event could not be written out as JSON: {error}"),
+        }
     }
 }
 

@@ -3,6 +3,7 @@
 use mumble_protocol::command;
 
 use super::AppState;
+use crate::state::core_event::CoreEvent;
 
 impl AppState {
     /// Set the user's comment on the connected server.
@@ -27,7 +28,7 @@ impl AppState {
                         user.comment = (!comment.is_empty()).then_some(comment);
                         Some(())
                     });
-                    self.emit_to_view("state-changed", ());
+                    self.tell_view(CoreEvent::StateChanged);
                 }
                 Ok(())
             }
@@ -57,7 +58,7 @@ impl AppState {
                         user.texture = (!texture.is_empty()).then_some(texture);
                         Some(())
                     });
-                    self.emit_to_view("state-changed", ());
+                    self.tell_view(CoreEvent::StateChanged);
                 }
                 Ok(())
             }

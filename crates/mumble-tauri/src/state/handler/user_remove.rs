@@ -2,6 +2,7 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::info;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::types::*;
 
 impl HandleMessage for mumble_tcp::UserRemove {
@@ -42,24 +43,18 @@ fn handle_self_kicked(msg: &mumble_tcp::UserRemove, ctx: &HandlerContext) {
         #[cfg(not(target_os = "android"))]
         stop_audio_pipelines(&mut state);
     }
-    ctx.emit(
-        "connection-rejected",
-        RejectedPayload {
-            server_id: None,
-            reason: reason.clone(),
-            reject_type: None,
-        },
-    );
+    ctx.send(CoreEvent::ConnectionRejected(RejectedPayload {
+        server_id: None,
+        reason: reason.clone(),
+        reject_type: None,
+    }));
     // server_id stays set on shared state until the connect helper tears the
     // session down; the TauriEmitter will stamp `serverId` onto the object
     // payload so the frontend can route the event.
-    ctx.emit(
-        "server-disconnected",
-        DisconnectedPayload {
-            server_id: None,
-            reason: Some(reason),
-        },
-    );
+    ctx.send(CoreEvent::Disconnected(DisconnectedPayload {
+        server_id: None,
+        reason: Some(reason),
+    }));
 }
 
 /// Another user left: drop their per-session state (audio, pending key
@@ -115,10 +110,10 @@ fn handle_user_departed(msg: &mumble_tcp::UserRemove, ctx: &HandlerContext) {
 
     // Emit outside the lock to avoid deadlock with Tauri IPC.
     if was_talking {
-        ctx.emit(
-            crate::state::audio::USER_TALKING_EVENT,
-            (msg.session, false),
-        );
+        ctx.send(CoreEvent::UserTalking {
+            session: msg.session,
+            talking: false,
+        });
     }
     for (ch_id, remaining) in deferred_share_events {
         ctx.emit(
@@ -129,7 +124,7 @@ fn handle_user_departed(msg: &mumble_tcp::UserRemove, ctx: &HandlerContext) {
             },
         );
     }
-    ctx.emit_empty("state-changed");
+    ctx.send(CoreEvent::StateChanged);
 
     if let Some(name) = departing_name
         && !name.is_empty()

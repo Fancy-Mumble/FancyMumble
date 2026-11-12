@@ -52,7 +52,7 @@ impl MockEmitter {
 }
 
 impl EventEmitter for MockEmitter {
-    fn emit_json(&self, event: &str, payload: Value) {
+    fn emit_json(&self, event: &'static str, payload: Value) {
         self.events
             .lock()
             .unwrap()
@@ -72,7 +72,7 @@ impl EventEmitter for MockEmitter {
 struct ArcEmitter(Arc<MockEmitter>);
 
 impl EventEmitter for ArcEmitter {
-    fn emit_json(&self, event: &str, payload: Value) {
+    fn emit_json(&self, event: &'static str, payload: Value) {
         self.0.emit_json(event, payload);
     }
 

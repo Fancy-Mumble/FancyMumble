@@ -5,6 +5,7 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::{debug, warn};
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::local_cache::{CachedReaction, LocalMessageCache};
 use crate::state::pchat;
 use crate::state::types::{
@@ -64,13 +65,10 @@ impl HandleMessage for mumble_tcp::PchatMessageDeliver {
             )
         };
 
-        ctx.emit(
-            "new-message",
-            NewMessagePayload {
-                channel_id,
-                sender_session,
-            },
-        );
+        ctx.send(CoreEvent::NewMessage(NewMessagePayload {
+            channel_id,
+            sender_session,
+        }));
 
         if unreads_changed {
             let unreads = ctx
@@ -78,7 +76,7 @@ impl HandleMessage for mumble_tcp::PchatMessageDeliver {
                 .lock()
                 .map(|s| s.msgs.channel_unread.clone())
                 .unwrap_or_default();
-            ctx.emit("unread-changed", UnreadPayload { unreads });
+            ctx.send(CoreEvent::UnreadChanged(UnreadPayload { unreads }));
         }
 
         if selected != Some(channel_id) || !app_focused {
@@ -110,7 +108,7 @@ impl HandleMessage for mumble_tcp::PchatMessageDeliver {
             ctx.request_user_attention();
         }
 
-        ctx.emit_empty("state-changed");
+        ctx.send(CoreEvent::StateChanged);
     }
 }
 
@@ -137,14 +135,11 @@ impl HandleMessage for mumble_tcp::PchatFetchResponse {
                 total_stored,
             },
         );
-        ctx.emit(
-            "new-message",
-            NewMessagePayload {
-                channel_id,
-                sender_session: None,
-            },
-        );
-        ctx.emit_empty("state-changed");
+        ctx.send(CoreEvent::NewMessage(NewMessagePayload {
+            channel_id,
+            sender_session: None,
+        }));
+        ctx.send(CoreEvent::StateChanged);
     }
 }
 
@@ -152,7 +147,7 @@ impl HandleMessage for mumble_tcp::PchatKeyAnnounce {
     fn handle(&self, ctx: &HandlerContext) {
         debug!("received PchatKeyAnnounce");
         pchat::handle_proto_key_announce(&ctx.shared, self);
-        ctx.emit_empty("state-changed");
+        ctx.send(CoreEvent::StateChanged);
     }
 }
 
@@ -160,7 +155,7 @@ impl HandleMessage for mumble_tcp::PchatKeyExchange {
     fn handle(&self, ctx: &HandlerContext) {
         debug!("received PchatKeyExchange");
         pchat::handle_proto_key_exchange(&ctx.shared, self);
-        ctx.emit_empty("state-changed");
+        ctx.send(CoreEvent::StateChanged);
     }
 }
 
@@ -168,7 +163,7 @@ impl HandleMessage for mumble_tcp::PchatKeyRequest {
     fn handle(&self, ctx: &HandlerContext) {
         debug!("received PchatKeyRequest");
         pchat::handle_proto_key_request(&ctx.shared, self);
-        ctx.emit_empty("state-changed");
+        ctx.send(CoreEvent::StateChanged);
     }
 }
 
@@ -337,7 +332,7 @@ impl HandleMessage for mumble_tcp::PchatKeyChallengeResult {
     fn handle(&self, ctx: &HandlerContext) {
         debug!("received PchatKeyChallengeResult");
         pchat::handle_proto_key_challenge_result(&ctx.shared, self);
-        ctx.emit_empty("state-changed");
+        ctx.send(CoreEvent::StateChanged);
     }
 }
 
@@ -370,13 +365,10 @@ impl HandleMessage for mumble_tcp::PchatDeleteMessages {
                 reason: None,
             });
         }
-        ctx.emit(
-            "new-message",
-            NewMessagePayload {
-                channel_id,
-                sender_session: None,
-            },
-        );
+        ctx.send(CoreEvent::NewMessage(NewMessagePayload {
+            channel_id,
+            sender_session: None,
+        }));
     }
 }
 
@@ -385,14 +377,11 @@ impl HandleMessage for mumble_tcp::PchatOfflineQueueDrain {
         debug!("received PchatOfflineQueueDrain");
         let channel_id = self.channel_id.unwrap_or(0);
         pchat::handle_proto_offline_queue_drain(&ctx.shared, self);
-        ctx.emit(
-            "new-message",
-            NewMessagePayload {
-                channel_id,
-                sender_session: None,
-            },
-        );
-        ctx.emit_empty("state-changed");
+        ctx.send(CoreEvent::NewMessage(NewMessagePayload {
+            channel_id,
+            sender_session: None,
+        }));
+        ctx.send(CoreEvent::StateChanged);
     }
 }
 
@@ -404,7 +393,7 @@ impl HandleMessage for mumble_tcp::PchatSenderKeyDistribution {
         let data = self.distribution.clone().unwrap_or_default();
 
         if pchat::handle_signal_sender_key_by_hash(&ctx.shared, &sender_hash, channel_id, &data) {
-            ctx.emit_empty("state-changed");
+            ctx.send(CoreEvent::StateChanged);
         }
     }
 }

@@ -6,6 +6,7 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::{debug, info};
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::{SharedState, pchat, types::ChannelEntry};
 
 impl HandleMessage for mumble_tcp::ChannelState {
@@ -87,7 +88,7 @@ impl HandleMessage for mumble_tcp::ChannelState {
 
         if is_synced {
             spawn_permissions_refresh(Arc::clone(&ctx.shared), id);
-            ctx.emit_empty("state-changed");
+            ctx.send(CoreEvent::StateChanged);
         }
     }
 }

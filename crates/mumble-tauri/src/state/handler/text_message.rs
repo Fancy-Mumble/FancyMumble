@@ -4,6 +4,7 @@ use mumble_protocol::proto::mumble_tcp;
 
 use super::{HandleMessage, HandlerContext};
 use crate::state::SharedState;
+use crate::state::core_event::CoreEvent;
 use crate::state::types::*;
 
 // -- Message classification ----------------------------------------
@@ -91,13 +92,10 @@ impl<'a> DeferredEmitter<'a> {
                     channel_id,
                     sender_session,
                 } => {
-                    self.ctx.emit(
-                        "new-message",
-                        NewMessagePayload {
-                            channel_id: *channel_id,
-                            sender_session: *sender_session,
-                        },
-                    );
+                    self.ctx.send(CoreEvent::NewMessage(NewMessagePayload {
+                        channel_id: *channel_id,
+                        sender_session: *sender_session,
+                    }));
                 }
                 DeferredEvent::RequestUserAttention => {
                     self.ctx.request_user_attention();
@@ -116,12 +114,9 @@ impl<'a> DeferredEmitter<'a> {
     }
 
     fn emit_direct_message(&self, sender_session: u32, sender_name: &str, body: &str) {
-        self.ctx.emit(
-            "new-dm",
-            NewDmPayload {
-                session: sender_session,
-            },
-        );
+        self.ctx.send(CoreEvent::NewDm(NewDmPayload {
+            session: sender_session,
+        }));
         self.ctx.request_user_attention();
         let icon = self.lookup_texture(Some(sender_session));
         self.ctx.send_notification_with_icon(
@@ -140,7 +135,7 @@ impl<'a> DeferredEmitter<'a> {
             .map(|s| s.msgs.dm_unread.clone())
             .unwrap_or_default();
         self.ctx
-            .emit("dm-unread-changed", DmUnreadPayload { unreads });
+            .send(CoreEvent::DmUnreadChanged(DmUnreadPayload { unreads }));
     }
 
     fn emit_channel_unreads(&self) {
@@ -150,7 +145,8 @@ impl<'a> DeferredEmitter<'a> {
             .lock()
             .map(|s| s.msgs.channel_unread.clone())
             .unwrap_or_default();
-        self.ctx.emit("unread-changed", UnreadPayload { unreads });
+        self.ctx
+            .send(CoreEvent::UnreadChanged(UnreadPayload { unreads }));
     }
 
     fn emit_channel_notification(
