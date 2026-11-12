@@ -10,6 +10,7 @@ use serde::Serialize;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub(crate) struct PluginAdminEntryPayload {
@@ -74,29 +75,23 @@ impl HandleMessage for mumble_tcp::FancyPluginAdminList {
                 load_error: None,
             })
             .collect();
-        ctx.emit(
-            "plugin-admin-list",
-            PluginAdminListPayload {
-                plugins,
-                plugins_dir: self.plugins_dir.clone(),
-                host_abi_version: self.host_abi_version,
-            },
-        );
+        ctx.send(CoreEvent::PluginAdminList(PluginAdminListPayload {
+            plugins,
+            plugins_dir: self.plugins_dir.clone(),
+            host_abi_version: self.host_abi_version,
+        }));
     }
 }
 
 impl HandleMessage for mumble_tcp::FancyPluginAdminAck {
     fn handle(&self, ctx: &HandlerContext) {
         debug!(ok = self.ok, "received FancyPluginAdminAck");
-        ctx.emit(
-            "plugin-admin-ack",
-            PluginAdminAckPayload {
-                plugin_name: self.plugin_name.clone(),
-                ok: self.ok,
-                error: self.error.clone(),
-                request_id: self.request_id.clone(),
-                verb: self.verb.map(|v| verb_to_str(v).to_string()),
-            },
-        );
+        ctx.send(CoreEvent::PluginAdminAck(PluginAdminAckPayload {
+            plugin_name: self.plugin_name.clone(),
+            ok: self.ok,
+            error: self.error.clone(),
+            request_id: self.request_id.clone(),
+            verb: self.verb.map(|v| verb_to_str(v).to_string()),
+        }));
     }
 }

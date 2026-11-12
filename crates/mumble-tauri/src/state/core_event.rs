@@ -19,15 +19,17 @@ use super::handler::files::{
     ChannelFiles, ManagedFiles, RefusedRequest, SharedFile, VoiceSupportPayload,
 };
 use super::handler::operator_ticket::OperatorTicket;
+use super::handler::plugin_admin::{PluginAdminAckPayload, PluginAdminListPayload};
+use super::handler::plugin_message::PluginMessagePayload;
 use super::sessions::ServerId;
 use super::types::{
     AclPayload, AuditConfigSnapshot, AuditEntryPayload, BanEntryPayload, CurrentChannelPayload,
     DisconnectedPayload, DmUnreadPayload, KeyHoldersChangedPayload, KeyShareRequestPayload,
     KeyShareRequestsChangedPayload, NewDmPayload, NewMessagePayload, PchatFetchCompletePayload,
     PchatHistoryLoadingPayload, PchatKeyRevokedPayload, PchatSendRejectedPayload,
-    PinDeliverPayload, PinFetchResponsePayload, ReactionDeliverPayload,
-    ReactionFetchResponsePayload, RegisteredUserPayload, RejectedPayload, SignalBridgeErrorPayload,
-    UnreadPayload, UploadProgressPayload, UserCommentPayload, VoiceState,
+    PinDeliverPayload, PinFetchResponsePayload, PluginDataPayload, PluginRegistryEntryPayload,
+    ReactionDeliverPayload, ReactionFetchResponsePayload, RegisteredUserPayload, RejectedPayload,
+    SignalBridgeErrorPayload, UnreadPayload, UploadProgressPayload, UserCommentPayload, VoiceState,
 };
 
 /// Something that happened in the engine that a view may want to show.
@@ -120,6 +122,16 @@ pub(crate) enum CoreEvent {
     AuditConfig(AuditConfigSnapshot),
     /// The server answered a request for an operator ticket.
     OperatorTicket(OperatorTicket),
+    /// The plugins installed on the server.
+    PluginAdminList(PluginAdminListPayload),
+    /// The outcome of one plugin administration request.
+    PluginAdminAck(PluginAdminAckPayload),
+    /// A message from a server plugin, its payload left as the plugin wrote it.
+    PluginMessage(PluginMessagePayload),
+    /// Plugin data that arrived over the legacy transmission path.
+    PluginData(PluginDataPayload),
+    /// The plugins the server runs, and the slot each one answers on.
+    PluginRegistry(Vec<PluginRegistryEntryPayload>),
     /// An event that has not been given a variant yet: its wire name and its
     /// payload, already written out as JSON.
     Untyped {
@@ -190,6 +202,11 @@ impl CoreEvent {
             Self::AuditEvent(_) => "audit-event",
             Self::AuditConfig(_) => "audit-config",
             Self::OperatorTicket(_) => "operator-ticket",
+            Self::PluginAdminList(_) => "plugin-admin-list",
+            Self::PluginAdminAck(_) => "plugin-admin-ack",
+            Self::PluginMessage(_) => "plugin-message",
+            Self::PluginData(_) => "plugin-data",
+            Self::PluginRegistry(_) => "plugin-registry",
             Self::Untyped { name, .. } => name,
         }
     }
@@ -232,6 +249,11 @@ impl CoreEvent {
                 | Self::AuditEvent(_)
                 | Self::AuditConfig(_)
                 | Self::OperatorTicket(_)
+                | Self::PluginAdminList(_)
+                | Self::PluginAdminAck(_)
+                | Self::PluginMessage(_)
+                | Self::PluginData(_)
+                | Self::PluginRegistry(_)
         )
     }
 }
@@ -281,6 +303,11 @@ impl Serialize for CoreEvent {
             Self::AuditEvent(entry) => keyed(serializer, "entry", entry),
             Self::AuditConfig(config) => keyed(serializer, "config", config),
             Self::OperatorTicket(ticket) => keyed(serializer, "ticket", ticket),
+            Self::PluginAdminList(payload) => payload.serialize(serializer),
+            Self::PluginAdminAck(payload) => payload.serialize(serializer),
+            Self::PluginMessage(payload) => payload.serialize(serializer),
+            Self::PluginData(payload) => payload.serialize(serializer),
+            Self::PluginRegistry(plugins) => keyed(serializer, "plugins", plugins),
             Self::Untyped { payload, .. } => payload.serialize(serializer),
         }
     }
@@ -1170,6 +1197,146 @@ mod tests {
                         "expiresAtMs": 17,
                         "baseUrl": "https://x",
                     },
+                })
+            )
+        );
+    }
+
+    #[test]
+    fn plugin_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PluginMessage(PluginMessagePayload {
+                    plugin_name: "polls".to_owned(),
+                    plugin_slot: Some(2),
+                    payload_type: "vote".to_owned(),
+                    payload: b"hi".to_vec(),
+                    target_sessions: vec![9],
+                    channel_id: None,
+                    sender_session: Some(9),
+                    sender_name: None,
+                })
+            ),
+            (
+                "plugin-message",
+                json!({
+                    "pluginName": "polls",
+                    "pluginSlot": 2,
+                    "payloadType": "vote",
+                    "payload": "aGk=",
+                    "targetSessions": [9],
+                    "channelId": null,
+                    "senderSession": 9,
+                    "senderName": null,
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PluginData(PluginDataPayload {
+                    sender_session: Some(9),
+                    data: b"hi".to_vec(),
+                    data_id: "fancy-plugin-info".to_owned(),
+                })
+            ),
+            (
+                "plugin-data",
+                json!({ "sender_session": 9, "data": "aGk=", "data_id": "fancy-plugin-info" })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PluginRegistry(vec![PluginRegistryEntryPayload {
+                    plugin_name: "polls".to_owned(),
+                    version: "1.0".to_owned(),
+                    plugin_slot: Some(2),
+                    info_json: None,
+                }])
+            ),
+            (
+                "plugin-registry",
+                json!({
+                    "plugins": [{
+                        "pluginName": "polls",
+                        "version": "1.0",
+                        "pluginSlot": 2,
+                        "infoJson": null,
+                    }],
+                })
+            )
+        );
+    }
+
+    #[test]
+    fn plugin_admin_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        use crate::state::handler::plugin_admin::PluginAdminEntryPayload;
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PluginAdminList(PluginAdminListPayload {
+                    plugins: vec![PluginAdminEntryPayload {
+                        plugin_name: "polls".to_owned(),
+                        version: "1.0".to_owned(),
+                        enabled: true,
+                        loaded: false,
+                        path: None,
+                        info_json: None,
+                        marketplace_id: Some("m1".to_owned()),
+                        installed_at: Some(17),
+                        builtin: false,
+                        load_error: Some("abi".to_owned()),
+                    }],
+                    plugins_dir: Some("/plugins".to_owned()),
+                    host_abi_version: Some(3),
+                })
+            ),
+            (
+                "plugin-admin-list",
+                json!({
+                    "plugins": [{
+                        "plugin_name": "polls",
+                        "version": "1.0",
+                        "enabled": true,
+                        "loaded": false,
+                        "path": null,
+                        "info_json": null,
+                        "marketplace_id": "m1",
+                        "installed_at": 17,
+                        "builtin": false,
+                        "load_error": "abi",
+                    }],
+                    "plugins_dir": "/plugins",
+                    "host_abi_version": 3,
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PluginAdminAck(PluginAdminAckPayload {
+                    plugin_name: Some("polls".to_owned()),
+                    ok: false,
+                    error: Some("no".to_owned()),
+                    request_id: None,
+                    verb: Some("install".to_owned()),
+                })
+            ),
+            (
+                "plugin-admin-ack",
+                json!({
+                    "plugin_name": "polls",
+                    "ok": false,
+                    "error": "no",
+                    "request_id": null,
+                    "verb": "install",
                 })
             )
         );

@@ -12,6 +12,7 @@ use serde::Serialize;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::types::{PluginRegistryEntryPayload, serialize_bytes_base64};
 
 /// Tauri event payload for an inbound `PluginMessage`.
@@ -23,16 +24,16 @@ use crate::state::types::{PluginRegistryEntryPayload, serialize_bytes_base64};
 /// decodes them based on `plugin_name` + `payload_type`.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct PluginMessagePayload {
-    plugin_name: String,
-    plugin_slot: Option<u32>,
-    payload_type: String,
+pub(crate) struct PluginMessagePayload {
+    pub plugin_name: String,
+    pub plugin_slot: Option<u32>,
+    pub payload_type: String,
     #[serde(serialize_with = "serialize_bytes_base64")]
-    payload: Vec<u8>,
-    target_sessions: Vec<u32>,
-    channel_id: Option<u32>,
-    sender_session: Option<u32>,
-    sender_name: Option<String>,
+    pub payload: Vec<u8>,
+    pub target_sessions: Vec<u32>,
+    pub channel_id: Option<u32>,
+    pub sender_session: Option<u32>,
+    pub sender_name: Option<String>,
 }
 
 impl HandleMessage for mumble_tcp::PluginMessage {
@@ -52,26 +53,17 @@ impl HandleMessage for mumble_tcp::PluginMessage {
             len = self.payload.as_ref().map_or(0, Vec::len),
             "received PluginMessage"
         );
-        ctx.emit(
-            "plugin-message",
-            PluginMessagePayload {
-                plugin_name,
-                plugin_slot: self.plugin_slot,
-                payload_type,
-                payload: self.payload.clone().unwrap_or_default(),
-                target_sessions: self.target_sessions.clone(),
-                channel_id: self.channel_id,
-                sender_session: self.sender_session,
-                sender_name: self.sender_name.clone(),
-            },
-        );
+        ctx.send(CoreEvent::PluginMessage(PluginMessagePayload {
+            plugin_name,
+            plugin_slot: self.plugin_slot,
+            payload_type,
+            payload: self.payload.clone().unwrap_or_default(),
+            target_sessions: self.target_sessions.clone(),
+            channel_id: self.channel_id,
+            sender_session: self.sender_session,
+            sender_name: self.sender_name.clone(),
+        }));
     }
-}
-
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct PluginRegistryPayload {
-    plugins: Vec<PluginRegistryEntryPayload>,
 }
 
 impl HandleMessage for mumble_tcp::PluginRegistry {
@@ -92,6 +84,6 @@ impl HandleMessage for mumble_tcp::PluginRegistry {
         if let Ok(mut state) = ctx.shared.lock() {
             state.plugin_registry = plugins.clone();
         }
-        ctx.emit("plugin-registry", PluginRegistryPayload { plugins });
+        ctx.send(CoreEvent::PluginRegistry(plugins));
     }
 }

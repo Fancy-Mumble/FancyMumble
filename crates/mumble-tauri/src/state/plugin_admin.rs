@@ -24,6 +24,7 @@ use super::handler::plugin_admin::{
 };
 use super::operator_http;
 use super::types::{PluginDataPayload, PluginRegistryEntryPayload};
+use crate::state::core_event::CoreEvent;
 
 /// How long to wait for the server to answer a ticket request.
 const TICKET_TIMEOUT: Duration = Duration::from_secs(8);
@@ -81,7 +82,7 @@ impl AppState {
                 .await
                 .map_err(|error| format!("request failed: {error}"))?;
             let listed = list_from_operator_json(&operator_http::body(response, &url).await?)?;
-            self.emit_to_view("plugin-admin-list", listed);
+            self.tell_view(CoreEvent::PluginAdminList(listed));
             return Ok(());
         }
         let handle = {
@@ -114,7 +115,10 @@ impl AppState {
                 .await
                 .map_err(|error| format!("request failed: {error}"))?;
             let _ = operator_http::body(response, &url).await?;
-            self.emit_to_view("plugin-admin-ack", succeeded("set_enabled", plugin_name));
+            self.tell_view(CoreEvent::PluginAdminAck(succeeded(
+                "set_enabled",
+                plugin_name,
+            )));
             return Ok(());
         }
         let handle = {
@@ -167,7 +171,7 @@ impl AppState {
                         .map(ToOwned::to_owned)
                 })
                 .unwrap_or(marketplace_id);
-            self.emit_to_view("plugin-admin-ack", succeeded("install", installed));
+            self.tell_view(CoreEvent::PluginAdminAck(succeeded("install", installed)));
             return Ok(());
         }
         let handle = {
@@ -200,7 +204,10 @@ impl AppState {
                 .await
                 .map_err(|error| format!("request failed: {error}"))?;
             let _ = operator_http::body(response, &url).await?;
-            self.emit_to_view("plugin-admin-ack", succeeded("uninstall", plugin_name));
+            self.tell_view(CoreEvent::PluginAdminAck(succeeded(
+                "uninstall",
+                plugin_name,
+            )));
             return Ok(());
         }
         let handle = {

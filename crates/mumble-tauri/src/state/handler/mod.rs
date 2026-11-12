@@ -29,7 +29,7 @@ mod permission_query;
 mod ping;
 pub(super) mod plugin_admin;
 mod plugin_data;
-mod plugin_message;
+pub(super) mod plugin_message;
 mod poll;
 mod read_receipt;
 mod reject;

@@ -2,6 +2,7 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::types::PluginDataPayload;
 
 /// `data_id`s of server-originated broadcasts that arrive once after
@@ -49,7 +50,7 @@ impl HandleMessage for mumble_tcp::PluginDataTransmission {
             cache_broadcast(&mut state.plugin_broadcasts, &payload);
         }
 
-        ctx.emit("plugin-data", payload);
+        ctx.send(CoreEvent::PluginData(payload));
     }
 }
 
