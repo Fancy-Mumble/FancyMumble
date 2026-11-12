@@ -11,22 +11,23 @@ use serde::Serialize;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 
 /// One invite, as the UI renders it.
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-struct InvitePayload {
-    code: String,
+pub(crate) struct InvitePayload {
+    pub code: String,
     /// Zero: no particular channel.
-    channel_id: u32,
-    created_ms: u64,
+    pub channel_id: u32,
+    pub created_ms: u64,
     /// Zero: never.
-    expires_ms: u64,
+    pub expires_ms: u64,
     /// Zero: unlimited.
-    max_uses: u32,
-    uses: u32,
-    creator: String,
-    mine: bool,
+    pub max_uses: u32,
+    pub uses: u32,
+    pub creator: String,
+    pub mine: bool,
 }
 
 impl From<&Invite> for InvitePayload {
@@ -50,7 +51,7 @@ impl From<&Invite> for InvitePayload {
     rename_all = "camelCase",
     rename_all_fields = "camelCase"
 )]
-enum InvitesPayload {
+pub(crate) enum InvitesPayload {
     Support {
         request_id: String,
         available: bool,
@@ -138,7 +139,7 @@ impl HandleMessage for InvitesEnvelope {
             return;
         };
         debug!(?payload, "invites answer");
-        ctx.emit("invites", payload);
+        ctx.send(CoreEvent::Invites(payload));
     }
 }
 

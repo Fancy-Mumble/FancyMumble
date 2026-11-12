@@ -1,23 +1,13 @@
 //! Inbound handlers for onboarding-workflow messages.
 
 use mumble_protocol::proto::mumble_tcp;
-use serde::Serialize;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::types::{
     OnboardingAnswer, OnboardingConfig, OnboardingQuestion, OnboardingResponse, OnboardingSelection,
 };
-
-#[derive(Serialize, Clone)]
-struct OnboardingConfigPayload {
-    config: OnboardingConfig,
-}
-
-#[derive(Serialize, Clone)]
-struct OnboardingResponsePayload {
-    response: Option<OnboardingResponse>,
-}
 
 impl HandleMessage for mumble_tcp::FancyOnboardingConfig {
     fn handle(&self, ctx: &HandlerContext) {
@@ -49,7 +39,7 @@ impl HandleMessage for mumble_tcp::FancyOnboardingConfig {
             }
         }
 
-        ctx.emit("onboarding-config", OnboardingConfigPayload { config });
+        ctx.send(CoreEvent::OnboardingConfig(config));
     }
 }
 
@@ -66,10 +56,7 @@ impl HandleMessage for mumble_tcp::FancyOnboardingResponseDeliver {
             state.onboarding_response = response.clone();
         }
 
-        ctx.emit(
-            "onboarding-response",
-            OnboardingResponsePayload { response },
-        );
+        ctx.send(CoreEvent::OnboardingResponse(response));
     }
 }
 

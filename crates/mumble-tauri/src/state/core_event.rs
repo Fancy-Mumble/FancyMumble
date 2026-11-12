@@ -22,6 +22,7 @@ use super::handler::files::{
 };
 use super::handler::forum::{ForumFetchResponsePayload, ForumPostPayload};
 use super::handler::gifs::{GifPagePayload, GifRefusedPayload, GifSupportPayload};
+use super::handler::invites::InvitesPayload;
 use super::handler::link_preview::LinkPreviewResponsePayload;
 use super::handler::livery::LiverySnapshot;
 use super::handler::operator_ticket::OperatorTicket;
@@ -29,17 +30,19 @@ use super::handler::plugin_admin::{PluginAdminAckPayload, PluginAdminListPayload
 use super::handler::plugin_message::PluginMessagePayload;
 use super::handler::poll::{PollPayload, PollVotePayload};
 use super::handler::read_receipt::ReadReceiptDeliverPayload;
+use super::handler::records::RecordChanged;
 use super::handler::scheduled_message::{ScheduledMessageAckPayload, ScheduledMessagePayload};
 use super::handler::typing_indicator::TypingIndicatorPayload;
 use super::handler::version::ServerVersionPayload;
 use super::handler::watch_sync::WatchSyncPayload;
 use super::sessions::ServerId;
 use super::types::{
-    AclPayload, AudioTransportPayload, AuditConfigSnapshot, AuditEntryPayload, BanEntryPayload,
-    ChannelDeniedPayload, CryptoStatsPayload, CurrentChannelPayload, CustodianPinPayload,
-    DisconnectedPayload, DmUnreadPayload, KeyHoldersChangedPayload, KeyShareRequestPayload,
-    KeyShareRequestsChangedPayload, LatencyPayload, ListenDeniedPayload, NewDmPayload,
-    NewMessagePayload, PchatFetchCompletePayload, PchatHistoryLoadingPayload,
+    AccountAck, AccountSettings, AclPayload, AudioTransportPayload, AuditConfigSnapshot,
+    AuditEntryPayload, BanEntryPayload, ChannelDeniedPayload, CryptoStatsPayload,
+    CurrentChannelPayload, CustodianPinPayload, DisconnectedPayload, DmUnreadPayload,
+    KeyHoldersChangedPayload, KeyShareRequestPayload, KeyShareRequestsChangedPayload,
+    LatencyPayload, ListenDeniedPayload, NewDmPayload, NewMessagePayload, OnboardingConfig,
+    OnboardingResponse, PchatFetchCompletePayload, PchatHistoryLoadingPayload,
     PchatKeyRevokedPayload, PchatSendRejectedPayload, PermissionDeniedPayload, PinDeliverPayload,
     PinFetchResponsePayload, PluginDataPayload, PluginRegistryEntryPayload, ReactionDeliverPayload,
     ReactionFetchResponsePayload, RegisteredUserPayload, RejectedPayload, ServerLogEntry,
@@ -209,6 +212,18 @@ pub(crate) enum CoreEvent {
     GifSupport(GifSupportPayload),
     /// The user's scheduled messages, all of them.
     ScheduledMessages(Vec<ScheduledMessagePayload>),
+    /// The server's answer to a change to the user's account.
+    AccountAck(AccountAck),
+    /// Another of the account's devices wrote a synced record.
+    AccountRecordChanged(RecordChanged),
+    /// An answer from the invites service; which one is in its `kind`.
+    Invites(InvitesPayload),
+    /// The user's account on this server, as the server now has it.
+    AccountSettings(AccountSettings),
+    /// The server's onboarding questions.
+    OnboardingConfig(OnboardingConfig),
+    /// The user's own onboarding answers, or `None` if they gave none.
+    OnboardingResponse(Option<OnboardingResponse>),
     /// An event that has not been given a variant yet: its wire name and its
     /// payload, already written out as JSON.
     Untyped {
@@ -315,6 +330,12 @@ impl CoreEvent {
             Self::GifSearchRefused(_) => "gif-search-refused",
             Self::GifSupport(_) => "gif-support",
             Self::ScheduledMessages(_) => "fancy-scheduled-message-list",
+            Self::AccountAck(_) => "account-ack",
+            Self::AccountRecordChanged(_) => "account-record-changed",
+            Self::Invites(_) => "invites",
+            Self::AccountSettings(_) => "account-settings",
+            Self::OnboardingConfig(_) => "onboarding-config",
+            Self::OnboardingResponse(_) => "onboarding-response",
             Self::Untyped { name, .. } => name,
         }
     }
@@ -391,6 +412,12 @@ impl CoreEvent {
                 | Self::GifSearchRefused(_)
                 | Self::GifSupport(_)
                 | Self::ScheduledMessages(_)
+                | Self::AccountAck(_)
+                | Self::AccountRecordChanged(_)
+                | Self::Invites(_)
+                | Self::AccountSettings(_)
+                | Self::OnboardingConfig(_)
+                | Self::OnboardingResponse(_)
         )
     }
 }
@@ -477,6 +504,12 @@ impl Serialize for CoreEvent {
             Self::GifSearchRefused(payload) => payload.serialize(serializer),
             Self::GifSupport(payload) => payload.serialize(serializer),
             Self::ScheduledMessages(messages) => keyed(serializer, "messages", messages),
+            Self::AccountAck(payload) => payload.serialize(serializer),
+            Self::AccountRecordChanged(payload) => payload.serialize(serializer),
+            Self::Invites(payload) => payload.serialize(serializer),
+            Self::AccountSettings(settings) => keyed(serializer, "settings", settings),
+            Self::OnboardingConfig(config) => keyed(serializer, "config", config),
+            Self::OnboardingResponse(response) => keyed(serializer, "response", response),
             Self::Untyped { payload, .. } => payload.serialize(serializer),
         }
     }
@@ -2110,6 +2143,86 @@ mod tests {
                     "provider": "klipy",
                 })
             )
+        );
+    }
+
+    #[test]
+    fn account_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::AccountAck(AccountAck {
+                    action: 2,
+                    ok: true,
+                    error: None,
+                    totp_secret: None,
+                    totp_uri: None,
+                })
+            ),
+            ("account-ack", json!({ "action": 2, "ok": true }))
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::AccountRecordChanged(RecordChanged {
+                    key: "settings".to_owned(),
+                    value: Some("{}".to_owned()),
+                    found: true,
+                    updated_at_ms: 17,
+                })
+            ),
+            (
+                "account-record-changed",
+                json!({ "key": "settings", "value": "{}", "found": true, "updatedAtMs": 17 })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::Invites(InvitesPayload::Revoked {
+                    request_id: "r1".to_owned(),
+                    code: "abc".to_owned(),
+                })
+            ),
+            (
+                "invites",
+                json!({ "kind": "revoked", "requestId": "r1", "code": "abc" })
+            )
+        );
+        assert_carries_keyed(
+            "account-settings",
+            "settings",
+            &AccountSettings {
+                registered: true,
+                name: Some("Ada".to_owned()),
+                ..AccountSettings::default()
+            },
+            CoreEvent::AccountSettings,
+        );
+        assert_carries_keyed(
+            "onboarding-config",
+            "config",
+            &OnboardingConfig {
+                enabled: true,
+                revision: 4,
+                ..OnboardingConfig::default()
+            },
+            CoreEvent::OnboardingConfig,
+        );
+        assert_carries_keyed(
+            "onboarding-response",
+            "response",
+            &Some(OnboardingResponse {
+                config_revision: 4,
+                ..OnboardingResponse::default()
+            }),
+            CoreEvent::OnboardingResponse,
+        );
+        assert_eq!(
+            wire(None, CoreEvent::OnboardingResponse(None)),
+            ("onboarding-response", json!({ "response": null }))
         );
     }
 

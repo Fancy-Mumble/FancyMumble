@@ -1,16 +1,11 @@
 //! Inbound handlers for the self-service account settings messages.
 
 use mumble_protocol::proto::mumble_tcp;
-use serde::Serialize;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::types::{AccountAck, AccountDevice, AccountSettings};
-
-#[derive(Serialize, Clone)]
-struct AccountSettingsPayload {
-    settings: AccountSettings,
-}
 
 impl HandleMessage for mumble_tcp::FancyAccountSettings {
     fn handle(&self, ctx: &HandlerContext) {
@@ -48,10 +43,7 @@ impl HandleMessage for mumble_tcp::FancyAccountSettings {
             state.account_settings = Some(snapshot.clone());
         }
 
-        ctx.emit(
-            "account-settings",
-            AccountSettingsPayload { settings: snapshot },
-        );
+        ctx.send(CoreEvent::AccountSettings(snapshot));
     }
 }
 
@@ -65,6 +57,6 @@ impl HandleMessage for mumble_tcp::FancyAccountAck {
             totp_uri: self.totp_uri.clone(),
         };
         debug!(action = ack.action, ok = ack.ok, error = ?ack.error, "received FancyAccountAck");
-        ctx.emit("account-ack", ack);
+        ctx.send(CoreEvent::AccountAck(ack));
     }
 }

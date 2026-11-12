@@ -18,13 +18,13 @@ use crate::state::types::{DmUnreadPayload, UnreadPayload};
 /// it. Settings and the saved-server list listen for their own keys.
 #[derive(serde::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct RecordChanged {
-    key: String,
+pub(crate) struct RecordChanged {
+    pub key: String,
     /// UTF-8, or `None` for bytes that are not; every record this client keeps
     /// is a JSON document.
-    value: Option<String>,
-    found: bool,
-    updated_at_ms: u64,
+    pub value: Option<String>,
+    pub found: bool,
+    pub updated_at_ms: u64,
 }
 
 impl HandleMessage for fancy::domain::Record {
@@ -88,15 +88,12 @@ fn changed_elsewhere(record: &fancy::domain::Record, ctx: &HandlerContext) {
         }
         return;
     }
-    ctx.emit(
-        "account-record-changed",
-        RecordChanged {
-            key: record.key.clone(),
-            value: String::from_utf8(record.value.clone()).ok(),
-            found: record.found,
-            updated_at_ms: record.updated_at_ms,
-        },
-    );
+    ctx.send(CoreEvent::AccountRecordChanged(RecordChanged {
+        key: record.key.clone(),
+        value: String::from_utf8(record.value.clone()).ok(),
+        found: record.found,
+        updated_at_ms: record.updated_at_ms,
+    }));
 }
 
 /// The sentence to show for a refusal.
