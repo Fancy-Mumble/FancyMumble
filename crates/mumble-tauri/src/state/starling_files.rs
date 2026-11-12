@@ -392,8 +392,7 @@ impl AppState {
     ) -> Result<T, String> {
         let mut running = self.media_server.lock().await;
         if running.is_none() {
-            let host = self.host().ok_or("App not initialized")?;
-            *running = Some(super::media_server::start(host).await?);
+            *running = Some(super::media_server::start(self.downgrade()).await?);
         }
         running
             .as_ref()

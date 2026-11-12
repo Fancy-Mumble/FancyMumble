@@ -44,7 +44,7 @@ use hyper::{Method, Request, Response, StatusCode, header};
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 
-use crate::state::host::Host;
+use crate::state::WeakEngine;
 
 /// The most this hands back in one response.
 ///
@@ -87,7 +87,7 @@ const PLAYER_SEGMENT: &str = "~player";
 /// Returns the running server, or the reason it could not start - which is a
 /// preview that does not appear rather than anything worse: the card below it
 /// still names the file and still offers to save it.
-pub(crate) async fn start(app: Host) -> Result<MediaServer, String> {
+pub(crate) async fn start(engine: WeakEngine) -> Result<MediaServer, String> {
     let token = mint_token();
     let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
         .await
@@ -103,9 +103,13 @@ pub(crate) async fn start(app: Host) -> Result<MediaServer, String> {
             let Ok((stream, _)) = listener.accept().await else {
                 continue;
             };
+            // The engine is gone, and with it anything there was to serve.
+            if engine.upgrade().is_none() {
+                break;
+            }
             drop(crate::state::runtime::spawn(converse(
                 stream,
-                app.clone(),
+                engine.clone(),
                 served_token.clone(),
             )));
         }
@@ -120,11 +124,11 @@ pub(crate) async fn start(app: Host) -> Result<MediaServer, String> {
 ///
 /// A player keeps a connection open across the pieces it asks for, so this
 /// outlives any single range.
-async fn converse(stream: tokio::net::TcpStream, app: Host, token: String) {
+async fn converse(stream: tokio::net::TcpStream, engine: WeakEngine, token: String) {
     let service = service_fn(move |request| {
-        let app = app.clone();
+        let engine = engine.clone();
         let token = token.clone();
-        async move { Ok::<_, Infallible>(answer(&app, &token, request).await) }
+        async move { Ok::<_, Infallible>(answer(&engine, &token, request).await) }
     });
     // A dropped connection is the ordinary end of a video the viewer scrolled
     // past, not something to report.
@@ -187,8 +191,12 @@ pub(crate) fn upstream_range(header: Option<&str>) -> Option<String> {
 }
 
 /// Serve one request, against whatever this app is connected to.
-async fn answer(app: &Host, token: &str, request: Request<Incoming>) -> Response<Full<Bytes>> {
-    let Some(state) = app.app_state() else {
+async fn answer(
+    engine: &WeakEngine,
+    token: &str,
+    request: Request<Incoming>,
+) -> Response<Full<Bytes>> {
+    let Some(state) = engine.upgrade() else {
         return refuse(StatusCode::SERVICE_UNAVAILABLE);
     };
     serve(

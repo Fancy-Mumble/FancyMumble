@@ -14,9 +14,9 @@ use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 
+use super::SharedState;
 use super::core_event::{CoreEvent, Event};
 use super::sessions::ServerId;
-use super::{AppState, SharedState};
 
 /// A change to the service that keeps a voice connection alive while the app
 /// is in the background.
@@ -114,17 +114,6 @@ pub(crate) trait SignalInterceptor: Send + Sync + 'static {
     ) -> bool;
 }
 
-/// How long-running engine work finds the engine again.
-///
-/// The loopback media origin and the audio loop outlive the call that started
-/// them, so they cannot borrow the engine from their caller. This goes away
-/// once the engine owns itself behind a shared pointer.
-pub(crate) trait EngineLookup: Send + Sync + 'static {
-    /// The engine this application runs; `None` while the application is
-    /// still starting or already shutting down.
-    fn app_state(&self) -> Option<&AppState>;
-}
-
 /// A [`Notifier`] for an application that has no notifications.
 #[derive(Debug, Clone, Copy, Default)]
 #[allow(dead_code, reason = "for views that bring no notifier of their own")]
@@ -181,8 +170,6 @@ pub(crate) struct HostParts {
     pub background: Arc<dyn BackgroundService>,
     /// Who else may answer WebRTC signalling.
     pub signals: Arc<dyn SignalInterceptor>,
-    /// How detached engine work finds the engine.
-    pub engine: Arc<dyn EngineLookup>,
 }
 
 /// A shared handle to the application hosting the engine.
@@ -201,7 +188,7 @@ impl Host {
     /// A host whose every part is the same object.
     pub(crate) fn from_single<H>(host: H) -> Self
     where
-        H: EventSink + AppDirs + Notifier + BackgroundService + SignalInterceptor + EngineLookup,
+        H: EventSink + AppDirs + Notifier + BackgroundService + SignalInterceptor,
     {
         let host = Arc::new(host);
         Self::new(HostParts {
@@ -209,8 +196,7 @@ impl Host {
             dirs: host.clone(),
             notifier: host.clone(),
             background: host.clone(),
-            signals: host.clone(),
-            engine: host,
+            signals: host,
         })
     }
 
@@ -310,11 +296,6 @@ impl Host {
         self.0
             .signals
             .claim_webrtc_signal(sender_session, signal_type, payload)
-    }
-
-    /// The engine this application runs; see [`EngineLookup`].
-    pub(crate) fn app_state(&self) -> Option<&AppState> {
-        self.0.engine.app_state()
     }
 }
 

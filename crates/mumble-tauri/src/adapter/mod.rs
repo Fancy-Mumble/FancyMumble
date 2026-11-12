@@ -14,8 +14,7 @@ use tauri_plugin_notification::NotificationExt;
 
 use crate::state::AppState;
 use crate::state::host::{
-    AppDirs, BackgroundService, EngineLookup, EventSink, Host, Notifier, SignalInterceptor,
-    VoiceService,
+    AppDirs, BackgroundService, EventSink, Host, Notifier, SignalInterceptor, VoiceService,
 };
 
 /// The engine's host when the view is a Tauri webview.
@@ -79,12 +78,6 @@ impl SignalInterceptor for TauriHost {
 
         let _ = (sender_session, signal_type, payload);
         false
-    }
-}
-
-impl EngineLookup for TauriHost {
-    fn app_state(&self) -> Option<&AppState> {
-        self.app.try_state::<AppState>().map(|state| state.inner())
     }
 }
 

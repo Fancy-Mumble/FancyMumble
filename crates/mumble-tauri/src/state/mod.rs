@@ -714,10 +714,42 @@ impl SharedState {
     }
 }
 
-// --- Tauri-managed application state ------------------------------
+// --- The engine ---------------------------------------------------
 
-/// Central state managed by Tauri and shared across all commands.
-pub struct AppState {
+/// The engine: every session, and what they share.
+///
+/// A handle rather than the thing itself: cloning it is one reference count
+/// and every clone is the same engine. That is what lets work that outlives
+/// the call that started it - a loopback server, a background task - keep the
+/// engine (or a [`WeakEngine`]) of its own instead of asking the application
+/// where it is.
+#[derive(Clone)]
+pub struct AppState(Arc<Engine>);
+
+impl std::ops::Deref for AppState {
+    type Target = Engine;
+
+    fn deref(&self) -> &Engine {
+        &self.0
+    }
+}
+
+/// An [`AppState`] that does not keep the engine alive.
+///
+/// For work the engine itself owns: a strong handle there would be a cycle,
+/// and the engine could never be dropped.
+#[derive(Clone)]
+pub(crate) struct WeakEngine(std::sync::Weak<Engine>);
+
+impl WeakEngine {
+    /// The engine, unless it has been dropped.
+    pub(crate) fn upgrade(&self) -> Option<AppState> {
+        self.0.upgrade().map(AppState)
+    }
+}
+
+/// What an [`AppState`] points at.
+pub struct Engine {
     /// Atomically-swappable handle to the currently-active session's
     /// [`SharedState`].  Existing call sites continue to spell
     /// `state.inner.snapshot().lock()`; under the hood the lock targets whichever
@@ -768,7 +800,7 @@ impl AppState {
             },
             ..Default::default()
         }));
-        Self {
+        Self(Arc::new(Engine {
             registry: registry::Registry::default(),
             inner: shared_handle::SharedHandle::new(Arc::clone(&default_inner)),
             default_inner,
@@ -782,7 +814,12 @@ impl AppState {
             #[cfg(not(target_os = "android"))]
             presence: presence::PresenceManager::default(),
             local_talking: Arc::default(),
-        }
+        }))
+    }
+
+    /// A handle to this engine that does not keep it alive.
+    pub(crate) fn downgrade(&self) -> WeakEngine {
+        WeakEngine(Arc::downgrade(&self.0))
     }
 
     /// Build a fresh, empty per-session `SharedState` seeded with the
