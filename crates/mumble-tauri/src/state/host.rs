@@ -340,6 +340,14 @@ pub(crate) fn emit_for<S: Serialize>(shared: &Mutex<SharedState>, event: &'stati
     }
 }
 
+/// Tell the view of the session behind `shared` that `event` happened, if it
+/// has one.
+pub(crate) fn tell_view_of(shared: &Mutex<SharedState>, event: CoreEvent) {
+    if let Some(host) = host_of(shared) {
+        host.send(event);
+    }
+}
+
 /// The data directory an end-to-end test asked for, if it asked for one.
 pub(crate) fn data_dir_override() -> Option<PathBuf> {
     std::env::var(crate::constants::ENV_E2E_DATA_DIR)

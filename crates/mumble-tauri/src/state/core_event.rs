@@ -15,8 +15,12 @@ use serde_json::value::RawValue;
 
 use super::sessions::ServerId;
 use super::types::{
-    CurrentChannelPayload, DisconnectedPayload, DmUnreadPayload, NewDmPayload, NewMessagePayload,
-    RejectedPayload, UnreadPayload, VoiceState,
+    CurrentChannelPayload, DisconnectedPayload, DmUnreadPayload, KeyHoldersChangedPayload,
+    KeyShareRequestPayload, KeyShareRequestsChangedPayload, NewDmPayload, NewMessagePayload,
+    PchatFetchCompletePayload, PchatHistoryLoadingPayload, PchatKeyRevokedPayload,
+    PchatSendRejectedPayload, PinDeliverPayload, PinFetchResponsePayload, ReactionDeliverPayload,
+    ReactionFetchResponsePayload, RejectedPayload, SignalBridgeErrorPayload, UnreadPayload,
+    VoiceState,
 };
 
 /// Something that happened in the engine that a view may want to show.
@@ -51,6 +55,32 @@ pub(crate) enum CoreEvent {
     DmUnreadChanged(DmUnreadPayload),
     /// A direct message arrived.
     NewDm(NewDmPayload),
+    /// Stored history for a channel started or finished loading.
+    PchatHistoryLoading(PchatHistoryLoadingPayload),
+    /// A page of stored history has been merged into its channel.
+    PchatFetchComplete(PchatFetchCompletePayload),
+    /// The server refused to store messages the view already shows as sent.
+    PchatSendRejected(PchatSendRejectedPayload),
+    /// The set of users holding a channel's key changed.
+    PchatKeyHoldersChanged(KeyHoldersChangedPayload),
+    /// A peer asked for a channel's key and waits for the user's consent.
+    PchatKeyShareRequested(KeyShareRequestPayload),
+    /// The key requests still waiting on a channel changed.
+    PchatKeyShareRequestsChanged(KeyShareRequestsChangedPayload),
+    /// The channel's key failed verification and was thrown away.
+    PchatKeyRevoked(PchatKeyRevokedPayload),
+    /// A channel that had lost its key has one again.
+    PchatKeyRestored(PchatKeyRevokedPayload),
+    /// A reaction was added to or removed from a stored message.
+    PchatReactionDelivered(ReactionDeliverPayload),
+    /// The stored reactions of a channel arrived.
+    PchatReactionsFetched(ReactionFetchResponsePayload),
+    /// A stored message was pinned or unpinned.
+    PchatPinDelivered(PinDeliverPayload),
+    /// The pinned messages of a channel arrived.
+    PchatPinsFetched(PinFetchResponsePayload),
+    /// The Signal bridge could not be loaded, so `SignalV1` channels stay unreadable.
+    PchatSignalBridgeError(SignalBridgeErrorPayload),
     /// An event that has not been given a variant yet: its wire name and its
     /// payload, already written out as JSON.
     Untyped {
@@ -92,6 +122,19 @@ impl CoreEvent {
             Self::UnreadChanged(_) => "unread-changed",
             Self::DmUnreadChanged(_) => "dm-unread-changed",
             Self::NewDm(_) => "new-dm",
+            Self::PchatHistoryLoading(_) => "pchat-history-loading",
+            Self::PchatFetchComplete(_) => "pchat-fetch-complete",
+            Self::PchatSendRejected(_) => "pchat-send-rejected",
+            Self::PchatKeyHoldersChanged(_) => "pchat-key-holders-changed",
+            Self::PchatKeyShareRequested(_) => "pchat-key-share-request",
+            Self::PchatKeyShareRequestsChanged(_) => "pchat-key-share-requests-changed",
+            Self::PchatKeyRevoked(_) => "pchat-key-revoked",
+            Self::PchatKeyRestored(_) => "pchat-key-restored",
+            Self::PchatReactionDelivered(_) => "pchat-reaction-deliver",
+            Self::PchatReactionsFetched(_) => "pchat-reaction-fetch-response",
+            Self::PchatPinDelivered(_) => "pchat-pin-deliver",
+            Self::PchatPinsFetched(_) => "pchat-pin-fetch-response",
+            Self::PchatSignalBridgeError(_) => "pchat-signal-bridge-error",
             Self::Untyped { name, .. } => name,
         }
     }
@@ -108,6 +151,19 @@ impl CoreEvent {
                 | Self::UnreadChanged(_)
                 | Self::DmUnreadChanged(_)
                 | Self::NewDm(_)
+                | Self::PchatHistoryLoading(_)
+                | Self::PchatFetchComplete(_)
+                | Self::PchatSendRejected(_)
+                | Self::PchatKeyHoldersChanged(_)
+                | Self::PchatKeyShareRequested(_)
+                | Self::PchatKeyShareRequestsChanged(_)
+                | Self::PchatKeyRevoked(_)
+                | Self::PchatKeyRestored(_)
+                | Self::PchatReactionDelivered(_)
+                | Self::PchatReactionsFetched(_)
+                | Self::PchatPinDelivered(_)
+                | Self::PchatPinsFetched(_)
+                | Self::PchatSignalBridgeError(_)
         )
     }
 }
@@ -128,6 +184,19 @@ impl Serialize for CoreEvent {
             Self::UnreadChanged(payload) => payload.serialize(serializer),
             Self::DmUnreadChanged(payload) => payload.serialize(serializer),
             Self::NewDm(payload) => payload.serialize(serializer),
+            Self::PchatHistoryLoading(payload) => payload.serialize(serializer),
+            Self::PchatFetchComplete(payload) => payload.serialize(serializer),
+            Self::PchatSendRejected(payload) => payload.serialize(serializer),
+            Self::PchatKeyHoldersChanged(payload) => payload.serialize(serializer),
+            Self::PchatKeyShareRequested(payload) => payload.serialize(serializer),
+            Self::PchatKeyShareRequestsChanged(payload) => payload.serialize(serializer),
+            Self::PchatKeyRevoked(payload) => payload.serialize(serializer),
+            Self::PchatKeyRestored(payload) => payload.serialize(serializer),
+            Self::PchatReactionDelivered(payload) => payload.serialize(serializer),
+            Self::PchatReactionsFetched(payload) => payload.serialize(serializer),
+            Self::PchatPinDelivered(payload) => payload.serialize(serializer),
+            Self::PchatPinsFetched(payload) => payload.serialize(serializer),
+            Self::PchatSignalBridgeError(payload) => payload.serialize(serializer),
             Self::Untyped { payload, .. } => payload.serialize(serializer),
         }
     }
@@ -306,6 +375,277 @@ mod tests {
             (
                 "connection-rejected",
                 json!({ "serverId": null, "reason": "wrong password", "reject_type": 3 })
+            )
+        );
+    }
+
+    #[test]
+    fn persistent_chat_history_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PchatHistoryLoading(PchatHistoryLoadingPayload {
+                    channel_id: 3,
+                    loading: true,
+                })
+            ),
+            (
+                "pchat-history-loading",
+                json!({ "channel_id": 3, "loading": true })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PchatFetchComplete(PchatFetchCompletePayload {
+                    channel_id: 3,
+                    has_more: true,
+                    total_stored: 40,
+                })
+            ),
+            (
+                "pchat-fetch-complete",
+                json!({ "channel_id": 3, "has_more": true, "total_stored": 40 })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PchatSendRejected(PchatSendRejectedPayload {
+                    message_ids: vec!["m1".to_owned()],
+                    reason: None,
+                })
+            ),
+            (
+                "pchat-send-rejected",
+                json!({ "message_ids": ["m1"], "reason": null })
+            )
+        );
+    }
+
+    #[test]
+    fn persistent_chat_key_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        use crate::state::types::{KeyHolderEntry, PendingKeyShare};
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PchatKeyHoldersChanged(KeyHoldersChangedPayload {
+                    channel_id: 3,
+                    holders: vec![KeyHolderEntry {
+                        cert_hash: "abc".to_owned(),
+                        name: "Ada".to_owned(),
+                        is_online: true,
+                    }],
+                })
+            ),
+            (
+                "pchat-key-holders-changed",
+                json!({
+                    "channel_id": 3,
+                    "holders": [{ "cert_hash": "abc", "name": "Ada", "is_online": true }],
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PchatKeyShareRequested(KeyShareRequestPayload {
+                    channel_id: 3,
+                    peer_name: "Ada".to_owned(),
+                    peer_cert_hash: "abc".to_owned(),
+                })
+            ),
+            (
+                "pchat-key-share-request",
+                json!({ "channel_id": 3, "peer_name": "Ada", "peer_cert_hash": "abc" })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PchatKeyShareRequestsChanged(KeyShareRequestsChangedPayload {
+                    channel_id: 3,
+                    pending: vec![
+                        PendingKeyShare {
+                            channel_id: 3,
+                            peer_cert_hash: "abc".to_owned(),
+                            peer_name: "Ada".to_owned(),
+                            request_id: None,
+                        },
+                        PendingKeyShare {
+                            channel_id: 3,
+                            peer_cert_hash: "def".to_owned(),
+                            peer_name: "Bob".to_owned(),
+                            request_id: Some("r1".to_owned()),
+                        },
+                    ],
+                })
+            ),
+            (
+                "pchat-key-share-requests-changed",
+                json!({
+                    "channel_id": 3,
+                    "pending": [
+                        { "channel_id": 3, "peer_cert_hash": "abc", "peer_name": "Ada" },
+                        {
+                            "channel_id": 3,
+                            "peer_cert_hash": "def",
+                            "peer_name": "Bob",
+                            "request_id": "r1",
+                        },
+                    ],
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PchatKeyRevoked(PchatKeyRevokedPayload { channel_id: 3 })
+            ),
+            ("pchat-key-revoked", json!({ "channel_id": 3 }))
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PchatKeyRestored(PchatKeyRevokedPayload { channel_id: 3 })
+            ),
+            ("pchat-key-restored", json!({ "channel_id": 3 }))
+        );
+    }
+
+    #[test]
+    fn persistent_chat_reaction_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        use crate::state::types::StoredReactionPayload;
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PchatReactionDelivered(ReactionDeliverPayload {
+                    channel_id: 3,
+                    message_id: "m1".to_owned(),
+                    emoji: "+1".to_owned(),
+                    action: "add".to_owned(),
+                    sender_hash: "abc".to_owned(),
+                    sender_name: "Ada".to_owned(),
+                    timestamp: 17,
+                })
+            ),
+            (
+                "pchat-reaction-deliver",
+                json!({
+                    "channel_id": 3,
+                    "message_id": "m1",
+                    "emoji": "+1",
+                    "action": "add",
+                    "sender_hash": "abc",
+                    "sender_name": "Ada",
+                    "timestamp": 17,
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PchatReactionsFetched(ReactionFetchResponsePayload {
+                    channel_id: 3,
+                    reactions: vec![StoredReactionPayload {
+                        message_id: "m1".to_owned(),
+                        emoji: "+1".to_owned(),
+                        sender_hash: "abc".to_owned(),
+                        sender_name: "Ada".to_owned(),
+                        timestamp: 17,
+                    }],
+                })
+            ),
+            (
+                "pchat-reaction-fetch-response",
+                json!({
+                    "channel_id": 3,
+                    "reactions": [{
+                        "message_id": "m1",
+                        "emoji": "+1",
+                        "sender_hash": "abc",
+                        "sender_name": "Ada",
+                        "timestamp": 17,
+                    }],
+                })
+            )
+        );
+    }
+
+    #[test]
+    fn persistent_chat_pin_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        use crate::state::types::StoredPinPayload;
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PchatPinDelivered(PinDeliverPayload {
+                    channel_id: 3,
+                    message_id: "m1".to_owned(),
+                    pinned: true,
+                    pinner_hash: "abc".to_owned(),
+                    pinner_name: "Ada".to_owned(),
+                    timestamp: 17,
+                })
+            ),
+            (
+                "pchat-pin-deliver",
+                json!({
+                    "channel_id": 3,
+                    "message_id": "m1",
+                    "pinned": true,
+                    "pinner_hash": "abc",
+                    "pinner_name": "Ada",
+                    "timestamp": 17,
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PchatPinsFetched(PinFetchResponsePayload {
+                    channel_id: 3,
+                    pins: vec![StoredPinPayload {
+                        message_id: "m1".to_owned(),
+                        pinner_hash: "abc".to_owned(),
+                        pinner_name: "Ada".to_owned(),
+                        timestamp: 17,
+                    }],
+                })
+            ),
+            (
+                "pchat-pin-fetch-response",
+                json!({
+                    "channel_id": 3,
+                    "pins": [{
+                        "message_id": "m1",
+                        "pinner_hash": "abc",
+                        "pinner_name": "Ada",
+                        "timestamp": 17,
+                    }],
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PchatSignalBridgeError(SignalBridgeErrorPayload {
+                    message: "no library".to_owned(),
+                })
+            ),
+            (
+                "pchat-signal-bridge-error",
+                json!({ "message": "no library" })
             )
         );
     }

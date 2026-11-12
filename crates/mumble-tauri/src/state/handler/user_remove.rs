@@ -116,13 +116,12 @@ fn handle_user_departed(msg: &mumble_tcp::UserRemove, ctx: &HandlerContext) {
         });
     }
     for (ch_id, remaining) in deferred_share_events {
-        ctx.emit(
-            "pchat-key-share-requests-changed",
+        ctx.send(CoreEvent::PchatKeyShareRequestsChanged(
             KeyShareRequestsChangedPayload {
                 channel_id: ch_id,
                 pending: remaining,
             },
-        );
+        ));
     }
     ctx.send(CoreEvent::StateChanged);
 

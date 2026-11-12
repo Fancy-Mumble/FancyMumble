@@ -93,6 +93,7 @@ use mumble_protocol::persistent::wire::{MessageEnvelope, MsgPackCodec, WireCodec
 use super::SharedState;
 use super::local_cache::{CachedMessage, LocalMessageCache};
 use super::types::{PchatHistoryLoadingPayload, SignalBridgeErrorPayload};
+use crate::state::core_event::CoreEvent;
 
 use settings::MAX_STASHED_ENVELOPES;
 
@@ -280,23 +281,21 @@ pub(crate) fn emit_history_loading(
     channel_id: u32,
     loading: bool,
 ) {
-    crate::state::host::emit_for(
+    crate::state::host::tell_view_of(
         shared,
-        "pchat-history-loading",
-        PchatHistoryLoadingPayload {
+        CoreEvent::PchatHistoryLoading(PchatHistoryLoadingPayload {
             channel_id,
             loading,
-        },
+        }),
     );
 }
 
 /// Emit a `pchat-signal-bridge-error` event to the frontend.
 pub(crate) fn emit_signal_bridge_error(shared: &Arc<Mutex<SharedState>>, message: &str) {
-    crate::state::host::emit_for(
+    crate::state::host::tell_view_of(
         shared,
-        "pchat-signal-bridge-error",
-        SignalBridgeErrorPayload {
+        CoreEvent::PchatSignalBridgeError(SignalBridgeErrorPayload {
             message: message.to_string(),
-        },
+        }),
     );
 }

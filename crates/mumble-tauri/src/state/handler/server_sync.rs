@@ -574,13 +574,12 @@ impl HandlerContext {
                     timestamp: r.timestamp,
                 })
                 .collect();
-            self.emit(
-                "pchat-reaction-fetch-response",
+            self.send(CoreEvent::PchatReactionsFetched(
                 ReactionFetchResponsePayload {
                     channel_id: ch_id,
                     reactions: payloads,
                 },
-            );
+            ));
         }
     }
 

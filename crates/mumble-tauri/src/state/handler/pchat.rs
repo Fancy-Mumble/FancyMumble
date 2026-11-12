@@ -120,21 +120,15 @@ impl HandleMessage for mumble_tcp::PchatFetchResponse {
         let total_stored = self.total_stored.unwrap_or(0);
         pchat::handle_proto_fetch_resp(&ctx.shared, self);
         // Signal that history loading is complete for this channel.
-        ctx.emit(
-            "pchat-history-loading",
-            PchatHistoryLoadingPayload {
-                channel_id,
-                loading: false,
-            },
-        );
-        ctx.emit(
-            "pchat-fetch-complete",
-            PchatFetchCompletePayload {
-                channel_id,
-                has_more,
-                total_stored,
-            },
-        );
+        ctx.send(CoreEvent::PchatHistoryLoading(PchatHistoryLoadingPayload {
+            channel_id,
+            loading: false,
+        }));
+        ctx.send(CoreEvent::PchatFetchComplete(PchatFetchCompletePayload {
+            channel_id,
+            has_more,
+            total_stored,
+        }));
         ctx.send(CoreEvent::NewMessage(NewMessagePayload {
             channel_id,
             sender_session: None,
@@ -216,7 +210,7 @@ impl HandleMessage for mumble_tcp::PchatAck {
         }
 
         if let Some(payload) = pchat::handle_proto_ack(&ctx.shared, self) {
-            ctx.emit("pchat-send-rejected", payload);
+            ctx.send(CoreEvent::PchatSendRejected(payload));
         }
     }
 }
@@ -311,13 +305,12 @@ impl HandleMessage for mumble_tcp::PchatKeyHoldersList {
             event.emit();
         }
 
-        ctx.emit(
-            "pchat-key-holders-changed",
+        ctx.send(CoreEvent::PchatKeyHoldersChanged(
             KeyHoldersChangedPayload {
                 channel_id,
                 holders,
             },
-        );
+        ));
     }
 }
 
@@ -458,18 +451,15 @@ impl HandleMessage for mumble_tcp::PchatReactionDeliver {
             }
         }
 
-        ctx.emit(
-            "pchat-reaction-deliver",
-            ReactionDeliverPayload {
-                channel_id,
-                message_id,
-                emoji,
-                action: action_str.to_owned(),
-                sender_hash,
-                sender_name,
-                timestamp,
-            },
-        );
+        ctx.send(CoreEvent::PchatReactionDelivered(ReactionDeliverPayload {
+            channel_id,
+            message_id,
+            emoji,
+            action: action_str.to_owned(),
+            sender_hash,
+            sender_name,
+            timestamp,
+        }));
     }
 }
 
@@ -521,13 +511,12 @@ impl HandleMessage for mumble_tcp::PchatReactionFetchResponse {
             }
         }
 
-        ctx.emit(
-            "pchat-reaction-fetch-response",
+        ctx.send(CoreEvent::PchatReactionsFetched(
             ReactionFetchResponsePayload {
                 channel_id,
                 reactions,
             },
-        );
+        ));
     }
 }
 
@@ -564,17 +553,14 @@ impl HandleMessage for mumble_tcp::PchatPinDeliver {
             );
         }
 
-        ctx.emit(
-            "pchat-pin-deliver",
-            PinDeliverPayload {
-                channel_id,
-                message_id,
-                pinned,
-                pinner_hash,
-                pinner_name,
-                timestamp,
-            },
-        );
+        ctx.send(CoreEvent::PchatPinDelivered(PinDeliverPayload {
+            channel_id,
+            message_id,
+            pinned,
+            pinner_hash,
+            pinner_name,
+            timestamp,
+        }));
     }
 }
 
@@ -607,10 +593,10 @@ impl HandleMessage for mumble_tcp::PchatPinFetchResponse {
             }
         }
 
-        ctx.emit(
-            "pchat-pin-fetch-response",
-            PinFetchResponsePayload { channel_id, pins },
-        );
+        ctx.send(CoreEvent::PchatPinsFetched(PinFetchResponsePayload {
+            channel_id,
+            pins,
+        }));
     }
 }
 

@@ -10,6 +10,7 @@ use mumble_protocol::persistent::PchatProtocol;
 use mumble_protocol::proto::mumble_tcp;
 
 use crate::state::SharedState;
+use crate::state::core_event::CoreEvent;
 use crate::state::types;
 
 use super::conversion::{
@@ -426,10 +427,9 @@ fn finalize_key_acceptance(
 
     // Notify the frontend that the revoked key has been replaced.
     if let Some(ref app) = state.conn.host {
-        let _ = app.emit(
-            "pchat-key-restored",
-            types::PchatKeyRevokedPayload { channel_id },
-        );
+        app.send(CoreEvent::PchatKeyRestored(types::PchatKeyRevokedPayload {
+            channel_id,
+        }));
     }
 
     retry_decrypt_pending_messages(&mut state, channel_id, protocol);
@@ -542,14 +542,13 @@ fn queue_key_share_consent(
     state.pchat_ctx.pending_key_shares.push(pending);
 
     if let Some(ref app) = state.conn.host {
-        let _ = app.emit(
-            "pchat-key-share-request",
+        app.send(CoreEvent::PchatKeyShareRequested(
             types::KeyShareRequestPayload {
                 channel_id,
                 peer_name: peer_name.to_owned(),
                 peer_cert_hash: peer_cert_hash.to_owned(),
             },
-        );
+        ));
     }
 
     debug!(

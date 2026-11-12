@@ -12,6 +12,7 @@ use mumble_protocol::proto::mumble_tcp;
 use mumble_protocol::persistent::PchatProtocol;
 
 use crate::state::SharedState;
+use crate::state::core_event::CoreEvent;
 use crate::state::host::Host;
 use crate::state::types;
 
@@ -51,9 +52,8 @@ impl KeyShareRequestsChanged {
 
     /// Send the event to the view.
     pub(crate) fn emit(self) {
-        let _ = self
-            .host
-            .emit("pchat-key-share-requests-changed", self.payload);
+        self.host
+            .send(CoreEvent::PchatKeyShareRequestsChanged(self.payload));
     }
 }
 
@@ -229,7 +229,7 @@ pub(crate) fn handle_proto_key_holder_report(
         })
     };
     if let Some((app, payload)) = payload {
-        let _ = app.emit("pchat-key-holders-changed", payload);
+        app.send(CoreEvent::PchatKeyHoldersChanged(payload));
     }
 }
 
@@ -359,10 +359,9 @@ pub(crate) fn handle_proto_key_challenge_result(
     }
 
     if let Some(app) = app {
-        let _ = app.emit(
-            "pchat-key-revoked",
-            types::PchatKeyRevokedPayload { channel_id },
-        );
+        app.send(CoreEvent::PchatKeyRevoked(types::PchatKeyRevokedPayload {
+            channel_id,
+        }));
     }
 }
 
@@ -510,10 +509,9 @@ pub(crate) fn send_key_takeover(
         // The channel had no key (post-purge takeover): tell the UI the key
         // is re-established so the revoked banner clears once verified.
         if let Some(app) = app {
-            let _ = app.emit(
-                "pchat-key-restored",
-                types::PchatKeyRevokedPayload { channel_id },
-            );
+            app.send(CoreEvent::PchatKeyRestored(types::PchatKeyRevokedPayload {
+                channel_id,
+            }));
         }
     }
 
