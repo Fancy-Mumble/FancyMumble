@@ -6,7 +6,7 @@
 
 mod account;
 mod acl;
-mod audit;
+pub(super) mod audit;
 mod ban_list;
 mod channel_remove;
 mod channel_state;

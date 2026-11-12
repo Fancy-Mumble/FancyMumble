@@ -14,17 +14,20 @@ use serde::{Serialize, Serializer};
 use serde_json::value::RawValue;
 
 use super::canon_emotes::CanonEmote;
+use super::handler::audit::{AuditResponsePayload, AuditSnapshotPayload};
 use super::handler::files::{
     ChannelFiles, ManagedFiles, RefusedRequest, SharedFile, VoiceSupportPayload,
 };
+use super::handler::operator_ticket::OperatorTicket;
 use super::sessions::ServerId;
 use super::types::{
-    CurrentChannelPayload, DisconnectedPayload, DmUnreadPayload, KeyHoldersChangedPayload,
-    KeyShareRequestPayload, KeyShareRequestsChangedPayload, NewDmPayload, NewMessagePayload,
-    PchatFetchCompletePayload, PchatHistoryLoadingPayload, PchatKeyRevokedPayload,
-    PchatSendRejectedPayload, PinDeliverPayload, PinFetchResponsePayload, ReactionDeliverPayload,
-    ReactionFetchResponsePayload, RejectedPayload, SignalBridgeErrorPayload, UnreadPayload,
-    UploadProgressPayload, VoiceState,
+    AclPayload, AuditConfigSnapshot, AuditEntryPayload, BanEntryPayload, CurrentChannelPayload,
+    DisconnectedPayload, DmUnreadPayload, KeyHoldersChangedPayload, KeyShareRequestPayload,
+    KeyShareRequestsChangedPayload, NewDmPayload, NewMessagePayload, PchatFetchCompletePayload,
+    PchatHistoryLoadingPayload, PchatKeyRevokedPayload, PchatSendRejectedPayload,
+    PinDeliverPayload, PinFetchResponsePayload, ReactionDeliverPayload,
+    ReactionFetchResponsePayload, RegisteredUserPayload, RejectedPayload, SignalBridgeErrorPayload,
+    UnreadPayload, UploadProgressPayload, UserCommentPayload, VoiceState,
 };
 
 /// Something that happened in the engine that a view may want to show.
@@ -99,6 +102,24 @@ pub(crate) enum CoreEvent {
     ServerEmotesChanged(Vec<CanonEmote>),
     /// An upload moved on by at least one percent.
     UploadProgress(UploadProgressPayload),
+    /// A page of the audit log, in answer to a query.
+    AuditResponse(AuditResponsePayload),
+    /// An avatar or comment the audit log kept, in answer to a request for it.
+    AuditSnapshot(AuditSnapshotPayload),
+    /// The server's bans, all of them.
+    BanList(Vec<BanEntryPayload>),
+    /// The groups and access rules of one channel.
+    Acl(AclPayload),
+    /// The server's registered users.
+    RegisteredUsers(Vec<RegisteredUserPayload>),
+    /// The comment of one registered user, fetched on demand.
+    UserComment(UserCommentPayload),
+    /// An entry was just written to the audit log.
+    AuditEvent(AuditEntryPayload),
+    /// The audit log's configuration, as the server now has it.
+    AuditConfig(AuditConfigSnapshot),
+    /// The server answered a request for an operator ticket.
+    OperatorTicket(OperatorTicket),
     /// An event that has not been given a variant yet: its wire name and its
     /// payload, already written out as JSON.
     Untyped {
@@ -160,6 +181,15 @@ impl CoreEvent {
             Self::VoiceSupport(_) => "voice-support",
             Self::ServerEmotesChanged(_) => "server-emotes-changed",
             Self::UploadProgress(_) => "upload-progress",
+            Self::AuditResponse(_) => "audit-response",
+            Self::AuditSnapshot(_) => "audit-snapshot",
+            Self::BanList(_) => "ban-list",
+            Self::Acl(_) => "acl",
+            Self::RegisteredUsers(_) => "user-list",
+            Self::UserComment(_) => "user-comment",
+            Self::AuditEvent(_) => "audit-event",
+            Self::AuditConfig(_) => "audit-config",
+            Self::OperatorTicket(_) => "operator-ticket",
             Self::Untyped { name, .. } => name,
         }
     }
@@ -195,6 +225,13 @@ impl CoreEvent {
                 | Self::FilesManaged(_)
                 | Self::VoiceSupport(_)
                 | Self::UploadProgress(_)
+                | Self::AuditResponse(_)
+                | Self::AuditSnapshot(_)
+                | Self::Acl(_)
+                | Self::UserComment(_)
+                | Self::AuditEvent(_)
+                | Self::AuditConfig(_)
+                | Self::OperatorTicket(_)
         )
     }
 }
@@ -235,9 +272,32 @@ impl Serialize for CoreEvent {
             Self::VoiceSupport(payload) => payload.serialize(serializer),
             Self::ServerEmotesChanged(payload) => payload.serialize(serializer),
             Self::UploadProgress(payload) => payload.serialize(serializer),
+            Self::AuditResponse(payload) => payload.serialize(serializer),
+            Self::AuditSnapshot(payload) => payload.serialize(serializer),
+            Self::BanList(payload) => payload.serialize(serializer),
+            Self::Acl(payload) => payload.serialize(serializer),
+            Self::RegisteredUsers(payload) => payload.serialize(serializer),
+            Self::UserComment(payload) => payload.serialize(serializer),
+            Self::AuditEvent(entry) => keyed(serializer, "entry", entry),
+            Self::AuditConfig(config) => keyed(serializer, "config", config),
+            Self::OperatorTicket(ticket) => keyed(serializer, "ticket", ticket),
             Self::Untyped { payload, .. } => payload.serialize(serializer),
         }
     }
+}
+
+/// Write `value` out as the one field `key` of an object: the shape of an
+/// event whose JSON wraps a single value.
+fn keyed<S: Serializer, T: Serialize>(
+    serializer: S,
+    key: &'static str,
+    value: &T,
+) -> Result<S::Ok, S::Error> {
+    use serde::ser::SerializeMap;
+
+    let mut map = serializer.serialize_map(Some(1))?;
+    map.serialize_entry(key, value)?;
+    map.end()
 }
 
 /// A [`CoreEvent`] and the session it is about.
@@ -859,6 +919,258 @@ mod tests {
                     "aliasEmoji": "w",
                     "description": "hi",
                 }])
+            )
+        );
+    }
+
+    #[test]
+    fn audit_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        let entry = || AuditEntryPayload {
+            id: 4,
+            ts: 17,
+            source: "core".to_owned(),
+            category: "ban".to_owned(),
+            severity: "info".to_owned(),
+            actor_user_id: Some(1),
+            ..AuditEntryPayload::default()
+        };
+        let entry_json = json!({
+            "id": 4,
+            "ts": 17,
+            "source": "core",
+            "category": "ban",
+            "severity": "info",
+            "actorUserId": 1,
+        });
+        assert_eq!(
+            wire(None, CoreEvent::AuditEvent(entry())),
+            ("audit-event", json!({ "entry": entry_json.clone() }))
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::AuditResponse(AuditResponsePayload {
+                    query_id: Some("q1".to_owned()),
+                    entries: vec![entry()],
+                    has_more: true,
+                    next_before_id: Some(3),
+                    error: None,
+                    chain_ok: Some(true),
+                    chain_height: Some(9),
+                    chain_error: None,
+                })
+            ),
+            (
+                "audit-response",
+                json!({
+                    "queryId": "q1",
+                    "entries": [entry_json],
+                    "hasMore": true,
+                    "nextBeforeId": 3,
+                    "error": null,
+                    "chainOk": true,
+                    "chainHeight": 9,
+                    "chainError": null,
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::AuditConfig(AuditConfigSnapshot {
+                    revision: 2,
+                    advanced_sql_available: true,
+                    chain_height: 9,
+                    ..AuditConfigSnapshot::default()
+                })
+            ),
+            (
+                "audit-config",
+                json!({
+                    "config": {
+                        "settings": [],
+                        "revision": 2,
+                        "advancedSqlAvailable": true,
+                        "chainHeight": 9,
+                    },
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::AuditSnapshot(AuditSnapshotPayload {
+                    entry_id: "e1".to_owned(),
+                    query_id: "q1".to_owned(),
+                    found: true,
+                    kind: "comment".to_owned(),
+                    data_url: None,
+                    text: Some("hi".to_owned()),
+                    original_size: 2,
+                    stored_size: 2,
+                })
+            ),
+            (
+                "audit-snapshot",
+                json!({
+                    "entryId": "e1",
+                    "queryId": "q1",
+                    "found": true,
+                    "kind": "comment",
+                    "text": "hi",
+                    "originalSize": 2,
+                    "storedSize": 2,
+                })
+            )
+        );
+    }
+
+    #[test]
+    fn admin_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        // Arrays, so a session is never stamped onto them.
+        let server = Some(ServerId::new());
+        assert_eq!(
+            wire(
+                server,
+                CoreEvent::BanList(vec![BanEntryPayload {
+                    address: "10.0.0.1".to_owned(),
+                    mask: 32,
+                    name: "Ada".to_owned(),
+                    hash: "abc".to_owned(),
+                    reason: "spam".to_owned(),
+                    start: "2026-01-01".to_owned(),
+                    duration: 60,
+                }])
+            ),
+            (
+                "ban-list",
+                json!([{
+                    "address": "10.0.0.1",
+                    "mask": 32,
+                    "name": "Ada",
+                    "hash": "abc",
+                    "reason": "spam",
+                    "start": "2026-01-01",
+                    "duration": 60,
+                }])
+            )
+        );
+        assert_eq!(
+            wire(
+                server,
+                CoreEvent::RegisteredUsers(vec![RegisteredUserPayload {
+                    user_id: 1,
+                    name: "Ada".to_owned(),
+                    last_seen: None,
+                    last_channel: Some(3),
+                    texture_size: Some(512),
+                    comment: None,
+                    comment_hash: None,
+                }])
+            ),
+            (
+                "user-list",
+                json!([{ "user_id": 1, "name": "Ada", "last_channel": 3, "texture_size": 512 }])
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::UserComment(UserCommentPayload {
+                    user_id: 1,
+                    comment: "hi".to_owned(),
+                })
+            ),
+            ("user-comment", json!({ "user_id": 1, "comment": "hi" }))
+        );
+    }
+
+    #[test]
+    fn access_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        use crate::state::types::{AclEntryPayload, AclGroupPayload};
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::Acl(AclPayload {
+                    channel_id: 3,
+                    inherit_acls: true,
+                    groups: vec![AclGroupPayload {
+                        name: "admin".to_owned(),
+                        inherited: false,
+                        inherit: true,
+                        inheritable: true,
+                        add: vec![1],
+                        remove: Vec::new(),
+                        inherited_members: Vec::new(),
+                        color: None,
+                        icon: None,
+                        style_preset: None,
+                        metadata: HashMap::new(),
+                    }],
+                    acls: vec![AclEntryPayload {
+                        apply_here: true,
+                        apply_subs: false,
+                        inherited: false,
+                        user_id: None,
+                        group: Some("admin".to_owned()),
+                        grant: 1,
+                        deny: 0,
+                    }],
+                })
+            ),
+            (
+                "acl",
+                json!({
+                    "channel_id": 3,
+                    "inherit_acls": true,
+                    "groups": [{
+                        "name": "admin",
+                        "inherited": false,
+                        "inherit": true,
+                        "inheritable": true,
+                        "add": [1],
+                        "remove": [],
+                        "inherited_members": [],
+                    }],
+                    "acls": [{
+                        "apply_here": true,
+                        "apply_subs": false,
+                        "inherited": false,
+                        "group": "admin",
+                        "grant": 1,
+                        "deny": 0,
+                    }],
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::OperatorTicket(OperatorTicket {
+                    token: "t".to_owned(),
+                    granted_scopes: vec!["plugins:read".to_owned()],
+                    expires_at_ms: 17,
+                    base_url: "https://x".to_owned(),
+                    denied_reason: String::new(),
+                })
+            ),
+            (
+                "operator-ticket",
+                json!({
+                    "ticket": {
+                        "token": "t",
+                        "grantedScopes": ["plugins:read"],
+                        "expiresAtMs": 17,
+                        "baseUrl": "https://x",
+                    },
+                })
             )
         );
     }

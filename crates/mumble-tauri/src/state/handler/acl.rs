@@ -1,6 +1,7 @@
 use mumble_protocol::proto::mumble_tcp;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::types::{AclEntryPayload, AclGroupPayload, AclPayload};
 
 impl HandleMessage for mumble_tcp::Acl {
@@ -47,6 +48,6 @@ impl HandleMessage for mumble_tcp::Acl {
             groups,
             acls,
         };
-        ctx.emit("acl", payload);
+        ctx.send(CoreEvent::Acl(payload));
     }
 }

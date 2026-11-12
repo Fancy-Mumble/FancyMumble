@@ -2,6 +2,7 @@ use fancy_utils::net::format_ip_address;
 use mumble_protocol::proto::mumble_tcp;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::types::BanEntryPayload;
 
 impl HandleMessage for mumble_tcp::BanList {
@@ -22,6 +23,6 @@ impl HandleMessage for mumble_tcp::BanList {
                 }
             })
             .collect();
-        ctx.emit("ban-list", bans);
+        ctx.send(CoreEvent::BanList(bans));
     }
 }

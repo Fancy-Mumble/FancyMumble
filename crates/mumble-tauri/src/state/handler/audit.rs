@@ -11,6 +11,7 @@ use serde::Serialize;
 
 use super::server_settings::decode_setting;
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::types::{AuditConfigSnapshot, AuditEntryPayload};
 
 pub(crate) fn decode_entry(p: &mumble_tcp::AuditEntry) -> AuditEntryPayload {
@@ -40,39 +41,30 @@ pub(crate) fn decode_entry(p: &mumble_tcp::AuditEntry) -> AuditEntryPayload {
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct AuditResponsePayload {
-    query_id: Option<String>,
-    entries: Vec<AuditEntryPayload>,
-    has_more: bool,
-    next_before_id: Option<u64>,
-    error: Option<String>,
-    chain_ok: Option<bool>,
-    chain_height: Option<u64>,
-    chain_error: Option<String>,
+pub(crate) struct AuditResponsePayload {
+    pub query_id: Option<String>,
+    pub entries: Vec<AuditEntryPayload>,
+    pub has_more: bool,
+    pub next_before_id: Option<u64>,
+    pub error: Option<String>,
+    pub chain_ok: Option<bool>,
+    pub chain_height: Option<u64>,
+    pub chain_error: Option<String>,
 }
 
 impl HandleMessage for mumble_tcp::FancyAuditResponse {
     fn handle(&self, ctx: &HandlerContext) {
-        ctx.emit(
-            "audit-response",
-            AuditResponsePayload {
-                query_id: self.query_id.clone(),
-                entries: self.entries.iter().map(decode_entry).collect(),
-                has_more: self.has_more.unwrap_or(false),
-                next_before_id: self.next_before_id,
-                error: self.error.clone().filter(|e| !e.is_empty()),
-                chain_ok: self.chain_ok,
-                chain_height: self.chain_height,
-                chain_error: self.chain_error.clone().filter(|e| !e.is_empty()),
-            },
-        );
+        ctx.send(CoreEvent::AuditResponse(AuditResponsePayload {
+            query_id: self.query_id.clone(),
+            entries: self.entries.iter().map(decode_entry).collect(),
+            has_more: self.has_more.unwrap_or(false),
+            next_before_id: self.next_before_id,
+            error: self.error.clone().filter(|e| !e.is_empty()),
+            chain_ok: self.chain_ok,
+            chain_height: self.chain_height,
+            chain_error: self.chain_error.clone().filter(|e| !e.is_empty()),
+        }));
     }
-}
-
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct AuditEventPayload {
-    entry: AuditEntryPayload,
 }
 
 impl HandleMessage for mumble_tcp::FancyAuditEvent {
@@ -81,19 +73,8 @@ impl HandleMessage for mumble_tcp::FancyAuditEvent {
         let Some(entry) = self.entry.as_ref() else {
             return;
         };
-        ctx.emit(
-            "audit-event",
-            AuditEventPayload {
-                entry: decode_entry(entry),
-            },
-        );
+        ctx.send(CoreEvent::AuditEvent(decode_entry(entry)));
     }
-}
-
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct AuditConfigPayload {
-    config: AuditConfigSnapshot,
 }
 
 impl HandleMessage for mumble_tcp::FancyAuditConfig {
@@ -119,25 +100,25 @@ impl HandleMessage for mumble_tcp::FancyAuditConfig {
             state.audit_config = Some(snapshot.clone());
         }
 
-        ctx.emit("audit-config", AuditConfigPayload { config: snapshot });
+        ctx.send(CoreEvent::AuditConfig(snapshot));
     }
 }
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct AuditSnapshotPayload {
-    entry_id: String,
-    query_id: String,
-    found: bool,
-    kind: String,
+pub(crate) struct AuditSnapshotPayload {
+    pub entry_id: String,
+    pub query_id: String,
+    pub found: bool,
+    pub kind: String,
     /// An avatar, ready for an `<img>`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    data_url: Option<String>,
+    pub data_url: Option<String>,
     /// A comment, as the HTML source the user wrote.
     #[serde(skip_serializing_if = "Option::is_none")]
-    text: Option<String>,
-    original_size: u64,
-    stored_size: u64,
+    pub text: Option<String>,
+    pub original_size: u64,
+    pub stored_size: u64,
 }
 
 impl HandleMessage for fancy::feature::ProfileSnapshot {
@@ -156,18 +137,15 @@ impl HandleMessage for fancy::feature::ProfileSnapshot {
             });
         let text = (found && self.kind == "comment")
             .then(|| String::from_utf8_lossy(&self.body).into_owned());
-        ctx.emit(
-            "audit-snapshot",
-            AuditSnapshotPayload {
-                entry_id: self.entry_id.clone(),
-                query_id: self.query_id.clone(),
-                found,
-                kind: self.kind.clone(),
-                data_url,
-                text,
-                original_size: self.original_size,
-                stored_size: self.stored_size,
-            },
-        );
+        ctx.send(CoreEvent::AuditSnapshot(AuditSnapshotPayload {
+            entry_id: self.entry_id.clone(),
+            query_id: self.query_id.clone(),
+            found,
+            kind: self.kind.clone(),
+            data_url,
+            text,
+            original_size: self.original_size,
+            stored_size: self.stored_size,
+        }));
     }
 }

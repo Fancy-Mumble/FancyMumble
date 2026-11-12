@@ -10,6 +10,7 @@ use serde::Serialize;
 use tokio::sync::oneshot;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 
 /// Backend code waiting on a ticket.
 ///
@@ -66,11 +67,6 @@ pub(crate) struct OperatorTicket {
     pub denied_reason: String,
 }
 
-#[derive(Serialize)]
-struct OperatorTicketPayload {
-    ticket: OperatorTicket,
-}
-
 impl HandleMessage for fancy::domain::OperatorTicketReply {
     fn handle(&self, ctx: &HandlerContext) {
         let ticket = OperatorTicket {
@@ -83,7 +79,7 @@ impl HandleMessage for fancy::domain::OperatorTicketReply {
         if let Ok(mut shared) = ctx.shared.lock() {
             shared.operator_tickets.deliver(&ticket);
         }
-        ctx.emit("operator-ticket", OperatorTicketPayload { ticket });
+        ctx.send(CoreEvent::OperatorTicket(ticket));
     }
 }
 

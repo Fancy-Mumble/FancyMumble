@@ -1,6 +1,7 @@
 use mumble_protocol::proto::mumble_tcp;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::types::{RegisteredUserPayload, UserCommentPayload};
 
 impl HandleMessage for mumble_tcp::UserList {
@@ -18,13 +19,10 @@ impl HandleMessage for mumble_tcp::UserList {
             if u.name.is_none()
                 && let Some(comment) = u.comment.as_deref().filter(|c| !c.is_empty())
             {
-                ctx.emit(
-                    "user-comment",
-                    UserCommentPayload {
-                        user_id: u.user_id,
-                        comment: comment.to_owned(),
-                    },
-                );
+                ctx.send(CoreEvent::UserComment(UserCommentPayload {
+                    user_id: u.user_id,
+                    comment: comment.to_owned(),
+                }));
                 return;
             }
         }
@@ -56,6 +54,6 @@ impl HandleMessage for mumble_tcp::UserList {
             })
             .collect();
         drop(textures);
-        ctx.emit("user-list", users);
+        ctx.send(CoreEvent::RegisteredUsers(users));
     }
 }
