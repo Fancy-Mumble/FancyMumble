@@ -85,9 +85,7 @@ impl AppState {
                 let mut talking: Vec<u32> = state.audio.talking_sessions.iter().copied().collect();
                 // Same omission as above: the set is remote speakers only, and
                 // a roster that never rings your own avatar looks broken.
-                if self
-                    .local_talking
-                    .load(std::sync::atomic::Ordering::Relaxed)
+                if self.local_talking.is_talking()
                     && let Some(own) = own_session
                 {
                     talking.push(own);
@@ -120,15 +118,10 @@ impl AppState {
         // channel where only you are speaking looks silent from in here. Asked
         // as "how long ago", because an utterance shorter than the caller's
         // poll interval is invisible to a question asked in the present tense.
-        if self
-            .local_talking
-            .load(std::sync::atomic::Ordering::Relaxed)
-        {
+        if self.local_talking.is_talking() {
             return true;
         }
-        let spoke_at = self
-            .local_talking_at
-            .load(std::sync::atomic::Ordering::Relaxed);
+        let spoke_at = self.local_talking.changed_at_ms();
         if spoke_at != 0 && now_ms.saturating_sub(spoke_at) < LOCAL_TALKING_GRACE_MS {
             return true;
         }
@@ -174,7 +167,6 @@ fn empty_snapshot() -> OverlaySnapshot {
 )]
 mod tests {
     use super::super::AppState;
-    use std::sync::atomic::Ordering;
 
     /// The regression this file exists to prevent: `talking_sessions` holds
     /// only remote speakers, so a channel where the local user is the one
@@ -185,14 +177,15 @@ mod tests {
         let state = AppState::new();
         assert!(!state.overlay_has_activity(0));
 
-        state.local_talking.store(true, Ordering::Relaxed);
+        state.local_talking.set(true);
         assert!(
             state.overlay_has_activity(0),
             "talking into the microphone is activity even with nobody else speaking"
         );
 
-        state.local_talking.store(false, Ordering::Relaxed);
-        assert!(!state.overlay_has_activity(0));
+        // Stopping leaves a grace period behind it; long after that, silence.
+        state.local_talking.set(false);
+        assert!(!state.overlay_has_activity(u64::MAX));
     }
 
     #[test]

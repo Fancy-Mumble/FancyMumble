@@ -43,6 +43,7 @@ pub(crate) mod canon_emotes;
 pub(crate) mod hash_names;
 mod invites;
 pub(crate) mod local_cache;
+mod local_talking;
 pub(crate) mod media_server;
 mod messaging;
 pub mod offload;
@@ -752,23 +753,9 @@ pub struct AppState {
     /// Discord Rich Presence listener, idle until the user enables it.
     #[cfg(not(target_os = "android"))]
     pub(crate) presence: presence::PresenceManager,
-    /// Whether the local microphone is transmitting right now.
-    ///
-    /// `SharedState::audio::talking_sessions` holds only *remote* speakers -
-    /// the local user's talking is emitted straight to the frontend and never
-    /// recorded - so anything in Rust that asks "is anyone talking" has to ask
-    /// here as well. An atomic rather than a field on `SharedState` because
-    /// the writer is the outbound audio loop, and taking that lock on an
-    /// utterance edge is how the mixer ends up dropping samples.
-    pub(crate) local_talking: std::sync::atomic::AtomicBool,
-    /// Unix epoch milliseconds of the most recent moment the local microphone
-    /// was transmitting.
-    ///
-    /// The bool alone is not enough for anything that polls: "yes" is true only
-    /// while a packet is in flight, and a two-word reply is over long before a
-    /// half-second tick comes round to look. This is the edge that cannot be
-    /// missed, so pollers ask how long ago rather than whether right now.
-    pub(crate) local_talking_at: std::sync::atomic::AtomicU64,
+    /// Whether the local microphone is transmitting; shared with the outbound
+    /// audio loop, which is what writes it.
+    pub(crate) local_talking: Arc<local_talking::LocalTalking>,
 }
 
 impl AppState {
@@ -794,8 +781,7 @@ impl AppState {
             download_url_locks: Mutex::new(HashMap::new()),
             #[cfg(not(target_os = "android"))]
             presence: presence::PresenceManager::default(),
-            local_talking: std::sync::atomic::AtomicBool::new(false),
-            local_talking_at: std::sync::atomic::AtomicU64::new(0),
+            local_talking: Arc::default(),
         }
     }
 

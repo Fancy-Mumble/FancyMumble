@@ -581,8 +581,10 @@ mod voice_pipeline {
             let outbound_handle = if let Some(client) = client_handle {
                 let client = client.clone();
                 let app = app.clone();
+                let talking = Arc::clone(&self.local_talking);
                 Some(tokio::spawn(async move {
-                    outbound_audio_loop(outbound, client, app, own_session, voice_target).await;
+                    outbound_audio_loop(outbound, client, app, talking, own_session, voice_target)
+                        .await;
                 }))
             } else {
                 None

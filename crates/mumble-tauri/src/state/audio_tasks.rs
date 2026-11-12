@@ -21,6 +21,7 @@ use super::SharedState;
 use super::calibration::{
     AUTO_CALIBRATION_WINDOW, CalibrationResult, Calibrator, frame_peak, frame_rms,
 };
+use super::local_talking::LocalTalking;
 use super::types::{MicAmplitudePayload, VoiceActivationCalibrationPayload};
 use crate::state::host::Host;
 
@@ -39,6 +40,7 @@ pub(super) struct AudioPacketOut {
 /// clears the self-talking indicator if the task is cancelled.
 struct TalkingGuard {
     app: Option<Host>,
+    flag: Arc<LocalTalking>,
     session: Option<u32>,
     is_talking: bool,
 }
@@ -48,34 +50,16 @@ impl Drop for TalkingGuard {
         if self.is_talking
             && let (Some(app), Some(session)) = (&self.app, self.session)
         {
-            report_local_talking(app, session, false);
+            report_local_talking(app, &self.flag, session, false);
         }
     }
 }
 
-/// Mirror the local talking edge into [`AppState`].
-///
-/// One relaxed atomic store on the edges that already emit the event, so the
-/// audio loop pays a few nanoseconds once per utterance and never a lock.
-fn set_local_talking(app: &Host, talking: bool) {
-    use std::sync::atomic::Ordering;
-    let Some(state) = app.app_state() else {
-        return;
-    };
-    state.local_talking.store(talking, Ordering::Relaxed);
-    // Stamped on both edges: a poller that only ever sees "not talking now"
-    // still has to be able to tell a moment ago from a minute ago.
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
-    state.local_talking_at.store(now_ms, Ordering::Relaxed);
-}
-
 /// The local user started or stopped transmitting: tell the view, and record
 /// it for anything that polls instead of listening.
-fn report_local_talking(app: &Host, session: u32, talking: bool) {
+fn report_local_talking(app: &Host, flag: &LocalTalking, session: u32, talking: bool) {
     super::audio::emit_user_talking(app, session, talking);
-    set_local_talking(app, talking);
+    flag.set(talking);
 }
 
 /// Background task that reads from the microphone, encodes, and queues
@@ -91,6 +75,7 @@ pub(super) async fn outbound_audio_loop(
     mut pipeline: OutboundPipeline,
     handle: ClientHandle,
     app: Option<Host>,
+    local_talking: Arc<LocalTalking>,
     own_session: Option<u32>,
     voice_target: Arc<AtomicU8>,
 ) {
@@ -130,6 +115,7 @@ pub(super) async fn outbound_audio_loop(
     let mut last_tick = tokio::time::Instant::now();
     let mut guard = TalkingGuard {
         app: app.clone(),
+        flag: local_talking,
         session: own_session,
         is_talking: false,
     };
@@ -203,7 +189,7 @@ fn process_outbound_tick(
             if guard.is_talking {
                 guard.is_talking = false;
                 if let (Some(app), Some(session)) = (app, own_session) {
-                    report_local_talking(app, session, false);
+                    report_local_talking(app, &guard.flag, session, false);
                 }
                 let _ = tx.try_send(AudioPacketOut {
                     data: packet.data,
@@ -219,7 +205,7 @@ fn process_outbound_tick(
             if !guard.is_talking {
                 guard.is_talking = true;
                 if let (Some(app), Some(session)) = (app, own_session) {
-                    report_local_talking(app, session, true);
+                    report_local_talking(app, &guard.flag, session, true);
                 }
             }
             if stats.packets == 1 || stats.packets.is_multiple_of(500) {
@@ -247,7 +233,7 @@ fn process_outbound_tick(
             if guard.is_talking {
                 guard.is_talking = false;
                 if let (Some(app), Some(session)) = (app, own_session) {
-                    report_local_talking(app, session, false);
+                    report_local_talking(app, &guard.flag, session, false);
                 }
             }
             debug!(
