@@ -11,59 +11,60 @@ use serde::Serialize;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 
 /// One result, as the picker renders it.
 #[derive(Serialize, Clone)]
-struct GifResult {
-    id: String,
-    title: String,
+pub(crate) struct GifResult {
+    pub id: String,
+    pub title: String,
     /// Full size, for sending into a channel.
-    url: String,
+    pub url: String,
     /// Grid size, for drawing the picker.
-    preview: String,
+    pub preview: String,
     /// Zero means the provider did not say, and the grid should not reserve
     /// space it may have to give back.
-    width: u32,
-    height: u32,
-    preview_width: u32,
-    preview_height: u32,
-    mime: String,
+    pub width: u32,
+    pub height: u32,
+    pub preview_width: u32,
+    pub preview_height: u32,
+    pub mime: String,
 }
 
 #[derive(Serialize, Clone)]
-struct GifPagePayload {
-    request_id: String,
-    results: Vec<GifResult>,
-    page: u32,
-    has_next: bool,
+pub(crate) struct GifPagePayload {
+    pub request_id: String,
+    pub results: Vec<GifResult>,
+    pub page: u32,
+    pub has_next: bool,
     /// Which provider answered, for the attribution these APIs require.
-    provider: String,
+    pub provider: String,
 }
 
 #[derive(Serialize, Clone)]
-struct GifRefusedPayload {
-    request_id: String,
-    reason: String,
-    retry_after_ms: u32,
+pub(crate) struct GifRefusedPayload {
+    pub request_id: String,
+    pub reason: String,
+    pub retry_after_ms: u32,
     /// `"unavailable" | "throttled" | "upstream" | "malformed"`.
     ///
     /// A string rather than the raw enum number: the frontend branches on this
     /// to decide whether falling back to the user's own key is right, and a
     /// magic number at that decision is how the wrong branch gets taken after a
     /// renumbering nobody noticed.
-    kind: &'static str,
+    pub kind: &'static str,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
-struct GifSupportPayload {
-    request_id: String,
+pub(crate) struct GifSupportPayload {
+    pub request_id: String,
     /// Whether a search would be served at all.
-    available: bool,
+    pub available: bool,
     /// The prefix the server's proxied `url`s and `preview`s start with, or
     /// empty when results point at the provider's own CDN.
-    media_base: String,
+    pub media_base: String,
     /// Which provider answers, for attribution.
-    provider: String,
+    pub provider: String,
 }
 
 impl From<&fancy::media::GifSupport> for GifSupportPayload {
@@ -100,30 +101,27 @@ impl HandleMessage for fancy::media::GifPage {
             page = self.page,
             "received a page of gif results"
         );
-        ctx.emit(
-            "gif-search-page",
-            GifPagePayload {
-                request_id: self.request_id.clone(),
-                results: self
-                    .results
-                    .iter()
-                    .map(|gif| GifResult {
-                        id: gif.id.clone(),
-                        title: gif.title.clone(),
-                        url: gif.url.clone(),
-                        preview: gif.preview_url.clone(),
-                        width: gif.width,
-                        height: gif.height,
-                        preview_width: gif.preview_width,
-                        preview_height: gif.preview_height,
-                        mime: gif.mime.clone(),
-                    })
-                    .collect(),
-                page: self.page,
-                has_next: self.has_next,
-                provider: self.provider.clone(),
-            },
-        );
+        ctx.send(CoreEvent::GifPage(GifPagePayload {
+            request_id: self.request_id.clone(),
+            results: self
+                .results
+                .iter()
+                .map(|gif| GifResult {
+                    id: gif.id.clone(),
+                    title: gif.title.clone(),
+                    url: gif.url.clone(),
+                    preview: gif.preview_url.clone(),
+                    width: gif.width,
+                    height: gif.height,
+                    preview_width: gif.preview_width,
+                    preview_height: gif.preview_height,
+                    mime: gif.mime.clone(),
+                })
+                .collect(),
+            page: self.page,
+            has_next: self.has_next,
+            provider: self.provider.clone(),
+        }));
     }
 }
 
@@ -135,15 +133,12 @@ impl HandleMessage for fancy::media::GifRefused {
             kind = kind_of(self.kind),
             "the server refused a gif search"
         );
-        ctx.emit(
-            "gif-search-refused",
-            GifRefusedPayload {
-                request_id: self.request_id.clone(),
-                reason: self.reason.clone(),
-                retry_after_ms: self.retry_after_ms,
-                kind: kind_of(self.kind),
-            },
-        );
+        ctx.send(CoreEvent::GifSearchRefused(GifRefusedPayload {
+            request_id: self.request_id.clone(),
+            reason: self.reason.clone(),
+            retry_after_ms: self.retry_after_ms,
+            kind: kind_of(self.kind),
+        }));
     }
 }
 
@@ -156,7 +151,7 @@ impl HandleMessage for fancy::media::GifSupport {
             provider = %self.provider,
             "the server said what its gif service can do"
         );
-        ctx.emit("gif-support", GifSupportPayload::from(self));
+        ctx.send(CoreEvent::GifSupport(GifSupportPayload::from(self)));
     }
 }
 

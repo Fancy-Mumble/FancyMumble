@@ -3,18 +3,19 @@ use serde::Serialize;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct PollPayload {
-    channel_id: u32,
-    poll_id: String,
-    question: String,
-    options: Vec<String>,
-    multiple: bool,
-    creator_session: u32,
-    creator_name: Option<String>,
-    created_at: Option<String>,
+pub(crate) struct PollPayload {
+    pub channel_id: u32,
+    pub poll_id: String,
+    pub question: String,
+    pub options: Vec<String>,
+    pub multiple: bool,
+    pub creator_session: u32,
+    pub creator_name: Option<String>,
+    pub created_at: Option<String>,
 }
 
 impl HandleMessage for mumble_tcp::FancyPoll {
@@ -31,30 +32,27 @@ impl HandleMessage for mumble_tcp::FancyPoll {
             debug!("FancyPoll dropped: creator_session is 0/None");
             return;
         }
-        ctx.emit(
-            "fancy-poll",
-            PollPayload {
-                channel_id,
-                poll_id,
-                question: self.question.clone().unwrap_or_default(),
-                options: self.options.clone(),
-                multiple: self.multiple.unwrap_or(false),
-                creator_session,
-                creator_name: self.creator_name.clone(),
-                created_at: self.created_at.clone(),
-            },
-        );
+        ctx.send(CoreEvent::Poll(PollPayload {
+            channel_id,
+            poll_id,
+            question: self.question.clone().unwrap_or_default(),
+            options: self.options.clone(),
+            multiple: self.multiple.unwrap_or(false),
+            creator_session,
+            creator_name: self.creator_name.clone(),
+            created_at: self.created_at.clone(),
+        }));
     }
 }
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct PollVotePayload {
-    channel_id: u32,
-    poll_id: String,
-    selected: Vec<u32>,
-    voter_session: u32,
-    voter_name: Option<String>,
+pub(crate) struct PollVotePayload {
+    pub channel_id: u32,
+    pub poll_id: String,
+    pub selected: Vec<u32>,
+    pub voter_session: u32,
+    pub voter_name: Option<String>,
 }
 
 impl HandleMessage for mumble_tcp::FancyPollVote {
@@ -71,15 +69,12 @@ impl HandleMessage for mumble_tcp::FancyPollVote {
             debug!("FancyPollVote dropped: voter_session is 0/None");
             return;
         }
-        ctx.emit(
-            "fancy-poll-vote",
-            PollVotePayload {
-                channel_id,
-                poll_id,
-                selected: self.selected.clone(),
-                voter_session,
-                voter_name: self.voter_name.clone(),
-            },
-        );
+        ctx.send(CoreEvent::PollVote(PollVotePayload {
+            channel_id,
+            poll_id,
+            selected: self.selected.clone(),
+            voter_session,
+            voter_name: self.voter_name.clone(),
+        }));
     }
 }

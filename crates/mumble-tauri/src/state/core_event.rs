@@ -20,12 +20,16 @@ use super::handler::draw_stroke::DrawStrokePayload;
 use super::handler::files::{
     ChannelFiles, ManagedFiles, RefusedRequest, SharedFile, VoiceSupportPayload,
 };
+use super::handler::forum::{ForumFetchResponsePayload, ForumPostPayload};
+use super::handler::gifs::{GifPagePayload, GifRefusedPayload, GifSupportPayload};
 use super::handler::link_preview::LinkPreviewResponsePayload;
 use super::handler::livery::LiverySnapshot;
 use super::handler::operator_ticket::OperatorTicket;
 use super::handler::plugin_admin::{PluginAdminAckPayload, PluginAdminListPayload};
 use super::handler::plugin_message::PluginMessagePayload;
+use super::handler::poll::{PollPayload, PollVotePayload};
 use super::handler::read_receipt::ReadReceiptDeliverPayload;
+use super::handler::scheduled_message::{ScheduledMessageAckPayload, ScheduledMessagePayload};
 use super::handler::typing_indicator::TypingIndicatorPayload;
 use super::handler::version::ServerVersionPayload;
 use super::handler::watch_sync::WatchSyncPayload;
@@ -187,6 +191,24 @@ pub(crate) enum CoreEvent {
     WatchSync(WatchSyncPayload),
     /// WebRTC signalling the view's own peers must answer.
     WebRtcSignal(WebRtcSignalPayload),
+    /// A poll was posted in a channel.
+    Poll(PollPayload),
+    /// Someone voted in a poll.
+    PollVote(PollVotePayload),
+    /// A forum post was created, edited or deleted.
+    ForumPost(ForumPostPayload),
+    /// A page of a forum channel's posts.
+    ForumPosts(ForumFetchResponsePayload),
+    /// The server's answer to scheduling or cancelling a message.
+    ScheduledMessageAck(ScheduledMessageAckPayload),
+    /// A page of GIF search results.
+    GifPage(GifPagePayload),
+    /// The server refused a GIF search.
+    GifSearchRefused(GifRefusedPayload),
+    /// Whether the server offers a GIF search, and through whom.
+    GifSupport(GifSupportPayload),
+    /// The user's scheduled messages, all of them.
+    ScheduledMessages(Vec<ScheduledMessagePayload>),
     /// An event that has not been given a variant yet: its wire name and its
     /// payload, already written out as JSON.
     Untyped {
@@ -284,6 +306,15 @@ impl CoreEvent {
             Self::DrawStroke(_) => "draw-stroke",
             Self::WatchSync(_) => "watch-sync",
             Self::WebRtcSignal(_) => "webrtc-signal",
+            Self::Poll(_) => "fancy-poll",
+            Self::PollVote(_) => "fancy-poll-vote",
+            Self::ForumPost(_) => "fancy-forum-post",
+            Self::ForumPosts(_) => "fancy-forum-fetch-response",
+            Self::ScheduledMessageAck(_) => "fancy-scheduled-message-ack",
+            Self::GifPage(_) => "gif-search-page",
+            Self::GifSearchRefused(_) => "gif-search-refused",
+            Self::GifSupport(_) => "gif-support",
+            Self::ScheduledMessages(_) => "fancy-scheduled-message-list",
             Self::Untyped { name, .. } => name,
         }
     }
@@ -351,6 +382,15 @@ impl CoreEvent {
                 | Self::DrawStroke(_)
                 | Self::WatchSync(_)
                 | Self::WebRtcSignal(_)
+                | Self::Poll(_)
+                | Self::PollVote(_)
+                | Self::ForumPost(_)
+                | Self::ForumPosts(_)
+                | Self::ScheduledMessageAck(_)
+                | Self::GifPage(_)
+                | Self::GifSearchRefused(_)
+                | Self::GifSupport(_)
+                | Self::ScheduledMessages(_)
         )
     }
 }
@@ -428,6 +468,15 @@ impl Serialize for CoreEvent {
             Self::DrawStroke(payload) => payload.serialize(serializer),
             Self::WatchSync(payload) => payload.serialize(serializer),
             Self::WebRtcSignal(payload) => payload.serialize(serializer),
+            Self::Poll(payload) => payload.serialize(serializer),
+            Self::PollVote(payload) => payload.serialize(serializer),
+            Self::ForumPost(payload) => payload.serialize(serializer),
+            Self::ForumPosts(payload) => payload.serialize(serializer),
+            Self::ScheduledMessageAck(payload) => payload.serialize(serializer),
+            Self::GifPage(payload) => payload.serialize(serializer),
+            Self::GifSearchRefused(payload) => payload.serialize(serializer),
+            Self::GifSupport(payload) => payload.serialize(serializer),
+            Self::ScheduledMessages(messages) => keyed(serializer, "messages", messages),
             Self::Untyped { payload, .. } => payload.serialize(serializer),
         }
     }
@@ -1812,6 +1861,253 @@ mod tests {
                     "sessionId": "w1",
                     "actor": 9,
                     "event": { "type": "join", "session": 9 },
+                })
+            )
+        );
+    }
+
+    #[test]
+    fn poll_and_forum_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::Poll(PollPayload {
+                    channel_id: 3,
+                    poll_id: "p1".to_owned(),
+                    question: "Lunch?".to_owned(),
+                    options: vec!["yes".to_owned()],
+                    multiple: false,
+                    creator_session: 9,
+                    creator_name: None,
+                    created_at: None,
+                })
+            ),
+            (
+                "fancy-poll",
+                json!({
+                    "channelId": 3,
+                    "pollId": "p1",
+                    "question": "Lunch?",
+                    "options": ["yes"],
+                    "multiple": false,
+                    "creatorSession": 9,
+                    "creatorName": null,
+                    "createdAt": null,
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PollVote(PollVotePayload {
+                    channel_id: 3,
+                    poll_id: "p1".to_owned(),
+                    selected: vec![0],
+                    voter_session: 9,
+                    voter_name: Some("Ada".to_owned()),
+                })
+            ),
+            (
+                "fancy-poll-vote",
+                json!({
+                    "channelId": 3,
+                    "pollId": "p1",
+                    "selected": [0],
+                    "voterSession": 9,
+                    "voterName": "Ada",
+                })
+            )
+        );
+        let post = ForumPostPayload {
+            channel_id: 3,
+            post_id: "f1".to_owned(),
+            thread_id: "t1".to_owned(),
+            title: Some("Hello".to_owned()),
+            body: None,
+            author_hash: None,
+            author_session: Some(9),
+            author_name: None,
+            created_at: Some(17),
+            edited_at: None,
+            deleted: false,
+            reply_count: 2,
+        };
+        let post_json = json!({
+            "channelId": 3,
+            "postId": "f1",
+            "threadId": "t1",
+            "title": "Hello",
+            "body": null,
+            "authorHash": null,
+            "authorSession": 9,
+            "authorName": null,
+            "createdAt": 17,
+            "editedAt": null,
+            "deleted": false,
+            "replyCount": 2,
+        });
+        assert_eq!(
+            wire(None, CoreEvent::ForumPost(post.clone())),
+            ("fancy-forum-post", post_json.clone())
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::ForumPosts(ForumFetchResponsePayload {
+                    channel_id: 3,
+                    thread_id: None,
+                    posts: vec![post],
+                    has_more: true,
+                })
+            ),
+            (
+                "fancy-forum-fetch-response",
+                json!({ "channelId": 3, "threadId": null, "posts": [post_json], "hasMore": true })
+            )
+        );
+    }
+
+    #[test]
+    fn scheduled_message_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::ScheduledMessages(vec![ScheduledMessagePayload {
+                    schedule_id: "s1".to_owned(),
+                    channel_ids: vec![3],
+                    tree_ids: Vec::new(),
+                    message: Some("hi".to_owned()),
+                    deliver_at: Some(17),
+                    creator_session: None,
+                    creator_hash: None,
+                    creator_name: None,
+                    created_at: None,
+                    status: 0,
+                }])
+            ),
+            (
+                "fancy-scheduled-message-list",
+                json!({
+                    "messages": [{
+                        "scheduleId": "s1",
+                        "channelIds": [3],
+                        "treeIds": [],
+                        "message": "hi",
+                        "deliverAt": 17,
+                        "creatorSession": null,
+                        "creatorHash": null,
+                        "creatorName": null,
+                        "createdAt": null,
+                        "status": 0,
+                    }],
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::ScheduledMessageAck(ScheduledMessageAckPayload {
+                    schedule_id: Some("s1".to_owned()),
+                    status: 1,
+                    reason: None,
+                })
+            ),
+            (
+                "fancy-scheduled-message-ack",
+                json!({ "scheduleId": "s1", "status": 1, "reason": null })
+            )
+        );
+    }
+
+    #[test]
+    fn gif_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        use crate::state::handler::gifs::GifResult;
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::GifPage(GifPagePayload {
+                    request_id: "r1".to_owned(),
+                    results: vec![GifResult {
+                        id: "g1".to_owned(),
+                        title: "wave".to_owned(),
+                        url: "https://x/g1".to_owned(),
+                        preview: "https://x/g1s".to_owned(),
+                        width: 4,
+                        height: 3,
+                        preview_width: 2,
+                        preview_height: 1,
+                        mime: "image/gif".to_owned(),
+                    }],
+                    page: 1,
+                    has_next: false,
+                    provider: "klipy".to_owned(),
+                })
+            ),
+            (
+                "gif-search-page",
+                json!({
+                    "request_id": "r1",
+                    "results": [{
+                        "id": "g1",
+                        "title": "wave",
+                        "url": "https://x/g1",
+                        "preview": "https://x/g1s",
+                        "width": 4,
+                        "height": 3,
+                        "preview_width": 2,
+                        "preview_height": 1,
+                        "mime": "image/gif",
+                    }],
+                    "page": 1,
+                    "has_next": false,
+                    "provider": "klipy",
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::GifSearchRefused(GifRefusedPayload {
+                    request_id: "r1".to_owned(),
+                    reason: "slow down".to_owned(),
+                    retry_after_ms: 500,
+                    kind: "rateLimited",
+                })
+            ),
+            (
+                "gif-search-refused",
+                json!({
+                    "request_id": "r1",
+                    "reason": "slow down",
+                    "retry_after_ms": 500,
+                    "kind": "rateLimited",
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::GifSupport(GifSupportPayload {
+                    request_id: "r1".to_owned(),
+                    available: true,
+                    media_base: "https://x".to_owned(),
+                    provider: "klipy".to_owned(),
+                })
+            ),
+            (
+                "gif-support",
+                json!({
+                    "request_id": "r1",
+                    "available": true,
+                    "media_base": "https://x",
+                    "provider": "klipy",
                 })
             )
         );

@@ -2,6 +2,7 @@ use mumble_protocol::proto::mumble_tcp;
 use serde::Serialize;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 
 /// A single forum post as delivered to the frontend.
 #[derive(Serialize, Clone)]
@@ -46,17 +47,17 @@ impl HandleMessage for mumble_tcp::FancyForumPost {
         if self.post_id.as_deref().unwrap_or_default().is_empty() {
             return;
         }
-        ctx.emit("fancy-forum-post", ForumPostPayload::from(self));
+        ctx.send(CoreEvent::ForumPost(ForumPostPayload::from(self)));
     }
 }
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-struct ForumFetchResponsePayload {
-    channel_id: u32,
-    thread_id: Option<String>,
-    posts: Vec<ForumPostPayload>,
-    has_more: bool,
+pub(crate) struct ForumFetchResponsePayload {
+    pub channel_id: u32,
+    pub thread_id: Option<String>,
+    pub posts: Vec<ForumPostPayload>,
+    pub has_more: bool,
 }
 
 impl HandleMessage for mumble_tcp::FancyForumFetchResponse {
@@ -65,14 +66,11 @@ impl HandleMessage for mumble_tcp::FancyForumFetchResponse {
             return;
         };
         let thread_id = self.thread_id.clone().filter(|t| !t.is_empty());
-        ctx.emit(
-            "fancy-forum-fetch-response",
-            ForumFetchResponsePayload {
-                channel_id,
-                thread_id,
-                posts: self.posts.iter().map(ForumPostPayload::from).collect(),
-                has_more: self.has_more.unwrap_or(false),
-            },
-        );
+        ctx.send(CoreEvent::ForumPosts(ForumFetchResponsePayload {
+            channel_id,
+            thread_id,
+            posts: self.posts.iter().map(ForumPostPayload::from).collect(),
+            has_more: self.has_more.unwrap_or(false),
+        }));
     }
 }
