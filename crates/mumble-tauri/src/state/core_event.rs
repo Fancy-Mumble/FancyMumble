@@ -580,15 +580,43 @@ impl Event {
     pub(crate) fn into_wire(self) -> Result<(&'static str, Box<RawValue>), serde_json::Error> {
         let name = self.kind.name();
         let payload = match self.server {
-            Some(server) if self.kind.payload_is_object() => {
+            // These two carry a `serverId` of their own, which wins unless it
+            // is null, so the payload has to be looked at to tell.
+            Some(server)
+                if matches!(
+                    self.kind,
+                    CoreEvent::Disconnected(_) | CoreEvent::ConnectionRejected(_)
+                ) =>
+            {
                 let mut value = serde_json::to_value(&self.kind)?;
                 stamp_server_id(&mut value, server.to_string());
                 serde_json::value::to_raw_value(&value)?
+            }
+            Some(server) if self.kind.payload_is_object() => {
+                let json = serde_json::to_string(&self.kind)?;
+                RawValue::from_string(with_server_id(json, server))?
             }
             _ => serde_json::value::to_raw_value(&self.kind)?,
         };
         Ok((name, payload))
     }
+}
+
+/// `json`, an object that has no `serverId` field, with one added.
+///
+/// Spliced into the text rather than parsed, changed and written out again:
+/// most events are stamped, some are megabytes of base64, and a parsed tree
+/// costs several times the payload in allocations for the sake of one field.
+fn with_server_id(json: String, server: ServerId) -> String {
+    let Some(fields) = json.strip_prefix('{') else {
+        return json;
+    };
+    let separator = if fields.trim_start().starts_with('}') {
+        ""
+    } else {
+        ","
+    };
+    format!("{{\"serverId\":\"{server}\"{separator}{fields}")
 }
 
 /// Insert (or replace) a `serverId` field into a JSON-object payload.
@@ -2428,6 +2456,23 @@ mod tests {
             }),
         );
         assert_eq!(payload["serverId"], "other");
+    }
+
+    #[test]
+    fn a_stamped_payload_stays_one_well_formed_object() {
+        let server = ServerId::new();
+        let stamped = with_server_id(r#"{"channel_id":3}"#.to_owned(), server);
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&stamped).unwrap(),
+            serde_json::json!({ "serverId": server.to_string(), "channel_id": 3 })
+        );
+        let stamped = with_server_id("{}".to_owned(), server);
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&stamped).unwrap(),
+            serde_json::json!({ "serverId": server.to_string() })
+        );
+        // Not an object after all: nothing to add a field to.
+        assert_eq!(with_server_id("[1]".to_owned(), server), "[1]");
     }
 
     #[test]
