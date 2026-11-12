@@ -33,7 +33,7 @@
 //! At most one overlay window per app process; reopening replaces the
 //! previous one.
 
-use crate::state::AppState;
+use crate::view_state::ViewState;
 
 #[cfg(not(target_os = "android"))]
 use crate::platform::window::WindowExt;
@@ -84,7 +84,7 @@ struct OverlayPlacement {
 #[tauri::command]
 pub(crate) async fn open_drawing_overlay(
     app: tauri::AppHandle,
-    state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, ViewState>,
     channel_id: u32,
     own_session: u32,
     capture_width: Option<u32>,
@@ -637,7 +637,7 @@ fn pick_target_monitor(
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 fn spawn_tracker_if_supported(
     app: &tauri::AppHandle,
-    state: &tauri::State<'_, AppState>,
+    state: &tauri::State<'_, ViewState>,
     follow: Option<tracker::SourceFollower>,
 ) {
     let Some(follower) = follow else {
@@ -653,10 +653,10 @@ fn spawn_tracker_if_supported(
     not(target_os = "android"),
     not(any(target_os = "windows", target_os = "linux"))
 ))]
-fn spawn_tracker_if_supported(_app: &tauri::AppHandle, _state: &tauri::State<'_, AppState>) {}
+fn spawn_tracker_if_supported(_app: &tauri::AppHandle, _state: &tauri::State<'_, ViewState>) {}
 
 #[cfg(not(target_os = "android"))]
-fn abort_tracker(state: &tauri::State<'_, AppState>) {
+fn abort_tracker(state: &tauri::State<'_, ViewState>) {
     if let Ok(mut slot) = state.draw_overlay_tracker.lock()
         && let Some(handle) = slot.take()
     {
@@ -668,7 +668,7 @@ fn abort_tracker(state: &tauri::State<'_, AppState>) {
 #[tauri::command]
 pub(crate) async fn open_drawing_overlay(
     _app: tauri::AppHandle,
-    _state: tauri::State<'_, AppState>,
+    _state: tauri::State<'_, ViewState>,
     _channel_id: u32,
     _own_session: u32,
     _capture_width: Option<u32>,
@@ -749,7 +749,7 @@ pub(crate) fn drawing_overlay_support() -> DrawingOverlaySupport {
 #[tauri::command]
 pub(crate) async fn close_drawing_overlay(
     app: tauri::AppHandle,
-    state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, ViewState>,
 ) -> Result<(), String> {
     use tauri::Manager;
 
@@ -767,7 +767,7 @@ pub(crate) async fn close_drawing_overlay(
 #[tauri::command]
 pub(crate) async fn close_drawing_overlay(
     _app: tauri::AppHandle,
-    _state: tauri::State<'_, AppState>,
+    _state: tauri::State<'_, ViewState>,
 ) -> Result<(), String> {
     Ok(())
 }
@@ -777,7 +777,7 @@ pub(crate) async fn close_drawing_overlay(
 /// reload (e.g. devtools refresh) still gets the data.
 #[tauri::command]
 pub(crate) fn take_drawing_overlay_context(
-    state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, ViewState>,
 ) -> Option<DrawOverlayContext> {
     state
         .draw_overlay_context

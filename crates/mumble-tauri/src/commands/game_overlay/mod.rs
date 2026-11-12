@@ -29,7 +29,7 @@ use fancy_gamedetect::{ProbeNote, Reason, ShellState, Verdict};
 use fancy_gamedetect::{Rule, Rules};
 use serde::{Deserialize, Serialize};
 
-use crate::state::AppState;
+use crate::view_state::ViewState;
 use crate::state::types::OverlaySnapshot;
 
 #[cfg(not(target_os = "android"))]
@@ -116,7 +116,7 @@ impl Default for GameOverlayConfig {
     }
 }
 
-/// Everything the overlay keeps in [`AppState`].
+/// Everything the overlay keeps in [`ViewState`].
 #[derive(Debug, Default)]
 pub(crate) struct GameOverlayState {
     config: Mutex<GameOverlayConfig>,
@@ -271,7 +271,7 @@ pub(crate) struct GameOverlaySettings {
 }
 
 #[cfg(not(target_os = "android"))]
-fn config_of(state: &AppState) -> GameOverlayConfig {
+fn config_of(state: &ViewState) -> GameOverlayConfig {
     state
         .game_overlay
         .config
@@ -281,7 +281,7 @@ fn config_of(state: &AppState) -> GameOverlayConfig {
 }
 
 #[cfg(not(target_os = "android"))]
-fn take_manual_toggle(state: &AppState) -> Option<bool> {
+fn take_manual_toggle(state: &ViewState) -> Option<bool> {
     state
         .game_overlay
         .manual_toggle
@@ -295,7 +295,7 @@ fn take_manual_toggle(state: &AppState) -> Option<bool> {
 #[tauri::command]
 pub(crate) fn game_overlay_configure(
     app: tauri::AppHandle,
-    state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, ViewState>,
     settings: GameOverlaySettings,
 ) -> Result<(), String> {
     {
@@ -332,7 +332,7 @@ pub(crate) fn game_overlay_configure() {}
 
 /// Start the detector task if it is not already running.
 #[cfg(not(target_os = "android"))]
-fn ensure_watcher(app: &tauri::AppHandle, state: &AppState) {
+fn ensure_watcher(app: &tauri::AppHandle, state: &ViewState) {
     let Ok(mut slot) = state.game_overlay.watcher.lock() else {
         return;
     };
@@ -347,7 +347,7 @@ fn ensure_watcher(app: &tauri::AppHandle, state: &AppState) {
 /// changes. This is what the toggle hotkey calls.
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-pub(crate) fn game_overlay_toggle(state: tauri::State<'_, AppState>) -> Result<bool, String> {
+pub(crate) fn game_overlay_toggle(state: tauri::State<'_, ViewState>) -> Result<bool, String> {
     let currently_visible = state
         .game_overlay
         .last_event
@@ -367,7 +367,7 @@ pub(crate) fn game_overlay_toggle(state: tauri::State<'_, AppState>) -> Result<b
 /// `rule` of `None` forgets the decision, so a mis-click can be undone.
 #[tauri::command]
 pub(crate) fn game_overlay_set_rule(
-    state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, ViewState>,
     exe_path: String,
     rule: Option<Rule>,
 ) -> Result<(), String> {
@@ -390,7 +390,9 @@ pub(crate) fn game_overlay_set_rule(
 
 /// Everything the overlay window draws. Called once when it opens.
 #[tauri::command]
-pub(crate) fn game_overlay_snapshot(state: tauri::State<'_, AppState>) -> OverlaySnapshot {
+pub(crate) fn game_overlay_snapshot(
+    state: tauri::State<'_, crate::state::AppState>,
+) -> OverlaySnapshot {
     state.overlay_snapshot()
 }
 
@@ -399,7 +401,7 @@ pub(crate) fn game_overlay_snapshot(state: tauri::State<'_, AppState>) -> Overla
 /// Until this arrives the window is left alone: a transparent `WebView2` window
 /// that is hidden before it has rendered comes back blank when shown again.
 #[tauri::command]
-pub(crate) fn game_overlay_ready(state: tauri::State<'_, AppState>) {
+pub(crate) fn game_overlay_ready(state: tauri::State<'_, ViewState>) {
     state
         .game_overlay
         .page_ready
@@ -408,7 +410,7 @@ pub(crate) fn game_overlay_ready(state: tauri::State<'_, AppState>) {
 
 /// Has the overlay page mounted at least once this window's lifetime?
 #[cfg(not(target_os = "android"))]
-fn page_ready(state: &AppState) -> bool {
+fn page_ready(state: &ViewState) -> bool {
     state
         .game_overlay
         .page_ready
@@ -417,7 +419,7 @@ fn page_ready(state: &AppState) -> bool {
 
 /// Forget that the page was ready, when the window it belonged to is gone.
 #[cfg(not(target_os = "android"))]
-fn clear_page_ready(state: &AppState) {
+fn clear_page_ready(state: &ViewState) {
     state
         .game_overlay
         .page_ready
@@ -426,7 +428,7 @@ fn clear_page_ready(state: &AppState) {
 
 /// The page reporting what it drew, so a blank overlay can say why it is blank.
 #[tauri::command]
-pub(crate) fn game_overlay_page_status(state: tauri::State<'_, AppState>, status: PageStatus) {
+pub(crate) fn game_overlay_page_status(state: tauri::State<'_, ViewState>, status: PageStatus) {
     if let Ok(mut slot) = state.game_overlay.page_status.lock() {
         *slot = Some(status);
     }
@@ -434,7 +436,7 @@ pub(crate) fn game_overlay_page_status(state: tauri::State<'_, AppState>, status
 
 /// The page's last account of itself.
 #[cfg(not(target_os = "android"))]
-fn page_status(state: &AppState) -> Option<PageStatus> {
+fn page_status(state: &ViewState) -> Option<PageStatus> {
     state.game_overlay.page_status.lock().ok().and_then(|s| *s)
 }
 
@@ -442,7 +444,7 @@ fn page_status(state: &AppState) -> Option<PageStatus> {
 /// the card rather than leaving transparent slack over the game.
 #[tauri::command]
 pub(crate) fn game_overlay_resize(
-    state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, ViewState>,
     width: f64,
     height: f64,
 ) -> Result<(), String> {
@@ -460,7 +462,7 @@ pub(crate) fn game_overlay_resize(
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 pub(crate) fn game_overlay_diagnostics(
-    state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, ViewState>,
 ) -> Option<GameOverlayEvent> {
     state
         .game_overlay
@@ -472,7 +474,7 @@ pub(crate) fn game_overlay_diagnostics(
 
 /// Remember the last event so `game_overlay_diagnostics` can answer.
 #[cfg(not(target_os = "android"))]
-fn remember_event(state: &AppState, event: &GameOverlayEvent) {
+fn remember_event(state: &ViewState, event: &GameOverlayEvent) {
     if let Ok(mut slot) = state.game_overlay.last_event.lock() {
         *slot = Some(event.clone());
     }

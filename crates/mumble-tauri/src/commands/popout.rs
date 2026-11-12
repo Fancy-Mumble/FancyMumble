@@ -1,6 +1,6 @@
 //! Image popout window: borderless, transparent, always-on-top viewer.
 
-use crate::state::AppState;
+use crate::view_state::ViewState;
 
 /// Metadata sent alongside an image to the popout window.
 ///
@@ -35,7 +35,7 @@ pub(crate) struct PopoutImagePayload {
 #[tauri::command]
 pub(crate) async fn open_image_popout(
     app: tauri::AppHandle,
-    state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, ViewState>,
     payload: PopoutImagePayload,
     width: Option<f64>,
     height: Option<f64>,
@@ -77,7 +77,7 @@ pub(crate) async fn open_image_popout(
 #[tauri::command]
 pub(crate) async fn open_image_popout(
     _app: tauri::AppHandle,
-    _state: tauri::State<'_, AppState>,
+    _state: tauri::State<'_, ViewState>,
     _payload: PopoutImagePayload,
     _width: Option<f64>,
     _height: Option<f64>,
@@ -90,7 +90,7 @@ pub(crate) async fn open_image_popout(
 /// Each id is single-use; a missing/already-taken id returns `None`.
 #[tauri::command]
 pub(crate) fn take_popout_image(
-    state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, ViewState>,
     id: String,
 ) -> Option<PopoutImagePayload> {
     state
@@ -128,7 +128,7 @@ pub(crate) struct PopoutStreamPayload {
 #[tauri::command]
 pub(crate) async fn open_stream_popout(
     app: tauri::AppHandle,
-    state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, ViewState>,
     payload: PopoutStreamPayload,
 ) -> Result<(), String> {
     let id = uuid::Uuid::new_v4().simple().to_string();
@@ -169,7 +169,7 @@ pub(crate) async fn open_stream_popout(
 #[tauri::command]
 pub(crate) async fn open_stream_popout(
     _app: tauri::AppHandle,
-    _state: tauri::State<'_, AppState>,
+    _state: tauri::State<'_, ViewState>,
     _payload: PopoutStreamPayload,
 ) -> Result<(), String> {
     Err("Stream popout windows are not supported on Android".to_string())
@@ -178,7 +178,7 @@ pub(crate) async fn open_stream_popout(
 /// Consume and return the stream payload registered for a popout window id.
 #[tauri::command]
 pub(crate) fn take_popout_stream(
-    state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, ViewState>,
     id: String,
 ) -> Option<PopoutStreamPayload> {
     state
@@ -214,7 +214,7 @@ pub(crate) struct PopoutDmPayload {
 #[tauri::command]
 pub(crate) async fn open_dm_popout(
     app: tauri::AppHandle,
-    state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, ViewState>,
     payload: PopoutDmPayload,
 ) -> Result<(), String> {
     let id = uuid::Uuid::new_v4().simple().to_string();
@@ -249,7 +249,7 @@ pub(crate) async fn open_dm_popout(
 #[tauri::command]
 pub(crate) async fn open_dm_popout(
     _app: tauri::AppHandle,
-    _state: tauri::State<'_, AppState>,
+    _state: tauri::State<'_, ViewState>,
     _payload: PopoutDmPayload,
 ) -> Result<(), String> {
     Err("DM popout windows are not supported on Android".to_string())
@@ -258,7 +258,7 @@ pub(crate) async fn open_dm_popout(
 /// Consume and return the DM payload registered for a popout window id.
 #[tauri::command]
 pub(crate) fn take_popout_dm(
-    state: tauri::State<'_, AppState>,
+    state: tauri::State<'_, ViewState>,
     id: String,
 ) -> Option<PopoutDmPayload> {
     state.popout_dms.lock().ok().and_then(|mut m| m.remove(&id))

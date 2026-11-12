@@ -62,6 +62,7 @@ mod state;
 pub(crate) mod ui_mode;
 #[cfg(not(target_os = "android"))]
 mod updater;
+mod view_state;
 
 use state::AppState;
 use tauri::Manager;
@@ -130,6 +131,7 @@ pub fn run() {
 
     builder
         .manage(AppState::new())
+        .manage(view_state::ViewState::default())
         .setup(move |app| {
             app::init_app_state(app);
             // WebKitGTK ships WebRTC off; without this no Linux webview has
@@ -182,7 +184,7 @@ pub fn run() {
                 && window.label().starts_with("popout-stream-")
             {
                 use tauri::{Emitter, Manager};
-                if let Some(state) = window.try_state::<AppState>() {
+                if let Some(state) = window.try_state::<view_state::ViewState>() {
                     let session = state
                         .popout_stream_sessions
                         .lock()

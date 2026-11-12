@@ -20,6 +20,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use super::{GameOverlayEvent, HiddenReason, OverlayMode, WindowRect, window};
 use crate::state::AppState;
+use crate::view_state::ViewState;
 
 /// How often the foreground window is probed. Fast enough that the overlay
 /// appears within a couple of hundred milliseconds of someone speaking, slow
@@ -92,17 +93,18 @@ pub(super) async fn run(app: AppHandle) {
 /// One pass of the policy. `None` means the app state has gone.
 async fn tick(app: &AppHandle, detector: &mut Detector, lp: &mut Loop, own_pid: u32) -> Option<()> {
     let app_state = app.try_state::<AppState>()?;
-    let config = super::config_of(&app_state);
+    let view = app.try_state::<ViewState>()?;
+    let config = super::config_of(&view);
 
     if config.mode == OverlayMode::Off {
         if app.get_webview_window(window::GAME_OVERLAY_LABEL).is_some() {
             window::close(app);
-            super::clear_page_ready(&app_state);
+            super::clear_page_ready(&view);
             lp.shown = false;
         }
         emit_state(
             app,
-            &app_state,
+            &view,
             lp,
             None,
             HiddenReason::ModeOff,
@@ -121,7 +123,7 @@ async fn tick(app: &AppHandle, detector: &mut Detector, lp: &mut Loop, own_pid: 
         lp.manual = None;
         lp.manual_for.clone_from(&foreground_exe);
     }
-    if let Some(pending) = super::take_manual_toggle(&app_state) {
+    if let Some(pending) = super::take_manual_toggle(&view) {
         lp.manual = Some(pending);
     }
 
@@ -173,7 +175,7 @@ async fn tick(app: &AppHandle, detector: &mut Detector, lp: &mut Loop, own_pid: 
         None => (false, HiddenReason::WaitingForActivity),
     };
 
-    apply(app, &app_state, lp, &assessment, &config, want_visible);
+    apply(app, &view, lp, &assessment, &config, want_visible);
     let reason = if lp.blocked_on_page {
         HiddenReason::PageNotReady
     } else {
@@ -181,7 +183,7 @@ async fn tick(app: &AppHandle, detector: &mut Detector, lp: &mut Loop, own_pid: 
     };
     emit_state(
         app,
-        &app_state,
+        &view,
         lp,
         assessment.as_ref(),
         reason,
@@ -210,7 +212,7 @@ fn wants_showing(lp: &Loop, mode: OverlayMode) -> bool {
 /// Create, place, show, hide or destroy the window to match the decision.
 fn apply(
     app: &AppHandle,
-    app_state: &AppState,
+    view: &ViewState,
     lp: &mut Loop,
     assessment: &Option<fancy_gamedetect::Assessment>,
     config: &super::GameOverlayConfig,
@@ -223,7 +225,7 @@ fn apply(
     // never report that it is ready, so it is never shown again: a window that
     // is hidden before its first paint is hidden for good. Every hide below is
     // therefore gated on this, and only on this.
-    let ready = super::page_ready(app_state);
+    let ready = super::page_ready(view);
     lp.blocked_on_page = !ready;
 
     if !has_game && lp.manual != Some(true) {
@@ -240,7 +242,7 @@ fn apply(
             && app.get_webview_window(window::GAME_OVERLAY_LABEL).is_some()
         {
             window::close(app);
-            super::clear_page_ready(app_state);
+            super::clear_page_ready(view);
             lp.no_game_since = None;
         }
         return;
@@ -325,7 +327,7 @@ fn current_monitor_rect(win: &tauri::WebviewWindow) -> Option<fancy_gamedetect::
 /// Tell the frontend what the detector concluded, when it has changed.
 fn emit_state(
     app: &AppHandle,
-    app_state: &AppState,
+    view: &ViewState,
     lp: &mut Loop,
     assessment: Option<&fancy_gamedetect::Assessment>,
     hidden_reason: HiddenReason,
@@ -345,7 +347,7 @@ fn emit_state(
             hidden_reason
         },
         mode,
-        page_status: super::page_status(app_state),
+        page_status: super::page_status(view),
         placement: placement_of(app),
         verdict: assessment.map(|a| a.verdict),
         probe_note,
@@ -364,6 +366,6 @@ fn emit_state(
         return;
     }
     lp.last_emitted = Some(encoded);
-    super::remember_event(app_state, &event);
+    super::remember_event(view, &event);
     let _ = app.emit(super::STATE_EVENT, event);
 }
