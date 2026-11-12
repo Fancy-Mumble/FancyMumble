@@ -313,14 +313,6 @@ pub(crate) fn host_of(shared: &Mutex<SharedState>) -> Option<Host> {
     shared.lock().ok().and_then(|state| state.conn.host.clone())
 }
 
-/// Send an event that has no [`CoreEvent`] variant yet to the view of the
-/// session behind `shared`, if it has one.
-pub(crate) fn emit_for<S: Serialize>(shared: &Mutex<SharedState>, event: &'static str, payload: S) {
-    if let Some(host) = host_of(shared) {
-        let _ = host.emit(event, payload);
-    }
-}
-
 /// Tell the view of the session behind `shared` that `event` happened, if it
 /// has one.
 pub(crate) fn tell_view_of(shared: &Mutex<SharedState>, event: CoreEvent) {

@@ -7,7 +7,8 @@ use tracing::{debug, info};
 
 use super::{HandleMessage, HandlerContext};
 use crate::state::core_event::CoreEvent;
-use crate::state::{SharedState, pchat, types::ChannelEntry};
+use crate::state::types::{ChannelEntry, CustodianPinPayload, CustodianPinPayloadInner};
+use crate::state::{SharedState, pchat};
 
 impl HandleMessage for mumble_tcp::ChannelState {
     fn handle(&self, ctx: &HandlerContext) {
@@ -191,30 +192,16 @@ fn emit_custodian_pin_changed(
     channel_id: u32,
     pin: mumble_protocol::persistent::keys::CustodianPinState,
 ) {
-    use serde::Serialize;
-    #[derive(Serialize, Clone)]
-    struct CustodianPinPayload {
-        channel_id: u32,
-        pin: CustodianPinPayloadInner,
-    }
-    #[derive(Serialize, Clone)]
-    #[serde(rename_all = "camelCase")]
-    struct CustodianPinPayloadInner {
-        pinned: Vec<String>,
-        confirmed: bool,
-        pending_update: Option<Vec<String>>,
-    }
-    crate::state::host::emit_for(
+    crate::state::host::tell_view_of(
         &ctx.shared,
-        "custodian-pin-changed",
-        CustodianPinPayload {
+        CoreEvent::CustodianPinChanged(CustodianPinPayload {
             channel_id,
             pin: CustodianPinPayloadInner {
                 pinned: pin.pinned,
                 confirmed: pin.confirmed,
                 pending_update: pin.pending_update,
             },
-        },
+        }),
     );
 }
 

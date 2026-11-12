@@ -253,6 +253,22 @@ pub(crate) struct SignalBridgeErrorPayload {
     pub message: String,
 }
 
+/// Which custodians a channel's key is pinned to.
+#[derive(Clone, Serialize)]
+pub(crate) struct CustodianPinPayload {
+    pub channel_id: u32,
+    pub pin: CustodianPinPayloadInner,
+}
+
+/// The pin itself: who is trusted now, and who is asking to be.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CustodianPinPayloadInner {
+    pub pinned: Vec<String>,
+    pub confirmed: bool,
+    pub pending_update: Option<Vec<String>>,
+}
+
 /// How far an upload has got.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

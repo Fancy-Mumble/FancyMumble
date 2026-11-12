@@ -2,6 +2,7 @@ use mumble_protocol::proto::mumble_tcp;
 use tracing::info;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::types::{ChannelDeniedPayload, ListenDeniedPayload, PermissionDeniedPayload};
 use crate::state::whisper::{WHISPER_DENIALS_EVENT, WhisperDenials, WhisperRefusal};
 
@@ -41,13 +42,10 @@ impl HandleMessage for mumble_tcp::PermissionDenied {
                     }),
                 },
             );
-            ctx.emit(
-                "permission-denied",
-                PermissionDeniedPayload {
-                    deny_type: self.r#type,
-                    reason: self.reason.clone(),
-                },
-            );
+            ctx.send(CoreEvent::PermissionDenied(PermissionDeniedPayload {
+                deny_type: self.r#type,
+                reason: self.reason.clone(),
+            }));
             return;
         }
 
@@ -81,18 +79,19 @@ impl HandleMessage for mumble_tcp::PermissionDenied {
             {
                 info!(ch_id, "reverted permanent listen due to permission denied");
             }
-            ctx.emit("listen-denied", ListenDeniedPayload { channel_id: ch_id });
-            ctx.emit("channel-denied", ChannelDeniedPayload { channel_id: ch_id });
+            ctx.send(CoreEvent::ListenDenied(ListenDeniedPayload {
+                channel_id: ch_id,
+            }));
+            ctx.send(CoreEvent::ChannelDenied(ChannelDeniedPayload {
+                channel_id: ch_id,
+            }));
         }
 
         // Always emit a general permission-denied event so the
         // frontend can surface errors (e.g. profile too large).
-        ctx.emit(
-            "permission-denied",
-            PermissionDeniedPayload {
-                deny_type: self.r#type,
-                reason: self.reason.clone(),
-            },
-        );
+        ctx.send(CoreEvent::PermissionDenied(PermissionDeniedPayload {
+            deny_type: self.r#type,
+            reason: self.reason.clone(),
+        }));
     }
 }

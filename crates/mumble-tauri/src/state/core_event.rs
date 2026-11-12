@@ -27,14 +27,15 @@ use super::handler::version::ServerVersionPayload;
 use super::sessions::ServerId;
 use super::types::{
     AclPayload, AudioTransportPayload, AuditConfigSnapshot, AuditEntryPayload, BanEntryPayload,
-    CryptoStatsPayload, CurrentChannelPayload, DisconnectedPayload, DmUnreadPayload,
-    KeyHoldersChangedPayload, KeyShareRequestPayload, KeyShareRequestsChangedPayload,
-    LatencyPayload, NewDmPayload, NewMessagePayload, PchatFetchCompletePayload,
-    PchatHistoryLoadingPayload, PchatKeyRevokedPayload, PchatSendRejectedPayload,
-    PinDeliverPayload, PinFetchResponsePayload, PluginDataPayload, PluginRegistryEntryPayload,
-    ReactionDeliverPayload, ReactionFetchResponsePayload, RegisteredUserPayload, RejectedPayload,
-    ServerLogEntry, ServerSettingsSnapshot, SignalBridgeErrorPayload, UnreadPayload,
-    UploadProgressPayload, UserCommentPayload, UserStatsPayload, VoiceState,
+    ChannelDeniedPayload, CryptoStatsPayload, CurrentChannelPayload, CustodianPinPayload,
+    DisconnectedPayload, DmUnreadPayload, KeyHoldersChangedPayload, KeyShareRequestPayload,
+    KeyShareRequestsChangedPayload, LatencyPayload, ListenDeniedPayload, NewDmPayload,
+    NewMessagePayload, PchatFetchCompletePayload, PchatHistoryLoadingPayload,
+    PchatKeyRevokedPayload, PchatSendRejectedPayload, PermissionDeniedPayload, PinDeliverPayload,
+    PinFetchResponsePayload, PluginDataPayload, PluginRegistryEntryPayload, ReactionDeliverPayload,
+    ReactionFetchResponsePayload, RegisteredUserPayload, RejectedPayload, ServerLogEntry,
+    ServerSettingsSnapshot, SignalBridgeErrorPayload, UnreadPayload, UploadProgressPayload,
+    UserCommentPayload, UserStatsPayload, VoiceState,
 };
 
 /// Something that happened in the engine that a view may want to show.
@@ -157,6 +158,14 @@ pub(crate) enum CoreEvent {
     ServerSettings(ServerSettingsSnapshot),
     /// How the server presents itself: name, colours, artwork.
     ServerLivery(LiverySnapshot),
+    /// The server refused something the user asked for.
+    PermissionDenied(PermissionDeniedPayload),
+    /// The user may not enter a channel.
+    ChannelDenied(ChannelDeniedPayload),
+    /// The user may not listen to a channel.
+    ListenDenied(ListenDeniedPayload),
+    /// The custodians a channel's key is pinned to changed.
+    CustodianPinChanged(CustodianPinPayload),
     /// An event that has not been given a variant yet: its wire name and its
     /// payload, already written out as JSON.
     Untyped {
@@ -242,6 +251,10 @@ impl CoreEvent {
             Self::UserStats(_) => "user-stats",
             Self::ServerSettings(_) => "server-settings",
             Self::ServerLivery(_) => "server-livery",
+            Self::PermissionDenied(_) => "permission-denied",
+            Self::ChannelDenied(_) => "channel-denied",
+            Self::ListenDenied(_) => "listen-denied",
+            Self::CustodianPinChanged(_) => "custodian-pin-changed",
             Self::Untyped { name, .. } => name,
         }
     }
@@ -297,6 +310,10 @@ impl CoreEvent {
                 | Self::UserStats(_)
                 | Self::ServerSettings(_)
                 | Self::ServerLivery(_)
+                | Self::PermissionDenied(_)
+                | Self::ChannelDenied(_)
+                | Self::ListenDenied(_)
+                | Self::CustodianPinChanged(_)
         )
     }
 }
@@ -362,6 +379,10 @@ impl Serialize for CoreEvent {
             Self::UserStats(payload) => payload.serialize(serializer),
             Self::ServerSettings(settings) => keyed(serializer, "settings", settings),
             Self::ServerLivery(livery) => keyed(serializer, "livery", livery),
+            Self::PermissionDenied(payload) => payload.serialize(serializer),
+            Self::ChannelDenied(payload) => payload.serialize(serializer),
+            Self::ListenDenied(payload) => payload.serialize(serializer),
+            Self::CustodianPinChanged(payload) => payload.serialize(serializer),
             Self::Untyped { payload, .. } => payload.serialize(serializer),
         }
     }
@@ -1546,6 +1567,61 @@ mod tests {
                 ..LiverySnapshot::default()
             },
             CoreEvent::ServerLivery,
+        );
+    }
+
+    #[test]
+    fn permission_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        use crate::state::types::CustodianPinPayloadInner;
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::PermissionDenied(PermissionDeniedPayload {
+                    deny_type: Some(1),
+                    reason: None,
+                })
+            ),
+            (
+                "permission-denied",
+                json!({ "deny_type": 1, "reason": null })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::ChannelDenied(ChannelDeniedPayload { channel_id: 3 })
+            ),
+            ("channel-denied", json!({ "channel_id": 3 }))
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::ListenDenied(ListenDeniedPayload { channel_id: 3 })
+            ),
+            ("listen-denied", json!({ "channel_id": 3 }))
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::CustodianPinChanged(CustodianPinPayload {
+                    channel_id: 3,
+                    pin: CustodianPinPayloadInner {
+                        pinned: vec!["abc".to_owned()],
+                        confirmed: true,
+                        pending_update: None,
+                    },
+                })
+            ),
+            (
+                "custodian-pin-changed",
+                json!({
+                    "channel_id": 3,
+                    "pin": { "pinned": ["abc"], "confirmed": true, "pendingUpdate": null },
+                })
+            )
         );
     }
 
