@@ -13,7 +13,7 @@ mod channel_state;
 mod codec_version;
 mod custom_reactions_config;
 mod draw_stroke;
-mod files;
+pub(super) mod files;
 mod forum;
 mod gifs;
 mod invites;

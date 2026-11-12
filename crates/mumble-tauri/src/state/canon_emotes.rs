@@ -55,9 +55,9 @@ impl CanonEmotes {
     }
 
     /// Hand a listing to everyone waiting.
-    pub(crate) fn resolve(&mut self, emotes: Vec<CanonEmote>) {
+    pub(crate) fn resolve(&mut self, emotes: &[CanonEmote]) {
         for waiter in self.waiters.drain(..) {
-            let _ = waiter.send(emotes.clone());
+            let _ = waiter.send(emotes.to_vec());
         }
     }
 }

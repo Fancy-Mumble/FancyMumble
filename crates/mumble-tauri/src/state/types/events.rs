@@ -253,6 +253,16 @@ pub(crate) struct SignalBridgeErrorPayload {
     pub message: String,
 }
 
+/// How far an upload has got.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct UploadProgressPayload {
+    /// The id the view started the upload under.
+    pub upload_id: String,
+    pub bytes_sent: u64,
+    pub total_bytes: u64,
+}
+
 /// Result sent through the oneshot channel when a `PchatAck` for a deletion
 /// request is received from the server.
 pub(crate) struct DeleteAckResult {

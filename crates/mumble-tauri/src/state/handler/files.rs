@@ -16,6 +16,7 @@ use serde::Serialize;
 use tracing::debug;
 
 use super::{HandleMessage, HandlerContext};
+use crate::state::core_event::CoreEvent;
 use crate::state::starling_files::GrantOutcome;
 
 /// One shared file, as the frontend needs it.
@@ -91,13 +92,10 @@ impl HandleMessage for fancy::files::Refused {
         // Also announced, for the asks that are not a grant: a management
         // request has no waiter to resolve, and without this its caller would
         // sit out a timeout to learn it had been told no.
-        ctx.emit(
-            "starling-file-refused",
-            RefusedRequest {
-                request_id: self.request_id.clone(),
-                reason,
-            },
-        );
+        ctx.send(CoreEvent::FileRequestRefused(RefusedRequest {
+            request_id: self.request_id.clone(),
+            reason,
+        }));
     }
 }
 
@@ -106,7 +104,7 @@ impl HandleMessage for fancy::files::Share {
         if let Ok(mut state) = ctx.shared.lock() {
             state.starling_files.set_available(true);
         }
-        ctx.emit("starling-file-shared", SharedFile::from(self));
+        ctx.send(CoreEvent::FileShared(SharedFile::from(self)));
     }
 }
 
@@ -117,13 +115,10 @@ impl HandleMessage for fancy::files::Listing {
         if let Ok(mut state) = ctx.shared.lock() {
             state.starling_files.set_available(true);
         }
-        ctx.emit(
-            "starling-file-listing",
-            ChannelFiles {
-                channel_id: self.channel,
-                files: self.files.iter().map(SharedFile::from).collect(),
-            },
-        );
+        ctx.send(CoreEvent::FileListing(ChannelFiles {
+            channel_id: self.channel,
+            files: self.files.iter().map(SharedFile::from).collect(),
+        }));
     }
 }
 
@@ -160,7 +155,7 @@ impl HandleMessage for fancy::files::VoiceSupport {
             max_bytes = self.max_bytes,
             "the server said what voice messages may be"
         );
-        ctx.emit("voice-support", VoiceSupportPayload::from(self));
+        ctx.send(CoreEvent::VoiceSupport(VoiceSupportPayload::from(self)));
     }
 }
 
@@ -264,19 +259,16 @@ impl HandleMessage for fancy::files::ManageListing {
         if let Ok(mut state) = ctx.shared.lock() {
             state.starling_files.set_available(true);
         }
-        ctx.emit(
-            "starling-files-managed",
-            ManagedFiles {
-                request_id: self.request_id.clone(),
-                files: self.files.iter().map(ManagedFile::from).collect(),
-                storage: self.storage.as_ref().map(|storage| StorageStats {
-                    used_bytes: storage.used_bytes,
-                    max_total_bytes: storage.max_total_bytes,
-                    max_upload_bytes: storage.max_upload_bytes,
-                    file_count: storage.file_count,
-                }),
-            },
-        );
+        ctx.send(CoreEvent::FilesManaged(ManagedFiles {
+            request_id: self.request_id.clone(),
+            files: self.files.iter().map(ManagedFile::from).collect(),
+            storage: self.storage.as_ref().map(|storage| StorageStats {
+                used_bytes: storage.used_bytes,
+                max_total_bytes: storage.max_total_bytes,
+                max_upload_bytes: storage.max_upload_bytes,
+                file_count: storage.file_count,
+            }),
+        }));
     }
 }
 
@@ -311,10 +303,10 @@ impl HandleMessage for fancy::files::Emotes {
         // an emote somebody deleted has to stop rendering for the rest.
         let emotes = crate::state::canon_emotes::emotes_of(self);
         debug!(count = emotes.len(), "received the server's emotes");
-        ctx.emit("server-emotes-changed", &emotes);
         if let Ok(mut state) = ctx.shared.lock() {
-            state.canon_emotes.resolve(emotes);
+            state.canon_emotes.resolve(&emotes);
         }
+        ctx.send(CoreEvent::ServerEmotesChanged(emotes));
     }
 }
 

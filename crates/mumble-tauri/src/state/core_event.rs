@@ -13,6 +13,10 @@
 use serde::{Serialize, Serializer};
 use serde_json::value::RawValue;
 
+use super::canon_emotes::CanonEmote;
+use super::handler::files::{
+    ChannelFiles, ManagedFiles, RefusedRequest, SharedFile, VoiceSupportPayload,
+};
 use super::sessions::ServerId;
 use super::types::{
     CurrentChannelPayload, DisconnectedPayload, DmUnreadPayload, KeyHoldersChangedPayload,
@@ -20,7 +24,7 @@ use super::types::{
     PchatFetchCompletePayload, PchatHistoryLoadingPayload, PchatKeyRevokedPayload,
     PchatSendRejectedPayload, PinDeliverPayload, PinFetchResponsePayload, ReactionDeliverPayload,
     ReactionFetchResponsePayload, RejectedPayload, SignalBridgeErrorPayload, UnreadPayload,
-    VoiceState,
+    UploadProgressPayload, VoiceState,
 };
 
 /// Something that happened in the engine that a view may want to show.
@@ -81,6 +85,20 @@ pub(crate) enum CoreEvent {
     PchatPinsFetched(PinFetchResponsePayload),
     /// The Signal bridge could not be loaded, so `SignalV1` channels stay unreadable.
     PchatSignalBridgeError(SignalBridgeErrorPayload),
+    /// A file was shared in a channel.
+    FileShared(SharedFile),
+    /// The files shared in a channel.
+    FileListing(ChannelFiles),
+    /// The server refused a file request that nothing else was waiting on.
+    FileRequestRefused(RefusedRequest),
+    /// The answer to a file-management request.
+    FilesManaged(ManagedFiles),
+    /// What the server allows of voice messages.
+    VoiceSupport(VoiceSupportPayload),
+    /// The server's custom emotes, all of them.
+    ServerEmotesChanged(Vec<CanonEmote>),
+    /// An upload moved on by at least one percent.
+    UploadProgress(UploadProgressPayload),
     /// An event that has not been given a variant yet: its wire name and its
     /// payload, already written out as JSON.
     Untyped {
@@ -135,6 +153,13 @@ impl CoreEvent {
             Self::PchatPinDelivered(_) => "pchat-pin-deliver",
             Self::PchatPinsFetched(_) => "pchat-pin-fetch-response",
             Self::PchatSignalBridgeError(_) => "pchat-signal-bridge-error",
+            Self::FileShared(_) => "starling-file-shared",
+            Self::FileListing(_) => "starling-file-listing",
+            Self::FileRequestRefused(_) => "starling-file-refused",
+            Self::FilesManaged(_) => "starling-files-managed",
+            Self::VoiceSupport(_) => "voice-support",
+            Self::ServerEmotesChanged(_) => "server-emotes-changed",
+            Self::UploadProgress(_) => "upload-progress",
             Self::Untyped { name, .. } => name,
         }
     }
@@ -164,6 +189,12 @@ impl CoreEvent {
                 | Self::PchatPinDelivered(_)
                 | Self::PchatPinsFetched(_)
                 | Self::PchatSignalBridgeError(_)
+                | Self::FileShared(_)
+                | Self::FileListing(_)
+                | Self::FileRequestRefused(_)
+                | Self::FilesManaged(_)
+                | Self::VoiceSupport(_)
+                | Self::UploadProgress(_)
         )
     }
 }
@@ -197,6 +228,13 @@ impl Serialize for CoreEvent {
             Self::PchatPinDelivered(payload) => payload.serialize(serializer),
             Self::PchatPinsFetched(payload) => payload.serialize(serializer),
             Self::PchatSignalBridgeError(payload) => payload.serialize(serializer),
+            Self::FileShared(payload) => payload.serialize(serializer),
+            Self::FileListing(payload) => payload.serialize(serializer),
+            Self::FileRequestRefused(payload) => payload.serialize(serializer),
+            Self::FilesManaged(payload) => payload.serialize(serializer),
+            Self::VoiceSupport(payload) => payload.serialize(serializer),
+            Self::ServerEmotesChanged(payload) => payload.serialize(serializer),
+            Self::UploadProgress(payload) => payload.serialize(serializer),
             Self::Untyped { payload, .. } => payload.serialize(serializer),
         }
     }
@@ -646,6 +684,181 @@ mod tests {
             (
                 "pchat-signal-bridge-error",
                 json!({ "message": "no library" })
+            )
+        );
+    }
+
+    #[test]
+    fn file_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        let shared = || SharedFile {
+            key: "k1".to_owned(),
+            channel_id: 3,
+            owner: 9,
+            filename: "a.png".to_owned(),
+            size: 512,
+            shared_at_ms: 17,
+            public: false,
+        };
+        let shared_json = json!({
+            "key": "k1",
+            "channelId": 3,
+            "owner": 9,
+            "filename": "a.png",
+            "size": 512,
+            "sharedAtMs": 17,
+            "public": false,
+        });
+        assert_eq!(
+            wire(None, CoreEvent::FileShared(shared())),
+            ("starling-file-shared", shared_json.clone())
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::FileListing(ChannelFiles {
+                    channel_id: 3,
+                    files: vec![shared()],
+                })
+            ),
+            (
+                "starling-file-listing",
+                json!({ "channelId": 3, "files": [shared_json] })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::FileRequestRefused(RefusedRequest {
+                    request_id: "r1".to_owned(),
+                    reason: "no".to_owned(),
+                })
+            ),
+            (
+                "starling-file-refused",
+                json!({ "requestId": "r1", "reason": "no" })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::VoiceSupport(VoiceSupportPayload {
+                    request_id: "r1".to_owned(),
+                    available: true,
+                    max_seconds: 60,
+                    max_bytes: 1024,
+                })
+            ),
+            (
+                "voice-support",
+                json!({
+                    "requestId": "r1",
+                    "available": true,
+                    "maxSeconds": 60,
+                    "maxBytes": 1024,
+                })
+            )
+        );
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::UploadProgress(UploadProgressPayload {
+                    upload_id: "u1".to_owned(),
+                    bytes_sent: 5,
+                    total_bytes: 10,
+                })
+            ),
+            (
+                "upload-progress",
+                json!({ "uploadId": "u1", "bytesSent": 5, "totalBytes": 10 })
+            )
+        );
+    }
+
+    #[test]
+    fn managed_file_and_emote_events_keep_their_wire_format() {
+        use serde_json::json;
+
+        use crate::state::handler::files::{ManagedFile, StorageStats};
+
+        assert_eq!(
+            wire(
+                None,
+                CoreEvent::FilesManaged(ManagedFiles {
+                    request_id: "r1".to_owned(),
+                    files: vec![ManagedFile {
+                        key: "k1".to_owned(),
+                        channel_id: 3,
+                        filename: "a.png".to_owned(),
+                        mime_type: "image/png".to_owned(),
+                        size: 512,
+                        mode: "public",
+                        shared_at_ms: 17,
+                        expires_at: None,
+                        downloaded_at_ms: Some(18),
+                        share_url: "https://x/k1".to_owned(),
+                        uploader_account: None,
+                        uploader_name: Some("Ada".to_owned()),
+                        uploader_cert: None,
+                        uploader_online: true,
+                    }],
+                    storage: Some(StorageStats {
+                        used_bytes: 1,
+                        max_total_bytes: 2,
+                        max_upload_bytes: 3,
+                        file_count: 4,
+                    }),
+                })
+            ),
+            (
+                "starling-files-managed",
+                json!({
+                    "requestId": "r1",
+                    "files": [{
+                        "key": "k1",
+                        "channelId": 3,
+                        "filename": "a.png",
+                        "mimeType": "image/png",
+                        "size": 512,
+                        "mode": "public",
+                        "sharedAtMs": 17,
+                        "expiresAt": null,
+                        "downloadedAtMs": 18,
+                        "shareUrl": "https://x/k1",
+                        "uploaderAccount": null,
+                        "uploaderName": "Ada",
+                        "uploaderCert": null,
+                        "uploaderOnline": true,
+                    }],
+                    "storage": {
+                        "usedBytes": 1,
+                        "maxTotalBytes": 2,
+                        "maxUploadBytes": 3,
+                        "fileCount": 4,
+                    },
+                })
+            )
+        );
+        // An array, so it is never stamped with a session.
+        assert_eq!(
+            wire(
+                Some(ServerId::new()),
+                CoreEvent::ServerEmotesChanged(vec![CanonEmote {
+                    shortcode: "wave".to_owned(),
+                    url: "https://x/wave".to_owned(),
+                    alias_emoji: "w".to_owned(),
+                    description: "hi".to_owned(),
+                }])
+            ),
+            (
+                "server-emotes-changed",
+                json!([{
+                    "shortcode": "wave",
+                    "url": "https://x/wave",
+                    "aliasEmoji": "w",
+                    "description": "hi",
+                }])
             )
         );
     }

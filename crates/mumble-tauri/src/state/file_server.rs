@@ -27,7 +27,9 @@ use tokio_util::io::ReaderStream;
 use tokio_util::sync::CancellationToken;
 
 use super::AppState;
+use crate::state::core_event::CoreEvent;
 use crate::state::host::Host;
+use crate::state::types::UploadProgressPayload;
 
 const USER_AGENT: &str = concat!("FancyMumble/", env!("CARGO_PKG_VERSION"));
 
@@ -361,14 +363,11 @@ async fn emit_progress_events(
         let pct = ((bytes_sent as f64 / file_size as f64) * 100.0).min(99.0) as u8;
         if pct != last_pct {
             last_pct = pct;
-            let _ = app_handle.emit(
-                "upload-progress",
-                serde_json::json!({
-                    "uploadId": upload_id,
-                    "bytesSent": bytes_sent,
-                    "totalBytes": file_size,
-                }),
-            );
+            app_handle.send(CoreEvent::UploadProgress(UploadProgressPayload {
+                upload_id: upload_id.clone(),
+                bytes_sent,
+                total_bytes: file_size,
+            }));
         }
     }
 }
