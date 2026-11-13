@@ -178,7 +178,11 @@ fn channel_row(
                 let Some(channel) = shell.snapshot.channels.iter().find(|c| c.id == id) else {
                     return;
                 };
-                let items = super::menu::channel_items(channel, shell.snapshot.current_channel);
+                let items = super::menu::channel_items(
+                    channel,
+                    shell.snapshot.current_channel,
+                    shell.snapshot.fancy,
+                );
                 shell.open_menu(event.position, items, cx);
             }),
         )
@@ -502,6 +506,7 @@ mod tests {
             name: name.to_owned().into(),
             position,
             unread: 0,
+            history: false,
         }
     }
 

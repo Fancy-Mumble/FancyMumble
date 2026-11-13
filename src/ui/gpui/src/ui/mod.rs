@@ -26,8 +26,8 @@ use gpui::{
 };
 
 use crate::engine::{
-    AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation, Engine, EngineEvent,
-    Message, SavedServer, Session, Snapshot, Subject, User, VoiceSettings,
+    Action, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation, Engine,
+    EngineEvent, Message, SavedServer, Session, Snapshot, Subject, User, VoiceSettings,
 };
 use crate::store::{Settings, Store, StoredVoice};
 use crate::theme::{ActiveTheme, Catalog, Mode};
@@ -36,6 +36,10 @@ use text_input::{InputEvent, TextInput};
 /// How far past the visible rows the conversation lays messages out, so a
 /// short scroll does not wait on layout.
 const OVERDRAW: f32 = 400.0;
+
+/// How long somebody is shown as writing after they last said so. A
+/// client says so every few seconds while it goes on.
+const TYPING_LASTS: std::time::Duration = std::time::Duration::from_secs(6);
 
 /// The window's title: the application's name, led by how many messages
 /// wait unread when any do.
@@ -78,6 +82,10 @@ pub(crate) struct Shell {
     /// Who is talking right now.
     talking: HashSet<Session>,
     composer: Entity<TextInput>,
+    /// The message being changed, while the composer holds its text.
+    editing: Option<gpui::SharedString>,
+    /// Who was last seen writing in the open channel, and when.
+    typing: std::collections::HashMap<Session, std::time::Instant>,
     search: Entity<TextInput>,
     /// The saved identities, as last read from the engine.
     servers: Vec<SavedServer>,
@@ -189,6 +197,8 @@ impl Shell {
             utc_offset: 0,
             talking: HashSet::new(),
             composer,
+            editing: None,
+            typing: std::collections::HashMap::new(),
             search,
             selected_server: None,
             selected_identity: None,
@@ -267,6 +277,13 @@ impl Shell {
                 self.read_welcome();
                 self.follow_active_session(cx);
                 self.drop_closed_conversation(cx);
+                // A message deleted by somebody else is announced only as
+                // a change of state.
+                if let Some(open) = self.open
+                    && self.engine.message_count(open) != self.messages.len()
+                {
+                    self.reload_messages(cx);
+                }
                 // Back on the server list: what it says about each server is
                 // as old as the visit just ended.
                 if was == Connection::Connected
@@ -283,6 +300,7 @@ impl Shell {
             }
             EngineEvent::ServersChanged => self.servers = self.engine.saved_servers(),
             EngineEvent::Notice(notice) => self.notice = notice,
+            EngineEvent::Typing { channel, session } => self.saw_typing(channel, session, cx),
             EngineEvent::CurrentChannelChanged => {
                 self.snapshot = self.engine.snapshot();
                 self.follow_current_channel(self.was_in);
@@ -435,6 +453,9 @@ impl Shell {
     /// Put `conversation` on screen.
     pub(super) fn open_conversation(&mut self, conversation: Conversation, cx: &mut Context<Self>) {
         if self.open != Some(conversation) {
+            // What was being written and corrected belonged to the other.
+            self.stop_editing(cx);
+            self.typing.clear();
             self.open = Some(conversation);
             self.engine.open(conversation);
             self.reload_messages(cx);
@@ -484,9 +505,83 @@ impl Shell {
     }
 
     fn on_composer(&mut self, _: Entity<TextInput>, event: &InputEvent, cx: &mut Context<Self>) {
-        if matches!(event, InputEvent::Submitted(_)) {
-            self.send_composed(cx);
+        match event {
+            InputEvent::Submitted(_) => self.send_composed(cx),
+            InputEvent::Changed => {
+                // Writing something new, not correcting something sent.
+                if let Some(conversation) = self.open.filter(|_| self.editing.is_none())
+                    && !self.composer.read(cx).text().is_empty()
+                {
+                    self.engine.typing(conversation);
+                }
+            }
+            InputEvent::Cancelled => self.stop_editing(cx),
+            InputEvent::Tabbed { .. } => {}
         }
+    }
+
+    /// Put the message `id` in the composer, to be changed and sent again.
+    pub(super) fn start_editing(
+        &mut self,
+        id: gpui::SharedString,
+        text: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.editing = Some(id);
+        self.composer.update(cx, |composer, cx| {
+            composer.set_text(text);
+            composer.focus(window);
+            cx.notify();
+        });
+    }
+
+    /// Leave the message being changed as it was.
+    pub(super) fn stop_editing(&mut self, cx: &mut Context<Self>) {
+        if self.editing.take().is_some() {
+            self.composer.update(cx, |composer, cx| {
+                composer.clear();
+                cx.notify();
+            });
+            cx.notify();
+        }
+    }
+
+    /// The names of those writing in the open channel right now, the local
+    /// user aside.
+    pub(super) fn writers(&self) -> Vec<gpui::SharedString> {
+        let mut names: Vec<_> = self
+            .snapshot
+            .users
+            .iter()
+            .filter(|user| {
+                Some(user.session) != self.snapshot.own_session
+                    && self
+                        .typing
+                        .get(&user.session)
+                        .is_some_and(|seen| seen.elapsed() < TYPING_LASTS)
+            })
+            .map(|user| user.name.clone())
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// `session` is writing in `channel`: say so while it lasts.
+    fn saw_typing(&mut self, channel: ChannelId, session: Session, cx: &mut Context<Self>) {
+        if self.open != Some(Conversation::Channel(channel)) {
+            return;
+        }
+        let _ = self.typing.insert(session, std::time::Instant::now());
+        // Nothing says they stopped: look again once it would have lapsed.
+        cx.spawn(async move |shell, cx| {
+            cx.background_executor().timer(TYPING_LASTS).await;
+            let _ = shell.update(cx, |shell, cx| {
+                shell.typing.retain(|_, seen| seen.elapsed() < TYPING_LASTS);
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// Send what is in the composer to the open conversation, and empty it.
@@ -495,8 +590,16 @@ impl Shell {
         if body.trim().is_empty() {
             return;
         }
-        if let Some(conversation) = self.open {
-            self.engine.send_message(conversation, body);
+        match (self.editing.take(), self.open) {
+            (Some(id), Some(Conversation::Channel(channel))) => {
+                self.engine.act(Action::EditMessage {
+                    channel,
+                    id: id.to_string(),
+                    text: body,
+                });
+            }
+            (_, Some(conversation)) => self.engine.send_message(conversation, body),
+            (_, None) => {}
         }
         self.composer.update(cx, |composer, cx| {
             composer.clear();
@@ -536,6 +639,10 @@ impl Shell {
         if self.menu.take().is_some() || self.prompt.take().is_some() || self.info.take().is_some()
         {
             cx.notify();
+            return;
+        }
+        if self.editing.is_some() {
+            self.stop_editing(cx);
             return;
         }
         if self.editor.take().is_none() {

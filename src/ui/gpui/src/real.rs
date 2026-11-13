@@ -14,8 +14,8 @@ use mumble_tauri_lib::engine_api::{
 
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation,
-    Engine, EngineEvent, Message, SavedServer, ServerPing, SessionEntry, Snapshot, Subject, User,
-    Voice, VoiceSettings,
+    Engine, EngineEvent, Message, Reaction, SavedServer, ServerPing, SessionEntry, Snapshot,
+    Subject, User, Voice, VoiceSettings,
 };
 use crate::store::Store;
 
@@ -39,6 +39,11 @@ struct Shared {
     /// Each user's picture: the marker it was fetched for, and the picture
     /// once it has arrived.
     avatars: Mutex<HashMap<u32, AvatarSlot>>,
+    /// Who put which emoji on which message, by channel and then by
+    /// message: the engine passes reactions on and keeps none.
+    reactions: Mutex<HashMap<u32, HashMap<String, Vec<api::ReactionInfo>>>>,
+    /// When the server was last told the local user is writing.
+    typed_at: Mutex<Option<std::time::Instant>>,
     /// The identity the user last connected as, while they want to be on
     /// that server: what a lost connection is retried with.
     wanted: Mutex<Option<(String, Option<String>)>>,
@@ -56,6 +61,23 @@ impl Shared {
         // The receiver lives as long as the view; with nobody left to tell
         // there is nothing to do about a failure.
         let _ = self.events.try_send(event);
+    }
+
+    /// Drop what was kept about the server on screen: another one's
+    /// sessions, messages and reactions would be taken for it.
+    fn forget_server(&self) {
+        self.first_read
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
+        self.avatars
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
+        self.reactions
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
     }
 
     /// Run `command`, and tell the user if it fails.
@@ -78,14 +100,7 @@ impl Shared {
                 self.open_current_conversation(runtime);
             }
             api::EngineEvent::Disconnected { reason } => {
-                self.first_read
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .clear();
-                self.avatars
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .clear();
+                self.forget_server();
                 let refused = self
                     .refused
                     .swap(false, std::sync::atomic::Ordering::Relaxed);
@@ -129,6 +144,41 @@ impl Shared {
                 self.tell(EngineEvent::Notice(Some(reason.into())));
             }
             api::EngineEvent::Notify { title, body } => crate::notify::show(&title, &body),
+            api::EngineEvent::Typing { channel, session } => {
+                self.tell(EngineEvent::Typing { channel, session });
+            }
+            api::EngineEvent::Reaction {
+                channel,
+                reaction,
+                added,
+            } => {
+                note_reaction(
+                    self.reactions
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .entry(channel)
+                        .or_default(),
+                    reaction,
+                    added,
+                );
+                self.tell(EngineEvent::NewMessage {
+                    conversation: Conversation::Channel(channel),
+                });
+            }
+            api::EngineEvent::Reactions { channel, reactions } => {
+                let mut by_message = HashMap::new();
+                for reaction in reactions {
+                    note_reaction(&mut by_message, reaction, true);
+                }
+                let _ = self
+                    .reactions
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .insert(channel, by_message);
+                self.tell(EngineEvent::NewMessage {
+                    conversation: Conversation::Channel(channel),
+                });
+            }
             // The engine API may grow events this view does not draw yet.
             _ => {}
         }
@@ -239,6 +289,8 @@ impl RealEngine {
             pings: Mutex::default(),
             first_read: Mutex::default(),
             avatars: Mutex::default(),
+            reactions: Mutex::default(),
+            typed_at: Mutex::default(),
             wanted: Mutex::default(),
             retries: std::sync::atomic::AtomicU32::new(0),
             refused: std::sync::atomic::AtomicBool::new(false),
@@ -394,6 +446,7 @@ impl Engine for RealEngine {
                     parent: channel.parent,
                     name: channel.name.into(),
                     position: channel.position,
+                    history: channel.keeps_history,
                 })
                 .collect(),
             users: self.users_with_avatars(engine.users()),
@@ -405,6 +458,7 @@ impl Engine for RealEngine {
             deafened: engine.deafened(),
             welcome: engine.welcome().map(Into::into),
             sessions,
+            fancy: engine.fancy(),
         }
     }
 
@@ -511,18 +565,44 @@ impl Engine for RealEngine {
             .unwrap_or_else(PoisonError::into_inner);
         let read_at = first_read.entry(conversation).or_default();
         stamp_first_read(read_at, messages.len(), now_ms());
+        let reactions = self
+            .shared
+            .reactions
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let on_channel = match conversation {
+            Conversation::Channel(channel) => reactions.get(&channel),
+            Conversation::Direct(_) => None,
+        };
+        let own_hash = on_channel.and_then(|_| self.shared.engine.own_hash());
         messages
             .into_iter()
             .zip(read_at.iter())
             .map(|(message, read_at)| Message {
+                reactions: message
+                    .id
+                    .as_ref()
+                    .and_then(|id| on_channel?.get(id))
+                    .map(|given| tally(given, own_hash.as_deref()))
+                    .unwrap_or_default(),
                 sender: message.sender,
                 sender_name: message.sender_name.into(),
                 body: message.text.into(),
                 html: message.html.into(),
                 sent_at_ms: message.sent_at_ms.or(Some(*read_at)),
                 own: message.own,
+                id: message.id.map(Into::into),
+                edited: message.edited,
+                failed: message.failed,
             })
             .collect()
+    }
+
+    fn message_count(&self, conversation: Conversation) -> usize {
+        match conversation {
+            Conversation::Channel(channel) => self.shared.engine.message_count(channel),
+            Conversation::Direct(session) => self.shared.engine.direct_message_count(session),
+        }
     }
 
     fn open(&self, conversation: Conversation) {
@@ -599,6 +679,33 @@ impl Engine for RealEngine {
         }
     }
 
+    fn typing(&self, conversation: Conversation) {
+        // Only channels are told, and only a Fancy server understands.
+        let Conversation::Channel(channel) = conversation else {
+            return;
+        };
+        if !self.shared.engine.fancy() {
+            return;
+        }
+        {
+            let mut typed_at = self
+                .shared
+                .typed_at
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            if typed_at.is_some_and(|at| at.elapsed() < TYPING_EVERY) {
+                return;
+            }
+            *typed_at = Some(std::time::Instant::now());
+        }
+        let engine = self.shared.engine.clone();
+        // Not worth a notice when it fails: nobody misses it.
+        drop(
+            self.runtime
+                .spawn(async move { engine.typing(channel).await }),
+        );
+    }
+
     fn activate_session(&self, id: &str) {
         let shared = Arc::clone(&self.shared);
         let id = id.to_owned();
@@ -607,16 +714,7 @@ impl Engine for RealEngine {
                 shared.tell(EngineEvent::Notice(Some(reason.into())));
             }
             // Another server altogether: everything is to be read again.
-            shared
-                .first_read
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .clear();
-            shared
-                .avatars
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .clear();
+            shared.forget_server();
             shared.tell(EngineEvent::StateChanged);
             shared.tell(EngineEvent::CurrentChannelChanged);
         }));
@@ -649,7 +747,11 @@ impl Engine for RealEngine {
                 }
                 Action::MoveUser { session, channel } => engine.move_user(session, channel).await,
                 Action::Register { session } => engine.register(session).await,
-                Action::CreateChannel { parent, name } => engine.create_channel(parent, name).await,
+                Action::CreateChannel {
+                    parent,
+                    name,
+                    history,
+                } => engine.create_channel(parent, name, history).await,
                 Action::RenameChannel { channel, name } => {
                     engine.rename_channel(channel, name).await
                 }
@@ -659,6 +761,18 @@ impl Engine for RealEngine {
                 }
                 Action::SetComment(text) => engine.set_comment(&text).await,
                 Action::SetAvatar(image) => engine.set_avatar(image).await,
+                Action::EditMessage { channel, id, text } => {
+                    engine.edit_text(channel, &id, &text).await
+                }
+                Action::DeleteMessage { channel, id } => {
+                    engine.delete_messages(channel, vec![id]).await
+                }
+                Action::React {
+                    channel,
+                    id,
+                    emoji,
+                    add,
+                } => engine.react(channel, &id, &emoji, add).await,
             }
         });
     }
@@ -723,6 +837,47 @@ fn target_of(server: &SavedServer, password: Option<String>) -> ConnectTarget {
         certificate: server.certificate.as_ref().map(ToString::to_string),
         password,
     }
+}
+
+/// How often, at most, the server is told the local user is writing.
+const TYPING_EVERY: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Put `reaction` among a channel's, or with `added` false take it out.
+fn note_reaction(
+    channel: &mut HashMap<String, Vec<api::ReactionInfo>>,
+    reaction: api::ReactionInfo,
+    added: bool,
+) {
+    let on_message = channel.entry(reaction.message.clone()).or_default();
+    // One of each emoji a person: a second is the first again.
+    on_message.retain(|known| !(known.by == reaction.by && known.emoji == reaction.emoji));
+    if added {
+        on_message.push(reaction);
+    }
+}
+
+/// The reactions on one message as it shows them: each emoji once, in the
+/// order it was first used, with how many put it there.
+fn tally(given: &[api::ReactionInfo], own_hash: Option<&str>) -> Vec<Reaction> {
+    let mut tallied: Vec<Reaction> = Vec::new();
+    for reaction in given {
+        let own = own_hash == Some(reaction.by.as_str());
+        match tallied
+            .iter_mut()
+            .find(|known| known.emoji.as_ref() == reaction.emoji)
+        {
+            Some(known) => {
+                known.count += 1;
+                known.own |= own;
+            }
+            None => tallied.push(Reaction {
+                emoji: reaction.emoji.clone().into(),
+                count: 1,
+                own,
+            }),
+        }
+    }
+    tallied
 }
 
 /// How long to wait before retry number `attempt` (from zero) of a lost
@@ -793,6 +948,36 @@ mod tests {
             None,
             "a wanted leave says nothing"
         );
+    }
+
+    #[test]
+    fn reactions_are_tallied_by_emoji_and_a_removal_takes_one_out() {
+        let by = |emoji: &str, who: &str| api::ReactionInfo {
+            message: "m".to_owned(),
+            emoji: emoji.to_owned(),
+            by: who.to_owned(),
+            by_name: who.to_owned(),
+        };
+        let mut channel = HashMap::new();
+        note_reaction(&mut channel, by("👍", "ann"), true);
+        note_reaction(&mut channel, by("🎉", "bob"), true);
+        note_reaction(&mut channel, by("👍", "bob"), true);
+        // Said twice, counted once.
+        note_reaction(&mut channel, by("👍", "bob"), true);
+        let tallied = tally(&channel["m"], Some("bob"));
+        let shown: Vec<_> = tallied
+            .iter()
+            .map(|reaction| (reaction.emoji.as_ref(), reaction.count, reaction.own))
+            .collect();
+        assert_eq!(shown, [("👍", 2, true), ("🎉", 1, true)]);
+
+        note_reaction(&mut channel, by("👍", "bob"), false);
+        let tallied = tally(&channel["m"], Some("bob"));
+        let shown: Vec<_> = tallied
+            .iter()
+            .map(|reaction| (reaction.emoji.as_ref(), reaction.count, reaction.own))
+            .collect();
+        assert_eq!(shown, [("👍", 1, false), ("🎉", 1, true)]);
     }
 
     #[test]
@@ -1124,5 +1309,209 @@ mod tests {
         assert!(engine.snapshot().sessions.is_empty());
         engine.shutdown();
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A client on the live Fancy server named by `FANCY_GPUI_TEST_FANCY`,
+    /// connecting as `name`.
+    fn fancy_client(name: &str, password: Option<String>) -> (RealEngine, std::path::PathBuf) {
+        let address = std::env::var("FANCY_GPUI_TEST_FANCY").expect("FANCY_GPUI_TEST_FANCY");
+        let (host, port) = address.rsplit_once(':').expect("host:port");
+        let dir = std::env::temp_dir().join(format!(
+            "fancy-gpui-fancy-{}-{}",
+            name.to_lowercase(),
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let engine = RealEngine::start(&dir).expect("the engine starts");
+        engine.save_server(SavedServer {
+            id: "live".into(),
+            label: "live".into(),
+            host: host.to_owned().into(),
+            port: port.parse().expect("a port"),
+            username: name.to_owned().into(),
+            certificate: Some(name.to_lowercase().into()),
+            favorite: false,
+        });
+        engine.connect("live", password);
+        (engine, dir)
+    }
+
+    /// The message of `room` that reads `text`, as `engine` holds it.
+    fn said(engine: &RealEngine, room: Conversation, text: &str) -> Option<Message> {
+        engine
+            .messages(room)
+            .into_iter()
+            .find(|message| message.body.as_ref() == text)
+    }
+
+    /// What only a Fancy server does: a message is edited and reacted to,
+    /// and one client sees the other writing.
+    ///
+    /// ```text
+    /// FANCY_GPUI_TEST_FANCY=127.0.0.1:64738 cargo test -- --ignored live_fancy
+    /// ```
+    #[test]
+    #[ignore = "needs a live Fancy server; set FANCY_GPUI_TEST_FANCY=host:port"]
+    fn live_fancy_messages_are_edited_and_reacted_to() {
+        let (alice, alice_dir) = fancy_client("FancyAlice", None);
+        let (bob, bob_dir) = fancy_client("FancyBob", None);
+        wait_for("both to connect", || {
+            alice.snapshot().users.len() >= 2 && bob.snapshot().users.len() >= 2
+        });
+        assert!(alice.snapshot().fancy, "the server speaks the extensions");
+        let channel = alice.snapshot().current_channel.expect("a channel");
+        let room = Conversation::Channel(channel);
+
+        alice.send_message(room, "first draft".to_owned());
+        wait_for("bob to receive it, with an id", || {
+            said(&bob, room, "first draft").is_some_and(|message| message.id.is_some())
+        });
+        let id = said(&alice, room, "first draft")
+            .and_then(|message| message.id)
+            .expect("alice's own copy has the id")
+            .to_string();
+        assert_eq!(
+            said(&bob, room, "first draft")
+                .and_then(|message| message.id)
+                .map(|id| id.to_string()),
+            Some(id.clone()),
+            "one id for both"
+        );
+
+        // Bob is seen writing.
+        let seen = alice.events();
+        bob.typing(room);
+        let bob_session = bob.snapshot().own_session.expect("bob's session");
+        wait_for("alice to see bob writing", || {
+            std::iter::from_fn(|| seen.try_recv().ok()).any(|event| {
+                event
+                    == EngineEvent::Typing {
+                        channel,
+                        session: bob_session,
+                    }
+            })
+        });
+
+        alice.act(Action::EditMessage {
+            channel,
+            id: id.clone(),
+            text: "second draft".to_owned(),
+        });
+        wait_for("bob to see the edit", || {
+            said(&bob, room, "second draft").is_some_and(|message| message.edited)
+        });
+        assert!(
+            said(&bob, room, "first draft").is_none(),
+            "changed, not added"
+        );
+
+        let react = |add| Action::React {
+            channel,
+            id: id.clone(),
+            emoji: "👍".to_owned(),
+            add,
+        };
+        bob.act(react(true));
+        wait_for("both to see bob's reaction", || {
+            let on = |engine: &RealEngine| {
+                said(engine, room, "second draft")
+                    .map(|message| message.reactions)
+                    .unwrap_or_default()
+            };
+            let (at_alice, at_bob) = (on(&alice), on(&bob));
+            at_alice.len() == 1
+                && at_alice[0].count == 1
+                && !at_alice[0].own
+                && at_bob.len() == 1
+                && at_bob[0].own
+        });
+        bob.act(react(false));
+        wait_for("the reaction to go again", || {
+            said(&alice, room, "second draft").is_some_and(|message| message.reactions.is_empty())
+        });
+
+        alice.shutdown();
+        bob.shutdown();
+        let _ = std::fs::remove_dir_all(alice_dir);
+        let _ = std::fs::remove_dir_all(bob_dir);
+    }
+
+    /// A channel made to keep its messages serves them to whoever comes
+    /// later, and a message deleted there is gone for everyone. Making the
+    /// channel takes the server's `SuperUser`:
+    ///
+    /// ```text
+    /// FANCY_GPUI_TEST_FANCY=127.0.0.1:64738 FANCY_GPUI_TEST_SUPERUSER=<password> \
+    ///     cargo test -- --ignored live_fancy_history
+    /// ```
+    #[test]
+    #[ignore = "needs a live Fancy server and its SuperUser password"]
+    fn live_fancy_history_is_kept_and_a_message_deleted_for_everyone() {
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        let (alice, alice_dir) = fancy_client("KeptAlice", None);
+        wait_for("both to connect", || {
+            admin.snapshot().users.len() >= 2 && alice.snapshot().users.len() >= 2
+        });
+        let name = format!("kept-{}", std::process::id());
+        let root = admin.snapshot().current_channel.expect("the root");
+        admin.act(Action::CreateChannel {
+            parent: root,
+            name: name.clone(),
+            history: true,
+        });
+        let kept = |engine: &RealEngine| {
+            engine
+                .snapshot()
+                .channels
+                .into_iter()
+                .find(|channel| channel.name.as_ref() == name)
+        };
+        wait_for("the channel, keeping its messages", || {
+            kept(&alice).is_some_and(|channel| channel.history)
+        });
+        let channel = kept(&alice).expect("the channel").id;
+        let room = Conversation::Channel(channel);
+        admin.join_channel(channel);
+        alice.join_channel(channel);
+        wait_for("both to be in it", || {
+            alice.snapshot().current_channel == Some(channel)
+                && admin.snapshot().current_channel == Some(channel)
+        });
+
+        alice.send_message(room, "to be deleted".to_owned());
+        alice.send_message(room, "to be kept".to_owned());
+        wait_for("the admin to have both", || {
+            said(&admin, room, "to be deleted").is_some()
+                && said(&admin, room, "to be kept").is_some()
+        });
+        let id = said(&alice, room, "to be deleted")
+            .and_then(|message| message.id)
+            .expect("an id")
+            .to_string();
+        alice.act(Action::DeleteMessage { channel, id });
+        wait_for("the message to go for both", || {
+            said(&alice, room, "to be deleted").is_none()
+                && said(&admin, room, "to be deleted").is_none()
+        });
+        assert_eq!(alice.message_count(room), alice.messages(room).len());
+
+        // Somebody who was not there reads what was kept, and only that.
+        let (late, late_dir) = fancy_client("KeptLate", None);
+        wait_for("the latecomer to connect", || kept(&late).is_some());
+        late.join_channel(channel);
+        late.open(room);
+        wait_for("the latecomer to read the history", || {
+            said(&late, room, "to be kept").is_some()
+        });
+        assert!(said(&late, room, "to be deleted").is_none());
+
+        admin.act(Action::DeleteChannel { channel });
+        wait_for("the channel to go", || kept(&alice).is_none());
+        for (engine, dir) in [(admin, admin_dir), (alice, alice_dir), (late, late_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
     }
 }

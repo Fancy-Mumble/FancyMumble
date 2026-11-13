@@ -5,8 +5,8 @@ use std::sync::Mutex;
 
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation,
-    Engine, EngineEvent, Message, SavedServer, ServerPing, Session, SessionEntry, Snapshot,
-    Subject, User, Voice, VoiceSettings,
+    Engine, EngineEvent, Message, Reaction, SavedServer, ServerPing, Session, SessionEntry,
+    Snapshot, Subject, User, Voice, VoiceSettings,
 };
 
 /// The local user's session in the demo server.
@@ -41,6 +41,8 @@ struct State {
     users: Vec<User>,
     /// Every message with the conversation it belongs to, oldest first.
     messages: Vec<(Conversation, Message)>,
+    /// How often the local user was said to be writing.
+    typed: u32,
 }
 
 impl DemoEngine {
@@ -69,6 +71,18 @@ impl DemoEngine {
     /// Have `session` start or stop talking.
     pub(crate) fn talk(&self, session: Session, talking: bool) {
         self.tell(EngineEvent::UserTalking { session, talking });
+    }
+
+    /// How often the view said the local user was writing.
+    #[cfg(test)]
+    pub(crate) fn typed(&self) -> u32 {
+        self.with_state(|state| state.typed)
+    }
+
+    /// Say something happened, as a server would.
+    #[cfg(test)]
+    pub(crate) fn emit(&self, event: EngineEvent) {
+        self.tell(event);
     }
 
     /// Every action asked of the demo so far.
@@ -122,7 +136,11 @@ impl State {
                     user.channel = *channel;
                 }
             }
-            Action::CreateChannel { parent, name } => {
+            Action::CreateChannel {
+                parent,
+                name,
+                history,
+            } => {
                 let id = self
                     .channels
                     .iter()
@@ -136,6 +154,7 @@ impl State {
                     name: name.clone().into(),
                     position: 0,
                     unread: 0,
+                    history: *history,
                 });
             }
             Action::RenameChannel { channel, name } => {
@@ -152,11 +171,43 @@ impl State {
                     own.channel = *channel;
                 }
             }
+            Action::EditMessage { id, text, .. } => {
+                if let Some(message) = self.message(id) {
+                    message.html = text.replace('&', "&amp;").replace('<', "&lt;").into();
+                    message.body = text.clone().into();
+                    message.edited = true;
+                }
+            }
+            Action::DeleteMessage { id, .. } => {
+                self.messages.retain(|(_, message)| {
+                    message
+                        .id
+                        .as_ref()
+                        .is_none_or(|known| known.as_ref() != id.as_str())
+                });
+            }
+            Action::React { id, emoji, add, .. } => {
+                if let Some(message) = self.message(id) {
+                    react(&mut message.reactions, emoji, *add);
+                }
+            }
             Action::SetUserVolume { .. }
             | Action::Register { .. }
             | Action::SetComment(_)
             | Action::SetAvatar(_) => {}
         }
+    }
+
+    fn message(&mut self, id: &str) -> Option<&mut Message> {
+        self.messages
+            .iter_mut()
+            .map(|(_, message)| message)
+            .find(|message| {
+                message
+                    .id
+                    .as_ref()
+                    .is_some_and(|known| known.as_ref() == id)
+            })
     }
 
     fn seeded() -> Self {
@@ -166,6 +217,7 @@ impl State {
             name: name.to_owned().into(),
             position: 0,
             unread: 0,
+            history: false,
         };
         let user = |session, name: &str| User {
             session,
@@ -186,6 +238,10 @@ impl State {
                     html: demo_markup(body).into(),
                     sent_at_ms: Some(FIRST_MESSAGE_MS + minute * MINUTE_MS),
                     own: session == OWN,
+                    id: Some(format!("demo-{minute}").into()),
+                    edited: false,
+                    failed: false,
+                    reactions: Vec::new(),
                 },
             )
         };
@@ -219,7 +275,10 @@ impl State {
             current_channel: LOUNGE,
             channels: vec![
                 channel(0, None, "Root"),
-                channel(LOUNGE, Some(0), "lounge"),
+                Channel {
+                    history: true,
+                    ..channel(LOUNGE, Some(0), "lounge")
+                },
                 channel(2, Some(0), "studio"),
                 channel(3, Some(0), "afk"),
             ],
@@ -230,6 +289,7 @@ impl State {
                 user(4, "Scout"),
                 user(5, "Torque"),
             ],
+            typed: 0,
             messages: vec![
                 said(0, OWN, "Alex", "Welcome to our creative lounge!"),
                 said(1, 3, "Rin", "Sketching a new character design tonight."),
@@ -240,9 +300,50 @@ impl State {
                     "My coastal drive was beautiful. Sharing photos soon.",
                 ),
                 said(3, 2, "Flora", "The dahlias are blooming in the garden."),
-                said(4, 4, "Scout", "Scout says hello from our walk!"),
+                reacted_to(said(4, 4, "Scout", "Scout says hello from our walk!")),
             ],
         }
+    }
+}
+
+/// Something to look at: a message people reacted to.
+fn reacted_to((room, mut message): (Conversation, Message)) -> (Conversation, Message) {
+    message.reactions = vec![
+        Reaction {
+            emoji: "👍".into(),
+            count: 2,
+            own: true,
+        },
+        Reaction {
+            emoji: "🎉".into(),
+            count: 1,
+            own: false,
+        },
+    ];
+    (room, message)
+}
+
+/// The local user puts `emoji` on a message, or takes theirs off.
+fn react(reactions: &mut Vec<Reaction>, emoji: &str, add: bool) {
+    let at = reactions.iter().position(|known| known.emoji == emoji);
+    match (at, add) {
+        (Some(at), true) if !reactions[at].own => {
+            reactions[at].count += 1;
+            reactions[at].own = true;
+        }
+        (None, true) => reactions.push(Reaction {
+            emoji: emoji.to_owned().into(),
+            count: 1,
+            own: true,
+        }),
+        (Some(at), false) if reactions[at].own => {
+            reactions[at].count -= 1;
+            reactions[at].own = false;
+            if reactions[at].count == 0 {
+                let _ = reactions.remove(at);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -282,6 +383,7 @@ impl Engine for DemoEngine {
                     name: "magical.rocks".into(),
                     active: true,
                 }],
+                fancy: true,
             }
         })
     }
@@ -364,6 +466,16 @@ impl Engine for DemoEngine {
         })
     }
 
+    fn message_count(&self, conversation: Conversation) -> usize {
+        self.with_state(|state| {
+            state
+                .messages
+                .iter()
+                .filter(|(of, _)| *of == conversation)
+                .count()
+        })
+    }
+
     fn open(&self, _conversation: Conversation) {}
 
     fn join_channel(&self, channel: ChannelId) {
@@ -409,6 +521,10 @@ impl Engine for DemoEngine {
                     body: body.into(),
                     sent_at_ms: Some(sent_at_ms),
                     own: true,
+                    id: Some(format!("demo-sent-{sent_at_ms}").into()),
+                    edited: false,
+                    failed: false,
+                    reactions: Vec::new(),
                 },
             ));
         });
@@ -475,16 +591,29 @@ impl Engine for DemoEngine {
         self.with_state(|state| state.devices = devices);
     }
 
+    fn typing(&self, _conversation: Conversation) {
+        self.with_state(|state| state.typed += 1);
+    }
+
     fn activate_session(&self, _id: &str) {}
 
     fn set_focused(&self, _focused: bool) {}
 
     fn act(&self, action: Action) {
+        let about_messages = matches!(
+            action,
+            Action::EditMessage { .. } | Action::DeleteMessage { .. } | Action::React { .. }
+        );
         self.with_state(|state| {
             state.apply(&action);
             state.actions.push(action);
         });
         self.tell(EngineEvent::StateChanged);
+        if about_messages {
+            self.tell(EngineEvent::NewMessage {
+                conversation: Conversation::Channel(LOUNGE),
+            });
+        }
     }
 
     fn about(&self, subject: Subject) {

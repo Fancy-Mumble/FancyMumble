@@ -11,7 +11,7 @@ use gpui::{
 
 use super::Shell;
 use super::widgets::{EMPHASIS, avatar, clock, icon, label};
-use crate::engine::{Conversation, Message};
+use crate::engine::{Action, Conversation, Message};
 use crate::rich::Rich;
 use crate::theme::{Fill, Theme};
 
@@ -103,6 +103,20 @@ pub(super) fn render(
                 .when_some(shell.notice.clone(), |column, notice| {
                     column.child(notice_strip(notice, theme, cx))
                 })
+                .when_some(writing_line(&shell.writers()), |column, line| {
+                    column.child(
+                        div()
+                            .debug_selector(|| "writing".to_owned())
+                            .flex_none()
+                            .px(px(30.0))
+                            .text_size(px(12.0))
+                            .text_color(theme.c.muted)
+                            .child(line),
+                    )
+                })
+                .when(shell.editing.is_some(), |column| {
+                    column.child(editing_strip(theme, cx))
+                })
                 .child(composer(shell, theme, cx)),
         )
 }
@@ -110,14 +124,19 @@ pub(super) fn render(
 fn header(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let (glyph, name, about, people) = match shell.open {
         Some(Conversation::Channel(id)) => {
-            let name = shell
+            let channel = shell
                 .snapshot
                 .channels
                 .iter()
-                .find(|channel| channel.id == id)
-                .map_or_else(SharedString::default, |channel| channel.name.clone());
+                .find(|channel| channel.id == id);
+            let name = channel.map_or_else(SharedString::default, |channel| channel.name.clone());
             let people = shell.occupants(id).len();
-            ("hash", name, format!("{people} in voice"), Some(people))
+            let about = if channel.is_some_and(|channel| channel.history) {
+                format!("{people} in voice · messages are kept")
+            } else {
+                format!("{people} in voice")
+            };
+            ("hash", name, about, Some(people))
         }
         Some(Conversation::Direct(session)) => {
             let name = shell
@@ -279,6 +298,52 @@ fn notice_strip(
     )
 }
 
+/// Who is writing, in words: one name, two, or how many.
+pub(super) fn writing_line(writers: &[SharedString]) -> Option<SharedString> {
+    Some(
+        match writers {
+            [] => return None,
+            [one] => format!("{one} is writing…"),
+            [one, other] => format!("{one} and {other} are writing…"),
+            many => format!("{} people are writing…", many.len()),
+        }
+        .into(),
+    )
+}
+
+/// Says the composer holds a message being changed, and how to leave it.
+fn editing_strip(theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+    let hover = theme.c.hover;
+    div()
+        .debug_selector(|| "editing".to_owned())
+        .flex_none()
+        .mx(px(10.0))
+        .px(px(20.0))
+        .py(px(6.0))
+        .flex()
+        .items_center()
+        .gap(px(8.0))
+        .rounded(theme.skin.radius_md)
+        .bg(theme.c.accent_soft)
+        .text_size(px(12.0))
+        .child(icon("pencil", 12.0, theme.c.accent_text))
+        .child(div().flex_1().child("Changing a message. Enter saves it."))
+        .child(
+            div()
+                .id("stop-editing")
+                .debug_selector(|| "stop-editing".to_owned())
+                .size(px(20.0))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(theme.skin.radius_sm)
+                .cursor_pointer()
+                .hover(move |style| style.bg(hover))
+                .on_click(cx.listener(|shell, _, _, cx| shell.stop_editing(cx)))
+                .child(icon("x", 12.0, theme.c.muted)),
+        )
+}
+
 fn composer(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     div().flex_none().p(px(10.0)).child(
         div()
@@ -350,8 +415,10 @@ impl Shell {
         } else {
             theme.skin.message_gap
         };
+        let chips = self.reaction_chips(index, &theme, cx);
+        let message = &self.messages[index];
         let body = if message.own {
-            own_message(message, &body, row, self.utc_offset, &theme).into_any_element()
+            own_message(message, &body, row, chips, self.utc_offset, &theme).into_any_element()
         } else {
             {
                 let picture = message.sender.and_then(|session| {
@@ -367,13 +434,24 @@ impl Shell {
                     row,
                     picture.as_ref(),
                     continues,
+                    chips,
                     self.utc_offset,
                     &theme,
                 )
                 .into_any_element()
             }
         };
-        row_frame().pt(gap).child(body).into_any_element()
+        row_frame()
+            .debug_selector(move || format!("message-{index}"))
+            .pt(gap)
+            .on_mouse_down(
+                gpui::MouseButton::Right,
+                cx.listener(move |shell, event: &gpui::MouseDownEvent, _, cx| {
+                    shell.open_message_menu(event.position, index, cx);
+                }),
+            )
+            .child(body)
+            .into_any_element()
     }
 }
 
@@ -404,6 +482,69 @@ impl DrawnBody {
 }
 
 impl Shell {
+    /// The reactions on message `index`, each a chip that adds the local
+    /// user's to it or takes it off; `None` when there are none.
+    fn reaction_chips(
+        &self,
+        index: usize,
+        theme: &Theme,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let message = self.messages.get(index)?;
+        let (Some(Conversation::Channel(channel)), Some(id)) = (self.open, message.id.as_ref())
+        else {
+            return None;
+        };
+        if message.reactions.is_empty() {
+            return None;
+        }
+        let hover = theme.c.hover;
+        Some(
+            div()
+                .flex()
+                .flex_wrap()
+                .gap(px(4.0))
+                .children(message.reactions.iter().enumerate().map(|(at, reaction)| {
+                    let act = Action::React {
+                        channel,
+                        id: id.to_string(),
+                        emoji: reaction.emoji.to_string(),
+                        add: !reaction.own,
+                    };
+                    let tag = reaction.emoji.clone();
+                    div()
+                        .id(("reaction", index * 64 + at))
+                        .debug_selector(move || format!("chip-{index}-{tag}"))
+                        .h(px(24.0))
+                        .px(px(8.0))
+                        .flex()
+                        .items_center()
+                        .gap(px(5.0))
+                        .rounded(theme.skin.radius_pill)
+                        .border_1()
+                        .text_size(px(12.0))
+                        .cursor_pointer()
+                        .map(|chip| {
+                            if reaction.own {
+                                chip.bg(theme.c.accent_soft)
+                                    .border_color(theme.c.accent_line)
+                            } else {
+                                chip.bg(theme.c.card).border_color(theme.c.line2)
+                            }
+                        })
+                        .hover(move |style| style.bg(hover))
+                        .on_click(cx.listener(move |shell, _, _, _| shell.engine.act(act.clone())))
+                        .child(reaction.emoji.clone())
+                        .child(
+                            div()
+                                .text_color(theme.c.muted)
+                                .child(SharedString::from(reaction.count.to_string())),
+                        )
+                }))
+                .into_any_element(),
+        )
+    }
+
     /// The body of message `index`, read from its HTML the first time it is
     /// drawn. Only rows near the viewport are ever asked for.
     fn drawn_body(&mut self, index: usize) -> Arc<DrawnBody> {
@@ -562,6 +703,7 @@ fn their_message(
     row: usize,
     picture: Option<&Arc<gpui::Image>>,
     continues: bool,
+    chips: Option<AnyElement>,
     utc_offset: i64,
     theme: &Theme,
 ) -> impl IntoElement + use<> {
@@ -622,7 +764,16 @@ fn their_message(
                         .border_1()
                         .border_color(theme.c.line2)
                         .child(body_text(body, row, theme.c.accent_text, theme)),
-                ),
+                )
+                .when(message.edited, |column| {
+                    column.child(
+                        div()
+                            .text_size(px(11.0))
+                            .text_color(theme.c.dim)
+                            .child("edited"),
+                    )
+                })
+                .children(chips),
         )
 }
 
@@ -630,6 +781,7 @@ fn own_message(
     message: &Message,
     body: &DrawnBody,
     row: usize,
+    chips: Option<AnyElement>,
     utc_offset: i64,
     theme: &Theme,
 ) -> impl IntoElement + use<> {
@@ -654,6 +806,7 @@ fn own_message(
         .items_end()
         .gap(px(5.0))
         .child(plate.child(body_text(body, row, link_ink, theme)))
+        .children(chips)
         .child(
             div()
                 .flex()
@@ -661,8 +814,15 @@ fn own_message(
                 .gap(px(6.0))
                 .text_size(px(11.0))
                 .text_color(theme.c.dim)
+                .when(message.edited, |line| line.child("edited"))
                 .child(SharedString::from(clock(message.sent_at_ms, utc_offset)))
-                .child(icon("check", 12.0, theme.c.dim)),
+                .map(|line| {
+                    if message.failed {
+                        line.child(div().text_color(theme.c.bad).child("not sent"))
+                    } else {
+                        line.child(icon("check", 12.0, theme.c.dim))
+                    }
+                }),
         )
 }
 
@@ -680,6 +840,10 @@ mod tests {
             html: "hi".into(),
             sent_at_ms,
             own: true,
+            id: None,
+            edited: false,
+            failed: false,
+            reactions: Vec::new(),
         }
     }
 
@@ -702,6 +866,30 @@ mod tests {
         assert_eq!(drawn[1].1.color, Some(ink));
         assert!(drawn[1].1.underline.is_some());
         assert!(highlights(&Rich::parse("plain"), ink, ground).is_empty());
+    }
+
+    #[test]
+    fn those_writing_are_named_until_there_are_too_many() {
+        let names = |names: &[&str]| -> Vec<SharedString> {
+            names.iter().map(|name| (*name).to_owned().into()).collect()
+        };
+        assert_eq!(writing_line(&[]), None);
+        assert_eq!(
+            writing_line(&names(&["Rin"])).as_ref().map(AsRef::as_ref),
+            Some("Rin is writing…")
+        );
+        assert_eq!(
+            writing_line(&names(&["Flora", "Rin"]))
+                .as_ref()
+                .map(AsRef::as_ref),
+            Some("Flora and Rin are writing…")
+        );
+        assert_eq!(
+            writing_line(&names(&["Flora", "Rin", "Scout"]))
+                .as_ref()
+                .map(AsRef::as_ref),
+            Some("3 people are writing…")
+        );
     }
 
     #[test]

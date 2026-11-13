@@ -141,7 +141,13 @@ pub(crate) enum Action {
     /// Register `session` on the server under their certificate.
     Register { session: Session },
     /// Create the channel `name` under `parent`.
-    CreateChannel { parent: ChannelId, name: String },
+    /// Create the channel `name` under `parent`; with `history` the
+    /// server keeps what is said there.
+    CreateChannel {
+        parent: ChannelId,
+        name: String,
+        history: bool,
+    },
     /// Rename `channel`.
     RenameChannel { channel: ChannelId, name: String },
     /// Delete `channel`, and everything under it.
@@ -155,6 +161,21 @@ pub(crate) enum Action {
     SetComment(String),
     /// Set the local user's picture, from an encoded image.
     SetAvatar(Vec<u8>),
+    /// Replace the text of the local user's message `id`.
+    EditMessage {
+        channel: ChannelId,
+        id: String,
+        text: String,
+    },
+    /// Delete the message `id` for everyone.
+    DeleteMessage { channel: ChannelId, id: String },
+    /// Put `emoji` on the message `id`, or take the local user's off.
+    React {
+        channel: ChannelId,
+        id: String,
+        emoji: String,
+        add: bool,
+    },
 }
 
 /// One of the servers the engine is on.
@@ -179,6 +200,8 @@ pub(crate) struct Channel {
     pub position: i32,
     /// Messages in it the user has not read.
     pub unread: u32,
+    /// Whether the server keeps what is said here.
+    pub history: bool,
 }
 
 /// One connected user.
@@ -204,20 +227,32 @@ pub(crate) struct Message {
     /// Who sent it; `None` once that user has left.
     pub sender: Option<Session>,
     pub sender_name: SharedString,
-    /// The message as plain text.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "drawn from `html`; kept for what wants words only"
-        )
-    )]
+    /// The message as plain text: what is copied, and what an edit starts
+    /// from.
     pub body: SharedString,
     /// The message as it was sent: HTML.
     pub html: SharedString,
     /// When it was sent, in Unix epoch milliseconds, where the server said.
     pub sent_at_ms: Option<u64>,
     /// Whether the local user sent it.
+    pub own: bool,
+    /// What names it to an edit, a reaction or a deletion; only a Fancy
+    /// server hands these out.
+    pub id: Option<SharedString>,
+    /// Whether it was changed after it was sent.
+    pub edited: bool,
+    /// Whether the server refused it.
+    pub failed: bool,
+    /// The reactions on it, in the order each emoji was first used.
+    pub reactions: Vec<Reaction>,
+}
+
+/// One emoji on a message, and how many put it there.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Reaction {
+    pub emoji: SharedString,
+    pub count: u32,
+    /// Whether the local user is one of them.
     pub own: bool,
 }
 
@@ -239,6 +274,9 @@ pub(crate) struct Snapshot {
     pub welcome: Option<SharedString>,
     /// Every server the engine is on; this snapshot is of the active one.
     pub sessions: Vec<SessionEntry>,
+    /// Whether the server speaks the Fancy extensions: messages can be
+    /// edited, reacted to and deleted, and people are seen writing.
+    pub fancy: bool,
 }
 
 impl Snapshot {
@@ -254,6 +292,7 @@ impl Snapshot {
             deafened: false,
             welcome: None,
             sessions: Vec::new(),
+            fancy: false,
         }
     }
 }
@@ -282,6 +321,12 @@ pub(crate) enum EngineEvent {
     /// Something the user should be told: a refused connection, a failed
     /// command. `None` clears what was said before.
     Notice(Option<SharedString>),
+    /// Somebody is writing in a channel. Said again while they go on;
+    /// nothing says when they stop.
+    Typing {
+        channel: ChannelId,
+        session: Session,
+    },
 }
 
 /// An engine, as this view sees one.
@@ -322,6 +367,10 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// The messages of `conversation`, oldest first.
     fn messages(&self, conversation: Conversation) -> Vec<Message>;
 
+    /// How many messages `conversation` holds. Cheap: for asking whether
+    /// [`Self::messages`] is worth reading again.
+    fn message_count(&self, conversation: Conversation) -> usize;
+
     /// The user is looking at `conversation`: mark it read, and fetch its
     /// stored history where the server keeps one.
     fn open(&self, conversation: Conversation);
@@ -348,6 +397,10 @@ pub(crate) trait Engine: Send + Sync + 'static {
 
     /// Use these devices from now on.
     fn choose_devices(&self, devices: ChosenDevices);
+
+    /// The local user is writing in `conversation`. Call it as often as
+    /// they type: the engine says so to the server only every few seconds.
+    fn typing(&self, conversation: Conversation);
 
     /// Make the session `id` the one the snapshot, and every command, is
     /// about.

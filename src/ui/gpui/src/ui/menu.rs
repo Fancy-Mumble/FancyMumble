@@ -9,7 +9,7 @@ use gpui::{
 use super::Shell;
 use super::text_input::{InputEvent, TextInput};
 use super::widgets::{EMPHASIS, icon, label, opaque};
-use crate::engine::{Action, Channel, ChannelId, Conversation, Session, Subject, User};
+use crate::engine::{Action, Channel, ChannelId, Conversation, Message, Session, Subject, User};
 use crate::theme::Theme;
 
 /// The loudness steps a user can be played at, with what each is called.
@@ -37,6 +37,13 @@ pub(super) enum Command {
     Ask(Question),
     /// Choose a picture file for the local user.
     PickAvatar,
+    /// Put a message's text in the composer, to be changed.
+    Edit {
+        id: SharedString,
+        text: SharedString,
+    },
+    /// Put text on the clipboard.
+    Copy(SharedString),
 }
 
 /// A question an entry puts before it can act.
@@ -45,6 +52,8 @@ pub(super) enum Question {
     KickReason(Session),
     BanReason(Session),
     NewChannel(ChannelId),
+    /// A channel whose messages the server keeps.
+    NewChannelWithHistory(ChannelId),
     RenameChannel(ChannelId),
     DeleteChannel(ChannelId),
     JoinPassword(ChannelId),
@@ -59,6 +68,11 @@ impl Question {
             Self::KickReason(_) => ("Kick", Some("Reason, if you want to give one"), "Kick"),
             Self::BanReason(_) => ("Ban", Some("Reason, if you want to give one"), "Ban"),
             Self::NewChannel(_) => ("New channel", Some("Name"), "Create"),
+            Self::NewChannelWithHistory(_) => (
+                "New channel that keeps its messages",
+                Some("Name"),
+                "Create",
+            ),
             Self::RenameChannel(_) => ("Rename channel", Some("Name"), "Rename"),
             Self::DeleteChannel(_) => ("Delete this channel and everything in it?", None, "Delete"),
             Self::JoinPassword(_) => ("Join with a password", Some("Password"), "Join"),
@@ -90,6 +104,12 @@ impl Question {
             Self::NewChannel(parent) => Action::CreateChannel {
                 parent,
                 name: Some(text).filter(|name| !name.is_empty())?,
+                history: false,
+            },
+            Self::NewChannelWithHistory(parent) => Action::CreateChannel {
+                parent,
+                name: Some(text).filter(|name| !name.is_empty())?,
+                history: true,
             },
             Self::RenameChannel(channel) => Action::RenameChannel {
                 channel,
@@ -143,6 +163,71 @@ pub(super) struct Menu {
     /// Where the pointer was.
     pub at: Point<Pixels>,
     pub items: Vec<Item>,
+    /// Entries drawn side by side above the others: the quick reactions.
+    /// Counted after `items` by [`Shell::choose`].
+    pub quick: Vec<Item>,
+}
+
+/// The emoji a message's menu offers at a click.
+pub(super) const QUICK_REACTIONS: &[&str] = &["👍", "❤️", "😂", "😮", "😢", "🎉"];
+
+/// The entries for a right click on `message` in `channel`: the quick
+/// reactions, and the rest.
+///
+/// `fancy` is whether the server can change messages at all; on one that
+/// cannot, a message can only be copied. `kept` is whether the channel's
+/// messages are stored: only a stored message can be deleted for everyone.
+pub(super) fn message_items(
+    message: &Message,
+    channel: Option<ChannelId>,
+    fancy: bool,
+    kept: bool,
+) -> (Vec<Item>, Vec<Item>) {
+    let mut items = vec![Item::new("Copy text", Command::Copy(message.body.clone()))];
+    let (Some(channel), Some(id), true) = (channel, message.id.as_ref(), fancy) else {
+        return (items, Vec::new());
+    };
+    let quick = QUICK_REACTIONS
+        .iter()
+        .map(|emoji| {
+            let own = message
+                .reactions
+                .iter()
+                .any(|reaction| reaction.own && reaction.emoji.as_ref() == *emoji);
+            Item::new(
+                emoji,
+                Command::Do(Action::React {
+                    channel,
+                    id: id.to_string(),
+                    emoji: (*emoji).to_owned(),
+                    add: !own,
+                }),
+            )
+            .ticked(own)
+        })
+        .collect();
+    if message.own {
+        items.push(Item::new(
+            "Edit",
+            Command::Edit {
+                id: id.clone(),
+                text: message.body.clone(),
+            },
+        ));
+        if kept {
+            items.push(
+                Item::new(
+                    "Delete",
+                    Command::Do(Action::DeleteMessage {
+                        channel,
+                        id: id.to_string(),
+                    }),
+                )
+                .danger(),
+            );
+        }
+    }
+    (items, quick)
 }
 
 /// The entries for a right click on `user`.
@@ -210,8 +295,13 @@ pub(super) fn user_items(
     items
 }
 
-/// The entries for a right click on `channel`.
-pub(super) fn channel_items(channel: &Channel, own_channel: Option<ChannelId>) -> Vec<Item> {
+/// The entries for a right click on `channel`. `fancy` is whether the
+/// server can keep a channel's messages.
+pub(super) fn channel_items(
+    channel: &Channel,
+    own_channel: Option<ChannelId>,
+    fancy: bool,
+) -> Vec<Item> {
     let id = channel.id;
     let mut items = vec![Item::new("Open", Command::Open(Conversation::Channel(id)))];
     if own_channel != Some(id) {
@@ -229,6 +319,12 @@ pub(super) fn channel_items(channel: &Channel, own_channel: Option<ChannelId>) -
         "New channel inside…",
         Command::Ask(Question::NewChannel(id)),
     ));
+    if fancy {
+        items.push(Item::new(
+            "New channel with history inside…",
+            Command::Ask(Question::NewChannelWithHistory(id)),
+        ));
+    }
     items.push(Item::new(
         "Rename…",
         Command::Ask(Question::RenameChannel(id)),
@@ -281,17 +377,50 @@ impl Shell {
         items: Vec<Item>,
         cx: &mut Context<Self>,
     ) {
-        self.menu = Some(Menu { at, items });
+        self.menu = Some(Menu {
+            at,
+            items,
+            quick: Vec::new(),
+        });
+        cx.notify();
+    }
+
+    /// Open the menu of the message at `index` of the open conversation.
+    pub(super) fn open_message_menu(
+        &mut self,
+        at: Point<Pixels>,
+        index: usize,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(message) = self.messages.get(index) else {
+            return;
+        };
+        let channel = match self.open {
+            Some(Conversation::Channel(channel)) => Some(channel),
+            _ => None,
+        };
+        let kept = channel.is_some_and(|id| {
+            self.snapshot
+                .channels
+                .iter()
+                .any(|known| known.id == id && known.history)
+        });
+        let (items, quick) = message_items(message, channel, self.snapshot.fancy, kept);
+        self.menu = Some(Menu { at, items, quick });
         cx.notify();
     }
 
     /// Do what the menu entry `index` says, and close the menu.
     pub(super) fn choose(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(item) = self
-            .menu
-            .take()
-            .and_then(|mut menu| (index < menu.items.len()).then(|| menu.items.swap_remove(index)))
-        else {
+        let Some(item) = self.menu.take().and_then(|mut menu| {
+            // The quick entries are counted on from the others.
+            let listed = menu.items.len();
+            if index < listed {
+                Some(menu.items.swap_remove(index))
+            } else {
+                (index - listed < menu.quick.len()).then(|| menu.quick.swap_remove(index - listed))
+            }
+        }) else {
             return;
         };
         match item.command {
@@ -308,6 +437,10 @@ impl Shell {
             Command::About(subject) => self.show_about(subject, cx),
             Command::Ask(question) => self.ask(question, window, cx),
             Command::PickAvatar => self.pick_avatar(cx),
+            Command::Edit { id, text } => self.start_editing(id, text.as_ref(), window, cx),
+            Command::Copy(text) => {
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.to_string()));
+            }
         }
         cx.notify();
     }
@@ -415,8 +548,15 @@ pub(super) fn render_menu(
 ) -> impl IntoElement + use<> {
     const WIDTH: f32 = 220.0;
     const ROW: f32 = 30.0;
+    const QUICK: f32 = 34.0;
     let viewport = window.viewport_size();
-    let height = px(menu.items.len() as f32 * ROW + 16.0);
+    let quick_height = if menu.quick.is_empty() {
+        0.0
+    } else {
+        QUICK + 6.0
+    };
+    let height = px(menu.items.len() as f32 * ROW + 16.0 + quick_height);
+    let listed = menu.items.len();
     // Kept on screen: a menu opened near an edge opens back from it.
     let left = menu.at.x.min(viewport.width - px(WIDTH + 8.0)).max(px(4.0));
     let top = menu
@@ -454,6 +594,32 @@ pub(super) fn render_menu(
                 .border_1()
                 .border_color(theme.c.line2)
                 .shadow_lg()
+                .when(!menu.quick.is_empty(), |list| {
+                    list.child(div().flex().justify_between().pb(px(6.0)).children(
+                        menu.quick.iter().enumerate().map(|(at, item)| {
+                            let tag = item.name.clone();
+                            div()
+                                .id(("menu-quick", at))
+                                .debug_selector(move || format!("react-{tag}"))
+                                .size(px(QUICK))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded(theme.skin.radius_md)
+                                .cursor_pointer()
+                                .text_size(px(18.0))
+                                .when(item.ticked, |tile| tile.bg(theme.c.accent_soft))
+                                .hover(move |style| style.bg(hover))
+                                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
+                                    cx.stop_propagation();
+                                })
+                                .on_click(cx.listener(move |shell, _, window, cx| {
+                                    shell.choose(listed + at, window, cx);
+                                }))
+                                .child(item.name.clone())
+                        }),
+                    ))
+                })
                 .children(menu.items.iter().enumerate().map(|(index, item)| {
                     let tag = item.name.clone();
                     div()
@@ -746,9 +912,10 @@ mod tests {
             name: "x".into(),
             position: 0,
             unread: 0,
+            history: false,
         };
         assert_eq!(
-            names(&channel_items(&channel(0, None), Some(1))),
+            names(&channel_items(&channel(0, None), Some(1), false)),
             [
                 "Open",
                 "Join",
@@ -759,7 +926,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            names(&channel_items(&channel(1, Some(0)), Some(1))),
+            names(&channel_items(&channel(1, Some(0)), Some(1), false)),
             [
                 "Open",
                 "About this channel",
@@ -792,7 +959,16 @@ mod tests {
             Question::NewChannel(1).answered(" Games "),
             Some(Action::CreateChannel {
                 parent: 1,
-                name: "Games".to_owned()
+                name: "Games".to_owned(),
+                history: false,
+            })
+        );
+        assert_eq!(
+            Question::NewChannelWithHistory(1).answered("Notes"),
+            Some(Action::CreateChannel {
+                parent: 1,
+                name: "Notes".to_owned(),
+                history: true,
             })
         );
         assert_eq!(

@@ -833,3 +833,117 @@ fn the_rail_adds_a_server_over_a_connection_and_goes_back(cx: &mut TestAppContex
     click(cx, "session-magical.rocks");
     shell.read_with(cx, |shell, _| assert!(!shell.shows_connect_screen()));
 }
+
+#[gpui::test]
+fn a_message_takes_a_reaction_from_its_menu_and_gives_it_back_at_its_chip(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    right_click(cx, "message-1");
+    // Somebody else's: nothing to change, only to react to and copy.
+    assert!(cx.debug_bounds("menu-Copy text").is_some());
+    shell.read_with(cx, |shell, _| {
+        let menu = shell.menu.as_ref().expect("the menu");
+        assert_eq!(menu.items.len(), 1, "not the local user's to edit");
+        assert_eq!(menu.quick.len(), super::menu::QUICK_REACTIONS.len());
+    });
+    click(cx, "react-👍");
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.menu.is_none());
+        let reactions = &shell.messages[1].reactions;
+        assert_eq!(reactions.len(), 1);
+        assert!(reactions[0].own && reactions[0].count == 1);
+    });
+    assert!(matches!(
+        engine.actions().last(),
+        Some(Action::React { add: true, .. })
+    ));
+    // The chip under the message takes it off again.
+    click(cx, "chip-1-👍");
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.messages[1].reactions.is_empty())
+    });
+    assert!(matches!(
+        engine.actions().last(),
+        Some(Action::React { add: false, .. })
+    ));
+}
+
+#[gpui::test]
+fn an_own_message_is_edited_in_the_composer_and_deleted_from_its_menu(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    right_click(cx, "message-0");
+    click(cx, "menu-Edit");
+    shell.read_with(cx, |shell, cx| {
+        assert!(shell.editing.is_some());
+        assert_eq!(
+            shell.composer.read(cx).text(),
+            "Welcome to our creative lounge!"
+        );
+    });
+    assert!(cx.debug_bounds("editing").is_some());
+    cx.simulate_keystrokes("! enter");
+    shell.read_with(cx, |shell, cx| {
+        assert!(shell.editing.is_none());
+        assert_eq!(shell.composer.read(cx).text(), "");
+        assert_eq!(shell.messages.len(), 5, "changed, not sent again");
+        assert!(shell.messages[0].edited);
+        assert_eq!(
+            shell.messages[0].body.as_ref(),
+            "Welcome to our creative lounge!!"
+        );
+    });
+
+    // Escape leaves a message as it was.
+    right_click(cx, "message-0");
+    click(cx, "menu-Edit");
+    cx.simulate_keystrokes("x escape");
+    shell.read_with(cx, |shell, cx| {
+        assert!(shell.editing.is_none());
+        assert_eq!(shell.composer.read(cx).text(), "");
+    });
+    assert_eq!(
+        engine
+            .actions()
+            .iter()
+            .filter(|action| matches!(action, Action::EditMessage { .. }))
+            .count(),
+        1
+    );
+
+    right_click(cx, "message-0");
+    click(cx, "menu-Delete");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.messages.len(), 4);
+        assert!(!shell.messages[0].own);
+    });
+}
+
+#[gpui::test]
+fn somebody_writing_is_named_and_the_local_user_writing_is_passed_on(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    let Some(Conversation::Channel(lounge)) = shell.read_with(cx, |shell, _| shell.open) else {
+        panic!("a channel is open");
+    };
+    engine.emit(crate::engine::EngineEvent::Typing {
+        channel: lounge,
+        session: 3,
+    });
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.writers(), ["Rin"]);
+    });
+    assert!(cx.debug_bounds("writing").is_some());
+    // In another channel: not this conversation's business.
+    engine.emit(crate::engine::EngineEvent::Typing {
+        channel: lounge + 1,
+        session: 2,
+    });
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| assert_eq!(shell.writers().len(), 1));
+
+    assert_eq!(engine.typed(), 0);
+    shell.update_in(cx, |shell, window, cx| {
+        shell.composer.read(cx).focus(window)
+    });
+    cx.simulate_keystrokes("h");
+    assert_eq!(engine.typed(), 1);
+}
