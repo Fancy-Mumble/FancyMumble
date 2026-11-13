@@ -55,6 +55,12 @@ fn main() {
 
             let (engine, store) = start_engine();
             install_theme(store.as_ref(), cx);
+            let closing = Arc::clone(&engine);
+            cx.on_app_quit(move |_| {
+                closing.shutdown();
+                async {}
+            })
+            .detach();
             let bounds = Bounds::centered(None, size(px(WINDOW.0), px(WINDOW.1)), cx);
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -110,18 +116,37 @@ fn start_engine() -> (Arc<dyn engine::Engine>, Option<store::Store>) {
     let dir = paths::data_dir();
     match real::RealEngine::start(&dir) {
         Ok(engine) => {
-            // `FANCY_GPUI_CONNECT=<saved identity id>` connects at once, for
-            // driving the view where nothing can click.
+            let engine: Arc<dyn engine::Engine> = Arc::new(engine);
+            // `FANCY_GPUI_CONNECT=<saved identity id>` connects at once, and
+            // `FANCY_GPUI_SAY=<text>` then says that in the channel arrived
+            // in: for driving the view where nothing can click or type.
             if let Some(id) = env("FANCY_GPUI_CONNECT") {
-                engine::Engine::connect(&engine, &id, env("FANCY_GPUI_PASSWORD"));
+                engine.connect(&id, env("FANCY_GPUI_PASSWORD"));
+                if let Some(text) = env("FANCY_GPUI_SAY") {
+                    say_once_connected(Arc::clone(&engine), text);
+                }
             }
-            (Arc::new(engine), Some(store::Store::new(dir)))
+            (engine, Some(store::Store::new(dir)))
         }
         Err(error) => {
             eprintln!("the engine could not start ({error}); showing the demo instead");
             (Arc::new(demo::DemoEngine::disconnected()), None)
         }
     }
+}
+
+/// Send `text` to the channel `engine` arrives in, once it has arrived;
+/// gives up after twenty seconds.
+fn say_once_connected(engine: Arc<dyn engine::Engine>, text: String) {
+    drop(std::thread::spawn(move || {
+        for _ in 0..200 {
+            if let Some(channel) = engine.snapshot().current_channel {
+                engine.send_message(channel, text);
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    }));
 }
 
 /// Start in the theme the environment names, else the one remembered, else

@@ -2383,6 +2383,7 @@ name = "fancy-gpui"
 version = "0.1.0"
 dependencies = [
  "async-channel 2.5.0",
+ "chrono",
  "gpui",
  "mumble-tauri",
  "serde",

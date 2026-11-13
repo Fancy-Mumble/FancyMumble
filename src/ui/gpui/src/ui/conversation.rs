@@ -10,14 +10,53 @@ use super::widgets::{EMPHASIS, avatar, clock, icon, label};
 use crate::engine::Message;
 use crate::theme::{Fill, Theme};
 
-/// How many rows a conversation of `messages` has: the day rule, then one
-/// per message. An empty channel has none.
-pub(super) fn row_count(messages: &[Message]) -> usize {
-    if messages.is_empty() {
-        0
-    } else {
-        messages.len() + 1
+/// One row of the conversation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Row {
+    /// The rule that starts a day, with what to call it.
+    Day(SharedString),
+    /// The message at this index.
+    Message(usize),
+}
+
+/// The local calendar day `at_ms` falls on, counted from the epoch, for a
+/// clock `offset_secs` east of UTC.
+fn day_of(at_ms: u64, offset_secs: i64) -> i64 {
+    let seconds = i64::try_from(at_ms / 1000).unwrap_or(i64::MAX);
+    seconds.saturating_add(offset_secs).div_euclid(86_400)
+}
+
+/// What to call `day`, seen from `today`.
+fn day_label(day: i64, today: i64) -> String {
+    match today - day {
+        0 => "Today".to_owned(),
+        1 => "Yesterday".to_owned(),
+        _ => chrono::DateTime::from_timestamp(day.saturating_mul(86_400), 0)
+            .map(|date| date.format("%-d %B %Y").to_string())
+            .unwrap_or_default(),
     }
+}
+
+/// `messages` as rows: each message, with a rule before the first of every
+/// day. A message that carries no time belongs to the day of the one before
+/// it, or to today when there is none.
+pub(super) fn rows(messages: &[Message], now_ms: u64, offset_secs: i64) -> Vec<Row> {
+    let today = day_of(now_ms, offset_secs);
+    let mut rows = Vec::with_capacity(messages.len() + 1);
+    let mut current = None;
+    for (index, message) in messages.iter().enumerate() {
+        let day = message
+            .sent_at_ms
+            .map(|at| day_of(at, offset_secs))
+            .or(current)
+            .unwrap_or(today);
+        if current != Some(day) {
+            current = Some(day);
+            rows.push(Row::Day(day_label(day, today).into()));
+        }
+        rows.push(Row::Message(index));
+    }
+    rows
 }
 
 pub(super) fn render(
@@ -53,6 +92,9 @@ pub(super) fn render(
                     .flex_1()
                     .min_h_0(),
                 )
+                .when_some(shell.notice.clone(), |column, notice| {
+                    column.child(notice_strip(notice, theme, cx))
+                })
                 .child(composer(shell, theme)),
         )
 }
@@ -62,7 +104,7 @@ fn header(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
     let in_voice = shell
         .snapshot
         .current_channel
-        .map_or(0, |channel| shell.occupants(channel).count());
+        .map_or(0, |channel| shell.occupants(channel).len());
     div()
         .flex_none()
         .h(theme.skin.header_height)
@@ -119,6 +161,43 @@ fn header(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
         .child(icon("ellipsis-vertical", 15.0, theme.c.muted))
 }
 
+/// What the engine had to say, above the composer, until it is dismissed.
+fn notice_strip(
+    notice: SharedString,
+    theme: &Theme,
+    cx: &mut Context<Shell>,
+) -> impl IntoElement + use<> {
+    let mut soft = theme.c.bad;
+    soft.a = 0.14;
+    let mut edge = theme.c.bad;
+    edge.a = 0.45;
+    div().flex_none().px(px(10.0)).pt(px(8.0)).child(
+        div()
+            .flex()
+            .items_center()
+            .gap(px(10.0))
+            .px(px(14.0))
+            .py(px(8.0))
+            .rounded(theme.skin.radius_md)
+            .bg(soft)
+            .border_1()
+            .border_color(edge)
+            .text_size(px(12.5))
+            .child(div().flex_1().min_w_0().child(notice))
+            .child(
+                div()
+                    .id("dismiss-notice")
+                    .debug_selector(|| "dismiss-notice".to_owned())
+                    .cursor_pointer()
+                    .on_click(cx.listener(|shell, _, _, cx| {
+                        shell.notice = None;
+                        cx.notify();
+                    }))
+                    .child(icon("x", 13.0, theme.c.muted)),
+            ),
+    )
+}
+
 fn composer(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
     div().flex_none().p(px(10.0)).child(
         div()
@@ -154,18 +233,28 @@ impl Shell {
     /// One row of the conversation. Called only for rows near the viewport.
     fn render_row(&self, row: usize, cx: &mut Context<Self>) -> AnyElement {
         let theme = crate::theme::ActiveTheme::get(cx);
-        let Some(index) = row.checked_sub(1) else {
-            return row_frame().child(day_rule(&theme)).into_any_element();
+        let index = match self.row_model.get(row) {
+            Some(Row::Day(name)) => {
+                return row_frame().child(day_rule(name, &theme)).into_any_element();
+            }
+            Some(Row::Message(index)) => *index,
+            None => return div().into_any_element(),
         };
         let Some(message) = self.messages.get(index) else {
             return div().into_any_element();
         };
         // A run is one person talking: the name and picture are said once.
-        let continues = index
+        // A new day starts a new run, since a rule sits between the two.
+        let continues = row
             .checked_sub(1)
-            .and_then(|previous| self.messages.get(previous))
+            .and_then(|above| match self.row_model.get(above) {
+                Some(Row::Message(previous)) => self.messages.get(*previous),
+                _ => None,
+            })
             .is_some_and(|previous| {
-                previous.sender == message.sender && !previous.own == !message.own
+                previous.sender == message.sender
+                    && previous.sender_name == message.sender_name
+                    && previous.own == message.own
             });
         let gap = if continues {
             theme.skin.message_run_gap
@@ -173,9 +262,9 @@ impl Shell {
             theme.skin.message_gap
         };
         let body = if message.own {
-            own_message(message, &theme).into_any_element()
+            own_message(message, self.utc_offset, &theme).into_any_element()
         } else {
-            their_message(message, continues, &theme).into_any_element()
+            their_message(message, continues, self.utc_offset, &theme).into_any_element()
         };
         row_frame().pt(gap).child(body).into_any_element()
     }
@@ -187,7 +276,7 @@ fn row_frame() -> gpui::Div {
 }
 
 /// The rule that starts a day, with the day on a pill in the middle.
-fn day_rule(theme: &Theme) -> impl IntoElement + use<> {
+fn day_rule(name: &SharedString, theme: &Theme) -> impl IntoElement + use<> {
     let rule = || div().flex_1().h(theme.skin.line_width).bg(theme.c.line);
     div()
         .w_full()
@@ -206,7 +295,7 @@ fn day_rule(theme: &Theme) -> impl IntoElement + use<> {
                 .border_color(theme.c.line)
                 .text_size(px(11.5))
                 .text_color(theme.c.muted)
-                .child(label("Today", theme)),
+                .child(label(name, theme)),
         )
         .child(rule())
 }
@@ -220,8 +309,13 @@ fn bubble(theme: &Theme) -> gpui::Div {
         .text_size(px(15.0))
 }
 
-fn their_message(message: &Message, continues: bool, theme: &Theme) -> impl IntoElement + use<> {
-    let time = SharedString::from(clock(message.sent_at_ms));
+fn their_message(
+    message: &Message,
+    continues: bool,
+    utc_offset: i64,
+    theme: &Theme,
+) -> impl IntoElement + use<> {
+    let time = SharedString::from(clock(message.sent_at_ms, utc_offset));
     div()
         .flex()
         .items_start()
@@ -282,7 +376,7 @@ fn their_message(message: &Message, continues: bool, theme: &Theme) -> impl Into
         )
 }
 
-fn own_message(message: &Message, theme: &Theme) -> impl IntoElement + use<> {
+fn own_message(message: &Message, utc_offset: i64, theme: &Theme) -> impl IntoElement + use<> {
     let plate = match theme.skin.bubble_own {
         Fill::Solid => bubble(theme)
             .bg(theme.c.accent)
@@ -305,7 +399,7 @@ fn own_message(message: &Message, theme: &Theme) -> impl IntoElement + use<> {
                 .gap(px(6.0))
                 .text_size(px(11.0))
                 .text_color(theme.c.dim)
-                .child(SharedString::from(clock(message.sent_at_ms)))
+                .child(SharedString::from(clock(message.sent_at_ms, utc_offset)))
                 .child(icon("check", 12.0, theme.c.dim)),
         )
 }
@@ -314,16 +408,66 @@ fn own_message(message: &Message, theme: &Theme) -> impl IntoElement + use<> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn an_empty_channel_has_no_rows_and_a_full_one_gets_a_day_rule() {
-        assert_eq!(row_count(&[]), 0);
-        let message = Message {
+    const DAY_MS: u64 = 86_400_000;
+
+    fn at(sent_at_ms: Option<u64>) -> Message {
+        Message {
             sender: Some(1),
             sender_name: "Alex".into(),
             body: "hi".into(),
-            sent_at_ms: Some(0),
+            sent_at_ms,
             own: true,
-        };
-        assert_eq!(row_count(&[message.clone(), message]), 3);
+        }
+    }
+
+    fn day(name: &str) -> Row {
+        Row::Day(name.to_owned().into())
+    }
+
+    #[test]
+    fn an_empty_channel_has_no_rows() {
+        assert!(rows(&[], 0, 0).is_empty());
+    }
+
+    #[test]
+    fn a_rule_starts_each_day() {
+        let now = 20 * DAY_MS + 1000;
+        let messages = [
+            at(Some(17 * DAY_MS)),
+            at(Some(19 * DAY_MS)),
+            at(Some(19 * DAY_MS + 5)),
+            at(Some(now)),
+        ];
+        assert_eq!(
+            rows(&messages, now, 0),
+            [
+                day("18 January 1970"),
+                Row::Message(0),
+                day("Yesterday"),
+                Row::Message(1),
+                Row::Message(2),
+                day("Today"),
+                Row::Message(3),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_day_is_the_local_one() {
+        // 23:30 UTC on day 19 is already day 20 one hour east of UTC.
+        let late = 19 * DAY_MS + 23 * 3_600_000 + 30 * 60_000;
+        let now = 20 * DAY_MS + 3_600_000;
+        assert_eq!(rows(&[at(Some(late))], now, 0)[0], day("Yesterday"));
+        assert_eq!(rows(&[at(Some(late))], now, 3600)[0], day("Today"));
+    }
+
+    #[test]
+    fn a_message_without_a_time_stays_with_the_one_before_it() {
+        let now = 20 * DAY_MS;
+        assert_eq!(
+            rows(&[at(Some(19 * DAY_MS)), at(None)], now, 0),
+            [day("Yesterday"), Row::Message(0), Row::Message(1)]
+        );
+        assert_eq!(rows(&[at(None)], now, 0), [day("Today"), Row::Message(0)]);
     }
 }

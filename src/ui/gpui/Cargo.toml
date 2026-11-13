@@ -29,9 +29,11 @@ gpui = { version = "0.2.2", default-features = false, features = ["font-kit"] }
 # view (`default-features = false`), so none of Tauri is compiled or linked.
 mumble-tauri = { path = "../../../crates/mumble-tauri", default-features = false }
 # The engine's background work runs on a runtime the view owns.
-tokio = { version = "1", features = ["rt-multi-thread"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 # The engine reports to the view over a channel the UI thread can await.
 async-channel = "2"
+# Local time, for the clock beside a message and the rule between days.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # The theme table (assets/themes.json) is generated from the web UI's
 # catalogue and read once at startup.
 serde = { version = "1", features = ["derive"] }

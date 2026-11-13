@@ -73,17 +73,26 @@ pub(crate) fn label(text: &str, theme: &Theme) -> SharedString {
     }
 }
 
-/// `HH:MM` for a Unix epoch time in milliseconds, or nothing for a message
-/// that carries no time (a server that does not send one).
-///
-/// UTC for now: the view has no time zone database, and the local offset is
-/// not worth a dependency until the settings can state it.
-pub(crate) fn clock(sent_at_ms: Option<u64>) -> String {
+/// `HH:MM` on a clock `offset_secs` east of UTC, for a Unix epoch time in
+/// milliseconds; nothing for a message that carries no time.
+pub(crate) fn clock(sent_at_ms: Option<u64>, offset_secs: i64) -> String {
     let Some(sent_at_ms) = sent_at_ms else {
         return String::new();
     };
-    let minutes = sent_at_ms / 60_000;
-    format!("{:02}:{:02}", (minutes / 60) % 24, minutes % 60)
+    let seconds = i64::try_from(sent_at_ms / 1000).unwrap_or(i64::MAX);
+    let minutes = seconds.saturating_add(offset_secs).div_euclid(60);
+    format!(
+        "{:02}:{:02}",
+        (minutes / 60).rem_euclid(24),
+        minutes.rem_euclid(60)
+    )
+}
+
+/// How far east of UTC the local clock is right now, in seconds.
+pub(crate) fn local_utc_offset() -> i64 {
+    use chrono::Offset;
+
+    i64::from(chrono::Local::now().offset().fix().local_minus_utc())
 }
 
 #[cfg(test)]
@@ -104,9 +113,19 @@ mod tests {
 
     #[test]
     fn formats_a_time_of_day() {
-        assert_eq!(clock(Some(0)), "00:00");
-        assert_eq!(clock(Some(1_760_045_820_000)), "21:37");
-        assert_eq!(clock(Some(1_760_045_820_000 + 23 * 60_000)), "22:00");
-        assert_eq!(clock(None), "");
+        assert_eq!(clock(Some(0), 0), "00:00");
+        assert_eq!(clock(Some(1_760_045_820_000), 0), "21:37");
+        assert_eq!(clock(Some(1_760_045_820_000 + 23 * 60_000), 0), "22:00");
+        assert_eq!(
+            clock(Some(1_760_045_820_000), 3600),
+            "22:37",
+            "an hour east"
+        );
+        assert_eq!(
+            clock(Some(0), -3600),
+            "23:00",
+            "an hour west, the day before"
+        );
+        assert_eq!(clock(None, 0), "");
     }
 }

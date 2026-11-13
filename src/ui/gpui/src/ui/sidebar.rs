@@ -137,7 +137,7 @@ fn channel_row(
     theme: &Theme,
     cx: &mut Context<Shell>,
 ) -> AnyElement {
-    let occupants = shell.occupants(channel.id).count();
+    let occupants = shell.occupants(channel.id).len();
     let solid = current && theme.skin.selection == Fill::Solid;
     let (ink, hash) = if solid {
         (theme.c.on_accent, theme.c.on_accent)
@@ -210,6 +210,7 @@ fn occupant_list(shell: &Shell, channel: &Channel, depth: usize, theme: &Theme) 
         .children(
             shell
                 .occupants(channel.id)
+                .into_iter()
                 .map(|user| occupant_row(shell, user, theme)),
         )
         .into_any_element()
@@ -246,10 +247,10 @@ fn occupant_row(shell: &Shell, user: &User, theme: &Theme) -> impl IntoElement +
                 .text_color(if own { theme.c.muted } else { theme.c.text })
                 .child(user.name.clone()),
         )
-        .when(user.deafened, |row| {
+        .when(user.deafened && !own, |row| {
             row.child(icon("headphone-off", 12.0, theme.c.dim))
         })
-        .when(user.muted && !user.deafened, |row| {
+        .when(user.muted && !user.deafened && !own, |row| {
             row.child(icon("mic-off", 12.0, theme.c.dim))
         })
         .when(own, |row| {
@@ -268,7 +269,9 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
         || SharedString::from("Not connected"),
         |user| user.name.clone(),
     );
-    let deafened = shell.snapshot.deafened;
+    // With voice off the server lists the user as deafened, because nothing
+    // is heard; to the user that is "voice off", not a deafen they chose.
+    let deafened = shell.snapshot.deafened && shell.snapshot.voice != Voice::Off;
     // The microphone is "off" both when voice is off and when it is muted:
     // either way nobody hears the user, which is what the red says.
     let silent = shell.snapshot.voice != Voice::On;

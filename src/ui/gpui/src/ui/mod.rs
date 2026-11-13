@@ -44,6 +44,10 @@ pub(crate) struct Shell {
     messages: Vec<Message>,
     /// The conversation's rows: only the visible ones are laid out.
     rows: ListState,
+    /// What each row is: a message, or the rule that starts a day.
+    row_model: Vec<conversation::Row>,
+    /// How far east of UTC the local clock is, as of the last reload.
+    utc_offset: i64,
     /// Who is talking right now.
     talking: HashSet<Session>,
     composer: Entity<TextInput>,
@@ -103,6 +107,8 @@ impl Shell {
             engine,
             messages: Vec::new(),
             rows: ListState::new(0, ListAlignment::Top, px(OVERDRAW)),
+            row_model: Vec::new(),
+            utc_offset: 0,
             talking: HashSet::new(),
             composer,
             search,
@@ -193,7 +199,14 @@ impl Shell {
             .unwrap_or_default();
         // A short conversation starts under the header, as the web UI draws
         // it; a long one opens on its newest message.
-        let rows = conversation::row_count(&self.messages);
+        self.utc_offset = widgets::local_utc_offset();
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| {
+                u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+            });
+        self.row_model = conversation::rows(&self.messages, now_ms, self.utc_offset);
+        let rows = self.row_model.len();
         self.rows.reset(rows);
         self.rows.scroll_to(ListOffset {
             item_ix: rows,
@@ -257,12 +270,16 @@ impl Shell {
             .collect()
     }
 
-    /// The users in `channel`, in the order the engine lists them.
-    fn occupants(&self, channel: ChannelId) -> impl Iterator<Item = &User> {
-        self.snapshot
+    /// The users in `channel`, by name.
+    fn occupants(&self, channel: ChannelId) -> Vec<&User> {
+        let mut users: Vec<&User> = self
+            .snapshot
             .users
             .iter()
-            .filter(move |user| user.channel == channel)
+            .filter(|user| user.channel == channel)
+            .collect();
+        users.sort_by_key(|user| user.name.to_lowercase());
+        users
     }
 
     fn own_user(&self) -> Option<&User> {

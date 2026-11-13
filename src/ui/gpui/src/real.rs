@@ -27,6 +27,10 @@ struct Shared {
     events: async_channel::Sender<EngineEvent>,
     servers: Mutex<Vec<SavedServer>>,
     pings: Mutex<HashMap<Address, ServerPing>>,
+    /// When each message that carries no time of its own was first read,
+    /// per channel and in order: a stock server sends none, and "when it
+    /// arrived here" is the time a reader expects beside it.
+    first_read: Mutex<HashMap<ChannelId, Vec<u64>>>,
     store: Store,
 }
 
@@ -56,6 +60,10 @@ impl Shared {
                 self.open_current_conversation(runtime);
             }
             api::EngineEvent::Disconnected { reason } => {
+                self.first_read
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .clear();
                 if reason.is_some() {
                     self.tell(EngineEvent::Notice(reason.map(Into::into)));
                 }
@@ -141,6 +149,7 @@ impl RealEngine {
             events,
             servers: Mutex::new(store.servers()),
             pings: Mutex::default(),
+            first_read: Mutex::default(),
             store,
         });
         let _ = slot.set(Arc::clone(&shared));
@@ -173,12 +182,6 @@ impl RealEngine {
             )));
         }
         self.shared.tell(EngineEvent::ServersChanged);
-    }
-}
-
-impl Drop for RealEngine {
-    fn drop(&mut self) {
-        self.shared.engine.shutdown();
     }
 }
 
@@ -318,15 +321,22 @@ impl Engine for RealEngine {
     }
 
     fn messages(&self, channel: ChannelId) -> Vec<Message> {
-        self.shared
-            .engine
-            .messages(channel)
+        let messages = self.shared.engine.messages(channel);
+        let mut first_read = self
+            .shared
+            .first_read
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let read_at = first_read.entry(channel).or_default();
+        stamp_first_read(read_at, messages.len(), now_ms());
+        messages
             .into_iter()
-            .map(|message| Message {
+            .zip(read_at.iter())
+            .map(|(message, read_at)| Message {
                 sender: message.sender,
                 sender_name: message.sender_name.into(),
                 body: message.text.into(),
-                sent_at_ms: message.sent_at_ms,
+                sent_at_ms: message.sent_at_ms.or(Some(*read_at)),
                 own: message.own,
             })
             .collect()
@@ -354,6 +364,32 @@ impl Engine for RealEngine {
         let engine = self.shared.engine.clone();
         self.spawn(async move { engine.toggle_deafen().await });
     }
+
+    fn shutdown(&self) {
+        let engine = self.shared.engine.clone();
+        // Leave properly, so the server and the others see a departure and
+        // not a timeout; then write out what the engine holds in memory.
+        let _ = self.runtime.block_on(async move {
+            tokio::time::timeout(std::time::Duration::from_secs(2), engine.disconnect()).await
+        });
+        self.shared.engine.shutdown();
+    }
+}
+
+/// Unix epoch milliseconds, now.
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| {
+            u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
+        })
+}
+
+/// Keep `read_at` as long as the channel's history: a message read for the
+/// first time is stamped `now`, and a history that shrank (messages were
+/// deleted) forgets the stamps past its end.
+fn stamp_first_read(read_at: &mut Vec<u64>, messages: usize, now: u64) {
+    read_at.resize(messages, now);
 }
 
 /// A ping as the server list shows it, or `None` for a server that is down
@@ -375,6 +411,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_message_is_stamped_when_first_read_and_keeps_that_time() {
+        let mut read_at = Vec::new();
+        stamp_first_read(&mut read_at, 2, 100);
+        stamp_first_read(&mut read_at, 3, 200);
+        assert_eq!(read_at, [100, 100, 200], "the first two keep their time");
+        stamp_first_read(&mut read_at, 1, 300);
+        assert_eq!(read_at, [100], "a shorter history forgets the rest");
+    }
+
+    #[test]
     fn a_server_that_is_down_has_no_ping_to_show() {
         let down = PingInfo {
             online: false,
@@ -394,5 +440,116 @@ mod tests {
         .expect("an answer");
         assert_eq!((up.users, up.max_users, up.latency_ms), (3, 101, 18));
         assert_eq!(up.version.as_ref(), "1.6.0");
+    }
+
+    /// Two engines on one live server: connect, see each other, talk in
+    /// text, turn voice on. Ignored unless a server is named:
+    ///
+    /// ```text
+    /// FANCY_GPUI_TEST_SERVER=127.0.0.1:64738 cargo test -- --ignored live
+    /// ```
+    ///
+    /// Voice is captured from the engine's virtual microphone, and only one
+    /// side turns it on, so nothing is recorded and nothing is played.
+    #[test]
+    #[ignore = "needs a live server; set FANCY_GPUI_TEST_SERVER=host:port"]
+    #[allow(unsafe_code, reason = "`std::env::set_var` is unsafe in Rust 2024")]
+    fn live_two_clients_connect_chat_and_turn_voice_on() {
+        let address = std::env::var("FANCY_GPUI_TEST_SERVER").expect("FANCY_GPUI_TEST_SERVER");
+        let (host, port) = address.rsplit_once(':').expect("host:port");
+        let port: u16 = port.parse().expect("a port");
+        // SAFETY: set before any engine thread reads the environment.
+        unsafe { std::env::set_var("FANCY_E2E_VIRTUAL_MIC", "sine:48000:440") };
+
+        let client = |name: &str| {
+            let dir =
+                std::env::temp_dir().join(format!("fancy-gpui-live-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            let engine = RealEngine::start(&dir).expect("the engine starts");
+            engine.save_server(SavedServer {
+                id: "live".into(),
+                label: "live".into(),
+                host: host.to_owned().into(),
+                port,
+                username: name.to_owned().into(),
+                certificate: Some(name.to_lowercase().into()),
+                favorite: false,
+            });
+            (engine, dir)
+        };
+        let (alice, alice_dir) = client("LiveAlice");
+        let (bob, bob_dir) = client("LiveBob");
+
+        // The saved server is written to disk and read back by a new store.
+        assert_eq!(Store::new(&alice_dir).servers().len(), 1);
+
+        alice.connect("live", None);
+        bob.connect("live", None);
+        wait_for("both to connect", || {
+            alice.snapshot().connection == Connection::Connected
+                && bob.snapshot().connection == Connection::Connected
+        });
+        wait_for("each to see the other", || {
+            alice.snapshot().users.len() >= 2 && bob.snapshot().users.len() >= 2
+        });
+        let on_alice = alice.snapshot();
+        let channel = on_alice.current_channel.expect("alice is in a channel");
+        assert!(on_alice.own_session.is_some());
+        assert!(!on_alice.channels.is_empty(), "the channel tree arrived");
+        assert_eq!(bob.snapshot().current_channel, Some(channel));
+
+        alice.send_message(channel, "hello <b>bob</b> & co".to_owned());
+        wait_for("bob to receive the message", || {
+            bob.messages(channel)
+                .iter()
+                .any(|message| message.body.as_ref() == "hello <b>bob</b> & co")
+        });
+        let received = bob.messages(channel);
+        let message = received.last().expect("the message");
+        assert_eq!(message.sender_name.as_ref(), "LiveAlice");
+        assert!(!message.own);
+        wait_for("alice to see her own message", || {
+            alice.messages(channel).iter().any(|message| message.own)
+        });
+
+        assert_eq!(alice.snapshot().voice, Voice::Off);
+        alice.toggle_microphone();
+        wait_for("alice's voice to turn on", || {
+            alice.snapshot().voice == Voice::On
+        });
+        wait_for("bob to see alice unmuted", || {
+            bob.snapshot()
+                .users
+                .iter()
+                .any(|user| user.name.as_ref() == "LiveAlice" && !user.muted)
+        });
+        alice.toggle_microphone();
+        wait_for("alice to mute", || alice.snapshot().voice == Voice::Muted);
+
+        bob.disconnect();
+        wait_for("bob to leave", || {
+            bob.snapshot().connection == Connection::Disconnected
+                && alice.snapshot().users.len() == 1
+        });
+        alice.disconnect();
+        wait_for("alice to leave", || {
+            alice.snapshot().connection == Connection::Disconnected
+        });
+        drop((alice, bob));
+        let _ = std::fs::remove_dir_all(alice_dir);
+        let _ = std::fs::remove_dir_all(bob_dir);
+    }
+
+    /// Poll `done` for up to twenty seconds.
+    #[track_caller]
+    fn wait_for(what: &str, done: impl Fn() -> bool) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while !done() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "timed out waiting for {what}"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
     }
 }

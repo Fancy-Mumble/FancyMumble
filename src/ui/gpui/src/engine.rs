@@ -204,4 +204,7 @@ pub(crate) trait Engine: Send + Sync + 'static {
 
     /// Deafen or undeafen the local user.
     fn toggle_deafen(&self);
+
+    /// The application is closing: write out what is held only in memory.
+    fn shutdown(&self) {}
 }

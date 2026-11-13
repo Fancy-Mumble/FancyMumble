@@ -374,3 +374,13 @@ fn a_notice_from_the_engine_is_shown_until_cleared(cx: &mut TestAppContext) {
     cx.run_until_parked();
     shell.read_with(cx, |shell, _| assert!(shell.notice.is_none()));
 }
+
+#[gpui::test]
+fn a_notice_while_connected_can_be_dismissed(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    engine.notify(Some("The microphone could not be opened"));
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| assert!(shell.notice.is_some()));
+    click(cx, "dismiss-notice");
+    shell.read_with(cx, |shell, _| assert!(shell.notice.is_none()));
+}
