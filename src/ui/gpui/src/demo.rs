@@ -30,6 +30,8 @@ pub(crate) struct DemoEngine {
 #[derive(Debug)]
 struct State {
     connected: bool,
+    /// Whether this is the server without anything of Fancy Mumble's.
+    plain: bool,
     voice: Voice,
     deafened: bool,
     servers: Vec<SavedServer>,
@@ -64,6 +66,29 @@ impl DemoEngine {
     /// Connected to a demo server with a handful of people in one channel.
     pub(crate) fn new() -> Self {
         Self::starting(true)
+    }
+
+    /// A server with nothing of Fancy Mumble's on it: two channels, the same
+    /// people, what they said as plain text, no welcome. What the web UI
+    /// shows of the same server is the reference this view is measured
+    /// against.
+    pub(crate) fn plain() -> Self {
+        let demo = Self::starting(true);
+        demo.with_state(|state| {
+            state.plain = true;
+            state.channels.retain(|channel| channel.id <= LOUNGE);
+            for channel in &mut state.channels {
+                channel.history = false;
+            }
+            for user in &mut state.users {
+                user.muted = false;
+            }
+            for (_, message) in &mut state.messages {
+                message.html = message.body.clone();
+                message.reactions.clear();
+            }
+        });
+        demo
     }
 
     /// The same server, not yet connected to: what a launch looks like.
@@ -427,6 +452,7 @@ impl State {
         };
         Self {
             connected: true,
+            plain: false,
             voice: Voice::Off,
             deafened: false,
             devices: ChosenDevices::default(),
@@ -589,13 +615,13 @@ impl Engine for DemoEngine {
                 users: state.users.clone(),
                 voice: state.voice,
                 deafened: state.deafened,
-                welcome: Some("Welcome to the <b>demo</b> server.".into()),
+                welcome: (!state.plain).then(|| "Welcome to the <b>demo</b> server.".into()),
                 sessions: vec![SessionEntry {
                     id: "demo".into(),
                     name: "magical.rocks".into(),
                     active: true,
                 }],
-                fancy: true,
+                fancy: !state.plain,
             }
         })
     }

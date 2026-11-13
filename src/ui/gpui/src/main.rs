@@ -122,16 +122,17 @@ fn main() {
 ///
 /// The real engine unless `FANCY_GPUI_ENGINE=demo` asks for the server that
 /// exists only in memory (`FANCY_GPUI_DEMO=connected` starts on it rather
-/// than on the connect screen; `FANCY_GPUI_DEMO_TALKING=<session>` has that
+/// than on the connect screen, `FANCY_GPUI_DEMO=plain` on the same server
+/// with nothing of Fancy Mumble's on it; `FANCY_GPUI_DEMO_TALKING=<session>` has that
 /// user talking; `FANCY_GPUI_DEMO_POLL` puts a poll to the lounge). The demo
 /// remembers nothing.
 fn start_engine() -> (Arc<dyn engine::Engine>, Option<store::Store>) {
     let env = |name: &str| std::env::var(name).ok();
     if env("FANCY_GPUI_ENGINE").as_deref() == Some("demo") {
-        let demo = if env("FANCY_GPUI_DEMO").as_deref() == Some("connected") {
-            demo::DemoEngine::new()
-        } else {
-            demo::DemoEngine::disconnected()
+        let demo = match env("FANCY_GPUI_DEMO").as_deref() {
+            Some("connected") => demo::DemoEngine::new(),
+            Some("plain") => demo::DemoEngine::plain(),
+            _ => demo::DemoEngine::disconnected(),
         };
         if let Some(session) = env("FANCY_GPUI_DEMO_TALKING").and_then(|id| id.parse().ok()) {
             demo.talk(session, true);
