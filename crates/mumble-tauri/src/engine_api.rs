@@ -273,6 +273,9 @@ pub struct ChannelChange {
     pub password: Option<String>,
 }
 
+/// How many messages one deletion names at most, when many are deleted.
+const PURGE_CHUNK: usize = 100;
+
 /// What becomes of the messages of a channel being created.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum History {
@@ -1630,6 +1633,52 @@ impl EngineHandle {
         Ok(())
     }
 
+    /// Delete from the server's store everything said in `channel`, or
+    /// with `by` everything said there by whoever has that certificate
+    /// hash; this side's copies go too.
+    ///
+    /// The messages this engine holds of the channel are deleted by name,
+    /// which every server that keeps messages understands, and the call
+    /// waits for that. The server is also asked, without being waited for,
+    /// to delete the rest by span or by sender: not every server does
+    /// (Starling drops such a request unanswered), so on one that does not,
+    /// what was never loaded here stays.
+    ///
+    /// # Errors
+    ///
+    /// When not connected, or when the server refuses.
+    pub async fn purge_messages(&self, channel: u32, by: Option<String>) -> Result<(), String> {
+        let held: Vec<String> = self
+            .state
+            .messages(channel)
+            .into_iter()
+            .filter(|message| by.is_none() || message.sender_hash == by)
+            .filter_map(|message| message.message_id)
+            .collect();
+        // Everything is a span of time with no ends; a sender needs none.
+        let (from, to) = if by.is_some() {
+            (None, None)
+        } else {
+            (Some(0), Some(u64::MAX))
+        };
+        let state = self.state.clone();
+        let sender = by.clone();
+        drop(tokio::spawn(async move {
+            // No answer is not an error: see above.
+            let _ = state
+                .delete_pchat_messages(channel, Vec::new(), from, to, sender)
+                .await;
+        }));
+        for ids in held.chunks(PURGE_CHUNK) {
+            self.state
+                .delete_pchat_messages(channel, ids.to_vec(), None, None, None)
+                .await?;
+        }
+        self.state.forget_local_messages(channel, held);
+        self.state.forget_local_span(channel, from, to, by);
+        Ok(())
+    }
+
     /// Put `emoji` on the message `id` of `channel`, or with `add` false
     /// take it off again.
     ///
@@ -2283,13 +2332,33 @@ impl EngineHandle {
         name: String,
         history: History,
     ) -> Result<(), String> {
+        self.make_channel(parent, name, history, false).await
+    }
+
+    /// Create the channel `name` under `parent` for as long as somebody is
+    /// in it: the server takes it away when the last one leaves.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn create_temporary_channel(&self, parent: u32, name: String) -> Result<(), String> {
+        self.make_channel(parent, name, History::None, true).await
+    }
+
+    async fn make_channel(
+        &self,
+        parent: u32,
+        name: String,
+        history: History,
+        temporary: bool,
+    ) -> Result<(), String> {
         self.state
             .create_channel(
                 parent,
                 name,
                 None,
                 None,
-                None,
+                temporary.then_some(true),
                 None,
                 match history {
                     History::None => None,
@@ -2307,6 +2376,15 @@ impl EngineHandle {
                 Vec::new(),
             )
             .await
+    }
+
+    /// Move everybody in the channel `from` to the channel `to`.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn move_everyone(&self, from: u32, to: u32) -> Result<(), String> {
+        self.state.move_channel_users(from, to).await
     }
 
     /// Rename `channel`.

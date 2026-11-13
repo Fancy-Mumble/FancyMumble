@@ -779,6 +779,25 @@ impl AppState {
     /// Forget messages this device holds for a channel without asking the
     /// server. A `SignalV1` channel keeps no server-side copy, so there is
     /// nothing there to delete and nobody to ask.
+    /// Forget what this device holds of a channel from a span of time, or
+    /// from one sender, the way a deletion from the server would.
+    pub fn forget_local_span(
+        &self,
+        channel_id: u32,
+        from: Option<u64>,
+        to: Option<u64>,
+        sender_hash: Option<String>,
+    ) {
+        let message = mumble_tcp::PchatDeleteMessages {
+            channel_id: Some(channel_id),
+            message_ids: Vec::new(),
+            time_range: (from.is_some() || to.is_some())
+                .then_some(mumble_tcp::pchat_delete_messages::TimeRange { from, to }),
+            sender_hash,
+        };
+        crate::state::pchat::handle_proto_delete_messages(&self.inner.snapshot(), &message);
+    }
+
     pub fn forget_local_messages(&self, channel_id: u32, message_ids: Vec<String>) {
         let message = mumble_tcp::PchatDeleteMessages {
             channel_id: Some(channel_id),
