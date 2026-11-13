@@ -11,6 +11,7 @@ use super::text_input::{InputEvent, TextInput};
 use super::widgets::{EMPHASIS, icon, label, opaque};
 use crate::engine::{
     Action, Channel, ChannelId, Conversation, Listing, Message, Session, Subject, User,
+    WhisperTarget,
 };
 use crate::theme::Theme;
 
@@ -52,6 +53,8 @@ pub(super) enum Command {
     Leave(SharedString),
     /// Open the permissions of a channel.
     Permissions(ChannelId),
+    /// Whisper to somebody, or shout into a channel, with the whisper key.
+    Whisper(WhisperTarget, SharedString),
     /// Open the administrator's panel on one of its lists.
     Admin(Listing),
 }
@@ -347,6 +350,7 @@ pub(super) fn user_items(
     own: Option<Session>,
     own_channel: Option<ChannelId>,
     volume: f32,
+    whispered_to: Option<WhisperTarget>,
 ) -> Vec<Item> {
     let session = user.session;
     if own == Some(session) {
@@ -363,6 +367,11 @@ pub(super) fn user_items(
     let mut items = vec![
         Item::new("Message", Command::Open(Conversation::Direct(session))),
         Item::new("View comment", Command::About(Subject::User(session))),
+        Item::new(
+            "Whisper with the whisper key",
+            Command::Whisper(WhisperTarget::User(session), user.name.clone()),
+        )
+        .ticked(whispered_to == Some(WhisperTarget::User(session))),
     ];
     items.extend(VOLUMES.iter().map(|(level, name)| {
         Item::new(name, Command::Volume(session, *level)).ticked((volume - level).abs() < 0.01)
@@ -417,6 +426,7 @@ pub(super) fn channel_items(
     channel: &Channel,
     own_channel: Option<ChannelId>,
     fancy: bool,
+    whispered_to: Option<WhisperTarget>,
 ) -> Vec<Item> {
     let id = channel.id;
     let mut items = vec![Item::new("Open", Command::Open(Conversation::Channel(id)))];
@@ -436,6 +446,16 @@ pub(super) fn channel_items(
             .ticked(channel.listening),
         );
     }
+    items.push(
+        Item::new(
+            "Shout here with the whisper key",
+            Command::Whisper(
+                WhisperTarget::Channel(id),
+                format!("#{}", channel.name).into(),
+            ),
+        )
+        .ticked(whispered_to == Some(WhisperTarget::Channel(id))),
+    );
     items.push(Item::new(
         "About this channel",
         Command::About(Subject::Channel(id)),
@@ -639,6 +659,7 @@ impl Shell {
             Command::Edit { id, text } => self.start_editing(id, text.as_ref(), window, cx),
             Command::Leave(session) => self.engine.leave_session(&session),
             Command::Permissions(channel) => self.open_acl(channel, cx),
+            Command::Whisper(target, name) => self.toggle_whisper_target(target, name, cx),
             Command::Admin(listing) => self.open_admin(listing, cx),
             Command::Reply(index) => self.start_replying(index, window, cx),
             Command::Copy(text) => {
@@ -1195,12 +1216,13 @@ mod tests {
 
     #[test]
     fn somebody_else_gets_message_volume_and_moderation() {
-        let items = user_items(&user(3, 1), Some(1), Some(1), 1.0);
+        let items = user_items(&user(3, 1), Some(1), Some(1), 1.0, None);
         assert_eq!(
             names(&items),
             [
                 "Message",
                 "View comment",
+                "Whisper with the whisper key",
                 "Mute here",
                 "Volume 50%",
                 "Volume 100%",
@@ -1226,15 +1248,20 @@ mod tests {
     fn a_user_elsewhere_can_be_moved_here_and_a_muted_one_unmuted() {
         let mut elsewhere = user(3, 2);
         elsewhere.muted = true;
-        let items = user_items(&elsewhere, Some(1), Some(1), 0.0);
+        let items = user_items(&elsewhere, Some(1), Some(1), 0.0, None);
         assert!(names(&items).contains(&"Move to my channel"));
         assert!(names(&items).contains(&"Unmute for everyone"));
-        assert!(items[2].ticked, "muted here");
+        let ticked: Vec<_> = items
+            .iter()
+            .filter(|item| item.ticked)
+            .map(|item| item.name.as_ref())
+            .collect();
+        assert_eq!(ticked, ["Mute here"]);
     }
 
     #[test]
     fn oneself_gets_the_profile_entries_only() {
-        let items = user_items(&user(1, 1), Some(1), Some(1), 1.0);
+        let items = user_items(&user(1, 1), Some(1), Some(1), 1.0, None);
         assert_eq!(
             names(&items),
             [
@@ -1259,12 +1286,13 @@ mod tests {
             listening: false,
         };
         assert_eq!(
-            names(&channel_items(&channel(0, None), Some(1), false)),
+            names(&channel_items(&channel(0, None), Some(1), false, None)),
             [
                 "Open",
                 "Join",
                 "Join with a password…",
                 "Listen without joining",
+                "Shout here with the whisper key",
                 "About this channel",
                 "New channel inside…",
                 "Rename…",
@@ -1274,9 +1302,10 @@ mod tests {
             ]
         );
         assert_eq!(
-            names(&channel_items(&channel(1, Some(0)), Some(1), false)),
+            names(&channel_items(&channel(1, Some(0)), Some(1), false, None)),
             [
                 "Open",
+                "Shout here with the whisper key",
                 "About this channel",
                 "New channel inside…",
                 "Rename…",

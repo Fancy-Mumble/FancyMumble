@@ -249,6 +249,15 @@ pub(crate) enum Action {
     },
 }
 
+/// Who a whisper goes to instead of the channel the speaker is in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WhisperTarget {
+    /// One user, wherever they are.
+    User(Session),
+    /// Everybody in a channel: a shout.
+    Channel(ChannelId),
+}
+
 /// Who may do what in a channel.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Acl {
@@ -587,6 +596,8 @@ pub(crate) enum EngineEvent {
     /// Something the user should be told: a refused connection, a failed
     /// command. `None` clears what was said before.
     Notice(Option<SharedString>),
+    /// The local user started whispering, or stopped.
+    Whispering(bool),
     /// Who is asking for the key of `channel` changed: read
     /// [`Engine::key_requests`] again.
     KeyRequests { channel: ChannelId },
@@ -782,6 +793,14 @@ pub(crate) trait Engine: Send + Sync + 'static {
 
     /// The push-to-talk key went down (`held`) or came up.
     fn push_to_talk(&self, held: bool);
+
+    /// Choose who the whisper key speaks to, or `None` for nobody. The
+    /// server is told now, so a whisper loses no first syllable.
+    fn set_whisper_target(&self, target: Option<WhisperTarget>);
+
+    /// The whisper key went down (`held`) or came up: while it is held
+    /// the local user speaks to the whisper target and to nobody else.
+    fn whisper(&self, held: bool);
 
     /// The application is closing: write out what is held only in memory.
     fn shutdown(&self) {}

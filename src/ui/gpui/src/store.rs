@@ -73,6 +73,9 @@ pub(crate) struct Settings {
     /// The push-to-talk key, as GPUI names it (`f9`, `space`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push_to_talk_key: Option<String>,
+    /// The key held to whisper, named the same way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub whisper_key: Option<String>,
 }
 
 /// The files, in one directory.
@@ -202,6 +205,7 @@ mod tests {
                 voice_over_tcp: true,
             }),
             push_to_talk_key: Some("f9".to_owned()),
+            whisper_key: Some("f10".to_owned()),
         };
         store
             .save_settings(&chosen)

@@ -553,8 +553,8 @@ fn push_to_talk_transmits_while_its_key_is_held(cx: &mut TestAppContext) {
     click(cx, "push-to-talk-key");
     cx.simulate_keystrokes("f9");
     shell.read_with(cx, |shell, _| {
-        assert_eq!(shell.ptt_key.as_ref().map(AsRef::as_ref), Some("f9"));
-        assert!(!shell.choosing_ptt_key);
+        assert_eq!(shell.ptt.key.as_ref().map(AsRef::as_ref), Some("f9"));
+        assert!(!shell.ptt.choosing);
     });
     assert_eq!(
         engine.snapshot().voice,
@@ -1553,4 +1553,67 @@ fn a_channels_permissions_are_changed_a_rule_at_a_time_and_saved(cx: &mut TestAp
     });
     click(cx, "acl-close");
     shell.read_with(cx, |shell, _| assert!(shell.panels.acl.is_none()));
+}
+
+#[gpui::test]
+fn the_whisper_key_speaks_to_whoever_was_chosen_while_it_is_held(cx: &mut TestAppContext) {
+    use crate::engine::WhisperTarget;
+    let (shell, engine, cx) = shell(cx);
+    // The key is chosen in the voice panel.
+    click(cx, "audio-devices");
+    click(cx, "whisper-key");
+    cx.simulate_keystrokes("f10");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.whisper.key.as_ref().map(AsRef::as_ref), Some("f10"));
+    });
+    click(cx, "audio-devices");
+    shell.read_with(cx, |shell, _| assert!(!shell.devices_open));
+
+    // With nobody chosen, the key does nothing.
+    cx.simulate_keystrokes("f10");
+    assert_eq!(engine.whisper_state(), (None, false, 0));
+
+    right_click(cx, "user-3");
+    click(cx, "menu-Whisper with the whisper key");
+    assert_eq!(engine.whisper_state().0, Some(WhisperTarget::User(3)));
+    assert!(cx.debug_bounds("whisper-target").is_some());
+
+    // Held, a whisper is going out; a key that repeats starts no second.
+    let key = gpui::Keystroke::parse("f10").expect("a key");
+    for is_held in [false, true] {
+        cx.simulate_event(gpui::KeyDownEvent {
+            keystroke: key.clone(),
+            is_held,
+        });
+    }
+    cx.run_until_parked();
+    assert_eq!(
+        engine.whisper_state(),
+        (Some(WhisperTarget::User(3)), true, 1)
+    );
+    shell.read_with(cx, |shell, _| assert!(shell.whisper.active));
+    cx.simulate_event(gpui::KeyUpEvent { keystroke: key });
+    cx.run_until_parked();
+    assert_eq!(
+        engine.whisper_state(),
+        (Some(WhisperTarget::User(3)), false, 1)
+    );
+    shell.read_with(cx, |shell, _| {
+        assert!(!shell.whisper.active && !shell.whisper.held)
+    });
+
+    // Chosen again, they are whispered to no longer; so is somebody who left.
+    right_click(cx, "channel-2");
+    click(cx, "menu-Shout here with the whisper key");
+    assert_eq!(engine.whisper_state().0, Some(WhisperTarget::Channel(2)));
+    right_click(cx, "channel-2");
+    click(cx, "menu-Shout here with the whisper key");
+    assert_eq!(engine.whisper_state().0, None);
+    right_click(cx, "user-3");
+    click(cx, "menu-Whisper with the whisper key");
+    right_click(cx, "user-3");
+    click(cx, "menu-Kick…");
+    cx.simulate_keystrokes("enter");
+    shell.read_with(cx, |shell, _| assert!(shell.whisper.target.is_none()));
+    assert_eq!(engine.whisper_state().0, None);
 }

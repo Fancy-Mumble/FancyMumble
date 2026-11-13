@@ -28,6 +28,7 @@ use gpui::{
     Styled, Subscription, Task, Window, div, prelude::*, px, relative,
 };
 
+use crate::engine::WhisperTarget;
 use crate::engine::{
     Action, AudioDevices, ChannelId, ChosenDevices, Connection, Conversation, Engine, EngineEvent,
     Found, KeyRequest, Message, Poll, Preview, Reader, SavedServer, Session, Snapshot, Subject,
@@ -85,6 +86,32 @@ pub(crate) fn size_in_words(bytes: u64) -> String {
         unit += 1;
     }
     format!("{size:.1} {}", UNITS[unit])
+}
+
+/// A key that does something for as long as it is held.
+#[derive(Default)]
+struct HeldKey {
+    /// The key, as GPUI names it.
+    key: Option<gpui::SharedString>,
+    /// Whether the next key pressed becomes the key.
+    choosing: bool,
+    /// Whether the key is down.
+    held: bool,
+}
+
+/// Whispering: speaking to one user or one channel while a key is held.
+#[derive(Default)]
+struct Whisper {
+    /// Who the key speaks to, and what they are called.
+    target: Option<(WhisperTarget, gpui::SharedString)>,
+    /// The key, as GPUI names it.
+    key: Option<gpui::SharedString>,
+    /// Whether the next key pressed becomes the key.
+    choosing_key: bool,
+    /// Whether the key is down.
+    held: bool,
+    /// Whether the engine says a whisper is going out.
+    active: bool,
 }
 
 /// The panels that open over the window, each with what it holds while
@@ -220,6 +247,8 @@ pub(crate) struct Shell {
     titled_unread: u32,
     /// The panels that open over the window.
     panels: Panels,
+    /// Who is whispered to, with which key.
+    whisper: Whisper,
     /// The menu a right click opened, while it is open.
     menu: Option<menu::Menu>,
     /// The dialog a menu entry asked a question in, while it is open.
@@ -228,17 +257,26 @@ pub(crate) struct Shell {
     volumes: std::collections::HashMap<Session, f32>,
     /// How the microphone is used.
     voice_settings: VoiceSettings,
-    /// The push-to-talk key, as GPUI names it.
-    ptt_key: Option<gpui::SharedString>,
-    /// Whether the next key pressed becomes the push-to-talk key.
-    choosing_ptt_key: bool,
-    /// Whether the push-to-talk key is down.
-    ptt_held: bool,
+    /// The push-to-talk key and what it is doing.
+    ptt: HeldKey,
     /// The window's own focus: where keys go when no field has them, so
     /// push to talk works without clicking into anything.
     focus: gpui::FocusHandle,
     _events: Task<()>,
     _subscriptions: Vec<Subscription>,
+}
+
+/// The list the conversation's rows are laid out in, and the flag it keeps
+/// of whether the reader is at the newest message: their own scrolling
+/// sets it.
+fn conversation_list() -> (ListState, std::rc::Rc<std::cell::Cell<bool>>) {
+    let at_tail = std::rc::Rc::new(std::cell::Cell::new(true));
+    let rows = ListState::new(0, ListAlignment::Top, px(OVERDRAW));
+    rows.set_scroll_handler({
+        let at_tail = std::rc::Rc::clone(&at_tail);
+        move |scrolled, _, _| at_tail.set(scrolled.visible_range.end >= scrolled.count)
+    });
+    (rows, at_tail)
 }
 
 impl Shell {
@@ -250,12 +288,7 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let at_tail = std::rc::Rc::new(std::cell::Cell::new(true));
-        let rows = ListState::new(0, ListAlignment::Top, px(OVERDRAW));
-        rows.set_scroll_handler({
-            let at_tail = std::rc::Rc::clone(&at_tail);
-            move |scrolled, _, _| at_tail.set(scrolled.visible_range.end >= scrolled.count)
-        });
+        let (rows, at_tail) = conversation_list();
         let composer = cx.new(|cx| TextInput::new("", cx).multiline().taking_pictures());
         let search = cx.new(|cx| TextInput::new("Search channels", cx));
         let server_search = cx.new(|cx| TextInput::new("Search servers", cx));
@@ -283,10 +316,9 @@ impl Shell {
         // whenever the list changes or the view returns to it.
         engine.refresh_pings();
         let events = Self::listen(engine.events(), cx);
-        let ptt_key = store
-            .as_ref()
-            .and_then(|store| store.settings().push_to_talk_key)
-            .map(Into::into);
+        let stored = store.as_ref().map(Store::settings).unwrap_or_default();
+        let ptt_key = stored.push_to_talk_key.map(Into::into);
+        let whisper_key = stored.whisper_key.map(Into::into);
         let mut shell = Self {
             snapshot: Snapshot::disconnected(),
             wanted: String::new(),
@@ -338,13 +370,18 @@ impl Shell {
             adding_server: false,
             titled_unread: 0,
             panels: Panels::default(),
+            whisper: Whisper {
+                key: whisper_key,
+                ..Whisper::default()
+            },
             menu: None,
             prompt: None,
             volumes: std::collections::HashMap::new(),
             voice_settings: engine.voice_settings(),
-            ptt_key,
-            choosing_ptt_key: false,
-            ptt_held: false,
+            ptt: HeldKey {
+                key: ptt_key,
+                ..HeldKey::default()
+            },
             focus: cx.focus_handle(),
             engine,
             _events: events,
@@ -420,6 +457,7 @@ impl Shell {
                     self.welcome_dismissed = false;
                 }
                 self.read_welcome();
+                self.drop_gone_whisper_target(cx);
                 self.follow_active_session(cx);
                 self.drop_closed_conversation(cx);
                 // A message deleted by somebody else is announced only as
@@ -450,6 +488,7 @@ impl Shell {
                 }
             }
             EngineEvent::ServersChanged => self.servers = self.engine.saved_servers(),
+            EngineEvent::Whispering(active) => self.whisper.active = active,
             EngineEvent::KeyRequests { channel } => {
                 if self.open == Some(Conversation::Channel(channel)) {
                     self.key_requests = self.engine.key_requests(channel);
@@ -1240,28 +1279,122 @@ impl Shell {
     /// key that is to become it.
     fn on_key_down(&mut self, event: &gpui::KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
         let key = event.keystroke.key.as_str();
-        if self.choosing_ptt_key {
-            self.choosing_ptt_key = false;
+        if self.ptt.choosing {
+            self.ptt.choosing = false;
             // Escape keeps the key there was.
             if key != "escape" {
-                self.ptt_key = Some(key.to_owned().into());
+                self.ptt.key = Some(key.to_owned().into());
                 self.remember_settings(cx);
             }
             cx.stop_propagation();
             cx.notify();
             return;
         }
+        if self.whisper.choosing_key {
+            self.whisper.choosing_key = false;
+            if key != "escape" {
+                self.whisper.key = Some(key.to_owned().into());
+                self.remember_settings(cx);
+            }
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
+        if self.is_whisper_key(key) {
+            if !std::mem::replace(&mut self.whisper.held, true) {
+                self.engine.whisper(true);
+            }
+            cx.stop_propagation();
+            return;
+        }
         if self.is_ptt_key(key) {
             // Held keys repeat; only the first press is a press.
-            if !std::mem::replace(&mut self.ptt_held, true) {
+            if !std::mem::replace(&mut self.ptt.held, true) {
                 self.engine.push_to_talk(true);
             }
             cx.stop_propagation();
         }
     }
 
+    /// Who the whisper key speaks to.
+    pub(super) fn whisper_target(&self) -> Option<WhisperTarget> {
+        self.whisper.target.as_ref().map(|(target, _)| *target)
+    }
+
+    /// Whether `key` is the whisper key and there is somebody to whisper
+    /// to.
+    fn is_whisper_key(&self, key: &str) -> bool {
+        self.whisper.target.is_some()
+            && self.snapshot.connection == Connection::Connected
+            && self
+                .whisper
+                .key
+                .as_ref()
+                .is_some_and(|chosen| chosen.as_ref() == key)
+    }
+
+    /// Whisper to `target`, called `name`, when the whisper key is held;
+    /// chosen a second time, to nobody again.
+    pub(super) fn toggle_whisper_target(
+        &mut self,
+        target: WhisperTarget,
+        name: gpui::SharedString,
+        cx: &mut Context<Self>,
+    ) {
+        let chosen = self.whisper.target.as_ref().map(|(chosen, _)| *chosen) != Some(target);
+        self.set_whisper_target(chosen.then_some((target, name)), cx);
+    }
+
+    fn set_whisper_target(
+        &mut self,
+        target: Option<(WhisperTarget, gpui::SharedString)>,
+        cx: &mut Context<Self>,
+    ) {
+        // A whisper under way ends with the target it was for.
+        if std::mem::take(&mut self.whisper.held) {
+            self.engine.whisper(false);
+        }
+        self.engine
+            .set_whisper_target(target.as_ref().map(|(target, _)| *target));
+        self.whisper.target = target;
+        cx.notify();
+    }
+
+    /// Somebody who left, or a channel that went, is whispered to no
+    /// longer: the session number may be somebody else's tomorrow.
+    fn drop_gone_whisper_target(&mut self, cx: &mut Context<Self>) {
+        let gone = match self.whisper.target.as_ref().map(|(target, _)| *target) {
+            Some(WhisperTarget::User(session)) => !self
+                .snapshot
+                .users
+                .iter()
+                .any(|user| user.session == session),
+            Some(WhisperTarget::Channel(channel)) => !self
+                .snapshot
+                .channels
+                .iter()
+                .any(|known| known.id == channel),
+            None => false,
+        };
+        if gone {
+            self.set_whisper_target(None, cx);
+        }
+    }
+
     fn on_key_up(&mut self, event: &gpui::KeyUpEvent, _: &mut Window, cx: &mut Context<Self>) {
-        if self.is_ptt_key(event.keystroke.key.as_str()) && std::mem::take(&mut self.ptt_held) {
+        let key = event.keystroke.key.as_str();
+        if self
+            .whisper
+            .key
+            .as_ref()
+            .is_some_and(|chosen| chosen.as_ref() == key)
+            && std::mem::take(&mut self.whisper.held)
+        {
+            self.engine.whisper(false);
+            cx.stop_propagation();
+            return;
+        }
+        if self.is_ptt_key(event.keystroke.key.as_str()) && std::mem::take(&mut self.ptt.held) {
             self.engine.push_to_talk(false);
             cx.stop_propagation();
         }
@@ -1272,7 +1405,8 @@ impl Shell {
         self.voice_settings.push_to_talk
             && self.snapshot.connection == Connection::Connected
             && self
-                .ptt_key
+                .ptt
+                .key
                 .as_ref()
                 .is_some_and(|chosen| chosen.as_ref() == key)
     }
@@ -1291,7 +1425,8 @@ impl Shell {
             input_device: name(&self.chosen_devices.input),
             output_device: name(&self.chosen_devices.output),
             voice: Some(self.voice_settings),
-            push_to_talk_key: name(&self.ptt_key),
+            push_to_talk_key: name(&self.ptt.key),
+            whisper_key: name(&self.whisper.key),
         };
         if let Err(error) = store.save_settings(&settings) {
             self.notice = Some(format!("The settings could not be remembered: {error}").into());

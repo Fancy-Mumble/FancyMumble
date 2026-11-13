@@ -3,7 +3,7 @@
 
 use std::sync::Mutex;
 
-use crate::engine::{Acl, AclRule, Attachment, KeyRequest, Poll, PollOption};
+use crate::engine::{Acl, AclRule, Attachment, KeyRequest, Poll, PollOption, WhisperTarget};
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
     Connection, Conversation, Engine, EngineEvent, Found, Listing, Message, Preview, Reaction,
@@ -51,6 +51,9 @@ struct State {
     /// The message the view last said it had read up to.
     read_up_to: Option<gpui::SharedString>,
     polls: Vec<Poll>,
+    /// Who the whisper key speaks to, whether it is held, and how often
+    /// a whisper has started.
+    whisper: (Option<WhisperTarget>, bool, u32),
     /// Who is asking for the lounge's key.
     key_requests: Vec<KeyRequest>,
     /// The shared files the view asked to have saved, and where to.
@@ -95,6 +98,13 @@ impl DemoEngine {
             });
         });
         self.tell(EngineEvent::KeyRequests { channel: LOUNGE });
+    }
+
+    /// Who the whisper key speaks to, whether it is held, and how often
+    /// a whisper has started.
+    #[cfg(test)]
+    pub(crate) fn whisper_state(&self) -> (Option<WhisperTarget>, bool, u32) {
+        self.with_state(|state| state.whisper)
     }
 
     /// The shared files the view asked to have saved, and where to.
@@ -447,6 +457,7 @@ impl State {
             snapshots: 0,
             read_up_to: None,
             polls: Vec::new(),
+            whisper: (None, false, 0),
             key_requests: Vec::new(),
             saved: Vec::new(),
             certificates: vec!["alex".into(), "work".into()],
@@ -1064,6 +1075,19 @@ impl Engine for DemoEngine {
 
     fn set_voice_settings(&self, settings: VoiceSettings) {
         self.with_state(|state| state.voice_settings = settings);
+    }
+
+    fn set_whisper_target(&self, target: Option<WhisperTarget>) {
+        self.with_state(|state| state.whisper.0 = target);
+    }
+
+    fn whisper(&self, held: bool) {
+        let whispering = self.with_state(|state| {
+            state.whisper.1 = held && state.whisper.0.is_some();
+            state.whisper.2 += u32::from(state.whisper.1);
+            state.whisper.1
+        });
+        self.tell(EngineEvent::Whispering(whispering));
     }
 
     fn push_to_talk(&self, held: bool) {

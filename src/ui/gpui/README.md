@@ -55,7 +55,8 @@ real engine and does text and voice.
   the headphones deafen. Devices, push to talk, the activation level,
   noise suppression, automatic gain, input and output volume, voice
   quality and voice over TCP are behind the sliders button on the user
-  tile.
+  tile. A whisper key speaks to one user, or shouts into one channel,
+  chosen from their menu, and to nobody else while it is held.
 - **Look.** The thirteen themes in light and dark, from the picker in the
   band. Theme, devices and voice settings are remembered.
 - **Keys.** `Ctrl+F` search, `Escape` close what is open, `Ctrl+Shift+T`

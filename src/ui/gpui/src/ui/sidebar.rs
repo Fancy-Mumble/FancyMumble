@@ -260,6 +260,7 @@ fn channel_row(
                     channel,
                     shell.snapshot.current_channel,
                     shell.snapshot.fancy,
+                    shell.whisper_target(),
                 );
                 shell.open_menu(event.position, items, cx);
             }),
@@ -384,6 +385,7 @@ fn occupant_row(
                     shell.snapshot.own_session,
                     shell.snapshot.current_channel,
                     shell.volumes.get(&session).copied().unwrap_or(1.0),
+                    shell.whisper_target(),
                 );
                 shell.open_menu(event.position, items, cx);
             }),
@@ -439,6 +441,32 @@ fn occupant_row(
 }
 
 /// The local user's tile: who they are, and the voice controls.
+/// What the user tile says under the name: what the voice is doing, and,
+/// when a whisper target is chosen and not being whispered to, who it is.
+fn voice_status(shell: &Shell, deafened: bool) -> (SharedString, Option<SharedString>) {
+    let status: SharedString = match (shell.snapshot.connection, deafened, shell.snapshot.voice) {
+        (Connection::Disconnected, ..) => "Not connected".into(),
+        (Connection::Connecting, ..) => "Connecting…".into(),
+        // A whisper is heard by its target and nobody else, whatever the
+        // microphone is otherwise doing: that is what is said, while it is.
+        (Connection::Connected, ..) if shell.whisper.active => match &shell.whisper.target {
+            Some((_, name)) => format!("Whispering to {name}").into(),
+            None => "Whispering".into(),
+        },
+        (Connection::Connected, true, _) => "Deafened".into(),
+        (Connection::Connected, false, Voice::Off) => "Voice off".into(),
+        (Connection::Connected, false, Voice::Muted) => "Muted".into(),
+        (Connection::Connected, false, Voice::On) => "Voice on".into(),
+    };
+    let whisper_to = shell
+        .whisper
+        .target
+        .as_ref()
+        .filter(|_| !shell.whisper.active)
+        .map(|(_, name)| SharedString::from(format!("Whisper key: {name}")));
+    (status, whisper_to)
+}
+
 fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let own = shell.own_user();
     let name = own.map_or_else(
@@ -453,14 +481,7 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
     // either way nobody hears the user, which is what the red says.
     let silent = shell.snapshot.voice != Voice::On;
     let tile_hover = theme.c.hover;
-    let status = match (shell.snapshot.connection, deafened, shell.snapshot.voice) {
-        (Connection::Disconnected, ..) => "Not connected",
-        (Connection::Connecting, ..) => "Connecting…",
-        (Connection::Connected, true, _) => "Deafened",
-        (Connection::Connected, false, Voice::Off) => "Voice off",
-        (Connection::Connected, false, Voice::Muted) => "Muted",
-        (Connection::Connected, false, Voice::On) => "Voice on",
-    };
+    let (status, whisper_to) = voice_status(shell, deafened);
     div()
         .flex_none()
         .flex()
@@ -490,10 +511,20 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
                                 .child(div().font_weight(EMPHASIS).child(name))
                                 .child(
                                     div()
+                                        .debug_selector(|| "voice-status".to_owned())
                                         .text_size(px(11.5))
                                         .text_color(theme.c.muted)
                                         .child(status),
-                                ),
+                                )
+                                .when_some(whisper_to, |column, says| {
+                                    column.child(
+                                        div()
+                                            .debug_selector(|| "whisper-target".to_owned())
+                                            .text_size(px(11.0))
+                                            .text_color(theme.c.accent_text)
+                                            .child(says),
+                                    )
+                                }),
                         )
                         .child(
                             div()

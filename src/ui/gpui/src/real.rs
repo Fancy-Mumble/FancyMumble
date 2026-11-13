@@ -14,7 +14,9 @@ use mumble_tauri_lib::engine_api::{
     self as api, ConnectTarget, EngineDirs, EngineHandle, PingInfo,
 };
 
-use crate::engine::{Acl, AclRule, Attachment, KeyRequest, Poll, PollOption, Reader};
+use crate::engine::{
+    Acl, AclRule, Attachment, KeyRequest, Poll, PollOption, Reader, WhisperTarget,
+};
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
     Connection, Conversation, Engine, EngineEvent, Found, Listing, Message, Preview, Reaction,
@@ -52,6 +54,8 @@ struct Shared {
     /// The rules last read for a channel, whole: the groups go back to
     /// the server as they came, with the rules the view changed.
     acl: Mutex<Option<api::AclInfo>>,
+    /// Who the whisper key speaks to.
+    whisper_target: Mutex<Option<api::WhisperTarget>>,
     /// The channel whose readers were last asked for.
     readers_asked: Mutex<Option<u32>>,
     /// When the server was last told the local user is writing.
@@ -363,6 +367,9 @@ impl Shared {
     /// and what happens around messages.
     fn forward_answer(&self, event: api::EngineEvent) {
         match event {
+            api::EngineEvent::Whispering(whispering) => {
+                self.tell(EngineEvent::Whispering(whispering));
+            }
             api::EngineEvent::KeyRequests { channel } => {
                 self.tell(EngineEvent::KeyRequests { channel });
             }
@@ -564,6 +571,7 @@ impl RealEngine {
             reactions: Mutex::default(),
             typed_at: Mutex::default(),
             readers_asked: Mutex::default(),
+            whisper_target: Mutex::default(),
             acl: Mutex::default(),
             polls: Mutex::default(),
             wanted: Mutex::default(),
@@ -1387,6 +1395,36 @@ impl Engine for RealEngine {
         }) {
             self.shared.tell(EngineEvent::Notice(Some(reason.into())));
         }
+    }
+
+    fn set_whisper_target(&self, target: Option<WhisperTarget>) {
+        let target = target.map(|target| match target {
+            WhisperTarget::User(session) => api::WhisperTarget::User(session),
+            WhisperTarget::Channel(channel) => api::WhisperTarget::Channel(channel),
+        });
+        *self
+            .shared
+            .whisper_target
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = target;
+        let engine = self.shared.engine.clone();
+        self.spawn(async move { engine.prepare_whisper(target).await });
+    }
+
+    fn whisper(&self, held: bool) {
+        let target = *self
+            .shared
+            .whisper_target
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let engine = self.shared.engine.clone();
+        self.spawn(async move {
+            match (held, target) {
+                (true, Some(target)) => engine.whisper_start(target).await,
+                (true, None) => Ok(()),
+                (false, _) => engine.whisper_end().await,
+            }
+        });
     }
 
     fn push_to_talk(&self, held: bool) {
@@ -2921,6 +2959,88 @@ mod tests {
         admin.act(Action::DeleteChannel { channel });
         wait_for("the channel to go", || ruled(&guest).is_none());
         for (engine, dir) in [(admin, admin_dir), (guest, guest_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+    /// A whisper reaches the one it is for and nobody else in the channel.
+    /// As with the voice test: run it where no speakers are attached.
+    #[test]
+    #[ignore = "needs a live server; set FANCY_GPUI_TEST_SERVER=host:port"]
+    #[allow(unsafe_code, reason = "`std::env::set_var` is unsafe in Rust 2024")]
+    fn live_a_whisper_is_heard_by_its_target_alone() {
+        let address = std::env::var("FANCY_GPUI_TEST_SERVER").expect("FANCY_GPUI_TEST_SERVER");
+        let (host, port) = address.rsplit_once(':').expect("host:port");
+        let port: u16 = port.parse().expect("a port");
+        // SAFETY: set before any engine thread reads the environment.
+        unsafe { std::env::set_var("FANCY_E2E_VIRTUAL_MIC", "sine:48000:440") };
+        let client = |name: &str| {
+            let dir = std::env::temp_dir()
+                .join(format!("fancy-gpui-whisper-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            let engine = RealEngine::start(&dir).expect("the engine starts");
+            engine.save_server(SavedServer {
+                id: "live".into(),
+                label: "live".into(),
+                host: host.to_owned().into(),
+                port,
+                username: name.to_owned().into(),
+                certificate: Some(name.to_lowercase().into()),
+                favorite: false,
+            });
+            engine.connect("live", None);
+            (engine, dir)
+        };
+        let (alice, alice_dir) = client("WhisperAlice");
+        let (bob, bob_dir) = client("WhisperBob");
+        let (carol, carol_dir) = client("WhisperCarol");
+        wait_for("all three to see each other", || {
+            [&alice, &bob, &carol]
+                .iter()
+                .all(|engine| engine.snapshot().users.len() >= 3)
+        });
+        // Listening: voice on, microphones muted.
+        for listener in [&bob, &carol] {
+            listener.toggle_microphone();
+            wait_for("a listener's voice to turn on", || {
+                listener.snapshot().voice == Voice::On
+            });
+            listener.toggle_microphone();
+            wait_for("a listener to mute", || {
+                listener.snapshot().voice == Voice::Muted
+            });
+        }
+        let session = |engine: &RealEngine| engine.snapshot().own_session.expect("a session");
+        let (alice_session, bob_session) = (session(&alice), session(&bob));
+        let talking = |heard: &async_channel::Receiver<EngineEvent>| {
+            std::iter::from_fn(|| heard.try_recv().ok()).any(|event| {
+                event
+                    == EngineEvent::UserTalking {
+                        session: alice_session,
+                        talking: true,
+                    }
+            })
+        };
+        let (at_bob, at_carol, at_alice) = (bob.events(), carol.events(), alice.events());
+
+        alice.set_whisper_target(Some(WhisperTarget::User(bob_session)));
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        alice.whisper(true);
+        wait_for("alice to be told she is whispering", || {
+            std::iter::from_fn(|| at_alice.try_recv().ok())
+                .any(|event| event == EngineEvent::Whispering(true))
+        });
+        wait_for("bob to hear the whisper", || talking(&at_bob));
+        // Long enough that carol would have heard it, were it for her.
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        assert!(!talking(&at_carol), "a whisper is not for the channel");
+        alice.whisper(false);
+        wait_for("the whisper to end", || {
+            std::iter::from_fn(|| at_alice.try_recv().ok())
+                .any(|event| event == EngineEvent::Whispering(false))
+        });
+
+        for (engine, dir) in [(alice, alice_dir), (bob, bob_dir), (carol, carol_dir)] {
             engine.shutdown();
             let _ = std::fs::remove_dir_all(dir);
         }

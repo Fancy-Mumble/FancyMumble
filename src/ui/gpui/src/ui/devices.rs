@@ -61,7 +61,7 @@ impl Shell {
         change(&mut self.voice_settings);
         self.engine.set_voice_settings(self.voice_settings);
         // With push to talk switched off there is no key to be holding.
-        if !self.voice_settings.push_to_talk && std::mem::take(&mut self.ptt_held) {
+        if !self.voice_settings.push_to_talk && std::mem::take(&mut self.ptt.held) {
             self.engine.push_to_talk(false);
         }
         self.remember_settings(cx);
@@ -139,6 +139,7 @@ pub(super) fn render(
     panel
         .child(heading("Voice", theme))
         .child(push_to_talk_row(shell, theme, cx))
+        .child(whisper_key_row(shell, theme, cx))
         .child(toggle(
             "noise-suppression",
             "Noise suppression",
@@ -279,6 +280,48 @@ fn switch(on: bool, theme: &Theme) -> impl IntoElement + use<> {
         )
 }
 
+/// The key held to whisper to whoever was chosen from a user's or a
+/// channel's menu.
+fn whisper_key_row(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement {
+    let key = if shell.whisper.choosing_key {
+        SharedString::from("Press a key…")
+    } else {
+        shell.whisper.key.as_ref().map_or_else(
+            || SharedString::from("Set key"),
+            |key| key.to_uppercase().into(),
+        )
+    };
+    let hover = theme.c.hover;
+    div()
+        .min_h(px(30.0))
+        .flex()
+        .items_center()
+        .gap(px(8.0))
+        .px(px(8.0))
+        .text_size(px(13.0))
+        .child(div().flex_1().min_w_0().child("Whisper key"))
+        .child(
+            div()
+                .id("whisper-key")
+                .debug_selector(|| "whisper-key".to_owned())
+                .px(px(8.0))
+                .py(px(2.0))
+                .rounded(theme.skin.radius_sm)
+                .bg(theme.c.card2)
+                .text_size(px(11.0))
+                .text_color(theme.c.muted)
+                .cursor_pointer()
+                .hover(move |style| style.bg(hover))
+                .on_click(cx.listener(|shell, _, window, cx| {
+                    shell.whisper.choosing_key = true;
+                    // The key must come to the window, not to a field.
+                    window.focus(&shell.focus);
+                    cx.notify();
+                }))
+                .child(key),
+        )
+}
+
 /// Push to talk: the switch, and the key that is held.
 fn push_to_talk_row(
     shell: &Shell,
@@ -286,10 +329,10 @@ fn push_to_talk_row(
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     let on = shell.voice_settings.push_to_talk;
-    let key = if shell.choosing_ptt_key {
+    let key = if shell.ptt.choosing {
         SharedString::from("Press a key…")
     } else {
-        shell.ptt_key.as_ref().map_or_else(
+        shell.ptt.key.as_ref().map_or_else(
             || SharedString::from("Set key"),
             |key| key.to_uppercase().into(),
         )
@@ -308,7 +351,7 @@ fn push_to_talk_row(
                 .text_color(theme.c.muted)
                 .hover(move |style| style.bg(hover))
                 .on_click(cx.listener(|shell, _, window, cx| {
-                    shell.choosing_ptt_key = true;
+                    shell.ptt.choosing = true;
                     // The key must come to the window, not to a field.
                     window.focus(&shell.focus);
                     cx.stop_propagation();
