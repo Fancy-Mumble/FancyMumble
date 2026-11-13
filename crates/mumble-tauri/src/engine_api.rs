@@ -265,30 +265,6 @@ impl EngineEvent {
             CoreEvent::PermissionDenied(payload) => Self::Denied {
                 reason: payload.reason.filter(|reason| !reason.is_empty()),
             },
-            CoreEvent::BanList(bans) => Self::Bans(
-                bans.into_iter()
-                    .map(|ban| BanInfo {
-                        address: ban.address,
-                        mask: ban.mask,
-                        name: ban.name,
-                        hash: ban.hash,
-                        reason: ban.reason,
-                        start: ban.start,
-                        duration_secs: ban.duration,
-                    })
-                    .collect(),
-            ),
-            CoreEvent::RegisteredUsers(users) => Self::Registered(
-                users
-                    .into_iter()
-                    .map(|user| RegisteredInfo {
-                        id: user.user_id,
-                        name: user.name,
-                        last_seen: user.last_seen,
-                        last_channel: user.last_channel,
-                    })
-                    .collect(),
-            ),
             CoreEvent::ListenDenied(_) => Self::Denied {
                 reason: Some("The server does not let you listen to that channel.".to_owned()),
             },
@@ -298,21 +274,6 @@ impl EngineEvent {
             CoreEvent::PchatPinsFetched(payload) => Self::NewMessage {
                 channel: payload.channel_id,
             },
-            CoreEvent::UserStats(payload) => Self::UserStats(UserStats {
-                session: payload.session,
-                tcp_ping_ms: whole_ms(payload.tcp_ping_avg),
-                udp_ping_ms: whole_ms(payload.udp_ping_avg),
-                online_secs: payload.onlinesecs,
-                idle_secs: payload.idlesecs,
-                os: match (payload.os, payload.os_version) {
-                    (Some(os), Some(version)) if !version.is_empty() => {
-                        Some(format!("{os} {version}"))
-                    }
-                    (os, _) => os,
-                },
-                version: payload.version,
-                address: payload.address,
-            }),
             CoreEvent::TypingIndicator(payload) => Self::Typing {
                 channel: payload.channel_id,
                 session: payload.session,
@@ -345,6 +306,52 @@ impl EngineEvent {
             CoreEvent::PchatFetchComplete(payload) => Self::NewMessage {
                 channel: payload.channel_id,
             },
+            other => return Self::answer_from_core(other),
+        })
+    }
+
+    /// The rest of [`Self::from_core`]: what a server answers when asked.
+    fn answer_from_core(event: CoreEvent) -> Option<Self> {
+        Some(match event {
+            CoreEvent::BanList(bans) => Self::Bans(
+                bans.into_iter()
+                    .map(|ban| BanInfo {
+                        address: ban.address,
+                        mask: ban.mask,
+                        name: ban.name,
+                        hash: ban.hash,
+                        reason: ban.reason,
+                        start: ban.start,
+                        duration_secs: ban.duration,
+                    })
+                    .collect(),
+            ),
+            CoreEvent::RegisteredUsers(users) => Self::Registered(
+                users
+                    .into_iter()
+                    .map(|user| RegisteredInfo {
+                        id: user.user_id,
+                        name: user.name,
+                        last_seen: user.last_seen,
+                        last_channel: user.last_channel,
+                    })
+                    .collect(),
+            ),
+            CoreEvent::UserStats(payload) => Self::UserStats(UserStats {
+                session: payload.session,
+                tcp_ping_ms: whole_ms(payload.tcp_ping_avg),
+                udp_ping_ms: whole_ms(payload.udp_ping_avg),
+                online_secs: payload.onlinesecs,
+                idle_secs: payload.idlesecs,
+                os: match (payload.os, payload.os_version) {
+                    (Some(os), Some(version)) if !version.is_empty() => {
+                        Some(format!("{os} {version}"))
+                    }
+                    (os, _) => os,
+                },
+                version: payload.version,
+                address: payload.address,
+            }),
             _ => return None,
         })
     }
