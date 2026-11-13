@@ -19,6 +19,7 @@ use crate::state::host::{
 use crate::state::pchat::IdentityStore;
 use crate::state::types::{ChannelEntry, ChatMessage, ConnectionStatus, UserEntry, VoiceState};
 use crate::state::{AppState, Credentials};
+use mumble_protocol::state::PchatProtocol;
 
 /// Where the engine keeps its files.
 #[derive(Debug, Clone)]
@@ -110,6 +111,44 @@ pub enum EngineEvent {
         /// The server's words, where it gave any.
         reason: Option<String>,
     },
+    /// Somebody is writing in a channel. Said again every few seconds for
+    /// as long as they are; nothing says when they stop.
+    Typing {
+        /// The channel they are writing in.
+        channel: u32,
+        /// Who is writing.
+        session: u32,
+    },
+    /// A reaction was put on a message, or taken off it.
+    Reaction {
+        /// The channel the message is in.
+        channel: u32,
+        /// The reaction.
+        reaction: ReactionInfo,
+        /// Whether it was put on; `false` when it was taken off.
+        added: bool,
+    },
+    /// The reactions a channel's messages already carried, read from the
+    /// server's store.
+    Reactions {
+        /// The channel.
+        channel: u32,
+        /// Every reaction on its messages.
+        reactions: Vec<ReactionInfo>,
+    },
+}
+
+/// One user's reaction to one message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReactionInfo {
+    /// The message reacted to.
+    pub message: String,
+    /// The emoji, or a server emote's `:shortcode:`.
+    pub emoji: String,
+    /// Whose reaction: their certificate's hash, which outlives a session.
+    pub by: String,
+    /// Their name when they reacted.
+    pub by_name: String,
 }
 
 impl EngineEvent {
@@ -139,6 +178,38 @@ impl EngineEvent {
             CoreEvent::PermissionDenied(payload) => Self::Denied {
                 reason: payload.reason.filter(|reason| !reason.is_empty()),
             },
+            CoreEvent::TypingIndicator(payload) => Self::Typing {
+                channel: payload.channel_id,
+                session: payload.session,
+            },
+            CoreEvent::PchatReactionDelivered(payload) => Self::Reaction {
+                channel: payload.channel_id,
+                added: payload.action != "remove",
+                reaction: ReactionInfo {
+                    message: payload.message_id,
+                    emoji: payload.emoji,
+                    by: payload.sender_hash,
+                    by_name: payload.sender_name,
+                },
+            },
+            CoreEvent::PchatReactionsFetched(payload) => Self::Reactions {
+                channel: payload.channel_id,
+                reactions: payload
+                    .reactions
+                    .into_iter()
+                    .map(|stored| ReactionInfo {
+                        message: stored.message_id,
+                        emoji: stored.emoji,
+                        by: stored.sender_hash,
+                        by_name: stored.sender_name,
+                    })
+                    .collect(),
+            },
+            // A pin, an edit or a deletion read back from the store changes
+            // messages already on screen.
+            CoreEvent::PchatFetchComplete(payload) => Self::NewMessage {
+                channel: payload.channel_id,
+            },
             _ => return None,
         })
     }
@@ -155,6 +226,9 @@ pub struct ChannelInfo {
     pub name: String,
     /// Where the channel sorts among its siblings.
     pub position: i32,
+    /// Whether the server keeps what is said here, for those who come
+    /// later.
+    pub keeps_history: bool,
 }
 
 impl From<ChannelEntry> for ChannelInfo {
@@ -164,6 +238,9 @@ impl From<ChannelEntry> for ChannelInfo {
             parent: channel.parent_id,
             name: channel.name,
             position: channel.position,
+            keeps_history: channel
+                .pchat_protocol
+                .is_some_and(|protocol| protocol != PchatProtocol::None),
         }
     }
 }
@@ -215,6 +292,13 @@ pub struct MessageInfo {
     pub sent_at_ms: Option<u64>,
     /// Whether the local user sent it.
     pub own: bool,
+    /// What names the message to an edit, a reaction or a deletion. Only a
+    /// Fancy server hands these out.
+    pub id: Option<String>,
+    /// Whether it was changed after it was sent.
+    pub edited: bool,
+    /// Whether the server refused it: nobody else has seen it.
+    pub failed: bool,
 }
 
 impl From<ChatMessage> for MessageInfo {
@@ -226,6 +310,9 @@ impl From<ChatMessage> for MessageInfo {
             html: message.body,
             sent_at_ms: message.timestamp,
             own: message.is_own,
+            id: message.message_id,
+            edited: message.edited_at.is_some(),
+            failed: message.send_failed,
         }
     }
 }
@@ -472,6 +559,18 @@ impl EngineHandle {
             .collect()
     }
 
+    /// How many messages of `channel` are held. Cheap: for asking whether
+    /// [`Self::messages`] is worth reading again.
+    pub fn message_count(&self, channel: u32) -> usize {
+        self.state.message_count(channel)
+    }
+
+    /// How many direct messages with `session` are held; as cheap as
+    /// [`Self::message_count`].
+    pub fn direct_message_count(&self, session: u32) -> usize {
+        self.state.dm_message_count(session)
+    }
+
     /// The direct messages exchanged with the user `session`, oldest first.
     pub fn direct_messages(&self, session: u32) -> Vec<MessageInfo> {
         self.state
@@ -557,6 +656,77 @@ impl EngineHandle {
     /// When not connected, or the message could not be sent.
     pub async fn send_text(&self, channel: u32, text: &str) -> Result<(), String> {
         self.state.send_message(channel, escape_html(text)).await
+    }
+
+    /// Whether the server speaks the Fancy extensions: messages there have
+    /// ids, and can be edited, reacted to and deleted.
+    pub fn fancy(&self) -> bool {
+        self.state.server_info().fancy_version.is_some()
+    }
+
+    /// The local user's certificate hash on this server: what a reaction
+    /// of theirs is signed with.
+    pub fn own_hash(&self) -> Option<String> {
+        let own = self.state.get_own_session()?;
+        self.state
+            .users()
+            .into_iter()
+            .find(|user| user.session == own)
+            .and_then(|user| user.hash)
+    }
+
+    /// Replace the text of the local user's message `id` in `channel`.
+    ///
+    /// # Errors
+    ///
+    /// When not connected, or the server is not a Fancy one.
+    pub async fn edit_text(&self, channel: u32, id: &str, text: &str) -> Result<(), String> {
+        self.state
+            .edit_message(channel, id.to_owned(), escape_html(text))
+            .await
+    }
+
+    /// Delete the messages `ids` of `channel` from the server's store.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn delete_messages(&self, channel: u32, ids: Vec<String>) -> Result<(), String> {
+        self.state
+            .delete_pchat_messages(channel, ids.clone(), None, None, None)
+            .await?;
+        // The server said yes; this side's copy goes too.
+        self.state.forget_local_messages(channel, ids);
+        Ok(())
+    }
+
+    /// Put `emoji` on the message `id` of `channel`, or with `add` false
+    /// take it off again.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn react(
+        &self,
+        channel: u32,
+        id: &str,
+        emoji: &str,
+        add: bool,
+    ) -> Result<(), String> {
+        let action = if add { "add" } else { "remove" };
+        self.state
+            .send_reaction(channel, id.to_owned(), emoji.to_owned(), action.to_owned())
+            .await
+    }
+
+    /// Say that the local user is writing in `channel`. To be said again
+    /// every few seconds while they are.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn typing(&self, channel: u32) -> Result<(), String> {
+        self.state.send_typing_indicator(channel).await
     }
 
     /// The local voice state.
@@ -780,12 +950,19 @@ impl EngineHandle {
         self.state.register_user(session).await
     }
 
-    /// Create the channel `name` under `parent`.
+    /// Create the channel `name` under `parent`. With `keep_history` the
+    /// server keeps what is said there, under its own key, and serves it to
+    /// whoever joins later; only a Fancy server can.
     ///
     /// # Errors
     ///
     /// When not connected.
-    pub async fn create_channel(&self, parent: u32, name: String) -> Result<(), String> {
+    pub async fn create_channel(
+        &self,
+        parent: u32,
+        name: String,
+        keep_history: bool,
+    ) -> Result<(), String> {
         self.state
             .create_channel(
                 parent,
@@ -794,7 +971,7 @@ impl EngineHandle {
                 None,
                 None,
                 None,
-                None,
+                keep_history.then(|| "server_managed".to_owned()),
                 None,
                 None,
                 None,

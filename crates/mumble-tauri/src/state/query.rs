@@ -171,6 +171,15 @@ impl AppState {
             .filter(|d| !d.is_empty())
     }
 
+    /// How many messages of `channel_id` are held, without copying them.
+    pub fn message_count(&self, channel_id: u32) -> usize {
+        self.inner
+            .snapshot()
+            .lock()
+            .map(|s| s.msgs.by_channel.get(&channel_id).map_or(0, Vec::len))
+            .unwrap_or_default()
+    }
+
     pub fn messages(&self, channel_id: u32) -> Vec<ChatMessage> {
         self.inner
             .snapshot()
@@ -267,6 +276,16 @@ impl AppState {
             more_after: window.more_after,
             at_tail: !window.more_after && request.offset_from_tail == 0,
         }
+    }
+
+    /// How many direct messages with `session` are held, without copying
+    /// them.
+    pub fn dm_message_count(&self, session: u32) -> usize {
+        self.inner
+            .snapshot()
+            .lock()
+            .map(|s| s.msgs.by_dm.get(&session).map_or(0, Vec::len))
+            .unwrap_or_default()
     }
 
     pub fn dm_messages(&self, session: u32) -> Vec<ChatMessage> {
