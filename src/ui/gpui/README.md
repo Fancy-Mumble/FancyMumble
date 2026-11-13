@@ -10,32 +10,44 @@ as the Tauri application.
 
 ## State
 
-A working client for the basics: it connects to a Mumble or Starling server
-through the real engine and does text and voice.
+A working client: it connects to Mumble and Starling servers through the
+real engine and does text and voice.
 
 - **Servers.** Saved servers and their identities, each pinged for whether
   it is up; add, edit and forget them; a certificate per identity, made on
-  first use; a server password typed for the connect at hand.
-- **On a server.** The channel tree in order, who is in the current
-  channel, who is talking; enter a channel by clicking it; the
-  conversation with day rules and local time; send with Enter or the send
-  button; leave with the button at the foot of the rail.
+  first use; a server password typed for the connect at hand. Several
+  servers at once, one tile each on the rail: `+` adds another, a click
+  switches, a right click says what the server is or leaves it. A lost
+  connection is retried.
+- **On a server.** The channel tree in order with unread counts, who is in
+  each channel, who is talking; read a channel with a click, enter it with
+  a double click or Join; listen to one without joining; channel passwords;
+  create, rename and delete channels; the welcome message, comments and
+  descriptions.
+- **Messages.** Rich text with live links and embedded pictures, day rules
+  and local time, several lines (Shift+Enter), direct messages,
+  notifications and the unread count in the window's title. On a Fancy
+  server: edit and delete your own, react, pin, see who is writing, and
+  channels that keep their messages for whoever comes later.
+- **People.** Pictures, comments, what the server knows of a connection;
+  per-user volume; kick, ban, mute, deafen, move, register, priority
+  speaker; your own comment and picture.
 - **Voice.** The microphone button turns voice on, then mutes and unmutes;
-  the headphones deafen. The microphone and the speaker are chosen from the
-  panel behind the sliders button on the user tile.
+  the headphones deafen. Devices, push to talk, the activation threshold,
+  noise suppression and automatic gain are behind the sliders button on
+  the user tile.
 - **Look.** The thirteen themes in light and dark, from the picker in the
-  band. Theme and devices are remembered.
+  band. Theme, devices and voice settings are remembered.
 - **Keys.** `Ctrl+F` search, `Escape` close what is open, `Ctrl+Shift+T`
   next theme, `Ctrl+Shift+L` light/dark, `Ctrl+Q` quit. Fields take
-  composed input (dead keys, an input method), shift-arrow selection, and
-  cut, copy and paste.
+  composed input (dead keys, an input method), pointer and shift-arrow
+  selection, and cut, copy and paste.
 
-What the web UI has and this does not, yet: pictures (avatars, images in
-messages - a message that is one says "sent an image"), rich text,
-editing and reactions, direct messages, unread counts, persistent-chat
-history beyond what the engine already holds, several servers at once,
-push-to-talk and the other voice settings, screen sharing, the admin
-surfaces, and placing the caret with the pointer.
+What the web UI has and this does not, yet: sending pictures and files,
+link previews, polls, read receipts, end-to-end encrypted channels' key
+handling, message search and paging far back, certificate management,
+screen sharing, and the admin surfaces (bans, registered users, ACLs,
+server settings).
 
 ## Testing
 
@@ -49,6 +61,14 @@ engine that exists only in memory (`src/demo.rs`).
 runs two real engines against a live server: connect, see each other, a
 message there and back, voice on and heard. Run it where no speakers are
 attached, or expect a tone: the microphone is the engine's virtual one.
+
+    FANCY_GPUI_TEST_SERVERS=host:port,host:port   one client on two servers
+    FANCY_GPUI_TEST_FANCY=host:port                edits, reactions, typing
+    FANCY_GPUI_TEST_SUPERUSER=<password>           with the above: kept
+                                                   history, deletion, pins
+
+name what the other live tests need; each is skipped by filter when its
+server is not there (`-- --ignored live_fancy`).
 
 How the views look is checked by eye, against screenshots of the web UI.
 
