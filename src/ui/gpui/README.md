@@ -59,16 +59,18 @@ real engine and does text and voice.
   quality and voice over TCP are behind the sliders button on the user
   tile. A whisper key speaks to one user, or shouts into one channel,
   chosen from their menu, and to nobody else while it is held.
-- **Look.** The thirteen themes in light and dark, from the picker in the
-  band. Theme, devices and voice settings are remembered.
+- **Look.** The thirteen themes in light and dark, from the menu on the
+  user's own tile (and under the saved servers, before there is a tile).
+  Theme, devices and voice settings are remembered.
 - **Keys.** `Ctrl+F` search, `Escape` close what is open, `Ctrl+Shift+T`
   next theme, `Ctrl+Shift+L` light/dark, `Ctrl+Q` quit. Fields take
   composed input (dead keys, an input method), pointer and shift-arrow
   selection, and cut, copy and paste.
 
-What the web UI has and this does not, yet: screen sharing, the Signal
-flavour of encrypted channels, editing a group's members, and a Fancy
-server's own settings.
+What the web UI has and this does not, yet: friends and screen sharing
+(their buttons are drawn where the web UI has them, and say so), messages
+sent later, the Signal flavour of encrypted channels, editing a group's
+members, and a Fancy server's own settings.
 
 ## Testing
 
@@ -91,7 +93,61 @@ attached, or expect a tone: the microphone is the engine's virtual one.
 name what the other live tests need; each is skipped by filter when its
 server is not there (`-- --ignored live_fancy`).
 
-How the views look is checked by eye, against screenshots of the web UI.
+## Measuring the look
+
+The main screen is measured against the web UI, not judged by eye. The web
+UI's side is `crates/mumble-tauri/ui/preview/native.tsx`: the whole client
+on a stubbed backend, serving the same small server as this view's plain
+demo. Both are drawn at 1410 by 758 and compared pixel for pixel:
+
+    # the web UI (from crates/mumble-tauri/ui)
+    node_modules/.bin/vite --config preview/vite.rail.config.ts --port 5393
+    google-chrome --headless=new --use-angle=swiftshader \
+        --enable-gpu-rasterization --window-size=1410,758 --hide-scrollbars \
+        --virtual-time-budget=9000 --screenshot=web.png \
+        'http://localhost:5393/native.html?mode=dark'
+
+    # this view, in a compositor that gives it the same size
+    FANCY_GPUI_ENGINE=demo FANCY_GPUI_DEMO=plain FANCY_GPUI_MODE=dark \
+        FANCY_GPUI_FRAME=client fancy-gpui
+
+    tools/compare.py web.png native.png overlay.png
+
+As of the last measurement the default theme deviates by 0.26 % (dark) and
+0.28 % (light), mean absolute, over the whole window. About half of that is
+channels one level apart, which is the browser dithering its gradients; the
+same page drawn by Chrome's two rasterisers differs from itself by 0.22 %.
+The rest is the edges of glyphs and icons, where two rasterisers never
+agree. Every box is where the web UI puts it, to the pixel; `?dump` on the
+page lists where that is.
+
+Only that screen, in that theme, has been measured this way. The connect
+screen, the dialogs and the other twelve themes are built from the same
+components and the same tokens but have not been compared.
+
+## Components
+
+Screens are built from a small kit, `src/ui/kit`, in the manner of a
+component library: a builder that reads the theme itself and turns into an
+element.
+
+| Component | What it is |
+| --- | --- |
+| `IconButton` | A button that is an icon: `Variant` (ghost, dashed, tonal, soft, filled, solid), `Tone`, `Corner`, any size. |
+| `Button` | A button that is a word, with an icon before it if wanted: text or contained, small or medium. |
+| `Avatar` | A face or a server's tile: picture or initials, presence pip, the ring of somebody speaking. |
+| `Paper` | A card cut as the web UI cuts them, edge under fill: raised, a field, or a plain plate (a message's bubble). |
+| `Sheet`, `Dialog` | An opaque surface that floats, and one in the middle of a veil, with a title. |
+| `MenuItem` | A row of a menu or of a list of choices. |
+| `Switch`, `Radio`, `Badge`, `Kbd` | The small marks. |
+| `Backdrop` | A surface filled with one of the theme's gradient stacks. |
+
+    IconButton::new("leave", "log-out")
+        .tone(Tone::Danger)
+        .on_click(cx.listener(|shell, _, _, _| shell.engine.disconnect()))
+
+A new screen should need no colours or corner sizes of its own; where one
+does, that is a component missing from the kit.
 
 ## The engine
 
@@ -124,13 +180,18 @@ catalogue:
     cd crates/mumble-tauri/ui
     npx vitest run src/ui/nebula/nativeThemes.test.ts -u
 
-Left out on purpose, because they are what costs the most to draw: the
-radial window mesh, backdrop blur and clip paths. Chrome the web UI draws as
-glass over a mesh is the same colour over the flat window here.
+The window's mesh and the conversation's backdrop are CSS gradient stacks
+in that file. They are drawn here (`src/paint.rs`) once per size into a
+picture an eighth of the area each way and stretched: tens of kilobytes,
+and no work per frame. Left out on purpose, because they are what costs the
+most to draw: backdrop blur, clip paths, and the two patterned layers
+(scanlines, dots) some themes add.
 
-No font is bundled. Each theme's font stack is resolved against the fonts
-the system has, falling back to a static sans, serif or monospace of the
-same voice.
+Inter is bundled (`assets/fonts`, OFL): five static faces cut from the
+variable font the web UI ships, about 1.4 MiB in memory. It is what the web
+UI sets everything in, and without it the two views break lines in
+different places. A theme whose stack names another family the system has
+still gets that family.
 
 ## Building
 
@@ -159,7 +220,7 @@ For development:
 | `FANCY_GPUI_CONNECT` | Connect at once as the saved identity with this id (`FANCY_GPUI_PASSWORD` for the server's password). |
 | `FANCY_GPUI_SAY` | With `FANCY_GPUI_CONNECT`: say this once connected. |
 | `FANCY_GPUI_FRAME` | `client` draws the window's own controls even where the compositor frames it. |
-| `FANCY_GPUI_ENGINE` | `demo` runs on the engine that exists only in memory. With it, `FANCY_GPUI_DEMO=connected` starts on the demo server and `FANCY_GPUI_DEMO_TALKING=<session>` has that user talking. |
+| `FANCY_GPUI_ENGINE` | `demo` runs on the engine that exists only in memory. With it, `FANCY_GPUI_DEMO=connected` starts on the demo server, `FANCY_GPUI_DEMO=plain` on the same server with nothing of Fancy Mumble's on it, and `FANCY_GPUI_DEMO_TALKING=<session>` has that user talking. |
 
 ## Icons
 
