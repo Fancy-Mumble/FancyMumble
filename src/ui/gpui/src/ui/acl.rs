@@ -13,7 +13,7 @@ use gpui::{
 use super::Shell;
 use super::kit::{Button, Dialog, Size, Tone};
 use super::widgets::{EMPHASIS, icon};
-use crate::engine::{Acl, AclRule, Action, ChannelId};
+use crate::engine::{Acl, AclGroup, AclRule, Action, ChannelId};
 use crate::theme::Theme;
 
 /// The permissions a rule speaks of, as Mumble's bits, with what each is
@@ -200,6 +200,39 @@ impl Shell {
         cx.notify();
     }
 
+    /// Put the account in the group `name` of the channel being edited, or
+    /// take it out; a group with no list yet gets one.
+    fn set_group_member(
+        &mut self,
+        name: &SharedString,
+        account: u32,
+        member: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(panel) = self.panels.acl.as_mut() else {
+            return;
+        };
+        let Some(acl) = panel.acl.as_mut() else {
+            return;
+        };
+        let at = acl
+            .groups
+            .iter()
+            .position(|group| group.name == *name)
+            .unwrap_or_else(|| {
+                acl.groups.push(AclGroup {
+                    name: name.clone(),
+                    inherited: Vec::new(),
+                    added: Vec::new(),
+                    removed: Vec::new(),
+                });
+                acl.groups.len() - 1
+            });
+        acl.groups[at].set_member(account, member);
+        panel.dirty = true;
+        cx.notify();
+    }
+
     /// Take the rule being edited out.
     fn remove_acl_rule(&mut self, cx: &mut Context<Self>) {
         let Some(panel) = self.panels.acl.as_mut() else {
@@ -368,10 +401,126 @@ fn rule_editor(rule: &AclRule, theme: &Theme, cx: &mut Context<Shell>) -> AnyEle
         .into_any_element()
 }
 
+/// The groups every server has, whose members are not a list: everybody,
+/// whoever is registered, whoever is in the channel, and so on.
+const BUILT_IN: &[&str] = &["all", "auth", "in", "out", "sub", "none"];
+
+/// Who is in the group a rule names, and who of those here could be: a
+/// click takes a member out, or puts somebody in.
+///
+/// Members are registered accounts. One who is not connected has no name
+/// here, only the account's number.
+fn members(
+    shell: &Shell,
+    name: &SharedString,
+    acl: &Acl,
+    theme: &Theme,
+    cx: &mut Context<Shell>,
+) -> AnyElement {
+    let accounts = acl
+        .groups
+        .iter()
+        .find(|group| group.name == *name)
+        .map(AclGroup::members)
+        .unwrap_or_default();
+    let named = |account: u32| {
+        shell
+            .snapshot
+            .users
+            .iter()
+            .find(|user| user.account == Some(account))
+            .map_or_else(
+                || SharedString::from(format!("account {account}")),
+                |user| user.name.clone(),
+            )
+    };
+    let hover = theme.c.hover;
+    let chip = |account: u32, member: bool| {
+        let group = name.clone();
+        div()
+            .id(("acl-member", account as usize))
+            .debug_selector(move || format!("acl-member-{account}"))
+            .flex()
+            .items_center()
+            .gap(px(5.0))
+            .px(px(9.0))
+            .py(px(3.0))
+            .rounded(theme.skin.radius_pill)
+            .border_1()
+            .cursor_pointer()
+            .text_size(px(12.0))
+            .map(|chip| {
+                if member {
+                    chip.bg(theme.c.accent_soft)
+                        .border_color(theme.c.accent_line)
+                } else {
+                    chip.border_color(theme.c.line2).text_color(theme.c.muted)
+                }
+            })
+            .hover(move |style| style.bg(hover))
+            .on_click(cx.listener(move |shell, _, _, cx| {
+                shell.set_group_member(&group, account, !member, cx);
+            }))
+            .child(icon(if member { "x" } else { "plus" }, 10.0, theme.c.muted))
+            .child(named(account))
+    };
+    // Whoever is here, is registered, and is not in it yet.
+    let mut candidates: Vec<u32> = shell
+        .snapshot
+        .users
+        .iter()
+        .filter_map(|user| user.account)
+        .filter(|account| !accounts.contains(account))
+        .collect();
+    candidates.sort_unstable();
+    candidates.dedup();
+    div()
+        .pb(px(12.0))
+        .flex()
+        .flex_col()
+        .gap(px(6.0))
+        .child(
+            div()
+                .text_size(px(11.0))
+                .font_weight(EMPHASIS)
+                .text_color(theme.c.muted)
+                .child(format!("MEMBERS OF @{name}")),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_wrap()
+                .gap(px(6.0))
+                .children(accounts.iter().map(|account| chip(*account, true)))
+                .children(candidates.into_iter().map(|account| chip(account, false))),
+        )
+        .into_any_element()
+}
+
 /// The two columns: the rules, and the editor of the one chosen.
-fn columns(panel: &Panel, acl: &Acl, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement {
+fn columns(
+    shell: &Shell,
+    panel: &Panel,
+    acl: &Acl,
+    theme: &Theme,
+    cx: &mut Context<Shell>,
+) -> impl IntoElement {
     let editor = match panel.selected.and_then(|at| acl.rules.get(at)) {
-        Some(rule) => rule_editor(rule, theme, cx),
+        Some(rule) => {
+            // A group with a list of members shows it under its rule.
+            let listed = rule
+                .group
+                .as_ref()
+                .filter(|name| !BUILT_IN.contains(&name.as_ref()) && !name.starts_with('~'));
+            div()
+                .flex()
+                .flex_col()
+                .when_some(listed, |editor, name| {
+                    editor.child(members(shell, name, acl, theme, cx))
+                })
+                .child(rule_editor(rule, theme, cx))
+                .into_any_element()
+        }
         None => div()
             .p(px(10.0))
             .text_color(theme.c.muted)
@@ -414,7 +563,12 @@ fn columns(panel: &Panel, acl: &Acl, theme: &Theme, cx: &mut Context<Shell>) -> 
 }
 
 /// The panel, over a veil.
-pub(super) fn render(panel: &Panel, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement {
+pub(super) fn render(
+    shell: &Shell,
+    panel: &Panel,
+    theme: &Theme,
+    cx: &mut Context<Shell>,
+) -> impl IntoElement {
     let body = match &panel.acl {
         None => div()
             .flex_1()
@@ -422,7 +576,7 @@ pub(super) fn render(panel: &Panel, theme: &Theme, cx: &mut Context<Shell>) -> i
             .text_color(theme.c.muted)
             .child("Asking the server…")
             .into_any_element(),
-        Some(acl) => columns(panel, acl, theme, cx).into_any_element(),
+        Some(acl) => columns(shell, panel, acl, theme, cx).into_any_element(),
     };
     let inherit = panel.acl.as_ref().is_some_and(|acl| acl.inherit);
     Dialog::new("acl")

@@ -15,7 +15,7 @@ use mumble_tauri_lib::engine_api::{
 };
 
 use crate::engine::{
-    Acl, AclRule, Attachment, KeyRequest, Poll, PollOption, Reader, WhisperTarget,
+    Acl, AclGroup, AclRule, Attachment, KeyRequest, Poll, PollOption, Reader, WhisperTarget,
 };
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
@@ -110,6 +110,16 @@ impl Shared {
         let shown = Acl {
             channel: acl.channel,
             inherit: acl.inherit,
+            groups: acl
+                .groups
+                .iter()
+                .map(|group| AclGroup {
+                    name: group.name.clone().into(),
+                    inherited: group.inherited_members.clone(),
+                    added: group.add.clone(),
+                    removed: group.remove.clone(),
+                })
+                .collect(),
             rules: acl
                 .rules
                 .iter()
@@ -138,9 +148,11 @@ impl Shared {
             .clone()
             .filter(|read| read.channel == changed.channel)
             .ok_or("These rules were not read from the server; open them again.")?;
+        let groups = merged_groups(read.groups.clone(), changed.groups);
         self.engine
             .set_acl(api::AclInfo {
                 inherit: changed.inherit,
+                groups,
                 rules: changed
                     .rules
                     .into_iter()
@@ -644,6 +656,7 @@ impl RealEngine {
                     deafened: user.deafened,
                     avatar,
                     priority: user.priority_speaker,
+                    account: user.account,
                 }
             })
             .collect()
@@ -1712,6 +1725,37 @@ fn disconnect_notice(reason: Option<String>, refused: bool) -> Option<String> {
 }
 
 /// Unix epoch milliseconds, now.
+/// The groups as the server sent them, with the members the view changed:
+/// everything else a group carries goes back as it came. A group the view
+/// made is new, and takes its parent's members as groups do.
+fn merged_groups(read: Vec<api::AclGroupInfo>, changed: Vec<AclGroup>) -> Vec<api::AclGroupInfo> {
+    let mut groups = read;
+    for group in changed {
+        if let Some(known) = groups
+            .iter_mut()
+            .find(|known| known.name == group.name.as_ref())
+        {
+            known.add = group.added;
+            known.remove = group.removed;
+        } else if !group.added.is_empty() {
+            groups.push(api::AclGroupInfo {
+                name: group.name.to_string(),
+                inherited: false,
+                inherit: true,
+                inheritable: true,
+                add: group.added,
+                remove: group.removed,
+                inherited_members: Vec::new(),
+                color: None,
+                icon: None,
+                style_preset: None,
+                metadata: HashMap::new(),
+            });
+        }
+    }
+    groups
+}
+
 /// A waiting message, under the view's names.
 fn scheduled_of(message: api::ScheduledInfo) -> Scheduled {
     Scheduled {

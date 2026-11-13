@@ -1263,6 +1263,7 @@ mod tests {
             avatar: None,
             unread: 0,
             priority: false,
+            account: None,
         }
     }
 

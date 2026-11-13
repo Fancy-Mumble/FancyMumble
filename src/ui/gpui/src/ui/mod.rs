@@ -1529,7 +1529,7 @@ impl Render for Shell {
                 shell.child(devices::render(self, &theme, cx))
             })
             .when_some(self.panels.acl.as_ref(), |shell, panel| {
-                shell.child(acl::render(panel, &theme, cx))
+                shell.child(acl::render(self, panel, &theme, cx))
             })
             .when_some(self.panels.admin.as_ref(), |shell, admin| {
                 shell.child(admin::render(admin, &theme, cx))

@@ -3,7 +3,9 @@
 
 use std::sync::Mutex;
 
-use crate::engine::{Acl, AclRule, Attachment, KeyRequest, Poll, PollOption, WhisperTarget};
+use crate::engine::{
+    Acl, AclGroup, AclRule, Attachment, KeyRequest, Poll, PollOption, WhisperTarget,
+};
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
     Connection, Conversation, Engine, EngineEvent, Found, Listing, Message, Preview, Reaction,
@@ -447,6 +449,8 @@ impl State {
             avatar: None,
             unread: 0,
             priority: false,
+            // Everybody but Scout has registered.
+            account: (session != 4).then_some(session + 100),
         };
         let said = |minute: u64, session: Session, name: &str, body: &str| {
             (
@@ -715,13 +719,26 @@ impl Engine for DemoEngine {
             grant,
             deny,
         };
+        let mut rules = vec![
+            rule("all", true, 0x2 | 0x4 | 0x8 | 0x200, 0),
+            rule("auth", false, 0x40, 0),
+        ];
+        let mut groups = Vec::new();
+        // The lounge has moderators: Rin, by the parent's say.
+        if channel == LOUNGE {
+            rules.push(rule("moderators", false, 0x1_0000, 0));
+            groups.push(AclGroup {
+                name: "moderators".into(),
+                inherited: vec![103],
+                added: Vec::new(),
+                removed: Vec::new(),
+            });
+        }
         self.tell(EngineEvent::Acl(Acl {
             channel,
             inherit: true,
-            rules: vec![
-                rule("all", true, 0x2 | 0x4 | 0x8 | 0x200, 0),
-                rule("auth", false, 0x40, 0),
-            ],
+            groups,
+            rules,
         }));
     }
 

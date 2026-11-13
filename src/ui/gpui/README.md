@@ -52,7 +52,9 @@ real engine and does text and voice.
   right click on the server's tile: filter them, lift a ban, rename an
   account or remove its registration (asked twice). Only the rows in view are built. A channel's
   permissions from its menu: its rules one at a time, each allowing or
-  denying a permission for a group, here or in the channels below.
+  denying a permission for a group, here or in the channels below, and
+  under a group's rule who is in it: a click puts somebody who is here
+  and registered in, or takes a member out.
 - **Certificates.** Listed with who uses each, from the foot of the
   server list; export one to carry it to another machine, import one,
   delete one (asked twice).
@@ -72,8 +74,7 @@ real engine and does text and voice.
 
 What the web UI has and this does not, yet: friends and screen sharing
 (their buttons are drawn where the web UI has them, and say so), the
-Signal flavour of encrypted channels, editing a group's members, and a
-Fancy server's own settings.
+Signal flavour of encrypted channels, and a Fancy server's own settings.
 
 ## Testing
 

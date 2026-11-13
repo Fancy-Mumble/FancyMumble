@@ -1825,3 +1825,49 @@ fn a_plain_server_offers_no_sending_later(cx: &mut TestAppContext) {
     assert!(cx.debug_bounds("menu-Emoji…").is_some());
     assert!(cx.debug_bounds("menu-Send later…").is_none());
 }
+
+#[gpui::test]
+fn a_groups_members_are_listed_and_changed_under_its_rule(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    shell.update(cx, |shell, cx| shell.open_acl(1, cx));
+    cx.run_until_parked();
+    let members = |shell: &Shell| {
+        let acl = shell
+            .panels
+            .acl
+            .as_ref()
+            .and_then(|panel| panel.acl.as_ref());
+        acl.and_then(|acl| {
+            acl.groups
+                .iter()
+                .find(|group| group.name.as_ref() == "moderators")
+        })
+        .map(crate::engine::AclGroup::members)
+    };
+    // The rule for the group is the last; Rin (account 103) is in it by
+    // the parent's say.
+    shell.update(cx, |shell, cx| {
+        if let Some(panel) = shell.panels.acl.as_mut() {
+            panel.selected = Some(2);
+        }
+        cx.notify();
+    });
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| assert_eq!(members(shell), Some(vec![103])));
+    // Flora (102) is here and registered: a click puts her in.
+    click(cx, "acl-member-102");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(members(shell), Some(vec![102, 103]))
+    });
+    // A click on a member takes them out: Rin, though the parent has her.
+    click(cx, "acl-member-103");
+    shell.read_with(cx, |shell, _| assert_eq!(members(shell), Some(vec![102])));
+    // Scout has not registered and cannot be offered.
+    assert!(cx.debug_bounds("acl-member-104").is_none());
+    click(cx, "acl-save");
+    let Some(Action::SetAcl(saved)) = engine.actions().last().cloned() else {
+        panic!("nothing was saved");
+    };
+    let group = &saved.groups[0];
+    assert_eq!((&group.added, &group.removed), (&vec![102], &vec![103]));
+}

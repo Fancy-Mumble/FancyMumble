@@ -320,8 +320,51 @@ pub(crate) struct Acl {
     pub channel: ChannelId,
     /// Whether the parent channel's rules apply here too.
     pub inherit: bool,
+    /// The groups with members of their own that rules can name.
+    pub groups: Vec<AclGroup>,
     /// The rules, in the order they apply: a later one over an earlier.
     pub rules: Vec<AclRule>,
+}
+
+/// A group of registered accounts a rule can name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AclGroup {
+    pub name: SharedString,
+    /// The accounts it has from the parent channel,
+    pub inherited: Vec<u32>,
+    /// those added in this channel,
+    pub added: Vec<u32>,
+    /// and those of the parent's taken out in this one.
+    pub removed: Vec<u32>,
+}
+
+impl AclGroup {
+    /// Who is in the group here: the parent's and those added, less those
+    /// taken out. In order, each once.
+    pub(crate) fn members(&self) -> Vec<u32> {
+        let mut members: Vec<u32> = self
+            .inherited
+            .iter()
+            .chain(&self.added)
+            .copied()
+            .filter(|account| !self.removed.contains(account))
+            .collect();
+        members.sort_unstable();
+        members.dedup();
+        members
+    }
+
+    /// Put `account` in the group, or take it out.
+    pub(crate) fn set_member(&mut self, account: u32, member: bool) {
+        self.added.retain(|added| *added != account);
+        self.removed.retain(|removed| *removed != account);
+        let from_parent = self.inherited.contains(&account);
+        if member && !from_parent {
+            self.added.push(account);
+        } else if !member && from_parent {
+            self.removed.push(account);
+        }
+    }
 }
 
 /// One rule: for a group or one account, what is allowed and denied.
@@ -443,6 +486,8 @@ pub(crate) struct User {
     pub unread: u32,
     /// Heard over everybody else in their channel.
     pub priority: bool,
+    /// The account they are registered as, if they are.
+    pub account: Option<u32>,
 }
 
 /// One chat message, as the conversation shows it.
