@@ -132,6 +132,10 @@ pub enum EngineEvent {
         /// Whether it was put on; `false` when it was taken off.
         added: bool,
     },
+    /// Somebody else put a poll to a channel.
+    Poll(PollInfo),
+    /// Somebody else answered a poll.
+    PollVote(PollVoteInfo),
     /// How far each reader of a channel has read: said when one of them
     /// reads on, and in answer to [`EngineHandle::request_readers`].
     Readers {
@@ -202,6 +206,39 @@ pub struct UserStats {
     pub os: Option<String>,
     /// Their address; a server tells only an administrator.
     pub address: Option<String>,
+}
+
+/// A poll put to a channel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PollInfo {
+    /// The channel it was put to.
+    pub channel: u32,
+    /// What names it to a vote.
+    pub id: String,
+    /// What is asked.
+    pub question: String,
+    /// The answers to choose from.
+    pub options: Vec<String>,
+    /// Whether more than one answer may be chosen.
+    pub multiple: bool,
+    /// Who asked.
+    pub creator: u32,
+    /// Their name, where the server gave it.
+    pub creator_name: Option<String>,
+}
+
+/// One user's answer to a poll: all of it, replacing what they answered
+/// before.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PollVoteInfo {
+    /// The channel the poll was put to.
+    pub channel: u32,
+    /// The poll.
+    pub poll: String,
+    /// The answers chosen, as places among the poll's options.
+    pub selected: Vec<u32>,
+    /// Who answered.
+    pub voter: u32,
 }
 
 /// How far somebody has read a channel.
@@ -393,6 +430,21 @@ impl EngineEvent {
     /// The rest of [`Self::from_core`]: what a server answers when asked.
     fn answer_from_core(event: CoreEvent) -> Option<Self> {
         Some(match event {
+            CoreEvent::Poll(payload) => Self::Poll(PollInfo {
+                channel: payload.channel_id,
+                id: payload.poll_id,
+                question: payload.question,
+                options: payload.options,
+                multiple: payload.multiple,
+                creator: payload.creator_session,
+                creator_name: payload.creator_name,
+            }),
+            CoreEvent::PollVote(payload) => Self::PollVote(PollVoteInfo {
+                channel: payload.channel_id,
+                poll: payload.poll_id,
+                selected: payload.selected,
+                voter: payload.voter_session,
+            }),
             CoreEvent::ReadReceipts(payload) => Self::Readers {
                 channel: payload.channel_id,
                 readers: payload
@@ -1176,6 +1228,46 @@ impl EngineHandle {
     /// When not connected.
     pub async fn request_user_stats(&self, session: u32) -> Result<(), String> {
         self.state.request_user_stats(session).await
+    }
+
+    /// Put a poll to `channel`; says the id it goes by. The server passes
+    /// it on to everybody else there and does not send it back: the
+    /// caller already has it.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn create_poll(
+        &self,
+        channel: u32,
+        question: String,
+        options: Vec<String>,
+        multiple: bool,
+    ) -> Result<String, String> {
+        let id = uuid::Uuid::new_v4().to_string();
+        self.state
+            .send_fancy_poll(
+                channel,
+                id.clone(),
+                question,
+                options,
+                multiple,
+                chrono::Utc::now().to_rfc3339(),
+            )
+            .await?;
+        Ok(id)
+    }
+
+    /// Answer the poll `poll` of `channel` with the options at `selected`,
+    /// replacing what was answered before. Not sent back either.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn vote(&self, channel: u32, poll: &str, selected: Vec<u32>) -> Result<(), String> {
+        self.state
+            .send_fancy_poll_vote(channel, poll.to_owned(), selected)
+            .await
     }
 
     /// Say that the local user has read `channel` up to the message `id`.
