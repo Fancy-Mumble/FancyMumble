@@ -17,11 +17,11 @@ use crate::state::host::{
     AppDirs, EventSink, Host, HostParts, NoBackgroundService, NoSignalInterceptor, Notifier,
 };
 use crate::state::pchat::IdentityStore;
-use crate::state::types::PageRequest;
 use crate::state::types::{
     BanEntryInput, ChannelEntry, ChatMessage, ConnectionStatus, RegisteredUserUpdate, UserEntry,
     VoiceState,
 };
+use crate::state::types::{PageRequest, SearchFilter};
 use crate::state::{AppState, Credentials, LinkEmbed};
 use mumble_protocol::state::PchatProtocol;
 
@@ -194,6 +194,23 @@ pub struct UserStats {
     pub os: Option<String>,
     /// Their address; a server tells only an administrator.
     pub address: Option<String>,
+}
+
+/// A message that matched a search.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FoundMessage {
+    /// The part of the message that matched, as plain text.
+    pub text: String,
+    /// Who sent it.
+    pub sender_name: String,
+    /// Where it was said, in words: `in #Gaming`, `DM with enot`.
+    pub place: String,
+    /// The channel it was said in, or
+    pub channel: Option<u32>,
+    /// the other party of the direct conversation it was said in.
+    pub direct: Option<u32>,
+    /// When it was sent, in Unix epoch milliseconds, where known.
+    pub sent_at_ms: Option<u64>,
 }
 
 /// What a server found behind a link: enough for a small card.
@@ -864,6 +881,31 @@ impl EngineHandle {
         self.state
             .fetch_older_messages(channel, before, limit)
             .await
+    }
+
+    /// The messages held that match `query`, best first, a couple of
+    /// dozen at the most. Only what this client holds is searched.
+    pub fn search_messages(&self, query: &str) -> Vec<FoundMessage> {
+        self.state
+            .super_search(query, SearchFilter::Messages, None)
+            .into_iter()
+            .filter_map(|found| {
+                let message = found.message?;
+                let (channel, direct) = if message.dm {
+                    (None, found.id)
+                } else {
+                    (found.id, None)
+                };
+                Some(FoundMessage {
+                    text: found.title,
+                    sender_name: message.sender_name,
+                    place: message.context,
+                    channel,
+                    direct,
+                    sent_at_ms: message.timestamp,
+                })
+            })
+            .collect()
     }
 
     /// How many messages of `channel` are held. Cheap: for asking whether
