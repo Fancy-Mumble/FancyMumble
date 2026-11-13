@@ -217,6 +217,24 @@ pub struct PingInfo {
     pub version: Option<String>,
 }
 
+/// A microphone or a speaker the system offers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AudioDeviceInfo {
+    /// The device's name; what [`EngineHandle::select_devices`] takes.
+    pub name: String,
+    /// Whether it is the system's default.
+    pub is_default: bool,
+}
+
+/// The audio devices the system offers.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AudioDevices {
+    /// Microphones.
+    pub inputs: Vec<AudioDeviceInfo>,
+    /// Speakers.
+    pub outputs: Vec<AudioDeviceInfo>,
+}
+
 /// Who to connect as, and where.
 #[derive(Debug, Clone, Default)]
 pub struct ConnectTarget {
@@ -440,6 +458,56 @@ impl EngineHandle {
         self.state.toggle_deafen().await
     }
 
+    /// The microphones and speakers the system offers.
+    ///
+    /// Blocking - enumeration can stall on a driver - so call it off the
+    /// view's thread.
+    pub fn audio_devices() -> AudioDevices {
+        #[cfg(not(target_os = "android"))]
+        {
+            let info = |device: crate::state::types::AudioDevice| AudioDeviceInfo {
+                name: device.name,
+                is_default: device.is_default,
+            };
+            AudioDevices {
+                inputs: crate::state::audio_devices::inputs()
+                    .into_iter()
+                    .map(info)
+                    .collect(),
+                outputs: crate::state::audio_devices::outputs()
+                    .into_iter()
+                    .map(info)
+                    .collect(),
+            }
+        }
+        #[cfg(target_os = "android")]
+        AudioDevices::default()
+    }
+
+    /// The chosen microphone and speaker, by name; `None` is the system's
+    /// default.
+    pub fn selected_devices(&self) -> (Option<String>, Option<String>) {
+        let settings = self.state.audio_settings();
+        (settings.selected_device, settings.selected_output_device)
+    }
+
+    /// Use the microphone `input` and the speaker `output`, by name; `None`
+    /// is the system's default. Takes effect at once if voice is on.
+    ///
+    /// # Errors
+    ///
+    /// When a chosen device cannot be opened.
+    pub fn select_devices(
+        &self,
+        input: Option<String>,
+        output: Option<String>,
+    ) -> Result<(), String> {
+        let mut settings = self.state.audio_settings();
+        settings.selected_device = input;
+        settings.selected_output_device = output;
+        self.state.apply_audio_settings(settings)
+    }
+
     /// Ask the server at `host:port` whether it is up, without connecting.
     pub async fn ping(host: &str, port: u16) -> PingInfo {
         let answer = crate::state::server_ping::ping_server(host, port).await;
@@ -612,6 +680,14 @@ mod tests {
         assert!(engine.channels().is_empty() && engine.users().is_empty());
         assert!(engine.own_session().is_none() && engine.current_channel().is_none());
         assert!(engine.messages(0).is_empty());
+        assert_eq!(engine.selected_devices(), (None, None));
+        engine
+            .select_devices(None, Some("Somewhere".to_owned()))
+            .expect("choosing a device while voice is off opens nothing");
+        assert_eq!(
+            engine.selected_devices(),
+            (None, Some("Somewhere".to_owned()))
+        );
         // Leaving when not on a server is not an error.
         assert!(engine.disconnect().await.is_ok());
         engine.shutdown();
