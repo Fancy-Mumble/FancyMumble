@@ -58,7 +58,7 @@ struct Shared {
     /// arriving; `roles_asked` is set while that answer is awaited, so a
     /// refusal of it is not shown as if the user had asked for something.
     roles: Mutex<Vec<Role>>,
-    roles_asked: std::sync::atomic::AtomicBool,
+    roles_asked: Mutex<Option<std::time::Instant>>,
     /// Who the whisper key speaks to.
     whisper_target: Mutex<Option<api::WhisperTarget>>,
     /// The channel whose readers were last asked for.
@@ -89,12 +89,25 @@ impl Shared {
     /// Ask for the server's roles, quietly: most servers tell only their
     /// administrators, and that is not news.
     fn ask_for_roles(self: &Arc<Self>, runtime: &tokio::runtime::Handle) {
-        self.roles_asked
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        *self
+            .roles_asked
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(std::time::Instant::now());
         let shared = Arc::clone(self);
         drop(runtime.spawn(async move {
             let _ = shared.engine.request_acl(ROOT).await;
         }));
+    }
+
+    /// Whether an answer arriving now is the one to the adapter's own
+    /// question about roles: it was asked, and no longer ago than a server
+    /// takes to answer. Asked once, answered once.
+    fn roles_answered(&self) -> bool {
+        self.roles_asked
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+            .is_some_and(|asked| asked.elapsed() < ROLES_ANSWER_WITHIN)
     }
 
     /// The root channel's groups, as roles.
@@ -157,10 +170,7 @@ impl Shared {
         if acl.channel == ROOT {
             self.take_roles(&acl);
             // The answer to the adapter's own question is not the user's.
-            if self
-                .roles_asked
-                .swap(false, std::sync::atomic::Ordering::Relaxed)
-            {
+            if self.roles_answered() {
                 return;
             }
         }
@@ -462,10 +472,7 @@ impl Shared {
                 // refusal of something else in the same moment is lost
                 // with it, which is the price of the server not saying
                 // what it refuses.
-                if self
-                    .roles_asked
-                    .swap(false, std::sync::atomic::Ordering::Relaxed)
-                {
+                if self.roles_answered() {
                     return;
                 }
                 let reason = reason.unwrap_or_else(|| "The server did not allow that.".to_owned());
@@ -694,7 +701,7 @@ impl RealEngine {
             whisper_target: Mutex::default(),
             acl: Mutex::default(),
             roles: Mutex::default(),
-            roles_asked: std::sync::atomic::AtomicBool::new(false),
+            roles_asked: Mutex::default(),
             polls: Mutex::default(),
             wanted: Mutex::default(),
             retries: std::sync::atomic::AtomicU32::new(0),
@@ -1901,6 +1908,9 @@ fn merged_groups(read: Vec<api::AclGroupInfo>, changed: Vec<AclGroup>) -> Vec<ap
     }
     groups
 }
+
+/// How long after asking for the roles an answer is taken to be to that.
+const ROLES_ANSWER_WITHIN: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// The channel every server has, at the top of its tree.
 const ROOT: u32 = 0;
