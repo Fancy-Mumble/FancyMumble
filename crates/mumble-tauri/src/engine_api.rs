@@ -132,6 +132,14 @@ pub enum EngineEvent {
         /// Whether it was put on; `false` when it was taken off.
         added: bool,
     },
+    /// How far each reader of a channel has read: said when one of them
+    /// reads on, and in answer to [`EngineHandle::request_readers`].
+    Readers {
+        /// The channel.
+        channel: u32,
+        /// Its readers; one who has read nothing is not among them.
+        readers: Vec<ReaderInfo>,
+    },
     /// The server looked behind links asked about with
     /// [`EngineHandle::link_previews`].
     LinkPreviews(Vec<LinkPreview>),
@@ -194,6 +202,17 @@ pub struct UserStats {
     pub os: Option<String>,
     /// Their address; a server tells only an administrator.
     pub address: Option<String>,
+}
+
+/// How far somebody has read a channel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReaderInfo {
+    /// Who: their certificate's hash, which outlives a session.
+    pub hash: String,
+    /// Their name.
+    pub name: String,
+    /// The newest message they have read.
+    pub read_up_to: String,
 }
 
 /// A message that matched a search.
@@ -374,6 +393,19 @@ impl EngineEvent {
     /// The rest of [`Self::from_core`]: what a server answers when asked.
     fn answer_from_core(event: CoreEvent) -> Option<Self> {
         Some(match event {
+            CoreEvent::ReadReceipts(payload) => Self::Readers {
+                channel: payload.channel_id,
+                readers: payload
+                    .read_states
+                    .into_iter()
+                    .filter(|state| !state.last_read_message_id.is_empty())
+                    .map(|state| ReaderInfo {
+                        hash: state.cert_hash,
+                        name: state.name,
+                        read_up_to: state.last_read_message_id,
+                    })
+                    .collect(),
+            },
             CoreEvent::LinkPreviews(payload) => Self::LinkPreviews(
                 payload
                     .requested_urls
@@ -1144,6 +1176,25 @@ impl EngineHandle {
     /// When not connected.
     pub async fn request_user_stats(&self, session: u32) -> Result<(), String> {
         self.state.request_user_stats(session).await
+    }
+
+    /// Say that the local user has read `channel` up to the message `id`.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn mark_read_up_to(&self, channel: u32, id: &str) -> Result<(), String> {
+        self.state.send_read_receipt(channel, id.to_owned()).await
+    }
+
+    /// Ask how far everybody has read `channel`; the answer is an
+    /// [`EngineEvent::Readers`].
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn request_readers(&self, channel: u32) -> Result<(), String> {
+        self.state.query_read_receipts(channel).await
     }
 
     /// What is behind `urls`. The cards this client already holds come
