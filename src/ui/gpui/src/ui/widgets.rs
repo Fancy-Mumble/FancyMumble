@@ -6,9 +6,9 @@ use crate::theme::Theme;
 
 /// The weight of a name, a title, the selected row.
 ///
-/// Bold rather than semibold: most system UI faces have no 600, and a
-/// request for one quietly comes back regular.
-pub(crate) const EMPHASIS: gpui::FontWeight = gpui::FontWeight::BOLD;
+/// Semibold, as the web UI sets them. The bundled Inter has that face; a
+/// family without one answers with its bold.
+pub(crate) const EMPHASIS: gpui::FontWeight = gpui::FontWeight::SEMIBOLD;
 
 /// A bundled icon, `size` square, in `color`.
 pub(crate) fn icon(name: &'static str, size: f32, color: Hsla) -> Svg {

@@ -505,8 +505,7 @@ const MONO: &[&str] = &["Noto Sans Mono", "DejaVu Sans Mono", "Consolas", "Menlo
 
 /// The first family in a CSS font stack that is installed, keeping the
 /// stack's voice (a serif stack ends in a serif), or the system's default UI
-/// face. No font ships with this view: a bundled face is memory held for the
-/// whole run, and the system already has one loaded.
+/// face. Inter is always there: the view bundles it (`assets::fonts`).
 fn first_installed(stack: &str, installed: &[String]) -> SharedString {
     let has = |family: &str| {
         installed

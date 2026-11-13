@@ -63,6 +63,9 @@ fn main() {
             cx.on_action(|_: &Quit, cx| cx.quit());
 
             let (engine, store) = start_engine();
+            if let Err(error) = cx.text_system().add_fonts(assets::fonts()) {
+                eprintln!("the bundled typeface could not be loaded: {error}");
+            }
             install_theme(store.as_ref(), cx);
             let closing = Arc::clone(&engine);
             cx.on_app_quit(move |_| {
