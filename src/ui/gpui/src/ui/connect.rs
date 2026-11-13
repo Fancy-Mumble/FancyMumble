@@ -8,7 +8,7 @@ use gpui::{
 };
 
 use super::Shell;
-use super::kit::{Avatar, Button, Size, tint};
+use super::kit::{Avatar, Button, Radio, Size, tint};
 use super::widgets::{EMPHASIS, icon, label};
 use crate::engine::{Connection, SavedServer, ServerPing};
 use crate::theme::Theme;
@@ -500,7 +500,7 @@ fn identity_row(
                 }))
                 .child(icon("pencil", 13.0, theme.c.muted))
         })
-        .child(radio(chosen, theme))
+        .child(Radio::new(chosen))
 }
 
 /// The server's password, for the servers that have one.
@@ -532,25 +532,6 @@ fn link(id: &'static str, text: &'static str, theme: &Theme) -> gpui::Stateful<g
 }
 
 /// A radio mark: a ring, filled when it is the chosen one.
-fn radio(chosen: bool, theme: &Theme) -> impl IntoElement + use<> {
-    div()
-        .flex_none()
-        .size(px(16.0))
-        .rounded_full()
-        .border_2()
-        .border_color(if chosen {
-            theme.c.accent_text
-        } else {
-            theme.c.line2
-        })
-        .flex()
-        .items_center()
-        .justify_center()
-        .when(chosen, |ring| {
-            ring.child(div().size(px(6.0)).rounded_full().bg(theme.c.accent_text))
-        })
-}
-
 fn connect_button(
     shell: &Shell,
     theme: &Theme,

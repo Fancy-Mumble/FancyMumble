@@ -137,6 +137,23 @@ impl IconButton {
         }
     }
 
+    /// The same button for the row at `at` of a list: `id` and the place
+    /// together tell it from its neighbours, and name it `<id>-<at>` for
+    /// the tests.
+    pub(crate) fn at(id: &'static str, at: usize, glyph: &'static str) -> Self {
+        Self {
+            id: (id, at).into(),
+            selector: Some(format!("{id}-{at}").into()),
+            ..Self::new(id, glyph)
+        }
+    }
+
+    /// What the tests call it, where that is not its id.
+    pub(crate) fn selector(mut self, selector: impl Into<SharedString>) -> Self {
+        self.selector = Some(selector.into());
+        self
+    }
+
     /// Both sides, in pixels.
     pub(crate) fn size(self, side: f32) -> Self {
         self.dims(side, side)

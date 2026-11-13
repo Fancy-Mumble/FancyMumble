@@ -8,7 +8,8 @@
 use gpui::{Context, IntoElement, ParentElement, SharedString, Styled, div, prelude::*, px};
 
 use super::Shell;
-use super::widgets::{EMPHASIS, icon, opaque};
+use super::kit::{Dialog, IconButton, Tone};
+use super::widgets::{EMPHASIS, icon};
 use crate::engine::CertificateTask;
 use crate::theme::Theme;
 
@@ -102,27 +103,6 @@ impl Shell {
     }
 }
 
-/// A small square button with an icon on it.
-fn tool(
-    id: (&'static str, usize),
-    glyph: &'static str,
-    ink: gpui::Hsla,
-    theme: &Theme,
-) -> gpui::Stateful<gpui::Div> {
-    let hover = theme.c.hover;
-    div()
-        .id(id)
-        .flex_none()
-        .size(px(28.0))
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(theme.skin.radius_md)
-        .cursor_pointer()
-        .hover(move |style| style.bg(hover))
-        .child(icon(glyph, 14.0, ink))
-}
-
 fn row(
     shell: &Shell,
     at: usize,
@@ -166,15 +146,16 @@ fn row(
                 ),
         )
         .child(
-            tool(("certificate-export", at), "download", theme.c.muted, theme)
-                .debug_selector(move || format!("export-{tag}"))
+            IconButton::at("certificate-export", at, "download")
+                .selector(format!("export-{tag}"))
                 .on_click(cx.listener(move |shell, _, _, cx| {
                     shell.export_certificate(&for_export, cx);
                 })),
         )
         .child(
-            tool(("certificate-delete", at), "trash-2", theme.c.bad, theme)
-                .debug_selector(move || format!("delete-{tag_delete}"))
+            IconButton::at("certificate-delete", at, "trash-2")
+                .tone(Tone::Danger)
+                .selector(format!("delete-{tag_delete}"))
                 .on_click(cx.listener(move |shell, _, _, cx| {
                     shell.delete_certificate(&for_delete, cx);
                 })),
@@ -187,8 +168,6 @@ pub(super) fn render(
     theme: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
-    let mut veil = gpui::black();
-    veil.a = 0.5;
     let hover = theme.c.hover;
     let button = |id: &'static str, name: &'static str| {
         div()
@@ -204,85 +183,63 @@ pub(super) fn render(
             .hover(move |style| style.bg(hover))
             .child(name)
     };
-    div()
-        .id("certificates")
-        .absolute()
-        .size_full()
-        .top_0()
-        .left_0()
-        .occlude()
-        .bg(veil)
-        .flex()
-        .items_center()
-        .justify_center()
-        .child(
-            div()
-                .w(px(480.0))
-                .max_h(px(560.0))
-                .flex()
-                .flex_col()
-                .gap(px(12.0))
-                .p(px(22.0))
-                .rounded(theme.skin.radius_lg)
-                .bg(opaque(theme.c.card, theme.c.bg0))
-                .border_1()
-                .border_color(theme.c.line2)
-                .shadow_lg()
-                .child(
-                    div()
-                        .text_size(px(16.0))
-                        .font_weight(EMPHASIS)
-                        .child("Certificates"),
-                )
-                .child(div().text_size(px(12.5)).text_color(theme.c.muted).child(
-                    "A server recognises you by your certificate, and a \
+    Dialog::new("certificates")
+        .w(px(480.0))
+        .max_h(px(560.0))
+        .gap(px(12.0))
+        .p(px(22.0))
+        .title("Certificates")
+        .child(div().text_size(px(12.5)).text_color(theme.c.muted).child(
+            "A server recognises you by your certificate, and a \
                              registration belongs to it. Export one to use it on \
                              another machine; an exported file holds its private key.",
-                ))
+        ))
+        .child(
+            div()
+                .id("certificate-list")
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .flex()
+                .flex_col()
+                .gap(px(6.0))
+                .text_size(px(13.0))
+                .when(shell.panels.certs.held.is_empty(), |list| {
+                    list.child(
+                        div()
+                            .py(px(10.0))
+                            .text_color(theme.c.muted)
+                            .child("None yet: one is made the first time an identity connects."),
+                    )
+                })
+                .children(
+                    shell
+                        .panels
+                        .certs
+                        .held
+                        .iter()
+                        .enumerate()
+                        .map(|(at, label)| row(shell, at, label, theme, cx)),
+                ),
+        )
+        .child(
+            div()
+                .flex()
+                .justify_between()
+                .text_size(px(13.0))
                 .child(
-                    div()
-                        .id("certificate-list")
-                        .flex_1()
-                        .min_h_0()
-                        .overflow_y_scroll()
-                        .flex()
-                        .flex_col()
-                        .gap(px(6.0))
-                        .text_size(px(13.0))
-                        .when(shell.panels.certs.held.is_empty(), |list| {
-                            list.child(div().py(px(10.0)).text_color(theme.c.muted).child(
-                                "None yet: one is made the first time an identity connects.",
-                            ))
-                        })
-                        .children(
-                            shell
-                                .panels
-                                .certs
-                                .held
-                                .iter()
-                                .enumerate()
-                                .map(|(at, label)| row(shell, at, label, theme, cx)),
-                        ),
+                    button("import-certificate", "Import…")
+                        .text_color(theme.c.accent_text)
+                        .on_click(cx.listener(|shell, _, _, cx| {
+                            shell.import_certificate(cx);
+                        })),
                 )
                 .child(
-                    div()
-                        .flex()
-                        .justify_between()
-                        .text_size(px(13.0))
-                        .child(
-                            button("import-certificate", "Import…")
-                                .text_color(theme.c.accent_text)
-                                .on_click(cx.listener(|shell, _, _, cx| {
-                                    shell.import_certificate(cx);
-                                })),
-                        )
-                        .child(
-                            button("certificates-close", "Close")
-                                .text_color(theme.c.muted)
-                                .on_click(cx.listener(|shell, _, _, cx| {
-                                    shell.toggle_certificates(cx);
-                                })),
-                        ),
+                    button("certificates-close", "Close")
+                        .text_color(theme.c.muted)
+                        .on_click(cx.listener(|shell, _, _, cx| {
+                            shell.toggle_certificates(cx);
+                        })),
                 ),
         )
 }

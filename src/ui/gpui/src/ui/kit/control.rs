@@ -1,0 +1,198 @@
+//! The small controls: a row of a menu, a switch, a radio mark.
+
+use gpui::{
+    App, ClickEvent, ElementId, IntoElement, MouseButton, ParentElement, RenderOnce, SharedString,
+    Styled, Window, div, prelude::*, px,
+};
+
+use super::icon;
+use crate::theme::ActiveTheme;
+
+type OnClick = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
+
+/// One row of a menu or of a list of choices: what it says, a tick at its
+/// end if it is the one in force.
+///
+/// ```ignore
+/// MenuItem::new(("menu-item", index), "Rename…").selector("menu-Rename…").on_click(...)
+/// ```
+#[derive(IntoElement)]
+pub(crate) struct MenuItem {
+    id: ElementId,
+    selector: Option<SharedString>,
+    label: SharedString,
+    lead: Option<gpui::AnyElement>,
+    danger: bool,
+    ticked: bool,
+    selected: bool,
+    height: f32,
+    on_click: Option<OnClick>,
+}
+
+impl MenuItem {
+    pub(crate) fn new(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
+        Self {
+            id: id.into(),
+            selector: None,
+            label: label.into(),
+            lead: None,
+            danger: false,
+            ticked: false,
+            selected: false,
+            height: 30.0,
+            on_click: None,
+        }
+    }
+
+    /// What the tests call it.
+    pub(crate) fn selector(mut self, selector: impl Into<SharedString>) -> Self {
+        self.selector = Some(selector.into());
+        self
+    }
+
+    /// Something drawn before the words: a swatch, an icon.
+    pub(crate) fn lead(mut self, lead: impl IntoElement) -> Self {
+        self.lead = Some(lead.into_any_element());
+        self
+    }
+
+    /// In the destructive ink.
+    pub(crate) fn danger(mut self, danger: bool) -> Self {
+        self.danger = danger;
+        self
+    }
+
+    /// With a tick at its end.
+    pub(crate) fn ticked(mut self, ticked: bool) -> Self {
+        self.ticked = ticked;
+        self
+    }
+
+    /// Washed in the accent: the choice in force.
+    pub(crate) fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    /// The row's height, in pixels.
+    pub(crate) fn height(mut self, height: f32) -> Self {
+        self.height = height;
+        self
+    }
+
+    pub(crate) fn on_click(
+        mut self,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_click = Some(Box::new(handler));
+        self
+    }
+}
+
+impl RenderOnce for MenuItem {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let theme = ActiveTheme::get(cx);
+        let hover = theme.c.hover;
+        div()
+            .id(self.id)
+            .when_some(self.selector, |row, selector| {
+                row.debug_selector(move || selector.to_string())
+            })
+            .flex_none()
+            .h(px(self.height))
+            .flex()
+            .items_center()
+            .gap(px(8.0))
+            .px(px(10.0))
+            .rounded(theme.skin.radius_md)
+            .cursor_pointer()
+            .text_size(px(13.0))
+            .when(self.danger, |row| row.text_color(theme.c.bad))
+            .map(|row| {
+                if self.selected {
+                    row.bg(theme.c.accent_soft)
+                } else {
+                    row.hover(move |style| style.bg(hover))
+                }
+            })
+            // Not also a press on whatever the menu floats over.
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .when_some(self.on_click, |row, handler| row.on_click(handler))
+            .children(self.lead)
+            .child(div().flex_1().min_w_0().truncate().child(self.label))
+            .when(self.ticked, |row| {
+                row.child(icon("check", 13.0, theme.c.accent_text))
+            })
+    }
+}
+
+/// A switch: a track with a knob at the end that says on. It only shows;
+/// the row it sits in takes the click.
+#[derive(IntoElement)]
+pub(crate) struct Switch {
+    on: bool,
+}
+
+impl Switch {
+    pub(crate) fn new(on: bool) -> Self {
+        Self { on }
+    }
+}
+
+impl RenderOnce for Switch {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let theme = ActiveTheme::get(cx);
+        let (track, knob) = if self.on {
+            (theme.c.accent, theme.c.on_accent)
+        } else {
+            (theme.c.card2, theme.c.muted)
+        };
+        div()
+            .flex_none()
+            .w(px(30.0))
+            .h(px(17.0))
+            .p(px(2.0))
+            .rounded(theme.skin.radius_pill)
+            .bg(track)
+            .flex()
+            .when(self.on, Styled::justify_end)
+            .child(
+                div()
+                    .size(px(13.0))
+                    .rounded(theme.skin.radius_pill)
+                    .bg(knob),
+            )
+    }
+}
+
+/// A radio mark: a ring, filled when it is the one chosen. It only shows;
+/// the row it sits in takes the click.
+#[derive(IntoElement)]
+pub(crate) struct Radio {
+    chosen: bool,
+}
+
+impl Radio {
+    pub(crate) fn new(chosen: bool) -> Self {
+        Self { chosen }
+    }
+}
+
+impl RenderOnce for Radio {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let theme = ActiveTheme::get(cx);
+        let ink = theme.c.accent_text;
+        div()
+            .flex_none()
+            .size(px(16.0))
+            .rounded_full()
+            .border_2()
+            .border_color(if self.chosen { ink } else { theme.c.line2 })
+            .flex()
+            .items_center()
+            .justify_center()
+            .when(self.chosen, |ring| {
+                ring.child(div().size(px(6.0)).rounded_full().bg(ink))
+            })
+    }
+}

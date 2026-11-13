@@ -6,9 +6,9 @@ use gpui::{
 };
 
 use super::Shell;
-use super::kit::{Button, Emphasis, Tone};
+use super::kit::{Button, Dialog, Emphasis, Tone};
 use super::text_input::{InputEvent, TextInput};
-use super::widgets::{EMPHASIS, icon, label, opaque};
+use super::widgets::{EMPHASIS, icon, label};
 use crate::engine::SavedServer;
 use crate::theme::Theme;
 
@@ -266,73 +266,51 @@ pub(super) fn render(
     theme: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
-    let mut veil = gpui::black();
-    veil.a = 0.5;
     let title = if editor.editing.is_some() {
         "Edit identity"
     } else {
         "Add a server"
     };
     let names = ["Name", "Address", "Port", "Join as"];
-    div()
-        .id("server-editor")
-        .absolute()
-        .size_full()
-        .top_0()
-        .left_0()
-        .occlude()
-        .bg(veil)
-        .flex()
-        .items_center()
-        .justify_center()
+    Dialog::new("server-editor")
+        .w(px(440.0))
+        .gap(px(12.0))
+        .p(px(22.0))
         .child(
             div()
-                .w(px(440.0))
-                .flex()
-                .flex_col()
-                .gap(px(12.0))
-                .p(px(22.0))
-                .rounded(theme.skin.radius_lg)
-                .bg(opaque(theme.c.card, theme.c.bg0))
-                .border_1()
-                .border_color(theme.c.line2)
-                .shadow_lg()
-                .child(
-                    div()
-                        .text_size(px(17.0))
-                        .font_weight(EMPHASIS)
-                        .child(label(title, theme)),
-                )
-                .children(
-                    names
-                        .into_iter()
-                        .zip(editor.fields.iter())
-                        .map(|(name, input)| field_row(name, input, theme)),
-                )
-                .child(toggle_row(
-                    "certificate",
-                    "Use a certificate, so the server can recognise you",
-                    editor.certificate,
-                    theme,
-                    cx,
-                ))
-                .child(toggle_row(
-                    "favourite",
-                    "Favourite",
-                    editor.favorite,
-                    theme,
-                    cx,
-                ))
-                .when_some(editor.error.clone(), |dialog, problem| {
-                    dialog.child(
-                        div()
-                            .text_size(px(12.5))
-                            .text_color(theme.c.bad)
-                            .child(problem),
-                    )
-                })
-                .child(buttons(editor.editing.is_some(), cx)),
+                .text_size(px(17.0))
+                .font_weight(EMPHASIS)
+                .child(label(title, theme)),
         )
+        .children(
+            names
+                .into_iter()
+                .zip(editor.fields.iter())
+                .map(|(name, input)| field_row(name, input, theme)),
+        )
+        .child(toggle_row(
+            "certificate",
+            "Use a certificate, so the server can recognise you",
+            editor.certificate,
+            theme,
+            cx,
+        ))
+        .child(toggle_row(
+            "favourite",
+            "Favourite",
+            editor.favorite,
+            theme,
+            cx,
+        ))
+        .when_some(editor.error.clone(), |dialog, problem| {
+            dialog.child(
+                div()
+                    .text_size(px(12.5))
+                    .text_color(theme.c.bad)
+                    .child(problem),
+            )
+        })
+        .child(buttons(editor.editing.is_some(), cx))
 }
 
 fn field_row(

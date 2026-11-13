@@ -12,8 +12,9 @@ use gpui::{
 };
 
 use super::Shell;
+use super::kit::{Dialog, IconButton, Tone};
 use super::text_input::TextInput;
-use super::widgets::{EMPHASIS, icon, opaque};
+use super::widgets::{EMPHASIS, icon};
 use crate::engine::{Action, Ban, Listing, Registered};
 use crate::theme::Theme;
 
@@ -209,49 +210,24 @@ impl Shell {
                                 ),
                         )
                         .when_some(renames, |row, id| {
-                            row.child(
-                                tool("admin-rename", at, "pencil", theme.c.muted, &theme).on_click(
-                                    cx.listener(move |shell, _, window, cx| {
-                                        shell.ask_to_rename_registered(id, window, cx);
-                                    }),
-                                ),
-                            )
+                            row.child(IconButton::at("admin-rename", at, "pencil").on_click(
+                                cx.listener(move |shell, _, window, cx| {
+                                    shell.ask_to_rename_registered(id, window, cx);
+                                }),
+                            ))
                         })
                         .child(
-                            tool("admin-remove", at, "trash-2", theme.c.bad, &theme).on_click(
-                                cx.listener(move |shell, _, _, cx| {
+                            IconButton::at("admin-remove", at, "trash-2")
+                                .tone(Tone::Danger)
+                                .on_click(cx.listener(move |shell, _, _, cx| {
                                     shell.remove_admin_row(at, cx);
-                                }),
-                            ),
+                                })),
                         )
                         .into_any_element(),
                 )
             })
             .collect()
     }
-}
-
-/// A small button at the end of a row, named `<id>-<at>`.
-fn tool(
-    id: &'static str,
-    at: usize,
-    glyph: &'static str,
-    ink: gpui::Hsla,
-    theme: &Theme,
-) -> gpui::Stateful<gpui::Div> {
-    let hover = theme.c.hover;
-    div()
-        .id((id, at))
-        .debug_selector(move || format!("{id}-{at}"))
-        .flex_none()
-        .size(px(28.0))
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(theme.skin.radius_md)
-        .cursor_pointer()
-        .hover(move |style| style.bg(hover))
-        .child(icon(glyph, 14.0, ink))
 }
 
 /// Who or what a ban is on: the name, or the address when it has none.
@@ -360,8 +336,6 @@ pub(super) fn render(
     theme: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
-    let mut veil = gpui::black();
-    veil.a = 0.5;
     let hover = theme.c.hover;
     let loaded = match admin.listing {
         Listing::Bans => admin.bans.is_some(),
@@ -388,60 +362,40 @@ pub(super) fn render(
         .size_full()
         .into_any_element()
     };
-    div()
-        .id("admin")
-        .absolute()
-        .size_full()
-        .top_0()
-        .left_0()
-        .occlude()
-        .bg(veil)
-        .flex()
-        .items_center()
-        .justify_center()
+    Dialog::new("admin")
+        .w(px(560.0))
+        .h(px(520.0))
+        .gap(px(12.0))
+        .p(px(22.0))
+        .children(head(admin, theme, cx))
         .child(
             div()
-                .w(px(560.0))
-                .h(px(520.0))
-                .flex()
-                .flex_col()
-                .gap(px(12.0))
-                .p(px(22.0))
-                .rounded(theme.skin.radius_lg)
-                .bg(opaque(theme.c.card, theme.c.bg0))
-                .border_1()
-                .border_color(theme.c.line2)
-                .shadow_lg()
-                .children(head(admin, theme, cx))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_h_0()
-                        .rounded(theme.skin.radius_md)
-                        .bg(theme.c.card2)
-                        .text_size(px(13.0))
-                        .child(body),
-                )
-                .child(
-                    div().flex().justify_end().child(
-                        div()
-                            .id("admin-close")
-                            .debug_selector(|| "admin-close".to_owned())
-                            .h(px(36.0))
-                            .px(px(18.0))
-                            .flex()
-                            .items_center()
-                            .rounded(theme.skin.radius_md)
-                            .cursor_pointer()
-                            .text_color(theme.c.muted)
-                            .hover(move |style| style.bg(hover))
-                            .on_click(cx.listener(|shell, _, _, cx| {
-                                shell.panels.admin = None;
-                                cx.notify();
-                            }))
-                            .child("Close"),
-                    ),
-                ),
+                .flex_1()
+                .min_h_0()
+                .rounded(theme.skin.radius_md)
+                .bg(theme.c.card2)
+                .text_size(px(13.0))
+                .child(body),
+        )
+        .child(
+            div().flex().justify_end().child(
+                div()
+                    .id("admin-close")
+                    .debug_selector(|| "admin-close".to_owned())
+                    .h(px(36.0))
+                    .px(px(18.0))
+                    .flex()
+                    .items_center()
+                    .rounded(theme.skin.radius_md)
+                    .cursor_pointer()
+                    .text_color(theme.c.muted)
+                    .hover(move |style| style.bg(hover))
+                    .on_click(cx.listener(|shell, _, _, cx| {
+                        shell.panels.admin = None;
+                        cx.notify();
+                    }))
+                    .child("Close"),
+            ),
         )
 }
 

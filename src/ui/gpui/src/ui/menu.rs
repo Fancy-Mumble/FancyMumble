@@ -7,9 +7,9 @@ use gpui::{
 };
 
 use super::Shell;
-use super::kit::{Button, Emphasis, Tone};
+use super::kit::{Button, Dialog, Emphasis, MenuItem, Sheet, Tone};
 use super::text_input::{InputEvent, TextInput};
-use super::widgets::{EMPHASIS, icon, label, opaque};
+use super::widgets::label;
 use crate::engine::{
     Action, Channel, ChannelId, Conversation, Listing, Message, Session, Subject, User,
     WhisperTarget,
@@ -1044,7 +1044,6 @@ pub(super) fn render_menu(
         .y
         .min(viewport.height - height - px(8.0))
         .max(px(4.0));
-    let hover = theme.c.hover;
     div()
         .id("menu-backdrop")
         .debug_selector(|| "menu-backdrop".to_owned())
@@ -1061,7 +1060,7 @@ pub(super) fn render_menu(
             }),
         )
         .child(
-            div()
+            Sheet::new("menu")
                 .absolute()
                 .left(left)
                 .top(top)
@@ -1069,38 +1068,18 @@ pub(super) fn render_menu(
                 .flex()
                 .flex_col()
                 .p(px(6.0))
-                .rounded(theme.skin.radius_lg)
-                .bg(opaque(theme.c.card, theme.c.bg0))
-                .border_1()
-                .border_color(theme.c.line2)
-                .shadow_lg()
                 .when(!menu.quick.is_empty(), |list| {
                     list.child(quick_row(menu, theme, cx))
                 })
                 .children(menu.items.iter().enumerate().map(|(index, item)| {
-                    let tag = item.name.clone();
-                    div()
-                        .id(("menu-item", index))
-                        .debug_selector(move || format!("menu-{tag}"))
-                        .h(px(ROW))
-                        .flex()
-                        .items_center()
-                        .gap(px(8.0))
-                        .px(px(10.0))
-                        .rounded(theme.skin.radius_md)
-                        .cursor_pointer()
-                        .text_size(px(13.0))
-                        .when(item.danger, |row| row.text_color(theme.c.bad))
-                        .hover(move |style| style.bg(hover))
-                        // Not also a press on the backdrop underneath.
-                        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    MenuItem::new(("menu-item", index), item.name.clone())
+                        .selector(format!("menu-{}", item.name))
+                        .height(ROW)
+                        .danger(item.danger)
+                        .ticked(item.ticked)
                         .on_click(cx.listener(move |shell, _, window, cx| {
                             shell.choose(index, window, cx);
                         }))
-                        .child(div().flex_1().min_w_0().truncate().child(item.name.clone()))
-                        .when(item.ticked, |row| {
-                            row.child(icon("check", 13.0, theme.c.accent_text))
-                        })
                 })),
         )
 }
@@ -1134,74 +1113,47 @@ pub(super) fn render_prompt(
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     let (title, _, confirm) = prompt.question.wording();
-    let mut veil = gpui::black();
-    veil.a = 0.5;
-    div()
-        .id("prompt")
-        .absolute()
-        .size_full()
-        .top_0()
-        .left_0()
-        .occlude()
-        .bg(veil)
-        .flex()
-        .items_center()
-        .justify_center()
+    Dialog::new("prompt")
+        .w(px(400.0))
+        .gap(px(14.0))
+        .p(px(22.0))
+        .title(label(title, theme))
+        .when_some(prompt.input.clone(), |dialog, input| {
+            dialog.child(
+                div()
+                    .min_h(px(38.0))
+                    .when(prompt.question.takes_lines(), |field| {
+                        field.min_h(px(120.0)).items_start().py(px(10.0))
+                    })
+                    .flex()
+                    .when(!prompt.question.takes_lines(), Styled::items_center)
+                    .px(px(12.0))
+                    .rounded(theme.skin.radius_md)
+                    .bg(theme.c.input)
+                    .border_1()
+                    .border_color(theme.c.line2)
+                    .child(input),
+            )
+        })
         .child(
             div()
-                .w(px(400.0))
                 .flex()
-                .flex_col()
-                .gap(px(14.0))
-                .p(px(22.0))
-                .rounded(theme.skin.radius_lg)
-                .bg(opaque(theme.c.card, theme.c.bg0))
-                .border_1()
-                .border_color(theme.c.line2)
-                .shadow_lg()
+                .items_center()
+                .justify_end()
+                .gap(px(8.0))
                 .child(
-                    div()
-                        .text_size(px(16.0))
-                        .font_weight(EMPHASIS)
-                        .child(label(title, theme)),
+                    Button::new("prompt-cancel", "Cancel")
+                        .on_click(cx.listener(|shell, _, _, cx| shell.close_prompt(cx))),
                 )
-                .when_some(prompt.input.clone(), |dialog, input| {
-                    dialog.child(
-                        div()
-                            .min_h(px(38.0))
-                            .when(prompt.question.takes_lines(), |field| {
-                                field.min_h(px(120.0)).items_start().py(px(10.0))
-                            })
-                            .flex()
-                            .when(!prompt.question.takes_lines(), Styled::items_center)
-                            .px(px(12.0))
-                            .rounded(theme.skin.radius_md)
-                            .bg(theme.c.input)
-                            .border_1()
-                            .border_color(theme.c.line2)
-                            .child(input),
-                    )
-                })
                 .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_end()
-                        .gap(px(8.0))
-                        .child(
-                            Button::new("prompt-cancel", "Cancel")
-                                .on_click(cx.listener(|shell, _, _, cx| shell.close_prompt(cx))),
-                        )
-                        .child(
-                            Button::new("prompt-ok", confirm)
-                                .emphasis(Emphasis::Contained)
-                                .tone(if prompt.question.destructive() {
-                                    Tone::Danger
-                                } else {
-                                    Tone::Accent
-                                })
-                                .on_click(cx.listener(|shell, _, _, cx| shell.answer_prompt(cx))),
-                        ),
+                    Button::new("prompt-ok", confirm)
+                        .emphasis(Emphasis::Contained)
+                        .tone(if prompt.question.destructive() {
+                            Tone::Danger
+                        } else {
+                            Tone::Accent
+                        })
+                        .on_click(cx.listener(|shell, _, _, cx| shell.answer_prompt(cx))),
                 ),
         )
 }
@@ -1212,92 +1164,65 @@ pub(super) fn render_info(
     theme: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
-    let mut veil = gpui::black();
-    veil.a = 0.5;
     let hover = theme.c.hover;
     let body = info_body(info, theme);
-    div()
-        .id("info")
-        .absolute()
-        .size_full()
-        .top_0()
-        .left_0()
-        .occlude()
-        .bg(veil)
-        .flex()
-        .items_center()
-        .justify_center()
+    Dialog::new("info")
+        .w(px(460.0))
+        .max_h(px(520.0))
+        .gap(px(14.0))
+        .p(px(22.0))
+        .title(info.title.clone())
+        .when(!info.facts.is_empty(), |card| {
+            card.child(
+                div()
+                    .debug_selector(|| "info-facts".to_owned())
+                    .flex()
+                    .flex_col()
+                    .gap(px(4.0))
+                    .text_size(px(12.5))
+                    .children(info.facts.iter().map(|(name, value)| {
+                        div()
+                            .flex()
+                            .gap(px(12.0))
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .w(px(130.0))
+                                    .text_color(theme.c.muted)
+                                    .child(name.clone()),
+                            )
+                            .child(div().flex_1().min_w_0().child(value.clone()))
+                    })),
+            )
+        })
         .child(
             div()
-                .w(px(460.0))
-                .max_h(px(520.0))
-                .flex()
-                .flex_col()
-                .gap(px(14.0))
-                .p(px(22.0))
-                .rounded(theme.skin.radius_lg)
-                .bg(opaque(theme.c.card, theme.c.bg0))
-                .border_1()
-                .border_color(theme.c.line2)
-                .shadow_lg()
-                .child(
-                    div()
-                        .text_size(px(16.0))
-                        .font_weight(EMPHASIS)
-                        .child(info.title.clone()),
-                )
-                .when(!info.facts.is_empty(), |card| {
-                    card.child(
-                        div()
-                            .debug_selector(|| "info-facts".to_owned())
-                            .flex()
-                            .flex_col()
-                            .gap(px(4.0))
-                            .text_size(px(12.5))
-                            .children(info.facts.iter().map(|(name, value)| {
-                                div()
-                                    .flex()
-                                    .gap(px(12.0))
-                                    .child(
-                                        div()
-                                            .flex_none()
-                                            .w(px(130.0))
-                                            .text_color(theme.c.muted)
-                                            .child(name.clone()),
-                                    )
-                                    .child(div().flex_1().min_w_0().child(value.clone()))
-                            })),
-                    )
-                })
-                .child(
-                    div()
-                        .id("info-body")
-                        .flex_1()
-                        .min_h_0()
-                        .overflow_y_scroll()
-                        .text_size(px(13.5))
-                        .child(body),
-                )
-                .child(
-                    div().flex().justify_end().child(
-                        div()
-                            .id("info-close")
-                            .debug_selector(|| "info-close".to_owned())
-                            .h(px(36.0))
-                            .px(px(18.0))
-                            .flex()
-                            .items_center()
-                            .rounded(theme.skin.radius_md)
-                            .cursor_pointer()
-                            .text_color(theme.c.muted)
-                            .hover(move |style| style.bg(hover))
-                            .on_click(cx.listener(|shell, _, _, cx| {
-                                shell.info = None;
-                                cx.notify();
-                            }))
-                            .child(label("Close", theme)),
-                    ),
-                ),
+                .id("info-body")
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .text_size(px(13.5))
+                .child(body),
+        )
+        .child(
+            div().flex().justify_end().child(
+                div()
+                    .id("info-close")
+                    .debug_selector(|| "info-close".to_owned())
+                    .h(px(36.0))
+                    .px(px(18.0))
+                    .flex()
+                    .items_center()
+                    .rounded(theme.skin.radius_md)
+                    .cursor_pointer()
+                    .text_color(theme.c.muted)
+                    .hover(move |style| style.bg(hover))
+                    .on_click(cx.listener(|shell, _, _, cx| {
+                        shell.info = None;
+                        cx.notify();
+                    }))
+                    .child(label("Close", theme)),
+            ),
         )
 }
 

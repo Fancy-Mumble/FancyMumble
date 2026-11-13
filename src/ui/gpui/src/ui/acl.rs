@@ -11,7 +11,8 @@ use gpui::{
 };
 
 use super::Shell;
-use super::widgets::{EMPHASIS, icon, opaque};
+use super::kit::{Button, Dialog, Size, Tone};
+use super::widgets::{EMPHASIS, icon};
 use crate::engine::{Acl, AclRule, Action, ChannelId};
 use crate::theme::Theme;
 
@@ -367,28 +368,6 @@ fn rule_editor(rule: &AclRule, theme: &Theme, cx: &mut Context<Shell>) -> AnyEle
         .into_any_element()
 }
 
-/// A button at the foot of the panel.
-fn button(
-    id: &'static str,
-    name: &'static str,
-    ink: gpui::Hsla,
-    theme: &Theme,
-) -> gpui::Stateful<gpui::Div> {
-    let hover = theme.c.hover;
-    div()
-        .id(id)
-        .debug_selector(move || id.to_owned())
-        .h(px(34.0))
-        .px(px(14.0))
-        .flex()
-        .items_center()
-        .rounded(theme.skin.radius_md)
-        .cursor_pointer()
-        .text_color(ink)
-        .hover(move |style| style.bg(hover))
-        .child(name)
-}
-
 /// The two columns: the rules, and the editor of the one chosen.
 fn columns(panel: &Panel, acl: &Acl, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement {
     let editor = match panel.selected.and_then(|at| acl.rules.get(at)) {
@@ -436,8 +415,6 @@ fn columns(panel: &Panel, acl: &Acl, theme: &Theme, cx: &mut Context<Shell>) -> 
 
 /// The panel, over a veil.
 pub(super) fn render(panel: &Panel, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement {
-    let mut veil = gpui::black();
-    veil.a = 0.5;
     let body = match &panel.acl {
         None => div()
             .flex_1()
@@ -448,80 +425,57 @@ pub(super) fn render(panel: &Panel, theme: &Theme, cx: &mut Context<Shell>) -> i
         Some(acl) => columns(panel, acl, theme, cx).into_any_element(),
     };
     let inherit = panel.acl.as_ref().is_some_and(|acl| acl.inherit);
-    div()
-        .id("acl")
-        .absolute()
-        .size_full()
-        .top_0()
-        .left_0()
-        .occlude()
-        .bg(veil)
-        .flex()
-        .items_center()
-        .justify_center()
+    Dialog::new("acl")
+        .w(px(640.0))
+        .h(px(580.0))
+        .gap(px(12.0))
+        .p(px(22.0))
         .child(
             div()
-                .w(px(640.0))
-                .h(px(580.0))
                 .flex()
-                .flex_col()
-                .gap(px(12.0))
-                .p(px(22.0))
-                .rounded(theme.skin.radius_lg)
-                .bg(opaque(theme.c.card, theme.c.bg0))
-                .border_1()
-                .border_color(theme.c.line2)
-                .shadow_lg()
+                .items_center()
+                .gap(px(8.0))
+                .child(icon("key-round", 15.0, theme.c.muted))
                 .child(
                     div()
-                        .flex()
-                        .items_center()
-                        .gap(px(8.0))
-                        .child(icon("key-round", 15.0, theme.c.muted))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .truncate()
-                                .text_size(px(16.0))
-                                .font_weight(EMPHASIS)
-                                .child(SharedString::from(format!(
-                                    "Permissions in {}",
-                                    panel.title
-                                ))),
-                        )
-                        .child(
-                            button(
-                                "acl-inherit",
-                                if inherit {
-                                    "Takes the parent's rules"
-                                } else {
-                                    "Ignores the parent's rules"
-                                },
-                                theme.c.accent_text,
-                                theme,
-                            )
-                            .text_size(px(12.0))
-                            .on_click(cx.listener(
-                                |shell, _, _, cx| {
-                                    if let Some(panel) = shell.panels.acl.as_mut()
-                                        && let Some(acl) = panel.acl.as_mut()
-                                    {
-                                        acl.inherit = !acl.inherit;
-                                        panel.dirty = true;
-                                    }
-                                    cx.notify();
-                                },
-                            )),
-                        ),
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_size(px(16.0))
+                        .font_weight(EMPHASIS)
+                        .child(SharedString::from(format!(
+                            "Permissions in {}",
+                            panel.title
+                        ))),
                 )
-                .child(body)
-                .child(foot(panel, theme, cx)),
+                .child(
+                    Button::new(
+                        "acl-inherit",
+                        if inherit {
+                            "Takes the parent's rules"
+                        } else {
+                            "Ignores the parent's rules"
+                        },
+                    )
+                    .tone(Tone::Accent)
+                    .size(Size::Small)
+                    .on_click(cx.listener(|shell, _, _, cx| {
+                        if let Some(panel) = shell.panels.acl.as_mut()
+                            && let Some(acl) = panel.acl.as_mut()
+                        {
+                            acl.inherit = !acl.inherit;
+                            panel.dirty = true;
+                        }
+                        cx.notify();
+                    })),
+                ),
         )
+        .child(body)
+        .child(foot(panel, cx))
 }
 
 /// The buttons under the two columns.
-fn foot(panel: &Panel, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement {
+fn foot(panel: &Panel, cx: &mut Context<Shell>) -> impl IntoElement {
     let channel = panel.channel;
     div()
         .flex()
@@ -529,42 +483,33 @@ fn foot(panel: &Panel, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoEleme
         .gap(px(4.0))
         .text_size(px(13.0))
         .child(
-            button(
-                "acl-add",
-                "Add a rule for a group…",
-                theme.c.accent_text,
-                theme,
-            )
-            .on_click(cx.listener(move |shell, _, window: &mut Window, cx| {
-                shell.ask_for_acl_group(channel, window, cx);
-            })),
+            Button::new("acl-add", "Add a rule for a group…")
+                .tone(Tone::Accent)
+                .size(Size::Small)
+                .on_click(cx.listener(move |shell, _, window: &mut Window, cx| {
+                    shell.ask_for_acl_group(channel, window, cx);
+                })),
         )
         .child(
-            button("acl-remove", "Remove this rule", theme.c.bad, theme)
+            Button::new("acl-remove", "Remove this rule")
+                .tone(Tone::Danger)
+                .size(Size::Small)
                 .on_click(cx.listener(|shell, _, _, cx| shell.remove_acl_rule(cx))),
         )
         .child(div().flex_1())
         .child(
-            button("acl-close", "Close", theme.c.muted, theme).on_click(cx.listener(
-                |shell, _, _, cx| {
+            Button::new("acl-close", "Close")
+                .size(Size::Small)
+                .on_click(cx.listener(|shell, _, _, cx| {
                     shell.panels.acl = None;
                     cx.notify();
-                },
-            )),
+                })),
         )
         .child(
-            button(
-                "acl-save",
-                "Save",
-                if panel.dirty {
-                    theme.c.accent_text
-                } else {
-                    theme.c.dim
-                },
-                theme,
-            )
-            .font_weight(EMPHASIS)
-            .on_click(cx.listener(|shell, _, _, cx| shell.save_acl(cx))),
+            Button::new("acl-save", "Save")
+                .tone(if panel.dirty { Tone::Accent } else { Tone::Dim })
+                .size(Size::Small)
+                .on_click(cx.listener(|shell, _, _, cx| shell.save_acl(cx))),
         )
 }
 

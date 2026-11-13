@@ -3,7 +3,8 @@
 use gpui::{Context, IntoElement, ParentElement, SharedString, Styled, div, prelude::*, px};
 
 use super::Shell;
-use super::widgets::{EMPHASIS, icon, label, opaque};
+use super::kit::{Sheet, Switch};
+use super::widgets::{EMPHASIS, icon, label};
 use crate::engine::{AudioDevice, ChosenDevices, VoiceSettings};
 use crate::theme::Theme;
 
@@ -109,24 +110,17 @@ pub(super) fn render(
     theme: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
-    let panel = div()
-        .id("devices")
+    let panel = Sheet::new("devices")
+        .scrolls()
         .absolute()
         .bottom(px(112.0))
         .left(theme.skin.rail_width + px(12.0))
         .w(theme.skin.column_width - px(24.0))
         .max_h(px(560.0))
-        .overflow_y_scroll()
-        .occlude()
         .flex()
         .flex_col()
         .gap(px(2.0))
-        .p(px(8.0))
-        .rounded(theme.skin.radius_lg)
-        .bg(opaque(theme.c.card, theme.c.bg0))
-        .border_1()
-        .border_color(theme.c.line2)
-        .shadow_lg();
+        .p(px(8.0));
     let Some(devices) = &shell.devices else {
         return panel.child(
             div()
@@ -258,26 +252,7 @@ fn toggle(
             );
         }))
         .child(div().flex_1().min_w_0().child(name))
-        .child(switch(on, theme))
-}
-
-/// A switch: a track with a knob at the end that says on.
-fn switch(on: bool, theme: &Theme) -> impl IntoElement + use<> {
-    div()
-        .flex_none()
-        .w(px(30.0))
-        .h(px(17.0))
-        .p(px(2.0))
-        .rounded(theme.skin.radius_pill)
-        .bg(if on { theme.c.accent } else { theme.c.card2 })
-        .flex()
-        .when(on, Styled::justify_end)
-        .child(
-            div()
-                .size(px(13.0))
-                .rounded(theme.skin.radius_pill)
-                .bg(if on { theme.c.on_accent } else { theme.c.muted }),
-        )
+        .child(Switch::new(on))
 }
 
 /// The key held to whisper to whoever was chosen from a user's or a

@@ -9,7 +9,8 @@ use gpui::{
 };
 
 use super::Shell;
-use super::widgets::{EMPHASIS, opaque};
+use super::kit::Dialog;
+use super::widgets::EMPHASIS;
 use crate::engine::{Action, ChannelId};
 use crate::theme::Theme;
 
@@ -79,8 +80,6 @@ impl Shell {
 /// The picker, over a veil that closes it.
 pub(super) fn render(theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let hover = theme.c.hover;
-    let mut veil = gpui::black();
-    veil.a = 0.35;
     let groups = GROUPS.iter().enumerate().map(|(group, (name, emoji))| {
         div()
             .flex()
@@ -121,41 +120,18 @@ pub(super) fn render(theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement
                     })),
             )
     });
-    div()
-        .id("emoji-picker")
-        .absolute()
-        .size_full()
-        .top_0()
-        .left_0()
-        .occlude()
-        .bg(veil)
-        .flex()
-        .items_center()
-        .justify_center()
-        .on_mouse_down(
-            gpui::MouseButton::Left,
-            cx.listener(|shell, _, _, cx| {
-                shell.emoji_for = None;
-                cx.notify();
-            }),
-        )
-        .child(
-            div()
-                .id("emoji-groups")
-                .w(px(34.0 * 10.0 + 32.0))
-                .max_h(px(440.0))
-                .overflow_y_scroll()
-                .flex()
-                .flex_col()
-                .gap(px(10.0))
-                .p(px(16.0))
-                .rounded(theme.skin.radius_lg)
-                .bg(opaque(theme.c.card, theme.c.bg0))
-                .border_1()
-                .border_color(theme.c.line2)
-                .shadow_lg()
-                .children(groups),
-        )
+    Dialog::new("emoji-picker")
+        .veil(0.35)
+        .on_dismiss(cx.listener(|shell, _, _, cx| {
+            shell.emoji_for = None;
+            cx.notify();
+        }))
+        .w(px(34.0 * 10.0 + 32.0))
+        .max_h(px(440.0))
+        .scrolls()
+        .gap(px(10.0))
+        .p(px(16.0))
+        .children(groups)
 }
 
 #[cfg(test)]
