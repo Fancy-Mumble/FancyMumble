@@ -2130,6 +2130,24 @@ impl EngineHandle {
         self.state.move_user(session, channel).await
     }
 
+    /// Take away what the user `session` says of themselves: their comment.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn reset_comment(&self, session: u32) -> Result<(), String> {
+        self.state.reset_user_comment(session).await
+    }
+
+    /// Take away the picture of the user `session`.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn remove_avatar(&self, session: u32) -> Result<(), String> {
+        self.state.remove_user_avatar(session).await
+    }
+
     /// Register the user `session` on the server under their certificate.
     ///
     /// # Errors
