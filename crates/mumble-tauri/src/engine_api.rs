@@ -605,6 +605,40 @@ impl EngineHandle {
         self.state.apply_audio_settings(settings)
     }
 
+    /// The server's welcome message, as HTML, once connected.
+    pub fn welcome(&self) -> Option<String> {
+        self.state
+            .welcome_text()
+            .filter(|text| !text.trim().is_empty())
+    }
+
+    /// The comment of the user `session`, as HTML; `None` if they have
+    /// none. Asks the server on first use.
+    pub async fn user_comment(&self, session: u32) -> Option<String> {
+        self.state.user_comment_or_fetch(session).await
+    }
+
+    /// The description of `channel`, as HTML; `None` if it has none, or it
+    /// has not arrived yet.
+    pub fn channel_description(&self, channel: u32) -> Option<String> {
+        self.state
+            .channel_description(channel)
+            .filter(|text| !text.trim().is_empty())
+    }
+
+    /// Move into `channel`, presenting `password`.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn join_channel_with_password(
+        &self,
+        channel: u32,
+        password: String,
+    ) -> Result<(), String> {
+        self.state.join_channel(channel, Some(password)).await
+    }
+
     /// How loud the user `session` is played here: 0.0 is silent, 1.0 as
     /// sent, 2.0 twice as loud. Local only; nobody else is told.
     pub fn set_user_volume(&self, session: u32, volume: f32) {

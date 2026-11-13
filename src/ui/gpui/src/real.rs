@@ -14,7 +14,8 @@ use mumble_tauri_lib::engine_api::{
 
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation,
-    Engine, EngineEvent, Message, SavedServer, ServerPing, Snapshot, User, Voice, VoiceSettings,
+    Engine, EngineEvent, Message, SavedServer, ServerPing, Snapshot, Subject, User, Voice,
+    VoiceSettings,
 };
 use crate::store::Store;
 
@@ -38,6 +39,11 @@ struct Shared {
     /// Each user's picture: the marker it was fetched for, and the picture
     /// once it has arrived.
     avatars: Mutex<HashMap<u32, AvatarSlot>>,
+    /// The identity the user last connected as, while they want to be on
+    /// that server: what a lost connection is retried with.
+    wanted: Mutex<Option<(String, Option<String>)>>,
+    /// How many retries have been made since the connection was last up.
+    retries: std::sync::atomic::AtomicU32,
     /// Whether the server refused this connection. The disconnect that
     /// follows a refusal has a reason of its own ("connection lost"), which
     /// must not replace the one that says why.
@@ -66,6 +72,7 @@ impl Shared {
                 self.tell(EngineEvent::StateChanged);
             }
             api::EngineEvent::Connected => {
+                self.retries.store(0, std::sync::atomic::Ordering::Relaxed);
                 self.tell(EngineEvent::Notice(None));
                 self.tell(EngineEvent::StateChanged);
                 self.open_current_conversation(runtime);
@@ -82,8 +89,15 @@ impl Shared {
                 let refused = self
                     .refused
                     .swap(false, std::sync::atomic::Ordering::Relaxed);
+                let lost = reason.is_some() && !refused;
                 if let Some(reason) = disconnect_notice(reason, refused) {
                     self.tell(EngineEvent::Notice(Some(reason.into())));
+                }
+                if refused {
+                    // Asking again would only be refused again.
+                    *self.wanted.lock().unwrap_or_else(PoisonError::into_inner) = None;
+                } else if lost {
+                    self.reconnect_later(runtime);
                 }
                 self.tell(EngineEvent::StateChanged);
                 self.tell(EngineEvent::CurrentChannelChanged);
@@ -117,6 +131,47 @@ impl Shared {
             // The engine API may grow events this view does not draw yet.
             _ => {}
         }
+    }
+
+    /// The connection was lost, not ended: try again after a pause that
+    /// grows with each attempt, for as long as the user still wants to be
+    /// on that server.
+    fn reconnect_later(self: &Arc<Self>, runtime: &tokio::runtime::Handle) {
+        let attempt = self
+            .retries
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let Some(pause) = retry_pause(attempt) else {
+            return;
+        };
+        let shared = Arc::clone(self);
+        drop(runtime.spawn(async move {
+            tokio::time::sleep(pause).await;
+            let wanted = shared
+                .wanted
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone();
+            let Some((id, password)) = wanted else {
+                return;
+            };
+            if shared.engine.connection() != api::Connection::Disconnected {
+                return;
+            }
+            let Some(server) = shared
+                .servers
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .iter()
+                .find(|saved| saved.id == id)
+                .cloned()
+            else {
+                return;
+            };
+            shared.tell(EngineEvent::Notice(Some(
+                "Connection lost. Reconnecting…".into(),
+            )));
+            let _ = shared.engine.connect(target_of(&server, password)).await;
+        }));
     }
 
     /// The local user is in a channel (again): open its conversation, then
@@ -183,6 +238,8 @@ impl RealEngine {
             pings: Mutex::default(),
             first_read: Mutex::default(),
             avatars: Mutex::default(),
+            wanted: Mutex::default(),
+            retries: std::sync::atomic::AtomicU32::new(0),
             refused: std::sync::atomic::AtomicBool::new(false),
             store,
         });
@@ -325,6 +382,7 @@ impl Engine for RealEngine {
                 api::Voice::Muted => Voice::Muted,
             },
             deafened: engine.deafened(),
+            welcome: engine.welcome().map(Into::into),
         }
     }
 
@@ -395,21 +453,26 @@ impl Engine for RealEngine {
         self.shared
             .refused
             .store(false, std::sync::atomic::Ordering::Relaxed);
+        self.shared
+            .retries
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        let password = password.filter(|password| !password.is_empty());
+        *self
+            .shared
+            .wanted
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some((id.to_owned(), password.clone()));
         let engine = self.shared.engine.clone();
-        self.spawn(async move {
-            engine
-                .connect(ConnectTarget {
-                    host: server.host.to_string(),
-                    port: server.port,
-                    username: server.username.to_string(),
-                    certificate: server.certificate.map(|label| label.to_string()),
-                    password: password.filter(|password| !password.is_empty()),
-                })
-                .await
-        });
+        self.spawn(async move { engine.connect(target_of(&server, password)).await });
     }
 
     fn disconnect(&self) {
+        // On purpose: nothing is to bring the connection back.
+        *self
+            .shared
+            .wanted
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = None;
         let engine = self.shared.engine.clone();
         self.spawn(async move { engine.disconnect().await });
     }
@@ -542,10 +605,27 @@ impl Engine for RealEngine {
                     engine.rename_channel(channel, name).await
                 }
                 Action::DeleteChannel { channel } => engine.delete_channel(channel).await,
+                Action::JoinWithPassword { channel, password } => {
+                    engine.join_channel_with_password(channel, password).await
+                }
                 Action::SetComment(text) => engine.set_comment(&text).await,
                 Action::SetAvatar(image) => engine.set_avatar(image).await,
             }
         });
+    }
+
+    fn about(&self, subject: Subject) {
+        let shared = Arc::clone(&self.shared);
+        drop(self.runtime.spawn(async move {
+            let html = match subject {
+                Subject::User(session) => shared.engine.user_comment(session).await,
+                Subject::Channel(channel) => shared.engine.channel_description(channel),
+            };
+            shared.tell(EngineEvent::About {
+                subject,
+                html: html.filter(|html| !html.trim().is_empty()).map(Into::into),
+            });
+        }));
     }
 
     fn voice_settings(&self) -> VoiceSettings {
@@ -583,6 +663,25 @@ impl Engine for RealEngine {
         });
         self.shared.engine.shutdown();
     }
+}
+
+/// How to connect as the saved identity `server`.
+fn target_of(server: &SavedServer, password: Option<String>) -> ConnectTarget {
+    ConnectTarget {
+        host: server.host.to_string(),
+        port: server.port,
+        username: server.username.to_string(),
+        certificate: server.certificate.as_ref().map(ToString::to_string),
+        password,
+    }
+}
+
+/// How long to wait before retry number `attempt` (from zero) of a lost
+/// connection: two seconds, doubling, at most thirty; `None` once it has
+/// been tried often enough that the server is simply gone.
+fn retry_pause(attempt: u32) -> Option<std::time::Duration> {
+    const ATTEMPTS: u32 = 10;
+    (attempt < ATTEMPTS).then(|| std::time::Duration::from_secs((2u64 << attempt.min(4)).min(30)))
 }
 
 /// What to tell the user when a session ends: the engine's reason, unless
@@ -645,6 +744,18 @@ mod tests {
             None,
             "a wanted leave says nothing"
         );
+    }
+
+    #[test]
+    fn retries_back_off_and_then_give_up() {
+        let seconds = |attempt| retry_pause(attempt).map(|pause| pause.as_secs());
+        assert_eq!(seconds(0), Some(2));
+        assert_eq!(seconds(1), Some(4));
+        assert_eq!(seconds(2), Some(8));
+        assert_eq!(seconds(3), Some(16));
+        assert_eq!(seconds(4), Some(30), "held at thirty");
+        assert_eq!(seconds(9), Some(30));
+        assert_eq!(seconds(10), None, "then no more");
     }
 
     #[test]

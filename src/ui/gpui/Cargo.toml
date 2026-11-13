@@ -47,6 +47,11 @@ serde_json = "1"
 # Drives the views without a display: simulated clicks and keys.
 gpui = { version = "0.2.2", default-features = false, features = ["test-support"] }
 
+# Debug information for this package only. With it for all seven hundred
+# dependencies as well, a debug build is tens of gigabytes on disk.
+[profile.dev.package."*"]
+debug = false
+
 # Small and quick to start rather than fastest: the view is idle almost all
 # of the time, and what it costs at rest is memory.
 [profile.release]

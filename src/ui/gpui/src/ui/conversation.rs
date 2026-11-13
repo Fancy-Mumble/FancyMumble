@@ -89,6 +89,9 @@ pub(super) fn render(
                     linear_color_stop(theme.c.canvas_a, 0.0),
                     linear_color_stop(theme.c.canvas_b, 1.0),
                 ))
+                .when_some(shell.welcome_to_show(), |column, welcome| {
+                    column.child(welcome_card(&welcome, theme, cx))
+                })
                 .child(
                     list(
                         shell.rows.clone(),
@@ -198,6 +201,45 @@ fn header(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoEle
                     ),
             )
         })
+}
+
+/// The server's welcome message, at the head of the conversation until it
+/// is dismissed.
+fn welcome_card(
+    welcome: &DrawnBody,
+    theme: &Theme,
+    cx: &mut Context<Shell>,
+) -> impl IntoElement + use<> {
+    div().flex_none().px(px(10.0)).pt(px(10.0)).child(
+        div()
+            .flex()
+            .items_start()
+            .gap(px(10.0))
+            .px(px(14.0))
+            .py(px(10.0))
+            .rounded(theme.skin.radius_md)
+            .bg(theme.c.card)
+            .border_1()
+            .border_color(theme.c.line2)
+            .text_size(px(13.0))
+            .child(div().flex_1().min_w_0().child(body_text(
+                welcome,
+                usize::MAX,
+                theme.c.accent_text,
+                theme,
+            )))
+            .child(
+                div()
+                    .id("dismiss-welcome")
+                    .debug_selector(|| "dismiss-welcome".to_owned())
+                    .cursor_pointer()
+                    .on_click(cx.listener(|shell, _, _, cx| {
+                        shell.welcome_dismissed = true;
+                        cx.notify();
+                    }))
+                    .child(icon("x", 13.0, theme.c.muted)),
+            ),
+    )
 }
 
 /// What the engine had to say, above the composer, until it is dismissed.
@@ -339,6 +381,24 @@ pub(super) struct DrawnBody {
     pictures: Vec<Arc<gpui::Image>>,
 }
 
+impl DrawnBody {
+    /// Read `html`.
+    pub(super) fn read(html: &str) -> Self {
+        let mut rich = Rich::parse(html);
+        let pictures = std::mem::take(&mut rich.images)
+            .into_iter()
+            .filter_map(crate::picture::picture)
+            .map(Arc::new)
+            .collect();
+        Self { rich, pictures }
+    }
+
+    /// Whether there is nothing in it to show.
+    pub(super) fn is_empty(&self) -> bool {
+        self.rich.text.is_empty() && self.pictures.is_empty()
+    }
+}
+
 impl Shell {
     /// The body of message `index`, read from its HTML the first time it is
     /// drawn. Only rows near the viewport are ever asked for.
@@ -350,13 +410,7 @@ impl Shell {
             .messages
             .get(index)
             .map_or("", |message| message.html.as_ref());
-        let mut rich = Rich::parse(html);
-        let pictures = std::mem::take(&mut rich.images)
-            .into_iter()
-            .filter_map(crate::picture::picture)
-            .map(Arc::new)
-            .collect();
-        let drawn = Arc::new(DrawnBody { rich, pictures });
+        let drawn = Arc::new(DrawnBody::read(html));
         let _ = self.bodies.insert(index, Arc::clone(&drawn));
         drawn
     }
@@ -419,7 +473,7 @@ fn highlights(
 }
 
 /// A message's text, with its links live, and its pictures under it.
-fn body_text(
+pub(super) fn body_text(
     body: &DrawnBody,
     row: usize,
     link_ink: Hsla,

@@ -27,7 +27,7 @@ use gpui::{
 
 use crate::engine::{
     AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation, Engine, EngineEvent,
-    Message, SavedServer, Session, Snapshot, User, VoiceSettings,
+    Message, SavedServer, Session, Snapshot, Subject, User, VoiceSettings,
 };
 use crate::store::{Settings, Store, StoredVoice};
 use crate::theme::{ActiveTheme, Catalog, Mode};
@@ -36,6 +36,14 @@ use text_input::{InputEvent, TextInput};
 /// How far past the visible rows the conversation lays messages out, so a
 /// short scroll does not wait on layout.
 const OVERDRAW: f32 = 400.0;
+
+/// What there is to read about a user or a channel, on a card.
+pub(super) struct Info {
+    subject: Subject,
+    title: gpui::SharedString,
+    /// The text, once it has arrived; `None` while it is being fetched.
+    body: Option<Arc<conversation::DrawnBody>>,
+}
 
 /// The application's one window.
 pub(crate) struct Shell {
@@ -85,6 +93,13 @@ pub(crate) struct Shell {
     devices: Option<AudioDevices>,
     /// The devices in use.
     chosen_devices: ChosenDevices,
+    /// The card showing a user's comment or a channel's description.
+    info: Option<Info>,
+    /// The server's welcome message as drawn, and the HTML it was read
+    /// from, so it is read once per message rather than once per frame.
+    welcome: Option<(gpui::SharedString, Arc<conversation::DrawnBody>)>,
+    /// Whether the welcome message was dismissed on this connection.
+    welcome_dismissed: bool,
     /// The menu a right click opened, while it is open.
     menu: Option<menu::Menu>,
     /// The dialog a menu entry asked a question in, while it is open.
@@ -162,6 +177,9 @@ impl Shell {
             devices_open: false,
             devices: None,
             chosen_devices: engine.chosen_devices(),
+            info: None,
+            welcome: None,
+            welcome_dismissed: false,
             menu: None,
             prompt: None,
             volumes: std::collections::HashMap::new(),
@@ -175,6 +193,7 @@ impl Shell {
             _subscriptions: subscriptions,
         };
         shell.follow_current_channel(None);
+        shell.read_welcome();
         shell.reload_messages(cx);
         shell
     }
@@ -213,6 +232,12 @@ impl Shell {
             EngineEvent::StateChanged => {
                 let was = self.snapshot.connection;
                 self.snapshot = self.engine.snapshot();
+                // A new connection has a welcome of its own to show.
+                if was != Connection::Connected && self.snapshot.connection == Connection::Connected
+                {
+                    self.welcome_dismissed = false;
+                }
+                self.read_welcome();
                 self.drop_closed_conversation(cx);
                 // Back on the server list: what it says about each server is
                 // as old as the visit just ended.
@@ -220,6 +245,12 @@ impl Shell {
                     && self.snapshot.connection == Connection::Disconnected
                 {
                     self.engine.refresh_pings();
+                }
+            }
+            EngineEvent::About { subject, html } => {
+                if let Some(info) = self.info.as_mut().filter(|info| info.subject == subject) {
+                    let html = html.unwrap_or_default();
+                    info.body = Some(Arc::new(conversation::DrawnBody::read(&html)));
                 }
             }
             EngineEvent::ServersChanged => self.servers = self.engine.saved_servers(),
@@ -246,6 +277,54 @@ impl Shell {
                 }
             }
         }
+    }
+
+    /// Read the server's welcome message, if it is not the one already read.
+    fn read_welcome(&mut self) {
+        let Some(html) = self.snapshot.welcome.clone() else {
+            self.welcome = None;
+            return;
+        };
+        if self.welcome.as_ref().is_none_or(|(read, _)| *read != html) {
+            let drawn = Arc::new(conversation::DrawnBody::read(&html));
+            self.welcome = Some((html, drawn));
+        }
+    }
+
+    /// The welcome message, while it is to be shown: not dismissed, with
+    /// something in it, and over the channel the user is in.
+    fn welcome_to_show(&self) -> Option<Arc<conversation::DrawnBody>> {
+        let in_own_channel = self.open.is_some()
+            && self.open == self.snapshot.current_channel.map(Conversation::Channel);
+        self.welcome
+            .as_ref()
+            .filter(|(_, drawn)| !self.welcome_dismissed && in_own_channel && !drawn.is_empty())
+            .map(|(_, drawn)| Arc::clone(drawn))
+    }
+
+    /// Show what there is to read about `subject`, fetching it.
+    pub(super) fn show_about(&mut self, subject: Subject, cx: &mut Context<Self>) {
+        let title = match subject {
+            Subject::User(session) => self
+                .snapshot
+                .users
+                .iter()
+                .find(|user| user.session == session)
+                .map(|user| user.name.clone()),
+            Subject::Channel(id) => self
+                .snapshot
+                .channels
+                .iter()
+                .find(|channel| channel.id == id)
+                .map(|channel| channel.name.clone()),
+        };
+        self.info = Some(Info {
+            subject,
+            title: title.unwrap_or_default(),
+            body: None,
+        });
+        self.engine.about(subject);
+        cx.notify();
     }
 
     /// After the local user moved: the channel conversation follows them,
@@ -380,7 +459,8 @@ impl Shell {
 
     /// Escape: close whatever is open on top of the window.
     pub(crate) fn dismiss(&mut self, cx: &mut Context<Self>) {
-        if self.menu.take().is_some() || self.prompt.take().is_some() {
+        if self.menu.take().is_some() || self.prompt.take().is_some() || self.info.take().is_some()
+        {
             cx.notify();
             return;
         }
@@ -591,6 +671,9 @@ impl Render for Shell {
             })
             .when_some(self.prompt.as_ref(), |shell, prompt| {
                 shell.child(menu::render_prompt(prompt, &theme, cx))
+            })
+            .when_some(self.info.as_ref(), |shell, info| {
+                shell.child(menu::render_info(info, &theme, cx))
             })
             .children(frame::resize_grips(window))
     }

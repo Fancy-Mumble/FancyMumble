@@ -24,6 +24,14 @@ pub(crate) enum Conversation {
     Direct(Session),
 }
 
+/// Something there is more to read about: a user's comment, a channel's
+/// description.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Subject {
+    User(Session),
+    Channel(ChannelId),
+}
+
 /// Where the connection to the server stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Connection {
@@ -138,6 +146,11 @@ pub(crate) enum Action {
     RenameChannel { channel: ChannelId, name: String },
     /// Delete `channel`, and everything under it.
     DeleteChannel { channel: ChannelId },
+    /// Move into `channel`, presenting `password`.
+    JoinWithPassword {
+        channel: ChannelId,
+        password: String,
+    },
     /// Set the local user's comment.
     SetComment(String),
     /// Set the local user's picture, from an encoded image.
@@ -211,6 +224,8 @@ pub(crate) struct Snapshot {
     pub voice: Voice,
     /// Whether the local user is deafened.
     pub deafened: bool,
+    /// The server's welcome message, as HTML.
+    pub welcome: Option<SharedString>,
 }
 
 impl Snapshot {
@@ -224,6 +239,7 @@ impl Snapshot {
             users: Vec::new(),
             voice: Voice::Off,
             deafened: false,
+            welcome: None,
         }
     }
 }
@@ -243,6 +259,12 @@ pub(crate) enum EngineEvent {
     NewMessage { conversation: Conversation },
     /// The saved servers, or what is known of whether they are up, changed.
     ServersChanged,
+    /// What was asked for with [`Engine::about`] has arrived: the comment or
+    /// description, as HTML, or `None` if there is none.
+    About {
+        subject: Subject,
+        html: Option<SharedString>,
+    },
     /// Something the user should be told: a refused connection, a failed
     /// command. `None` clears what was said before.
     Notice(Option<SharedString>),
@@ -315,6 +337,10 @@ pub(crate) trait Engine: Send + Sync + 'static {
 
     /// Do `action`.
     fn act(&self, action: Action);
+
+    /// Fetch what there is to read about `subject`; it arrives as
+    /// [`EngineEvent::About`].
+    fn about(&self, subject: Subject);
 
     /// How the microphone is used.
     fn voice_settings(&self) -> VoiceSettings;

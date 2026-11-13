@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation,
-    Engine, EngineEvent, Message, SavedServer, ServerPing, Session, Snapshot, User, Voice,
+    Engine, EngineEvent, Message, SavedServer, ServerPing, Session, Snapshot, Subject, User, Voice,
     VoiceSettings,
 };
 
@@ -146,6 +146,12 @@ impl State {
             Action::DeleteChannel { channel } => {
                 self.channels.retain(|known| known.id != *channel);
             }
+            Action::JoinWithPassword { channel, .. } => {
+                self.current_channel = *channel;
+                if let Some(own) = self.users.iter_mut().find(|user| user.session == OWN) {
+                    own.channel = *channel;
+                }
+            }
             Action::SetUserVolume { .. }
             | Action::Register { .. }
             | Action::SetComment(_)
@@ -270,6 +276,7 @@ impl Engine for DemoEngine {
                 users: state.users.clone(),
                 voice: state.voice,
                 deafened: state.deafened,
+                welcome: Some("Welcome to the <b>demo</b> server.".into()),
             }
         })
     }
@@ -465,6 +472,18 @@ impl Engine for DemoEngine {
             state.actions.push(action);
         });
         self.tell(EngineEvent::StateChanged);
+    }
+
+    fn about(&self, subject: Subject) {
+        let html = match subject {
+            Subject::User(3) => Some("Draws <i>characters</i>."),
+            Subject::Channel(LOUNGE) => Some("Where everybody starts."),
+            _ => None,
+        };
+        self.tell(EngineEvent::About {
+            subject,
+            html: html.map(Into::into),
+        });
     }
 
     fn voice_settings(&self) -> VoiceSettings {

@@ -703,3 +703,59 @@ fn a_menu_closes_on_a_click_elsewhere_and_a_prompt_on_cancel(cx: &mut TestAppCon
     shell.read_with(cx, |shell, _| assert!(shell.prompt.is_none()));
     assert!(engine.actions().is_empty());
 }
+
+#[gpui::test]
+fn a_users_comment_is_fetched_and_shown(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell(cx);
+    right_click(cx, "user-3");
+    click(cx, "menu-View comment");
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| {
+        let info = shell.info.as_ref().expect("the card is open");
+        assert_eq!(info.title.as_ref(), "Rin");
+        let body = info.body.as_ref().expect("the comment arrived");
+        assert!(!body.is_empty());
+    });
+    click(cx, "info-close");
+    shell.read_with(cx, |shell, _| assert!(shell.info.is_none()));
+    // Somebody with no comment gets a card that says so, not one that waits.
+    right_click(cx, "user-2");
+    click(cx, "menu-View comment");
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| {
+        let body = shell.info.as_ref().and_then(|info| info.body.as_ref());
+        assert!(body.is_some_and(|body| body.is_empty()));
+    });
+}
+
+#[gpui::test]
+fn the_welcome_shows_over_the_own_channel_until_dismissed(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell(cx);
+    shell.read_with(cx, |shell, _| assert!(shell.welcome_to_show().is_some()));
+    click(cx, "channel-2");
+    shell.read_with(cx, |shell, _| {
+        assert!(
+            shell.welcome_to_show().is_none(),
+            "not over a channel being read"
+        );
+    });
+    click(cx, "channel-1");
+    click(cx, "dismiss-welcome");
+    shell.read_with(cx, |shell, _| assert!(shell.welcome_to_show().is_none()));
+}
+
+#[gpui::test]
+fn joining_with_a_password_sends_it(cx: &mut TestAppContext) {
+    let (_shell, engine, cx) = shell(cx);
+    right_click(cx, "channel-2");
+    click(cx, "menu-Join with a password…");
+    cx.simulate_keystrokes("s 3 enter");
+    assert_eq!(
+        engine.actions(),
+        [Action::JoinWithPassword {
+            channel: 2,
+            password: "s3".to_owned()
+        }]
+    );
+    assert_eq!(engine.snapshot().current_channel, Some(2));
+}

@@ -9,7 +9,7 @@ use gpui::{
 use super::Shell;
 use super::text_input::{InputEvent, TextInput};
 use super::widgets::{EMPHASIS, icon, label, opaque};
-use crate::engine::{Action, Channel, ChannelId, Conversation, Session, User};
+use crate::engine::{Action, Channel, ChannelId, Conversation, Session, Subject, User};
 use crate::theme::Theme;
 
 /// The loudness steps a user can be played at, with what each is called.
@@ -31,6 +31,8 @@ pub(super) enum Command {
     Join(ChannelId),
     /// Play a user at a loudness, here.
     Volume(Session, f32),
+    /// Show what there is to read about a user or a channel.
+    About(Subject),
     /// Needs an answer first.
     Ask(Question),
     /// Choose a picture file for the local user.
@@ -45,6 +47,7 @@ pub(super) enum Question {
     NewChannel(ChannelId),
     RenameChannel(ChannelId),
     DeleteChannel(ChannelId),
+    JoinPassword(ChannelId),
     Comment,
 }
 
@@ -58,6 +61,7 @@ impl Question {
             Self::NewChannel(_) => ("New channel", Some("Name"), "Create"),
             Self::RenameChannel(_) => ("Rename channel", Some("Name"), "Rename"),
             Self::DeleteChannel(_) => ("Delete this channel and everything in it?", None, "Delete"),
+            Self::JoinPassword(_) => ("Join with a password", Some("Password"), "Join"),
             Self::Comment => ("Your comment", Some("What others read about you"), "Save"),
         }
     }
@@ -92,6 +96,10 @@ impl Question {
                 name: Some(text).filter(|name| !name.is_empty())?,
             },
             Self::DeleteChannel(channel) => Action::DeleteChannel { channel },
+            Self::JoinPassword(channel) => Action::JoinWithPassword {
+                channel,
+                password: answer.to_owned(),
+            },
             Self::Comment => Action::SetComment(text),
         })
     }
@@ -159,10 +167,10 @@ pub(super) fn user_items(
             ),
         ];
     }
-    let mut items = vec![Item::new(
-        "Message",
-        Command::Open(Conversation::Direct(session)),
-    )];
+    let mut items = vec![
+        Item::new("Message", Command::Open(Conversation::Direct(session))),
+        Item::new("View comment", Command::About(Subject::User(session))),
+    ];
     items.extend(VOLUMES.iter().map(|(level, name)| {
         Item::new(name, Command::Volume(session, *level)).ticked((volume - level).abs() < 0.01)
     }));
@@ -208,7 +216,15 @@ pub(super) fn channel_items(channel: &Channel, own_channel: Option<ChannelId>) -
     let mut items = vec![Item::new("Open", Command::Open(Conversation::Channel(id)))];
     if own_channel != Some(id) {
         items.push(Item::new("Join", Command::Join(id)));
+        items.push(Item::new(
+            "Join with a password…",
+            Command::Ask(Question::JoinPassword(id)),
+        ));
     }
+    items.push(Item::new(
+        "About this channel",
+        Command::About(Subject::Channel(id)),
+    ));
     items.push(Item::new(
         "New channel inside…",
         Command::Ask(Question::NewChannel(id)),
@@ -289,6 +305,7 @@ impl Shell {
                 let _ = self.volumes.insert(session, volume);
                 self.engine.act(Action::SetUserVolume { session, volume });
             }
+            Command::About(subject) => self.show_about(subject, cx),
             Command::Ask(question) => self.ask(question, window, cx),
             Command::PickAvatar => self.pick_avatar(cx),
         }
@@ -301,6 +318,9 @@ impl Shell {
         let input = placeholder.map(|placeholder| {
             let input = cx.new(|cx| {
                 let mut input = TextInput::new(placeholder, cx);
+                if matches!(question, Question::JoinPassword(_)) {
+                    input = input.obscured();
+                }
                 // A rename starts from the name there is.
                 if let Question::RenameChannel(id) = question
                     && let Some(channel) = self.snapshot.channels.iter().find(|c| c.id == id)
@@ -561,6 +581,91 @@ pub(super) fn render_prompt(
         )
 }
 
+/// The card with a user's comment or a channel's description.
+pub(super) fn render_info(
+    info: &super::Info,
+    theme: &Theme,
+    cx: &mut Context<Shell>,
+) -> impl IntoElement + use<> {
+    let mut veil = gpui::black();
+    veil.a = 0.5;
+    let hover = theme.c.hover;
+    let body = match &info.body {
+        None => div()
+            .text_color(theme.c.muted)
+            .child("Fetching…")
+            .into_any_element(),
+        Some(body) if body.is_empty() => div()
+            .text_color(theme.c.muted)
+            .child("Nothing has been written here.")
+            .into_any_element(),
+        Some(body) => {
+            super::conversation::body_text(body, usize::MAX - 1, theme.c.accent_text, theme)
+                .into_any_element()
+        }
+    };
+    div()
+        .id("info")
+        .absolute()
+        .size_full()
+        .top_0()
+        .left_0()
+        .occlude()
+        .bg(veil)
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(
+            div()
+                .w(px(460.0))
+                .max_h(px(520.0))
+                .flex()
+                .flex_col()
+                .gap(px(14.0))
+                .p(px(22.0))
+                .rounded(theme.skin.radius_lg)
+                .bg(opaque(theme.c.card, theme.c.bg0))
+                .border_1()
+                .border_color(theme.c.line2)
+                .shadow_lg()
+                .child(
+                    div()
+                        .text_size(px(16.0))
+                        .font_weight(EMPHASIS)
+                        .child(info.title.clone()),
+                )
+                .child(
+                    div()
+                        .id("info-body")
+                        .flex_1()
+                        .min_h_0()
+                        .overflow_y_scroll()
+                        .text_size(px(13.5))
+                        .child(body),
+                )
+                .child(
+                    div().flex().justify_end().child(
+                        div()
+                            .id("info-close")
+                            .debug_selector(|| "info-close".to_owned())
+                            .h(px(36.0))
+                            .px(px(18.0))
+                            .flex()
+                            .items_center()
+                            .rounded(theme.skin.radius_md)
+                            .cursor_pointer()
+                            .text_color(theme.c.muted)
+                            .hover(move |style| style.bg(hover))
+                            .on_click(cx.listener(|shell, _, _, cx| {
+                                shell.info = None;
+                                cx.notify();
+                            }))
+                            .child(label("Close", theme)),
+                    ),
+                ),
+        )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -588,6 +693,7 @@ mod tests {
             names(&items),
             [
                 "Message",
+                "View comment",
                 "Mute here",
                 "Volume 50%",
                 "Volume 100%",
@@ -615,7 +721,7 @@ mod tests {
         let items = user_items(&elsewhere, Some(1), Some(1), 0.0);
         assert!(names(&items).contains(&"Move to my channel"));
         assert!(names(&items).contains(&"Unmute for everyone"));
-        assert!(items[1].ticked, "muted here");
+        assert!(items[2].ticked, "muted here");
     }
 
     #[test]
@@ -643,11 +749,24 @@ mod tests {
         };
         assert_eq!(
             names(&channel_items(&channel(0, None), Some(1))),
-            ["Open", "Join", "New channel inside…", "Rename…"]
+            [
+                "Open",
+                "Join",
+                "Join with a password…",
+                "About this channel",
+                "New channel inside…",
+                "Rename…"
+            ]
         );
         assert_eq!(
             names(&channel_items(&channel(1, Some(0)), Some(1))),
-            ["Open", "New channel inside…", "Rename…", "Delete…"]
+            [
+                "Open",
+                "About this channel",
+                "New channel inside…",
+                "Rename…",
+                "Delete…"
+            ]
         );
     }
 
