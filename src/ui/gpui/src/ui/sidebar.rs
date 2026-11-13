@@ -301,23 +301,18 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
                 .flex_col()
                 .gap(px(6.0))
                 .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .child(div().font_weight(EMPHASIS).child(name))
-                                .child(
-                                    div()
-                                        .text_size(px(11.5))
-                                        .text_color(theme.c.muted)
-                                        .child(status),
-                                ),
-                        )
-                        .child(icon("ellipsis-vertical", 15.0, theme.c.muted)),
+                    div().flex().items_center().justify_between().child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .child(div().font_weight(EMPHASIS).child(name))
+                            .child(
+                                div()
+                                    .text_size(px(11.5))
+                                    .text_color(theme.c.muted)
+                                    .child(status),
+                            ),
+                    ),
                 )
                 .child(
                     div()
@@ -347,9 +342,7 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
                                 theme,
                             )
                             .on_click(cx.listener(|shell, _, _, _| shell.engine.toggle_deafen())),
-                        )
-                        .child(div().flex_1())
-                        .child(icon("monitor-up", 16.0, theme.c.muted)),
+                        ),
                 ),
         )
 }

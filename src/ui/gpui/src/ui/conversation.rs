@@ -95,7 +95,7 @@ pub(super) fn render(
                 .when_some(shell.notice.clone(), |column, notice| {
                     column.child(notice_strip(notice, theme, cx))
                 })
-                .child(composer(shell, theme)),
+                .child(composer(shell, theme, cx)),
         )
 }
 
@@ -131,8 +131,7 @@ fn header(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
                         .gap(px(6.0))
                         .font_weight(EMPHASIS)
                         .text_size(px(15.0))
-                        .child(label(name, theme))
-                        .child(icon("chevron-down", 13.0, theme.c.muted)),
+                        .child(label(name, theme)),
                 )
                 .child(
                     div()
@@ -156,9 +155,6 @@ fn header(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
                         .child(SharedString::from(in_voice.to_string())),
                 ),
         )
-        .child(icon("search", 15.0, theme.c.muted))
-        .child(icon("pin", 15.0, theme.c.muted))
-        .child(icon("ellipsis-vertical", 15.0, theme.c.muted))
 }
 
 /// What the engine had to say, above the composer, until it is dismissed.
@@ -198,7 +194,7 @@ fn notice_strip(
     )
 }
 
-fn composer(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
+fn composer(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     div().flex_none().p(px(10.0)).child(
         div()
             .h(px(54.0))
@@ -212,11 +208,11 @@ fn composer(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
             .border_1()
             .border_color(theme.c.line2)
             .text_size(px(15.0))
-            .child(icon("paperclip", 16.0, theme.c.muted))
-            .child(icon("chevron-down", 12.0, theme.c.muted))
             .child(shell.composer.clone())
             .child(
                 div()
+                    .id("send")
+                    .debug_selector(|| "send".to_owned())
                     .flex_none()
                     .size(px(32.0))
                     .rounded(theme.skin.radius_pill)
@@ -224,6 +220,9 @@ fn composer(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
                     .flex()
                     .items_center()
                     .justify_center()
+                    .cursor_pointer()
+                    .hover(|style| style.opacity(0.8))
+                    .on_click(cx.listener(|shell, _, _, cx| shell.send_composed(cx)))
                     .child(icon("send", 15.0, theme.c.muted)),
             ),
     )

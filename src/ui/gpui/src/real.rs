@@ -82,6 +82,10 @@ impl Shared {
             api::EngineEvent::NewMessage { channel } => {
                 self.tell(EngineEvent::NewMessage { channel });
             }
+            api::EngineEvent::Denied { reason } => {
+                let reason = reason.unwrap_or_else(|| "The server did not allow that.".to_owned());
+                self.tell(EngineEvent::Notice(Some(reason.into())));
+            }
             // The engine API may grow events this view does not draw yet.
             _ => {}
         }

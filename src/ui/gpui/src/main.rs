@@ -34,6 +34,10 @@ actions!(
         NextTheme,
         /// Flip between the light and dark drawing of the theme.
         ToggleMode,
+        /// Give the keyboard to the search field.
+        FocusSearch,
+        /// Close the picker or the dialog that is open.
+        Dismiss,
         /// Close the application.
         Quit
     ]
@@ -49,6 +53,8 @@ fn main() {
             cx.bind_keys([
                 KeyBinding::new("ctrl-shift-t", NextTheme, None),
                 KeyBinding::new("ctrl-shift-l", ToggleMode, None),
+                KeyBinding::new("ctrl-f", FocusSearch, None),
+                KeyBinding::new("escape", Dismiss, None),
                 KeyBinding::new("ctrl-q", Quit, None),
             ]);
             cx.on_action(|_: &Quit, cx| cx.quit());
@@ -87,6 +93,12 @@ fn main() {
             });
             cx.on_action(move |_: &ToggleMode, cx| {
                 let _ = window.update(cx, |shell, _, cx| shell.toggle_mode(cx));
+            });
+            cx.on_action(move |_: &FocusSearch, cx| {
+                let _ = window.update(cx, Shell::focus_search);
+            });
+            cx.on_action(move |_: &Dismiss, cx| {
+                let _ = window.update(cx, |shell, _, cx| shell.dismiss(cx));
             });
             // One window: closing it ends the application.
             cx.on_window_closed(|cx| cx.quit()).detach();

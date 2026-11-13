@@ -220,26 +220,43 @@ impl Shell {
             .update(cx, |composer, _| composer.set_placeholder(placeholder));
     }
 
-    #[expect(
-        clippy::needless_pass_by_value,
-        reason = "the signature a subscription calls"
-    )]
-    fn on_composer(
-        &mut self,
-        composer: Entity<TextInput>,
-        event: &InputEvent,
-        cx: &mut Context<Self>,
-    ) {
-        let InputEvent::Submitted(body) = event else {
-            return;
-        };
-        if let Some(channel) = self.snapshot.current_channel {
-            self.engine.send_message(channel, body.clone());
+    fn on_composer(&mut self, _: Entity<TextInput>, event: &InputEvent, cx: &mut Context<Self>) {
+        if matches!(event, InputEvent::Submitted(_)) {
+            self.send_composed(cx);
         }
-        composer.update(cx, |composer, cx| {
+    }
+
+    /// Send what is in the composer to the current channel, and empty it.
+    pub(super) fn send_composed(&mut self, cx: &mut Context<Self>) {
+        let body = self.composer.read(cx).text().to_owned();
+        if body.trim().is_empty() {
+            return;
+        }
+        if let Some(channel) = self.snapshot.current_channel {
+            self.engine.send_message(channel, body);
+        }
+        self.composer.update(cx, |composer, cx| {
             composer.clear();
             cx.notify();
         });
+    }
+
+    /// Give the keyboard to the search field of whichever list is showing.
+    pub(crate) fn focus_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let search = match self.snapshot.connection {
+            Connection::Connected => &self.search,
+            Connection::Disconnected | Connection::Connecting => &self.server_search,
+        };
+        search.read(cx).focus(window);
+        cx.notify();
+    }
+
+    /// Escape: close whatever is open on top of the window.
+    pub(crate) fn dismiss(&mut self, cx: &mut Context<Self>) {
+        if self.editor.take().is_none() {
+            self.picker_open = false;
+        }
+        cx.notify();
     }
 
     fn current_channel_name(&self) -> Option<&str> {

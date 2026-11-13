@@ -384,3 +384,52 @@ fn a_notice_while_connected_can_be_dismissed(cx: &mut TestAppContext) {
     click(cx, "dismiss-notice");
     shell.read_with(cx, |shell, _| assert!(shell.notice.is_none()));
 }
+
+#[gpui::test]
+fn the_send_button_sends_what_was_typed(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    click(cx, "send");
+    assert_eq!(
+        engine.messages(1).len(),
+        5,
+        "an empty composer sends nothing"
+    );
+    click(cx, "input-Message #lounge");
+    cx.simulate_keystrokes("o k");
+    click(cx, "send");
+    let sent = engine.messages(1);
+    assert_eq!(
+        sent.last().map(|message| message.body.to_string()),
+        Some("ok".to_owned())
+    );
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(shell.composer.read(cx).text(), "")
+    });
+}
+
+#[gpui::test]
+fn focus_search_goes_to_the_list_that_is_showing(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell(cx);
+    shell.update_in(cx, Shell::focus_search);
+    cx.simulate_keystrokes("a f");
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(shell.search.read(cx).text(), "af");
+        assert_eq!(shell.server_search.read(cx).text(), "");
+    });
+}
+
+#[gpui::test]
+fn dismiss_closes_the_dialog_before_the_picker(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell_on(DemoEngine::disconnected(), cx);
+    click(cx, "themes");
+    click(cx, "add-server");
+    shell.update(cx, Shell::dismiss);
+    shell.read_with(cx, |shell, _| {
+        assert!(
+            shell.editor.is_none() && shell.picker_open,
+            "the dialog first"
+        );
+    });
+    shell.update(cx, Shell::dismiss);
+    shell.read_with(cx, |shell, _| assert!(!shell.picker_open));
+}

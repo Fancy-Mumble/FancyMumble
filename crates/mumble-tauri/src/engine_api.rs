@@ -87,6 +87,12 @@ pub enum EngineEvent {
         /// The channel.
         channel: u32,
     },
+    /// The server refused something the user asked for: entering a channel,
+    /// sending a message that is too long.
+    Denied {
+        /// The server's words, where it gave any.
+        reason: Option<String>,
+    },
 }
 
 impl EngineEvent {
@@ -108,6 +114,9 @@ impl EngineEvent {
             CoreEvent::VoiceStateChanged(_) => Self::VoiceChanged,
             CoreEvent::NewMessage(payload) => Self::NewMessage {
                 channel: payload.channel_id,
+            },
+            CoreEvent::PermissionDenied(payload) => Self::Denied {
+                reason: payload.reason.filter(|reason| !reason.is_empty()),
             },
             _ => return None,
         })
@@ -544,6 +553,16 @@ mod tests {
                 sender_session: None,
             })),
             Some(EngineEvent::NewMessage { channel: 3 })
+        );
+        assert_eq!(
+            reported(CoreEvent::PermissionDenied(
+                crate::state::types::PermissionDeniedPayload {
+                    deny_type: Some(1),
+                    reason: Some(String::new()),
+                }
+            )),
+            Some(EngineEvent::Denied { reason: None }),
+            "an empty reason is no reason"
         );
         // One of the many this API does not carry yet.
         assert_eq!(reported(CoreEvent::ServerConfigChanged), None);
