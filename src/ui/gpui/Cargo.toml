@@ -32,6 +32,8 @@ mumble-tauri = { path = "../../../crates/mumble-tauri", default-features = false
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 # The engine reports to the view over a channel the UI thread can await.
 async-channel = "2"
+# Pictures pasted into a message arrive as base64 `data:` URIs.
+base64 = "0.22"
 # Local time, for the clock beside a message and the rule between days.
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # The theme table (assets/themes.json) is generated from the web UI's

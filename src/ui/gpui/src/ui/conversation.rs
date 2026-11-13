@@ -1,13 +1,18 @@
 //! The conversation: the channel's header, its messages and the composer.
 
+use std::ops::Range;
+use std::sync::Arc;
+
 use gpui::{
-    AnyElement, Context, IntoElement, ParentElement, SharedString, Styled, div, linear_color_stop,
-    linear_gradient, list, prelude::*, px,
+    AnyElement, Context, HighlightStyle, Hsla, InteractiveText, IntoElement, ParentElement,
+    SharedString, Styled, StyledText, div, linear_color_stop, linear_gradient, list, prelude::*,
+    px,
 };
 
 use super::Shell;
 use super::widgets::{EMPHASIS, avatar, clock, icon, label};
 use crate::engine::Message;
+use crate::rich::Rich;
 use crate::theme::{Fill, Theme};
 
 /// One row of the conversation.
@@ -230,7 +235,7 @@ fn composer(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoE
 
 impl Shell {
     /// One row of the conversation. Called only for rows near the viewport.
-    fn render_row(&self, row: usize, cx: &mut Context<Self>) -> AnyElement {
+    fn render_row(&mut self, row: usize, cx: &mut Context<Self>) -> AnyElement {
         let theme = crate::theme::ActiveTheme::get(cx);
         let index = match self.row_model.get(row) {
             Some(Row::Day(name)) => {
@@ -239,6 +244,7 @@ impl Shell {
             Some(Row::Message(index)) => *index,
             None => return div().into_any_element(),
         };
+        let body = self.drawn_body(index);
         let Some(message) = self.messages.get(index) else {
             return div().into_any_element();
         };
@@ -261,7 +267,7 @@ impl Shell {
             theme.skin.message_gap
         };
         let body = if message.own {
-            own_message(message, self.utc_offset, &theme).into_any_element()
+            own_message(message, &body, row, self.utc_offset, &theme).into_any_element()
         } else {
             {
                 let picture = message.sender.and_then(|session| {
@@ -273,6 +279,8 @@ impl Shell {
                 });
                 their_message(
                     message,
+                    &body,
+                    row,
                     picture.as_ref(),
                     continues,
                     self.utc_offset,
@@ -283,6 +291,130 @@ impl Shell {
         };
         row_frame().pt(gap).child(body).into_any_element()
     }
+}
+
+/// A message's body, read once and kept: its runs of text, and its pictures
+/// as GPUI holds them.
+#[derive(Debug)]
+pub(super) struct DrawnBody {
+    rich: Rich,
+    pictures: Vec<Arc<gpui::Image>>,
+}
+
+impl Shell {
+    /// The body of message `index`, read from its HTML the first time it is
+    /// drawn. Only rows near the viewport are ever asked for.
+    fn drawn_body(&mut self, index: usize) -> Arc<DrawnBody> {
+        if let Some(drawn) = self.bodies.get(&index) {
+            return Arc::clone(drawn);
+        }
+        let html = self
+            .messages
+            .get(index)
+            .map_or("", |message| message.html.as_ref());
+        let mut rich = Rich::parse(html);
+        let pictures = std::mem::take(&mut rich.images)
+            .into_iter()
+            .filter_map(crate::picture::picture)
+            .map(Arc::new)
+            .collect();
+        let drawn = Arc::new(DrawnBody { rich, pictures });
+        let _ = self.bodies.insert(index, Arc::clone(&drawn));
+        drawn
+    }
+}
+
+/// How each stretch of `rich` is drawn: its emphasis, and its links in
+/// `link_ink`. The stretches come out in order and never overlap, which is
+/// what the text element requires.
+fn highlights(
+    rich: &Rich,
+    link_ink: Hsla,
+    code_ground: Hsla,
+) -> Vec<(Range<usize>, HighlightStyle)> {
+    let mut cuts: Vec<usize> = rich
+        .spans
+        .iter()
+        .map(|(range, _)| range)
+        .chain(rich.links.iter().map(|(range, _)| range))
+        .flat_map(|range| [range.start, range.end])
+        .collect();
+    cuts.sort_unstable();
+    cuts.dedup();
+    cuts.windows(2)
+        .filter_map(|cut| {
+            let range = cut[0]..cut[1];
+            let inside =
+                |other: &Range<usize>| other.start <= range.start && range.end <= other.end;
+            let style = rich
+                .spans
+                .iter()
+                .find(|(span, _)| inside(span))
+                .map(|(_, style)| *style);
+            let link = rich.links.iter().any(|(link, _)| inside(link));
+            if style.is_none() && !link {
+                return None;
+            }
+            let style = style.unwrap_or_default();
+            let line = |color| gpui::UnderlineStyle {
+                thickness: px(1.0),
+                color,
+                wavy: false,
+            };
+            Some((
+                range,
+                HighlightStyle {
+                    color: link.then_some(link_ink),
+                    font_weight: style.bold.then_some(EMPHASIS),
+                    font_style: style.italic.then_some(gpui::FontStyle::Italic),
+                    background_color: style.code.then_some(code_ground),
+                    underline: (link || style.underline).then(|| line(link.then_some(link_ink))),
+                    strikethrough: style.strike.then(|| gpui::StrikethroughStyle {
+                        thickness: px(1.0),
+                        color: None,
+                    }),
+                    fade_out: None,
+                },
+            ))
+        })
+        .collect()
+}
+
+/// A message's text, with its links live, and its pictures under it.
+fn body_text(
+    body: &DrawnBody,
+    row: usize,
+    link_ink: Hsla,
+    theme: &Theme,
+) -> impl IntoElement + use<> {
+    let rich = &body.rich;
+    let text = StyledText::new(rich.text.clone()).with_highlights(highlights(
+        rich,
+        link_ink,
+        theme.c.card2,
+    ));
+    let (ranges, addresses): (Vec<_>, Vec<_>) = rich.links.iter().cloned().unzip();
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(8.0))
+        .when(!rich.text.is_empty(), |column| {
+            column.child(InteractiveText::new(("message", row), text).on_click(
+                ranges,
+                move |link, _, cx| {
+                    if let Some(address) = addresses.get(link) {
+                        cx.open_url(address);
+                    }
+                },
+            ))
+        })
+        .children(body.pictures.iter().map(|picture| {
+            gpui::img(Arc::clone(picture))
+                .max_w(px(420.0))
+                .max_h(px(320.0))
+                .rounded(theme.skin.radius_md)
+                .object_fit(gpui::ObjectFit::Contain)
+        }))
 }
 
 /// A conversation row: the full width of the column, inset from its edges.
@@ -324,9 +456,15 @@ fn bubble(theme: &Theme) -> gpui::Div {
         .text_size(px(15.0))
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one message, and everything it is drawn from"
+)]
 fn their_message(
     message: &Message,
-    picture: Option<&std::sync::Arc<gpui::Image>>,
+    body: &DrawnBody,
+    row: usize,
+    picture: Option<&Arc<gpui::Image>>,
     continues: bool,
     utc_offset: i64,
     theme: &Theme,
@@ -387,12 +525,24 @@ fn their_message(
                         .bg(theme.c.card)
                         .border_1()
                         .border_color(theme.c.line2)
-                        .child(message.body.clone()),
+                        .child(body_text(body, row, theme.c.accent_text, theme)),
                 ),
         )
 }
 
-fn own_message(message: &Message, utc_offset: i64, theme: &Theme) -> impl IntoElement + use<> {
+fn own_message(
+    message: &Message,
+    body: &DrawnBody,
+    row: usize,
+    utc_offset: i64,
+    theme: &Theme,
+) -> impl IntoElement + use<> {
+    // On a filled bubble the accent is the ground, so a link there is drawn
+    // in the bubble's own ink.
+    let link_ink = match theme.skin.bubble_own {
+        Fill::Solid => theme.c.on_accent,
+        Fill::Wash => theme.c.accent_text,
+    };
     let plate = match theme.skin.bubble_own {
         Fill::Solid => bubble(theme)
             .bg(theme.c.accent)
@@ -407,7 +557,7 @@ fn own_message(message: &Message, utc_offset: i64, theme: &Theme) -> impl IntoEl
         .flex_col()
         .items_end()
         .gap(px(5.0))
-        .child(plate.child(message.body.clone()))
+        .child(plate.child(body_text(body, row, link_ink, theme)))
         .child(
             div()
                 .flex()
@@ -431,6 +581,7 @@ mod tests {
             sender: Some(1),
             sender_name: "Alex".into(),
             body: "hi".into(),
+            html: "hi".into(),
             sent_at_ms,
             own: true,
         }
@@ -438,6 +589,23 @@ mod tests {
 
     fn day(name: &str) -> Row {
         Row::Day(name.to_owned().into())
+    }
+
+    #[test]
+    fn stretches_are_cut_where_a_span_or_a_link_starts_or_ends() {
+        let ink = gpui::red();
+        let ground = gpui::blue();
+        // "a bold link" with the last five characters also a link.
+        let rich = Rich::parse(r#"a <b>bold <a href="https://x.example">link</a></b>!"#);
+        assert_eq!(rich.text, "a bold link!");
+        let drawn = highlights(&rich, ink, ground);
+        let ranges: Vec<_> = drawn.iter().map(|(range, _)| range.clone()).collect();
+        assert_eq!(ranges, [2..7, 7..11], "in order, not overlapping");
+        assert!(drawn[0].1.font_weight.is_some() && drawn[0].1.color.is_none());
+        assert!(drawn[1].1.font_weight.is_some(), "the link is still bold");
+        assert_eq!(drawn[1].1.color, Some(ink));
+        assert!(drawn[1].1.underline.is_some());
+        assert!(highlights(&Rich::parse("plain"), ink, ground).is_empty());
     }
 
     #[test]

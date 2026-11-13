@@ -120,8 +120,17 @@ pub(crate) struct Message {
     /// Who sent it; `None` once that user has left.
     pub sender: Option<Session>,
     pub sender_name: SharedString,
-    /// The text. Rich content is not drawn yet, so this is plain.
+    /// The message as plain text.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "drawn from `html`; kept for what wants words only"
+        )
+    )]
     pub body: SharedString,
+    /// The message as it was sent: HTML.
+    pub html: SharedString,
     /// When it was sent, in Unix epoch milliseconds, where the server said.
     pub sent_at_ms: Option<u64>,
     /// Whether the local user sent it.

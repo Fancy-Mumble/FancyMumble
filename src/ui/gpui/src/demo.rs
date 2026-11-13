@@ -112,6 +112,7 @@ impl State {
                     sender: Some(session),
                     sender_name: name.to_owned().into(),
                     body: body.to_owned().into(),
+                    html: demo_markup(body).into(),
                     sent_at_ms: Some(FIRST_MESSAGE_MS + minute * MINUTE_MS),
                     own: session == OWN,
                 },
@@ -165,6 +166,18 @@ impl State {
             ],
         }
     }
+}
+
+/// The demo's messages with a little markup on them, so emphasis, code and
+/// links have something to be looked at on.
+fn demo_markup(body: &str) -> String {
+    body.replace("new character design", "<b>new character</b> design")
+        .replace("beautiful", "<i>beautiful</i>")
+        .replace("dahlias", "<code>dahlias</code>")
+        .replace(
+            "our walk",
+            r#"<a href="https://example.org/walk">our walk</a>"#,
+        )
 }
 
 impl Engine for DemoEngine {
@@ -302,6 +315,7 @@ impl Engine for DemoEngine {
                 Message {
                     sender: Some(OWN),
                     sender_name: "Alex".into(),
+                    html: body.replace('&', "&amp;").replace('<', "&lt;").into(),
                     body: body.into(),
                     sent_at_ms: Some(sent_at_ms),
                     own: true,

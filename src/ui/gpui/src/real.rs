@@ -230,7 +230,12 @@ impl RealEngine {
     fn fetch_avatar(&self, session: u32, marker: u32) {
         let shared = Arc::clone(&self.shared);
         drop(self.runtime.spawn(async move {
-            let Some(image) = shared.engine.user_avatar(session).await.and_then(picture) else {
+            let Some(image) = shared
+                .engine
+                .user_avatar(session)
+                .await
+                .and_then(crate::picture::picture)
+            else {
                 return;
             };
             {
@@ -413,6 +418,7 @@ impl Engine for RealEngine {
                 sender: message.sender,
                 sender_name: message.sender_name.into(),
                 body: message.text.into(),
+                html: message.html.into(),
                 sent_at_ms: message.sent_at_ms.or(Some(*read_at)),
                 own: message.own,
             })
@@ -484,34 +490,6 @@ impl Engine for RealEngine {
     }
 }
 
-/// `bytes` as a picture GPUI can draw, if they are one of the formats a
-/// picture arrives in. The format is read from the bytes: nothing else
-/// says what it is.
-fn picture(bytes: Vec<u8>) -> Option<gpui::Image> {
-    let format = match bytes.as_slice() {
-        [0x89, b'P', b'N', b'G', ..] => gpui::ImageFormat::Png,
-        [0xff, 0xd8, 0xff, ..] => gpui::ImageFormat::Jpeg,
-        [b'G', b'I', b'F', b'8', ..] => gpui::ImageFormat::Gif,
-        [
-            b'R',
-            b'I',
-            b'F',
-            b'F',
-            _,
-            _,
-            _,
-            _,
-            b'W',
-            b'E',
-            b'B',
-            b'P',
-            ..,
-        ] => gpui::ImageFormat::Webp,
-        _ => return None,
-    };
-    Some(gpui::Image::from_bytes(format, bytes))
-}
-
 /// What to tell the user when a session ends: the engine's reason, unless
 /// the server had just refused the connection and said why.
 fn disconnect_notice(reason: Option<String>, refused: bool) -> Option<String> {
@@ -560,26 +538,6 @@ mod tests {
         assert_eq!(read_at, [100, 100, 200], "the first two keep their time");
         stamp_first_read(&mut read_at, 1, 300);
         assert_eq!(read_at, [100], "a shorter history forgets the rest");
-    }
-
-    #[test]
-    fn a_picture_is_recognised_by_its_first_bytes() {
-        let format = |bytes: &[u8]| picture(bytes.to_vec()).map(|image| image.format());
-        assert_eq!(
-            format(b"\x89PNG\r\n\x1a\n...."),
-            Some(gpui::ImageFormat::Png)
-        );
-        assert_eq!(
-            format(b"\xff\xd8\xff\xe0...."),
-            Some(gpui::ImageFormat::Jpeg)
-        );
-        assert_eq!(format(b"GIF89a...."), Some(gpui::ImageFormat::Gif));
-        assert_eq!(
-            format(b"RIFF\x00\x00\x00\x00WEBPVP8 "),
-            Some(gpui::ImageFormat::Webp)
-        );
-        assert_eq!(format(b"<html>"), None, "not a picture");
-        assert_eq!(format(b""), None);
     }
 
     #[test]

@@ -45,6 +45,8 @@ pub(crate) struct Shell {
     messages: Vec<Message>,
     /// The conversation's rows: only the visible ones are laid out.
     rows: ListState,
+    /// The bodies of the messages drawn so far, by message index.
+    bodies: std::collections::HashMap<usize, Arc<conversation::DrawnBody>>,
     /// What each row is: a message, or the rule that starts a day.
     row_model: Vec<conversation::Row>,
     /// How far east of UTC the local clock is, as of the last reload.
@@ -113,6 +115,7 @@ impl Shell {
             servers: engine.saved_servers(),
             messages: Vec::new(),
             rows: ListState::new(0, ListAlignment::Top, px(OVERDRAW)),
+            bodies: std::collections::HashMap::new(),
             row_model: Vec::new(),
             utc_offset: 0,
             talking: HashSet::new(),
@@ -202,11 +205,22 @@ impl Shell {
 
     /// Read the current channel's messages again and lay the rows out afresh.
     fn reload_messages(&mut self, cx: &mut Context<Self>) {
-        self.messages = self
+        let messages = self
             .snapshot
             .current_channel
             .map(|channel| self.engine.messages(channel))
             .unwrap_or_default();
+        // A message drawn before is kept as drawn while it is still the same
+        // message; an edit, a deletion or another channel starts over.
+        let kept = self
+            .messages
+            .iter()
+            .zip(&messages)
+            .all(|(before, now)| before.html == now.html);
+        if !kept || messages.len() < self.messages.len() {
+            self.bodies.clear();
+        }
+        self.messages = messages;
         // A short conversation starts under the header, as the web UI draws
         // it; a long one opens on its newest message.
         self.utc_offset = widgets::local_utc_offset();

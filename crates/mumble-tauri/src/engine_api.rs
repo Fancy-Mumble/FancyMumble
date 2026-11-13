@@ -188,6 +188,8 @@ pub struct MessageInfo {
     /// The message as plain text. A message that is only a picture or a
     /// file says what was sent.
     pub text: String,
+    /// The message as it was sent: HTML.
+    pub html: String,
     /// When it was sent, in Unix epoch milliseconds, where known.
     pub sent_at_ms: Option<u64>,
     /// Whether the local user sent it.
@@ -200,6 +202,7 @@ impl From<ChatMessage> for MessageInfo {
             sender: message.sender_session,
             sender_name: message.sender_name,
             text: fancy_utils::html::message_preview(&message.body),
+            html: message.body,
             sent_at_ms: message.timestamp,
             own: message.is_own,
         }
