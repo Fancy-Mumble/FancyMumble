@@ -356,6 +356,8 @@ pub(crate) fn handle_proto_fetch_resp(
     };
     state.pchat_ctx.pchat = Some(pchat);
 
+    let walk = state.msgs.window(channel_id).fetching;
+    let decrypted_msgs = reading_order(decrypted_msgs, walk);
     let decrypted_msgs = match state.msgs.by_channel.get_mut(&channel_id) {
         Some(held) => fold_fetched_edits(held, decrypted_msgs),
         None => fold_fetched_edits(&mut [], decrypted_msgs),
@@ -423,6 +425,26 @@ fn fold_fetched_edits(
         .zip(folded)
         .filter_map(|(row, folded)| (!folded).then_some(row))
         .collect()
+}
+
+/// A fetched page in reading order, oldest first, which is the order the
+/// joins take one in.
+///
+/// A server that walks back from a cursor hands the page over as it walked
+/// it, newest first; joined like that, a channel read back its history
+/// upside down. Only the direction of the page is read off the two rows at
+/// its ends, which the server stamped: the rows keep the server's order and
+/// are never sorted among themselves.
+fn reading_order<T>(mut page: Vec<(ChatMessage, T)>, walk: FetchWalk) -> Vec<(ChatMessage, T)> {
+    let stamp = |row: Option<&(ChatMessage, T)>| row.and_then(|(message, _)| message.timestamp);
+    let walked_back = matches!(walk, FetchWalk::Newest | FetchWalk::Older);
+    if walked_back
+        && let (Some(first), Some(last)) = (stamp(page.first()), stamp(page.last()))
+        && first > last
+    {
+        page.reverse();
+    }
+    page
 }
 
 /// Decrypt a batch of fetched messages outside the state lock.
@@ -1108,6 +1130,47 @@ mod tests {
         let (msg, of) = edit("m-gone", "fixed", "abcd");
         let _ = insert_or_replace_message(&mut state, 4, "e-1", of.as_deref(), msg);
         assert!(bodies(&state).is_empty());
+    }
+
+    #[test]
+    fn a_page_walked_backwards_is_joined_in_reading_order() {
+        let at = |id: &str, timestamp: u64| {
+            let mut row = half(id, id, false);
+            row.timestamp = Some(timestamp);
+            (row, ())
+        };
+        let ids = |page: Vec<(ChatMessage, ())>| -> Vec<String> {
+            page.into_iter()
+                .filter_map(|(row, ())| row.message_id)
+                .collect()
+        };
+        // As a server hands back the newest page, and one before a cursor.
+        let newest_first = || vec![at("c", 30), at("b", 20), at("a", 10)];
+        assert_eq!(
+            ids(reading_order(newest_first(), FetchWalk::Newest)),
+            ["a", "b", "c"]
+        );
+        assert_eq!(
+            ids(reading_order(newest_first(), FetchWalk::Older)),
+            ["a", "b", "c"]
+        );
+        // Already in reading order: left alone, whichever way it was asked.
+        let oldest_first = || vec![at("a", 10), at("b", 20), at("c", 30)];
+        assert_eq!(
+            ids(reading_order(oldest_first(), FetchWalk::Newest)),
+            ["a", "b", "c"]
+        );
+        assert_eq!(
+            ids(reading_order(oldest_first(), FetchWalk::Newer)),
+            ["a", "b", "c"]
+        );
+        // The rows between the ends keep the server's order: never sorted.
+        let skewed = vec![at("c", 30), at("b", 99), at("a", 10)];
+        assert_eq!(
+            ids(reading_order(skewed, FetchWalk::Newest)),
+            ["a", "b", "c"]
+        );
+        assert!(reading_order(Vec::<(ChatMessage, ())>::new(), FetchWalk::Newest).is_empty());
     }
 
     #[test]
