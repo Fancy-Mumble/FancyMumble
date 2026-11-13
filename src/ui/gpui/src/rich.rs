@@ -16,6 +16,8 @@ pub(crate) struct Style {
     pub underline: bool,
     pub strike: bool,
     pub code: bool,
+    /// Somebody is named here: a mention.
+    pub mention: bool,
 }
 
 /// A message, ready to draw.
@@ -78,6 +80,8 @@ struct Reader {
     code: u32,
     /// Inside `<pre>`: white space is kept as written.
     pre: u32,
+    /// The `<span>`s open, innermost last: whether each is a mention.
+    spans: Vec<bool>,
     /// The link being read: where it started, and where it leads.
     link: Option<(usize, String)>,
     /// The style in force, and where it began.
@@ -95,6 +99,7 @@ impl Reader {
             underline: self.underline > 0,
             strike: self.strike > 0,
             code: self.code > 0 || self.pre > 0,
+            mention: self.spans.contains(&true),
         }
     }
 
@@ -187,6 +192,10 @@ impl Reader {
                 self.push('•');
                 self.push(' ');
             }
+            "span" if closing => drop(self.spans.pop()),
+            "span" => self
+                .spans
+                .push(attributes.to_ascii_lowercase().contains("data-mention-")),
             "a" => self.anchor(closing, attributes),
             "img" if !closing => self.image(attributes),
             // Their contents are not text to show.
@@ -234,6 +243,7 @@ impl Reader {
         self.strike = 0;
         self.code = 0;
         self.pre = 0;
+        self.spans.clear();
         self.restyle();
         if let Some((start, href)) = self.link.take()
             && self.out.text.len() > start
@@ -397,6 +407,7 @@ mod tests {
         underline: false,
         strike: false,
         code: false,
+        mention: false,
     };
 
     #[test]
@@ -518,6 +529,25 @@ mod tests {
             Rich::parse(r#"<img src="data:image/png;base64,!!!">"#)
                 .images
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_mention_is_set_apart_and_ends_with_its_span() {
+        let rich = Rich::parse(
+            r#"hi <span class="mention mention-user" data-mention-session="3">@Rin</span> and <span class="x">you</span>"#,
+        );
+        assert_eq!(rich.text, "hi @Rin and you");
+        assert_eq!(
+            rich.spans,
+            [(
+                3..7,
+                Style {
+                    mention: true,
+                    ..Style::default()
+                }
+            )],
+            "only the span that names somebody"
         );
     }
 

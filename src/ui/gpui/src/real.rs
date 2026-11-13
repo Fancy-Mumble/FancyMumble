@@ -2088,6 +2088,18 @@ mod tests {
             crate::rich::Rich::parse(&reply.html).text.as_str(),
             "agreed"
         );
+
+        // A name after an at sign is a mention, to a client that knows them.
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        bob.send_message(room, "ping @FancyAlice".to_owned());
+        wait_for("alice to be mentioned", || {
+            said(alice, room, "ping @FancyAlice").is_some_and(|message| {
+                crate::rich::Rich::parse(&message.html)
+                    .spans
+                    .iter()
+                    .any(|(range, style)| style.mention && range.len() == "@FancyAlice".len())
+            })
+        });
     }
 
     /// What only a Fancy server does: a message is edited and reacted to,

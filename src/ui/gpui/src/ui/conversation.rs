@@ -1066,10 +1066,12 @@ fn highlights(
             Some((
                 range,
                 HighlightStyle {
-                    color: link.then_some(link_ink),
-                    font_weight: style.bold.then_some(EMPHASIS),
+                    // Somebody named stands out as a link does, on the
+                    // ground code stands on.
+                    color: (link || style.mention).then_some(link_ink),
+                    font_weight: (style.bold || style.mention).then_some(EMPHASIS),
                     font_style: style.italic.then_some(gpui::FontStyle::Italic),
-                    background_color: style.code.then_some(code_ground),
+                    background_color: (style.code || style.mention).then_some(code_ground),
                     underline: (link || style.underline).then(|| line(link.then_some(link_ink))),
                     strikethrough: style.strike.then(|| gpui::StrikethroughStyle {
                         thickness: px(1.0),

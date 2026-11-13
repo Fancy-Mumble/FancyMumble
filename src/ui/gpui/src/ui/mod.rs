@@ -840,8 +840,43 @@ impl Shell {
                     self.engine.send_picture(conversation, picture.clone());
                 }
             }
-            InputEvent::Tabbed { .. } => {}
+            InputEvent::Tabbed { .. } => self.complete_mention(cx),
         }
+    }
+
+    /// Tab in the composer: finish the `@name` being typed at its end
+    /// with the first of those here whose name starts that way.
+    fn complete_mention(&mut self, cx: &mut Context<Self>) {
+        let text = self.composer.read(cx).text().to_owned();
+        let Some(at) = text.rfind('@') else {
+            return;
+        };
+        let begun = &text[at + 1..];
+        let starts_word = text[..at]
+            .chars()
+            .next_back()
+            .is_none_or(char::is_whitespace);
+        if !starts_word || begun.contains(char::is_whitespace) {
+            return;
+        }
+        let begun = begun.to_lowercase();
+        let mut names: Vec<&gpui::SharedString> = self
+            .snapshot
+            .users
+            .iter()
+            .filter(|user| Some(user.session) != self.snapshot.own_session)
+            .map(|user| &user.name)
+            .filter(|name| name.to_lowercase().starts_with(&begun))
+            .collect();
+        names.sort();
+        let Some(name) = names.first() else {
+            return;
+        };
+        let completed = format!("{}@{name} ", &text[..at]);
+        self.composer.update(cx, |composer, cx| {
+            composer.set_text(completed);
+            cx.notify();
+        });
     }
 
     /// Put the message `id` in the composer, to be changed and sent again.

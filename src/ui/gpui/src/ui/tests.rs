@@ -1437,3 +1437,20 @@ fn a_channels_description_is_edited_from_the_one_it_has(cx: &mut TestAppContext)
         })
     );
 }
+
+#[gpui::test]
+fn tab_finishes_a_name_begun_after_an_at_sign(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell(cx);
+    shell.update_in(cx, |shell, window, cx| {
+        shell.composer.read(cx).focus(window)
+    });
+    cx.simulate_keystrokes("h i space @ s c tab");
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(shell.composer.read(cx).text(), "hi @Scout ");
+    });
+    // Nothing begun, or nobody called that: Tab changes nothing.
+    cx.simulate_keystrokes("@ z z tab");
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(shell.composer.read(cx).text(), "hi @Scout @zz");
+    });
+}
