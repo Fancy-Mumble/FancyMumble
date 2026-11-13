@@ -208,6 +208,17 @@ pub struct UserStats {
     pub address: Option<String>,
 }
 
+/// What to change about a channel; what is `None` is left as it is.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ChannelChange {
+    /// Its name.
+    pub name: Option<String>,
+    /// What is said about it, as plain text; empty says nothing.
+    pub description: Option<String>,
+    /// The password it is entered with; empty lets anybody in.
+    pub password: Option<String>,
+}
+
 /// A file shared in a message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AttachmentInfo {
@@ -1809,19 +1820,35 @@ impl EngineHandle {
     ///
     /// When not connected.
     pub async fn rename_channel(&self, channel: u32, name: String) -> Result<(), String> {
+        self.change_channel(
+            channel,
+            ChannelChange {
+                name: Some(name),
+                ..ChannelChange::default()
+            },
+        )
+        .await
+    }
+
+    /// Change what `change` names about `channel`, and leave the rest.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn change_channel(&self, channel: u32, change: ChannelChange) -> Result<(), String> {
         self.state
             .update_channel(
                 channel,
                 None,
-                Some(name),
+                change.name,
+                change.description.as_deref().map(escape_html),
                 None,
                 None,
                 None,
                 None,
                 None,
                 None,
-                None,
-                None,
+                change.password,
                 None,
                 None,
                 None,
