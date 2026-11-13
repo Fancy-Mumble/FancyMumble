@@ -295,7 +295,69 @@ fn reply_html(to: &str, text: &str) -> String {
         .filter(|c| !matches!(c, '<' | '>'))
         .collect::<String>()
         .replace("--", "");
-    format!("{QUOTE_MARK}{to}{MARK_END}{}", escape_html(text))
+    format!("{QUOTE_MARK}{to}{MARK_END}{text}")
+}
+
+/// `html`, escaped text, with every `@Name` of somebody on the server made
+/// the mention a Fancy client draws as one and tells them of; `@everyone`
+/// and `@here` likewise. Another client reads the `@Name` it always was.
+///
+/// A mention starts a word and ends one: `mail@Rin.example` names nobody,
+/// and with a Rin and a Rina on the server `@Rina` is Rina.
+fn with_mentions(html: &str, users: &[(u32, String)]) -> String {
+    if !html.contains('@') {
+        return html.to_owned();
+    }
+    // Names as they stand in the escaped text, longest first.
+    let mut names: Vec<(String, String)> = users
+        .iter()
+        .filter(|(_, name)| !name.is_empty())
+        .map(|(session, name)| {
+            (
+                escape_html(name),
+                format!(r#"class="mention mention-user" data-mention-session="{session}""#),
+            )
+        })
+        .chain(["everyone", "here"].map(|all| {
+            (
+                all.to_owned(),
+                format!(r#"class="mention mention-{all}" data-mention-{all}="1""#),
+            )
+        }))
+        .collect();
+    names.sort_by_key(|(name, _)| std::cmp::Reverse(name.len()));
+
+    let mut out = String::with_capacity(html.len());
+    let mut rest = html;
+    while let Some(at) = rest.find('@') {
+        let starts_word = rest[..at]
+            .chars()
+            .next_back()
+            .or_else(|| out.chars().next_back())
+            .is_none_or(|before| !before.is_alphanumeric());
+        out.push_str(&rest[..at]);
+        let after = &rest[at + 1..];
+        let named = names.iter().find(|(name, _)| {
+            starts_word
+                && after.starts_with(name.as_str())
+                && after[name.len()..]
+                    .chars()
+                    .next()
+                    .is_none_or(|next| !next.is_alphanumeric())
+        });
+        match named {
+            Some((name, attributes)) => {
+                out.push_str(&format!("<span {attributes}>@{name}</span>"));
+                rest = &after[name.len()..];
+            }
+            None => {
+                out.push('@');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// The message that shares a file kept under `key`: the mark every Fancy
@@ -1140,7 +1202,23 @@ impl EngineHandle {
     ///
     /// When not connected, or the message could not be sent.
     pub async fn send_direct_text(&self, session: u32, text: &str) -> Result<(), String> {
-        self.state.send_dm(session, escape_html(text)).await
+        self.state.send_dm(session, self.composed(text)).await
+    }
+
+    /// `text` as the message it is sent as: escaped, its line breaks kept,
+    /// and on a Fancy server the people it names mentioned.
+    fn composed(&self, text: &str) -> String {
+        let html = escape_html(text);
+        if !html.contains('@') || !self.fancy() {
+            return html;
+        }
+        let users: Vec<(u32, String)> = self
+            .state
+            .users()
+            .into_iter()
+            .map(|user| (user.session, user.name))
+            .collect();
+        with_mentions(&html, &users)
     }
 
     /// Send `text` to `channel` as a reply to the message `to`. A client
@@ -1151,7 +1229,9 @@ impl EngineHandle {
     ///
     /// When not connected, or the message could not be sent.
     pub async fn reply_text(&self, channel: u32, to: &str, text: &str) -> Result<(), String> {
-        self.state.send_message(channel, reply_html(to, text)).await
+        self.state
+            .send_message(channel, reply_html(to, &self.composed(text)))
+            .await
     }
 
     /// Send `text` to the user `session` as a reply to the message `to`.
@@ -1165,7 +1245,9 @@ impl EngineHandle {
         to: &str,
         text: &str,
     ) -> Result<(), String> {
-        self.state.send_dm(session, reply_html(to, text)).await
+        self.state
+            .send_dm(session, reply_html(to, &self.composed(text)))
+            .await
     }
 
     /// Send `html` to `channel` as it stands: for what plain text cannot
@@ -1248,7 +1330,7 @@ impl EngineHandle {
     ///
     /// When not connected, or the message could not be sent.
     pub async fn send_text(&self, channel: u32, text: &str) -> Result<(), String> {
-        self.state.send_message(channel, escape_html(text)).await
+        self.state.send_message(channel, self.composed(text)).await
     }
 
     /// Whether the server speaks the Fancy extensions: messages there have
@@ -1275,7 +1357,7 @@ impl EngineHandle {
     /// When not connected, or the server is not a Fancy one.
     pub async fn edit_text(&self, channel: u32, id: &str, text: &str) -> Result<(), String> {
         self.state
-            .edit_message(channel, id.to_owned(), escape_html(text))
+            .edit_message(channel, id.to_owned(), self.composed(text))
             .await
     }
 
@@ -2005,8 +2087,37 @@ mod tests {
     };
 
     #[test]
+    fn a_name_after_an_at_sign_becomes_a_mention() {
+        let users = [
+            (3, "Rin".to_owned()),
+            (7, "Rina".to_owned()),
+            (9, "A&B".to_owned()),
+        ];
+        let said = |text: &str| with_mentions(&escape_html(text), &users);
+        assert_eq!(
+            said("hi @Rin!"),
+            r#"hi <span class="mention mention-user" data-mention-session="3">@Rin</span>!"#
+        );
+        // The longer name wins, and a name has to end where the word does.
+        assert!(said("@Rina").contains(r#"data-mention-session="7""#));
+        assert_eq!(said("@Rinaldo"), "@Rinaldo");
+        // It has to start a word, too.
+        assert_eq!(said("mail@Rin.example"), "mail@Rin.example");
+        assert!(
+            said("@A&B").contains(">@A&amp;B</span>"),
+            "a name is escaped as the text is"
+        );
+        assert_eq!(
+            said("@everyone"),
+            r#"<span class="mention mention-everyone" data-mention-everyone="1">@everyone</span>"#
+        );
+        assert_eq!(said("nobody @ all"), "nobody @ all");
+        assert_eq!(said("plain"), "plain");
+    }
+
+    #[test]
     fn a_reply_names_what_it_answers_and_is_read_back() {
-        let reply = reply_html("0191-abcd", "yes & no");
+        let reply = reply_html("0191-abcd", "yes &amp; no");
         assert_eq!(reply, "<!-- FANCY_QUOTE:0191-abcd -->yes &amp; no");
         assert_eq!(reply_target(&reply), Some("0191-abcd"));
         assert_eq!(reply_target("no mark here"), None);
