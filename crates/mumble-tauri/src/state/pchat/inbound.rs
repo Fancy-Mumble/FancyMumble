@@ -724,8 +724,10 @@ pub(crate) fn handle_proto_delete_messages(
                 return false;
             }
         }
+        // By certificate, which is what the request names; the name is
+        // matched too for copies that never learned their sender's hash.
         if let Some(hash) = sender_hash
-            && m.sender_name == hash
+            && (m.sender_hash.as_deref() == Some(hash) || m.sender_name == hash)
         {
             return false;
         }
