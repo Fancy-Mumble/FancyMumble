@@ -396,7 +396,11 @@ impl Engine for DemoEngine {
                 Message {
                     sender: Some(OWN),
                     sender_name: "Alex".into(),
-                    html: body.replace('&', "&amp;").replace('<', "&lt;").into(),
+                    html: body
+                        .replace('&', "&amp;")
+                        .replace('<', "&lt;")
+                        .replace('\n', "<br>")
+                        .into(),
                     body: body.into(),
                     sent_at_ms: Some(sent_at_ms),
                     own: true,

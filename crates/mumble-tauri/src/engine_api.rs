@@ -873,7 +873,7 @@ impl EngineHandle {
 ///
 /// Chat bodies are HTML on the wire, so text a person typed has to have the
 /// three characters that mean something in HTML written out, or `1 < 2`
-/// arrives as the start of a tag.
+/// arrives as the start of a tag - and its line breaks written as breaks.
 fn escape_html(text: &str) -> String {
     let mut html = String::with_capacity(text.len());
     for character in text.chars() {
@@ -881,6 +881,8 @@ fn escape_html(text: &str) -> String {
             '&' => html.push_str("&amp;"),
             '<' => html.push_str("&lt;"),
             '>' => html.push_str("&gt;"),
+            // HTML folds a line break into a space; a typed one is meant.
+            '\n' => html.push_str("<br>"),
             other => html.push(other),
         }
     }
@@ -903,6 +905,7 @@ mod tests {
             "1 &lt; 2 &amp;&amp; 3 &gt; 2"
         );
         assert_eq!(escape_html("plain"), "plain");
+        assert_eq!(escape_html("one\ntwo"), "one<br>two");
         // Round trip: what is sent reads back as what was typed.
         assert_eq!(
             fancy_utils::html::message_preview(&escape_html("<b>not bold</b> & co")),
