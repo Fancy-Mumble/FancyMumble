@@ -245,6 +245,8 @@ pub(crate) struct Shell {
     adding_server: bool,
     /// The unread count the window's title was last set for.
     titled_unread: u32,
+    /// The picture being looked at large, while one is.
+    lightbox: Option<Arc<gpui::Image>>,
     /// The panels that open over the window.
     panels: Panels,
     /// Who is whispered to, with which key.
@@ -369,6 +371,7 @@ impl Shell {
             active_session: None,
             adding_server: false,
             titled_unread: 0,
+            lightbox: None,
             panels: Panels::default(),
             whisper: Whisper {
                 key: whisper_key,
@@ -1092,7 +1095,10 @@ impl Shell {
 
     /// Escape: close whatever is open on top of the window.
     pub(crate) fn dismiss(&mut self, cx: &mut Context<Self>) {
-        if self.menu.take().is_some() || self.prompt.take().is_some() || self.info.take().is_some()
+        if self.lightbox.take().is_some()
+            || self.menu.take().is_some()
+            || self.prompt.take().is_some()
+            || self.info.take().is_some()
         {
             cx.notify();
             return;
@@ -1500,6 +1506,9 @@ impl Render for Shell {
             })
             .when_some(self.editor.as_ref(), |shell, editor| {
                 shell.child(server_editor::render(editor, &theme, cx))
+            })
+            .when_some(self.lightbox.as_ref(), |shell, picture| {
+                shell.child(conversation::render_lightbox(picture, &theme, cx))
             })
             .when_some(self.menu.as_ref(), |shell, menu| {
                 shell.child(menu::render_menu(menu, &theme, window, cx))

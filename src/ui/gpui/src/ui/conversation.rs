@@ -334,7 +334,7 @@ fn welcome_card(
             .text_size(px(13.0))
             .child(div().flex_1().min_w_0().child(body_text(
                 welcome,
-                usize::MAX,
+                Place::aside(usize::MAX),
                 theme.c.accent_text,
                 theme,
             )))
@@ -629,6 +629,11 @@ impl Shell {
             theme.skin.message_gap
         };
         // Under the bubble: what lies behind its link, then its reactions.
+        let viewer = cx.weak_entity();
+        let at = Place {
+            row,
+            viewer: Some(&viewer),
+        };
         let quoted = self.quoted(index, &theme);
         let under: Vec<AnyElement> = self
             .file_cards(index, &theme, cx)
@@ -642,7 +647,7 @@ impl Shell {
             own_message(
                 message,
                 &body,
-                row,
+                at,
                 under,
                 seen,
                 &seen_by,
@@ -662,7 +667,7 @@ impl Shell {
                 their_message(
                     message,
                     &body,
-                    row,
+                    at,
                     picture.as_ref(),
                     continues,
                     under,
@@ -1174,7 +1179,7 @@ fn highlights(
 /// A message's text, with its links live, and its pictures under it.
 pub(super) fn body_text(
     body: &DrawnBody,
-    row: usize,
+    at: Place<'_>,
     link_ink: Hsla,
     theme: &Theme,
 ) -> impl IntoElement + use<> {
@@ -1190,7 +1195,7 @@ pub(super) fn body_text(
         .flex_col()
         .gap(px(8.0))
         .when(!rich.text.is_empty(), |column| {
-            column.child(InteractiveText::new(("message", row), text).on_click(
+            column.child(InteractiveText::new(("message", at.row), text).on_click(
                 ranges,
                 move |link, _, cx| {
                     if let Some(address) = addresses.get(link) {
@@ -1199,13 +1204,144 @@ pub(super) fn body_text(
                 },
             ))
         })
-        .children(body.pictures.iter().map(|picture| {
-            gpui::img(Arc::clone(picture))
-                .max_w(px(420.0))
-                .max_h(px(320.0))
-                .rounded(theme.skin.radius_md)
-                .object_fit(gpui::ObjectFit::Contain)
+        .children(body.pictures.iter().enumerate().map(|(nth, picture)| {
+            let (shown, viewer) = (Arc::clone(picture), at.viewer.cloned());
+            div()
+                .id(("picture", at.row.wrapping_mul(8).wrapping_add(nth)))
+                .debug_selector(move || format!("picture-{}-{nth}", at.row))
+                // A click looks at it larger, where there is somewhere to.
+                .when_some(viewer, |tile, viewer| {
+                    tile.cursor_pointer().on_click(move |_, _, cx| {
+                        let _ = viewer.update(cx, |shell, cx| {
+                            shell.lightbox = Some(Arc::clone(&shown));
+                            cx.notify();
+                        });
+                    })
+                })
+                .child(
+                    gpui::img(Arc::clone(picture))
+                        .max_w(px(420.0))
+                        .max_h(px(320.0))
+                        .rounded(theme.skin.radius_md)
+                        .object_fit(gpui::ObjectFit::Contain),
+                )
         }))
+}
+
+/// The name a picture is offered to be saved under.
+fn picture_file_name(picture: &gpui::Image) -> &'static str {
+    match picture.format() {
+        gpui::ImageFormat::Png => "picture.png",
+        gpui::ImageFormat::Jpeg => "picture.jpg",
+        gpui::ImageFormat::Gif => "picture.gif",
+        gpui::ImageFormat::Webp => "picture.webp",
+        _ => "picture",
+    }
+}
+
+impl Shell {
+    /// Ask where to, and write the picture being looked at there.
+    fn save_lightbox_picture(&mut self, cx: &mut Context<Self>) {
+        let Some(picture) = self.lightbox.clone() else {
+            return;
+        };
+        let home = std::env::var_os("HOME").map_or_else(std::env::temp_dir, Into::into);
+        let chosen = cx.prompt_for_new_path(&home, Some(picture_file_name(&picture)));
+        cx.spawn(async move |shell, cx| {
+            let Ok(Ok(Some(to))) = chosen.await else {
+                return;
+            };
+            let written = cx
+                .background_executor()
+                .spawn(async move {
+                    std::fs::write(&to, picture.bytes())
+                        .map(|()| to)
+                        .map_err(|e| e.to_string())
+                })
+                .await;
+            let _ = shell.update(cx, |shell, cx| {
+                shell.notice = Some(match written {
+                    Ok(to) => format!("Saved {}.", to.display()).into(),
+                    Err(problem) => format!("The picture could not be saved: {problem}").into(),
+                });
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+}
+
+/// A picture as large as the window lets it be, over a veil. A click
+/// anywhere closes it.
+pub(super) fn render_lightbox(
+    picture: &Arc<gpui::Image>,
+    theme: &Theme,
+    cx: &mut Context<Shell>,
+) -> impl IntoElement + use<> {
+    let mut veil = gpui::black();
+    veil.a = 0.85;
+    div()
+        .id("lightbox")
+        .debug_selector(|| "lightbox".to_owned())
+        .absolute()
+        .size_full()
+        .top_0()
+        .left_0()
+        .occlude()
+        .bg(veil)
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .gap(px(12.0))
+        .p(px(32.0))
+        .on_click(cx.listener(|shell, _, _, cx| {
+            shell.lightbox = None;
+            cx.notify();
+        }))
+        .child(
+            gpui::img(Arc::clone(picture))
+                .flex_1()
+                .min_h_0()
+                .max_w_full()
+                .object_fit(gpui::ObjectFit::Contain),
+        )
+        .child(
+            div()
+                .id("save-picture")
+                .debug_selector(|| "save-picture".to_owned())
+                .flex_none()
+                .px(px(14.0))
+                .py(px(6.0))
+                .rounded(theme.skin.radius_pill)
+                .bg(theme.c.card)
+                .border_1()
+                .border_color(theme.c.line2)
+                .text_size(px(12.5))
+                .cursor_pointer()
+                .hover(|style| style.opacity(0.85))
+                .on_click(cx.listener(|shell, _, _, cx| {
+                    // Saving is not closing.
+                    cx.stop_propagation();
+                    shell.save_lightbox_picture(cx);
+                }))
+                .child("Save…"),
+        )
+}
+
+/// Where a body is drawn: the row it is in, which names its parts, and the
+/// shell a click on one of its pictures opens the picture in, if any.
+#[derive(Clone, Copy)]
+pub(super) struct Place<'a> {
+    pub row: usize,
+    pub viewer: Option<&'a gpui::WeakEntity<Shell>>,
+}
+
+impl Place<'_> {
+    /// A body shown outside the conversation: a card, the welcome.
+    pub(super) const fn aside(row: usize) -> Self {
+        Self { row, viewer: None }
+    }
 }
 
 /// One answer of a poll: its words over a bar that says how it stands
@@ -1320,7 +1456,7 @@ fn bubble(theme: &Theme) -> gpui::Div {
 fn their_message(
     message: &Message,
     body: &DrawnBody,
-    row: usize,
+    at: Place<'_>,
     picture: Option<&Arc<gpui::Image>>,
     continues: bool,
     under: Vec<AnyElement>,
@@ -1383,7 +1519,7 @@ fn their_message(
                         .bg(theme.c.card)
                         .border_1()
                         .border_color(theme.c.line2)
-                        .child(body_text(body, row, theme.c.accent_text, theme)),
+                        .child(body_text(body, at, theme.c.accent_text, theme)),
                 )
                 .when(message.edited || message.pinned, |column| {
                     column.child(
@@ -1410,7 +1546,7 @@ fn their_message(
 fn own_message(
     message: &Message,
     body: &DrawnBody,
-    row: usize,
+    at: Place<'_>,
     under: Vec<AnyElement>,
     seen: bool,
     seen_by: &[SharedString],
@@ -1437,7 +1573,7 @@ fn own_message(
         .flex_col()
         .items_end()
         .gap(px(5.0))
-        .child(plate.child(body_text(body, row, link_ink, theme)))
+        .child(plate.child(body_text(body, at, link_ink, theme)))
         .children(under)
         .child(
             div()

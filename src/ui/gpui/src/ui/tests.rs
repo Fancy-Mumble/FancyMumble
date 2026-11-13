@@ -1650,3 +1650,40 @@ fn files_sent_together_go_out_in_order_pictures_as_pictures(cx: &mut TestAppCont
     );
     let _ = std::fs::remove_dir_all(folder);
 }
+
+#[gpui::test]
+fn a_picture_in_a_message_opens_large_and_is_saved_from_there(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(4, 4, image::Rgb([9, 9, 9])))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .expect("a png");
+    engine.send_picture(Conversation::Channel(1), png.clone());
+    cx.run_until_parked();
+    // The message is the sixth; under the day rule it is row six.
+    click(cx, "picture-6-0");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(
+            shell.lightbox.as_ref().map(|picture| picture.bytes()),
+            Some(&png[..])
+        );
+    });
+    let folder = std::env::temp_dir().join(format!("fancy-gpui-lightbox-{}", std::process::id()));
+    std::fs::create_dir_all(&folder).expect("writable");
+    cx.executor().allow_parking();
+    click(cx, "save-picture");
+    assert!(cx.did_prompt_for_new_path());
+    let to = folder.join("kept.png");
+    cx.simulate_new_path_selection({
+        let to = to.clone();
+        move |_| Some(to)
+    });
+    cx.run_until_parked();
+    assert_eq!(std::fs::read(&to).ok().as_deref(), Some(&png[..]));
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.lightbox.is_some(), "saving is not closing")
+    });
+    shell.update(cx, Shell::dismiss);
+    shell.read_with(cx, |shell, _| assert!(shell.lightbox.is_none()));
+    let _ = std::fs::remove_dir_all(folder);
+}

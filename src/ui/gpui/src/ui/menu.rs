@@ -992,6 +992,28 @@ pub(super) fn render_menu(
         )
 }
 
+/// What an info card says: the text once it has come, or that it is on
+/// its way, or that there is none.
+fn info_body(info: &super::Info, theme: &Theme) -> gpui::AnyElement {
+    match &info.body {
+        None => div()
+            .text_color(theme.c.muted)
+            .child("Fetching…")
+            .into_any_element(),
+        Some(body) if body.is_empty() => div()
+            .text_color(theme.c.muted)
+            .child("Nothing has been written here.")
+            .into_any_element(),
+        Some(body) => super::conversation::body_text(
+            body,
+            super::conversation::Place::aside(usize::MAX - 1),
+            theme.c.accent_text,
+            theme,
+        )
+        .into_any_element(),
+    }
+}
+
 /// The open dialog, over a veil.
 pub(super) fn render_prompt(
     prompt: &Prompt,
@@ -1103,20 +1125,7 @@ pub(super) fn render_info(
     let mut veil = gpui::black();
     veil.a = 0.5;
     let hover = theme.c.hover;
-    let body = match &info.body {
-        None => div()
-            .text_color(theme.c.muted)
-            .child("Fetching…")
-            .into_any_element(),
-        Some(body) if body.is_empty() => div()
-            .text_color(theme.c.muted)
-            .child("Nothing has been written here.")
-            .into_any_element(),
-        Some(body) => {
-            super::conversation::body_text(body, usize::MAX - 1, theme.c.accent_text, theme)
-                .into_any_element()
-        }
-    };
+    let body = info_body(info, theme);
     div()
         .id("info")
         .absolute()

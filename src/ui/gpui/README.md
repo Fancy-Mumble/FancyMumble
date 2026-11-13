@@ -26,7 +26,8 @@ real engine and does text and voice.
   password; the welcome message, comments and
   descriptions.
 - **Messages.** Rich text with live links and embedded pictures; send a
-  picture from a file or the clipboard, scaled to what the server takes;
+  picture from a file or the clipboard, scaled to what the server takes; a
+  click on a picture looks at it large, and saves it;
   day rules
   and local time, several lines (Shift+Enter), direct messages,
   notifications and the unread count in the window's title. A long
