@@ -110,6 +110,7 @@ attached, or expect a tone: the microphone is the engine's virtual one.
 
 The Signal test (`live_fancy_a_signal`) also wants `libsignal_bridge.so`
 beside the test binary, in `target/.../debug/deps`.
+The recording test runs alone: `-- --ignored alone_what_is_heard`.
 
 name what the other live tests need; each is skipped by filter when its
 server is not there (`-- --ignored live_fancy`).
