@@ -589,6 +589,15 @@ pub struct VoiceSettings {
     pub noise_suppression: bool,
     /// Whether quiet speech is brought up to a common level.
     pub automatic_gain: bool,
+    /// How loud the microphone is sent: 1.0 as captured, 0.0 silent.
+    pub input_volume: f32,
+    /// How loud everybody is played: 1.0 as sent, 0.0 silent.
+    pub output_volume: f32,
+    /// How many bits a second voice is encoded at.
+    pub bitrate_bps: u32,
+    /// Whether voice travels with everything else over TCP, for a network
+    /// that loses or blocks UDP. Slower to arrive.
+    pub voice_over_tcp: bool,
 }
 
 /// Who to connect as, and where.
@@ -1503,6 +1512,10 @@ impl EngineHandle {
             activation_threshold: settings.vad_threshold,
             noise_suppression: settings.noise_suppression,
             automatic_gain: settings.auto_gain,
+            input_volume: settings.input_volume,
+            output_volume: settings.output_volume,
+            bitrate_bps: u32::try_from(settings.bitrate_bps).unwrap_or(0),
+            voice_over_tcp: settings.force_tcp_audio,
         }
     }
 
@@ -1518,6 +1531,11 @@ impl EngineHandle {
         settings.vad_threshold = voice.activation_threshold.clamp(0.0, 1.0);
         settings.noise_suppression = voice.noise_suppression;
         settings.auto_gain = voice.automatic_gain;
+        settings.input_volume = voice.input_volume.clamp(0.0, MAX_VOLUME);
+        settings.output_volume = voice.output_volume.clamp(0.0, MAX_VOLUME);
+        settings.bitrate_bps =
+            i32::try_from(voice.bitrate_bps.clamp(MIN_BITRATE, MAX_BITRATE)).unwrap_or(i32::MAX);
+        settings.force_tcp_audio = voice.voice_over_tcp;
         self.state.apply_audio_settings(settings)
     }
 
@@ -1558,6 +1576,12 @@ impl EngineHandle {
 /// Chat bodies are HTML on the wire, so text a person typed has to have the
 /// three characters that mean something in HTML written out, or `1 < 2`
 /// arrives as the start of a tag - and its line breaks written as breaks.
+/// The loudest a volume goes: twice as captured or as sent.
+const MAX_VOLUME: f32 = 2.0;
+/// What Opus is asked to encode voice at, at the least and at the most.
+const MIN_BITRATE: u32 = 8_000;
+const MAX_BITRATE: u32 = 192_000;
+
 /// The most messages a view is handed at once, whatever it asks for.
 const MAX_WINDOW: usize = 10_000;
 
