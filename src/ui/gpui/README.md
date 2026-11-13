@@ -48,6 +48,9 @@ real engine and does text and voice.
 - **People.** Pictures, comments, what the server knows of a connection;
   per-user volume; kick, ban, mute, deafen, move, register, priority
   speaker, and for a moderator taking away a comment or a picture; your own comment and picture.
+- **Friends.** Kept from somebody's menu, by their certificate, so they
+  are the same person on any server; the list says who is here now and
+  opens the conversation with one who is.
 - **Administration.** The ban list and the registered accounts, behind a
   right click on the server's tile: filter them, lift a ban, rename an
   account or remove its registration (asked twice). Only the rows in view are built. A channel's
@@ -72,8 +75,9 @@ real engine and does text and voice.
   composed input (dead keys, an input method), pointer and shift-arrow
   selection, and cut, copy and paste.
 
-What the web UI has and this does not, yet: friends and screen sharing
-(their buttons are drawn where the web UI has them, and say so), the
+What the web UI has and this does not, yet: screen sharing (its button
+is drawn where the web UI has it, and says so), friends on servers the
+view is not connected to, the
 Signal flavour of encrypted channels, and a Fancy server's own settings.
 
 ## Testing

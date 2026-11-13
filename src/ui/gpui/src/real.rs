@@ -657,6 +657,7 @@ impl RealEngine {
                     avatar,
                     priority: user.priority_speaker,
                     account: user.account,
+                    hash: user.hash.map(Into::into),
                 }
             })
             .collect()
@@ -1974,6 +1975,9 @@ mod tests {
             alice.snapshot().connection == Connection::Connected
                 && bob.snapshot().connection == Connection::Connected
         });
+        // Each is known to the other by their certificate, which is what a
+        // friend is kept by.
+        wait_for("certificates to be known", || known_apart(&alice));
         wait_for("each to see the other", || {
             alice.snapshot().users.len() >= 2 && bob.snapshot().users.len() >= 2
         });
@@ -2146,6 +2150,17 @@ mod tests {
 
     /// Poll `done` for up to twenty seconds.
     #[track_caller]
+    /// Whether `engine` sees two users with two different certificates.
+    fn known_apart(engine: &RealEngine) -> bool {
+        let hashes: Vec<_> = engine
+            .snapshot()
+            .users
+            .iter()
+            .filter_map(|user| user.hash.clone())
+            .collect();
+        hashes.len() >= 2 && hashes[0] != hashes[1]
+    }
+
     fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
         while !done() {

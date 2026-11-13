@@ -64,6 +64,8 @@ pub(super) enum Command {
     Panel(Panel),
     /// Choose an emoji to put in the message being written.
     Emoji,
+    /// Keep whoever is on this session as a friend, or stop.
+    Friend(Session, bool),
 }
 
 /// The panels the local user's own menu opens.
@@ -72,6 +74,7 @@ pub(super) enum Panel {
     Voice,
     Themes,
     Certificates,
+    Friends,
     /// The messages waiting to be sent later.
     Later,
 }
@@ -390,6 +393,7 @@ pub(super) fn user_items(
     own_channel: Option<ChannelId>,
     volume: f32,
     whispered_to: Option<WhisperTarget>,
+    friend: bool,
 ) -> Vec<Item> {
     let session = user.session;
     if own == Some(session) {
@@ -412,6 +416,14 @@ pub(super) fn user_items(
         )
         .ticked(whispered_to == Some(WhisperTarget::User(session))),
     ];
+    // Somebody with a certificate can be found again on any server.
+    if user.hash.is_some() {
+        items.push(if friend {
+            Item::new("Remove from friends", Command::Friend(session, false))
+        } else {
+            Item::new("Add to friends", Command::Friend(session, true))
+        });
+    }
     items.extend(VOLUMES.iter().map(|(level, name)| {
         Item::new(name, Command::Volume(session, *level)).ticked((volume - level).abs() < 0.01)
     }));
@@ -575,6 +587,7 @@ pub(super) fn own_items() -> Vec<Item> {
         Item::new("Voice settings…", Command::Panel(Panel::Voice)),
         Item::new("Themes…", Command::Panel(Panel::Themes)),
         Item::new("Certificates…", Command::Panel(Panel::Certificates)),
+        Item::new("Friends…", Command::Panel(Panel::Friends)),
         Item::new("Change picture…", Command::PickAvatar),
         Item::new("Change comment…", Command::Ask(Question::Comment)),
     ]
@@ -761,6 +774,7 @@ impl Shell {
             Command::Permissions(channel) => self.open_acl(channel, cx),
             Command::Whisper(target, name) => self.toggle_whisper_target(target, name, cx),
             Command::Admin(listing) => self.open_admin(listing, cx),
+            Command::Friend(session, keep) => self.set_friend(session, keep, cx),
             Command::Emoji => {
                 self.emoji_for = Some(super::emoji::For::Composer);
                 cx.notify();
@@ -769,6 +783,10 @@ impl Shell {
             Command::Panel(Panel::Themes) => self.toggle_picker(cx),
             Command::Panel(Panel::Certificates) => self.toggle_certificates(cx),
             Command::Panel(Panel::Later) => self.open_later(cx),
+            Command::Panel(Panel::Friends) => {
+                self.panels.friends.open = true;
+                cx.notify();
+            }
             Command::Reply(index) => self.start_replying(index, window, cx),
             Command::MoreReactions { channel, id } => {
                 self.emoji_for = Some(super::emoji::For::Reaction { channel, id });
@@ -1264,6 +1282,7 @@ mod tests {
             unread: 0,
             priority: false,
             account: None,
+            hash: None,
         }
     }
 
@@ -1273,7 +1292,7 @@ mod tests {
 
     #[test]
     fn somebody_else_gets_message_volume_and_moderation() {
-        let items = user_items(&user(3, 1), Some(1), Some(1), 1.0, None);
+        let items = user_items(&user(3, 1), Some(1), Some(1), 1.0, None, false);
         assert_eq!(
             names(&items),
             [
@@ -1307,7 +1326,7 @@ mod tests {
     fn a_user_elsewhere_can_be_moved_here_and_a_muted_one_unmuted() {
         let mut elsewhere = user(3, 2);
         elsewhere.muted = true;
-        let items = user_items(&elsewhere, Some(1), Some(1), 0.0, None);
+        let items = user_items(&elsewhere, Some(1), Some(1), 0.0, None, false);
         assert!(names(&items).contains(&"Move to my channel"));
         assert!(names(&items).contains(&"Unmute for everyone"));
         let ticked: Vec<_> = items
@@ -1320,7 +1339,7 @@ mod tests {
 
     #[test]
     fn oneself_gets_the_profile_entries_only() {
-        let items = user_items(&user(1, 1), Some(1), Some(1), 1.0, None);
+        let items = user_items(&user(1, 1), Some(1), Some(1), 1.0, None, false);
         assert_eq!(
             names(&items),
             [

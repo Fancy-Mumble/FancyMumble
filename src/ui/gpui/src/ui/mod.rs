@@ -11,6 +11,7 @@ mod conversation;
 mod devices;
 mod emoji;
 mod frame;
+mod friends;
 mod kit;
 mod later;
 mod menu;
@@ -129,6 +130,21 @@ struct Panels {
     certs: certificates::Panel,
     /// The messages waiting to be sent later.
     later: Option<later::Panel>,
+    /// The friends kept, and their list.
+    friends: friends::Friends,
+}
+
+impl Panels {
+    /// All closed, with the friends remembered.
+    fn keeping(friends: Vec<crate::store::Friend>) -> Self {
+        Self {
+            friends: friends::Friends {
+                open: false,
+                kept: friends,
+            },
+            ..Self::default()
+        }
+    }
 }
 
 /// How the window's own furniture is set.
@@ -396,7 +412,7 @@ impl Shell {
             titled_unread: 0,
             emoji_for: None,
             lightbox: None,
-            panels: Panels::default(),
+            panels: Panels::keeping(stored.friends.clone()),
             chrome: Chrome::remembering(stored.auto_connect.clone()),
             whisper: Whisper {
                 key: stored.whisper_key.map(Into::into),
@@ -1138,6 +1154,7 @@ impl Shell {
         if self.panels.admin.take().is_some()
             || self.panels.acl.take().is_some()
             || self.panels.later.take().is_some()
+            || std::mem::take(&mut self.panels.friends.open)
         {
             cx.notify();
             return;
@@ -1465,6 +1482,7 @@ impl Shell {
             push_to_talk_key: name(&self.ptt.key),
             whisper_key: name(&self.whisper.key),
             auto_connect: name(&self.chrome.auto_connect),
+            friends: self.panels.friends.kept.clone(),
         };
         if let Err(error) = store.save_settings(&settings) {
             self.notice = Some(format!("The settings could not be remembered: {error}").into());
@@ -1536,6 +1554,9 @@ impl Render for Shell {
             })
             .when_some(self.panels.later.as_ref(), |shell, panel| {
                 shell.child(later::render(self, panel, &theme, cx))
+            })
+            .when(self.panels.friends.open, |shell| {
+                shell.child(friends::render(self, &theme, cx))
             })
             .when(self.panels.certs.open, |shell| {
                 shell.child(certificates::render(self, &theme, cx))

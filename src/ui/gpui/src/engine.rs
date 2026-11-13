@@ -488,6 +488,8 @@ pub(crate) struct User {
     pub priority: bool,
     /// The account they are registered as, if they are.
     pub account: Option<u32>,
+    /// The hash of their certificate: who they are on every server.
+    pub hash: Option<SharedString>,
 }
 
 /// One chat message, as the conversation shows it.

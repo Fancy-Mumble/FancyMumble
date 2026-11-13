@@ -79,6 +79,21 @@ pub(crate) struct Settings {
     /// The saved identity to connect as at launch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_connect: Option<String>,
+    /// The people kept as friends.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub friends: Vec<Friend>,
+}
+
+/// Somebody kept as a friend: their certificate's hash, and what was known
+/// of them when they were added.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct Friend {
+    pub hash: String,
+    /// The name they had.
+    pub name: String,
+    /// What the server they were on is called.
+    #[serde(default)]
+    pub server: String,
 }
 
 /// The files, in one directory.
@@ -210,6 +225,11 @@ mod tests {
             push_to_talk_key: Some("f9".to_owned()),
             whisper_key: Some("f10".to_owned()),
             auto_connect: None,
+            friends: vec![Friend {
+                hash: "abc".to_owned(),
+                name: "Rin".to_owned(),
+                server: "magical.rocks".to_owned(),
+            }],
         };
         store
             .save_settings(&chosen)

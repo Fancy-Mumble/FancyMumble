@@ -425,6 +425,7 @@ fn occupant_row(
                     shell.snapshot.current_channel,
                     shell.volumes.get(&session).copied().unwrap_or(1.0),
                     shell.whisper_target(),
+                    user.hash.as_ref().is_some_and(|hash| shell.is_friend(hash)),
                 );
                 shell.open_menu(event.position, items, cx);
             }),

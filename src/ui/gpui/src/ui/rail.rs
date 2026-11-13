@@ -69,7 +69,7 @@ pub(super) fn render(
                 .glyph_size(22.0)
                 .variant(Variant::Tonal)
                 .on_click(cx.listener(|shell, _, _, cx| {
-                    shell.notice = Some("Friends are not in this view yet.".into());
+                    shell.panels.friends.open = true;
                     cx.notify();
                 })),
         )

@@ -60,10 +60,8 @@ struct State {
     whisper: (Option<WhisperTarget>, bool, u32),
     /// Who is asking for the lounge's key.
     key_requests: Vec<KeyRequest>,
-    /// What the local user has asked to have sent later, and how many
-    /// such messages there have been.
+    /// What the local user has asked to have sent later.
     scheduled: Vec<Scheduled>,
-    sent_later: u32,
     /// The shared files the view asked to have saved, and where to.
     saved: Vec<(gpui::SharedString, std::path::PathBuf)>,
 }
@@ -311,9 +309,9 @@ impl State {
                 body,
                 at_ms,
             } => {
-                self.sent_later += 1;
                 self.scheduled.push(Scheduled {
-                    id: format!("later-{}", self.sent_later).into(),
+                    // No two actions have the same place in the record.
+                    id: format!("later-{}", self.actions.len()).into(),
                     channels: vec![*channel],
                     html: body.clone().into(),
                     at_ms: *at_ms,
@@ -451,6 +449,7 @@ impl State {
             priority: false,
             // Everybody but Scout has registered.
             account: (session != 4).then_some(session + 100),
+            hash: Some(format!("h{session}").into()),
         };
         let said = |minute: u64, session: Session, name: &str, body: &str| {
             (
@@ -515,7 +514,6 @@ impl State {
             whisper: (None, false, 0),
             key_requests: Vec::new(),
             scheduled: Vec::new(),
-            sent_later: 0,
             saved: Vec::new(),
             certificates: vec!["alex".into(), "work".into()],
             messages: vec![

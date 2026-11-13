@@ -1871,3 +1871,35 @@ fn a_groups_members_are_listed_and_changed_under_its_rule(cx: &mut TestAppContex
     let group = &saved.groups[0];
     assert_eq!((&group.added, &group.removed), (&vec![102], &vec![103]));
 }
+
+#[gpui::test]
+fn a_friend_is_kept_from_their_menu_and_found_in_the_list(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell(cx);
+    click(cx, "friends");
+    assert!(cx.debug_bounds("friends-none").is_some());
+    click(cx, "friends-close");
+    right_click(cx, "user-3");
+    click(cx, "menu-Add to friends");
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.is_friend("h3"));
+        let kept = &shell.panels.friends.kept;
+        assert_eq!(
+            (kept[0].name.as_str(), kept[0].server.as_str()),
+            ("Rin", "magical.rocks")
+        );
+    });
+    // Their menu now offers the way back out.
+    right_click(cx, "user-3");
+    assert!(cx.debug_bounds("menu-Remove from friends").is_some());
+    click(cx, "menu-backdrop");
+    // In the list they are here: a click opens the conversation with them.
+    click(cx, "friends");
+    click(cx, "friend-0");
+    shell.read_with(cx, |shell, _| {
+        assert!(!shell.panels.friends.open);
+        assert_eq!(shell.open, Some(Conversation::Direct(3)));
+    });
+    click(cx, "friends");
+    click(cx, "friend-remove-0");
+    shell.read_with(cx, |shell, _| assert!(!shell.is_friend("h3")));
+}

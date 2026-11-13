@@ -222,7 +222,7 @@ fn column_head(theme: &Theme, cx: &mut Context<Shell>) -> [AnyElement; 3] {
             .font_weight(EMPHASIS)
             .text_color(theme.c.muted)
             .on_click(cx.listener(|shell, _, _, cx| {
-                shell.notice = Some("Friends are not in this view yet.".into());
+                shell.panels.friends.open = true;
                 cx.notify();
             }))
             .child(icon("users", 16.0, theme.c.muted))
