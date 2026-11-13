@@ -936,6 +936,26 @@ impl Engine for RealEngine {
         self.shared.engine.signal_available()
     }
 
+    fn is_recording(&self) -> bool {
+        self.shared.engine.is_recording()
+    }
+
+    fn record(&self, directory: Option<std::path::PathBuf>) {
+        let engine = &self.shared.engine;
+        let said = match directory {
+            Some(directory) => engine
+                .start_recording(&directory)
+                .map(|file| format!("Recording to {}", file.display())),
+            None => engine
+                .stop_recording()
+                .map(|file| format!("Recorded to {}", file.display())),
+        };
+        self.shared.tell(EngineEvent::Notice(Some(
+            said.unwrap_or_else(|why| why).into(),
+        )));
+        self.shared.tell(EngineEvent::StateChanged);
+    }
+
     fn request_scheduled(&self) {
         let engine = self.shared.engine.clone();
         self.spawn(async move { engine.request_scheduled().await });

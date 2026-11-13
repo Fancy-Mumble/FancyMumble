@@ -76,6 +76,8 @@ real engine and does text and voice.
   quality and voice over TCP are behind the sliders button on the user
   tile. A whisper key speaks to one user, or shouts into one channel,
   chosen from their menu, and to nobody else while it is held.
+- **Recording.** What is heard, written to a WAV file in a folder of
+  your choosing, from the menu on your own tile, until stopped.
 - **Look.** The thirteen themes in light and dark, from the menu on the
   user's own tile (and under the saved servers, before there is a tile).
   Theme, devices and voice settings are remembered.

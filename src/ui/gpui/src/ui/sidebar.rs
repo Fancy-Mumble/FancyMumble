@@ -495,6 +495,7 @@ fn voice_status(shell: &Shell, deafened: bool) -> (SharedString, Option<SharedSt
             Some((_, name)) => format!("Whispering to {name}").into(),
             None => "Whispering".into(),
         },
+        (Connection::Connected, ..) if shell.engine.is_recording() => "Recording".into(),
         (Connection::Connected, true, _) => "Deafened".into(),
         (Connection::Connected, false, Voice::Off) => "Voice off".into(),
         (Connection::Connected, false, Voice::Muted) => "Muted".into(),
@@ -594,8 +595,10 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
                                     .glyph_size(15.0)
                                     .on_click(cx.listener(
                                         |shell, event: &gpui::ClickEvent, _, cx| {
-                                            let items =
-                                                super::menu::own_items(shell.chrome.hide_empty);
+                                            let items = super::menu::own_items(
+                                                shell.chrome.hide_empty,
+                                                shell.engine.is_recording(),
+                                            );
                                             shell.open_menu(event.position(), items, cx);
                                         },
                                     )),

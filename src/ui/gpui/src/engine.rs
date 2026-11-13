@@ -909,6 +909,14 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// Deafen or undeafen the local user.
     fn toggle_deafen(&self);
 
+    /// Whether what is heard is being written to a file.
+    fn is_recording(&self) -> bool;
+
+    /// Start writing what is heard to a file in `directory`, or with
+    /// `None` stop. Where the file is, or why there is none, is said in a
+    /// notice.
+    fn record(&self, directory: Option<std::path::PathBuf>);
+
     /// The microphones and speakers the system offers. Blocking: call it
     /// off the view's thread.
     fn audio_devices(&self) -> AudioDevices;

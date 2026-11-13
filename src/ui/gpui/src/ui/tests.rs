@@ -2043,3 +2043,17 @@ fn a_saved_server_is_made_a_favourite_from_its_menu(cx: &mut TestAppContext) {
     );
     shell.read_with(cx, |shell, _| assert_eq!(shell.servers.len(), 4));
 }
+
+#[gpui::test]
+fn what_is_heard_is_recorded_into_a_chosen_folder_until_stopped(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    // Starting asks the system for a folder, which no test can answer:
+    // this is the folder picker's answer arriving.
+    let folder = std::env::temp_dir();
+    shell.update(cx, |shell, _| shell.engine.record(Some(folder)));
+    cx.run_until_parked();
+    assert!(engine.is_recording());
+    // The entry is ticked now, and stops it.
+    own_menu(cx, "menu-Record what is heard…");
+    assert!(!engine.is_recording());
+}

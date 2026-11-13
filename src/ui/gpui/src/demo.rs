@@ -62,6 +62,8 @@ struct State {
     key_requests: Vec<KeyRequest>,
     /// What the local user has asked to have sent later.
     scheduled: Vec<Scheduled>,
+    /// Where what is heard is being recorded to, while it is.
+    recording: Option<std::path::PathBuf>,
     /// The shared files the view asked to have saved, and where to.
     saved: Vec<(gpui::SharedString, std::path::PathBuf)>,
 }
@@ -498,16 +500,7 @@ impl State {
             deafened: false,
             devices: ChosenDevices::default(),
             actions: Vec::new(),
-            voice_settings: VoiceSettings {
-                push_to_talk: false,
-                threshold: 0.01,
-                noise_suppression: true,
-                automatic_gain: true,
-                input_volume: 1.0,
-                output_volume: 1.0,
-                bitrate_bps: 72_000,
-                voice_over_tcp: false,
-            },
+            voice_settings: seeded_voice(),
             servers: seeded_servers(),
             current_channel: LOUNGE,
             channels: vec![
@@ -534,6 +527,7 @@ impl State {
             whisper: (None, false, 0),
             key_requests: Vec::new(),
             scheduled: Vec::new(),
+            recording: None,
             saved: Vec::new(),
             certificates: vec!["alex".into(), "work".into()],
             messages: vec![
@@ -549,6 +543,20 @@ impl State {
                 reacted_to(said(4, 4, "Scout", "Scout says hello from our walk!")),
             ],
         }
+    }
+}
+
+/// How the demo's microphone starts out set.
+fn seeded_voice() -> VoiceSettings {
+    VoiceSettings {
+        push_to_talk: false,
+        threshold: 0.01,
+        noise_suppression: true,
+        automatic_gain: true,
+        input_volume: 1.0,
+        output_volume: 1.0,
+        bitrate_bps: 72_000,
+        voice_over_tcp: false,
     }
 }
 
@@ -762,6 +770,15 @@ impl Engine for DemoEngine {
 
     fn signal_available(&self) -> bool {
         true
+    }
+
+    fn is_recording(&self) -> bool {
+        self.with_state(|state| state.recording.is_some())
+    }
+
+    fn record(&self, directory: Option<std::path::PathBuf>) {
+        self.with_state(|state| state.recording = directory);
+        self.tell(EngineEvent::StateChanged);
     }
 
     fn request_scheduled(&self) {

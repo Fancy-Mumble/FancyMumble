@@ -68,6 +68,8 @@ pub(super) enum Command {
     Friend(Session, bool),
     /// Leave channels with nobody in them out of the column, or list all.
     HideEmpty(bool),
+    /// Start recording what is heard to a file, or stop.
+    Record(bool),
     /// Mark the saved server at this address a favourite, or not.
     Favourite(SharedString, bool),
 }
@@ -679,9 +681,10 @@ pub(super) fn saved_server_items(key: &str, host: &str, port: u16, favorite: boo
 
 /// The entries of the local user's own menu, on their tile: the view's
 /// settings, and what there is to change about themselves.
-pub(super) fn own_items(hide_empty: bool) -> Vec<Item> {
+pub(super) fn own_items(hide_empty: bool, recording: bool) -> Vec<Item> {
     vec![
         Item::new("Hide empty channels", Command::HideEmpty(!hide_empty)).ticked(hide_empty),
+        Item::new("Record what is heard…", Command::Record(!recording)).ticked(recording),
         Item::new("Voice settings…", Command::Panel(Panel::Voice)),
         Item::new("Themes…", Command::Panel(Panel::Themes)),
         Item::new("Certificates…", Command::Panel(Panel::Certificates)),
@@ -888,6 +891,7 @@ impl Shell {
             Command::Admin(listing) => self.open_admin(listing, cx),
             Command::Friend(session, keep) => self.set_friend(session, keep, cx),
             Command::Favourite(key, favorite) => self.set_favourite(&key, favorite, cx),
+            Command::Record(start) => self.record(start, cx),
             Command::HideEmpty(hide) => {
                 self.chrome.hide_empty = hide;
                 self.lay_out_column();
@@ -1033,6 +1037,29 @@ impl Shell {
                 return;
             };
             let _ = shell.update(cx, |shell, cx| shell.send_files(paths, cx));
+        })
+        .detach();
+    }
+
+    /// Start recording what is heard, into a folder the user chooses, or
+    /// stop the recording that is running.
+    fn record(&mut self, start: bool, cx: &mut Context<Self>) {
+        if !start {
+            self.engine.record(None);
+            return;
+        }
+        let chosen = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: false,
+            directories: true,
+            multiple: false,
+            prompt: Some("Choose a folder to record into".into()),
+        });
+        cx.spawn(async move |shell, cx| {
+            let Ok(Ok(Some(mut folders))) = chosen.await else {
+                return;
+            };
+            let Some(folder) = folders.pop() else { return };
+            let _ = shell.update(cx, |shell, _| shell.engine.record(Some(folder)));
         })
         .detach();
     }
