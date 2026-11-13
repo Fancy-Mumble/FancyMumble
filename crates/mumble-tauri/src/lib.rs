@@ -72,6 +72,7 @@ use mimalloc as _;
 mod audio;
 pub(crate) mod constants;
 pub(crate) mod e2e_stats;
+pub mod engine_api;
 pub(crate) mod media;
 mod state;
 

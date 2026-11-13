@@ -114,7 +114,6 @@ pub(crate) trait SignalInterceptor: Send + Sync + 'static {
 
 /// A [`Notifier`] for an application that has no notifications.
 #[derive(Debug, Clone, Copy, Default)]
-#[allow(dead_code, reason = "for views that bring no notifier of their own")]
 pub(crate) struct NoNotifier;
 
 impl Notifier for NoNotifier {
@@ -125,10 +124,6 @@ impl Notifier for NoNotifier {
 
 /// A [`BackgroundService`] for platforms that never suspend the application.
 #[derive(Debug, Clone, Copy, Default)]
-#[allow(
-    dead_code,
-    reason = "for views on platforms without a background service"
-)]
 pub(crate) struct NoBackgroundService;
 
 impl BackgroundService for NoBackgroundService {
@@ -142,7 +137,6 @@ impl BackgroundService for NoBackgroundService {
 /// A [`SignalInterceptor`] for an application whose view does all its own
 /// WebRTC.
 #[derive(Debug, Clone, Copy, Default)]
-#[allow(dead_code, reason = "for views without native media peers")]
 pub(crate) struct NoSignalInterceptor;
 
 impl SignalInterceptor for NoSignalInterceptor {
