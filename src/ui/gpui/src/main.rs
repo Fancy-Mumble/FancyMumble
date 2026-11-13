@@ -51,7 +51,13 @@ fn main() {
             ]);
             cx.on_action(|_: &Quit, cx| cx.quit());
 
-            let demo = demo::DemoEngine::new();
+            // A launch starts off the server, as a real one does;
+            // `FANCY_GPUI_DEMO=connected` starts on it.
+            let demo = if std::env::var("FANCY_GPUI_DEMO").as_deref() == Ok("connected") {
+                demo::DemoEngine::new()
+            } else {
+                demo::DemoEngine::disconnected()
+            };
             // `FANCY_GPUI_DEMO_TALKING=<session>` has that user talking, so the
             // talking ring can be looked at without a microphone.
             if let Some(session) = std::env::var("FANCY_GPUI_DEMO_TALKING")

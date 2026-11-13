@@ -1,13 +1,13 @@
 //! The server rail down the window's leading edge.
 
-use gpui::{Context, IntoElement, ParentElement, Styled, div, px};
+use gpui::{Context, IntoElement, ParentElement, Styled, div, prelude::*, px};
 
 use super::Shell;
 use super::widgets::icon;
 use crate::theme::Theme;
 
 pub(super) fn render(theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
-    let _ = cx;
+    let hover = theme.c.hover;
     let rule = || {
         div()
             .flex_none()
@@ -63,10 +63,16 @@ pub(super) fn render(theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement
         .child(div().flex_1())
         .child(
             div()
+                .id("leave")
+                .debug_selector(|| "leave".to_owned())
                 .size(px(30.0))
+                .rounded(theme.skin.radius_sm)
                 .flex()
                 .items_center()
                 .justify_center()
+                .cursor_pointer()
+                .hover(move |style| style.bg(hover))
+                .on_click(cx.listener(|shell, _, _, _| shell.engine.disconnect()))
                 .child(icon("log-out", 16.0, theme.c.bad)),
         )
 }

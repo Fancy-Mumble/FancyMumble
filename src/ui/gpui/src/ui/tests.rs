@@ -7,18 +7,26 @@ use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
 
 use super::Shell;
 use crate::demo::DemoEngine;
-use crate::engine::Engine;
+use crate::engine::{Connection, Engine};
 use crate::theme::{ActiveTheme, Catalog, DEFAULT_THEME, Mode};
 
 /// A shell on a fresh demo server, in the default theme.
 fn shell(cx: &mut TestAppContext) -> (Entity<Shell>, Arc<DemoEngine>, &mut VisualTestContext) {
+    shell_on(DemoEngine::new(), cx)
+}
+
+/// A shell on `engine`, in the default theme.
+fn shell_on(
+    engine: DemoEngine,
+    cx: &mut TestAppContext,
+) -> (Entity<Shell>, Arc<DemoEngine>, &mut VisualTestContext) {
     cx.update(|cx| {
         let theme = Catalog::get()
             .resolve(DEFAULT_THEME, Mode::Dark, &[])
             .expect("the default theme");
         cx.set_global(ActiveTheme(Arc::new(theme)));
     });
-    let engine = Arc::new(DemoEngine::new());
+    let engine = Arc::new(engine);
     let for_shell: Arc<dyn Engine> = engine.clone();
     let (shell, cx) = cx.add_window_view(|_, cx| Shell::new(for_shell, cx));
     cx.run_until_parked();
@@ -168,4 +176,92 @@ fn every_theme_draws_in_both_modes(cx: &mut TestAppContext) {
             });
         }
     }
+}
+
+#[gpui::test]
+fn a_launch_lands_on_the_first_saved_server(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell_on(DemoEngine::disconnected(), cx);
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(shell.snapshot.connection, Connection::Disconnected);
+        let listed: Vec<_> = shell
+            .listed_servers(cx)
+            .iter()
+            .map(|server| (server.key.clone(), server.identities.len()))
+            .collect();
+        assert_eq!(
+            listed,
+            [
+                ("magical.rocks:64738".to_owned(), 2),
+                ("kumo.jp:64738".to_owned(), 1),
+                ("localhost:64738".to_owned(), 1),
+            ]
+        );
+        let server = shell.selected_server().expect("a server is showing");
+        assert_eq!(server.key, "magical.rocks:64738");
+        let identity = shell.selected_identity().expect("an identity is chosen");
+        assert_eq!(identity.id.as_ref(), "magical-alex");
+    });
+}
+
+#[gpui::test]
+fn picking_an_identity_and_connecting_arrives_on_the_server(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell_on(DemoEngine::disconnected(), cx);
+    click(cx, "identity-magical-work");
+    shell.read_with(cx, |shell, _| {
+        let identity = shell.selected_identity().expect("an identity is chosen");
+        assert_eq!(identity.username.as_ref(), "Alex (work)");
+    });
+    click(cx, "connect");
+    assert_eq!(engine.snapshot().connection, Connection::Connected);
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.snapshot.connection, Connection::Connected);
+        assert_eq!(shell.current_channel_name(), Some("lounge"));
+        assert_eq!(shell.messages.len(), 5, "the channel's history is loaded");
+    });
+}
+
+#[gpui::test]
+fn picking_another_server_forgets_the_identity_picked_before(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell_on(DemoEngine::disconnected(), cx);
+    click(cx, "identity-magical-work");
+    click(cx, "server-kumo.jp:64738");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(
+            shell.selected_server().map(|server| server.key),
+            Some("kumo.jp:64738".to_owned())
+        );
+        // Not the identity of the server left behind: this one's own.
+        let identity = shell.selected_identity().expect("an identity is chosen");
+        assert_eq!(identity.id.as_ref(), "kumo");
+    });
+}
+
+#[gpui::test]
+fn leaving_returns_to_the_saved_servers(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    click(cx, "leave");
+    assert_eq!(engine.snapshot().connection, Connection::Disconnected);
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.snapshot.connection, Connection::Disconnected);
+        assert!(
+            shell.messages.is_empty(),
+            "nothing of the server is kept on screen"
+        );
+        assert_eq!(shell.rows.item_count(), 0);
+    });
+}
+
+#[gpui::test]
+fn the_server_search_narrows_the_list(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell_on(DemoEngine::disconnected(), cx);
+    click(cx, "input-Search servers");
+    cx.simulate_keystrokes("k u m");
+    shell.read_with(cx, |shell, cx| {
+        let listed: Vec<_> = shell
+            .listed_servers(cx)
+            .iter()
+            .map(|server| server.host.to_string())
+            .collect();
+        assert_eq!(listed, ["kumo.jp"]);
+    });
 }

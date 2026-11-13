@@ -4,7 +4,8 @@
 use std::sync::Mutex;
 
 use crate::engine::{
-    Channel, ChannelId, Connection, Engine, EngineEvent, Message, Session, Snapshot, User,
+    Channel, ChannelId, Connection, Engine, EngineEvent, Message, SavedServer, ServerPing, Session,
+    Snapshot, User,
 };
 
 /// The local user's session in the demo server.
@@ -25,6 +26,7 @@ pub(crate) struct DemoEngine {
 
 #[derive(Debug)]
 struct State {
+    connected: bool,
     current_channel: ChannelId,
     channels: Vec<Channel>,
     users: Vec<User>,
@@ -33,11 +35,23 @@ struct State {
 }
 
 impl DemoEngine {
-    /// A demo server with a handful of people talking in one channel.
+    /// Connected to a demo server with a handful of people in one channel.
     pub(crate) fn new() -> Self {
+        Self::starting(true)
+    }
+
+    /// The same server, not yet connected to: what a launch looks like.
+    pub(crate) fn disconnected() -> Self {
+        Self::starting(false)
+    }
+
+    fn starting(connected: bool) -> Self {
         let (events, inbox) = async_channel::unbounded();
         Self {
-            state: Mutex::new(State::seeded()),
+            state: Mutex::new(State {
+                connected,
+                ..State::seeded()
+            }),
             events,
             inbox,
         }
@@ -90,6 +104,7 @@ impl State {
             )
         };
         Self {
+            connected: true,
             current_channel: LOUNGE,
             channels: vec![
                 channel(0, None, "Root"),
@@ -126,13 +141,78 @@ impl Engine for DemoEngine {
     }
 
     fn snapshot(&self) -> Snapshot {
-        self.with_state(|state| Snapshot {
-            connection: Connection::Connected,
-            own_session: Some(OWN),
-            current_channel: Some(state.current_channel),
-            channels: state.channels.clone(),
-            users: state.users.clone(),
+        self.with_state(|state| {
+            if !state.connected {
+                return Snapshot {
+                    connection: Connection::Disconnected,
+                    own_session: None,
+                    current_channel: None,
+                    channels: Vec::new(),
+                    users: Vec::new(),
+                };
+            }
+            Snapshot {
+                connection: Connection::Connected,
+                own_session: Some(OWN),
+                current_channel: Some(state.current_channel),
+                channels: state.channels.clone(),
+                users: state.users.clone(),
+            }
         })
+    }
+
+    fn saved_servers(&self) -> Vec<SavedServer> {
+        let saved = |id: &str, host: &str, username: &str, favorite| SavedServer {
+            id: id.to_owned().into(),
+            label: host.to_owned().into(),
+            host: host.to_owned().into(),
+            port: 64738,
+            username: username.to_owned().into(),
+            certificate: None,
+            favorite,
+        };
+        vec![
+            saved("magical-alex", "magical.rocks", "Alex", true),
+            saved("magical-work", "magical.rocks", "Alex (work)", true),
+            saved("kumo", "kumo.jp", "Alex", false),
+            saved("local", "localhost", "Alex", false),
+        ]
+    }
+
+    fn ping(&self, host: &str, _port: u16) -> Option<ServerPing> {
+        let answer = |users, latency_ms, version: &str| ServerPing {
+            users,
+            max_users: 101,
+            latency_ms,
+            version: version.to_owned().into(),
+        };
+        match host {
+            "magical.rocks" => Some(answer(3, 18, "1.6.0")),
+            "kumo.jp" => Some(answer(0, 62, "1.5.7")),
+            // Nothing is listening on the demo's localhost.
+            _ => None,
+        }
+    }
+
+    fn connect(&self, id: &str) {
+        let known = self.saved_servers().iter().any(|saved| saved.id == id);
+        let connected = self.with_state(|state| {
+            let changes = known && !state.connected;
+            state.connected |= known;
+            changes
+        });
+        if connected {
+            self.tell(EngineEvent::StateChanged);
+            self.tell(EngineEvent::CurrentChannelChanged);
+        }
+    }
+
+    fn disconnect(&self) {
+        let left = self.with_state(|state| std::mem::replace(&mut state.connected, false));
+        if left {
+            self.tell(EngineEvent::StateChanged);
+            self.tell(EngineEvent::CurrentChannelChanged);
+        }
     }
 
     fn messages(&self, channel: ChannelId) -> Vec<Message> {
@@ -263,6 +343,33 @@ mod tests {
         assert_eq!(studio[0].body.as_ref(), "hello studio");
         assert!(studio[0].own);
         assert_eq!(drain(&engine), [EngineEvent::NewMessage { channel: 2 }]);
+    }
+
+    #[test]
+    fn a_launch_is_disconnected_until_a_saved_identity_connects() {
+        let engine = DemoEngine::disconnected();
+        let snapshot = engine.snapshot();
+        assert_eq!(snapshot.connection, Connection::Disconnected);
+        assert!(snapshot.channels.is_empty() && snapshot.own_session.is_none());
+
+        engine.connect("no-such-identity");
+        assert_eq!(engine.snapshot().connection, Connection::Disconnected);
+        assert!(drain(&engine).is_empty());
+
+        engine.connect("kumo");
+        assert_eq!(engine.snapshot().connection, Connection::Connected);
+        assert_eq!(
+            drain(&engine),
+            [
+                EngineEvent::StateChanged,
+                EngineEvent::CurrentChannelChanged
+            ]
+        );
+
+        engine.disconnect();
+        assert_eq!(engine.snapshot().connection, Connection::Disconnected);
+        engine.disconnect();
+        assert_eq!(drain(&engine).len(), 2, "leaving twice says so once");
     }
 
     #[test]

@@ -12,15 +12,23 @@ thirteen themes, each in a light and a dark mode.
 A start. The shell is drawn and themed, and it runs against an engine that
 exists only in memory.
 
-- Drawn: the band, the server rail, the channel column (search, channel tree,
-  who is in the current channel, the user tile with mute and deafen), the
-  conversation (header, day rule, message runs, own messages) and the
-  composer.
-- Works against the demo engine: joining a channel, sending a message,
-  muting and deafening, narrowing the channel list, switching theme and mode.
-- Not yet: the real engine, avatars and other pictures, rich message content,
-  text selection and composed input (IME) in the fields, window resize
-  handles, settings, and everything else the web UI has.
+- Drawn: the band, the connect screen (saved servers, the selected server's
+  landing page with its ping and identities), the server rail, the channel
+  column (search, channel tree, who is in the current channel, the user tile
+  with mute and deafen), the conversation (header, day rule, message runs,
+  own messages) and the composer.
+- Works against the demo engine: picking a server and an identity,
+  connecting and leaving, joining a channel, sending a message, muting and
+  deafening, narrowing the server and channel lists, switching theme and
+  mode, moving and resizing a window that draws its own frame.
+- Not yet: the real engine, adding or editing servers and identities,
+  auto-connect, avatars and other pictures, rich message content, text
+  selection and composed input (IME) in the fields, settings, and everything
+  else the web UI has.
+
+The views are driven in tests by simulated clicks and keys (`cargo test`),
+with no display. How they look is checked by eye, against screenshots of the
+web UI.
 
 ## The engine
 
@@ -76,6 +84,7 @@ For development:
 | `FANCY_GPUI_THEME` | Start in this theme (`dark`, `rose`, `nimbus`, ...). |
 | `FANCY_GPUI_MODE` | `light` or `dark`. |
 | `FANCY_GPUI_PICKER` | Start with the theme picker open. |
+| `FANCY_GPUI_DEMO` | `connected` starts on the demo server instead of the connect screen. |
 | `FANCY_GPUI_DEMO_TALKING` | A demo session id that is talking. |
 | `FANCY_GPUI_FRAME` | `client` draws the window's own controls even where the compositor frames it. |
 

@@ -18,13 +18,40 @@ pub(crate) type Session = u32;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Connection {
     /// Not connected.
-    #[expect(dead_code, reason = "the demo engine is always connected")]
     Disconnected,
     /// A connection attempt is under way.
-    #[expect(dead_code, reason = "the demo engine is always connected")]
+    #[expect(dead_code, reason = "the demo engine connects at once")]
     Connecting,
     /// Connected and synchronised.
     Connected,
+}
+
+/// One saved way onto a server: an address and who to arrive as.
+///
+/// Several may share an address; together they are that server's identities.
+#[derive(Debug, Clone)]
+pub(crate) struct SavedServer {
+    /// Stable id of this record.
+    pub id: SharedString,
+    /// What the user calls the server; the host until they name it.
+    pub label: SharedString,
+    pub host: SharedString,
+    pub port: u16,
+    pub username: SharedString,
+    /// The certificate this identity presents, if it has one.
+    pub certificate: Option<SharedString>,
+    /// Whether the server is pinned as a favourite.
+    pub favorite: bool,
+}
+
+/// What a server answered when asked, without connecting, whether it is up.
+#[derive(Debug, Clone)]
+pub(crate) struct ServerPing {
+    pub users: u32,
+    pub max_users: u32,
+    pub latency_ms: u32,
+    /// The server's version, as it reports it.
+    pub version: SharedString,
 }
 
 /// One channel of the server's tree.
@@ -98,6 +125,19 @@ pub(crate) trait Engine: Send + Sync + 'static {
 
     /// The server as it stands now.
     fn snapshot(&self) -> Snapshot;
+
+    /// Every saved identity, in the order the user keeps them.
+    fn saved_servers(&self) -> Vec<SavedServer>;
+
+    /// The latest answer from the server at `host:port`, or `None` while it
+    /// has not answered (or is down).
+    fn ping(&self, host: &str, port: u16) -> Option<ServerPing>;
+
+    /// Connect as the saved identity `id`.
+    fn connect(&self, id: &str);
+
+    /// Leave the server.
+    fn disconnect(&self);
 
     /// The messages of `channel`, oldest first.
     fn messages(&self, channel: ChannelId) -> Vec<Message>;

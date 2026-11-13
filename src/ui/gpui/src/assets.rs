@@ -43,6 +43,7 @@ icons![
     "search",
     "send",
     "square",
+    "star",
     "sun",
     "users",
     "volume-2",

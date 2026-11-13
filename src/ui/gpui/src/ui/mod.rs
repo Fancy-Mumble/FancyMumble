@@ -3,6 +3,7 @@
 //! conversation.
 
 mod band;
+mod connect;
 mod conversation;
 mod frame;
 mod picker;
@@ -21,7 +22,10 @@ use gpui::{
     Styled, Subscription, Task, Window, div, prelude::*, px, relative,
 };
 
-use crate::engine::{Channel, ChannelId, Engine, EngineEvent, Message, Session, Snapshot, User};
+use crate::engine::{
+    Channel, ChannelId, Connection, Engine, EngineEvent, Message, SavedServer, Session, Snapshot,
+    User,
+};
 use crate::theme::{ActiveTheme, Catalog};
 use text_input::{InputEvent, TextInput};
 
@@ -42,10 +46,17 @@ pub(crate) struct Shell {
     talking: HashSet<Session>,
     composer: Entity<TextInput>,
     search: Entity<TextInput>,
+    /// The saved identities, as last read from the engine.
+    servers: Vec<SavedServer>,
+    /// The `host:port` whose landing page is showing, once one was picked.
+    selected_server: Option<String>,
+    /// The identity picked to connect as, once one was.
+    selected_identity: Option<gpui::SharedString>,
+    server_search: Entity<TextInput>,
     /// Whether the theme picker is showing.
     picker_open: bool,
     _events: Task<()>,
-    _subscriptions: [Subscription; 2],
+    _subscriptions: [Subscription; 3],
 }
 
 impl Shell {
@@ -53,20 +64,26 @@ impl Shell {
     pub(crate) fn new(engine: Arc<dyn Engine>, cx: &mut Context<Self>) -> Self {
         let composer = cx.new(|cx| TextInput::new("", cx));
         let search = cx.new(|cx| TextInput::new("Search channels", cx));
+        let server_search = cx.new(|cx| TextInput::new("Search servers", cx));
         let subscriptions = [
             cx.subscribe(&composer, Self::on_composer),
-            // A search narrows the channel list as it is typed.
+            // A search narrows its list as it is typed.
             cx.subscribe(&search, |_, _, _, cx| cx.notify()),
+            cx.subscribe(&server_search, |_, _, _, cx| cx.notify()),
         ];
         let events = Self::listen(engine.events(), cx);
         let mut shell = Self {
             snapshot: engine.snapshot(),
+            servers: engine.saved_servers(),
             engine,
             messages: Vec::new(),
             rows: ListState::new(0, ListAlignment::Top, px(OVERDRAW)),
             talking: HashSet::new(),
             composer,
             search,
+            selected_server: None,
+            selected_identity: None,
+            server_search,
             picker_open: std::env::var_os("FANCY_GPUI_PICKER").is_some(),
             _events: events,
             _subscriptions: subscriptions,
@@ -264,15 +281,18 @@ impl Render for Shell {
             .when(theme.skin.band, |shell| {
                 shell.child(band::render(&theme, window, cx))
             })
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .flex()
-                    .child(rail::render(&theme, cx))
-                    .child(sidebar::render(self, &theme, cx))
-                    .child(conversation::render(self, &theme, cx)),
-            )
+            .child(div().flex_1().min_h_0().flex().map(|body| {
+                match self.snapshot.connection {
+                    // Not on a server: the saved ones, and the way onto one.
+                    Connection::Disconnected | Connection::Connecting => body
+                        .child(connect::server_column(self, &theme, cx))
+                        .child(connect::landing(self, &theme, cx)),
+                    Connection::Connected => body
+                        .child(rail::render(&theme, cx))
+                        .child(sidebar::render(self, &theme, cx))
+                        .child(conversation::render(self, &theme, cx)),
+                }
+            }))
             .when(!theme.skin.band, |shell| {
                 shell.child(band::corner_controls(&theme, window, cx))
             })
