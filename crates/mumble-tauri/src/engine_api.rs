@@ -9,7 +9,7 @@
 //! Everything here is a thin, typed layer over the same `state/` the Tauri
 //! commands call; nothing is implemented twice.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::state::core_event::{CoreEvent, Event};
@@ -1276,7 +1276,7 @@ impl EngineHandle {
     /// # Errors
     ///
     /// When there is no such certificate, or the file could not be written.
-    pub fn export_certificate(&self, label: &str, to: &std::path::Path) -> Result<(), String> {
+    pub fn export_certificate(&self, label: &str, to: &Path) -> Result<(), String> {
         IdentityStore::new(self.data_dir.clone()).export(label, to)
     }
 
@@ -1286,7 +1286,7 @@ impl EngineHandle {
     /// # Errors
     ///
     /// When the file is not an exported certificate.
-    pub fn import_certificate(&self, from: &std::path::Path) -> Result<String, String> {
+    pub fn import_certificate(&self, from: &Path) -> Result<String, String> {
         IdentityStore::new(self.data_dir.clone()).import(from)
     }
 
@@ -1758,7 +1758,7 @@ impl EngineHandle {
     ///
     /// When the file cannot be read, the server keeps no files, or it
     /// refuses this one.
-    pub async fn share_file(&self, channel: u32, path: &std::path::Path) -> Result<(), String> {
+    pub async fn share_file(&self, channel: u32, path: &Path) -> Result<(), String> {
         let filename = path
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
@@ -1790,7 +1790,7 @@ impl EngineHandle {
     /// # Errors
     ///
     /// When the server no longer has it, or the file cannot be written.
-    pub async fn save_shared_file(&self, key: &str, to: &std::path::Path) -> Result<u64, String> {
+    pub async fn save_shared_file(&self, key: &str, to: &Path) -> Result<u64, String> {
         self.state
             .starling_download_to_file(key.to_owned(), to.to_string_lossy().into_owned(), None)
             .await
@@ -2302,6 +2302,38 @@ impl EngineHandle {
     /// When not connected.
     pub async fn register(&self, session: u32) -> Result<(), String> {
         self.state.register_user(session).await
+    }
+
+    /// Start writing what is heard to a WAV file in `directory`, named for
+    /// the server, the channel and the time; the file's path is returned.
+    ///
+    /// # Errors
+    ///
+    /// When voice is off, when a recording is already running, or when the
+    /// file cannot be made.
+    pub fn start_recording(&self, directory: &Path) -> Result<PathBuf, String> {
+        self.state
+            .start_recording(
+                directory.to_string_lossy().into_owned(),
+                "{host}_{channel}_{datetime}".to_owned(),
+                crate::state::recording::RecordingFormat::Wav,
+            )
+            .map(PathBuf::from)
+    }
+
+    /// Stop recording and finish the file, whose path is returned.
+    ///
+    /// # Errors
+    ///
+    /// When nothing is being recorded.
+    pub fn stop_recording(&self) -> Result<PathBuf, String> {
+        self.state.stop_recording().map(PathBuf::from)
+    }
+
+    /// Whether what is heard is being recorded.
+    #[must_use]
+    pub fn is_recording(&self) -> bool {
+        self.state.recording_state().is_recording
     }
 
     /// Whether the Signal bridge library is there to be loaded: without it
