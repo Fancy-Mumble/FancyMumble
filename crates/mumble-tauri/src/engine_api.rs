@@ -975,6 +975,9 @@ pub struct UserInfo {
     /// The account the user is registered as, for one who is: what a
     /// group of a channel's rules lists its members by.
     pub account: Option<u32>,
+    /// The hash of the certificate they came with: who they are on every
+    /// server, registered or not.
+    pub hash: Option<String>,
 }
 
 impl From<UserEntry> for UserInfo {
@@ -988,6 +991,7 @@ impl From<UserEntry> for UserInfo {
             avatar: user.texture_marker.filter(|size| *size > 0),
             priority_speaker: user.priority_speaker,
             account: user.user_id,
+            hash: user.hash.filter(|hash| !hash.is_empty()),
         }
     }
 }
