@@ -99,15 +99,28 @@ impl Shared {
         }));
     }
 
-    /// Whether an answer arriving now is the one to the adapter's own
-    /// question about roles: it was asked, and no longer ago than a server
-    /// takes to answer. Asked once, answered once.
+    /// Whether rules arriving now answer the adapter's own question about
+    /// roles: it was asked, and no longer ago than a server takes to
+    /// answer. Asked once, answered once.
     fn roles_answered(&self) -> bool {
         self.roles_asked
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take()
             .is_some_and(|asked| asked.elapsed() < ROLES_ANSWER_WITHIN)
+    }
+
+    /// Whether a refusal arriving now is of the adapter's own question
+    /// about roles: the right to write the root channel's rules, missing
+    /// there, moments after it was asked for.
+    fn roles_refused(&self, permission: Option<u32>, channel: Option<u32>) -> bool {
+        let about_roles = channel == Some(ROOT) && permission.is_some_and(|bits| bits & WRITE != 0);
+        about_roles
+            && self
+                .roles_asked
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .is_some_and(|asked| asked.elapsed() < ROLES_ANSWER_WITHIN)
     }
 
     /// The root channel's groups, as roles.
@@ -467,13 +480,14 @@ impl Shared {
                 });
             }
             api::EngineEvent::UnreadChanged => self.tell(EngineEvent::StateChanged),
-            api::EngineEvent::Denied { reason } => {
+            api::EngineEvent::Denied {
+                reason,
+                permission,
+                channel,
+            } => {
                 // The roles were asked for unprompted; being refused them
-                // is how most servers answer, and nothing to show. A
-                // refusal of something else in the same moment is lost
-                // with it, which is the price of the server not saying
-                // what it refuses.
-                if self.roles_answered() {
+                // is how most servers answer, and nothing to show.
+                if self.roles_refused(permission, channel) {
                     return;
                 }
                 let reason = reason.unwrap_or_else(|| "The server did not allow that.".to_owned());
@@ -1909,6 +1923,9 @@ fn merged_groups(read: Vec<api::AclGroupInfo>, changed: Vec<AclGroup>) -> Vec<ap
     }
     groups
 }
+
+/// The permission to write a channel's rules, as Mumble numbers it.
+const WRITE: u32 = 0x1;
 
 /// How long after asking for the roles an answer is taken to be to that.
 const ROLES_ANSWER_WITHIN: std::time::Duration = std::time::Duration::from_secs(5);
