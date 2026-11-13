@@ -319,6 +319,15 @@ pub(crate) struct Message {
     pub reactions: Vec<Reaction>,
 }
 
+/// The newest messages of a conversation.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Window {
+    /// Oldest first.
+    pub messages: Vec<Message>,
+    /// Whether there are older ones than these.
+    pub earlier: bool,
+}
+
 /// One emoji on a message, and how many put it there.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Reaction {
@@ -460,7 +469,20 @@ pub(crate) trait Engine: Send + Sync + 'static {
     fn disconnect(&self);
 
     /// The messages of `conversation`, oldest first.
-    fn messages(&self, conversation: Conversation) -> Vec<Message>;
+    #[cfg(test)]
+    fn messages(&self, conversation: Conversation) -> Vec<Message> {
+        self.window(conversation, usize::MAX).messages
+    }
+
+    /// The newest `limit` messages of `conversation`, oldest first, and
+    /// whether there are older ones. What the conversation is drawn from:
+    /// a long history costs what is shown of it.
+    fn window(&self, conversation: Conversation, limit: usize) -> Window;
+
+    /// Fetch messages of `conversation` older than the message `before`
+    /// from the server, where it keeps any. They are announced as a
+    /// [`EngineEvent::NewMessage`].
+    fn load_earlier(&self, conversation: Conversation, before: Option<SharedString>);
 
     /// How many messages `conversation` holds. Cheap: for asking whether
     /// [`Self::messages`] is worth reading again.

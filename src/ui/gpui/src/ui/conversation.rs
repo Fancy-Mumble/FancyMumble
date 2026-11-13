@@ -22,6 +22,8 @@ pub(super) enum Row {
     Day(SharedString),
     /// The message at this index.
     Message(usize),
+    /// The way to the messages before the first one shown.
+    Earlier,
 }
 
 /// The local calendar day `at_ms` falls on, counted from the epoch, for a
@@ -446,6 +448,30 @@ impl Shell {
         let index = match self.row_model.get(row) {
             Some(Row::Day(name)) => {
                 return row_frame().child(day_rule(name, &theme)).into_any_element();
+            }
+            Some(Row::Earlier) => {
+                let hover = theme.c.hover;
+                return row_frame()
+                    .py(px(10.0))
+                    .flex()
+                    .justify_center()
+                    .child(
+                        div()
+                            .id("earlier")
+                            .debug_selector(|| "earlier".to_owned())
+                            .px(px(14.0))
+                            .py(px(5.0))
+                            .rounded(theme.skin.radius_pill)
+                            .border_1()
+                            .border_color(theme.c.line2)
+                            .text_size(px(12.0))
+                            .text_color(theme.c.muted)
+                            .cursor_pointer()
+                            .hover(move |style| style.bg(hover))
+                            .on_click(cx.listener(|shell, _, _, cx| shell.show_earlier(cx)))
+                            .child("Show earlier messages"),
+                    )
+                    .into_any_element();
             }
             Some(Row::Message(index)) => *index,
             None => return div().into_any_element(),

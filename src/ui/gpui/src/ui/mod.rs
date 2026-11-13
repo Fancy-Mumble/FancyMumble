@@ -39,6 +39,10 @@ use text_input::{InputEvent, TextInput};
 /// short scroll does not wait on layout.
 const OVERDRAW: f32 = 400.0;
 
+/// How many messages a conversation opens with, and how many more each
+/// step back through its history adds.
+const PAGE: usize = 100;
+
 /// How long somebody is shown as writing after they last said so. A
 /// client says so every few seconds while it goes on.
 const TYPING_LASTS: std::time::Duration = std::time::Duration::from_secs(6);
@@ -75,6 +79,11 @@ pub(crate) struct Shell {
     was_in: Option<ChannelId>,
     /// The open conversation's messages, oldest first.
     messages: Vec<Message>,
+    /// The conversation `messages` was read from, how many of its newest
+    /// messages are asked for, and whether it has older ones.
+    shown: Option<Conversation>,
+    window: usize,
+    earlier: bool,
     /// How many messages the open conversation holds, shown or not, and
     /// how many of them are pinned.
     held: usize,
@@ -208,6 +217,9 @@ impl Shell {
             open: None,
             was_in: None,
             messages: Vec::new(),
+            shown: None,
+            window: PAGE,
+            earlier: false,
             held: 0,
             pins: 0,
             rows: ListState::new(0, ListAlignment::Top, px(OVERDRAW)),
@@ -502,6 +514,21 @@ impl Shell {
         }
     }
 
+    /// Show a page more of the open conversation's history, asking the
+    /// server for it where the engine does not hold it.
+    pub(super) fn show_earlier(&mut self, cx: &mut Context<Self>) {
+        let Some(conversation) = self.open else {
+            return;
+        };
+        self.window += PAGE;
+        if self.window > self.held {
+            let oldest = self.messages.first().and_then(|message| message.id.clone());
+            self.engine.load_earlier(conversation, oldest);
+        }
+        self.reload_messages(cx);
+        cx.notify();
+    }
+
     /// Put `conversation` on screen.
     pub(super) fn open_conversation(&mut self, conversation: Conversation, cx: &mut Context<Self>) {
         if self.open != Some(conversation) {
@@ -519,11 +546,21 @@ impl Shell {
     /// Read the open conversation's messages again and lay the rows out
     /// afresh.
     fn reload_messages(&mut self, cx: &mut Context<Self>) {
-        let mut messages = self
+        // Another conversation starts from its newest page again.
+        let same_conversation = self.shown == self.open;
+        if !same_conversation {
+            self.shown = self.open;
+            self.window = PAGE;
+        }
+        let window = self
             .open
-            .map(|conversation| self.engine.messages(conversation))
+            .map(|conversation| self.engine.window(conversation, self.window))
             .unwrap_or_default();
-        self.held = messages.len();
+        let mut messages = window.messages;
+        self.earlier = window.earlier;
+        self.held = self
+            .open
+            .map_or(0, |conversation| self.engine.message_count(conversation));
         self.pins = messages.iter().filter(|message| message.pinned).count();
         // The last pin taken off ends the view that showed only pins.
         self.only_pinned &= self.pins > 0;
@@ -532,14 +569,23 @@ impl Shell {
         }
         // A message drawn before is kept as drawn while it is still the same
         // message; an edit, a deletion or another channel starts over.
-        let kept = self
-            .messages
-            .iter()
-            .zip(&messages)
-            .all(|(before, now)| before.html == now.html);
+        let kept = same_conversation
+            && self
+                .messages
+                .iter()
+                .zip(&messages)
+                .all(|(before, now)| before.html == now.html);
         if !kept || messages.len() < self.messages.len() {
             self.bodies.clear();
         }
+        // Whether the newest message is the one that was the newest: if
+        // not, something arrived, and the reader is taken to it.
+        let newest = |messages: &[Message]| {
+            messages
+                .last()
+                .map(|message| (message.id.clone(), message.sent_at_ms, message.html.len()))
+        };
+        let same_newest = same_conversation && newest(&self.messages) == newest(&messages);
         self.messages = messages;
         // A short conversation starts under the header, as the web UI draws
         // it; a long one opens on its newest message.
@@ -551,11 +597,23 @@ impl Shell {
             });
         let rows_before = self.row_model.len();
         self.row_model = conversation::rows(&self.messages, now_ms, self.utc_offset);
+        if self.earlier && !self.only_pinned {
+            self.row_model.insert(0, conversation::Row::Earlier);
+        }
         let rows = self.row_model.len();
-        // The same rows with something on them changed, a reaction say,
-        // stay where the reader has them; anything else opens on the
-        // newest message.
-        if rows != rows_before || !kept {
+        if rows == rows_before && kept {
+            // The same rows with something on them changed, a reaction
+            // say: they stay where the reader has them.
+        } else if same_newest {
+            // Rows came or went above: earlier messages were loaded, or
+            // one was deleted. The reader stays on what they were reading.
+            let top = self.rows.logical_scroll_top();
+            self.rows.reset(rows);
+            self.rows.scroll_to(ListOffset {
+                item_ix: (top.item_ix + rows).saturating_sub(rows_before),
+                offset_in_item: top.offset_in_item,
+            });
+        } else {
             self.rows.reset(rows);
             self.rows.scroll_to(ListOffset {
                 item_ix: rows,

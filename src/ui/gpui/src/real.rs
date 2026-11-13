@@ -17,7 +17,7 @@ use mumble_tauri_lib::engine_api::{
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
     Connection, Conversation, Engine, EngineEvent, Listing, Message, Reaction, Registered,
-    SavedServer, ServerPing, SessionEntry, Snapshot, Subject, User, Voice, VoiceSettings,
+    SavedServer, ServerPing, SessionEntry, Snapshot, Subject, User, Voice, VoiceSettings, Window,
 };
 use crate::store::Store;
 
@@ -618,18 +618,48 @@ impl Engine for RealEngine {
         self.spawn(async move { engine.disconnect().await });
     }
 
-    fn messages(&self, conversation: Conversation) -> Vec<Message> {
-        let messages = match conversation {
-            Conversation::Channel(channel) => self.shared.engine.messages(channel),
-            Conversation::Direct(session) => self.shared.engine.direct_messages(session),
+    fn load_earlier(&self, conversation: Conversation, before: Option<SharedString>) {
+        // Only a channel has a history on the server to fetch from.
+        let Conversation::Channel(channel) = conversation else {
+            return;
         };
+        let engine = self.shared.engine.clone();
+        if !engine
+            .channels()
+            .iter()
+            .any(|known| known.id == channel && known.keeps_history)
+        {
+            return;
+        }
+        self.spawn(async move {
+            engine
+                .fetch_earlier(channel, before.map(|id| id.to_string()), EARLIER_PAGE)
+                .await
+        });
+    }
+
+    fn window(&self, conversation: Conversation, limit: usize) -> Window {
+        let engine = &self.shared.engine;
+        let (window, held) = match conversation {
+            Conversation::Channel(channel) => (
+                engine.messages_tail(channel, limit),
+                engine.message_count(channel),
+            ),
+            Conversation::Direct(session) => (
+                engine.direct_messages_tail(session, limit),
+                engine.direct_message_count(session),
+            ),
+        };
+        let api::MessageWindow { messages, earlier } = window;
         let mut first_read = self
             .shared
             .first_read
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
         let read_at = first_read.entry(conversation).or_default();
-        stamp_first_read(read_at, messages.len(), now_ms());
+        stamp_first_read(read_at, held, now_ms());
+        // The stamps are for the whole history; the window is its end.
+        let read_at = &read_at[read_at.len().saturating_sub(messages.len())..];
         let reactions = self
             .shared
             .reactions
@@ -640,7 +670,7 @@ impl Engine for RealEngine {
             Conversation::Direct(_) => None,
         };
         let own_hash = on_channel.and_then(|_| self.shared.engine.own_hash());
-        messages
+        let messages = messages
             .into_iter()
             .zip(read_at.iter())
             .map(|(message, read_at)| Message {
@@ -661,7 +691,8 @@ impl Engine for RealEngine {
                 failed: message.failed,
                 pinned: message.pinned,
             })
-            .collect()
+            .collect();
+        Window { messages, earlier }
     }
 
     fn message_count(&self, conversation: Conversation) -> usize {
@@ -1063,6 +1094,9 @@ fn server_facts(server: &api::ServerDetails) -> Vec<(SharedString, SharedString)
     );
     facts
 }
+
+/// How many older messages are asked of the server at a time.
+const EARLIER_PAGE: u32 = 100;
 
 /// How often, at most, the server is told the local user is writing.
 const TYPING_EVERY: std::time::Duration = std::time::Duration::from_secs(3);
@@ -1872,6 +1906,103 @@ mod tests {
                 .any(|event| matches!(event, EngineEvent::Notice(Some(_))))
         });
         for (engine, dir) in [(admin, admin_dir), (guest, guest_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+    /// A kept channel's history is read a page at a time: the newest
+    /// first, and further back on asking, from the server.
+    #[test]
+    #[ignore = "needs a live Fancy server and its SuperUser password"]
+    fn live_fancy_history_is_read_back_a_page_at_a_time() {
+        const SENT: usize = 60;
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        wait_for("the admin to connect", || {
+            admin.snapshot().connection == Connection::Connected
+        });
+        let name = format!("paged-{}", std::process::id());
+        let root = admin.snapshot().current_channel.expect("the root");
+        admin.act(Action::CreateChannel {
+            parent: root,
+            name: name.clone(),
+            history: true,
+        });
+        let paged = |engine: &RealEngine| {
+            engine
+                .snapshot()
+                .channels
+                .into_iter()
+                .find(|channel| channel.name.as_ref() == name)
+                .map(|channel| channel.id)
+        };
+        wait_for("the channel", || paged(&admin).is_some());
+        let channel = paged(&admin).expect("the channel");
+        let room = Conversation::Channel(channel);
+        admin.join_channel(channel);
+        wait_for("the admin to be in it", || {
+            admin.snapshot().current_channel == Some(channel)
+        });
+        for line in 0..SENT {
+            admin.send_message(room, format!("line {line}"));
+            // In order, and no faster than a server takes them: one that
+            // limits how fast a client may talk drops the rest unsaid.
+            wait_for("the line to be held", || {
+                said(&admin, room, &format!("line {line}")).is_some()
+            });
+            std::thread::sleep(std::time::Duration::from_millis(450));
+        }
+
+        // A server writes what it keeps after it has passed it on, and on
+        // a busy disk it falls behind: give it time to have kept it all.
+        let settle = std::env::var("FANCY_GPUI_TEST_SETTLE_SECS")
+            .ok()
+            .and_then(|secs| secs.parse().ok())
+            .unwrap_or(5);
+        std::thread::sleep(std::time::Duration::from_secs(settle));
+
+        let (late, late_dir) = fancy_client("PagedLate", None);
+        wait_for("the latecomer to connect", || paged(&late).is_some());
+        late.join_channel(channel);
+        late.open(room);
+        wait_for("the newest page", || {
+            late.window(room, 100)
+                .messages
+                .last()
+                .is_some_and(|message| message.body.as_ref() == format!("line {}", SENT - 1))
+        });
+        // Step back until the first line is there; each step asks the
+        // server for what lies before the oldest message held.
+        let mut wanted = 100;
+        let mut steps = 0;
+        loop {
+            let window = late.window(room, wanted);
+            if window
+                .messages
+                .first()
+                .is_some_and(|message| message.body.as_ref() == "line 0")
+            {
+                assert_eq!(window.messages.len(), SENT);
+                assert!(!window.earlier, "nothing lies before the first line");
+                break;
+            }
+            assert!(window.earlier, "there is more, and it says so");
+            assert!(steps < 10, "the history never came");
+            steps += 1;
+            wanted += 100;
+            let oldest = window
+                .messages
+                .first()
+                .and_then(|message| message.id.clone());
+            let held = late.message_count(room);
+            late.load_earlier(room, oldest);
+            wait_for("an earlier page", || late.message_count(room) > held);
+        }
+
+        admin.act(Action::DeleteChannel { channel });
+        wait_for("the channel to go", || paged(&late).is_none());
+        for (engine, dir) in [(admin, admin_dir), (late, late_dir)] {
             engine.shutdown();
             let _ = std::fs::remove_dir_all(dir);
         }

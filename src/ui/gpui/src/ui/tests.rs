@@ -1113,3 +1113,30 @@ fn the_ban_list_is_filtered_and_a_ban_lifted_on_the_second_click(cx: &mut TestAp
     click(cx, "admin-close");
     shell.read_with(cx, |shell, _| assert!(shell.admin.is_none()));
 }
+
+#[gpui::test]
+fn a_long_conversation_opens_on_its_newest_page_and_steps_back(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    let lounge = Conversation::Channel(1);
+    for line in 0..150 {
+        engine.send_message(lounge, format!("line {line}"));
+    }
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.messages.len(), 100, "a page, not all 155");
+        assert_eq!(shell.held, 155);
+        assert!(shell.earlier);
+        assert_eq!(shell.messages[99].body.as_ref(), "line 149");
+        assert_eq!(shell.row_model[0], super::conversation::Row::Earlier);
+    });
+    shell.update(cx, Shell::show_earlier);
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.messages.len(), 155);
+        assert!(!shell.earlier, "that was all of it");
+        assert_ne!(shell.row_model[0], super::conversation::Row::Earlier);
+    });
+    // Another conversation, and back: the newest page again.
+    click(cx, "channel-2");
+    click(cx, "channel-1");
+    shell.read_with(cx, |shell, _| assert_eq!(shell.messages.len(), 100));
+}

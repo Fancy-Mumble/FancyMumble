@@ -7,6 +7,7 @@ use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
     Connection, Conversation, Engine, EngineEvent, Listing, Message, Reaction, Registered,
     SavedServer, ServerPing, Session, SessionEntry, Snapshot, Subject, User, Voice, VoiceSettings,
+    Window,
 };
 
 /// The local user's session in the demo server.
@@ -537,16 +538,21 @@ impl Engine for DemoEngine {
         }
     }
 
-    fn messages(&self, conversation: Conversation) -> Vec<Message> {
+    fn window(&self, conversation: Conversation, limit: usize) -> Window {
         self.with_state(|state| {
-            state
-                .messages
-                .iter()
-                .filter(|(of, _)| *of == conversation)
-                .map(|(_, message)| message.clone())
-                .collect()
+            let held = state.messages.iter().filter(|(of, _)| *of == conversation);
+            let skipped = held.clone().count().saturating_sub(limit);
+            Window {
+                messages: held
+                    .skip(skipped)
+                    .map(|(_, message)| message.clone())
+                    .collect(),
+                earlier: skipped > 0,
+            }
         })
     }
+
+    fn load_earlier(&self, _conversation: Conversation, _before: Option<gpui::SharedString>) {}
 
     fn message_count(&self, conversation: Conversation) -> usize {
         self.with_state(|state| {
