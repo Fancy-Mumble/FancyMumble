@@ -79,6 +79,9 @@ pub(crate) struct Settings {
     /// The saved identity to connect as at launch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_connect: Option<String>,
+    /// Whether channels with nobody in them are left out of the column.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hide_empty: bool,
     /// The people kept as friends.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub friends: Vec<Friend>,
@@ -225,6 +228,7 @@ mod tests {
             push_to_talk_key: Some("f9".to_owned()),
             whisper_key: Some("f10".to_owned()),
             auto_connect: None,
+            hide_empty: true,
             friends: vec![Friend {
                 hash: "abc".to_owned(),
                 name: "Rin".to_owned(),

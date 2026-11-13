@@ -1984,3 +1984,62 @@ fn everyone_is_moved_along_and_a_channel_is_made_to_last_a_visit(cx: &mut TestAp
         Some(Action::CreateTemporaryChannel { parent: 2, name }) if name == "huddle"
     ));
 }
+
+#[gpui::test]
+fn empty_channels_are_hidden_on_request_but_never_the_one_on_screen(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell(cx);
+    let names = |shell: &Shell, cx: &gpui::App| -> Vec<String> {
+        shell
+            .listed_channels(cx)
+            .into_iter()
+            .map(|(channel, _)| channel.name.to_string())
+            .collect()
+    };
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(names(shell, cx), ["Root", "afk", "lounge", "studio"]);
+    });
+    own_menu(cx, "menu-Hide empty channels");
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(
+            names(shell, cx),
+            ["Root", "lounge"],
+            "where people are, and above"
+        );
+    });
+    // Reading an empty channel keeps it listed while it is on screen.
+    shell.update(cx, |shell, cx| {
+        shell.open_conversation(Conversation::Channel(2), cx);
+    });
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(names(shell, cx), ["Root", "lounge", "studio"]);
+    });
+    own_menu(cx, "menu-Hide empty channels");
+    shell.read_with(cx, |shell, cx| assert_eq!(names(shell, cx).len(), 4));
+}
+
+#[gpui::test]
+fn a_saved_server_is_made_a_favourite_from_its_menu(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell_on(DemoEngine::disconnected(), cx);
+    let favourite = |engine: &DemoEngine, host: &str| {
+        engine
+            .saved_servers()
+            .iter()
+            .filter(|saved| saved.host.as_ref() == host)
+            .all(|saved| saved.favorite)
+    };
+    assert!(!favourite(&engine, "kumo.jp"));
+    right_click(cx, "server-kumo.jp:64738");
+    click(cx, "menu-Favourite");
+    assert!(favourite(&engine, "kumo.jp"));
+    // Both identities of the other lose the mark together.
+    right_click(cx, "server-magical.rocks:64738");
+    click(cx, "menu-Favourite");
+    assert!(
+        engine
+            .saved_servers()
+            .iter()
+            .filter(|saved| saved.host.as_ref() == "magical.rocks")
+            .all(|saved| !saved.favorite)
+    );
+    shell.read_with(cx, |shell, _| assert_eq!(shell.servers.len(), 4));
+}

@@ -16,11 +16,13 @@ real engine and does text and voice.
 - **Servers.** Saved servers and their identities, each pinged for whether
   it is up; add, edit and forget them; a certificate per identity, made on
   first use; a server password asked for once a server has turned the
-  user away; one identity to connect as at every launch. Several
+  user away; one identity to connect as at every launch; a right click marks a
+  server a favourite or copies its address. Several
   servers at once, one tile each on the rail: `+` adds another, a click
   switches, a right click says what the server is or leaves it. A lost
   connection is retried.
-- **On a server.** The channel tree in order with unread counts, who is in
+- **On a server.** The channel tree in order with unread counts (the
+  empty channels left out, if asked), who is in
   each channel, who is talking; read a channel with a click, enter it with
   a double click or Join; listen to one without joining; channel passwords;
   create, rename, describe and delete channels, and set a channel's

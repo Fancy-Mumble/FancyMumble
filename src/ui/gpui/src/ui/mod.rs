@@ -154,14 +154,18 @@ struct Chrome {
     rail_wide: bool,
     /// The saved identity to connect as at every launch, if there is one.
     auto_connect: Option<gpui::SharedString>,
+    /// Whether channels with nobody in or under them are left out of the
+    /// column.
+    hide_empty: bool,
 }
 
 impl Chrome {
     /// As it starts, with the identity remembered for connecting at launch.
-    fn remembering(auto_connect: Option<String>) -> Self {
+    fn remembering(auto_connect: Option<String>, hide_empty: bool) -> Self {
         Self {
             rail_wide: false,
             auto_connect: auto_connect.map(Into::into),
+            hide_empty,
         }
     }
 }
@@ -413,7 +417,7 @@ impl Shell {
             emoji_for: None,
             lightbox: None,
             panels: Panels::keeping(stored.friends.clone()),
-            chrome: Chrome::remembering(stored.auto_connect.clone()),
+            chrome: Chrome::remembering(stored.auto_connect.clone(), stored.hide_empty),
             whisper: Whisper {
                 key: stored.whisper_key.map(Into::into),
                 ..Whisper::default()
@@ -814,6 +818,10 @@ impl Shell {
             self.open = Some(conversation);
             self.engine.open(conversation);
             self.reload_messages(cx);
+            // The one on screen is listed even when it is empty.
+            if self.chrome.hide_empty {
+                self.lay_out_column();
+            }
         }
         cx.notify();
     }
@@ -1264,6 +1272,15 @@ impl Shell {
     /// deep each sits: the whole tree in order, or - flat - those whose
     /// name contains `wanted`.
     fn listed(&self, wanted: &str) -> Vec<(usize, usize)> {
+        if wanted.is_empty() && self.chrome.hide_empty {
+            let peopled = self.peopled();
+            return self
+                .tree
+                .iter()
+                .copied()
+                .filter(|(at, _)| peopled.contains(&self.snapshot.channels[*at].id))
+                .collect();
+        }
         if wanted.is_empty() {
             return self.tree.clone();
         }
@@ -1274,6 +1291,37 @@ impl Shell {
             .filter(|(_, channel)| channel.name.to_lowercase().contains(wanted))
             .map(|(at, _)| (at, 0))
             .collect()
+    }
+
+    /// The channels worth listing when the empty ones are hidden: those
+    /// with somebody in them, everything above those, and the one on
+    /// screen.
+    fn peopled(&self) -> HashSet<ChannelId> {
+        let parents: std::collections::HashMap<ChannelId, Option<ChannelId>> = self
+            .snapshot
+            .channels
+            .iter()
+            .map(|channel| (channel.id, channel.parent))
+            .collect();
+        let open = match self.open {
+            Some(Conversation::Channel(id)) => Some(id),
+            _ => None,
+        };
+        let mut kept = HashSet::new();
+        for start in self
+            .snapshot
+            .users
+            .iter()
+            .map(|user| user.channel)
+            .chain(open)
+        {
+            let mut at = Some(start);
+            // Up to the root, stopping where an earlier walk already went.
+            while let Some(id) = at.filter(|id| kept.insert(*id)) {
+                at = parents.get(&id).copied().flatten();
+            }
+        }
+        kept
     }
 
     /// The channels the column lists, each with how deep it sits.
@@ -1483,6 +1531,7 @@ impl Shell {
             whisper_key: name(&self.whisper.key),
             auto_connect: name(&self.chrome.auto_connect),
             friends: self.panels.friends.kept.clone(),
+            hide_empty: self.chrome.hide_empty,
         };
         if let Err(error) = store.save_settings(&settings) {
             self.notice = Some(format!("The settings could not be remembered: {error}").into());

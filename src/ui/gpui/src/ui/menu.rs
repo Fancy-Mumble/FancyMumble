@@ -66,6 +66,10 @@ pub(super) enum Command {
     Emoji,
     /// Keep whoever is on this session as a friend, or stop.
     Friend(Session, bool),
+    /// Leave channels with nobody in them out of the column, or list all.
+    HideEmpty(bool),
+    /// Mark the saved server at this address a favourite, or not.
+    Favourite(SharedString, bool),
 }
 
 /// The panels the local user's own menu opens.
@@ -657,10 +661,27 @@ pub(super) fn purge_item(user: &User, open: Option<&Channel>) -> Option<Item> {
     )
 }
 
+/// The entries for a right click on a saved server: whether it is a
+/// favourite, and its address to hand to somebody.
+pub(super) fn saved_server_items(key: &str, host: &str, port: u16, favorite: bool) -> Vec<Item> {
+    vec![
+        Item::new(
+            "Favourite",
+            Command::Favourite(key.to_owned().into(), !favorite),
+        )
+        .ticked(favorite),
+        Item::new(
+            "Copy address",
+            Command::Copy(format!("mumble://{host}:{port}").into()),
+        ),
+    ]
+}
+
 /// The entries of the local user's own menu, on their tile: the view's
 /// settings, and what there is to change about themselves.
-pub(super) fn own_items() -> Vec<Item> {
+pub(super) fn own_items(hide_empty: bool) -> Vec<Item> {
     vec![
+        Item::new("Hide empty channels", Command::HideEmpty(!hide_empty)).ticked(hide_empty),
         Item::new("Voice settings…", Command::Panel(Panel::Voice)),
         Item::new("Themes…", Command::Panel(Panel::Themes)),
         Item::new("Certificates…", Command::Panel(Panel::Certificates)),
@@ -866,6 +887,12 @@ impl Shell {
             Command::Whisper(target, name) => self.toggle_whisper_target(target, name, cx),
             Command::Admin(listing) => self.open_admin(listing, cx),
             Command::Friend(session, keep) => self.set_friend(session, keep, cx),
+            Command::Favourite(key, favorite) => self.set_favourite(&key, favorite, cx),
+            Command::HideEmpty(hide) => {
+                self.chrome.hide_empty = hide;
+                self.lay_out_column();
+                self.remember_settings(cx);
+            }
             Command::Emoji => {
                 self.emoji_for = Some(super::emoji::For::Composer);
                 cx.notify();

@@ -594,7 +594,8 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
                                     .glyph_size(15.0)
                                     .on_click(cx.listener(
                                         |shell, event: &gpui::ClickEvent, _, cx| {
-                                            let items = super::menu::own_items();
+                                            let items =
+                                                super::menu::own_items(shell.chrome.hide_empty);
                                             shell.open_menu(event.position(), items, cx);
                                         },
                                     )),

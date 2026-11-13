@@ -82,6 +82,24 @@ impl Shell {
         picked.or_else(|| server.identities.first().copied())
     }
 
+    /// Mark every identity saved for the address `key` a favourite, or
+    /// none of them: a server is one when any of its identities is.
+    pub(super) fn set_favourite(&mut self, key: &str, favorite: bool, cx: &mut Context<Self>) {
+        let changed: Vec<SavedServer> = self
+            .servers
+            .iter()
+            .filter(|saved| format!("{}:{}", saved.host, saved.port) == key)
+            .filter(|saved| saved.favorite != favorite)
+            .cloned()
+            .collect();
+        for mut saved in changed {
+            saved.favorite = favorite;
+            self.engine.save_server(saved);
+        }
+        self.servers = self.engine.saved_servers();
+        cx.notify();
+    }
+
     /// Connect as the chosen identity, with whatever password was typed.
     pub(super) fn connect_selected(&mut self, cx: &mut Context<Self>) {
         let Some(id) = self.selected_identity().map(|identity| identity.id.clone()) else {
@@ -328,6 +346,18 @@ fn server_card(
             shell.selected_identity = None;
             cx.notify();
         }))
+        .on_mouse_down(gpui::MouseButton::Right, {
+            let (key, host, port, favorite) = (
+                server.key.clone(),
+                server.host.clone(),
+                server.port,
+                server.favorite,
+            );
+            cx.listener(move |shell, event: &gpui::MouseDownEvent, _, cx| {
+                let items = super::menu::saved_server_items(&key, &host, port, favorite);
+                shell.open_menu(event.position, items, cx);
+            })
+        })
         .child(Avatar::new(server.label).tile(&server.key).size(34.0))
         .child(
             div()
