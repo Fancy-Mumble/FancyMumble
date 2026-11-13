@@ -576,6 +576,24 @@ fn composer(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoE
             .child(shell.composer.clone())
             .child(
                 div()
+                    .id("emoji")
+                    .debug_selector(|| "emoji".to_owned())
+                    .flex_none()
+                    .size(px(28.0))
+                    .rounded(theme.skin.radius_md)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .hover(move |style| style.bg(hover))
+                    .on_click(cx.listener(|shell, _, _, cx| {
+                        shell.emoji_for = Some(super::emoji::For::Composer);
+                        cx.notify();
+                    }))
+                    .child(icon("smile", 15.0, theme.c.muted)),
+            )
+            .child(
+                div()
                     .id("send")
                     .debug_selector(|| "send".to_owned())
                     .flex_none()

@@ -49,6 +49,8 @@ pub(super) enum Command {
     Copy(SharedString),
     /// Answer the message at this place in the conversation.
     Reply(usize),
+    /// Choose an emoji from the picker, to react to a message with.
+    MoreReactions { channel: ChannelId, id: String },
     /// Leave the server of a session.
     Leave(SharedString),
     /// Open the permissions of a channel.
@@ -288,7 +290,7 @@ pub(super) fn message_items(
     let (Some(channel), Some(id), true) = (channel, message.id.as_ref(), fancy) else {
         return (items, Vec::new());
     };
-    let quick = QUICK_REACTIONS
+    let quick: Vec<Item> = QUICK_REACTIONS
         .iter()
         .map(|emoji| {
             let own = message
@@ -306,6 +308,14 @@ pub(super) fn message_items(
             )
             .ticked(own)
         })
+        // The last of them opens the picker, for the rest.
+        .chain([Item::new(
+            "…",
+            Command::MoreReactions {
+                channel,
+                id: id.to_string(),
+            },
+        )])
         .collect();
     if kept {
         items.push(Item::new(
@@ -662,6 +672,9 @@ impl Shell {
             Command::Whisper(target, name) => self.toggle_whisper_target(target, name, cx),
             Command::Admin(listing) => self.open_admin(listing, cx),
             Command::Reply(index) => self.start_replying(index, window, cx),
+            Command::MoreReactions { channel, id } => {
+                self.emoji_for = Some(super::emoji::For::Reaction { channel, id });
+            }
             Command::Copy(text) => {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.to_string()));
             }
@@ -883,6 +896,40 @@ fn picture_at(path: &std::path::Path) -> Option<Vec<u8>> {
     Some(bytes)
 }
 
+/// The entries drawn side by side above a menu's others: the reactions at
+/// a click. They are counted on from the others by [`Shell::choose`].
+fn quick_row(menu: &Menu, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+    const QUICK: f32 = 34.0;
+    let hover = theme.c.hover;
+    let listed = menu.items.len();
+    div()
+        .flex()
+        .justify_between()
+        .pb(px(6.0))
+        .children(menu.quick.iter().enumerate().map(|(at, item)| {
+            let tag = item.name.clone();
+            div()
+                .id(("menu-quick", at))
+                .debug_selector(move || format!("react-{tag}"))
+                .size(px(QUICK))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(theme.skin.radius_md)
+                .cursor_pointer()
+                .text_size(px(18.0))
+                .when(item.ticked, |tile| tile.bg(theme.c.accent_soft))
+                .hover(move |style| style.bg(hover))
+                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
+                    cx.stop_propagation();
+                })
+                .on_click(cx.listener(move |shell, _, window, cx| {
+                    shell.choose(listed + at, window, cx);
+                }))
+                .child(item.name.clone())
+        }))
+}
+
 /// The open menu, over a backdrop that closes it.
 pub(super) fn render_menu(
     menu: &Menu,
@@ -900,7 +947,6 @@ pub(super) fn render_menu(
         QUICK + 6.0
     };
     let height = px(menu.items.len() as f32 * ROW + 16.0 + quick_height);
-    let listed = menu.items.len();
     // Kept on screen: a menu opened near an edge opens back from it.
     let left = menu.at.x.min(viewport.width - px(WIDTH + 8.0)).max(px(4.0));
     let top = menu
@@ -939,30 +985,7 @@ pub(super) fn render_menu(
                 .border_color(theme.c.line2)
                 .shadow_lg()
                 .when(!menu.quick.is_empty(), |list| {
-                    list.child(div().flex().justify_between().pb(px(6.0)).children(
-                        menu.quick.iter().enumerate().map(|(at, item)| {
-                            let tag = item.name.clone();
-                            div()
-                                .id(("menu-quick", at))
-                                .debug_selector(move || format!("react-{tag}"))
-                                .size(px(QUICK))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .rounded(theme.skin.radius_md)
-                                .cursor_pointer()
-                                .text_size(px(18.0))
-                                .when(item.ticked, |tile| tile.bg(theme.c.accent_soft))
-                                .hover(move |style| style.bg(hover))
-                                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| {
-                                    cx.stop_propagation();
-                                })
-                                .on_click(cx.listener(move |shell, _, window, cx| {
-                                    shell.choose(listed + at, window, cx);
-                                }))
-                                .child(item.name.clone())
-                        }),
-                    ))
+                    list.child(quick_row(menu, theme, cx))
                 })
                 .children(menu.items.iter().enumerate().map(|(index, item)| {
                     let tag = item.name.clone();

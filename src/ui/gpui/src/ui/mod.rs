@@ -9,6 +9,7 @@ mod certificates;
 mod connect;
 mod conversation;
 mod devices;
+mod emoji;
 mod frame;
 mod menu;
 mod picker;
@@ -245,6 +246,8 @@ pub(crate) struct Shell {
     adding_server: bool,
     /// The unread count the window's title was last set for.
     titled_unread: u32,
+    /// What an emoji picked from the picker is for, while it is open.
+    emoji_for: Option<emoji::For>,
     /// The picture being looked at large, while one is.
     lightbox: Option<Arc<gpui::Image>>,
     /// The panels that open over the window.
@@ -371,6 +374,7 @@ impl Shell {
             active_session: None,
             adding_server: false,
             titled_unread: 0,
+            emoji_for: None,
             lightbox: None,
             panels: Panels::default(),
             whisper: Whisper {
@@ -1083,6 +1087,7 @@ impl Shell {
             "picker" => self.toggle_picker(cx),
             "devices" => self.toggle_devices(cx),
             "certificates" => self.toggle_certificates(cx),
+            "emoji" => self.emoji_for = Some(emoji::For::Composer),
             "permissions" => {
                 if let Some(channel) = self.snapshot.current_channel {
                     self.open_acl(channel, cx);
@@ -1096,6 +1101,7 @@ impl Shell {
     /// Escape: close whatever is open on top of the window.
     pub(crate) fn dismiss(&mut self, cx: &mut Context<Self>) {
         if self.lightbox.take().is_some()
+            || self.emoji_for.take().is_some()
             || self.menu.take().is_some()
             || self.prompt.take().is_some()
             || self.info.take().is_some()
@@ -1506,6 +1512,9 @@ impl Render for Shell {
             })
             .when_some(self.editor.as_ref(), |shell, editor| {
                 shell.child(server_editor::render(editor, &theme, cx))
+            })
+            .when(self.emoji_for.is_some(), |shell| {
+                shell.child(emoji::render(&theme, cx))
             })
             .when_some(self.lightbox.as_ref(), |shell, picture| {
                 shell.child(conversation::render_lightbox(picture, &theme, cx))

@@ -52,6 +52,7 @@ icons![
     "search",
     "send",
     "settings-2",
+    "smile",
     "square",
     "star",
     "sun",

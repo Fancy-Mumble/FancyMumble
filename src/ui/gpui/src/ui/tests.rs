@@ -859,7 +859,11 @@ fn a_message_takes_a_reaction_from_its_menu_and_gives_it_back_at_its_chip(cx: &m
             ["Reply", "Copy text", "Pin"],
             "not the local user's to edit"
         );
-        assert_eq!(menu.quick.len(), super::menu::QUICK_REACTIONS.len());
+        assert_eq!(
+            menu.quick.len(),
+            super::menu::QUICK_REACTIONS.len() + 1,
+            "and the way to the rest"
+        );
     });
     click(cx, "react-👍");
     shell.read_with(cx, |shell, _| {
@@ -1686,4 +1690,34 @@ fn a_picture_in_a_message_opens_large_and_is_saved_from_there(cx: &mut TestAppCo
     shell.update(cx, Shell::dismiss);
     shell.read_with(cx, |shell, _| assert!(shell.lightbox.is_none()));
     let _ = std::fs::remove_dir_all(folder);
+}
+
+#[gpui::test]
+fn an_emoji_is_picked_into_the_composer_or_onto_a_message(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    click(cx, "input-Message #lounge");
+    cx.simulate_keystrokes("h i space");
+    click(cx, "emoji");
+    shell.read_with(cx, |shell, _| assert!(shell.emoji_for.is_some()));
+    click(cx, "emoji-🎉");
+    shell.read_with(cx, |shell, cx| {
+        assert!(shell.emoji_for.is_none(), "picked: closed");
+        assert_eq!(shell.composer.read(cx).text(), "hi 🎉");
+    });
+    // And typing goes on after it.
+    cx.simulate_keystrokes("!");
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(shell.composer.read(cx).text(), "hi 🎉!")
+    });
+
+    right_click(cx, "message-1");
+    click(cx, "react-…");
+    click(cx, "emoji-🚀");
+    assert!(matches!(
+        engine.actions().last(),
+        Some(Action::React { emoji, add: true, .. }) if emoji == "🚀"
+    ));
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.messages[1].reactions[0].emoji.as_ref(), "🚀");
+    });
 }

@@ -283,6 +283,12 @@ impl TextInput {
         self.placeholder = placeholder.into();
     }
 
+    /// Type `text` where the caret is, over what is selected.
+    pub(crate) fn type_text(&mut self, text: &str) {
+        self.line.insert(text);
+        self.marked = None;
+    }
+
     /// Empty the field.
     pub(crate) fn clear(&mut self) {
         self.line = Line::default();
