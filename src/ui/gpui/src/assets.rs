@@ -36,6 +36,7 @@ icons![
     "download",
     "ear",
     "file",
+    "grip-vertical",
     "ellipsis-vertical",
     "hash",
     "headphone-off",
@@ -68,10 +69,12 @@ icons![
     "x",
 ];
 
-/// The bundled faces of Inter: regular, medium, semibold, bold and italic.
+/// The bundled faces of Inter: regular, medium, semibold, bold and italic,
+/// and the bold of its display cut (`Inter Display`), which is what a
+/// browser draws a heading in.
 ///
 /// About 290 KiB each, and the text system copies what it is given, so this
-/// is some 1.4 MiB held for the whole run. It buys the same letterforms and
+/// is some 1.7 MiB held for the whole run. It buys the same letterforms and
 /// the same line breaks as the web UI on a system that has no Inter, where
 /// the fallback would be whatever sans the system names.
 pub(crate) fn fonts() -> Vec<Cow<'static, [u8]>> {
@@ -86,6 +89,7 @@ pub(crate) fn fonts() -> Vec<Cow<'static, [u8]>> {
         face!("SemiBold"),
         face!("Bold"),
         face!("Italic"),
+        face!("DisplayBold"),
     ]
 }
 

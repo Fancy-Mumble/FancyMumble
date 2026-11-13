@@ -91,14 +91,64 @@ pub(crate) struct Colors {
     pub on_accent: Hsla,
     pub accent_soft: Hsla,
     pub accent_line: Hsla,
-    /// Presence, destructive.
+    /// Presence, destructive, and a mark that wants noticing.
     pub ok: Hsla,
     pub bad: Hsla,
+    pub warn: Hsla,
     /// The conversation's ground, under its backdrop.
     pub canvas_b: Hsla,
-    /// The gradients behind the whole window and behind the conversation.
+    /// The gradients behind the whole window, behind the conversation, and
+    /// on whatever floats over either: a menu, a dialog.
     pub window: Arc<Paint>,
     pub backdrop: Arc<Paint>,
+    pub tint: Arc<Paint>,
+    /// The shadow a floating surface casts.
+    pub shadow: Shadow,
+}
+
+/// A shadow as CSS writes one: how far down, how blurred, what colour.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Shadow {
+    pub drop: f32,
+    pub blur: f32,
+    pub color: Hsla,
+}
+
+impl Shadow {
+    /// Read `0 <drop>px <blur>px <colour>`; anything else casts nothing.
+    fn parse(css: &str) -> Self {
+        let nothing = Self {
+            drop: 0.0,
+            blur: 0.0,
+            color: gpui::transparent_black(),
+        };
+        let mut parts = css.trim().splitn(4, ' ');
+        let (Some(_), Some(drop), Some(blur), Some(ink)) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
+        else {
+            return nothing;
+        };
+        let length = |value: &str| value.trim_end_matches("px").parse::<f32>().ok();
+        match (length(drop), length(blur)) {
+            (Some(drop), Some(blur)) => Self {
+                drop,
+                blur,
+                color: color(ink),
+            },
+            _ => nothing,
+        }
+    }
+
+    /// This shadow for the renderer, which takes a blur as its deviation:
+    /// half of what CSS calls the blur.
+    pub(crate) fn cast(self) -> Vec<gpui::BoxShadow> {
+        vec![gpui::BoxShadow {
+            color: self.color,
+            offset: gpui::point(px(0.0), px(self.drop)),
+            blur_radius: px(self.blur / 2.0),
+            spread_radius: px(0.0),
+        }]
+    }
 }
 
 /// Everything about a theme that is not a colour.
@@ -114,6 +164,7 @@ pub(crate) struct Skin {
     pub radius_sm: Pixels,
     pub radius_md: Pixels,
     pub radius_lg: Pixels,
+    pub radius_xl: Pixels,
     pub radius_rail: Pixels,
     pub radius_pill: Pixels,
     /// Avatar corner, or `None` for a full circle.
@@ -281,9 +332,12 @@ pub(crate) fn emergency_theme() -> Theme {
             accent_line: accent,
             ok: accent,
             bad: accent,
+            warn: accent,
             canvas_b: ground,
             window: Arc::default(),
             backdrop: Arc::default(),
+            tint: Arc::default(),
+            shadow: Shadow::parse(""),
         },
         skin: RawSkin::default().resolve(&[]),
     }
@@ -343,9 +397,12 @@ impl RawMode {
             accent_line: color(&t.accent_line),
             ok: color(&t.ok),
             bad: color(&t.bad),
+            warn: color(&t.warn),
             canvas_b: color(&self.canvas_b),
             window: Arc::new(Paint::parse(&t.window)),
             backdrop: Arc::new(Paint::parse(&t.backdrop)),
+            tint: Arc::new(Paint::parse(&t.tint)),
+            shadow: Shadow::parse(&t.shadow),
         }
     }
 }
@@ -358,6 +415,8 @@ struct RawTokens {
     /// The two gradient stacks, as CSS.
     window: String,
     backdrop: String,
+    tint: String,
+    shadow: String,
     bar: String,
     bar_text: String,
     bar_dim: String,
@@ -383,6 +442,7 @@ struct RawTokens {
     accent_line: String,
     ok: String,
     bad: String,
+    warn: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -394,6 +454,7 @@ struct RawSkin {
     radius_sm: String,
     radius_md: String,
     radius_lg: String,
+    radius_xl: String,
     radius_rail: String,
     radius_avatar: String,
     radius_pill: String,
@@ -418,6 +479,7 @@ impl Default for RawSkin {
             radius_sm: "6px".to_owned(),
             radius_md: "10px".to_owned(),
             radius_lg: "14px".to_owned(),
+            radius_xl: "14px".to_owned(),
             radius_rail: "10px".to_owned(),
             radius_avatar: "50%".to_owned(),
             radius_pill: "999px".to_owned(),
@@ -443,6 +505,7 @@ impl RawSkin {
             radius_sm: length(&self.radius_sm),
             radius_md: length(&self.radius_md),
             radius_lg: length(&self.radius_lg),
+            radius_xl: length(&self.radius_xl),
             radius_rail: length(&self.radius_rail),
             radius_pill: length(&self.radius_pill),
             radius_avatar: (!self.radius_avatar.ends_with('%'))

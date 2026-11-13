@@ -8,8 +8,8 @@ use gpui::{
 };
 
 use super::Shell;
-use super::kit::{Avatar, Button, Radio, Size, tint};
-use super::widgets::{EMPHASIS, icon, label};
+use super::kit::{Avatar, Button, IconButton, Radio, Size, Switch, tint};
+use super::widgets::{EMPHASIS, display_font, icon, label};
 use crate::engine::{Connection, SavedServer, ServerPing};
 use crate::theme::Theme;
 
@@ -95,6 +95,9 @@ impl Shell {
     }
 }
 
+/// One line of a card's title: 12.5px at the web UI's leading.
+const LINE: f32 = 19.375;
+
 /// The column of saved servers.
 pub(super) fn server_column(
     shell: &Shell,
@@ -116,54 +119,63 @@ pub(super) fn server_column(
         .h_full()
         .flex()
         .flex_col()
-        .gap(px(8.0))
-        .p(px(10.0))
+        .px(px(9.0))
+        .py(px(10.0))
         .bg(theme.c.panel)
         .border_r_1()
         .border_color(theme.c.line)
-        .child(
-            div()
-                .px(px(5.0))
-                .pt(px(6.0))
-                .pb(px(4.0))
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .text_size(px(16.0))
-                        .font_weight(EMPHASIS)
-                        .child(label("Servers", theme)),
-                )
-                .child(link("add-server", "+ Add", theme).on_click(
-                    cx.listener(|shell, _, window, cx| shell.open_editor(None, None, window, cx)),
-                )),
-        )
+        .children(column_head(theme, cx))
         .child(
             div()
                 .flex_none()
-                .h(px(46.0))
+                .mt(px(5.0))
+                .h(px(47.0))
                 .flex()
                 .items_center()
-                .gap(px(10.0))
+                .gap(px(8.0))
                 .px(px(14.0))
                 .rounded(theme.skin.radius_lg)
                 .bg(theme.c.input)
                 .border_1()
                 .border_color(theme.c.line2)
-                .child(icon("search", 14.0, theme.c.dim))
+                .text_size(px(12.5))
+                .child(icon("search", 12.0, theme.c.dim))
                 .child(shell.server_search.clone()),
         )
         .child(
             div()
                 .id("servers")
+                .mt(px(8.0))
                 .flex_1()
                 .min_h_0()
                 .overflow_y_scroll()
                 .flex()
                 .flex_col()
-                .gap(px(6.0))
-                .children(rows),
+                .gap(px(3.9))
+                .children(rows)
+                .child(
+                    div()
+                        .id("add-server-row")
+                        .debug_selector(|| "add-server-row".to_owned())
+                        .flex_none()
+                        .h(px(38.0))
+                        .flex()
+                        .items_center()
+                        .gap(px(9.0))
+                        .px(px(10.0))
+                        .rounded(theme.skin.radius_lg)
+                        .border_1()
+                        .border_dashed()
+                        .border_color(theme.c.line2)
+                        .cursor_pointer()
+                        .text_size(px(11.5))
+                        .text_color(theme.c.dim)
+                        .on_click(cx.listener(|shell, _, window, cx| {
+                            shell.open_editor(None, None, window, cx);
+                        }))
+                        .child(icon("plus", 14.0, theme.c.dim))
+                        .child("Add a server"),
+                ),
         )
         .child(
             div()
@@ -187,6 +199,101 @@ pub(super) fn server_column(
         )
 }
 
+/// The head of the column: the way to friends, a rule, and the heading
+/// over the servers with the way to add one.
+fn column_head(theme: &Theme, cx: &mut Context<Shell>) -> [AnyElement; 3] {
+    [
+        div()
+            .id("friends-row")
+            .debug_selector(|| "friends-row".to_owned())
+            .flex_none()
+            .h(px(38.0))
+            .flex()
+            .items_center()
+            .gap(px(9.0))
+            .px(px(10.0))
+            .rounded(theme.skin.radius_lg)
+            .cursor_pointer()
+            .hover({
+                let hover = theme.c.hover;
+                move |style| style.bg(hover)
+            })
+            .text_size(px(13.0))
+            .font_weight(EMPHASIS)
+            .text_color(theme.c.muted)
+            .on_click(cx.listener(|shell, _, _, cx| {
+                shell.notice = Some("Friends are not in this view yet.".into());
+                cx.notify();
+            }))
+            .child(icon("users", 16.0, theme.c.muted))
+            .child(div().mt(px(2.0)).child(label("Friends", theme)))
+            .into_any_element(),
+        div()
+            .flex_none()
+            .h(px(1.0))
+            .mt(px(9.0))
+            .mx(px(6.0))
+            .bg(theme.c.line2)
+            .into_any_element(),
+        div()
+            .flex_none()
+            .mt(px(8.0))
+            .h(px(36.0))
+            .px(px(6.0))
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(
+                div()
+                    .text_size(px(15.0))
+                    .font_weight(EMPHASIS)
+                    .child(label("Servers", theme)),
+            )
+            .child(
+                link("add-server", "+ Add", theme)
+                    .text_size(px(11.0))
+                    .on_click(cx.listener(|shell, _, window, cx| {
+                        shell.open_editor(None, None, window, cx);
+                    })),
+            )
+            .into_any_element(),
+    ]
+}
+
+/// A card that is one of a list of choices: washed in the accent when it is
+/// the one chosen, a quiet card when it is not.
+fn choice_card(chosen: bool, quiet_edge: gpui::Hsla, theme: &Theme) -> gpui::Div {
+    let hover = theme.c.hover;
+    div()
+        .rounded(theme.skin.radius_lg)
+        .border_1()
+        .cursor_pointer()
+        .text_size(px(12.5))
+        .line_height(px(LINE))
+        .map(|card| {
+            if chosen {
+                card.bg(theme.c.accent_soft)
+                    .border_color(theme.c.accent_line)
+            } else {
+                card.bg(theme.c.card)
+                    .border_color(quiet_edge)
+                    .hover(move |style| style.bg(hover))
+            }
+        })
+}
+
+/// A card's name: heavier on the one chosen.
+fn choice_name(name: SharedString, chosen: bool) -> gpui::Div {
+    div()
+        .truncate()
+        .font_weight(if chosen {
+            EMPHASIS
+        } else {
+            gpui::FontWeight::MEDIUM
+        })
+        .child(name)
+}
+
 fn server_card(
     shell: &Shell,
     server: &ServerGroup<'_>,
@@ -205,30 +312,17 @@ fn server_card(
     } else {
         "identities"
     };
-    let hover = theme.c.hover;
     let key = server.key.clone();
     let tag = server.key.clone();
-    div()
+    choice_card(current, theme.c.line2, theme)
         .id(SharedString::from(server.key.clone()))
         .debug_selector(move || format!("server-{tag}"))
         .flex_none()
         .flex()
         .items_center()
+        .h(px(56.9))
         .gap(px(10.0))
-        .p(px(10.0))
-        .rounded(theme.skin.radius_lg)
-        .border_1()
-        .cursor_pointer()
-        .map(|card| {
-            if current {
-                card.bg(theme.c.accent_soft)
-                    .border_color(theme.c.accent_line)
-            } else {
-                card.bg(theme.c.card)
-                    .border_color(theme.c.line)
-                    .hover(move |style| style.bg(hover))
-            }
-        })
+        .px(px(10.0))
         .on_click(cx.listener(move |shell, _, _, cx| {
             shell.selected_server = Some(key.clone());
             shell.selected_identity = None;
@@ -241,23 +335,31 @@ fn server_card(
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .gap(px(2.0))
+                .gap(px(3.0))
+                .child(choice_name(server.label.clone(), current))
                 .child(
                     div()
                         .truncate()
-                        .when(current, |name| name.font_weight(EMPHASIS))
-                        .child(server.label.clone()),
-                )
-                .child(
-                    div()
-                        .truncate()
-                        .text_size(px(11.0))
+                        .text_size(px(10.0))
+                        .line_height(px(15.5))
                         .text_color(theme.c.dim)
                         .child(format!("{presence} · {identities} {plural}")),
                 ),
         )
         .when(server.favorite, |card| {
-            card.child(icon("star", 13.0, gpui::rgb(0xe9_b949).into()))
+            card.child(
+                // Hung from the card's corner in the web UI, not set in
+                // its row: five pixels into the padding, a little low.
+                div()
+                    .flex_none()
+                    .size(px(23.0))
+                    .mr(px(-5.0))
+                    .mt(px(7.0))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(icon("star", 13.0, theme.c.warn)),
+            )
         })
         .into_any_element()
 }
@@ -298,30 +400,34 @@ pub(super) fn landing(
         .items_center()
         .child(banner(&server, theme))
         .child(
-            // The tile sits across the banner's lower edge.
+            // The tile sits across the banner's lower edge, in a frame of
+            // the window's own colour.
             div()
-                .mt(px(-45.0))
-                .rounded(theme.skin.radius_lg)
-                .border_2()
-                .border_color(theme.c.bg0)
+                .mt(px(-48.0))
+                .p(px(3.0))
+                .rounded(theme.skin.radius_xl)
+                .bg(theme.c.bg0)
+                .shadow(shadow(10.0, 30.0, gpui::hsla(0.0, 0.0, 0.0, 0.3)))
                 .child(Avatar::new(server.label).tile(&server.key).size(72.0)),
         )
         .child(
             div()
-                .mt(px(12.0))
-                .text_size(px(22.0))
-                .font_weight(EMPHASIS)
+                .mt(px(9.0))
+                .mb(px(1.0))
+                .font_family(display_font(theme))
+                .text_size(px(23.0))
+                .line_height(px(27.6))
+                .font_weight(gpui::FontWeight::BOLD)
                 .child(server.label.clone()),
         )
         .child(facts(ping.as_ref(), theme))
         .child(
             div()
-                .mt(px(22.0))
+                .mt(px(19.0))
                 .w(px(556.0))
                 .max_w_full()
                 .flex()
                 .flex_col()
-                .gap(px(8.0))
                 .child(
                     div()
                         .flex()
@@ -329,9 +435,11 @@ pub(super) fn landing(
                         .justify_between()
                         .child(
                             div()
-                                .text_size(px(11.0))
+                                .mt(px(-1.0))
+                                .text_size(px(10.5))
+                                .line_height(px(14.7))
                                 .font_weight(EMPHASIS)
-                                .text_color(theme.c.muted)
+                                .text_color(theme.c.dim)
                                 .child("JOIN AS"),
                         )
                         .child(link("new-identity", "+ New identity", theme).on_click(
@@ -340,79 +448,118 @@ pub(super) fn landing(
                             }),
                         )),
                 )
-                .children(server.identities.iter().map(|identity| {
-                    identity_row(identity, chosen.as_ref() == Some(&identity.id), theme, cx)
-                }))
-                .child(password_field(shell, theme))
-                .child(connect_button(shell, theme, cx))
+                .child(div().mt(px(8.0)).flex().flex_col().gap(px(7.0)).children(
+                    server.identities.iter().map(|identity| {
+                        identity_row(identity, chosen.as_ref() == Some(&identity.id), theme, cx)
+                    }),
+                ))
+                // Asked for once a server has turned the user away: most
+                // servers have none.
+                .when(shell.notice.is_some(), |form| {
+                    form.child(password_field(shell, theme))
+                })
+                .child(connect_row(shell, theme, cx))
                 .when_some(shell.notice.clone(), |form, notice| {
                     form.child(
                         div()
+                            .mt(px(8.0))
                             .text_size(px(12.5))
                             .text_color(theme.c.bad)
                             .child(notice),
                     )
                 }),
         )
-        .child(address_pill(&server, theme))
+        .child(address_pill(&server))
         .into_any_element()
 }
 
-/// The strip across the top of the landing page, in the server's colour,
-/// with its name set large and faint.
+/// A shadow straight down, as CSS writes one.
+fn shadow(drop: f32, blur: f32, color: gpui::Hsla) -> Vec<gpui::BoxShadow> {
+    crate::theme::Shadow { drop, blur, color }.cast()
+}
+
+/// The strip across the top of the landing page, in the server's colours,
+/// fading into the window, with its name set large and faint.
 fn banner(server: &ServerGroup<'_>, theme: &Theme) -> impl IntoElement + use<> {
-    let mut tint = tint(&server.key).0;
-    tint.a = 0.32;
-    let mut ghost = theme.c.text;
-    ghost.a = 0.14;
+    let (from, to) = tint(&server.key);
+    let faint = |color: gpui::Hsla| gpui::Hsla { a: 0.35, ..color };
+    let clear = gpui::Hsla {
+        a: 0.0,
+        ..theme.c.bg0
+    };
     div()
         .flex_none()
         .w_full()
         .h(px(150.0))
+        .relative()
         .bg(linear_gradient(
-            180.0,
-            linear_color_stop(tint, 0.0),
-            linear_color_stop(theme.c.header, 1.0),
+            120.0,
+            linear_color_stop(faint(from), 0.0),
+            linear_color_stop(faint(to), 1.0),
         ))
-        .flex()
-        .items_center()
-        .justify_center()
         .overflow_hidden()
-        .text_size(px(44.0))
-        .font_weight(EMPHASIS)
-        .text_color(ghost)
-        .child(server.label.clone())
+        .child(
+            div()
+                .absolute()
+                .top(px(40.9))
+                .left_0()
+                .w_full()
+                .flex()
+                .justify_center()
+                .font_family(display_font(theme))
+                .text_size(px(44.0))
+                .line_height(px(68.2))
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(gpui::hsla(0.0, 0.0, 1.0, 0.25))
+                .child(server.label.clone()),
+        )
+        // The lower three fifths fade into the window.
+        .child(
+            div()
+                .absolute()
+                .top(px(60.0))
+                .left_0()
+                .w_full()
+                .h(px(90.0))
+                .bg(linear_gradient(
+                    180.0,
+                    linear_color_stop(clear, 0.0),
+                    linear_color_stop(theme.c.bg0, 1.0),
+                )),
+        )
 }
 
 /// Whether the server is up, how far away it is, and what it runs.
 fn facts(ping: Option<&ServerPing>, theme: &Theme) -> impl IntoElement + use<> {
     let chip = || {
         div()
-            .px(px(12.0))
-            .py(px(4.0))
-            .rounded(theme.skin.radius_pill)
+            .h(px(27.0))
+            .px(px(11.0))
+            .flex()
+            .items_center()
+            .rounded(theme.skin.radius_lg)
             .bg(theme.c.card2)
-            .text_size(px(11.5))
+            .border_1()
+            .border_color(gpui::transparent_black())
+            .text_size(px(11.0))
+            .font_weight(gpui::FontWeight::MEDIUM)
             .text_color(theme.c.muted)
     };
-    let row = div().mt(px(10.0)).flex().items_center().gap(px(8.0));
+    let row = div().mt(px(12.0)).flex().items_center().gap(px(8.0));
     let Some(ping) = ping else {
         return row.child(chip().child("offline"));
     };
-    let mut soft = theme.c.ok;
-    soft.a = 0.14;
-    let mut edge = theme.c.ok;
-    edge.a = 0.5;
+    let wash = |alpha: f32| gpui::Hsla {
+        a: alpha,
+        ..theme.c.ok
+    };
     row.child(
         chip()
-            .bg(soft)
-            .border_1()
-            .border_color(edge)
+            .bg(wash(0.14))
+            .border_color(wash(0.333))
             .text_color(theme.c.ok)
-            .flex()
-            .items_center()
-            .gap(px(7.0))
-            .child(div().size(px(5.0)).rounded_full().bg(theme.c.ok))
+            .gap(px(8.0))
+            .child(div().size(px(6.0)).rounded_full().bg(theme.c.ok))
             .child(format!("{}/{} online", ping.users, ping.max_users)),
     )
     .child(chip().child(format!("{} ms", ping.latency_ms)))
@@ -425,34 +572,34 @@ fn identity_row(
     theme: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
-    let hover = theme.c.hover;
     let id = identity.id.clone();
     let tag = identity.id.clone();
-    div()
+    let edit_tag = identity.id.clone();
+    let edited = identity.clone();
+    choice_card(chosen, theme.c.line, theme)
         .id(identity.id.clone())
         .debug_selector(move || format!("identity-{tag}"))
-        .h(px(58.0))
+        .h(px(57.6))
         .flex()
         .items_center()
-        .gap(px(12.0))
-        .px(px(12.0))
-        .rounded(theme.skin.radius_lg)
-        .border_1()
-        .cursor_pointer()
-        .map(|row| {
-            if chosen {
-                row.bg(theme.c.accent_soft)
-                    .border_color(theme.c.accent_line)
-            } else {
-                row.bg(theme.c.card)
-                    .border_color(theme.c.line)
-                    .hover(move |style| style.bg(hover))
-            }
-        })
+        .gap(px(11.0))
+        .pl(px(8.0))
+        .pr(px(12.0))
         .on_click(cx.listener(move |shell, _, _, cx| {
             shell.selected_identity = Some(id.clone());
             cx.notify();
         }))
+        // The grip the web UI reorders identities by; here it only marks
+        // the row.
+        .child(
+            div()
+                .flex_none()
+                .w(px(16.0))
+                .flex()
+                .justify_center()
+                .opacity(0.75)
+                .child(icon("grip-vertical", 14.0, theme.c.dim)),
+        )
         .child(Avatar::new(&identity.username).size(34.0))
         .child(
             div()
@@ -460,16 +607,14 @@ fn identity_row(
                 .min_w_0()
                 .flex()
                 .flex_col()
+                .child(choice_name(identity.username.clone(), chosen))
                 .child(
                     div()
                         .truncate()
-                        .when(chosen, |name| name.font_weight(EMPHASIS))
-                        .child(identity.username.clone()),
-                )
-                .child(
-                    div()
-                        .truncate()
-                        .text_size(px(11.0))
+                        .mt(px(1.0))
+                        .mb(px(-1.0))
+                        .text_size(px(10.5))
+                        .line_height(px(16.275))
                         .text_color(theme.c.muted)
                         .child(
                             identity
@@ -479,34 +624,24 @@ fn identity_row(
                         ),
                 ),
         )
-        .child({
-            let identity = identity.clone();
-            let hover = theme.c.hover;
-            let tag = identity.id.clone();
-            div()
-                .id(("edit", 0usize))
-                .debug_selector(move || format!("edit-{tag}"))
-                .flex_none()
-                .size(px(28.0))
-                .rounded(theme.skin.radius_sm)
-                .flex()
-                .items_center()
-                .justify_center()
-                .hover(move |style| style.bg(hover))
+        .child(
+            IconButton::new("edit", "pencil")
+                .selector(format!("edit-{edit_tag}"))
+                .size(27.0)
+                .glyph_size(13.0)
                 .on_click(cx.listener(move |shell, _, window, cx| {
-                    shell.open_editor(Some(identity.clone()), None, window, cx);
+                    shell.open_editor(Some(edited.clone()), None, window, cx);
                     // Not also a choice of this identity.
                     cx.stop_propagation();
-                }))
-                .child(icon("pencil", 13.0, theme.c.muted))
-        })
+                })),
+        )
         .child(Radio::new(chosen))
 }
 
 /// The server's password, for the servers that have one.
 fn password_field(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
     div()
-        .mt(px(2.0))
+        .mt(px(10.0))
         .h(px(38.0))
         .flex()
         .items_center()
@@ -526,18 +661,19 @@ fn link(id: &'static str, text: &'static str, theme: &Theme) -> gpui::Stateful<g
         .debug_selector(move || id.to_owned())
         .cursor_pointer()
         .text_size(px(11.5))
+        .line_height(px(17.825))
+        .font_weight(gpui::FontWeight::MEDIUM)
         .text_color(theme.c.accent_text)
         .hover(|style| style.opacity(0.8))
         .child(text)
 }
 
-/// A radio mark: a ring, filled when it is the chosen one.
-fn connect_button(
-    shell: &Shell,
-    theme: &Theme,
-    cx: &mut Context<Shell>,
-) -> impl IntoElement + use<> {
+/// The way onto the server, and whether to take it at every launch.
+fn connect_row(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let connecting = shell.snapshot.connection == Connection::Connecting;
+    let picked = shell
+        .selected_identity()
+        .map(|identity| identity.id.clone());
     let text = if connecting {
         "Connecting…".to_owned()
     } else {
@@ -546,34 +682,72 @@ fn connect_button(
             .map_or_else(SharedString::default, |identity| identity.username.clone());
         format!("Connect as {name}")
     };
+    let automatic = picked.is_some() && shell.chrome.auto_connect == picked;
     div()
-        .id("connect")
-        .debug_selector(|| "connect".to_owned())
-        .mt(px(4.0))
-        .h(px(42.0))
+        .mt(px(19.0))
         .flex()
         .items_center()
-        .justify_center()
-        .rounded(theme.skin.radius_lg)
-        .bg(theme.c.accent)
-        .text_color(theme.c.on_accent)
-        .font_weight(EMPHASIS)
-        .map(|button| {
-            if connecting {
-                // Under way: a second press would start a second attempt.
-                button.opacity(0.6)
-            } else {
-                button
-                    .cursor_pointer()
-                    .hover(|style| style.opacity(0.92))
-                    .on_click(cx.listener(|shell, _, _, cx| shell.connect_selected(cx)))
-            }
-        })
-        .child(label(&text, theme))
+        .gap(px(12.0))
+        .child(
+            div()
+                .id("connect")
+                .debug_selector(|| "connect".to_owned())
+                .flex_1()
+                .h(px(42.0))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(theme.skin.radius_lg)
+                .bg(theme.c.accent)
+                .shadow(shadow(
+                    4.0,
+                    14.0,
+                    gpui::Hsla {
+                        a: 0.4,
+                        ..theme.c.accent
+                    },
+                ))
+                .text_size(px(13.0))
+                .text_color(theme.c.on_accent)
+                .font_weight(EMPHASIS)
+                .map(|button| {
+                    if connecting {
+                        // Under way: a second press would start a second
+                        // attempt.
+                        button.opacity(0.6)
+                    } else {
+                        button
+                            .cursor_pointer()
+                            .hover(|style| style.opacity(0.92))
+                            .on_click(cx.listener(|shell, _, _, cx| shell.connect_selected(cx)))
+                    }
+                })
+                .child(label(&text, theme)),
+        )
+        .child(
+            div()
+                .id("auto-connect")
+                .debug_selector(|| "auto-connect".to_owned())
+                .flex_none()
+                .flex()
+                .items_center()
+                .gap(px(8.0))
+                .cursor_pointer()
+                .text_size(px(11.5))
+                .text_color(theme.c.muted)
+                .on_click(cx.listener(move |shell, _, _, cx| {
+                    shell.chrome.auto_connect = if automatic { None } else { picked.clone() };
+                    shell.remember_settings(cx);
+                    cx.notify();
+                }))
+                .child(Switch::new(automatic))
+                .child("Auto-connect"),
+        )
 }
 
 /// The server's address, floating over the banner's trailing corner.
-fn address_pill(server: &ServerGroup<'_>, theme: &Theme) -> impl IntoElement + use<> {
+fn address_pill(server: &ServerGroup<'_>) -> impl IntoElement + use<> {
+    let white = |alpha: f32| gpui::hsla(0.0, 0.0, 1.0, alpha);
     div()
         .absolute()
         .top(px(14.0))
@@ -581,15 +755,22 @@ fn address_pill(server: &ServerGroup<'_>, theme: &Theme) -> impl IntoElement + u
         .flex()
         .items_center()
         .gap(px(8.0))
-        .px(px(12.0))
+        .pl(px(11.0))
+        .pr(px(9.0))
         .py(px(3.0))
-        .rounded(theme.skin.radius_pill)
-        .bg(super::widgets::opaque(theme.c.card, theme.c.bg0))
+        .rounded_full()
+        .bg(gpui::Hsla::from(gpui::Rgba {
+            r: 10.0 / 255.0,
+            g: 14.0 / 255.0,
+            b: 24.0 / 255.0,
+            a: 0.66,
+        }))
         .border_1()
-        .border_color(theme.c.line2)
-        .text_size(px(11.0))
-        .text_color(theme.c.muted)
-        .child(div().size(px(5.0)).rounded_full().bg(theme.c.muted))
+        .border_color(white(0.16))
+        .text_size(px(10.0))
+        .line_height(px(15.5))
+        .text_color(white(0.94))
+        .child(div().size(px(6.0)).rounded_full().bg(gpui::rgb(0xb9_c6e2)))
         .child(format!("mumble://{}:{}", server.host, server.port))
 }
 

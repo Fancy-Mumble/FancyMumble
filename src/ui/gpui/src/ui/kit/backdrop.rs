@@ -1,14 +1,17 @@
 //! A surface filled with one of the theme's gradient stacks.
 
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::Arc;
 
-use gpui::{ContentMask, Hsla, IntoElement, Styled, canvas, px};
+use gpui::{App, ContentMask, Global, Hsla, IntoElement, Pixels, Styled, Window, canvas, px};
 
 use crate::paint::{Paint, Picture};
 
-/// The picture last painted, and what it was painted from.
+/// How many pictures are kept. The window, the conversation and a few
+/// floating sheets are on screen at once; a resize or a theme change makes
+/// new ones and lets the oldest go.
+const KEPT: usize = 12;
+
+/// A picture, and what it was painted from.
 #[derive(Debug)]
 struct Baked {
     paint: Arc<Paint>,
@@ -18,77 +21,97 @@ struct Baked {
     picture: Picture,
 }
 
-/// A gradient backdrop that fills whatever it is laid under.
-///
-/// It keeps the picture it drew, and draws another only when the paint or
-/// the area changes: a view holds one of these for each surface it backs,
-/// and asks it for an [`element`](Self::element) every frame.
-///
-/// Translucent chrome goes over it as an ordinary background colour. The
-/// renderer blends in the colours' own encoding, as a browser does, so a
-/// theme's `rgba()` surfaces come out the shade the theme means.
-#[derive(Debug, Clone, Default)]
-pub(crate) struct Backdrop {
-    baked: Rc<RefCell<Option<Baked>>>,
+/// The pictures drawn so far, newest last.
+#[derive(Debug, Default)]
+struct Kept(Vec<Baked>);
+
+impl Global for Kept {}
+
+/// The picture of `paint` over `ground` for an area this size: the one
+/// kept, or a new one, with the oldest let go of to make room.
+fn picture(
+    paint: &Arc<Paint>,
+    ground: Hsla,
+    (width, height): (f32, f32),
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<Picture> {
+    #[expect(clippy::cast_possible_truncation, reason = "a length on screen")]
+    let area = (width.round() as i32, height.round() as i32);
+    let kept = &mut cx.default_global::<Kept>().0;
+    let found = kept.iter().position(|baked| {
+        baked.area == area && baked.ground == ground && Arc::ptr_eq(&baked.paint, paint)
+    });
+    if let Some(at) = found {
+        // Used again: the last to be let go.
+        let baked = kept.remove(at);
+        let picture = baked.picture.clone();
+        kept.push(baked);
+        return Some(picture);
+    }
+    let picture = paint.picture(width, height, ground.into())?;
+    if kept.len() >= KEPT {
+        // It would otherwise stay in the atlas for as long as the window
+        // lives.
+        let _ = window.drop_image(kept.remove(0).picture.image);
+    }
+    kept.push(Baked {
+        paint: Arc::clone(paint),
+        ground,
+        area,
+        picture: picture.clone(),
+    });
+    Some(picture)
 }
 
-impl Backdrop {
-    /// The backdrop as an element: absolutely placed, filling its parent,
-    /// painted with `paint` over `ground`. Put it first among the children
-    /// of a `relative()` parent.
-    pub(crate) fn element(&self, paint: &Arc<Paint>, ground: Hsla) -> impl IntoElement + use<> {
-        let baked = Rc::clone(&self.baked);
-        let paint = Arc::clone(paint);
-        canvas(
-            |_, _, _| (),
-            move |bounds, (), window, _| {
-                if paint.is_empty() {
-                    return;
-                }
-                let (width, height) = (f32::from(bounds.size.width), f32::from(bounds.size.height));
-                #[expect(clippy::cast_possible_truncation, reason = "a length on screen")]
-                let area = (width.round() as i32, height.round() as i32);
-                let mut baked = baked.borrow_mut();
-                let fresh = baked.as_ref().is_some_and(|baked| {
-                    baked.area == area
-                        && baked.ground == ground
-                        && Arc::ptr_eq(&baked.paint, &paint)
-                });
-                if !fresh {
-                    // The old picture would otherwise stay in the atlas for
-                    // as long as the window lives.
-                    if let Some(stale) = baked.take() {
-                        let _ = window.drop_image(stale.picture.image);
-                    }
-                    *baked = paint
-                        .picture(width, height, ground.into())
-                        .map(|picture| Baked {
-                            paint: Arc::clone(&paint),
-                            ground,
-                            area,
-                            picture,
-                        });
-                }
-                if let Some(baked) = baked.as_ref() {
-                    // A cell past the surface each way, and clipped to it.
-                    let (across, down) = baked.picture.margin;
-                    let spread = bounds.extend(gpui::Edges {
-                        top: px(down),
-                        bottom: px(down),
-                        left: px(across),
-                        right: px(across),
-                    });
-                    let image = Arc::clone(&baked.picture.image);
-                    window.with_content_mask(Some(ContentMask { bounds }), |window| {
-                        let _ =
-                            window.paint_image(spread, gpui::Corners::default(), image, 0, false);
-                    });
-                }
-            },
-        )
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full()
-    }
+/// A gradient backdrop: absolutely placed, filling its parent, painted with
+/// `paint` over `ground`, its corners rounded by `corner`. Put it first
+/// among the children of a `relative()` parent.
+///
+/// The picture is drawn once for a size and kept. Translucent chrome goes
+/// over it as an ordinary background colour: the renderer blends in the
+/// colours' own encoding, as a browser does, so a theme's `rgba()` surfaces
+/// come out the shade the theme means.
+pub(crate) fn backdrop(
+    paint: &Arc<Paint>,
+    ground: Hsla,
+    corner: Pixels,
+) -> impl IntoElement + use<> {
+    let paint = Arc::clone(paint);
+    canvas(
+        |_, _, _| (),
+        move |bounds, (), window, cx| {
+            if paint.is_empty() {
+                return;
+            }
+            let size = (f32::from(bounds.size.width), f32::from(bounds.size.height));
+            let Some(picture) = picture(&paint, ground, size, window, cx) else {
+                return;
+            };
+            // A cell past the surface each way, and clipped to it.
+            let (across, down) = picture.margin;
+            let spread = bounds.extend(gpui::Edges {
+                top: px(down),
+                bottom: px(down),
+                left: px(across),
+                right: px(across),
+            });
+            if corner > px(0.0) {
+                // Rounded: the picture itself is cut to the surface, which
+                // costs it the cell of margin, and a dark hair at the edge
+                // is hidden under the surface's own border.
+                let _ =
+                    window.paint_image(bounds, gpui::Corners::all(corner), picture.image, 0, false);
+                return;
+            }
+            window.with_content_mask(Some(ContentMask { bounds }), |window| {
+                let _ =
+                    window.paint_image(spread, gpui::Corners::default(), picture.image, 0, false);
+            });
+        },
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
 }

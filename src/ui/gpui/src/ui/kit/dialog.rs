@@ -7,21 +7,24 @@ use gpui::{
     Window, div, prelude::*, px,
 };
 
+use super::backdrop;
 use crate::theme::ActiveTheme;
-use crate::ui::widgets::{EMPHASIS, opaque};
+use crate::ui::widgets::EMPHASIS;
 
-/// An opaque card that floats over other content: a menu, a popover, the
+/// An opaque surface that floats over other content: a menu, a popover, the
 /// body of a dialog. Style it and fill it like a `div`.
 ///
-/// Themes with glass give their cards an alpha, which is right for a card
-/// on the window and wrong for one over a conversation, so a sheet is the
-/// card's colour flattened onto the window's.
+/// It is the window's own colour under the theme's tint - a glow of the
+/// accent from its top leading corner - inside a hairline, casting the
+/// theme's shadow: the web UI's floating surface.
 #[derive(IntoElement)]
 pub(crate) struct Sheet {
     id: ElementId,
     base: Div,
     children: Vec<AnyElement>,
     scrolls: bool,
+    /// The extra-large corner of a dialog, not the large one of a menu.
+    roomy: bool,
 }
 
 impl Sheet {
@@ -31,6 +34,7 @@ impl Sheet {
             base: div(),
             children: Vec::new(),
             scrolls: false,
+            roomy: false,
         }
     }
 
@@ -56,15 +60,26 @@ impl Styled for Sheet {
 impl RenderOnce for Sheet {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = ActiveTheme::get(cx);
-        self.base
-            .id(self.id)
+        let corner = if self.roomy {
+            theme.skin.radius_xl
+        } else {
+            theme.skin.radius_lg
+        };
+        // What the backdrop is placed against: the sheet itself, which an
+        // absolutely placed one already is.
+        let mut base = self.base;
+        if base.style().position.is_none() {
+            base = base.relative();
+        }
+        base.id(self.id)
             .when(self.scrolls, StatefulInteractiveElement::overflow_y_scroll)
             .occlude()
-            .rounded(theme.skin.radius_lg)
-            .bg(opaque(theme.c.card, theme.c.bg0))
+            .rounded(corner)
+            .bg(theme.c.bg0)
             .border_1()
             .border_color(theme.c.line2)
-            .shadow_lg()
+            .shadow(theme.c.shadow.cast())
+            .child(backdrop(&theme.c.tint, theme.c.bg0, corner))
             // A press on the sheet is not a press on what it floats over.
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .children(self.children)
@@ -144,6 +159,7 @@ impl Styled for Dialog {
 impl RenderOnce for Dialog {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let mut sheet = self.sheet.flex().flex_col();
+        sheet.roomy = true;
         if let Some(title) = self.title {
             // First, whatever was added before it was given.
             sheet.children.insert(

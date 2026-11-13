@@ -176,7 +176,7 @@ fn start_engine() -> (Arc<dyn engine::Engine>, Option<store::Store>) {
             // `FANCY_GPUI_CONNECT=<saved identity id>` connects at once, and
             // `FANCY_GPUI_SAY=<text>` then says that in the channel arrived
             // in: for driving the view where nothing can click or type.
-            if let Some(id) = env("FANCY_GPUI_CONNECT") {
+            if let Some(id) = env("FANCY_GPUI_CONNECT").or(stored.auto_connect) {
                 engine.connect(&id, env("FANCY_GPUI_PASSWORD"));
                 if let Some(text) = env("FANCY_GPUI_SAY") {
                     say_once_connected(Arc::clone(&engine), text);

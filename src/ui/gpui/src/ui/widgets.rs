@@ -12,6 +12,19 @@ pub(crate) const EMPHASIS: gpui::FontWeight = gpui::FontWeight::SEMIBOLD;
 
 pub(crate) use super::kit::icon;
 
+/// The family a heading is set in: the display cut of the theme's face
+/// where the view bundles one, else the face itself.
+///
+/// A browser follows the size a variable font is set at and draws large
+/// type from a tighter, finer design; a static face has to be told.
+pub(crate) fn display_font(theme: &Theme) -> SharedString {
+    if theme.skin.font.as_ref() == "Inter" {
+        "Inter Display".into()
+    } else {
+        theme.skin.font.clone()
+    }
+}
+
 /// `color` as it looks painted over `ground`, with no transparency left.
 ///
 /// For a surface that floats over other content. Themes with glass give

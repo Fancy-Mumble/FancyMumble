@@ -142,26 +142,23 @@ impl Switch {
 impl RenderOnce for Switch {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = ActiveTheme::get(cx);
+        // Off, the knob is the pale grey the web UI's switch comes with.
         let (track, knob) = if self.on {
             (theme.c.accent, theme.c.on_accent)
         } else {
-            (theme.c.card2, theme.c.muted)
+            (theme.c.card2, gpui::rgb(0xe0_e0e0).into())
         };
+        // A capsule and a circle whatever the theme does to its corners.
         div()
             .flex_none()
-            .w(px(30.0))
-            .h(px(17.0))
+            .w(px(32.0))
+            .h(px(18.0))
             .p(px(2.0))
-            .rounded(theme.skin.radius_pill)
+            .rounded_full()
             .bg(track)
             .flex()
             .when(self.on, Styled::justify_end)
-            .child(
-                div()
-                    .size(px(13.0))
-                    .rounded(theme.skin.radius_pill)
-                    .bg(knob),
-            )
+            .child(div().size(px(14.0)).rounded_full().bg(knob))
     }
 }
 
@@ -181,18 +178,13 @@ impl Radio {
 impl RenderOnce for Radio {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = ActiveTheme::get(cx);
-        let ink = theme.c.accent_text;
-        div()
-            .flex_none()
-            .size(px(16.0))
-            .rounded_full()
-            .border_2()
-            .border_color(if self.chosen { ink } else { theme.c.line2 })
-            .flex()
-            .items_center()
-            .justify_center()
-            .when(self.chosen, |ring| {
-                ring.child(div().size(px(6.0)).rounded_full().bg(ink))
-            })
+        // Chosen, the ring is five pixels of accent round a hole.
+        div().flex_none().size(px(16.0)).rounded_full().map(|ring| {
+            if self.chosen {
+                ring.border(px(5.0)).border_color(theme.c.accent)
+            } else {
+                ring.border_1().border_color(theme.c.line2)
+            }
+        })
     }
 }

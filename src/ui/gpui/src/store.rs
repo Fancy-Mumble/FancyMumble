@@ -76,6 +76,9 @@ pub(crate) struct Settings {
     /// The key held to whisper, named the same way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub whisper_key: Option<String>,
+    /// The saved identity to connect as at launch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_connect: Option<String>,
 }
 
 /// The files, in one directory.
@@ -206,6 +209,7 @@ mod tests {
             }),
             push_to_talk_key: Some("f9".to_owned()),
             whisper_key: Some("f10".to_owned()),
+            auto_connect: None,
         };
         store
             .save_settings(&chosen)

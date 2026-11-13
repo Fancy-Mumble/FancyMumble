@@ -1742,3 +1742,28 @@ fn an_emoji_is_picked_into_the_composer_or_onto_a_message(cx: &mut TestAppContex
         assert_eq!(shell.messages[1].reactions[0].emoji.as_ref(), "🚀");
     });
 }
+
+#[gpui::test]
+fn the_identity_to_connect_as_at_launch_is_chosen_with_a_switch(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell_on(DemoEngine::disconnected(), cx);
+    shell.read_with(cx, |shell, _| assert!(shell.chrome.auto_connect.is_none()));
+    click(cx, "auto-connect");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(
+            shell.chrome.auto_connect.as_ref().map(AsRef::as_ref),
+            Some("magical-alex"),
+            "the identity that is picked"
+        );
+    });
+    // Another identity is not the one: its switch is off, and turns it on.
+    click(cx, "identity-magical-work");
+    click(cx, "auto-connect");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(
+            shell.chrome.auto_connect.as_ref().map(AsRef::as_ref),
+            Some("magical-work")
+        );
+    });
+    click(cx, "auto-connect");
+    shell.read_with(cx, |shell, _| assert!(shell.chrome.auto_connect.is_none()));
+}

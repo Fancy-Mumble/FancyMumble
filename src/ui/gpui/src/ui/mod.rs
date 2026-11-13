@@ -128,14 +128,23 @@ struct Panels {
     certs: certificates::Panel,
 }
 
-/// The window's own furniture: the gradients behind the window and behind
-/// the conversation, and how the rail is set.
+/// How the window's own furniture is set.
 #[derive(Default)]
 struct Chrome {
-    window: kit::Backdrop,
-    canvas: kit::Backdrop,
     /// Whether the rail shows the servers' names beside their tiles.
     rail_wide: bool,
+    /// The saved identity to connect as at every launch, if there is one.
+    auto_connect: Option<gpui::SharedString>,
+}
+
+impl Chrome {
+    /// As it starts, with the identity remembered for connecting at launch.
+    fn remembering(auto_connect: Option<String>) -> Self {
+        Self {
+            rail_wide: false,
+            auto_connect: auto_connect.map(Into::into),
+        }
+    }
 }
 
 /// Who has read how far in the open channel.
@@ -385,7 +394,7 @@ impl Shell {
             emoji_for: None,
             lightbox: None,
             panels: Panels::default(),
-            chrome: Chrome::default(),
+            chrome: Chrome::remembering(stored.auto_connect.clone()),
             whisper: Whisper {
                 key: stored.whisper_key.map(Into::into),
                 ..Whisper::default()
@@ -1447,6 +1456,7 @@ impl Shell {
             voice: Some(self.voice_settings),
             push_to_talk_key: name(&self.ptt.key),
             whisper_key: name(&self.whisper.key),
+            auto_connect: name(&self.chrome.auto_connect),
         };
         if let Err(error) = store.save_settings(&settings) {
             self.notice = Some(format!("The settings could not be remembered: {error}").into());
@@ -1481,7 +1491,7 @@ impl Render for Shell {
             .when_some(theme.c.window_line, |shell, line| {
                 shell.border_1().border_color(line)
             })
-            .child(self.chrome.window.element(&theme.c.window, theme.c.bg0))
+            .child(kit::backdrop(&theme.c.window, theme.c.bg0, px(0.0)))
             .when(theme.skin.band, |shell| {
                 shell.child(band::render(self, &theme, window))
             })

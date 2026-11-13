@@ -17,7 +17,7 @@ mod surface;
 use gpui::{Hsla, SharedString, Styled, Svg, px, svg};
 
 pub(crate) use avatar::{Avatar, tint};
-pub(crate) use backdrop::Backdrop;
+pub(crate) use backdrop::backdrop;
 pub(crate) use button::{Button, Corner, Emphasis, IconButton, Size, Variant};
 pub(crate) use control::{MenuItem, Radio, Switch};
 pub(crate) use dialog::{Dialog, Sheet};

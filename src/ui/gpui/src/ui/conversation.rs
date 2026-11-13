@@ -104,12 +104,11 @@ pub(super) fn render(
         .relative()
         .flex()
         .flex_col()
-        .child(
-            shell
-                .chrome
-                .canvas
-                .element(&theme.c.backdrop, theme.c.canvas_b),
-        )
+        .child(super::kit::backdrop(
+            &theme.c.backdrop,
+            theme.c.canvas_b,
+            px(0.0),
+        ))
         // Files dragged in from outside are sent to whoever is on screen.
         .on_drop(cx.listener(|shell, dropped: &gpui::ExternalPaths, _, cx| {
             shell.send_files(dropped.paths().to_vec(), cx);

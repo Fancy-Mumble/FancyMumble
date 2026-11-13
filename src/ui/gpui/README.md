@@ -15,7 +15,8 @@ real engine and does text and voice.
 
 - **Servers.** Saved servers and their identities, each pinged for whether
   it is up; add, edit and forget them; a certificate per identity, made on
-  first use; a server password typed for the connect at hand. Several
+  first use; a server password asked for once a server has turned the
+  user away; one identity to connect as at every launch. Several
   servers at once, one tile each on the rail: `+` adds another, a click
   switches, a right click says what the server is or leaves it. A lost
   connection is retried.
@@ -113,17 +114,23 @@ demo. Both are drawn at 1410 by 758 and compared pixel for pixel:
 
     tools/compare.py web.png native.png overlay.png
 
-As of the last measurement the default theme deviates by 0.26 % (dark) and
-0.28 % (light), mean absolute, over the whole window. About half of that is
+The connect screen is the same page with `&screen=connect`, against this
+view started without `FANCY_GPUI_DEMO`.
+
+As of the last measurement the default theme's main screen deviates by
+0.26 % (dark) and 0.28 % (light), mean absolute, over the whole window, and
+its connect screen by 0.39 % and 0.41 %. About half of that is
 channels one level apart, which is the browser dithering its gradients; the
 same page drawn by Chrome's two rasterisers differs from itself by 0.22 %.
 The rest is the edges of glyphs and icons, where two rasterisers never
 agree. Every box is where the web UI puts it, to the pixel; `?dump` on the
 page lists where that is.
 
-Only that screen, in that theme, has been measured this way. The connect
-screen, the dialogs and the other twelve themes are built from the same
-components and the same tokens but have not been compared.
+Only those two screens, in that theme, have been brought to measure. Three
+other themes were measured on the main screen and left as they came out
+(rose 0.31 %, aurora 0.31 %, ply 0.60 %). The dialogs and menus take the web
+UI's floating surface - the window's colour under the theme's tint, its
+hairline and its shadow - but have not been compared pixel for pixel.
 
 ## Components
 
@@ -187,8 +194,9 @@ and no work per frame. Left out on purpose, because they are what costs the
 most to draw: backdrop blur, clip paths, and the two patterned layers
 (scanlines, dots) some themes add.
 
-Inter is bundled (`assets/fonts`, OFL): five static faces cut from the
-variable font the web UI ships, about 1.4 MiB in memory. It is what the web
+Inter is bundled (`assets/fonts`, OFL): six static faces cut from the
+variable font the web UI ships, one of them the bold of its display cut
+for headings, about 1.7 MiB in memory. It is what the web
 UI sets everything in, and without it the two views break lines in
 different places. A theme whose stack names another family the system has
 still gets that family.

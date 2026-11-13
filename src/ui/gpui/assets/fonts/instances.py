@@ -11,10 +11,19 @@ from fontTools.ttLib import TTFont
 from fontTools.varLib.instancer import instantiateVariableFont
 from fontTools.subset import Subsetter, Options
 src, out = sys.argv[1], sys.argv[2]
-FACES = [("Regular", 400, False), ("Medium", 500, False), ("SemiBold", 600, False), ("Bold", 700, False), ("Italic", 400, True)]
-for name, wght, italic in FACES:
+# (face, weight, italic, optical size, family). The last is the display cut:
+# what a browser draws a heading in, since it follows the size it is set at.
+FACES = [
+    ("Regular", 400, False, 14, "Inter"),
+    ("Medium", 500, False, 14, "Inter"),
+    ("SemiBold", 600, False, 14, "Inter"),
+    ("Bold", 700, False, 14, "Inter"),
+    ("Italic", 400, True, 14, "Inter"),
+    ("DisplayBold", 700, False, 24, "Inter Display"),
+]
+for name, wght, italic, opsz, family in FACES:
     path = f"{src}/Inter-Italic-VariableFont_opsz,wght.ttf" if italic else f"{src}/Inter-VariableFont_opsz,wght.ttf"
-    f = instantiateVariableFont(TTFont(path), {"wght": wght, "opsz": 14}, inplace=False)
+    f = instantiateVariableFont(TTFont(path), {"wght": wght, "opsz": opsz}, inplace=False)
     o = Options()
     o.layout_features = ["kern", "liga", "calt", "ccmp", "locl", "mark", "mkmk", "tnum", "case"]
     o.name_IDs = ["*"]; o.notdef_outline = True; o.hinting = False; o.drop_tables += ["STAT", "MVAR", "HVAR", "avar", "fvar", "gvar"]
@@ -22,14 +31,14 @@ for name, wght, italic in FACES:
     f["OS/2"].usWeightClass = wght
     sub = name if not italic else "Italic"
     for rec in f["name"].names:
-        if rec.nameID == 1: rec.string = "Inter"
-        elif rec.nameID == 2: rec.string = {"Regular": "Regular", "Bold": "Bold", "Italic": "Italic"}.get(name, "Regular")
+        if rec.nameID == 1: rec.string = family
+        elif rec.nameID == 2: rec.string = {"Regular": "Regular", "Bold": "Bold", "Italic": "Italic", "DisplayBold": "Bold"}.get(name, "Regular")
         elif rec.nameID == 4: rec.string = f"Inter {name}"
         elif rec.nameID == 6: rec.string = f"Inter-{name}"
-        elif rec.nameID == 16: rec.string = "Inter"
+        elif rec.nameID == 16: rec.string = family
         elif rec.nameID == 17: rec.string = name
     have = {r.nameID for r in f["name"].names}
-    if 16 not in have: f["name"].setName("Inter", 16, 3, 1, 0x409)
+    if 16 not in have: f["name"].setName(family, 16, 3, 1, 0x409)
     if 17 not in have: f["name"].setName(name, 17, 3, 1, 0x409)
     fs = f["OS/2"].fsSelection & ~0b1100001
     if italic: fs |= 1
