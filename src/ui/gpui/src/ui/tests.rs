@@ -1232,3 +1232,36 @@ fn a_burst_of_state_changes_reads_the_server_once(cx: &mut TestAppContext) {
     );
     shell.read_with(cx, |shell, _| assert_eq!(shell.messages.len(), 6));
 }
+
+#[gpui::test]
+fn the_search_field_finds_messages_too_and_a_click_opens_where_one_was_said(
+    cx: &mut TestAppContext,
+) {
+    let (shell, engine, cx) = shell(cx);
+    engine.send_message(Conversation::Direct(3), "the dahlias again".to_owned());
+    click(cx, "channel-2");
+    shell.update_in(cx, Shell::focus_search);
+    cx.simulate_keystrokes("d");
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.found.is_empty(), "one letter is not searched")
+    });
+    cx.simulate_keystrokes("a h l");
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.found.len(), 2, "one in the channel, one direct");
+        assert_eq!(
+            shell.column.len(),
+            3,
+            "no channel is called that: a heading and two"
+        );
+    });
+    click(cx, "found-1");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.open, Some(Conversation::Direct(3)))
+    });
+    click(cx, "found-0");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.open, Some(Conversation::Channel(1)))
+    });
+}

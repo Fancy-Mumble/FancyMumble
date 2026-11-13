@@ -5,9 +5,9 @@ use std::sync::Mutex;
 
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
-    Connection, Conversation, Engine, EngineEvent, Listing, Message, Preview, Reaction, Registered,
-    SavedServer, ServerPing, Session, SessionEntry, Snapshot, Subject, User, Voice, VoiceSettings,
-    Window,
+    Connection, Conversation, Engine, EngineEvent, Found, Listing, Message, Preview, Reaction,
+    Registered, SavedServer, ServerPing, Session, SessionEntry, Snapshot, Subject, User, Voice,
+    VoiceSettings, Window,
 };
 
 /// The local user's session in the demo server.
@@ -474,6 +474,22 @@ impl Engine for DemoEngine {
         // The demo's answers never change; say so anyway, as a real engine
         // would once its servers have replied.
         self.tell(EngineEvent::ServersChanged);
+    }
+
+    fn search_messages(&self, query: &str) -> Vec<Found> {
+        let wanted = query.to_lowercase();
+        self.with_state(|state| {
+            state
+                .messages
+                .iter()
+                .filter(|(_, message)| message.body.to_lowercase().contains(&wanted))
+                .map(|(conversation, message)| Found {
+                    text: message.body.clone(),
+                    about: format!("{} · in the demo", message.sender_name).into(),
+                    conversation: *conversation,
+                })
+                .collect()
+        })
     }
 
     fn previews(&self, urls: Vec<gpui::SharedString>) {

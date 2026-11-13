@@ -30,7 +30,8 @@ real engine and does text and voice.
   and local time, several lines (Shift+Enter), direct messages,
   notifications and the unread count in the window's title. A long
   conversation opens on its newest page and steps back on asking; an
-  arrival does not move a reader who has scrolled up. On a Fancy server:
+  arrival does not move a reader who has scrolled up. The search field
+  finds messages as well as channels. On a Fancy server:
   edit and delete your own, react, pin, see who is writing, a card for
   what lies behind a link, and channels that keep their messages for
   whoever comes later.
@@ -56,8 +57,7 @@ real engine and does text and voice.
   selection, and cut, copy and paste.
 
 What the web UI has and this does not, yet: sending files, polls, read
-receipts, end-to-end encrypted channels' key handling, message search,
-screen sharing, and the rest of the admin surfaces (ACLs, server settings).
+receipts, end-to-end encrypted channels' key handling, screen sharing, and the rest of the admin surfaces (ACLs, server settings).
 
 ## Testing
 

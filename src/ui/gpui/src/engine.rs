@@ -342,6 +342,17 @@ pub(crate) struct Message {
     pub reactions: Vec<Reaction>,
 }
 
+/// A message that matched what was typed in the search field.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Found {
+    /// The part of the message that matched.
+    pub text: SharedString,
+    /// Who said it and where, in words.
+    pub about: SharedString,
+    /// The conversation it is in.
+    pub conversation: Conversation,
+}
+
 /// What a server found behind a link, for a card under the message.
 #[derive(Debug, Clone)]
 pub(crate) struct Preview {
@@ -494,6 +505,10 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// The latest answer from the server at `host:port`, or `None` while it
     /// has not answered (or is down).
     fn ping(&self, host: &str, port: u16) -> Option<ServerPing>;
+
+    /// The messages held that match `query`, best first. Searches what
+    /// the client holds, so it may be asked off the view's thread.
+    fn search_messages(&self, query: &str) -> Vec<Found>;
 
     /// Ask what lies behind `urls`. The answers arrive as
     /// [`EngineEvent::Previews`]; a server that does not look never

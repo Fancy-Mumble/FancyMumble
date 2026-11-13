@@ -29,7 +29,7 @@ use gpui::{
 
 use crate::engine::{
     Action, AudioDevices, ChannelId, ChosenDevices, Connection, Conversation, Engine, EngineEvent,
-    Message, Preview, SavedServer, Session, Snapshot, Subject, User, VoiceSettings,
+    Found, Message, Preview, SavedServer, Session, Snapshot, Subject, User, VoiceSettings,
 };
 use crate::store::{Settings, Store};
 use crate::theme::{ActiveTheme, Catalog, Mode};
@@ -80,6 +80,8 @@ pub(crate) struct Shell {
     /// in each channel, by name, as places among the snapshot's users.
     tree: Vec<(usize, usize)>,
     people: std::collections::HashMap<ChannelId, Vec<usize>>,
+    /// The messages that match what is in the search field.
+    found: Vec<Found>,
     /// The channel column's rows, and the list that lays out only those
     /// in view: a server with thousands of channels costs what is on
     /// screen.
@@ -241,6 +243,7 @@ impl Shell {
             snapshot: Snapshot::disconnected(),
             wanted: String::new(),
             tree: Vec::new(),
+            found: Vec::new(),
             column: Vec::new(),
             column_list: ListState::new(0, ListAlignment::Top, px(OVERDRAW)),
             people: std::collections::HashMap::new(),
@@ -923,6 +926,13 @@ impl Shell {
                 std::iter::once(sidebar::Row::Channel { at, depth })
                     .chain(peopled.then_some(sidebar::Row::People { at, depth }))
             })
+            // Under the channels, the messages that matched.
+            .chain(
+                (!self.found.is_empty())
+                    .then_some(sidebar::Row::FoundHeading)
+                    .into_iter()
+                    .chain((0..self.found.len()).map(sidebar::Row::Found)),
+            )
             .collect();
         if column.len() != self.column.len() {
             let top = self.column_list.logical_scroll_top();
@@ -935,8 +945,31 @@ impl Shell {
     /// The search field of the channel column changed.
     fn narrow_column(&mut self, cx: &mut Context<Self>) {
         self.wanted = self.search.read(cx).text().trim().to_lowercase();
+        self.found.clear();
         self.lay_out_column();
         cx.notify();
+        // A letter matches everything; the messages are searched from two.
+        if self.wanted.chars().count() < 2 {
+            return;
+        }
+        // Off the view's thread, and only the answer to what is still in
+        // the field is taken: typing does not wait on the search.
+        let (engine, wanted) = (Arc::clone(&self.engine), self.wanted.clone());
+        cx.spawn(async move |shell, cx| {
+            let query = wanted.clone();
+            let found = cx
+                .background_executor()
+                .spawn(async move { engine.search_messages(&query) })
+                .await;
+            let _ = shell.update(cx, |shell, cx| {
+                if shell.wanted == wanted {
+                    shell.found = found;
+                    shell.lay_out_column();
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
     }
 
     /// The channels the column lists, as places in the snapshot with how

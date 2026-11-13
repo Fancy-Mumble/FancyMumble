@@ -16,8 +16,9 @@ use mumble_tauri_lib::engine_api::{
 
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
-    Connection, Conversation, Engine, EngineEvent, Listing, Message, Preview, Reaction, Registered,
-    SavedServer, ServerPing, SessionEntry, Snapshot, Subject, User, Voice, VoiceSettings, Window,
+    Connection, Conversation, Engine, EngineEvent, Found, Listing, Message, Preview, Reaction,
+    Registered, SavedServer, ServerPing, SessionEntry, Snapshot, Subject, User, Voice,
+    VoiceSettings, Window,
 };
 use crate::store::Store;
 
@@ -527,6 +528,26 @@ impl Engine for RealEngine {
                 shared.tell(EngineEvent::ServersChanged);
             }));
         }
+    }
+
+    fn search_messages(&self, query: &str) -> Vec<Found> {
+        self.shared
+            .engine
+            .search_messages(query)
+            .into_iter()
+            .filter_map(|found| {
+                let conversation = match (found.channel, found.direct) {
+                    (Some(channel), _) => Conversation::Channel(channel),
+                    (None, Some(session)) => Conversation::Direct(session),
+                    (None, None) => return None,
+                };
+                Some(Found {
+                    text: found.text.into(),
+                    about: format!("{} · {}", found.sender_name, found.place).into(),
+                    conversation,
+                })
+            })
+            .collect()
     }
 
     fn previews(&self, urls: Vec<SharedString>) {
@@ -1739,6 +1760,14 @@ mod tests {
         assert!(
             said(&bob, room, "first draft").is_none(),
             "changed, not added"
+        );
+        // What is held can be searched, and says where it was said.
+        let found = bob.search_messages("second dra");
+        assert!(
+            found
+                .iter()
+                .any(|found| found.conversation == room && found.about.contains("FancyAlice")),
+            "{found:?}"
         );
 
         let react = |add| Action::React {

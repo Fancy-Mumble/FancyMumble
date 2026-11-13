@@ -124,6 +124,10 @@ pub(super) enum Row {
     Channel { at: usize, depth: usize },
     /// The people in that channel, on a card under it.
     People { at: usize, depth: usize },
+    /// The line above the messages that matched the search.
+    FoundHeading,
+    /// The matching message at this place among those found.
+    Found(usize),
 }
 
 impl Shell {
@@ -133,6 +137,19 @@ impl Shell {
         let (at, depth, people) = match self.column.get(row) {
             Some(Row::Channel { at, depth }) => (*at, *depth, false),
             Some(Row::People { at, depth }) => (*at, *depth, true),
+            Some(Row::FoundHeading) => {
+                return div()
+                    .w_full()
+                    .px(px(14.0))
+                    .pt(px(10.0))
+                    .pb(px(6.0))
+                    .text_size(px(11.0))
+                    .font_weight(EMPHASIS)
+                    .text_color(theme.c.muted)
+                    .child(label("Messages", &theme))
+                    .into_any_element();
+            }
+            Some(Row::Found(at)) => return self.found_row(*at, &theme, cx),
             None => return div().into_any_element(),
         };
         let Some(channel) = self.snapshot.channels.get(at) else {
@@ -146,6 +163,49 @@ impl Shell {
         };
         // The gap between rows, which a list does not put there itself.
         div().w_full().pb(px(4.0)).child(drawn).into_any_element()
+    }
+
+    /// A message that matched the search: what it says, and who said it
+    /// where. A click opens the conversation it is in.
+    fn found_row(&self, at: usize, theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let Some(found) = self.found.get(at) else {
+            return div().into_any_element();
+        };
+        let hover = theme.c.hover;
+        let conversation = found.conversation;
+        div()
+            .w_full()
+            .pb(px(4.0))
+            .child(
+                div()
+                    .id(("found", at))
+                    .debug_selector(move || format!("found-{at}"))
+                    .flex()
+                    .flex_col()
+                    .gap(px(2.0))
+                    .px(px(14.0))
+                    .py(px(6.0))
+                    .rounded(theme.skin.radius_md)
+                    .cursor_pointer()
+                    .hover(move |style| style.bg(hover))
+                    .on_click(cx.listener(move |shell, _, _, cx| {
+                        shell.open_conversation(conversation, cx);
+                    }))
+                    .child(
+                        div()
+                            .text_size(px(13.0))
+                            .line_clamp(2)
+                            .child(found.text.clone()),
+                    )
+                    .child(
+                        div()
+                            .truncate()
+                            .text_size(px(11.0))
+                            .text_color(theme.c.muted)
+                            .child(found.about.clone()),
+                    ),
+            )
+            .into_any_element()
     }
 }
 
