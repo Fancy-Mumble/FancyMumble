@@ -155,6 +155,15 @@ pub enum EngineEvent {
     /// The server looked behind links asked about with
     /// [`EngineHandle::link_previews`].
     LinkPreviews(Vec<LinkPreview>),
+    /// The messages of the local user's that wait to be sent later: in
+    /// answer to [`EngineHandle::request_scheduled`].
+    Scheduled(Vec<ScheduledInfo>),
+    /// The server took a message to send later, or a cancellation of one;
+    /// `refused` says why not, when it did not.
+    ScheduleAnswered {
+        /// The server's words, when it refused.
+        refused: Option<String>,
+    },
     /// The server answered [`EngineHandle::request_acl`].
     Acl(AclInfo),
     /// The server answered [`EngineHandle::request_bans`].
@@ -669,6 +678,19 @@ pub struct BanInfo {
     pub duration_secs: u32,
 }
 
+/// A message waiting on the server to be sent at a later time.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScheduledInfo {
+    /// What names it to a cancellation.
+    pub id: String,
+    /// The channels it will be sent to.
+    pub channels: Vec<u32>,
+    /// What it says, as HTML.
+    pub html: String,
+    /// When it will be sent, in Unix epoch milliseconds.
+    pub at_ms: u64,
+}
+
 /// One account registered on the server.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegisteredInfo {
@@ -822,6 +844,35 @@ impl EngineEvent {
                     .collect(),
             ),
             CoreEvent::Acl(acl) => Self::Acl(acl.into()),
+            CoreEvent::ScheduledMessages(waiting) => Self::Scheduled(
+                waiting
+                    .into_iter()
+                    // Those still to come: status 0 is pending.
+                    .filter(|message| message.status == 0)
+                    .map(|message| ScheduledInfo {
+                        id: message.schedule_id,
+                        channels: message.channel_ids,
+                        html: message.message.unwrap_or_default(),
+                        at_ms: message.deliver_at.unwrap_or_default(),
+                    })
+                    .collect(),
+            ),
+            // Status 3 is a refusal; anything else is the server agreeing.
+            CoreEvent::ScheduledMessageAck(ack) => Self::ScheduleAnswered {
+                refused: (ack.status == 3).then(|| {
+                    ack.reason
+                        .filter(|reason| !reason.is_empty())
+                        .unwrap_or_else(|| "The server did not take that.".to_owned())
+                }),
+            },
+            other => return Self::administrative_from_core(other),
+        })
+    }
+
+    /// The rest of [`Self::answer_from_core`]: what an administrator, or a
+    /// user asking after another, is told.
+    fn administrative_from_core(event: CoreEvent) -> Option<Self> {
+        Some(match event {
             CoreEvent::BanList(bans) => Self::Bans(
                 bans.into_iter()
                     .map(|ban| BanInfo {
@@ -1790,6 +1841,40 @@ impl EngineHandle {
             .into_iter()
             .map(|hit| LinkPreview::from_embed(hit.requested_url, hit.embed))
             .collect())
+    }
+
+    /// Have the server send `text` to `channel` at `at_ms`, Unix epoch
+    /// milliseconds, whether or not this client is still there then.
+    /// The server's answer is an [`EngineEvent::ScheduleAnswered`].
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn schedule_text(&self, channel: u32, text: &str, at_ms: u64) -> Result<(), String> {
+        self.state
+            .send_fancy_scheduled_message(vec![channel], Vec::new(), self.composed(text), at_ms)
+            .await
+    }
+
+    /// Ask for the local user's messages that wait to be sent; the answer
+    /// is an [`EngineEvent::Scheduled`].
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn request_scheduled(&self) -> Result<(), String> {
+        self.state.request_fancy_scheduled_messages().await
+    }
+
+    /// Have the waiting message `id` not sent after all.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn cancel_scheduled(&self, id: &str) -> Result<(), String> {
+        self.state
+            .cancel_fancy_scheduled_message(id.to_owned())
+            .await
     }
 
     /// Ask the server who may do what in `channel`; the answer is an
