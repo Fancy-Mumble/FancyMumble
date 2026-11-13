@@ -284,6 +284,11 @@ pub enum History {
     /// Kept by the server sealed with a key it does not have. Those in
     /// the channel pass the key on to those who join, when they agree to.
     EndToEnd,
+    /// Sealed the Signal way: each sender's key goes to those in the
+    /// channel as they speak, and nothing said before somebody came is
+    /// theirs to read. Needs the Signal bridge library; see
+    /// [`EngineHandle::signal_available`].
+    Signal,
 }
 
 /// Somebody who joined an encrypted channel and asks for its key.
@@ -2250,6 +2255,22 @@ impl EngineHandle {
         self.state.register_user(session).await
     }
 
+    /// Whether the Signal bridge library is there to be loaded: without it
+    /// a channel sealed the Signal way can be neither written to nor read.
+    /// It is a library of its own, under its own licence, and is looked for
+    /// beside the executable and where a package would put it.
+    #[must_use]
+    pub fn signal_available(&self) -> bool {
+        #[cfg(not(target_os = "android"))]
+        {
+            crate::state::pchat::find_bridge_library().is_some()
+        }
+        #[cfg(target_os = "android")]
+        {
+            true
+        }
+    }
+
     /// Create the channel `name` under `parent`, keeping its messages as
     /// `history` says; only a Fancy server keeps any.
     ///
@@ -2274,6 +2295,7 @@ impl EngineHandle {
                     History::None => None,
                     History::OnServer => Some("server_managed".to_owned()),
                     History::EndToEnd => Some("fancy_v1_full_archive".to_owned()),
+                    History::Signal => Some("signal_v1".to_owned()),
                 },
                 None,
                 None,
