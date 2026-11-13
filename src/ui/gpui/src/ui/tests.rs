@@ -1617,3 +1617,36 @@ fn the_whisper_key_speaks_to_whoever_was_chosen_while_it_is_held(cx: &mut TestAp
     shell.read_with(cx, |shell, _| assert!(shell.whisper.target.is_none()));
     assert_eq!(engine.whisper_state().0, None);
 }
+
+#[gpui::test]
+fn files_sent_together_go_out_in_order_pictures_as_pictures(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    let folder = std::env::temp_dir().join(format!("fancy-gpui-drop-{}", std::process::id()));
+    std::fs::create_dir_all(&folder).expect("writable");
+    let (notes, picture) = (folder.join("notes.txt"), folder.join("dot.png"));
+    std::fs::write(&notes, b"not a picture").expect("writable");
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(2, 2, image::Rgb([1, 2, 3])))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .expect("a png");
+    std::fs::write(&picture, &png).expect("writable");
+
+    // As a drop on the conversation hands them over.
+    cx.executor().allow_parking();
+    shell.update(cx, |shell, cx| shell.send_files(vec![notes, picture], cx));
+    cx.run_until_parked();
+    let sent = engine.messages(Conversation::Channel(1));
+    assert_eq!(sent.len(), 7);
+    assert_eq!(
+        sent[5].files.len(),
+        1,
+        "what is not a picture is shared as a file"
+    );
+    assert_eq!(sent[5].files[0].name.as_ref(), "notes.txt");
+    assert!(
+        sent[6]
+            .html
+            .starts_with(r#"<img src="data:image/png;base64,"#)
+    );
+    let _ = std::fs::remove_dir_all(folder);
+}

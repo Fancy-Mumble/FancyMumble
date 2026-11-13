@@ -770,25 +770,34 @@ impl Shell {
             let Ok(Ok(Some(paths))) = chosen.await else {
                 return;
             };
-            let Some(path) = paths.into_iter().next() else {
-                return;
-            };
-            // Only a picture is read here, and off the view's thread; a
-            // file is read by whoever uploads it, a piece at a time.
-            let read = path.clone();
-            let picture = cx
-                .background_executor()
-                .spawn(async move { picture_at(&read) })
-                .await;
-            let _ = shell.update(cx, |shell, cx| {
-                if let Some(conversation) = shell.open {
-                    match picture {
-                        Some(picture) => shell.engine.send_picture(conversation, picture),
-                        None => shell.engine.send_file(conversation, path),
-                    }
+            let _ = shell.update(cx, |shell, cx| shell.send_files(paths, cx));
+        })
+        .detach();
+    }
+
+    /// Send the files at `paths` to the open conversation, in order: each
+    /// picture in a message of its own, anything else shared as a file.
+    pub(super) fn send_files(&mut self, paths: Vec<std::path::PathBuf>, cx: &mut Context<Self>) {
+        let Some(conversation) = self.open else {
+            return;
+        };
+        cx.spawn(async move |shell, cx| {
+            for path in paths {
+                // Only a picture is read here, and off the view's thread;
+                // a file is read by whoever uploads it, a piece at a time.
+                let read = path.clone();
+                let picture = cx
+                    .background_executor()
+                    .spawn(async move { picture_at(&read) })
+                    .await;
+                let sent = shell.update(cx, |shell, _| match picture {
+                    Some(picture) => shell.engine.send_picture(conversation, picture),
+                    None => shell.engine.send_file(conversation, path),
+                });
+                if sent.is_err() {
+                    return;
                 }
-                cx.notify();
-            });
+            }
         })
         .detach();
     }

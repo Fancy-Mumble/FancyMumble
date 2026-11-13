@@ -104,6 +104,10 @@ pub(super) fn render(
         .h_full()
         .flex()
         .flex_col()
+        // Files dragged in from outside are sent to whoever is on screen.
+        .on_drop(cx.listener(|shell, dropped: &gpui::ExternalPaths, _, cx| {
+            shell.send_files(dropped.paths().to_vec(), cx);
+        }))
         .child(header(shell, theme, cx))
         .child(
             div()
