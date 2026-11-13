@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
-    Connection, Conversation, Engine, EngineEvent, Listing, Message, Reaction, Registered,
+    Connection, Conversation, Engine, EngineEvent, Listing, Message, Preview, Reaction, Registered,
     SavedServer, ServerPing, Session, SessionEntry, Snapshot, Subject, User, Voice, VoiceSettings,
     Window,
 };
@@ -79,6 +79,41 @@ impl DemoEngine {
     #[cfg(test)]
     pub(crate) fn typed(&self) -> u32 {
         self.with_state(|state| state.typed)
+    }
+
+    /// Have somebody else say `body` in `conversation`.
+    #[cfg(test)]
+    pub(crate) fn say_as(
+        &self,
+        session: Session,
+        name: &str,
+        conversation: Conversation,
+        body: &str,
+    ) {
+        self.with_state(|state| {
+            let sent_at_ms = state
+                .messages
+                .last()
+                .and_then(|(_, last)| last.sent_at_ms)
+                .map_or(FIRST_MESSAGE_MS, |last| last + MINUTE_MS);
+            state.messages.push((
+                conversation,
+                Message {
+                    sender: Some(session),
+                    sender_name: name.to_owned().into(),
+                    html: body.to_owned().into(),
+                    body: body.to_owned().into(),
+                    sent_at_ms: Some(sent_at_ms),
+                    own: false,
+                    id: Some(format!("demo-said-{sent_at_ms}").into()),
+                    edited: false,
+                    failed: false,
+                    pinned: false,
+                    reactions: Vec::new(),
+                },
+            ));
+        });
+        self.tell(EngineEvent::NewMessage { conversation });
     }
 
     /// Say something happened, as a server would.
@@ -420,6 +455,20 @@ impl Engine for DemoEngine {
         // The demo's answers never change; say so anyway, as a real engine
         // would once its servers have replied.
         self.tell(EngineEvent::ServersChanged);
+    }
+
+    fn previews(&self, urls: Vec<gpui::SharedString>) {
+        self.tell(EngineEvent::Previews(
+            urls.into_iter()
+                .map(|url| Preview {
+                    title: Some("A walk by the river".into()),
+                    description: Some("Photos from the towpath, taken on Sunday.".into()),
+                    site: Some("example.org".into()),
+                    picture: None,
+                    url,
+                })
+                .collect(),
+        ));
     }
 
     fn list(&self, listing: Listing) {

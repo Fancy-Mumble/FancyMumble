@@ -29,7 +29,7 @@ use gpui::{
 
 use crate::engine::{
     Action, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation, Engine,
-    EngineEvent, Message, SavedServer, Session, Snapshot, Subject, User, VoiceSettings,
+    EngineEvent, Message, Preview, SavedServer, Session, Snapshot, Subject, User, VoiceSettings,
 };
 use crate::store::{Settings, Store, StoredVoice};
 use crate::theme::{ActiveTheme, Catalog, Mode};
@@ -88,10 +88,16 @@ pub(crate) struct Shell {
     /// how many of them are pinned.
     held: usize,
     pins: usize,
+    /// Whether the reader is at the newest message: set by their own
+    /// scrolling, and what decides whether an arrival moves them.
+    at_tail: std::rc::Rc<std::cell::Cell<bool>>,
     /// The conversation's rows: only the visible ones are laid out.
     rows: ListState,
     /// The bodies of the messages drawn so far, by message index.
     bodies: std::collections::HashMap<usize, Arc<conversation::DrawnBody>>,
+    /// What lies behind the links of the messages drawn: `None` while the
+    /// server is being asked, or when it found nothing.
+    previews: std::collections::HashMap<gpui::SharedString, Option<Arc<Preview>>>,
     /// What each row is: a message, or the rule that starts a day.
     row_model: Vec<conversation::Row>,
     /// How far east of UTC the local clock is, as of the last reload.
@@ -180,6 +186,12 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        let at_tail = std::rc::Rc::new(std::cell::Cell::new(true));
+        let rows = ListState::new(0, ListAlignment::Top, px(OVERDRAW));
+        rows.set_scroll_handler({
+            let at_tail = std::rc::Rc::clone(&at_tail);
+            move |scrolled, _, _| at_tail.set(scrolled.visible_range.end >= scrolled.count)
+        });
         let composer = cx.new(|cx| TextInput::new("", cx).multiline().taking_pictures());
         let search = cx.new(|cx| TextInput::new("Search channels", cx));
         let server_search = cx.new(|cx| TextInput::new("Search servers", cx));
@@ -222,8 +234,10 @@ impl Shell {
             earlier: false,
             held: 0,
             pins: 0,
-            rows: ListState::new(0, ListAlignment::Top, px(OVERDRAW)),
+            rows,
+            at_tail,
             bodies: std::collections::HashMap::new(),
+            previews: std::collections::HashMap::new(),
             row_model: Vec::new(),
             utc_offset: 0,
             talking: HashSet::new(),
@@ -340,6 +354,14 @@ impl Shell {
                 }
             }
             EngineEvent::ServersChanged => self.servers = self.engine.saved_servers(),
+            EngineEvent::Previews(previews) => {
+                for preview in previews {
+                    let _ = self
+                        .previews
+                        .insert(preview.url.clone(), Some(Arc::new(preview)));
+                }
+                self.stick_to_tail();
+            }
             EngineEvent::Bans(bans) => {
                 if let Some(admin) = self.admin.as_mut() {
                     admin.bans = Some(bans);
@@ -395,6 +417,7 @@ impl Shell {
             return;
         }
         self.active_session = active;
+        self.previews.clear();
         // Arrived somewhere: the connect screen has done what it was for.
         self.adding_server = false;
         self.open = None;
@@ -514,6 +537,17 @@ impl Shell {
         }
     }
 
+    /// Keep the newest message in view if that is where the reader was:
+    /// what is under it may have grown, by a reaction or a link's card.
+    fn stick_to_tail(&self) {
+        if self.at_tail.get() {
+            self.rows.scroll_to(ListOffset {
+                item_ix: self.row_model.len(),
+                offset_in_item: px(0.0),
+            });
+        }
+    }
+
     /// Show a page more of the open conversation's history, asking the
     /// server for it where the engine does not hold it.
     pub(super) fn show_earlier(&mut self, cx: &mut Context<Self>) {
@@ -521,6 +555,8 @@ impl Shell {
             return;
         };
         self.window += PAGE;
+        // Going back through the history is leaving the newest message.
+        self.at_tail.set(false);
         if self.window > self.held {
             let oldest = self.messages.first().and_then(|message| message.id.clone());
             self.engine.load_earlier(conversation, oldest);
@@ -601,24 +637,34 @@ impl Shell {
             self.row_model.insert(0, conversation::Row::Earlier);
         }
         let rows = self.row_model.len();
+        // The reader is taken to the newest message when they were on it
+        // already, when the conversation is another one, and when what
+        // arrived is their own.
+        let follows = !same_conversation
+            || self.at_tail.get()
+            || (!same_newest && self.messages.last().is_some_and(|message| message.own));
         if rows == rows_before && kept {
             // The same rows with something on them changed, a reaction
             // say: they stay where the reader has them.
-        } else if same_newest {
-            // Rows came or went above: earlier messages were loaded, or
-            // one was deleted. The reader stays on what they were reading.
+        } else if same_newest || !follows {
+            // Rows came or went above (earlier messages were loaded, one
+            // was deleted), or arrived below while the reader was further
+            // up: they stay on what they were reading.
             let top = self.rows.logical_scroll_top();
+            let above = if same_newest {
+                rows.saturating_sub(rows_before)
+            } else {
+                0
+            };
             self.rows.reset(rows);
             self.rows.scroll_to(ListOffset {
-                item_ix: (top.item_ix + rows).saturating_sub(rows_before),
+                item_ix: top.item_ix + above,
                 offset_in_item: top.offset_in_item,
             });
         } else {
             self.rows.reset(rows);
-            self.rows.scroll_to(ListOffset {
-                item_ix: rows,
-                offset_in_item: px(0.0),
-            });
+            self.at_tail.set(true);
+            self.stick_to_tail();
         }
         let placeholder = self
             .open_title()

@@ -1140,3 +1140,63 @@ fn a_long_conversation_opens_on_its_newest_page_and_steps_back(cx: &mut TestAppC
     click(cx, "channel-1");
     shell.read_with(cx, |shell, _| assert_eq!(shell.messages.len(), 100));
 }
+
+#[gpui::test]
+fn a_link_drawn_for_the_first_time_is_looked_behind_and_gets_a_card(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell(cx);
+    // Scout's message, the one with a link in it, is on screen.
+    shell.read_with(cx, |shell, _| {
+        let card = shell
+            .previews
+            .get("https://example.org/walk")
+            .expect("asked about")
+            .as_ref()
+            .expect("answered");
+        assert_eq!(
+            card.title.as_ref().map(AsRef::as_ref),
+            Some("A walk by the river")
+        );
+        assert_eq!(shell.previews.len(), 1, "only links are asked about");
+    });
+    assert!(cx.debug_bounds("preview-4").is_some());
+}
+
+#[gpui::test]
+fn an_arrival_does_not_move_a_reader_who_has_scrolled_up(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    let lounge = Conversation::Channel(1);
+    for line in 0..40 {
+        engine.send_message(lounge, format!("line {line}"));
+    }
+    cx.run_until_parked();
+    let top = |shell: &Shell| shell.rows.logical_scroll_top().item_ix;
+    // The reader goes back up the conversation.
+    shell.update(cx, |shell, _| {
+        shell.at_tail.set(false);
+        shell.rows.scroll_to(gpui::ListOffset {
+            item_ix: 3,
+            offset_in_item: gpui::px(0.0),
+        });
+    });
+    engine.emit(crate::engine::EngineEvent::Typing {
+        channel: 1,
+        session: 3,
+    });
+    // Somebody else's message arrives below.
+    engine.say_as(3, "Rin", lounge, "meanwhile");
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(
+            shell.messages.last().map(|m| m.body.as_ref()),
+            Some("meanwhile")
+        );
+        assert_eq!(top(shell), 3, "left where they were reading");
+    });
+    // Their own message takes them to it.
+    engine.send_message(lounge, "back".to_owned());
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.at_tail.get());
+        assert!(top(shell) > 3);
+    });
+}

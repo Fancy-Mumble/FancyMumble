@@ -319,6 +319,35 @@ pub(crate) struct Message {
     pub reactions: Vec<Reaction>,
 }
 
+/// What a server found behind a link, for a card under the message.
+#[derive(Debug, Clone)]
+pub(crate) struct Preview {
+    /// The link as it stands in the message.
+    pub url: SharedString,
+    pub title: Option<SharedString>,
+    pub description: Option<SharedString>,
+    pub site: Option<SharedString>,
+    /// A small picture, fetched by the server.
+    pub picture: Option<std::sync::Arc<gpui::Image>>,
+}
+
+impl PartialEq for Preview {
+    /// The same card: the same words, and the very same picture.
+    fn eq(&self, other: &Self) -> bool {
+        self.url == other.url
+            && self.title == other.title
+            && self.description == other.description
+            && self.site == other.site
+            && match (&self.picture, &other.picture) {
+                (Some(one), Some(other)) => std::sync::Arc::ptr_eq(one, other),
+                (None, None) => true,
+                _ => false,
+            }
+    }
+}
+
+impl Eq for Preview {}
+
 /// The newest messages of a conversation.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Window {
@@ -402,6 +431,9 @@ pub(crate) enum EngineEvent {
     /// Something the user should be told: a refused connection, a failed
     /// command. `None` clears what was said before.
     Notice(Option<SharedString>),
+    /// What lies behind links asked about with [`Engine::previews`]. A
+    /// link the server found nothing behind is not among them.
+    Previews(Vec<Preview>),
     /// The server's ban list, asked for with [`Engine::list`].
     Bans(Vec<Ban>),
     /// The server's registered accounts, asked for with [`Engine::list`].
@@ -439,6 +471,11 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// The latest answer from the server at `host:port`, or `None` while it
     /// has not answered (or is down).
     fn ping(&self, host: &str, port: u16) -> Option<ServerPing>;
+
+    /// Ask what lies behind `urls`. The answers arrive as
+    /// [`EngineEvent::Previews`]; a server that does not look never
+    /// answers.
+    fn previews(&self, urls: Vec<SharedString>);
 
     /// Ask the server for one of its administrator's lists. It arrives as
     /// an event, or is refused with a notice.

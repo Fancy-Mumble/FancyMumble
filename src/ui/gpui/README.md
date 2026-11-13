@@ -28,9 +28,12 @@ real engine and does text and voice.
   picture from a file or the clipboard, scaled to what the server takes;
   day rules
   and local time, several lines (Shift+Enter), direct messages,
-  notifications and the unread count in the window's title. On a Fancy
-  server: edit and delete your own, react, pin, see who is writing, and
-  channels that keep their messages for whoever comes later.
+  notifications and the unread count in the window's title. A long
+  conversation opens on its newest page and steps back on asking; an
+  arrival does not move a reader who has scrolled up. On a Fancy server:
+  edit and delete your own, react, pin, see who is writing, a card for
+  what lies behind a link, and channels that keep their messages for
+  whoever comes later.
 - **People.** Pictures, comments, what the server knows of a connection;
   per-user volume; kick, ban, mute, deafen, move, register, priority
   speaker; your own comment and picture.
@@ -51,10 +54,9 @@ real engine and does text and voice.
   composed input (dead keys, an input method), pointer and shift-arrow
   selection, and cut, copy and paste.
 
-What the web UI has and this does not, yet: sending files, link previews,
-polls, read receipts, end-to-end encrypted channels' key handling, message
-search and paging far back, screen sharing, and the rest of the admin
-surfaces (ACLs, server settings).
+What the web UI has and this does not, yet: sending files, polls, read
+receipts, end-to-end encrypted channels' key handling, message search,
+screen sharing, and the rest of the admin surfaces (ACLs, server settings).
 
 ## Testing
 

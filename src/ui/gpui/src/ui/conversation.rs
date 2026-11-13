@@ -15,6 +15,9 @@ use crate::engine::{Action, Conversation, Message};
 use crate::rich::Rich;
 use crate::theme::{Fill, Theme};
 
+/// How many links' cards are remembered before the lot is forgotten.
+const MAX_PREVIEWS: usize = 256;
+
 /// One row of the conversation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Row {
@@ -498,10 +501,17 @@ impl Shell {
         } else {
             theme.skin.message_gap
         };
-        let chips = self.reaction_chips(index, &theme, cx);
+        // Under the bubble: what lies behind its link, then its reactions.
+        let under: Vec<AnyElement> = [
+            self.preview_card(index, &theme),
+            self.reaction_chips(index, &theme, cx),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
         let message = &self.messages[index];
         let body = if message.own {
-            own_message(message, &body, row, chips, self.utc_offset, &theme).into_any_element()
+            own_message(message, &body, row, under, self.utc_offset, &theme).into_any_element()
         } else {
             {
                 let picture = message.sender.and_then(|session| {
@@ -517,7 +527,7 @@ impl Shell {
                     row,
                     picture.as_ref(),
                     continues,
-                    chips,
+                    under,
                     self.utc_offset,
                     &theme,
                 )
@@ -556,6 +566,14 @@ impl DrawnBody {
             .map(Arc::new)
             .collect();
         Self { rich, pictures }
+    }
+
+    /// The address of the first link in it.
+    fn first_link(&self) -> Option<SharedString> {
+        self.rich
+            .links
+            .first()
+            .map(|(_, address)| SharedString::from(address.clone()))
     }
 
     /// Whether there is nothing in it to show.
@@ -640,7 +658,91 @@ impl Shell {
             .map_or("", |message| message.html.as_ref());
         let drawn = Arc::new(DrawnBody::read(html));
         let _ = self.bodies.insert(index, Arc::clone(&drawn));
+        // The first time a message with a link is drawn, the server is
+        // asked what lies behind it; a message never scrolled to costs
+        // nothing.
+        if self.snapshot.fancy
+            && let Some(url) = drawn.first_link()
+            && !self.previews.contains_key(&url)
+        {
+            // Bounded: a long session forgets and, at worst, asks again,
+            // which the engine answers from what it holds.
+            if self.previews.len() >= MAX_PREVIEWS {
+                self.previews.clear();
+            }
+            let _ = self.previews.insert(url.clone(), None);
+            self.engine.previews(vec![url]);
+        }
         drawn
+    }
+
+    /// The card for what lies behind the first link of message `index`,
+    /// once the server has said.
+    fn preview_card(&self, index: usize, theme: &Theme) -> Option<AnyElement> {
+        let url = self.bodies.get(&index)?.first_link()?;
+        let preview = Arc::clone(self.previews.get(&url)?.as_ref()?);
+        let address = url.clone();
+        let hover = theme.c.hover;
+        Some(
+            div()
+                .id(("preview", index))
+                .debug_selector(move || format!("preview-{index}"))
+                .max_w(px(420.0))
+                .flex()
+                .gap(px(10.0))
+                .p(px(10.0))
+                .rounded(theme.skin.radius_md)
+                .bg(theme.c.card)
+                .border_1()
+                .border_color(theme.c.line2)
+                .cursor_pointer()
+                .hover(move |style| style.bg(hover))
+                .on_click(move |_, _, cx| cx.open_url(&address))
+                .when_some(preview.picture.clone(), |card, picture| {
+                    card.child(
+                        gpui::img(picture)
+                            .flex_none()
+                            .size(px(56.0))
+                            .rounded(theme.skin.radius_sm)
+                            .object_fit(gpui::ObjectFit::Cover),
+                    )
+                })
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .gap(px(2.0))
+                        .when_some(preview.site.clone(), |text, site| {
+                            text.child(
+                                div()
+                                    .truncate()
+                                    .text_size(px(11.0))
+                                    .text_color(theme.c.muted)
+                                    .child(site),
+                            )
+                        })
+                        .child(
+                            div()
+                                .truncate()
+                                .text_size(px(13.0))
+                                .font_weight(EMPHASIS)
+                                .text_color(theme.c.accent_text)
+                                .child(preview.title.clone().unwrap_or(url)),
+                        )
+                        .when_some(preview.description.clone(), |text, description| {
+                            text.child(
+                                div()
+                                    .text_size(px(12.0))
+                                    .text_color(theme.c.muted)
+                                    .line_clamp(2)
+                                    .child(description),
+                            )
+                        }),
+                )
+                .into_any_element(),
+        )
     }
 }
 
@@ -786,7 +888,7 @@ fn their_message(
     row: usize,
     picture: Option<&Arc<gpui::Image>>,
     continues: bool,
-    chips: Option<AnyElement>,
+    under: Vec<AnyElement>,
     utc_offset: i64,
     theme: &Theme,
 ) -> impl IntoElement + use<> {
@@ -862,7 +964,7 @@ fn their_message(
                             .when(message.edited, |line| line.child("edited")),
                     )
                 })
-                .children(chips),
+                .children(under),
         )
 }
 
@@ -870,7 +972,7 @@ fn own_message(
     message: &Message,
     body: &DrawnBody,
     row: usize,
-    chips: Option<AnyElement>,
+    under: Vec<AnyElement>,
     utc_offset: i64,
     theme: &Theme,
 ) -> impl IntoElement + use<> {
@@ -895,7 +997,7 @@ fn own_message(
         .items_end()
         .gap(px(5.0))
         .child(plate.child(body_text(body, row, link_ink, theme)))
-        .children(chips)
+        .children(under)
         .child(
             div()
                 .flex()

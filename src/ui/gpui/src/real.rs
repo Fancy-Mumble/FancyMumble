@@ -16,7 +16,7 @@ use mumble_tauri_lib::engine_api::{
 
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
-    Connection, Conversation, Engine, EngineEvent, Listing, Message, Reaction, Registered,
+    Connection, Conversation, Engine, EngineEvent, Listing, Message, Preview, Reaction, Registered,
     SavedServer, ServerPing, SessionEntry, Snapshot, Subject, User, Voice, VoiceSettings, Window,
 };
 use crate::store::Store;
@@ -154,6 +154,9 @@ impl Shared {
     /// and what happens around messages.
     fn forward_answer(&self, event: api::EngineEvent) {
         match event {
+            api::EngineEvent::LinkPreviews(previews) => self.tell(EngineEvent::Previews(
+                previews.into_iter().map(preview_of).collect(),
+            )),
             api::EngineEvent::Bans(bans) => {
                 self.tell(EngineEvent::Bans(bans.into_iter().map(ban_of).collect()));
             }
@@ -524,6 +527,25 @@ impl Engine for RealEngine {
                 shared.tell(EngineEvent::ServersChanged);
             }));
         }
+    }
+
+    fn previews(&self, urls: Vec<SharedString>) {
+        let shared = Arc::clone(&self.shared);
+        if !shared.engine.fancy() {
+            return;
+        }
+        drop(self.runtime.spawn(async move {
+            let urls = urls.into_iter().map(|url| url.to_string()).collect();
+            // What the engine already holds comes back here; the rest in
+            // an event. A failure is a card not shown, and worth no words.
+            if let Ok(held) = shared.engine.link_previews(urls).await
+                && !held.is_empty()
+            {
+                shared.tell(EngineEvent::Previews(
+                    held.into_iter().map(preview_of).collect(),
+                ));
+            }
+        }));
     }
 
     fn list(&self, listing: Listing) {
@@ -1003,6 +1025,19 @@ fn target_of(server: &SavedServer, password: Option<String>) -> ConnectTarget {
         username: server.username.to_string(),
         certificate: server.certificate.as_ref().map(ToString::to_string),
         password,
+    }
+}
+
+fn preview_of(preview: api::LinkPreview) -> Preview {
+    Preview {
+        url: preview.url.into(),
+        title: preview.title.map(Into::into),
+        description: preview.description.map(Into::into),
+        site: preview.site.map(Into::into),
+        picture: preview
+            .thumbnail
+            .and_then(crate::picture::picture)
+            .map(Arc::new),
     }
 }
 
@@ -2006,5 +2041,34 @@ mod tests {
             engine.shutdown();
             let _ = std::fs::remove_dir_all(dir);
         }
+    }
+    /// The server looks behind a link and says what is there. It needs
+    /// the server to reach the web: `example.org` is what it is asked of.
+    #[test]
+    #[ignore = "needs a live Fancy server that can reach the web"]
+    fn live_fancy_a_link_is_looked_behind() {
+        let (alice, alice_dir) = fancy_client("LinkAlice", None);
+        wait_for("alice to connect", || {
+            alice.snapshot().connection == Connection::Connected
+        });
+        let told = alice.events();
+        alice.previews(vec!["https://example.org/".into()]);
+        wait_for("the card", || {
+            std::iter::from_fn(|| told.try_recv().ok()).any(|event| {
+                matches!(event, EngineEvent::Previews(cards)
+                if cards.iter().any(|card| {
+                    card.url.as_ref() == "https://example.org/"
+                        && card.title.as_ref().is_some_and(|title| title.contains("Example"))
+                }))
+            })
+        });
+        // Asked again, it is answered from what is held: no second wait.
+        alice.previews(vec!["https://example.org/".into()]);
+        wait_for("the card again", || {
+            std::iter::from_fn(|| told.try_recv().ok())
+                .any(|event| matches!(event, EngineEvent::Previews(_)))
+        });
+        alice.shutdown();
+        let _ = std::fs::remove_dir_all(alice_dir);
     }
 }
