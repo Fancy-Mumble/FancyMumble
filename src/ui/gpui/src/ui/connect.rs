@@ -125,6 +125,7 @@ pub(super) fn server_column(
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     let selected = shell.selected_server().map(|server| server.key);
+    let hover = theme.c.hover;
     let rows: Vec<AnyElement> = shell
         .listed_servers(cx)
         .iter()
@@ -187,6 +188,25 @@ pub(super) fn server_column(
                 .flex_col()
                 .gap(px(6.0))
                 .children(rows),
+        )
+        .child(
+            div()
+                .id("open-certificates")
+                .debug_selector(|| "open-certificates".to_owned())
+                .flex_none()
+                .h(px(34.0))
+                .flex()
+                .items_center()
+                .gap(px(8.0))
+                .px(px(10.0))
+                .rounded(theme.skin.radius_md)
+                .cursor_pointer()
+                .text_size(px(12.5))
+                .text_color(theme.c.muted)
+                .hover(move |style| style.bg(hover))
+                .on_click(cx.listener(|shell, _, _, cx| shell.toggle_certificates(cx)))
+                .child(icon("key-round", 14.0, theme.c.muted))
+                .child("Certificates"),
         )
 }
 

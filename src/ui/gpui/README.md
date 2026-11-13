@@ -24,7 +24,9 @@ real engine and does text and voice.
   a double click or Join; listen to one without joining; channel passwords;
   create, rename and delete channels; the welcome message, comments and
   descriptions.
-- **Messages.** Rich text with live links and embedded pictures, day rules
+- **Messages.** Rich text with live links and embedded pictures; send a
+  picture from a file or the clipboard, scaled to what the server takes;
+  day rules
   and local time, several lines (Shift+Enter), direct messages,
   notifications and the unread count in the window's title. On a Fancy
   server: edit and delete your own, react, pin, see who is writing, and
@@ -32,6 +34,9 @@ real engine and does text and voice.
 - **People.** Pictures, comments, what the server knows of a connection;
   per-user volume; kick, ban, mute, deafen, move, register, priority
   speaker; your own comment and picture.
+- **Certificates.** Listed with who uses each, from the foot of the
+  server list; export one to carry it to another machine, import one,
+  delete one (asked twice).
 - **Voice.** The microphone button turns voice on, then mutes and unmutes;
   the headphones deafen. Devices, push to talk, the activation threshold,
   noise suppression and automatic gain are behind the sliders button on
@@ -43,11 +48,10 @@ real engine and does text and voice.
   composed input (dead keys, an input method), pointer and shift-arrow
   selection, and cut, copy and paste.
 
-What the web UI has and this does not, yet: sending pictures and files,
-link previews, polls, read receipts, end-to-end encrypted channels' key
-handling, message search and paging far back, certificate management,
-screen sharing, and the admin surfaces (bans, registered users, ACLs,
-server settings).
+What the web UI has and this does not, yet: sending files, link previews,
+polls, read receipts, end-to-end encrypted channels' key handling, message
+search and paging far back, screen sharing, and the admin surfaces (bans,
+registered users, ACLs, server settings).
 
 ## Testing
 
@@ -133,7 +137,7 @@ For development:
 | --- | --- |
 | `FANCY_GPUI_DATA_DIR` | Keep every file here instead of the platform's place. |
 | `FANCY_GPUI_THEME`, `FANCY_GPUI_MODE` | Start in this theme (`dark`, `rose`, ...) and mode (`light`, `dark`), without choosing it. |
-| `FANCY_GPUI_OPEN` | Start with `picker`, `devices` or `editor` open. |
+| `FANCY_GPUI_OPEN` | Start with `picker`, `devices`, `certificates` or `editor` open. |
 | `FANCY_GPUI_CONNECT` | Connect at once as the saved identity with this id (`FANCY_GPUI_PASSWORD` for the server's password). |
 | `FANCY_GPUI_SAY` | With `FANCY_GPUI_CONNECT`: say this once connected. |
 | `FANCY_GPUI_FRAME` | `client` draws the window's own controls even where the compositor frames it. |

@@ -3,6 +3,7 @@
 //! conversation.
 
 mod band;
+mod certificates;
 mod connect;
 mod conversation;
 mod devices;
@@ -114,6 +115,11 @@ pub(crate) struct Shell {
     picker_open: bool,
     /// Whether the audio device panel is showing.
     devices_open: bool,
+    /// Whether the certificates panel is showing, what it lists, and the
+    /// certificate a first click on delete has armed.
+    certificates_open: bool,
+    certificates: Vec<gpui::SharedString>,
+    doomed_certificate: Option<gpui::SharedString>,
     /// The devices the system offers, once they have been asked for.
     devices: Option<AudioDevices>,
     /// The devices in use.
@@ -220,6 +226,9 @@ impl Shell {
             store,
             picker_open: false,
             devices_open: false,
+            certificates_open: false,
+            certificates: Vec::new(),
+            doomed_certificate: None,
             devices: None,
             chosen_devices: engine.chosen_devices(),
             info: None,
@@ -315,6 +324,10 @@ impl Shell {
                 }
             }
             EngineEvent::ServersChanged => self.servers = self.engine.saved_servers(),
+            EngineEvent::CertificatesChanged => {
+                self.certificates = self.engine.certificates();
+                self.doomed_certificate = None;
+            }
             EngineEvent::Notice(notice) => self.notice = notice,
             EngineEvent::Typing { channel, session } => self.saw_typing(channel, session, cx),
             EngineEvent::CurrentChannelChanged => {
@@ -660,7 +673,7 @@ impl Shell {
         cx.notify();
     }
 
-    /// Start with something open: `picker`, `devices` or `editor`. For
+    /// Start with something open: `picker`, `devices`, `certificates` or `editor`. For
     /// looking at them where nothing can click.
     pub(crate) fn open_for_inspection(
         &mut self,
@@ -671,6 +684,7 @@ impl Shell {
         match what {
             "picker" => self.toggle_picker(cx),
             "devices" => self.toggle_devices(cx),
+            "certificates" => self.toggle_certificates(cx),
             "editor" => self.open_editor(None, None, window, cx),
             _ => {}
         }
@@ -690,6 +704,7 @@ impl Shell {
         if self.editor.take().is_none() {
             self.picker_open = false;
             self.devices_open = false;
+            self.certificates_open = false;
         }
         cx.notify();
     }
@@ -895,6 +910,9 @@ impl Render for Shell {
             })
             .when(self.devices_open, |shell| {
                 shell.child(devices::render(self, &theme, cx))
+            })
+            .when(self.certificates_open, |shell| {
+                shell.child(certificates::render(self, &theme, cx))
             })
             .when_some(self.editor.as_ref(), |shell, editor| {
                 shell.child(server_editor::render(editor, &theme, cx))

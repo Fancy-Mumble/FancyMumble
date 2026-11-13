@@ -190,6 +190,20 @@ pub(crate) enum Action {
     },
 }
 
+/// Something done to the certificates the client holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CertificateTask {
+    /// Delete the one with this label, keys and all.
+    Delete(String),
+    /// Write the one with this label, private key included, to a file.
+    Export {
+        label: String,
+        to: std::path::PathBuf,
+    },
+    /// Take in one exported to this file.
+    Import(std::path::PathBuf),
+}
+
 /// One of the servers the engine is on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SessionEntry {
@@ -339,6 +353,8 @@ pub(crate) enum EngineEvent {
     /// Something the user should be told: a refused connection, a failed
     /// command. `None` clears what was said before.
     Notice(Option<SharedString>),
+    /// The certificates held changed: read [`Engine::certificates`] again.
+    CertificatesChanged,
     /// What is known about `subject` besides its text, as names and
     /// values: a user's connection, a server's version.
     Facts {
@@ -370,6 +386,13 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// The latest answer from the server at `host:port`, or `None` while it
     /// has not answered (or is down).
     fn ping(&self, host: &str, port: u16) -> Option<ServerPing>;
+
+    /// The labels of the certificates held, in order.
+    fn certificates(&self) -> Vec<SharedString>;
+
+    /// Delete, export or import a certificate. How it went is said in a
+    /// notice; a change in [`EngineEvent::CertificatesChanged`].
+    fn manage_certificate(&self, task: CertificateTask);
 
     /// Ask every saved server again whether it is up. The answers arrive
     /// later, each announced by [`EngineEvent::ServersChanged`].

@@ -1043,3 +1043,31 @@ fn a_picture_on_the_clipboard_is_sent_when_pasted_into_the_composer(cx: &mut Tes
         assert_eq!(shell.composer.read(cx).text(), "", "nothing typed");
     });
 }
+
+#[gpui::test]
+fn certificates_are_listed_with_who_uses_them_and_deleted_on_the_second_click(
+    cx: &mut TestAppContext,
+) {
+    let (shell, engine, cx) = shell(cx);
+    click(cx, "leave");
+    click(cx, "open-certificates");
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.certificates_open);
+        assert_eq!(shell.certificates, ["alex", "work"]);
+    });
+    click(cx, "delete-work");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(
+            shell.doomed_certificate.as_ref().map(AsRef::as_ref),
+            Some("work")
+        );
+    });
+    assert_eq!(engine.certificates().len(), 2, "armed, not gone");
+    click(cx, "delete-work");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.certificates, ["alex"]);
+        assert!(shell.doomed_certificate.is_none());
+    });
+    click(cx, "certificates-close");
+    shell.read_with(cx, |shell, _| assert!(!shell.certificates_open));
+}

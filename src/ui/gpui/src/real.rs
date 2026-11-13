@@ -15,9 +15,9 @@ use mumble_tauri_lib::engine_api::{
 };
 
 use crate::engine::{
-    Action, AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation,
-    Engine, EngineEvent, Message, Reaction, SavedServer, ServerPing, SessionEntry, Snapshot,
-    Subject, User, Voice, VoiceSettings,
+    Action, AudioDevice, AudioDevices, CertificateTask, Channel, ChannelId, ChosenDevices,
+    Connection, Conversation, Engine, EngineEvent, Message, Reaction, SavedServer, ServerPing,
+    SessionEntry, Snapshot, Subject, User, Voice, VoiceSettings,
 };
 use crate::store::Store;
 
@@ -510,6 +510,38 @@ impl Engine for RealEngine {
                 shared.tell(EngineEvent::ServersChanged);
             }));
         }
+    }
+
+    fn certificates(&self) -> Vec<SharedString> {
+        self.shared
+            .engine
+            .certificates()
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+
+    fn manage_certificate(&self, task: CertificateTask) {
+        let shared = Arc::clone(&self.shared);
+        // Files are read and written: not on the view's thread.
+        drop(self.runtime.spawn_blocking(move || {
+            let engine = &shared.engine;
+            let said = match task {
+                CertificateTask::Delete(label) => engine
+                    .delete_certificate(&label)
+                    .map(|()| format!("Deleted the certificate \u{201c}{label}\u{201d}.")),
+                CertificateTask::Export { label, to } => engine
+                    .export_certificate(&label, &to)
+                    .map(|()| format!("Exported to {}. Keep it private.", to.display())),
+                CertificateTask::Import(from) => engine
+                    .import_certificate(&from)
+                    .map(|label| format!("Imported the certificate \u{201c}{label}\u{201d}.")),
+            };
+            shared.tell(EngineEvent::CertificatesChanged);
+            shared.tell(EngineEvent::Notice(Some(
+                said.unwrap_or_else(|problem| problem).into(),
+            )));
+        }));
     }
 
     fn save_server(&self, server: SavedServer) {
@@ -1422,6 +1454,22 @@ mod tests {
         });
         assert_eq!(active(&engine).as_deref(), Some("first"));
         let first_channels = engine.snapshot().channels.len();
+
+        // The certificate made for that connect leaves in a file and
+        // comes back from it.
+        assert_eq!(engine.certificates(), ["livetwo"]);
+        let exported = dir.join("exported.json");
+        engine.manage_certificate(CertificateTask::Export {
+            label: "livetwo".to_owned(),
+            to: exported.clone(),
+        });
+        wait_for("the export", || exported.exists());
+        engine.manage_certificate(CertificateTask::Delete("livetwo".to_owned()));
+        wait_for("the certificate to go", || engine.certificates().is_empty());
+        engine.manage_certificate(CertificateTask::Import(exported));
+        wait_for("the certificate to come back", || {
+            engine.certificates() == ["livetwo"]
+        });
 
         engine.connect("second", None);
         wait_for("the second server beside the first", || {

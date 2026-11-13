@@ -4,9 +4,9 @@
 use std::sync::Mutex;
 
 use crate::engine::{
-    Action, AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation,
-    Engine, EngineEvent, Message, Reaction, SavedServer, ServerPing, Session, SessionEntry,
-    Snapshot, Subject, User, Voice, VoiceSettings,
+    Action, AudioDevice, AudioDevices, CertificateTask, Channel, ChannelId, ChosenDevices,
+    Connection, Conversation, Engine, EngineEvent, Message, Reaction, SavedServer, ServerPing,
+    Session, SessionEntry, Snapshot, Subject, User, Voice, VoiceSettings,
 };
 
 /// The local user's session in the demo server.
@@ -31,6 +31,7 @@ struct State {
     voice: Voice,
     deafened: bool,
     servers: Vec<SavedServer>,
+    certificates: Vec<gpui::SharedString>,
     devices: ChosenDevices,
     voice_settings: VoiceSettings,
     /// Every action asked for, in order: the demo's record of what a server
@@ -309,6 +310,7 @@ impl State {
                 user(5, "Torque"),
             ],
             typed: 0,
+            certificates: vec!["alex".into(), "work".into()],
             messages: vec![
                 said(0, OWN, "Alex", "Welcome to our creative lounge!"),
                 said(1, 3, "Rin", "Sketching a new character design tonight."),
@@ -415,6 +417,28 @@ impl Engine for DemoEngine {
         // The demo's answers never change; say so anyway, as a real engine
         // would once its servers have replied.
         self.tell(EngineEvent::ServersChanged);
+    }
+
+    fn certificates(&self) -> Vec<gpui::SharedString> {
+        self.with_state(|state| state.certificates.clone())
+    }
+
+    fn manage_certificate(&self, task: CertificateTask) {
+        self.with_state(|state| match task {
+            CertificateTask::Delete(label) => {
+                state.certificates.retain(|held| held.as_ref() != label);
+            }
+            CertificateTask::Import(from) => {
+                let label = from
+                    .file_stem()
+                    .map(|stem| stem.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                state.certificates.push(label.into());
+                state.certificates.sort();
+            }
+            CertificateTask::Export { .. } => {}
+        });
+        self.tell(EngineEvent::CertificatesChanged);
     }
 
     fn save_server(&self, server: SavedServer) {
