@@ -591,6 +591,7 @@ mod tests {
             position,
             unread: 0,
             history: false,
+            encrypted: false,
             listening: false,
         }
     }

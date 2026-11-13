@@ -1454,3 +1454,34 @@ fn tab_finishes_a_name_begun_after_an_at_sign(cx: &mut TestAppContext) {
         assert_eq!(shell.composer.read(cx).text(), "hi @Scout @zz");
     });
 }
+
+#[gpui::test]
+fn somebody_asking_for_the_channels_key_is_answered_from_a_strip(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    engine.ask_for_key("abc", "Rin");
+    engine.ask_for_key("def", "Flora");
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| assert_eq!(shell.key_requests.len(), 2));
+    click(cx, "share-key-Rin");
+    assert_eq!(
+        engine.actions().last(),
+        Some(&Action::AnswerKeyRequest {
+            channel: 1,
+            hash: "abc".to_owned(),
+            share: true,
+        })
+    );
+    // The demo says its state changed, not who is asking: the strip goes
+    // when the engine next says so.
+    engine.emit(crate::engine::EngineEvent::KeyRequests { channel: 1 });
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.key_requests.len(), 1);
+        assert_eq!(shell.key_requests[0].name.as_ref(), "Flora");
+    });
+    click(cx, "refuse-key-Flora");
+    assert!(matches!(
+        engine.actions().last(),
+        Some(Action::AnswerKeyRequest { share: false, .. })
+    ));
+}

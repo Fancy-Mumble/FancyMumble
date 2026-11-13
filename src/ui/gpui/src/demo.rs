@@ -9,7 +9,7 @@ use crate::engine::{
     Registered, SavedServer, ServerPing, Session, SessionEntry, Snapshot, Subject, User, Voice,
     VoiceSettings, Window,
 };
-use crate::engine::{Attachment, Poll, PollOption};
+use crate::engine::{Attachment, KeyRequest, Poll, PollOption};
 
 /// The local user's session in the demo server.
 const OWN: Session = 1;
@@ -51,6 +51,8 @@ struct State {
     /// The message the view last said it had read up to.
     read_up_to: Option<gpui::SharedString>,
     polls: Vec<Poll>,
+    /// Who is asking for the lounge's key.
+    key_requests: Vec<KeyRequest>,
     /// The shared files the view asked to have saved, and where to.
     saved: Vec<(gpui::SharedString, std::path::PathBuf)>,
 }
@@ -81,6 +83,18 @@ impl DemoEngine {
     /// Have `session` start or stop talking.
     pub(crate) fn talk(&self, session: Session, talking: bool) {
         self.tell(EngineEvent::UserTalking { session, talking });
+    }
+
+    /// Have `name` ask for the lounge's key.
+    #[cfg(test)]
+    pub(crate) fn ask_for_key(&self, hash: &str, name: &str) {
+        self.with_state(|state| {
+            state.key_requests.push(KeyRequest {
+                hash: hash.to_owned().into(),
+                name: name.to_owned().into(),
+            });
+        });
+        self.tell(EngineEvent::KeyRequests { channel: LOUNGE });
     }
 
     /// The shared files the view asked to have saved, and where to.
@@ -205,6 +219,7 @@ impl State {
                 parent,
                 name,
                 history,
+                encrypted,
             } => {
                 let id = self
                     .channels
@@ -220,6 +235,7 @@ impl State {
                     position: 0,
                     unread: 0,
                     history: *history,
+                    encrypted: *encrypted,
                     listening: false,
                 });
             }
@@ -245,6 +261,10 @@ impl State {
             | Action::Vote { .. }
             | Action::ToggleListen { .. }
             | Action::PrioritySpeaker { .. } => self.apply_further(action),
+            Action::AnswerKeyRequest { hash, .. } => {
+                self.key_requests
+                    .retain(|asking| asking.hash.as_ref() != hash);
+            }
             Action::SetUserVolume { .. }
             | Action::DescribeChannel { .. }
             | Action::SetChannelPassword { .. }
@@ -354,6 +374,7 @@ impl State {
             position: 0,
             unread: 0,
             history: false,
+            encrypted: false,
             listening: false,
         };
         let user = |session, name: &str| User {
@@ -408,6 +429,7 @@ impl State {
                 channel(0, None, "Root"),
                 Channel {
                     history: true,
+                    encrypted: false,
                     ..channel(LOUNGE, Some(0), "lounge")
                 },
                 channel(2, Some(0), "studio"),
@@ -424,6 +446,7 @@ impl State {
             snapshots: 0,
             read_up_to: None,
             polls: Vec::new(),
+            key_requests: Vec::new(),
             saved: Vec::new(),
             certificates: vec!["alex".into(), "work".into()],
             messages: vec![
@@ -566,6 +589,13 @@ impl Engine for DemoEngine {
         // The demo's answers never change; say so anyway, as a real engine
         // would once its servers have replied.
         self.tell(EngineEvent::ServersChanged);
+    }
+
+    fn key_requests(&self, channel: ChannelId) -> Vec<KeyRequest> {
+        if channel != LOUNGE {
+            return Vec::new();
+        }
+        self.with_state(|state| state.key_requests.clone())
     }
 
     fn polls(&self, conversation: Conversation) -> Vec<Poll> {

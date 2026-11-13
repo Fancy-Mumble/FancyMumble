@@ -38,7 +38,8 @@ real engine and does text and voice.
   read what you wrote, ask a poll and answer one, share a file and save one
   shared, a card for
   what lies behind a link, and channels that keep their messages for
-  whoever comes later.
+  whoever comes later: on the server, or end-to-end encrypted, with the
+  key passed on to a newcomer when somebody who holds it agrees.
 - **People.** Pictures, comments, what the server knows of a connection;
   per-user volume; kick, ban, mute, deafen, move, register, priority
   speaker; your own comment and picture.
@@ -60,8 +61,9 @@ real engine and does text and voice.
   composed input (dead keys, an input method), pointer and shift-arrow
   selection, and cut, copy and paste.
 
-What the web UI has and this does not, yet: end-to-end encrypted
-channels' key handling, screen sharing, and the rest of the admin surfaces (ACLs, server settings).
+What the web UI has and this does not, yet: screen sharing, the Signal
+flavour of encrypted channels, and the rest of the admin surfaces (ACLs,
+server settings).
 
 ## Testing
 

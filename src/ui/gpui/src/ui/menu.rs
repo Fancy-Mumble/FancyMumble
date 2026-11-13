@@ -62,6 +62,8 @@ pub(super) enum Question {
     NewChannel(ChannelId),
     /// A channel whose messages the server keeps.
     NewChannelWithHistory(ChannelId),
+    /// A channel whose messages are kept sealed from the server.
+    NewEncryptedChannel(ChannelId),
     RenameChannel(ChannelId),
     DeleteChannel(ChannelId),
     JoinPassword(ChannelId),
@@ -84,6 +86,11 @@ impl Question {
             Self::NewChannel(_) => ("New channel", Some("Name"), "Create"),
             Self::NewChannelWithHistory(_) => (
                 "New channel that keeps its messages",
+                Some("Name"),
+                "Create",
+            ),
+            Self::NewEncryptedChannel(_) => (
+                "New channel that keeps its messages, encrypted",
                 Some("Name"),
                 "Create",
             ),
@@ -147,11 +154,19 @@ impl Question {
                 parent,
                 name: Some(text).filter(|name| !name.is_empty())?,
                 history: false,
+                encrypted: false,
             },
             Self::NewChannelWithHistory(parent) => Action::CreateChannel {
                 parent,
                 name: Some(text).filter(|name| !name.is_empty())?,
                 history: true,
+                encrypted: false,
+            },
+            Self::NewEncryptedChannel(parent) => Action::CreateChannel {
+                parent,
+                name: Some(text).filter(|name| !name.is_empty())?,
+                history: true,
+                encrypted: true,
             },
             Self::RenameChannel(channel) => Action::RenameChannel {
                 channel,
@@ -422,6 +437,10 @@ pub(super) fn channel_items(
         items.push(Item::new(
             "New channel with history inside…",
             Command::Ask(Question::NewChannelWithHistory(id)),
+        ));
+        items.push(Item::new(
+            "New encrypted channel inside…",
+            Command::Ask(Question::NewEncryptedChannel(id)),
         ));
         items.push(Item::new(
             "New poll: choose one…",
@@ -1210,6 +1229,7 @@ mod tests {
             position: 0,
             unread: 0,
             history: false,
+            encrypted: false,
             listening: false,
         };
         assert_eq!(
@@ -1264,6 +1284,7 @@ mod tests {
                 parent: 1,
                 name: "Games".to_owned(),
                 history: false,
+                encrypted: false,
             })
         );
         assert_eq!(
@@ -1272,6 +1293,16 @@ mod tests {
                 parent: 1,
                 name: "Notes".to_owned(),
                 history: true,
+                encrypted: false,
+            })
+        );
+        assert_eq!(
+            Question::NewEncryptedChannel(1).answered("Secrets"),
+            Some(Action::CreateChannel {
+                parent: 1,
+                name: "Secrets".to_owned(),
+                history: true,
+                encrypted: true,
             })
         );
         assert_eq!(

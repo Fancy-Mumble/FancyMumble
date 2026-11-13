@@ -29,8 +29,8 @@ use gpui::{
 
 use crate::engine::{
     Action, AudioDevices, ChannelId, ChosenDevices, Connection, Conversation, Engine, EngineEvent,
-    Found, Message, Poll, Preview, Reader, SavedServer, Session, Snapshot, Subject, User,
-    VoiceSettings,
+    Found, KeyRequest, Message, Poll, Preview, Reader, SavedServer, Session, Snapshot, Subject,
+    User, VoiceSettings,
 };
 use crate::store::{Settings, Store};
 use crate::theme::{ActiveTheme, Catalog, Mode};
@@ -113,6 +113,8 @@ pub(crate) struct Shell {
     people: std::collections::HashMap<ChannelId, Vec<usize>>,
     /// Who has read how far in the open channel.
     seen: Seen,
+    /// Who is asking for the open channel's key.
+    key_requests: Vec<KeyRequest>,
     /// The polls put to the open channel, oldest first.
     polls: Vec<Poll>,
     /// The messages that match what is in the search field.
@@ -279,6 +281,7 @@ impl Shell {
             wanted: String::new(),
             tree: Vec::new(),
             seen: Seen::default(),
+            key_requests: Vec::new(),
             polls: Vec::new(),
             found: Vec::new(),
             column: Vec::new(),
@@ -437,6 +440,11 @@ impl Shell {
                 }
             }
             EngineEvent::ServersChanged => self.servers = self.engine.saved_servers(),
+            EngineEvent::KeyRequests { channel } => {
+                if self.open == Some(Conversation::Channel(channel)) {
+                    self.key_requests = self.engine.key_requests(channel);
+                }
+            }
             EngineEvent::Readers { channel, readers } => {
                 if self.open == Some(Conversation::Channel(channel)) {
                     self.seen.readers = readers;
@@ -722,6 +730,10 @@ impl Shell {
         if !same_conversation {
             self.shown = self.open;
             self.window = PAGE;
+            self.key_requests = match self.open {
+                Some(Conversation::Channel(channel)) => self.engine.key_requests(channel),
+                _ => Vec::new(),
+            };
             self.seen.readers.clear();
             self.seen.said = None;
         }

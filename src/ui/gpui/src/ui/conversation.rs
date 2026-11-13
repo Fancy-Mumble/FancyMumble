@@ -143,6 +143,7 @@ pub(super) fn render(
                             .child(line),
                     )
                 })
+                .children(key_request_strips(shell, theme, cx))
                 .when(shell.editing.is_some(), |column| {
                     column.child(composer_strip(
                         "pencil",
@@ -158,6 +159,18 @@ pub(super) fn render(
         )
 }
 
+/// The line under a channel's name: who is there, and what becomes of
+/// what is said.
+fn channel_words(channel: Option<&crate::engine::Channel>, people: usize) -> String {
+    match channel {
+        Some(channel) if channel.encrypted => {
+            format!("{people} in voice · messages are kept, end-to-end encrypted")
+        }
+        Some(channel) if channel.history => format!("{people} in voice · messages are kept"),
+        _ => format!("{people} in voice"),
+    }
+}
+
 fn header(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let (glyph, name, about, people) = match shell.open {
         Some(Conversation::Channel(id)) => {
@@ -168,11 +181,7 @@ fn header(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoEle
                 .find(|channel| channel.id == id);
             let name = channel.map_or_else(SharedString::default, |channel| channel.name.clone());
             let people = shell.occupant_count(id);
-            let about = if channel.is_some_and(|channel| channel.history) {
-                format!("{people} in voice · messages are kept")
-            } else {
-                format!("{people} in voice")
-            };
+            let about = channel_words(channel, people);
             ("hash", name, about, Some(people))
         }
         Some(Conversation::Direct(session)) => {
@@ -387,6 +396,80 @@ pub(super) fn writing_line(writers: &[SharedString]) -> Option<SharedString> {
         }
         .into(),
     )
+}
+
+/// One strip for each person asking for the open channel's key: who, and
+/// the two answers.
+fn key_request_strips(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> Vec<AnyElement> {
+    let Some(Conversation::Channel(channel)) = shell.open else {
+        return Vec::new();
+    };
+    let hover = theme.c.hover;
+    shell
+        .key_requests
+        .iter()
+        .enumerate()
+        .map(|(at, asking)| {
+            let answer = |share: bool, id: &'static str, says: &'static str| {
+                let hash = asking.hash.to_string();
+                let name = asking.name.clone();
+                div()
+                    .id((id, at))
+                    .debug_selector(move || format!("{id}-{name}"))
+                    .px(px(10.0))
+                    .py(px(3.0))
+                    .rounded(theme.skin.radius_pill)
+                    .cursor_pointer()
+                    .when(share, |button| {
+                        button
+                            .bg(theme.c.accent)
+                            .text_color(theme.c.on_accent)
+                            .font_weight(EMPHASIS)
+                    })
+                    .hover(move |style| {
+                        if share {
+                            style.opacity(0.9)
+                        } else {
+                            style.bg(hover)
+                        }
+                    })
+                    .on_click(cx.listener(move |shell, _, _, _| {
+                        shell.engine.act(Action::AnswerKeyRequest {
+                            channel,
+                            hash: hash.clone(),
+                            share,
+                        });
+                    }))
+                    .child(says)
+            };
+            div()
+                .flex_none()
+                .mx(px(10.0))
+                .mb(px(4.0))
+                .px(px(14.0))
+                .py(px(6.0))
+                .flex()
+                .items_center()
+                .gap(px(8.0))
+                .rounded(theme.skin.radius_md)
+                .bg(theme.c.accent_soft)
+                .text_size(px(12.0))
+                .child(icon("key-round", 12.0, theme.c.accent_text))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .child(SharedString::from(format!(
+                            "{} asks for this channel's key, to read what is kept here.",
+                            asking.name
+                        ))),
+                )
+                .child(answer(false, "refuse-key", "Not now"))
+                .child(answer(true, "share-key", "Share the key"))
+                .into_any_element()
+        })
+        .collect()
 }
 
 /// A message in a line: who said it, and how it starts.

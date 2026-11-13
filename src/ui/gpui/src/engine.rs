@@ -172,6 +172,15 @@ pub(crate) enum Action {
         parent: ChannelId,
         name: String,
         history: bool,
+        /// Keep them sealed with a key the server does not have.
+        encrypted: bool,
+    },
+    /// Give the key of the encrypted `channel` to the one asking for it
+    /// under `hash`, or turn them down.
+    AnswerKeyRequest {
+        channel: ChannelId,
+        hash: String,
+        share: bool,
     },
     /// Rename `channel`.
     RenameChannel { channel: ChannelId, name: String },
@@ -312,6 +321,9 @@ pub(crate) struct Channel {
     pub unread: u32,
     /// Whether the server keeps what is said here.
     pub history: bool,
+    /// Whether what is kept is sealed with a key only those in the
+    /// channel hold.
+    pub encrypted: bool,
     /// Whether the local user hears it without being in it.
     pub listening: bool,
 }
@@ -365,6 +377,14 @@ pub(crate) struct Message {
     pub reply_to: Option<SharedString>,
     /// The reactions on it, in the order each emoji was first used.
     pub reactions: Vec<Reaction>,
+}
+
+/// Somebody who joined an encrypted channel and asks for its key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct KeyRequest {
+    /// What names them to an answer.
+    pub hash: SharedString,
+    pub name: SharedString,
 }
 
 /// A poll put to a channel, with how it stands.
@@ -536,6 +556,9 @@ pub(crate) enum EngineEvent {
     /// Something the user should be told: a refused connection, a failed
     /// command. `None` clears what was said before.
     Notice(Option<SharedString>),
+    /// Who is asking for the key of `channel` changed: read
+    /// [`Engine::key_requests`] again.
+    KeyRequests { channel: ChannelId },
     /// How far each other reader of `channel` has read.
     Readers {
         channel: ChannelId,
@@ -581,6 +604,9 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// The latest answer from the server at `host:port`, or `None` while it
     /// has not answered (or is down).
     fn ping(&self, host: &str, port: u16) -> Option<ServerPing>;
+
+    /// Who is asking for the key of the encrypted channel `channel`.
+    fn key_requests(&self, channel: ChannelId) -> Vec<KeyRequest>;
 
     /// The polls put to `conversation` while this client was there,
     /// oldest first, with how each stands.

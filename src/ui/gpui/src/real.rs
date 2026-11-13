@@ -20,7 +20,7 @@ use crate::engine::{
     Registered, SavedServer, ServerPing, SessionEntry, Snapshot, Subject, User, Voice,
     VoiceSettings, Window,
 };
-use crate::engine::{Attachment, Poll, PollOption, Reader};
+use crate::engine::{Attachment, KeyRequest, Poll, PollOption, Reader};
 use crate::store::Store;
 
 /// `(host, port)`: what a ping is kept under.
@@ -302,6 +302,9 @@ impl Shared {
     /// and what happens around messages.
     fn forward_answer(&self, event: api::EngineEvent) {
         match event {
+            api::EngineEvent::KeyRequests { channel } => {
+                self.tell(EngineEvent::KeyRequests { channel });
+            }
             api::EngineEvent::Poll(poll) => self.hold_poll(
                 poll.channel,
                 HeldPoll {
@@ -658,6 +661,7 @@ impl Engine for RealEngine {
                     name: channel.name.into(),
                     position: channel.position,
                     history: channel.keeps_history,
+                    encrypted: channel.encrypted,
                     listening: listening.contains(&channel.id),
                 })
                 .collect(),
@@ -713,6 +717,18 @@ impl Engine for RealEngine {
                 shared.tell(EngineEvent::ServersChanged);
             }));
         }
+    }
+
+    fn key_requests(&self, channel: u32) -> Vec<KeyRequest> {
+        self.shared
+            .engine
+            .key_requests(channel)
+            .into_iter()
+            .map(|asking| KeyRequest {
+                hash: asking.hash.into(),
+                name: asking.name.into(),
+            })
+            .collect()
     }
 
     fn polls(&self, conversation: Conversation) -> Vec<Poll> {
@@ -1201,7 +1217,20 @@ impl Engine for RealEngine {
                     parent,
                     name,
                     history,
-                } => engine.create_channel(parent, name, history).await,
+                    encrypted,
+                } => {
+                    let history = match (history, encrypted) {
+                        (_, true) => api::History::EndToEnd,
+                        (true, false) => api::History::OnServer,
+                        (false, false) => api::History::None,
+                    };
+                    engine.create_channel(parent, name, history).await
+                }
+                Action::AnswerKeyRequest {
+                    channel,
+                    hash,
+                    share,
+                } => engine.answer_key_request(channel, &hash, share).await,
                 Action::RenameChannel { channel, name } => {
                     engine.rename_channel(channel, name).await
                 }
@@ -2308,6 +2337,7 @@ mod tests {
             parent: root,
             name: name.clone(),
             history: true,
+            encrypted: false,
         });
         let kept = |engine: &RealEngine| {
             engine
@@ -2432,6 +2462,7 @@ mod tests {
             parent: root,
             name: name.clone(),
             history: true,
+            encrypted: false,
         });
         let paged = |engine: &RealEngine| {
             engine
@@ -2643,6 +2674,90 @@ mod tests {
             std::fs::read(&saved).is_ok_and(|read| read == contents)
         });
         for (engine, dir) in [(alice, alice_dir), (bob, bob_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+    /// A channel kept under a key the server does not have: the one who
+    /// made it holds the key, a newcomer asks for it, and reads what was
+    /// said before they came once it is shared with them.
+    #[test]
+    #[ignore = "needs a live Fancy server and its SuperUser password"]
+    fn live_fancy_an_encrypted_channels_key_is_asked_for_and_shared() {
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        wait_for("the admin to connect", || {
+            admin.snapshot().connection == Connection::Connected
+        });
+        let name = format!("sealed-{}", std::process::id());
+        let root = admin.snapshot().current_channel.expect("the root");
+        admin.act(Action::CreateChannel {
+            parent: root,
+            name: name.clone(),
+            history: true,
+            encrypted: true,
+        });
+        let sealed = |engine: &RealEngine| {
+            engine
+                .snapshot()
+                .channels
+                .into_iter()
+                .find(|channel| channel.name.as_ref() == name)
+        };
+        wait_for("the channel, encrypted", || {
+            sealed(&admin).is_some_and(|channel| channel.encrypted && channel.history)
+        });
+        let channel = sealed(&admin).expect("the channel").id;
+        let room = Conversation::Channel(channel);
+        admin.join_channel(channel);
+        wait_for("the admin to be in it", || {
+            admin.snapshot().current_channel == Some(channel)
+        });
+        admin.open(room);
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        admin.send_message(room, "said before anybody came".to_owned());
+        wait_for("the admin's own message", || {
+            said(&admin, room, "said before anybody came").is_some()
+        });
+
+        let (late, late_dir) = fancy_client("SealedLate", None);
+        wait_for("the latecomer to connect", || sealed(&late).is_some());
+        late.join_channel(channel);
+        late.open(room);
+        wait_for("the latecomer to ask for the key", || {
+            admin
+                .key_requests(channel)
+                .iter()
+                .any(|asking| asking.name.as_ref() == "SealedLate")
+        });
+        assert!(
+            said(&late, room, "said before anybody came").is_none(),
+            "not readable without the key"
+        );
+        let asking = admin.key_requests(channel).remove(0);
+        admin.act(Action::AnswerKeyRequest {
+            channel,
+            hash: asking.hash.to_string(),
+            share: true,
+        });
+        wait_for("the request to be answered", || {
+            admin.key_requests(channel).is_empty()
+        });
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        admin.send_message(room, "said to both".to_owned());
+        wait_for("the latecomer to read what is said now", || {
+            said(&late, room, "said to both").is_some()
+        });
+        // And, with the key, what was kept from before they came.
+        late.open(room);
+        wait_for("the latecomer to read what was said before", || {
+            said(&late, room, "said before anybody came").is_some()
+        });
+
+        admin.act(Action::DeleteChannel { channel });
+        wait_for("the channel to go", || sealed(&late).is_none());
+        for (engine, dir) in [(admin, admin_dir), (late, late_dir)] {
             engine.shutdown();
             let _ = std::fs::remove_dir_all(dir);
         }
