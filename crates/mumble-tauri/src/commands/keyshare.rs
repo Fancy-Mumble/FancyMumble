@@ -38,99 +38,7 @@ pub(crate) async fn approve_key_share(
     channel_id: u32,
     peer_cert_hash: String,
 ) -> Result<(), String> {
-    use mumble_protocol::persistent::PchatProtocol;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    // Extract everything we need while holding the lock, then release it.
-    let (handle, exchange, share_requests_emit) = {
-        let __session = state.inner.snapshot();
-        let mut shared = __session.lock().map_err(|e| e.to_string())?;
-
-        // Remove the pending entry and capture its request_id.
-        let idx = shared
-            .pchat_ctx
-            .pending_key_shares
-            .iter()
-            .position(|p| p.channel_id == channel_id && p.peer_cert_hash == peer_cert_hash)
-            .ok_or("no pending key share for this channel/peer")?;
-        let removed = shared.pchat_ctx.pending_key_shares.remove(idx);
-        let request_id = removed.request_id;
-
-        // Collect payload for deferred emit outside the lock.
-        let share_requests_emit =
-            state::pchat::KeyShareRequestsChanged::pending(&shared, channel_id);
-
-        let pchat = shared
-            .pchat_ctx
-            .pchat
-            .as_ref()
-            .ok_or("pchat not initialised")?;
-
-        let peer_record = pchat
-            .key_manager
-            .get_peer(&peer_cert_hash)
-            .ok_or("peer public key not known")?;
-        let peer_x25519 = peer_record.dh_public;
-
-        let now_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
-
-        let mut wire_exchange = pchat
-            .key_manager
-            .distribute_key(
-                channel_id,
-                PchatProtocol::FancyV1FullArchive,
-                0,
-                &peer_cert_hash,
-                &peer_x25519,
-                request_id.as_deref(),
-                now_ms,
-            )
-            .map_err(|e| format!("failed to build key exchange: {e}"))?;
-
-        wire_exchange.sender_hash = pchat.own_cert_hash.clone();
-
-        let proto = state::pchat::wire_key_exchange_to_proto(&wire_exchange);
-
-        let handle = shared.conn.client_handle.clone().ok_or("not connected")?;
-
-        (handle, proto, share_requests_emit)
-    };
-
-    // Emit outside the lock: the view may call straight back in.
-    if let Some(event) = share_requests_emit {
-        event.emit();
-    }
-
-    // Send the key exchange to the peer.
-    handle
-        .send(mumble_protocol::command::SendPchatKeyExchange { exchange })
-        .await
-        .map_err(|e| format!("send failed: {e}"))?;
-
-    // Record the peer as a key holder locally so we don't prompt consent
-    // for them again on subsequent channel moves.
-    if let Ok(mut shared) = state.inner.snapshot().lock()
-        && let Some(ref mut pchat) = shared.pchat_ctx.pchat
-    {
-        pchat
-            .key_manager
-            .record_key_holder(channel_id, peer_cert_hash.clone());
-    }
-
-    // Report to the server that the peer now holds the key.
-    let report = mumble_protocol::proto::mumble_tcp::PchatKeyHolderReport {
-        channel_id: Some(channel_id),
-        cert_hash: Some(peer_cert_hash),
-        takeover_mode: None,
-    };
-    let _ = handle
-        .send(mumble_protocol::command::SendPchatKeyHolderReport { report })
-        .await;
-
-    Ok(())
+    state.approve_key_share(channel_id, peer_cert_hash).await
 }
 
 /// Dismiss a pending key-share request without sending the key.
@@ -140,25 +48,7 @@ pub(crate) fn dismiss_key_share(
     channel_id: u32,
     peer_cert_hash: String,
 ) -> Result<(), String> {
-    let share_requests_emit = {
-        let __session = state.inner.snapshot();
-        let mut shared = __session.lock().map_err(|e| e.to_string())?;
-
-        shared
-            .pchat_ctx
-            .pending_key_shares
-            .retain(|p| !(p.channel_id == channel_id && p.peer_cert_hash == peer_cert_hash));
-
-        // Collect payload for deferred emit outside the lock.
-        state::pchat::KeyShareRequestsChanged::pending(&shared, channel_id)
-    };
-
-    // Emit outside the lock: the view may call straight back in.
-    if let Some(event) = share_requests_emit {
-        event.emit();
-    }
-
-    Ok(())
+    state.dismiss_key_share(channel_id, &peer_cert_hash)
 }
 
 /// Ask the server for the list of key holders for a channel.

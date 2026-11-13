@@ -132,6 +132,12 @@ pub enum EngineEvent {
         /// Whether it was put on; `false` when it was taken off.
         added: bool,
     },
+    /// Who is asking for the key of an encrypted channel changed: read
+    /// [`EngineHandle::key_requests`] again.
+    KeyRequests {
+        /// The channel.
+        channel: u32,
+    },
     /// Somebody else put a poll to a channel.
     Poll(PollInfo),
     /// Somebody else answered a poll.
@@ -217,6 +223,28 @@ pub struct ChannelChange {
     pub description: Option<String>,
     /// The password it is entered with; empty lets anybody in.
     pub password: Option<String>,
+}
+
+/// What becomes of the messages of a channel being created.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum History {
+    /// Gone when they have been read: stock Mumble.
+    #[default]
+    None,
+    /// Kept by the server, under its own key, for whoever joins later.
+    OnServer,
+    /// Kept by the server sealed with a key it does not have. Those in
+    /// the channel pass the key on to those who join, when they agree to.
+    EndToEnd,
+}
+
+/// Somebody who joined an encrypted channel and asks for its key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyRequestInfo {
+    /// Who: their certificate's hash, which names them to an answer.
+    pub hash: String,
+    /// Their name.
+    pub name: String,
 }
 
 /// A file shared in a message.
@@ -602,6 +630,12 @@ impl EngineEvent {
     /// The rest of [`Self::from_core`]: what a server answers when asked.
     fn answer_from_core(event: CoreEvent) -> Option<Self> {
         Some(match event {
+            CoreEvent::PchatKeyShareRequested(payload) => Self::KeyRequests {
+                channel: payload.channel_id,
+            },
+            CoreEvent::PchatKeyShareRequestsChanged(payload) => Self::KeyRequests {
+                channel: payload.channel_id,
+            },
             CoreEvent::Poll(payload) => Self::Poll(PollInfo {
                 channel: payload.channel_id,
                 id: payload.poll_id,
@@ -696,6 +730,9 @@ pub struct ChannelInfo {
     /// Whether the server keeps what is said here, for those who come
     /// later.
     pub keeps_history: bool,
+    /// Whether what is kept is sealed with a key the server does not
+    /// have: only those in the channel who were given it can read it.
+    pub encrypted: bool,
 }
 
 impl From<ChannelEntry> for ChannelInfo {
@@ -708,6 +745,10 @@ impl From<ChannelEntry> for ChannelInfo {
             keeps_history: channel
                 .pchat_protocol
                 .is_some_and(|protocol| protocol != PchatProtocol::None),
+            encrypted: matches!(
+                channel.pchat_protocol,
+                Some(PchatProtocol::FancyV1FullArchive | PchatProtocol::SignalV1)
+            ),
         }
     }
 }
@@ -1492,6 +1533,38 @@ impl EngineHandle {
             .await
     }
 
+    /// Who is asking for the key of the encrypted channel `channel`.
+    pub fn key_requests(&self, channel: u32) -> Vec<KeyRequestInfo> {
+        self.state
+            .pending_key_shares(channel)
+            .into_iter()
+            .map(|pending| KeyRequestInfo {
+                hash: pending.peer_cert_hash,
+                name: pending.peer_name,
+            })
+            .collect()
+    }
+
+    /// Give the key of `channel` to the one asking for it under `hash`,
+    /// or with `share` false turn them down.
+    ///
+    /// # Errors
+    ///
+    /// When nobody is asking under that hash, or the key could not be
+    /// sent.
+    pub async fn answer_key_request(
+        &self,
+        channel: u32,
+        hash: &str,
+        share: bool,
+    ) -> Result<(), String> {
+        if share {
+            self.state.approve_key_share(channel, hash.to_owned()).await
+        } else {
+            self.state.dismiss_key_share(channel, hash)
+        }
+    }
+
     /// Put a poll to `channel`; says the id it goes by. The server passes
     /// it on to everybody else there and does not send it back: the
     /// caller already has it.
@@ -1862,9 +1935,8 @@ impl EngineHandle {
         self.state.register_user(session).await
     }
 
-    /// Create the channel `name` under `parent`. With `keep_history` the
-    /// server keeps what is said there, under its own key, and serves it to
-    /// whoever joins later; only a Fancy server can.
+    /// Create the channel `name` under `parent`, keeping its messages as
+    /// `history` says; only a Fancy server keeps any.
     ///
     /// # Errors
     ///
@@ -1873,7 +1945,7 @@ impl EngineHandle {
         &self,
         parent: u32,
         name: String,
-        keep_history: bool,
+        history: History,
     ) -> Result<(), String> {
         self.state
             .create_channel(
@@ -1883,7 +1955,11 @@ impl EngineHandle {
                 None,
                 None,
                 None,
-                keep_history.then(|| "server_managed".to_owned()),
+                match history {
+                    History::None => None,
+                    History::OnServer => Some("server_managed".to_owned()),
+                    History::EndToEnd => Some("fancy_v1_full_archive".to_owned()),
+                },
                 None,
                 None,
                 None,
