@@ -14,6 +14,7 @@ mod frame;
 mod friends;
 mod kit;
 mod later;
+mod members;
 mod menu;
 mod picker;
 mod rail;
@@ -135,6 +136,8 @@ struct Panels {
     friends: friends::Friends,
     /// The view's own settings, and their dialog.
     settings: settings::Settings,
+    /// Who is in the channel on screen, and the server's roles.
+    members: members::Panel,
 }
 
 impl Panels {
@@ -833,6 +836,7 @@ impl Shell {
             if self.chrome.hide_empty {
                 self.lay_out_column();
             }
+            self.list_members();
         }
         cx.notify();
     }
@@ -1145,6 +1149,7 @@ impl Shell {
             "picker" => self.toggle_picker(cx),
             "devices" => self.toggle_devices(cx),
             "certificates" => self.toggle_certificates(cx),
+            "members" => self.toggle_members(cx),
             "emoji" => self.emoji_for = Some(emoji::For::Composer),
             "permissions" => {
                 if let Some(channel) = self.snapshot.current_channel {
@@ -1220,6 +1225,7 @@ impl Shell {
             people.sort_by_cached_key(|at| users[*at].name.to_lowercase());
         }
         self.lay_out_column();
+        self.take_roles();
     }
 
     /// Work out the channel column's rows: each listed channel, and under

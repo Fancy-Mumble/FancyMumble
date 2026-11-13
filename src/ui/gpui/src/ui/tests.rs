@@ -2095,3 +2095,31 @@ fn a_second_factor_code_is_asked_for_after_a_refusal_and_sent_once(cx: &mut Test
         assert_eq!(shell.secrets.code.read(cx).text(), "", "not kept on screen");
     });
 }
+
+#[gpui::test]
+fn the_people_button_lists_who_is_here_under_their_roles(cx: &mut TestAppContext) {
+    use super::members::Row;
+
+    let (shell, _engine, cx) = shell(cx);
+    shell.read_with(cx, |shell, _| assert!(shell.panels.members.rows.is_empty()));
+    click(cx, "people");
+    shell.read_with(cx, |shell, _| {
+        let rows = &shell.panels.members.rows;
+        // Rin moderates; the other four have no role.
+        assert!(matches!(&rows[0], Row::Heading { name, count: 1, color: Some(_) } if name.as_ref() == "moderators"));
+        assert_eq!(rows[1], Row::Member(3));
+        assert!(matches!(&rows[2], Row::Heading { name, count: 4, color: None } if name.as_ref() == "Members"));
+        assert_eq!(rows.len(), 7);
+        // Her name wears the role's colour wherever it is drawn.
+        let rin = shell.snapshot.users.iter().find(|user| user.session == 3).expect("Rin");
+        assert!(shell.role_color(rin).is_some());
+        assert!(shell.sender_color(Some(2)).is_none());
+    });
+    // A click on a member opens the conversation with them, where there
+    // is no channel to list.
+    click(cx, "member-2");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.open, Some(Conversation::Direct(2)));
+        assert!(shell.panels.members.rows.is_empty());
+    });
+}

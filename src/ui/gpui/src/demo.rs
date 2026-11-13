@@ -9,8 +9,8 @@ use crate::engine::{
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
     Connection, Conversation, Engine, EngineEvent, Found, Listing, Message, Preview, Reaction,
-    Registered, SavedServer, Scheduled, ServerPing, Session, SessionEntry, Snapshot, Subject, User,
-    Voice, VoiceSettings, Window,
+    Registered, Role, SavedServer, Scheduled, ServerPing, Session, SessionEntry, Snapshot, Subject,
+    User, Voice, VoiceSettings, Window,
 };
 
 /// The local user's session in the demo server.
@@ -775,6 +775,18 @@ impl Engine for DemoEngine {
             groups,
             rules,
         }));
+    }
+
+    fn roles(&self) -> Vec<Role> {
+        if self.with_state(|state| state.plain) {
+            return Vec::new();
+        }
+        // Rin moderates, in the colour the server gave the role.
+        vec![Role {
+            name: "moderators".into(),
+            color: Some(gpui::rgb(0xe0_9a4b).into()),
+            members: vec![103],
+        }]
     }
 
     fn signal_available(&self) -> bool {

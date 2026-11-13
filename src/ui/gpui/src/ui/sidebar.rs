@@ -459,7 +459,11 @@ fn occupant_row(
                 .flex_1()
                 .min_w_0()
                 .truncate()
-                .text_color(if own { theme.c.muted } else { theme.c.text })
+                .text_color(shell.role_color(user).unwrap_or(if own {
+                    theme.c.muted
+                } else {
+                    theme.c.text
+                }))
                 .child(user.name.clone()),
         )
         .when(user.deafened && !own, |row| {

@@ -58,6 +58,11 @@ real engine and does text and voice.
   person said in a channel or all that the server keeps of it; your own
   comment and picture. A channel can be made to last only while somebody
   is in it.
+- **Members and roles.** The people button in the header lists who is in
+  the channel under the role the server files each of them under, and a
+  name wears its role's colour wherever it is drawn. Roles are the groups
+  of the server's root channel, which most servers show only to their
+  administrators; without them everybody is listed as a member.
 - **Friends.** Kept from somebody's menu, by their certificate, so they
   are the same person on any server; the list says who is here now and
   opens the conversation with one who is.
@@ -250,7 +255,7 @@ For development:
 | `FANCY_GPUI_DATA_DIR` | Keep every file here instead of the platform's place. |
 | `FANCY_GPUI_THEME`, `FANCY_GPUI_MODE` | Start in this theme (`dark`, `rose`, ...) and mode (`light`, `dark`), without choosing it. |
 | `FANCY_GPUI_DEMO_POLL` | With the demo engine: put a poll to the lounge. |
-| `FANCY_GPUI_OPEN` | Start with `picker`, `devices`, `certificates`, `permissions` or `editor` open. |
+| `FANCY_GPUI_OPEN` | Start with `picker`, `devices`, `certificates`, `permissions`, `members` or `editor` open. |
 | `FANCY_GPUI_CONNECT` | Connect at once as the saved identity with this id (`FANCY_GPUI_PASSWORD` for the server's password). |
 | `FANCY_GPUI_SAY` | With `FANCY_GPUI_CONNECT`: say this once connected. |
 | `FANCY_GPUI_FRAME` | `client` draws the window's own controls even where the compositor frames it. |

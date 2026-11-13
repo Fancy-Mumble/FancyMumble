@@ -555,6 +555,17 @@ pub(crate) struct KeyRequest {
     pub name: SharedString,
 }
 
+/// A role: a group of the server's root channel, which is what a server's
+/// operator names its people by.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Role {
+    pub name: SharedString,
+    /// The colour the server gave it, if it gave one.
+    pub color: Option<gpui::Hsla>,
+    /// The registered accounts in it.
+    pub members: Vec<u32>,
+}
+
 /// A message waiting on the server to be sent later.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Scheduled {
@@ -798,6 +809,10 @@ pub(crate) trait Engine: Send + Sync + 'static {
 
     /// Who is asking for the key of the encrypted channel `channel`.
     fn key_requests(&self, channel: ChannelId) -> Vec<KeyRequest>;
+
+    /// The server's roles, in the order it lists them. Empty where the
+    /// server keeps them to its administrators, or has none.
+    fn roles(&self) -> Vec<Role>;
 
     /// Whether channels sealed the Signal way can be made and read here:
     /// that takes a library that is not always installed.

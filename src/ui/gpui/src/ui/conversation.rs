@@ -115,49 +115,62 @@ pub(super) fn render(
         }))
         .child(header(shell, theme, cx))
         .child(
+            // The conversation, and beside it who is in it, if asked.
             div()
                 .flex_1()
                 .min_h_0()
                 .flex()
-                .flex_col()
-                .when_some(shell.welcome_to_show(), |column, welcome| {
-                    column.child(welcome_card(&welcome, theme, cx))
-                })
                 .child(
-                    list(
-                        shell.rows.clone(),
-                        cx.processor(|shell, row: usize, _, cx| shell.render_row(row, cx)),
-                    )
-                    .flex_1()
-                    .min_h_0(),
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .h_full()
+                        .flex()
+                        .flex_col()
+                        .when_some(shell.welcome_to_show(), |column, welcome| {
+                            column.child(welcome_card(&welcome, theme, cx))
+                        })
+                        .child(
+                            list(
+                                shell.rows.clone(),
+                                cx.processor(|shell, row: usize, _, cx| shell.render_row(row, cx)),
+                            )
+                            .flex_1()
+                            .min_h_0(),
+                        )
+                        .when_some(shell.notice.clone(), |column, notice| {
+                            column.child(notice_strip(notice, theme, cx))
+                        })
+                        .when_some(writing_line(&shell.writers()), |column, line| {
+                            column.child(
+                                div()
+                                    .debug_selector(|| "writing".to_owned())
+                                    .flex_none()
+                                    .px(px(30.0))
+                                    .text_size(px(12.0))
+                                    .text_color(theme.c.muted)
+                                    .child(line),
+                            )
+                        })
+                        .children(key_request_strips(shell, theme, cx))
+                        .when(shell.editing.is_some(), |column| {
+                            column.child(composer_strip(
+                                "pencil",
+                                "Changing a message. Enter saves it.".into(),
+                                theme,
+                                cx,
+                            ))
+                        })
+                        .when_some(shell.replying.clone(), |column, (_, said)| {
+                            column.child(composer_strip("reply", said, theme, cx))
+                        })
+                        .child(composer(shell, window, cx)),
                 )
-                .when_some(shell.notice.clone(), |column, notice| {
-                    column.child(notice_strip(notice, theme, cx))
-                })
-                .when_some(writing_line(&shell.writers()), |column, line| {
-                    column.child(
-                        div()
-                            .debug_selector(|| "writing".to_owned())
-                            .flex_none()
-                            .px(px(30.0))
-                            .text_size(px(12.0))
-                            .text_color(theme.c.muted)
-                            .child(line),
-                    )
-                })
-                .children(key_request_strips(shell, theme, cx))
-                .when(shell.editing.is_some(), |column| {
-                    column.child(composer_strip(
-                        "pencil",
-                        "Changing a message. Enter saves it.".into(),
-                        theme,
-                        cx,
-                    ))
-                })
-                .when_some(shell.replying.clone(), |column, (_, said)| {
-                    column.child(composer_strip("reply", said, theme, cx))
-                })
-                .child(composer(shell, window, cx)),
+                .when(
+                    matches!(shell.open, Some(Conversation::Channel(_)))
+                        && shell.panels.members.open,
+                    |body| body.child(super::members::render(shell, theme, cx)),
+                ),
         )
 }
 
@@ -312,6 +325,14 @@ fn header_tools(
         .when_some(people, |tools, people| {
             tools.child(
                 div()
+                    .id("people")
+                    .debug_selector(|| "people".to_owned())
+                    .rounded(theme.skin.radius_md)
+                    .cursor_pointer()
+                    .when(shell.panels.members.open, |button| {
+                        button.bg(theme.c.accent_soft)
+                    })
+                    .on_click(cx.listener(|shell, _, _, cx| shell.toggle_members(cx)))
                     .h(px(28.0))
                     .pl(px(9.0))
                     .pr(px(8.0))
@@ -731,7 +752,7 @@ impl Shell {
                     &body,
                     at,
                     picture.as_ref(),
-                    continues,
+                    (continues, self.sender_color(message.sender)),
                     under,
                     self.zone,
                     &theme,
@@ -1544,7 +1565,7 @@ fn their_message(
     body: &DrawnBody,
     at: Place<'_>,
     picture: Option<&Arc<gpui::Image>>,
-    continues: bool,
+    (continues, name_color): (bool, Option<Hsla>),
     under: Vec<AnyElement>,
     zone: Zone,
     theme: &Theme,
@@ -1599,6 +1620,8 @@ fn their_message(
                                     .font_weight(EMPHASIS)
                                     .text_size(px(13.0))
                                     .line_height(px(20.15))
+                                    // In their role's colour, if it has one.
+                                    .when_some(name_color, Styled::text_color)
                                     .child(message.sender_name.clone()),
                             )
                             // On the name's baseline.

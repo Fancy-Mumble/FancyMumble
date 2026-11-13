@@ -20,8 +20,8 @@ use crate::engine::{
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
     Connection, Conversation, Engine, EngineEvent, Found, Listing, Message, Preview, Reaction,
-    Registered, SavedServer, Scheduled, ServerPing, SessionEntry, Snapshot, Subject, User, Voice,
-    VoiceSettings, Window,
+    Registered, Role, SavedServer, Scheduled, ServerPing, SessionEntry, Snapshot, Subject, User,
+    Voice, VoiceSettings, Window,
 };
 use crate::store::Store;
 
@@ -54,6 +54,11 @@ struct Shared {
     /// The rules last read for a channel, whole: the groups go back to
     /// the server as they came, with the rules the view changed.
     acl: Mutex<Option<api::AclInfo>>,
+    /// The server's roles: the groups of its root channel. Asked for on
+    /// arriving; `roles_asked` is set while that answer is awaited, so a
+    /// refusal of it is not shown as if the user had asked for something.
+    roles: Mutex<Vec<Role>>,
+    roles_asked: std::sync::atomic::AtomicBool,
     /// Who the whisper key speaks to.
     whisper_target: Mutex<Option<api::WhisperTarget>>,
     /// The channel whose readers were last asked for.
@@ -81,7 +86,49 @@ impl Shared {
 
     /// Drop what was kept about the server on screen: another one's
     /// sessions, messages and reactions would be taken for it.
+    /// Ask for the server's roles, quietly: most servers tell only their
+    /// administrators, and that is not news.
+    fn ask_for_roles(self: &Arc<Self>, runtime: &tokio::runtime::Handle) {
+        self.roles_asked
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        let shared = Arc::clone(self);
+        drop(runtime.spawn(async move {
+            let _ = shared.engine.request_acl(ROOT).await;
+        }));
+    }
+
+    /// The root channel's groups, as roles.
+    fn take_roles(&self, acl: &api::AclInfo) {
+        let roles = acl
+            .groups
+            .iter()
+            // A leading tilde is the server's own bookkeeping.
+            .filter(|group| !group.name.starts_with('~'))
+            .map(|group| Role {
+                name: group.name.clone().into(),
+                color: group
+                    .color
+                    .as_deref()
+                    .and_then(crate::theme::parse_color)
+                    .map(Into::into),
+                members: group
+                    .add
+                    .iter()
+                    .chain(&group.inherited_members)
+                    .copied()
+                    .filter(|account| !group.remove.contains(account))
+                    .collect(),
+            })
+            .collect();
+        *self.roles.lock().unwrap_or_else(PoisonError::into_inner) = roles;
+        self.tell(EngineEvent::StateChanged);
+    }
+
     fn forget_server(&self) {
+        self.roles
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
         self.first_read
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -107,6 +154,16 @@ impl Shared {
     /// A channel's rules arrived: keep them whole, and show the view its
     /// part of them.
     fn take_acl(&self, acl: api::AclInfo) {
+        if acl.channel == ROOT {
+            self.take_roles(&acl);
+            // The answer to the adapter's own question is not the user's.
+            if self
+                .roles_asked
+                .swap(false, std::sync::atomic::Ordering::Relaxed)
+            {
+                return;
+            }
+        }
         let shown = Acl {
             channel: acl.channel,
             inherit: acl.inherit,
@@ -357,6 +414,7 @@ impl Shared {
                 self.tell(EngineEvent::Notice(None));
                 self.tell(EngineEvent::StateChanged);
                 self.open_current_conversation(runtime);
+                self.ask_for_roles(runtime);
             }
             api::EngineEvent::Disconnected { reason } => {
                 self.forget_server();
@@ -399,6 +457,17 @@ impl Shared {
             }
             api::EngineEvent::UnreadChanged => self.tell(EngineEvent::StateChanged),
             api::EngineEvent::Denied { reason } => {
+                // The roles were asked for unprompted; being refused them
+                // is how most servers answer, and nothing to show. A
+                // refusal of something else in the same moment is lost
+                // with it, which is the price of the server not saying
+                // what it refuses.
+                if self
+                    .roles_asked
+                    .swap(false, std::sync::atomic::Ordering::Relaxed)
+                {
+                    return;
+                }
                 let reason = reason.unwrap_or_else(|| "The server did not allow that.".to_owned());
                 self.tell(EngineEvent::Notice(Some(reason.into())));
             }
@@ -624,6 +693,8 @@ impl RealEngine {
             readers_asked: Mutex::default(),
             whisper_target: Mutex::default(),
             acl: Mutex::default(),
+            roles: Mutex::default(),
+            roles_asked: std::sync::atomic::AtomicBool::new(false),
             polls: Mutex::default(),
             wanted: Mutex::default(),
             retries: std::sync::atomic::AtomicU32::new(0),
@@ -930,6 +1001,14 @@ impl Engine for RealEngine {
     fn request_acl(&self, channel: u32) {
         let engine = self.shared.engine.clone();
         self.spawn(async move { engine.request_acl(channel).await });
+    }
+
+    fn roles(&self) -> Vec<Role> {
+        self.shared
+            .roles
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     fn signal_available(&self) -> bool {
@@ -1822,6 +1901,9 @@ fn merged_groups(read: Vec<api::AclGroupInfo>, changed: Vec<AclGroup>) -> Vec<ap
     }
     groups
 }
+
+/// The channel every server has, at the top of its tree.
+const ROOT: u32 = 0;
 
 /// A waiting message, under the view's names.
 fn scheduled_of(message: api::ScheduledInfo) -> Scheduled {
