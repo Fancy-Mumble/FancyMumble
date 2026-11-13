@@ -530,3 +530,66 @@ fn the_device_panel_lists_devices_and_takes_a_choice(cx: &mut TestAppContext) {
     click(cx, "audio-devices");
     shell.read_with(cx, |shell, _| assert!(!shell.devices_open));
 }
+
+#[gpui::test]
+fn push_to_talk_transmits_while_its_key_is_held(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    click(cx, "audio-devices");
+    click(cx, "push-to-talk");
+    assert!(engine.voice_settings().push_to_talk);
+    // Choose the key: the next one pressed.
+    click(cx, "push-to-talk-key");
+    cx.simulate_keystrokes("f9");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.ptt_key.as_ref().map(AsRef::as_ref), Some("f9"));
+        assert!(!shell.choosing_ptt_key);
+    });
+    assert_eq!(
+        engine.snapshot().voice,
+        Voice::Off,
+        "choosing the key is not pressing it"
+    );
+
+    let key = gpui::Keystroke::parse("f9").expect("a key");
+    cx.simulate_event(gpui::KeyDownEvent {
+        keystroke: key.clone(),
+        is_held: false,
+    });
+    cx.run_until_parked();
+    assert_eq!(engine.snapshot().voice, Voice::On, "held: transmitting");
+    cx.simulate_event(gpui::KeyUpEvent { keystroke: key });
+    cx.run_until_parked();
+    assert_eq!(engine.snapshot().voice, Voice::Muted, "released: silent");
+}
+
+#[gpui::test]
+fn another_key_is_not_push_to_talk_and_still_types(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    click(cx, "audio-devices");
+    click(cx, "push-to-talk");
+    click(cx, "push-to-talk-key");
+    cx.simulate_keystrokes("f9");
+    click(cx, "audio-devices");
+    click(cx, "input-Message #lounge");
+    cx.simulate_keystrokes("h i");
+    assert_eq!(engine.snapshot().voice, Voice::Off);
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(shell.composer.read(cx).text(), "hi")
+    });
+}
+
+#[gpui::test]
+fn the_voice_switches_and_the_activation_level_reach_the_engine(cx: &mut TestAppContext) {
+    let (_shell, engine, cx) = shell(cx);
+    click(cx, "audio-devices");
+    let before = engine.voice_settings();
+    click(cx, "noise-suppression");
+    click(cx, "automatic-gain");
+    click(cx, "threshold-up");
+    let after = engine.voice_settings();
+    assert_eq!(after.noise_suppression, !before.noise_suppression);
+    assert_eq!(after.automatic_gain, !before.automatic_gain);
+    assert!(after.threshold > before.threshold);
+    click(cx, "threshold-down");
+    assert!((engine.voice_settings().threshold - before.threshold).abs() < 1e-6);
+}

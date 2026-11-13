@@ -14,7 +14,7 @@ use mumble_tauri_lib::engine_api::{
 
 use crate::engine::{
     AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation, Engine,
-    EngineEvent, Message, SavedServer, ServerPing, Snapshot, User, Voice,
+    EngineEvent, Message, SavedServer, ServerPing, Snapshot, User, Voice, VoiceSettings,
 };
 use crate::store::Store;
 
@@ -512,6 +512,32 @@ impl Engine for RealEngine {
         {
             self.shared.tell(EngineEvent::Notice(Some(reason.into())));
         }
+    }
+
+    fn voice_settings(&self) -> VoiceSettings {
+        let voice = self.shared.engine.voice_settings();
+        VoiceSettings {
+            push_to_talk: voice.push_to_talk,
+            threshold: voice.activation_threshold,
+            noise_suppression: voice.noise_suppression,
+            automatic_gain: voice.automatic_gain,
+        }
+    }
+
+    fn set_voice_settings(&self, settings: VoiceSettings) {
+        if let Err(reason) = self.shared.engine.set_voice_settings(api::VoiceSettings {
+            push_to_talk: settings.push_to_talk,
+            activation_threshold: settings.threshold,
+            noise_suppression: settings.noise_suppression,
+            automatic_gain: settings.automatic_gain,
+        }) {
+            self.shared.tell(EngineEvent::Notice(Some(reason.into())));
+        }
+    }
+
+    fn push_to_talk(&self, held: bool) {
+        let engine = self.shared.engine.clone();
+        self.spawn(async move { engine.push_to_talk(held).await });
     }
 
     fn shutdown(&self) {

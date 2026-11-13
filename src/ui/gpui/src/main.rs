@@ -139,6 +139,14 @@ fn start_engine() -> (Arc<dyn engine::Engine>, Option<store::Store>) {
             let store = store::Store::new(dir);
             // The devices chosen last time, before voice can be turned on.
             let stored = store.settings();
+            if let Some(voice) = stored.voice {
+                engine.set_voice_settings(engine::VoiceSettings {
+                    push_to_talk: voice.push_to_talk,
+                    threshold: voice.threshold,
+                    noise_suppression: voice.noise_suppression,
+                    automatic_gain: voice.automatic_gain,
+                });
+            }
             if stored.input_device.is_some() || stored.output_device.is_some() {
                 engine.choose_devices(engine::ChosenDevices {
                     input: stored.input_device.map(Into::into),

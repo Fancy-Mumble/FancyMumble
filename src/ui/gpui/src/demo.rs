@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use crate::engine::{
     AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation, Engine,
-    EngineEvent, Message, SavedServer, ServerPing, Session, Snapshot, User, Voice,
+    EngineEvent, Message, SavedServer, ServerPing, Session, Snapshot, User, Voice, VoiceSettings,
 };
 
 /// The local user's session in the demo server.
@@ -31,6 +31,7 @@ struct State {
     deafened: bool,
     servers: Vec<SavedServer>,
     devices: ChosenDevices,
+    voice_settings: VoiceSettings,
     current_channel: ChannelId,
     channels: Vec<Channel>,
     users: Vec<User>,
@@ -134,6 +135,12 @@ impl State {
             voice: Voice::Off,
             deafened: false,
             devices: ChosenDevices::default(),
+            voice_settings: VoiceSettings {
+                push_to_talk: false,
+                threshold: 0.01,
+                noise_suppression: true,
+                automatic_gain: true,
+            },
             servers: vec![
                 saved("magical-alex", "magical.rocks", "Alex", true),
                 saved("magical-work", "magical.rocks", "Alex (work)", true),
@@ -387,6 +394,32 @@ impl Engine for DemoEngine {
 
     fn choose_devices(&self, devices: ChosenDevices) {
         self.with_state(|state| state.devices = devices);
+    }
+
+    fn voice_settings(&self) -> VoiceSettings {
+        self.with_state(|state| state.voice_settings)
+    }
+
+    fn set_voice_settings(&self, settings: VoiceSettings) {
+        self.with_state(|state| state.voice_settings = settings);
+    }
+
+    fn push_to_talk(&self, held: bool) {
+        // Held is "transmitting": the demo shows it as voice on, and as the
+        // local user talking.
+        let changed = self.with_state(|state| {
+            let voice = if held { Voice::On } else { Voice::Muted };
+            let changed = state.voice != voice;
+            state.voice = voice;
+            changed
+        });
+        if changed {
+            self.tell(EngineEvent::StateChanged);
+            self.tell(EngineEvent::UserTalking {
+                session: OWN,
+                talking: held,
+            });
+        }
     }
 }
 

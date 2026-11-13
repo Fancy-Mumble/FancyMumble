@@ -253,6 +253,21 @@ pub struct AudioDevices {
     pub outputs: Vec<AudioDeviceInfo>,
 }
 
+/// How the microphone is used.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VoiceSettings {
+    /// Transmit only while the push-to-talk key is held, instead of
+    /// whenever the microphone hears something.
+    pub push_to_talk: bool,
+    /// How loud the microphone must be before it counts as speech, from
+    /// 0.0 to 1.0. Not used with push to talk.
+    pub activation_threshold: f32,
+    /// Whether background noise is filtered out.
+    pub noise_suppression: bool,
+    /// Whether quiet speech is brought up to a common level.
+    pub automatic_gain: bool,
+}
+
 /// Who to connect as, and where.
 #[derive(Debug, Clone, Default)]
 pub struct ConnectTarget {
@@ -590,6 +605,45 @@ impl EngineHandle {
         self.state.apply_audio_settings(settings)
     }
 
+    /// How the microphone is used.
+    pub fn voice_settings(&self) -> VoiceSettings {
+        let settings = self.state.audio_settings();
+        VoiceSettings {
+            push_to_talk: settings.push_to_talk,
+            activation_threshold: settings.vad_threshold,
+            noise_suppression: settings.noise_suppression,
+            automatic_gain: settings.auto_gain,
+        }
+    }
+
+    /// Change how the microphone is used. Takes effect at once if voice is
+    /// on.
+    ///
+    /// # Errors
+    ///
+    /// When the capture pipeline could not be restarted.
+    pub fn set_voice_settings(&self, voice: VoiceSettings) -> Result<(), String> {
+        let mut settings = self.state.audio_settings();
+        settings.push_to_talk = voice.push_to_talk;
+        settings.vad_threshold = voice.activation_threshold.clamp(0.0, 1.0);
+        settings.noise_suppression = voice.noise_suppression;
+        settings.auto_gain = voice.automatic_gain;
+        self.state.apply_audio_settings(settings)
+    }
+
+    /// The push-to-talk key went down (`held`) or came up.
+    ///
+    /// # Errors
+    ///
+    /// When not connected, or the microphone cannot be opened.
+    pub async fn push_to_talk(&self, held: bool) -> Result<(), String> {
+        if held {
+            self.state.push_to_talk_start().await
+        } else {
+            self.state.push_to_talk_end().await
+        }
+    }
+
     /// Ask the server at `host:port` whether it is up, without connecting.
     pub async fn ping(host: &str, port: u16) -> PingInfo {
         let answer = crate::state::server_ping::ping_server(host, port).await;
@@ -762,6 +816,19 @@ mod tests {
         assert!(engine.channels().is_empty() && engine.users().is_empty());
         assert!(engine.own_session().is_none() && engine.current_channel().is_none());
         assert!(engine.messages(0).is_empty());
+        let mut voice = engine.voice_settings();
+        assert!(!voice.push_to_talk, "voice activation is the default");
+        voice.push_to_talk = true;
+        voice.activation_threshold = 7.0;
+        engine
+            .set_voice_settings(voice)
+            .expect("nothing to restart");
+        let voice = engine.voice_settings();
+        assert!(voice.push_to_talk);
+        assert!(
+            (voice.activation_threshold - 1.0).abs() < f32::EPSILON,
+            "a threshold is held within its range"
+        );
         assert_eq!(engine.selected_devices(), (None, None));
         engine
             .select_devices(None, Some("Somewhere".to_owned()))

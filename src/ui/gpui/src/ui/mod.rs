@@ -26,9 +26,9 @@ use gpui::{
 
 use crate::engine::{
     AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation, Engine, EngineEvent,
-    Message, SavedServer, Session, Snapshot, User,
+    Message, SavedServer, Session, Snapshot, User, VoiceSettings,
 };
-use crate::store::{Settings, Store};
+use crate::store::{Settings, Store, StoredVoice};
 use crate::theme::{ActiveTheme, Catalog, Mode};
 use text_input::{InputEvent, TextInput};
 
@@ -84,6 +84,17 @@ pub(crate) struct Shell {
     devices: Option<AudioDevices>,
     /// The devices in use.
     chosen_devices: ChosenDevices,
+    /// How the microphone is used.
+    voice_settings: VoiceSettings,
+    /// The push-to-talk key, as GPUI names it.
+    ptt_key: Option<gpui::SharedString>,
+    /// Whether the next key pressed becomes the push-to-talk key.
+    choosing_ptt_key: bool,
+    /// Whether the push-to-talk key is down.
+    ptt_held: bool,
+    /// The window's own focus: where keys go when no field has them, so
+    /// push to talk works without clicking into anything.
+    focus: gpui::FocusHandle,
     _events: Task<()>,
     _subscriptions: Vec<Subscription>,
 }
@@ -116,6 +127,10 @@ impl Shell {
         // whenever the list changes or the view returns to it.
         engine.refresh_pings();
         let events = Self::listen(engine.events(), cx);
+        let ptt_key = store
+            .as_ref()
+            .and_then(|store| store.settings().push_to_talk_key)
+            .map(Into::into);
         let mut shell = Self {
             snapshot: engine.snapshot(),
             servers: engine.saved_servers(),
@@ -140,6 +155,11 @@ impl Shell {
             devices_open: false,
             devices: None,
             chosen_devices: engine.chosen_devices(),
+            voice_settings: engine.voice_settings(),
+            ptt_key,
+            choosing_ptt_key: false,
+            ptt_held: false,
+            focus: cx.focus_handle(),
             engine,
             _events: events,
             _subscriptions: subscriptions,
@@ -436,6 +456,47 @@ impl Shell {
         self.remember_settings(cx);
     }
 
+    /// A key went down anywhere in the window: the push-to-talk key, or the
+    /// key that is to become it.
+    fn on_key_down(&mut self, event: &gpui::KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+        let key = event.keystroke.key.as_str();
+        if self.choosing_ptt_key {
+            self.choosing_ptt_key = false;
+            // Escape keeps the key there was.
+            if key != "escape" {
+                self.ptt_key = Some(key.to_owned().into());
+                self.remember_settings(cx);
+            }
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
+        if self.is_ptt_key(key) {
+            // Held keys repeat; only the first press is a press.
+            if !std::mem::replace(&mut self.ptt_held, true) {
+                self.engine.push_to_talk(true);
+            }
+            cx.stop_propagation();
+        }
+    }
+
+    fn on_key_up(&mut self, event: &gpui::KeyUpEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if self.is_ptt_key(event.keystroke.key.as_str()) && std::mem::take(&mut self.ptt_held) {
+            self.engine.push_to_talk(false);
+            cx.stop_propagation();
+        }
+    }
+
+    /// Whether `key` is the push-to-talk key and push to talk is on.
+    fn is_ptt_key(&self, key: &str) -> bool {
+        self.voice_settings.push_to_talk
+            && self.snapshot.connection == Connection::Connected
+            && self
+                .ptt_key
+                .as_ref()
+                .is_some_and(|chosen| chosen.as_ref() == key)
+    }
+
     /// Write the view's settings out: the theme and the audio devices.
     fn remember_settings(&mut self, cx: &mut Context<Self>) {
         let Some(store) = &self.store else { return };
@@ -449,6 +510,13 @@ impl Shell {
             }),
             input_device: name(&self.chosen_devices.input),
             output_device: name(&self.chosen_devices.output),
+            voice: Some(StoredVoice {
+                push_to_talk: self.voice_settings.push_to_talk,
+                threshold: self.voice_settings.threshold,
+                noise_suppression: self.voice_settings.noise_suppression,
+                automatic_gain: self.voice_settings.automatic_gain,
+            }),
+            push_to_talk_key: name(&self.ptt_key),
         };
         if let Err(error) = store.save_settings(&settings) {
             self.notice = Some(format!("The settings could not be remembered: {error}").into());
@@ -462,6 +530,10 @@ impl Render for Shell {
         div()
             .size_full()
             .relative()
+            .track_focus(&self.focus)
+            // Before any field sees the key: push to talk works while typing.
+            .capture_key_down(cx.listener(Self::on_key_down))
+            .capture_key_up(cx.listener(Self::on_key_up))
             .flex()
             .flex_col()
             .bg(theme.c.bg0)

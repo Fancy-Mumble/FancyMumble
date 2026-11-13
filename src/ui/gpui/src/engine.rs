@@ -97,6 +97,17 @@ pub(crate) struct ChosenDevices {
     pub output: Option<SharedString>,
 }
 
+/// How the microphone is used.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct VoiceSettings {
+    /// Transmit only while the push-to-talk key is held.
+    pub push_to_talk: bool,
+    /// How loud the microphone must be to count as speech, 0.0 to 1.0.
+    pub threshold: f32,
+    pub noise_suppression: bool,
+    pub automatic_gain: bool,
+}
+
 /// One channel of the server's tree.
 #[derive(Debug, Clone)]
 pub(crate) struct Channel {
@@ -265,6 +276,15 @@ pub(crate) trait Engine: Send + Sync + 'static {
 
     /// Use these devices from now on.
     fn choose_devices(&self, devices: ChosenDevices);
+
+    /// How the microphone is used.
+    fn voice_settings(&self) -> VoiceSettings;
+
+    /// Change how the microphone is used.
+    fn set_voice_settings(&self, settings: VoiceSettings);
+
+    /// The push-to-talk key went down (`held`) or came up.
+    fn push_to_talk(&self, held: bool);
 
     /// The application is closing: write out what is held only in memory.
     fn shutdown(&self) {}

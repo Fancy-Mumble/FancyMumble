@@ -53,7 +53,7 @@ impl From<StoredServer> for SavedServer {
 }
 
 /// The view's settings.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Settings {
     /// The theme's catalogue id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -67,6 +67,21 @@ pub(crate) struct Settings {
     /// The chosen speaker; absent for the system's default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_device: Option<String>,
+    /// How the microphone is used; absent until it has been changed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voice: Option<StoredVoice>,
+    /// The push-to-talk key, as GPUI names it (`f9`, `space`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub push_to_talk_key: Option<String>,
+}
+
+/// How the microphone is used, as it is written to disk.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub(crate) struct StoredVoice {
+    pub push_to_talk: bool,
+    pub threshold: f32,
+    pub noise_suppression: bool,
+    pub automatic_gain: bool,
 }
 
 /// The files, in one directory.
@@ -185,6 +200,13 @@ mod tests {
             mode: Some("light".to_owned()),
             input_device: None,
             output_device: Some("USB Headset".to_owned()),
+            voice: Some(StoredVoice {
+                push_to_talk: true,
+                threshold: 0.02,
+                noise_suppression: false,
+                automatic_gain: true,
+            }),
+            push_to_talk_key: Some("f9".to_owned()),
         };
         store
             .save_settings(&chosen)
