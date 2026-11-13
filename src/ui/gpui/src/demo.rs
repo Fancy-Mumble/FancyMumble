@@ -323,6 +323,10 @@ impl State {
                 threshold: 0.01,
                 noise_suppression: true,
                 automatic_gain: true,
+                input_volume: 1.0,
+                output_volume: 1.0,
+                bitrate_bps: 72_000,
+                voice_over_tcp: false,
             },
             servers: vec![
                 saved("magical-alex", "magical.rocks", "Alex", true),

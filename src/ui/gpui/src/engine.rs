@@ -116,6 +116,29 @@ pub(crate) struct VoiceSettings {
     pub threshold: f32,
     pub noise_suppression: bool,
     pub automatic_gain: bool,
+    /// How loud the microphone is sent: 1.0 as captured.
+    #[serde(default = "as_it_is")]
+    pub input_volume: f32,
+    /// How loud everybody is played: 1.0 as sent.
+    #[serde(default = "as_it_is")]
+    pub output_volume: f32,
+    /// How many bits a second voice is encoded at.
+    #[serde(default = "usual_bitrate")]
+    pub bitrate_bps: u32,
+    /// Whether voice travels over TCP, for a network that blocks UDP.
+    #[serde(default)]
+    pub voice_over_tcp: bool,
+}
+
+/// A volume that changes nothing: what settings written before there was
+/// one are read as.
+fn as_it_is() -> f32 {
+    1.0
+}
+
+/// The bitrate the engine starts with.
+fn usual_bitrate() -> u32 {
+    72_000
 }
 
 /// Something the user asks of the server about a user or a channel, or of

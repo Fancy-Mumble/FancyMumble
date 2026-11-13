@@ -44,9 +44,10 @@ real engine and does text and voice.
   server list; export one to carry it to another machine, import one,
   delete one (asked twice).
 - **Voice.** The microphone button turns voice on, then mutes and unmutes;
-  the headphones deafen. Devices, push to talk, the activation threshold,
-  noise suppression and automatic gain are behind the sliders button on
-  the user tile.
+  the headphones deafen. Devices, push to talk, the activation level,
+  noise suppression, automatic gain, input and output volume, voice
+  quality and voice over TCP are behind the sliders button on the user
+  tile.
 - **Look.** The thirteen themes in light and dark, from the picker in the
   band. Theme, devices and voice settings are remembered.
 - **Keys.** `Ctrl+F` search, `Escape` close what is open, `Ctrl+Shift+T`

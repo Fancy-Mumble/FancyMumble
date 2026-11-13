@@ -29,6 +29,32 @@ pub(super) fn stepped_threshold(threshold: f32, up: bool) -> f32 {
     stepped.clamp(THRESHOLD_RANGE.0, THRESHOLD_RANGE.1)
 }
 
+/// A volume as a whole percentage.
+fn percent(volume: f32) -> String {
+    format!("{:.0}%", volume * 100.0)
+}
+
+/// A volume a tenth louder or quieter, from silent to twice as loud.
+pub(super) fn stepped_volume(volume: f32, up: bool) -> f32 {
+    let tenths = (volume * 10.0).round() + if up { 1.0 } else { -1.0 };
+    (tenths / 10.0).clamp(0.0, 2.0)
+}
+
+/// The bitrates voice is offered at, from frugal to more than speech
+/// needs.
+const BITRATES: &[u32] = &[16_000, 24_000, 40_000, 56_000, 72_000, 96_000, 128_000];
+
+/// The next bitrate up or down from `bitrate`, which need not be one of
+/// those offered.
+pub(super) fn stepped_bitrate(bitrate: u32, up: bool) -> u32 {
+    let next = if up {
+        BITRATES.iter().find(|offered| **offered > bitrate)
+    } else {
+        BITRATES.iter().rev().find(|offered| **offered < bitrate)
+    };
+    next.copied().unwrap_or(bitrate)
+}
+
 impl Shell {
     /// Change one of the voice settings and remember it.
     fn change_voice(&mut self, change: impl FnOnce(&mut VoiceSettings), cx: &mut Context<Self>) {
@@ -128,8 +154,16 @@ pub(super) fn render(
             cx,
         ))
         .when(!shell.voice_settings.push_to_talk, |panel| {
-            panel.child(sensitivity_row(shell.voice_settings.threshold, theme, cx))
+            panel.child(level_row(
+                "threshold",
+                "Activation level",
+                format!("{:.1}%", shell.voice_settings.threshold * 100.0),
+                |voice, up| voice.threshold = stepped_threshold(voice.threshold, up),
+                theme,
+                cx,
+            ))
         })
+        .children(loudness_rows(shell, theme, cx))
         .child(heading("Microphone", theme))
         .children(rows(
             Kind::Input,
@@ -146,6 +180,48 @@ pub(super) fn render(
             theme,
             cx,
         ))
+}
+
+/// How loud, how good and by which road voice travels.
+fn loudness_rows(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> [gpui::AnyElement; 4] {
+    let voice = &shell.voice_settings;
+    [
+        level_row(
+            "input-volume",
+            "Input volume",
+            percent(voice.input_volume),
+            |voice, up| voice.input_volume = stepped_volume(voice.input_volume, up),
+            theme,
+            cx,
+        )
+        .into_any_element(),
+        level_row(
+            "output-volume",
+            "Output volume",
+            percent(voice.output_volume),
+            |voice, up| voice.output_volume = stepped_volume(voice.output_volume, up),
+            theme,
+            cx,
+        )
+        .into_any_element(),
+        level_row(
+            "bitrate",
+            "Voice quality",
+            format!("{} kbit/s", voice.bitrate_bps / 1000),
+            |voice, up| voice.bitrate_bps = stepped_bitrate(voice.bitrate_bps, up),
+            theme,
+            cx,
+        )
+        .into_any_element(),
+        toggle(
+            "voice-over-tcp",
+            "Send voice over TCP",
+            voice.voice_over_tcp,
+            theme,
+            cx,
+        )
+        .into_any_element(),
+    ]
 }
 
 /// A setting that is on or off.
@@ -174,6 +250,7 @@ fn toggle(
                 |voice| match id {
                     "push-to-talk" => voice.push_to_talk = !voice.push_to_talk,
                     "noise-suppression" => voice.noise_suppression = !voice.noise_suppression,
+                    "voice-over-tcp" => voice.voice_over_tcp = !voice.voice_over_tcp,
                     _ => voice.automatic_gain = !voice.automatic_gain,
                 },
                 cx,
@@ -242,17 +319,23 @@ fn push_to_talk_row(
     })
 }
 
-/// How loud the microphone must be to count as speech.
-fn sensitivity_row(
-    threshold: f32,
+/// A setting that goes up and down in steps: its name, what it stands at,
+/// and a button either side. `id` names the buttons `<id>-down` and
+/// `<id>-up`.
+fn level_row(
+    id: &'static str,
+    name: &'static str,
+    stands_at: String,
+    step_it: fn(&mut VoiceSettings, bool),
     theme: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     let hover = theme.c.hover;
-    let step = |id: &'static str, glyph: &'static str, up: bool, cx: &mut Context<Shell>| {
+    let step = |glyph: &'static str, up: bool, cx: &mut Context<Shell>| {
+        let way = if up { "up" } else { "down" };
         div()
-            .id(id)
-            .debug_selector(move || id.to_owned())
+            .id((id, usize::from(up)))
+            .debug_selector(move || format!("{id}-{way}"))
             .size(px(22.0))
             .rounded(theme.skin.radius_sm)
             .flex()
@@ -261,10 +344,7 @@ fn sensitivity_row(
             .cursor_pointer()
             .hover(move |style| style.bg(hover))
             .on_click(cx.listener(move |shell, _, _, cx| {
-                shell.change_voice(
-                    |voice| voice.threshold = stepped_threshold(voice.threshold, up),
-                    cx,
-                );
+                shell.change_voice(|voice| step_it(voice, up), cx);
             }))
             .child(icon(glyph, 12.0, theme.c.muted))
     };
@@ -275,18 +355,18 @@ fn sensitivity_row(
         .gap(px(6.0))
         .px(px(8.0))
         .text_size(px(13.0))
-        .child(div().flex_1().min_w_0().child("Activation level"))
-        .child(step("threshold-down", "minus", false, cx))
+        .child(div().flex_1().min_w_0().child(name))
+        .child(step("minus", false, cx))
         .child(
             div()
-                .min_w(px(44.0))
+                .min_w(px(58.0))
                 .flex()
                 .justify_center()
                 .text_size(px(12.0))
                 .text_color(theme.c.muted)
-                .child(format!("{:.1}%", threshold * 100.0)),
+                .child(stands_at),
         )
-        .child(step("threshold-up", "plus", true, cx))
+        .child(step("plus", true, cx))
 }
 
 fn heading(text: &'static str, theme: &Theme) -> impl IntoElement + use<> {

@@ -196,6 +196,10 @@ mod tests {
                 threshold: 0.02,
                 noise_suppression: false,
                 automatic_gain: true,
+                input_volume: 1.2,
+                output_volume: 0.8,
+                bitrate_bps: 40_000,
+                voice_over_tcp: true,
             }),
             push_to_talk_key: Some("f9".to_owned()),
         };

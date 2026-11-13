@@ -987,6 +987,10 @@ impl Engine for RealEngine {
             threshold: voice.activation_threshold,
             noise_suppression: voice.noise_suppression,
             automatic_gain: voice.automatic_gain,
+            input_volume: voice.input_volume,
+            output_volume: voice.output_volume,
+            bitrate_bps: voice.bitrate_bps,
+            voice_over_tcp: voice.voice_over_tcp,
         }
     }
 
@@ -996,6 +1000,10 @@ impl Engine for RealEngine {
             activation_threshold: settings.threshold,
             noise_suppression: settings.noise_suppression,
             automatic_gain: settings.automatic_gain,
+            input_volume: settings.input_volume,
+            output_volume: settings.output_volume,
+            bitrate_bps: settings.bitrate_bps,
+            voice_over_tcp: settings.voice_over_tcp,
         }) {
             self.shared.tell(EngineEvent::Notice(Some(reason.into())));
         }

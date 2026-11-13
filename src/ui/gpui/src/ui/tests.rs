@@ -604,6 +604,17 @@ fn the_voice_switches_and_the_activation_level_reach_the_engine(cx: &mut TestApp
     assert!(after.threshold > before.threshold);
     click(cx, "threshold-down");
     assert!((engine.voice_settings().threshold - before.threshold).abs() < 1e-6);
+
+    click(cx, "input-volume-up");
+    click(cx, "output-volume-down");
+    click(cx, "output-volume-down");
+    click(cx, "bitrate-down");
+    click(cx, "voice-over-tcp");
+    let after = engine.voice_settings();
+    assert!((after.input_volume - 1.1).abs() < 1e-6);
+    assert!((after.output_volume - 0.8).abs() < 1e-6);
+    assert_eq!(after.bitrate_bps, 56_000);
+    assert!(after.voice_over_tcp);
 }
 
 #[gpui::test]
