@@ -205,6 +205,9 @@ fn header(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoEle
                     .child(label("Join", theme)),
             )
         })
+        .when(shell.pins > 0, |header| {
+            header.child(pins_button(shell, theme, cx))
+        })
         .when_some(people, |header, people| {
             header.child(
                 div()
@@ -220,6 +223,44 @@ fn header(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoEle
                     ),
             )
         })
+}
+
+/// How many messages are pinned; a click shows only those, or all again.
+fn pins_button(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+    let on = shell.only_pinned;
+    let hover = theme.c.hover;
+    div()
+        .id("pins")
+        .debug_selector(|| "pins".to_owned())
+        .h(px(28.0))
+        .px(px(8.0))
+        .flex()
+        .items_center()
+        .gap(px(6.0))
+        .rounded(theme.skin.radius_md)
+        .cursor_pointer()
+        .when(on, |pins| pins.bg(theme.c.accent_soft))
+        .hover(move |style| style.bg(hover))
+        .on_click(cx.listener(|shell, _, _, cx| {
+            shell.only_pinned = !shell.only_pinned;
+            shell.reload_messages(cx);
+            cx.notify();
+        }))
+        .child(icon(
+            "pin",
+            14.0,
+            if on {
+                theme.c.accent_text
+            } else {
+                theme.c.muted
+            },
+        ))
+        .child(
+            div()
+                .font_weight(EMPHASIS)
+                .text_size(px(12.0))
+                .child(SharedString::from(shell.pins.to_string())),
+        )
 }
 
 /// The server's welcome message, at the head of the conversation until it
@@ -765,12 +806,18 @@ fn their_message(
                         .border_color(theme.c.line2)
                         .child(body_text(body, row, theme.c.accent_text, theme)),
                 )
-                .when(message.edited, |column| {
+                .when(message.edited || message.pinned, |column| {
                     column.child(
                         div()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.0))
                             .text_size(px(11.0))
                             .text_color(theme.c.dim)
-                            .child("edited"),
+                            .when(message.pinned, |line| {
+                                line.child(icon("pin", 11.0, theme.c.accent_text))
+                            })
+                            .when(message.edited, |line| line.child("edited")),
                     )
                 })
                 .children(chips),
@@ -814,6 +861,9 @@ fn own_message(
                 .gap(px(6.0))
                 .text_size(px(11.0))
                 .text_color(theme.c.dim)
+                .when(message.pinned, |line| {
+                    line.child(icon("pin", 11.0, theme.c.accent_text))
+                })
                 .when(message.edited, |line| line.child("edited"))
                 .child(SharedString::from(clock(message.sent_at_ms, utc_offset)))
                 .map(|line| {
@@ -843,6 +893,7 @@ mod tests {
             id: None,
             edited: false,
             failed: false,
+            pinned: false,
             reactions: Vec::new(),
         }
     }

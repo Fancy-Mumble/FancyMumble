@@ -38,6 +38,13 @@ pub(super) fn render(
                     shell.engine.activate_session(&id);
                     cx.notify();
                 }))
+                .on_mouse_down(gpui::MouseButton::Right, {
+                    let id = session.id.clone();
+                    cx.listener(move |shell, event: &gpui::MouseDownEvent, _, cx| {
+                        let items = super::menu::session_items(&id, showing);
+                        shell.open_menu(event.position, items, cx);
+                    })
+                })
                 .child(
                     div()
                         .size_full()

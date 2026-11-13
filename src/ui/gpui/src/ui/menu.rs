@@ -44,6 +44,8 @@ pub(super) enum Command {
     },
     /// Put text on the clipboard.
     Copy(SharedString),
+    /// Leave the server of a session.
+    Leave(SharedString),
 }
 
 /// A question an entry puts before it can act.
@@ -206,6 +208,16 @@ pub(super) fn message_items(
             .ticked(own)
         })
         .collect();
+    if kept {
+        items.push(Item::new(
+            if message.pinned { "Unpin" } else { "Pin" },
+            Command::Do(Action::Pin {
+                channel,
+                id: id.to_string(),
+                pinned: !message.pinned,
+            }),
+        ));
+    }
     if message.own {
         items.push(Item::new(
             "Edit",
@@ -267,6 +279,14 @@ pub(super) fn user_items(
     }
     items.extend([
         Item::new(
+            "Priority speaker",
+            Command::Do(Action::PrioritySpeaker {
+                session,
+                priority: !user.priority,
+            }),
+        )
+        .ticked(user.priority),
+        Item::new(
             if user.muted {
                 "Unmute for everyone"
             } else {
@@ -311,6 +331,15 @@ pub(super) fn channel_items(
             Command::Ask(Question::JoinPassword(id)),
         ));
     }
+    if own_channel != Some(id) {
+        items.push(
+            Item::new(
+                "Listen without joining",
+                Command::Do(Action::ToggleListen { channel: id }),
+            )
+            .ticked(channel.listening),
+        );
+    }
     items.push(Item::new(
         "About this channel",
         Command::About(Subject::Channel(id)),
@@ -333,6 +362,20 @@ pub(super) fn channel_items(
     if channel.parent.is_some() {
         items.push(Item::new("Delete…", Command::Ask(Question::DeleteChannel(id))).danger());
     }
+    items
+}
+
+/// The entries for a right click on a server's tile on the rail.
+/// `showing` is whether it is the server on screen.
+pub(super) fn session_items(id: &SharedString, showing: bool) -> Vec<Item> {
+    let mut items = Vec::new();
+    if showing {
+        items.push(Item::new(
+            "Server information",
+            Command::About(Subject::Server),
+        ));
+    }
+    items.push(Item::new("Disconnect", Command::Leave(id.clone())).danger());
     items
 }
 
@@ -438,6 +481,7 @@ impl Shell {
             Command::Ask(question) => self.ask(question, window, cx),
             Command::PickAvatar => self.pick_avatar(cx),
             Command::Edit { id, text } => self.start_editing(id, text.as_ref(), window, cx),
+            Command::Leave(session) => self.engine.leave_session(&session),
             Command::Copy(text) => {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.to_string()));
             }
@@ -800,6 +844,29 @@ pub(super) fn render_info(
                         .font_weight(EMPHASIS)
                         .child(info.title.clone()),
                 )
+                .when(!info.facts.is_empty(), |card| {
+                    card.child(
+                        div()
+                            .debug_selector(|| "info-facts".to_owned())
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.0))
+                            .text_size(px(12.5))
+                            .children(info.facts.iter().map(|(name, value)| {
+                                div()
+                                    .flex()
+                                    .gap(px(12.0))
+                                    .child(
+                                        div()
+                                            .flex_none()
+                                            .w(px(130.0))
+                                            .text_color(theme.c.muted)
+                                            .child(name.clone()),
+                                    )
+                                    .child(div().flex_1().min_w_0().child(value.clone()))
+                            })),
+                    )
+                })
                 .child(
                     div()
                         .id("info-body")
@@ -845,6 +912,7 @@ mod tests {
             deafened: false,
             avatar: None,
             unread: 0,
+            priority: false,
         }
     }
 
@@ -864,6 +932,7 @@ mod tests {
                 "Volume 50%",
                 "Volume 100%",
                 "Volume 150%",
+                "Priority speaker",
                 "Mute for everyone",
                 "Deafen for everyone",
                 "Register",
@@ -913,6 +982,7 @@ mod tests {
             position: 0,
             unread: 0,
             history: false,
+            listening: false,
         };
         assert_eq!(
             names(&channel_items(&channel(0, None), Some(1), false)),
@@ -920,6 +990,7 @@ mod tests {
                 "Open",
                 "Join",
                 "Join with a password…",
+                "Listen without joining",
                 "About this channel",
                 "New channel inside…",
                 "Rename…"

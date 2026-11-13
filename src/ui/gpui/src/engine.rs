@@ -30,6 +30,8 @@ pub(crate) enum Conversation {
 pub(crate) enum Subject {
     User(Session),
     Channel(ChannelId),
+    /// The server on screen: its welcome, and what it says of itself.
+    Server,
 }
 
 /// Where the connection to the server stands.
@@ -169,6 +171,16 @@ pub(crate) enum Action {
     },
     /// Delete the message `id` for everyone.
     DeleteMessage { channel: ChannelId, id: String },
+    /// Pin the message `id` for everyone, or take the pin off.
+    Pin {
+        channel: ChannelId,
+        id: String,
+        pinned: bool,
+    },
+    /// Start hearing `channel` without being in it, or stop.
+    ToggleListen { channel: ChannelId },
+    /// Have `session` heard over everybody else in their channel, or not.
+    PrioritySpeaker { session: Session, priority: bool },
     /// Put `emoji` on the message `id`, or take the local user's off.
     React {
         channel: ChannelId,
@@ -202,6 +214,8 @@ pub(crate) struct Channel {
     pub unread: u32,
     /// Whether the server keeps what is said here.
     pub history: bool,
+    /// Whether the local user hears it without being in it.
+    pub listening: bool,
 }
 
 /// One connected user.
@@ -219,6 +233,8 @@ pub(crate) struct User {
     pub avatar: Option<std::sync::Arc<gpui::Image>>,
     /// Direct messages from them the user has not read.
     pub unread: u32,
+    /// Heard over everybody else in their channel.
+    pub priority: bool,
 }
 
 /// One chat message, as the conversation shows it.
@@ -243,6 +259,8 @@ pub(crate) struct Message {
     pub edited: bool,
     /// Whether the server refused it.
     pub failed: bool,
+    /// Whether it is pinned in its channel.
+    pub pinned: bool,
     /// The reactions on it, in the order each emoji was first used.
     pub reactions: Vec<Reaction>,
 }
@@ -321,6 +339,12 @@ pub(crate) enum EngineEvent {
     /// Something the user should be told: a refused connection, a failed
     /// command. `None` clears what was said before.
     Notice(Option<SharedString>),
+    /// What is known about `subject` besides its text, as names and
+    /// values: a user's connection, a server's version.
+    Facts {
+        subject: Subject,
+        facts: Vec<(SharedString, SharedString)>,
+    },
     /// Somebody is writing in a channel. Said again while they go on;
     /// nothing says when they stop.
     Typing {
@@ -405,6 +429,9 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// Make the session `id` the one the snapshot, and every command, is
     /// about.
     fn activate_session(&self, id: &str);
+
+    /// Leave the server of the session `id`, whichever one is showing.
+    fn leave_session(&self, id: &str);
 
     /// The window gained or lost the user's attention.
     fn set_focused(&self, focused: bool);

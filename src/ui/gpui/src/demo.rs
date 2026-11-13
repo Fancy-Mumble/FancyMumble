@@ -155,6 +155,7 @@ impl State {
                     position: 0,
                     unread: 0,
                     history: *history,
+                    listening: false,
                 });
             }
             Action::RenameChannel { channel, name } => {
@@ -185,6 +186,21 @@ impl State {
                         .as_ref()
                         .is_none_or(|known| known.as_ref() != id.as_str())
                 });
+            }
+            Action::Pin { id, pinned, .. } => {
+                if let Some(message) = self.message(id) {
+                    message.pinned = *pinned;
+                }
+            }
+            Action::ToggleListen { channel } => {
+                if let Some(found) = self.channels.iter_mut().find(|known| known.id == *channel) {
+                    found.listening = !found.listening;
+                }
+            }
+            Action::PrioritySpeaker { session, priority } => {
+                if let Some(user) = self.users.iter_mut().find(|user| user.session == *session) {
+                    user.priority = *priority;
+                }
             }
             Action::React { id, emoji, add, .. } => {
                 if let Some(message) = self.message(id) {
@@ -218,6 +234,7 @@ impl State {
             position: 0,
             unread: 0,
             history: false,
+            listening: false,
         };
         let user = |session, name: &str| User {
             session,
@@ -227,6 +244,7 @@ impl State {
             deafened: false,
             avatar: None,
             unread: 0,
+            priority: false,
         };
         let said = |minute: u64, session: Session, name: &str, body: &str| {
             (
@@ -241,6 +259,7 @@ impl State {
                     id: Some(format!("demo-{minute}").into()),
                     edited: false,
                     failed: false,
+                    pinned: false,
                     reactions: Vec::new(),
                 },
             )
@@ -524,6 +543,7 @@ impl Engine for DemoEngine {
                     id: Some(format!("demo-sent-{sent_at_ms}").into()),
                     edited: false,
                     failed: false,
+                    pinned: false,
                     reactions: Vec::new(),
                 },
             ));
@@ -597,12 +617,19 @@ impl Engine for DemoEngine {
 
     fn activate_session(&self, _id: &str) {}
 
+    fn leave_session(&self, _id: &str) {
+        self.disconnect();
+    }
+
     fn set_focused(&self, _focused: bool) {}
 
     fn act(&self, action: Action) {
         let about_messages = matches!(
             action,
-            Action::EditMessage { .. } | Action::DeleteMessage { .. } | Action::React { .. }
+            Action::EditMessage { .. }
+                | Action::DeleteMessage { .. }
+                | Action::React { .. }
+                | Action::Pin { .. }
         );
         self.with_state(|state| {
             state.apply(&action);
@@ -620,8 +647,15 @@ impl Engine for DemoEngine {
         let html = match subject {
             Subject::User(3) => Some("Draws <i>characters</i>."),
             Subject::Channel(LOUNGE) => Some("Where everybody starts."),
+            Subject::Server => Some("Welcome to the <b>demo</b> server."),
             _ => None,
         };
+        if subject == Subject::Server {
+            self.tell(EngineEvent::Facts {
+                subject,
+                facts: vec![("Address".into(), "magical.rocks:64738".into())],
+            });
+        }
         self.tell(EngineEvent::About {
             subject,
             html: html.map(Into::into),

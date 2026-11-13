@@ -201,6 +201,13 @@ fn channel_row(
                 .truncate()
                 .child(label(&channel.name, theme)),
         )
+        .when(channel.listening, |row| {
+            row.child(
+                div()
+                    .debug_selector(move || format!("listening-{id}"))
+                    .child(icon("ear", 12.0, hash)),
+            )
+        })
         .when(channel.unread > 0 && !current, |row| {
             row.child(unread_badge(channel.unread, theme))
         })
@@ -507,6 +514,7 @@ mod tests {
             position,
             unread: 0,
             history: false,
+            listening: false,
         }
     }
 

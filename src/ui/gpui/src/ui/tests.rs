@@ -842,7 +842,8 @@ fn a_message_takes_a_reaction_from_its_menu_and_gives_it_back_at_its_chip(cx: &m
     assert!(cx.debug_bounds("menu-Copy text").is_some());
     shell.read_with(cx, |shell, _| {
         let menu = shell.menu.as_ref().expect("the menu");
-        assert_eq!(menu.items.len(), 1, "not the local user's to edit");
+        let names: Vec<_> = menu.items.iter().map(|item| item.name.as_ref()).collect();
+        assert_eq!(names, ["Copy text", "Pin"], "not the local user's to edit");
         assert_eq!(menu.quick.len(), super::menu::QUICK_REACTIONS.len());
     });
     click(cx, "react-👍");
@@ -946,4 +947,70 @@ fn somebody_writing_is_named_and_the_local_user_writing_is_passed_on(cx: &mut Te
     });
     cx.simulate_keystrokes("h");
     assert_eq!(engine.typed(), 1);
+}
+
+#[gpui::test]
+fn a_pinned_message_is_marked_and_the_header_shows_only_the_pins(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    assert!(cx.debug_bounds("pins").is_none(), "nothing pinned yet");
+    right_click(cx, "message-2");
+    click(cx, "menu-Pin");
+    assert!(matches!(
+        engine.actions().last(),
+        Some(Action::Pin { pinned: true, .. })
+    ));
+    shell.read_with(cx, |shell, _| {
+        assert_eq!((shell.pins, shell.messages.len()), (1, 5));
+        assert!(shell.messages[2].pinned);
+    });
+    click(cx, "pins");
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.only_pinned);
+        assert_eq!(shell.messages.len(), 1);
+        assert_eq!(shell.held, 5, "the rest are held, not shown");
+    });
+    // Taking the last pin off leaves nothing to show only pins of.
+    right_click(cx, "message-0");
+    click(cx, "menu-Unpin");
+    shell.read_with(cx, |shell, _| {
+        assert!(!shell.only_pinned);
+        assert_eq!(shell.messages.len(), 5);
+    });
+}
+
+#[gpui::test]
+fn a_channel_is_listened_to_from_its_menu(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    right_click(cx, "channel-2");
+    click(cx, "menu-Listen without joining");
+    assert_eq!(
+        engine.actions().last(),
+        Some(&Action::ToggleListen { channel: 2 })
+    );
+    assert!(cx.debug_bounds("listening-2").is_some());
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(
+            shell.snapshot.current_channel,
+            Some(1),
+            "still where they were"
+        );
+    });
+}
+
+#[gpui::test]
+fn a_servers_tile_says_what_the_server_is_and_leaves_it(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    right_click(cx, "session-magical.rocks");
+    click(cx, "menu-Server information");
+    shell.read_with(cx, |shell, _| {
+        let info = shell.info.as_ref().expect("the card");
+        assert_eq!(info.title.as_ref(), "magical.rocks");
+        assert_eq!(info.facts.len(), 1);
+        assert!(info.body.is_some(), "the welcome message");
+    });
+    assert!(cx.debug_bounds("info-facts").is_some());
+    click(cx, "info-close");
+    right_click(cx, "session-magical.rocks");
+    click(cx, "menu-Disconnect");
+    assert_eq!(engine.snapshot().connection, Connection::Disconnected);
 }

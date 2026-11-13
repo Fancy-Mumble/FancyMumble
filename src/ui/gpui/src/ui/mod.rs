@@ -56,6 +56,8 @@ pub(super) struct Info {
     title: gpui::SharedString,
     /// The text, once it has arrived; `None` while it is being fetched.
     body: Option<Arc<conversation::DrawnBody>>,
+    /// What else is known, as names and values.
+    facts: Vec<(gpui::SharedString, gpui::SharedString)>,
 }
 
 /// The application's one window.
@@ -71,6 +73,10 @@ pub(crate) struct Shell {
     was_in: Option<ChannelId>,
     /// The open conversation's messages, oldest first.
     messages: Vec<Message>,
+    /// How many messages the open conversation holds, shown or not, and
+    /// how many of them are pinned.
+    held: usize,
+    pins: usize,
     /// The conversation's rows: only the visible ones are laid out.
     rows: ListState,
     /// The bodies of the messages drawn so far, by message index.
@@ -82,6 +88,8 @@ pub(crate) struct Shell {
     /// Who is talking right now.
     talking: HashSet<Session>,
     composer: Entity<TextInput>,
+    /// Whether the conversation shows only its pinned messages.
+    only_pinned: bool,
     /// The message being changed, while the composer holds its text.
     editing: Option<gpui::SharedString>,
     /// Who was last seen writing in the open channel, and when.
@@ -191,12 +199,15 @@ impl Shell {
             open: None,
             was_in: None,
             messages: Vec::new(),
+            held: 0,
+            pins: 0,
             rows: ListState::new(0, ListAlignment::Top, px(OVERDRAW)),
             bodies: std::collections::HashMap::new(),
             row_model: Vec::new(),
             utc_offset: 0,
             talking: HashSet::new(),
             composer,
+            only_pinned: false,
             editing: None,
             typing: std::collections::HashMap::new(),
             search,
@@ -280,7 +291,7 @@ impl Shell {
                 // A message deleted by somebody else is announced only as
                 // a change of state.
                 if let Some(open) = self.open
-                    && self.engine.message_count(open) != self.messages.len()
+                    && self.engine.message_count(open) != self.held
                 {
                     self.reload_messages(cx);
                 }
@@ -296,6 +307,11 @@ impl Shell {
                 if let Some(info) = self.info.as_mut().filter(|info| info.subject == subject) {
                     let html = html.unwrap_or_default();
                     info.body = Some(Arc::new(conversation::DrawnBody::read(&html)));
+                }
+            }
+            EngineEvent::Facts { subject, facts } => {
+                if let Some(info) = self.info.as_mut().filter(|info| info.subject == subject) {
+                    info.facts = facts;
                 }
             }
             EngineEvent::ServersChanged => self.servers = self.engine.saved_servers(),
@@ -408,11 +424,18 @@ impl Shell {
                 .iter()
                 .find(|channel| channel.id == id)
                 .map(|channel| channel.name.clone()),
+            Subject::Server => self
+                .snapshot
+                .sessions
+                .iter()
+                .find(|session| session.active)
+                .map(|session| session.name.clone()),
         };
         self.info = Some(Info {
             subject,
             title: title.unwrap_or_default(),
             body: None,
+            facts: Vec::new(),
         });
         self.engine.about(subject);
         cx.notify();
@@ -455,6 +478,7 @@ impl Shell {
         if self.open != Some(conversation) {
             // What was being written and corrected belonged to the other.
             self.stop_editing(cx);
+            self.only_pinned = false;
             self.typing.clear();
             self.open = Some(conversation);
             self.engine.open(conversation);
@@ -466,10 +490,17 @@ impl Shell {
     /// Read the open conversation's messages again and lay the rows out
     /// afresh.
     fn reload_messages(&mut self, cx: &mut Context<Self>) {
-        let messages = self
+        let mut messages = self
             .open
             .map(|conversation| self.engine.messages(conversation))
             .unwrap_or_default();
+        self.held = messages.len();
+        self.pins = messages.iter().filter(|message| message.pinned).count();
+        // The last pin taken off ends the view that showed only pins.
+        self.only_pinned &= self.pins > 0;
+        if self.only_pinned {
+            messages.retain(|message| message.pinned);
+        }
         // A message drawn before is kept as drawn while it is still the same
         // message; an edit, a deletion or another channel starts over.
         let kept = self
@@ -489,13 +520,19 @@ impl Shell {
             .map_or(0, |since| {
                 u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
             });
+        let rows_before = self.row_model.len();
         self.row_model = conversation::rows(&self.messages, now_ms, self.utc_offset);
         let rows = self.row_model.len();
-        self.rows.reset(rows);
-        self.rows.scroll_to(ListOffset {
-            item_ix: rows,
-            offset_in_item: px(0.0),
-        });
+        // The same rows with something on them changed, a reaction say,
+        // stay where the reader has them; anything else opens on the
+        // newest message.
+        if rows != rows_before || !kept {
+            self.rows.reset(rows);
+            self.rows.scroll_to(ListOffset {
+                item_ix: rows,
+                offset_in_item: px(0.0),
+            });
+        }
         let placeholder = self
             .open_title()
             .map(|title| format!("Message {title}"))

@@ -8,6 +8,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 
+use gpui::SharedString;
+
 use mumble_tauri_lib::engine_api::{
     self as api, ConnectTarget, EngineDirs, EngineHandle, PingInfo,
 };
@@ -144,6 +146,10 @@ impl Shared {
                 self.tell(EngineEvent::Notice(Some(reason.into())));
             }
             api::EngineEvent::Notify { title, body } => crate::notify::show(&title, &body),
+            api::EngineEvent::UserStats(stats) => self.tell(EngineEvent::Facts {
+                subject: Subject::User(stats.session),
+                facts: user_facts(&stats),
+            }),
             api::EngineEvent::Typing { channel, session } => {
                 self.tell(EngineEvent::Typing { channel, session });
             }
@@ -342,6 +348,7 @@ impl RealEngine {
                     muted: user.muted,
                     deafened: user.deafened,
                     avatar,
+                    priority: user.priority_speaker,
                 }
             })
             .collect()
@@ -433,6 +440,7 @@ impl Engine for RealEngine {
             };
         }
         let unread_channels = engine.unread_channels();
+        let listening = engine.listening();
         Snapshot {
             connection,
             own_session: engine.own_session(),
@@ -447,6 +455,7 @@ impl Engine for RealEngine {
                     name: channel.name.into(),
                     position: channel.position,
                     history: channel.keeps_history,
+                    listening: listening.contains(&channel.id),
                 })
                 .collect(),
             users: self.users_with_avatars(engine.users()),
@@ -594,6 +603,7 @@ impl Engine for RealEngine {
                 id: message.id.map(Into::into),
                 edited: message.edited,
                 failed: message.failed,
+                pinned: message.pinned,
             })
             .collect()
     }
@@ -669,7 +679,7 @@ impl Engine for RealEngine {
     }
 
     fn choose_devices(&self, devices: ChosenDevices) {
-        let name = |device: Option<gpui::SharedString>| device.map(|name| name.to_string());
+        let name = |device: Option<SharedString>| device.map(|name| name.to_string());
         if let Err(reason) = self
             .shared
             .engine
@@ -720,12 +730,23 @@ impl Engine for RealEngine {
         }));
     }
 
+    fn leave_session(&self, id: &str) {
+        let shared = Arc::clone(&self.shared);
+        let id = id.to_owned();
+        self.spawn(async move {
+            let left = shared.engine.disconnect_session(&id).await;
+            shared.tell(EngineEvent::StateChanged);
+            left
+        });
+    }
+
     fn set_focused(&self, focused: bool) {
         self.shared.engine.set_focused(focused);
     }
 
     fn act(&self, action: Action) {
         let engine = self.shared.engine.clone();
+        let shared = Arc::clone(&self.shared);
         let reason = |reason: String| Some(reason).filter(|reason| !reason.trim().is_empty());
         self.spawn(async move {
             match action {
@@ -773,6 +794,19 @@ impl Engine for RealEngine {
                     emoji,
                     add,
                 } => engine.react(channel, &id, &emoji, add).await,
+                Action::Pin {
+                    channel,
+                    id,
+                    pinned,
+                } => engine.pin(channel, &id, pinned).await,
+                Action::ToggleListen { channel } => {
+                    let toggled = engine.toggle_listen(channel).await.map(|_| ());
+                    shared.tell(EngineEvent::StateChanged);
+                    toggled
+                }
+                Action::PrioritySpeaker { session, priority } => {
+                    engine.set_priority_speaker(session, priority).await
+                }
             }
         });
     }
@@ -781,8 +815,19 @@ impl Engine for RealEngine {
         let shared = Arc::clone(&self.shared);
         drop(self.runtime.spawn(async move {
             let html = match subject {
-                Subject::User(session) => shared.engine.user_comment(session).await,
+                Subject::User(session) => {
+                    // The answer comes back as an event of its own.
+                    let _ = shared.engine.request_user_stats(session).await;
+                    shared.engine.user_comment(session).await
+                }
                 Subject::Channel(channel) => shared.engine.channel_description(channel),
+                Subject::Server => {
+                    shared.tell(EngineEvent::Facts {
+                        subject,
+                        facts: server_facts(&shared.engine.server()),
+                    });
+                    shared.engine.welcome()
+                }
             };
             shared.tell(EngineEvent::About {
                 subject,
@@ -837,6 +882,74 @@ fn target_of(server: &SavedServer, password: Option<String>) -> ConnectTarget {
         certificate: server.certificate.as_ref().map(ToString::to_string),
         password,
     }
+}
+
+/// A length of time in the two largest units that say something.
+fn span(secs: u32) -> String {
+    let (days, hours, minutes) = (secs / 86_400, secs / 3600 % 24, secs / 60 % 60);
+    match (days, hours, minutes) {
+        (0, 0, 0) => format!("{secs} s"),
+        (0, 0, minutes) => format!("{minutes} min"),
+        (0, hours, minutes) => format!("{hours} h {minutes} min"),
+        (days, hours, _) => format!("{days} d {hours} h"),
+    }
+}
+
+/// What a server knows of a user's connection, as the info card lists it.
+fn user_facts(stats: &api::UserStats) -> Vec<(SharedString, SharedString)> {
+    let mut facts: Vec<(SharedString, SharedString)> = Vec::new();
+    let mut fact = |name: &str, value: String| facts.push((name.to_owned().into(), value.into()));
+    fact("Ping", format!("{} ms", stats.tcp_ping_ms));
+    if stats.udp_ping_ms > 0 {
+        fact("Voice ping", format!("{} ms", stats.udp_ping_ms));
+    }
+    if let Some(online) = stats.online_secs {
+        fact("Connected for", span(online));
+    }
+    if let Some(idle) = stats.idle_secs {
+        fact("Idle for", span(idle));
+    }
+    if let Some(version) = &stats.version {
+        fact("Client", version.clone());
+    }
+    if let Some(os) = &stats.os {
+        fact("System", os.clone());
+    }
+    if let Some(address) = &stats.address {
+        fact("Address", address.clone());
+    }
+    facts
+}
+
+/// What a server says of itself, as the info card lists it.
+fn server_facts(server: &api::ServerDetails) -> Vec<(SharedString, SharedString)> {
+    let mut facts: Vec<(SharedString, SharedString)> = Vec::new();
+    let mut fact = |name: &str, value: String| facts.push((name.to_owned().into(), value.into()));
+    fact("Address", format!("{}:{}", server.host, server.port));
+    fact(
+        "Users",
+        match server.max_users {
+            Some(most) => format!("{} of {most}", server.users),
+            None => server.users.to_string(),
+        },
+    );
+    if let Some(release) = &server.release {
+        fact("Server", release.clone());
+    }
+    if let Some(os) = &server.os {
+        fact("System", os.clone());
+    }
+    if let Some(protocol) = &server.protocol {
+        fact("Protocol", protocol.clone());
+    }
+    if let Some(bits) = server.max_bandwidth {
+        fact("Voice bitrate limit", format!("{} kbit/s", bits / 1000));
+    }
+    fact(
+        "Fancy extensions",
+        if server.fancy { "yes" } else { "no" }.to_owned(),
+    );
+    facts
 }
 
 /// How often, at most, the server is told the local user is writing.
@@ -978,6 +1091,14 @@ mod tests {
             .map(|reaction| (reaction.emoji.as_ref(), reaction.count, reaction.own))
             .collect();
         assert_eq!(shown, [("👍", 1, false), ("🎉", 1, true)]);
+    }
+
+    #[test]
+    fn a_span_is_said_in_its_two_largest_units() {
+        assert_eq!(span(42), "42 s");
+        assert_eq!(span(125), "2 min");
+        assert_eq!(span(3 * 3600 + 5 * 60), "3 h 5 min");
+        assert_eq!(span(2 * 86_400 + 7 * 3600 + 59), "2 d 7 h");
     }
 
     #[test]
@@ -1436,6 +1557,57 @@ mod tests {
         let _ = std::fs::remove_dir_all(bob_dir);
     }
 
+    /// The tail of the history test, on the clients it already has: `late`
+    /// hears `root` from inside `channel`, and `alice` reads what the
+    /// server knows of `admin` and of itself.
+    fn listening_and_what_is_known(
+        alice: &RealEngine,
+        late: &RealEngine,
+        admin: &RealEngine,
+        root: u32,
+        channel: u32,
+    ) {
+        // Hearing a channel without being in it.
+        let listens = |engine: &RealEngine| {
+            engine
+                .snapshot()
+                .channels
+                .iter()
+                .any(|known| known.id == root && known.listening)
+        };
+        assert!(!listens(late));
+        late.act(Action::ToggleListen { channel: root });
+        wait_for("the latecomer to listen to the root", || listens(late));
+        assert_eq!(late.snapshot().current_channel, Some(channel));
+
+        // What the server knows of a user's connection.
+        let told = alice.events();
+        let admin_session = admin.snapshot().own_session.expect("the admin's session");
+        alice.about(Subject::User(admin_session));
+        wait_for("the admin's connection to be described", || {
+            std::iter::from_fn(|| told.try_recv().ok()).any(|event| {
+                matches!(
+                    event,
+                    EngineEvent::Facts { subject, facts }
+                        if subject == Subject::User(admin_session)
+                            && facts.iter().any(|(name, _)| name.as_ref() == "Ping")
+                )
+            })
+        });
+        alice.about(Subject::Server);
+        wait_for("the server to be described", || {
+            std::iter::from_fn(|| told.try_recv().ok()).any(|event| {
+                matches!(
+                    event,
+                    EngineEvent::Facts { subject: Subject::Server, facts }
+                        if facts.iter().any(|(name, value)| {
+                            name.as_ref() == "Fancy extensions" && value.as_ref() == "yes"
+                        })
+                )
+            })
+        });
+    }
+
     /// A channel made to keep its messages serves them to whoever comes
     /// later, and a message deleted there is gone for everyone. Making the
     /// channel takes the server's `SuperUser`:
@@ -1497,6 +1669,20 @@ mod tests {
         });
         assert_eq!(alice.message_count(room), alice.messages(room).len());
 
+        // A pin is for everyone, and for whoever comes later.
+        let id = said(&alice, room, "to be kept")
+            .and_then(|message| message.id)
+            .expect("an id")
+            .to_string();
+        admin.act(Action::Pin {
+            channel,
+            id,
+            pinned: true,
+        });
+        wait_for("alice to see the pin", || {
+            said(&alice, room, "to be kept").is_some_and(|message| message.pinned)
+        });
+
         // Somebody who was not there reads what was kept, and only that.
         let (late, late_dir) = fancy_client("KeptLate", None);
         wait_for("the latecomer to connect", || kept(&late).is_some());
@@ -1506,6 +1692,7 @@ mod tests {
             said(&late, room, "to be kept").is_some()
         });
         assert!(said(&late, room, "to be deleted").is_none());
+        listening_and_what_is_known(&alice, &late, &admin, root, channel);
 
         admin.act(Action::DeleteChannel { channel });
         wait_for("the channel to go", || kept(&alice).is_none());
