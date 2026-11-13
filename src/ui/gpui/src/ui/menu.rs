@@ -68,6 +68,8 @@ pub(super) enum Command {
     Friend(Session, bool),
     /// Leave channels with nobody in them out of the column, or list all.
     HideEmpty(bool),
+    /// Start picking messages, with the one at this place picked.
+    Select(usize),
     /// Start recording what is heard to a file, or stop.
     Record(bool),
     /// Mark the saved server at this address a favourite, or not.
@@ -408,6 +410,10 @@ pub(super) fn message_items(
                 pinned: !message.pinned,
             }),
         ));
+    }
+    if kept {
+        // The way to more than one at a time: to delete them together.
+        items.push(Item::new("Select…", Command::Select(index)));
     }
     if message.own {
         items.push(Item::new(
@@ -893,6 +899,7 @@ impl Shell {
             Command::Admin(listing) => self.open_admin(listing, cx),
             Command::Friend(session, keep) => self.set_friend(session, keep, cx),
             Command::Favourite(key, favorite) => self.set_favourite(&key, favorite, cx),
+            Command::Select(index) => self.start_picking(index, cx),
             Command::Record(start) => self.record(start, cx),
             Command::HideEmpty(hide) => {
                 self.chrome.hide_empty = hide;

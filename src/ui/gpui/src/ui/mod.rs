@@ -171,6 +171,9 @@ struct Chrome {
     /// Whether channels with nobody in or under them are left out of the
     /// column.
     hide_empty: bool,
+    /// The messages picked, by id, while several are being picked to be
+    /// deleted together.
+    picked: Option<Vec<gpui::SharedString>>,
 }
 
 impl Chrome {
@@ -180,6 +183,7 @@ impl Chrome {
             rail_wide: false,
             auto_connect: auto_connect.map(Into::into),
             hide_empty,
+            picked: None,
         }
     }
 }
@@ -852,6 +856,7 @@ impl Shell {
         if self.open != Some(conversation) {
             // What was being written and corrected belonged to the other.
             self.stop_editing(cx);
+            self.chrome.picked = None;
             self.only_pinned = false;
             self.typing.clear();
             self.open = Some(conversation);
@@ -1209,6 +1214,10 @@ impl Shell {
         }
         if self.editing.is_some() || self.replying.is_some() {
             self.stop_editing(cx);
+            return;
+        }
+        if self.chrome.picked.take().is_some() {
+            cx.notify();
             return;
         }
         if self.panels.admin.take().is_some()

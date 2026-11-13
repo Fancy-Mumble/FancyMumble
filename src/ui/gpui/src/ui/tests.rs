@@ -864,7 +864,7 @@ fn a_message_takes_a_reaction_from_its_menu_and_gives_it_back_at_its_chip(cx: &m
         let names: Vec<_> = menu.items.iter().map(|item| item.name.as_ref()).collect();
         assert_eq!(
             names,
-            ["Reply", "Copy text", "Pin"],
+            ["Reply", "Copy text", "Pin", "Select…"],
             "not the local user's to edit"
         );
         assert_eq!(
@@ -2151,5 +2151,28 @@ fn a_click_on_a_face_beside_a_message_opens_that_persons_card(cx: &mut TestAppCo
         let info = shell.info.as_ref().expect("the card");
         assert_eq!(info.title.as_ref(), "Rin");
         assert!(info.profile.is_some());
+    });
+}
+
+#[gpui::test]
+fn several_messages_are_picked_and_deleted_together(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    right_click(cx, "message-1");
+    click(cx, "menu-Select…");
+    click(cx, "message-3");
+    click(cx, "message-4");
+    // A second click lets one go again.
+    click(cx, "message-4");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.chrome.picked.as_ref().map(Vec::len), Some(2));
+    });
+    click(cx, "delete-picked");
+    let Some(Action::DeleteMessages { channel: 1, ids }) = engine.actions().last().cloned() else {
+        panic!("nothing was deleted: {:?}", engine.actions().last());
+    };
+    assert_eq!(ids, ["demo-1", "demo-3"]);
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.chrome.picked.is_none());
+        assert_eq!(shell.messages.len(), 3);
     });
 }

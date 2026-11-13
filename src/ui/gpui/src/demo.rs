@@ -303,6 +303,7 @@ impl State {
             }
             Action::EditMessage { .. }
             | Action::DeleteMessage { .. }
+            | Action::DeleteMessages { .. }
             | Action::Pin { .. }
             | Action::React { .. }
             | Action::CreatePoll { .. }
@@ -377,6 +378,14 @@ impl State {
                     message.body = text.clone().into();
                     message.edited = true;
                 }
+            }
+            Action::DeleteMessages { ids, .. } => {
+                self.messages.retain(|(_, message)| {
+                    message
+                        .id
+                        .as_ref()
+                        .is_none_or(|known| !ids.iter().any(|id| id == known.as_ref()))
+                });
             }
             Action::DeleteMessage { id, .. } => {
                 self.messages.retain(|(_, message)| {
@@ -1174,6 +1183,7 @@ impl Engine for DemoEngine {
             action,
             Action::EditMessage { .. }
                 | Action::DeleteMessage { .. }
+                | Action::DeleteMessages { .. }
                 | Action::React { .. }
                 | Action::Pin { .. }
                 | Action::CreatePoll { .. }

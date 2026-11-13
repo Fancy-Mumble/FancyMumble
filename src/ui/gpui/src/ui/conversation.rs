@@ -9,7 +9,7 @@ use gpui::{
 };
 
 use super::Shell;
-use super::kit::{Avatar, Corner, IconButton, Nearest, Paper, Tone, Variant};
+use super::kit::{Avatar, Button, Corner, IconButton, Nearest, Paper, Size, Tone, Variant};
 use super::widgets::{EMPHASIS, Zone, clock, icon, label};
 use crate::engine::{Action, Conversation, Message, Poll, PollOption};
 use crate::rich::Rich;
@@ -153,6 +153,9 @@ pub(super) fn render(
                             )
                         })
                         .children(key_request_strips(shell, theme, cx))
+                        .when_some(shell.chrome.picked.as_ref(), |column, picked| {
+                            column.child(picking_strip(picked.len(), theme, cx))
+                        })
                         .when(shell.editing.is_some(), |column| {
                             column.child(composer_strip(
                                 "pencil",
@@ -624,6 +627,79 @@ fn composer_strip(
         )
 }
 
+/// While messages are being picked: how many are, and what to do with
+/// them.
+fn picking_strip(count: usize, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+    div()
+        .debug_selector(|| "picking".to_owned())
+        .flex_none()
+        .mx(px(10.0))
+        .pl(px(20.0))
+        .pr(px(6.0))
+        .flex()
+        .items_center()
+        .gap(px(4.0))
+        .rounded(theme.skin.radius_md)
+        .bg(theme.c.accent_soft)
+        .text_size(px(12.0))
+        .child(div().flex_1().child(format!(
+            "{count} picked. Click a message to pick it or let it go."
+        )))
+        .child(
+            Button::new("delete-picked", "Delete")
+                .size(Size::Small)
+                .tone(Tone::Danger)
+                .on_click(cx.listener(|shell, _, _, cx| shell.delete_picked(cx))),
+        )
+        .child(
+            Button::new("stop-picking", "Cancel")
+                .size(Size::Small)
+                .on_click(cx.listener(|shell, _, _, cx| {
+                    shell.chrome.picked = None;
+                    cx.notify();
+                })),
+        )
+}
+
+impl Shell {
+    /// Start picking messages, with the one at `index` picked.
+    pub(super) fn start_picking(&mut self, index: usize, cx: &mut Context<Self>) {
+        self.chrome.picked = Some(Vec::new());
+        self.pick(index, cx);
+    }
+
+    /// Pick the message at `index`, or let it go if it is picked. One
+    /// with no id cannot be named to the server, and is not picked.
+    fn pick(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(id) = self
+            .messages
+            .get(index)
+            .and_then(|message| message.id.clone())
+        else {
+            return;
+        };
+        if let Some(picked) = self.chrome.picked.as_mut() {
+            match picked.iter().position(|held| *held == id) {
+                Some(at) => drop(picked.remove(at)),
+                None => picked.push(id),
+            }
+        }
+        cx.notify();
+    }
+
+    /// Delete the picked messages for everyone, in one request.
+    fn delete_picked(&mut self, cx: &mut Context<Self>) {
+        let picked = self.chrome.picked.take().unwrap_or_default();
+        if let (Some(Conversation::Channel(channel)), false) = (self.open, picked.is_empty()) {
+            self.engine.act(Action::DeleteMessages {
+                channel,
+                ids: picked.iter().map(ToString::to_string).collect(),
+            });
+        }
+        cx.notify();
+    }
+}
+
 fn composer(shell: &Shell, window: &Window, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let armed = !shell.composer.read(cx).text().trim().is_empty();
     let focused = shell.composer.focus_handle(cx).is_focused(window);
@@ -760,9 +836,22 @@ impl Shell {
                 .into_any_element()
             }
         };
+        let picking = self.chrome.picked.is_some();
+        let picked = message
+            .id
+            .as_ref()
+            .is_some_and(|id| self.chrome.picked.iter().flatten().any(|held| held == id));
         row_frame()
+            .id(("message", row))
             .debug_selector(move || format!("message-{index}"))
             .pt(gap)
+            // While messages are being picked, a click picks or lets go.
+            .when(picking, |frame| {
+                frame
+                    .cursor_pointer()
+                    .on_click(cx.listener(move |shell, _, _, cx| shell.pick(index, cx)))
+            })
+            .when(picked, |frame| frame.bg(theme.c.accent_soft))
             .on_mouse_down(
                 gpui::MouseButton::Right,
                 cx.listener(move |shell, event: &gpui::MouseDownEvent, _, cx| {

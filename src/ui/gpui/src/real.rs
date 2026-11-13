@@ -300,6 +300,7 @@ impl Shared {
             Action::DeleteMessage { channel, id } => {
                 engine.delete_messages(channel, vec![id]).await
             }
+            Action::DeleteMessages { channel, ids } => engine.delete_messages(channel, ids).await,
             Action::React {
                 channel,
                 id,

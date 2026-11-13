@@ -273,6 +273,11 @@ pub(crate) enum Action {
         channel: ChannelId,
         id: String,
     },
+    /// Delete several messages of `channel` for everyone, at once.
+    DeleteMessages {
+        channel: ChannelId,
+        ids: Vec<String>,
+    },
     /// Put a poll to `channel`.
     CreatePoll {
         channel: ChannelId,

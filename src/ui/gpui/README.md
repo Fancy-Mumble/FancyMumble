@@ -41,7 +41,7 @@ real engine and does text and voice.
   `*italic*`, `~~struck~~`, `` `code` ``, a fenced block or a quoting `>`
   is sent set that way. On a Fancy server:
   reply, mention somebody (`@name`, finished with Tab), edit and delete
-  your own, react (six at a click, the rest from a picker that also
+  your own, pick several messages and delete them together, react (six at a click, the rest from a picker that also
   writes into the composer), pin, see who is writing and who has
   read what you wrote, ask a poll and answer one, leave a message with
   the server to send later (at `18:30`, or in `15m`, `2h`, `1d`) and call
