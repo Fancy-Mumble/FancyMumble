@@ -15,9 +15,44 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [[bin]]
 name = "mumble-tauri"
 path = "src/main.rs"
+required-features = ["tauri-view"]
 
 [features]
-default = ["self-updater"]
+default = ["tauri-view", "self-updater"]
+# The Tauri application: the web view, its commands, and everything that only
+# they need. On by default, because that is what this package builds.
+#
+# Turn it OFF to use the crate as the engine alone - which is how another view
+# links it (`src/ui/gpui`) until the engine is a crate of its own:
+#
+#   mumble-tauri = { path = "...", default-features = false }
+#
+# What is left is `state/`, `audio/`, `media/` and the public `engine_api`
+# module over them; none of that names Tauri (a test in `state/host.rs` keeps
+# it so), so none of the dependencies below are built.
+tauri-view = [
+    "dep:tauri",
+    "dep:tauri-plugin-store",
+    "dep:tauri-plugin-opener",
+    "dep:tauri-plugin-notification",
+    "dep:tauri-plugin-dialog",
+    "dep:tauri-plugin-deep-link",
+    "dep:tauri-plugin-global-shortcut",
+    "dep:tauri-plugin-window-state",
+    "dep:gtk",
+    "dep:webkit2gtk",
+    "dep:webview2-com",
+    "dep:notify-rust",
+    "dep:fancy-gamedetect",
+    "dep:mimalloc",
+    "dep:dns-lookup",
+    "dep:tracing-subscriber",
+    "dep:zstd",
+    "dep:quick-xml",
+    "dep:png",
+    "dep:fancy-screenshare",
+    "dep:libloading",
+]
 # The bundled auto-updater: checks GitHub releases on launch, and can download
 # and swap the binary in place. On by default, because that is how the .deb,
 # the AppImage and the Windows installer are expected to behave.
@@ -36,6 +71,7 @@ default = ["self-updater"]
 # in `updater/window.rs` (`MAIN_WINDOW_LABEL`, `show_main_window`), which the
 # rest of the app uses to reveal the main window on launch.
 self-updater = [
+    "tauri-view",
     "dep:tauri-plugin-updater",
     "dep:tauri-plugin-process",
     "dep:semver",
@@ -47,11 +83,11 @@ deepfilternet-denoiser = ["mumble-protocol/deepfilternet-denoiser"]
 # this automatically for `cargo tauri build`; define it here so a plain
 # `cargo build/run --features custom-protocol` also produces a standalone
 # binary that needs no running vite dev server (e.g. for profiling).
-custom-protocol = ["tauri/custom-protocol"]
+custom-protocol = ["tauri-view", "tauri/custom-protocol"]
 # Webview devtools (F12 + right-click "Inspect Element"). Auto-enabled in debug
 # builds, but NOT in optimized profiles like `release-debug`, so expose it as a
 # feature to opt in when profiling an optimized build.
-devtools = ["tauri/devtools"]
+devtools = ["tauri-view", "tauri/devtools"]
 # Heap profiling: replaces the global allocator with dhat's profiling
 # allocator and writes `dhat-heap.json` on exit (view at
 # https://nnethercote.github.io/dh_view/dh_view.html). Mutually exclusive
@@ -60,13 +96,13 @@ dhat-heap = ["dep:dhat"]
 
 [dependencies]
 fancy-utils = { path = "../fancy-utils" }
-tauri = { version = "2.10.1", features = [
+tauri = { version = "2.10.1", optional = true, features = [
     "protocol-asset",
     "tray-icon",
     "image-png",
 ] }
-tauri-plugin-store = "2"
-tauri-plugin-opener = "2"
+tauri-plugin-store = { version = "2", optional = true }
+tauri-plugin-opener = { version = "2", optional = true }
 # The loopback origin shared media is played from: a small HTTP server of our
 # own, and the percent-decoding of a key out of a request path. A media element
 # will not load a custom scheme, so it has to be real HTTP - see
@@ -90,18 +126,18 @@ tokio = { version = "1", features = [
 ] }
 futures-util = { version = "0.3", default-features = false }
 tokio-util = { version = "0.7", features = ["io"] }
-dns-lookup = "2"
+dns-lookup = { version = "2", optional = true }
 rustls = { version = "0.23", features = ["ring"] }
 rcgen = "0.14.7"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-uuid = { version = "1", features = ["v4"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+uuid = { version = "1", features = ["v4", "serde"] }
 rand = "0.10"
 ring = "0.17"
 arc-swap = "1"
 base64 = "0.22"
 prost = "0.14"
-zstd = "0.13"
+zstd = { version = "0.13", optional = true }
 sha2 = "0.10"
 reqwest = { version = "0.12", default-features = false, features = [
     "rustls-tls",
@@ -112,10 +148,10 @@ reqwest = { version = "0.12", default-features = false, features = [
     "stream",
     "json",
 ] }
-quick-xml = { version = "0.39.2", features = ["serialize"] }
-tauri-plugin-notification = "2.3.3"
-tauri-plugin-dialog = "2"
-tauri-plugin-deep-link = "2"
+quick-xml = { version = "0.39.2", features = ["serialize"], optional = true }
+tauri-plugin-notification = { version = "2.3.3", optional = true }
+tauri-plugin-dialog = { version = "2", optional = true }
+tauri-plugin-deep-link = { version = "2", optional = true }
 hound = "3.5"
 chrono = "0.4"
 mp4 = "0.14"
@@ -128,7 +164,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png"]
 # module needs this crate's types to compile everywhere. It builds anywhere -
 # the probe has a stub for the platforms with no window manager to ask
 # (`probe/stub.rs`), which is what macOS already uses.
-fancy-gamedetect = { path = "../fancy-gamedetect" }
+fancy-gamedetect = { path = "../fancy-gamedetect", optional = true }
 bip39 = { version = "3", default-features = false, features = ["std"] }
 
 # Desktop-only dependencies (cpal, global shortcuts, and Opus are not available on Android).
@@ -136,10 +172,10 @@ bip39 = { version = "3", default-features = false, features = ["std"] }
 # Compacting allocator that returns freed pages to the OS far more
 # aggressively than the Windows system heap, which otherwise holds the
 # startup high-water mark (~280 MB) for the whole process lifetime.
-mimalloc = { version = "0.1", default-features = false }
+mimalloc = { version = "0.1", default-features = false, optional = true }
 # Optional heap profiler, enabled only via the `dhat-heap` feature.
 dhat = { version = "0.3", optional = true }
-png = "0.18"
+png = { version = "0.18", optional = true }
 mumble-protocol = { path = "../mumble-protocol", features = [
     "opus-codec",
     "persistent-chat",
@@ -147,13 +183,13 @@ mumble-protocol = { path = "../mumble-protocol", features = [
 ] }
 cpal = "0.17.3"
 # Screen sharing core (source enumeration, capture, encode, WebRTC broadcast).
-fancy-screenshare = { path = "../fancy-screenshare" }
+fancy-screenshare = { path = "../fancy-screenshare", optional = true }
 # Discord Rich Presence listener. Desktop only: it hosts the Discord IPC
 # endpoint (Unix socket / named pipe), which has no Android equivalent.
 fancy-presence = { path = "../fancy-presence" }
 rodio = { version = "0.22", features = ["recording"] }
-tauri-plugin-global-shortcut = "2"
-tauri-plugin-window-state = "2"
+tauri-plugin-global-shortcut = { version = "2", optional = true }
+tauri-plugin-window-state = { version = "2", optional = true }
 # Auto-updater (desktop only). All updater logic lives in `src/updater/`.
 # Optional so a distro/Flathub build can drop it - see the `self-updater`
 # feature above. `process` is only here for the bootstrapper's relaunch, so it
@@ -198,7 +234,7 @@ windows-sys = { version = "0.61", features = [
 # WebView2 COM bindings for ICoreWebView2_19::SetMemoryUsageTargetLevel
 # (trim browser memory while minimized).  Versions must match the ones
 # tauri/wry pull in so the COM interface types are identical.
-webview2-com = "0.38"
+webview2-com = { version = "0.38", optional = true }
 windows-core = "0.61"
 # Reading which browser owns `https`, for "open in a private window". A safe
 # wrapper rather than the raw Win32 calls: `unsafe_code` is denied here.
@@ -232,21 +268,21 @@ objc2-foundation = { version = "0.2", features = ["NSGeometry"] }
 # constraints (see crates/mumble-tauri/src/platform/window/linux.rs).
 # The gtk version must match the one tao/tauri pulls in (0.18).
 [target.'cfg(all(unix, not(any(target_os = "android", target_os = "macos", target_os = "ios"))))'.dependencies]
-gtk = { version = "0.18", default-features = false }
+gtk = { version = "0.18", default-features = false, optional = true }
 
 # Linux-only: flip WebKitGTK's enable-webrtc / enable-media-stream settings on
 # (they default to OFF and wry never sets them - without this the webview has
 # no RTCPeerConnection and stream viewing cannot work; see app/webview_linux.rs).
 # Same crate/version line wry uses; v2_38 gates the set_enable_webrtc binding.
 [target.'cfg(target_os = "linux")'.dependencies]
-webkit2gtk = { version = "2.0.1", features = ["v2_38"] }
+webkit2gtk = { version = "2.0.1", features = ["v2_38"], optional = true }
 # dlopen for libgtk-layer-shell (see platform/linux/layer_shell.rs). Loaded at
 # runtime, never linked: the library is an optional distro package, and its
 # absence has to degrade to "unsupported", not to a binary that will not start.
-libloading = "0.8"
+libloading = { version = "0.8", optional = true }
 # Same version the notification plugin uses; see event_handler.rs for why
 # Linux notifications bypass the plugin.
-notify-rust = "4"
+notify-rust = { version = "4", optional = true }
 # Direct ALSA access for the PipeWire device layer (`audio/pipewire.rs`).
 # cpal's ALSA host can only open the PCMs it finds in ALSA's hint list, and
 # the per-node PCM this needs - `pipewire:NODE=<name>` - is not one of them.

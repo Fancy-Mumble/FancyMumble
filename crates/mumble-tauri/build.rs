@@ -34,8 +34,15 @@ fn main() {
     generate_permissions_ts();
     generate_shared_constants();
 
+    // The Tauri application, or the engine alone for another view to link.
+    // Read from the environment: `cfg!(feature = ...)` in a build script is
+    // the script's own features, not the crate's.
+    let tauri_view = std::env::var_os("CARGO_FEATURE_TAURI_VIEW").is_some();
+
     export_signal_bridge_version();
-    if target_os != "android" && std::env::var("SKIP_SIGNAL_BRIDGE").is_err() {
+    // The companion binaries are the application's: the engine alone neither
+    // ships the bridge nor hands off to the minimal client.
+    if tauri_view && target_os != "android" && std::env::var("SKIP_SIGNAL_BRIDGE").is_err() {
         build_signal_bridge();
     }
 
@@ -43,11 +50,13 @@ fn main() {
     // (GNU toolchain + MinGW Qt kit), so `cargo tauri dev` / `cargo build`
     // would otherwise never rebuild it and minimal mode would hand off to a
     // stale binary. Skips with a warning when the kit/toolchain is absent.
-    if target_os != "android" && std::env::var("SKIP_QT6UI").is_err() {
+    if tauri_view && target_os != "android" && std::env::var("SKIP_QT6UI").is_err() {
         build_qt6ui();
     }
 
-    build_tauri();
+    if tauri_view {
+        build_tauri();
+    }
 
     // Oboe (Android audio) is a C++ library whose pure-virtual functions
     // need the C++ runtime (`__cxa_pure_virtual` etc.).  The Rust linker

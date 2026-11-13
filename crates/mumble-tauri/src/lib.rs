@@ -17,6 +17,17 @@
     unreachable_pub,
     reason = "application crate: pub items in private modules are intentional for Tauri command system"
 )]
+// Without the Tauri view this crate is the engine alone, and most of what the
+// engine offers has only the view's commands as its callers.
+#![cfg_attr(
+    not(feature = "tauri-view"),
+    allow(
+        dead_code,
+        unused_imports,
+        unused_crate_dependencies,
+        reason = "the engine's callers are the view's commands, which this build leaves out"
+    )
+)]
 
 // --- Global allocator -------------------------------------------------
 //
@@ -28,7 +39,11 @@
 //
 // When the `dhat-heap` profiling feature is on, dhat's allocator takes the
 // slot instead so we can attribute live/peak heap to allocation sites.
-#[cfg(all(not(target_os = "android"), not(feature = "dhat-heap")))]
+#[cfg(all(
+    feature = "tauri-view",
+    not(target_os = "android"),
+    not(feature = "dhat-heap")
+))]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
@@ -46,25 +61,41 @@ static DHAT_PROFILER: std::sync::Mutex<Option<dhat::Profiler>> = std::sync::Mute
 // With `dhat-heap` on, dhat owns the allocator slot, so mimalloc is linked
 // but unused on desktop. Acknowledge it to keep `unused_crate_dependencies`
 // quiet without dropping the dependency declaration.
-#[cfg(all(not(target_os = "android"), feature = "dhat-heap"))]
+#[cfg(all(
+    feature = "tauri-view",
+    not(target_os = "android"),
+    feature = "dhat-heap"
+))]
 use mimalloc as _;
 
-mod adapter;
-mod app;
+// The engine: everything a view sits on. Builds without Tauri.
 mod audio;
-pub(crate) mod commands;
 pub(crate) mod constants;
 pub(crate) mod e2e_stats;
-pub(crate) mod logging;
 pub(crate) mod media;
-pub mod platform;
 mod state;
+
+// The Tauri view over it.
+#[cfg(feature = "tauri-view")]
+mod adapter;
+#[cfg(feature = "tauri-view")]
+mod app;
+#[cfg(feature = "tauri-view")]
+pub(crate) mod commands;
+#[cfg(feature = "tauri-view")]
+pub(crate) mod logging;
+#[cfg(feature = "tauri-view")]
+pub mod platform;
+#[cfg(feature = "tauri-view")]
 pub(crate) mod ui_mode;
-#[cfg(not(target_os = "android"))]
+#[cfg(all(feature = "tauri-view", not(target_os = "android")))]
 mod updater;
+#[cfg(feature = "tauri-view")]
 mod view_state;
 
+#[cfg(feature = "tauri-view")]
 use state::AppState;
+#[cfg(feature = "tauri-view")]
 use tauri::Manager;
 
 /// Resolve the application data directory used for certificates, identities,
@@ -75,6 +106,7 @@ use tauri::Manager;
 /// known-folder API (which ignores env overrides on Windows), so per-instance
 /// isolation for the e2e suite requires this explicit hook. Production runs
 /// (no env var set) behave exactly as before.
+#[cfg(feature = "tauri-view")]
 pub(crate) fn e2e_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     if let Some(dir) = state::host::data_dir_override() {
         return Ok(dir);
@@ -90,6 +122,7 @@ pub(crate) fn e2e_data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf,
     clippy::expect_used,
     reason = "Tauri builder failure during startup is unrecoverable"
 )]
+#[cfg(feature = "tauri-view")]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Start heap profiling. Dropped in the `RunEvent::Exit` handler (see
@@ -225,6 +258,7 @@ pub fn run() {
 /// Everything here must be synchronous: this runs on the main thread outside
 /// the async runtime, and blocking on that runtime from here aborts the
 /// process rather than waiting.
+#[cfg(feature = "tauri-view")]
 fn handle_exit(app: &tauri::AppHandle) {
     // Flush the dhat heap profile before the process exits.
     #[cfg(feature = "dhat-heap")]
