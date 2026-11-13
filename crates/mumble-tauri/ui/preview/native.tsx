@@ -7,7 +7,8 @@
  * this page and one of that view differ only in how they are drawn. See
  * "Measuring the look" in `src/ui/gpui/README.md`.
  *
- * `?mode=light` for the light scheme; `?dump` writes every box's place,
+ * `?screen=connect` is the same client before it is on a server, with the
+ * demo's saved servers; `?mode=light` for the light scheme, `?theme=<id>` for another theme; `?dump` writes every box's place,
  * type and paint into `#dbg` after a few seconds, for `--dump-dom`.
  */
 export {};
@@ -45,6 +46,27 @@ const messages = [
 ];
 const session = { id: "sess", label: "magical.rocks", host: "magical.rocks", port: 64738, username: "Alex", certLabel: null, status: "connected" };
 const server = { id: "s1", label: "magical.rocks", host: "magical.rocks", port: 64738, username: "Alex", cert_label: null };
+const connecting = new URLSearchParams(location.search).get("screen") === "connect";
+const saved = (id: string, host: string, username: string, favorite: boolean) => ({
+  id, label: host, host, port: 64738, username, cert_label: null, favorite,
+});
+// The native demo's saved identities, and what its servers answer a ping with.
+const savedServers = connecting
+  ? [
+      saved("magical-alex", "magical.rocks", "Alex", true),
+      saved("magical-work", "magical.rocks", "Alex (work)", true),
+      saved("kumo", "kumo.jp", "Alex", false),
+      saved("local", "localhost", "Alex", false),
+    ]
+  : [{ ...server, favorite: false }];
+const pong = (users: number, latency: number, version: string) => ({
+  online: true, latency_ms: latency, user_count: users, max_user_count: 101, server_version: version,
+});
+const pings: Record<string, unknown> = {
+  "magical.rocks": pong(3, 18, "1.6.0"),
+  "kumo.jp": pong(0, 62, "1.5.7"),
+};
+const offline = { online: false, latency_ms: null, user_count: null, max_user_count: null, server_version: null };
 const seen = new Set<string>();
 const stores: string[] = [];
 const answers: Record<string, (args: any) => unknown> = {
@@ -54,9 +76,10 @@ const answers: Record<string, (args: any) => unknown> = {
   get_messages_page: () => ({ rows: messages, moreBefore: false, moreAfter: false, atTail: true }),
   get_current_channel: () => 1,
   get_own_session: () => 1,
-  get_status: () => "connected",
-  list_servers: () => [session],
-  get_active_server: () => "sess",
+  get_status: () => (connecting ? "disconnected" : "connected"),
+  list_servers: () => (connecting ? [] : [session]),
+  get_active_server: () => (connecting ? null : "sess"),
+  ping_server: (a: any) => pings[a?.host] ?? offline,
   get_unread_counts: () => ({}),
   get_dm_unread_counts: () => ({}),
   get_listened_channels: () => [],
@@ -69,7 +92,7 @@ const answers: Record<string, (args: any) => unknown> = {
   "plugin:store|load": (a: any) => { stores.push(String(a?.path ?? "")); return stores.length; },
   "plugin:store|get": (a: any) => {
     const file = stores[(a?.rid ?? 0) - 1] ?? "";
-    if (file.endsWith("servers.json") && a?.key === "servers") return [[{ ...server, favorite: false }], true];
+    if (file.endsWith("servers.json") && a?.key === "servers") return [savedServers, true];
     return null;
   },
   "plugin:event|listen": () => 1,
@@ -94,13 +117,27 @@ window.addEventListener("unhandledrejection", (e) => { const d = document.getEle
 const { createRoot } = await import("react-dom/client");
 await import("@core/i18n");
 const { useAppStore } = await import("@core/store");
-useAppStore.setState({
-  status: "connected", sessions: [session], activeServerId: "sess",
-  channels, users, messages, pollMessages: [], dmMessages: [],
-  selectedChannel: 1, selectedDmUser: null, selectedUser: null, currentChannel: 1, ownSession: 1,
-} as any);
+if (!connecting)
+  useAppStore.setState({
+    status: "connected", sessions: [session], activeServerId: "sess",
+    channels, users, messages, pollMessages: [], dmMessages: [],
+    selectedChannel: 1, selectedDmUser: null, selectedUser: null, currentChannel: 1, ownSession: 1,
+  } as any);
 const { default: NebulaApp } = await import("@nebula/index");
 createRoot(document.getElementById("root")!).render(<NebulaApp />);
+// After the app's own start-up, which falls back to the default theme when
+// it finds no stored choice.
+// `?click=<css selector>` presses something once the client is up: a way
+// to photograph a menu or a dialog.
+const wantClick = new URLSearchParams(location.search).get("click");
+if (wantClick)
+  setTimeout(() => {
+    const target = document.querySelector(wantClick);
+    for (const kind of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"])
+      target?.dispatchEvent(new MouseEvent(kind, { bubbles: true, cancelable: true, view: window }));
+  }, 2500);
+const wantTheme = new URLSearchParams(location.search).get("theme");
+if (wantTheme) setTimeout(() => document.documentElement.setAttribute("data-theme", wantTheme), 1500);
 if (new URLSearchParams(location.search).has("dump")) {
   setTimeout(() => {
     const out: string[] = [];
