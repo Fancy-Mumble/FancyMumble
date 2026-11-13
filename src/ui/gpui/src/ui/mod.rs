@@ -67,6 +67,25 @@ pub(super) struct Info {
     facts: Vec<(gpui::SharedString, gpui::SharedString)>,
 }
 
+/// A size in bytes as a person says it: `812 B`, `1.5 KB`, `3.2 MB`.
+pub(crate) fn size_in_words(bytes: u64) -> String {
+    const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
+    if bytes < 1024 {
+        return format!("{bytes} B");
+    }
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "said to one decimal; nobody shares a file of 2^53 bytes"
+    )]
+    let mut size = bytes as f64 / 1024.0;
+    let mut unit = 0;
+    while size >= 1024.0 && unit + 1 < UNITS.len() {
+        size /= 1024.0;
+        unit += 1;
+    }
+    format!("{size:.1} {}", UNITS[unit])
+}
+
 /// Who has read how far in the open channel.
 #[derive(Default)]
 pub(super) struct Seen {

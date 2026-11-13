@@ -352,6 +352,8 @@ pub(crate) struct Message {
     pub failed: bool,
     /// Whether it is pinned in its channel.
     pub pinned: bool,
+    /// The files it shares.
+    pub files: Vec<Attachment>,
     /// The reactions on it, in the order each emoji was first used.
     pub reactions: Vec<Reaction>,
 }
@@ -437,6 +439,18 @@ pub(crate) struct Window {
     pub messages: Vec<Message>,
     /// Whether there are older ones than these.
     pub earlier: bool,
+}
+
+/// A file shared in a message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Attachment {
+    pub name: SharedString,
+    /// Its size in bytes, where the sender said.
+    pub size: Option<u64>,
+    /// What the server keeps it under: what [`Engine::save_file`] takes.
+    pub key: Option<SharedString>,
+    /// A link anybody can fetch it from, where it has one.
+    pub url: Option<SharedString>,
 }
 
 /// One emoji on a message, and how many put it there.
@@ -638,6 +652,14 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// Send the picture in `file`, an encoded image, to `conversation`,
     /// scaled down as far as the server's limit on a message asks.
     fn send_picture(&self, conversation: Conversation, file: Vec<u8>);
+
+    /// Share the file at `path` with `conversation`. A server that keeps
+    /// no files says so in a notice.
+    fn send_file(&self, conversation: Conversation, path: std::path::PathBuf);
+
+    /// Fetch the shared file kept under `key` and write it to `to`. How
+    /// it went is said in a notice.
+    fn save_file(&self, key: SharedString, to: std::path::PathBuf);
 
     /// The microphone button: turns voice on when it is off, mutes or
     /// unmutes when it is on.

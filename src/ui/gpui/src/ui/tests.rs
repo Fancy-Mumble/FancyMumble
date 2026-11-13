@@ -1351,3 +1351,31 @@ fn a_poll_is_asked_from_the_channels_menu_and_answered_with_a_click(cx: &mut Tes
         Some(Action::Vote { selected, .. }) if selected.is_empty()
     ));
 }
+
+#[gpui::test]
+fn a_shared_file_is_a_card_and_a_click_asks_where_to_save_it(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    engine.send_file(Conversation::Channel(1), "/somewhere/notes.txt".into());
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| {
+        let files = &shell.messages[5].files;
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].name.as_ref(), "notes.txt");
+    });
+    click(cx, "file-5-0");
+    assert!(cx.did_prompt_for_new_path());
+    cx.simulate_new_path_selection(|folder| Some(folder.join("kept.txt")));
+    cx.run_until_parked();
+    let saved = engine.saved();
+    assert_eq!(saved.len(), 1);
+    assert_eq!(saved[0].0.as_ref(), "demo/notes.txt");
+    assert!(saved[0].1.ends_with("kept.txt"));
+}
+
+#[test]
+fn a_size_is_said_in_the_unit_that_fits() {
+    assert_eq!(super::size_in_words(812), "812 B");
+    assert_eq!(super::size_in_words(1_536), "1.5 KB");
+    assert_eq!(super::size_in_words(3 * 1024 * 1024 + 200_000), "3.2 MB");
+    assert_eq!(super::size_in_words(5 * 1024 * 1024 * 1024), "5.0 GB");
+}

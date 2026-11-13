@@ -611,17 +611,59 @@ impl Shell {
         });
     }
 
-    /// Choose a picture file to send to the open conversation.
-    pub(super) fn pick_picture_to_send(&mut self, cx: &mut Context<Self>) {
-        self.pick_picture(
-            cx,
-            |file| Ok(file.to_vec()),
-            |shell, picture| {
+    /// Choose a file to send to the open conversation. A picture goes in
+    /// the message itself, which every server and client takes; anything
+    /// else is shared as a file, where the server keeps files.
+    pub(super) fn pick_file_to_send(&mut self, cx: &mut Context<Self>) {
+        let chosen = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: Some("Choose a file to send".into()),
+        });
+        cx.spawn(async move |shell, cx| {
+            let Ok(Ok(Some(paths))) = chosen.await else {
+                return;
+            };
+            let Some(path) = paths.into_iter().next() else {
+                return;
+            };
+            // Only a picture is read here, and off the view's thread; a
+            // file is read by whoever uploads it, a piece at a time.
+            let read = path.clone();
+            let picture = cx
+                .background_executor()
+                .spawn(async move { picture_at(&read) })
+                .await;
+            let _ = shell.update(cx, |shell, cx| {
                 if let Some(conversation) = shell.open {
-                    shell.engine.send_picture(conversation, picture);
+                    match picture {
+                        Some(picture) => shell.engine.send_picture(conversation, picture),
+                        None => shell.engine.send_file(conversation, path),
+                    }
                 }
-            },
-        );
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Ask where to, and save the shared file kept under `key` there.
+    pub(super) fn save_attachment(
+        &mut self,
+        key: SharedString,
+        name: &str,
+        cx: &mut Context<Self>,
+    ) {
+        let home = std::env::var_os("HOME").map_or_else(std::env::temp_dir, Into::into);
+        let chosen = cx.prompt_for_new_path(&home, Some(name));
+        cx.spawn(async move |shell, cx| {
+            let Ok(Ok(Some(to))) = chosen.await else {
+                return;
+            };
+            let _ = shell.update(cx, |shell, _| shell.engine.save_file(key, to));
+        })
+        .detach();
     }
 
     /// Ask for a picture file, read it and put it through `prepare` on
@@ -666,6 +708,25 @@ impl Shell {
         })
         .detach();
     }
+}
+
+/// The file at `path` whole, if it is a picture small enough to go in a
+/// message; `None` for anything else, a file that cannot be read included.
+fn picture_at(path: &std::path::Path) -> Option<Vec<u8>> {
+    use std::io::Read as _;
+    let mut file = std::fs::File::open(path).ok()?;
+    if file.metadata().ok()?.len() > MAX_PICTURE_FILE {
+        return None;
+    }
+    // The first bytes say what it is; the rest is read only if it is one.
+    let mut bytes = vec![0; 16];
+    let read = file.read(&mut bytes).ok()?;
+    bytes.truncate(read);
+    if !crate::picture::is_picture(&bytes) {
+        return None;
+    }
+    let _ = file.read_to_end(&mut bytes).ok()?;
+    Some(bytes)
 }
 
 /// The open menu, over a backdrop that closes it.

@@ -53,6 +53,12 @@ fn mime(bytes: &[u8]) -> Option<&'static str> {
     })
 }
 
+/// Whether `bytes`, the start of a file at least, are a picture this can
+/// send in a message.
+pub(crate) fn is_picture(bytes: &[u8]) -> bool {
+    mime(bytes).is_some()
+}
+
 /// How long the message carrying `encoded` bytes of picture is: the bytes
 /// in base64, inside the tag around them.
 fn message_len(encoded: usize, mime: &str) -> usize {

@@ -30,6 +30,7 @@ icons![
     "chevron-right",
     "download",
     "ear",
+    "file",
     "ellipsis-vertical",
     "hash",
     "headphone-off",

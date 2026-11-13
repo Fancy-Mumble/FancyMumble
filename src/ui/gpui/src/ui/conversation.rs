@@ -445,7 +445,7 @@ fn composer(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoE
                     .justify_center()
                     .cursor_pointer()
                     .hover(move |style| style.bg(hover))
-                    .on_click(cx.listener(|shell, _, _, cx| shell.pick_picture_to_send(cx)))
+                    .on_click(cx.listener(|shell, _, _, cx| shell.pick_file_to_send(cx)))
                     .child(icon("paperclip", 15.0, theme.c.muted)),
             )
             .child(shell.composer.clone())
@@ -504,13 +504,12 @@ impl Shell {
             theme.skin.message_gap
         };
         // Under the bubble: what lies behind its link, then its reactions.
-        let under: Vec<AnyElement> = [
-            self.preview_card(index, &theme),
-            self.reaction_chips(index, &theme, cx),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
+        let under: Vec<AnyElement> = self
+            .file_cards(index, &theme, cx)
+            .into_iter()
+            .chain(self.preview_card(index, &theme))
+            .chain(self.reaction_chips(index, &theme, cx))
+            .collect();
         let message = &self.messages[index];
         let body = if message.own {
             let (seen, seen_by) = self.seen_marks(index);
@@ -810,6 +809,70 @@ impl Shell {
             self.engine.previews(vec![url]);
         }
         drawn
+    }
+
+    /// A card for each file message `index` shares: its name and size. A
+    /// click saves it, or opens its link where that is all there is.
+    fn file_cards(&self, index: usize, theme: &Theme, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let Some(message) = self.messages.get(index) else {
+            return Vec::new();
+        };
+        let hover = theme.c.hover;
+        message
+            .files
+            .iter()
+            .enumerate()
+            .map(|(at, file)| {
+                let (key, url, name) = (file.key.clone(), file.url.clone(), file.name.clone());
+                div()
+                    .id(("file", index * 16 + at))
+                    .debug_selector(move || format!("file-{index}-{at}"))
+                    .max_w(px(420.0))
+                    .flex()
+                    .items_center()
+                    .gap(px(10.0))
+                    .px(px(12.0))
+                    .py(px(9.0))
+                    .rounded(theme.skin.radius_md)
+                    .bg(theme.c.card)
+                    .border_1()
+                    .border_color(theme.c.line2)
+                    .cursor_pointer()
+                    .hover(move |style| style.bg(hover))
+                    .on_click(cx.listener(move |shell, _, _, cx| {
+                        match (key.clone(), url.as_ref()) {
+                            (Some(key), _) => shell.save_attachment(key, &name, cx),
+                            (None, Some(url)) => cx.open_url(url),
+                            (None, None) => {}
+                        }
+                    }))
+                    .child(icon("file", 18.0, theme.c.muted))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .truncate()
+                                    .text_size(px(13.0))
+                                    .font_weight(EMPHASIS)
+                                    .child(file.name.clone()),
+                            )
+                            .when_some(file.size, |text, size| {
+                                text.child(
+                                    div()
+                                        .text_size(px(11.0))
+                                        .text_color(theme.c.muted)
+                                        .child(SharedString::from(super::size_in_words(size))),
+                                )
+                            }),
+                    )
+                    .child(icon("download", 14.0, theme.c.muted))
+                    .into_any_element()
+            })
+            .collect()
     }
 
     /// The card for what lies behind the first link of message `index`,
@@ -1271,6 +1334,7 @@ mod tests {
             edited: false,
             failed: false,
             pinned: false,
+            files: Vec::new(),
             reactions: Vec::new(),
         }
     }

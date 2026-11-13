@@ -9,7 +9,7 @@ use crate::engine::{
     Registered, SavedServer, ServerPing, Session, SessionEntry, Snapshot, Subject, User, Voice,
     VoiceSettings, Window,
 };
-use crate::engine::{Poll, PollOption};
+use crate::engine::{Attachment, Poll, PollOption};
 
 /// The local user's session in the demo server.
 const OWN: Session = 1;
@@ -51,6 +51,8 @@ struct State {
     /// The message the view last said it had read up to.
     read_up_to: Option<gpui::SharedString>,
     polls: Vec<Poll>,
+    /// The shared files the view asked to have saved, and where to.
+    saved: Vec<(gpui::SharedString, std::path::PathBuf)>,
 }
 
 impl DemoEngine {
@@ -79,6 +81,12 @@ impl DemoEngine {
     /// Have `session` start or stop talking.
     pub(crate) fn talk(&self, session: Session, talking: bool) {
         self.tell(EngineEvent::UserTalking { session, talking });
+    }
+
+    /// The shared files the view asked to have saved, and where to.
+    #[cfg(test)]
+    pub(crate) fn saved(&self) -> Vec<(gpui::SharedString, std::path::PathBuf)> {
+        self.with_state(|state| state.saved.clone())
     }
 
     /// The message the view last said it had read up to.
@@ -127,6 +135,7 @@ impl DemoEngine {
                     edited: false,
                     failed: false,
                     pinned: false,
+                    files: Vec::new(),
                     reactions: Vec::new(),
                 },
             ));
@@ -368,6 +377,7 @@ impl State {
                     edited: false,
                     failed: false,
                     pinned: false,
+                    files: Vec::new(),
                     reactions: Vec::new(),
                 },
             )
@@ -410,6 +420,7 @@ impl State {
             snapshots: 0,
             read_up_to: None,
             polls: Vec::new(),
+            saved: Vec::new(),
             certificates: vec!["alex".into(), "work".into()],
             messages: vec![
                 said(0, OWN, "Alex", "Welcome to our creative lounge!"),
@@ -785,6 +796,7 @@ impl Engine for DemoEngine {
                     edited: false,
                     failed: false,
                     pinned: false,
+                    files: Vec::new(),
                     reactions: Vec::new(),
                 },
             ));
@@ -814,6 +826,7 @@ impl Engine for DemoEngine {
                             edited: false,
                             failed: false,
                             pinned: false,
+                            files: Vec::new(),
                             reactions: Vec::new(),
                         },
                     ));
@@ -822,6 +835,47 @@ impl Engine for DemoEngine {
             }
             Err(problem) => self.tell(EngineEvent::Notice(Some(problem.into()))),
         }
+    }
+
+    fn send_file(&self, conversation: Conversation, path: std::path::PathBuf) {
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        self.with_state(|state| {
+            let sent_at_ms = state
+                .messages
+                .last()
+                .and_then(|(_, last)| last.sent_at_ms)
+                .map_or(FIRST_MESSAGE_MS, |last| last + MINUTE_MS);
+            state.messages.push((
+                conversation,
+                Message {
+                    sender: Some(OWN),
+                    sender_name: "Alex".into(),
+                    html: gpui::SharedString::default(),
+                    body: "sent a file".into(),
+                    sent_at_ms: Some(sent_at_ms),
+                    own: true,
+                    id: Some(format!("demo-sent-{sent_at_ms}").into()),
+                    edited: false,
+                    failed: false,
+                    pinned: false,
+                    files: vec![Attachment {
+                        key: Some(format!("demo/{name}").into()),
+                        name: name.into(),
+                        size: Some(1_536),
+                        url: None,
+                    }],
+                    reactions: Vec::new(),
+                },
+            ));
+        });
+        self.tell(EngineEvent::NewMessage { conversation });
+    }
+
+    fn save_file(&self, key: gpui::SharedString, to: std::path::PathBuf) {
+        self.with_state(|state| state.saved.push((key, to)));
     }
 
     fn toggle_microphone(&self) {

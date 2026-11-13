@@ -20,7 +20,7 @@ use crate::engine::{
     Registered, SavedServer, ServerPing, SessionEntry, Snapshot, Subject, User, Voice,
     VoiceSettings, Window,
 };
-use crate::engine::{Poll, PollOption, Reader};
+use crate::engine::{Attachment, Poll, PollOption, Reader};
 use crate::store::Store;
 
 /// `(host, port)`: what a ping is kept under.
@@ -889,13 +889,14 @@ impl Engine for RealEngine {
                 sender: message.sender,
                 sender_name: message.sender_name.into(),
                 body: message.text.into(),
-                html: message.html.into(),
                 sent_at_ms: message.sent_at_ms.or(Some(*read_at)),
                 own: message.own,
                 id: message.id.map(Into::into),
                 edited: message.edited,
                 failed: message.failed,
                 pinned: message.pinned,
+                files: attachments(&message.html),
+                html: message.html.into(),
             })
             .collect();
         Window { messages, earlier }
@@ -972,6 +973,37 @@ impl Engine for RealEngine {
                 Conversation::Channel(channel) => engine.send_html(channel, html).await,
                 Conversation::Direct(session) => engine.send_direct_html(session, html).await,
             }
+        });
+    }
+
+    fn send_file(&self, conversation: Conversation, path: std::path::PathBuf) {
+        let engine = self.shared.engine.clone();
+        self.spawn(async move {
+            let Conversation::Channel(channel) = conversation else {
+                return Err(
+                    "Files are shared in channels; a direct message takes pictures.".into(),
+                );
+            };
+            if !engine.fancy() {
+                return Err("This server keeps no files; it takes pictures only.".into());
+            }
+            engine.share_file(channel, &path).await
+        });
+    }
+
+    fn save_file(&self, key: SharedString, to: std::path::PathBuf) {
+        let shared = Arc::clone(&self.shared);
+        self.spawn(async move {
+            let bytes = shared.engine.save_shared_file(&key, &to).await?;
+            shared.tell(EngineEvent::Notice(Some(
+                format!(
+                    "Saved {} ({}).",
+                    to.display(),
+                    crate::ui::size_in_words(bytes)
+                )
+                .into(),
+            )));
+            Ok(())
         });
     }
 
@@ -1278,6 +1310,23 @@ impl HeldPoll {
             at_ms: self.at_ms,
         }
     }
+}
+
+/// The files the message `html` shares. Most messages share none, and
+/// that is found out without taking the message apart.
+fn attachments(html: &str) -> Vec<Attachment> {
+    if !html.contains("FANCY_FILE") {
+        return Vec::new();
+    }
+    api::attachments_in(html)
+        .into_iter()
+        .map(|file| Attachment {
+            name: file.filename.into(),
+            size: file.size,
+            key: file.key.map(Into::into),
+            url: file.url.map(Into::into),
+        })
+        .collect()
 }
 
 fn preview_of(preview: api::LinkPreview) -> Preview {
@@ -2439,6 +2488,59 @@ mod tests {
         bob.act(vote(vec![0]));
         wait_for("bob's vote to move", || {
             stands(&alice) == [(2, true), (0, false)] && stands(&bob) == [(2, true), (0, false)]
+        });
+        for (engine, dir) in [(alice, alice_dir), (bob, bob_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+    /// A file is shared by one who may and saved by the other, byte for
+    /// byte.
+    #[test]
+    #[ignore = "needs a live Fancy server that keeps files, and its SuperUser password"]
+    fn live_fancy_a_file_is_shared_and_saved() {
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (alice, alice_dir) = fancy_client("SuperUser", Some(password));
+        let (bob, bob_dir) = fancy_client("FileBob", None);
+        wait_for("both to connect", || {
+            alice.snapshot().users.len() >= 2 && bob.snapshot().users.len() >= 2
+        });
+        let channel = alice.snapshot().current_channel.expect("a channel");
+        let room = Conversation::Channel(channel);
+        // Not a picture, and not small enough to be all one block.
+        let contents: Vec<u8> = (0..200_000_u32).flat_map(u32::to_le_bytes).collect();
+        let original = alice_dir.join("numbers.bin");
+        std::fs::write(&original, &contents).expect("writable");
+
+        // A guest may not: the server says so, and nothing is sent.
+        let told = bob.events();
+        let unsent = bob_dir.join("unsent.bin");
+        std::fs::write(&unsent, b"not a picture").expect("writable");
+        bob.send_file(room, unsent);
+        wait_for("the guest to be refused, with words", || {
+            std::iter::from_fn(|| told.try_recv().ok())
+                .any(|event| matches!(event, EngineEvent::Notice(Some(_))))
+        });
+
+        alice.send_file(room, original);
+        let shared = |engine: &RealEngine| {
+            engine
+                .messages(room)
+                .into_iter()
+                .find_map(|message| message.files.into_iter().next())
+        };
+        wait_for("both to have the file's card", || {
+            shared(&alice).is_some() && shared(&bob).is_some()
+        });
+        let file = shared(&bob).expect("the file");
+        assert_eq!(file.name.as_ref(), "numbers.bin");
+        assert_eq!(file.size, Some(contents.len() as u64));
+
+        let saved = bob_dir.join("saved.bin");
+        bob.save_file(file.key.expect("a key"), saved.clone());
+        wait_for("the file to be saved whole", || {
+            std::fs::read(&saved).is_ok_and(|read| read == contents)
         });
         for (engine, dir) in [(alice, alice_dir), (bob, bob_dir)] {
             engine.shutdown();
