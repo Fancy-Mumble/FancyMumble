@@ -69,6 +69,7 @@ pub(crate) mod recovery;
 mod registry;
 pub(crate) mod runtime;
 mod search;
+pub(crate) mod server_ping;
 mod server_settings;
 mod sessions;
 mod shared_handle;
