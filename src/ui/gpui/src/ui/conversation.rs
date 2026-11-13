@@ -1547,6 +1547,42 @@ fn bubble(fill: Hsla, edge: Hsla, own: bool) -> Paper {
         .line_height(px(21.7))
 }
 
+/// The face beside what somebody said. While they are still here, a click
+/// on it opens their card.
+fn face(
+    message: &Message,
+    picture: Option<&Arc<gpui::Image>>,
+    at: Place<'_>,
+) -> impl IntoElement + use<> {
+    let session = message.sender;
+    div()
+        .id(("face", at.row))
+        .debug_selector(move || format!("face-{}", at.row))
+        .when_some(
+            session.zip(at.viewer.cloned()),
+            |face, (session, viewer)| {
+                face.cursor_pointer().on_click(move |_, _, cx| {
+                    let _ = viewer.update(cx, |shell, cx| {
+                        // Somebody who has left has no card to fetch.
+                        if shell
+                            .snapshot
+                            .users
+                            .iter()
+                            .any(|user| user.session == session)
+                        {
+                            shell.show_about(crate::engine::Subject::User(session), cx);
+                        }
+                    });
+                })
+            },
+        )
+        .child(
+            Avatar::new(&message.sender_name)
+                .picture(picture)
+                .size(38.0),
+        )
+}
+
 /// The time beside a name or under a bubble.
 fn stamp(time: SharedString, theme: &Theme) -> gpui::Div {
     div()
@@ -1586,19 +1622,13 @@ fn their_message(
                 .items_center()
                 .gap(px(3.0))
                 .when(!continues, |column| {
-                    column
-                        .child(
-                            Avatar::new(&message.sender_name)
-                                .picture(picture)
-                                .size(38.0),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(9.0))
-                                .line_height(px(10.8))
-                                .text_color(theme.c.dim)
-                                .child(time.clone()),
-                        )
+                    column.child(face(message, picture, at)).child(
+                        div()
+                            .text_size(px(9.0))
+                            .line_height(px(10.8))
+                            .text_color(theme.c.dim)
+                            .child(time.clone()),
+                    )
                 }),
         )
         .child(

@@ -2141,3 +2141,15 @@ fn somebody_with_a_profile_gets_a_card_that_says_what_it_says(cx: &mut TestAppCo
     });
     assert!(cx.debug_bounds("profile-line").is_some());
 }
+
+#[gpui::test]
+fn a_click_on_a_face_beside_a_message_opens_that_persons_card(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell(cx);
+    // Row 2 is Rin's message: the day rule, Alex's own, then hers.
+    click(cx, "face-2");
+    shell.read_with(cx, |shell, _| {
+        let info = shell.info.as_ref().expect("the card");
+        assert_eq!(info.title.as_ref(), "Rin");
+        assert!(info.profile.is_some());
+    });
+}
