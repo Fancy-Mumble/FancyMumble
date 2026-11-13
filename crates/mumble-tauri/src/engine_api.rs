@@ -605,6 +605,148 @@ impl EngineHandle {
         self.state.apply_audio_settings(settings)
     }
 
+    /// How loud the user `session` is played here: 0.0 is silent, 1.0 as
+    /// sent, 2.0 twice as loud. Local only; nobody else is told.
+    pub fn set_user_volume(&self, session: u32, volume: f32) {
+        self.state.set_user_volume(session, volume);
+    }
+
+    /// Remove the user `session` from the server.
+    ///
+    /// # Errors
+    ///
+    /// When not connected. A refusal arrives as [`EngineEvent::Denied`].
+    pub async fn kick(&self, session: u32, reason: Option<String>) -> Result<(), String> {
+        self.state.kick_user(session, reason).await
+    }
+
+    /// Remove the user `session` and ban them from returning.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn ban(&self, session: u32, reason: Option<String>) -> Result<(), String> {
+        self.state.ban_user(session, reason).await
+    }
+
+    /// Mute or unmute the user `session` for everyone.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn server_mute(&self, session: u32, muted: bool) -> Result<(), String> {
+        self.state.mute_user(session, muted).await
+    }
+
+    /// Deafen or undeafen the user `session` for everyone.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn server_deafen(&self, session: u32, deafened: bool) -> Result<(), String> {
+        self.state.deafen_user(session, deafened).await
+    }
+
+    /// Move the user `session` into `channel`.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn move_user(&self, session: u32, channel: u32) -> Result<(), String> {
+        self.state.move_user(session, channel).await
+    }
+
+    /// Register the user `session` on the server under their certificate.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn register(&self, session: u32) -> Result<(), String> {
+        self.state.register_user(session).await
+    }
+
+    /// Create the channel `name` under `parent`.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn create_channel(&self, parent: u32, name: String) -> Result<(), String> {
+        self.state
+            .create_channel(
+                parent,
+                name,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Vec::new(),
+                Vec::new(),
+            )
+            .await
+    }
+
+    /// Rename `channel`.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn rename_channel(&self, channel: u32, name: String) -> Result<(), String> {
+        self.state
+            .update_channel(
+                channel,
+                None,
+                Some(name),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Vec::new(),
+                Vec::new(),
+            )
+            .await
+    }
+
+    /// Delete `channel`, and everything under it.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn delete_channel(&self, channel: u32) -> Result<(), String> {
+        self.state.delete_channel(channel).await
+    }
+
+    /// Set the local user's comment: what others read about them.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn set_comment(&self, text: &str) -> Result<(), String> {
+        self.state.set_user_comment(escape_html(text)).await
+    }
+
+    /// Set the local user's picture, from an encoded image; empty removes it.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn set_avatar(&self, image: Vec<u8>) -> Result<(), String> {
+        self.state.set_user_texture(image).await
+    }
+
     /// How the microphone is used.
     pub fn voice_settings(&self) -> VoiceSettings {
         let settings = self.state.audio_settings();

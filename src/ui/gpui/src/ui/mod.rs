@@ -7,6 +7,7 @@ mod connect;
 mod conversation;
 mod devices;
 mod frame;
+mod menu;
 mod picker;
 mod rail;
 mod server_editor;
@@ -84,6 +85,12 @@ pub(crate) struct Shell {
     devices: Option<AudioDevices>,
     /// The devices in use.
     chosen_devices: ChosenDevices,
+    /// The menu a right click opened, while it is open.
+    menu: Option<menu::Menu>,
+    /// The dialog a menu entry asked a question in, while it is open.
+    prompt: Option<menu::Prompt>,
+    /// How loud each user is played here, where that is not as sent.
+    volumes: std::collections::HashMap<Session, f32>,
     /// How the microphone is used.
     voice_settings: VoiceSettings,
     /// The push-to-talk key, as GPUI names it.
@@ -155,6 +162,9 @@ impl Shell {
             devices_open: false,
             devices: None,
             chosen_devices: engine.chosen_devices(),
+            menu: None,
+            prompt: None,
+            volumes: std::collections::HashMap::new(),
             voice_settings: engine.voice_settings(),
             ptt_key,
             choosing_ptt_key: false,
@@ -370,6 +380,10 @@ impl Shell {
 
     /// Escape: close whatever is open on top of the window.
     pub(crate) fn dismiss(&mut self, cx: &mut Context<Self>) {
+        if self.menu.take().is_some() || self.prompt.take().is_some() {
+            cx.notify();
+            return;
+        }
         if self.editor.take().is_none() {
             self.picker_open = false;
             self.devices_open = false;
@@ -571,6 +585,12 @@ impl Render for Shell {
             })
             .when_some(self.editor.as_ref(), |shell, editor| {
                 shell.child(server_editor::render(editor, &theme, cx))
+            })
+            .when_some(self.menu.as_ref(), |shell, menu| {
+                shell.child(menu::render_menu(menu, &theme, window, cx))
+            })
+            .when_some(self.prompt.as_ref(), |shell, prompt| {
+                shell.child(menu::render_prompt(prompt, &theme, cx))
             })
             .children(frame::resize_grips(window))
     }

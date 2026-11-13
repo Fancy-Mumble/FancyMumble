@@ -172,6 +172,16 @@ fn channel_row(
             _ => row.hover(move |style| style.bg(hover)),
         })
         .when(current, |row| row.font_weight(EMPHASIS))
+        .on_mouse_down(
+            gpui::MouseButton::Right,
+            cx.listener(move |shell, event: &gpui::MouseDownEvent, _, cx| {
+                let Some(channel) = shell.snapshot.channels.iter().find(|c| c.id == id) else {
+                    return;
+                };
+                let items = super::menu::channel_items(channel, shell.snapshot.current_channel);
+                shell.open_menu(event.position, items, cx);
+            }),
+        )
         // A click reads the channel; a double click moves into it.
         .on_click(cx.listener(move |shell, event: &gpui::ClickEvent, _, cx| {
             if event.click_count() >= 2 {
@@ -275,6 +285,21 @@ fn occupant_row(
         .gap(px(9.0))
         .px(px(14.0))
         .rounded(theme.skin.radius_sm)
+        .on_mouse_down(
+            gpui::MouseButton::Right,
+            cx.listener(move |shell, event: &gpui::MouseDownEvent, _, cx| {
+                let Some(user) = shell.snapshot.users.iter().find(|u| u.session == session) else {
+                    return;
+                };
+                let items = super::menu::user_items(
+                    user,
+                    shell.snapshot.own_session,
+                    shell.snapshot.current_channel,
+                    shell.volumes.get(&session).copied().unwrap_or(1.0),
+                );
+                shell.open_menu(event.position, items, cx);
+            }),
+        )
         .when(open, |row| row.bg(theme.c.accent_soft))
         // A click on somebody else opens the direct conversation with them.
         .when(!own, |row| {

@@ -108,6 +108,42 @@ pub(crate) struct VoiceSettings {
     pub automatic_gain: bool,
 }
 
+/// Something the user asks of the server about a user or a channel, or of
+/// this client about how a user is played.
+///
+/// The server may refuse any of the ones addressed to it; a refusal comes
+/// back as a notice.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Action {
+    /// Play `session` at `volume` here: 0.0 silent, 1.0 as sent.
+    SetUserVolume { session: Session, volume: f32 },
+    /// Remove `session` from the server.
+    Kick { session: Session, reason: String },
+    /// Remove `session` and ban them from returning.
+    Ban { session: Session, reason: String },
+    /// Mute or unmute `session` for everyone.
+    ServerMute { session: Session, muted: bool },
+    /// Deafen or undeafen `session` for everyone.
+    ServerDeafen { session: Session, deafened: bool },
+    /// Move `session` into `channel`.
+    MoveUser {
+        session: Session,
+        channel: ChannelId,
+    },
+    /// Register `session` on the server under their certificate.
+    Register { session: Session },
+    /// Create the channel `name` under `parent`.
+    CreateChannel { parent: ChannelId, name: String },
+    /// Rename `channel`.
+    RenameChannel { channel: ChannelId, name: String },
+    /// Delete `channel`, and everything under it.
+    DeleteChannel { channel: ChannelId },
+    /// Set the local user's comment.
+    SetComment(String),
+    /// Set the local user's picture, from an encoded image.
+    SetAvatar(Vec<u8>),
+}
+
 /// One channel of the server's tree.
 #[derive(Debug, Clone)]
 pub(crate) struct Channel {
@@ -276,6 +312,9 @@ pub(crate) trait Engine: Send + Sync + 'static {
 
     /// Use these devices from now on.
     fn choose_devices(&self, devices: ChosenDevices);
+
+    /// Do `action`.
+    fn act(&self, action: Action);
 
     /// How the microphone is used.
     fn voice_settings(&self) -> VoiceSettings;

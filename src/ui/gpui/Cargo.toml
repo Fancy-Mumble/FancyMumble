@@ -34,6 +34,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 async-channel = "2"
 # Pictures pasted into a message arrive as base64 `data:` URIs.
 base64 = "0.22"
+# Scaling a chosen picture down to an avatar. The version GPUI already builds.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 # Local time, for the clock beside a message and the rule between days.
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # The theme table (assets/themes.json) is generated from the web UI's

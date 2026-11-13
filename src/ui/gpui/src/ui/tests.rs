@@ -7,7 +7,7 @@ use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
 
 use super::Shell;
 use crate::demo::DemoEngine;
-use crate::engine::{Connection, Conversation, Engine, Voice};
+use crate::engine::{Action, Connection, Conversation, Engine, Voice};
 use crate::theme::{ActiveTheme, Catalog, DEFAULT_THEME, Mode};
 
 /// A shell on a fresh demo server, in the default theme.
@@ -40,6 +40,18 @@ fn click(cx: &mut VisualTestContext, selector: &'static str) {
         .debug_bounds(selector)
         .unwrap_or_else(|| panic!("nothing on screen is tagged `{selector}`"));
     cx.simulate_click(bounds.center(), Modifiers::none());
+    cx.run_until_parked();
+}
+
+/// Right-click the middle of the element tagged `selector`.
+#[track_caller]
+fn right_click(cx: &mut VisualTestContext, selector: &'static str) {
+    let at = cx
+        .debug_bounds(selector)
+        .unwrap_or_else(|| panic!("nothing on screen is tagged `{selector}`"))
+        .center();
+    cx.simulate_mouse_down(at, gpui::MouseButton::Right, Modifiers::none());
+    cx.simulate_mouse_up(at, gpui::MouseButton::Right, Modifiers::none());
     cx.run_until_parked();
 }
 
@@ -592,4 +604,102 @@ fn the_voice_switches_and_the_activation_level_reach_the_engine(cx: &mut TestApp
     assert!(after.threshold > before.threshold);
     click(cx, "threshold-down");
     assert!((engine.voice_settings().threshold - before.threshold).abs() < 1e-6);
+}
+
+#[gpui::test]
+fn a_users_menu_sets_their_volume_and_remembers_it(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    right_click(cx, "user-3");
+    shell.read_with(cx, |shell, _| assert!(shell.menu.is_some()));
+    click(cx, "menu-Mute here");
+    assert_eq!(
+        engine.actions(),
+        [Action::SetUserVolume {
+            session: 3,
+            volume: 0.0
+        }]
+    );
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.menu.is_none(), "choosing closes the menu");
+        assert_eq!(shell.volumes.get(&3), Some(&0.0));
+    });
+}
+
+#[gpui::test]
+fn kicking_asks_for_a_reason_first(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    right_click(cx, "user-3");
+    click(cx, "menu-Kick…");
+    assert!(
+        engine.actions().is_empty(),
+        "nothing happens before the answer"
+    );
+    shell.read_with(cx, |shell, _| assert!(shell.prompt.is_some()));
+    cx.simulate_keystrokes("s p a m enter");
+    assert_eq!(
+        engine.actions(),
+        [Action::Kick {
+            session: 3,
+            reason: "spam".to_owned()
+        }]
+    );
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.prompt.is_none());
+        assert!(
+            shell.snapshot.users.iter().all(|user| user.session != 3),
+            "gone from the list"
+        );
+    });
+}
+
+#[gpui::test]
+fn a_channels_menu_creates_renames_and_deletes(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    right_click(cx, "channel-1");
+    click(cx, "menu-New channel inside…");
+    // No name is no channel: the dialog stays.
+    click(cx, "prompt-ok");
+    shell.read_with(cx, |shell, _| assert!(shell.prompt.is_some()));
+    cx.simulate_keystrokes("g a m e s enter");
+    let created = engine
+        .snapshot()
+        .channels
+        .into_iter()
+        .find(|channel| channel.name.as_ref() == "games")
+        .expect("the new channel");
+    assert_eq!(created.parent, Some(1));
+
+    right_click(cx, "channel-2");
+    click(cx, "menu-Rename…");
+    // The field starts from the name there is.
+    cx.simulate_keystrokes("2 enter");
+    assert!(
+        engine
+            .snapshot()
+            .channels
+            .iter()
+            .any(|c| c.name.as_ref() == "studio2")
+    );
+
+    right_click(cx, "channel-3");
+    click(cx, "menu-Delete…");
+    assert!(
+        engine.snapshot().channels.iter().any(|c| c.id == 3),
+        "not before the yes"
+    );
+    click(cx, "prompt-ok");
+    assert!(engine.snapshot().channels.iter().all(|c| c.id != 3));
+}
+
+#[gpui::test]
+fn a_menu_closes_on_a_click_elsewhere_and_a_prompt_on_cancel(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    right_click(cx, "user-3");
+    click(cx, "menu-backdrop");
+    shell.read_with(cx, |shell, _| assert!(shell.menu.is_none()));
+    right_click(cx, "user-3");
+    click(cx, "menu-Ban…");
+    click(cx, "prompt-cancel");
+    shell.read_with(cx, |shell, _| assert!(shell.prompt.is_none()));
+    assert!(engine.actions().is_empty());
 }

@@ -13,8 +13,8 @@ use mumble_tauri_lib::engine_api::{
 };
 
 use crate::engine::{
-    AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation, Engine,
-    EngineEvent, Message, SavedServer, ServerPing, Snapshot, User, Voice, VoiceSettings,
+    Action, AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation,
+    Engine, EngineEvent, Message, SavedServer, ServerPing, Snapshot, User, Voice, VoiceSettings,
 };
 use crate::store::Store;
 
@@ -514,6 +514,40 @@ impl Engine for RealEngine {
         }
     }
 
+    fn act(&self, action: Action) {
+        let engine = self.shared.engine.clone();
+        let reason = |reason: String| Some(reason).filter(|reason| !reason.trim().is_empty());
+        self.spawn(async move {
+            match action {
+                Action::SetUserVolume { session, volume } => {
+                    engine.set_user_volume(session, volume);
+                    Ok(())
+                }
+                Action::Kick {
+                    session,
+                    reason: why,
+                } => engine.kick(session, reason(why)).await,
+                Action::Ban {
+                    session,
+                    reason: why,
+                } => engine.ban(session, reason(why)).await,
+                Action::ServerMute { session, muted } => engine.server_mute(session, muted).await,
+                Action::ServerDeafen { session, deafened } => {
+                    engine.server_deafen(session, deafened).await
+                }
+                Action::MoveUser { session, channel } => engine.move_user(session, channel).await,
+                Action::Register { session } => engine.register(session).await,
+                Action::CreateChannel { parent, name } => engine.create_channel(parent, name).await,
+                Action::RenameChannel { channel, name } => {
+                    engine.rename_channel(channel, name).await
+                }
+                Action::DeleteChannel { channel } => engine.delete_channel(channel).await,
+                Action::SetComment(text) => engine.set_comment(&text).await,
+                Action::SetAvatar(image) => engine.set_avatar(image).await,
+            }
+        });
+    }
+
     fn voice_settings(&self) -> VoiceSettings {
         let voice = self.shared.engine.voice_settings();
         VoiceSettings {
@@ -754,6 +788,63 @@ mod tests {
         drop((alice, bob));
         let _ = std::fs::remove_dir_all(alice_dir);
         let _ = std::fs::remove_dir_all(bob_dir);
+    }
+
+    /// A picture set by one client is fetched and decoded by the other.
+    #[test]
+    #[ignore = "needs a live server; set FANCY_GPUI_TEST_SERVER=host:port"]
+    fn live_a_picture_set_by_one_is_seen_by_the_other() {
+        let address = std::env::var("FANCY_GPUI_TEST_SERVER").expect("FANCY_GPUI_TEST_SERVER");
+        let (host, port) = address.rsplit_once(':').expect("host:port");
+        let port: u16 = port.parse().expect("a port");
+        let client = |name: &str| {
+            let dir =
+                std::env::temp_dir().join(format!("fancy-gpui-pic-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            let engine = RealEngine::start(&dir).expect("the engine starts");
+            engine.save_server(SavedServer {
+                id: "live".into(),
+                label: "live".into(),
+                host: host.to_owned().into(),
+                port,
+                username: name.to_owned().into(),
+                certificate: Some(name.to_lowercase().into()),
+                favorite: false,
+            });
+            engine.connect("live", None);
+            (engine, dir)
+        };
+        let (painter, painter_dir) = client("PicPainter");
+        let (viewer, viewer_dir) = client("PicViewer");
+        wait_for("both to connect", || {
+            painter.snapshot().users.len() >= 2 && viewer.snapshot().users.len() >= 2
+        });
+        // A real, tiny JPEG.
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new(&mut jpeg)
+            .encode_image(&image::RgbImage::from_pixel(
+                8,
+                8,
+                image::Rgb([200, 40, 40]),
+            ))
+            .expect("a jpeg");
+        painter.act(Action::SetAvatar(jpeg));
+        wait_for("the viewer to have the painter's picture", || {
+            viewer
+                .snapshot()
+                .users
+                .iter()
+                .any(|user| user.name.as_ref() == "PicPainter" && user.avatar.is_some())
+        });
+        painter.disconnect();
+        viewer.disconnect();
+        wait_for("both to leave", || {
+            painter.snapshot().connection == Connection::Disconnected
+                && viewer.snapshot().connection == Connection::Disconnected
+        });
+        drop((painter, viewer));
+        let _ = std::fs::remove_dir_all(painter_dir);
+        let _ = std::fs::remove_dir_all(viewer_dir);
     }
 
     /// A direct message reaches only the one it is for, and counts as

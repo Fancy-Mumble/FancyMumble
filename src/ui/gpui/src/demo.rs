@@ -4,8 +4,9 @@
 use std::sync::Mutex;
 
 use crate::engine::{
-    AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation, Engine,
-    EngineEvent, Message, SavedServer, ServerPing, Session, Snapshot, User, Voice, VoiceSettings,
+    Action, AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation,
+    Engine, EngineEvent, Message, SavedServer, ServerPing, Session, Snapshot, User, Voice,
+    VoiceSettings,
 };
 
 /// The local user's session in the demo server.
@@ -32,6 +33,9 @@ struct State {
     servers: Vec<SavedServer>,
     devices: ChosenDevices,
     voice_settings: VoiceSettings,
+    /// Every action asked for, in order: the demo's record of what a server
+    /// would have been sent.
+    actions: Vec<Action>,
     current_channel: ChannelId,
     channels: Vec<Channel>,
     users: Vec<User>,
@@ -67,6 +71,12 @@ impl DemoEngine {
         self.tell(EngineEvent::UserTalking { session, talking });
     }
 
+    /// Every action asked of the demo so far.
+    #[cfg(test)]
+    pub(crate) fn actions(&self) -> Vec<Action> {
+        self.with_state(|state| state.actions.clone())
+    }
+
     /// Tell the user something, as a refused connection would.
     #[cfg(test)]
     pub(crate) fn notify(&self, notice: Option<&str>) {
@@ -91,6 +101,58 @@ impl DemoEngine {
 }
 
 impl State {
+    /// What a server would do about `action`, for the ones that show.
+    fn apply(&mut self, action: &Action) {
+        match action {
+            Action::Kick { session, .. } | Action::Ban { session, .. } => {
+                self.users.retain(|user| user.session != *session);
+            }
+            Action::ServerMute { session, muted } => {
+                if let Some(user) = self.users.iter_mut().find(|user| user.session == *session) {
+                    user.muted = *muted;
+                }
+            }
+            Action::ServerDeafen { session, deafened } => {
+                if let Some(user) = self.users.iter_mut().find(|user| user.session == *session) {
+                    user.deafened = *deafened;
+                }
+            }
+            Action::MoveUser { session, channel } => {
+                if let Some(user) = self.users.iter_mut().find(|user| user.session == *session) {
+                    user.channel = *channel;
+                }
+            }
+            Action::CreateChannel { parent, name } => {
+                let id = self
+                    .channels
+                    .iter()
+                    .map(|channel| channel.id)
+                    .max()
+                    .unwrap_or(0)
+                    + 1;
+                self.channels.push(Channel {
+                    id,
+                    parent: Some(*parent),
+                    name: name.clone().into(),
+                    position: 0,
+                    unread: 0,
+                });
+            }
+            Action::RenameChannel { channel, name } => {
+                if let Some(found) = self.channels.iter_mut().find(|known| known.id == *channel) {
+                    found.name = name.clone().into();
+                }
+            }
+            Action::DeleteChannel { channel } => {
+                self.channels.retain(|known| known.id != *channel);
+            }
+            Action::SetUserVolume { .. }
+            | Action::Register { .. }
+            | Action::SetComment(_)
+            | Action::SetAvatar(_) => {}
+        }
+    }
+
     fn seeded() -> Self {
         let channel = |id, parent, name: &str| Channel {
             id,
@@ -135,6 +197,7 @@ impl State {
             voice: Voice::Off,
             deafened: false,
             devices: ChosenDevices::default(),
+            actions: Vec::new(),
             voice_settings: VoiceSettings {
                 push_to_talk: false,
                 threshold: 0.01,
@@ -394,6 +457,14 @@ impl Engine for DemoEngine {
 
     fn choose_devices(&self, devices: ChosenDevices) {
         self.with_state(|state| state.devices = devices);
+    }
+
+    fn act(&self, action: Action) {
+        self.with_state(|state| {
+            state.apply(&action);
+            state.actions.push(action);
+        });
+        self.tell(EngineEvent::StateChanged);
     }
 
     fn voice_settings(&self) -> VoiceSettings {
