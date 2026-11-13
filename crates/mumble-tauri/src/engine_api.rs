@@ -1145,6 +1145,9 @@ pub struct ConnectTarget {
     pub certificate: Option<String>,
     /// The server's password, if it has one.
     pub password: Option<String>,
+    /// The one-time code of an account that signs in with a second
+    /// factor. Good for one attempt.
+    pub totp: Option<String>,
 }
 
 /// Where the engine's events go, and where its files live.
@@ -1249,6 +1252,7 @@ impl EngineHandle {
                 target.certificate,
                 Credentials {
                     password: target.password,
+                    totp: target.totp,
                     ..Credentials::default()
                 },
             )
