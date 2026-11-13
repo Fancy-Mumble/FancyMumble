@@ -31,6 +31,10 @@ struct Shared {
     /// per channel and in order: a stock server sends none, and "when it
     /// arrived here" is the time a reader expects beside it.
     first_read: Mutex<HashMap<ChannelId, Vec<u64>>>,
+    /// Whether the server refused this connection. The disconnect that
+    /// follows a refusal has a reason of its own ("connection lost"), which
+    /// must not replace the one that says why.
+    refused: std::sync::atomic::AtomicBool,
     store: Store,
 }
 
@@ -64,13 +68,18 @@ impl Shared {
                     .lock()
                     .unwrap_or_else(PoisonError::into_inner)
                     .clear();
-                if reason.is_some() {
-                    self.tell(EngineEvent::Notice(reason.map(Into::into)));
+                let refused = self
+                    .refused
+                    .swap(false, std::sync::atomic::Ordering::Relaxed);
+                if let Some(reason) = disconnect_notice(reason, refused) {
+                    self.tell(EngineEvent::Notice(Some(reason.into())));
                 }
                 self.tell(EngineEvent::StateChanged);
                 self.tell(EngineEvent::CurrentChannelChanged);
             }
             api::EngineEvent::Rejected { reason } => {
+                self.refused
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
                 self.tell(EngineEvent::Notice(Some(reason.into())));
                 self.tell(EngineEvent::StateChanged);
             }
@@ -154,6 +163,7 @@ impl RealEngine {
             servers: Mutex::new(store.servers()),
             pings: Mutex::default(),
             first_read: Mutex::default(),
+            refused: std::sync::atomic::AtomicBool::new(false),
             store,
         });
         let _ = slot.set(Arc::clone(&shared));
@@ -305,6 +315,9 @@ impl Engine for RealEngine {
             return;
         };
         self.shared.tell(EngineEvent::Notice(None));
+        self.shared
+            .refused
+            .store(false, std::sync::atomic::Ordering::Relaxed);
         let engine = self.shared.engine.clone();
         self.spawn(async move {
             engine
@@ -411,6 +424,12 @@ impl Engine for RealEngine {
     }
 }
 
+/// What to tell the user when a session ends: the engine's reason, unless
+/// the server had just refused the connection and said why.
+fn disconnect_notice(reason: Option<String>, refused: bool) -> Option<String> {
+    reason.filter(|_| !refused)
+}
+
 /// Unix epoch milliseconds, now.
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
@@ -456,6 +475,18 @@ mod tests {
     }
 
     #[test]
+    fn a_refusal_is_not_replaced_by_the_disconnect_that_follows_it() {
+        let lost = || Some("Connection lost".to_owned());
+        assert_eq!(disconnect_notice(lost(), false), lost());
+        assert_eq!(disconnect_notice(lost(), true), None);
+        assert_eq!(
+            disconnect_notice(None, false),
+            None,
+            "a wanted leave says nothing"
+        );
+    }
+
+    #[test]
     fn a_server_that_is_down_has_no_ping_to_show() {
         let down = PingInfo {
             online: false,
@@ -478,14 +509,15 @@ mod tests {
     }
 
     /// Two engines on one live server: connect, see each other, talk in
-    /// text, turn voice on. Ignored unless a server is named:
+    /// text, turn voice on and hear each other. Ignored unless a server is
+    /// named:
     ///
     /// ```text
     /// FANCY_GPUI_TEST_SERVER=127.0.0.1:64738 cargo test -- --ignored live
     /// ```
     ///
-    /// Voice is captured from the engine's virtual microphone, and only one
-    /// side turns it on, so nothing is recorded and nothing is played.
+    /// Voice is captured from the engine's virtual microphone, so nothing is
+    /// recorded; what is received is played on the default output.
     #[test]
     #[ignore = "needs a live server; set FANCY_GPUI_TEST_SERVER=host:port"]
     #[allow(unsafe_code, reason = "`std::env::set_var` is unsafe in Rust 2024")]
@@ -558,6 +590,25 @@ mod tests {
                 .iter()
                 .any(|user| user.name.as_ref() == "LiveAlice" && !user.muted)
         });
+        // Hearing: with voice on, bob is sent alice's audio, decodes it, and
+        // is told she is talking. (Run where no speakers are attached, or
+        // with a null sink chosen: her microphone is a 440 Hz tone.)
+        let alice_session = on_alice.own_session.expect("alice's session");
+        let heard = bob.events();
+        bob.toggle_microphone();
+        wait_for("bob's voice to turn on", || {
+            bob.snapshot().voice == Voice::On
+        });
+        wait_for("bob to hear alice", || {
+            std::iter::from_fn(|| heard.try_recv().ok()).any(|event| {
+                event
+                    == EngineEvent::UserTalking {
+                        session: alice_session,
+                        talking: true,
+                    }
+            })
+        });
+
         alice.toggle_microphone();
         wait_for("alice to mute", || alice.snapshot().voice == Voice::Muted);
 

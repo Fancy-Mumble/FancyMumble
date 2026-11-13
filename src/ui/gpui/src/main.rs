@@ -100,6 +100,11 @@ fn main() {
             cx.on_action(move |_: &Dismiss, cx| {
                 let _ = window.update(cx, |shell, _, cx| shell.dismiss(cx));
             });
+            if let Ok(what) = std::env::var("FANCY_GPUI_OPEN") {
+                let _ = window.update(cx, |shell, window, cx| {
+                    shell.open_for_inspection(&what, window, cx);
+                });
+            }
             // One window: closing it ends the application.
             cx.on_window_closed(|cx| cx.quit()).detach();
             cx.activate(true);

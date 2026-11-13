@@ -125,7 +125,7 @@ impl Shell {
             editor: None,
             notice: None,
             store,
-            picker_open: std::env::var_os("FANCY_GPUI_PICKER").is_some(),
+            picker_open: false,
             devices_open: false,
             devices: None,
             chosen_devices: engine.chosen_devices(),
@@ -259,6 +259,22 @@ impl Shell {
         };
         search.read(cx).focus(window);
         cx.notify();
+    }
+
+    /// Start with something open: `picker`, `devices` or `editor`. For
+    /// looking at them where nothing can click.
+    pub(crate) fn open_for_inspection(
+        &mut self,
+        what: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match what {
+            "picker" => self.toggle_picker(cx),
+            "devices" => self.toggle_devices(cx),
+            "editor" => self.open_editor(None, None, window, cx),
+            _ => {}
+        }
     }
 
     /// Escape: close whatever is open on top of the window.
