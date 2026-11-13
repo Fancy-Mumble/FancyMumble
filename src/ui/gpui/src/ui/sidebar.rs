@@ -237,7 +237,7 @@ fn occupant_row(shell: &Shell, user: &User, theme: &Theme) -> impl IntoElement +
                 } else {
                     gpui::transparent_black()
                 })
-                .child(avatar(&user.name, 20.0, theme)),
+                .child(avatar(&user.name, user.avatar.as_ref(), 20.0, theme)),
         )
         .child(
             div()
@@ -265,10 +265,12 @@ fn occupant_row(shell: &Shell, user: &User, theme: &Theme) -> impl IntoElement +
 
 /// The local user's tile: who they are, and the voice controls.
 fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
-    let name = shell.own_user().map_or_else(
+    let own = shell.own_user();
+    let name = own.map_or_else(
         || SharedString::from("Not connected"),
         |user| user.name.clone(),
     );
+    let picture = own.and_then(|user| user.avatar.clone());
     // With voice off the server lists the user as deafened, because nothing
     // is heard; to the user that is "voice off", not a deafen they chose.
     let deafened = shell.snapshot.deafened && shell.snapshot.voice != Voice::Off;
@@ -293,7 +295,7 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
         .bg(theme.c.card)
         .border_1()
         .border_color(theme.c.line2)
-        .child(avatar(&name, 42.0, theme))
+        .child(avatar(&name, picture.as_ref(), 42.0, theme))
         .child(
             div()
                 .flex_1()

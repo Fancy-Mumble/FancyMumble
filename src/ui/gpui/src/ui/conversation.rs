@@ -263,7 +263,23 @@ impl Shell {
         let body = if message.own {
             own_message(message, self.utc_offset, &theme).into_any_element()
         } else {
-            their_message(message, continues, self.utc_offset, &theme).into_any_element()
+            {
+                let picture = message.sender.and_then(|session| {
+                    self.snapshot
+                        .users
+                        .iter()
+                        .find(|user| user.session == session)
+                        .and_then(|user| user.avatar.clone())
+                });
+                their_message(
+                    message,
+                    picture.as_ref(),
+                    continues,
+                    self.utc_offset,
+                    &theme,
+                )
+                .into_any_element()
+            }
         };
         row_frame().pt(gap).child(body).into_any_element()
     }
@@ -310,6 +326,7 @@ fn bubble(theme: &Theme) -> gpui::Div {
 
 fn their_message(
     message: &Message,
+    picture: Option<&std::sync::Arc<gpui::Image>>,
     continues: bool,
     utc_offset: i64,
     theme: &Theme,
@@ -331,7 +348,7 @@ fn their_message(
                 .gap(px(4.0))
                 .when(!continues, |column| {
                     column
-                        .child(avatar(&message.sender_name, 38.0, theme))
+                        .child(avatar(&message.sender_name, picture, 38.0, theme))
                         .child(
                             div()
                                 .text_size(px(10.0))

@@ -103,6 +103,7 @@ impl State {
             channel: LOUNGE,
             muted: session == OWN,
             deafened: false,
+            avatar: None,
         };
         let said = |minute: u64, session: Session, name: &str, body: &str| {
             (

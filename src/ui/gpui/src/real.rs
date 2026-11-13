@@ -21,6 +21,10 @@ use crate::store::Store;
 /// `(host, port)`: what a ping is kept under.
 type Address = (String, u16);
 
+/// A user's picture: the marker it was asked for under, and the picture once
+/// it has arrived.
+type AvatarSlot = (u32, Option<Arc<gpui::Image>>);
+
 /// What the adapter shares with the tasks it starts.
 struct Shared {
     engine: EngineHandle,
@@ -31,6 +35,9 @@ struct Shared {
     /// per channel and in order: a stock server sends none, and "when it
     /// arrived here" is the time a reader expects beside it.
     first_read: Mutex<HashMap<ChannelId, Vec<u64>>>,
+    /// Each user's picture: the marker it was fetched for, and the picture
+    /// once it has arrived.
+    avatars: Mutex<HashMap<u32, AvatarSlot>>,
     /// Whether the server refused this connection. The disconnect that
     /// follows a refusal has a reason of its own ("connection lost"), which
     /// must not replace the one that says why.
@@ -65,6 +72,10 @@ impl Shared {
             }
             api::EngineEvent::Disconnected { reason } => {
                 self.first_read
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .clear();
+                self.avatars
                     .lock()
                     .unwrap_or_else(PoisonError::into_inner)
                     .clear();
@@ -163,6 +174,7 @@ impl RealEngine {
             servers: Mutex::new(store.servers()),
             pings: Mutex::default(),
             first_read: Mutex::default(),
+            avatars: Mutex::default(),
             refused: std::sync::atomic::AtomicBool::new(false),
             store,
         });
@@ -177,6 +189,64 @@ impl RealEngine {
     /// Run `command` on the engine's runtime, telling the user if it fails.
     fn spawn(&self, command: impl Future<Output = Result<(), String>> + Send + 'static) {
         drop(self.runtime.spawn(Arc::clone(&self.shared).run(command)));
+    }
+
+    /// The engine's users as the view's, each with its picture if that has
+    /// arrived. A picture not asked for yet is asked for now; the view is
+    /// told to read again when it lands.
+    fn users_with_avatars(&self, users: Vec<api::UserInfo>) -> Vec<User> {
+        let mut avatars = self
+            .shared
+            .avatars
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        // Sessions are reused: a picture belongs to whoever is here now.
+        avatars.retain(|session, _| users.iter().any(|user| user.session == *session));
+        users
+            .into_iter()
+            .map(|user| {
+                let avatar = user
+                    .avatar
+                    .and_then(|marker| match avatars.get(&user.session) {
+                        Some((fetched_for, image)) if *fetched_for == marker => image.clone(),
+                        _ => {
+                            let _ = avatars.insert(user.session, (marker, None));
+                            self.fetch_avatar(user.session, marker);
+                            None
+                        }
+                    });
+                User {
+                    session: user.session,
+                    name: user.name.into(),
+                    channel: user.channel,
+                    muted: user.muted,
+                    deafened: user.deafened,
+                    avatar,
+                }
+            })
+            .collect()
+    }
+
+    fn fetch_avatar(&self, session: u32, marker: u32) {
+        let shared = Arc::clone(&self.shared);
+        drop(self.runtime.spawn(async move {
+            let Some(image) = shared.engine.user_avatar(session).await.and_then(picture) else {
+                return;
+            };
+            {
+                let mut avatars = shared
+                    .avatars
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner);
+                // Only if nobody else took the session, or changed picture,
+                // while this one was on its way.
+                match avatars.get_mut(&session) {
+                    Some((wanted, slot)) if *wanted == marker => *slot = Some(Arc::new(image)),
+                    _ => return,
+                }
+            }
+            shared.tell(EngineEvent::StateChanged);
+        }));
     }
 
     /// Change the saved servers, write them out, and say so.
@@ -231,17 +301,7 @@ impl Engine for RealEngine {
                     position: channel.position,
                 })
                 .collect(),
-            users: engine
-                .users()
-                .into_iter()
-                .map(|user| User {
-                    session: user.session,
-                    name: user.name.into(),
-                    channel: user.channel,
-                    muted: user.muted,
-                    deafened: user.deafened,
-                })
-                .collect(),
+            users: self.users_with_avatars(engine.users()),
             voice: match engine.voice() {
                 api::Voice::Off => Voice::Off,
                 api::Voice::On => Voice::On,
@@ -424,6 +484,34 @@ impl Engine for RealEngine {
     }
 }
 
+/// `bytes` as a picture GPUI can draw, if they are one of the formats a
+/// picture arrives in. The format is read from the bytes: nothing else
+/// says what it is.
+fn picture(bytes: Vec<u8>) -> Option<gpui::Image> {
+    let format = match bytes.as_slice() {
+        [0x89, b'P', b'N', b'G', ..] => gpui::ImageFormat::Png,
+        [0xff, 0xd8, 0xff, ..] => gpui::ImageFormat::Jpeg,
+        [b'G', b'I', b'F', b'8', ..] => gpui::ImageFormat::Gif,
+        [
+            b'R',
+            b'I',
+            b'F',
+            b'F',
+            _,
+            _,
+            _,
+            _,
+            b'W',
+            b'E',
+            b'B',
+            b'P',
+            ..,
+        ] => gpui::ImageFormat::Webp,
+        _ => return None,
+    };
+    Some(gpui::Image::from_bytes(format, bytes))
+}
+
 /// What to tell the user when a session ends: the engine's reason, unless
 /// the server had just refused the connection and said why.
 fn disconnect_notice(reason: Option<String>, refused: bool) -> Option<String> {
@@ -472,6 +560,26 @@ mod tests {
         assert_eq!(read_at, [100, 100, 200], "the first two keep their time");
         stamp_first_read(&mut read_at, 1, 300);
         assert_eq!(read_at, [100], "a shorter history forgets the rest");
+    }
+
+    #[test]
+    fn a_picture_is_recognised_by_its_first_bytes() {
+        let format = |bytes: &[u8]| picture(bytes.to_vec()).map(|image| image.format());
+        assert_eq!(
+            format(b"\x89PNG\r\n\x1a\n...."),
+            Some(gpui::ImageFormat::Png)
+        );
+        assert_eq!(
+            format(b"\xff\xd8\xff\xe0...."),
+            Some(gpui::ImageFormat::Jpeg)
+        );
+        assert_eq!(format(b"GIF89a...."), Some(gpui::ImageFormat::Gif));
+        assert_eq!(
+            format(b"RIFF\x00\x00\x00\x00WEBPVP8 "),
+            Some(gpui::ImageFormat::Webp)
+        );
+        assert_eq!(format(b"<html>"), None, "not a picture");
+        assert_eq!(format(b""), None);
     }
 
     #[test]

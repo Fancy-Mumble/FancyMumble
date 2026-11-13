@@ -1,6 +1,6 @@
 //! The small pieces every part of the shell draws with.
 
-use gpui::{Hsla, IntoElement, ParentElement, Pixels, SharedString, Styled, Svg, div, px, svg};
+use gpui::{Hsla, Pixels, SharedString, Styled, Svg, div, px, svg};
 
 use crate::theme::Theme;
 
@@ -19,9 +19,25 @@ pub(crate) fn icon(name: &'static str, size: f32, color: Hsla) -> Svg {
         .text_color(color)
 }
 
-/// A user's avatar: until pictures are drawn, their initial on the theme's
-/// placeholder tile.
-pub(crate) fn avatar(name: &str, size: f32, theme: &Theme) -> impl IntoElement + use<> {
+/// A user's avatar: their picture, or until it has arrived (or if they
+/// have none) their initial on the theme's placeholder tile.
+pub(crate) fn avatar(
+    name: &str,
+    picture: Option<&std::sync::Arc<gpui::Image>>,
+    size: f32,
+    theme: &Theme,
+) -> gpui::AnyElement {
+    use gpui::prelude::*;
+
+    let radius = avatar_radius(size, theme);
+    if let Some(picture) = picture {
+        return gpui::img(std::sync::Arc::clone(picture))
+            .flex_none()
+            .size(px(size))
+            .rounded(radius)
+            .object_fit(gpui::ObjectFit::Cover)
+            .into_any_element();
+    }
     let initial: String = name
         .chars()
         .next()
@@ -30,7 +46,7 @@ pub(crate) fn avatar(name: &str, size: f32, theme: &Theme) -> impl IntoElement +
     div()
         .flex_none()
         .size(px(size))
-        .rounded(avatar_radius(size, theme))
+        .rounded(radius)
         .bg(theme.c.tile)
         .flex()
         .items_center()
@@ -39,6 +55,7 @@ pub(crate) fn avatar(name: &str, size: f32, theme: &Theme) -> impl IntoElement +
         .font_weight(EMPHASIS)
         .text_color(theme.c.text)
         .child(initial)
+        .into_any_element()
 }
 
 /// The corner an avatar of `size` gets: a circle unless the theme squares

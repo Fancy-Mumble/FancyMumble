@@ -110,6 +110,8 @@ pub(crate) struct User {
     pub muted: bool,
     /// Deafened, by themselves or by the server.
     pub deafened: bool,
+    /// The user's picture, once it has been fetched.
+    pub avatar: Option<std::sync::Arc<gpui::Image>>,
 }
 
 /// One chat message, as the conversation shows it.

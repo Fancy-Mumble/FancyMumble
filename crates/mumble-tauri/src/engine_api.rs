@@ -160,6 +160,9 @@ pub struct UserInfo {
     pub muted: bool,
     /// Deafened, by themselves or by the server.
     pub deafened: bool,
+    /// Present when the user has a picture; changes when the picture does.
+    /// The picture itself is fetched with [`EngineHandle::user_avatar`].
+    pub avatar: Option<u32>,
 }
 
 impl From<UserEntry> for UserInfo {
@@ -170,6 +173,7 @@ impl From<UserEntry> for UserInfo {
             channel: user.channel_id,
             muted: user.self_mute || user.mute || user.suppress,
             deafened: user.self_deaf || user.deaf,
+            avatar: user.texture_marker.filter(|size| *size > 0),
         }
     }
 }
@@ -382,6 +386,12 @@ impl EngineHandle {
     /// Every connected user.
     pub fn users(&self) -> Vec<UserInfo> {
         self.state.users().into_iter().map(Into::into).collect()
+    }
+
+    /// The picture of the user `session`, as the encoded image they
+    /// uploaded; `None` if they have none. Asks the server on first use.
+    pub async fn user_avatar(&self, session: u32) -> Option<Vec<u8>> {
+        self.state.user_texture_or_fetch(session).await
     }
 
     /// The messages of `channel`, oldest first.

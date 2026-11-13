@@ -472,7 +472,12 @@ fn identity_row(
             shell.selected_identity = Some(id.clone());
             cx.notify();
         }))
-        .child(super::widgets::avatar(&identity.username, 34.0, theme))
+        .child(super::widgets::avatar(
+            &identity.username,
+            None,
+            34.0,
+            theme,
+        ))
         .child(
             div()
                 .flex_1()
