@@ -4,6 +4,7 @@
 
 mod band;
 mod conversation;
+mod frame;
 mod picker;
 mod rail;
 mod sidebar;
@@ -244,7 +245,7 @@ impl Shell {
 }
 
 impl Render for Shell {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = ActiveTheme::get(cx);
         div()
             .size_full()
@@ -261,7 +262,7 @@ impl Render for Shell {
                 shell.border_1().border_color(line)
             })
             .when(theme.skin.band, |shell| {
-                shell.child(band::render(&theme, cx))
+                shell.child(band::render(&theme, window, cx))
             })
             .child(
                 div()
@@ -273,10 +274,11 @@ impl Render for Shell {
                     .child(conversation::render(self, &theme, cx)),
             )
             .when(!theme.skin.band, |shell| {
-                shell.child(band::corner_controls(&theme, cx))
+                shell.child(band::corner_controls(&theme, window, cx))
             })
             .when(self.picker_open, |shell| {
                 shell.child(picker::render(&theme, cx))
             })
+            .children(frame::resize_grips(window))
     }
 }

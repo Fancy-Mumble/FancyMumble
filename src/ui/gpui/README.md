@@ -77,6 +77,7 @@ For development:
 | `FANCY_GPUI_MODE` | `light` or `dark`. |
 | `FANCY_GPUI_PICKER` | Start with the theme picker open. |
 | `FANCY_GPUI_DEMO_TALKING` | A demo session id that is talking. |
+| `FANCY_GPUI_FRAME` | `client` draws the window's own controls even where the compositor frames it. |
 
 `Ctrl+Shift+T` moves to the next theme, `Ctrl+Shift+L` flips light and dark.
 

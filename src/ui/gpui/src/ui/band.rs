@@ -1,16 +1,23 @@
 //! The band across the top of the window: the brand, and the window's own
 //! controls, since the window draws its own frame.
 
-use gpui::{Context, Hsla, IntoElement, MouseButton, ParentElement, Styled, div, prelude::*, px};
+use gpui::{
+    Context, Hsla, IntoElement, MouseButton, ParentElement, Styled, Window, div, prelude::*, px,
+};
 
 use super::Shell;
+use super::frame;
 use super::widgets::{EMPHASIS, icon, label, opaque};
 use crate::theme::Theme;
 
 /// The band's height, as the web UI draws it.
 const HEIGHT: f32 = 44.0;
 
-pub(super) fn render(theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+pub(super) fn render(
+    theme: &Theme,
+    window: &Window,
+    cx: &mut Context<Shell>,
+) -> impl IntoElement + use<> {
     div()
         .id("band")
         .flex_none()
@@ -42,12 +49,16 @@ pub(super) fn render(theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement
                         .child(label("Fancy Mumble", theme)),
                 ),
         )
-        .child(controls(theme.c.bar_dim, theme, cx))
+        .child(controls(theme.c.bar_dim, theme, window, cx))
 }
 
 /// The window's controls on their own, for a theme that draws no band: they
 /// float over the window's top trailing corner instead.
-pub(super) fn corner_controls(theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+pub(super) fn corner_controls(
+    theme: &Theme,
+    window: &Window,
+    cx: &mut Context<Shell>,
+) -> impl IntoElement + use<> {
     div()
         .absolute()
         .top(px(4.0))
@@ -55,11 +66,18 @@ pub(super) fn corner_controls(theme: &Theme, cx: &mut Context<Shell>) -> impl In
         .occlude()
         .rounded(theme.skin.radius_md)
         .bg(opaque(theme.c.header, theme.c.bg0))
-        .child(controls(theme.c.muted, theme, cx))
+        .child(controls(theme.c.muted, theme, window, cx))
 }
 
-/// Themes, minimise, maximise, close.
-fn controls(ink: Hsla, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+/// The theme picker's button, then - where the window draws its own frame -
+/// minimise, maximise and close. A window the system frames already has
+/// those three, and a second set would be a second way to be wrong.
+fn controls(
+    ink: Hsla,
+    theme: &Theme,
+    window: &Window,
+    cx: &mut Context<Shell>,
+) -> impl IntoElement + use<> {
     div()
         .flex()
         .items_center()
@@ -68,14 +86,18 @@ fn controls(ink: Hsla, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoEleme
             control("themes", "palette", ink, theme)
                 .on_click(cx.listener(|shell, _, _, cx| shell.toggle_picker(cx))),
         )
-        .child(
-            control("minimise", "minus", ink, theme)
-                .on_click(|_, window, _| window.minimize_window()),
-        )
-        .child(
-            control("maximise", "square", ink, theme).on_click(|_, window, _| window.zoom_window()),
-        )
-        .child(control("close", "x", ink, theme).on_click(|_, _, cx| cx.quit()))
+        .when(frame::is_client_decorated(window), |controls| {
+            controls
+                .child(
+                    control("minimise", "minus", ink, theme)
+                        .on_click(|_, window, _| window.minimize_window()),
+                )
+                .child(
+                    control("maximise", "square", ink, theme)
+                        .on_click(|_, window, _| window.zoom_window()),
+                )
+                .child(control("close", "x", ink, theme).on_click(|_, _, cx| cx.quit()))
+        })
 }
 
 /// The round brand mark at the band's leading edge.
@@ -88,10 +110,14 @@ fn brand_mark(theme: &Theme) -> impl IntoElement + use<> {
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(12.0))
-        .font_weight(EMPHASIS)
-        .text_color(theme.c.on_accent)
-        .child("F")
+        // The monogram is wider than it is tall: 1391 by 844.
+        .child(
+            gpui::svg()
+                .path("icons/brand.svg")
+                .w(px(15.0))
+                .h(px(9.1))
+                .text_color(theme.c.on_accent),
+        )
 }
 
 /// One of the band's buttons.

@@ -1,7 +1,9 @@
 //! The view's own assets, compiled into the binary.
 //!
 //! Only icons: outline glyphs from Lucide (ISC, see `assets/icons/LICENSE`),
-//! each a few hundred bytes, drawn in whatever colour the theme asks for.
+//! each a few hundred bytes, drawn in whatever colour the theme asks for, and
+//! the brand's monogram, an outline lifted from Great Vibes (OFL, see
+//! `assets/icons/brand-OFL.txt`) by the web UI's `brandGlyph.ts`.
 
 use std::borrow::Cow;
 
@@ -20,6 +22,7 @@ macro_rules! icons {
 }
 
 icons![
+    "brand",
     "check",
     "chevron-down",
     "chevron-right",
