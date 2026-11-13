@@ -7,7 +7,9 @@
 /// Show a notification titled `title` saying `body`. Best effort: a desktop
 /// with no notification service simply shows nothing.
 pub(crate) fn show(title: &str, body: &str) {
-    #[cfg(target_os = "linux")]
+    // Not under test: a test run must not put messages on the desktop of
+    // whoever is running it.
+    #[cfg(all(target_os = "linux", not(test)))]
     {
         // Spawned and not waited for: the call can take a moment, and this
         // runs on an engine thread that has messages to deliver. The child
@@ -27,7 +29,7 @@ pub(crate) fn show(title: &str, body: &str) {
             }));
         }
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(all(target_os = "linux", not(test))))]
     {
         let _ = (title, body);
     }
