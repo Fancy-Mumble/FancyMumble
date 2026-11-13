@@ -11,7 +11,7 @@ use gpui::{
 
 use super::Shell;
 use super::widgets::{EMPHASIS, avatar, clock, icon, label};
-use crate::engine::Message;
+use crate::engine::{Conversation, Message};
 use crate::rich::Rich;
 use crate::theme::{Fill, Theme};
 
@@ -75,7 +75,7 @@ pub(super) fn render(
         .h_full()
         .flex()
         .flex_col()
-        .child(header(shell, theme))
+        .child(header(shell, theme, cx))
         .child(
             div()
                 .flex_1()
@@ -104,12 +104,34 @@ pub(super) fn render(
         )
 }
 
-fn header(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
-    let name = shell.current_channel_name().unwrap_or("No channel");
-    let in_voice = shell
-        .snapshot
-        .current_channel
-        .map_or(0, |channel| shell.occupants(channel).len());
+fn header(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+    let (glyph, name, about, people) = match shell.open {
+        Some(Conversation::Channel(id)) => {
+            let name = shell
+                .snapshot
+                .channels
+                .iter()
+                .find(|channel| channel.id == id)
+                .map_or_else(SharedString::default, |channel| channel.name.clone());
+            let people = shell.occupants(id).len();
+            ("hash", name, format!("{people} in voice"), Some(people))
+        }
+        Some(Conversation::Direct(session)) => {
+            let name = shell
+                .snapshot
+                .users
+                .iter()
+                .find(|user| user.session == session)
+                .map_or_else(SharedString::default, |user| user.name.clone());
+            ("at-sign", name, "Direct message".to_owned(), None)
+        }
+        None => ("hash", "No channel".into(), String::new(), None),
+    };
+    // Reading a channel the user is not in: offer the way in.
+    let joinable = match shell.open {
+        Some(Conversation::Channel(id)) if shell.snapshot.current_channel != Some(id) => Some(id),
+        _ => None,
+    };
     div()
         .flex_none()
         .h(theme.skin.header_height)
@@ -122,7 +144,7 @@ fn header(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
         .bg(theme.c.header)
         .border_b_1()
         .border_color(theme.c.line)
-        .child(icon("hash", 16.0, theme.c.dim))
+        .child(icon(glyph, 16.0, theme.c.dim))
         .child(
             div()
                 .flex_1()
@@ -131,35 +153,51 @@ fn header(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
                 .flex_col()
                 .child(
                     div()
-                        .flex()
-                        .items_center()
-                        .gap(px(6.0))
+                        .truncate()
                         .font_weight(EMPHASIS)
                         .text_size(px(15.0))
-                        .child(label(name, theme)),
+                        .child(label(&name, theme)),
                 )
                 .child(
                     div()
                         .text_size(px(11.5))
                         .text_color(theme.c.muted)
-                        .child(SharedString::from(format!("{in_voice} in voice"))),
+                        .child(about),
                 ),
         )
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(6.0))
-                .text_color(theme.c.muted)
-                .child(icon("users", 15.0, theme.c.muted))
-                .child(
-                    div()
-                        .font_weight(EMPHASIS)
-                        .text_size(px(12.0))
-                        .text_color(theme.c.text)
-                        .child(SharedString::from(in_voice.to_string())),
-                ),
-        )
+        .when_some(joinable, |header, channel| {
+            header.child(
+                div()
+                    .id("join")
+                    .debug_selector(|| "join".to_owned())
+                    .px(px(14.0))
+                    .py(px(5.0))
+                    .rounded(theme.skin.radius_pill)
+                    .bg(theme.c.accent)
+                    .text_color(theme.c.on_accent)
+                    .text_size(px(12.5))
+                    .font_weight(EMPHASIS)
+                    .cursor_pointer()
+                    .hover(|style| style.opacity(0.9))
+                    .on_click(cx.listener(move |shell, _, _, _| shell.engine.join_channel(channel)))
+                    .child(label("Join", theme)),
+            )
+        })
+        .when_some(people, |header, people| {
+            header.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0))
+                    .child(icon("users", 15.0, theme.c.muted))
+                    .child(
+                        div()
+                            .font_weight(EMPHASIS)
+                            .text_size(px(12.0))
+                            .child(SharedString::from(people.to_string())),
+                    ),
+            )
+        })
 }
 
 /// What the engine had to say, above the composer, until it is dismissed.

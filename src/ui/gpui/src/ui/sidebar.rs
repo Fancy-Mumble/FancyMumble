@@ -7,7 +7,7 @@ use gpui::{
 
 use super::Shell;
 use super::widgets::{EMPHASIS, avatar, icon, label};
-use crate::engine::{Channel, Connection, User, Voice};
+use crate::engine::{Channel, Connection, Conversation, User, Voice};
 use crate::theme::{Fill, Theme};
 
 /// `channels` in the order a tree lists them - each parent, then its
@@ -120,10 +120,12 @@ fn search_box(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
 fn channel_rows(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> Vec<AnyElement> {
     let mut rows = Vec::new();
     for (channel, depth) in shell.listed_channels(cx) {
-        let current = shell.snapshot.current_channel == Some(channel.id);
-        rows.push(channel_row(shell, channel, depth, current, theme, cx));
-        if current {
-            rows.push(occupant_list(shell, channel, depth, theme));
+        let open = shell.open == Some(Conversation::Channel(channel.id));
+        rows.push(channel_row(shell, channel, depth, open, theme, cx));
+        // Who is where is the point of the tree: every channel with people
+        // in it lists them.
+        if !shell.occupants(channel.id).is_empty() {
+            rows.push(occupant_list(shell, channel, depth, theme, cx));
         }
     }
     rows
@@ -170,7 +172,13 @@ fn channel_row(
             _ => row.hover(move |style| style.bg(hover)),
         })
         .when(current, |row| row.font_weight(EMPHASIS))
-        .on_click(cx.listener(move |shell, _, _, _| shell.engine.join_channel(id)))
+        // A click reads the channel; a double click moves into it.
+        .on_click(cx.listener(move |shell, event: &gpui::ClickEvent, _, cx| {
+            if event.click_count() >= 2 {
+                shell.engine.join_channel(id);
+            }
+            shell.open_conversation(Conversation::Channel(id), cx);
+        }))
         .child(icon("hash", 13.0, hash))
         .child(
             div()
@@ -179,6 +187,9 @@ fn channel_row(
                 .truncate()
                 .child(label(&channel.name, theme)),
         )
+        .when(channel.unread > 0 && !current, |row| {
+            row.child(unread_badge(channel.unread, theme))
+        })
         .when(occupants > 0 && channel.parent.is_some(), |row| {
             let voice = if solid { theme.c.on_accent } else { theme.c.ok };
             row.child(
@@ -195,8 +206,36 @@ fn channel_row(
         .into_any_element()
 }
 
-/// Who is in the current channel, on a card hanging under its row.
-fn occupant_list(shell: &Shell, channel: &Channel, depth: usize, theme: &Theme) -> AnyElement {
+/// How many messages wait unread, on a pill.
+fn unread_badge(count: u32, theme: &Theme) -> impl IntoElement + use<> {
+    div()
+        .flex_none()
+        .min_w(px(18.0))
+        .h(px(18.0))
+        .px(px(5.0))
+        .rounded(theme.skin.radius_pill)
+        .bg(theme.c.accent)
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(px(10.5))
+        .font_weight(EMPHASIS)
+        .text_color(theme.c.on_accent)
+        .child(if count > 99 {
+            SharedString::from("99+")
+        } else {
+            SharedString::from(count.to_string())
+        })
+}
+
+/// Who is in a channel, on a card hanging under its row.
+fn occupant_list(
+    shell: &Shell,
+    channel: &Channel,
+    depth: usize,
+    theme: &Theme,
+    cx: &mut Context<Shell>,
+) -> AnyElement {
     div()
         .flex_none()
         .ml(px(INDENT * depth as f32))
@@ -211,20 +250,40 @@ fn occupant_list(shell: &Shell, channel: &Channel, depth: usize, theme: &Theme) 
             shell
                 .occupants(channel.id)
                 .into_iter()
-                .map(|user| occupant_row(shell, user, theme)),
+                .map(|user| occupant_row(shell, user, theme, cx)),
         )
         .into_any_element()
 }
 
-fn occupant_row(shell: &Shell, user: &User, theme: &Theme) -> impl IntoElement + use<> {
+fn occupant_row(
+    shell: &Shell,
+    user: &User,
+    theme: &Theme,
+    cx: &mut Context<Shell>,
+) -> impl IntoElement + use<> {
     let own = shell.snapshot.own_session == Some(user.session);
     let talking = shell.talking.contains(&user.session);
+    let session = user.session;
+    let open = shell.open == Some(Conversation::Direct(session));
+    let hover = theme.c.hover;
     div()
+        .id(("user", session as usize))
+        .debug_selector(move || format!("user-{session}"))
         .h(px(31.0))
         .flex()
         .items_center()
         .gap(px(9.0))
         .px(px(14.0))
+        .rounded(theme.skin.radius_sm)
+        .when(open, |row| row.bg(theme.c.accent_soft))
+        // A click on somebody else opens the direct conversation with them.
+        .when(!own, |row| {
+            row.cursor_pointer()
+                .when(!open, |row| row.hover(move |style| style.bg(hover)))
+                .on_click(cx.listener(move |shell, _, _, cx| {
+                    shell.open_conversation(Conversation::Direct(session), cx);
+                }))
+        })
         .child(
             // The ring a talking user wears; always present so a row does not
             // shift by a pixel when somebody speaks.
@@ -260,6 +319,9 @@ fn occupant_row(shell: &Shell, user: &User, theme: &Theme) -> impl IntoElement +
                     .text_color(theme.c.dim)
                     .child("you"),
             )
+        })
+        .when(user.unread > 0, |row| {
+            row.child(unread_badge(user.unread, theme))
         })
 }
 
@@ -414,6 +476,7 @@ mod tests {
             parent,
             name: name.to_owned().into(),
             position,
+            unread: 0,
         }
     }
 

@@ -87,6 +87,13 @@ pub enum EngineEvent {
         /// The channel.
         channel: u32,
     },
+    /// A direct message arrived from, or was sent to, this user.
+    NewDirectMessage {
+        /// The other party's session.
+        session: u32,
+    },
+    /// The counts of unread messages changed.
+    UnreadChanged,
     /// The server refused something the user asked for: entering a channel,
     /// sending a message that is too long.
     Denied {
@@ -115,6 +122,10 @@ impl EngineEvent {
             CoreEvent::NewMessage(payload) => Self::NewMessage {
                 channel: payload.channel_id,
             },
+            CoreEvent::NewDm(payload) => Self::NewDirectMessage {
+                session: payload.session,
+            },
+            CoreEvent::UnreadChanged(_) | CoreEvent::DmUnreadChanged(_) => Self::UnreadChanged,
             CoreEvent::PermissionDenied(payload) => Self::Denied {
                 reason: payload.reason.filter(|reason| !reason.is_empty()),
             },
@@ -404,6 +415,64 @@ impl EngineHandle {
             .into_iter()
             .map(Into::into)
             .collect()
+    }
+
+    /// The direct messages exchanged with the user `session`, oldest first.
+    pub fn direct_messages(&self, session: u32) -> Vec<MessageInfo> {
+        self.state
+            .dm_messages(session)
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+
+    /// Open the direct conversation with `session`, marking it read.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub fn open_direct(&self, session: u32) -> Result<(), String> {
+        self.state.select_dm_user(session)?;
+        self.state.mark_dm_read(session);
+        Ok(())
+    }
+
+    /// Send `text` to the user `session` as a plain-text direct message.
+    ///
+    /// # Errors
+    ///
+    /// When not connected, or the message could not be sent.
+    pub async fn send_direct_text(&self, session: u32, text: &str) -> Result<(), String> {
+        self.state.send_dm(session, escape_html(text)).await
+    }
+
+    /// Unread messages per channel; channels with none are absent.
+    pub fn unread_channels(&self) -> std::collections::HashMap<u32, u32> {
+        self.state.unread_counts()
+    }
+
+    /// Unread direct messages per user session; users with none are absent.
+    pub fn unread_directs(&self) -> std::collections::HashMap<u32, u32> {
+        self.state.dm_unread_counts()
+    }
+
+    /// Mark `channel` read, because the user is looking at it.
+    pub fn mark_channel_read(&self, channel: u32) {
+        self.state.mark_read(channel);
+    }
+
+    /// Mark the direct conversation with `session` read.
+    pub fn mark_direct_read(&self, session: u32) {
+        self.state.mark_dm_read(session);
+    }
+
+    /// Move into `channel`, without changing which conversation is open.
+    ///
+    /// # Errors
+    ///
+    /// When not connected, or the server refuses.
+    pub async fn join_channel(&self, channel: u32) -> Result<(), String> {
+        self.state.join_channel(channel, None).await
     }
 
     /// Move into `channel` and open its conversation.

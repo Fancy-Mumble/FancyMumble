@@ -15,6 +15,15 @@ pub(crate) type ChannelId = u32;
 /// A connected user's session id.
 pub(crate) type Session = u32;
 
+/// What a conversation is with: a channel, or one other user.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum Conversation {
+    /// Everyone in a channel.
+    Channel(ChannelId),
+    /// One user, directly.
+    Direct(Session),
+}
+
 /// Where the connection to the server stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Connection {
@@ -97,6 +106,8 @@ pub(crate) struct Channel {
     pub name: SharedString,
     /// Where the channel sorts among its siblings; ties go by name.
     pub position: i32,
+    /// Messages in it the user has not read.
+    pub unread: u32,
 }
 
 /// One connected user.
@@ -112,6 +123,8 @@ pub(crate) struct User {
     pub deafened: bool,
     /// The user's picture, once it has been fetched.
     pub avatar: Option<std::sync::Arc<gpui::Image>>,
+    /// Direct messages from them the user has not read.
+    pub unread: u32,
 }
 
 /// One chat message, as the conversation shows it.
@@ -179,8 +192,8 @@ pub(crate) enum EngineEvent {
     CurrentChannelChanged,
     /// A user started or stopped talking.
     UserTalking { session: Session, talking: bool },
-    /// A channel received, changed or lost a message.
-    NewMessage { channel: ChannelId },
+    /// A conversation received, changed or lost a message.
+    NewMessage { conversation: Conversation },
     /// The saved servers, or what is known of whether they are up, changed.
     ServersChanged,
     /// Something the user should be told: a refused connection, a failed
@@ -223,14 +236,18 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// Leave the server.
     fn disconnect(&self);
 
-    /// The messages of `channel`, oldest first.
-    fn messages(&self, channel: ChannelId) -> Vec<Message>;
+    /// The messages of `conversation`, oldest first.
+    fn messages(&self, conversation: Conversation) -> Vec<Message>;
+
+    /// The user is looking at `conversation`: mark it read, and fetch its
+    /// stored history where the server keeps one.
+    fn open(&self, conversation: Conversation);
 
     /// Move the local user into `channel`.
     fn join_channel(&self, channel: ChannelId);
 
-    /// Send `body` to `channel`.
-    fn send_message(&self, channel: ChannelId, body: String);
+    /// Send `body` to `conversation`.
+    fn send_message(&self, conversation: Conversation, body: String);
 
     /// The microphone button: turns voice on when it is off, mutes or
     /// unmutes when it is on.

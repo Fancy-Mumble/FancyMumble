@@ -169,7 +169,7 @@ fn say_once_connected(engine: Arc<dyn engine::Engine>, text: String) {
     drop(std::thread::spawn(move || {
         for _ in 0..200 {
             if let Some(channel) = engine.snapshot().current_channel {
-                engine.send_message(channel, text);
+                engine.send_message(engine::Conversation::Channel(channel), text);
                 return;
             }
             std::thread::sleep(std::time::Duration::from_millis(100));

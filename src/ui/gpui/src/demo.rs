@@ -4,8 +4,8 @@
 use std::sync::Mutex;
 
 use crate::engine::{
-    AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Engine, EngineEvent,
-    Message, SavedServer, ServerPing, Session, Snapshot, User, Voice,
+    AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation, Engine,
+    EngineEvent, Message, SavedServer, ServerPing, Session, Snapshot, User, Voice,
 };
 
 /// The local user's session in the demo server.
@@ -34,8 +34,8 @@ struct State {
     current_channel: ChannelId,
     channels: Vec<Channel>,
     users: Vec<User>,
-    /// `(channel, message)`, oldest first.
-    messages: Vec<(ChannelId, Message)>,
+    /// Every message with the conversation it belongs to, oldest first.
+    messages: Vec<(Conversation, Message)>,
 }
 
 impl DemoEngine {
@@ -96,6 +96,7 @@ impl State {
             parent,
             name: name.to_owned().into(),
             position: 0,
+            unread: 0,
         };
         let user = |session, name: &str| User {
             session,
@@ -104,10 +105,11 @@ impl State {
             muted: session == OWN,
             deafened: false,
             avatar: None,
+            unread: 0,
         };
         let said = |minute: u64, session: Session, name: &str, body: &str| {
             (
-                LOUNGE,
+                Conversation::Channel(LOUNGE),
                 Message {
                     sender: Some(session),
                     sender_name: name.to_owned().into(),
@@ -269,16 +271,18 @@ impl Engine for DemoEngine {
         }
     }
 
-    fn messages(&self, channel: ChannelId) -> Vec<Message> {
+    fn messages(&self, conversation: Conversation) -> Vec<Message> {
         self.with_state(|state| {
             state
                 .messages
                 .iter()
-                .filter(|(in_channel, _)| *in_channel == channel)
+                .filter(|(of, _)| *of == conversation)
                 .map(|(_, message)| message.clone())
                 .collect()
         })
     }
+
+    fn open(&self, _conversation: Conversation) {}
 
     fn join_channel(&self, channel: ChannelId) {
         let moved = self.with_state(|state| {
@@ -299,7 +303,7 @@ impl Engine for DemoEngine {
         }
     }
 
-    fn send_message(&self, channel: ChannelId, body: String) {
+    fn send_message(&self, conversation: Conversation, body: String) {
         let body = body.trim().to_owned();
         if body.is_empty() {
             return;
@@ -311,7 +315,7 @@ impl Engine for DemoEngine {
                 .and_then(|(_, last)| last.sent_at_ms)
                 .map_or(FIRST_MESSAGE_MS, |last| last + MINUTE_MS);
             state.messages.push((
-                channel,
+                conversation,
                 Message {
                     sender: Some(OWN),
                     sender_name: "Alex".into(),
@@ -322,7 +326,7 @@ impl Engine for DemoEngine {
                 },
             ));
         });
-        self.tell(EngineEvent::NewMessage { channel });
+        self.tell(EngineEvent::NewMessage { conversation });
     }
 
     fn toggle_microphone(&self) {
@@ -424,15 +428,34 @@ mod tests {
     #[test]
     fn a_sent_message_lands_in_its_channel_only() {
         let engine = DemoEngine::new();
-        let before = engine.messages(LOUNGE).len();
-        engine.send_message(2, "  hello studio  ".to_owned());
-        engine.send_message(2, "   ".to_owned());
-        assert_eq!(engine.messages(LOUNGE).len(), before);
-        let studio = engine.messages(2);
+        let lounge = Conversation::Channel(LOUNGE);
+        let studio = Conversation::Channel(2);
+        let before = engine.messages(lounge).len();
+        engine.send_message(studio, "  hello studio  ".to_owned());
+        engine.send_message(studio, "   ".to_owned());
+        assert_eq!(engine.messages(lounge).len(), before);
+        let direct = Conversation::Direct(3);
+        engine.send_message(direct, "psst".to_owned());
+        assert_eq!(
+            engine.messages(direct).len(),
+            1,
+            "a direct message is its own conversation"
+        );
+        let studio = engine.messages(studio);
         assert_eq!(studio.len(), 1);
         assert_eq!(studio[0].body.as_ref(), "hello studio");
         assert!(studio[0].own);
-        assert_eq!(drain(&engine), [EngineEvent::NewMessage { channel: 2 }]);
+        assert_eq!(
+            drain(&engine),
+            [
+                EngineEvent::NewMessage {
+                    conversation: Conversation::Channel(2)
+                },
+                EngineEvent::NewMessage {
+                    conversation: Conversation::Direct(3)
+                }
+            ]
+        );
     }
 
     #[test]

@@ -7,7 +7,7 @@ use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
 
 use super::Shell;
 use crate::demo::DemoEngine;
-use crate::engine::{Connection, Engine, Voice};
+use crate::engine::{Connection, Conversation, Engine, Voice};
 use crate::theme::{ActiveTheme, Catalog, DEFAULT_THEME, Mode};
 
 /// A shell on a fresh demo server, in the default theme.
@@ -47,7 +47,7 @@ fn click(cx: &mut VisualTestContext, selector: &'static str) {
 fn opens_on_the_current_channel_and_its_history(cx: &mut TestAppContext) {
     let (shell, _engine, cx) = shell(cx);
     shell.read_with(cx, |shell, cx| {
-        assert_eq!(shell.current_channel_name(), Some("lounge"));
+        assert_eq!(shell.open_title().as_deref(), Some("#lounge"));
         assert_eq!(shell.messages.len(), 5);
         assert_eq!(shell.rows.item_count(), 6, "five messages under a day rule");
         assert_eq!(shell.composer.read(cx).placeholder(), "Message #lounge");
@@ -55,15 +55,80 @@ fn opens_on_the_current_channel_and_its_history(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn clicking_a_channel_joins_it(cx: &mut TestAppContext) {
+fn clicking_a_channel_reads_it_and_join_moves_into_it(cx: &mut TestAppContext) {
     let (shell, engine, cx) = shell(cx);
     click(cx, "channel-2");
-    assert_eq!(engine.snapshot().current_channel, Some(2));
+    assert_eq!(
+        engine.snapshot().current_channel,
+        Some(1),
+        "still in the lounge"
+    );
     shell.read_with(cx, |shell, cx| {
-        assert_eq!(shell.current_channel_name(), Some("studio"));
+        assert_eq!(shell.open, Some(Conversation::Channel(2)));
+        assert_eq!(shell.open_title().as_deref(), Some("#studio"));
         assert!(shell.messages.is_empty(), "the studio has no history");
         assert_eq!(shell.rows.item_count(), 0);
         assert_eq!(shell.composer.read(cx).placeholder(), "Message #studio");
+    });
+    click(cx, "join");
+    assert_eq!(engine.snapshot().current_channel, Some(2));
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(
+            shell.open,
+            Some(Conversation::Channel(2)),
+            "and still reading it"
+        );
+    });
+}
+
+#[gpui::test]
+fn clicking_a_user_opens_a_direct_conversation(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    click(cx, "user-3");
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(shell.open, Some(Conversation::Direct(3)));
+        assert_eq!(shell.open_title().as_deref(), Some("@Rin"));
+        assert_eq!(shell.composer.read(cx).placeholder(), "Message @Rin");
+        assert!(shell.messages.is_empty());
+    });
+    click(cx, "input-Message @Rin");
+    cx.simulate_keystrokes("h i enter");
+    let direct = engine.messages(Conversation::Direct(3));
+    assert_eq!(direct.len(), 1);
+    assert_eq!(
+        engine.messages(Conversation::Channel(1)).len(),
+        5,
+        "not in the channel"
+    );
+    shell.read_with(cx, |shell, _| assert_eq!(shell.messages.len(), 1));
+    // Clicking oneself opens nothing.
+    click(cx, "user-1");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.open, Some(Conversation::Direct(3)))
+    });
+}
+
+#[gpui::test]
+fn the_channel_conversation_follows_the_user_unless_they_read_elsewhere(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    engine.join_channel(2);
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(
+            shell.open,
+            Some(Conversation::Channel(2)),
+            "followed the move"
+        );
+    });
+    click(cx, "user-3");
+    engine.join_channel(3);
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(
+            shell.open,
+            Some(Conversation::Direct(3)),
+            "the direct message stays"
+        );
     });
 }
 
@@ -72,7 +137,7 @@ fn typing_and_enter_sends_a_message_and_empties_the_composer(cx: &mut TestAppCon
     let (shell, engine, cx) = shell(cx);
     click(cx, "input-Message #lounge");
     cx.simulate_keystrokes("h i space t h e r e enter");
-    let sent = engine.messages(1);
+    let sent = engine.messages(Conversation::Channel(1));
     assert_eq!(sent.len(), 6);
     assert_eq!(sent[5].body.as_ref(), "hi there");
     shell.read_with(cx, |shell, cx| {
@@ -102,7 +167,7 @@ fn keys_go_to_the_field_that_was_clicked(cx: &mut TestAppContext) {
     });
     // Enter in the search field sends nothing.
     cx.simulate_keystrokes("enter");
-    assert_eq!(engine.messages(1).len(), 5);
+    assert_eq!(engine.messages(Conversation::Channel(1)).len(), 5);
 }
 
 #[gpui::test]
@@ -219,7 +284,7 @@ fn picking_an_identity_and_connecting_arrives_on_the_server(cx: &mut TestAppCont
     assert_eq!(engine.snapshot().connection, Connection::Connected);
     shell.read_with(cx, |shell, _| {
         assert_eq!(shell.snapshot.connection, Connection::Connected);
-        assert_eq!(shell.current_channel_name(), Some("lounge"));
+        assert_eq!(shell.open_title().as_deref(), Some("#lounge"));
         assert_eq!(shell.messages.len(), 5, "the channel's history is loaded");
     });
 }
@@ -390,14 +455,14 @@ fn the_send_button_sends_what_was_typed(cx: &mut TestAppContext) {
     let (shell, engine, cx) = shell(cx);
     click(cx, "send");
     assert_eq!(
-        engine.messages(1).len(),
+        engine.messages(Conversation::Channel(1)).len(),
         5,
         "an empty composer sends nothing"
     );
     click(cx, "input-Message #lounge");
     cx.simulate_keystrokes("o k");
     click(cx, "send");
-    let sent = engine.messages(1);
+    let sent = engine.messages(Conversation::Channel(1));
     assert_eq!(
         sent.last().map(|message| message.body.to_string()),
         Some("ok".to_owned())

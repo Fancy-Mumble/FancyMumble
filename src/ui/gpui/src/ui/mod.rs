@@ -25,8 +25,8 @@ use gpui::{
 };
 
 use crate::engine::{
-    AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Engine, EngineEvent, Message,
-    SavedServer, Session, Snapshot, User,
+    AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation, Engine, EngineEvent,
+    Message, SavedServer, Session, Snapshot, User,
 };
 use crate::store::{Settings, Store};
 use crate::theme::{ActiveTheme, Catalog, Mode};
@@ -41,7 +41,13 @@ pub(crate) struct Shell {
     engine: Arc<dyn Engine>,
     /// The server as last read from the engine.
     snapshot: Snapshot,
-    /// The current channel's messages, oldest first.
+    /// The conversation on screen: a channel, or one other user.
+    open: Option<Conversation>,
+    /// The channel the local user was in when the conversation last
+    /// followed them. Kept apart from the snapshot, which may already show
+    /// the new channel by the time the move itself is announced.
+    was_in: Option<ChannelId>,
+    /// The open conversation's messages, oldest first.
     messages: Vec<Message>,
     /// The conversation's rows: only the visible ones are laid out.
     rows: ListState,
@@ -113,6 +119,8 @@ impl Shell {
         let mut shell = Self {
             snapshot: engine.snapshot(),
             servers: engine.saved_servers(),
+            open: None,
+            was_in: None,
             messages: Vec::new(),
             rows: ListState::new(0, ListAlignment::Top, px(OVERDRAW)),
             bodies: std::collections::HashMap::new(),
@@ -136,6 +144,7 @@ impl Shell {
             _events: events,
             _subscriptions: subscriptions,
         };
+        shell.follow_current_channel(None);
         shell.reload_messages(cx);
         shell
     }
@@ -174,6 +183,7 @@ impl Shell {
             EngineEvent::StateChanged => {
                 let was = self.snapshot.connection;
                 self.snapshot = self.engine.snapshot();
+                self.drop_closed_conversation(cx);
                 // Back on the server list: what it says about each server is
                 // as old as the visit just ended.
                 if was == Connection::Connected
@@ -186,6 +196,7 @@ impl Shell {
             EngineEvent::Notice(notice) => self.notice = notice,
             EngineEvent::CurrentChannelChanged => {
                 self.snapshot = self.engine.snapshot();
+                self.follow_current_channel(self.was_in);
                 self.reload_messages(cx);
             }
             EngineEvent::UserTalking { session, talking } => {
@@ -195,20 +206,66 @@ impl Shell {
                     self.talking.remove(&session)
                 };
             }
-            EngineEvent::NewMessage { channel } => {
-                if self.snapshot.current_channel == Some(channel) {
+            EngineEvent::NewMessage { conversation } => {
+                if self.open == Some(conversation) {
+                    // On screen, so read: it must not also count as unread.
+                    self.engine.open(conversation);
                     self.reload_messages(cx);
+                } else {
+                    self.snapshot = self.engine.snapshot();
                 }
             }
         }
     }
 
-    /// Read the current channel's messages again and lay the rows out afresh.
+    /// After the local user moved: the channel conversation follows them,
+    /// unless they had opened something else to read.
+    fn follow_current_channel(&mut self, before: Option<ChannelId>) {
+        let followed = match self.open {
+            None => true,
+            Some(Conversation::Channel(open)) => Some(open) == before,
+            Some(Conversation::Direct(_)) => false,
+        };
+        if followed || self.snapshot.connection != Connection::Connected {
+            self.open = self.snapshot.current_channel.map(Conversation::Channel);
+        }
+        self.was_in = self.snapshot.current_channel;
+    }
+
+    /// The open conversation is with a channel or a user that is gone: fall
+    /// back to the channel the local user is in.
+    fn drop_closed_conversation(&mut self, cx: &mut Context<Self>) {
+        let there = match self.open {
+            Some(Conversation::Channel(id)) => self.snapshot.channels.iter().any(|c| c.id == id),
+            Some(Conversation::Direct(session)) => self
+                .snapshot
+                .users
+                .iter()
+                .any(|user| user.session == session),
+            None => self.snapshot.current_channel.is_none(),
+        };
+        if !there {
+            self.open = self.snapshot.current_channel.map(Conversation::Channel);
+            self.reload_messages(cx);
+        }
+    }
+
+    /// Put `conversation` on screen.
+    pub(super) fn open_conversation(&mut self, conversation: Conversation, cx: &mut Context<Self>) {
+        if self.open != Some(conversation) {
+            self.open = Some(conversation);
+            self.engine.open(conversation);
+            self.reload_messages(cx);
+        }
+        cx.notify();
+    }
+
+    /// Read the open conversation's messages again and lay the rows out
+    /// afresh.
     fn reload_messages(&mut self, cx: &mut Context<Self>) {
         let messages = self
-            .snapshot
-            .current_channel
-            .map(|channel| self.engine.messages(channel))
+            .open
+            .map(|conversation| self.engine.messages(conversation))
             .unwrap_or_default();
         // A message drawn before is kept as drawn while it is still the same
         // message; an edit, a deletion or another channel starts over.
@@ -237,8 +294,8 @@ impl Shell {
             offset_in_item: px(0.0),
         });
         let placeholder = self
-            .current_channel_name()
-            .map(|name| format!("Message #{name}"))
+            .open_title()
+            .map(|title| format!("Message {title}"))
             .unwrap_or_default();
         self.composer
             .update(cx, |composer, _| composer.set_placeholder(placeholder));
@@ -250,14 +307,14 @@ impl Shell {
         }
     }
 
-    /// Send what is in the composer to the current channel, and empty it.
+    /// Send what is in the composer to the open conversation, and empty it.
     pub(super) fn send_composed(&mut self, cx: &mut Context<Self>) {
         let body = self.composer.read(cx).text().to_owned();
         if body.trim().is_empty() {
             return;
         }
-        if let Some(channel) = self.snapshot.current_channel {
-            self.engine.send_message(channel, body);
+        if let Some(conversation) = self.open {
+            self.engine.send_message(conversation, body);
         }
         self.composer.update(cx, |composer, cx| {
             composer.clear();
@@ -300,13 +357,22 @@ impl Shell {
         cx.notify();
     }
 
-    fn current_channel_name(&self) -> Option<&str> {
-        let current = self.snapshot.current_channel?;
-        self.snapshot
-            .channels
-            .iter()
-            .find(|channel| channel.id == current)
-            .map(|channel| channel.name.as_ref())
+    /// What the open conversation is called: `#channel` or `@user`.
+    fn open_title(&self) -> Option<String> {
+        match self.open? {
+            Conversation::Channel(id) => self
+                .snapshot
+                .channels
+                .iter()
+                .find(|channel| channel.id == id)
+                .map(|channel| format!("#{}", channel.name)),
+            Conversation::Direct(session) => self
+                .snapshot
+                .users
+                .iter()
+                .find(|user| user.session == session)
+                .map(|user| format!("@{}", user.name)),
+        }
     }
 
     /// The channels the column lists, each with how deep it sits: the whole

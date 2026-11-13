@@ -13,8 +13,8 @@ use mumble_tauri_lib::engine_api::{
 };
 
 use crate::engine::{
-    AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Engine, EngineEvent,
-    Message, SavedServer, ServerPing, Snapshot, User, Voice,
+    AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation, Engine,
+    EngineEvent, Message, SavedServer, ServerPing, Snapshot, User, Voice,
 };
 use crate::store::Store;
 
@@ -34,7 +34,7 @@ struct Shared {
     /// When each message that carries no time of its own was first read,
     /// per channel and in order: a stock server sends none, and "when it
     /// arrived here" is the time a reader expects beside it.
-    first_read: Mutex<HashMap<ChannelId, Vec<u64>>>,
+    first_read: Mutex<HashMap<Conversation, Vec<u64>>>,
     /// Each user's picture: the marker it was fetched for, and the picture
     /// once it has arrived.
     avatars: Mutex<HashMap<u32, AvatarSlot>>,
@@ -100,8 +100,16 @@ impl Shared {
             }
             api::EngineEvent::VoiceChanged => self.tell(EngineEvent::StateChanged),
             api::EngineEvent::NewMessage { channel } => {
-                self.tell(EngineEvent::NewMessage { channel });
+                self.tell(EngineEvent::NewMessage {
+                    conversation: Conversation::Channel(channel),
+                });
             }
+            api::EngineEvent::NewDirectMessage { session } => {
+                self.tell(EngineEvent::NewMessage {
+                    conversation: Conversation::Direct(session),
+                });
+            }
+            api::EngineEvent::UnreadChanged => self.tell(EngineEvent::StateChanged),
             api::EngineEvent::Denied { reason } => {
                 let reason = reason.unwrap_or_else(|| "The server did not allow that.".to_owned());
                 self.tell(EngineEvent::Notice(Some(reason.into())));
@@ -195,6 +203,7 @@ impl RealEngine {
     /// arrived. A picture not asked for yet is asked for now; the view is
     /// told to read again when it lands.
     fn users_with_avatars(&self, users: Vec<api::UserInfo>) -> Vec<User> {
+        let unread = self.shared.engine.unread_directs();
         let mut avatars = self
             .shared
             .avatars
@@ -216,6 +225,7 @@ impl RealEngine {
                         }
                     });
                 User {
+                    unread: unread.get(&user.session).copied().unwrap_or(0),
                     session: user.session,
                     name: user.name.into(),
                     channel: user.channel,
@@ -292,6 +302,7 @@ impl Engine for RealEngine {
                 ..Snapshot::disconnected()
             };
         }
+        let unread_channels = engine.unread_channels();
         Snapshot {
             connection,
             own_session: engine.own_session(),
@@ -300,6 +311,7 @@ impl Engine for RealEngine {
                 .channels()
                 .into_iter()
                 .map(|channel| Channel {
+                    unread: unread_channels.get(&channel.id).copied().unwrap_or(0),
                     id: channel.id,
                     parent: channel.parent,
                     name: channel.name.into(),
@@ -402,14 +414,17 @@ impl Engine for RealEngine {
         self.spawn(async move { engine.disconnect().await });
     }
 
-    fn messages(&self, channel: ChannelId) -> Vec<Message> {
-        let messages = self.shared.engine.messages(channel);
+    fn messages(&self, conversation: Conversation) -> Vec<Message> {
+        let messages = match conversation {
+            Conversation::Channel(channel) => self.shared.engine.messages(channel),
+            Conversation::Direct(session) => self.shared.engine.direct_messages(session),
+        };
         let mut first_read = self
             .shared
             .first_read
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
-        let read_at = first_read.entry(channel).or_default();
+        let read_at = first_read.entry(conversation).or_default();
         stamp_first_read(read_at, messages.len(), now_ms());
         messages
             .into_iter()
@@ -425,17 +440,37 @@ impl Engine for RealEngine {
             .collect()
     }
 
-    fn join_channel(&self, channel: ChannelId) {
+    fn open(&self, conversation: Conversation) {
         let engine = self.shared.engine.clone();
-        self.spawn(async move { engine.enter_channel(channel).await });
+        match conversation {
+            Conversation::Channel(channel) => {
+                engine.mark_channel_read(channel);
+                self.spawn(async move { engine.open_conversation(channel).await });
+            }
+            Conversation::Direct(session) => {
+                if let Err(reason) = engine.open_direct(session) {
+                    self.shared.tell(EngineEvent::Notice(Some(reason.into())));
+                }
+            }
+        }
     }
 
-    fn send_message(&self, channel: ChannelId, body: String) {
+    fn join_channel(&self, channel: ChannelId) {
+        let engine = self.shared.engine.clone();
+        self.spawn(async move { engine.join_channel(channel).await });
+    }
+
+    fn send_message(&self, conversation: Conversation, body: String) {
         if body.trim().is_empty() {
             return;
         }
         let engine = self.shared.engine.clone();
-        self.spawn(async move { engine.send_text(channel, &body).await });
+        self.spawn(async move {
+            match conversation {
+                Conversation::Channel(channel) => engine.send_text(channel, &body).await,
+                Conversation::Direct(session) => engine.send_direct_text(session, &body).await,
+            }
+        });
     }
 
     fn toggle_microphone(&self) {
@@ -631,19 +666,22 @@ mod tests {
         assert!(!on_alice.channels.is_empty(), "the channel tree arrived");
         assert_eq!(bob.snapshot().current_channel, Some(channel));
 
-        alice.send_message(channel, "hello <b>bob</b> & co".to_owned());
+        let room = Conversation::Channel(channel);
+        alice.send_message(room, "hello <b>bob</b> & co".to_owned());
         wait_for("bob to receive the message", || {
-            bob.messages(channel)
+            bob.messages(room)
                 .iter()
                 .any(|message| message.body.as_ref() == "hello <b>bob</b> & co")
         });
-        let received = bob.messages(channel);
+        let received = bob.messages(room);
         let message = received.last().expect("the message");
         assert_eq!(message.sender_name.as_ref(), "LiveAlice");
         assert!(!message.own);
         wait_for("alice to see her own message", || {
-            alice.messages(channel).iter().any(|message| message.own)
+            alice.messages(room).iter().any(|message| message.own)
         });
+
+        direct_message_reaches_only_bob(&alice, &bob, room, received.len());
 
         assert_eq!(alice.snapshot().voice, Voice::Off);
         alice.toggle_microphone();
@@ -690,6 +728,36 @@ mod tests {
         drop((alice, bob));
         let _ = std::fs::remove_dir_all(alice_dir);
         let _ = std::fs::remove_dir_all(bob_dir);
+    }
+
+    /// A direct message reaches only the one it is for, and counts as
+    /// unread there until the conversation is opened.
+    fn direct_message_reaches_only_bob(
+        alice: &RealEngine,
+        bob: &RealEngine,
+        room: Conversation,
+        in_room: usize,
+    ) {
+        let bob_session = bob.snapshot().own_session.expect("bob's session");
+        let alice_session = alice.snapshot().own_session.expect("alice's session");
+        alice.send_message(Conversation::Direct(bob_session), "just for you".to_owned());
+        let from_alice = Conversation::Direct(alice_session);
+        wait_for("bob to receive the direct message", || {
+            bob.messages(from_alice)
+                .iter()
+                .any(|message| message.body.as_ref() == "just for you")
+        });
+        assert_eq!(bob.messages(room).len(), in_room, "not in the channel");
+        wait_for("bob to see it counted unread", || {
+            bob.snapshot()
+                .users
+                .iter()
+                .any(|user| user.session == alice_session && user.unread == 1)
+        });
+        bob.open(from_alice);
+        wait_for("opening it to mark it read", || {
+            bob.snapshot().users.iter().all(|user| user.unread == 0)
+        });
     }
 
     /// Poll `done` for up to twenty seconds.

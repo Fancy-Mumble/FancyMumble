@@ -22,6 +22,7 @@ macro_rules! icons {
 }
 
 icons![
+    "at-sign",
     "brand",
     "check",
     "chevron-down",
