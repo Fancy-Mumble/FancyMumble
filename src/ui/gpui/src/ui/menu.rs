@@ -75,6 +75,8 @@ pub(super) enum Question {
     DeleteChannel(ChannelId),
     JoinPassword(ChannelId),
     Comment,
+    /// What a registered account is to be called.
+    RenameRegistered(u32),
     /// The group a new rule of a channel's permissions is for.
     AclGroup(ChannelId),
     /// What is said about a channel, and the password it is entered with.
@@ -107,6 +109,7 @@ impl Question {
             Self::DeleteChannel(_) => ("Delete this channel and everything in it?", None, "Delete"),
             Self::JoinPassword(_) => ("Join with a password", Some("Password"), "Join"),
             Self::Comment => ("Your comment", Some("What others read about you"), "Save"),
+            Self::RenameRegistered(_) => ("Rename this account", Some("Name"), "Rename"),
             Self::AclGroup(_) => (
                 "A rule for which group?",
                 Some("all, auth, in, sub, admin, or a group of this channel"),
@@ -192,6 +195,10 @@ impl Question {
                 password: answer.to_owned(),
             },
             Self::Comment => Action::SetComment(text),
+            Self::RenameRegistered(id) => Action::RenameRegistered {
+                id,
+                name: Some(text).filter(|name| !name.is_empty())?,
+            },
             // Answered into the permissions panel, not to the server.
             Self::AclGroup(_) => return None,
             Self::DescribeChannel(channel) => Action::DescribeChannel { channel, text },
@@ -424,6 +431,14 @@ pub(super) fn user_items(
             }),
         ),
         Item::new("Register", Command::Do(Action::Register { session })),
+        Item::new(
+            "Reset their comment",
+            Command::Do(Action::ResetComment { session }),
+        ),
+        Item::new(
+            "Remove their picture",
+            Command::Do(Action::RemovePicture { session }),
+        ),
         Item::new("Kick…", Command::Ask(Question::KickReason(session))).danger(),
         Item::new("Ban…", Command::Ask(Question::BanReason(session))).danger(),
     ]);
@@ -680,6 +695,16 @@ impl Shell {
             }
         }
         cx.notify();
+    }
+
+    /// Ask what the registered account `id` is to be called.
+    pub(super) fn ask_to_rename_registered(
+        &mut self,
+        id: u32,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.ask(Question::RenameRegistered(id), window, cx);
     }
 
     /// Ask which group a new rule of `channel`'s permissions is for.
@@ -1272,6 +1297,8 @@ mod tests {
                 "Mute for everyone",
                 "Deafen for everyone",
                 "Register",
+                "Reset their comment",
+                "Remove their picture",
                 "Kick…",
                 "Ban…",
             ]

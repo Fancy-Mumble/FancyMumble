@@ -1129,6 +1129,18 @@ fn the_ban_list_is_filtered_and_a_ban_lifted_on_the_second_click(cx: &mut TestAp
         let admin = shell.panels.admin.as_ref().expect("the panel");
         assert_eq!(admin.registered.as_ref().map(Vec::len), Some(5));
     });
+    // A registered account is called something else.
+    click(cx, "input-Filter");
+    cx.simulate_keystrokes("backspace backspace backspace");
+    click(cx, "admin-rename-2");
+    cx.simulate_keystrokes("R i n n a enter");
+    assert_eq!(
+        engine.actions().last(),
+        Some(&Action::RenameRegistered {
+            id: 3,
+            name: "Rinna".to_owned(),
+        })
+    );
     click(cx, "admin-close");
     shell.read_with(cx, |shell, _| assert!(shell.panels.admin.is_none()));
 }

@@ -149,22 +149,51 @@ fn usual_bitrate() -> u32 {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Action {
     /// Play `session` at `volume` here: 0.0 silent, 1.0 as sent.
-    SetUserVolume { session: Session, volume: f32 },
+    SetUserVolume {
+        session: Session,
+        volume: f32,
+    },
     /// Remove `session` from the server.
-    Kick { session: Session, reason: String },
+    Kick {
+        session: Session,
+        reason: String,
+    },
     /// Remove `session` and ban them from returning.
-    Ban { session: Session, reason: String },
+    Ban {
+        session: Session,
+        reason: String,
+    },
     /// Mute or unmute `session` for everyone.
-    ServerMute { session: Session, muted: bool },
+    ServerMute {
+        session: Session,
+        muted: bool,
+    },
     /// Deafen or undeafen `session` for everyone.
-    ServerDeafen { session: Session, deafened: bool },
+    ServerDeafen {
+        session: Session,
+        deafened: bool,
+    },
     /// Move `session` into `channel`.
     MoveUser {
         session: Session,
         channel: ChannelId,
     },
+    /// Take away `session`'s comment, or their picture: for a moderator.
+    ResetComment {
+        session: Session,
+    },
+    RemovePicture {
+        session: Session,
+    },
+    /// Call the registered account `id` something else.
+    RenameRegistered {
+        id: u32,
+        name: String,
+    },
     /// Register `session` on the server under their certificate.
-    Register { session: Session },
+    Register {
+        session: Session,
+    },
     /// Create the channel `name` under `parent`.
     /// Create the channel `name` under `parent`; with `history` the
     /// server keeps what is said there.
@@ -183,16 +212,24 @@ pub(crate) enum Action {
         share: bool,
     },
     /// Rename `channel`.
-    RenameChannel { channel: ChannelId, name: String },
+    RenameChannel {
+        channel: ChannelId,
+        name: String,
+    },
     /// Say `text` about `channel`: its description. Empty says nothing.
-    DescribeChannel { channel: ChannelId, text: String },
+    DescribeChannel {
+        channel: ChannelId,
+        text: String,
+    },
     /// Have `channel` entered with `password`; empty lets anybody in.
     SetChannelPassword {
         channel: ChannelId,
         password: String,
     },
     /// Delete `channel`, and everything under it.
-    DeleteChannel { channel: ChannelId },
+    DeleteChannel {
+        channel: ChannelId,
+    },
     /// Move into `channel`, presenting `password`.
     JoinWithPassword {
         channel: ChannelId,
@@ -209,7 +246,10 @@ pub(crate) enum Action {
         text: String,
     },
     /// Delete the message `id` for everyone.
-    DeleteMessage { channel: ChannelId, id: String },
+    DeleteMessage {
+        channel: ChannelId,
+        id: String,
+    },
     /// Put a poll to `channel`.
     CreatePoll {
         channel: ChannelId,
@@ -229,7 +269,9 @@ pub(crate) enum Action {
     /// Replace the server's ban list with this one.
     SetBans(Vec<Ban>),
     /// Remove the registration of the account `id`.
-    Unregister { id: u32 },
+    Unregister {
+        id: u32,
+    },
     /// Pin the message `id` for everyone, or take the pin off.
     Pin {
         channel: ChannelId,
@@ -237,9 +279,14 @@ pub(crate) enum Action {
         pinned: bool,
     },
     /// Start hearing `channel` without being in it, or stop.
-    ToggleListen { channel: ChannelId },
+    ToggleListen {
+        channel: ChannelId,
+    },
     /// Have `session` heard over everybody else in their channel, or not.
-    PrioritySpeaker { session: Session, priority: bool },
+    PrioritySpeaker {
+        session: Session,
+        priority: bool,
+    },
     /// Put `emoji` on the message `id`, or take the local user's off.
     React {
         channel: ChannelId,

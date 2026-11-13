@@ -44,10 +44,10 @@ real engine and does text and voice.
   key passed on to a newcomer when somebody who holds it agrees.
 - **People.** Pictures, comments, what the server knows of a connection;
   per-user volume; kick, ban, mute, deafen, move, register, priority
-  speaker; your own comment and picture.
+  speaker, and for a moderator taking away a comment or a picture; your own comment and picture.
 - **Administration.** The ban list and the registered accounts, behind a
-  right click on the server's tile: filter them, lift a ban, remove a
-  registration (asked twice). Only the rows in view are built. A channel's
+  right click on the server's tile: filter them, lift a ban, rename an
+  account or remove its registration (asked twice). Only the rows in view are built. A channel's
   permissions from its menu: its rules one at a time, each allowing or
   denying a permission for a group, here or in the channels below.
 - **Certificates.** Listed with who uses each, from the foot of the

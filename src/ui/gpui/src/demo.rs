@@ -275,7 +275,14 @@ impl State {
                 self.key_requests
                     .retain(|asking| asking.hash.as_ref() != hash);
             }
+            Action::RemovePicture { session } => {
+                if let Some(user) = self.users.iter_mut().find(|user| user.session == *session) {
+                    user.avatar = None;
+                }
+            }
             Action::SetUserVolume { .. }
+            | Action::ResetComment { .. }
+            | Action::RenameRegistered { .. }
             | Action::SetAcl(_)
             | Action::DescribeChannel { .. }
             | Action::SetChannelPassword { .. }

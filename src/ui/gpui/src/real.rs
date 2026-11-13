@@ -231,6 +231,11 @@ impl Shared {
             Action::SetAcl(acl) => shared.set_acl(acl).await,
             Action::SetBans(bans) => engine.set_bans(bans.iter().map(ban_info).collect()).await,
             Action::Unregister { id } => engine.change_registered(id, None).await,
+            Action::RenameRegistered { id, name } => {
+                engine.change_registered(id, Some(name)).await?;
+                // The list as the server has it now.
+                engine.request_registered().await
+            }
             Action::ToggleListen { channel } => {
                 let toggled = engine.toggle_listen(channel).await.map(|_| ());
                 shared.tell(EngineEvent::StateChanged);
@@ -1289,6 +1294,8 @@ impl Engine for RealEngine {
                 }
                 Action::MoveUser { session, channel } => engine.move_user(session, channel).await,
                 Action::Register { session } => engine.register(session).await,
+                Action::ResetComment { session } => engine.reset_comment(session).await,
+                Action::RemovePicture { session } => engine.remove_avatar(session).await,
                 Action::CreateChannel {
                     parent,
                     name,
