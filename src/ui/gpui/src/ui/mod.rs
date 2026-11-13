@@ -2,6 +2,7 @@
 //! out - a band across the top, the server rail, the channel column and the
 //! conversation.
 
+mod acl;
 mod admin;
 mod band;
 mod certificates;
@@ -84,6 +85,18 @@ pub(crate) fn size_in_words(bytes: u64) -> String {
         unit += 1;
     }
     format!("{size:.1} {}", UNITS[unit])
+}
+
+/// The panels that open over the window, each with what it holds while
+/// it is open.
+#[derive(Default)]
+struct Panels {
+    /// A channel's permissions.
+    acl: Option<acl::Panel>,
+    /// The administrator's lists.
+    admin: Option<admin::Admin>,
+    /// The certificates.
+    certs: certificates::Panel,
 }
 
 /// Who has read how far in the open channel.
@@ -187,10 +200,6 @@ pub(crate) struct Shell {
     picker_open: bool,
     /// Whether the audio device panel is showing.
     devices_open: bool,
-    /// The administrator's panel, while it is open.
-    admin: Option<admin::Admin>,
-    /// The certificates panel.
-    certs: certificates::Panel,
     /// The devices the system offers, once they have been asked for.
     devices: Option<AudioDevices>,
     /// The devices in use.
@@ -209,6 +218,8 @@ pub(crate) struct Shell {
     adding_server: bool,
     /// The unread count the window's title was last set for.
     titled_unread: u32,
+    /// The panels that open over the window.
+    panels: Panels,
     /// The menu a right click opened, while it is open.
     menu: Option<menu::Menu>,
     /// The dialog a menu entry asked a question in, while it is open.
@@ -318,8 +329,6 @@ impl Shell {
             store,
             picker_open: false,
             devices_open: false,
-            admin: None,
-            certs: certificates::Panel::default(),
             devices: None,
             chosen_devices: engine.chosen_devices(),
             info: None,
@@ -328,6 +337,7 @@ impl Shell {
             active_session: None,
             adding_server: false,
             titled_unread: 0,
+            panels: Panels::default(),
             menu: None,
             prompt: None,
             volumes: std::collections::HashMap::new(),
@@ -460,21 +470,22 @@ impl Shell {
                 }
                 self.stick_to_tail();
             }
+            EngineEvent::Acl(acl) => self.take_acl(acl),
             EngineEvent::Bans(bans) => {
-                if let Some(admin) = self.admin.as_mut() {
+                if let Some(admin) = self.panels.admin.as_mut() {
                     admin.bans = Some(bans);
                     self.refilter_admin(cx);
                 }
             }
             EngineEvent::Registered(users) => {
-                if let Some(admin) = self.admin.as_mut() {
+                if let Some(admin) = self.panels.admin.as_mut() {
                     admin.registered = Some(users);
                     self.refilter_admin(cx);
                 }
             }
             EngineEvent::CertificatesChanged => {
-                self.certs.held = self.engine.certificates();
-                self.certs.doomed = None;
+                self.panels.certs.held = self.engine.certificates();
+                self.panels.certs.doomed = None;
             }
             EngineEvent::Notice(notice) => self.notice = notice,
             EngineEvent::Typing { channel, session } => self.saw_typing(channel, session, cx),
@@ -1017,7 +1028,8 @@ impl Shell {
         cx.notify();
     }
 
-    /// Start with something open: `picker`, `devices`, `certificates` or `editor`. For
+    /// Start with something open: `picker`, `devices`, `certificates`,
+    /// `permissions` or `editor`. For
     /// looking at them where nothing can click.
     pub(crate) fn open_for_inspection(
         &mut self,
@@ -1029,6 +1041,11 @@ impl Shell {
             "picker" => self.toggle_picker(cx),
             "devices" => self.toggle_devices(cx),
             "certificates" => self.toggle_certificates(cx),
+            "permissions" => {
+                if let Some(channel) = self.snapshot.current_channel {
+                    self.open_acl(channel, cx);
+                }
+            }
             "editor" => self.open_editor(None, None, window, cx),
             _ => {}
         }
@@ -1045,14 +1062,14 @@ impl Shell {
             self.stop_editing(cx);
             return;
         }
-        if self.admin.take().is_some() {
+        if self.panels.admin.take().is_some() || self.panels.acl.take().is_some() {
             cx.notify();
             return;
         }
         if self.editor.take().is_none() {
             self.picker_open = false;
             self.devices_open = false;
-            self.certs.open = false;
+            self.panels.certs.open = false;
         }
         cx.notify();
     }
@@ -1337,10 +1354,13 @@ impl Render for Shell {
             .when(self.devices_open, |shell| {
                 shell.child(devices::render(self, &theme, cx))
             })
-            .when_some(self.admin.as_ref(), |shell, admin| {
+            .when_some(self.panels.acl.as_ref(), |shell, panel| {
+                shell.child(acl::render(panel, &theme, cx))
+            })
+            .when_some(self.panels.admin.as_ref(), |shell, admin| {
                 shell.child(admin::render(admin, &theme, cx))
             })
-            .when(self.certs.open, |shell| {
+            .when(self.panels.certs.open, |shell| {
                 shell.child(certificates::render(self, &theme, cx))
             })
             .when_some(self.editor.as_ref(), |shell, editor| {

@@ -14,13 +14,13 @@ use mumble_tauri_lib::engine_api::{
     self as api, ConnectTarget, EngineDirs, EngineHandle, PingInfo,
 };
 
+use crate::engine::{Acl, AclRule, Attachment, KeyRequest, Poll, PollOption, Reader};
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
     Connection, Conversation, Engine, EngineEvent, Found, Listing, Message, Preview, Reaction,
     Registered, SavedServer, ServerPing, SessionEntry, Snapshot, Subject, User, Voice,
     VoiceSettings, Window,
 };
-use crate::engine::{Attachment, KeyRequest, Poll, PollOption, Reader};
 use crate::store::Store;
 
 /// `(host, port)`: what a ping is kept under.
@@ -49,6 +49,9 @@ struct Shared {
     /// The polls seen, by channel, with who answered what: the engine
     /// passes polls and votes on and keeps neither.
     polls: Mutex<HashMap<u32, Vec<HeldPoll>>>,
+    /// The rules last read for a channel, whole: the groups go back to
+    /// the server as they came, with the rules the view changed.
+    acl: Mutex<Option<api::AclInfo>>,
     /// The channel whose readers were last asked for.
     readers_asked: Mutex<Option<u32>>,
     /// When the server was last told the local user is writing.
@@ -95,6 +98,63 @@ impl Shared {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clear();
+    }
+
+    /// A channel's rules arrived: keep them whole, and show the view its
+    /// part of them.
+    fn take_acl(&self, acl: api::AclInfo) {
+        let shown = Acl {
+            channel: acl.channel,
+            inherit: acl.inherit,
+            rules: acl
+                .rules
+                .iter()
+                .map(|rule| AclRule {
+                    here: rule.apply_here,
+                    subs: rule.apply_subs,
+                    inherited: rule.inherited,
+                    user: rule.user,
+                    group: rule.group.clone().map(Into::into),
+                    grant: rule.grant,
+                    deny: rule.deny,
+                })
+                .collect(),
+        };
+        *self.acl.lock().unwrap_or_else(PoisonError::into_inner) = Some(acl);
+        self.tell(EngineEvent::Acl(shown));
+    }
+
+    /// Send a channel's rules as the view changed them, with the groups
+    /// as the server last sent them.
+    async fn set_acl(&self, changed: Acl) -> Result<(), String> {
+        let read = self
+            .acl
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+            .filter(|read| read.channel == changed.channel)
+            .ok_or("These rules were not read from the server; open them again.")?;
+        self.engine
+            .set_acl(api::AclInfo {
+                inherit: changed.inherit,
+                rules: changed
+                    .rules
+                    .into_iter()
+                    .map(|rule| api::AclRuleInfo {
+                        apply_here: rule.here,
+                        apply_subs: rule.subs,
+                        inherited: rule.inherited,
+                        user: rule.user,
+                        group: rule.group.map(|group| group.to_string()),
+                        grant: rule.grant,
+                        deny: rule.deny,
+                    })
+                    .collect(),
+                ..read
+            })
+            .await?;
+        // What the server made of it is what there is to show.
+        self.engine.request_acl(changed.channel).await
     }
 
     /// Put a poll to `channel`. The server passes it on and does not send
@@ -164,6 +224,7 @@ impl Shared {
                 }
                 Ok(())
             }
+            Action::SetAcl(acl) => shared.set_acl(acl).await,
             Action::SetBans(bans) => engine.set_bans(bans.iter().map(ban_info).collect()).await,
             Action::Unregister { id } => engine.change_registered(id, None).await,
             Action::ToggleListen { channel } => {
@@ -344,6 +405,7 @@ impl Shared {
             api::EngineEvent::LinkPreviews(previews) => self.tell(EngineEvent::Previews(
                 previews.into_iter().map(preview_of).collect(),
             )),
+            api::EngineEvent::Acl(acl) => self.take_acl(acl),
             api::EngineEvent::Bans(bans) => {
                 self.tell(EngineEvent::Bans(bans.into_iter().map(ban_of).collect()));
             }
@@ -502,6 +564,7 @@ impl RealEngine {
             reactions: Mutex::default(),
             typed_at: Mutex::default(),
             readers_asked: Mutex::default(),
+            acl: Mutex::default(),
             polls: Mutex::default(),
             wanted: Mutex::default(),
             retries: std::sync::atomic::AtomicU32::new(0),
@@ -800,6 +863,11 @@ impl Engine for RealEngine {
                 ));
             }
         }));
+    }
+
+    fn request_acl(&self, channel: u32) {
+        let engine = self.shared.engine.clone();
+        self.spawn(async move { engine.request_acl(channel).await });
     }
 
     fn list(&self, listing: Listing) {
@@ -1960,7 +2028,7 @@ mod tests {
 
     /// Poll `done` for up to twenty seconds.
     #[track_caller]
-    fn wait_for(what: &str, done: impl Fn() -> bool) {
+    fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
         while !done() {
             assert!(
@@ -2758,6 +2826,101 @@ mod tests {
         admin.act(Action::DeleteChannel { channel });
         wait_for("the channel to go", || sealed(&late).is_none());
         for (engine, dir) in [(admin, admin_dir), (late, late_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+    /// A channel's rules are read, changed and take effect: a rule that
+    /// denies entering keeps a guest out, and taking it away lets them in.
+    #[test]
+    #[ignore = "needs a live Fancy server and its SuperUser password"]
+    fn live_fancy_a_channels_permissions_are_changed_and_hold() {
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        let (guest, guest_dir) = fancy_client("AclGuest", None);
+        wait_for("both to connect", || {
+            admin.snapshot().users.len() >= 2 && guest.snapshot().users.len() >= 2
+        });
+        let name = format!("ruled-{}", std::process::id());
+        let root = admin.snapshot().current_channel.expect("the root");
+        admin.act(Action::CreateChannel {
+            parent: root,
+            name: name.clone(),
+            history: false,
+            encrypted: false,
+        });
+        let ruled = |engine: &RealEngine| {
+            engine
+                .snapshot()
+                .channels
+                .into_iter()
+                .find(|channel| channel.name.as_ref() == name)
+                .map(|channel| channel.id)
+        };
+        wait_for("the channel", || ruled(&guest).is_some());
+        let channel = ruled(&guest).expect("the channel");
+
+        let told = admin.events();
+        let rules = |told: &async_channel::Receiver<EngineEvent>| {
+            std::iter::from_fn(|| told.try_recv().ok()).find_map(|event| match event {
+                EngineEvent::Acl(acl) if acl.channel == channel => Some(acl),
+                _ => None,
+            })
+        };
+        admin.request_acl(channel);
+        let mut read = None;
+        wait_for("the channel's rules", || {
+            read = rules(&told);
+            read.is_some()
+        });
+        let mut acl = read.expect("the rules");
+        let own_before = acl.rules.iter().filter(|rule| !rule.inherited).count();
+
+        // Nobody may enter.
+        acl.rules.push(AclRule {
+            here: true,
+            subs: true,
+            inherited: false,
+            user: None,
+            group: Some("all".into()),
+            grant: 0,
+            deny: 0x4,
+        });
+        admin.act(Action::SetAcl(acl));
+        let mut saved = None;
+        wait_for("the rules as the server took them", || {
+            saved = rules(&told).filter(|acl| {
+                acl.rules.iter().filter(|rule| !rule.inherited).count() == own_before + 1
+            });
+            saved.is_some()
+        });
+        let refused = guest.events();
+        guest.join_channel(channel);
+        wait_for("the guest to be refused", || {
+            std::iter::from_fn(|| refused.try_recv().ok())
+                .any(|event| matches!(event, EngineEvent::Notice(Some(_))))
+        });
+        assert_eq!(guest.snapshot().current_channel, Some(root));
+
+        // The rule goes, and the guest gets in.
+        let mut acl = saved.expect("the rules");
+        acl.rules.retain(|rule| rule.inherited || rule.deny != 0x4);
+        admin.act(Action::SetAcl(acl));
+        wait_for("the rule to be gone", || {
+            rules(&told).is_some_and(|acl| {
+                acl.rules.iter().filter(|rule| !rule.inherited).count() == own_before
+            })
+        });
+        guest.join_channel(channel);
+        wait_for("the guest to be let in", || {
+            guest.snapshot().current_channel == Some(channel)
+        });
+
+        guest.join_channel(root);
+        admin.act(Action::DeleteChannel { channel });
+        wait_for("the channel to go", || ruled(&guest).is_none());
+        for (engine, dir) in [(admin, admin_dir), (guest, guest_dir)] {
             engine.shutdown();
             let _ = std::fs::remove_dir_all(dir);
         }

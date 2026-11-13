@@ -224,6 +224,8 @@ pub(crate) enum Action {
         poll: String,
         selected: Vec<u32>,
     },
+    /// Replace a channel's rules with these.
+    SetAcl(Acl),
     /// Replace the server's ban list with this one.
     SetBans(Vec<Ban>),
     /// Remove the registration of the account `id`.
@@ -245,6 +247,35 @@ pub(crate) enum Action {
         emoji: String,
         add: bool,
     },
+}
+
+/// Who may do what in a channel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Acl {
+    pub channel: ChannelId,
+    /// Whether the parent channel's rules apply here too.
+    pub inherit: bool,
+    /// The rules, in the order they apply: a later one over an earlier.
+    pub rules: Vec<AclRule>,
+}
+
+/// One rule: for a group or one account, what is allowed and denied.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AclRule {
+    /// Whether it applies in the channel itself,
+    pub here: bool,
+    /// and in the channels under it.
+    pub subs: bool,
+    /// Whether it comes from a parent channel, and cannot be changed here.
+    pub inherited: bool,
+    /// The account it is for, or
+    pub user: Option<u32>,
+    /// the group.
+    pub group: Option<SharedString>,
+    /// The permissions allowed, as Mumble's bits,
+    pub grant: u32,
+    /// and those denied.
+    pub deny: u32,
 }
 
 /// One of the lists a server's administrator looks after.
@@ -567,6 +598,8 @@ pub(crate) enum EngineEvent {
     /// What lies behind links asked about with [`Engine::previews`]. A
     /// link the server found nothing behind is not among them.
     Previews(Vec<Preview>),
+    /// A channel's rules, asked for with [`Engine::request_acl`].
+    Acl(Acl),
     /// The server's ban list, asked for with [`Engine::list`].
     Bans(Vec<Ban>),
     /// The server's registered accounts, asked for with [`Engine::list`].
@@ -625,6 +658,10 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// [`EngineEvent::Previews`]; a server that does not look never
     /// answers.
     fn previews(&self, urls: Vec<SharedString>);
+
+    /// Ask the server who may do what in `channel`. The answer is an
+    /// [`EngineEvent::Acl`], or a refusal said in a notice.
+    fn request_acl(&self, channel: ChannelId);
 
     /// Ask the server for one of its administrator's lists. It arrives as
     /// an event, or is refused with a notice.

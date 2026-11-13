@@ -44,7 +44,7 @@ impl Shell {
             cx.notify();
         })
         .detach();
-        self.admin = Some(Admin {
+        self.panels.admin = Some(Admin {
             listing,
             bans: None,
             registered: None,
@@ -58,7 +58,7 @@ impl Shell {
 
     /// Show the other list, asking for it if it has not come yet.
     fn show_listing(&mut self, listing: Listing, cx: &mut Context<Self>) {
-        let Some(admin) = self.admin.as_mut() else {
+        let Some(admin) = self.panels.admin.as_mut() else {
             return;
         };
         admin.listing = listing;
@@ -76,7 +76,7 @@ impl Shell {
 
     /// Work out again which rows pass the filter.
     pub(super) fn refilter_admin(&mut self, cx: &mut Context<Self>) {
-        let Some(admin) = self.admin.as_mut() else {
+        let Some(admin) = self.panels.admin.as_mut() else {
             return;
         };
         let wanted = admin.filter.read(cx).text().to_lowercase();
@@ -110,7 +110,7 @@ impl Shell {
     /// The remove button of row `at`: the first click arms it, the second
     /// lifts the ban or removes the registration.
     fn remove_admin_row(&mut self, at: usize, cx: &mut Context<Self>) {
-        let Some(admin) = self.admin.as_mut() else {
+        let Some(admin) = self.panels.admin.as_mut() else {
             return;
         };
         if admin.doomed != Some(at) {
@@ -145,7 +145,7 @@ impl Shell {
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
         let theme = crate::theme::ActiveTheme::get(cx);
-        let Some(admin) = self.admin.as_ref() else {
+        let Some(admin) = self.panels.admin.as_ref() else {
             return Vec::new();
         };
         range
@@ -406,7 +406,7 @@ pub(super) fn render(
                             .text_color(theme.c.muted)
                             .hover(move |style| style.bg(hover))
                             .on_click(cx.listener(|shell, _, _, cx| {
-                                shell.admin = None;
+                                shell.panels.admin = None;
                                 cx.notify();
                             }))
                             .child("Close"),

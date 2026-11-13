@@ -1067,21 +1067,24 @@ fn certificates_are_listed_with_who_uses_them_and_deleted_on_the_second_click(
     click(cx, "leave");
     click(cx, "open-certificates");
     shell.read_with(cx, |shell, _| {
-        assert!(shell.certs.open);
-        assert_eq!(shell.certs.held, ["alex", "work"]);
+        assert!(shell.panels.certs.open);
+        assert_eq!(shell.panels.certs.held, ["alex", "work"]);
     });
     click(cx, "delete-work");
     shell.read_with(cx, |shell, _| {
-        assert_eq!(shell.certs.doomed.as_ref().map(AsRef::as_ref), Some("work"));
+        assert_eq!(
+            shell.panels.certs.doomed.as_ref().map(AsRef::as_ref),
+            Some("work")
+        );
     });
     assert_eq!(engine.certificates().len(), 2, "armed, not gone");
     click(cx, "delete-work");
     shell.read_with(cx, |shell, _| {
-        assert_eq!(shell.certs.held, ["alex"]);
-        assert!(shell.certs.doomed.is_none());
+        assert_eq!(shell.panels.certs.held, ["alex"]);
+        assert!(shell.panels.certs.doomed.is_none());
     });
     click(cx, "certificates-close");
-    shell.read_with(cx, |shell, _| assert!(!shell.certs.open));
+    shell.read_with(cx, |shell, _| assert!(!shell.panels.certs.open));
 }
 
 #[gpui::test]
@@ -1090,14 +1093,14 @@ fn the_ban_list_is_filtered_and_a_ban_lifted_on_the_second_click(cx: &mut TestAp
     right_click(cx, "session-magical.rocks");
     click(cx, "menu-Bans…");
     shell.read_with(cx, |shell, _| {
-        let admin = shell.admin.as_ref().expect("the panel");
+        let admin = shell.panels.admin.as_ref().expect("the panel");
         assert_eq!(admin.bans.as_ref().map(Vec::len), Some(2));
     });
     click(cx, "input-Filter");
     cx.simulate_keystrokes("m a l");
     shell.read_with(cx, |shell, _| {
         assert_eq!(
-            shell.admin.as_ref().expect("the panel").shown,
+            shell.panels.admin.as_ref().expect("the panel").shown,
             [0],
             "the other is filtered out"
         );
@@ -1119,11 +1122,11 @@ fn the_ban_list_is_filtered_and_a_ban_lifted_on_the_second_click(cx: &mut TestAp
 
     click(cx, "admin-registered");
     shell.read_with(cx, |shell, _| {
-        let admin = shell.admin.as_ref().expect("the panel");
+        let admin = shell.panels.admin.as_ref().expect("the panel");
         assert_eq!(admin.registered.as_ref().map(Vec::len), Some(5));
     });
     click(cx, "admin-close");
-    shell.read_with(cx, |shell, _| assert!(shell.admin.is_none()));
+    shell.read_with(cx, |shell, _| assert!(shell.panels.admin.is_none()));
 }
 
 #[gpui::test]
@@ -1484,4 +1487,70 @@ fn somebody_asking_for_the_channels_key_is_answered_from_a_strip(cx: &mut TestAp
         engine.actions().last(),
         Some(Action::AnswerKeyRequest { share: false, .. })
     ));
+}
+
+#[gpui::test]
+fn a_channels_permissions_are_changed_a_rule_at_a_time_and_saved(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    right_click(cx, "channel-2");
+    click(cx, "menu-Permissions…");
+    shell.read_with(cx, |shell, _| {
+        let panel = shell.panels.acl.as_ref().expect("the panel");
+        let acl = panel.acl.as_ref().expect("the rules");
+        assert_eq!(acl.rules.len(), 2);
+        assert_eq!(
+            panel.selected,
+            Some(1),
+            "the first rule that is the channel's own"
+        );
+        assert!(!panel.dirty);
+    });
+    // The parent's rule cannot be chosen.
+    click(cx, "acl-rule-0");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(
+            shell.panels.acl.as_ref().expect("the panel").selected,
+            Some(1)
+        );
+    });
+    click(cx, "acl-Speak");
+    click(cx, "acl-Enter");
+    click(cx, "acl-Enter");
+    click(cx, "acl-subs");
+    click(cx, "acl-add");
+    cx.simulate_keystrokes("m o d s enter");
+    click(cx, "acl-Kick");
+    shell.read_with(cx, |shell, _| {
+        let panel = shell.panels.acl.as_ref().expect("the panel");
+        assert!(panel.dirty);
+        assert_eq!(
+            panel.selected,
+            Some(2),
+            "the new rule is the one being edited"
+        );
+    });
+    click(cx, "acl-save");
+    let Some(Action::SetAcl(saved)) = engine.actions().last().cloned() else {
+        panic!("the rules are sent");
+    };
+    assert_eq!(saved.channel, 2);
+    assert_eq!(saved.rules.len(), 3);
+    let auth = &saved.rules[1];
+    assert_eq!(
+        (auth.grant, auth.deny),
+        (0x40 | 0x8, 0x4),
+        "speak allowed, enter denied"
+    );
+    assert!(auth.here && !auth.subs);
+    let mods = &saved.rules[2];
+    assert_eq!(mods.group.as_ref().map(AsRef::as_ref), Some("mods"));
+    assert_eq!(mods.grant, 0x1_0000);
+
+    click(cx, "acl-remove");
+    shell.read_with(cx, |shell, _| {
+        let panel = shell.panels.acl.as_ref().expect("the panel");
+        assert_eq!(panel.acl.as_ref().expect("the rules").rules.len(), 2);
+    });
+    click(cx, "acl-close");
+    shell.read_with(cx, |shell, _| assert!(shell.panels.acl.is_none()));
 }

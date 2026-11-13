@@ -3,13 +3,13 @@
 
 use std::sync::Mutex;
 
+use crate::engine::{Acl, AclRule, Attachment, KeyRequest, Poll, PollOption};
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
     Connection, Conversation, Engine, EngineEvent, Found, Listing, Message, Preview, Reaction,
     Registered, SavedServer, ServerPing, Session, SessionEntry, Snapshot, Subject, User, Voice,
     VoiceSettings, Window,
 };
-use crate::engine::{Attachment, KeyRequest, Poll, PollOption};
 
 /// The local user's session in the demo server.
 const OWN: Session = 1;
@@ -266,6 +266,7 @@ impl State {
                     .retain(|asking| asking.hash.as_ref() != hash);
             }
             Action::SetUserVolume { .. }
+            | Action::SetAcl(_)
             | Action::DescribeChannel { .. }
             | Action::SetChannelPassword { .. }
             | Action::SetBans(_)
@@ -637,6 +638,26 @@ impl Engine for DemoEngine {
                 })
                 .collect(),
         ));
+    }
+
+    fn request_acl(&self, channel: ChannelId) {
+        let rule = |group: &str, inherited, grant, deny| AclRule {
+            here: true,
+            subs: true,
+            inherited,
+            user: None,
+            group: Some(group.to_owned().into()),
+            grant,
+            deny,
+        };
+        self.tell(EngineEvent::Acl(Acl {
+            channel,
+            inherit: true,
+            rules: vec![
+                rule("all", true, 0x2 | 0x4 | 0x8 | 0x200, 0),
+                rule("auth", false, 0x40, 0),
+            ],
+        }));
     }
 
     fn list(&self, listing: Listing) {

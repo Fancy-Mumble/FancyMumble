@@ -50,6 +50,8 @@ pub(super) enum Command {
     Reply(usize),
     /// Leave the server of a session.
     Leave(SharedString),
+    /// Open the permissions of a channel.
+    Permissions(ChannelId),
     /// Open the administrator's panel on one of its lists.
     Admin(Listing),
 }
@@ -68,6 +70,8 @@ pub(super) enum Question {
     DeleteChannel(ChannelId),
     JoinPassword(ChannelId),
     Comment,
+    /// The group a new rule of a channel's permissions is for.
+    AclGroup(ChannelId),
     /// What is said about a channel, and the password it is entered with.
     DescribeChannel(ChannelId),
     ChannelPassword(ChannelId),
@@ -98,6 +102,11 @@ impl Question {
             Self::DeleteChannel(_) => ("Delete this channel and everything in it?", None, "Delete"),
             Self::JoinPassword(_) => ("Join with a password", Some("Password"), "Join"),
             Self::Comment => ("Your comment", Some("What others read about you"), "Save"),
+            Self::AclGroup(_) => (
+                "A rule for which group?",
+                Some("all, auth, in, sub, admin, or a group of this channel"),
+                "Add",
+            ),
             Self::DescribeChannel(_) => (
                 "About this channel",
                 Some("What it is for (Shift+Enter for a new line)"),
@@ -178,6 +187,8 @@ impl Question {
                 password: answer.to_owned(),
             },
             Self::Comment => Action::SetComment(text),
+            // Answered into the permissions panel, not to the server.
+            Self::AclGroup(_) => return None,
             Self::DescribeChannel(channel) => Action::DescribeChannel { channel, text },
             Self::ChannelPassword(channel) => Action::SetChannelPassword {
                 channel,
@@ -463,6 +474,7 @@ pub(super) fn channel_items(
         "Set a password…",
         Command::Ask(Question::ChannelPassword(id)),
     ));
+    items.push(Item::new("Permissions…", Command::Permissions(id)));
     // The root cannot be deleted; a server would only refuse.
     if channel.parent.is_some() {
         items.push(Item::new("Delete…", Command::Ask(Question::DeleteChannel(id))).danger());
@@ -626,6 +638,7 @@ impl Shell {
             Command::PickAvatar => self.pick_avatar(cx),
             Command::Edit { id, text } => self.start_editing(id, text.as_ref(), window, cx),
             Command::Leave(session) => self.engine.leave_session(&session),
+            Command::Permissions(channel) => self.open_acl(channel, cx),
             Command::Admin(listing) => self.open_admin(listing, cx),
             Command::Reply(index) => self.start_replying(index, window, cx),
             Command::Copy(text) => {
@@ -633,6 +646,16 @@ impl Shell {
             }
         }
         cx.notify();
+    }
+
+    /// Ask which group a new rule of `channel`'s permissions is for.
+    pub(super) fn ask_for_acl_group(
+        &mut self,
+        channel: ChannelId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.ask(Question::AclGroup(channel), window, cx);
     }
 
     /// Open the dialog for `question`.
@@ -695,7 +718,10 @@ impl Shell {
             .as_ref()
             .map(|input| input.read(cx).text().to_owned())
             .unwrap_or_default();
-        if let Some(action) = prompt.question.answered(&answer) {
+        if matches!(prompt.question, Question::AclGroup(_)) {
+            self.prompt = None;
+            self.add_acl_rule(&answer, cx);
+        } else if let Some(action) = prompt.question.answered(&answer) {
             self.engine.act(action);
             self.prompt = None;
         }
@@ -1244,6 +1270,7 @@ mod tests {
                 "Rename…",
                 "Describe…",
                 "Set a password…",
+                "Permissions…",
             ]
         );
         assert_eq!(
@@ -1255,6 +1282,7 @@ mod tests {
                 "Rename…",
                 "Describe…",
                 "Set a password…",
+                "Permissions…",
                 "Delete…"
             ]
         );

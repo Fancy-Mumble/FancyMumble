@@ -45,7 +45,9 @@ real engine and does text and voice.
   speaker; your own comment and picture.
 - **Administration.** The ban list and the registered accounts, behind a
   right click on the server's tile: filter them, lift a ban, remove a
-  registration (asked twice). Only the rows in view are built.
+  registration (asked twice). Only the rows in view are built. A channel's
+  permissions from its menu: its rules one at a time, each allowing or
+  denying a permission for a group, here or in the channels below.
 - **Certificates.** Listed with who uses each, from the foot of the
   server list; export one to carry it to another machine, import one,
   delete one (asked twice).
@@ -62,8 +64,8 @@ real engine and does text and voice.
   selection, and cut, copy and paste.
 
 What the web UI has and this does not, yet: screen sharing, the Signal
-flavour of encrypted channels, and the rest of the admin surfaces (ACLs,
-server settings).
+flavour of encrypted channels, editing a group's members, and a Fancy
+server's own settings.
 
 ## Testing
 
@@ -150,7 +152,7 @@ For development:
 | `FANCY_GPUI_DATA_DIR` | Keep every file here instead of the platform's place. |
 | `FANCY_GPUI_THEME`, `FANCY_GPUI_MODE` | Start in this theme (`dark`, `rose`, ...) and mode (`light`, `dark`), without choosing it. |
 | `FANCY_GPUI_DEMO_POLL` | With the demo engine: put a poll to the lounge. |
-| `FANCY_GPUI_OPEN` | Start with `picker`, `devices`, `certificates` or `editor` open. |
+| `FANCY_GPUI_OPEN` | Start with `picker`, `devices`, `certificates`, `permissions` or `editor` open. |
 | `FANCY_GPUI_CONNECT` | Connect at once as the saved identity with this id (`FANCY_GPUI_PASSWORD` for the server's password). |
 | `FANCY_GPUI_SAY` | With `FANCY_GPUI_CONNECT`: say this once connected. |
 | `FANCY_GPUI_FRAME` | `client` draws the window's own controls even where the compositor frames it. |

@@ -26,10 +26,10 @@ pub(super) struct Panel {
 impl Shell {
     /// Open or close the panel, reading the certificates afresh on opening.
     pub(super) fn toggle_certificates(&mut self, cx: &mut Context<Self>) {
-        self.certs.open = !self.certs.open;
-        self.certs.doomed = None;
-        if self.certs.open {
-            self.certs.held = self.engine.certificates();
+        self.panels.certs.open = !self.panels.certs.open;
+        self.panels.certs.doomed = None;
+        if self.panels.certs.open {
+            self.panels.certs.held = self.engine.certificates();
         }
         cx.notify();
     }
@@ -49,12 +49,12 @@ impl Shell {
 
     /// Delete `label` on the second asking; the first only arms it.
     fn delete_certificate(&mut self, label: &SharedString, cx: &mut Context<Self>) {
-        if self.certs.doomed.as_ref() == Some(label) {
-            self.certs.doomed = None;
+        if self.panels.certs.doomed.as_ref() == Some(label) {
+            self.panels.certs.doomed = None;
             self.engine
                 .manage_certificate(CertificateTask::Delete(label.to_string()));
         } else {
-            self.certs.doomed = Some(label.clone());
+            self.panels.certs.doomed = Some(label.clone());
         }
         cx.notify();
     }
@@ -131,7 +131,7 @@ fn row(
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     let users = shell.users_of(label);
-    let doomed = shell.certs.doomed.as_ref() == Some(label);
+    let doomed = shell.panels.certs.doomed.as_ref() == Some(label);
     let about: SharedString = match (doomed, users) {
         (true, 0) => "Click again to delete it for good".into(),
         (true, _) => "In use. Click again to delete it for good".into(),
@@ -249,13 +249,14 @@ pub(super) fn render(
                         .flex_col()
                         .gap(px(6.0))
                         .text_size(px(13.0))
-                        .when(shell.certs.held.is_empty(), |list| {
+                        .when(shell.panels.certs.held.is_empty(), |list| {
                             list.child(div().py(px(10.0)).text_color(theme.c.muted).child(
                                 "None yet: one is made the first time an identity connects.",
                             ))
                         })
                         .children(
                             shell
+                                .panels
                                 .certs
                                 .held
                                 .iter()
