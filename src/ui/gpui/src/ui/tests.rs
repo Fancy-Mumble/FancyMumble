@@ -765,3 +765,44 @@ fn the_title_leads_with_the_unread_count_when_there_is_one() {
     assert_eq!(super::window_title(0), "Fancy Mumble");
     assert_eq!(super::window_title(3), "(3) Fancy Mumble");
 }
+
+#[gpui::test]
+fn shift_enter_starts_a_line_and_enter_sends_them_all(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    click(cx, "input-Message #lounge");
+    cx.simulate_keystrokes("o n e shift-enter t w o");
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(shell.composer.read(cx).text(), "one\ntwo")
+    });
+    cx.simulate_keystrokes("enter");
+    let sent = engine.messages(Conversation::Channel(1));
+    assert_eq!(
+        sent.last().map(|message| message.body.to_string()),
+        Some("one\ntwo".to_owned())
+    );
+    // A one-line field has no second line to start.
+    click(cx, "input-Search channels");
+    cx.simulate_keystrokes("a shift-enter b");
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(shell.search.read(cx).text(), "ab")
+    });
+}
+
+#[gpui::test]
+fn a_click_in_the_text_places_the_caret_there(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell(cx);
+    click(cx, "input-Message #lounge");
+    cx.simulate_keystrokes("h e l l o");
+    // Click at the very start of the field: typing now goes in front.
+    let field = cx
+        .debug_bounds("input-Message #lounge")
+        .expect("the composer");
+    cx.simulate_click(
+        field.origin + gpui::point(gpui::px(1.0), field.size.height / 2.0),
+        Modifiers::none(),
+    );
+    cx.simulate_keystrokes(">");
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(shell.composer.read(cx).text(), ">hello")
+    });
+}

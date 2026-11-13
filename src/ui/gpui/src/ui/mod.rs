@@ -141,7 +141,7 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let composer = cx.new(|cx| TextInput::new("", cx));
+        let composer = cx.new(|cx| TextInput::new("", cx).multiline());
         let search = cx.new(|cx| TextInput::new("Search channels", cx));
         let server_search = cx.new(|cx| TextInput::new("Search servers", cx));
         let password = cx.new(|cx| TextInput::new("Server password, if it has one", cx).obscured());

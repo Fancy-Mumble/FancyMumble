@@ -1,20 +1,22 @@
-//! A one-line text field.
+//! A text field: one line, or - for the composer - as many as are typed.
 //!
 //! Text arrives the way the platform delivers it - through GPUI's input
 //! handler - so composed input works: dead keys, the compose key, an input
 //! method. Keys that are not text (arrows, backspace, enter) are handled
-//! here. The caret does not blink, because a blink is a repaint twice a
-//! second for as long as the field has focus, and an idle chat window should
-//! draw nothing.
-//!
-//! Not handled yet: placing the caret or selecting with the pointer.
+//! here, and the pointer places the caret and drags out a selection. The
+//! caret does not blink, because a blink is a repaint twice a second for as
+//! long as the field has focus, and an idle chat window should draw nothing.
 
 use std::ops::Range;
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use gpui::{
     Bounds, ClipboardItem, Context, ElementInputHandler, EntityInputHandler, EventEmitter,
-    FocusHandle, Focusable, IntoElement, KeyDownEvent, ParentElement, Pixels, Render, SharedString,
-    Styled, UTF16Selection, Window, canvas, div, prelude::*, px,
+    FocusHandle, Focusable, HighlightStyle, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent,
+    MouseMoveEvent, ParentElement, Pixels, Point, Render, SharedString, Styled, StyledText,
+    TextLayout, UTF16Selection, Window, canvas, div, fill, prelude::*, px, size,
 };
 
 use crate::theme::ActiveTheme;
@@ -110,6 +112,25 @@ impl Line {
         self.caret = self.text.len();
     }
 
+    /// Select the word `offset` is in or beside: the run of letters and
+    /// digits around it.
+    fn select_word_at(&mut self, offset: usize) {
+        let offset = self.clamp(offset..offset).start;
+        let wordy = |c: char| c.is_alphanumeric() || c == '_';
+        let start = self.text[..offset]
+            .char_indices()
+            .rev()
+            .take_while(|(_, c)| wordy(*c))
+            .last()
+            .map_or(offset, |(at, _)| at);
+        let end = self.text[offset..]
+            .char_indices()
+            .find(|(_, c)| !wordy(*c))
+            .map_or(self.text.len(), |(at, _)| offset + at);
+        self.anchor = start;
+        self.caret = end;
+    }
+
     fn previous_boundary(&self) -> Option<usize> {
         self.text[..self.caret]
             .char_indices()
@@ -165,8 +186,10 @@ impl Line {
     }
 }
 
-/// A one-line text field.
-#[derive(Debug)]
+/// What each character of a password is drawn as.
+const DOT: &str = "•";
+
+/// A text field.
 pub(crate) struct TextInput {
     line: Line,
     /// Text an input method is still composing, as a byte range.
@@ -174,6 +197,14 @@ pub(crate) struct TextInput {
     placeholder: SharedString,
     /// Whether the text is drawn as dots: a password.
     obscured: bool,
+    /// Whether Shift+Enter starts a new line.
+    multiline: bool,
+    /// Where the text was laid out in the frame last painted: what turns a
+    /// pointer position into a place in the text. Empty while there is no
+    /// text on screen to point at.
+    layout: Rc<RefCell<Option<TextLayout>>>,
+    /// Whether the pointer is dragging out a selection.
+    selecting: bool,
     focus: FocusHandle,
 }
 
@@ -193,8 +224,17 @@ impl TextInput {
             marked: None,
             placeholder: placeholder.into(),
             obscured: false,
+            multiline: false,
+            layout: Rc::default(),
+            selecting: false,
             focus: cx.focus_handle(),
         }
+    }
+
+    /// The same field, taking Shift+Enter as a new line.
+    pub(crate) fn multiline(mut self) -> Self {
+        self.multiline = true;
+        self
     }
 
     /// The same field, drawing what is typed as dots.
@@ -244,8 +284,16 @@ impl TextInput {
         let command = keystroke.modifiers.control || keystroke.modifiers.platform;
         let before = self.line.clone();
         let handled = match keystroke.key.as_str() {
+            "enter" if self.multiline && keystroke.modifiers.shift => {
+                self.line.insert("\n");
+                true
+            }
             "enter" => {
                 cx.emit(InputEvent::Submitted(self.line.text.clone()));
+                true
+            }
+            key @ ("up" | "down") if self.multiline => {
+                self.move_by_line(key == "down", keystroke.modifiers.shift);
                 true
             }
             "tab" => {
@@ -264,9 +312,7 @@ impl TextInput {
             }
             "v" if command => {
                 if let Some(pasted) = cx.read_from_clipboard().and_then(|item| item.text()) {
-                    // One line: a pasted paragraph joins up rather than
-                    // sending itself line by line.
-                    self.line.insert(&pasted.replace(['\n', '\r'], " "));
+                    self.line.insert(&self.pasteable(&pasted));
                 }
                 true
             }
@@ -304,12 +350,112 @@ impl TextInput {
         cx.notify();
     }
 
+    /// `pasted` as this field takes it: as it is where lines are allowed,
+    /// and joined up into one where they are not.
+    fn pasteable(&self, pasted: &str) -> String {
+        if self.multiline {
+            pasted.replace("\r\n", "\n").replace('\r', "\n")
+        } else {
+            pasted.replace(['\n', '\r'], " ")
+        }
+    }
+
     /// The text as drawn: itself, or a dot for each character of a password.
     fn shown(&self, text: &str) -> String {
         if self.obscured {
-            "•".repeat(text.chars().count())
+            DOT.repeat(text.chars().count())
         } else {
             text.to_owned()
+        }
+    }
+
+    /// An offset in the text as an offset in what is drawn.
+    fn text_to_drawn(&self, offset: usize) -> usize {
+        if self.obscured {
+            self.line.text[..offset].chars().count() * DOT.len()
+        } else {
+            offset
+        }
+    }
+
+    /// An offset in what is drawn as an offset in the text.
+    fn drawn_to_text(&self, offset: usize) -> usize {
+        if !self.obscured {
+            return self.line.clamp(offset..offset).start;
+        }
+        self.line
+            .text
+            .char_indices()
+            .nth(offset / DOT.len())
+            .map_or(self.line.text.len(), |(at, _)| at)
+    }
+
+    /// The place in the text nearest `position` in the window.
+    fn offset_at(&self, position: Point<Pixels>) -> Option<usize> {
+        let layout = self.layout.borrow();
+        let drawn = match layout.as_ref()?.index_for_position(position) {
+            Ok(inside) | Err(inside) => inside,
+        };
+        Some(self.drawn_to_text(drawn))
+    }
+
+    /// Move the caret a line up or down, keeping its column as nearly as
+    /// the lines allow. At the first or last line it goes to the very start
+    /// or end.
+    fn move_by_line(&mut self, down: bool, extend: bool) {
+        let target = {
+            let layout = self.layout.borrow();
+            layout.as_ref().and_then(|layout| {
+                let mut at = layout.position_for_index(self.text_to_drawn(self.line.caret))?;
+                let line = layout.line_height();
+                at.y += if down { line * 1.5 } else { -(line * 0.5) };
+                let bounds = layout.bounds();
+                (at.y >= bounds.top() && at.y <= bounds.bottom()).then(|| {
+                    match layout.index_for_position(at) {
+                        Ok(inside) | Err(inside) => inside,
+                    }
+                })
+            })
+        };
+        let caret = target.map_or(if down { self.line.text.len() } else { 0 }, |drawn| {
+            self.drawn_to_text(drawn)
+        });
+        self.line.move_to(caret, extend);
+    }
+
+    fn on_mouse_down(
+        &mut self,
+        event: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        window.focus(&self.focus);
+        if let Some(offset) = self.offset_at(event.position) {
+            match event.click_count {
+                // A double click takes the word, a triple click everything.
+                2 => self.line.select_word_at(offset),
+                3.. => self.line.select_all(),
+                _ => self.line.move_to(offset, event.modifiers.shift),
+            }
+            self.selecting = true;
+        }
+        cx.notify();
+    }
+
+    fn on_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if !self.selecting {
+            return;
+        }
+        if event.pressed_button != Some(MouseButton::Left) {
+            // Released somewhere this field never heard of.
+            self.selecting = false;
+            return;
+        }
+        if let Some(offset) = self.offset_at(event.position)
+            && offset != self.line.caret
+        {
+            self.line.move_to(offset, true);
+            cx.notify();
         }
     }
 }
@@ -414,7 +560,7 @@ impl EntityInputHandler for TextInput {
 
     fn character_index_for_point(
         &mut self,
-        _point: gpui::Point<Pixels>,
+        _point: Point<Pixels>,
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<usize> {
@@ -426,36 +572,40 @@ impl Render for TextInput {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = ActiveTheme::get(cx);
         let focused = self.focus.is_focused(window);
-        let caret = || {
-            div()
-                .flex_none()
-                .w(px(1.5))
-                .h(px(18.0))
-                .bg(theme.c.accent_text)
-        };
-        let line = div().flex().items_center().overflow_hidden();
-        let line = if self.line.text.is_empty() {
-            line.when(focused, |line| line.child(caret())).child(
-                div()
-                    .text_color(theme.c.dim)
-                    .child(self.placeholder.clone()),
-            )
-        } else {
+        let caret_ink = theme.c.accent_text;
+        let empty = self.line.text.is_empty();
+        let text = (!empty).then(|| {
             let selection = self.line.selection();
-            let caret_first = self.line.caret == selection.start;
-            line.text_color(theme.c.text)
-                .child(self.shown(&self.line.text[..selection.start]))
-                .when(focused && caret_first, |line| line.child(caret()))
-                .when(!selection.is_empty(), |line| {
-                    line.child(
-                        div()
-                            .bg(theme.c.accent_soft)
-                            .child(self.shown(&self.line.text[selection.clone()])),
-                    )
-                })
-                .when(focused && !caret_first, |line| line.child(caret()))
-                .child(self.shown(&self.line.text[selection.end..]))
-        };
+            let selected = self.text_to_drawn(selection.start)..self.text_to_drawn(selection.end);
+            let marked = self
+                .marked
+                .as_ref()
+                .map(|range| self.text_to_drawn(range.start)..self.text_to_drawn(range.end));
+            StyledText::new(self.shown(&self.line.text)).with_highlights(
+                marks(selected, marked)
+                    .into_iter()
+                    .map(|(range, selected, composing)| {
+                        let style = HighlightStyle {
+                            background_color: selected.then_some(theme.c.accent_soft),
+                            underline: composing.then(|| gpui::UnderlineStyle {
+                                thickness: px(1.0),
+                                color: Some(caret_ink),
+                                wavy: false,
+                            }),
+                            ..HighlightStyle::default()
+                        };
+                        (range, style)
+                    }),
+            )
+        });
+        // What the pointer can be mapped against: this frame's text, once
+        // it has been painted, and nothing while there is none.
+        let layout = text.as_ref().map(|text| text.layout().clone());
+        if layout.is_none() {
+            *self.layout.borrow_mut() = None;
+        }
+        let painted = Rc::clone(&self.layout);
+        let caret_at = self.text_to_drawn(self.line.caret);
         let entity = cx.entity();
         let focus = self.focus.clone();
         div()
@@ -467,24 +617,70 @@ impl Render for TextInput {
             .cursor_text()
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::on_key))
-            .on_click(cx.listener(|this, _, window, cx| {
-                window.focus(&this.focus);
-                cx.notify();
-            }))
-            .child(line)
-            // Paints nothing: it is where the field tells the platform, each
-            // frame it has focus, that text typed now belongs to it.
+            .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
+            .on_mouse_move(cx.listener(Self::on_mouse_move))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, _, _, _| this.selecting = false),
+            )
+            .map(|field| match text {
+                Some(text) => field.text_color(theme.c.text).child(text),
+                None => field.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        // An empty field has no text to measure a caret
+                        // against, so its caret is an element of its own.
+                        .when(focused, |line| {
+                            line.child(div().flex_none().w(px(1.5)).h(px(18.0)).bg(caret_ink))
+                        })
+                        .child(
+                            div()
+                                .text_color(theme.c.dim)
+                                .child(self.placeholder.clone()),
+                        ),
+                ),
+            })
+            // Paints the caret, and is where the field tells the platform,
+            // each frame it has focus, that text typed now belongs to it.
             .child(
                 canvas(
                     |_, _, _| {},
                     move |bounds, (), window, cx| {
                         window.handle_input(&focus, ElementInputHandler::new(bounds, entity), cx);
+                        let Some(layout) = layout else { return };
+                        if focused && let Some(origin) = layout.position_for_index(caret_at) {
+                            let caret = Bounds::new(origin, size(px(1.5), layout.line_height()));
+                            window.paint_quad(fill(caret, caret_ink));
+                        }
+                        *painted.borrow_mut() = Some(layout);
                     },
                 )
                 .absolute()
                 .size_full(),
             )
     }
+}
+
+/// The stretches of drawn text that are selected or being composed, in
+/// order and not overlapping, each with which of the two it is.
+fn marks(
+    selected: Range<usize>,
+    composing: Option<Range<usize>>,
+) -> Vec<(Range<usize>, bool, bool)> {
+    let composing = composing.unwrap_or(0..0);
+    let mut cuts = vec![selected.start, selected.end, composing.start, composing.end];
+    cuts.sort_unstable();
+    cuts.dedup();
+    cuts.windows(2)
+        .filter_map(|cut| {
+            let range = cut[0]..cut[1];
+            let within =
+                |other: &Range<usize>| other.start <= range.start && range.end <= other.end;
+            let (is_selected, is_composing) = (within(&selected), within(&composing));
+            (is_selected || is_composing).then_some((range, is_selected, is_composing))
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -564,6 +760,32 @@ mod tests {
         let mut all = line("abc", 1);
         all.select_all();
         assert_eq!(all.selection(), 0..3);
+    }
+
+    #[test]
+    fn a_double_click_takes_the_word_under_it() {
+        let mut text = line("say hello_there now", 0);
+        text.select_word_at(7);
+        assert_eq!(text.selection(), 4..15);
+        // On the space between two words: the word that ends there.
+        text.select_word_at(3);
+        assert_eq!(text.selection(), 0..3);
+        let mut accented = line("über cool", 0);
+        accented.select_word_at(2);
+        assert_eq!(accented.selection(), 0..5, "by character, not by byte");
+    }
+
+    #[test]
+    fn marked_stretches_are_cut_where_selection_and_composition_meet() {
+        assert!(
+            marks(3..3, None).is_empty(),
+            "nothing selected, nothing composing"
+        );
+        assert_eq!(marks(2..5, None), [(2..5, true, false)]);
+        assert_eq!(
+            marks(2..6, Some(4..8)),
+            [(2..4, true, false), (4..6, true, true), (6..8, false, true)]
+        );
     }
 
     #[test]

@@ -282,7 +282,11 @@ fn notice_strip(
 fn composer(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     div().flex_none().p(px(10.0)).child(
         div()
-            .h(px(54.0))
+            // Grows with what is typed, up to a few lines.
+            .min_h(px(54.0))
+            .max_h(px(180.0))
+            .overflow_hidden()
+            .py(px(10.0))
             .flex()
             .items_center()
             .gap(px(10.0))
