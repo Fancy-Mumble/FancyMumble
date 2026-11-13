@@ -25,6 +25,7 @@ icons![
     "at-sign",
     "brand",
     "check",
+    "check-check",
     "chevron-down",
     "chevron-right",
     "download",

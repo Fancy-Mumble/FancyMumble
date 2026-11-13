@@ -47,6 +47,8 @@ struct State {
     typed: u32,
     /// How often the server was read whole.
     snapshots: u32,
+    /// The message the view last said it had read up to.
+    read_up_to: Option<gpui::SharedString>,
 }
 
 impl DemoEngine {
@@ -75,6 +77,12 @@ impl DemoEngine {
     /// Have `session` start or stop talking.
     pub(crate) fn talk(&self, session: Session, talking: bool) {
         self.tell(EngineEvent::UserTalking { session, talking });
+    }
+
+    /// The message the view last said it had read up to.
+    #[cfg(test)]
+    pub(crate) fn read_up_to_id(&self) -> Option<gpui::SharedString> {
+        self.with_state(|state| state.read_up_to.clone())
     }
 
     /// How often the server was read whole.
@@ -347,6 +355,7 @@ impl State {
             ],
             typed: 0,
             snapshots: 0,
+            read_up_to: None,
             certificates: vec!["alex".into(), "work".into()],
             messages: vec![
                 said(0, OWN, "Alex", "Welcome to our creative lounge!"),
@@ -474,6 +483,10 @@ impl Engine for DemoEngine {
         // The demo's answers never change; say so anyway, as a real engine
         // would once its servers have replied.
         self.tell(EngineEvent::ServersChanged);
+    }
+
+    fn read_up_to(&self, _conversation: Conversation, id: gpui::SharedString) {
+        self.with_state(|state| state.read_up_to = Some(id));
     }
 
     fn search_messages(&self, query: &str) -> Vec<Found> {

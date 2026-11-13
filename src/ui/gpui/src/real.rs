@@ -14,6 +14,7 @@ use mumble_tauri_lib::engine_api::{
     self as api, ConnectTarget, EngineDirs, EngineHandle, PingInfo,
 };
 
+use crate::engine::Reader;
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
     Connection, Conversation, Engine, EngineEvent, Found, Listing, Message, Preview, Reaction,
@@ -45,6 +46,8 @@ struct Shared {
     /// Who put which emoji on which message, by channel and then by
     /// message: the engine passes reactions on and keeps none.
     reactions: Mutex<HashMap<u32, HashMap<String, Vec<api::ReactionInfo>>>>,
+    /// The channel whose readers were last asked for.
+    readers_asked: Mutex<Option<u32>>,
     /// When the server was last told the local user is writing.
     typed_at: Mutex<Option<std::time::Instant>>,
     /// The identity the user last connected as, while they want to be on
@@ -81,6 +84,10 @@ impl Shared {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clear();
+        *self
+            .readers_asked
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = None;
     }
 
     /// Run `command`, and tell the user if it fails.
@@ -155,6 +162,22 @@ impl Shared {
     /// and what happens around messages.
     fn forward_answer(&self, event: api::EngineEvent) {
         match event {
+            api::EngineEvent::Readers { channel, readers } => {
+                // Everybody but the local user: that they have read what
+                // they are looking at is no news.
+                let own = self.engine.own_hash();
+                self.tell(EngineEvent::Readers {
+                    channel,
+                    readers: readers
+                        .into_iter()
+                        .filter(|reader| Some(&reader.hash) != own.as_ref())
+                        .map(|reader| Reader {
+                            name: reader.name.into(),
+                            read_up_to: reader.read_up_to.into(),
+                        })
+                        .collect(),
+                });
+            }
             api::EngineEvent::LinkPreviews(previews) => self.tell(EngineEvent::Previews(
                 previews.into_iter().map(preview_of).collect(),
             )),
@@ -315,6 +338,7 @@ impl RealEngine {
             avatars: Mutex::default(),
             reactions: Mutex::default(),
             typed_at: Mutex::default(),
+            readers_asked: Mutex::default(),
             wanted: Mutex::default(),
             retries: std::sync::atomic::AtomicU32::new(0),
             refused: std::sync::atomic::AtomicBool::new(false),
@@ -528,6 +552,22 @@ impl Engine for RealEngine {
                 shared.tell(EngineEvent::ServersChanged);
             }));
         }
+    }
+
+    fn read_up_to(&self, conversation: Conversation, id: SharedString) {
+        let Conversation::Channel(channel) = conversation else {
+            return;
+        };
+        let engine = self.shared.engine.clone();
+        if !engine.fancy() {
+            return;
+        }
+        // Nobody misses a receipt that did not get through. One frame: a
+        // server counts what a client sends, and drops what is too much.
+        drop(
+            self.runtime
+                .spawn(async move { engine.mark_read_up_to(channel, &id).await }),
+        );
     }
 
     fn search_messages(&self, query: &str) -> Vec<Found> {
@@ -750,7 +790,24 @@ impl Engine for RealEngine {
         match conversation {
             Conversation::Channel(channel) => {
                 engine.mark_channel_read(channel);
-                self.spawn(async move { engine.open_conversation(channel).await });
+                // How far the others have read is asked once on opening;
+                // after that the server says when one of them reads on.
+                // Opening is also how a message on screen is marked read,
+                // so it is called for the same channel over and over.
+                let first = self
+                    .shared
+                    .readers_asked
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .replace(channel)
+                    != Some(channel);
+                self.spawn(async move {
+                    engine.open_conversation(channel).await?;
+                    if first && engine.fancy() {
+                        let _ = engine.request_readers(channel).await;
+                    }
+                    Ok(())
+                });
             }
             Conversation::Direct(session) => {
                 if let Err(reason) = engine.open_direct(session) {
@@ -1735,6 +1792,18 @@ mod tests {
             "one id for both"
         );
 
+        // Bob says how far he has read, and alice hears of it.
+        let read = alice.events();
+        bob.read_up_to(room, id.clone().into());
+        wait_for("alice to hear that bob has read it", || {
+            std::iter::from_fn(|| read.try_recv().ok()).any(|event| {
+                matches!(event, EngineEvent::Readers { channel: of, readers }
+                if of == channel && readers.iter().any(|reader| {
+                    reader.name.as_ref() == "FancyBob" && reader.read_up_to.as_ref() == id
+                }))
+            })
+        });
+
         // Bob is seen writing.
         let seen = alice.events();
         bob.typing(room);
@@ -1770,6 +1839,9 @@ mod tests {
             "{found:?}"
         );
 
+        // A server counts what a client sends and drops what is too much
+        // at once; a person does not react this fast.
+        std::thread::sleep(std::time::Duration::from_secs(1));
         let react = |add| Action::React {
             channel,
             id: id.clone(),

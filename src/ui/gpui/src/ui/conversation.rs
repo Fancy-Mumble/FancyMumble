@@ -452,30 +452,7 @@ impl Shell {
             Some(Row::Day(name)) => {
                 return row_frame().child(day_rule(name, &theme)).into_any_element();
             }
-            Some(Row::Earlier) => {
-                let hover = theme.c.hover;
-                return row_frame()
-                    .py(px(10.0))
-                    .flex()
-                    .justify_center()
-                    .child(
-                        div()
-                            .id("earlier")
-                            .debug_selector(|| "earlier".to_owned())
-                            .px(px(14.0))
-                            .py(px(5.0))
-                            .rounded(theme.skin.radius_pill)
-                            .border_1()
-                            .border_color(theme.c.line2)
-                            .text_size(px(12.0))
-                            .text_color(theme.c.muted)
-                            .cursor_pointer()
-                            .hover(move |style| style.bg(hover))
-                            .on_click(cx.listener(|shell, _, _, cx| shell.show_earlier(cx)))
-                            .child("Show earlier messages"),
-                    )
-                    .into_any_element();
-            }
+            Some(Row::Earlier) => return Self::earlier_row(&theme, cx),
             Some(Row::Message(index)) => *index,
             None => return div().into_any_element(),
         };
@@ -511,7 +488,18 @@ impl Shell {
         .collect();
         let message = &self.messages[index];
         let body = if message.own {
-            own_message(message, &body, row, under, self.utc_offset, &theme).into_any_element()
+            let (seen, seen_by) = self.seen_marks(index);
+            own_message(
+                message,
+                &body,
+                row,
+                under,
+                seen,
+                &seen_by,
+                self.utc_offset,
+                &theme,
+            )
+            .into_any_element()
         } else {
             {
                 let picture = message.sender.and_then(|session| {
@@ -583,6 +571,54 @@ impl DrawnBody {
 }
 
 impl Shell {
+    /// Whether somebody has read the local user's message at `index`,
+    /// which earns it a second tick, and by whom: named under the newest
+    /// such message only.
+    fn seen_marks(&self, index: usize) -> (bool, Vec<SharedString>) {
+        let read = |at: usize| self.seen.until.is_some_and(|until| at <= until);
+        if !read(index) {
+            return (false, Vec::new());
+        }
+        let newest_read = !self
+            .messages
+            .iter()
+            .enumerate()
+            .skip(index + 1)
+            .any(|(at, later)| later.own && read(at));
+        let by = if newest_read {
+            self.seen_by(index)
+        } else {
+            Vec::new()
+        };
+        (true, by)
+    }
+
+    /// The way to the messages before the first one shown.
+    fn earlier_row(theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let hover = theme.c.hover;
+        row_frame()
+            .py(px(10.0))
+            .flex()
+            .justify_center()
+            .child(
+                div()
+                    .id("earlier")
+                    .debug_selector(|| "earlier".to_owned())
+                    .px(px(14.0))
+                    .py(px(5.0))
+                    .rounded(theme.skin.radius_pill)
+                    .border_1()
+                    .border_color(theme.c.line2)
+                    .text_size(px(12.0))
+                    .text_color(theme.c.muted)
+                    .cursor_pointer()
+                    .hover(move |style| style.bg(hover))
+                    .on_click(cx.listener(|shell, _, _, cx| shell.show_earlier(cx)))
+                    .child("Show earlier messages"),
+            )
+            .into_any_element()
+    }
+
     /// The reactions on message `index`, each a chip that adds the local
     /// user's to it or takes it off; `None` when there are none.
     fn reaction_chips(
@@ -968,11 +1004,17 @@ fn their_message(
         )
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one message, and everything it is drawn from"
+)]
 fn own_message(
     message: &Message,
     body: &DrawnBody,
     row: usize,
     under: Vec<AnyElement>,
+    seen: bool,
+    seen_by: &[SharedString],
     utc_offset: i64,
     theme: &Theme,
 ) -> impl IntoElement + use<> {
@@ -1013,11 +1055,36 @@ fn own_message(
                 .map(|line| {
                     if message.failed {
                         line.child(div().text_color(theme.c.bad).child("not sent"))
+                    } else if seen {
+                        line.child(icon("check-check", 12.0, theme.c.accent_text))
                     } else {
                         line.child(icon("check", 12.0, theme.c.dim))
                     }
                 }),
         )
+        .when_some(seen_line(seen_by), |column, line| {
+            column.child(
+                div()
+                    .debug_selector(|| "seen-by".to_owned())
+                    .text_size(px(11.0))
+                    .text_color(theme.c.dim)
+                    .child(line),
+            )
+        })
+}
+
+/// Who has read a message, in words: up to three names, then how many.
+pub(super) fn seen_line(readers: &[SharedString]) -> Option<SharedString> {
+    Some(
+        match readers {
+            [] => return None,
+            [one] => format!("Seen by {one}"),
+            [one, other] => format!("Seen by {one} and {other}"),
+            [one, other, third] => format!("Seen by {one}, {other} and {third}"),
+            [one, other, rest @ ..] => format!("Seen by {one}, {other} and {} more", rest.len()),
+        }
+        .into(),
+    )
 }
 
 #[cfg(test)]
@@ -1061,6 +1128,29 @@ mod tests {
         assert_eq!(drawn[1].1.color, Some(ink));
         assert!(drawn[1].1.underline.is_some());
         assert!(highlights(&Rich::parse("plain"), ink, ground).is_empty());
+    }
+
+    #[test]
+    fn those_who_have_read_are_named_up_to_three() {
+        let said = |names: &[&str]| seen_line(&names_of(names)).map(|line| line.to_string());
+        assert_eq!(said(&[]), None);
+        assert_eq!(said(&["Rin"]).as_deref(), Some("Seen by Rin"));
+        assert_eq!(
+            said(&["Flora", "Rin"]).as_deref(),
+            Some("Seen by Flora and Rin")
+        );
+        assert_eq!(
+            said(&["Flora", "Rin", "Scout"]).as_deref(),
+            Some("Seen by Flora, Rin and Scout")
+        );
+        assert_eq!(
+            said(&["Flora", "Rin", "Scout", "Torque"]).as_deref(),
+            Some("Seen by Flora, Rin and 2 more")
+        );
+    }
+
+    fn names_of(names: &[&str]) -> Vec<SharedString> {
+        names.iter().map(|name| (*name).to_owned().into()).collect()
     }
 
     #[test]

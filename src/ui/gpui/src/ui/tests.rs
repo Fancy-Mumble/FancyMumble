@@ -1265,3 +1265,49 @@ fn the_search_field_finds_messages_too_and_a_click_opens_where_one_was_said(
         assert_eq!(shell.open, Some(Conversation::Channel(1)))
     });
 }
+
+#[gpui::test]
+fn reading_is_said_once_and_a_message_others_have_read_says_who(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    // The newest message, Scout's, was read on opening the channel.
+    assert_eq!(
+        engine.read_up_to_id().as_ref().map(AsRef::as_ref),
+        Some("demo-4")
+    );
+    // The local user's own newest is nothing to tell anybody about.
+    engine.send_message(Conversation::Channel(1), "anyone there?".to_owned());
+    cx.run_until_parked();
+    assert_eq!(
+        engine.read_up_to_id().as_ref().map(AsRef::as_ref),
+        Some("demo-4")
+    );
+    let newest = shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.seen.until, None);
+        shell.messages[5].id.clone().expect("an id")
+    });
+    // Rin has read it; Flora only the one before.
+    engine.emit(crate::engine::EngineEvent::Readers {
+        channel: 1,
+        readers: vec![
+            crate::engine::Reader {
+                name: "Rin".into(),
+                read_up_to: newest,
+            },
+            crate::engine::Reader {
+                name: "Flora".into(),
+                read_up_to: "demo-4".into(),
+            },
+        ],
+    });
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.seen.until, Some(5));
+        assert_eq!(shell.seen_by(5), ["Rin"]);
+        assert_eq!(
+            shell.seen_by(0).len(),
+            2,
+            "both have read the first message"
+        );
+    });
+    assert!(cx.debug_bounds("seen-by").is_some());
+}

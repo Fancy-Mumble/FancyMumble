@@ -29,7 +29,7 @@ use gpui::{
 
 use crate::engine::{
     Action, AudioDevices, ChannelId, ChosenDevices, Connection, Conversation, Engine, EngineEvent,
-    Found, Message, Preview, SavedServer, Session, Snapshot, Subject, User, VoiceSettings,
+    Found, Message, Preview, Reader, SavedServer, Session, Snapshot, Subject, User, VoiceSettings,
 };
 use crate::store::{Settings, Store};
 use crate::theme::{ActiveTheme, Catalog, Mode};
@@ -66,6 +66,17 @@ pub(super) struct Info {
     facts: Vec<(gpui::SharedString, gpui::SharedString)>,
 }
 
+/// Who has read how far in the open channel.
+#[derive(Default)]
+pub(super) struct Seen {
+    /// How far each of the others has read.
+    readers: Vec<Reader>,
+    /// The newest message any of them has read, as a place in `messages`.
+    pub(super) until: Option<usize>,
+    /// The message the local user last said they had read up to.
+    said: Option<gpui::SharedString>,
+}
+
 /// The application's one window.
 pub(crate) struct Shell {
     engine: Arc<dyn Engine>,
@@ -80,6 +91,8 @@ pub(crate) struct Shell {
     /// in each channel, by name, as places among the snapshot's users.
     tree: Vec<(usize, usize)>,
     people: std::collections::HashMap<ChannelId, Vec<usize>>,
+    /// Who has read how far in the open channel.
+    seen: Seen,
     /// The messages that match what is in the search field.
     found: Vec<Found>,
     /// The channel column's rows, and the list that lays out only those
@@ -243,6 +256,7 @@ impl Shell {
             snapshot: Snapshot::disconnected(),
             wanted: String::new(),
             tree: Vec::new(),
+            seen: Seen::default(),
             found: Vec::new(),
             column: Vec::new(),
             column_list: ListState::new(0, ListAlignment::Top, px(OVERDRAW)),
@@ -400,6 +414,13 @@ impl Shell {
                 }
             }
             EngineEvent::ServersChanged => self.servers = self.engine.saved_servers(),
+            EngineEvent::Readers { channel, readers } => {
+                if self.open == Some(Conversation::Channel(channel)) {
+                    self.seen.readers = readers;
+                    self.note_seen();
+                    self.stick_to_tail();
+                }
+            }
             EngineEvent::Previews(previews) => {
                 for preview in previews {
                     let _ = self
@@ -583,6 +604,51 @@ impl Shell {
         }
     }
 
+    /// Work out the newest message somebody else has read.
+    fn note_seen(&mut self) {
+        self.seen.until = self
+            .seen
+            .readers
+            .iter()
+            .filter_map(|reader| self.place_of(&reader.read_up_to))
+            .max();
+    }
+
+    /// Where the message `id` is among those shown.
+    fn place_of(&self, id: &gpui::SharedString) -> Option<usize> {
+        self.messages
+            .iter()
+            .rposition(|message| message.id.as_ref() == Some(id))
+    }
+
+    /// The names of those who have read the message at `index`.
+    pub(super) fn seen_by(&self, index: usize) -> Vec<gpui::SharedString> {
+        self.seen
+            .readers
+            .iter()
+            .filter(|reader| {
+                self.place_of(&reader.read_up_to)
+                    .is_some_and(|at| at >= index)
+            })
+            .map(|reader| reader.name.clone())
+            .collect()
+    }
+
+    /// Tell the others how far the local user has read: once for each
+    /// newest message, and only one somebody else wrote.
+    fn say_read(&mut self) {
+        let (Some(conversation), Some(newest)) = (self.open, self.messages.last()) else {
+            return;
+        };
+        let Some(id) = newest.id.clone().filter(|_| !newest.own) else {
+            return;
+        };
+        if self.seen.said.as_ref() != Some(&id) {
+            self.seen.said = Some(id.clone());
+            self.engine.read_up_to(conversation, id);
+        }
+    }
+
     /// Keep the newest message in view if that is where the reader was:
     /// what is under it may have grown, by a reaction or a link's card.
     fn stick_to_tail(&self) {
@@ -633,6 +699,8 @@ impl Shell {
         if !same_conversation {
             self.shown = self.open;
             self.window = PAGE;
+            self.seen.readers.clear();
+            self.seen.said = None;
         }
         let window = self
             .open
@@ -669,6 +737,8 @@ impl Shell {
         };
         let same_newest = same_conversation && newest(&self.messages) == newest(&messages);
         self.messages = messages;
+        self.note_seen();
+        self.say_read();
         // A short conversation starts under the header, as the web UI draws
         // it; a long one opens on its newest message.
         self.utc_offset = widgets::local_utc_offset();

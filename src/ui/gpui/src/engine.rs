@@ -342,6 +342,14 @@ pub(crate) struct Message {
     pub reactions: Vec<Reaction>,
 }
 
+/// How far somebody else has read a channel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Reader {
+    pub name: SharedString,
+    /// The newest message they have read.
+    pub read_up_to: SharedString,
+}
+
 /// A message that matched what was typed in the search field.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Found {
@@ -465,6 +473,11 @@ pub(crate) enum EngineEvent {
     /// Something the user should be told: a refused connection, a failed
     /// command. `None` clears what was said before.
     Notice(Option<SharedString>),
+    /// How far each other reader of `channel` has read.
+    Readers {
+        channel: ChannelId,
+        readers: Vec<Reader>,
+    },
     /// What lies behind links asked about with [`Engine::previews`]. A
     /// link the server found nothing behind is not among them.
     Previews(Vec<Preview>),
@@ -505,6 +518,11 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// The latest answer from the server at `host:port`, or `None` while it
     /// has not answered (or is down).
     fn ping(&self, host: &str, port: u16) -> Option<ServerPing>;
+
+    /// The local user has read `conversation` up to the message `id`:
+    /// say so to those in it, and ask how far they have read. Only a
+    /// Fancy server keeps track; elsewhere this does nothing.
+    fn read_up_to(&self, conversation: Conversation, id: SharedString);
 
     /// The messages held that match `query`, best first. Searches what
     /// the client holds, so it may be asked off the view's thread.
