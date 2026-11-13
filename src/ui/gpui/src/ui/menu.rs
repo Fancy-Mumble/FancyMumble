@@ -89,6 +89,8 @@ pub(super) enum Question {
     NewChannelWithHistory(ChannelId),
     /// A channel whose messages are kept sealed from the server.
     NewEncryptedChannel(ChannelId),
+    /// A channel sealed the Signal way.
+    NewSignalChannel(ChannelId),
     RenameChannel(ChannelId),
     DeleteChannel(ChannelId),
     JoinPassword(ChannelId),
@@ -125,6 +127,9 @@ impl Question {
                 Some("Name"),
                 "Create",
             ),
+            Self::NewSignalChannel(_) => {
+                ("New channel, sealed the Signal way", Some("Name"), "Create")
+            }
             Self::RenameChannel(_) => ("Rename channel", Some("Name"), "Rename"),
             Self::DeleteChannel(_) => ("Delete this channel and everything in it?", None, "Delete"),
             Self::JoinPassword(_) => ("Join with a password", Some("Password"), "Join"),
@@ -209,6 +214,10 @@ impl Question {
                 name: Some(text).filter(|name| !name.is_empty())?,
                 history: true,
                 encrypted: true,
+            },
+            Self::NewSignalChannel(parent) => Action::CreateSignalChannel {
+                parent,
+                name: Some(text).filter(|name| !name.is_empty())?,
             },
             Self::RenameChannel(channel) => Action::RenameChannel {
                 channel,
@@ -685,12 +694,26 @@ impl Shell {
         let Some(channel) = self.snapshot.channels.iter().find(|c| c.id == id) else {
             return;
         };
-        let items = channel_items(
+        let mut items = channel_items(
             channel,
             self.snapshot.current_channel,
             self.snapshot.fancy,
             self.whisper_target(),
         );
+        // Offered beside the other encrypted kind, where the library that
+        // does the sealing is installed.
+        let beside = items
+            .iter()
+            .position(|item| item.name.as_ref() == "New encrypted channel inside…");
+        if let Some(beside) = beside.filter(|_| self.engine.signal_available()) {
+            items.insert(
+                beside + 1,
+                Item::new(
+                    "New Signal-sealed channel inside…",
+                    Command::Ask(Question::NewSignalChannel(id)),
+                ),
+            );
+        }
         self.open_menu(at, items, cx);
     }
 

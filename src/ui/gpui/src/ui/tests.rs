@@ -1903,3 +1903,23 @@ fn a_friend_is_kept_from_their_menu_and_found_in_the_list(cx: &mut TestAppContex
     click(cx, "friend-remove-0");
     shell.read_with(cx, |shell, _| assert!(!shell.is_friend("h3")));
 }
+
+#[gpui::test]
+fn a_channel_sealed_the_signal_way_is_made_from_a_channels_menu(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    right_click(cx, "channel-1");
+    click(cx, "menu-New Signal-sealed channel inside…");
+    cx.simulate_keystrokes("v a u l t enter");
+    assert!(matches!(
+        engine.actions().last(),
+        Some(Action::CreateSignalChannel { parent: 1, name }) if name == "vault"
+    ));
+    shell.read_with(cx, |shell, _| {
+        let made = shell
+            .snapshot
+            .channels
+            .iter()
+            .find(|c| c.name.as_ref() == "vault");
+        assert!(made.is_some_and(|channel| channel.encrypted));
+    });
+}

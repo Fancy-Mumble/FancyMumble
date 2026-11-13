@@ -44,7 +44,10 @@ real engine and does text and voice.
   conversation) and save one shared, a card for
   what lies behind a link, and channels that keep their messages for
   whoever comes later: on the server, or end-to-end encrypted, with the
-  key passed on to a newcomer when somebody who holds it agrees.
+  key passed on to a newcomer when somebody who holds it agrees; or
+  sealed the Signal way, read only by who is in the channel when something
+  is said, where the Signal bridge library is installed (it is a library
+  of its own and is looked for beside the executable).
 - **People.** Pictures, comments, what the server knows of a connection;
   per-user volume; kick, ban, mute, deafen, move, register, priority
   speaker, and for a moderator taking away a comment or a picture; your own comment and picture.
@@ -77,8 +80,7 @@ real engine and does text and voice.
 
 What the web UI has and this does not, yet: screen sharing (its button
 is drawn where the web UI has it, and says so), friends on servers the
-view is not connected to, the
-Signal flavour of encrypted channels, and a Fancy server's own settings.
+view is not connected to, and a Fancy server's own settings.
 
 ## Testing
 
@@ -97,6 +99,9 @@ attached, or expect a tone: the microphone is the engine's virtual one.
     FANCY_GPUI_TEST_FANCY=host:port                edits, reactions, typing
     FANCY_GPUI_TEST_SUPERUSER=<password>           with the above: kept
                                                    history, deletion, pins
+
+The Signal test (`live_fancy_a_signal`) also wants `libsignal_bridge.so`
+beside the test binary, in `target/.../debug/deps`.
 
 name what the other live tests need; each is skipped by filter when its
 server is not there (`-- --ignored live_fancy`).

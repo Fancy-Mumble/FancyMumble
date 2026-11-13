@@ -259,24 +259,9 @@ impl State {
                 name,
                 history,
                 encrypted,
-            } => {
-                let id = self
-                    .channels
-                    .iter()
-                    .map(|channel| channel.id)
-                    .max()
-                    .unwrap_or(0)
-                    + 1;
-                self.channels.push(Channel {
-                    id,
-                    parent: Some(*parent),
-                    name: name.clone().into(),
-                    position: 0,
-                    unread: 0,
-                    history: *history,
-                    encrypted: *encrypted,
-                    listening: false,
-                });
+            } => self.add_channel(*parent, name, *history, *encrypted),
+            Action::CreateSignalChannel { parent, name } => {
+                self.add_channel(*parent, name, true, true);
             }
             Action::RenameChannel { channel, name } => {
                 if let Some(found) = self.channels.iter_mut().find(|known| known.id == *channel) {
@@ -339,6 +324,27 @@ impl State {
 
     /// The rest of [`Self::apply`]: messages, polls, and what is set on a
     /// channel or a user for the local user alone.
+    /// A new channel under `parent`, with the next id.
+    fn add_channel(&mut self, parent: ChannelId, name: &str, history: bool, encrypted: bool) {
+        let id = self
+            .channels
+            .iter()
+            .map(|known| known.id)
+            .max()
+            .unwrap_or(0)
+            + 1;
+        self.channels.push(Channel {
+            id,
+            parent: Some(parent),
+            name: name.to_owned().into(),
+            position: 0,
+            unread: 0,
+            history,
+            encrypted,
+            listening: false,
+        });
+    }
+
     fn apply_further(&mut self, action: &Action) {
         match action {
             Action::EditMessage { id, text, .. } => {
@@ -738,6 +744,10 @@ impl Engine for DemoEngine {
             groups,
             rules,
         }));
+    }
+
+    fn signal_available(&self) -> bool {
+        true
     }
 
     fn request_scheduled(&self) {

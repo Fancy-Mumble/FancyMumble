@@ -911,6 +911,10 @@ impl Engine for RealEngine {
         self.spawn(async move { engine.request_acl(channel).await });
     }
 
+    fn signal_available(&self) -> bool {
+        self.shared.engine.signal_available()
+    }
+
     fn request_scheduled(&self) {
         let engine = self.shared.engine.clone();
         self.spawn(async move { engine.request_scheduled().await });
@@ -1341,6 +1345,11 @@ impl Engine for RealEngine {
                         (false, false) => api::History::None,
                     };
                     engine.create_channel(parent, name, history).await
+                }
+                Action::CreateSignalChannel { parent, name } => {
+                    engine
+                        .create_channel(parent, name, api::History::Signal)
+                        .await
                 }
                 Action::AnswerKeyRequest {
                     channel,
@@ -2772,6 +2781,67 @@ mod tests {
         alice.shutdown();
         let _ = std::fs::remove_dir_all(alice_dir);
     }
+    /// A channel sealed the Signal way: two who are in it read each other,
+    /// and one who comes later reads what is said from then on and nothing
+    /// from before. Needs the Signal bridge library beside the test binary.
+    #[test]
+    #[ignore = "needs a live Fancy server and the Signal bridge library"]
+    fn live_fancy_a_signal_sealed_channel_is_read_by_who_is_in_it() {
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        wait_for("the admin to connect", || {
+            admin.snapshot().connection == Connection::Connected
+        });
+        assert!(admin.signal_available(), "the bridge library is not here");
+        let name = format!("signal-{}", std::process::id());
+        let root = admin.snapshot().current_channel.expect("the root");
+        admin.act(Action::CreateSignalChannel {
+            parent: root,
+            name: name.clone(),
+        });
+        let made = |engine: &RealEngine| {
+            engine
+                .snapshot()
+                .channels
+                .into_iter()
+                .find(|channel| channel.name.as_ref() == name)
+        };
+        wait_for("the channel, encrypted", || {
+            made(&admin).is_some_and(|channel| channel.encrypted)
+        });
+        let channel = made(&admin).expect("the channel").id;
+        let room = Conversation::Channel(channel);
+        let enter = |engine: &RealEngine| {
+            engine.join_channel(channel);
+            wait_for("to be in the channel", || {
+                engine.snapshot().current_channel == Some(channel)
+            });
+            engine.open(room);
+        };
+        enter(&admin);
+        let (bob, bob_dir) = fancy_client("SignalBob", None);
+        wait_for("bob to see the channel", || made(&bob).is_some());
+        enter(&bob);
+        std::thread::sleep(std::time::Duration::from_secs(2));
+
+        admin.send_message(room, "between the two of us".to_owned());
+        wait_for("bob to read the admin", || {
+            said(&bob, room, "between the two of us").is_some()
+        });
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        bob.send_message(room, "and back".to_owned());
+        wait_for("the admin to read bob", || {
+            said(&admin, room, "and back").is_some()
+        });
+
+        admin.act(Action::DeleteChannel { channel });
+        admin.shutdown();
+        bob.shutdown();
+        let _ = std::fs::remove_dir_all(admin_dir);
+        let _ = std::fs::remove_dir_all(bob_dir);
+    }
+
     /// A message is left with the server to send in a few seconds: it waits
     /// in the list, a second one is called off, and the first arrives.
     #[test]

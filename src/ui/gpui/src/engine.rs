@@ -204,6 +204,12 @@ pub(crate) enum Action {
         /// Keep them sealed with a key the server does not have.
         encrypted: bool,
     },
+    /// Create the channel `name` under `parent`, sealed the Signal way:
+    /// read only by who is in it when something is said.
+    CreateSignalChannel {
+        parent: ChannelId,
+        name: String,
+    },
     /// Give the key of the encrypted `channel` to the one asking for it
     /// under `hash`, or turn them down.
     AnswerKeyRequest {
@@ -775,6 +781,10 @@ pub(crate) trait Engine: Send + Sync + 'static {
 
     /// Who is asking for the key of the encrypted channel `channel`.
     fn key_requests(&self, channel: ChannelId) -> Vec<KeyRequest>;
+
+    /// Whether channels sealed the Signal way can be made and read here:
+    /// that takes a library that is not always installed.
+    fn signal_available(&self) -> bool;
 
     /// The polls put to `conversation` while this client was there,
     /// oldest first, with how each stands.
