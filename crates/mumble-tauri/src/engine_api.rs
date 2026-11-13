@@ -245,6 +245,23 @@ pub struct PingInfo {
     pub version: Option<String>,
 }
 
+/// One of the servers the engine is on, or was and may be again.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionInfo {
+    /// What names the session to [`EngineHandle::activate_session`].
+    pub id: String,
+    /// The server's host name.
+    pub host: String,
+    /// The server's port.
+    pub port: u16,
+    /// The name the user is there under.
+    pub username: String,
+    /// Where its connection stands.
+    pub connection: Connection,
+    /// Whether it is the one every other call here is about.
+    pub active: bool,
+}
+
 /// A microphone or a speaker the system offers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AudioDeviceInfo {
@@ -626,6 +643,40 @@ impl EngineHandle {
         settings.selected_device = input;
         settings.selected_output_device = output;
         self.state.apply_audio_settings(settings)
+    }
+
+    /// Every server the engine is on. Connecting to another adds one and
+    /// makes it the active one.
+    pub fn sessions(&self) -> Vec<SessionInfo> {
+        let active = self.state.registry.active_id();
+        self.state
+            .registry
+            .list_meta()
+            .into_iter()
+            .map(|session| SessionInfo {
+                active: active == Some(session.id),
+                id: session.id.to_string(),
+                host: session.host,
+                port: session.port,
+                username: session.username,
+                connection: match session.status {
+                    ConnectionStatus::Disconnected => Connection::Disconnected,
+                    ConnectionStatus::Connecting => Connection::Connecting,
+                    ConnectionStatus::Connected => Connection::Connected,
+                },
+            })
+            .collect()
+    }
+
+    /// Make the session `id` the one every other call here is about; voice
+    /// moves with it.
+    ///
+    /// # Errors
+    ///
+    /// When `id` names no session.
+    pub async fn activate_session(&self, id: &str) -> Result<(), String> {
+        let id = id.parse().map_err(|_| "no such session".to_owned())?;
+        self.state.switch_active_with_voice(id).await
     }
 
     /// Tell the engine whether the user is looking at the application. While
