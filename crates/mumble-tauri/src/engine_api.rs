@@ -687,6 +687,31 @@ impl EngineHandle {
         self.state.send_dm(session, escape_html(text)).await
     }
 
+    /// Send `html` to `channel` as it stands: for what plain text cannot
+    /// say, a picture above all. The server's limits apply.
+    ///
+    /// # Errors
+    ///
+    /// When not connected, or the message could not be sent.
+    pub async fn send_html(&self, channel: u32, html: String) -> Result<(), String> {
+        self.state.send_message(channel, html).await
+    }
+
+    /// Send `html` to the user `session` as it stands.
+    ///
+    /// # Errors
+    ///
+    /// When not connected, or the message could not be sent.
+    pub async fn send_direct_html(&self, session: u32, html: String) -> Result<(), String> {
+        self.state.send_dm(session, html).await
+    }
+
+    /// The longest message carrying a picture the server takes, in bytes;
+    /// zero when it sets no limit.
+    pub fn picture_limit(&self) -> usize {
+        self.state.server_config().max_image_message_length as usize
+    }
+
     /// Unread messages per channel; channels with none are absent.
     pub fn unread_channels(&self) -> std::collections::HashMap<u32, u32> {
         self.state.unread_counts()
