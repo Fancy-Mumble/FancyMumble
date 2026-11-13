@@ -48,6 +48,7 @@ icons![
     "pencil",
     "pin",
     "plus",
+    "reply",
     "search",
     "send",
     "settings-2",

@@ -46,6 +46,8 @@ pub(super) enum Command {
     },
     /// Put text on the clipboard.
     Copy(SharedString),
+    /// Answer the message at this place in the conversation.
+    Reply(usize),
     /// Leave the server of a session.
     Leave(SharedString),
     /// Open the administrator's panel on one of its lists.
@@ -223,11 +225,16 @@ pub(super) const QUICK_REACTIONS: &[&str] = &["👍", "❤️", "😂", "😮", 
 /// messages are stored: only a stored message can be deleted for everyone.
 pub(super) fn message_items(
     message: &Message,
+    index: usize,
     channel: Option<ChannelId>,
     fancy: bool,
     kept: bool,
 ) -> (Vec<Item>, Vec<Item>) {
     let mut items = vec![Item::new("Copy text", Command::Copy(message.body.clone()))];
+    // A reply names a message by its id, which only a Fancy server gives.
+    if fancy && message.id.is_some() {
+        items.insert(0, Item::new("Reply", Command::Reply(index)));
+    }
     let (Some(channel), Some(id), true) = (channel, message.id.as_ref(), fancy) else {
         return (items, Vec::new());
     };
@@ -503,7 +510,7 @@ impl Shell {
                 .iter()
                 .any(|known| known.id == id && known.history)
         });
-        let (items, quick) = message_items(message, channel, self.snapshot.fancy, kept);
+        let (items, quick) = message_items(message, index, channel, self.snapshot.fancy, kept);
         self.menu = Some(Menu { at, items, quick });
         cx.notify();
     }
@@ -538,6 +545,7 @@ impl Shell {
             Command::Edit { id, text } => self.start_editing(id, text.as_ref(), window, cx),
             Command::Leave(session) => self.engine.leave_session(&session),
             Command::Admin(listing) => self.open_admin(listing, cx),
+            Command::Reply(index) => self.start_replying(index, window, cx),
             Command::Copy(text) => {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.to_string()));
             }

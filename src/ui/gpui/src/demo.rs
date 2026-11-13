@@ -136,6 +136,7 @@ impl DemoEngine {
                     failed: false,
                     pinned: false,
                     files: Vec::new(),
+                    reply_to: None,
                     reactions: Vec::new(),
                 },
             ));
@@ -378,6 +379,7 @@ impl State {
                     failed: false,
                     pinned: false,
                     files: Vec::new(),
+                    reply_to: None,
                     reactions: Vec::new(),
                 },
             )
@@ -797,11 +799,21 @@ impl Engine for DemoEngine {
                     failed: false,
                     pinned: false,
                     files: Vec::new(),
+                    reply_to: None,
                     reactions: Vec::new(),
                 },
             ));
         });
         self.tell(EngineEvent::NewMessage { conversation });
+    }
+
+    fn send_reply(&self, conversation: Conversation, to: gpui::SharedString, body: String) {
+        self.send_message(conversation, body);
+        self.with_state(|state| {
+            if let Some((_, sent)) = state.messages.last_mut() {
+                sent.reply_to = Some(to);
+            }
+        });
     }
 
     fn send_picture(&self, conversation: Conversation, file: Vec<u8>) {
@@ -827,6 +839,7 @@ impl Engine for DemoEngine {
                             failed: false,
                             pinned: false,
                             files: Vec::new(),
+                            reply_to: None,
                             reactions: Vec::new(),
                         },
                     ));
@@ -867,6 +880,7 @@ impl Engine for DemoEngine {
                         size: Some(1_536),
                         url: None,
                     }],
+                    reply_to: None,
                     reactions: Vec::new(),
                 },
             ));

@@ -158,6 +158,9 @@ pub(crate) struct Shell {
     composer: Entity<TextInput>,
     /// Whether the conversation shows only its pinned messages.
     only_pinned: bool,
+    /// The message being answered: its id, and what the strip above the
+    /// composer says of it.
+    replying: Option<(gpui::SharedString, gpui::SharedString)>,
     /// The message being changed, while the composer holds its text.
     editing: Option<gpui::SharedString>,
     /// Who was last seen writing in the open channel, and when.
@@ -184,11 +187,8 @@ pub(crate) struct Shell {
     devices_open: bool,
     /// The administrator's panel, while it is open.
     admin: Option<admin::Admin>,
-    /// Whether the certificates panel is showing, what it lists, and the
-    /// certificate a first click on delete has armed.
-    certificates_open: bool,
-    certificates: Vec<gpui::SharedString>,
-    doomed_certificate: Option<gpui::SharedString>,
+    /// The certificates panel.
+    certs: certificates::Panel,
     /// The devices the system offers, once they have been asked for.
     devices: Option<AudioDevices>,
     /// The devices in use.
@@ -302,6 +302,7 @@ impl Shell {
             talking: HashSet::new(),
             composer,
             only_pinned: false,
+            replying: None,
             editing: None,
             typing: std::collections::HashMap::new(),
             search,
@@ -315,9 +316,7 @@ impl Shell {
             picker_open: false,
             devices_open: false,
             admin: None,
-            certificates_open: false,
-            certificates: Vec::new(),
-            doomed_certificate: None,
+            certs: certificates::Panel::default(),
             devices: None,
             chosen_devices: engine.chosen_devices(),
             info: None,
@@ -465,8 +464,8 @@ impl Shell {
                 }
             }
             EngineEvent::CertificatesChanged => {
-                self.certificates = self.engine.certificates();
-                self.doomed_certificate = None;
+                self.certs.held = self.engine.certificates();
+                self.certs.doomed = None;
             }
             EngineEvent::Notice(notice) => self.notice = notice,
             EngineEvent::Typing { channel, session } => self.saw_typing(channel, session, cx),
@@ -860,8 +859,33 @@ impl Shell {
         });
     }
 
-    /// Leave the message being changed as it was.
+    /// Answer the message at `index`: what is sent next names it.
+    pub(super) fn start_replying(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some((id, said)) = self
+            .messages
+            .get(index)
+            .and_then(|message| Some((message.id.clone()?, conversation::said_by(message))))
+        else {
+            return;
+        };
+        // Answering is not correcting: what was being changed is let go.
+        self.stop_editing(cx);
+        self.replying = Some((id, said));
+        self.composer.read(cx).focus(window);
+        cx.notify();
+    }
+
+    /// Leave the message being changed as it was, or the one being
+    /// answered unanswered.
     pub(super) fn stop_editing(&mut self, cx: &mut Context<Self>) {
+        if self.replying.take().is_some() {
+            cx.notify();
+        }
         if self.editing.take().is_some() {
             self.composer.update(cx, |composer, cx| {
                 composer.clear();
@@ -922,7 +946,10 @@ impl Shell {
                     text: body,
                 });
             }
-            (_, Some(conversation)) => self.engine.send_message(conversation, body),
+            (_, Some(conversation)) => match self.replying.take() {
+                Some((to, _)) => self.engine.send_reply(conversation, to, body),
+                None => self.engine.send_message(conversation, body),
+            },
             (_, None) => {}
         }
         self.composer.update(cx, |composer, cx| {
@@ -966,7 +993,7 @@ impl Shell {
             cx.notify();
             return;
         }
-        if self.editing.is_some() {
+        if self.editing.is_some() || self.replying.is_some() {
             self.stop_editing(cx);
             return;
         }
@@ -977,7 +1004,7 @@ impl Shell {
         if self.editor.take().is_none() {
             self.picker_open = false;
             self.devices_open = false;
-            self.certificates_open = false;
+            self.certs.open = false;
         }
         cx.notify();
     }
@@ -1265,7 +1292,7 @@ impl Render for Shell {
             .when_some(self.admin.as_ref(), |shell, admin| {
                 shell.child(admin::render(admin, &theme, cx))
             })
-            .when(self.certificates_open, |shell| {
+            .when(self.certs.open, |shell| {
                 shell.child(certificates::render(self, &theme, cx))
             })
             .when_some(self.editor.as_ref(), |shell, editor| {

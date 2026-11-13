@@ -144,7 +144,15 @@ pub(super) fn render(
                     )
                 })
                 .when(shell.editing.is_some(), |column| {
-                    column.child(editing_strip(theme, cx))
+                    column.child(composer_strip(
+                        "pencil",
+                        "Changing a message. Enter saves it.".into(),
+                        theme,
+                        cx,
+                    ))
+                })
+                .when_some(shell.replying.clone(), |column, (_, said)| {
+                    column.child(composer_strip("reply", said, theme, cx))
                 })
                 .child(composer(shell, theme, cx)),
         )
@@ -381,11 +389,41 @@ pub(super) fn writing_line(writers: &[SharedString]) -> Option<SharedString> {
     )
 }
 
-/// Says the composer holds a message being changed, and how to leave it.
-fn editing_strip(theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+/// A message in a line: who said it, and how it starts.
+pub(super) fn said_by(message: &Message) -> SharedString {
+    const SHOWN: usize = 90;
+    let mut said = format!("{}: ", message.sender_name);
+    let mut words = message.body.chars();
+    said.extend(
+        words
+            .by_ref()
+            .take(SHOWN)
+            .map(|c| if c == '\n' { ' ' } else { c }),
+    );
+    if words.next().is_some() {
+        said.push('…');
+    }
+    said.into()
+}
+
+/// Says what the composer is for just now, when it is not for a new
+/// message: one being changed, one being answered. And the way out.
+fn composer_strip(
+    glyph: &'static str,
+    says: SharedString,
+    theme: &Theme,
+    cx: &mut Context<Shell>,
+) -> impl IntoElement + use<> {
     let hover = theme.c.hover;
     div()
-        .debug_selector(|| "editing".to_owned())
+        .debug_selector(move || {
+            if glyph == "reply" {
+                "replying"
+            } else {
+                "editing"
+            }
+            .to_owned()
+        })
         .flex_none()
         .mx(px(10.0))
         .px(px(20.0))
@@ -396,8 +434,8 @@ fn editing_strip(theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + u
         .rounded(theme.skin.radius_md)
         .bg(theme.c.accent_soft)
         .text_size(px(12.0))
-        .child(icon("pencil", 12.0, theme.c.accent_text))
-        .child(div().flex_1().child("Changing a message. Enter saves it."))
+        .child(icon(glyph, 12.0, theme.c.accent_text))
+        .child(div().flex_1().min_w_0().truncate().child(says))
         .child(
             div()
                 .id("stop-editing")
@@ -504,6 +542,7 @@ impl Shell {
             theme.skin.message_gap
         };
         // Under the bubble: what lies behind its link, then its reactions.
+        let quoted = self.quoted(index, &theme);
         let under: Vec<AnyElement> = self
             .file_cards(index, &theme, cx)
             .into_iter()
@@ -555,8 +594,50 @@ impl Shell {
                     shell.open_message_menu(event.position, index, cx);
                 }),
             )
+            .children(quoted)
             .child(body)
             .into_any_element()
+    }
+
+    /// What message `index` is a reply to, in a line above it: who said
+    /// it and how it starts, or that it is further back than is shown.
+    fn quoted(&self, index: usize, theme: &Theme) -> Option<AnyElement> {
+        let message = self.messages.get(index)?;
+        let to = message.reply_to.as_ref()?;
+        let said = self
+            .place_of(to)
+            .and_then(|at| self.messages.get(at))
+            .map_or_else(|| SharedString::from("An earlier message"), said_by);
+        Some(
+            div()
+                .debug_selector(move || format!("quoted-{index}"))
+                .flex()
+                // Over the bubble it belongs to: theirs sits past the
+                // picture column, the local user's at the far edge.
+                .map(|line| {
+                    if message.own {
+                        line.justify_end()
+                    } else {
+                        line.pl(px(50.0))
+                    }
+                })
+                .pb(px(3.0))
+                .child(
+                    div()
+                        .max_w(px(420.0))
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0))
+                        .pl(px(8.0))
+                        .border_l_2()
+                        .border_color(theme.c.accent_line)
+                        .text_size(px(12.0))
+                        .text_color(theme.c.muted)
+                        .child(icon("reply", 11.0, theme.c.dim))
+                        .child(div().min_w_0().truncate().child(said)),
+                )
+                .into_any_element(),
+        )
     }
 }
 
@@ -1335,6 +1416,7 @@ mod tests {
             failed: false,
             pinned: false,
             files: Vec::new(),
+            reply_to: None,
             reactions: Vec::new(),
         }
     }

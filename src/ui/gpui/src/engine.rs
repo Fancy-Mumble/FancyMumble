@@ -354,6 +354,8 @@ pub(crate) struct Message {
     pub pinned: bool,
     /// The files it shares.
     pub files: Vec<Attachment>,
+    /// The message it is a reply to.
+    pub reply_to: Option<SharedString>,
     /// The reactions on it, in the order each emoji was first used.
     pub reactions: Vec<Reaction>,
 }
@@ -648,6 +650,9 @@ pub(crate) trait Engine: Send + Sync + 'static {
 
     /// Send `body` to `conversation`.
     fn send_message(&self, conversation: Conversation, body: String);
+
+    /// Send `body` to `conversation` as a reply to the message `to`.
+    fn send_reply(&self, conversation: Conversation, to: SharedString, body: String);
 
     /// Send the picture in `file`, an encoded image, to `conversation`,
     /// scaled down as far as the server's limit on a message asks.

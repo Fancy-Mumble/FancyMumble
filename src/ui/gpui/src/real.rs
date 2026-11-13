@@ -896,6 +896,7 @@ impl Engine for RealEngine {
                 failed: message.failed,
                 pinned: message.pinned,
                 files: attachments(&message.html),
+                reply_to: api::reply_target(&message.html).map(|to| to.to_owned().into()),
                 html: message.html.into(),
             })
             .collect();
@@ -955,6 +956,21 @@ impl Engine for RealEngine {
             match conversation {
                 Conversation::Channel(channel) => engine.send_text(channel, &body).await,
                 Conversation::Direct(session) => engine.send_direct_text(session, &body).await,
+            }
+        });
+    }
+
+    fn send_reply(&self, conversation: Conversation, to: SharedString, body: String) {
+        if body.trim().is_empty() {
+            return;
+        }
+        let engine = self.shared.engine.clone();
+        self.spawn(async move {
+            match conversation {
+                Conversation::Channel(channel) => engine.reply_text(channel, &to, &body).await,
+                Conversation::Direct(session) => {
+                    engine.reply_direct_text(session, &to, &body).await
+                }
             }
         });
     }
@@ -2018,6 +2034,29 @@ mod tests {
             .find(|message| message.body.as_ref() == text)
     }
 
+    /// The tail of the test below, on the clients it already has: bob
+    /// answers the message `id`, and alice's copy of the answer names it.
+    fn replies_name_what_they_answer(
+        alice: &RealEngine,
+        bob: &RealEngine,
+        room: Conversation,
+        id: &str,
+    ) {
+        // No faster than a server takes them.
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        bob.send_reply(room, id.to_owned().into(), "agreed".to_owned());
+        wait_for("alice to receive the reply", || {
+            said(alice, room, "agreed").is_some()
+        });
+        let reply = said(alice, room, "agreed").expect("the reply");
+        assert_eq!(reply.reply_to.as_ref().map(AsRef::as_ref), Some(id));
+        // The mark is a comment: it is in the message and not in its words.
+        assert_eq!(
+            crate::rich::Rich::parse(&reply.html).text.as_str(),
+            "agreed"
+        );
+    }
+
     /// What only a Fancy server does: a message is edited and reacted to,
     /// and one client sees the other writing.
     ///
@@ -2126,6 +2165,8 @@ mod tests {
         wait_for("the reaction to go again", || {
             said(&alice, room, "second draft").is_some_and(|message| message.reactions.is_empty())
         });
+
+        replies_name_what_they_answer(&alice, &bob, room, &id);
 
         alice.shutdown();
         bob.shutdown();

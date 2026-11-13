@@ -854,7 +854,11 @@ fn a_message_takes_a_reaction_from_its_menu_and_gives_it_back_at_its_chip(cx: &m
     shell.read_with(cx, |shell, _| {
         let menu = shell.menu.as_ref().expect("the menu");
         let names: Vec<_> = menu.items.iter().map(|item| item.name.as_ref()).collect();
-        assert_eq!(names, ["Copy text", "Pin"], "not the local user's to edit");
+        assert_eq!(
+            names,
+            ["Reply", "Copy text", "Pin"],
+            "not the local user's to edit"
+        );
         assert_eq!(menu.quick.len(), super::menu::QUICK_REACTIONS.len());
     });
     click(cx, "react-👍");
@@ -1063,24 +1067,21 @@ fn certificates_are_listed_with_who_uses_them_and_deleted_on_the_second_click(
     click(cx, "leave");
     click(cx, "open-certificates");
     shell.read_with(cx, |shell, _| {
-        assert!(shell.certificates_open);
-        assert_eq!(shell.certificates, ["alex", "work"]);
+        assert!(shell.certs.open);
+        assert_eq!(shell.certs.held, ["alex", "work"]);
     });
     click(cx, "delete-work");
     shell.read_with(cx, |shell, _| {
-        assert_eq!(
-            shell.doomed_certificate.as_ref().map(AsRef::as_ref),
-            Some("work")
-        );
+        assert_eq!(shell.certs.doomed.as_ref().map(AsRef::as_ref), Some("work"));
     });
     assert_eq!(engine.certificates().len(), 2, "armed, not gone");
     click(cx, "delete-work");
     shell.read_with(cx, |shell, _| {
-        assert_eq!(shell.certificates, ["alex"]);
-        assert!(shell.doomed_certificate.is_none());
+        assert_eq!(shell.certs.held, ["alex"]);
+        assert!(shell.certs.doomed.is_none());
     });
     click(cx, "certificates-close");
-    shell.read_with(cx, |shell, _| assert!(!shell.certificates_open));
+    shell.read_with(cx, |shell, _| assert!(!shell.certs.open));
 }
 
 #[gpui::test]
@@ -1378,4 +1379,38 @@ fn a_size_is_said_in_the_unit_that_fits() {
     assert_eq!(super::size_in_words(1_536), "1.5 KB");
     assert_eq!(super::size_in_words(3 * 1024 * 1024 + 200_000), "3.2 MB");
     assert_eq!(super::size_in_words(5 * 1024 * 1024 * 1024), "5.0 GB");
+}
+
+#[gpui::test]
+fn a_reply_is_begun_from_a_messages_menu_and_shows_what_it_answers(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    right_click(cx, "message-3");
+    click(cx, "menu-Reply");
+    shell.read_with(cx, |shell, _| {
+        let (to, said) = shell.replying.as_ref().expect("answering");
+        assert_eq!(to.as_ref(), "demo-3");
+        assert_eq!(
+            said.as_ref(),
+            "Flora: The dahlias are blooming in the garden."
+        );
+    });
+    assert!(cx.debug_bounds("replying").is_some());
+    cx.simulate_keystrokes("l o v e l y enter");
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.replying.is_none(), "answered");
+        let sent = shell.messages.last().expect("the reply");
+        assert_eq!(sent.body.as_ref(), "lovely");
+        assert_eq!(sent.reply_to.as_ref().map(AsRef::as_ref), Some("demo-3"));
+    });
+    assert!(cx.debug_bounds("quoted-5").is_some());
+    assert_eq!(engine.messages(Conversation::Channel(1)).len(), 6);
+
+    // Escape leaves a message unanswered, and what was typed is kept.
+    right_click(cx, "message-1");
+    click(cx, "menu-Reply");
+    cx.simulate_keystrokes("h m escape");
+    shell.read_with(cx, |shell, cx| {
+        assert!(shell.replying.is_none());
+        assert_eq!(shell.composer.read(cx).text(), "hm");
+    });
 }

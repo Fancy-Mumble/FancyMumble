@@ -32,7 +32,7 @@ real engine and does text and voice.
   conversation opens on its newest page and steps back on asking; an
   arrival does not move a reader who has scrolled up. The search field
   finds messages as well as channels. On a Fancy server:
-  edit and delete your own, react, pin, see who is writing and who has
+  reply, edit and delete your own, react, pin, see who is writing and who has
   read what you wrote, ask a poll and answer one, share a file and save one
   shared, a card for
   what lies behind a link, and channels that keep their messages for

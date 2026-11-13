@@ -12,13 +12,24 @@ use super::widgets::{EMPHASIS, icon, opaque};
 use crate::engine::CertificateTask;
 use crate::theme::Theme;
 
+/// The panel's state.
+#[derive(Default)]
+pub(super) struct Panel {
+    /// Whether it is showing.
+    pub open: bool,
+    /// The certificates it lists.
+    pub held: Vec<SharedString>,
+    /// The certificate a first click on delete has armed.
+    pub doomed: Option<SharedString>,
+}
+
 impl Shell {
     /// Open or close the panel, reading the certificates afresh on opening.
     pub(super) fn toggle_certificates(&mut self, cx: &mut Context<Self>) {
-        self.certificates_open = !self.certificates_open;
-        self.doomed_certificate = None;
-        if self.certificates_open {
-            self.certificates = self.engine.certificates();
+        self.certs.open = !self.certs.open;
+        self.certs.doomed = None;
+        if self.certs.open {
+            self.certs.held = self.engine.certificates();
         }
         cx.notify();
     }
@@ -38,12 +49,12 @@ impl Shell {
 
     /// Delete `label` on the second asking; the first only arms it.
     fn delete_certificate(&mut self, label: &SharedString, cx: &mut Context<Self>) {
-        if self.doomed_certificate.as_ref() == Some(label) {
-            self.doomed_certificate = None;
+        if self.certs.doomed.as_ref() == Some(label) {
+            self.certs.doomed = None;
             self.engine
                 .manage_certificate(CertificateTask::Delete(label.to_string()));
         } else {
-            self.doomed_certificate = Some(label.clone());
+            self.certs.doomed = Some(label.clone());
         }
         cx.notify();
     }
@@ -120,7 +131,7 @@ fn row(
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     let users = shell.users_of(label);
-    let doomed = shell.doomed_certificate.as_ref() == Some(label);
+    let doomed = shell.certs.doomed.as_ref() == Some(label);
     let about: SharedString = match (doomed, users) {
         (true, 0) => "Click again to delete it for good".into(),
         (true, _) => "In use. Click again to delete it for good".into(),
@@ -238,14 +249,15 @@ pub(super) fn render(
                         .flex_col()
                         .gap(px(6.0))
                         .text_size(px(13.0))
-                        .when(shell.certificates.is_empty(), |list| {
+                        .when(shell.certs.held.is_empty(), |list| {
                             list.child(div().py(px(10.0)).text_color(theme.c.muted).child(
                                 "None yet: one is made the first time an identity connects.",
                             ))
                         })
                         .children(
                             shell
-                                .certificates
+                                .certs
+                                .held
                                 .iter()
                                 .enumerate()
                                 .map(|(at, label)| row(shell, at, label, theme, cx)),
