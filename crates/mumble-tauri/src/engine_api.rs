@@ -208,6 +208,84 @@ pub struct UserStats {
     pub address: Option<String>,
 }
 
+/// A file shared in a message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttachmentInfo {
+    /// The file's name.
+    pub filename: String,
+    /// Its size in bytes, where the sender said.
+    pub size: Option<u64>,
+    /// What the server keeps it under: what
+    /// [`EngineHandle::save_shared_file`] is asked for it by.
+    pub key: Option<String>,
+    /// A link anyone holding it can fetch the file from, where it has one.
+    pub url: Option<String>,
+}
+
+/// The mark a shared file is written into a message as: a comment, so a
+/// client that does not know it draws nothing.
+const FILE_MARK: &str = "<!-- FANCY_FILE:";
+const MARK_END: &str = " -->";
+
+/// The files shared in the message `html`, in order.
+pub fn attachments_in(html: &str) -> Vec<AttachmentInfo> {
+    use base64::Engine as _;
+    let mut found = Vec::new();
+    let mut rest = html;
+    while let Some(at) = rest.find(FILE_MARK) {
+        rest = &rest[at + FILE_MARK.len()..];
+        let Some(end) = rest.find(MARK_END) else {
+            break;
+        };
+        let stated = base64::engine::general_purpose::STANDARD
+            .decode(&rest[..end])
+            .ok()
+            .and_then(|json| serde_json::from_slice::<serde_json::Value>(&json).ok());
+        rest = &rest[end..];
+        let Some(stated) = stated else {
+            continue;
+        };
+        let text = |name: &str| {
+            stated
+                .get(name)
+                .and_then(serde_json::Value::as_str)
+                .filter(|text| !text.is_empty())
+                .map(str::to_owned)
+        };
+        let (key, url) = (text("key"), text("url"));
+        // A mark that names no file, or no way to it, is not a file.
+        if let Some(filename) = text("filename").filter(|_| key.is_some() || url.is_some()) {
+            found.push(AttachmentInfo {
+                filename,
+                size: stated.get("sizeBytes").and_then(serde_json::Value::as_u64),
+                key,
+                url,
+            });
+        }
+    }
+    found
+}
+
+/// The message that shares a file kept under `key`: the mark every Fancy
+/// client draws a card from, and beside it a line for a client that draws
+/// a comment as nothing.
+fn file_message(filename: &str, size: u64, key: &str, expires_at: u64) -> String {
+    use base64::Engine as _;
+    let stated = serde_json::json!({
+        "url": "",
+        "filename": filename,
+        "sizeBytes": size,
+        "mode": "session",
+        "expiresAt": (expires_at > 0).then_some(expires_at),
+        "key": key,
+    });
+    format!(
+        "{FILE_MARK}{}{MARK_END}<!-- FANCY_LEGACY -->{} ({size} bytes), shared as a file<!-- /FANCY_LEGACY -->",
+        base64::engine::general_purpose::STANDARD.encode(stated.to_string()),
+        escape_html(filename),
+    )
+}
+
 /// A poll put to a channel.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PollInfo {
@@ -1230,6 +1308,51 @@ impl EngineHandle {
         self.state.request_user_stats(session).await
     }
 
+    /// Share the file at `path` with `channel`: upload it to the server
+    /// and send the message that names it. For those in the channel only.
+    ///
+    /// # Errors
+    ///
+    /// When the file cannot be read, the server keeps no files, or it
+    /// refuses this one.
+    pub async fn share_file(&self, channel: u32, path: &std::path::Path) -> Result<(), String> {
+        let filename = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .ok_or("that is not a file")?;
+        let shared = self
+            .state
+            .starling_upload_file(
+                path.to_string_lossy().into_owned(),
+                channel,
+                None,
+                String::new(),
+                mumble_protocol::proto::fancy::files::Visibility::Session,
+                0,
+                String::new(),
+                None,
+            )
+            .await?;
+        self.state
+            .send_message(
+                channel,
+                file_message(&filename, shared.size, &shared.key, shared.expires_at),
+            )
+            .await
+    }
+
+    /// Fetch the shared file kept under `key` and write it to `to`; says
+    /// how many bytes were written.
+    ///
+    /// # Errors
+    ///
+    /// When the server no longer has it, or the file cannot be written.
+    pub async fn save_shared_file(&self, key: &str, to: &std::path::Path) -> Result<u64, String> {
+        self.state
+            .starling_download_to_file(key.to_owned(), to.to_string_lossy().into_owned(), None)
+            .await
+    }
+
     /// Put a poll to `channel`; says the id it goes by. The server passes
     /// it on to everybody else there and does not send it back: the
     /// caller already has it.
@@ -1807,6 +1930,28 @@ mod tests {
     use crate::state::types::{
         CurrentChannelPayload, DisconnectedPayload, NewMessagePayload, RejectedPayload,
     };
+
+    #[test]
+    fn a_shared_file_is_read_back_out_of_the_message_that_shares_it() {
+        let message = file_message("notes <1>.txt", 42, "k/1", 0);
+        assert_eq!(
+            attachments_in(&message),
+            [AttachmentInfo {
+                filename: "notes <1>.txt".to_owned(),
+                size: Some(42),
+                key: Some("k/1".to_owned()),
+                url: None,
+            }]
+        );
+        assert!(
+            message.contains("notes &lt;1&gt;.txt"),
+            "the line for other clients"
+        );
+        // Marks that name nothing, or are not marks, are passed over.
+        assert!(attachments_in("plain <!-- FANCY_FILE:!!! --> text").is_empty());
+        assert!(attachments_in("<!-- FANCY_FILE:e30= -->").is_empty());
+        assert!(attachments_in("<!-- FANCY_FILE:unfinished").is_empty());
+    }
 
     #[test]
     fn typed_text_survives_as_html() {
