@@ -288,6 +288,20 @@ impl AppState {
             .unwrap_or_default()
     }
 
+    /// The newest `limit` direct messages with `session`, and whether
+    /// older ones are held. Copies only what it returns.
+    pub fn dm_messages_tail(&self, session: u32, limit: usize) -> (Vec<ChatMessage>, bool) {
+        self.inner
+            .snapshot()
+            .lock()
+            .map(|s| {
+                let held = s.msgs.by_dm.get(&session).map_or(&[][..], Vec::as_slice);
+                let start = held.len().saturating_sub(limit);
+                (held[start..].to_vec(), start > 0)
+            })
+            .unwrap_or_default()
+    }
+
     pub fn dm_messages(&self, session: u32) -> Vec<ChatMessage> {
         self.inner
             .snapshot()

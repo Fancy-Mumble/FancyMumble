@@ -17,6 +17,7 @@ use crate::state::host::{
     AppDirs, EventSink, Host, HostParts, NoBackgroundService, NoSignalInterceptor, Notifier,
 };
 use crate::state::pchat::IdentityStore;
+use crate::state::types::PageRequest;
 use crate::state::types::{
     BanEntryInput, ChannelEntry, ChatMessage, ConnectionStatus, RegisteredUserUpdate, UserEntry,
     VoiceState,
@@ -465,6 +466,15 @@ impl From<ChatMessage> for MessageInfo {
     }
 }
 
+/// The newest messages of a conversation.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MessageWindow {
+    /// The messages, oldest first.
+    pub messages: Vec<MessageInfo>,
+    /// Whether there are older ones: held here, or kept by the server.
+    pub earlier: bool,
+}
+
 /// What a server answered when asked, without connecting, whether it is up.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PingInfo {
@@ -750,6 +760,50 @@ impl EngineHandle {
             .into_iter()
             .map(Into::into)
             .collect()
+    }
+
+    /// The newest `limit` messages of `channel`. What a view shows: a long
+    /// channel costs what is on screen, not what was ever said. In a
+    /// channel whose messages the server keeps, the engine lets go of what
+    /// lies far outside the window; it can be fetched again.
+    pub fn messages_tail(&self, channel: u32, limit: usize) -> MessageWindow {
+        let page = self.state.messages_page(&PageRequest {
+            channel_id: channel,
+            offset_from_tail: 0,
+            limit: limit.clamp(1, MAX_WINDOW),
+        });
+        MessageWindow {
+            messages: page.rows.into_iter().map(Into::into).collect(),
+            earlier: page.more_before,
+        }
+    }
+
+    /// The newest `limit` direct messages exchanged with `session`.
+    pub fn direct_messages_tail(&self, session: u32, limit: usize) -> MessageWindow {
+        let (messages, earlier) = self.state.dm_messages_tail(session, limit);
+        MessageWindow {
+            messages: messages.into_iter().map(Into::into).collect(),
+            earlier,
+        }
+    }
+
+    /// Ask the server for up to `limit` messages of `channel` older than
+    /// the message `before`; they join the channel's messages and are
+    /// announced as an [`EngineEvent::NewMessage`]. Only a channel whose
+    /// messages the server keeps has any.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn fetch_earlier(
+        &self,
+        channel: u32,
+        before: Option<String>,
+        limit: u32,
+    ) -> Result<(), String> {
+        self.state
+            .fetch_older_messages(channel, before, limit)
+            .await
     }
 
     /// How many messages of `channel` are held. Cheap: for asking whether
@@ -1435,6 +1489,9 @@ impl EngineHandle {
 /// Chat bodies are HTML on the wire, so text a person typed has to have the
 /// three characters that mean something in HTML written out, or `1 < 2`
 /// arrives as the start of a tag - and its line breaks written as breaks.
+/// The most messages a view is handed at once, whatever it asks for.
+const MAX_WINDOW: usize = 10_000;
+
 /// A measured time in whole milliseconds; nonsense reads as zero.
 #[allow(
     clippy::cast_possible_truncation,
