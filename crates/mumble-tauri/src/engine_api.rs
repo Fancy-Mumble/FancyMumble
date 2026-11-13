@@ -128,6 +128,8 @@ pub enum EngineEvent {
         /// Whether it was put on; `false` when it was taken off.
         added: bool,
     },
+    /// The server answered [`EngineHandle::request_user_stats`].
+    UserStats(UserStats),
     /// The reactions a channel's messages already carried, read from the
     /// server's store.
     Reactions {
@@ -136,6 +138,51 @@ pub enum EngineEvent {
         /// Every reaction on its messages.
         reactions: Vec<ReactionInfo>,
     },
+}
+
+/// What a server says of itself once connected.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServerDetails {
+    /// The host connected to.
+    pub host: String,
+    /// The port connected to.
+    pub port: u16,
+    /// How many users are on it.
+    pub users: u32,
+    /// How many it admits, where it said.
+    pub max_users: Option<u32>,
+    /// The server software's release, where it said.
+    pub release: Option<String>,
+    /// The system it runs on, where it said.
+    pub os: Option<String>,
+    /// The protocol version it speaks, where it said.
+    pub protocol: Option<String>,
+    /// The most a client may send, in bits a second, where it said.
+    pub max_bandwidth: Option<u32>,
+    /// Whether it speaks the Fancy extensions.
+    pub fancy: bool,
+}
+
+/// What a server knows of one user's connection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UserStats {
+    /// Whose.
+    pub session: u32,
+    /// The round trip over TCP, in milliseconds.
+    pub tcp_ping_ms: u32,
+    /// The round trip over UDP, in milliseconds; zero when voice is
+    /// tunnelled.
+    pub udp_ping_ms: u32,
+    /// How long they have been connected, in seconds.
+    pub online_secs: Option<u32>,
+    /// How long since they last did anything, in seconds.
+    pub idle_secs: Option<u32>,
+    /// Their client's version.
+    pub version: Option<String>,
+    /// The system their client runs on.
+    pub os: Option<String>,
+    /// Their address; a server tells only an administrator.
+    pub address: Option<String>,
 }
 
 /// One user's reaction to one message.
@@ -178,6 +225,30 @@ impl EngineEvent {
             CoreEvent::PermissionDenied(payload) => Self::Denied {
                 reason: payload.reason.filter(|reason| !reason.is_empty()),
             },
+            CoreEvent::ListenDenied(_) => Self::Denied {
+                reason: Some("The server does not let you listen to that channel.".to_owned()),
+            },
+            CoreEvent::PchatPinDelivered(payload) => Self::NewMessage {
+                channel: payload.channel_id,
+            },
+            CoreEvent::PchatPinsFetched(payload) => Self::NewMessage {
+                channel: payload.channel_id,
+            },
+            CoreEvent::UserStats(payload) => Self::UserStats(UserStats {
+                session: payload.session,
+                tcp_ping_ms: whole_ms(payload.tcp_ping_avg),
+                udp_ping_ms: whole_ms(payload.udp_ping_avg),
+                online_secs: payload.onlinesecs,
+                idle_secs: payload.idlesecs,
+                os: match (payload.os, payload.os_version) {
+                    (Some(os), Some(version)) if !version.is_empty() => {
+                        Some(format!("{os} {version}"))
+                    }
+                    (os, _) => os,
+                },
+                version: payload.version,
+                address: payload.address,
+            }),
             CoreEvent::TypingIndicator(payload) => Self::Typing {
                 channel: payload.channel_id,
                 session: payload.session,
@@ -261,6 +332,8 @@ pub struct UserInfo {
     /// Present when the user has a picture; changes when the picture does.
     /// The picture itself is fetched with [`EngineHandle::user_avatar`].
     pub avatar: Option<u32>,
+    /// Whether the user is heard over everybody else in their channel.
+    pub priority_speaker: bool,
 }
 
 impl From<UserEntry> for UserInfo {
@@ -272,6 +345,7 @@ impl From<UserEntry> for UserInfo {
             muted: user.self_mute || user.mute || user.suppress,
             deafened: user.self_deaf || user.deaf,
             avatar: user.texture_marker.filter(|size| *size > 0),
+            priority_speaker: user.priority_speaker,
         }
     }
 }
@@ -297,6 +371,8 @@ pub struct MessageInfo {
     pub id: Option<String>,
     /// Whether it was changed after it was sent.
     pub edited: bool,
+    /// Whether it is pinned in its channel.
+    pub pinned: bool,
     /// Whether the server refused it: nobody else has seen it.
     pub failed: bool,
 }
@@ -312,6 +388,7 @@ impl From<ChatMessage> for MessageInfo {
             own: message.is_own,
             id: message.message_id,
             edited: message.edited_at.is_some(),
+            pinned: message.pinned,
             failed: message.send_failed,
         }
     }
@@ -513,6 +590,16 @@ impl EngineHandle {
     /// When the session could not be torn down cleanly.
     pub async fn disconnect(&self) -> Result<(), String> {
         self.state.disconnect().await
+    }
+
+    /// Leave the server of the session `id`, whichever one is active.
+    ///
+    /// # Errors
+    ///
+    /// When `id` names no session, or it could not be torn down cleanly.
+    pub async fn disconnect_session(&self, id: &str) -> Result<(), String> {
+        let id = id.parse().map_err(|_| "no such session".to_owned())?;
+        self.state.disconnect_session(id).await
     }
 
     /// Where the connection stands.
@@ -717,6 +804,68 @@ impl EngineHandle {
         self.state
             .send_reaction(channel, id.to_owned(), emoji.to_owned(), action.to_owned())
             .await
+    }
+
+    /// Pin the message `id` of `channel` for everyone, or with `pinned`
+    /// false take the pin off.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn pin(&self, channel: u32, id: &str, pinned: bool) -> Result<(), String> {
+        self.state
+            .pin_message(channel, id.to_owned(), !pinned)
+            .await
+    }
+
+    /// The channels the local user hears without being in them.
+    pub fn listening(&self) -> Vec<u32> {
+        self.state.listened_channels()
+    }
+
+    /// Start hearing `channel` without being in it, or stop. Says which
+    /// it now is.
+    ///
+    /// # Errors
+    ///
+    /// When the server's permissions rule it out.
+    pub async fn toggle_listen(&self, channel: u32) -> Result<bool, String> {
+        self.state.toggle_listen(channel).await
+    }
+
+    /// What the server says of itself.
+    pub fn server(&self) -> ServerDetails {
+        let info = self.state.server_info();
+        ServerDetails {
+            host: info.host,
+            port: info.port,
+            users: info.user_count,
+            max_users: info.max_users,
+            release: info.release,
+            os: info.os,
+            protocol: info.protocol_version,
+            max_bandwidth: info.max_bandwidth,
+            fancy: info.fancy_version.is_some(),
+        }
+    }
+
+    /// Ask the server what it knows of `session`'s connection; the answer
+    /// is an [`EngineEvent::UserStats`].
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn request_user_stats(&self, session: u32) -> Result<(), String> {
+        self.state.request_user_stats(session).await
+    }
+
+    /// Have `session` heard over everybody else in their channel, or not.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn set_priority_speaker(&self, session: u32, priority: bool) -> Result<(), String> {
+        self.state.set_priority_speaker(session, priority).await
     }
 
     /// Say that the local user is writing in `channel`. To be said again
@@ -1102,6 +1251,20 @@ impl EngineHandle {
 /// Chat bodies are HTML on the wire, so text a person typed has to have the
 /// three characters that mean something in HTML written out, or `1 < 2`
 /// arrives as the start of a tag - and its line breaks written as breaks.
+/// A measured time in whole milliseconds; nonsense reads as zero.
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "clamped to what a u32 holds first"
+)]
+fn whole_ms(measured: f32) -> u32 {
+    if measured.is_finite() {
+        measured.round().clamp(0.0, 86_400_000.0) as u32
+    } else {
+        0
+    }
+}
+
 fn escape_html(text: &str) -> String {
     let mut html = String::with_capacity(text.len());
     for character in text.chars() {
