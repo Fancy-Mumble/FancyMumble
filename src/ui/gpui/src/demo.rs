@@ -466,6 +466,8 @@ impl Engine for DemoEngine {
         self.with_state(|state| state.devices = devices);
     }
 
+    fn set_focused(&self, _focused: bool) {}
+
     fn act(&self, action: Action) {
         self.with_state(|state| {
             state.apply(&action);

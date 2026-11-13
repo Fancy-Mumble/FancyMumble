@@ -11,6 +11,7 @@
 mod assets;
 mod demo;
 mod engine;
+mod notify;
 mod paths;
 mod picture;
 mod real;
@@ -83,8 +84,9 @@ fn main() {
                 app_id: Some("fancy-mumble".to_owned()),
                 ..WindowOptions::default()
             };
-            let opened =
-                cx.open_window(options, |_, cx| cx.new(|cx| Shell::new(engine, store, cx)));
+            let opened = cx.open_window(options, |window, cx| {
+                cx.new(|cx| Shell::new(engine, store, window, cx))
+            });
             let Ok(window) = opened else {
                 eprintln!("the window could not be opened");
                 cx.quit();

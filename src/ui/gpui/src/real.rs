@@ -128,6 +128,7 @@ impl Shared {
                 let reason = reason.unwrap_or_else(|| "The server did not allow that.".to_owned());
                 self.tell(EngineEvent::Notice(Some(reason.into())));
             }
+            api::EngineEvent::Notify { title, body } => crate::notify::show(&title, &body),
             // The engine API may grow events this view does not draw yet.
             _ => {}
         }
@@ -575,6 +576,10 @@ impl Engine for RealEngine {
         {
             self.shared.tell(EngineEvent::Notice(Some(reason.into())));
         }
+    }
+
+    fn set_focused(&self, focused: bool) {
+        self.shared.engine.set_focused(focused);
     }
 
     fn act(&self, action: Action) {

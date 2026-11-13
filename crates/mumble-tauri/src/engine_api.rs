@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use crate::state::core_event::{CoreEvent, Event};
 use crate::state::host::{
-    AppDirs, EventSink, Host, HostParts, NoBackgroundService, NoNotifier, NoSignalInterceptor,
+    AppDirs, EventSink, Host, HostParts, NoBackgroundService, NoSignalInterceptor, Notifier,
 };
 use crate::state::pchat::IdentityStore;
 use crate::state::types::{ChannelEntry, ChatMessage, ConnectionStatus, UserEntry, VoiceState};
@@ -94,6 +94,16 @@ pub enum EngineEvent {
     },
     /// The counts of unread messages changed.
     UnreadChanged,
+    /// Something happened that the user should hear of while they are
+    /// looking elsewhere: show a system notification.
+    Notify {
+        /// Who or what it is about.
+        title: String,
+        /// What happened, as plain text.
+        body: String,
+    },
+    /// Ask for the user's attention without interrupting them.
+    Attention,
     /// The server refused something the user asked for: entering a channel,
     /// sending a message that is too long.
     Denied {
@@ -298,6 +308,19 @@ impl EventSink for Embedder {
     }
 }
 
+impl Notifier for Embedder {
+    fn request_user_attention(&self) {
+        (self.on_event)(EngineEvent::Attention);
+    }
+
+    fn show_notification(&self, title: &str, body: &str, _: Option<&[u8]>, _: Option<u32>) {
+        (self.on_event)(EngineEvent::Notify {
+            title: title.to_owned(),
+            body: body.to_owned(),
+        });
+    }
+}
+
 impl AppDirs for Embedder {
     fn app_data_dir(&self) -> Result<PathBuf, String> {
         Ok(self.dirs.data.clone())
@@ -347,8 +370,8 @@ impl EngineHandle {
         let state = AppState::new();
         state.set_host(Host::new(HostParts {
             events: embedder.clone(),
-            dirs: embedder,
-            notifier: Arc::new(NoNotifier),
+            dirs: embedder.clone(),
+            notifier: embedder,
             background: Arc::new(NoBackgroundService),
             signals: Arc::new(NoSignalInterceptor),
         }));
@@ -603,6 +626,13 @@ impl EngineHandle {
         settings.selected_device = input;
         settings.selected_output_device = output;
         self.state.apply_audio_settings(settings)
+    }
+
+    /// Tell the engine whether the user is looking at the application. While
+    /// they are not, arriving messages count as unread and raise
+    /// [`EngineEvent::Notify`].
+    pub fn set_focused(&self, focused: bool) {
+        self.state.set_app_focused(focused);
     }
 
     /// The server's welcome message, as HTML, once connected.

@@ -198,9 +198,8 @@ pub fn run() {
             app::window_state::on_window_event(window, event);
             if let tauri::WindowEvent::Focused(focused) = event
                 && let Some(state) = window.try_state::<AppState>()
-                && let Ok(mut s) = state.inner.snapshot().lock()
             {
-                s.prefs.app_focused = *focused;
+                state.set_app_focused(*focused);
             }
             #[cfg(target_os = "windows")]
             app::webview::update_webview_memory_target(window, event);

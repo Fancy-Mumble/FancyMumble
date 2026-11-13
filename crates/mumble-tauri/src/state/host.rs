@@ -112,16 +112,6 @@ pub(crate) trait SignalInterceptor: Send + Sync + 'static {
     ) -> bool;
 }
 
-/// A [`Notifier`] for an application that has no notifications.
-#[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct NoNotifier;
-
-impl Notifier for NoNotifier {
-    fn request_user_attention(&self) {}
-
-    fn show_notification(&self, _: &str, _: &str, _: Option<&[u8]>, _: Option<u32>) {}
-}
-
 /// A [`BackgroundService`] for platforms that never suspend the application.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct NoBackgroundService;

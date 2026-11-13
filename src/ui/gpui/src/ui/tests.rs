@@ -28,7 +28,7 @@ fn shell_on(
     });
     let engine = Arc::new(engine);
     let for_shell: Arc<dyn Engine> = engine.clone();
-    let (shell, cx) = cx.add_window_view(|_, cx| Shell::new(for_shell, None, cx));
+    let (shell, cx) = cx.add_window_view(|window, cx| Shell::new(for_shell, None, window, cx));
     cx.run_until_parked();
     (shell, engine, cx)
 }
@@ -758,4 +758,10 @@ fn joining_with_a_password_sends_it(cx: &mut TestAppContext) {
         }]
     );
     assert_eq!(engine.snapshot().current_channel, Some(2));
+}
+
+#[test]
+fn the_title_leads_with_the_unread_count_when_there_is_one() {
+    assert_eq!(super::window_title(0), "Fancy Mumble");
+    assert_eq!(super::window_title(3), "(3) Fancy Mumble");
 }

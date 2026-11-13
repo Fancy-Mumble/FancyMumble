@@ -7,6 +7,16 @@ use crate::state::core_event::CoreEvent;
 use crate::state::types::{DmUnreadPayload, UnreadPayload};
 
 impl AppState {
+    /// Tell the engine whether the user is looking at the application.
+    ///
+    /// A message that arrives while they are not counts as unread and raises
+    /// a notification even in the conversation that is open.
+    pub fn set_app_focused(&self, focused: bool) {
+        if let Ok(mut state) = self.inner.snapshot().lock() {
+            state.prefs.app_focused = focused;
+        }
+    }
+
     pub fn unread_counts(&self) -> HashMap<u32, u32> {
         self.inner
             .snapshot()

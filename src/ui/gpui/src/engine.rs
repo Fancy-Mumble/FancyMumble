@@ -335,6 +335,9 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// Use these devices from now on.
     fn choose_devices(&self, devices: ChosenDevices);
 
+    /// The window gained or lost the user's attention.
+    fn set_focused(&self, focused: bool);
+
     /// Do `action`.
     fn act(&self, action: Action);
 

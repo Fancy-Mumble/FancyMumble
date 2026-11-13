@@ -37,6 +37,15 @@ use text_input::{InputEvent, TextInput};
 /// short scroll does not wait on layout.
 const OVERDRAW: f32 = 400.0;
 
+/// The window's title: the application's name, led by how many messages
+/// wait unread when any do.
+pub(super) fn window_title(unread: u32) -> String {
+    match unread {
+        0 => "Fancy Mumble".to_owned(),
+        count => format!("({count}) Fancy Mumble"),
+    }
+}
+
 /// What there is to read about a user or a channel, on a card.
 pub(super) struct Info {
     subject: Subject,
@@ -100,6 +109,8 @@ pub(crate) struct Shell {
     welcome: Option<(gpui::SharedString, Arc<conversation::DrawnBody>)>,
     /// Whether the welcome message was dismissed on this connection.
     welcome_dismissed: bool,
+    /// The unread count the window's title was last set for.
+    titled_unread: u32,
     /// The menu a right click opened, while it is open.
     menu: Option<menu::Menu>,
     /// The dialog a menu entry asked a question in, while it is open.
@@ -127,6 +138,7 @@ impl Shell {
     pub(crate) fn new(
         engine: Arc<dyn Engine>,
         store: Option<Store>,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
         let composer = cx.new(|cx| TextInput::new("", cx));
@@ -134,6 +146,13 @@ impl Shell {
         let server_search = cx.new(|cx| TextInput::new("Search servers", cx));
         let password = cx.new(|cx| TextInput::new("Server password, if it has one", cx).obscured());
         let subscriptions = vec![
+            // The engine counts messages unread, and notifies, by whether
+            // the user is looking.
+            cx.observe_window_activation(window, |shell, window, cx| {
+                shell.engine.set_focused(window.is_window_active());
+                shell.retitle(window);
+                cx.notify();
+            }),
             cx.subscribe(&composer, Self::on_composer),
             // A search narrows its list as it is typed.
             cx.subscribe(&search, |_, _, _, cx| cx.notify()),
@@ -180,6 +199,7 @@ impl Shell {
             info: None,
             welcome: None,
             welcome_dismissed: false,
+            titled_unread: 0,
             menu: None,
             prompt: None,
             volumes: std::collections::HashMap::new(),
@@ -277,6 +297,23 @@ impl Shell {
                 }
             }
         }
+    }
+
+    /// How many messages wait unread, across channels and people.
+    fn unread_total(&self) -> u32 {
+        let channels: u32 = self
+            .snapshot
+            .channels
+            .iter()
+            .map(|channel| channel.unread)
+            .sum();
+        let directs: u32 = self.snapshot.users.iter().map(|user| user.unread).sum();
+        channels + directs
+    }
+
+    /// Put the unread count in the window's title, where a task bar shows it.
+    fn retitle(&self, window: &mut Window) {
+        window.set_window_title(&window_title(self.unread_total()));
     }
 
     /// Read the server's welcome message, if it is not the one already read.
@@ -621,6 +658,12 @@ impl Shell {
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = ActiveTheme::get(cx);
+        // Only when it changes: setting a title is a round trip to the
+        // window system.
+        let unread = self.unread_total();
+        if std::mem::replace(&mut self.titled_unread, unread) != unread {
+            self.retitle(window);
+        }
         div()
             .size_full()
             .relative()
