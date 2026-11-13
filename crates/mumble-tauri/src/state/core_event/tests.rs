@@ -1116,6 +1116,8 @@ fn permission_events_keep_their_wire_format() {
             CoreEvent::PermissionDenied(PermissionDeniedPayload {
                 deny_type: Some(1),
                 reason: None,
+                permission: Some(1),
+                channel_id: Some(0),
             })
         ),
         (

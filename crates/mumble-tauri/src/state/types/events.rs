@@ -71,6 +71,13 @@ pub(crate) struct ChannelDeniedPayload {
 pub(crate) struct PermissionDeniedPayload {
     pub deny_type: Option<i32>,
     pub reason: Option<String>,
+    /// The permission that was missing, as Mumble's bits, and the channel
+    /// it was missing in. For the engine's own API; the web UI's event
+    /// does not carry them.
+    #[serde(skip)]
+    pub permission: Option<u32>,
+    #[serde(skip)]
+    pub channel_id: Option<u32>,
 }
 
 /// Cached snapshot of the server's `PluginRegistry`.  Also forms the

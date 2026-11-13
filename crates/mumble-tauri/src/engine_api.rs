@@ -114,6 +114,11 @@ pub enum EngineEvent {
     Denied {
         /// The server's words, where it gave any.
         reason: Option<String>,
+        /// The permission that was missing, as Mumble's bits, where the
+        /// server said.
+        permission: Option<u32>,
+        /// The channel it was missing in, where the server said.
+        channel: Option<u32>,
     },
     /// Somebody is writing in a channel. Said again every few seconds for
     /// as long as they are; nothing says when they stop.
@@ -751,10 +756,12 @@ impl EngineEvent {
             CoreEvent::UnreadChanged(_) | CoreEvent::DmUnreadChanged(_) => Self::UnreadChanged,
             CoreEvent::PermissionDenied(payload) => Self::Denied {
                 reason: payload.reason.filter(|reason| !reason.is_empty()),
+                permission: payload.permission,
+                channel: payload.channel_id,
             },
-            CoreEvent::ListenDenied(_) => Self::Denied {
-                reason: Some("The server does not let you listen to that channel.".to_owned()),
-            },
+            // Sent beside the refusal above for anything refused in a
+            // channel, listening or not: the refusal says what it was.
+            CoreEvent::ListenDenied(_) => return None,
             CoreEvent::PchatPinDelivered(payload) => Self::NewMessage {
                 channel: payload.channel_id,
             },
@@ -807,6 +814,8 @@ impl EngineEvent {
                     reason: Some(denials.latest?.reason.unwrap_or_else(|| {
                         "The server does not let you whisper there.".to_owned()
                     })),
+                    permission: None,
+                    channel: None,
                 }
             }
             CoreEvent::PchatKeyShareRequested(payload) => Self::KeyRequests {
@@ -2788,9 +2797,15 @@ mod tests {
                 crate::state::types::PermissionDeniedPayload {
                     deny_type: Some(1),
                     reason: Some(String::new()),
+                    permission: Some(0x2_0000),
+                    channel_id: Some(0),
                 }
             )),
-            Some(EngineEvent::Denied { reason: None }),
+            Some(EngineEvent::Denied {
+                reason: None,
+                permission: Some(0x2_0000),
+                channel: Some(0),
+            }),
             "an empty reason is no reason"
         );
         // One of the many this API does not carry yet.

@@ -42,6 +42,8 @@ impl HandleMessage for mumble_tcp::PermissionDenied {
             ctx.send(CoreEvent::PermissionDenied(PermissionDeniedPayload {
                 deny_type: self.r#type,
                 reason: self.reason.clone(),
+                permission: self.permission,
+                channel_id: self.channel_id,
             }));
             return;
         }
@@ -89,6 +91,8 @@ impl HandleMessage for mumble_tcp::PermissionDenied {
         ctx.send(CoreEvent::PermissionDenied(PermissionDeniedPayload {
             deny_type: self.r#type,
             reason: self.reason.clone(),
+            permission: self.permission,
+            channel_id: self.channel_id,
         }));
     }
 }
