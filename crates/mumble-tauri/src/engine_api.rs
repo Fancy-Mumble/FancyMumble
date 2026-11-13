@@ -1468,9 +1468,10 @@ impl EngineHandle {
     }
 
     /// `text` as the message it is sent as: escaped, its line breaks kept,
-    /// and on a Fancy server the people it names mentioned.
+    /// the marks people type for emphasis and code made that (see
+    /// `markup`), and on a Fancy server the people it names mentioned.
     fn composed(&self, text: &str) -> String {
-        let html = escape_html(text);
+        let html = crate::markup::marked(text);
         if !html.contains('@') || !self.fancy() {
             return html;
         }

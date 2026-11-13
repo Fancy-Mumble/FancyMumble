@@ -73,6 +73,7 @@ mod audio;
 pub(crate) mod constants;
 pub(crate) mod e2e_stats;
 pub mod engine_api;
+mod markup;
 pub(crate) mod media;
 mod state;
 
