@@ -27,7 +27,11 @@ members = [
 # ABIs), so it cannot participate in the default MSVC workspace build.  It
 # path-depends on the workspace crates and is built on its own - see
 # crates/qt6ui/README.md.
-exclude = ["crates/signal-bridge", "crates/qt6ui"]
+#
+# fancy-gpui (the native GPUI view) is excluded so that its few hundred
+# dependencies resolve on their own: sharing a lockfile would let either UI
+# move the other's versions.
+exclude = ["crates/signal-bridge", "crates/qt6ui", "src/ui/gpui"]
 
 # -- Workspace-wide lints --------------------------------------------
 # These apply to every crate in the workspace automatically.

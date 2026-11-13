@@ -1,0 +1,74 @@
+# NOTE: fancy-gpui is intentionally EXCLUDED from the parent workspace (see
+# ../../../Cargo.toml), like qt6ui: GPUI brings a few hundred crates of its
+# own, and resolving them together with Tauri's would let either UI move the
+# other's dependency versions. It keeps its own lockfile and repeats the
+# workspace lints below.
+[package]
+name = "fancy-gpui"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Native GPUI view for Fancy Mumble: small memory and CPU footprint"
+license = "MIT"
+
+[[bin]]
+name = "fancy-gpui"
+path = "src/main.rs"
+
+[features]
+default = ["wayland", "x11"]
+# The two Linux window systems, as GPUI names them. Both by default; a build
+# for one leaves the other's client code out. Either one links
+# libxkbcommon-x11 (Debian: libxkbcommon-x11-dev).
+wayland = ["gpui/wayland"]
+x11 = ["gpui/x11"]
+
+[dependencies]
+gpui = { version = "0.2.2", default-features = false, features = ["font-kit"] }
+# The engine reports to the view over a channel the UI thread can await.
+async-channel = "2"
+# The theme table (assets/themes.json) is generated from the web UI's
+# catalogue and read once at startup.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Small and quick to start rather than fastest: the view is idle almost all
+# of the time, and what it costs at rest is memory.
+[profile.release]
+opt-level = "s"
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+
+# The workspace's lints, repeated because an excluded package inherits none.
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "deny"
+unused_results = "deny"
+missing_debug_implementations = "deny"
+unused_qualifications = "warn"
+unreachable_pub = "warn"
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+
+[lints.clippy]
+correctness = { level = "deny", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+needless_pass_by_value = "warn"
+redundant_closure_for_method_calls = "warn"
+manual_let_else = "warn"
+cloned_instead_of_copied = "warn"
+implicit_clone = "warn"
+uninlined_format_args = "warn"
+doc_markdown = "warn"
+unwrap_used = "deny"
+excessive_nesting = "deny"
+too_many_lines = "deny"
+allow_attributes_without_reason = "deny"
+branches_sharing_code = "deny"
+collapsible_else_if = "deny"
+expect_used = "warn"
