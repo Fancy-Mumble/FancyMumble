@@ -18,10 +18,10 @@ use crate::state::host::{
 };
 use crate::state::pchat::IdentityStore;
 use crate::state::types::{
-    BanEntryInput, ChannelEntry, ChatMessage, ConnectionStatus, RegisteredUserUpdate, UserEntry,
-    VoiceState,
+    AclEntryInput, AclGroupInput, AclInput, BanEntryInput, ChannelEntry, ChatMessage,
+    ConnectionStatus, RegisteredUserUpdate, UserEntry, VoiceState,
 };
-use crate::state::types::{PageRequest, SearchFilter};
+use crate::state::types::{AclPayload, PageRequest, SearchFilter};
 use crate::state::{AppState, Credentials, LinkEmbed};
 use mumble_protocol::state::PchatProtocol;
 
@@ -153,6 +153,8 @@ pub enum EngineEvent {
     /// The server looked behind links asked about with
     /// [`EngineHandle::link_previews`].
     LinkPreviews(Vec<LinkPreview>),
+    /// The server answered [`EngineHandle::request_acl`].
+    Acl(AclInfo),
     /// The server answered [`EngineHandle::request_bans`].
     Bans(Vec<BanInfo>),
     /// The server answered [`EngineHandle::request_registered`].
@@ -509,6 +511,107 @@ impl LinkPreview {
     }
 }
 
+/// Who may do what in a channel: its groups and its rules.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AclInfo {
+    /// The channel.
+    pub channel: u32,
+    /// Whether the parent channel's rules apply here too.
+    pub inherit: bool,
+    /// The groups rules can name.
+    pub groups: Vec<AclGroupInfo>,
+    /// The rules, in the order they are applied: a later one overrides an
+    /// earlier one.
+    pub rules: Vec<AclRuleInfo>,
+}
+
+/// A group of users a rule can name. Everything here goes back to the
+/// server with [`EngineHandle::set_acl`], so a view that changes only the
+/// rules hands the groups back as it got them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AclGroupInfo {
+    /// The group's name.
+    pub name: String,
+    /// Whether it comes from a parent channel.
+    pub inherited: bool,
+    /// Whether it takes the parent's members.
+    pub inherit: bool,
+    /// Whether sub-channels take it.
+    pub inheritable: bool,
+    /// The accounts added here.
+    pub add: Vec<u32>,
+    /// The accounts taken out here.
+    pub remove: Vec<u32>,
+    /// The accounts it has from the parent.
+    pub inherited_members: Vec<u32>,
+    /// How a Fancy server has the group drawn: its colour,
+    pub color: Option<String>,
+    /// its icon,
+    pub icon: Option<Vec<u8>>,
+    /// its style,
+    pub style_preset: Option<String>,
+    /// and whatever else it says of it.
+    pub metadata: std::collections::HashMap<String, String>,
+}
+
+/// One rule: for a group or one account, what is allowed and what denied.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AclRuleInfo {
+    /// Whether it applies in this channel.
+    pub apply_here: bool,
+    /// Whether it applies in the channels under it.
+    pub apply_subs: bool,
+    /// Whether it comes from a parent channel: it cannot be changed here.
+    pub inherited: bool,
+    /// The account it is for, or
+    pub user: Option<u32>,
+    /// the group.
+    pub group: Option<String>,
+    /// The permissions allowed, as Mumble's bits.
+    pub grant: u32,
+    /// The permissions denied.
+    pub deny: u32,
+}
+
+impl From<AclPayload> for AclInfo {
+    fn from(acl: AclPayload) -> Self {
+        Self {
+            channel: acl.channel_id,
+            inherit: acl.inherit_acls,
+            groups: acl
+                .groups
+                .into_iter()
+                .map(|group| AclGroupInfo {
+                    name: group.name,
+                    inherited: group.inherited,
+                    inherit: group.inherit,
+                    inheritable: group.inheritable,
+                    add: group.add,
+                    remove: group.remove,
+                    inherited_members: group.inherited_members,
+                    color: group.color,
+                    icon: group.icon,
+                    style_preset: group.style_preset,
+                    metadata: group.metadata,
+                })
+                .collect(),
+            rules: acl
+                .acls
+                .into_iter()
+                .map(|rule| AclRuleInfo {
+                    apply_here: rule.apply_here,
+                    apply_subs: rule.apply_subs,
+                    inherited: rule.inherited,
+                    user: rule.user_id,
+                    group: rule.group,
+                    grant: rule.grant,
+                    deny: rule.deny,
+                })
+                .collect(),
+        }
+    }
+}
+
 /// One entry of the server's ban list.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BanInfo {
@@ -672,6 +775,7 @@ impl EngineEvent {
                     .map(|(url, embed)| LinkPreview::from_embed(url, embed))
                     .collect(),
             ),
+            CoreEvent::Acl(acl) => Self::Acl(acl.into()),
             CoreEvent::BanList(bans) => Self::Bans(
                 bans.into_iter()
                     .map(|ban| BanInfo {
@@ -1640,6 +1744,60 @@ impl EngineHandle {
             .into_iter()
             .map(|hit| LinkPreview::from_embed(hit.requested_url, hit.embed))
             .collect())
+    }
+
+    /// Ask the server who may do what in `channel`; the answer is an
+    /// [`EngineEvent::Acl`], or a refusal.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn request_acl(&self, channel: u32) -> Result<(), String> {
+        self.state.request_acl(channel).await
+    }
+
+    /// Replace the groups and rules of a channel with those of `acl`.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn set_acl(&self, acl: AclInfo) -> Result<(), String> {
+        self.state
+            .update_acl(AclInput {
+                channel_id: acl.channel,
+                inherit_acls: acl.inherit,
+                groups: acl
+                    .groups
+                    .into_iter()
+                    .map(|group| AclGroupInput {
+                        name: group.name,
+                        inherited: group.inherited,
+                        inherit: group.inherit,
+                        inheritable: group.inheritable,
+                        add: group.add,
+                        remove: group.remove,
+                        inherited_members: group.inherited_members,
+                        color: group.color,
+                        icon: group.icon,
+                        style_preset: group.style_preset,
+                        metadata: group.metadata,
+                    })
+                    .collect(),
+                acls: acl
+                    .rules
+                    .into_iter()
+                    .map(|rule| AclEntryInput {
+                        apply_here: rule.apply_here,
+                        apply_subs: rule.apply_subs,
+                        inherited: rule.inherited,
+                        user_id: rule.user,
+                        group: rule.group,
+                        grant: rule.grant,
+                        deny: rule.deny,
+                    })
+                    .collect(),
+            })
+            .await
     }
 
     /// Ask the server for its ban list; the answer is an
