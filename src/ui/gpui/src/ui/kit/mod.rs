@@ -19,7 +19,7 @@ use gpui::{Hsla, SharedString, Styled, Svg, px, svg};
 pub(crate) use avatar::{Avatar, tint};
 pub(crate) use backdrop::backdrop;
 pub(crate) use button::{Button, Corner, Emphasis, IconButton, Size, Variant};
-pub(crate) use control::{MenuItem, Radio, Switch};
+pub(crate) use control::{MenuItem, Radio, Switch, SwitchRow};
 pub(crate) use dialog::{Dialog, Sheet};
 pub(crate) use surface::{Badge, Kbd, Nearest, Paper};
 

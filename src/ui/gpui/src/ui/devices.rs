@@ -3,7 +3,7 @@
 use gpui::{Context, IntoElement, ParentElement, SharedString, Styled, div, prelude::*, px};
 
 use super::Shell;
-use super::kit::{Sheet, Switch};
+use super::kit::{Sheet, SwitchRow};
 use super::widgets::{EMPHASIS, icon, label};
 use crate::engine::{AudioDevice, ChosenDevices, VoiceSettings};
 use crate::theme::Theme;
@@ -138,14 +138,12 @@ pub(super) fn render(
             "noise-suppression",
             "Noise suppression",
             shell.voice_settings.noise_suppression,
-            theme,
             cx,
         ))
         .child(toggle(
             "automatic-gain",
             "Automatic gain",
             shell.voice_settings.automatic_gain,
-            theme,
             cx,
         ))
         .when(!shell.voice_settings.push_to_talk, |panel| {
@@ -212,7 +210,6 @@ fn loudness_rows(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> [gpui
             "voice-over-tcp",
             "Send voice over TCP",
             voice.voice_over_tcp,
-            theme,
             cx,
         )
         .into_any_element(),
@@ -220,39 +217,18 @@ fn loudness_rows(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> [gpui
 }
 
 /// A setting that is on or off.
-fn toggle(
-    id: &'static str,
-    name: &'static str,
-    on: bool,
-    theme: &Theme,
-    cx: &mut Context<Shell>,
-) -> gpui::Stateful<gpui::Div> {
-    let hover = theme.c.hover;
-    div()
-        .id(id)
-        .debug_selector(move || id.to_owned())
-        .min_h(px(30.0))
-        .flex()
-        .items_center()
-        .gap(px(8.0))
-        .px(px(8.0))
-        .rounded(theme.skin.radius_md)
-        .cursor_pointer()
-        .text_size(px(13.0))
-        .hover(move |style| style.bg(hover))
-        .on_click(cx.listener(move |shell, _, _, cx| {
-            shell.change_voice(
-                |voice| match id {
-                    "push-to-talk" => voice.push_to_talk = !voice.push_to_talk,
-                    "noise-suppression" => voice.noise_suppression = !voice.noise_suppression,
-                    "voice-over-tcp" => voice.voice_over_tcp = !voice.voice_over_tcp,
-                    _ => voice.automatic_gain = !voice.automatic_gain,
-                },
-                cx,
-            );
-        }))
-        .child(div().flex_1().min_w_0().child(name))
-        .child(Switch::new(on))
+fn toggle(id: &'static str, name: &'static str, on: bool, cx: &mut Context<Shell>) -> SwitchRow {
+    SwitchRow::new(id, name, on).on_click(cx.listener(move |shell, _, _, cx| {
+        shell.change_voice(
+            |voice| match id {
+                "push-to-talk" => voice.push_to_talk = !voice.push_to_talk,
+                "noise-suppression" => voice.noise_suppression = !voice.noise_suppression,
+                "voice-over-tcp" => voice.voice_over_tcp = !voice.voice_over_tcp,
+                _ => voice.automatic_gain = !voice.automatic_gain,
+            },
+            cx,
+        );
+    }))
 }
 
 /// The key held to whisper to whoever was chosen from a user's or a
@@ -313,28 +289,30 @@ fn push_to_talk_row(
         )
     };
     let hover = theme.c.hover;
-    toggle("push-to-talk", "Push to talk", on, theme, cx).when(on, |row| {
-        row.child(
-            div()
-                .id("push-to-talk-key")
-                .debug_selector(|| "push-to-talk-key".to_owned())
-                .px(px(8.0))
-                .py(px(2.0))
-                .rounded(theme.skin.radius_sm)
-                .bg(theme.c.card2)
-                .text_size(px(11.0))
-                .text_color(theme.c.muted)
-                .hover(move |style| style.bg(hover))
-                .on_click(cx.listener(|shell, _, window, cx| {
-                    shell.ptt.choosing = true;
-                    // The key must come to the window, not to a field.
-                    window.focus(&shell.focus);
-                    cx.stop_propagation();
-                    cx.notify();
-                }))
-                .child(key),
-        )
-    })
+    let row = toggle("push-to-talk", "Push to talk", on, cx);
+    if !on {
+        return row;
+    }
+    row.trailing(
+        div()
+            .id("push-to-talk-key")
+            .debug_selector(|| "push-to-talk-key".to_owned())
+            .px(px(8.0))
+            .py(px(2.0))
+            .rounded(theme.skin.radius_sm)
+            .bg(theme.c.card2)
+            .text_size(px(11.0))
+            .text_color(theme.c.muted)
+            .hover(move |style| style.bg(hover))
+            .on_click(cx.listener(|shell, _, window, cx| {
+                shell.ptt.choosing = true;
+                // The key must come to the window, not to a field.
+                window.focus(&shell.focus);
+                cx.stop_propagation();
+                cx.notify();
+            }))
+            .child(key),
+    )
 }
 
 /// A setting that goes up and down in steps: its name, what it stands at,

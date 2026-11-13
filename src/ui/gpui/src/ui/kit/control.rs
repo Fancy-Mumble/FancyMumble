@@ -188,3 +188,69 @@ impl RenderOnce for Radio {
         })
     }
 }
+
+/// A setting that is on or off: what it is called, and its switch, on a
+/// row that takes the click.
+///
+/// ```ignore
+/// SwitchRow::new("no-typing", "Tell others when I am writing", on).on_click(...)
+/// ```
+#[derive(IntoElement)]
+pub(crate) struct SwitchRow {
+    id: &'static str,
+    label: SharedString,
+    on: bool,
+    trailing: Option<gpui::AnyElement>,
+    on_click: Option<OnClick>,
+}
+
+impl SwitchRow {
+    /// `id` also names it for the tests.
+    pub(crate) fn new(id: &'static str, label: impl Into<SharedString>, on: bool) -> Self {
+        Self {
+            id,
+            label: label.into(),
+            on,
+            trailing: None,
+            on_click: None,
+        }
+    }
+
+    /// Something that goes with the setting, drawn after its switch.
+    pub(crate) fn trailing(mut self, trailing: impl IntoElement) -> Self {
+        self.trailing = Some(trailing.into_any_element());
+        self
+    }
+
+    pub(crate) fn on_click(
+        mut self,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_click = Some(Box::new(handler));
+        self
+    }
+}
+
+impl RenderOnce for SwitchRow {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let theme = ActiveTheme::get(cx);
+        let hover = theme.c.hover;
+        let id = self.id;
+        div()
+            .id(id)
+            .debug_selector(move || id.to_owned())
+            .min_h(px(30.0))
+            .flex()
+            .items_center()
+            .gap(px(8.0))
+            .px(px(8.0))
+            .rounded(theme.skin.radius_md)
+            .cursor_pointer()
+            .text_size(px(13.0))
+            .hover(move |style| style.bg(hover))
+            .when_some(self.on_click, |row, handler| row.on_click(handler))
+            .child(div().flex_1().min_w_0().child(self.label))
+            .child(Switch::new(self.on))
+            .children(self.trailing)
+    }
+}

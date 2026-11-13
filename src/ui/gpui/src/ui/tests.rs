@@ -2057,3 +2057,28 @@ fn what_is_heard_is_recorded_into_a_chosen_folder_until_stopped(cx: &mut TestApp
     own_menu(cx, "menu-Record what is heard…");
     assert!(!engine.is_recording());
 }
+
+#[gpui::test]
+fn writing_and_reading_are_kept_to_oneself_when_switched_off(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    click(cx, "input-Message #lounge");
+    cx.simulate_keystrokes("h");
+    let told = engine.typed();
+    assert!(told > 0, "others are told by default");
+    own_menu(cx, "menu-Settings…");
+    click(cx, "tell-writing");
+    click(cx, "tell-reading");
+    click(cx, "settings-close");
+    shell.read_with(cx, |shell, _| {
+        let privacy = shell.panels.settings.privacy;
+        assert!(privacy.hide_writing && privacy.hide_reading && !privacy.leave_links);
+    });
+    click(cx, "input-Message #lounge");
+    cx.simulate_keystrokes("i");
+    assert_eq!(engine.typed(), told, "nothing more is said about writing");
+    // Somebody says something: it is read, and nobody is told so.
+    let before = engine.read_up_to_id();
+    engine.say_as(3, "Rin", Conversation::Channel(1), "still there?");
+    cx.run_until_parked();
+    assert_eq!(engine.read_up_to_id(), before);
+}

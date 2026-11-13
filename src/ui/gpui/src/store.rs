@@ -82,9 +82,33 @@ pub(crate) struct Settings {
     /// Whether channels with nobody in them are left out of the column.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub hide_empty: bool,
+    /// What is kept from others and from servers.
+    #[serde(default, skip_serializing_if = "Privacy::is_default")]
+    pub privacy: Privacy,
     /// The people kept as friends.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub friends: Vec<Friend>,
+}
+
+/// What the user keeps to themselves. Everything is told and asked until
+/// it is switched off, so each field says what is withheld.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct Privacy {
+    /// Others are not told when the user is writing.
+    #[serde(default)]
+    pub hide_writing: bool,
+    /// Others are not told what the user has read.
+    #[serde(default)]
+    pub hide_reading: bool,
+    /// The server is not asked what lies behind a link.
+    #[serde(default)]
+    pub leave_links: bool,
+}
+
+impl Privacy {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 /// Somebody kept as a friend: their certificate's hash, and what was known
@@ -229,6 +253,10 @@ mod tests {
             whisper_key: Some("f10".to_owned()),
             auto_connect: None,
             hide_empty: true,
+            privacy: Privacy {
+                hide_reading: true,
+                ..Privacy::default()
+            },
             friends: vec![Friend {
                 hash: "abc".to_owned(),
                 name: "Rin".to_owned(),

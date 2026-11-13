@@ -18,6 +18,7 @@ mod menu;
 mod picker;
 mod rail;
 mod server_editor;
+mod settings;
 mod sidebar;
 #[cfg(test)]
 mod tests;
@@ -132,15 +133,21 @@ struct Panels {
     later: Option<later::Panel>,
     /// The friends kept, and their list.
     friends: friends::Friends,
+    /// The view's own settings, and their dialog.
+    settings: settings::Settings,
 }
 
 impl Panels {
     /// All closed, with the friends remembered.
-    fn keeping(friends: Vec<crate::store::Friend>) -> Self {
+    fn keeping(friends: Vec<crate::store::Friend>, privacy: crate::store::Privacy) -> Self {
         Self {
             friends: friends::Friends {
                 open: false,
                 kept: friends,
+            },
+            settings: settings::Settings {
+                open: false,
+                privacy,
             },
             ..Self::default()
         }
@@ -416,7 +423,7 @@ impl Shell {
             titled_unread: 0,
             emoji_for: None,
             lightbox: None,
-            panels: Panels::keeping(stored.friends.clone()),
+            panels: Panels::keeping(stored.friends.clone(), stored.privacy),
             chrome: Chrome::remembering(stored.auto_connect.clone(), stored.hide_empty),
             whisper: Whisper {
                 key: stored.whisper_key.map(Into::into),
@@ -774,9 +781,13 @@ impl Shell {
         let Some(id) = newest.id.clone().filter(|_| !newest.own) else {
             return;
         };
+        // Noted either way, so switching the telling back on does not
+        // announce everything read in the meantime at once.
         if self.seen.said.as_ref() != Some(&id) {
             self.seen.said = Some(id.clone());
-            self.engine.read_up_to(conversation, id);
+            if !self.panels.settings.privacy.hide_reading {
+                self.engine.read_up_to(conversation, id);
+            }
         }
     }
 
@@ -945,6 +956,7 @@ impl Shell {
                 // Writing something new, not correcting something sent.
                 if let Some(conversation) = self.open.filter(|_| self.editing.is_none())
                     && !self.composer.read(cx).text().is_empty()
+                    && !self.panels.settings.privacy.hide_writing
                 {
                     self.engine.typing(conversation);
                 }
@@ -1163,6 +1175,7 @@ impl Shell {
             || self.panels.acl.take().is_some()
             || self.panels.later.take().is_some()
             || std::mem::take(&mut self.panels.friends.open)
+            || std::mem::take(&mut self.panels.settings.open)
         {
             cx.notify();
             return;
@@ -1532,6 +1545,7 @@ impl Shell {
             auto_connect: name(&self.chrome.auto_connect),
             friends: self.panels.friends.kept.clone(),
             hide_empty: self.chrome.hide_empty,
+            privacy: self.panels.settings.privacy,
         };
         if let Err(error) = store.save_settings(&settings) {
             self.notice = Some(format!("The settings could not be remembered: {error}").into());
@@ -1603,6 +1617,9 @@ impl Render for Shell {
             })
             .when_some(self.panels.later.as_ref(), |shell, panel| {
                 shell.child(later::render(self, panel, &theme, cx))
+            })
+            .when(self.panels.settings.open, |shell| {
+                shell.child(settings::render(self, &theme, cx))
             })
             .when(self.panels.friends.open, |shell| {
                 shell.child(friends::render(self, &theme, cx))

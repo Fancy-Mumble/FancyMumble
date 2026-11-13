@@ -81,6 +81,7 @@ pub(super) enum Panel {
     Themes,
     Certificates,
     Friends,
+    Settings,
     /// The messages waiting to be sent later.
     Later,
 }
@@ -685,6 +686,7 @@ pub(super) fn own_items(hide_empty: bool, recording: bool) -> Vec<Item> {
     vec![
         Item::new("Hide empty channels", Command::HideEmpty(!hide_empty)).ticked(hide_empty),
         Item::new("Record what is heard…", Command::Record(!recording)).ticked(recording),
+        Item::new("Settings…", Command::Panel(Panel::Settings)),
         Item::new("Voice settings…", Command::Panel(Panel::Voice)),
         Item::new("Themes…", Command::Panel(Panel::Themes)),
         Item::new("Certificates…", Command::Panel(Panel::Certificates)),
@@ -905,6 +907,10 @@ impl Shell {
             Command::Panel(Panel::Themes) => self.toggle_picker(cx),
             Command::Panel(Panel::Certificates) => self.toggle_certificates(cx),
             Command::Panel(Panel::Later) => self.open_later(cx),
+            Command::Panel(Panel::Settings) => {
+                self.panels.settings.open = true;
+                cx.notify();
+            }
             Command::Panel(Panel::Friends) => {
                 self.panels.friends.open = true;
                 cx.notify();

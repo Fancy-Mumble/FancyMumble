@@ -76,6 +76,9 @@ real engine and does text and voice.
   quality and voice over TCP are behind the sliders button on the user
   tile. A whisper key speaks to one user, or shouts into one channel,
   chosen from their menu, and to nobody else while it is held.
+- **Privacy.** Whether others are told that you are writing and what you
+  have read, and whether a server is asked what lies behind a link: three
+  switches under Settings, on the menu of your own tile.
 - **Recording.** What is heard, written to a WAV file in a folder of
   your choosing, from the menu on your own tile, until stopped.
 - **Look.** The thirteen themes in light and dark, from the menu on the
@@ -167,6 +170,7 @@ element.
 | `Paper` | A card cut as the web UI cuts them, edge under fill: raised, a field, or a plain plate (a message's bubble). |
 | `Sheet`, `Dialog` | An opaque surface that floats, and one in the middle of a veil, with a title. |
 | `MenuItem` | A row of a menu or of a list of choices. |
+| `SwitchRow` | A setting that is on or off: its name and its switch on a row that takes the click. |
 | `Switch`, `Radio`, `Badge`, `Kbd` | The small marks. |
 | `Backdrop` | A surface filled with one of the theme's gradient stacks. |
 

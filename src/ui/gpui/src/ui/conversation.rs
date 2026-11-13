@@ -1034,6 +1034,7 @@ impl Shell {
         if self.snapshot.fancy
             && let Some(url) = drawn.first_link()
             && !self.previews.contains_key(&url)
+            && !self.panels.settings.privacy.leave_links
         {
             // Bounded: a long session forgets and, at worst, asks again,
             // which the engine answers from what it holds.
