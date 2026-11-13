@@ -642,7 +642,8 @@ fn composer(shell: &Shell, window: &Window, cx: &mut Context<Shell>) -> impl Int
                             .glyph_size(10.0)
                             .corner(Corner::Small)
                             .on_click(cx.listener(|shell, event: &gpui::ClickEvent, _, cx| {
-                                let items = super::menu::compose_items(shell.open);
+                                let items =
+                                    super::menu::compose_items(shell.open, shell.snapshot.fancy);
                                 shell.open_menu(event.position(), items, cx);
                             })),
                     ),

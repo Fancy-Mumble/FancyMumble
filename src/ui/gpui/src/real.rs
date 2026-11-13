@@ -20,7 +20,7 @@ use crate::engine::{
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
     Connection, Conversation, Engine, EngineEvent, Found, Listing, Message, Preview, Reaction,
-    Registered, SavedServer, ServerPing, SessionEntry, Snapshot, Subject, User, Voice,
+    Registered, SavedServer, Scheduled, ServerPing, SessionEntry, Snapshot, Subject, User, Voice,
     VoiceSettings, Window,
 };
 use crate::store::Store;
@@ -231,6 +231,12 @@ impl Shared {
             Action::SetAcl(acl) => shared.set_acl(acl).await,
             Action::SetBans(bans) => engine.set_bans(bans.iter().map(ban_info).collect()).await,
             Action::Unregister { id } => engine.change_registered(id, None).await,
+            Action::SendLater {
+                channel,
+                body,
+                at_ms,
+            } => engine.schedule_text(channel, &body, at_ms).await,
+            Action::CancelScheduled(id) => engine.cancel_scheduled(&id).await,
             Action::RenameRegistered { id, name } => {
                 engine.change_registered(id, Some(name)).await?;
                 // The list as the server has it now.
@@ -424,6 +430,13 @@ impl Shared {
             api::EngineEvent::Registered(users) => self.tell(EngineEvent::Registered(
                 users.into_iter().map(registered_of).collect(),
             )),
+            api::EngineEvent::Scheduled(waiting) => self.tell(EngineEvent::Scheduled(
+                waiting.into_iter().map(scheduled_of).collect(),
+            )),
+            api::EngineEvent::ScheduleAnswered { refused } => self.tell(match refused {
+                Some(reason) => EngineEvent::Notice(Some(reason.into())),
+                None => EngineEvent::ScheduleTaken,
+            }),
             api::EngineEvent::UserStats(stats) => self.tell(EngineEvent::Facts {
                 subject: Subject::User(stats.session),
                 facts: user_facts(&stats),
@@ -882,6 +895,11 @@ impl Engine for RealEngine {
     fn request_acl(&self, channel: u32) {
         let engine = self.shared.engine.clone();
         self.spawn(async move { engine.request_acl(channel).await });
+    }
+
+    fn request_scheduled(&self) {
+        let engine = self.shared.engine.clone();
+        self.spawn(async move { engine.request_scheduled().await });
     }
 
     fn list(&self, listing: Listing) {
@@ -1694,6 +1712,16 @@ fn disconnect_notice(reason: Option<String>, refused: bool) -> Option<String> {
 }
 
 /// Unix epoch milliseconds, now.
+/// A waiting message, under the view's names.
+fn scheduled_of(message: api::ScheduledInfo) -> Scheduled {
+    Scheduled {
+        id: message.id.into(),
+        channels: message.channels,
+        html: message.html.into(),
+        at_ms: message.at_ms,
+    }
+}
+
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -2685,6 +2713,75 @@ mod tests {
         alice.shutdown();
         let _ = std::fs::remove_dir_all(alice_dir);
     }
+    /// A message is left with the server to send in a few seconds: it waits
+    /// in the list, a second one is called off, and the first arrives.
+    #[test]
+    #[ignore = "needs a live Fancy server; set FANCY_GPUI_TEST_FANCY=host:port"]
+    fn live_fancy_a_message_is_sent_later_and_another_called_off() {
+        let (alice, alice_dir) = fancy_client("LaterAlice", None);
+        let (bob, bob_dir) = fancy_client("LaterBob", None);
+        wait_for("both to connect", || {
+            alice.snapshot().users.len() >= 2 && bob.snapshot().users.len() >= 2
+        });
+        let channel = alice.snapshot().current_channel.expect("a channel");
+        let room = Conversation::Channel(channel);
+        let told = alice.events();
+        let mut waiting = Vec::new();
+        let mut listed = |alice: &RealEngine, want: usize| {
+            alice.request_scheduled();
+            wait_for("the list of what waits", || {
+                std::iter::from_fn(|| told.try_recv().ok()).any(|event| match event {
+                    EngineEvent::Scheduled(list) => {
+                        waiting = list;
+                        waiting.len() == want
+                    }
+                    EngineEvent::Notice(Some(reason)) => panic!("refused: {reason}"),
+                    _ => false,
+                })
+            });
+            waiting.clone()
+        };
+        let soon = now_ms() + 4_000;
+        alice.act(Action::SendLater {
+            channel,
+            body: "kept back".to_owned(),
+            at_ms: soon,
+        });
+        alice.act(Action::SendLater {
+            channel,
+            body: "never sent".to_owned(),
+            at_ms: now_ms() + 3_600_000,
+        });
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let both = listed(&alice, 2);
+        let doomed = both
+            .iter()
+            .find(|message| message.html.contains("never sent"))
+            .expect("the second waits too");
+        assert_eq!(doomed.channels, [channel]);
+        alice.act(Action::CancelScheduled(doomed.id.clone()));
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        wait_for("the first to arrive", || {
+            bob.window(room, 50)
+                .messages
+                .iter()
+                .any(|message| message.body.contains("kept back"))
+        });
+        assert!(now_ms() + 500 >= soon, "not before its time");
+        assert!(listed(&alice, 0).is_empty(), "nothing waits any more");
+        assert!(
+            !bob.window(room, 50)
+                .messages
+                .iter()
+                .any(|message| message.body.contains("never sent"))
+        );
+        alice.shutdown();
+        bob.shutdown();
+        let _ = std::fs::remove_dir_all(alice_dir);
+        let _ = std::fs::remove_dir_all(bob_dir);
+    }
+
     /// A poll is asked by one and answered by both; each sees how it
     /// stands, and which answer is their own.
     #[test]

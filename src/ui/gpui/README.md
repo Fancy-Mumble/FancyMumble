@@ -38,7 +38,9 @@ real engine and does text and voice.
   reply, mention somebody (`@name`, finished with Tab), edit and delete
   your own, react (six at a click, the rest from a picker that also
   writes into the composer), pin, see who is writing and who has
-  read what you wrote, ask a poll and answer one, share a file (the paperclip, or dropped on the
+  read what you wrote, ask a poll and answer one, leave a message with
+  the server to send later (at `18:30`, or in `15m`, `2h`, `1d`) and call
+  one off while it waits, share a file (the paperclip, or dropped on the
   conversation) and save one shared, a card for
   what lies behind a link, and channels that keep their messages for
   whoever comes later: on the server, or end-to-end encrypted, with the
@@ -69,9 +71,9 @@ real engine and does text and voice.
   selection, and cut, copy and paste.
 
 What the web UI has and this does not, yet: friends and screen sharing
-(their buttons are drawn where the web UI has them, and say so), messages
-sent later, the Signal flavour of encrypted channels, editing a group's
-members, and a Fancy server's own settings.
+(their buttons are drawn where the web UI has them, and say so), the
+Signal flavour of encrypted channels, editing a group's members, and a
+Fancy server's own settings.
 
 ## Testing
 

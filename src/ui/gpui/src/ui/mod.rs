@@ -12,6 +12,7 @@ mod devices;
 mod emoji;
 mod frame;
 mod kit;
+mod later;
 mod menu;
 mod picker;
 mod rail;
@@ -126,6 +127,8 @@ struct Panels {
     admin: Option<admin::Admin>,
     /// The certificates.
     certs: certificates::Panel,
+    /// The messages waiting to be sent later.
+    later: Option<later::Panel>,
 }
 
 /// How the window's own furniture is set.
@@ -547,6 +550,8 @@ impl Shell {
                     self.refilter_admin(cx);
                 }
             }
+            EngineEvent::Scheduled(waiting) => self.take_scheduled(waiting),
+            EngineEvent::ScheduleTaken => self.schedule_taken(),
             EngineEvent::CertificatesChanged => {
                 self.panels.certs.held = self.engine.certificates();
                 self.panels.certs.doomed = None;
@@ -1130,7 +1135,10 @@ impl Shell {
             self.stop_editing(cx);
             return;
         }
-        if self.panels.admin.take().is_some() || self.panels.acl.take().is_some() {
+        if self.panels.admin.take().is_some()
+            || self.panels.acl.take().is_some()
+            || self.panels.later.take().is_some()
+        {
             cx.notify();
             return;
         }
@@ -1525,6 +1533,9 @@ impl Render for Shell {
             })
             .when_some(self.panels.admin.as_ref(), |shell, admin| {
                 shell.child(admin::render(admin, &theme, cx))
+            })
+            .when_some(self.panels.later.as_ref(), |shell, panel| {
+                shell.child(later::render(self, panel, &theme, cx))
             })
             .when(self.panels.certs.open, |shell| {
                 shell.child(certificates::render(self, &theme, cx))

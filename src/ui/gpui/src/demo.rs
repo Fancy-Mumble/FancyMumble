@@ -7,8 +7,8 @@ use crate::engine::{Acl, AclRule, Attachment, KeyRequest, Poll, PollOption, Whis
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
     Connection, Conversation, Engine, EngineEvent, Found, Listing, Message, Preview, Reaction,
-    Registered, SavedServer, ServerPing, Session, SessionEntry, Snapshot, Subject, User, Voice,
-    VoiceSettings, Window,
+    Registered, SavedServer, Scheduled, ServerPing, Session, SessionEntry, Snapshot, Subject, User,
+    Voice, VoiceSettings, Window,
 };
 
 /// The local user's session in the demo server.
@@ -58,6 +58,10 @@ struct State {
     whisper: (Option<WhisperTarget>, bool, u32),
     /// Who is asking for the lounge's key.
     key_requests: Vec<KeyRequest>,
+    /// What the local user has asked to have sent later, and how many
+    /// such messages there have been.
+    scheduled: Vec<Scheduled>,
+    sent_later: u32,
     /// The shared files the view asked to have saved, and where to.
     saved: Vec<(gpui::SharedString, std::path::PathBuf)>,
 }
@@ -300,6 +304,20 @@ impl State {
                 self.key_requests
                     .retain(|asking| asking.hash.as_ref() != hash);
             }
+            Action::SendLater {
+                channel,
+                body,
+                at_ms,
+            } => {
+                self.sent_later += 1;
+                self.scheduled.push(Scheduled {
+                    id: format!("later-{}", self.sent_later).into(),
+                    channels: vec![*channel],
+                    html: body.clone().into(),
+                    at_ms: *at_ms,
+                });
+            }
+            Action::CancelScheduled(id) => self.scheduled.retain(|waiting| waiting.id != *id),
             Action::RemovePicture { session } => {
                 if let Some(user) = self.users.iter_mut().find(|user| user.session == *session) {
                     user.avatar = None;
@@ -492,6 +510,8 @@ impl State {
             polls: Vec::new(),
             whisper: (None, false, 0),
             key_requests: Vec::new(),
+            scheduled: Vec::new(),
+            sent_later: 0,
             saved: Vec::new(),
             certificates: vec!["alex".into(), "work".into()],
             messages: vec![
@@ -703,6 +723,11 @@ impl Engine for DemoEngine {
                 rule("auth", false, 0x40, 0),
             ],
         }));
+    }
+
+    fn request_scheduled(&self) {
+        let waiting = self.with_state(|state| state.scheduled.clone());
+        self.tell(EngineEvent::Scheduled(waiting));
     }
 
     fn list(&self, listing: Listing) {
@@ -1072,10 +1097,17 @@ impl Engine for DemoEngine {
                 | Action::CreatePoll { .. }
                 | Action::Vote { .. }
         );
+        let scheduling = matches!(
+            action,
+            Action::SendLater { .. } | Action::CancelScheduled(_)
+        );
         self.with_state(|state| {
             state.apply(&action);
             state.actions.push(action);
         });
+        if scheduling {
+            self.tell(EngineEvent::ScheduleTaken);
+        }
         self.tell(EngineEvent::StateChanged);
         if about_messages {
             self.tell(EngineEvent::NewMessage {

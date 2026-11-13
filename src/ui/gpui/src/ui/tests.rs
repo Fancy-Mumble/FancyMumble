@@ -1767,3 +1767,61 @@ fn the_identity_to_connect_as_at_launch_is_chosen_with_a_switch(cx: &mut TestApp
     click(cx, "auto-connect");
     shell.read_with(cx, |shell, _| assert!(shell.chrome.auto_connect.is_none()));
 }
+
+#[gpui::test]
+fn a_message_is_sent_later_and_can_be_called_off(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    click(cx, "input-Message #lounge");
+    cx.simulate_keystrokes("s e e space y o u");
+    click(cx, "compose-more");
+    click(cx, "menu-Send later…");
+    // Not a time: the question stays, and nothing is sent or lost.
+    cx.simulate_keystrokes("s o o n enter");
+    shell.read_with(cx, |shell, cx| {
+        assert!(shell.prompt.is_some());
+        assert_eq!(shell.composer.read(cx).text(), "see you");
+    });
+    cx.simulate_keystrokes("backspace backspace backspace backspace 2 h enter");
+    shell.read_with(cx, |shell, cx| {
+        assert!(shell.prompt.is_none());
+        assert_eq!(shell.composer.read(cx).text(), "", "it is on its way");
+    });
+    let Some(Action::SendLater { channel, body, .. }) = engine.actions().last().cloned() else {
+        panic!("nothing was scheduled: {:?}", engine.actions().last());
+    };
+    assert_eq!((channel, body.as_str()), (1, "see you"));
+
+    // It waits in the list, and is called off from there.
+    click(cx, "compose-more");
+    click(cx, "menu-Messages waiting…");
+    shell.read_with(cx, |shell, _| {
+        let waiting = shell
+            .panels
+            .later
+            .as_ref()
+            .and_then(|panel| panel.waiting.as_ref());
+        assert_eq!(waiting.map(Vec::len), Some(1));
+    });
+    click(cx, "later-cancel-0");
+    assert!(matches!(
+        engine.actions().last(),
+        Some(Action::CancelScheduled(_))
+    ));
+    shell.read_with(cx, |shell, _| {
+        let waiting = shell
+            .panels
+            .later
+            .as_ref()
+            .and_then(|panel| panel.waiting.as_ref());
+        assert_eq!(waiting.map(Vec::len), Some(0));
+    });
+    assert!(cx.debug_bounds("later-none").is_some());
+}
+
+#[gpui::test]
+fn a_plain_server_offers_no_sending_later(cx: &mut TestAppContext) {
+    let (_shell, _engine, cx) = shell_on(DemoEngine::plain(), cx);
+    click(cx, "compose-more");
+    assert!(cx.debug_bounds("menu-Emoji…").is_some());
+    assert!(cx.debug_bounds("menu-Send later…").is_none());
+}

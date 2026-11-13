@@ -272,6 +272,15 @@ pub(crate) enum Action {
     Unregister {
         id: u32,
     },
+    /// Have the server send `body` to `channel` at `at_ms`, Unix epoch
+    /// milliseconds, whether or not this client is still there then.
+    SendLater {
+        channel: ChannelId,
+        body: String,
+        at_ms: u64,
+    },
+    /// Have the waiting message with this id not sent after all.
+    CancelScheduled(SharedString),
     /// Pin the message `id` for everyone, or take the pin off.
     Pin {
         channel: ChannelId,
@@ -476,6 +485,19 @@ pub(crate) struct KeyRequest {
     pub name: SharedString,
 }
 
+/// A message waiting on the server to be sent later.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Scheduled {
+    /// What names it to a cancellation.
+    pub id: SharedString,
+    /// The channels it will be sent to.
+    pub channels: Vec<ChannelId>,
+    /// What it says, as HTML.
+    pub html: SharedString,
+    /// When it will be sent, in Unix epoch milliseconds.
+    pub at_ms: u64,
+}
+
 /// A poll put to a channel, with how it stands.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Poll {
@@ -664,6 +686,12 @@ pub(crate) enum EngineEvent {
     Bans(Vec<Ban>),
     /// The server's registered accounts, asked for with [`Engine::list`].
     Registered(Vec<Registered>),
+    /// The local user's messages that wait to be sent later, asked for
+    /// with [`Engine::request_scheduled`].
+    Scheduled(Vec<Scheduled>),
+    /// The server took a message to send later, or a cancellation of one.
+    /// A refusal is said in a notice instead.
+    ScheduleTaken,
     /// The certificates held changed: read [`Engine::certificates`] again.
     CertificatesChanged,
     /// What is known about `subject` besides its text, as names and
@@ -726,6 +754,10 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// Ask the server for one of its administrator's lists. It arrives as
     /// an event, or is refused with a notice.
     fn list(&self, listing: Listing);
+
+    /// Ask the server for the local user's messages that wait to be sent
+    /// later. The answer is an [`EngineEvent::Scheduled`].
+    fn request_scheduled(&self);
 
     /// The labels of the certificates held, in order.
     fn certificates(&self) -> Vec<SharedString>;

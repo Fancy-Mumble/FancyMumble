@@ -72,6 +72,8 @@ pub(super) enum Panel {
     Voice,
     Themes,
     Certificates,
+    /// The messages waiting to be sent later.
+    Later,
 }
 
 /// A question an entry puts before it can act.
@@ -98,6 +100,8 @@ pub(super) enum Question {
     /// A poll for a channel: one answer each, or several.
     NewPoll(ChannelId),
     NewPollSeveral(ChannelId),
+    /// When the server is to send what is in the composer to a channel.
+    SendLater(ChannelId),
 }
 
 impl Question {
@@ -137,6 +141,11 @@ impl Question {
                 "Channel password",
                 Some("Leave empty to let anybody in"),
                 "Set",
+            ),
+            Self::SendLater(_) => (
+                "Send what is written, later",
+                Some("When: 18:30, or in 15m, 2h, 1d"),
+                "Send later",
             ),
             Self::NewPoll(_) => (
                 "New poll: choose one",
@@ -213,7 +222,7 @@ impl Question {
                 name: Some(text).filter(|name| !name.is_empty())?,
             },
             // Answered into the permissions panel, not to the server.
-            Self::AclGroup(_) => return None,
+            Self::AclGroup(_) | Self::SendLater(_) => return None,
             Self::DescribeChannel(channel) => Action::DescribeChannel { channel, text },
             Self::ChannelPassword(channel) => Action::SetChannelPassword {
                 channel,
@@ -573,8 +582,16 @@ pub(super) fn own_items() -> Vec<Item> {
 
 /// What else there is to put in a message, beside the composer's paperclip:
 /// an emoji anywhere, a poll in a channel.
-pub(super) fn compose_items(open: Option<Conversation>) -> Vec<Item> {
+pub(super) fn compose_items(open: Option<Conversation>, fancy: bool) -> Vec<Item> {
     let mut items = vec![Item::new("Emoji…", Command::Emoji)];
+    // Only a server that keeps messages can hold one back.
+    if let (Some(Conversation::Channel(channel)), true) = (open, fancy) {
+        items.push(Item::new(
+            "Send later…",
+            Command::Ask(Question::SendLater(channel)),
+        ));
+        items.push(Item::new("Messages waiting…", Command::Panel(Panel::Later)));
+    }
     if let Some(Conversation::Channel(channel)) = open {
         items.push(Item::new("Poll…", Command::Ask(Question::NewPoll(channel))));
         items.push(Item::new(
@@ -751,6 +768,7 @@ impl Shell {
             Command::Panel(Panel::Voice) => self.toggle_devices(cx),
             Command::Panel(Panel::Themes) => self.toggle_picker(cx),
             Command::Panel(Panel::Certificates) => self.toggle_certificates(cx),
+            Command::Panel(Panel::Later) => self.open_later(cx),
             Command::Reply(index) => self.start_replying(index, window, cx),
             Command::MoreReactions { channel, id } => {
                 self.emoji_for = Some(super::emoji::For::Reaction { channel, id });
@@ -845,6 +863,11 @@ impl Shell {
         if matches!(prompt.question, Question::AclGroup(_)) {
             self.prompt = None;
             self.add_acl_rule(&answer, cx);
+        } else if let Question::SendLater(channel) = prompt.question {
+            // An answer that names no time leaves the question open.
+            if self.send_later(channel, &answer, cx) {
+                self.prompt = None;
+            }
         } else if let Some(action) = prompt.question.answered(&answer) {
             self.engine.act(action);
             self.prompt = None;
