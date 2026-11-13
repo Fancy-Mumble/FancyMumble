@@ -9,7 +9,7 @@ use gpui::{
 
 use super::Shell;
 use super::widgets::{EMPHASIS, icon, label};
-use crate::engine::{SavedServer, ServerPing};
+use crate::engine::{Connection, SavedServer, ServerPing};
 use crate::theme::Theme;
 
 /// Every identity saved for one address.
@@ -105,10 +105,16 @@ impl Shell {
         picked.or_else(|| server.identities.first().copied())
     }
 
-    pub(super) fn connect_selected(&self) {
-        if let Some(identity) = self.selected_identity() {
-            self.engine.connect(&identity.id);
-        }
+    /// Connect as the chosen identity, with whatever password was typed.
+    pub(super) fn connect_selected(&mut self, cx: &mut Context<Self>) {
+        let Some(id) = self.selected_identity().map(|identity| identity.id.clone()) else {
+            return;
+        };
+        let password = self.password.read(cx).text().to_owned();
+        self.engine.connect(&id, Some(password));
+        // Typed for this connect; not kept on screen, or anywhere else.
+        self.password.update(cx, |field, _| field.clear());
+        cx.notify();
     }
 }
 
@@ -143,9 +149,18 @@ pub(super) fn server_column(
                 .px(px(5.0))
                 .pt(px(6.0))
                 .pb(px(4.0))
-                .text_size(px(16.0))
-                .font_weight(EMPHASIS)
-                .child(label("Servers", theme)),
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(
+                    div()
+                        .text_size(px(16.0))
+                        .font_weight(EMPHASIS)
+                        .child(label("Servers", theme)),
+                )
+                .child(link("add-server", "+ Add", theme).on_click(
+                    cx.listener(|shell, _, window, cx| shell.open_editor(None, None, window, cx)),
+                )),
         )
         .child(
             div()
@@ -276,12 +291,18 @@ pub(super) fn landing(
         return div()
             .flex_1()
             .flex()
+            .flex_col()
             .items_center()
             .justify_center()
+            .gap(px(14.0))
             .text_color(theme.c.muted)
             .child("No saved servers yet")
+            .child(link("add-first-server", "+ Add a server", theme).on_click(
+                cx.listener(|shell, _, window, cx| shell.open_editor(None, None, window, cx)),
+            ))
             .into_any_element();
     };
+    let address = (server.host.clone(), server.port);
     let ping = shell.engine.ping(server.host, server.port);
     let chosen = shell
         .selected_identity()
@@ -322,15 +343,35 @@ pub(super) fn landing(
                 .gap(px(8.0))
                 .child(
                     div()
-                        .text_size(px(11.0))
-                        .font_weight(EMPHASIS)
-                        .text_color(theme.c.muted)
-                        .child("JOIN AS"),
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(
+                            div()
+                                .text_size(px(11.0))
+                                .font_weight(EMPHASIS)
+                                .text_color(theme.c.muted)
+                                .child("JOIN AS"),
+                        )
+                        .child(link("new-identity", "+ New identity", theme).on_click(
+                            cx.listener(move |shell, _, window, cx| {
+                                shell.open_editor(None, Some(&address), window, cx);
+                            }),
+                        )),
                 )
                 .children(server.identities.iter().map(|identity| {
                     identity_row(identity, chosen.as_ref() == Some(&identity.id), theme, cx)
                 }))
-                .child(connect_button(shell, theme, cx)),
+                .child(password_field(shell, theme))
+                .child(connect_button(shell, theme, cx))
+                .when_some(shell.notice.clone(), |form, notice| {
+                    form.child(
+                        div()
+                            .text_size(px(12.5))
+                            .text_color(theme.c.bad)
+                            .child(notice),
+                    )
+                }),
         )
         .child(address_pill(&server, theme))
         .into_any_element()
@@ -457,7 +498,56 @@ fn identity_row(
                         ),
                 ),
         )
+        .child({
+            let identity = identity.clone();
+            let hover = theme.c.hover;
+            let tag = identity.id.clone();
+            div()
+                .id(("edit", 0usize))
+                .debug_selector(move || format!("edit-{tag}"))
+                .flex_none()
+                .size(px(28.0))
+                .rounded(theme.skin.radius_sm)
+                .flex()
+                .items_center()
+                .justify_center()
+                .hover(move |style| style.bg(hover))
+                .on_click(cx.listener(move |shell, _, window, cx| {
+                    shell.open_editor(Some(identity.clone()), None, window, cx);
+                    // Not also a choice of this identity.
+                    cx.stop_propagation();
+                }))
+                .child(icon("pencil", 13.0, theme.c.muted))
+        })
         .child(radio(chosen, theme))
+}
+
+/// The server's password, for the servers that have one.
+fn password_field(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
+    div()
+        .mt(px(2.0))
+        .h(px(38.0))
+        .flex()
+        .items_center()
+        .px(px(12.0))
+        .rounded(theme.skin.radius_md)
+        .bg(theme.c.input)
+        .border_1()
+        .border_color(theme.c.line)
+        .text_size(px(13.0))
+        .child(shell.password.clone())
+}
+
+/// A text link: "+ Add", "+ New identity".
+fn link(id: &'static str, text: &'static str, theme: &Theme) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .debug_selector(move || id.to_owned())
+        .cursor_pointer()
+        .text_size(px(11.5))
+        .text_color(theme.c.accent_text)
+        .hover(|style| style.opacity(0.8))
+        .child(text)
 }
 
 /// A radio mark: a ring, filled when it is the chosen one.
@@ -485,13 +575,19 @@ fn connect_button(
     theme: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
-    let name = shell
-        .selected_identity()
-        .map_or_else(SharedString::default, |identity| identity.username.clone());
+    let connecting = shell.snapshot.connection == Connection::Connecting;
+    let text = if connecting {
+        "Connecting…".to_owned()
+    } else {
+        let name = shell
+            .selected_identity()
+            .map_or_else(SharedString::default, |identity| identity.username.clone());
+        format!("Connect as {name}")
+    };
     div()
         .id("connect")
         .debug_selector(|| "connect".to_owned())
-        .mt(px(10.0))
+        .mt(px(4.0))
         .h(px(42.0))
         .flex()
         .items_center()
@@ -500,10 +596,18 @@ fn connect_button(
         .bg(theme.c.accent)
         .text_color(theme.c.on_accent)
         .font_weight(EMPHASIS)
-        .cursor_pointer()
-        .hover(|style| style.opacity(0.92))
-        .on_click(cx.listener(|shell, _, _, _| shell.connect_selected()))
-        .child(label(&format!("Connect as {name}"), theme))
+        .map(|button| {
+            if connecting {
+                // Under way: a second press would start a second attempt.
+                button.opacity(0.6)
+            } else {
+                button
+                    .cursor_pointer()
+                    .hover(|style| style.opacity(0.92))
+                    .on_click(cx.listener(|shell, _, _, cx| shell.connect_selected(cx)))
+            }
+        })
+        .child(label(&text, theme))
 }
 
 /// The server's address, floating over the banner's trailing corner.

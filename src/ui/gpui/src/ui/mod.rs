@@ -8,6 +8,7 @@ mod conversation;
 mod frame;
 mod picker;
 mod rail;
+mod server_editor;
 mod sidebar;
 #[cfg(test)]
 mod tests;
@@ -26,7 +27,8 @@ use crate::engine::{
     Channel, ChannelId, Connection, Engine, EngineEvent, Message, SavedServer, Session, Snapshot,
     User,
 };
-use crate::theme::{ActiveTheme, Catalog};
+use crate::store::{Settings, Store};
+use crate::theme::{ActiveTheme, Catalog, Mode};
 use text_input::{InputEvent, TextInput};
 
 /// How far past the visible rows the conversation lays messages out, so a
@@ -53,24 +55,47 @@ pub(crate) struct Shell {
     /// The identity picked to connect as, once one was.
     selected_identity: Option<gpui::SharedString>,
     server_search: Entity<TextInput>,
+    /// The server's password, for the connect about to be made.
+    password: Entity<TextInput>,
+    /// The add/edit dialog, while it is open.
+    editor: Option<server_editor::ServerEditor>,
+    /// What the engine last had to tell the user.
+    notice: Option<gpui::SharedString>,
+    /// Where the chosen theme is remembered; `None` remembers nothing.
+    store: Option<Store>,
     /// Whether the theme picker is showing.
     picker_open: bool,
     _events: Task<()>,
-    _subscriptions: [Subscription; 3],
+    _subscriptions: Vec<Subscription>,
 }
 
 impl Shell {
-    /// A shell showing whatever `engine` is connected to.
-    pub(crate) fn new(engine: Arc<dyn Engine>, cx: &mut Context<Self>) -> Self {
+    /// A shell showing whatever `engine` is connected to, remembering the
+    /// chosen theme in `store`.
+    pub(crate) fn new(
+        engine: Arc<dyn Engine>,
+        store: Option<Store>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let composer = cx.new(|cx| TextInput::new("", cx));
         let search = cx.new(|cx| TextInput::new("Search channels", cx));
         let server_search = cx.new(|cx| TextInput::new("Search servers", cx));
-        let subscriptions = [
+        let password = cx.new(|cx| TextInput::new("Server password, if it has one", cx).obscured());
+        let subscriptions = vec![
             cx.subscribe(&composer, Self::on_composer),
             // A search narrows its list as it is typed.
             cx.subscribe(&search, |_, _, _, cx| cx.notify()),
             cx.subscribe(&server_search, |_, _, _, cx| cx.notify()),
+            // Enter in the password field connects.
+            cx.subscribe(&password, |shell, _, event, cx| {
+                if matches!(event, InputEvent::Submitted(_)) {
+                    shell.connect_selected(cx);
+                }
+            }),
         ];
+        // Whether the saved servers are up is asked once, here, and again
+        // whenever the list changes or the view returns to it.
+        engine.refresh_pings();
         let events = Self::listen(engine.events(), cx);
         let mut shell = Self {
             snapshot: engine.snapshot(),
@@ -84,6 +109,10 @@ impl Shell {
             selected_server: None,
             selected_identity: None,
             server_search,
+            password,
+            editor: None,
+            notice: None,
+            store,
             picker_open: std::env::var_os("FANCY_GPUI_PICKER").is_some(),
             _events: events,
             _subscriptions: subscriptions,
@@ -123,7 +152,19 @@ impl Shell {
 
     fn apply(&mut self, event: EngineEvent, cx: &mut Context<Self>) {
         match event {
-            EngineEvent::StateChanged => self.snapshot = self.engine.snapshot(),
+            EngineEvent::StateChanged => {
+                let was = self.snapshot.connection;
+                self.snapshot = self.engine.snapshot();
+                // Back on the server list: what it says about each server is
+                // as old as the visit just ended.
+                if was == Connection::Connected
+                    && self.snapshot.connection == Connection::Disconnected
+                {
+                    self.engine.refresh_pings();
+                }
+            }
+            EngineEvent::ServersChanged => self.servers = self.engine.saved_servers(),
+            EngineEvent::Notice(notice) => self.notice = notice,
             EngineEvent::CurrentChannelChanged => {
                 self.snapshot = self.engine.snapshot();
                 self.reload_messages(cx);
@@ -197,14 +238,22 @@ impl Shell {
             .map(|channel| channel.name.as_ref())
     }
 
-    /// The channels the column lists: all of them, or those whose name
-    /// contains what is in the search field.
-    fn listed_channels(&self, cx: &gpui::App) -> Vec<&Channel> {
+    /// The channels the column lists, each with how deep it sits: the whole
+    /// tree in order, or - flat - those whose name contains what is in the
+    /// search field.
+    fn listed_channels(&self, cx: &gpui::App) -> Vec<(&Channel, usize)> {
         let wanted = self.search.read(cx).text().trim().to_lowercase();
-        self.snapshot
-            .channels
+        let channels = &self.snapshot.channels;
+        if wanted.is_empty() {
+            return sidebar::tree_order(channels)
+                .into_iter()
+                .map(|(at, depth)| (&channels[at], depth))
+                .collect();
+        }
+        channels
             .iter()
-            .filter(|channel| wanted.is_empty() || channel.name.to_lowercase().contains(&wanted))
+            .filter(|channel| channel.name.to_lowercase().contains(&wanted))
+            .map(|channel| (channel, 0))
             .collect()
     }
 
@@ -214,26 +263,6 @@ impl Shell {
             .users
             .iter()
             .filter(move |user| user.channel == channel)
-    }
-
-    /// How many ancestors `channel` has. A parent the engine does not list
-    /// (or a loop it should never send) ends the count rather than the view.
-    fn depth(&self, channel: &Channel) -> usize {
-        let mut depth = 0;
-        let mut parent = channel.parent;
-        while let Some(id) = parent {
-            if depth >= self.snapshot.channels.len() {
-                break;
-            }
-            depth += 1;
-            parent = self
-                .snapshot
-                .channels
-                .iter()
-                .find(|candidate| candidate.id == id)
-                .and_then(|found| found.parent);
-        }
-        depth
     }
 
     fn own_user(&self) -> Option<&User> {
@@ -250,14 +279,31 @@ impl Shell {
     pub(crate) fn next_theme(&mut self, cx: &mut Context<Self>) {
         let theme = ActiveTheme::get(cx);
         if let Some(next) = Catalog::get().next_id(&theme.id) {
-            ActiveTheme::set(next, theme.mode, cx);
+            self.set_theme(next, theme.mode, cx);
         }
     }
 
     /// Flip between the light and dark drawing of the current theme.
     pub(crate) fn toggle_mode(&mut self, cx: &mut Context<Self>) {
         let theme = ActiveTheme::get(cx);
-        ActiveTheme::set(&theme.id, theme.mode.toggled(), cx);
+        self.set_theme(&theme.id, theme.mode.toggled(), cx);
+    }
+
+    /// Switch to `id` in `mode`, and remember the choice.
+    pub(super) fn set_theme(&mut self, id: &str, mode: Mode, cx: &mut Context<Self>) {
+        ActiveTheme::set(id, mode, cx);
+        let Some(store) = &self.store else { return };
+        let chosen = ActiveTheme::get(cx);
+        let settings = Settings {
+            theme: Some(chosen.id.to_string()),
+            mode: Some(match chosen.mode {
+                Mode::Light => "light".to_owned(),
+                Mode::Dark => "dark".to_owned(),
+            }),
+        };
+        if let Err(error) = store.save_settings(&settings) {
+            self.notice = Some(format!("The theme could not be remembered: {error}").into());
+        }
     }
 }
 
@@ -298,6 +344,9 @@ impl Render for Shell {
             })
             .when(self.picker_open, |shell| {
                 shell.child(picker::render(&theme, cx))
+            })
+            .when_some(self.editor.as_ref(), |shell, editor| {
+                shell.child(server_editor::render(editor, &theme, cx))
             })
             .children(frame::resize_grips(window))
     }

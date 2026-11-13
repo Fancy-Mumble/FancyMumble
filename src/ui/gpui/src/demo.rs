@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use crate::engine::{
     Channel, ChannelId, Connection, Engine, EngineEvent, Message, SavedServer, ServerPing, Session,
-    Snapshot, User,
+    Snapshot, User, Voice,
 };
 
 /// The local user's session in the demo server.
@@ -27,6 +27,9 @@ pub(crate) struct DemoEngine {
 #[derive(Debug)]
 struct State {
     connected: bool,
+    voice: Voice,
+    deafened: bool,
+    servers: Vec<SavedServer>,
     current_channel: ChannelId,
     channels: Vec<Channel>,
     users: Vec<User>,
@@ -62,6 +65,14 @@ impl DemoEngine {
         self.tell(EngineEvent::UserTalking { session, talking });
     }
 
+    /// Tell the user something, as a refused connection would.
+    #[cfg(test)]
+    pub(crate) fn notify(&self, notice: Option<&str>) {
+        self.tell(EngineEvent::Notice(
+            notice.map(|text| text.to_owned().into()),
+        ));
+    }
+
     fn with_state<R>(&self, f: impl FnOnce(&mut State) -> R) -> R {
         let mut state = self
             .state
@@ -83,13 +94,14 @@ impl State {
             id,
             parent,
             name: name.to_owned().into(),
+            position: 0,
         };
         let user = |session, name: &str| User {
             session,
             name: name.to_owned().into(),
             channel: LOUNGE,
-            self_mute: session == OWN,
-            self_deaf: false,
+            muted: session == OWN,
+            deafened: false,
         };
         let said = |minute: u64, session: Session, name: &str, body: &str| {
             (
@@ -98,13 +110,30 @@ impl State {
                     sender: Some(session),
                     sender_name: name.to_owned().into(),
                     body: body.to_owned().into(),
-                    sent_at_ms: FIRST_MESSAGE_MS + minute * MINUTE_MS,
+                    sent_at_ms: Some(FIRST_MESSAGE_MS + minute * MINUTE_MS),
                     own: session == OWN,
                 },
             )
         };
+        let saved = |id: &str, host: &str, username: &str, favorite| SavedServer {
+            id: id.to_owned().into(),
+            label: host.to_owned().into(),
+            host: host.to_owned().into(),
+            port: 64738,
+            username: username.to_owned().into(),
+            certificate: None,
+            favorite,
+        };
         Self {
             connected: true,
+            voice: Voice::Off,
+            deafened: false,
+            servers: vec![
+                saved("magical-alex", "magical.rocks", "Alex", true),
+                saved("magical-work", "magical.rocks", "Alex (work)", true),
+                saved("kumo", "kumo.jp", "Alex", false),
+                saved("local", "localhost", "Alex", false),
+            ],
             current_channel: LOUNGE,
             channels: vec![
                 channel(0, None, "Root"),
@@ -143,13 +172,7 @@ impl Engine for DemoEngine {
     fn snapshot(&self) -> Snapshot {
         self.with_state(|state| {
             if !state.connected {
-                return Snapshot {
-                    connection: Connection::Disconnected,
-                    own_session: None,
-                    current_channel: None,
-                    channels: Vec::new(),
-                    users: Vec::new(),
-                };
+                return Snapshot::disconnected();
             }
             Snapshot {
                 connection: Connection::Connected,
@@ -157,26 +180,41 @@ impl Engine for DemoEngine {
                 current_channel: Some(state.current_channel),
                 channels: state.channels.clone(),
                 users: state.users.clone(),
+                voice: state.voice,
+                deafened: state.deafened,
             }
         })
     }
 
     fn saved_servers(&self) -> Vec<SavedServer> {
-        let saved = |id: &str, host: &str, username: &str, favorite| SavedServer {
-            id: id.to_owned().into(),
-            label: host.to_owned().into(),
-            host: host.to_owned().into(),
-            port: 64738,
-            username: username.to_owned().into(),
-            certificate: None,
-            favorite,
-        };
-        vec![
-            saved("magical-alex", "magical.rocks", "Alex", true),
-            saved("magical-work", "magical.rocks", "Alex (work)", true),
-            saved("kumo", "kumo.jp", "Alex", false),
-            saved("local", "localhost", "Alex", false),
-        ]
+        self.with_state(|state| state.servers.clone())
+    }
+
+    fn refresh_pings(&self) {
+        // The demo's answers never change; say so anyway, as a real engine
+        // would once its servers have replied.
+        self.tell(EngineEvent::ServersChanged);
+    }
+
+    fn save_server(&self, server: SavedServer) {
+        self.with_state(|state| {
+            match state.servers.iter_mut().find(|saved| saved.id == server.id) {
+                Some(existing) => *existing = server,
+                None => state.servers.push(server),
+            }
+        });
+        self.tell(EngineEvent::ServersChanged);
+    }
+
+    fn remove_server(&self, id: &str) {
+        let removed = self.with_state(|state| {
+            let before = state.servers.len();
+            state.servers.retain(|saved| saved.id != id);
+            state.servers.len() != before
+        });
+        if removed {
+            self.tell(EngineEvent::ServersChanged);
+        }
     }
 
     fn ping(&self, host: &str, _port: u16) -> Option<ServerPing> {
@@ -194,7 +232,7 @@ impl Engine for DemoEngine {
         }
     }
 
-    fn connect(&self, id: &str) {
+    fn connect(&self, id: &str, _password: Option<String>) {
         let known = self.saved_servers().iter().any(|saved| saved.id == id);
         let connected = self.with_state(|state| {
             let changes = known && !state.connected;
@@ -254,14 +292,15 @@ impl Engine for DemoEngine {
             let sent_at_ms = state
                 .messages
                 .last()
-                .map_or(FIRST_MESSAGE_MS, |(_, last)| last.sent_at_ms + MINUTE_MS);
+                .and_then(|(_, last)| last.sent_at_ms)
+                .map_or(FIRST_MESSAGE_MS, |last| last + MINUTE_MS);
             state.messages.push((
                 channel,
                 Message {
                     sender: Some(OWN),
                     sender_name: "Alex".into(),
                     body: body.into(),
-                    sent_at_ms,
+                    sent_at_ms: Some(sent_at_ms),
                     own: true,
                 },
             ));
@@ -269,27 +308,36 @@ impl Engine for DemoEngine {
         self.tell(EngineEvent::NewMessage { channel });
     }
 
-    fn set_self_mute(&self, muted: bool) {
+    fn toggle_microphone(&self) {
         self.with_state(|state| {
+            state.voice = match state.voice {
+                Voice::Off | Voice::Muted => Voice::On,
+                Voice::On => Voice::Muted,
+            };
+            // Unmuting undeafens, as it does on a real server.
+            if state.voice == Voice::On {
+                state.deafened = false;
+            }
+            let (muted, deafened) = (state.voice != Voice::On, state.deafened);
             if let Some(own) = state.users.iter_mut().find(|user| user.session == OWN) {
-                own.self_mute = muted;
-                // Unmuting undeafens, as it does on a real server.
-                if !muted {
-                    own.self_deaf = false;
-                }
+                own.muted = muted;
+                own.deafened = deafened;
             }
         });
         self.tell(EngineEvent::StateChanged);
     }
 
-    fn set_self_deaf(&self, deafened: bool) {
+    fn toggle_deafen(&self) {
         self.with_state(|state| {
+            state.deafened = !state.deafened;
+            // Deafening mutes, as it does on a real server.
+            if state.deafened && state.voice == Voice::On {
+                state.voice = Voice::Muted;
+            }
+            let (muted, deafened) = (state.voice != Voice::On, state.deafened);
             if let Some(own) = state.users.iter_mut().find(|user| user.session == OWN) {
-                own.self_deaf = deafened;
-                // Deafening mutes, as it does on a real server.
-                if deafened {
-                    own.self_mute = true;
-                }
+                own.muted = muted;
+                own.deafened = deafened;
             }
         });
         self.tell(EngineEvent::StateChanged);
@@ -352,11 +400,11 @@ mod tests {
         assert_eq!(snapshot.connection, Connection::Disconnected);
         assert!(snapshot.channels.is_empty() && snapshot.own_session.is_none());
 
-        engine.connect("no-such-identity");
+        engine.connect("no-such-identity", None);
         assert_eq!(engine.snapshot().connection, Connection::Disconnected);
         assert!(drain(&engine).is_empty());
 
-        engine.connect("kumo");
+        engine.connect("kumo", None);
         assert_eq!(engine.snapshot().connection, Connection::Connected);
         assert_eq!(
             drain(&engine),
@@ -373,21 +421,48 @@ mod tests {
     }
 
     #[test]
-    fn deafening_mutes_and_unmuting_undeafens() {
+    fn the_microphone_button_turns_voice_on_then_mutes_and_deafen_mutes() {
         let engine = DemoEngine::new();
-        let own = |engine: &DemoEngine| {
-            engine
-                .snapshot()
-                .users
-                .into_iter()
-                .find(|user| user.session == OWN)
-                .expect("the local user")
-        };
-        engine.set_self_mute(false);
-        assert!(!own(&engine).self_mute);
-        engine.set_self_deaf(true);
-        assert!(own(&engine).self_mute && own(&engine).self_deaf);
-        engine.set_self_mute(false);
-        assert!(!own(&engine).self_mute && !own(&engine).self_deaf);
+        assert_eq!(engine.snapshot().voice, Voice::Off);
+        engine.toggle_microphone();
+        assert_eq!(engine.snapshot().voice, Voice::On);
+        engine.toggle_microphone();
+        assert_eq!(engine.snapshot().voice, Voice::Muted);
+        engine.toggle_microphone();
+        engine.toggle_deafen();
+        let snapshot = engine.snapshot();
+        assert!(snapshot.deafened);
+        assert_eq!(snapshot.voice, Voice::Muted, "deafening mutes");
+        engine.toggle_microphone();
+        let snapshot = engine.snapshot();
+        assert!(!snapshot.deafened, "unmuting undeafens");
+        assert_eq!(snapshot.voice, Voice::On);
+    }
+
+    #[test]
+    fn a_saved_server_is_added_replaced_and_removed() {
+        let engine = DemoEngine::new();
+        let before = engine.saved_servers().len();
+        let mut server = engine.saved_servers()[0].clone();
+        server.id = "new".into();
+        server.host = "new.example".into();
+        engine.save_server(server.clone());
+        assert_eq!(engine.saved_servers().len(), before + 1);
+        server.username = "Renamed".into();
+        engine.save_server(server);
+        let saved = engine.saved_servers();
+        assert_eq!(saved.len(), before + 1, "the same id replaces");
+        assert_eq!(saved[before].username.as_ref(), "Renamed");
+        engine.remove_server("new");
+        engine.remove_server("new");
+        assert_eq!(engine.saved_servers().len(), before);
+        assert_eq!(
+            drain(&engine),
+            [
+                EngineEvent::ServersChanged,
+                EngineEvent::ServersChanged,
+                EngineEvent::ServersChanged
+            ]
+        );
     }
 }

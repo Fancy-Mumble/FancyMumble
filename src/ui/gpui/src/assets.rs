@@ -38,6 +38,7 @@ icons![
     "moon",
     "palette",
     "paperclip",
+    "pencil",
     "pin",
     "plus",
     "search",

@@ -3,9 +3,10 @@
 //! The view never names a concrete engine: it holds an [`Engine`] and reads
 //! from it when an [`EngineEvent`] says something changed. That mirrors how
 //! the real engine talks to a view (its `CoreEvent`s are notifications, and
-//! the view reads the state it mirrors again), so the adapter that puts the
-//! real engine behind this trait is a mapping, not a translation layer.
-//! Until then [`crate::demo::DemoEngine`] stands in.
+//! the view reads the state it mirrors again), so [`crate::real::RealEngine`],
+//! which puts the real engine behind this trait, is a mapping and not a
+//! translation layer. [`crate::demo::DemoEngine`] is a server that exists
+//! only in memory, for tests and for looking at the view.
 
 use gpui::SharedString;
 
@@ -20,7 +21,6 @@ pub(crate) enum Connection {
     /// Not connected.
     Disconnected,
     /// A connection attempt is under way.
-    #[expect(dead_code, reason = "the demo engine connects at once")]
     Connecting,
     /// Connected and synchronised.
     Connected,
@@ -54,6 +54,17 @@ pub(crate) struct ServerPing {
     pub version: SharedString,
 }
 
+/// The local voice state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Voice {
+    /// Voice is off: nothing is captured and nothing is heard.
+    Off,
+    /// Hearing and transmitting.
+    On,
+    /// Hearing, with the microphone muted.
+    Muted,
+}
+
 /// One channel of the server's tree.
 #[derive(Debug, Clone)]
 pub(crate) struct Channel {
@@ -61,6 +72,8 @@ pub(crate) struct Channel {
     /// `None` for the root.
     pub parent: Option<ChannelId>,
     pub name: SharedString,
+    /// Where the channel sorts among its siblings; ties go by name.
+    pub position: i32,
 }
 
 /// One connected user.
@@ -70,8 +83,10 @@ pub(crate) struct User {
     pub name: SharedString,
     /// The channel the user is in.
     pub channel: ChannelId,
-    pub self_mute: bool,
-    pub self_deaf: bool,
+    /// Muted, by themselves or by the server.
+    pub muted: bool,
+    /// Deafened, by themselves or by the server.
+    pub deafened: bool,
 }
 
 /// One chat message, as the conversation shows it.
@@ -82,8 +97,8 @@ pub(crate) struct Message {
     pub sender_name: SharedString,
     /// The text. Rich content is not drawn yet, so this is plain.
     pub body: SharedString,
-    /// When it was sent, in Unix epoch milliseconds.
-    pub sent_at_ms: u64,
+    /// When it was sent, in Unix epoch milliseconds, where the server said.
+    pub sent_at_ms: Option<u64>,
     /// Whether the local user sent it.
     pub own: bool,
 }
@@ -98,12 +113,31 @@ pub(crate) struct Snapshot {
     pub current_channel: Option<ChannelId>,
     pub channels: Vec<Channel>,
     pub users: Vec<User>,
+    /// The local voice state.
+    pub voice: Voice,
+    /// Whether the local user is deafened.
+    pub deafened: bool,
+}
+
+impl Snapshot {
+    /// What there is to show when not on a server.
+    pub(crate) fn disconnected() -> Self {
+        Self {
+            connection: Connection::Disconnected,
+            own_session: None,
+            current_channel: None,
+            channels: Vec::new(),
+            users: Vec::new(),
+            voice: Voice::Off,
+            deafened: false,
+        }
+    }
 }
 
 /// Something happened in the engine. Each names what to read again.
 ///
 /// Named after the engine's own events so the adapter is one `match`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum EngineEvent {
     /// Channels, users or the connection changed: take a new [`Snapshot`].
     StateChanged,
@@ -113,6 +147,11 @@ pub(crate) enum EngineEvent {
     UserTalking { session: Session, talking: bool },
     /// A channel received, changed or lost a message.
     NewMessage { channel: ChannelId },
+    /// The saved servers, or what is known of whether they are up, changed.
+    ServersChanged,
+    /// Something the user should be told: a refused connection, a failed
+    /// command. `None` clears what was said before.
+    Notice(Option<SharedString>),
 }
 
 /// An engine, as this view sees one.
@@ -133,8 +172,19 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// has not answered (or is down).
     fn ping(&self, host: &str, port: u16) -> Option<ServerPing>;
 
-    /// Connect as the saved identity `id`.
-    fn connect(&self, id: &str);
+    /// Ask every saved server again whether it is up. The answers arrive
+    /// later, each announced by [`EngineEvent::ServersChanged`].
+    fn refresh_pings(&self);
+
+    /// Save `server`: a new record, or a replacement for the one with its id.
+    fn save_server(&self, server: SavedServer);
+
+    /// Forget the saved identity `id`.
+    fn remove_server(&self, id: &str);
+
+    /// Connect as the saved identity `id`, with the server's password if it
+    /// wants one.
+    fn connect(&self, id: &str, password: Option<String>);
 
     /// Leave the server.
     fn disconnect(&self);
@@ -148,9 +198,10 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// Send `body` to `channel`.
     fn send_message(&self, channel: ChannelId, body: String);
 
-    /// Mute or unmute the local microphone.
-    fn set_self_mute(&self, muted: bool);
+    /// The microphone button: turns voice on when it is off, mutes or
+    /// unmutes when it is on.
+    fn toggle_microphone(&self);
 
     /// Deafen or undeafen the local user.
-    fn set_self_deaf(&self, deafened: bool);
+    fn toggle_deafen(&self);
 }

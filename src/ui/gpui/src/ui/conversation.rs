@@ -321,7 +321,7 @@ mod tests {
             sender: Some(1),
             sender_name: "Alex".into(),
             body: "hi".into(),
-            sent_at_ms: 0,
+            sent_at_ms: Some(0),
             own: true,
         };
         assert_eq!(row_count(&[message.clone(), message]), 3);

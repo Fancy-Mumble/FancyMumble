@@ -20,6 +20,14 @@ pub(crate) enum InputEvent {
     Submitted(String),
     /// The text changed.
     Changed,
+    /// Tab was pressed: focus belongs to the next field; with shift, to the
+    /// one before.
+    Tabbed {
+        /// Whether shift was held.
+        back: bool,
+    },
+    /// Escape was pressed.
+    Cancelled,
 }
 
 /// The text of a field and where its caret is: the editing itself, with
@@ -83,6 +91,8 @@ impl Line {
 pub(crate) struct TextInput {
     line: Line,
     placeholder: SharedString,
+    /// Whether the text is drawn as dots: a password.
+    obscured: bool,
     focus: FocusHandle,
 }
 
@@ -100,8 +110,26 @@ impl TextInput {
         Self {
             line: Line::default(),
             placeholder: placeholder.into(),
+            obscured: false,
             focus: cx.focus_handle(),
         }
+    }
+
+    /// The same field, drawing what is typed as dots.
+    pub(crate) fn obscured(mut self) -> Self {
+        self.obscured = true;
+        self
+    }
+
+    /// Replace the text, leaving the caret after it.
+    pub(crate) fn set_text(&mut self, text: impl Into<String>) {
+        self.line.text = text.into();
+        self.line.caret = self.line.text.len();
+    }
+
+    /// Give the field the keyboard.
+    pub(crate) fn focus(&self, window: &mut Window) {
+        window.focus(&self.focus);
     }
 
     /// The text in the field.
@@ -134,6 +162,16 @@ impl TextInput {
                 cx.emit(InputEvent::Submitted(self.line.text.clone()));
                 return;
             }
+            "tab" => {
+                cx.emit(InputEvent::Tabbed {
+                    back: keystroke.modifiers.shift,
+                });
+                return;
+            }
+            "escape" => {
+                cx.emit(InputEvent::Cancelled);
+                return;
+            }
             "v" if command => {
                 if let Some(pasted) = cx.read_from_clipboard().and_then(|item| item.text()) {
                     // One line: a pasted paragraph joins up rather than
@@ -141,7 +179,8 @@ impl TextInput {
                     self.line.insert(&pasted.replace(['\n', '\r'], " "));
                 }
             }
-            "c" if command => {
+            // A password is not handed to the clipboard.
+            "c" if command && !self.obscured => {
                 cx.write_to_clipboard(ClipboardItem::new_string(self.line.text.clone()));
             }
             _ if command || keystroke.modifiers.alt => return,
@@ -174,10 +213,17 @@ impl Render for TextInput {
             )
         } else {
             let (before, after) = self.line.text.split_at(self.line.caret);
+            let shown = |text: &str| {
+                if self.obscured {
+                    "•".repeat(text.chars().count())
+                } else {
+                    text.to_owned()
+                }
+            };
             line.text_color(theme.c.text)
-                .child(before.to_owned())
+                .child(shown(before))
                 .when(focused, |line| line.child(caret))
-                .child(after.to_owned())
+                .child(shown(after))
         };
         div()
             .id("text-input")

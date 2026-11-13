@@ -25,6 +25,11 @@ x11 = ["gpui/x11"]
 
 [dependencies]
 gpui = { version = "0.2.2", default-features = false, features = ["font-kit"] }
+# The engine. Still inside the Tauri package, built here without the Tauri
+# view (`default-features = false`), so none of Tauri is compiled or linked.
+mumble-tauri = { path = "../../../crates/mumble-tauri", default-features = false }
+# The engine's background work runs on a runtime the view owns.
+tokio = { version = "1", features = ["rt-multi-thread"] }
 # The engine reports to the view over a channel the UI thread can await.
 async-channel = "2"
 # The theme table (assets/themes.json) is generated from the web UI's

@@ -73,11 +73,15 @@ pub(crate) fn label(text: &str, theme: &Theme) -> SharedString {
     }
 }
 
-/// `HH:MM` for a Unix epoch time in milliseconds.
+/// `HH:MM` for a Unix epoch time in milliseconds, or nothing for a message
+/// that carries no time (a server that does not send one).
 ///
-/// UTC for now: the local offset comes from the engine's settings once the
-/// real engine is behind the view.
-pub(crate) fn clock(sent_at_ms: u64) -> String {
+/// UTC for now: the view has no time zone database, and the local offset is
+/// not worth a dependency until the settings can state it.
+pub(crate) fn clock(sent_at_ms: Option<u64>) -> String {
+    let Some(sent_at_ms) = sent_at_ms else {
+        return String::new();
+    };
     let minutes = sent_at_ms / 60_000;
     format!("{:02}:{:02}", (minutes / 60) % 24, minutes % 60)
 }
@@ -100,8 +104,9 @@ mod tests {
 
     #[test]
     fn formats_a_time_of_day() {
-        assert_eq!(clock(0), "00:00");
-        assert_eq!(clock(1_760_045_820_000), "21:37");
-        assert_eq!(clock(1_760_045_820_000 + 23 * 60_000), "22:00");
+        assert_eq!(clock(Some(0)), "00:00");
+        assert_eq!(clock(Some(1_760_045_820_000)), "21:37");
+        assert_eq!(clock(Some(1_760_045_820_000 + 23 * 60_000)), "22:00");
+        assert_eq!(clock(None), "");
     }
 }

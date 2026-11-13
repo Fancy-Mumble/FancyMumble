@@ -7,7 +7,7 @@ use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
 
 use super::Shell;
 use crate::demo::DemoEngine;
-use crate::engine::{Connection, Engine};
+use crate::engine::{Connection, Engine, Voice};
 use crate::theme::{ActiveTheme, Catalog, DEFAULT_THEME, Mode};
 
 /// A shell on a fresh demo server, in the default theme.
@@ -28,7 +28,7 @@ fn shell_on(
     });
     let engine = Arc::new(engine);
     let for_shell: Arc<dyn Engine> = engine.clone();
-    let (shell, cx) = cx.add_window_view(|_, cx| Shell::new(for_shell, cx));
+    let (shell, cx) = cx.add_window_view(|_, cx| Shell::new(for_shell, None, cx));
     cx.run_until_parked();
     (shell, engine, cx)
 }
@@ -96,7 +96,7 @@ fn keys_go_to_the_field_that_was_clicked(cx: &mut TestAppContext) {
         let listed: Vec<_> = shell
             .listed_channels(cx)
             .iter()
-            .map(|channel| channel.name.as_ref())
+            .map(|(channel, _)| channel.name.as_ref())
             .collect();
         assert_eq!(listed, ["studio"]);
     });
@@ -106,24 +106,28 @@ fn keys_go_to_the_field_that_was_clicked(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn the_voice_buttons_mute_and_deafen(cx: &mut TestAppContext) {
-    let (_shell, engine, cx) = shell(cx);
-    let own = |engine: &DemoEngine| {
-        let snapshot = engine.snapshot();
-        let own = snapshot.own_session;
-        snapshot
-            .users
-            .into_iter()
-            .find(|user| Some(user.session) == own)
-            .expect("the local user")
-    };
-    assert!(own(&engine).self_mute, "the demo starts muted");
+fn the_voice_buttons_turn_voice_on_mute_and_deafen(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    assert_eq!(
+        engine.snapshot().voice,
+        Voice::Off,
+        "the demo starts with voice off"
+    );
     click(cx, "mute");
-    assert!(!own(&engine).self_mute);
+    assert_eq!(
+        engine.snapshot().voice,
+        Voice::On,
+        "the first press turns voice on"
+    );
+    click(cx, "mute");
+    assert_eq!(engine.snapshot().voice, Voice::Muted);
     click(cx, "deafen");
-    assert!(own(&engine).self_deaf && own(&engine).self_mute);
+    assert!(engine.snapshot().deafened);
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.snapshot.deafened, "the view has seen it");
+    });
     click(cx, "deafen");
-    assert!(!own(&engine).self_deaf);
+    assert!(!engine.snapshot().deafened);
 }
 
 #[gpui::test]
@@ -264,4 +268,109 @@ fn the_server_search_narrows_the_list(cx: &mut TestAppContext) {
             .collect();
         assert_eq!(listed, ["kumo.jp"]);
     });
+}
+
+#[gpui::test]
+fn the_channel_column_lists_the_tree_in_order(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell(cx);
+    shell.read_with(cx, |shell, cx| {
+        let listed: Vec<_> = shell
+            .listed_channels(cx)
+            .iter()
+            .map(|(channel, depth)| (channel.name.to_string(), *depth))
+            .collect();
+        assert_eq!(
+            listed,
+            [
+                ("Root".to_owned(), 0),
+                ("afk".to_owned(), 1),
+                ("lounge".to_owned(), 1),
+                ("studio".to_owned(), 1),
+            ]
+        );
+    });
+}
+
+#[gpui::test]
+fn adding_a_server_through_the_dialog_saves_and_selects_it(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell_on(DemoEngine::disconnected(), cx);
+    let before = engine.saved_servers().len();
+    click(cx, "add-server");
+    shell.read_with(cx, |shell, _| assert!(shell.editor.is_some()));
+    // The address has the keyboard; tab reaches the port, then the name.
+    cx.simulate_keystrokes("n e w . e x a m p l e tab 1 2 3 4 tab z o e");
+    click(cx, "editor-save");
+    let saved = engine.saved_servers();
+    assert_eq!(saved.len(), before + 1);
+    let added = saved.last().expect("the new identity");
+    assert_eq!(
+        (added.host.as_ref(), added.port, added.username.as_ref()),
+        ("new.example", 1234, "zoe")
+    );
+    assert_eq!(added.certificate.as_ref().map(AsRef::as_ref), Some("zoe"));
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.editor.is_none(), "the dialog closed");
+        assert_eq!(shell.servers.len(), before + 1, "the list has it");
+        assert_eq!(
+            shell.selected_server().map(|server| server.key),
+            Some("new.example:1234".to_owned())
+        );
+    });
+}
+
+#[gpui::test]
+fn the_dialog_refuses_what_cannot_be_connected_to(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell_on(DemoEngine::disconnected(), cx);
+    let before = engine.saved_servers().len();
+    click(cx, "add-server");
+    click(cx, "editor-save");
+    assert_eq!(engine.saved_servers().len(), before, "nothing was saved");
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.editor.is_some(), "the dialog stays open")
+    });
+    cx.simulate_keystrokes("escape");
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.editor.is_none(), "escape closes it")
+    });
+}
+
+#[gpui::test]
+fn an_identity_can_be_edited_and_forgotten(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell_on(DemoEngine::disconnected(), cx);
+    let before = engine.saved_servers().len();
+    click(cx, "edit-magical-work");
+    // The address has the keyboard; two tabs on is the name.
+    cx.simulate_keystrokes(
+        "tab tab backspace backspace backspace backspace backspace backspace enter",
+    );
+    let renamed = engine
+        .saved_servers()
+        .into_iter()
+        .find(|saved| saved.id == "magical-work")
+        .expect("still saved");
+    assert_eq!(
+        renamed.username.as_ref(),
+        "Alex",
+        "the suffix went, and the space with it"
+    );
+    click(cx, "edit-magical-work");
+    click(cx, "editor-delete");
+    assert_eq!(engine.saved_servers().len(), before - 1);
+    shell.read_with(cx, |shell, _| assert!(shell.editor.is_none()));
+}
+
+#[gpui::test]
+fn a_notice_from_the_engine_is_shown_until_cleared(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell_on(DemoEngine::disconnected(), cx);
+    engine.notify(Some("Wrong password"));
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(
+            shell.notice.as_ref().map(AsRef::as_ref),
+            Some("Wrong password")
+        );
+    });
+    engine.notify(None);
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| assert!(shell.notice.is_none()));
 }

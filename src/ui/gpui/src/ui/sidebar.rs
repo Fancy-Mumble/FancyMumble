@@ -7,8 +7,53 @@ use gpui::{
 
 use super::Shell;
 use super::widgets::{EMPHASIS, avatar, icon, label};
-use crate::engine::{Channel, Connection, User};
+use crate::engine::{Channel, Connection, User, Voice};
 use crate::theme::{Fill, Theme};
+
+/// `channels` in the order a tree lists them - each parent, then its
+/// children by position and then by name - as `(index, depth)`.
+///
+/// A channel whose parent is not in the list is shown at the top rather than
+/// lost, and a loop (which no server should send) is walked once.
+pub(super) fn tree_order(channels: &[Channel]) -> Vec<(usize, usize)> {
+    let known = |id| channels.iter().any(|channel: &Channel| channel.id == id);
+    let children_of = |parent: Option<u32>| {
+        let mut children: Vec<usize> = (0..channels.len())
+            .filter(|&at| match (channels[at].parent, parent) {
+                (Some(of), Some(wanted)) => of == wanted && channels[at].id != wanted,
+                // Roots: no parent, or one this list does not have.
+                (of, None) => of.is_none_or(|of| !known(of) || of == channels[at].id),
+                (None, Some(_)) => false,
+            })
+            .collect();
+        children.sort_by(|&a, &b| {
+            let key = |at: usize| (channels[at].position, channels[at].name.to_lowercase());
+            key(a).cmp(&key(b))
+        });
+        children
+    };
+    let mut ordered = Vec::with_capacity(channels.len());
+    let mut seen = vec![false; channels.len()];
+    // Depth first, with the stack reversed so siblings come out in order.
+    let mut stack: Vec<(usize, usize)> = children_of(None)
+        .into_iter()
+        .rev()
+        .map(|at| (at, 0))
+        .collect();
+    while let Some((at, depth)) = stack.pop() {
+        if std::mem::replace(&mut seen[at], true) {
+            continue;
+        }
+        ordered.push((at, depth));
+        stack.extend(
+            children_of(Some(channels[at].id))
+                .into_iter()
+                .rev()
+                .map(|child| (child, depth + 1)),
+        );
+    }
+    ordered
+}
 
 /// How far each level of the channel tree steps in.
 const INDENT: f32 = 11.0;
@@ -74,11 +119,11 @@ fn search_box(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
 /// The channel tree, flattened to rows, narrowed by the search field.
 fn channel_rows(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> Vec<AnyElement> {
     let mut rows = Vec::new();
-    for channel in shell.listed_channels(cx) {
+    for (channel, depth) in shell.listed_channels(cx) {
         let current = shell.snapshot.current_channel == Some(channel.id);
-        rows.push(channel_row(shell, channel, current, theme, cx));
+        rows.push(channel_row(shell, channel, depth, current, theme, cx));
         if current {
-            rows.push(occupant_list(shell, channel, theme));
+            rows.push(occupant_list(shell, channel, depth, theme));
         }
     }
     rows
@@ -87,12 +132,12 @@ fn channel_rows(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> Vec<An
 fn channel_row(
     shell: &Shell,
     channel: &Channel,
+    depth: usize,
     current: bool,
     theme: &Theme,
     cx: &mut Context<Shell>,
 ) -> AnyElement {
     let occupants = shell.occupants(channel.id).count();
-    let depth = shell.depth(channel);
     let solid = current && theme.skin.selection == Fill::Solid;
     let (ink, hash) = if solid {
         (theme.c.on_accent, theme.c.on_accent)
@@ -151,10 +196,10 @@ fn channel_row(
 }
 
 /// Who is in the current channel, on a card hanging under its row.
-fn occupant_list(shell: &Shell, channel: &Channel, theme: &Theme) -> AnyElement {
+fn occupant_list(shell: &Shell, channel: &Channel, depth: usize, theme: &Theme) -> AnyElement {
     div()
         .flex_none()
-        .ml(px(INDENT * shell.depth(channel) as f32))
+        .ml(px(INDENT * depth as f32))
         .flex()
         .flex_col()
         .py(px(4.0))
@@ -201,10 +246,10 @@ fn occupant_row(shell: &Shell, user: &User, theme: &Theme) -> impl IntoElement +
                 .text_color(if own { theme.c.muted } else { theme.c.text })
                 .child(user.name.clone()),
         )
-        .when(user.self_deaf, |row| {
+        .when(user.deafened, |row| {
             row.child(icon("headphone-off", 12.0, theme.c.dim))
         })
-        .when(user.self_mute && !own, |row| {
+        .when(user.muted && !user.deafened, |row| {
             row.child(icon("mic-off", 12.0, theme.c.dim))
         })
         .when(own, |row| {
@@ -219,16 +264,21 @@ fn occupant_row(shell: &Shell, user: &User, theme: &Theme) -> impl IntoElement +
 
 /// The local user's tile: who they are, and the voice controls.
 fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
-    let (name, muted, deafened) = shell.own_user().map_or_else(
-        || (SharedString::from("Not connected"), true, false),
-        |user| (user.name.clone(), user.self_mute, user.self_deaf),
+    let name = shell.own_user().map_or_else(
+        || SharedString::from("Not connected"),
+        |user| user.name.clone(),
     );
-    let status = match (shell.snapshot.connection, deafened, muted) {
+    let deafened = shell.snapshot.deafened;
+    // The microphone is "off" both when voice is off and when it is muted:
+    // either way nobody hears the user, which is what the red says.
+    let silent = shell.snapshot.voice != Voice::On;
+    let status = match (shell.snapshot.connection, deafened, shell.snapshot.voice) {
         (Connection::Disconnected, ..) => "Not connected",
         (Connection::Connecting, ..) => "Connecting…",
         (Connection::Connected, true, _) => "Deafened",
-        (Connection::Connected, false, true) => "Voice off",
-        (Connection::Connected, false, false) => "Voice on",
+        (Connection::Connected, false, Voice::Off) => "Voice off",
+        (Connection::Connected, false, Voice::Muted) => "Muted",
+        (Connection::Connected, false, Voice::On) => "Voice on",
     };
     div()
         .flex_none()
@@ -274,15 +324,13 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
                         .child(
                             voice_button(
                                 "mute",
-                                if muted { "mic-off" } else { "mic" },
-                                muted,
+                                if silent { "mic-off" } else { "mic" },
+                                silent,
                                 theme,
                             )
-                            .on_click(cx.listener(
-                                move |shell, _, _, _| {
-                                    shell.engine.set_self_mute(!muted);
-                                },
-                            )),
+                            .on_click(
+                                cx.listener(|shell, _, _, _| shell.engine.toggle_microphone()),
+                            ),
                         )
                         .child(
                             voice_button(
@@ -295,11 +343,7 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
                                 deafened,
                                 theme,
                             )
-                            .on_click(cx.listener(
-                                move |shell, _, _, _| {
-                                    shell.engine.set_self_deaf(!deafened);
-                                },
-                            )),
+                            .on_click(cx.listener(|shell, _, _, _| shell.engine.toggle_deafen())),
                         )
                         .child(div().flex_1())
                         .child(icon("monitor-up", 16.0, theme.c.muted)),
@@ -341,4 +385,69 @@ fn voice_button(
             15.0,
             if off { theme.c.bad } else { theme.c.muted },
         ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn channel(id: u32, parent: Option<u32>, name: &str, position: i32) -> Channel {
+        Channel {
+            id,
+            parent,
+            name: name.to_owned().into(),
+            position,
+        }
+    }
+
+    fn names(channels: &[Channel]) -> Vec<(String, usize)> {
+        tree_order(channels)
+            .into_iter()
+            .map(|(at, depth)| (channels[at].name.to_string(), depth))
+            .collect()
+    }
+
+    fn row(name: &str, depth: usize) -> (String, usize) {
+        (name.to_owned(), depth)
+    }
+
+    #[test]
+    fn children_follow_their_parent_by_position_then_name() {
+        // Listed in an order nothing like the tree's.
+        let channels = [
+            channel(5, Some(2), "deep", 0),
+            channel(3, Some(0), "beta", 0),
+            channel(0, None, "Root", 0),
+            channel(4, Some(0), "last", 9),
+            channel(2, Some(0), "Alpha", 0),
+            channel(6, Some(0), "first", -1),
+        ];
+        assert_eq!(
+            names(&channels),
+            [
+                row("Root", 0),
+                row("first", 1),
+                row("Alpha", 1),
+                row("deep", 2),
+                row("beta", 1),
+                row("last", 1),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_orphan_is_listed_and_a_loop_is_walked_once() {
+        let orphan = [channel(0, None, "Root", 0), channel(7, Some(99), "lost", 0)];
+        assert_eq!(names(&orphan), [row("lost", 0), row("Root", 0)]);
+
+        let looped = [
+            channel(0, None, "Root", 0),
+            channel(1, Some(2), "a", 0),
+            channel(2, Some(1), "b", 0),
+            channel(3, Some(3), "self", 0),
+        ];
+        let listed = names(&looped);
+        assert!(listed.contains(&row("Root", 0)) && listed.contains(&row("self", 0)));
+        assert!(listed.len() <= looped.len(), "nothing is listed twice");
+    }
 }

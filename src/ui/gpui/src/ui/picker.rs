@@ -4,7 +4,7 @@ use gpui::{Context, IntoElement, ParentElement, Styled, div, prelude::*, px};
 
 use super::Shell;
 use super::widgets::{EMPHASIS, icon, label, opaque};
-use crate::theme::{ActiveTheme, Catalog, Mode, Theme, ThemeEntry};
+use crate::theme::{Catalog, Mode, Theme, ThemeEntry};
 
 pub(super) fn render(theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let entries = Catalog::get().entries(theme.mode);
@@ -84,7 +84,7 @@ fn theme_row(
         .cursor_pointer()
         .when(current, |row| row.bg(theme.c.accent_soft))
         .when(!current, |row| row.hover(move |style| style.bg(hover)))
-        .on_click(cx.listener(move |_, _, _, cx| ActiveTheme::set(&id, mode, cx)))
+        .on_click(cx.listener(move |shell, _, _, cx| shell.set_theme(&id, mode, cx)))
         .child(
             div()
                 .flex()

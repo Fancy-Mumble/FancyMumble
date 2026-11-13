@@ -11,6 +11,9 @@
 mod assets;
 mod demo;
 mod engine;
+mod paths;
+mod real;
+mod store;
 mod theme;
 mod ui;
 
@@ -43,7 +46,6 @@ fn main() {
     Application::new()
         .with_assets(assets::Assets)
         .run(|cx: &mut App| {
-            install_theme(cx);
             cx.bind_keys([
                 KeyBinding::new("ctrl-shift-t", NextTheme, None),
                 KeyBinding::new("ctrl-shift-l", ToggleMode, None),
@@ -51,22 +53,8 @@ fn main() {
             ]);
             cx.on_action(|_: &Quit, cx| cx.quit());
 
-            // A launch starts off the server, as a real one does;
-            // `FANCY_GPUI_DEMO=connected` starts on it.
-            let demo = if std::env::var("FANCY_GPUI_DEMO").as_deref() == Ok("connected") {
-                demo::DemoEngine::new()
-            } else {
-                demo::DemoEngine::disconnected()
-            };
-            // `FANCY_GPUI_DEMO_TALKING=<session>` has that user talking, so the
-            // talking ring can be looked at without a microphone.
-            if let Some(session) = std::env::var("FANCY_GPUI_DEMO_TALKING")
-                .ok()
-                .and_then(|session| session.parse().ok())
-            {
-                demo.talk(session, true);
-            }
-            let engine: Arc<dyn engine::Engine> = Arc::new(demo);
+            let (engine, store) = start_engine();
+            install_theme(store.as_ref(), cx);
             let bounds = Bounds::centered(None, size(px(WINDOW.0), px(WINDOW.1)), cx);
             let options = WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -81,7 +69,8 @@ fn main() {
                 app_id: Some("fancy-mumble".to_owned()),
                 ..WindowOptions::default()
             };
-            let opened = cx.open_window(options, |_, cx| cx.new(|cx| Shell::new(engine, cx)));
+            let opened =
+                cx.open_window(options, |_, cx| cx.new(|cx| Shell::new(engine, store, cx)));
             let Ok(window) = opened else {
                 eprintln!("the window could not be opened");
                 cx.quit();
@@ -99,14 +88,59 @@ fn main() {
         });
 }
 
-/// Start in the theme the environment names, or the default.
+/// The engine the view runs on, and where the view keeps its own settings.
 ///
-/// `FANCY_GPUI_THEME` and `FANCY_GPUI_MODE` (`light`/`dark`) stand in for the
-/// stored preference until the engine's settings are behind the view.
-fn install_theme(cx: &mut App) {
-    let wanted = std::env::var("FANCY_GPUI_THEME").unwrap_or_else(|_| DEFAULT_THEME.to_owned());
-    let mode = match std::env::var("FANCY_GPUI_MODE").as_deref() {
-        Ok("light") => Mode::Light,
+/// The real engine unless `FANCY_GPUI_ENGINE=demo` asks for the server that
+/// exists only in memory (`FANCY_GPUI_DEMO=connected` starts on it rather
+/// than on the connect screen; `FANCY_GPUI_DEMO_TALKING=<session>` has that
+/// user talking). The demo remembers nothing.
+fn start_engine() -> (Arc<dyn engine::Engine>, Option<store::Store>) {
+    let env = |name: &str| std::env::var(name).ok();
+    if env("FANCY_GPUI_ENGINE").as_deref() == Some("demo") {
+        let demo = if env("FANCY_GPUI_DEMO").as_deref() == Some("connected") {
+            demo::DemoEngine::new()
+        } else {
+            demo::DemoEngine::disconnected()
+        };
+        if let Some(session) = env("FANCY_GPUI_DEMO_TALKING").and_then(|id| id.parse().ok()) {
+            demo.talk(session, true);
+        }
+        return (Arc::new(demo), None);
+    }
+    let dir = paths::data_dir();
+    match real::RealEngine::start(&dir) {
+        Ok(engine) => {
+            // `FANCY_GPUI_CONNECT=<saved identity id>` connects at once, for
+            // driving the view where nothing can click.
+            if let Some(id) = env("FANCY_GPUI_CONNECT") {
+                engine::Engine::connect(&engine, &id, env("FANCY_GPUI_PASSWORD"));
+            }
+            (Arc::new(engine), Some(store::Store::new(dir)))
+        }
+        Err(error) => {
+            eprintln!("the engine could not start ({error}); showing the demo instead");
+            (Arc::new(demo::DemoEngine::disconnected()), None)
+        }
+    }
+}
+
+/// Start in the theme the environment names, else the one remembered, else
+/// the default.
+///
+/// `FANCY_GPUI_THEME` and `FANCY_GPUI_MODE` (`light`/`dark`) override what
+/// is stored, for looking at a theme without choosing it.
+fn install_theme(store: Option<&store::Store>, cx: &mut App) {
+    let stored = store.map(store::Store::settings).unwrap_or_default();
+    let wanted = std::env::var("FANCY_GPUI_THEME")
+        .ok()
+        .or(stored.theme)
+        .unwrap_or_else(|| DEFAULT_THEME.to_owned());
+    let mode = match std::env::var("FANCY_GPUI_MODE")
+        .ok()
+        .or(stored.mode)
+        .as_deref()
+    {
+        Some("light") => Mode::Light,
         _ => Mode::Dark,
     };
     let fonts = cx.text_system().all_font_names();
