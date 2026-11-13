@@ -972,6 +972,9 @@ pub struct UserInfo {
     pub avatar: Option<u32>,
     /// Whether the user is heard over everybody else in their channel.
     pub priority_speaker: bool,
+    /// The account the user is registered as, for one who is: what a
+    /// group of a channel's rules lists its members by.
+    pub account: Option<u32>,
 }
 
 impl From<UserEntry> for UserInfo {
@@ -984,6 +987,7 @@ impl From<UserEntry> for UserInfo {
             deafened: user.self_deaf || user.deaf,
             avatar: user.texture_marker.filter(|size| *size > 0),
             priority_speaker: user.priority_speaker,
+            account: user.user_id,
         }
     }
 }
