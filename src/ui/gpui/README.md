@@ -5,42 +5,72 @@ meant to be the cheapest way to keep the client open: no web view, no script
 runtime, and nothing drawn while nothing changes.
 
 It looks like the web UI's default design (Nebula) and paints with the same
-thirteen themes, each in a light and a dark mode.
+thirteen themes, each in a light and a dark mode. It runs on the same engine
+as the Tauri application.
 
 ## State
 
-A start. The shell is drawn and themed, and it runs against an engine that
-exists only in memory.
+A working client for the basics: it connects to a Mumble or Starling server
+through the real engine and does text and voice.
 
-- Drawn: the band, the connect screen (saved servers, the selected server's
-  landing page with its ping and identities), the server rail, the channel
-  column (search, channel tree, who is in the current channel, the user tile
-  with mute and deafen), the conversation (header, day rule, message runs,
-  own messages) and the composer.
-- Works against the demo engine: picking a server and an identity,
-  connecting and leaving, joining a channel, sending a message, muting and
-  deafening, narrowing the server and channel lists, switching theme and
-  mode, moving and resizing a window that draws its own frame.
-- Not yet: the real engine, adding or editing servers and identities,
-  auto-connect, avatars and other pictures, rich message content, text
-  selection and composed input (IME) in the fields, settings, and everything
-  else the web UI has.
+- **Servers.** Saved servers and their identities, each pinged for whether
+  it is up; add, edit and forget them; a certificate per identity, made on
+  first use; a server password typed for the connect at hand.
+- **On a server.** The channel tree in order, who is in the current
+  channel, who is talking; enter a channel by clicking it; the
+  conversation with day rules and local time; send with Enter or the send
+  button; leave with the button at the foot of the rail.
+- **Voice.** The microphone button turns voice on, then mutes and unmutes;
+  the headphones deafen. The microphone and the speaker are chosen from the
+  panel behind the sliders button on the user tile.
+- **Look.** The thirteen themes in light and dark, from the picker in the
+  band. Theme and devices are remembered.
+- **Keys.** `Ctrl+F` search, `Escape` close what is open, `Ctrl+Shift+T`
+  next theme, `Ctrl+Shift+L` light/dark, `Ctrl+Q` quit. Fields take
+  composed input (dead keys, an input method), shift-arrow selection, and
+  cut, copy and paste.
 
-The views are driven in tests by simulated clicks and keys (`cargo test`),
-with no display. How they look is checked by eye, against screenshots of the
-web UI.
+What the web UI has and this does not, yet: pictures (avatars, images in
+messages - a message that is one says "sent an image"), rich text,
+editing and reactions, direct messages, unread counts, persistent-chat
+history beyond what the engine already holds, several servers at once,
+push-to-talk and the other voice settings, screen sharing, the admin
+surfaces, and placing the caret with the pointer.
+
+## Testing
+
+    cargo test
+
+runs the views with simulated clicks and keys, with no display, against an
+engine that exists only in memory (`src/demo.rs`).
+
+    FANCY_GPUI_TEST_SERVER=127.0.0.1:64738 cargo test -- --ignored live
+
+runs two real engines against a live server: connect, see each other, a
+message there and back, voice on and heard. Run it where no speakers are
+attached, or expect a tone: the microphone is the engine's virtual one.
+
+How the views look is checked by eye, against screenshots of the web UI.
 
 ## The engine
 
 The view never names a concrete engine. `src/engine.rs` is the whole of what
 it asks for: a snapshot of the server, the messages of a channel, a handful
-of commands, and a stream of events that say what to read again. The events
-are named after the engine's own `CoreEvent`s, so putting the real engine
-behind the trait is a mapping.
+of commands, and a stream of events that say what to read again.
+`src/real.rs` puts the real engine behind that trait; it is a mapping, and
+what it adds is what the engine has no notion of - the saved servers, kept
+in `servers.json`, and their pings.
 
-That adapter cannot be written yet: the engine still lives inside the
-`mumble-tauri` crate. Once it is a crate of its own, this package depends on
-it and `src/demo.rs` becomes a development aid.
+The engine still lives inside the `mumble-tauri` package. This package
+links it with `default-features = false`, which leaves the Tauri view - and
+every dependency only it needs - out of the build, and talks to it through
+`mumble_tauri_lib::engine_api`. When the engine becomes a crate of its own,
+the dependency line changes and nothing else.
+
+Files live in the platform's data directory under `fancy-mumble-native`
+(`FANCY_GPUI_DATA_DIR` overrides it): the engine's identities and keys, and
+the view's `servers.json` and `view.json`. Not the Tauri application's
+directory: two programs writing one set of keys is how a key gets lost.
 
 ## Themes
 
@@ -81,14 +111,13 @@ For development:
 
 | Variable | Effect |
 | --- | --- |
-| `FANCY_GPUI_THEME` | Start in this theme (`dark`, `rose`, `nimbus`, ...). |
-| `FANCY_GPUI_MODE` | `light` or `dark`. |
-| `FANCY_GPUI_PICKER` | Start with the theme picker open. |
-| `FANCY_GPUI_DEMO` | `connected` starts on the demo server instead of the connect screen. |
-| `FANCY_GPUI_DEMO_TALKING` | A demo session id that is talking. |
+| `FANCY_GPUI_DATA_DIR` | Keep every file here instead of the platform's place. |
+| `FANCY_GPUI_THEME`, `FANCY_GPUI_MODE` | Start in this theme (`dark`, `rose`, ...) and mode (`light`, `dark`), without choosing it. |
+| `FANCY_GPUI_OPEN` | Start with `picker`, `devices` or `editor` open. |
+| `FANCY_GPUI_CONNECT` | Connect at once as the saved identity with this id (`FANCY_GPUI_PASSWORD` for the server's password). |
+| `FANCY_GPUI_SAY` | With `FANCY_GPUI_CONNECT`: say this once connected. |
 | `FANCY_GPUI_FRAME` | `client` draws the window's own controls even where the compositor frames it. |
-
-`Ctrl+Shift+T` moves to the next theme, `Ctrl+Shift+L` flips light and dark.
+| `FANCY_GPUI_ENGINE` | `demo` runs on the engine that exists only in memory. With it, `FANCY_GPUI_DEMO=connected` starts on the demo server and `FANCY_GPUI_DEMO_TALKING=<session>` has that user talking. |
 
 ## Icons
 
