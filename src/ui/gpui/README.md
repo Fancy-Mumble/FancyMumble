@@ -33,7 +33,7 @@ real engine and does text and voice.
   arrival does not move a reader who has scrolled up. The search field
   finds messages as well as channels. On a Fancy server:
   edit and delete your own, react, pin, see who is writing and who has
-  read what you wrote, a card for
+  read what you wrote, ask a poll and answer one, a card for
   what lies behind a link, and channels that keep their messages for
   whoever comes later.
 - **People.** Pictures, comments, what the server knows of a connection;
@@ -57,8 +57,8 @@ real engine and does text and voice.
   composed input (dead keys, an input method), pointer and shift-arrow
   selection, and cut, copy and paste.
 
-What the web UI has and this does not, yet: sending files, polls,
-end-to-end encrypted channels' key handling, screen sharing, and the rest of the admin surfaces (ACLs, server settings).
+What the web UI has and this does not, yet: sending files, end-to-end
+encrypted channels' key handling, screen sharing, and the rest of the admin surfaces (ACLs, server settings).
 
 ## Testing
 
@@ -144,6 +144,7 @@ For development:
 | --- | --- |
 | `FANCY_GPUI_DATA_DIR` | Keep every file here instead of the platform's place. |
 | `FANCY_GPUI_THEME`, `FANCY_GPUI_MODE` | Start in this theme (`dark`, `rose`, ...) and mode (`light`, `dark`), without choosing it. |
+| `FANCY_GPUI_DEMO_POLL` | With the demo engine: put a poll to the lounge. |
 | `FANCY_GPUI_OPEN` | Start with `picker`, `devices`, `certificates` or `editor` open. |
 | `FANCY_GPUI_CONNECT` | Connect at once as the saved identity with this id (`FANCY_GPUI_PASSWORD` for the server's password). |
 | `FANCY_GPUI_SAY` | With `FANCY_GPUI_CONNECT`: say this once connected. |

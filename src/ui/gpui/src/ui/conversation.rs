@@ -11,7 +11,7 @@ use gpui::{
 
 use super::Shell;
 use super::widgets::{EMPHASIS, avatar, clock, icon, label};
-use crate::engine::{Action, Conversation, Message};
+use crate::engine::{Action, Conversation, Message, Poll, PollOption};
 use crate::rich::Rich;
 use crate::theme::{Fill, Theme};
 
@@ -27,6 +27,30 @@ pub(super) enum Row {
     Message(usize),
     /// The way to the messages before the first one shown.
     Earlier,
+    /// The poll at this place among the channel's.
+    Poll(usize),
+}
+
+/// Put each poll among `rows` where it arrived: before the first message
+/// sent after it, or at the end.
+pub(super) fn place_polls(rows: &mut Vec<Row>, messages: &[Message], polls: &[Poll]) {
+    if polls.is_empty() {
+        return;
+    }
+    let mut placed = Vec::with_capacity(rows.len() + polls.len());
+    let mut next = 0;
+    for row in rows.drain(..) {
+        if let Row::Message(index) = row {
+            let sent = messages.get(index).and_then(|message| message.sent_at_ms);
+            while next < polls.len() && sent.is_some_and(|sent| sent > polls[next].at_ms) {
+                placed.push(Row::Poll(next));
+                next += 1;
+            }
+        }
+        placed.push(row);
+    }
+    placed.extend((next..polls.len()).map(Row::Poll));
+    *rows = placed;
 }
 
 /// The local calendar day `at_ms` falls on, counted from the epoch, for a
@@ -453,6 +477,7 @@ impl Shell {
                 return row_frame().child(day_rule(name, &theme)).into_any_element();
             }
             Some(Row::Earlier) => return Self::earlier_row(&theme, cx),
+            Some(Row::Poll(at)) => return self.poll_row(*at, &theme, cx),
             Some(Row::Message(index)) => *index,
             None => return div().into_any_element(),
         };
@@ -591,6 +616,81 @@ impl Shell {
             Vec::new()
         };
         (true, by)
+    }
+
+    /// A poll: what is asked, and each answer with how many chose it. A
+    /// click on an answer chooses it, or takes the choice back.
+    fn poll_row(&self, at: usize, theme: &Theme, cx: &mut Context<Self>) -> AnyElement {
+        let (Some(poll), Some(Conversation::Channel(channel))) = (self.polls.get(at), self.open)
+        else {
+            return div().into_any_element();
+        };
+        let most = poll
+            .options
+            .iter()
+            .map(|option| option.votes)
+            .max()
+            .unwrap_or(0);
+        let chosen: Vec<u32> = poll
+            .options
+            .iter()
+            .zip(0_u32..)
+            .filter(|(option, _)| option.own)
+            .map(|(_, place)| place)
+            .collect();
+        let options = poll.options.iter().zip(0_u32..).map(|(option, place)| {
+            // What the answer would be after a click here.
+            let selected: Vec<u32> = match (poll.multiple, option.own) {
+                (_, true) => chosen
+                    .iter()
+                    .copied()
+                    .filter(|held| *held != place)
+                    .collect(),
+                (true, false) => chosen.iter().copied().chain([place]).collect(),
+                (false, false) => vec![place],
+            };
+            let act = Action::Vote {
+                channel,
+                poll: poll.id.to_string(),
+                selected,
+            };
+            poll_option(option, (at, place), most, theme)
+                .on_click(cx.listener(move |shell, _, _, _| shell.engine.act(act.clone())))
+        });
+        let about = format!(
+            "{} asks · choose {}",
+            poll.by,
+            if poll.multiple { "any" } else { "one" }
+        );
+        row_frame()
+            .pt(theme.skin.message_gap)
+            .child(
+                div()
+                    .max_w(px(420.0))
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.0))
+                    .p(px(12.0))
+                    .rounded(theme.skin.radius_lg)
+                    .bg(theme.c.card)
+                    .border_1()
+                    .border_color(theme.c.line2)
+                    .text_size(px(13.0))
+                    .child(
+                        div()
+                            .text_size(px(14.0))
+                            .font_weight(EMPHASIS)
+                            .child(poll.question.clone()),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(11.0))
+                            .text_color(theme.c.muted)
+                            .child(SharedString::from(about)),
+                    )
+                    .children(options),
+            )
+            .into_any_element()
     }
 
     /// The way to the messages before the first one shown.
@@ -875,6 +975,72 @@ pub(super) fn body_text(
         }))
 }
 
+/// One answer of a poll: its words over a bar that says how it stands
+/// against the answer most chosen, and how many chose it. `at` is the
+/// poll's place and the answer's, which name the row.
+fn poll_option(
+    option: &PollOption,
+    at: (usize, u32),
+    most: u32,
+    theme: &Theme,
+) -> gpui::Stateful<gpui::Div> {
+    let (poll, place) = at;
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "a share of a width; a vote count is nowhere near 2^24"
+    )]
+    let share = if most == 0 {
+        0.0
+    } else {
+        option.votes as f32 / most as f32
+    };
+    let hover = theme.c.hover;
+    div()
+        .id(("poll-option", poll * 64 + place as usize))
+        .debug_selector(move || format!("poll-{poll}-{place}"))
+        .relative()
+        .h(px(30.0))
+        .flex()
+        .items_center()
+        .gap(px(8.0))
+        .px(px(10.0))
+        .rounded(theme.skin.radius_md)
+        .border_1()
+        .border_color(if option.own {
+            theme.c.accent_line
+        } else {
+            theme.c.line2
+        })
+        .overflow_hidden()
+        .cursor_pointer()
+        .hover(move |style| style.bg(hover))
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .h_full()
+                .w(gpui::relative(share))
+                .bg(theme.c.accent_soft),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .child(option.text.clone()),
+        )
+        .when(option.own, |row| {
+            row.child(icon("check", 12.0, theme.c.accent_text))
+        })
+        .child(
+            div()
+                .text_size(px(12.0))
+                .text_color(theme.c.muted)
+                .child(SharedString::from(option.votes.to_string())),
+        )
+}
+
 /// A conversation row: the full width of the column, inset from its edges.
 fn row_frame() -> gpui::Div {
     div().w_full().pl(px(10.0)).pr(px(20.0))
@@ -1128,6 +1294,36 @@ mod tests {
         assert_eq!(drawn[1].1.color, Some(ink));
         assert!(drawn[1].1.underline.is_some());
         assert!(highlights(&Rich::parse("plain"), ink, ground).is_empty());
+    }
+
+    #[test]
+    fn a_poll_sits_before_the_first_message_sent_after_it() {
+        let poll = |at_ms| Poll {
+            id: "p".into(),
+            question: "?".into(),
+            options: Vec::new(),
+            multiple: false,
+            by: "Rin".into(),
+            at_ms,
+        };
+        let messages = [at(Some(1_000)), at(Some(2_000)), at(Some(3_000))];
+        let mut placed = rows(&messages, 3_000, 0);
+        place_polls(&mut placed, &messages, &[poll(1_500), poll(9_000)]);
+        assert_eq!(
+            placed[1..],
+            [
+                Row::Message(0),
+                Row::Poll(0),
+                Row::Message(1),
+                Row::Message(2),
+                Row::Poll(1),
+            ],
+            "after the day rule"
+        );
+        // Nothing said yet: the poll stands alone.
+        let mut empty = rows(&[], 0, 0);
+        place_polls(&mut empty, &[], &[poll(1)]);
+        assert_eq!(empty, [Row::Poll(0)]);
     }
 
     #[test]

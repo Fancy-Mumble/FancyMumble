@@ -194,6 +194,20 @@ pub(crate) enum Action {
     },
     /// Delete the message `id` for everyone.
     DeleteMessage { channel: ChannelId, id: String },
+    /// Put a poll to `channel`.
+    CreatePoll {
+        channel: ChannelId,
+        question: String,
+        options: Vec<String>,
+        multiple: bool,
+    },
+    /// Answer the poll `poll` of `channel` with the options at
+    /// `selected`, replacing what was answered before.
+    Vote {
+        channel: ChannelId,
+        poll: String,
+        selected: Vec<u32>,
+    },
     /// Replace the server's ban list with this one.
     SetBans(Vec<Ban>),
     /// Remove the registration of the account `id`.
@@ -340,6 +354,32 @@ pub(crate) struct Message {
     pub pinned: bool,
     /// The reactions on it, in the order each emoji was first used.
     pub reactions: Vec<Reaction>,
+}
+
+/// A poll put to a channel, with how it stands.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Poll {
+    /// What names it to a vote.
+    pub id: SharedString,
+    pub question: SharedString,
+    pub options: Vec<PollOption>,
+    /// Whether more than one answer may be chosen.
+    pub multiple: bool,
+    /// Who asked.
+    pub by: SharedString,
+    /// When it arrived here, in Unix epoch milliseconds: where it sits
+    /// among the messages.
+    pub at_ms: u64,
+}
+
+/// One answer of a poll.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PollOption {
+    pub text: SharedString,
+    /// How many chose it.
+    pub votes: u32,
+    /// Whether the local user is one of them.
+    pub own: bool,
 }
 
 /// How far somebody else has read a channel.
@@ -518,6 +558,10 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// The latest answer from the server at `host:port`, or `None` while it
     /// has not answered (or is down).
     fn ping(&self, host: &str, port: u16) -> Option<ServerPing>;
+
+    /// The polls put to `conversation` while this client was there,
+    /// oldest first, with how each stands.
+    fn polls(&self, conversation: Conversation) -> Vec<Poll>;
 
     /// The local user has read `conversation` up to the message `id`:
     /// say so to those in it, and ask how far they have read. Only a

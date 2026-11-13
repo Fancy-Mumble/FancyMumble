@@ -64,6 +64,9 @@ pub(super) enum Question {
     DeleteChannel(ChannelId),
     JoinPassword(ChannelId),
     Comment,
+    /// A poll for a channel: one answer each, or several.
+    NewPoll(ChannelId),
+    NewPollSeveral(ChannelId),
 }
 
 impl Question {
@@ -83,7 +86,22 @@ impl Question {
             Self::DeleteChannel(_) => ("Delete this channel and everything in it?", None, "Delete"),
             Self::JoinPassword(_) => ("Join with a password", Some("Password"), "Join"),
             Self::Comment => ("Your comment", Some("What others read about you"), "Save"),
+            Self::NewPoll(_) => (
+                "New poll: choose one",
+                Some("The question, then an answer on each line (Shift+Enter)"),
+                "Ask",
+            ),
+            Self::NewPollSeveral(_) => (
+                "New poll: choose any",
+                Some("The question, then an answer on each line (Shift+Enter)"),
+                "Ask",
+            ),
         }
+    }
+
+    /// Whether the answer runs over several lines.
+    fn takes_lines(self) -> bool {
+        matches!(self, Self::NewPoll(_) | Self::NewPollSeveral(_))
     }
 
     /// Whether the button is drawn as destructive.
@@ -127,6 +145,26 @@ impl Question {
                 password: answer.to_owned(),
             },
             Self::Comment => Action::SetComment(text),
+            Self::NewPoll(channel) | Self::NewPollSeveral(channel) => {
+                // The first line asks; each line after it is an answer,
+                // and a poll with fewer than two is not one.
+                let mut lines = answer
+                    .lines()
+                    .map(str::trim)
+                    .filter(|line| !line.is_empty())
+                    .map(str::to_owned);
+                let question = lines.next()?;
+                let options: Vec<String> = lines.collect();
+                if options.len() < 2 {
+                    return None;
+                }
+                Action::CreatePoll {
+                    channel,
+                    question,
+                    options,
+                    multiple: matches!(self, Self::NewPollSeveral(_)),
+                }
+            }
         })
     }
 }
@@ -357,6 +395,14 @@ pub(super) fn channel_items(
             "New channel with history inside…",
             Command::Ask(Question::NewChannelWithHistory(id)),
         ));
+        items.push(Item::new(
+            "New poll: choose one…",
+            Command::Ask(Question::NewPoll(id)),
+        ));
+        items.push(Item::new(
+            "New poll: choose any…",
+            Command::Ask(Question::NewPollSeveral(id)),
+        ));
     }
     items.push(Item::new(
         "Rename…",
@@ -507,6 +553,9 @@ impl Shell {
                 let mut input = TextInput::new(placeholder, cx);
                 if matches!(question, Question::JoinPassword(_)) {
                     input = input.obscured();
+                }
+                if question.takes_lines() {
+                    input = input.multiline();
                 }
                 // A rename starts from the name there is.
                 if let Question::RenameChannel(id) = question
@@ -775,9 +824,12 @@ pub(super) fn render_prompt(
                 .when_some(prompt.input.clone(), |dialog, input| {
                     dialog.child(
                         div()
-                            .h(px(38.0))
+                            .min_h(px(38.0))
+                            .when(prompt.question.takes_lines(), |field| {
+                                field.min_h(px(120.0)).items_start().py(px(10.0))
+                            })
                             .flex()
-                            .items_center()
+                            .when(!prompt.question.takes_lines(), Styled::items_center)
                             .px(px(12.0))
                             .rounded(theme.skin.radius_md)
                             .bg(theme.c.input)
@@ -1077,6 +1129,20 @@ mod tests {
                 name: "Notes".to_owned(),
                 history: true,
             })
+        );
+        assert_eq!(
+            Question::NewPollSeveral(1).answered("Tea?\n\n Yes \nNo\n"),
+            Some(Action::CreatePoll {
+                channel: 1,
+                question: "Tea?".to_owned(),
+                options: vec!["Yes".to_owned(), "No".to_owned()],
+                multiple: true,
+            })
+        );
+        assert_eq!(
+            Question::NewPoll(1).answered("Tea?\nYes"),
+            None,
+            "one answer is no poll"
         );
         assert_eq!(
             Question::DeleteChannel(2).answered(""),

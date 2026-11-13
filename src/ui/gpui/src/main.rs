@@ -120,7 +120,8 @@ fn main() {
 /// The real engine unless `FANCY_GPUI_ENGINE=demo` asks for the server that
 /// exists only in memory (`FANCY_GPUI_DEMO=connected` starts on it rather
 /// than on the connect screen; `FANCY_GPUI_DEMO_TALKING=<session>` has that
-/// user talking). The demo remembers nothing.
+/// user talking; `FANCY_GPUI_DEMO_POLL` puts a poll to the lounge). The demo
+/// remembers nothing.
 fn start_engine() -> (Arc<dyn engine::Engine>, Option<store::Store>) {
     let env = |name: &str| std::env::var(name).ok();
     if env("FANCY_GPUI_ENGINE").as_deref() == Some("demo") {
@@ -131,6 +132,23 @@ fn start_engine() -> (Arc<dyn engine::Engine>, Option<store::Store>) {
         };
         if let Some(session) = env("FANCY_GPUI_DEMO_TALKING").and_then(|id| id.parse().ok()) {
             demo.talk(session, true);
+        }
+        // Something to look at: a poll, answered.
+        if env("FANCY_GPUI_DEMO_POLL").is_some() {
+            use engine::{Action, Engine as _};
+            demo.act(Action::CreatePoll {
+                channel: 1,
+                question: "Where to on Saturday?".to_owned(),
+                options: ["The lake", "The hills", "Stay in"]
+                    .map(str::to_owned)
+                    .to_vec(),
+                multiple: false,
+            });
+            demo.act(Action::Vote {
+                channel: 1,
+                poll: "poll-0".to_owned(),
+                selected: vec![1],
+            });
         }
         return (Arc::new(demo), None);
     }

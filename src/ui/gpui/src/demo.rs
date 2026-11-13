@@ -9,6 +9,7 @@ use crate::engine::{
     Registered, SavedServer, ServerPing, Session, SessionEntry, Snapshot, Subject, User, Voice,
     VoiceSettings, Window,
 };
+use crate::engine::{Poll, PollOption};
 
 /// The local user's session in the demo server.
 const OWN: Session = 1;
@@ -49,6 +50,7 @@ struct State {
     snapshots: u32,
     /// The message the view last said it had read up to.
     read_up_to: Option<gpui::SharedString>,
+    polls: Vec<Poll>,
 }
 
 impl DemoEngine {
@@ -225,6 +227,27 @@ impl State {
                     own.channel = *channel;
                 }
             }
+            Action::EditMessage { .. }
+            | Action::DeleteMessage { .. }
+            | Action::Pin { .. }
+            | Action::React { .. }
+            | Action::CreatePoll { .. }
+            | Action::Vote { .. }
+            | Action::ToggleListen { .. }
+            | Action::PrioritySpeaker { .. } => self.apply_further(action),
+            Action::SetUserVolume { .. }
+            | Action::SetBans(_)
+            | Action::Unregister { .. }
+            | Action::Register { .. }
+            | Action::SetComment(_)
+            | Action::SetAvatar(_) => {}
+        }
+    }
+
+    /// The rest of [`Self::apply`]: messages, polls, and what is set on a
+    /// channel or a user for the local user alone.
+    fn apply_further(&mut self, action: &Action) {
+        match action {
             Action::EditMessage { id, text, .. } => {
                 if let Some(message) = self.message(id) {
                     message.html = text.replace('&', "&amp;").replace('<', "&lt;").into();
@@ -260,13 +283,43 @@ impl State {
                     react(&mut message.reactions, emoji, *add);
                 }
             }
-            Action::SetUserVolume { .. }
-            | Action::SetBans(_)
-            | Action::Unregister { .. }
-            | Action::Register { .. }
-            | Action::SetComment(_)
-            | Action::SetAvatar(_) => {}
+            Action::CreatePoll {
+                question,
+                options,
+                multiple,
+                ..
+            } => self.ask(question, options, *multiple),
+            Action::Vote { poll, selected, .. } => {
+                if let Some(held) = self.polls.iter_mut().find(|held| held.id.as_ref() == poll) {
+                    cast(held, selected);
+                }
+            }
+            _ => {}
         }
+    }
+
+    /// Put a poll to the lounge, as the local user.
+    fn ask(&mut self, question: &str, options: &[String], multiple: bool) {
+        let at_ms = self
+            .messages
+            .last()
+            .and_then(|(_, last)| last.sent_at_ms)
+            .map_or(FIRST_MESSAGE_MS, |last| last + MINUTE_MS);
+        self.polls.push(Poll {
+            id: format!("poll-{}", self.polls.len()).into(),
+            question: question.to_owned().into(),
+            options: options
+                .iter()
+                .map(|text| PollOption {
+                    text: text.clone().into(),
+                    votes: 0,
+                    own: false,
+                })
+                .collect(),
+            multiple,
+            by: "Alex".into(),
+            at_ms,
+        });
     }
 
     fn message(&mut self, id: &str) -> Option<&mut Message> {
@@ -356,6 +409,7 @@ impl State {
             typed: 0,
             snapshots: 0,
             read_up_to: None,
+            polls: Vec::new(),
             certificates: vec!["alex".into(), "work".into()],
             messages: vec![
                 said(0, OWN, "Alex", "Welcome to our creative lounge!"),
@@ -390,6 +444,20 @@ fn seeded_servers() -> Vec<SavedServer> {
         saved("kumo", "kumo.jp", "Alex", false),
         saved("local", "localhost", "Alex", false),
     ]
+}
+
+/// The local user answers `poll` with the options at `selected`, in place
+/// of what they answered before.
+fn cast(poll: &mut Poll, selected: &[u32]) {
+    for (option, place) in poll.options.iter_mut().zip(0_u32..) {
+        let chosen = selected.contains(&place);
+        if chosen && !option.own {
+            option.votes += 1;
+        } else if !chosen && option.own {
+            option.votes -= 1;
+        }
+        option.own = chosen;
+    }
 }
 
 /// Something to look at: a message people reacted to.
@@ -483,6 +551,13 @@ impl Engine for DemoEngine {
         // The demo's answers never change; say so anyway, as a real engine
         // would once its servers have replied.
         self.tell(EngineEvent::ServersChanged);
+    }
+
+    fn polls(&self, conversation: Conversation) -> Vec<Poll> {
+        if conversation != Conversation::Channel(LOUNGE) {
+            return Vec::new();
+        }
+        self.with_state(|state| state.polls.clone())
     }
 
     fn read_up_to(&self, _conversation: Conversation, id: gpui::SharedString) {
@@ -828,6 +903,8 @@ impl Engine for DemoEngine {
                 | Action::DeleteMessage { .. }
                 | Action::React { .. }
                 | Action::Pin { .. }
+                | Action::CreatePoll { .. }
+                | Action::Vote { .. }
         );
         self.with_state(|state| {
             state.apply(&action);

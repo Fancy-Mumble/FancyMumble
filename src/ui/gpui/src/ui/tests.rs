@@ -1311,3 +1311,43 @@ fn reading_is_said_once_and_a_message_others_have_read_says_who(cx: &mut TestApp
     });
     assert!(cx.debug_bounds("seen-by").is_some());
 }
+
+#[gpui::test]
+fn a_poll_is_asked_from_the_channels_menu_and_answered_with_a_click(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    right_click(cx, "channel-1");
+    click(cx, "menu-New poll: choose one…");
+    cx.simulate_keystrokes("T e a ? shift-enter Y e s shift-enter N o enter");
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.prompt.is_none(), "asked");
+        assert_eq!(shell.polls.len(), 1);
+        assert_eq!(shell.polls[0].question.as_ref(), "Tea?");
+        assert_eq!(shell.polls[0].options.len(), 2);
+        assert_eq!(
+            shell.row_model.last(),
+            Some(&super::conversation::Row::Poll(0)),
+            "after the messages there were"
+        );
+    });
+    click(cx, "poll-0-1");
+    shell.read_with(cx, |shell, _| {
+        let options = &shell.polls[0].options;
+        assert!(options[1].own && options[1].votes == 1);
+    });
+    // One answer each: choosing the other moves the vote.
+    click(cx, "poll-0-0");
+    shell.read_with(cx, |shell, _| {
+        let options = &shell.polls[0].options;
+        assert!(options[0].own && !options[1].own);
+        assert_eq!((options[0].votes, options[1].votes), (1, 0));
+    });
+    // And the same again takes it back.
+    click(cx, "poll-0-0");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.polls[0].options[0].votes, 0)
+    });
+    assert!(matches!(
+        engine.actions().last(),
+        Some(Action::Vote { selected, .. }) if selected.is_empty()
+    ));
+}

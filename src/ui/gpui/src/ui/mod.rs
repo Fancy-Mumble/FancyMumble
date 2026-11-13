@@ -29,7 +29,8 @@ use gpui::{
 
 use crate::engine::{
     Action, AudioDevices, ChannelId, ChosenDevices, Connection, Conversation, Engine, EngineEvent,
-    Found, Message, Preview, Reader, SavedServer, Session, Snapshot, Subject, User, VoiceSettings,
+    Found, Message, Poll, Preview, Reader, SavedServer, Session, Snapshot, Subject, User,
+    VoiceSettings,
 };
 use crate::store::{Settings, Store};
 use crate::theme::{ActiveTheme, Catalog, Mode};
@@ -93,6 +94,8 @@ pub(crate) struct Shell {
     people: std::collections::HashMap<ChannelId, Vec<usize>>,
     /// Who has read how far in the open channel.
     seen: Seen,
+    /// The polls put to the open channel, oldest first.
+    polls: Vec<Poll>,
     /// The messages that match what is in the search field.
     found: Vec<Found>,
     /// The channel column's rows, and the list that lays out only those
@@ -257,6 +260,7 @@ impl Shell {
             wanted: String::new(),
             tree: Vec::new(),
             seen: Seen::default(),
+            polls: Vec::new(),
             found: Vec::new(),
             column: Vec::new(),
             column_list: ListState::new(0, ListAlignment::Top, px(OVERDRAW)),
@@ -749,6 +753,16 @@ impl Shell {
             });
         let rows_before = self.row_model.len();
         self.row_model = conversation::rows(&self.messages, now_ms, self.utc_offset);
+        let polls = self
+            .open
+            .filter(|_| !self.only_pinned)
+            .map(|conversation| self.engine.polls(conversation))
+            .unwrap_or_default();
+        // A vote changes a poll's row without adding one: that is a change
+        // to rows that are otherwise the same.
+        let kept = kept && polls == self.polls;
+        self.polls = polls;
+        conversation::place_polls(&mut self.row_model, &self.messages, &self.polls);
         if self.earlier && !self.only_pinned {
             self.row_model.insert(0, conversation::Row::Earlier);
         }

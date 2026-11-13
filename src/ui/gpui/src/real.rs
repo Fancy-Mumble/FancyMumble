@@ -14,13 +14,13 @@ use mumble_tauri_lib::engine_api::{
     self as api, ConnectTarget, EngineDirs, EngineHandle, PingInfo,
 };
 
-use crate::engine::Reader;
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
     Connection, Conversation, Engine, EngineEvent, Found, Listing, Message, Preview, Reaction,
     Registered, SavedServer, ServerPing, SessionEntry, Snapshot, Subject, User, Voice,
     VoiceSettings, Window,
 };
+use crate::engine::{Poll, PollOption, Reader};
 use crate::store::Store;
 
 /// `(host, port)`: what a ping is kept under.
@@ -46,6 +46,9 @@ struct Shared {
     /// Who put which emoji on which message, by channel and then by
     /// message: the engine passes reactions on and keeps none.
     reactions: Mutex<HashMap<u32, HashMap<String, Vec<api::ReactionInfo>>>>,
+    /// The polls seen, by channel, with who answered what: the engine
+    /// passes polls and votes on and keeps neither.
+    polls: Mutex<HashMap<u32, Vec<HeldPoll>>>,
     /// The channel whose readers were last asked for.
     readers_asked: Mutex<Option<u32>>,
     /// When the server was last told the local user is writing.
@@ -88,6 +91,89 @@ impl Shared {
             .readers_asked
             .lock()
             .unwrap_or_else(PoisonError::into_inner) = None;
+        self.polls
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
+    }
+
+    /// Put a poll to `channel`. The server passes it on and does not send
+    /// it back: the asker's copy is made here.
+    async fn ask(
+        &self,
+        channel: u32,
+        question: String,
+        options: Vec<String>,
+        multiple: bool,
+    ) -> Result<(), String> {
+        let id = self
+            .engine
+            .create_poll(channel, question.clone(), options.clone(), multiple)
+            .await?;
+        self.hold_poll(
+            channel,
+            HeldPoll {
+                id,
+                question,
+                options,
+                multiple,
+                by: self.own_name(),
+                at_ms: now_ms(),
+                votes: HashMap::new(),
+            },
+        );
+        Ok(())
+    }
+
+    /// Hold a poll put to `channel`, and say the channel has news.
+    fn hold_poll(&self, channel: u32, poll: HeldPoll) {
+        {
+            let mut polls = self.polls.lock().unwrap_or_else(PoisonError::into_inner);
+            let held = polls.entry(channel).or_default();
+            // Once: a server may send the asker's own poll back to them,
+            // or may not, and their copy is made either way.
+            if held.iter().any(|known| known.id == poll.id) {
+                return;
+            }
+            held.push(poll);
+        }
+        self.tell(EngineEvent::NewMessage {
+            conversation: Conversation::Channel(channel),
+        });
+    }
+
+    /// Record what `voter` answered to a poll of `channel`.
+    fn hold_vote(&self, channel: u32, poll: &str, voter: u32, selected: Vec<u32>) {
+        if let Some(held) = self
+            .polls
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get_mut(&channel)
+            .and_then(|polls| polls.iter_mut().find(|held| held.id == poll))
+        {
+            let _ = held.votes.insert(voter, selected);
+        }
+        self.tell(EngineEvent::NewMessage {
+            conversation: Conversation::Channel(channel),
+        });
+    }
+
+    /// The name the local user goes by on the server.
+    fn own_name(&self) -> String {
+        self.engine
+            .own_session()
+            .map(|own| self.name_of(own))
+            .unwrap_or_default()
+    }
+
+    /// The name of the user `session`, if they are still here.
+    fn name_of(&self, session: u32) -> String {
+        self.engine
+            .users()
+            .into_iter()
+            .find(|user| user.session == session)
+            .map(|user| user.name)
+            .unwrap_or_default()
     }
 
     /// Run `command`, and tell the user if it fails.
@@ -162,6 +248,26 @@ impl Shared {
     /// and what happens around messages.
     fn forward_answer(&self, event: api::EngineEvent) {
         match event {
+            api::EngineEvent::Poll(poll) => self.hold_poll(
+                poll.channel,
+                HeldPoll {
+                    id: poll.id,
+                    question: poll.question,
+                    options: poll.options,
+                    multiple: poll.multiple,
+                    // A server that names only the session leaves the
+                    // name to be looked up among who is here.
+                    by: poll
+                        .creator_name
+                        .filter(|name| !name.is_empty())
+                        .unwrap_or_else(|| self.name_of(poll.creator)),
+                    at_ms: now_ms(),
+                    votes: HashMap::new(),
+                },
+            ),
+            api::EngineEvent::PollVote(vote) => {
+                self.hold_vote(vote.channel, &vote.poll, vote.voter, vote.selected);
+            }
             api::EngineEvent::Readers { channel, readers } => {
                 // Everybody but the local user: that they have read what
                 // they are looking at is no news.
@@ -339,6 +445,7 @@ impl RealEngine {
             reactions: Mutex::default(),
             typed_at: Mutex::default(),
             readers_asked: Mutex::default(),
+            polls: Mutex::default(),
             wanted: Mutex::default(),
             retries: std::sync::atomic::AtomicU32::new(0),
             refused: std::sync::atomic::AtomicBool::new(false),
@@ -552,6 +659,22 @@ impl Engine for RealEngine {
                 shared.tell(EngineEvent::ServersChanged);
             }));
         }
+    }
+
+    fn polls(&self, conversation: Conversation) -> Vec<Poll> {
+        let Conversation::Channel(channel) = conversation else {
+            return Vec::new();
+        };
+        let polls = self
+            .shared
+            .polls
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let Some(held) = polls.get(&channel).filter(|held| !held.is_empty()) else {
+            return Vec::new();
+        };
+        let own = self.shared.engine.own_session();
+        held.iter().map(|poll| poll.as_it_stands(own)).collect()
     }
 
     fn read_up_to(&self, conversation: Conversation, id: SharedString) {
@@ -1003,23 +1126,24 @@ impl Engine for RealEngine {
                     id,
                     pinned,
                 } => engine.pin(channel, &id, pinned).await,
-                Action::SetBans(bans) => {
-                    engine
-                        .set_bans(
-                            bans.into_iter()
-                                .map(|ban| api::BanInfo {
-                                    address: ban.address.to_string(),
-                                    mask: ban.mask,
-                                    name: ban.name.to_string(),
-                                    hash: ban.hash.to_string(),
-                                    reason: ban.reason.to_string(),
-                                    start: ban.start.to_string(),
-                                    duration_secs: ban.duration_secs,
-                                })
-                                .collect(),
-                        )
-                        .await
+                Action::CreatePoll {
+                    channel,
+                    question,
+                    options,
+                    multiple,
+                } => shared.ask(channel, question, options, multiple).await,
+                Action::Vote {
+                    channel,
+                    poll,
+                    selected,
+                } => {
+                    engine.vote(channel, &poll, selected.clone()).await?;
+                    if let Some(own) = engine.own_session() {
+                        shared.hold_vote(channel, &poll, own, selected);
+                    }
+                    Ok(())
                 }
+                Action::SetBans(bans) => engine.set_bans(bans.iter().map(ban_info).collect()).await,
                 Action::Unregister { id } => engine.change_registered(id, None).await,
                 Action::ToggleListen { channel } => {
                     let toggled = engine.toggle_listen(channel).await.map(|_| ());
@@ -1114,6 +1238,48 @@ fn target_of(server: &SavedServer, password: Option<String>) -> ConnectTarget {
     }
 }
 
+/// A poll as the adapter holds it: what was asked, and who answered what.
+struct HeldPoll {
+    id: String,
+    question: String,
+    options: Vec<String>,
+    multiple: bool,
+    by: String,
+    at_ms: u64,
+    /// Each voter's answer, whole: a new one replaces the old.
+    votes: HashMap<u32, Vec<u32>>,
+}
+
+impl HeldPoll {
+    /// The poll with its answers counted, as `own` sees it.
+    fn as_it_stands(&self, own: Option<u32>) -> Poll {
+        let chosen_by_own = own.and_then(|own| self.votes.get(&own));
+        Poll {
+            id: self.id.clone().into(),
+            question: self.question.clone().into(),
+            options: self
+                .options
+                .iter()
+                .zip(0_u32..)
+                .map(|(text, at)| PollOption {
+                    text: text.clone().into(),
+                    votes: u32::try_from(
+                        self.votes
+                            .values()
+                            .filter(|selected| selected.contains(&at))
+                            .count(),
+                    )
+                    .unwrap_or(u32::MAX),
+                    own: chosen_by_own.is_some_and(|selected| selected.contains(&at)),
+                })
+                .collect(),
+            multiple: self.multiple,
+            by: self.by.clone().into(),
+            at_ms: self.at_ms,
+        }
+    }
+}
+
 fn preview_of(preview: api::LinkPreview) -> Preview {
     Preview {
         url: preview.url.into(),
@@ -1135,6 +1301,18 @@ fn ban_of(ban: api::BanInfo) -> Ban {
         hash: ban.hash.into(),
         reason: ban.reason.into(),
         start: ban.start.into(),
+        duration_secs: ban.duration_secs,
+    }
+}
+
+fn ban_info(ban: &Ban) -> api::BanInfo {
+    api::BanInfo {
+        address: ban.address.to_string(),
+        mask: ban.mask,
+        name: ban.name.to_string(),
+        hash: ban.hash.to_string(),
+        reason: ban.reason.to_string(),
+        start: ban.start.to_string(),
         duration_secs: ban.duration_secs,
     }
 }
@@ -1358,6 +1536,39 @@ mod tests {
             .map(|reaction| (reaction.emoji.as_ref(), reaction.count, reaction.own))
             .collect();
         assert_eq!(shown, [("👍", 1, false), ("🎉", 1, true)]);
+    }
+
+    #[test]
+    fn a_poll_counts_each_voters_latest_answer() {
+        let mut poll = HeldPoll {
+            id: "p".to_owned(),
+            question: "Tea?".to_owned(),
+            options: vec!["Yes".to_owned(), "No".to_owned(), "Later".to_owned()],
+            multiple: true,
+            by: "Rin".to_owned(),
+            at_ms: 0,
+            votes: HashMap::new(),
+        };
+        let _ = poll.votes.insert(1, vec![0, 2]);
+        let _ = poll.votes.insert(2, vec![1]);
+        // Voter 2 thinks again: the new answer replaces the old.
+        let _ = poll.votes.insert(2, vec![0]);
+        let stands = poll.as_it_stands(Some(1));
+        let counted: Vec<_> = stands
+            .options
+            .iter()
+            .map(|option| (option.text.as_ref(), option.votes, option.own))
+            .collect();
+        assert_eq!(
+            counted,
+            [("Yes", 2, true), ("No", 0, false), ("Later", 1, true)]
+        );
+        assert!(
+            poll.as_it_stands(None)
+                .options
+                .iter()
+                .all(|option| !option.own)
+        );
     }
 
     #[test]
@@ -2179,5 +2390,59 @@ mod tests {
         });
         alice.shutdown();
         let _ = std::fs::remove_dir_all(alice_dir);
+    }
+    /// A poll is asked by one and answered by both; each sees how it
+    /// stands, and which answer is their own.
+    #[test]
+    #[ignore = "needs a live Fancy server; set FANCY_GPUI_TEST_FANCY=host:port"]
+    fn live_fancy_a_poll_is_asked_and_answered() {
+        let (alice, alice_dir) = fancy_client("PollAlice", None);
+        let (bob, bob_dir) = fancy_client("PollBob", None);
+        wait_for("both to connect", || {
+            alice.snapshot().users.len() >= 2 && bob.snapshot().users.len() >= 2
+        });
+        let channel = alice.snapshot().current_channel.expect("a channel");
+        let room = Conversation::Channel(channel);
+        alice.act(Action::CreatePoll {
+            channel,
+            question: "Tea?".to_owned(),
+            options: vec!["Yes".to_owned(), "No".to_owned()],
+            multiple: false,
+        });
+        wait_for("both to have the poll", || {
+            alice.polls(room).len() == 1 && bob.polls(room).len() == 1
+        });
+        let poll = bob.polls(room).remove(0);
+        assert_eq!(poll.question.as_ref(), "Tea?");
+        assert_eq!(poll.by.as_ref(), "PollAlice");
+        assert_eq!(alice.polls(room)[0].id, poll.id, "one id for both");
+
+        let vote = |selected: Vec<u32>| Action::Vote {
+            channel,
+            poll: poll.id.to_string(),
+            selected,
+        };
+        bob.act(vote(vec![1]));
+        alice.act(vote(vec![0]));
+        let stands = |engine: &RealEngine| -> Vec<(u32, bool)> {
+            engine.polls(room)[0]
+                .options
+                .iter()
+                .map(|option| (option.votes, option.own))
+                .collect()
+        };
+        wait_for("both votes to be counted by both", || {
+            stands(&alice) == [(1, true), (1, false)] && stands(&bob) == [(1, false), (1, true)]
+        });
+        // Bob thinks again: his answer moves, it is not added.
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        bob.act(vote(vec![0]));
+        wait_for("bob's vote to move", || {
+            stands(&alice) == [(2, true), (0, false)] && stands(&bob) == [(2, true), (0, false)]
+        });
+        for (engine, dir) in [(alice, alice_dir), (bob, bob_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
     }
 }
