@@ -210,7 +210,7 @@ impl Shell {
                 editor.fields[next].read(cx).focus(window);
                 cx.notify();
             }
-            InputEvent::Changed => {}
+            InputEvent::Changed | InputEvent::PastedPicture(_) => {}
         }
     }
 

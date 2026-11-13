@@ -513,7 +513,7 @@ impl Shell {
             cx.subscribe(input, |shell, _, event, cx| match event {
                 InputEvent::Submitted(_) => shell.answer_prompt(cx),
                 InputEvent::Cancelled => shell.close_prompt(cx),
-                InputEvent::Changed | InputEvent::Tabbed { .. } => {}
+                InputEvent::Changed | InputEvent::Tabbed { .. } | InputEvent::PastedPicture(_) => {}
             })
         });
         self.prompt = Some(Prompt {
@@ -547,6 +547,32 @@ impl Shell {
 
     /// Let the user choose a picture file, and make it their avatar.
     fn pick_avatar(&mut self, cx: &mut Context<Self>) {
+        self.pick_picture(cx, avatar_from, |shell, avatar| {
+            shell.engine.act(Action::SetAvatar(avatar));
+        });
+    }
+
+    /// Choose a picture file to send to the open conversation.
+    pub(super) fn pick_picture_to_send(&mut self, cx: &mut Context<Self>) {
+        self.pick_picture(
+            cx,
+            |file| Ok(file.to_vec()),
+            |shell, picture| {
+                if let Some(conversation) = shell.open {
+                    shell.engine.send_picture(conversation, picture);
+                }
+            },
+        );
+    }
+
+    /// Ask for a picture file, read it and put it through `prepare` on
+    /// another thread, and hand what comes out to `then`.
+    fn pick_picture(
+        &mut self,
+        cx: &mut Context<Self>,
+        prepare: fn(&[u8]) -> Result<Vec<u8>, String>,
+        then: fn(&mut Self, Vec<u8>),
+    ) {
         let chosen = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
             directories: false,
@@ -568,12 +594,12 @@ impl Shell {
                     if size > MAX_PICTURE_FILE {
                         return Err("That picture file is too large.".to_owned());
                     }
-                    avatar_from(&std::fs::read(&path).map_err(|e| e.to_string())?)
+                    prepare(&std::fs::read(&path).map_err(|e| e.to_string())?)
                 })
                 .await;
             let _ = shell.update(cx, |shell, cx| {
                 match made {
-                    Ok(avatar) => shell.engine.act(Action::SetAvatar(avatar)),
+                    Ok(picture) => then(shell, picture),
                     Err(problem) => shell.notice = Some(problem.into()),
                 }
                 cx.notify();

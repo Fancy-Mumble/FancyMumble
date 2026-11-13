@@ -648,6 +648,23 @@ impl Engine for RealEngine {
         });
     }
 
+    fn send_picture(&self, conversation: Conversation, file: Vec<u8>) {
+        let engine = self.shared.engine.clone();
+        let limit = engine.picture_limit();
+        self.spawn(async move {
+            // Decoding and scaling is work, and not for the engine's own
+            // threads.
+            let html =
+                tokio::task::spawn_blocking(move || crate::picture::message_html(&file, limit))
+                    .await
+                    .map_err(|error| error.to_string())??;
+            match conversation {
+                Conversation::Channel(channel) => engine.send_html(channel, html).await,
+                Conversation::Direct(session) => engine.send_direct_html(session, html).await,
+            }
+        });
+    }
+
     fn toggle_microphone(&self) {
         let engine = self.shared.engine.clone();
         self.spawn(async move { engine.toggle_microphone().await });
@@ -1294,7 +1311,17 @@ mod tests {
                 image::Rgb([200, 40, 40]),
             ))
             .expect("a jpeg");
-        painter.act(Action::SetAvatar(jpeg));
+        painter.act(Action::SetAvatar(jpeg.clone()));
+
+        // The same picture as a message: it arrives as one, whole.
+        let room = Conversation::Channel(painter.snapshot().current_channel.expect("a channel"));
+        painter.send_picture(room, jpeg.clone());
+        wait_for("the viewer to receive the picture", || {
+            viewer
+                .messages(room)
+                .iter()
+                .any(|message| crate::rich::Rich::parse(&message.html).images == [jpeg.clone()])
+        });
         wait_for("the viewer to have the painter's picture", || {
             viewer
                 .snapshot()

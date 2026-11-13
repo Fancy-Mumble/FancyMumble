@@ -36,6 +36,9 @@ pub(crate) enum InputEvent {
     },
     /// Escape was pressed.
     Cancelled,
+    /// A picture was pasted: its encoded bytes. Only a field that asked
+    /// for pictures says this.
+    PastedPicture(Vec<u8>),
 }
 
 /// The text of a field, its caret and its selection: the editing itself,
@@ -199,6 +202,8 @@ pub(crate) struct TextInput {
     obscured: bool,
     /// Whether Shift+Enter starts a new line.
     multiline: bool,
+    /// Whether a pasted picture is passed on rather than ignored.
+    takes_pictures: bool,
     /// Where the text was laid out in the frame last painted: what turns a
     /// pointer position into a place in the text. Empty while there is no
     /// text on screen to point at.
@@ -225,6 +230,7 @@ impl TextInput {
             placeholder: placeholder.into(),
             obscured: false,
             multiline: false,
+            takes_pictures: false,
             layout: Rc::default(),
             selecting: false,
             focus: cx.focus_handle(),
@@ -232,6 +238,12 @@ impl TextInput {
     }
 
     /// The same field, taking Shift+Enter as a new line.
+    /// Pass a pasted picture on as an [`InputEvent::PastedPicture`].
+    pub(crate) fn taking_pictures(mut self) -> Self {
+        self.takes_pictures = true;
+        self
+    }
+
     pub(crate) fn multiline(mut self) -> Self {
         self.multiline = true;
         self
@@ -311,7 +323,21 @@ impl TextInput {
                 true
             }
             "v" if command => {
-                if let Some(pasted) = cx.read_from_clipboard().and_then(|item| item.text()) {
+                let item = cx.read_from_clipboard();
+                // A picture on the clipboard goes to whoever takes them;
+                // everything else is text for the field.
+                let picture = item
+                    .as_ref()
+                    .filter(|_| self.takes_pictures)
+                    .and_then(|item| {
+                        item.entries().iter().find_map(|entry| match entry {
+                            gpui::ClipboardEntry::Image(image) => Some(image.bytes.clone()),
+                            gpui::ClipboardEntry::String(_) => None,
+                        })
+                    });
+                if let Some(picture) = picture {
+                    cx.emit(InputEvent::PastedPicture(picture));
+                } else if let Some(pasted) = item.and_then(|item| item.text()) {
                     self.line.insert(&self.pasteable(&pasted));
                 }
                 true

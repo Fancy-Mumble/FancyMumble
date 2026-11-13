@@ -386,6 +386,7 @@ fn editing_strip(theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + u
 }
 
 fn composer(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+    let hover = theme.c.hover;
     div().flex_none().p(px(10.0)).child(
         div()
             // Grows with what is typed, up to a few lines.
@@ -396,13 +397,28 @@ fn composer(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoE
             .flex()
             .items_center()
             .gap(px(10.0))
-            .pl(px(20.0))
+            .pl(px(12.0))
             .pr(px(14.0))
             .rounded(theme.skin.radius_lg)
             .bg(theme.c.input)
             .border_1()
             .border_color(theme.c.line2)
             .text_size(px(15.0))
+            .child(
+                div()
+                    .id("attach")
+                    .debug_selector(|| "attach".to_owned())
+                    .flex_none()
+                    .size(px(28.0))
+                    .rounded(theme.skin.radius_md)
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .hover(move |style| style.bg(hover))
+                    .on_click(cx.listener(|shell, _, _, cx| shell.pick_picture_to_send(cx)))
+                    .child(icon("paperclip", 15.0, theme.c.muted)),
+            )
             .child(shell.composer.clone())
             .child(
                 div()

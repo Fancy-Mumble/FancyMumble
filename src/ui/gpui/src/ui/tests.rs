@@ -1014,3 +1014,32 @@ fn a_servers_tile_says_what_the_server_is_and_leaves_it(cx: &mut TestAppContext)
     click(cx, "menu-Disconnect");
     assert_eq!(engine.snapshot().connection, Connection::Disconnected);
 }
+
+#[gpui::test]
+fn a_picture_on_the_clipboard_is_sent_when_pasted_into_the_composer(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(4, 4, image::Rgb([9, 9, 9])))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .expect("a png");
+    cx.write_to_clipboard(gpui::ClipboardItem::new_image(&gpui::Image::from_bytes(
+        gpui::ImageFormat::Png,
+        png.clone(),
+    )));
+    assert!(cx.debug_bounds("attach").is_some());
+    shell.update_in(cx, |shell, window, cx| {
+        shell.composer.read(cx).focus(window)
+    });
+    cx.simulate_keystrokes("ctrl-v");
+    let sent = engine.messages(Conversation::Channel(1));
+    assert_eq!(sent.len(), 6);
+    assert!(
+        sent[5]
+            .html
+            .starts_with(r#"<img src="data:image/png;base64,"#)
+    );
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(shell.messages.len(), 6);
+        assert_eq!(shell.composer.read(cx).text(), "", "nothing typed");
+    });
+}

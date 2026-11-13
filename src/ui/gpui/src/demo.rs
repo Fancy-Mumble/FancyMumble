@@ -551,6 +551,38 @@ impl Engine for DemoEngine {
         self.tell(EngineEvent::NewMessage { conversation });
     }
 
+    fn send_picture(&self, conversation: Conversation, file: Vec<u8>) {
+        match crate::picture::message_html(&file, 0) {
+            Ok(html) => {
+                self.with_state(|state| {
+                    let sent_at_ms = state
+                        .messages
+                        .last()
+                        .and_then(|(_, last)| last.sent_at_ms)
+                        .map_or(FIRST_MESSAGE_MS, |last| last + MINUTE_MS);
+                    state.messages.push((
+                        conversation,
+                        Message {
+                            sender: Some(OWN),
+                            sender_name: "Alex".into(),
+                            html: html.into(),
+                            body: "sent an image".into(),
+                            sent_at_ms: Some(sent_at_ms),
+                            own: true,
+                            id: Some(format!("demo-sent-{sent_at_ms}").into()),
+                            edited: false,
+                            failed: false,
+                            pinned: false,
+                            reactions: Vec::new(),
+                        },
+                    ));
+                });
+                self.tell(EngineEvent::NewMessage { conversation });
+            }
+            Err(problem) => self.tell(EngineEvent::Notice(Some(problem.into()))),
+        }
+    }
+
     fn toggle_microphone(&self) {
         self.with_state(|state| {
             state.voice = match state.voice {

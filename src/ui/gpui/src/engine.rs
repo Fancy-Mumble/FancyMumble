@@ -405,6 +405,10 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// Send `body` to `conversation`.
     fn send_message(&self, conversation: Conversation, body: String);
 
+    /// Send the picture in `file`, an encoded image, to `conversation`,
+    /// scaled down as far as the server's limit on a message asks.
+    fn send_picture(&self, conversation: Conversation, file: Vec<u8>);
+
     /// The microphone button: turns voice on when it is off, mutes or
     /// unmutes when it is on.
     fn toggle_microphone(&self);
