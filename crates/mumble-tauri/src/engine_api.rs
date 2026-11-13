@@ -583,6 +583,41 @@ impl EngineHandle {
             .await
     }
 
+    /// The labels of the certificates held, in order.
+    pub fn certificates(&self) -> Vec<String> {
+        IdentityStore::new(self.data_dir.clone()).list_labels()
+    }
+
+    /// Delete the certificate `label` and its keys. Registrations made
+    /// with it are lost with it.
+    ///
+    /// # Errors
+    ///
+    /// When its files could not be removed.
+    pub fn delete_certificate(&self, label: &str) -> Result<(), String> {
+        IdentityStore::new(self.data_dir.clone()).delete(label)
+    }
+
+    /// Write the certificate `label`, private key included, to the file
+    /// `to`.
+    ///
+    /// # Errors
+    ///
+    /// When there is no such certificate, or the file could not be written.
+    pub fn export_certificate(&self, label: &str, to: &std::path::Path) -> Result<(), String> {
+        IdentityStore::new(self.data_dir.clone()).export(label, to)
+    }
+
+    /// Take in a certificate exported to the file `from`; says the label
+    /// it is held under.
+    ///
+    /// # Errors
+    ///
+    /// When the file is not an exported certificate.
+    pub fn import_certificate(&self, from: &std::path::Path) -> Result<String, String> {
+        IdentityStore::new(self.data_dir.clone()).import(from)
+    }
+
     /// Leave the server.
     ///
     /// # Errors
