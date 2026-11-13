@@ -22,7 +22,7 @@ use crate::state::types::{
     BanEntryInput, ChannelEntry, ChatMessage, ConnectionStatus, RegisteredUserUpdate, UserEntry,
     VoiceState,
 };
-use crate::state::{AppState, Credentials};
+use crate::state::{AppState, Credentials, LinkEmbed};
 use mumble_protocol::state::PchatProtocol;
 
 /// Where the engine keeps its files.
@@ -132,6 +132,9 @@ pub enum EngineEvent {
         /// Whether it was put on; `false` when it was taken off.
         added: bool,
     },
+    /// The server looked behind links asked about with
+    /// [`EngineHandle::link_previews`].
+    LinkPreviews(Vec<LinkPreview>),
     /// The server answered [`EngineHandle::request_bans`].
     Bans(Vec<BanInfo>),
     /// The server answered [`EngineHandle::request_registered`].
@@ -191,6 +194,46 @@ pub struct UserStats {
     pub os: Option<String>,
     /// Their address; a server tells only an administrator.
     pub address: Option<String>,
+}
+
+/// What a server found behind a link: enough for a small card.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkPreview {
+    /// The link as it stands in the message: what to file the card under.
+    pub url: String,
+    /// The page's title.
+    pub title: Option<String>,
+    /// What the page says of itself.
+    pub description: Option<String>,
+    /// The site's name.
+    pub site: Option<String>,
+    /// A small picture for the card, as an encoded image. Fetched by the
+    /// server: showing it contacts nobody.
+    pub thumbnail: Option<Vec<u8>>,
+}
+
+impl LinkPreview {
+    fn from_embed(url: String, embed: LinkEmbed) -> Self {
+        use base64::Engine as _;
+        let thumbnail = [embed.thumbnail, embed.image]
+            .into_iter()
+            .flatten()
+            .find_map(|media| media.preview)
+            .and_then(|preview| {
+                let (_, encoded) = preview.data_url.split_once(";base64,")?;
+                base64::engine::general_purpose::STANDARD
+                    .decode(encoded)
+                    .ok()
+            });
+        let said = |text: Option<String>| text.filter(|text| !text.trim().is_empty());
+        Self {
+            url,
+            title: said(embed.title),
+            description: said(embed.description).or_else(|| said(embed.summary)),
+            site: said(embed.site_name).or_else(|| embed.provider.map(|provider| provider.name)),
+            thumbnail,
+        }
+    }
 }
 
 /// One entry of the server's ban list.
@@ -314,6 +357,14 @@ impl EngineEvent {
     /// The rest of [`Self::from_core`]: what a server answers when asked.
     fn answer_from_core(event: CoreEvent) -> Option<Self> {
         Some(match event {
+            CoreEvent::LinkPreviews(payload) => Self::LinkPreviews(
+                payload
+                    .requested_urls
+                    .into_iter()
+                    .zip(payload.embeds)
+                    .map(|(url, embed)| LinkPreview::from_embed(url, embed))
+                    .collect(),
+            ),
             CoreEvent::BanList(bans) => Self::Bans(
                 bans.into_iter()
                     .map(|ban| BanInfo {
@@ -1042,6 +1093,24 @@ impl EngineHandle {
     /// When not connected.
     pub async fn request_user_stats(&self, session: u32) -> Result<(), String> {
         self.state.request_user_stats(session).await
+    }
+
+    /// What is behind `urls`. The cards this client already holds come
+    /// back at once; the server is asked about the rest, and answers in an
+    /// [`EngineEvent::LinkPreviews`]. Only a Fancy server looks.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn link_previews(&self, urls: Vec<String>) -> Result<Vec<LinkPreview>, String> {
+        let request = uuid::Uuid::new_v4().to_string();
+        Ok(self
+            .state
+            .request_link_preview(urls, request)
+            .await?
+            .into_iter()
+            .map(|hit| LinkPreview::from_embed(hit.requested_url, hit.embed))
+            .collect())
     }
 
     /// Ask the server for its ban list; the answer is an

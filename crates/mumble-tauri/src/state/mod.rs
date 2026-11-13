@@ -36,6 +36,7 @@ pub use file_server::{
 };
 mod handler;
 pub(crate) mod host;
+pub(crate) use handler::link_preview::LinkEmbed;
 pub(crate) use handler::{LiverySnapshot, data_uri, to_snapshot};
 mod account;
 mod account_seal;
