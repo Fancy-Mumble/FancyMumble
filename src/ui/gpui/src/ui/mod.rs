@@ -11,6 +11,7 @@ mod conversation;
 mod devices;
 mod emoji;
 mod frame;
+mod kit;
 mod menu;
 mod picker;
 mod rail;
@@ -125,6 +126,16 @@ struct Panels {
     admin: Option<admin::Admin>,
     /// The certificates.
     certs: certificates::Panel,
+}
+
+/// The window's own furniture: the gradients behind the window and behind
+/// the conversation, and how the rail is set.
+#[derive(Default)]
+struct Chrome {
+    window: kit::Backdrop,
+    canvas: kit::Backdrop,
+    /// Whether the rail shows the servers' names beside their tiles.
+    rail_wide: bool,
 }
 
 /// Who has read how far in the open channel.
@@ -252,6 +263,7 @@ pub(crate) struct Shell {
     lightbox: Option<Arc<gpui::Image>>,
     /// The panels that open over the window.
     panels: Panels,
+    chrome: Chrome,
     /// Who is whispered to, with which key.
     whisper: Whisper,
     /// The menu a right click opened, while it is open.
@@ -307,7 +319,6 @@ impl Shell {
                 cx.notify();
             }),
             cx.subscribe(&composer, Self::on_composer),
-            // A search narrows its list as it is typed.
             cx.subscribe(&search, |shell, _, _, cx| shell.narrow_column(cx)),
             cx.subscribe(&server_search, |_, _, _, cx| cx.notify()),
             // Enter in the password field connects.
@@ -317,13 +328,10 @@ impl Shell {
                 }
             }),
         ];
-        // Whether the saved servers are up is asked once, here, and again
-        // whenever the list changes or the view returns to it.
+        // Asked here, and whenever the list changes or is returned to.
         engine.refresh_pings();
         let events = Self::listen(engine.events(), cx);
         let stored = store.as_ref().map(Store::settings).unwrap_or_default();
-        let ptt_key = stored.push_to_talk_key.map(Into::into);
-        let whisper_key = stored.whisper_key.map(Into::into);
         let mut shell = Self {
             snapshot: Snapshot::disconnected(),
             wanted: String::new(),
@@ -377,8 +385,9 @@ impl Shell {
             emoji_for: None,
             lightbox: None,
             panels: Panels::default(),
+            chrome: Chrome::default(),
             whisper: Whisper {
-                key: whisper_key,
+                key: stored.whisper_key.map(Into::into),
                 ..Whisper::default()
             },
             menu: None,
@@ -386,7 +395,7 @@ impl Shell {
             volumes: std::collections::HashMap::new(),
             voice_settings: engine.voice_settings(),
             ptt: HeldKey {
-                key: ptt_key,
+                key: stored.push_to_talk_key.map(Into::into),
                 ..HeldKey::default()
             },
             focus: cx.focus_handle(),
@@ -1472,8 +1481,9 @@ impl Render for Shell {
             .when_some(theme.c.window_line, |shell, line| {
                 shell.border_1().border_color(line)
             })
+            .child(self.chrome.window.element(&theme.c.window, theme.c.bg0))
             .when(theme.skin.band, |shell| {
-                shell.child(band::render(&theme, window, cx))
+                shell.child(band::render(self, &theme, window))
             })
             .child(div().flex_1().min_h_0().flex().map(|body| {
                 if self.shows_connect_screen() {
@@ -1488,11 +1498,11 @@ impl Render for Shell {
                 } else {
                     body.child(rail::render(self, &theme, cx))
                         .child(sidebar::render(self, &theme, cx))
-                        .child(conversation::render(self, &theme, cx))
+                        .child(conversation::render(self, &theme, window, cx))
                 }
             }))
             .when(!theme.skin.band, |shell| {
-                shell.child(band::corner_controls(&theme, window, cx))
+                shell.child(band::corner_controls(&theme, window))
             })
             .when(self.picker_open, |shell| {
                 shell.child(picker::render(&theme, cx))

@@ -4,13 +4,13 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use gpui::{
-    AnyElement, Context, HighlightStyle, Hsla, InteractiveText, IntoElement, ParentElement,
-    SharedString, Styled, StyledText, div, linear_color_stop, linear_gradient, list, prelude::*,
-    px,
+    AnyElement, Context, Focusable, HighlightStyle, Hsla, InteractiveText, IntoElement,
+    ParentElement, SharedString, Styled, StyledText, Window, div, list, prelude::*, px,
 };
 
 use super::Shell;
-use super::widgets::{EMPHASIS, Zone, avatar, clock, icon, label};
+use super::kit::{Avatar, Corner, IconButton, Nearest, Paper, Tone, Variant};
+use super::widgets::{EMPHASIS, Zone, clock, icon, label};
 use crate::engine::{Action, Conversation, Message, Poll, PollOption};
 use crate::rich::Rich;
 use crate::theme::{Fill, Theme};
@@ -94,14 +94,22 @@ pub(super) fn rows(messages: &[Message], now_ms: u64, zone: Zone) -> Vec<Row> {
 pub(super) fn render(
     shell: &Shell,
     theme: &Theme,
+    window: &Window,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     div()
         .flex_1()
         .min_w_0()
         .h_full()
+        .relative()
         .flex()
         .flex_col()
+        .child(
+            shell
+                .chrome
+                .canvas
+                .element(&theme.c.backdrop, theme.c.canvas_b),
+        )
         // Files dragged in from outside are sent to whoever is on screen.
         .on_drop(cx.listener(|shell, dropped: &gpui::ExternalPaths, _, cx| {
             shell.send_files(dropped.paths().to_vec(), cx);
@@ -113,13 +121,6 @@ pub(super) fn render(
                 .min_h_0()
                 .flex()
                 .flex_col()
-                // 165deg in the web UI: near enough top to bottom that two
-                // stops down the column read the same.
-                .bg(linear_gradient(
-                    165.0,
-                    linear_color_stop(theme.c.canvas_a, 0.0),
-                    linear_color_stop(theme.c.canvas_b, 1.0),
-                ))
                 .when_some(shell.welcome_to_show(), |column, welcome| {
                     column.child(welcome_card(&welcome, theme, cx))
                 })
@@ -157,7 +158,7 @@ pub(super) fn render(
                 .when_some(shell.replying.clone(), |column, (_, said)| {
                     column.child(composer_strip("reply", said, theme, cx))
                 })
-                .child(composer(shell, theme, cx)),
+                .child(composer(shell, window, cx)),
         )
 }
 
@@ -202,44 +203,31 @@ fn header(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoEle
         Some(Conversation::Channel(id)) if shell.snapshot.current_channel != Some(id) => Some(id),
         _ => None,
     };
+    let open_channel = match shell.open {
+        Some(Conversation::Channel(id)) => Some(id),
+        _ => None,
+    };
     div()
         .flex_none()
         .h(theme.skin.header_height)
         .flex()
         .items_center()
-        .gap(px(14.0))
-        .pl(px(28.0))
+        .gap(px(6.0))
+        .pl(px(26.0))
         // A theme with no band floats the window's controls over this corner.
-        .pr(px(if theme.skin.band { 28.0 } else { 150.0 }))
+        .pr(px(if theme.skin.band { 26.0 } else { 150.0 }))
         .bg(theme.c.header)
         .border_b_1()
         .border_color(theme.c.line)
-        .child(icon(glyph, 16.0, theme.c.dim))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .child(
-                    div()
-                        .truncate()
-                        .font_weight(EMPHASIS)
-                        .text_size(px(15.0))
-                        .child(label(&name, theme)),
-                )
-                .child(
-                    div()
-                        .text_size(px(11.5))
-                        .text_color(theme.c.muted)
-                        .child(about),
-                ),
-        )
+        .child(icon(glyph, 15.0, theme.c.dim))
+        .child(title(&name, about, open_channel, theme, cx))
+        .child(div().flex_1())
         .when_some(joinable, |header, channel| {
             header.child(
                 div()
                     .id("join")
                     .debug_selector(|| "join".to_owned())
+                    .mr(px(8.0))
                     .px(px(14.0))
                     .py(px(5.0))
                     .rounded(theme.skin.radius_pill)
@@ -253,61 +241,140 @@ fn header(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoEle
                     .child(label("Join", theme)),
             )
         })
-        .when(shell.pins > 0, |header| {
-            header.child(pins_button(shell, theme, cx))
+        .child(header_tools(shell, people, open_channel, theme, cx))
+}
+
+/// A conversation's name over what there is to say about it. For a channel
+/// the name is the way into the channel's menu.
+fn title(
+    name: &SharedString,
+    about: String,
+    open_channel: Option<crate::engine::ChannelId>,
+    theme: &Theme,
+    cx: &mut Context<Shell>,
+) -> impl IntoElement + use<> {
+    div()
+        .id("conversation-title")
+        .debug_selector(|| "conversation-title".to_owned())
+        .min_w_0()
+        .flex()
+        .flex_col()
+        .px(px(6.0))
+        .rounded(theme.skin.radius_md)
+        .when_some(open_channel, |title, channel| {
+            title.cursor_pointer().on_click(cx.listener(
+                move |shell, event: &gpui::ClickEvent, _, cx| {
+                    shell.open_channel_menu(channel, event.position(), cx);
+                },
+            ))
         })
-        .when_some(people, |header, people| {
-            header.child(
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(3.0))
+                .child(
+                    div()
+                        .truncate()
+                        .pt(px(1.0))
+                        .mb(px(-1.0))
+                        .font_weight(EMPHASIS)
+                        .text_size(px(14.0))
+                        .line_height(px(21.7))
+                        .child(label(name, theme)),
+                )
+                .when(open_channel.is_some(), |line| {
+                    line.child(icon("chevron-down", 13.0, theme.c.dim))
+                }),
+        )
+        .child(
+            div()
+                .text_size(px(11.0))
+                .line_height(px(17.05))
+                .text_color(theme.c.muted)
+                .child(about),
+        )
+}
+
+/// The buttons at the header's trailing end: how many are here, the search,
+/// the pins, and the rest.
+fn header_tools(
+    shell: &Shell,
+    people: Option<usize>,
+    channel: Option<crate::engine::ChannelId>,
+    theme: &Theme,
+    cx: &mut Context<Shell>,
+) -> impl IntoElement + use<> {
+    let pinned = shell.only_pinned;
+    div()
+        .flex()
+        .items_center()
+        .gap(px(3.0))
+        .when_some(people, |tools, people| {
+            tools.child(
                 div()
+                    .h(px(28.0))
+                    .pl(px(9.0))
+                    .pr(px(8.0))
                     .flex()
                     .items_center()
-                    .gap(px(6.0))
-                    .child(icon("users", 15.0, theme.c.muted))
+                    .gap(px(5.0))
+                    .child(icon("users", 14.0, theme.c.muted))
                     .child(
                         div()
                             .font_weight(EMPHASIS)
-                            .text_size(px(12.0))
+                            .text_size(px(11.5))
+                            .text_color(theme.c.muted)
                             .child(SharedString::from(people.to_string())),
                     ),
             )
         })
-}
-
-/// How many messages are pinned; a click shows only those, or all again.
-fn pins_button(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
-    let on = shell.only_pinned;
-    let hover = theme.c.hover;
-    div()
-        .id("pins")
-        .debug_selector(|| "pins".to_owned())
-        .h(px(28.0))
-        .px(px(8.0))
-        .flex()
-        .items_center()
-        .gap(px(6.0))
-        .rounded(theme.skin.radius_md)
-        .cursor_pointer()
-        .when(on, |pins| pins.bg(theme.c.accent_soft))
-        .hover(move |style| style.bg(hover))
-        .on_click(cx.listener(|shell, _, _, cx| {
-            shell.only_pinned = !shell.only_pinned;
-            shell.reload_messages(cx);
-            cx.notify();
-        }))
-        .child(icon(
-            "pin",
-            14.0,
-            if on {
-                theme.c.accent_text
-            } else {
-                theme.c.muted
-            },
-        ))
         .child(
+            IconButton::new("find", "search")
+                .on_click(cx.listener(|shell, _, window, cx| shell.focus_search(window, cx))),
+        )
+        .child(
+            // How many are pinned rides beside the pin once there are any.
             div()
-                .font_weight(EMPHASIS)
-                .text_size(px(12.0))
-                .child(SharedString::from(shell.pins.to_string())),
+                .flex()
+                .items_center()
+                .child(
+                    IconButton::new("pins", "pin")
+                        .tone(if pinned { Tone::Accent } else { Tone::Muted })
+                        .variant(if pinned {
+                            Variant::Soft
+                        } else {
+                            Variant::Ghost
+                        })
+                        .on_click(cx.listener(|shell, _, _, cx| {
+                            shell.only_pinned = !shell.only_pinned;
+                            shell.reload_messages(cx);
+                            cx.notify();
+                        })),
+                )
+                .when(shell.pins > 0, |pins| {
+                    pins.child(
+                        div()
+                            .debug_selector(|| "pin-count".to_owned())
+                            .pl(px(3.0))
+                            .pr(px(4.0))
+                            .font_weight(EMPHASIS)
+                            .text_size(px(11.5))
+                            .text_color(theme.c.muted)
+                            .child(SharedString::from(shell.pins.to_string())),
+                    )
+                }),
+        )
+        .child(
+            IconButton::new("conversation-menu", "ellipsis-vertical").on_click(cx.listener(
+                move |shell, event: &gpui::ClickEvent, _, cx| match channel {
+                    Some(channel) => shell.open_channel_menu(channel, event.position(), cx),
+                    None => {
+                        let items = super::menu::session_items(&SharedString::default(), true);
+                        shell.open_menu(event.position(), items, cx);
+                    }
+                },
+            )),
         )
 }
 
@@ -537,74 +604,62 @@ fn composer_strip(
         )
 }
 
-fn composer(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
-    let hover = theme.c.hover;
-    div().flex_none().p(px(10.0)).child(
-        div()
+fn composer(shell: &Shell, window: &Window, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+    let armed = !shell.composer.read(cx).text().trim().is_empty();
+    let focused = shell.composer.focus_handle(cx).is_focused(window);
+    // The same gutter the conversation keeps for its scrollbar.
+    div().flex_none().p(px(10.0)).pr(px(19.0)).child(
+        Paper::field()
+            .lit(focused)
             // Grows with what is typed, up to a few lines.
             .min_h(px(54.0))
             .max_h(px(180.0))
             .overflow_hidden()
-            .py(px(10.0))
+            .py(px(11.0))
+            .px(px(15.0))
             .flex()
             .items_center()
-            .gap(px(10.0))
-            .pl(px(12.0))
-            .pr(px(14.0))
-            .rounded(theme.skin.radius_lg)
-            .bg(theme.c.input)
-            .border_1()
-            .border_color(theme.c.line2)
-            .text_size(px(15.0))
+            .gap(px(9.0))
+            .text_size(px(14.0))
+            .line_height(px(19.6))
             .child(
                 div()
-                    .id("attach")
-                    .debug_selector(|| "attach".to_owned())
                     .flex_none()
-                    .size(px(28.0))
-                    .rounded(theme.skin.radius_md)
                     .flex()
                     .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .hover(move |style| style.bg(hover))
-                    .on_click(cx.listener(|shell, _, _, cx| shell.pick_file_to_send(cx)))
-                    .child(icon("paperclip", 15.0, theme.c.muted)),
+                    .gap(px(3.0))
+                    .child(
+                        // On a server that takes no files it still sends
+                        // pictures, in the message itself.
+                        IconButton::new("attach", "paperclip")
+                            .dims(28.0, 32.0)
+                            .glyph_size(16.0)
+                            .faded(!shell.snapshot.fancy)
+                            .on_click(cx.listener(|shell, _, _, cx| shell.pick_file_to_send(cx))),
+                    )
+                    .child(
+                        IconButton::new("compose-more", "chevron-down")
+                            .dims(16.0, 32.0)
+                            .glyph_size(10.0)
+                            .corner(Corner::Small)
+                            .on_click(cx.listener(|shell, event: &gpui::ClickEvent, _, cx| {
+                                let items = super::menu::compose_items(shell.open);
+                                shell.open_menu(event.position(), items, cx);
+                            })),
+                    ),
             )
             .child(shell.composer.clone())
             .child(
-                div()
-                    .id("emoji")
-                    .debug_selector(|| "emoji".to_owned())
-                    .flex_none()
-                    .size(px(28.0))
-                    .rounded(theme.skin.radius_md)
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .hover(move |style| style.bg(hover))
-                    .on_click(cx.listener(|shell, _, _, cx| {
-                        shell.emoji_for = Some(super::emoji::For::Composer);
-                        cx.notify();
-                    }))
-                    .child(icon("smile", 15.0, theme.c.muted)),
-            )
-            .child(
-                div()
-                    .id("send")
-                    .debug_selector(|| "send".to_owned())
-                    .flex_none()
-                    .size(px(32.0))
-                    .rounded(theme.skin.radius_pill)
-                    .bg(theme.c.card2)
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .cursor_pointer()
-                    .hover(|style| style.opacity(0.8))
-                    .on_click(cx.listener(|shell, _, _, cx| shell.send_composed(cx)))
-                    .child(icon("send", 15.0, theme.c.muted)),
+                IconButton::new("send", "send")
+                    .size(32.0)
+                    .corner(Corner::Pill)
+                    .variant(if armed {
+                        Variant::Solid
+                    } else {
+                        Variant::Filled
+                    })
+                    .tone(Tone::Dim)
+                    .on_click(cx.listener(|shell, _, _, cx| shell.send_composed(cx))),
             ),
     )
 }
@@ -1419,7 +1474,8 @@ fn poll_option(
 
 /// A conversation row: the full width of the column, inset from its edges.
 fn row_frame() -> gpui::Div {
-    div().w_full().pl(px(10.0)).pr(px(20.0))
+    // The trailing nine pixels are the gutter a scrollbar would take.
+    div().w_full().pl(px(10.0)).pr(px(19.0))
 }
 
 /// The rule that starts a day, with the day on a pill in the middle.
@@ -1430,30 +1486,52 @@ fn day_rule(name: &SharedString, theme: &Theme) -> impl IntoElement + use<> {
         .pt(px(26.0))
         .flex()
         .items_center()
-        .gap(px(12.0))
+        .gap(px(14.0))
         .child(rule())
         .child(
             div()
-                .px(px(11.0))
+                .px(px(10.5))
                 .py(px(3.0))
-                .rounded(theme.skin.radius_pill)
+                .rounded(theme.skin.radius_lg)
                 .bg(theme.c.card)
                 .border_1()
                 .border_color(theme.c.line)
-                .text_size(px(11.5))
+                .text_size(px(10.5))
+                .line_height(px(16.275))
                 .text_color(theme.c.muted)
                 .child(label(name, theme)),
         )
         .child(rule())
 }
 
-fn bubble(theme: &Theme) -> gpui::Div {
-    div()
+/// A message's plate, of `fill` on a ground of `edge`: the large corner
+/// all round but the one nearest its sender.
+fn bubble(fill: Hsla, edge: Hsla, own: bool) -> Paper {
+    Paper::plate(fill, edge)
+        .nearest(if own {
+            Nearest::Trailing
+        } else {
+            Nearest::Leading
+        })
         .max_w(px(620.0))
-        .px(px(14.0))
-        .py(px(9.0))
-        .rounded(theme.skin.radius_lg)
-        .text_size(px(15.0))
+        // Fourteen and nine all round in the web UI. A browser sets the
+        // line a pixel lower in its box than this text system does, and
+        // measures it a fraction narrower: both are taken up here.
+        .pl(px(14.0))
+        .pr(px(13.0))
+        .pt(px(10.0))
+        .pb(px(8.0))
+        .text_size(px(14.0))
+        .line_height(px(21.7))
+}
+
+/// The time beside a name or under a bubble.
+fn stamp(time: SharedString, theme: &Theme) -> gpui::Div {
+    div()
+        .text_size(px(9.5))
+        .line_height(px(13.3))
+        .text_color(theme.c.dim)
+        .child(time)
 }
 
 #[allow(
@@ -1484,13 +1562,18 @@ fn their_message(
                 .flex()
                 .flex_col()
                 .items_center()
-                .gap(px(4.0))
+                .gap(px(3.0))
                 .when(!continues, |column| {
                     column
-                        .child(avatar(&message.sender_name, picture, 38.0, theme))
+                        .child(
+                            Avatar::new(&message.sender_name)
+                                .picture(picture)
+                                .size(38.0),
+                        )
                         .child(
                             div()
-                                .text_size(px(10.0))
+                                .text_size(px(9.0))
+                                .line_height(px(10.8))
                                 .text_color(theme.c.dim)
                                 .child(time.clone()),
                         )
@@ -1501,33 +1584,32 @@ fn their_message(
                 .flex()
                 .flex_col()
                 .items_start()
-                .gap(px(5.0))
+                .gap(px(2.0))
                 .when(!continues, |column| {
                     column.child(
                         div()
                             .flex()
-                            .items_baseline()
+                            .items_start()
                             .gap(px(8.0))
                             .child(
                                 div()
+                                    .pt(px(1.0))
+                                    .mb(px(-1.0))
                                     .font_weight(EMPHASIS)
+                                    .text_size(px(13.0))
+                                    .line_height(px(20.15))
                                     .child(message.sender_name.clone()),
                             )
-                            .child(
-                                div()
-                                    .text_size(px(11.0))
-                                    .text_color(theme.c.dim)
-                                    .child(time),
-                            ),
+                            // On the name's baseline.
+                            .child(stamp(time, theme).mt(px(5.0))),
                     )
                 })
-                .child(
-                    bubble(theme)
-                        .bg(theme.c.card)
-                        .border_1()
-                        .border_color(theme.c.line2)
-                        .child(body_text(body, at, theme.c.accent_text, theme)),
-                )
+                .child(bubble(theme.c.card, theme.c.line, false).child(body_text(
+                    body,
+                    at,
+                    theme.c.accent_text,
+                    theme,
+                )))
                 .when(message.edited || message.pinned, |column| {
                     column.child(
                         div()
@@ -1567,28 +1649,21 @@ fn own_message(
         Fill::Wash => theme.c.accent_text,
     };
     let plate = match theme.skin.bubble_own {
-        Fill::Solid => bubble(theme)
-            .bg(theme.c.accent)
-            .text_color(theme.c.on_accent),
-        Fill::Wash => bubble(theme)
-            .bg(theme.c.accent_soft)
-            .border_1()
-            .border_color(theme.c.accent_line),
+        Fill::Solid => bubble(theme.c.accent, theme.c.accent, true).text_color(theme.c.on_accent),
+        Fill::Wash => bubble(theme.c.accent_soft, theme.c.accent_line, true),
     };
     div()
         .flex()
         .flex_col()
         .items_end()
-        .gap(px(5.0))
+        .gap(px(4.0))
         .child(plate.child(body_text(body, at, link_ink, theme)))
         .children(under)
         .child(
-            div()
+            stamp(SharedString::default(), theme)
                 .flex()
                 .items_center()
-                .gap(px(6.0))
-                .text_size(px(11.0))
-                .text_color(theme.c.dim)
+                .gap(px(8.0))
                 .when(message.pinned, |line| {
                     line.child(icon("pin", 11.0, theme.c.accent_text))
                 })
@@ -1598,9 +1673,9 @@ fn own_message(
                     if message.failed {
                         line.child(div().text_color(theme.c.bad).child("not sent"))
                     } else if seen {
-                        line.child(icon("check-check", 12.0, theme.c.accent_text))
+                        line.child(icon("check-check", 13.0, theme.c.accent_text))
                     } else {
-                        line.child(icon("check", 12.0, theme.c.dim))
+                        line.child(icon("check", 13.0, theme.c.dim))
                     }
                 }),
         )

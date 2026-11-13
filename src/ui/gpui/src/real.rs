@@ -702,6 +702,7 @@ impl Engine for RealEngine {
             .into_iter()
             .filter(|session| session.connection != api::Connection::Disconnected)
             .map(|session| SessionEntry {
+                key: format!("{}:{}", session.host, session.port).into(),
                 name: saved
                     .iter()
                     .find(|server| {

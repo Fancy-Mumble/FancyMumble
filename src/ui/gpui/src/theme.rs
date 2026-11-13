@@ -5,14 +5,18 @@
 //! (`nebula/themeCatalog.ts`, resolved by `themeScheme.ts`) and a test there
 //! keeps current, so the two views cannot drift apart.
 //!
-//! What this view leaves out is what costs the most to draw: the radial
-//! window mesh, backdrop blur and clip paths. Chrome that the web UI draws as
-//! glass over a mesh is drawn here as the same colour over the flat window.
+//! What this view leaves out is what costs the most to draw: backdrop blur
+//! and clip paths. The window's mesh and the conversation's backdrop are
+//! drawn once into a small picture and stretched (see `paint`), and chrome
+//! the web UI draws as glass over them is drawn as the same colour over
+//! them, unblurred: a blurred gradient is the gradient.
 
 use std::sync::Arc;
 
 use gpui::{App, FontWeight, Global, Hsla, Pixels, Rgba, SharedString, px};
 use serde::Deserialize;
+
+use crate::paint::Paint;
 
 /// The generated table: every theme, both modes, already resolved.
 const TABLE: &str = include_str!("../assets/themes.json");
@@ -63,16 +67,13 @@ pub(crate) struct Colors {
     pub header: Hsla,
     /// The server rail and what is drawn on it.
     pub rail: Hsla,
-    pub rail_tile: Hsla,
-    pub rail_line: Hsla,
+    pub rail_dim: Hsla,
     /// A raised surface, and its edge.
     pub card: Hsla,
     /// Chips, badges, the keyboard hint.
     pub card2: Hsla,
     /// Search box and composer fill.
     pub input: Hsla,
-    /// Avatar placeholder.
-    pub tile: Hsla,
     /// The section rule, and the stronger card edge.
     pub line: Hsla,
     pub line2: Hsla,
@@ -87,16 +88,17 @@ pub(crate) struct Colors {
     /// The accent as a fill, as a foreground, and the ink on it.
     pub accent: Hsla,
     pub accent_text: Hsla,
-    pub accent_on_rail: Hsla,
     pub on_accent: Hsla,
     pub accent_soft: Hsla,
     pub accent_line: Hsla,
     /// Presence, destructive.
     pub ok: Hsla,
     pub bad: Hsla,
-    /// The conversation's gradient, top and bottom.
-    pub canvas_a: Hsla,
+    /// The conversation's ground, under its backdrop.
     pub canvas_b: Hsla,
+    /// The gradients behind the whole window and behind the conversation.
+    pub window: Arc<Paint>,
+    pub backdrop: Arc<Paint>,
 }
 
 /// Everything about a theme that is not a colour.
@@ -261,12 +263,10 @@ pub(crate) fn emergency_theme() -> Theme {
             panel: ground,
             header: raised,
             rail: ground,
-            rail_tile: raised,
-            rail_line: raised,
+            rail_dim: ink,
             card: raised,
             card2: raised,
             input: raised,
-            tile: raised,
             line: raised,
             line2: raised,
             window_line: None,
@@ -276,14 +276,14 @@ pub(crate) fn emergency_theme() -> Theme {
             dim: ink,
             accent,
             accent_text: accent,
-            accent_on_rail: accent,
             on_accent: ground,
             accent_soft: raised,
             accent_line: accent,
             ok: accent,
             bad: accent,
-            canvas_a: ground,
             canvas_b: ground,
+            window: Arc::default(),
+            backdrop: Arc::default(),
         },
         skin: RawSkin::default().resolve(&[]),
     }
@@ -311,7 +311,6 @@ impl RawTheme {
 #[serde(rename_all = "camelCase")]
 struct RawMode {
     tokens: RawTokens,
-    canvas_a: String,
     canvas_b: String,
 }
 
@@ -326,12 +325,10 @@ impl RawMode {
             panel: color(&t.panel),
             header: color(&t.header),
             rail: color(&t.rail),
-            rail_tile: color(&t.rail_tile),
-            rail_line: color(&t.rail_line),
+            rail_dim: color(&t.rail_dim),
             card: color(&t.card),
             card2: color(&t.card2),
             input: color(&t.input),
-            tile: color(&t.tile),
             line: color(&t.line),
             line2: color(&t.line2),
             window_line: (t.window_line != "none").then(|| color(&t.window_line)),
@@ -341,14 +338,14 @@ impl RawMode {
             dim: color(&t.dim),
             accent: color(&t.accent),
             accent_text: color(&t.accent_text),
-            accent_on_rail: color(&t.accent_on_rail),
             on_accent: color(&t.on_accent),
             accent_soft: color(&t.accent_soft),
             accent_line: color(&t.accent_line),
             ok: color(&t.ok),
             bad: color(&t.bad),
-            canvas_a: color(&self.canvas_a),
             canvas_b: color(&self.canvas_b),
+            window: Arc::new(Paint::parse(&t.window)),
+            backdrop: Arc::new(Paint::parse(&t.backdrop)),
         }
     }
 }
@@ -358,18 +355,19 @@ impl RawMode {
 #[serde(rename_all = "camelCase")]
 struct RawTokens {
     bg0: String,
+    /// The two gradient stacks, as CSS.
+    window: String,
+    backdrop: String,
     bar: String,
     bar_text: String,
     bar_dim: String,
     panel: String,
     header: String,
     rail: String,
-    rail_tile: String,
-    rail_line: String,
+    rail_dim: String,
     card: String,
     card2: String,
     input: String,
-    tile: String,
     line: String,
     line2: String,
     window_line: String,
@@ -380,7 +378,6 @@ struct RawTokens {
     accent: String,
     accent_text: String,
     accent2: String,
-    accent_on_rail: String,
     on_accent: String,
     accent_soft: String,
     accent_line: String,
@@ -537,7 +534,7 @@ pub(crate) fn color(value: &str) -> Hsla {
     parse_color(value).map_or_else(gpui::transparent_black, Hsla::from)
 }
 
-fn parse_color(value: &str) -> Option<Rgba> {
+pub(crate) fn parse_color(value: &str) -> Option<Rgba> {
     let value = value.trim();
     if let Some(hex) = value.strip_prefix('#') {
         return parse_hex(hex);

@@ -1,6 +1,6 @@
 //! The small pieces every part of the shell draws with.
 
-use gpui::{Hsla, Pixels, SharedString, Styled, Svg, div, px, svg};
+use gpui::{Hsla, SharedString};
 
 use crate::theme::Theme;
 
@@ -10,59 +10,7 @@ use crate::theme::Theme;
 /// family without one answers with its bold.
 pub(crate) const EMPHASIS: gpui::FontWeight = gpui::FontWeight::SEMIBOLD;
 
-/// A bundled icon, `size` square, in `color`.
-pub(crate) fn icon(name: &'static str, size: f32, color: Hsla) -> Svg {
-    svg()
-        .path(SharedString::from(format!("icons/{name}.svg")))
-        .size(px(size))
-        .flex_none()
-        .text_color(color)
-}
-
-/// A user's avatar: their picture, or until it has arrived (or if they
-/// have none) their initial on the theme's placeholder tile.
-pub(crate) fn avatar(
-    name: &str,
-    picture: Option<&std::sync::Arc<gpui::Image>>,
-    size: f32,
-    theme: &Theme,
-) -> gpui::AnyElement {
-    use gpui::prelude::*;
-
-    let radius = avatar_radius(size, theme);
-    if let Some(picture) = picture {
-        return gpui::img(std::sync::Arc::clone(picture))
-            .flex_none()
-            .size(px(size))
-            .rounded(radius)
-            .object_fit(gpui::ObjectFit::Cover)
-            .into_any_element();
-    }
-    let initial: String = name
-        .chars()
-        .next()
-        .map(|first| first.to_uppercase().collect())
-        .unwrap_or_default();
-    div()
-        .flex_none()
-        .size(px(size))
-        .rounded(radius)
-        .bg(theme.c.tile)
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px((size * 0.42).max(9.0)))
-        .font_weight(EMPHASIS)
-        .text_color(theme.c.text)
-        .child(initial)
-        .into_any_element()
-}
-
-/// The corner an avatar of `size` gets: a circle unless the theme squares
-/// its avatars off.
-pub(crate) fn avatar_radius(size: f32, theme: &Theme) -> Pixels {
-    theme.skin.radius_avatar.unwrap_or(px(size / 2.0))
-}
+pub(crate) use super::kit::icon;
 
 /// `color` as it looks painted over `ground`, with no transparency left.
 ///

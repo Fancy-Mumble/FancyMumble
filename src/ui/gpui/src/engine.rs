@@ -391,6 +391,8 @@ pub(crate) struct SessionEntry {
     pub id: SharedString,
     /// What the user calls the server: its saved label, or its host.
     pub name: SharedString,
+    /// Its address, `host:port`: what its tile's colours are taken from.
+    pub key: SharedString,
     /// Whether it is the one the snapshot is of.
     pub active: bool,
 }

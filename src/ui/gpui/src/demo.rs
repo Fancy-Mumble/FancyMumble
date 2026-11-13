@@ -619,6 +619,7 @@ impl Engine for DemoEngine {
                 sessions: vec![SessionEntry {
                     id: "demo".into(),
                     name: "magical.rocks".into(),
+                    key: "magical.rocks:64738".into(),
                     active: true,
                 }],
                 fancy: !state.plain,

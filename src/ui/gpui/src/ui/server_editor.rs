@@ -6,6 +6,7 @@ use gpui::{
 };
 
 use super::Shell;
+use super::kit::{Button, Emphasis, Tone};
 use super::text_input::{InputEvent, TextInput};
 use super::widgets::{EMPHASIS, icon, label, opaque};
 use crate::engine::SavedServer;
@@ -330,7 +331,7 @@ pub(super) fn render(
                             .child(problem),
                     )
                 })
-                .child(buttons(editor.editing.is_some(), theme, cx)),
+                .child(buttons(editor.editing.is_some(), cx)),
         )
 }
 
@@ -410,19 +411,7 @@ fn toggle_row(
         .child(div().text_size(px(13.0)).child(meaning))
 }
 
-fn buttons(editing: bool, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
-    let hover = theme.c.hover;
-    let button = |id: &'static str| {
-        div()
-            .id(id)
-            .debug_selector(move || format!("editor-{id}"))
-            .h(px(36.0))
-            .px(px(18.0))
-            .flex()
-            .items_center()
-            .rounded(theme.skin.radius_md)
-            .cursor_pointer()
-    };
+fn buttons(editing: bool, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     div()
         .mt(px(6.0))
         .flex()
@@ -430,28 +419,23 @@ fn buttons(editing: bool, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoEl
         .gap(px(8.0))
         .when(editing, |row| {
             row.child(
-                button("delete")
-                    .text_color(theme.c.bad)
-                    .hover(move |style| style.bg(hover))
-                    .on_click(cx.listener(|shell, _, _, cx| shell.delete_edited(cx)))
-                    .child(label("Forget", theme)),
+                Button::new("delete", "Forget")
+                    .selector("editor-delete")
+                    .tone(Tone::Danger)
+                    .on_click(cx.listener(|shell, _, _, cx| shell.delete_edited(cx))),
             )
         })
         .child(div().flex_1())
         .child(
-            button("cancel")
-                .text_color(theme.c.muted)
-                .hover(move |style| style.bg(hover))
-                .on_click(cx.listener(|shell, _, _, cx| shell.close_editor(cx)))
-                .child(label("Cancel", theme)),
+            Button::new("cancel", "Cancel")
+                .selector("editor-cancel")
+                .on_click(cx.listener(|shell, _, _, cx| shell.close_editor(cx))),
         )
         .child(
-            button("save")
-                .bg(theme.c.accent)
-                .text_color(theme.c.on_accent)
-                .font_weight(EMPHASIS)
-                .on_click(cx.listener(|shell, _, _, cx| shell.save_editor(cx)))
-                .child(label("Save", theme)),
+            Button::new("save", "Save")
+                .selector("editor-save")
+                .emphasis(Emphasis::Contained)
+                .on_click(cx.listener(|shell, _, _, cx| shell.save_editor(cx))),
         )
 }
 

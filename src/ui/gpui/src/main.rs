@@ -12,6 +12,7 @@ mod assets;
 mod demo;
 mod engine;
 mod notify;
+mod paint;
 mod paths;
 mod picture;
 mod real;

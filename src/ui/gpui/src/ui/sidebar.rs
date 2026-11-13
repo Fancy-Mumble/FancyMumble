@@ -6,7 +6,8 @@ use gpui::{
 };
 
 use super::Shell;
-use super::widgets::{EMPHASIS, avatar, icon, label};
+use super::kit::{Avatar, Badge, IconButton, Kbd, Paper, Tone, Variant};
+use super::widgets::{EMPHASIS, icon, label};
 use crate::engine::{Channel, Connection, Conversation, User, Voice};
 use crate::theme::{Fill, Theme};
 
@@ -60,7 +61,9 @@ pub(super) fn tree_order(channels: &[Channel]) -> Vec<(usize, usize)> {
 }
 
 /// How far each level of the channel tree steps in.
-const INDENT: f32 = 11.0;
+const INDENT: f32 = 12.0;
+/// One line of a row's text: 12.5px at the web UI's leading.
+const LINE: f32 = 19.375;
 
 pub(super) fn render(
     shell: &Shell,
@@ -73,48 +76,48 @@ pub(super) fn render(
         .h_full()
         .flex()
         .flex_col()
-        .gap(px(12.0))
-        .p(px(12.0))
         .bg(theme.c.panel)
         .border_r_1()
         .border_color(theme.c.line)
-        .child(search_box(shell, theme))
+        .child(
+            div()
+                .flex_none()
+                .p(px(12.0))
+                .pb(px(6.0))
+                .child(search_box(shell, theme)),
+        )
         .child(
             gpui::list(
                 shell.column_list.clone(),
                 cx.processor(|shell, row: usize, _, cx| shell.render_column_row(row, cx)),
             )
             .flex_1()
-            .min_h_0(),
+            .min_h_0()
+            .py(px(8.0)),
         )
-        .child(user_tile(shell, theme, cx))
+        .child(
+            div()
+                .flex_none()
+                .p(px(10.0))
+                .child(user_tile(shell, theme, cx)),
+        )
 }
 
 fn search_box(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
     div()
-        .flex_none()
-        .h(px(46.0))
+        .h(px(47.0))
         .flex()
         .items_center()
-        .gap(px(10.0))
+        .gap(px(8.0))
         .px(px(14.0))
         .rounded(theme.skin.radius_lg)
         .bg(theme.c.input)
         .border_1()
         .border_color(theme.c.line2)
-        .child(icon("search", 14.0, theme.c.dim))
+        .text_size(px(12.5))
+        .child(icon("search", 12.0, theme.c.dim).mt(px(-1.0)))
         .child(shell.search.clone())
-        .child(
-            div()
-                .flex_none()
-                .px(px(6.0))
-                .py(px(1.0))
-                .rounded(theme.skin.radius_sm)
-                .bg(theme.c.card2)
-                .text_size(px(10.5))
-                .text_color(theme.c.muted)
-                .child("Ctrl+F"),
-        )
+        .child(Kbd::new("Ctrl+F"))
 }
 
 /// One row of the channel column.
@@ -140,7 +143,7 @@ impl Shell {
             Some(Row::FoundHeading) => {
                 return div()
                     .w_full()
-                    .px(px(14.0))
+                    .px(px(24.0))
                     .pt(px(10.0))
                     .pb(px(6.0))
                     .text_size(px(11.0))
@@ -161,8 +164,19 @@ impl Shell {
             let open = self.open == Some(Conversation::Channel(channel.id));
             channel_row(self, channel, depth, open, &theme, cx)
         };
-        // The gap between rows, which a list does not put there itself.
-        div().w_full().pb(px(4.0)).child(drawn).into_any_element()
+        // The gap between rows, which a list does not put there itself; a
+        // channel and the people under it are one card, with none.
+        let gap = if !people && self.occupant_count(channel.id) > 0 {
+            0.0
+        } else {
+            2.0
+        };
+        div()
+            .w_full()
+            .px(px(10.0))
+            .pb(px(gap))
+            .child(drawn)
+            .into_any_element()
     }
 
     /// A message that matched the search: what it says, and who said it
@@ -175,7 +189,8 @@ impl Shell {
         let conversation = found.conversation;
         div()
             .w_full()
-            .pb(px(4.0))
+            .px(px(10.0))
+            .pb(px(2.0))
             .child(
                 div()
                     .id(("found", at))
@@ -218,34 +233,42 @@ fn channel_row(
     cx: &mut Context<Shell>,
 ) -> AnyElement {
     let occupants = shell.occupant_count(channel.id);
+    // A channel with people in it is the head of the card that lists them.
+    let carded = occupants > 0;
     let solid = current && theme.skin.selection == Fill::Solid;
     let (ink, hash) = if solid {
         (theme.c.on_accent, theme.c.on_accent)
     } else if current {
-        (theme.c.text, theme.c.muted)
+        (theme.c.text, theme.c.accent_text)
     } else {
         (theme.c.muted, theme.c.dim)
     };
     let hover = theme.c.hover;
     let id = channel.id;
-    div()
+    let clear = gpui::transparent_black();
+    let row = div()
         .id(("channel", id as usize))
         .debug_selector(|| format!("channel-{id}"))
-        .flex_none()
-        .h(px(36.0))
         .flex()
         .items_center()
-        .gap(px(9.0))
-        .px(px(14.0))
-        .ml(px(INDENT * depth as f32))
+        .gap(px(8.2))
+        // A carded row gives two pixels each way to the card's own edge.
+        .px(px(if carded { 10.0 } else { 12.0 }))
+        // 37.4 in the web UI, which a browser draws as 38 whole pixels.
+        .when(carded, |row| row.h(px(38.0)))
+        .when(!carded, |row| row.py(px(10.0)))
         .rounded(theme.skin.radius_md)
+        .when(carded, |row| row.rounded_b(px(0.0)))
+        .border_1()
+        .border_color(clear)
         .cursor_pointer()
+        .text_size(px(12.5))
+        .line_height(px(LINE))
         .text_color(ink)
         .map(|row| match (current, solid) {
             (true, true) => row.bg(theme.c.accent),
             (true, false) => row
                 .bg(theme.c.accent_soft)
-                .border_1()
                 .border_color(theme.c.accent_line),
             _ => row.hover(move |style| style.bg(hover)),
         })
@@ -253,16 +276,7 @@ fn channel_row(
         .on_mouse_down(
             gpui::MouseButton::Right,
             cx.listener(move |shell, event: &gpui::MouseDownEvent, _, cx| {
-                let Some(channel) = shell.snapshot.channels.iter().find(|c| c.id == id) else {
-                    return;
-                };
-                let items = super::menu::channel_items(
-                    channel,
-                    shell.snapshot.current_channel,
-                    shell.snapshot.fancy,
-                    shell.whisper_target(),
-                );
-                shell.open_menu(event.position, items, cx);
+                shell.open_channel_menu(id, event.position, cx);
             }),
         )
         // A click reads the channel; a double click moves into it.
@@ -272,7 +286,15 @@ fn channel_row(
             }
             shell.open_conversation(Conversation::Channel(id), cx);
         }))
-        .child(icon("hash", 13.0, hash))
+        .child(
+            div()
+                .flex_none()
+                .text_size(px(13.0))
+                .line_height(px(13.0))
+                .font_weight(theme.skin.weight)
+                .text_color(hash)
+                .child("#"),
+        )
         .child(
             div()
                 .flex_1()
@@ -280,55 +302,67 @@ fn channel_row(
                 .truncate()
                 .child(label(&channel.name, theme)),
         )
-        .when(channel.listening, |row| {
-            row.child(
-                div()
-                    .debug_selector(move || format!("listening-{id}"))
-                    .child(icon("ear", 12.0, hash)),
-            )
-        })
-        .when(channel.unread > 0 && !current, |row| {
-            row.child(unread_badge(channel.unread, theme))
-        })
-        .when(occupants > 0 && channel.parent.is_some(), |row| {
-            let voice = if solid { theme.c.on_accent } else { theme.c.ok };
-            row.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(5.0))
-                    .text_size(px(11.5))
-                    .text_color(voice)
-                    .child(icon("volume-2", 11.0, voice))
-                    .child(SharedString::from(occupants.to_string())),
-            )
-        })
-        .into_any_element()
+        .children(row_marks(channel, occupants, current, solid, hash, theme));
+    let indent = px(INDENT * depth as f32);
+    if carded {
+        // The top of the card; the people under it are its bottom.
+        div()
+            .ml(indent)
+            .rounded_t(theme.skin.radius_md)
+            .bg(theme.c.card)
+            .border_1()
+            .border_b_0()
+            .border_color(theme.c.line)
+            .child(row)
+            .into_any_element()
+    } else {
+        div().ml(indent).child(row).into_any_element()
+    }
 }
 
-/// How many messages wait unread, on a pill.
-fn unread_badge(count: u32, theme: &Theme) -> impl IntoElement + use<> {
-    div()
-        .flex_none()
-        .min_w(px(18.0))
-        .h(px(18.0))
-        .px(px(5.0))
-        .rounded(theme.skin.radius_pill)
-        .bg(theme.c.accent)
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(10.5))
-        .font_weight(EMPHASIS)
-        .text_color(theme.c.on_accent)
-        .child(if count > 99 {
-            SharedString::from("99+")
-        } else {
-            SharedString::from(count.to_string())
-        })
+/// What rides at a channel row's trailing end: that it is listened to, how
+/// much waits unread, how many are in it.
+fn row_marks(
+    channel: &Channel,
+    occupants: usize,
+    current: bool,
+    solid: bool,
+    hash: gpui::Hsla,
+    theme: &Theme,
+) -> Vec<AnyElement> {
+    let id = channel.id;
+    let mut marks = Vec::new();
+    if channel.listening {
+        marks.push(
+            div()
+                .debug_selector(move || format!("listening-{id}"))
+                .child(icon("ear", 12.0, hash))
+                .into_any_element(),
+        );
+    }
+    if channel.unread > 0 && !current {
+        marks.push(Badge::new(channel.unread).into_any_element());
+    }
+    if occupants > 0 && channel.parent.is_some() {
+        let voice = if solid { theme.c.on_accent } else { theme.c.ok };
+        marks.push(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(4.2))
+                .font_weight(theme.skin.weight)
+                .text_size(px(10.5))
+                .line_height(px(16.275))
+                .text_color(voice)
+                .child(icon("volume-2", 10.0, voice))
+                .child(SharedString::from(occupants.to_string()))
+                .into_any_element(),
+        );
+    }
+    marks
 }
 
-/// Who is in a channel, on a card hanging under its row.
+/// Who is in a channel: the bottom of the card its row is the top of.
 fn occupant_list(
     shell: &Shell,
     channel: &Channel,
@@ -341,10 +375,13 @@ fn occupant_list(
         .ml(px(INDENT * depth as f32))
         .flex()
         .flex_col()
-        .py(px(4.0))
-        .rounded(theme.skin.radius_md)
+        .gap(px(1.0))
+        .px(px(8.0))
+        .pb(px(8.0))
+        .rounded_b(theme.skin.radius_md)
         .bg(theme.c.card)
         .border_1()
+        .border_t_0()
         .border_color(theme.c.line)
         .children(
             shell
@@ -368,12 +405,14 @@ fn occupant_row(
     div()
         .id(("user", session as usize))
         .debug_selector(move || format!("user-{session}"))
-        .h(px(31.0))
+        .h(px(30.0))
         .flex()
         .items_center()
         .gap(px(9.0))
-        .px(px(14.0))
-        .rounded(theme.skin.radius_sm)
+        .px(px(8.0))
+        .rounded(theme.skin.radius_md)
+        .text_size(px(12.5))
+        .line_height(px(LINE))
         .on_mouse_down(
             gpui::MouseButton::Right,
             cx.listener(move |shell, event: &gpui::MouseDownEvent, _, cx| {
@@ -400,18 +439,10 @@ fn occupant_row(
                 }))
         })
         .child(
-            // The ring a talking user wears; always present so a row does not
-            // shift by a pixel when somebody speaks.
-            div()
-                .flex_none()
-                .rounded(super::widgets::avatar_radius(24.0, theme))
-                .border_2()
-                .border_color(if talking {
-                    theme.c.ok
-                } else {
-                    gpui::transparent_black()
-                })
-                .child(avatar(&user.name, user.avatar.as_ref(), 20.0, theme)),
+            Avatar::new(&user.name)
+                .picture(user.avatar.as_ref())
+                .size(20.0)
+                .talking(talking),
         )
         .child(
             div()
@@ -430,14 +461,15 @@ fn occupant_row(
         .when(own, |row| {
             row.child(
                 div()
-                    .text_size(px(10.5))
+                    .mt(px(-1.0))
+                    .text_size(px(9.5))
+                    .line_height(px(14.725))
+                    .font_weight(gpui::FontWeight::MEDIUM)
                     .text_color(theme.c.dim)
                     .child("you"),
             )
         })
-        .when(user.unread > 0, |row| {
-            row.child(unread_badge(user.unread, theme))
-        })
+        .when(user.unread > 0, |row| row.child(Badge::new(user.unread)))
 }
 
 /// The local user's tile: who they are, and the voice controls.
@@ -473,46 +505,64 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
         || SharedString::from("Not connected"),
         |user| user.name.clone(),
     );
-    let picture = own.and_then(|user| user.avatar.clone());
     // With voice off the server lists the user as deafened, because nothing
     // is heard; to the user that is "voice off", not a deafen they chose.
     let deafened = shell.snapshot.deafened && shell.snapshot.voice != Voice::Off;
     // The microphone is "off" both when voice is off and when it is muted:
     // either way nobody hears the user, which is what the red says.
     let silent = shell.snapshot.voice != Voice::On;
-    let tile_hover = theme.c.hover;
     let (status, whisper_to) = voice_status(shell, deafened);
-    div()
-        .flex_none()
+    // The pip says how the user is heard: not at all, muted, or live.
+    let pip = match (shell.snapshot.voice, deafened) {
+        (Voice::Off, _) => theme.c.dim,
+        (_, true) | (Voice::Muted, _) => theme.c.bad,
+        (Voice::On, false) => theme.c.ok,
+    };
+    Paper::raised()
         .flex()
-        .gap(px(12.0))
+        .items_center()
+        .gap(px(14.0))
         .p(px(10.0))
-        .rounded(theme.skin.radius_lg)
-        .bg(theme.c.card)
-        .border_1()
-        .border_color(theme.c.line2)
-        .child(avatar(&name, picture.as_ref(), 42.0, theme))
+        .child(
+            Avatar::new(&name)
+                .picture(own.and_then(|user| user.avatar.as_ref()))
+                .size(42.0)
+                .status(Some(pip)),
+        )
         .child(
             div()
                 .flex_1()
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .gap(px(6.0))
+                .gap(px(8.0))
                 .child(
                     div()
                         .flex()
-                        .items_center()
+                        .items_start()
                         .justify_between()
+                        .gap(px(8.0))
                         .child(
                             div()
+                                .flex_1()
+                                .min_w_0()
                                 .flex()
                                 .flex_col()
-                                .child(div().font_weight(EMPHASIS).child(name))
+                                .gap(px(1.0))
+                                .child(
+                                    div()
+                                        .truncate()
+                                        .text_size(px(13.0))
+                                        .line_height(px(14.95))
+                                        .font_weight(EMPHASIS)
+                                        .child(name),
+                                )
                                 .child(
                                     div()
                                         .debug_selector(|| "voice-status".to_owned())
-                                        .text_size(px(11.5))
+                                        .truncate()
+                                        .text_size(px(10.5))
+                                        .line_height(px(14.175))
                                         .text_color(theme.c.muted)
                                         .child(status),
                                 )
@@ -520,94 +570,70 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
                                     column.child(
                                         div()
                                             .debug_selector(|| "whisper-target".to_owned())
-                                            .text_size(px(11.0))
+                                            .truncate()
+                                            .text_size(px(10.5))
+                                            .line_height(px(14.175))
                                             .text_color(theme.c.accent_text)
                                             .child(says),
                                     )
                                 }),
                         )
                         .child(
-                            div()
-                                .id("audio-devices")
-                                .debug_selector(|| "audio-devices".to_owned())
-                                .size(px(28.0))
-                                .rounded(theme.skin.radius_sm)
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .cursor_pointer()
-                                .hover(move |style| style.bg(tile_hover))
-                                .on_click(cx.listener(|shell, _, _, cx| shell.toggle_devices(cx)))
-                                .child(icon("settings-2", 15.0, theme.c.muted)),
+                            div().child(
+                                IconButton::new("own-menu", "ellipsis-vertical")
+                                    .glyph_size(15.0)
+                                    .on_click(cx.listener(
+                                        |shell, event: &gpui::ClickEvent, _, cx| {
+                                            let items = super::menu::own_items();
+                                            shell.open_menu(event.position(), items, cx);
+                                        },
+                                    )),
+                            ),
                         ),
                 )
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(6.0))
-                        .child(
-                            voice_button(
-                                "mute",
-                                if silent { "mic-off" } else { "mic" },
-                                silent,
-                                theme,
-                            )
-                            .on_click(
-                                cx.listener(|shell, _, _, _| shell.engine.toggle_microphone()),
-                            ),
-                        )
-                        .child(
-                            voice_button(
-                                "deafen",
-                                if deafened {
-                                    "headphone-off"
-                                } else {
-                                    "headphones"
-                                },
-                                deafened,
-                                theme,
-                            )
-                            .on_click(cx.listener(|shell, _, _, _| shell.engine.toggle_deafen())),
-                        ),
-                ),
+                .child(voice_row(silent, deafened, cx)),
         )
 }
 
-/// A voice control. `off` draws it in the destructive colour: a muted
-/// microphone is the state worth noticing.
-fn voice_button(
-    id: &'static str,
-    glyph: &'static str,
-    off: bool,
-    theme: &Theme,
-) -> gpui::Stateful<gpui::Div> {
-    let hover = theme.c.hover;
-    let mut soft = theme.c.bad;
-    soft.a = 0.16;
-    let mut edge = theme.c.bad;
-    edge.a = 0.45;
+/// The voice controls under the user's name: the microphone, the
+/// headphones, and at the far end the screen.
+fn voice_row(silent: bool, deafened: bool, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+    let voice_button = |id, glyph, off: bool| {
+        IconButton::new(id, glyph)
+            .dims(30.0, 28.0)
+            .glyph_size(15.0)
+            .tone(if off { Tone::Danger } else { Tone::Muted })
+            .variant(if off { Variant::Soft } else { Variant::Ghost })
+    };
     div()
-        .id(id)
-        .debug_selector(|| id.to_owned())
-        .size(px(30.0))
-        .rounded(theme.skin.radius_sm)
         .flex()
         .items_center()
-        .justify_center()
-        .cursor_pointer()
-        .map(|button| {
-            if off {
-                button.bg(soft).border_1().border_color(edge)
-            } else {
-                button.hover(move |style| style.bg(hover))
-            }
-        })
-        .child(icon(
-            glyph,
-            15.0,
-            if off { theme.c.bad } else { theme.c.muted },
-        ))
+        .gap(px(8.0))
+        .child(
+            voice_button("mute", if silent { "mic-off" } else { "mic" }, silent)
+                .on_click(cx.listener(|shell, _, _, _| shell.engine.toggle_microphone())),
+        )
+        .child(
+            voice_button(
+                "deafen",
+                if deafened {
+                    "headphone-off"
+                } else {
+                    "headphones"
+                },
+                deafened,
+            )
+            .on_click(cx.listener(|shell, _, _, _| shell.engine.toggle_deafen())),
+        )
+        .child(div().flex_1())
+        .child(
+            voice_button("share-screen", "screen-share", false).on_click(cx.listener(
+                |shell, _, _, cx| {
+                    shell.notice = Some("Screen sharing is not in this view yet.".into());
+                    cx.notify();
+                },
+            )),
+        )
 }
 
 #[cfg(test)]

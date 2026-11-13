@@ -43,6 +43,14 @@ fn click(cx: &mut VisualTestContext, selector: &'static str) {
     cx.run_until_parked();
 }
 
+/// Choose `entry` from the local user's own menu, on their tile: the way to
+/// the view's panels.
+#[track_caller]
+fn own_menu(cx: &mut VisualTestContext, entry: &'static str) {
+    click(cx, "own-menu");
+    click(cx, entry);
+}
+
 /// Right-click the middle of the element tagged `selector`.
 #[track_caller]
 fn right_click(cx: &mut VisualTestContext, selector: &'static str) {
@@ -213,7 +221,7 @@ fn the_picker_opens_switches_theme_and_mode(cx: &mut TestAppContext) {
     shell.read_with(cx, |shell, _| {
         assert!(!shell.picker_open, "closed at first")
     });
-    click(cx, "themes");
+    own_menu(cx, "menu-Themes…");
     shell.read_with(cx, |shell, _| assert!(shell.picker_open));
     click(cx, "theme-rose");
     cx.update(|_, cx| {
@@ -227,7 +235,7 @@ fn the_picker_opens_switches_theme_and_mode(cx: &mut TestAppContext) {
         assert_eq!(theme.id.as_ref(), "rose", "the theme is kept");
         assert_eq!(theme.mode, Mode::Light);
     });
-    click(cx, "themes");
+    own_menu(cx, "menu-Themes…");
     shell.read_with(cx, |shell, _| assert!(!shell.picker_open));
 }
 
@@ -514,7 +522,7 @@ fn dismiss_closes_the_dialog_before_the_picker(cx: &mut TestAppContext) {
 #[gpui::test]
 fn the_device_panel_lists_devices_and_takes_a_choice(cx: &mut TestAppContext) {
     let (shell, engine, cx) = shell(cx);
-    click(cx, "audio-devices");
+    own_menu(cx, "menu-Voice settings…");
     cx.run_until_parked();
     shell.read_with(cx, |shell, _| {
         let devices = shell.devices.as_ref().expect("the devices arrived");
@@ -539,14 +547,14 @@ fn the_device_panel_lists_devices_and_takes_a_choice(cx: &mut TestAppContext) {
         Some("USB Headset")
     );
     assert_eq!(chosen.output, None, "back to the system's default");
-    click(cx, "audio-devices");
+    own_menu(cx, "menu-Voice settings…");
     shell.read_with(cx, |shell, _| assert!(!shell.devices_open));
 }
 
 #[gpui::test]
 fn push_to_talk_transmits_while_its_key_is_held(cx: &mut TestAppContext) {
     let (shell, engine, cx) = shell(cx);
-    click(cx, "audio-devices");
+    own_menu(cx, "menu-Voice settings…");
     click(cx, "push-to-talk");
     assert!(engine.voice_settings().push_to_talk);
     // Choose the key: the next one pressed.
@@ -577,11 +585,11 @@ fn push_to_talk_transmits_while_its_key_is_held(cx: &mut TestAppContext) {
 #[gpui::test]
 fn another_key_is_not_push_to_talk_and_still_types(cx: &mut TestAppContext) {
     let (shell, engine, cx) = shell(cx);
-    click(cx, "audio-devices");
+    own_menu(cx, "menu-Voice settings…");
     click(cx, "push-to-talk");
     click(cx, "push-to-talk-key");
     cx.simulate_keystrokes("f9");
-    click(cx, "audio-devices");
+    own_menu(cx, "menu-Voice settings…");
     click(cx, "input-Message #lounge");
     cx.simulate_keystrokes("h i");
     assert_eq!(engine.snapshot().voice, Voice::Off);
@@ -593,7 +601,7 @@ fn another_key_is_not_push_to_talk_and_still_types(cx: &mut TestAppContext) {
 #[gpui::test]
 fn the_voice_switches_and_the_activation_level_reach_the_engine(cx: &mut TestAppContext) {
     let (_shell, engine, cx) = shell(cx);
-    click(cx, "audio-devices");
+    own_menu(cx, "menu-Voice settings…");
     let before = engine.voice_settings();
     click(cx, "noise-suppression");
     click(cx, "automatic-gain");
@@ -971,7 +979,7 @@ fn somebody_writing_is_named_and_the_local_user_writing_is_passed_on(cx: &mut Te
 #[gpui::test]
 fn a_pinned_message_is_marked_and_the_header_shows_only_the_pins(cx: &mut TestAppContext) {
     let (shell, engine, cx) = shell(cx);
-    assert!(cx.debug_bounds("pins").is_none(), "nothing pinned yet");
+    assert!(cx.debug_bounds("pin-count").is_none(), "nothing pinned yet");
     right_click(cx, "message-2");
     click(cx, "menu-Pin");
     assert!(matches!(
@@ -1576,13 +1584,13 @@ fn the_whisper_key_speaks_to_whoever_was_chosen_while_it_is_held(cx: &mut TestAp
     use crate::engine::WhisperTarget;
     let (shell, engine, cx) = shell(cx);
     // The key is chosen in the voice panel.
-    click(cx, "audio-devices");
+    own_menu(cx, "menu-Voice settings…");
     click(cx, "whisper-key");
     cx.simulate_keystrokes("f10");
     shell.read_with(cx, |shell, _| {
         assert_eq!(shell.whisper.key.as_ref().map(AsRef::as_ref), Some("f10"));
     });
-    click(cx, "audio-devices");
+    own_menu(cx, "menu-Voice settings…");
     shell.read_with(cx, |shell, _| assert!(!shell.devices_open));
 
     // With nobody chosen, the key does nothing.
@@ -1709,7 +1717,8 @@ fn an_emoji_is_picked_into_the_composer_or_onto_a_message(cx: &mut TestAppContex
     let (shell, engine, cx) = shell(cx);
     click(cx, "input-Message #lounge");
     cx.simulate_keystrokes("h i space");
-    click(cx, "emoji");
+    click(cx, "compose-more");
+    click(cx, "menu-Emoji…");
     shell.read_with(cx, |shell, _| assert!(shell.emoji_for.is_some()));
     click(cx, "emoji-🎉");
     shell.read_with(cx, |shell, cx| {

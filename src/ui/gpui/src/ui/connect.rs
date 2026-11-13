@@ -3,11 +3,12 @@
 //! who to arrive as.
 
 use gpui::{
-    AnyElement, Context, Hsla, IntoElement, ParentElement, SharedString, Styled, div, hsla,
-    linear_color_stop, linear_gradient, prelude::*, px,
+    AnyElement, Context, IntoElement, ParentElement, SharedString, Styled, div, linear_color_stop,
+    linear_gradient, prelude::*, px,
 };
 
 use super::Shell;
+use super::kit::{Avatar, Button, Size, tint};
 use super::widgets::{EMPHASIS, icon, label};
 use crate::engine::{Connection, SavedServer, ServerPing};
 use crate::theme::Theme;
@@ -44,30 +45,6 @@ pub(super) fn group(servers: &[SavedServer]) -> Vec<ServerGroup<'_>> {
         });
     }
     groups
-}
-
-/// Up to two letters that stand for a server or a person on a tile.
-pub(super) fn initials(name: &str) -> String {
-    let mut words = name
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|word| !word.is_empty());
-    let first = words.next().and_then(|word| word.chars().next());
-    let second = words.next().and_then(|word| word.chars().next());
-    first
-        .into_iter()
-        .chain(second)
-        .flat_map(char::to_uppercase)
-        .collect()
-}
-
-/// A colour for a server that has no picture: always the same for the same
-/// name, and different enough between names to tell tiles apart.
-pub(super) fn tile_color(name: &str) -> Hsla {
-    // FNV-1a: tiny, stable across runs, and spreads short names well.
-    let hash = name.bytes().fold(0x811c_9dc5_u32, |hash, byte| {
-        (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
-    });
-    hsla((hash % 360) as f32 / 360.0, 0.30, 0.42, 1.0)
 }
 
 impl Shell {
@@ -125,7 +102,6 @@ pub(super) fn server_column(
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     let selected = shell.selected_server().map(|server| server.key);
-    let hover = theme.c.hover;
     let rows: Vec<AnyElement> = shell
         .listed_servers(cx)
         .iter()
@@ -191,22 +167,23 @@ pub(super) fn server_column(
         )
         .child(
             div()
-                .id("open-certificates")
-                .debug_selector(|| "open-certificates".to_owned())
                 .flex_none()
-                .h(px(34.0))
                 .flex()
-                .items_center()
-                .gap(px(8.0))
-                .px(px(10.0))
-                .rounded(theme.skin.radius_md)
-                .cursor_pointer()
-                .text_size(px(12.5))
-                .text_color(theme.c.muted)
-                .hover(move |style| style.bg(hover))
-                .on_click(cx.listener(|shell, _, _, cx| shell.toggle_certificates(cx)))
-                .child(icon("key-round", 14.0, theme.c.muted))
-                .child("Certificates"),
+                .flex_col()
+                .child(
+                    Button::new("open-certificates", "Certificates")
+                        .start_icon("key-round")
+                        .size(Size::Small)
+                        .wide()
+                        .on_click(cx.listener(|shell, _, _, cx| shell.toggle_certificates(cx))),
+                )
+                .child(
+                    Button::new("themes", "Themes")
+                        .start_icon("palette")
+                        .size(Size::Small)
+                        .wide()
+                        .on_click(cx.listener(|shell, _, _, cx| shell.toggle_picker(cx))),
+                ),
         )
 }
 
@@ -257,7 +234,7 @@ fn server_card(
             shell.selected_identity = None;
             cx.notify();
         }))
-        .child(server_tile(server.label, 34.0, theme))
+        .child(Avatar::new(server.label).tile(&server.key).size(34.0))
         .child(
             div()
                 .flex_1()
@@ -283,22 +260,6 @@ fn server_card(
             card.child(icon("star", 13.0, gpui::rgb(0xe9_b949).into()))
         })
         .into_any_element()
-}
-
-/// The picture a server gets until it has one: its initials on its colour.
-fn server_tile(name: &str, size: f32, theme: &Theme) -> impl IntoElement + use<> {
-    div()
-        .flex_none()
-        .size(px(size))
-        .rounded(theme.skin.radius_rail.min(px(size / 2.0)))
-        .bg(tile_color(name))
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(px(size * 0.36))
-        .font_weight(EMPHASIS)
-        .text_color(gpui::white())
-        .child(initials(name))
 }
 
 /// The selected server's landing page.
@@ -343,7 +304,7 @@ pub(super) fn landing(
                 .rounded(theme.skin.radius_lg)
                 .border_2()
                 .border_color(theme.c.bg0)
-                .child(server_tile(server.label, 72.0, theme)),
+                .child(Avatar::new(server.label).tile(&server.key).size(72.0)),
         )
         .child(
             div()
@@ -400,7 +361,7 @@ pub(super) fn landing(
 /// The strip across the top of the landing page, in the server's colour,
 /// with its name set large and faint.
 fn banner(server: &ServerGroup<'_>, theme: &Theme) -> impl IntoElement + use<> {
-    let mut tint = tile_color(server.label);
+    let mut tint = tint(&server.key).0;
     tint.a = 0.32;
     let mut ghost = theme.c.text;
     ghost.a = 0.14;
@@ -492,12 +453,7 @@ fn identity_row(
             shell.selected_identity = Some(id.clone());
             cx.notify();
         }))
-        .child(super::widgets::avatar(
-            &identity.username,
-            None,
-            34.0,
-            theme,
-        ))
+        .child(Avatar::new(&identity.username).size(34.0))
         .child(
             div()
                 .flex_1()
@@ -692,21 +648,5 @@ mod tests {
             "a favourite identity makes the server one"
         );
         assert!(!groups[2].favorite, "another port is another server");
-    }
-
-    #[test]
-    fn initials_take_the_first_letter_of_up_to_two_words() {
-        assert_eq!(initials("magical.rocks"), "MR");
-        assert_eq!(initials("localhost"), "L");
-        assert_eq!(initials("kumo.jp"), "KJ");
-        assert_eq!(initials("Alex (work)"), "AW");
-        assert_eq!(initials(""), "");
-        assert_eq!(initials("über cool server"), "ÜC");
-    }
-
-    #[test]
-    fn a_tile_colour_is_stable_and_differs_between_names() {
-        assert_eq!(tile_color("kumo.jp"), tile_color("kumo.jp"));
-        assert_ne!(tile_color("kumo.jp"), tile_color("localhost"));
     }
 }

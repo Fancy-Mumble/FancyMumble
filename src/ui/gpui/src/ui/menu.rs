@@ -7,6 +7,7 @@ use gpui::{
 };
 
 use super::Shell;
+use super::kit::{Button, Emphasis, Tone};
 use super::text_input::{InputEvent, TextInput};
 use super::widgets::{EMPHASIS, icon, label, opaque};
 use crate::engine::{
@@ -59,6 +60,18 @@ pub(super) enum Command {
     Whisper(WhisperTarget, SharedString),
     /// Open the administrator's panel on one of its lists.
     Admin(Listing),
+    /// Open one of the view's own panels.
+    Panel(Panel),
+    /// Choose an emoji to put in the message being written.
+    Emoji,
+}
+
+/// The panels the local user's own menu opens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Panel {
+    Voice,
+    Themes,
+    Certificates,
 }
 
 /// A question an entry puts before it can act.
@@ -546,6 +559,32 @@ pub(super) fn session_items(id: &SharedString, showing: bool) -> Vec<Item> {
     items
 }
 
+/// The entries of the local user's own menu, on their tile: the view's
+/// settings, and what there is to change about themselves.
+pub(super) fn own_items() -> Vec<Item> {
+    vec![
+        Item::new("Voice settings…", Command::Panel(Panel::Voice)),
+        Item::new("Themes…", Command::Panel(Panel::Themes)),
+        Item::new("Certificates…", Command::Panel(Panel::Certificates)),
+        Item::new("Change picture…", Command::PickAvatar),
+        Item::new("Change comment…", Command::Ask(Question::Comment)),
+    ]
+}
+
+/// What else there is to put in a message, beside the composer's paperclip:
+/// an emoji anywhere, a poll in a channel.
+pub(super) fn compose_items(open: Option<Conversation>) -> Vec<Item> {
+    let mut items = vec![Item::new("Emoji…", Command::Emoji)];
+    if let Some(Conversation::Channel(channel)) = open {
+        items.push(Item::new("Poll…", Command::Ask(Question::NewPoll(channel))));
+        items.push(Item::new(
+            "Poll with several answers…",
+            Command::Ask(Question::NewPollSeveral(channel)),
+        ));
+    }
+    items
+}
+
 /// The dialog a [`Question`] is put in.
 pub(super) struct Prompt {
     question: Question,
@@ -606,6 +645,25 @@ impl Shell {
     }
 
     /// Open the menu of the message at `index` of the open conversation.
+    /// The menu of the channel `id`, at `at`.
+    pub(super) fn open_channel_menu(
+        &mut self,
+        id: ChannelId,
+        at: Point<Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(channel) = self.snapshot.channels.iter().find(|c| c.id == id) else {
+            return;
+        };
+        let items = channel_items(
+            channel,
+            self.snapshot.current_channel,
+            self.snapshot.fancy,
+            self.whisper_target(),
+        );
+        self.open_menu(at, items, cx);
+    }
+
     pub(super) fn open_message_menu(
         &mut self,
         at: Point<Pixels>,
@@ -686,6 +744,13 @@ impl Shell {
             Command::Permissions(channel) => self.open_acl(channel, cx),
             Command::Whisper(target, name) => self.toggle_whisper_target(target, name, cx),
             Command::Admin(listing) => self.open_admin(listing, cx),
+            Command::Emoji => {
+                self.emoji_for = Some(super::emoji::For::Composer);
+                cx.notify();
+            }
+            Command::Panel(Panel::Voice) => self.toggle_devices(cx),
+            Command::Panel(Panel::Themes) => self.toggle_picker(cx),
+            Command::Panel(Panel::Certificates) => self.toggle_certificates(cx),
             Command::Reply(index) => self.start_replying(index, window, cx),
             Command::MoreReactions { channel, id } => {
                 self.emoji_for = Some(super::emoji::For::Reaction { channel, id });
@@ -1071,12 +1136,6 @@ pub(super) fn render_prompt(
     let (title, _, confirm) = prompt.question.wording();
     let mut veil = gpui::black();
     veil.a = 0.5;
-    let hover = theme.c.hover;
-    let fill = if prompt.question.destructive() {
-        theme.c.bad
-    } else {
-        theme.c.accent
-    };
     div()
         .id("prompt")
         .absolute()
@@ -1130,35 +1189,18 @@ pub(super) fn render_prompt(
                         .justify_end()
                         .gap(px(8.0))
                         .child(
-                            div()
-                                .id("prompt-cancel")
-                                .debug_selector(|| "prompt-cancel".to_owned())
-                                .h(px(36.0))
-                                .px(px(18.0))
-                                .flex()
-                                .items_center()
-                                .rounded(theme.skin.radius_md)
-                                .cursor_pointer()
-                                .text_color(theme.c.muted)
-                                .hover(move |style| style.bg(hover))
-                                .on_click(cx.listener(|shell, _, _, cx| shell.close_prompt(cx)))
-                                .child(label("Cancel", theme)),
+                            Button::new("prompt-cancel", "Cancel")
+                                .on_click(cx.listener(|shell, _, _, cx| shell.close_prompt(cx))),
                         )
                         .child(
-                            div()
-                                .id("prompt-ok")
-                                .debug_selector(|| "prompt-ok".to_owned())
-                                .h(px(36.0))
-                                .px(px(18.0))
-                                .flex()
-                                .items_center()
-                                .rounded(theme.skin.radius_md)
-                                .cursor_pointer()
-                                .bg(fill)
-                                .text_color(theme.c.on_accent)
-                                .font_weight(EMPHASIS)
-                                .on_click(cx.listener(|shell, _, _, cx| shell.answer_prompt(cx)))
-                                .child(label(confirm, theme)),
+                            Button::new("prompt-ok", confirm)
+                                .emphasis(Emphasis::Contained)
+                                .tone(if prompt.question.destructive() {
+                                    Tone::Danger
+                                } else {
+                                    Tone::Accent
+                                })
+                                .on_click(cx.listener(|shell, _, _, cx| shell.answer_prompt(cx))),
                         ),
                 ),
         )
