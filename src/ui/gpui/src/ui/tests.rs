@@ -1923,3 +1923,64 @@ fn a_channel_sealed_the_signal_way_is_made_from_a_channels_menu(cx: &mut TestApp
         assert!(made.is_some_and(|channel| channel.encrypted));
     });
 }
+
+#[gpui::test]
+fn a_moderator_empties_a_channel_of_one_persons_messages_or_of_all(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    // The lounge keeps its messages; Rin said one of the five.
+    right_click(cx, "user-3");
+    click(cx, "menu-Delete their messages here…");
+    click(cx, "prompt-ok");
+    assert!(matches!(
+        engine.actions().last(),
+        Some(Action::Purge {
+            channel: 1,
+            by: Some(3)
+        })
+    ));
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(shell.messages.len(), 4);
+        assert!(
+            shell
+                .messages
+                .iter()
+                .all(|message| message.sender != Some(3))
+        );
+    });
+    right_click(cx, "channel-1");
+    click(cx, "menu-Delete all messages…");
+    click(cx, "prompt-ok");
+    shell.read_with(cx, |shell, _| assert!(shell.messages.is_empty()));
+    // A channel that keeps nothing has nothing to delete.
+    right_click(cx, "channel-2");
+    shell.read_with(cx, |shell, _| {
+        let offered = shell.menu.as_ref().expect("the menu");
+        assert!(
+            offered
+                .items
+                .iter()
+                .all(|item| item.name.as_ref() != "Delete all messages…")
+        );
+    });
+}
+
+#[gpui::test]
+fn everyone_is_moved_along_and_a_channel_is_made_to_last_a_visit(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    right_click(cx, "channel-2");
+    click(cx, "menu-Move everyone with me here");
+    assert!(matches!(
+        engine.actions().last(),
+        Some(Action::MoveEveryone { from: 1, to: 2 })
+    ));
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.snapshot.users.iter().all(|user| user.channel == 2));
+    });
+    right_click(cx, "channel-2");
+    click(cx, "menu-New temporary channel inside…");
+    cx.simulate_keystrokes("h u d d l e enter");
+    assert!(matches!(
+        engine.actions().last(),
+        Some(Action::CreateTemporaryChannel { parent: 2, name }) if name == "huddle"
+    ));
+}

@@ -263,6 +263,20 @@ impl State {
             Action::CreateSignalChannel { parent, name } => {
                 self.add_channel(*parent, name, true, true);
             }
+            Action::CreateTemporaryChannel { parent, name } => {
+                self.add_channel(*parent, name, false, false);
+            }
+            Action::MoveEveryone { from, to } => {
+                for user in self.users.iter_mut().filter(|user| user.channel == *from) {
+                    user.channel = *to;
+                }
+            }
+            Action::Purge { channel, by } => {
+                let room = Conversation::Channel(*channel);
+                self.messages.retain(|(place, message)| {
+                    *place != room || by.is_some_and(|by| message.sender != Some(by))
+                });
+            }
             Action::RenameChannel { channel, name } => {
                 if let Some(found) = self.channels.iter_mut().find(|known| known.id == *channel) {
                     found.name = name.clone().into();

@@ -204,6 +204,23 @@ pub(crate) enum Action {
         /// Keep them sealed with a key the server does not have.
         encrypted: bool,
     },
+    /// Create the channel `name` under `parent` for as long as somebody is
+    /// in it.
+    CreateTemporaryChannel {
+        parent: ChannelId,
+        name: String,
+    },
+    /// Move everybody in the channel `from` to the channel `to`.
+    MoveEveryone {
+        from: ChannelId,
+        to: ChannelId,
+    },
+    /// Delete everything the server keeps of `channel`: all of it, or with
+    /// `by` what the user on that session said there.
+    Purge {
+        channel: ChannelId,
+        by: Option<Session>,
+    },
     /// Create the channel `name` under `parent`, sealed the Signal way:
     /// read only by who is in it when something is said.
     CreateSignalChannel {

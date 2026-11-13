@@ -419,7 +419,7 @@ fn occupant_row(
                 let Some(user) = shell.snapshot.users.iter().find(|u| u.session == session) else {
                     return;
                 };
-                let items = super::menu::user_items(
+                let mut items = super::menu::user_items(
                     user,
                     shell.snapshot.own_session,
                     shell.snapshot.current_channel,
@@ -427,6 +427,15 @@ fn occupant_row(
                     shell.whisper_target(),
                     user.hash.as_ref().is_some_and(|hash| shell.is_friend(hash)),
                 );
+                let open = match shell.open {
+                    Some(Conversation::Channel(id)) => {
+                        shell.snapshot.channels.iter().find(|c| c.id == id)
+                    }
+                    _ => None,
+                };
+                if shell.snapshot.own_session != Some(session) {
+                    items.extend(super::menu::purge_item(user, open));
+                }
                 shell.open_menu(event.position, items, cx);
             }),
         )

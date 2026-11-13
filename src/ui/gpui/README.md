@@ -50,7 +50,11 @@ real engine and does text and voice.
   of its own and is looked for beside the executable).
 - **People.** Pictures, comments, what the server knows of a connection;
   per-user volume; kick, ban, mute, deafen, move, register, priority
-  speaker, and for a moderator taking away a comment or a picture; your own comment and picture.
+  speaker, moving everyone in your channel along to another, and for a
+  moderator taking away a comment or a picture, or deleting what one
+  person said in a channel or all that the server keeps of it; your own
+  comment and picture. A channel can be made to last only while somebody
+  is in it.
 - **Friends.** Kept from somebody's menu, by their certificate, so they
   are the same person on any server; the list says who is here now and
   opens the conversation with one who is.

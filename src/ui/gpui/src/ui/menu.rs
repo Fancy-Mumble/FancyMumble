@@ -91,6 +91,12 @@ pub(super) enum Question {
     NewEncryptedChannel(ChannelId),
     /// A channel sealed the Signal way.
     NewSignalChannel(ChannelId),
+    /// A channel that lasts while somebody is in it.
+    NewTemporaryChannel(ChannelId),
+    /// Whether to delete everything the server keeps of a channel,
+    PurgeChannel(ChannelId),
+    /// or what one user said in it.
+    PurgeSender(ChannelId, Session),
     RenameChannel(ChannelId),
     DeleteChannel(ChannelId),
     JoinPassword(ChannelId),
@@ -130,6 +136,21 @@ impl Question {
             Self::NewSignalChannel(_) => {
                 ("New channel, sealed the Signal way", Some("Name"), "Create")
             }
+            Self::NewTemporaryChannel(_) => (
+                "New channel, gone when the last one leaves",
+                Some("Name"),
+                "Create",
+            ),
+            Self::PurgeChannel(_) => (
+                "Delete every message kept of this channel, for everyone?",
+                None,
+                "Delete all",
+            ),
+            Self::PurgeSender(..) => (
+                "Delete every message of theirs kept of this channel, for everyone?",
+                None,
+                "Delete theirs",
+            ),
             Self::RenameChannel(_) => ("Rename channel", Some("Name"), "Rename"),
             Self::DeleteChannel(_) => ("Delete this channel and everything in it?", None, "Delete"),
             Self::JoinPassword(_) => ("Join with a password", Some("Password"), "Join"),
@@ -180,7 +201,11 @@ impl Question {
     fn destructive(self) -> bool {
         matches!(
             self,
-            Self::KickReason(_) | Self::BanReason(_) | Self::DeleteChannel(_)
+            Self::KickReason(_)
+                | Self::BanReason(_)
+                | Self::DeleteChannel(_)
+                | Self::PurgeChannel(_)
+                | Self::PurgeSender(..)
         )
     }
 
@@ -224,6 +249,15 @@ impl Question {
                 name: Some(text).filter(|name| !name.is_empty())?,
             },
             Self::DeleteChannel(channel) => Action::DeleteChannel { channel },
+            Self::NewTemporaryChannel(parent) => Action::CreateTemporaryChannel {
+                parent,
+                name: Some(text).filter(|name| !name.is_empty())?,
+            },
+            Self::PurgeChannel(channel) => Action::Purge { channel, by: None },
+            Self::PurgeSender(channel, session) => Action::Purge {
+                channel,
+                by: Some(session),
+            },
             Self::JoinPassword(channel) => Action::JoinWithPassword {
                 channel,
                 password: answer.to_owned(),
@@ -532,6 +566,17 @@ pub(super) fn channel_items(
         "New channel inside…",
         Command::Ask(Question::NewChannel(id)),
     ));
+    items.push(Item::new(
+        "New temporary channel inside…",
+        Command::Ask(Question::NewTemporaryChannel(id)),
+    ));
+    // Everybody in the user's own channel can be brought along.
+    if let Some(from) = own_channel.filter(|own| *own != id) {
+        items.push(Item::new(
+            "Move everyone with me here",
+            Command::Do(Action::MoveEveryone { from, to: id }),
+        ));
+    }
     if fancy {
         items.push(Item::new(
             "New channel with history inside…",
@@ -563,6 +608,15 @@ pub(super) fn channel_items(
         Command::Ask(Question::ChannelPassword(id)),
     ));
     items.push(Item::new("Permissions…", Command::Permissions(id)));
+    if channel.history {
+        items.push(
+            Item::new(
+                "Delete all messages…",
+                Command::Ask(Question::PurgeChannel(id)),
+            )
+            .danger(),
+        );
+    }
     // The root cannot be deleted; a server would only refuse.
     if channel.parent.is_some() {
         items.push(Item::new("Delete…", Command::Ask(Question::DeleteChannel(id))).danger());
@@ -587,6 +641,20 @@ pub(super) fn session_items(id: &SharedString, showing: bool) -> Vec<Item> {
     }
     items.push(Item::new("Disconnect", Command::Leave(id.clone())).danger());
     items
+}
+
+/// For a moderator: delete what `user` said in the channel on screen, where
+/// the server keeps that channel's messages and knows the user by a
+/// certificate.
+pub(super) fn purge_item(user: &User, open: Option<&Channel>) -> Option<Item> {
+    let channel = open.filter(|channel| channel.history && user.hash.is_some())?;
+    Some(
+        Item::new(
+            "Delete their messages here…",
+            Command::Ask(Question::PurgeSender(channel.id, user.session)),
+        )
+        .danger(),
+    )
 }
 
 /// The entries of the local user's own menu, on their tile: the view's
@@ -1396,6 +1464,8 @@ mod tests {
                 "Shout here with the whisper key",
                 "About this channel",
                 "New channel inside…",
+                "New temporary channel inside…",
+                "Move everyone with me here",
                 "Rename…",
                 "Describe…",
                 "Set a password…",
@@ -1409,6 +1479,7 @@ mod tests {
                 "Shout here with the whisper key",
                 "About this channel",
                 "New channel inside…",
+                "New temporary channel inside…",
                 "Rename…",
                 "Describe…",
                 "Set a password…",

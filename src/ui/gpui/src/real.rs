@@ -138,6 +138,27 @@ impl Shared {
         self.tell(EngineEvent::Acl(shown));
     }
 
+    /// Delete what the server keeps of a channel, all of it or one user's,
+    /// and say that what there is to show has changed.
+    async fn purge(&self, channel: ChannelId, by: Option<u32>) -> Result<(), String> {
+        let hash = match by {
+            None => None,
+            Some(session) => Some(
+                self.engine
+                    .users()
+                    .into_iter()
+                    .find(|user| user.session == session)
+                    .and_then(|user| user.hash)
+                    .ok_or("That user has no certificate to know their messages by.")?,
+            ),
+        };
+        self.engine.purge_messages(channel, hash).await?;
+        self.tell(EngineEvent::NewMessage {
+            conversation: Conversation::Channel(channel),
+        });
+        Ok(())
+    }
+
     /// Send a channel's rules as the view changed them, with the groups
     /// as the server last sent them.
     async fn set_acl(&self, changed: Acl) -> Result<(), String> {
@@ -1346,6 +1367,11 @@ impl Engine for RealEngine {
                     };
                     engine.create_channel(parent, name, history).await
                 }
+                Action::CreateTemporaryChannel { parent, name } => {
+                    engine.create_temporary_channel(parent, name).await
+                }
+                Action::MoveEveryone { from, to } => engine.move_everyone(from, to).await,
+                Action::Purge { channel, by } => shared.purge(channel, by).await,
                 Action::CreateSignalChannel { parent, name } => {
                     engine
                         .create_channel(parent, name, api::History::Signal)
@@ -2781,6 +2807,84 @@ mod tests {
         alice.shutdown();
         let _ = std::fs::remove_dir_all(alice_dir);
     }
+    /// An administrator deletes what one user said in a channel that keeps
+    /// its messages, then everything: both see it go.
+    #[test]
+    #[ignore = "needs a live Fancy server; set FANCY_GPUI_TEST_FANCY=host:port"]
+    fn live_fancy_a_channel_is_emptied_of_one_users_messages_then_of_all() {
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        let (alice, alice_dir) = fancy_client("PurgeAlice", None);
+        wait_for("both to connect", || {
+            admin.snapshot().users.len() >= 2 && alice.snapshot().users.len() >= 2
+        });
+        let name = format!("purged-{}", std::process::id());
+        let root = admin.snapshot().current_channel.expect("the root");
+        admin.act(Action::CreateChannel {
+            parent: root,
+            name: name.clone(),
+            history: true,
+            encrypted: false,
+        });
+        let made = |engine: &RealEngine| {
+            engine
+                .snapshot()
+                .channels
+                .into_iter()
+                .find(|channel| channel.name.as_ref() == name)
+        };
+        wait_for("the channel", || {
+            made(&admin).is_some() && made(&alice).is_some()
+        });
+        let channel = made(&admin).expect("the channel").id;
+        let room = Conversation::Channel(channel);
+        for engine in [&admin, &alice] {
+            engine.join_channel(channel);
+            wait_for("to be in the channel", || {
+                engine.snapshot().current_channel == Some(channel)
+            });
+            engine.open(room);
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        admin.send_message(room, "the admin's".to_owned());
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        alice.send_message(room, "alice's".to_owned());
+        wait_for("both messages with both", || {
+            [&admin, &alice].iter().all(|engine| {
+                said(engine, room, "the admin's").is_some()
+                    && said(engine, room, "alice's").is_some()
+            })
+        });
+        let her = admin
+            .snapshot()
+            .users
+            .into_iter()
+            .find(|user| user.name.as_ref() == "PurgeAlice")
+            .expect("alice")
+            .session;
+        admin.act(Action::Purge {
+            channel,
+            by: Some(her),
+        });
+        wait_for("alice's to go, for both", || {
+            [&admin, &alice]
+                .iter()
+                .all(|engine| said(engine, room, "alice's").is_none())
+        });
+        assert!(said(&admin, room, "the admin's").is_some(), "only hers");
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        admin.act(Action::Purge { channel, by: None });
+        wait_for("everything to go, for both", || {
+            admin.messages(room).is_empty() && alice.messages(room).is_empty()
+        });
+        admin.act(Action::DeleteChannel { channel });
+        admin.shutdown();
+        alice.shutdown();
+        let _ = std::fs::remove_dir_all(admin_dir);
+        let _ = std::fs::remove_dir_all(alice_dir);
+    }
+
     /// A channel sealed the Signal way: two who are in it read each other,
     /// and one who comes later reads what is said from then on and nothing
     /// from before. Needs the Signal bridge library beside the test binary.
