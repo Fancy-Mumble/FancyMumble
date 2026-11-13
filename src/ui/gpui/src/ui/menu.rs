@@ -9,7 +9,9 @@ use gpui::{
 use super::Shell;
 use super::text_input::{InputEvent, TextInput};
 use super::widgets::{EMPHASIS, icon, label, opaque};
-use crate::engine::{Action, Channel, ChannelId, Conversation, Message, Session, Subject, User};
+use crate::engine::{
+    Action, Channel, ChannelId, Conversation, Listing, Message, Session, Subject, User,
+};
 use crate::theme::Theme;
 
 /// The loudness steps a user can be played at, with what each is called.
@@ -46,6 +48,8 @@ pub(super) enum Command {
     Copy(SharedString),
     /// Leave the server of a session.
     Leave(SharedString),
+    /// Open the administrator's panel on one of its lists.
+    Admin(Listing),
 }
 
 /// A question an entry puts before it can act.
@@ -374,6 +378,11 @@ pub(super) fn session_items(id: &SharedString, showing: bool) -> Vec<Item> {
             "Server information",
             Command::About(Subject::Server),
         ));
+        items.push(Item::new("Bans…", Command::Admin(Listing::Bans)));
+        items.push(Item::new(
+            "Registered users…",
+            Command::Admin(Listing::Registered),
+        ));
     }
     items.push(Item::new("Disconnect", Command::Leave(id.clone())).danger());
     items
@@ -482,6 +491,7 @@ impl Shell {
             Command::PickAvatar => self.pick_avatar(cx),
             Command::Edit { id, text } => self.start_editing(id, text.as_ref(), window, cx),
             Command::Leave(session) => self.engine.leave_session(&session),
+            Command::Admin(listing) => self.open_admin(listing, cx),
             Command::Copy(text) => {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.to_string()));
             }

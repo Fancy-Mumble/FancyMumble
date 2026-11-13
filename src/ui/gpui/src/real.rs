@@ -15,9 +15,9 @@ use mumble_tauri_lib::engine_api::{
 };
 
 use crate::engine::{
-    Action, AudioDevice, AudioDevices, CertificateTask, Channel, ChannelId, ChosenDevices,
-    Connection, Conversation, Engine, EngineEvent, Message, Reaction, SavedServer, ServerPing,
-    SessionEntry, Snapshot, Subject, User, Voice, VoiceSettings,
+    Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
+    Connection, Conversation, Engine, EngineEvent, Listing, Message, Reaction, Registered,
+    SavedServer, ServerPing, SessionEntry, Snapshot, Subject, User, Voice, VoiceSettings,
 };
 use crate::store::Store;
 
@@ -146,6 +146,20 @@ impl Shared {
                 self.tell(EngineEvent::Notice(Some(reason.into())));
             }
             api::EngineEvent::Notify { title, body } => crate::notify::show(&title, &body),
+            other => self.forward_answer(other),
+        }
+    }
+
+    /// The rest of [`Self::forward`]: what the server answers when asked,
+    /// and what happens around messages.
+    fn forward_answer(&self, event: api::EngineEvent) {
+        match event {
+            api::EngineEvent::Bans(bans) => {
+                self.tell(EngineEvent::Bans(bans.into_iter().map(ban_of).collect()));
+            }
+            api::EngineEvent::Registered(users) => self.tell(EngineEvent::Registered(
+                users.into_iter().map(registered_of).collect(),
+            )),
             api::EngineEvent::UserStats(stats) => self.tell(EngineEvent::Facts {
                 subject: Subject::User(stats.session),
                 facts: user_facts(&stats),
@@ -512,6 +526,16 @@ impl Engine for RealEngine {
         }
     }
 
+    fn list(&self, listing: Listing) {
+        let engine = self.shared.engine.clone();
+        self.spawn(async move {
+            match listing {
+                Listing::Bans => engine.request_bans().await,
+                Listing::Registered => engine.request_registered().await,
+            }
+        });
+    }
+
     fn certificates(&self) -> Vec<SharedString> {
         self.shared
             .engine
@@ -848,6 +872,24 @@ impl Engine for RealEngine {
                     id,
                     pinned,
                 } => engine.pin(channel, &id, pinned).await,
+                Action::SetBans(bans) => {
+                    engine
+                        .set_bans(
+                            bans.into_iter()
+                                .map(|ban| api::BanInfo {
+                                    address: ban.address.to_string(),
+                                    mask: ban.mask,
+                                    name: ban.name.to_string(),
+                                    hash: ban.hash.to_string(),
+                                    reason: ban.reason.to_string(),
+                                    start: ban.start.to_string(),
+                                    duration_secs: ban.duration_secs,
+                                })
+                                .collect(),
+                        )
+                        .await
+                }
+                Action::Unregister { id } => engine.change_registered(id, None).await,
                 Action::ToggleListen { channel } => {
                     let toggled = engine.toggle_listen(channel).await.map(|_| ());
                     shared.tell(EngineEvent::StateChanged);
@@ -930,6 +972,27 @@ fn target_of(server: &SavedServer, password: Option<String>) -> ConnectTarget {
         username: server.username.to_string(),
         certificate: server.certificate.as_ref().map(ToString::to_string),
         password,
+    }
+}
+
+fn ban_of(ban: api::BanInfo) -> Ban {
+    Ban {
+        address: ban.address.into(),
+        mask: ban.mask,
+        name: ban.name.into(),
+        hash: ban.hash.into(),
+        reason: ban.reason.into(),
+        start: ban.start.into(),
+        duration_secs: ban.duration_secs,
+    }
+}
+
+fn registered_of(user: api::RegisteredInfo) -> Registered {
+    Registered {
+        id: user.id,
+        name: user.name.into(),
+        last_seen: user.last_seen.map(Into::into),
+        last_channel: user.last_channel,
     }
 }
 
@@ -1772,6 +1835,43 @@ mod tests {
         admin.act(Action::DeleteChannel { channel });
         wait_for("the channel to go", || kept(&alice).is_none());
         for (engine, dir) in [(admin, admin_dir), (alice, alice_dir), (late, late_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+    /// The administrator's lists arrive for the `SuperUser`, and are
+    /// refused, with words, to somebody who is not one.
+    #[test]
+    #[ignore = "needs a live Fancy server and its SuperUser password"]
+    fn live_fancy_the_administrators_lists_are_for_administrators() {
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        let (guest, guest_dir) = fancy_client("ListGuest", None);
+        wait_for("both to connect", || {
+            admin.snapshot().users.len() >= 2 && guest.snapshot().users.len() >= 2
+        });
+        let told = admin.events();
+        let next = |wanted: fn(&EngineEvent) -> bool| {
+            std::iter::from_fn(|| told.try_recv().ok()).any(|event| wanted(&event))
+        };
+        admin.list(Listing::Bans);
+        wait_for("the ban list", || {
+            next(|event| matches!(event, EngineEvent::Bans(_)))
+        });
+        admin.list(Listing::Registered);
+        // Whoever is on it: a new server has registered nobody yet.
+        wait_for("the registered accounts", || {
+            next(|event| matches!(event, EngineEvent::Registered(_)))
+        });
+
+        let refused = guest.events();
+        guest.list(Listing::Bans);
+        wait_for("the guest to be refused", || {
+            std::iter::from_fn(|| refused.try_recv().ok())
+                .any(|event| matches!(event, EngineEvent::Notice(Some(_))))
+        });
+        for (engine, dir) in [(admin, admin_dir), (guest, guest_dir)] {
             engine.shutdown();
             let _ = std::fs::remove_dir_all(dir);
         }

@@ -2,6 +2,7 @@
 //! out - a band across the top, the server rail, the channel column and the
 //! conversation.
 
+mod admin;
 mod band;
 mod certificates;
 mod connect;
@@ -115,6 +116,8 @@ pub(crate) struct Shell {
     picker_open: bool,
     /// Whether the audio device panel is showing.
     devices_open: bool,
+    /// The administrator's panel, while it is open.
+    admin: Option<admin::Admin>,
     /// Whether the certificates panel is showing, what it lists, and the
     /// certificate a first click on delete has armed.
     certificates_open: bool,
@@ -226,6 +229,7 @@ impl Shell {
             store,
             picker_open: false,
             devices_open: false,
+            admin: None,
             certificates_open: false,
             certificates: Vec::new(),
             doomed_certificate: None,
@@ -324,6 +328,18 @@ impl Shell {
                 }
             }
             EngineEvent::ServersChanged => self.servers = self.engine.saved_servers(),
+            EngineEvent::Bans(bans) => {
+                if let Some(admin) = self.admin.as_mut() {
+                    admin.bans = Some(bans);
+                    self.refilter_admin(cx);
+                }
+            }
+            EngineEvent::Registered(users) => {
+                if let Some(admin) = self.admin.as_mut() {
+                    admin.registered = Some(users);
+                    self.refilter_admin(cx);
+                }
+            }
             EngineEvent::CertificatesChanged => {
                 self.certificates = self.engine.certificates();
                 self.doomed_certificate = None;
@@ -701,6 +717,10 @@ impl Shell {
             self.stop_editing(cx);
             return;
         }
+        if self.admin.take().is_some() {
+            cx.notify();
+            return;
+        }
         if self.editor.take().is_none() {
             self.picker_open = false;
             self.devices_open = false;
@@ -910,6 +930,9 @@ impl Render for Shell {
             })
             .when(self.devices_open, |shell| {
                 shell.child(devices::render(self, &theme, cx))
+            })
+            .when_some(self.admin.as_ref(), |shell, admin| {
+                shell.child(admin::render(admin, &theme, cx))
             })
             .when(self.certificates_open, |shell| {
                 shell.child(certificates::render(self, &theme, cx))

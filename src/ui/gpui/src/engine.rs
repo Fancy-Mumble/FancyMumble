@@ -171,6 +171,10 @@ pub(crate) enum Action {
     },
     /// Delete the message `id` for everyone.
     DeleteMessage { channel: ChannelId, id: String },
+    /// Replace the server's ban list with this one.
+    SetBans(Vec<Ban>),
+    /// Remove the registration of the account `id`.
+    Unregister { id: u32 },
     /// Pin the message `id` for everyone, or take the pin off.
     Pin {
         channel: ChannelId,
@@ -188,6 +192,42 @@ pub(crate) enum Action {
         emoji: String,
         add: bool,
     },
+}
+
+/// One of the lists a server's administrator looks after.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Listing {
+    Bans,
+    Registered,
+}
+
+/// One entry of the server's ban list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Ban {
+    pub address: SharedString,
+    /// How many leading bits of the address count; 32 or 128 is that one
+    /// address.
+    pub mask: u32,
+    /// The name the banned user had; empty when the ban names nobody.
+    pub name: SharedString,
+    /// The banned certificate's hash, where there was one.
+    pub hash: SharedString,
+    pub reason: SharedString,
+    /// When it started, as the server writes it.
+    pub start: SharedString,
+    /// How long it lasts; zero is for good.
+    pub duration_secs: u32,
+}
+
+/// One account registered on the server.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Registered {
+    pub id: u32,
+    pub name: SharedString,
+    /// When it was last on, as the server writes it.
+    pub last_seen: Option<SharedString>,
+    /// The channel it was last in.
+    pub last_channel: Option<ChannelId>,
 }
 
 /// Something done to the certificates the client holds.
@@ -353,6 +393,10 @@ pub(crate) enum EngineEvent {
     /// Something the user should be told: a refused connection, a failed
     /// command. `None` clears what was said before.
     Notice(Option<SharedString>),
+    /// The server's ban list, asked for with [`Engine::list`].
+    Bans(Vec<Ban>),
+    /// The server's registered accounts, asked for with [`Engine::list`].
+    Registered(Vec<Registered>),
     /// The certificates held changed: read [`Engine::certificates`] again.
     CertificatesChanged,
     /// What is known about `subject` besides its text, as names and
@@ -386,6 +430,10 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// The latest answer from the server at `host:port`, or `None` while it
     /// has not answered (or is down).
     fn ping(&self, host: &str, port: u16) -> Option<ServerPing>;
+
+    /// Ask the server for one of its administrator's lists. It arrives as
+    /// an event, or is refused with a notice.
+    fn list(&self, listing: Listing);
 
     /// The labels of the certificates held, in order.
     fn certificates(&self) -> Vec<SharedString>;

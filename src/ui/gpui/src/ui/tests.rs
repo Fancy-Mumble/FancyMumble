@@ -1071,3 +1071,45 @@ fn certificates_are_listed_with_who_uses_them_and_deleted_on_the_second_click(
     click(cx, "certificates-close");
     shell.read_with(cx, |shell, _| assert!(!shell.certificates_open));
 }
+
+#[gpui::test]
+fn the_ban_list_is_filtered_and_a_ban_lifted_on_the_second_click(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    right_click(cx, "session-magical.rocks");
+    click(cx, "menu-Bans…");
+    shell.read_with(cx, |shell, _| {
+        let admin = shell.admin.as_ref().expect("the panel");
+        assert_eq!(admin.bans.as_ref().map(Vec::len), Some(2));
+    });
+    click(cx, "input-Filter");
+    cx.simulate_keystrokes("m a l");
+    shell.read_with(cx, |shell, _| {
+        assert_eq!(
+            shell.admin.as_ref().expect("the panel").shown,
+            [0],
+            "the other is filtered out"
+        );
+    });
+    click(cx, "admin-remove-0");
+    assert!(
+        !engine
+            .actions()
+            .iter()
+            .any(|action| matches!(action, Action::SetBans(_))),
+        "armed, not lifted"
+    );
+    click(cx, "admin-remove-0");
+    let Some(Action::SetBans(left)) = engine.actions().last().cloned() else {
+        panic!("the list that is left is sent");
+    };
+    assert_eq!(left.len(), 1);
+    assert_eq!(left[0].mask, 24, "the other ban stays");
+
+    click(cx, "admin-registered");
+    shell.read_with(cx, |shell, _| {
+        let admin = shell.admin.as_ref().expect("the panel");
+        assert_eq!(admin.registered.as_ref().map(Vec::len), Some(5));
+    });
+    click(cx, "admin-close");
+    shell.read_with(cx, |shell, _| assert!(shell.admin.is_none()));
+}

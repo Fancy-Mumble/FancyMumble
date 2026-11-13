@@ -34,6 +34,9 @@ real engine and does text and voice.
 - **People.** Pictures, comments, what the server knows of a connection;
   per-user volume; kick, ban, mute, deafen, move, register, priority
   speaker; your own comment and picture.
+- **Administration.** The ban list and the registered accounts, behind a
+  right click on the server's tile: filter them, lift a ban, remove a
+  registration (asked twice). Only the rows in view are built.
 - **Certificates.** Listed with who uses each, from the foot of the
   server list; export one to carry it to another machine, import one,
   delete one (asked twice).
@@ -50,8 +53,8 @@ real engine and does text and voice.
 
 What the web UI has and this does not, yet: sending files, link previews,
 polls, read receipts, end-to-end encrypted channels' key handling, message
-search and paging far back, screen sharing, and the admin surfaces (bans,
-registered users, ACLs, server settings).
+search and paging far back, screen sharing, and the rest of the admin
+surfaces (ACLs, server settings).
 
 ## Testing
 

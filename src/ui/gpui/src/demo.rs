@@ -4,9 +4,9 @@
 use std::sync::Mutex;
 
 use crate::engine::{
-    Action, AudioDevice, AudioDevices, CertificateTask, Channel, ChannelId, ChosenDevices,
-    Connection, Conversation, Engine, EngineEvent, Message, Reaction, SavedServer, ServerPing,
-    Session, SessionEntry, Snapshot, Subject, User, Voice, VoiceSettings,
+    Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
+    Connection, Conversation, Engine, EngineEvent, Listing, Message, Reaction, Registered,
+    SavedServer, ServerPing, Session, SessionEntry, Snapshot, Subject, User, Voice, VoiceSettings,
 };
 
 /// The local user's session in the demo server.
@@ -209,6 +209,8 @@ impl State {
                 }
             }
             Action::SetUserVolume { .. }
+            | Action::SetBans(_)
+            | Action::Unregister { .. }
             | Action::Register { .. }
             | Action::SetComment(_)
             | Action::SetAvatar(_) => {}
@@ -417,6 +419,43 @@ impl Engine for DemoEngine {
         // The demo's answers never change; say so anyway, as a real engine
         // would once its servers have replied.
         self.tell(EngineEvent::ServersChanged);
+    }
+
+    fn list(&self, listing: Listing) {
+        self.tell(match listing {
+            Listing::Bans => EngineEvent::Bans(vec![
+                Ban {
+                    address: "203.0.113.7".into(),
+                    mask: 32,
+                    name: "Mallory".into(),
+                    hash: gpui::SharedString::default(),
+                    reason: "spam".into(),
+                    start: "2026-01-02".into(),
+                    duration_secs: 0,
+                },
+                Ban {
+                    address: "198.51.100.0".into(),
+                    mask: 24,
+                    name: gpui::SharedString::default(),
+                    hash: gpui::SharedString::default(),
+                    reason: gpui::SharedString::default(),
+                    start: "2026-02-03".into(),
+                    duration_secs: 7200,
+                },
+            ]),
+            Listing::Registered => EngineEvent::Registered(self.with_state(|state| {
+                state
+                    .users
+                    .iter()
+                    .map(|user| Registered {
+                        id: user.session,
+                        name: user.name.clone(),
+                        last_seen: Some("2026-01-02".into()),
+                        last_channel: Some(user.channel),
+                    })
+                    .collect()
+            })),
+        });
     }
 
     fn certificates(&self) -> Vec<gpui::SharedString> {
