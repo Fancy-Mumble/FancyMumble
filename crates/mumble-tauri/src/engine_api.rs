@@ -17,7 +17,10 @@ use crate::state::host::{
     AppDirs, EventSink, Host, HostParts, NoBackgroundService, NoSignalInterceptor, Notifier,
 };
 use crate::state::pchat::IdentityStore;
-use crate::state::types::{ChannelEntry, ChatMessage, ConnectionStatus, UserEntry, VoiceState};
+use crate::state::types::{
+    BanEntryInput, ChannelEntry, ChatMessage, ConnectionStatus, RegisteredUserUpdate, UserEntry,
+    VoiceState,
+};
 use crate::state::{AppState, Credentials};
 use mumble_protocol::state::PchatProtocol;
 
@@ -128,6 +131,10 @@ pub enum EngineEvent {
         /// Whether it was put on; `false` when it was taken off.
         added: bool,
     },
+    /// The server answered [`EngineHandle::request_bans`].
+    Bans(Vec<BanInfo>),
+    /// The server answered [`EngineHandle::request_registered`].
+    Registered(Vec<RegisteredInfo>),
     /// The server answered [`EngineHandle::request_user_stats`].
     UserStats(UserStats),
     /// The reactions a channel's messages already carried, read from the
@@ -185,6 +192,39 @@ pub struct UserStats {
     pub address: Option<String>,
 }
 
+/// One entry of the server's ban list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BanInfo {
+    /// The banned address.
+    pub address: String,
+    /// How many leading bits of the address count: 32 or 128 is that one
+    /// address, less is a network.
+    pub mask: u32,
+    /// The name the banned user had.
+    pub name: String,
+    /// The banned certificate's hash, where there was one.
+    pub hash: String,
+    /// Why, in the banner's words.
+    pub reason: String,
+    /// When it started, as the server writes it.
+    pub start: String,
+    /// How long it lasts, in seconds; zero is for good.
+    pub duration_secs: u32,
+}
+
+/// One account registered on the server.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RegisteredInfo {
+    /// The account's id.
+    pub id: u32,
+    /// Its name.
+    pub name: String,
+    /// When it was last on, as the server writes it.
+    pub last_seen: Option<String>,
+    /// The channel it was last in.
+    pub last_channel: Option<u32>,
+}
+
 /// One user's reaction to one message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReactionInfo {
@@ -225,6 +265,30 @@ impl EngineEvent {
             CoreEvent::PermissionDenied(payload) => Self::Denied {
                 reason: payload.reason.filter(|reason| !reason.is_empty()),
             },
+            CoreEvent::BanList(bans) => Self::Bans(
+                bans.into_iter()
+                    .map(|ban| BanInfo {
+                        address: ban.address,
+                        mask: ban.mask,
+                        name: ban.name,
+                        hash: ban.hash,
+                        reason: ban.reason,
+                        start: ban.start,
+                        duration_secs: ban.duration,
+                    })
+                    .collect(),
+            ),
+            CoreEvent::RegisteredUsers(users) => Self::Registered(
+                users
+                    .into_iter()
+                    .map(|user| RegisteredInfo {
+                        id: user.user_id,
+                        name: user.name,
+                        last_seen: user.last_seen,
+                        last_channel: user.last_channel,
+                    })
+                    .collect(),
+            ),
             CoreEvent::ListenDenied(_) => Self::Denied {
                 reason: Some("The server does not let you listen to that channel.".to_owned()),
             },
@@ -917,6 +981,59 @@ impl EngineHandle {
     /// When not connected.
     pub async fn request_user_stats(&self, session: u32) -> Result<(), String> {
         self.state.request_user_stats(session).await
+    }
+
+    /// Ask the server for its ban list; the answer is an
+    /// [`EngineEvent::Bans`], or a refusal.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn request_bans(&self) -> Result<(), String> {
+        self.state.request_ban_list().await
+    }
+
+    /// Replace the server's ban list with `bans`.
+    ///
+    /// # Errors
+    ///
+    /// When not connected, or an address is not one.
+    pub async fn set_bans(&self, bans: Vec<BanInfo>) -> Result<(), String> {
+        let bans = bans
+            .into_iter()
+            .map(|ban| BanEntryInput {
+                address: ban.address,
+                mask: ban.mask,
+                name: ban.name,
+                hash: ban.hash,
+                reason: ban.reason,
+                start: ban.start,
+                duration: ban.duration_secs,
+            })
+            .collect();
+        self.state.update_ban_list(bans).await
+    }
+
+    /// Ask the server for its registered accounts; the answer is an
+    /// [`EngineEvent::Registered`], or a refusal.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn request_registered(&self) -> Result<(), String> {
+        self.state.request_user_list().await
+    }
+
+    /// Rename the registered account `id`, or with `name` `None` remove
+    /// its registration.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn change_registered(&self, id: u32, name: Option<String>) -> Result<(), String> {
+        self.state
+            .update_user_list(vec![RegisteredUserUpdate { user_id: id, name }])
+            .await
     }
 
     /// Have `session` heard over everybody else in their channel, or not.
