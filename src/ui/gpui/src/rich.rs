@@ -344,7 +344,7 @@ fn entity(text: &str) -> (char, &str) {
 }
 
 /// The bytes of a picture given as a base64 `data:` URI.
-fn embedded_picture(source: &str) -> Option<Vec<u8>> {
+pub(crate) fn embedded_picture(source: &str) -> Option<Vec<u8>> {
     use base64::Engine as _;
 
     let data = source.strip_prefix("data:image/")?;

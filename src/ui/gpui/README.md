@@ -51,6 +51,10 @@ real engine and does text and voice.
   sealed the Signal way, read only by who is in the channel when something
   is said, where the Signal bridge library is installed (it is a library
   of its own and is looked for beside the executable).
+- **Profiles.** Somebody's card shows what their Fancy Mumble profile
+  says: banner, name in its colour, pronouns, status, contact, and what
+  they wrote about themselves. Read only; nothing in a profile is ever
+  fetched.
 - **People.** Pictures, comments, what the server knows of a connection;
   per-user volume; kick, ban, mute, deafen, move, register, priority
   speaker, moving everyone in your channel along to another, and for a
@@ -255,7 +259,7 @@ For development:
 | `FANCY_GPUI_DATA_DIR` | Keep every file here instead of the platform's place. |
 | `FANCY_GPUI_THEME`, `FANCY_GPUI_MODE` | Start in this theme (`dark`, `rose`, ...) and mode (`light`, `dark`), without choosing it. |
 | `FANCY_GPUI_DEMO_POLL` | With the demo engine: put a poll to the lounge. |
-| `FANCY_GPUI_OPEN` | Start with `picker`, `devices`, `certificates`, `permissions`, `members` or `editor` open. |
+| `FANCY_GPUI_OPEN` | Start with `picker`, `devices`, `certificates`, `permissions`, `members`, `profile` or `editor` open. |
 | `FANCY_GPUI_CONNECT` | Connect at once as the saved identity with this id (`FANCY_GPUI_PASSWORD` for the server's password). |
 | `FANCY_GPUI_SAY` | With `FANCY_GPUI_CONNECT`: say this once connected. |
 | `FANCY_GPUI_FRAME` | `client` draws the window's own controls even where the compositor frames it. |

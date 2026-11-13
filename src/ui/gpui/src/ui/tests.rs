@@ -2123,3 +2123,21 @@ fn the_people_button_lists_who_is_here_under_their_roles(cx: &mut TestAppContext
         assert!(shell.panels.members.rows.is_empty());
     });
 }
+
+#[gpui::test]
+fn somebody_with_a_profile_gets_a_card_that_says_what_it_says(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell(cx);
+    right_click(cx, "user-3");
+    click(cx, "menu-View comment");
+    assert!(cx.debug_bounds("profile-head").is_some());
+    shell.read_with(cx, |shell, _| {
+        let info = shell.info.as_ref().expect("the card");
+        let profile = info.profile.as_ref().expect("Rin has a profile");
+        assert_eq!(profile.status.as_deref(), Some("Sketching"));
+        assert_eq!(profile.pronouns.as_deref(), Some("she/her"));
+        assert!(profile.banner_color.is_some() && info.banner.is_none());
+        // What she wrote about herself is still there, without the head.
+        assert!(info.body.as_ref().is_some_and(|body| !body.is_empty()));
+    });
+    assert!(cx.debug_bounds("profile-line").is_some());
+}

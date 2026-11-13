@@ -15,6 +15,7 @@ mod notify;
 mod paint;
 mod paths;
 mod picture;
+mod profile;
 mod real;
 mod rich;
 mod store;

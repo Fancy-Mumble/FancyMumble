@@ -1200,7 +1200,11 @@ impl Engine for DemoEngine {
 
     fn about(&self, subject: Subject) {
         let html = match subject {
-            Subject::User(3) => Some("Draws <i>characters</i>."),
+            Subject::User(3) => Some(concat!(
+                r##"<!--FANCY:{"v":1,"status":"Sketching","pronouns":"she/her","##,
+                r##""banner":{"color":"#7a4e9a"},"nameStyle":{"color":"#e09a4b","bold":true}}-->"##,
+                "\nDraws <i>characters</i>."
+            )),
             Subject::Channel(LOUNGE) => Some("Where everybody starts."),
             Subject::Server => Some("Welcome to the <b>demo</b> server."),
             _ => None,

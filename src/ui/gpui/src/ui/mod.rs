@@ -73,6 +73,10 @@ pub(super) struct Info {
     body: Option<Arc<conversation::DrawnBody>>,
     /// What else is known, as names and values.
     facts: Vec<(gpui::SharedString, gpui::SharedString)>,
+    /// For a user: the profile their comment carries, if it carries one,
+    /// and its banner's picture. Held while the card is open and no longer.
+    profile: Option<crate::profile::Profile>,
+    banner: Option<Arc<gpui::Image>>,
 }
 
 /// A size in bytes as a person says it: `812 B`, `1.5 KB`, `3.2 MB`.
@@ -533,13 +537,7 @@ impl Shell {
                     self.engine.refresh_pings();
                 }
             }
-            EngineEvent::About { subject, html } => {
-                self.fill_description(subject, html.as_ref().map(AsRef::as_ref), cx);
-                if let Some(info) = self.info.as_mut().filter(|info| info.subject == subject) {
-                    let html = html.unwrap_or_default();
-                    info.body = Some(Arc::new(conversation::DrawnBody::read(&html)));
-                }
-            }
+            EngineEvent::About { subject, html } => self.take_about(subject, html, cx),
             EngineEvent::Facts { subject, facts } => {
                 if let Some(info) = self.info.as_mut().filter(|info| info.subject == subject) {
                     info.facts = facts;
@@ -682,6 +680,31 @@ impl Shell {
     }
 
     /// Show what there is to read about `subject`, fetching it.
+    /// What there is to read about a subject arrived: fill the dialog
+    /// that describes it, and the card that is open on it.
+    fn take_about(
+        &mut self,
+        subject: Subject,
+        html: Option<gpui::SharedString>,
+        cx: &mut Context<Self>,
+    ) {
+        self.fill_description(subject, html.as_ref().map(AsRef::as_ref), cx);
+        let Some(info) = self.info.as_mut().filter(|info| info.subject == subject) else {
+            return;
+        };
+        let html = html.unwrap_or_default();
+        info.body = Some(Arc::new(conversation::DrawnBody::read(&html)));
+        if matches!(subject, Subject::User(_)) {
+            info.profile = crate::profile::Profile::of(&html);
+            info.banner = info
+                .profile
+                .as_mut()
+                .and_then(|profile| profile.banner_picture.take())
+                .and_then(crate::picture::picture)
+                .map(Arc::new);
+        }
+    }
+
     pub(super) fn show_about(&mut self, subject: Subject, cx: &mut Context<Self>) {
         let title = match subject {
             Subject::User(session) => self
@@ -708,6 +731,8 @@ impl Shell {
             title: title.unwrap_or_default(),
             body: None,
             facts: Vec::new(),
+            profile: None,
+            banner: None,
         });
         self.engine.about(subject);
         cx.notify();
@@ -1150,6 +1175,16 @@ impl Shell {
             "devices" => self.toggle_devices(cx),
             "certificates" => self.toggle_certificates(cx),
             "members" => self.toggle_members(cx),
+            // The first user who is not the local one.
+            "profile" => {
+                let other = self.snapshot.users.iter().map(|user| user.session);
+                if let Some(session) = other
+                    .filter(|s| Some(*s) != self.snapshot.own_session)
+                    .nth(1)
+                {
+                    self.show_about(Subject::User(session), cx);
+                }
+            }
             "emoji" => self.emoji_for = Some(emoji::For::Composer),
             "permissions" => {
                 if let Some(channel) = self.snapshot.current_channel {
@@ -1649,7 +1684,7 @@ impl Render for Shell {
                 shell.child(menu::render_prompt(prompt, &theme, cx))
             })
             .when_some(self.info.as_ref(), |shell, info| {
-                shell.child(menu::render_info(info, &theme, cx))
+                shell.child(menu::render_info(self, info, &theme, cx))
             })
             .children(frame::resize_grips(window))
     }

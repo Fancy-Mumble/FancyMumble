@@ -7,7 +7,7 @@ use gpui::{
 };
 
 use super::Shell;
-use super::kit::{Button, Dialog, Emphasis, MenuItem, Sheet, Tone};
+use super::kit::{Avatar, Button, Dialog, Emphasis, MenuItem, Sheet, Tone};
 use super::text_input::{InputEvent, TextInput};
 use super::widgets::label;
 use crate::engine::{
@@ -1351,19 +1351,119 @@ pub(super) fn render_prompt(
 }
 
 /// The card with a user's comment or a channel's description.
+/// The head of a person's card: their banner, their face across its lower
+/// edge, their name as their profile sets it, and what they say of
+/// themselves in a line. Somebody with no profile has the theme's banner
+/// and their name as it is.
+fn profile_head(
+    shell: &Shell,
+    info: &super::Info,
+    user: &User,
+    theme: &Theme,
+) -> impl IntoElement + use<> {
+    let profile = info.profile.as_ref();
+    let line: Vec<&str> = profile
+        .into_iter()
+        .flat_map(|profile| [profile.pronouns.as_deref(), profile.status.as_deref()])
+        .flatten()
+        .collect();
+    let name_color = profile
+        .and_then(|profile| profile.name_color)
+        .or_else(|| shell.role_color(user))
+        .unwrap_or(theme.c.text);
+    div()
+        .debug_selector(|| "profile-head".to_owned())
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .h(px(84.0))
+                .rounded(theme.skin.radius_md)
+                .overflow_hidden()
+                .bg(profile
+                    .and_then(|profile| profile.banner_color)
+                    .unwrap_or(theme.c.accent_soft))
+                .when_some(info.banner.clone(), |banner, picture| {
+                    banner.child(
+                        gpui::img(picture)
+                            .size_full()
+                            .object_fit(gpui::ObjectFit::Cover),
+                    )
+                }),
+        )
+        .child(
+            div()
+                .mt(px(-30.0))
+                .ml(px(14.0))
+                .p(px(3.0))
+                .w(px(62.0))
+                .rounded_full()
+                .bg(theme.c.bg0)
+                .child(
+                    Avatar::new(&user.name)
+                        .picture(user.avatar.as_ref())
+                        .size(56.0),
+                ),
+        )
+        .child(
+            div()
+                .mt(px(8.0))
+                .text_size(px(18.0))
+                .font_weight(if profile.is_some_and(|profile| !profile.name_bold) {
+                    gpui::FontWeight::MEDIUM
+                } else {
+                    gpui::FontWeight::BOLD
+                })
+                .when(profile.is_some_and(|profile| profile.name_italic), |name| {
+                    name.italic()
+                })
+                .text_color(name_color)
+                .child(user.name.clone()),
+        )
+        .when(!line.is_empty(), |head| {
+            head.child(
+                div()
+                    .debug_selector(|| "profile-line".to_owned())
+                    .text_size(px(12.5))
+                    .text_color(theme.c.muted)
+                    .child(line.join(" · ")),
+            )
+        })
+        .when_some(
+            profile.and_then(|profile| profile.contact.clone()),
+            |head, contact| {
+                head.child(
+                    div()
+                        .text_size(px(12.0))
+                        .text_color(theme.c.dim)
+                        .child(contact),
+                )
+            },
+        )
+}
+
 pub(super) fn render_info(
+    shell: &Shell,
     info: &super::Info,
     theme: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     let hover = theme.c.hover;
     let body = info_body(info, theme);
+    // A person gets a card's head; anything else, its name.
+    let person = match info.subject {
+        Subject::User(session) => shell.snapshot.users.iter().find(|u| u.session == session),
+        _ => None,
+    };
     Dialog::new("info")
         .w(px(460.0))
-        .max_h(px(520.0))
+        .max_h(px(560.0))
         .gap(px(14.0))
         .p(px(22.0))
-        .title(info.title.clone())
+        .map(|card| match person {
+            Some(user) => card.child(profile_head(shell, info, user, theme)),
+            None => card.title(info.title.clone()),
+        })
         .when(!info.facts.is_empty(), |card| {
             card.child(
                 div()
