@@ -32,6 +32,10 @@ async-channel = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+[dev-dependencies]
+# Drives the views without a display: simulated clicks and keys.
+gpui = { version = "0.2.2", default-features = false, features = ["test-support"] }
+
 # Small and quick to start rather than fastest: the view is idle almost all
 # of the time, and what it costs at rest is memory.
 [profile.release]

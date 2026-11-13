@@ -43,6 +43,7 @@ fn mode_switch(light: bool, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
     let hover = theme.c.hover;
     div()
         .id("mode")
+        .debug_selector(|| "mode".to_owned())
         .flex()
         .items_center()
         .gap(px(6.0))
@@ -73,6 +74,7 @@ fn theme_row(
     let id = entry.id.clone();
     div()
         .id(entry.id.clone())
+        .debug_selector(|| format!("theme-{}", entry.id))
         .h(px(32.0))
         .flex()
         .items_center()

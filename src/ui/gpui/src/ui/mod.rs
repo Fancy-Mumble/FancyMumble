@@ -7,6 +7,8 @@ mod conversation;
 mod picker;
 mod rail;
 mod sidebar;
+#[cfg(test)]
+mod tests;
 pub(crate) mod text_input;
 mod widgets;
 
@@ -175,6 +177,17 @@ impl Shell {
             .iter()
             .find(|channel| channel.id == current)
             .map(|channel| channel.name.as_ref())
+    }
+
+    /// The channels the column lists: all of them, or those whose name
+    /// contains what is in the search field.
+    fn listed_channels(&self, cx: &gpui::App) -> Vec<&Channel> {
+        let wanted = self.search.read(cx).text().trim().to_lowercase();
+        self.snapshot
+            .channels
+            .iter()
+            .filter(|channel| wanted.is_empty() || channel.name.to_lowercase().contains(&wanted))
+            .collect()
     }
 
     /// The users in `channel`, in the order the engine lists them.

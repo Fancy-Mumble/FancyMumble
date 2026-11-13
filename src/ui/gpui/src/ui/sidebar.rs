@@ -73,12 +73,8 @@ fn search_box(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
 
 /// The channel tree, flattened to rows, narrowed by the search field.
 fn channel_rows(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> Vec<AnyElement> {
-    let wanted = shell.search.read(cx).text().trim().to_lowercase();
     let mut rows = Vec::new();
-    for channel in &shell.snapshot.channels {
-        if !wanted.is_empty() && !channel.name.to_lowercase().contains(&wanted) {
-            continue;
-        }
+    for channel in shell.listed_channels(cx) {
         let current = shell.snapshot.current_channel == Some(channel.id);
         rows.push(channel_row(shell, channel, current, theme, cx));
         if current {
@@ -109,6 +105,7 @@ fn channel_row(
     let id = channel.id;
     div()
         .id(("channel", id as usize))
+        .debug_selector(|| format!("channel-{id}"))
         .flex_none()
         .h(px(36.0))
         .flex()
@@ -325,6 +322,7 @@ fn voice_button(
     edge.a = 0.45;
     div()
         .id(id)
+        .debug_selector(|| id.to_owned())
         .size(px(30.0))
         .rounded(theme.skin.radius_sm)
         .flex()

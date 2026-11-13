@@ -109,6 +109,12 @@ impl TextInput {
         &self.line.text
     }
 
+    /// The placeholder shown while the field is empty.
+    #[cfg(test)]
+    pub(crate) fn placeholder(&self) -> &str {
+        &self.placeholder
+    }
+
     /// Replace the placeholder, e.g. when the channel changes.
     pub(crate) fn set_placeholder(&mut self, placeholder: impl Into<SharedString>) {
         self.placeholder = placeholder.into();
@@ -175,6 +181,7 @@ impl Render for TextInput {
         };
         div()
             .id("text-input")
+            .debug_selector(|| format!("input-{}", self.placeholder))
             .flex_1()
             .min_w_0()
             .cursor_text()

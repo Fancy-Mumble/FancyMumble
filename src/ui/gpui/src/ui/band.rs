@@ -104,6 +104,7 @@ fn control(
     let hover = theme.c.hover;
     div()
         .id(id)
+        .debug_selector(|| id.to_owned())
         .size(px(28.0))
         .rounded(theme.skin.radius_sm)
         .flex()
