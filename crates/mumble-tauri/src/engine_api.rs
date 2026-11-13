@@ -376,6 +376,16 @@ impl EngineHandle {
         self.state.select_channel(channel).await
     }
 
+    /// Open the conversation of `channel` without moving into it: marks it
+    /// read and fetches its stored history where the server keeps one.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn open_conversation(&self, channel: u32) -> Result<(), String> {
+        self.state.select_channel(channel).await
+    }
+
     /// Send `text` to `channel` as a plain-text message.
     ///
     /// # Errors
