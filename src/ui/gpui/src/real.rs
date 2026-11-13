@@ -13,8 +13,8 @@ use mumble_tauri_lib::engine_api::{
 };
 
 use crate::engine::{
-    Channel, ChannelId, Connection, Engine, EngineEvent, Message, SavedServer, ServerPing,
-    Snapshot, User, Voice,
+    AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Engine, EngineEvent,
+    Message, SavedServer, ServerPing, Snapshot, User, Voice,
 };
 use crate::store::Store;
 
@@ -367,6 +367,37 @@ impl Engine for RealEngine {
     fn toggle_deafen(&self) {
         let engine = self.shared.engine.clone();
         self.spawn(async move { engine.toggle_deafen().await });
+    }
+
+    fn audio_devices(&self) -> AudioDevices {
+        let device = |device: api::AudioDeviceInfo| AudioDevice {
+            name: device.name.into(),
+            is_default: device.is_default,
+        };
+        let devices = EngineHandle::audio_devices();
+        AudioDevices {
+            inputs: devices.inputs.into_iter().map(device).collect(),
+            outputs: devices.outputs.into_iter().map(device).collect(),
+        }
+    }
+
+    fn chosen_devices(&self) -> ChosenDevices {
+        let (input, output) = self.shared.engine.selected_devices();
+        ChosenDevices {
+            input: input.map(Into::into),
+            output: output.map(Into::into),
+        }
+    }
+
+    fn choose_devices(&self, devices: ChosenDevices) {
+        let name = |device: Option<gpui::SharedString>| device.map(|name| name.to_string());
+        if let Err(reason) = self
+            .shared
+            .engine
+            .select_devices(name(devices.input), name(devices.output))
+        {
+            self.shared.tell(EngineEvent::Notice(Some(reason.into())));
+        }
     }
 
     fn shutdown(&self) {

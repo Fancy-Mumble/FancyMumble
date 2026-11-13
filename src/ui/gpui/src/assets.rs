@@ -43,6 +43,7 @@ icons![
     "plus",
     "search",
     "send",
+    "settings-2",
     "square",
     "star",
     "sun",

@@ -4,8 +4,8 @@
 use std::sync::Mutex;
 
 use crate::engine::{
-    Channel, ChannelId, Connection, Engine, EngineEvent, Message, SavedServer, ServerPing, Session,
-    Snapshot, User, Voice,
+    AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Engine, EngineEvent,
+    Message, SavedServer, ServerPing, Session, Snapshot, User, Voice,
 };
 
 /// The local user's session in the demo server.
@@ -30,6 +30,7 @@ struct State {
     voice: Voice,
     deafened: bool,
     servers: Vec<SavedServer>,
+    devices: ChosenDevices,
     current_channel: ChannelId,
     channels: Vec<Channel>,
     users: Vec<User>,
@@ -128,6 +129,7 @@ impl State {
             connected: true,
             voice: Voice::Off,
             deafened: false,
+            devices: ChosenDevices::default(),
             servers: vec![
                 saved("magical-alex", "magical.rocks", "Alex", true),
                 saved("magical-work", "magical.rocks", "Alex (work)", true),
@@ -341,6 +343,31 @@ impl Engine for DemoEngine {
             }
         });
         self.tell(EngineEvent::StateChanged);
+    }
+
+    fn audio_devices(&self) -> AudioDevices {
+        let device = |name: &str, is_default| AudioDevice {
+            name: name.to_owned().into(),
+            is_default,
+        };
+        AudioDevices {
+            inputs: vec![
+                device("Built-in Microphone", true),
+                device("USB Headset", false),
+            ],
+            outputs: vec![
+                device("Built-in Speakers", true),
+                device("USB Headset", false),
+            ],
+        }
+    }
+
+    fn chosen_devices(&self) -> ChosenDevices {
+        self.with_state(|state| state.devices.clone())
+    }
+
+    fn choose_devices(&self, devices: ChosenDevices) {
+        self.with_state(|state| state.devices = devices);
     }
 }
 

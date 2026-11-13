@@ -433,3 +433,35 @@ fn dismiss_closes_the_dialog_before_the_picker(cx: &mut TestAppContext) {
     shell.update(cx, Shell::dismiss);
     shell.read_with(cx, |shell, _| assert!(!shell.picker_open));
 }
+
+#[gpui::test]
+fn the_device_panel_lists_devices_and_takes_a_choice(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    click(cx, "audio-devices");
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| {
+        let devices = shell.devices.as_ref().expect("the devices arrived");
+        assert_eq!(devices.inputs.len(), 2);
+        assert_eq!(devices.outputs.len(), 2);
+    });
+    click(cx, "output-USB Headset");
+    assert_eq!(
+        engine.chosen_devices().output.as_ref().map(AsRef::as_ref),
+        Some("USB Headset")
+    );
+    assert_eq!(
+        engine.chosen_devices().input,
+        None,
+        "the microphone is untouched"
+    );
+    click(cx, "input-USB Headset");
+    click(cx, "output-default");
+    let chosen = engine.chosen_devices();
+    assert_eq!(
+        chosen.input.as_ref().map(AsRef::as_ref),
+        Some("USB Headset")
+    );
+    assert_eq!(chosen.output, None, "back to the system's default");
+    click(cx, "audio-devices");
+    shell.read_with(cx, |shell, _| assert!(!shell.devices_open));
+}

@@ -275,6 +275,7 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
     // The microphone is "off" both when voice is off and when it is muted:
     // either way nobody hears the user, which is what the red says.
     let silent = shell.snapshot.voice != Voice::On;
+    let tile_hover = theme.c.hover;
     let status = match (shell.snapshot.connection, deafened, shell.snapshot.voice) {
         (Connection::Disconnected, ..) => "Not connected",
         (Connection::Connecting, ..) => "Connecting…",
@@ -301,18 +302,36 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
                 .flex_col()
                 .gap(px(6.0))
                 .child(
-                    div().flex().items_center().justify_between().child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .child(div().font_weight(EMPHASIS).child(name))
-                            .child(
-                                div()
-                                    .text_size(px(11.5))
-                                    .text_color(theme.c.muted)
-                                    .child(status),
-                            ),
-                    ),
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .child(div().font_weight(EMPHASIS).child(name))
+                                .child(
+                                    div()
+                                        .text_size(px(11.5))
+                                        .text_color(theme.c.muted)
+                                        .child(status),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .id("audio-devices")
+                                .debug_selector(|| "audio-devices".to_owned())
+                                .size(px(28.0))
+                                .rounded(theme.skin.radius_sm)
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .cursor_pointer()
+                                .hover(move |style| style.bg(tile_hover))
+                                .on_click(cx.listener(|shell, _, _, cx| shell.toggle_devices(cx)))
+                                .child(icon("settings-2", 15.0, theme.c.muted)),
+                        ),
                 )
                 .child(
                     div()

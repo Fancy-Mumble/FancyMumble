@@ -5,6 +5,7 @@
 mod band;
 mod connect;
 mod conversation;
+mod devices;
 mod frame;
 mod picker;
 mod rail;
@@ -24,8 +25,8 @@ use gpui::{
 };
 
 use crate::engine::{
-    Channel, ChannelId, Connection, Engine, EngineEvent, Message, SavedServer, Session, Snapshot,
-    User,
+    AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Engine, EngineEvent, Message,
+    SavedServer, Session, Snapshot, User,
 };
 use crate::store::{Settings, Store};
 use crate::theme::{ActiveTheme, Catalog, Mode};
@@ -69,6 +70,12 @@ pub(crate) struct Shell {
     store: Option<Store>,
     /// Whether the theme picker is showing.
     picker_open: bool,
+    /// Whether the audio device panel is showing.
+    devices_open: bool,
+    /// The devices the system offers, once they have been asked for.
+    devices: Option<AudioDevices>,
+    /// The devices in use.
+    chosen_devices: ChosenDevices,
     _events: Task<()>,
     _subscriptions: Vec<Subscription>,
 }
@@ -104,7 +111,6 @@ impl Shell {
         let mut shell = Self {
             snapshot: engine.snapshot(),
             servers: engine.saved_servers(),
-            engine,
             messages: Vec::new(),
             rows: ListState::new(0, ListAlignment::Top, px(OVERDRAW)),
             row_model: Vec::new(),
@@ -120,6 +126,10 @@ impl Shell {
             notice: None,
             store,
             picker_open: std::env::var_os("FANCY_GPUI_PICKER").is_some(),
+            devices_open: false,
+            devices: None,
+            chosen_devices: engine.chosen_devices(),
+            engine,
             _events: events,
             _subscriptions: subscriptions,
         };
@@ -255,6 +265,7 @@ impl Shell {
     pub(crate) fn dismiss(&mut self, cx: &mut Context<Self>) {
         if self.editor.take().is_none() {
             self.picker_open = false;
+            self.devices_open = false;
         }
         cx.notify();
     }
@@ -326,17 +337,25 @@ impl Shell {
     /// Switch to `id` in `mode`, and remember the choice.
     pub(super) fn set_theme(&mut self, id: &str, mode: Mode, cx: &mut Context<Self>) {
         ActiveTheme::set(id, mode, cx);
+        self.remember_settings(cx);
+    }
+
+    /// Write the view's settings out: the theme and the audio devices.
+    fn remember_settings(&mut self, cx: &mut Context<Self>) {
         let Some(store) = &self.store else { return };
-        let chosen = ActiveTheme::get(cx);
+        let theme = ActiveTheme::get(cx);
+        let name = |device: &Option<gpui::SharedString>| device.as_ref().map(ToString::to_string);
         let settings = Settings {
-            theme: Some(chosen.id.to_string()),
-            mode: Some(match chosen.mode {
+            theme: Some(theme.id.to_string()),
+            mode: Some(match theme.mode {
                 Mode::Light => "light".to_owned(),
                 Mode::Dark => "dark".to_owned(),
             }),
+            input_device: name(&self.chosen_devices.input),
+            output_device: name(&self.chosen_devices.output),
         };
         if let Err(error) = store.save_settings(&settings) {
-            self.notice = Some(format!("The theme could not be remembered: {error}").into());
+            self.notice = Some(format!("The settings could not be remembered: {error}").into());
         }
     }
 }
@@ -378,6 +397,9 @@ impl Render for Shell {
             })
             .when(self.picker_open, |shell| {
                 shell.child(picker::render(&theme, cx))
+            })
+            .when(self.devices_open, |shell| {
+                shell.child(devices::render(self, &theme, cx))
             })
             .when_some(self.editor.as_ref(), |shell, editor| {
                 shell.child(server_editor::render(editor, &theme, cx))

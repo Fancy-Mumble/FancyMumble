@@ -129,6 +129,15 @@ fn start_engine() -> (Arc<dyn engine::Engine>, Option<store::Store>) {
     match real::RealEngine::start(&dir) {
         Ok(engine) => {
             let engine: Arc<dyn engine::Engine> = Arc::new(engine);
+            let store = store::Store::new(dir);
+            // The devices chosen last time, before voice can be turned on.
+            let stored = store.settings();
+            if stored.input_device.is_some() || stored.output_device.is_some() {
+                engine.choose_devices(engine::ChosenDevices {
+                    input: stored.input_device.map(Into::into),
+                    output: stored.output_device.map(Into::into),
+                });
+            }
             // `FANCY_GPUI_CONNECT=<saved identity id>` connects at once, and
             // `FANCY_GPUI_SAY=<text>` then says that in the channel arrived
             // in: for driving the view where nothing can click or type.
@@ -138,7 +147,7 @@ fn start_engine() -> (Arc<dyn engine::Engine>, Option<store::Store>) {
                     say_once_connected(Arc::clone(&engine), text);
                 }
             }
-            (engine, Some(store::Store::new(dir)))
+            (engine, Some(store))
         }
         Err(error) => {
             eprintln!("the engine could not start ({error}); showing the demo instead");

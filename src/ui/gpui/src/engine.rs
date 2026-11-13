@@ -65,6 +65,29 @@ pub(crate) enum Voice {
     Muted,
 }
 
+/// A microphone or a speaker the system offers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AudioDevice {
+    pub name: SharedString,
+    /// Whether it is the system's default.
+    pub is_default: bool,
+}
+
+/// The audio devices the system offers.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct AudioDevices {
+    pub inputs: Vec<AudioDevice>,
+    pub outputs: Vec<AudioDevice>,
+}
+
+/// The chosen microphone and speaker, by name; `None` is the system's
+/// default.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct ChosenDevices {
+    pub input: Option<SharedString>,
+    pub output: Option<SharedString>,
+}
+
 /// One channel of the server's tree.
 #[derive(Debug, Clone)]
 pub(crate) struct Channel {
@@ -204,6 +227,16 @@ pub(crate) trait Engine: Send + Sync + 'static {
 
     /// Deafen or undeafen the local user.
     fn toggle_deafen(&self);
+
+    /// The microphones and speakers the system offers. Blocking: call it
+    /// off the view's thread.
+    fn audio_devices(&self) -> AudioDevices;
+
+    /// The devices in use.
+    fn chosen_devices(&self) -> ChosenDevices;
+
+    /// Use these devices from now on.
+    fn choose_devices(&self, devices: ChosenDevices);
 
     /// The application is closing: write out what is held only in memory.
     fn shutdown(&self) {}

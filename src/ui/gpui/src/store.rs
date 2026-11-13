@@ -61,6 +61,12 @@ pub(crate) struct Settings {
     /// `light` or `dark`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
+    /// The chosen microphone; absent for the system's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_device: Option<String>,
+    /// The chosen speaker; absent for the system's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_device: Option<String>,
 }
 
 /// The files, in one directory.
@@ -177,6 +183,8 @@ mod tests {
         let chosen = Settings {
             theme: Some("rose".to_owned()),
             mode: Some("light".to_owned()),
+            input_device: None,
+            output_device: Some("USB Headset".to_owned()),
         };
         store
             .save_settings(&chosen)
