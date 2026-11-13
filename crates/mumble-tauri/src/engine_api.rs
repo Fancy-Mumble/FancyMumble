@@ -22,7 +22,7 @@ use crate::state::types::{
     ConnectionStatus, RegisteredUserUpdate, UserEntry, VoiceState,
 };
 use crate::state::types::{AclPayload, PageRequest, SearchFilter};
-use crate::state::{AppState, Credentials, LinkEmbed};
+use crate::state::{AppState, Credentials, LinkEmbed, WhisperEntry};
 use mumble_protocol::state::PchatProtocol;
 
 /// Where the engine keeps its files.
@@ -132,6 +132,8 @@ pub enum EngineEvent {
         /// Whether it was put on; `false` when it was taken off.
         added: bool,
     },
+    /// The local user started whispering, or stopped.
+    Whispering(bool),
     /// Who is asking for the key of an encrypted channel changed: read
     /// [`EngineHandle::key_requests`] again.
     KeyRequests {
@@ -215,6 +217,41 @@ pub struct UserStats {
     /// Their address; a server tells only an administrator.
     pub address: Option<String>,
 }
+
+/// Who a whisper goes to instead of the channel the speaker is in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhisperTarget {
+    /// One user, wherever they are.
+    User(u32),
+    /// Everybody in a channel: a shout.
+    Channel(u32),
+}
+
+impl WhisperTarget {
+    fn entries(self) -> Vec<WhisperEntry> {
+        let blank = WhisperEntry {
+            sessions: Vec::new(),
+            channel_id: None,
+            group: None,
+            links: false,
+            children: false,
+        };
+        vec![match self {
+            Self::User(session) => WhisperEntry {
+                sessions: vec![session],
+                ..blank
+            },
+            Self::Channel(channel) => WhisperEntry {
+                channel_id: Some(channel),
+                ..blank
+            },
+        }]
+    }
+}
+
+/// The one slot this API whispers at. A view with one whisper key has one
+/// target at a time.
+const WHISPER_SLOT: u8 = 1;
 
 /// What to change about a channel; what is `None` is left as it is.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -733,6 +770,15 @@ impl EngineEvent {
     /// The rest of [`Self::from_core`]: what a server answers when asked.
     fn answer_from_core(event: CoreEvent) -> Option<Self> {
         Some(match event {
+            CoreEvent::WhisperState(active) => Self::Whispering(active),
+            // Only a refusal is news; a list that merely shrank is not.
+            CoreEvent::WhisperDenials(denials) => {
+                Self::Denied {
+                    reason: Some(denials.latest?.reason.unwrap_or_else(|| {
+                        "The server does not let you whisper there.".to_owned()
+                    })),
+                }
+            }
             CoreEvent::PchatKeyShareRequested(payload) => Self::KeyRequests {
                 channel: payload.channel_id,
             },
@@ -2234,6 +2280,42 @@ impl EngineHandle {
             i32::try_from(voice.bitrate_bps.clamp(MIN_BITRATE, MAX_BITRATE)).unwrap_or(i32::MAX);
         settings.force_tcp_audio = voice.voice_over_tcp;
         self.state.apply_audio_settings(settings)
+    }
+
+    /// Tell the server ahead of time who a whisper will go to, so that
+    /// the first syllable of one is not lost; `None` forgets the target.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn prepare_whisper(&self, target: Option<WhisperTarget>) -> Result<(), String> {
+        let entries = target.map(WhisperTarget::entries).unwrap_or_default();
+        self.state
+            .whisper_register(WHISPER_SLOT, entries)
+            .await
+            .map(|_| ())
+    }
+
+    /// The whisper key went down: speak to `target` and to nobody else,
+    /// whatever the microphone was doing.
+    ///
+    /// # Errors
+    ///
+    /// When not connected, or the microphone cannot be opened.
+    pub async fn whisper_start(&self, target: WhisperTarget) -> Result<(), String> {
+        self.state
+            .whisper_start(WHISPER_SLOT, target.entries())
+            .await
+    }
+
+    /// The whisper key came up: back to the channel, and to what the
+    /// microphone was doing before.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn whisper_end(&self) -> Result<(), String> {
+        self.state.whisper_end().await
     }
 
     /// The push-to-talk key went down (`held`) or came up.
