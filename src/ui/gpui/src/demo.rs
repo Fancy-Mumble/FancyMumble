@@ -62,6 +62,8 @@ struct State {
     key_requests: Vec<KeyRequest>,
     /// What the local user has asked to have sent later.
     scheduled: Vec<Scheduled>,
+    /// The second-factor code the last connect came with.
+    code: Option<String>,
     /// Where what is heard is being recorded to, while it is.
     recording: Option<std::path::PathBuf>,
     /// The shared files the view asked to have saved, and where to.
@@ -112,6 +114,12 @@ impl DemoEngine {
             events,
             inbox,
         }
+    }
+
+    /// The second-factor code the last connect came with.
+    #[cfg(test)]
+    pub(crate) fn code(&self) -> Option<String> {
+        self.with_state(|state| state.code.clone())
     }
 
     /// Have `session` start or stop talking.
@@ -528,6 +536,7 @@ impl State {
             key_requests: Vec::new(),
             scheduled: Vec::new(),
             recording: None,
+            code: None,
             saved: Vec::new(),
             certificates: vec!["alex".into(), "work".into()],
             messages: vec![
@@ -892,6 +901,11 @@ impl Engine for DemoEngine {
             self.tell(EngineEvent::StateChanged);
             self.tell(EngineEvent::CurrentChannelChanged);
         }
+    }
+
+    fn connect_with_code(&self, id: &str, password: Option<String>, code: Option<String>) {
+        self.with_state(|state| state.code = code.filter(|code| !code.is_empty()));
+        self.connect(id, password);
     }
 
     fn disconnect(&self) {

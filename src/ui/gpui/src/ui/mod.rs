@@ -267,7 +267,7 @@ pub(crate) struct Shell {
     selected_identity: Option<gpui::SharedString>,
     server_search: Entity<TextInput>,
     /// The server's password, for the connect about to be made.
-    password: Entity<TextInput>,
+    secrets: connect::Secrets,
     /// The add/edit dialog, while it is open.
     editor: Option<server_editor::ServerEditor>,
     /// What the engine last had to tell the user.
@@ -407,7 +407,7 @@ impl Shell {
             selected_server: None,
             selected_identity: None,
             server_search,
-            password,
+            secrets: connect::Secrets::new(password, cx),
             editor: None,
             notice: None,
             store,

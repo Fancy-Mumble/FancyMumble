@@ -1018,6 +1018,10 @@ impl Engine for RealEngine {
     }
 
     fn connect(&self, id: &str, password: Option<String>) {
+        self.connect_with_code(id, password, None);
+    }
+
+    fn connect_with_code(&self, id: &str, password: Option<String>, code: Option<String>) {
         let Some(server) = self
             .saved_servers()
             .into_iter()
@@ -1039,7 +1043,13 @@ impl Engine for RealEngine {
             .lock()
             .unwrap_or_else(PoisonError::into_inner) = Some((id.to_owned(), password.clone()));
         let engine = self.shared.engine.clone();
-        self.spawn(async move { engine.connect(target_of(&server, password)).await });
+        // The code goes with this attempt only: a retry would send a
+        // spent one.
+        let target = ConnectTarget {
+            totp: code.filter(|code| !code.is_empty()),
+            ..target_of(&server, password)
+        };
+        self.spawn(async move { engine.connect(target).await });
     }
 
     fn disconnect(&self) {
@@ -1541,6 +1551,7 @@ impl Engine for RealEngine {
 /// How to connect as the saved identity `server`.
 fn target_of(server: &SavedServer, password: Option<String>) -> ConnectTarget {
     ConnectTarget {
+        totp: None,
         host: server.host.to_string(),
         port: server.port,
         username: server.username.to_string(),

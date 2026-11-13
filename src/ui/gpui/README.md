@@ -15,8 +15,9 @@ real engine and does text and voice.
 
 - **Servers.** Saved servers and their identities, each pinged for whether
   it is up; add, edit and forget them; a certificate per identity, made on
-  first use; a server password asked for once a server has turned the
-  user away; one identity to connect as at every launch; a right click marks a
+  first use; a server password, and the one-time code of an account
+  with a second factor, asked for once a server has turned the user away
+  (the code path has not been tried against a server that demands one); one identity to connect as at every launch; a right click marks a
   server a favourite or copies its address. Several
   servers at once, one tile each on the rail: `+` adds another, a click
   switches, a right click says what the server is or leaves it. A lost

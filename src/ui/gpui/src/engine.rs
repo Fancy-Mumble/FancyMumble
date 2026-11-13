@@ -854,6 +854,13 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// wants one.
     fn connect(&self, id: &str, password: Option<String>);
 
+    /// The same, with the one-time code of an account that signs in with a
+    /// second factor. The code is used for this attempt and not kept.
+    fn connect_with_code(&self, id: &str, password: Option<String>, code: Option<String>) {
+        let _ = code;
+        self.connect(id, password);
+    }
+
     /// Leave the server.
     fn disconnect(&self);
 

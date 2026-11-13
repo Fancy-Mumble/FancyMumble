@@ -3,12 +3,13 @@
 //! who to arrive as.
 
 use gpui::{
-    AnyElement, Context, IntoElement, ParentElement, SharedString, Styled, div, linear_color_stop,
-    linear_gradient, prelude::*, px,
+    AnyElement, Context, Entity, IntoElement, ParentElement, SharedString, Styled, div,
+    linear_color_stop, linear_gradient, prelude::*, px,
 };
 
 use super::Shell;
 use super::kit::{Avatar, Button, IconButton, Radio, Size, Switch, tint};
+use super::text_input::{InputEvent, TextInput};
 use super::widgets::{EMPHASIS, display_font, icon, label};
 use crate::engine::{Connection, SavedServer, ServerPing};
 use crate::theme::Theme;
@@ -105,10 +106,13 @@ impl Shell {
         let Some(id) = self.selected_identity().map(|identity| identity.id.clone()) else {
             return;
         };
-        let password = self.password.read(cx).text().to_owned();
-        self.engine.connect(&id, Some(password));
+        let password = self.secrets.password.read(cx).text().to_owned();
+        let code = self.secrets.code.read(cx).text().trim().to_owned();
+        self.engine
+            .connect_with_code(&id, Some(password), Some(code));
         // Typed for this connect; not kept on screen, or anywhere else.
-        self.password.update(cx, |field, _| field.clear());
+        self.secrets.password.update(cx, |field, _| field.clear());
+        self.secrets.code.update(cx, |field, _| field.clear());
         cx.notify();
     }
 }
@@ -487,6 +491,7 @@ pub(super) fn landing(
                 // servers have none.
                 .when(shell.notice.is_some(), |form| {
                     form.child(password_field(shell, theme))
+                        .child(code_field(shell, theme))
                 })
                 .child(connect_row(shell, theme, cx))
                 .when_some(shell.notice.clone(), |form, notice| {
@@ -681,7 +686,44 @@ fn password_field(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
         .border_1()
         .border_color(theme.c.line)
         .text_size(px(13.0))
-        .child(shell.password.clone())
+        .child(shell.secrets.password.clone())
+}
+
+/// The one-time code, for an account that signs in with a second factor.
+fn code_field(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
+    div()
+        .mt(px(6.0))
+        .h(px(38.0))
+        .flex()
+        .items_center()
+        .px(px(12.0))
+        .rounded(theme.skin.radius_md)
+        .bg(theme.c.input)
+        .border_1()
+        .border_color(theme.c.line)
+        .text_size(px(13.0))
+        .child(shell.secrets.code.clone())
+}
+
+/// What is typed to get onto a server and kept nowhere: its password, and
+/// the code of a second factor.
+pub(super) struct Secrets {
+    pub password: Entity<TextInput>,
+    pub code: Entity<TextInput>,
+}
+
+impl Secrets {
+    /// With the password's field already made, since Enter in it connects.
+    pub(super) fn new(password: Entity<TextInput>, cx: &mut Context<Shell>) -> Self {
+        let code = cx.new(|cx| TextInput::new("Two-factor code, if the account has one", cx));
+        cx.subscribe(&code, |shell, _, event, cx| {
+            if matches!(event, InputEvent::Submitted(_)) {
+                shell.connect_selected(cx);
+            }
+        })
+        .detach();
+        Self { password, code }
+    }
 }
 
 /// A text link: "+ Add", "+ New identity".

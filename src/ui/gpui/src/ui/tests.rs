@@ -2082,3 +2082,16 @@ fn writing_and_reading_are_kept_to_oneself_when_switched_off(cx: &mut TestAppCon
     cx.run_until_parked();
     assert_eq!(engine.read_up_to_id(), before);
 }
+
+#[gpui::test]
+fn a_second_factor_code_is_asked_for_after_a_refusal_and_sent_once(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell_on(DemoEngine::disconnected(), cx);
+    engine.notify(Some("This account wants its one-time code"));
+    cx.run_until_parked();
+    click(cx, "input-Two-factor code, if the account has one");
+    cx.simulate_keystrokes("1 2 3 4 5 6 enter");
+    assert_eq!(engine.code().as_deref(), Some("123456"));
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(shell.secrets.code.read(cx).text(), "", "not kept on screen");
+    });
+}
