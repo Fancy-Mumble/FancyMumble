@@ -22,7 +22,8 @@ real engine and does text and voice.
 - **On a server.** The channel tree in order with unread counts, who is in
   each channel, who is talking; read a channel with a click, enter it with
   a double click or Join; listen to one without joining; channel passwords;
-  create, rename and delete channels; the welcome message, comments and
+  create, rename, describe and delete channels, and set a channel's
+  password; the welcome message, comments and
   descriptions.
 - **Messages.** Rich text with live links and embedded pictures; send a
   picture from a file or the clipboard, scaled to what the server takes;

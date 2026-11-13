@@ -425,6 +425,7 @@ impl Shell {
                 }
             }
             EngineEvent::About { subject, html } => {
+                self.fill_description(subject, html.as_ref().map(AsRef::as_ref), cx);
                 if let Some(info) = self.info.as_mut().filter(|info| info.subject == subject) {
                     let html = html.unwrap_or_default();
                     info.body = Some(Arc::new(conversation::DrawnBody::read(&html)));

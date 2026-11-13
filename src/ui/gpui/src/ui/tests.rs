@@ -1414,3 +1414,26 @@ fn a_reply_is_begun_from_a_messages_menu_and_shows_what_it_answers(cx: &mut Test
         assert_eq!(shell.composer.read(cx).text(), "hm");
     });
 }
+
+#[gpui::test]
+fn a_channels_description_is_edited_from_the_one_it_has(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    right_click(cx, "channel-1");
+    click(cx, "menu-Describe…");
+    // The demo's lounge is described; the field starts from that.
+    shell.read_with(cx, |shell, cx| {
+        let prompt = shell.prompt.as_ref().expect("the dialog");
+        assert_eq!(
+            prompt.field_text(cx).as_deref(),
+            Some("Where everybody starts.")
+        );
+    });
+    cx.simulate_keystrokes("space N o w . enter");
+    assert_eq!(
+        engine.actions().last(),
+        Some(&Action::DescribeChannel {
+            channel: 1,
+            text: "Where everybody starts. Now.".to_owned(),
+        })
+    );
+}

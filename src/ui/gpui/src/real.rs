@@ -125,6 +125,60 @@ impl Shared {
         Ok(())
     }
 
+    /// The rest of what [`RealEngine::act`] asks for: what is done to
+    /// messages, polls and the administrator's lists.
+    async fn act_on_conversation(&self, action: Action) -> Result<(), String> {
+        let (engine, shared) = (&self.engine, self);
+        match action {
+            Action::EditMessage { channel, id, text } => {
+                engine.edit_text(channel, &id, &text).await
+            }
+            Action::DeleteMessage { channel, id } => {
+                engine.delete_messages(channel, vec![id]).await
+            }
+            Action::React {
+                channel,
+                id,
+                emoji,
+                add,
+            } => engine.react(channel, &id, &emoji, add).await,
+            Action::Pin {
+                channel,
+                id,
+                pinned,
+            } => engine.pin(channel, &id, pinned).await,
+            Action::CreatePoll {
+                channel,
+                question,
+                options,
+                multiple,
+            } => shared.ask(channel, question, options, multiple).await,
+            Action::Vote {
+                channel,
+                poll,
+                selected,
+            } => {
+                engine.vote(channel, &poll, selected.clone()).await?;
+                if let Some(own) = engine.own_session() {
+                    shared.hold_vote(channel, &poll, own, selected);
+                }
+                Ok(())
+            }
+            Action::SetBans(bans) => engine.set_bans(bans.iter().map(ban_info).collect()).await,
+            Action::Unregister { id } => engine.change_registered(id, None).await,
+            Action::ToggleListen { channel } => {
+                let toggled = engine.toggle_listen(channel).await.map(|_| ());
+                shared.tell(EngineEvent::StateChanged);
+                toggled
+            }
+            Action::PrioritySpeaker { session, priority } => {
+                engine.set_priority_speaker(session, priority).await
+            }
+            // Everything else was done before this was asked.
+            _ => Ok(()),
+        }
+    }
+
     /// Hold a poll put to `channel`, and say the channel has news.
     fn hold_poll(&self, channel: u32, poll: HeldPoll) {
         {
@@ -1151,56 +1205,35 @@ impl Engine for RealEngine {
                 Action::RenameChannel { channel, name } => {
                     engine.rename_channel(channel, name).await
                 }
+                Action::DescribeChannel { channel, text } => {
+                    engine
+                        .change_channel(
+                            channel,
+                            api::ChannelChange {
+                                description: Some(text),
+                                ..api::ChannelChange::default()
+                            },
+                        )
+                        .await
+                }
+                Action::SetChannelPassword { channel, password } => {
+                    engine
+                        .change_channel(
+                            channel,
+                            api::ChannelChange {
+                                password: Some(password),
+                                ..api::ChannelChange::default()
+                            },
+                        )
+                        .await
+                }
                 Action::DeleteChannel { channel } => engine.delete_channel(channel).await,
                 Action::JoinWithPassword { channel, password } => {
                     engine.join_channel_with_password(channel, password).await
                 }
                 Action::SetComment(text) => engine.set_comment(&text).await,
                 Action::SetAvatar(image) => engine.set_avatar(image).await,
-                Action::EditMessage { channel, id, text } => {
-                    engine.edit_text(channel, &id, &text).await
-                }
-                Action::DeleteMessage { channel, id } => {
-                    engine.delete_messages(channel, vec![id]).await
-                }
-                Action::React {
-                    channel,
-                    id,
-                    emoji,
-                    add,
-                } => engine.react(channel, &id, &emoji, add).await,
-                Action::Pin {
-                    channel,
-                    id,
-                    pinned,
-                } => engine.pin(channel, &id, pinned).await,
-                Action::CreatePoll {
-                    channel,
-                    question,
-                    options,
-                    multiple,
-                } => shared.ask(channel, question, options, multiple).await,
-                Action::Vote {
-                    channel,
-                    poll,
-                    selected,
-                } => {
-                    engine.vote(channel, &poll, selected.clone()).await?;
-                    if let Some(own) = engine.own_session() {
-                        shared.hold_vote(channel, &poll, own, selected);
-                    }
-                    Ok(())
-                }
-                Action::SetBans(bans) => engine.set_bans(bans.iter().map(ban_info).collect()).await,
-                Action::Unregister { id } => engine.change_registered(id, None).await,
-                Action::ToggleListen { channel } => {
-                    let toggled = engine.toggle_listen(channel).await.map(|_| ());
-                    shared.tell(EngineEvent::StateChanged);
-                    toggled
-                }
-                Action::PrioritySpeaker { session, priority } => {
-                    engine.set_priority_speaker(session, priority).await
-                }
+                other => shared.act_on_conversation(other).await,
             }
         });
     }
@@ -2209,6 +2242,20 @@ mod tests {
                         if subject == Subject::User(admin_session)
                             && facts.iter().any(|(name, _)| name.as_ref() == "Ping")
                 )
+            })
+        });
+        // What is said about a channel is changed by one and read by another.
+        admin.act(Action::DescribeChannel {
+            channel,
+            text: "Kept for <good>".to_owned(),
+        });
+        wait_for("the channel's new description", || {
+            alice.about(Subject::Channel(channel));
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            std::iter::from_fn(|| told.try_recv().ok()).any(|event| {
+                matches!(event, EngineEvent::About { subject, html: Some(html) }
+                    if subject == Subject::Channel(channel)
+                        && crate::rich::Rich::parse(&html).text == "Kept for <good>")
             })
         });
         alice.about(Subject::Server);

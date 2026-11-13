@@ -175,6 +175,13 @@ pub(crate) enum Action {
     },
     /// Rename `channel`.
     RenameChannel { channel: ChannelId, name: String },
+    /// Say `text` about `channel`: its description. Empty says nothing.
+    DescribeChannel { channel: ChannelId, text: String },
+    /// Have `channel` entered with `password`; empty lets anybody in.
+    SetChannelPassword {
+        channel: ChannelId,
+        password: String,
+    },
     /// Delete `channel`, and everything under it.
     DeleteChannel { channel: ChannelId },
     /// Move into `channel`, presenting `password`.

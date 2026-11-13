@@ -66,6 +66,9 @@ pub(super) enum Question {
     DeleteChannel(ChannelId),
     JoinPassword(ChannelId),
     Comment,
+    /// What is said about a channel, and the password it is entered with.
+    DescribeChannel(ChannelId),
+    ChannelPassword(ChannelId),
     /// A poll for a channel: one answer each, or several.
     NewPoll(ChannelId),
     NewPollSeveral(ChannelId),
@@ -88,6 +91,16 @@ impl Question {
             Self::DeleteChannel(_) => ("Delete this channel and everything in it?", None, "Delete"),
             Self::JoinPassword(_) => ("Join with a password", Some("Password"), "Join"),
             Self::Comment => ("Your comment", Some("What others read about you"), "Save"),
+            Self::DescribeChannel(_) => (
+                "About this channel",
+                Some("What it is for (Shift+Enter for a new line)"),
+                "Save",
+            ),
+            Self::ChannelPassword(_) => (
+                "Channel password",
+                Some("Leave empty to let anybody in"),
+                "Set",
+            ),
             Self::NewPoll(_) => (
                 "New poll: choose one",
                 Some("The question, then an answer on each line (Shift+Enter)"),
@@ -103,7 +116,10 @@ impl Question {
 
     /// Whether the answer runs over several lines.
     fn takes_lines(self) -> bool {
-        matches!(self, Self::NewPoll(_) | Self::NewPollSeveral(_))
+        matches!(
+            self,
+            Self::NewPoll(_) | Self::NewPollSeveral(_) | Self::DescribeChannel(_)
+        )
     }
 
     /// Whether the button is drawn as destructive.
@@ -147,6 +163,11 @@ impl Question {
                 password: answer.to_owned(),
             },
             Self::Comment => Action::SetComment(text),
+            Self::DescribeChannel(channel) => Action::DescribeChannel { channel, text },
+            Self::ChannelPassword(channel) => Action::SetChannelPassword {
+                channel,
+                password: answer.to_owned(),
+            },
             Self::NewPoll(channel) | Self::NewPollSeveral(channel) => {
                 // The first line asks; each line after it is an answer,
                 // and a poll with fewer than two is not one.
@@ -415,6 +436,14 @@ pub(super) fn channel_items(
         "Rename…",
         Command::Ask(Question::RenameChannel(id)),
     ));
+    items.push(Item::new(
+        "Describe…",
+        Command::Ask(Question::DescribeChannel(id)),
+    ));
+    items.push(Item::new(
+        "Set a password…",
+        Command::Ask(Question::ChannelPassword(id)),
+    ));
     // The root cannot be deleted; a server would only refuse.
     if channel.parent.is_some() {
         items.push(Item::new("Delete…", Command::Ask(Question::DeleteChannel(id))).danger());
@@ -447,6 +476,16 @@ pub(super) struct Prompt {
     /// The field, for a question that wants more than a yes.
     input: Option<Entity<TextInput>>,
     _subscription: Option<Subscription>,
+}
+
+impl Prompt {
+    /// What is in the dialog's field, if it has one.
+    #[cfg(test)]
+    pub(super) fn field_text(&self, cx: &gpui::App) -> Option<String> {
+        self.input
+            .as_ref()
+            .map(|input| input.read(cx).text().to_owned())
+    }
 }
 
 /// The largest picture file this will read, before it is scaled down.
@@ -515,6 +554,30 @@ impl Shell {
         cx.notify();
     }
 
+    /// The description asked for when its editor opened has arrived: put
+    /// it in the field, unless something was typed there meanwhile.
+    pub(super) fn fill_description(
+        &mut self,
+        subject: Subject,
+        html: Option<&str>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(prompt) = self.prompt.as_ref().filter(|prompt| {
+            matches!(prompt.question, Question::DescribeChannel(id) if Subject::Channel(id) == subject)
+        }) else {
+            return;
+        };
+        let (Some(input), Some(html)) = (prompt.input.as_ref(), html) else {
+            return;
+        };
+        input.update(cx, |input, cx| {
+            if input.text().is_empty() {
+                input.set_text(crate::rich::Rich::parse(html).text);
+                cx.notify();
+            }
+        });
+    }
+
     /// Do what the menu entry `index` says, and close the menu.
     pub(super) fn choose(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some(item) = self.menu.take().and_then(|mut menu| {
@@ -559,7 +622,10 @@ impl Shell {
         let input = placeholder.map(|placeholder| {
             let input = cx.new(|cx| {
                 let mut input = TextInput::new(placeholder, cx);
-                if matches!(question, Question::JoinPassword(_)) {
+                if matches!(
+                    question,
+                    Question::JoinPassword(_) | Question::ChannelPassword(_)
+                ) {
                     input = input.obscured();
                 }
                 if question.takes_lines() {
@@ -574,6 +640,11 @@ impl Shell {
                 input
             });
             input.read(cx).focus(window);
+            // A description starts from the one there is, which has to be
+            // asked for: it is not sent with the tree.
+            if let Question::DescribeChannel(id) = question {
+                self.engine.about(Subject::Channel(id));
+            }
             input
         });
         let subscription = input.as_ref().map(|input| {
@@ -1150,7 +1221,9 @@ mod tests {
                 "Listen without joining",
                 "About this channel",
                 "New channel inside…",
-                "Rename…"
+                "Rename…",
+                "Describe…",
+                "Set a password…",
             ]
         );
         assert_eq!(
@@ -1160,6 +1233,8 @@ mod tests {
                 "About this channel",
                 "New channel inside…",
                 "Rename…",
+                "Describe…",
+                "Set a password…",
                 "Delete…"
             ]
         );

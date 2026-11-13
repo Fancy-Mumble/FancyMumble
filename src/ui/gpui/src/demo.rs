@@ -246,6 +246,8 @@ impl State {
             | Action::ToggleListen { .. }
             | Action::PrioritySpeaker { .. } => self.apply_further(action),
             Action::SetUserVolume { .. }
+            | Action::DescribeChannel { .. }
+            | Action::SetChannelPassword { .. }
             | Action::SetBans(_)
             | Action::Unregister { .. }
             | Action::Register { .. }
