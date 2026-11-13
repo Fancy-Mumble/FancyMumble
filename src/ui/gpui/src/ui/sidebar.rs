@@ -16,30 +16,28 @@ use crate::theme::{Fill, Theme};
 /// A channel whose parent is not in the list is shown at the top rather than
 /// lost, and a loop (which no server should send) is walked once.
 pub(super) fn tree_order(channels: &[Channel]) -> Vec<(usize, usize)> {
-    let known = |id| channels.iter().any(|channel: &Channel| channel.id == id);
-    let children_of = |parent: Option<u32>| {
-        let mut children: Vec<usize> = (0..channels.len())
-            .filter(|&at| match (channels[at].parent, parent) {
-                (Some(of), Some(wanted)) => of == wanted && channels[at].id != wanted,
-                // Roots: no parent, or one this list does not have.
-                (of, None) => of.is_none_or(|of| !known(of) || of == channels[at].id),
-                (None, Some(_)) => false,
-            })
-            .collect();
-        children.sort_by(|&a, &b| {
-            let key = |at: usize| (channels[at].position, channels[at].name.to_lowercase());
-            key(a).cmp(&key(b))
-        });
-        children
-    };
+    use std::collections::{HashMap, HashSet};
+    // Each channel under its parent, once: a tree of thousands is walked
+    // in a pass, not searched through for every channel in it.
+    let known: HashSet<u32> = channels.iter().map(|channel| channel.id).collect();
+    let mut children: HashMap<Option<u32>, Vec<usize>> = HashMap::new();
+    for (at, channel) in channels.iter().enumerate() {
+        // Roots: no parent, one this list does not have, or itself.
+        let parent = channel
+            .parent
+            .filter(|of| known.contains(of) && *of != channel.id);
+        children.entry(parent).or_default().push(at);
+    }
+    for siblings in children.values_mut() {
+        siblings
+            .sort_by_cached_key(|&at| (channels[at].position, channels[at].name.to_lowercase()));
+    }
+    let children_of = |parent: Option<u32>| children.get(&parent).map_or(&[][..], Vec::as_slice);
     let mut ordered = Vec::with_capacity(channels.len());
     let mut seen = vec![false; channels.len()];
     // Depth first, with the stack reversed so siblings come out in order.
-    let mut stack: Vec<(usize, usize)> = children_of(None)
-        .into_iter()
-        .rev()
-        .map(|at| (at, 0))
-        .collect();
+    let mut stack: Vec<(usize, usize)> =
+        children_of(None).iter().rev().map(|&at| (at, 0)).collect();
     while let Some((at, depth)) = stack.pop() {
         if std::mem::replace(&mut seen[at], true) {
             continue;
@@ -47,11 +45,17 @@ pub(super) fn tree_order(channels: &[Channel]) -> Vec<(usize, usize)> {
         ordered.push((at, depth));
         stack.extend(
             children_of(Some(channels[at].id))
-                .into_iter()
+                .iter()
                 .rev()
-                .map(|child| (child, depth + 1)),
+                .map(|&child| (child, depth + 1)),
         );
     }
+    // What a loop of parents left unreached is listed all the same.
+    ordered.extend(
+        (0..channels.len())
+            .filter(|&at| !seen[at])
+            .map(|at| (at, 0)),
+    );
     ordered
 }
 
@@ -124,7 +128,7 @@ fn channel_rows(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> Vec<An
         rows.push(channel_row(shell, channel, depth, open, theme, cx));
         // Who is where is the point of the tree: every channel with people
         // in it lists them.
-        if !shell.occupants(channel.id).is_empty() {
+        if shell.occupant_count(channel.id) > 0 {
             rows.push(occupant_list(shell, channel, depth, theme, cx));
         }
     }
@@ -139,7 +143,7 @@ fn channel_row(
     theme: &Theme,
     cx: &mut Context<Shell>,
 ) -> AnyElement {
-    let occupants = shell.occupants(channel.id).len();
+    let occupants = shell.occupant_count(channel.id);
     let solid = current && theme.skin.selection == Fill::Solid;
     let (ink, hash) = if solid {
         (theme.c.on_accent, theme.c.on_accent)
@@ -270,7 +274,6 @@ fn occupant_list(
         .children(
             shell
                 .occupants(channel.id)
-                .into_iter()
                 .map(|user| occupant_row(shell, user, theme, cx)),
         )
         .into_any_element()
@@ -516,6 +519,20 @@ mod tests {
             history: false,
             listening: false,
         }
+    }
+
+    /// Not a benchmark, a guard: ordering used to search the whole list
+    /// for every channel in it, and a tree this size took seconds.
+    #[test]
+    fn a_tree_of_thousands_is_ordered_in_one_pass() {
+        let channels: Vec<Channel> = (0..20_000_u32)
+            .map(|id| channel(id, id.checked_sub(1).map(|above| above / 3), "c", 0))
+            .collect();
+        let started = std::time::Instant::now();
+        let ordered = tree_order(&channels);
+        let took = started.elapsed();
+        assert_eq!(ordered.len(), channels.len());
+        assert!(took < std::time::Duration::from_secs(1), "took {took:?}");
     }
 
     fn names(channels: &[Channel]) -> Vec<(String, usize)> {

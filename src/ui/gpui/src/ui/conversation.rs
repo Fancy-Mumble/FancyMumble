@@ -135,7 +135,7 @@ fn header(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoEle
                 .iter()
                 .find(|channel| channel.id == id);
             let name = channel.map_or_else(SharedString::default, |channel| channel.name.clone());
-            let people = shell.occupants(id).len();
+            let people = shell.occupant_count(id);
             let about = if channel.is_some_and(|channel| channel.history) {
                 format!("{people} in voice · messages are kept")
             } else {

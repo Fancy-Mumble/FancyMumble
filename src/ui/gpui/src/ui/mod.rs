@@ -71,6 +71,12 @@ pub(crate) struct Shell {
     engine: Arc<dyn Engine>,
     /// The server as last read from the engine.
     snapshot: Snapshot,
+    /// What the channel column is drawn from, worked out when the snapshot
+    /// is taken rather than on every frame: the channels in tree order,
+    /// each as its place in the snapshot and how deep it sits, and who is
+    /// in each channel, by name, as places among the snapshot's users.
+    tree: Vec<(usize, usize)>,
+    people: std::collections::HashMap<ChannelId, Vec<usize>>,
     /// The conversation on screen: a channel, or one other user.
     open: Option<Conversation>,
     /// The channel the local user was in when the conversation last
@@ -224,7 +230,9 @@ impl Shell {
             .and_then(|store| store.settings().push_to_talk_key)
             .map(Into::into);
         let mut shell = Self {
-            snapshot: engine.snapshot(),
+            snapshot: Snapshot::disconnected(),
+            tree: Vec::new(),
+            people: std::collections::HashMap::new(),
             servers: engine.saved_servers(),
             open: None,
             was_in: None,
@@ -279,6 +287,7 @@ impl Shell {
             _events: events,
             _subscriptions: subscriptions,
         };
+        shell.take_snapshot();
         shell.follow_current_channel(None);
         shell.read_welcome();
         shell.reload_messages(cx);
@@ -307,9 +316,32 @@ impl Shell {
         inbox: &async_channel::Receiver<EngineEvent>,
         cx: &mut Context<Self>,
     ) {
-        self.apply(first, cx);
-        while let Ok(next) = inbox.try_recv() {
-            self.apply(next, cx);
+        // "Read the server again" said ten times over is read once: a
+        // server sending a user's every change, or its whole tree at a
+        // connect, would otherwise cost a full copy of it each time. So is
+        // the same conversation's "read the messages again".
+        let mut stale = false;
+        let mut reread: Option<Conversation> = None;
+        let mut waiting =
+            std::iter::once(first).chain(std::iter::from_fn(|| inbox.try_recv().ok()));
+        for event in &mut waiting {
+            match event {
+                EngineEvent::StateChanged => stale = true,
+                EngineEvent::NewMessage { conversation } if reread == Some(conversation) => {}
+                other => {
+                    if std::mem::take(&mut stale) {
+                        self.apply(EngineEvent::StateChanged, cx);
+                    }
+                    reread = match other {
+                        EngineEvent::NewMessage { conversation } => Some(conversation),
+                        _ => None,
+                    };
+                    self.apply(other, cx);
+                }
+            }
+        }
+        if stale {
+            self.apply(EngineEvent::StateChanged, cx);
         }
         cx.notify();
     }
@@ -318,7 +350,7 @@ impl Shell {
         match event {
             EngineEvent::StateChanged => {
                 let was = self.snapshot.connection;
-                self.snapshot = self.engine.snapshot();
+                self.take_snapshot();
                 // A new connection has a welcome of its own to show.
                 if was != Connection::Connected && self.snapshot.connection == Connection::Connected
                 {
@@ -381,7 +413,7 @@ impl Shell {
             EngineEvent::Notice(notice) => self.notice = notice,
             EngineEvent::Typing { channel, session } => self.saw_typing(channel, session, cx),
             EngineEvent::CurrentChannelChanged => {
-                self.snapshot = self.engine.snapshot();
+                self.take_snapshot();
                 self.follow_current_channel(self.was_in);
                 self.reload_messages(cx);
             }
@@ -398,7 +430,7 @@ impl Shell {
                     self.engine.open(conversation);
                     self.reload_messages(cx);
                 } else {
-                    self.snapshot = self.engine.snapshot();
+                    self.take_snapshot();
                 }
             }
         }
@@ -851,6 +883,21 @@ impl Shell {
         }
     }
 
+    /// Read the server from the engine again, and work out what the
+    /// channel column draws from it.
+    fn take_snapshot(&mut self) {
+        self.snapshot = self.engine.snapshot();
+        self.tree = sidebar::tree_order(&self.snapshot.channels);
+        self.people.clear();
+        for (at, user) in self.snapshot.users.iter().enumerate() {
+            self.people.entry(user.channel).or_default().push(at);
+        }
+        let users = &self.snapshot.users;
+        for people in self.people.values_mut() {
+            people.sort_by_cached_key(|at| users[*at].name.to_lowercase());
+        }
+    }
+
     /// The channels the column lists, each with how deep it sits: the whole
     /// tree in order, or - flat - those whose name contains what is in the
     /// search field.
@@ -858,9 +905,10 @@ impl Shell {
         let wanted = self.search.read(cx).text().trim().to_lowercase();
         let channels = &self.snapshot.channels;
         if wanted.is_empty() {
-            return sidebar::tree_order(channels)
-                .into_iter()
-                .map(|(at, depth)| (&channels[at], depth))
+            return self
+                .tree
+                .iter()
+                .map(|(at, depth)| (&channels[*at], *depth))
                 .collect();
         }
         channels
@@ -871,15 +919,17 @@ impl Shell {
     }
 
     /// The users in `channel`, by name.
-    fn occupants(&self, channel: ChannelId) -> Vec<&User> {
-        let mut users: Vec<&User> = self
-            .snapshot
-            .users
-            .iter()
-            .filter(|user| user.channel == channel)
-            .collect();
-        users.sort_by_key(|user| user.name.to_lowercase());
-        users
+    fn occupants(&self, channel: ChannelId) -> impl Iterator<Item = &User> {
+        self.people
+            .get(&channel)
+            .into_iter()
+            .flatten()
+            .filter_map(|at| self.snapshot.users.get(*at))
+    }
+
+    /// How many users are in `channel`.
+    fn occupant_count(&self, channel: ChannelId) -> usize {
+        self.people.get(&channel).map_or(0, Vec::len)
     }
 
     fn own_user(&self) -> Option<&User> {

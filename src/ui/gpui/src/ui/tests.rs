@@ -1211,3 +1211,24 @@ fn an_arrival_does_not_move_a_reader_who_has_scrolled_up(cx: &mut TestAppContext
         assert!(top(shell) > 3);
     });
 }
+
+#[gpui::test]
+fn a_burst_of_state_changes_reads_the_server_once(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    let before = engine.snapshots();
+    for _ in 0..50 {
+        engine.emit(crate::engine::EngineEvent::StateChanged);
+    }
+    // A message for the open conversation in the middle of more of them.
+    engine.say_as(3, "Rin", Conversation::Channel(1), "hello");
+    for _ in 0..50 {
+        engine.emit(crate::engine::EngineEvent::StateChanged);
+    }
+    cx.run_until_parked();
+    assert_eq!(
+        engine.snapshots() - before,
+        2,
+        "once before the message, once after"
+    );
+    shell.read_with(cx, |shell, _| assert_eq!(shell.messages.len(), 6));
+}

@@ -45,6 +45,8 @@ struct State {
     messages: Vec<(Conversation, Message)>,
     /// How often the local user was said to be writing.
     typed: u32,
+    /// How often the server was read whole.
+    snapshots: u32,
 }
 
 impl DemoEngine {
@@ -73,6 +75,12 @@ impl DemoEngine {
     /// Have `session` start or stop talking.
     pub(crate) fn talk(&self, session: Session, talking: bool) {
         self.tell(EngineEvent::UserTalking { session, talking });
+    }
+
+    /// How often the server was read whole.
+    #[cfg(test)]
+    pub(crate) fn snapshots(&self) -> u32 {
+        self.with_state(|state| state.snapshots)
     }
 
     /// How often the view said the local user was writing.
@@ -303,15 +311,6 @@ impl State {
                 },
             )
         };
-        let saved = |id: &str, host: &str, username: &str, favorite| SavedServer {
-            id: id.to_owned().into(),
-            label: host.to_owned().into(),
-            host: host.to_owned().into(),
-            port: 64738,
-            username: username.to_owned().into(),
-            certificate: None,
-            favorite,
-        };
         Self {
             connected: true,
             voice: Voice::Off,
@@ -328,12 +327,7 @@ impl State {
                 bitrate_bps: 72_000,
                 voice_over_tcp: false,
             },
-            servers: vec![
-                saved("magical-alex", "magical.rocks", "Alex", true),
-                saved("magical-work", "magical.rocks", "Alex (work)", true),
-                saved("kumo", "kumo.jp", "Alex", false),
-                saved("local", "localhost", "Alex", false),
-            ],
+            servers: seeded_servers(),
             current_channel: LOUNGE,
             channels: vec![
                 channel(0, None, "Root"),
@@ -352,6 +346,7 @@ impl State {
                 user(5, "Torque"),
             ],
             typed: 0,
+            snapshots: 0,
             certificates: vec!["alex".into(), "work".into()],
             messages: vec![
                 said(0, OWN, "Alex", "Welcome to our creative lounge!"),
@@ -367,6 +362,25 @@ impl State {
             ],
         }
     }
+}
+
+/// The identities the demo starts with saved.
+fn seeded_servers() -> Vec<SavedServer> {
+    let saved = |id: &str, host: &str, username: &str, favorite| SavedServer {
+        id: id.to_owned().into(),
+        label: host.to_owned().into(),
+        host: host.to_owned().into(),
+        port: 64738,
+        username: username.to_owned().into(),
+        certificate: None,
+        favorite,
+    };
+    vec![
+        saved("magical-alex", "magical.rocks", "Alex", true),
+        saved("magical-work", "magical.rocks", "Alex (work)", true),
+        saved("kumo", "kumo.jp", "Alex", false),
+        saved("local", "localhost", "Alex", false),
+    ]
 }
 
 /// Something to look at: a message people reacted to.
@@ -429,6 +443,7 @@ impl Engine for DemoEngine {
 
     fn snapshot(&self) -> Snapshot {
         self.with_state(|state| {
+            state.snapshots += 1;
             if !state.connected {
                 return Snapshot::disconnected();
             }
