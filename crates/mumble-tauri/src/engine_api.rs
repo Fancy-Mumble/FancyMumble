@@ -266,6 +266,27 @@ pub fn attachments_in(html: &str) -> Vec<AttachmentInfo> {
     found
 }
 
+/// The mark a reply names the message it answers with.
+const QUOTE_MARK: &str = "<!-- FANCY_QUOTE:";
+
+/// The id of the message that the message `html` is a reply to.
+pub fn reply_target(html: &str) -> Option<&str> {
+    let after = &html[html.find(QUOTE_MARK)? + QUOTE_MARK.len()..];
+    let id = &after[..after.find(MARK_END)?];
+    (!id.is_empty()).then_some(id)
+}
+
+/// `text` as the message that answers the message `to`.
+fn reply_html(to: &str, text: &str) -> String {
+    // The id goes into a comment: nothing in it may end one.
+    let to = to
+        .chars()
+        .filter(|c| !matches!(c, '<' | '>'))
+        .collect::<String>()
+        .replace("--", "");
+    format!("{QUOTE_MARK}{to}{MARK_END}{}", escape_html(text))
+}
+
 /// The message that shares a file kept under `key`: the mark every Fancy
 /// client draws a card from, and beside it a line for a client that draws
 /// a comment as nothing.
@@ -1111,6 +1132,31 @@ impl EngineHandle {
         self.state.send_dm(session, escape_html(text)).await
     }
 
+    /// Send `text` to `channel` as a reply to the message `to`. A client
+    /// that knows replies draws what is answered above it; another draws
+    /// the text alone.
+    ///
+    /// # Errors
+    ///
+    /// When not connected, or the message could not be sent.
+    pub async fn reply_text(&self, channel: u32, to: &str, text: &str) -> Result<(), String> {
+        self.state.send_message(channel, reply_html(to, text)).await
+    }
+
+    /// Send `text` to the user `session` as a reply to the message `to`.
+    ///
+    /// # Errors
+    ///
+    /// When not connected, or the message could not be sent.
+    pub async fn reply_direct_text(
+        &self,
+        session: u32,
+        to: &str,
+        text: &str,
+    ) -> Result<(), String> {
+        self.state.send_dm(session, reply_html(to, text)).await
+    }
+
     /// Send `html` to `channel` as it stands: for what plain text cannot
     /// say, a picture above all. The server's limits apply.
     ///
@@ -1930,6 +1976,19 @@ mod tests {
     use crate::state::types::{
         CurrentChannelPayload, DisconnectedPayload, NewMessagePayload, RejectedPayload,
     };
+
+    #[test]
+    fn a_reply_names_what_it_answers_and_is_read_back() {
+        let reply = reply_html("0191-abcd", "yes & no");
+        assert_eq!(reply, "<!-- FANCY_QUOTE:0191-abcd -->yes &amp; no");
+        assert_eq!(reply_target(&reply), Some("0191-abcd"));
+        assert_eq!(reply_target("no mark here"), None);
+        assert_eq!(reply_target("<!-- FANCY_QUOTE: -->x"), None);
+        // An id cannot close the comment it sits in.
+        let sly = reply_html("a--><b>", "x");
+        assert_eq!(reply_target(&sly), Some("ab"));
+        assert!(!sly.contains("<b>"));
+    }
 
     #[test]
     fn a_shared_file_is_read_back_out_of_the_message_that_shares_it() {
