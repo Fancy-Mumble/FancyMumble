@@ -10,7 +10,7 @@ use gpui::{
 };
 
 use super::Shell;
-use super::widgets::{EMPHASIS, avatar, clock, icon, label};
+use super::widgets::{EMPHASIS, Zone, avatar, clock, icon, label};
 use crate::engine::{Action, Conversation, Message, Poll, PollOption};
 use crate::rich::Rich;
 use crate::theme::{Fill, Theme};
@@ -53,11 +53,9 @@ pub(super) fn place_polls(rows: &mut Vec<Row>, messages: &[Message], polls: &[Po
     *rows = placed;
 }
 
-/// The local calendar day `at_ms` falls on, counted from the epoch, for a
-/// clock `offset_secs` east of UTC.
-fn day_of(at_ms: u64, offset_secs: i64) -> i64 {
-    let seconds = i64::try_from(at_ms / 1000).unwrap_or(i64::MAX);
-    seconds.saturating_add(offset_secs).div_euclid(86_400)
+/// The calendar day `at_ms` falls on, counted from the epoch, on `zone`.
+fn day_of(at_ms: u64, zone: Zone) -> i64 {
+    zone.wall_seconds(at_ms).div_euclid(86_400)
 }
 
 /// What to call `day`, seen from `today`.
@@ -66,7 +64,7 @@ fn day_label(day: i64, today: i64) -> String {
         0 => "Today".to_owned(),
         1 => "Yesterday".to_owned(),
         _ => chrono::DateTime::from_timestamp(day.saturating_mul(86_400), 0)
-            .map(|date| date.format("%-d %B %Y").to_string())
+            .map(|date| date.format("%a, %b %-d").to_string())
             .unwrap_or_default(),
     }
 }
@@ -74,14 +72,14 @@ fn day_label(day: i64, today: i64) -> String {
 /// `messages` as rows: each message, with a rule before the first of every
 /// day. A message that carries no time belongs to the day of the one before
 /// it, or to today when there is none.
-pub(super) fn rows(messages: &[Message], now_ms: u64, offset_secs: i64) -> Vec<Row> {
-    let today = day_of(now_ms, offset_secs);
+pub(super) fn rows(messages: &[Message], now_ms: u64, zone: Zone) -> Vec<Row> {
+    let today = day_of(now_ms, zone);
     let mut rows = Vec::with_capacity(messages.len() + 1);
     let mut current = None;
     for (index, message) in messages.iter().enumerate() {
         let day = message
             .sent_at_ms
-            .map(|at| day_of(at, offset_secs))
+            .map(|at| day_of(at, zone))
             .or(current)
             .unwrap_or(today);
         if current != Some(day) {
@@ -662,17 +660,8 @@ impl Shell {
         let message = &self.messages[index];
         let body = if message.own {
             let (seen, seen_by) = self.seen_marks(index);
-            own_message(
-                message,
-                &body,
-                at,
-                under,
-                seen,
-                &seen_by,
-                self.utc_offset,
-                &theme,
-            )
-            .into_any_element()
+            own_message(message, &body, at, under, seen, &seen_by, self.zone, &theme)
+                .into_any_element()
         } else {
             {
                 let picture = message.sender.and_then(|session| {
@@ -689,7 +678,7 @@ impl Shell {
                     picture.as_ref(),
                     continues,
                     under,
-                    self.utc_offset,
+                    self.zone,
                     &theme,
                 )
                 .into_any_element()
@@ -1478,10 +1467,10 @@ fn their_message(
     picture: Option<&Arc<gpui::Image>>,
     continues: bool,
     under: Vec<AnyElement>,
-    utc_offset: i64,
+    zone: Zone,
     theme: &Theme,
 ) -> impl IntoElement + use<> {
-    let time = SharedString::from(clock(message.sent_at_ms, utc_offset));
+    let time = SharedString::from(clock(message.sent_at_ms, zone));
     div()
         .flex()
         .items_start()
@@ -1568,7 +1557,7 @@ fn own_message(
     under: Vec<AnyElement>,
     seen: bool,
     seen_by: &[SharedString],
-    utc_offset: i64,
+    zone: Zone,
     theme: &Theme,
 ) -> impl IntoElement + use<> {
     // On a filled bubble the accent is the ground, so a link there is drawn
@@ -1604,7 +1593,7 @@ fn own_message(
                     line.child(icon("pin", 11.0, theme.c.accent_text))
                 })
                 .when(message.edited, |line| line.child("edited"))
-                .child(SharedString::from(clock(message.sent_at_ms, utc_offset)))
+                .child(SharedString::from(clock(message.sent_at_ms, zone)))
                 .map(|line| {
                     if message.failed {
                         line.child(div().text_color(theme.c.bad).child("not sent"))
@@ -1696,7 +1685,7 @@ mod tests {
             at_ms,
         };
         let messages = [at(Some(1_000)), at(Some(2_000)), at(Some(3_000))];
-        let mut placed = rows(&messages, 3_000, 0);
+        let mut placed = rows(&messages, 3_000, Zone::Fixed(0));
         place_polls(&mut placed, &messages, &[poll(1_500), poll(9_000)]);
         assert_eq!(
             placed[1..],
@@ -1710,7 +1699,7 @@ mod tests {
             "after the day rule"
         );
         // Nothing said yet: the poll stands alone.
-        let mut empty = rows(&[], 0, 0);
+        let mut empty = rows(&[], 0, Zone::Fixed(0));
         place_polls(&mut empty, &[], &[poll(1)]);
         assert_eq!(empty, [Row::Poll(0)]);
     }
@@ -1764,7 +1753,7 @@ mod tests {
 
     #[test]
     fn an_empty_channel_has_no_rows() {
-        assert!(rows(&[], 0, 0).is_empty());
+        assert!(rows(&[], 0, Zone::Fixed(0)).is_empty());
     }
 
     #[test]
@@ -1777,9 +1766,9 @@ mod tests {
             at(Some(now)),
         ];
         assert_eq!(
-            rows(&messages, now, 0),
+            rows(&messages, now, Zone::Fixed(0)),
             [
-                day("18 January 1970"),
+                day("Sun, Jan 18"),
                 Row::Message(0),
                 day("Yesterday"),
                 Row::Message(1),
@@ -1795,17 +1784,26 @@ mod tests {
         // 23:30 UTC on day 19 is already day 20 one hour east of UTC.
         let late = 19 * DAY_MS + 23 * 3_600_000 + 30 * 60_000;
         let now = 20 * DAY_MS + 3_600_000;
-        assert_eq!(rows(&[at(Some(late))], now, 0)[0], day("Yesterday"));
-        assert_eq!(rows(&[at(Some(late))], now, 3600)[0], day("Today"));
+        assert_eq!(
+            rows(&[at(Some(late))], now, Zone::Fixed(0))[0],
+            day("Yesterday")
+        );
+        assert_eq!(
+            rows(&[at(Some(late))], now, Zone::Fixed(3600))[0],
+            day("Today")
+        );
     }
 
     #[test]
     fn a_message_without_a_time_stays_with_the_one_before_it() {
         let now = 20 * DAY_MS;
         assert_eq!(
-            rows(&[at(Some(19 * DAY_MS)), at(None)], now, 0),
+            rows(&[at(Some(19 * DAY_MS)), at(None)], now, Zone::Fixed(0)),
             [day("Yesterday"), Row::Message(0), Row::Message(1)]
         );
-        assert_eq!(rows(&[at(None)], now, 0), [day("Today"), Row::Message(0)]);
+        assert_eq!(
+            rows(&[at(None)], now, Zone::Fixed(0)),
+            [day("Today"), Row::Message(0)]
+        );
     }
 }

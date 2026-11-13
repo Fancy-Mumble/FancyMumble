@@ -194,8 +194,8 @@ pub(crate) struct Shell {
     previews: std::collections::HashMap<gpui::SharedString, Option<Arc<Preview>>>,
     /// What each row is: a message, or the rule that starts a day.
     row_model: Vec<conversation::Row>,
-    /// How far east of UTC the local clock is, as of the last reload.
-    utc_offset: i64,
+    /// The clock message times are read on.
+    zone: widgets::Zone,
     /// Who is talking right now.
     talking: HashSet<Session>,
     composer: Entity<TextInput>,
@@ -349,7 +349,7 @@ impl Shell {
             bodies: std::collections::HashMap::new(),
             previews: std::collections::HashMap::new(),
             row_model: Vec::new(),
-            utc_offset: 0,
+            zone: widgets::Zone::Local,
             talking: HashSet::new(),
             composer,
             only_pinned: false,
@@ -833,14 +833,13 @@ impl Shell {
         self.say_read();
         // A short conversation starts under the header, as the web UI draws
         // it; a long one opens on its newest message.
-        self.utc_offset = widgets::local_utc_offset();
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |since| {
                 u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
             });
         let rows_before = self.row_model.len();
-        self.row_model = conversation::rows(&self.messages, now_ms, self.utc_offset);
+        self.row_model = conversation::rows(&self.messages, now_ms, self.zone);
         let polls = self
             .open
             .filter(|_| !self.only_pinned)
