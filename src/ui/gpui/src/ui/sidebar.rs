@@ -80,15 +80,12 @@ pub(super) fn render(
         .border_color(theme.c.line)
         .child(search_box(shell, theme))
         .child(
-            div()
-                .id("channels")
-                .flex_1()
-                .min_h_0()
-                .overflow_y_scroll()
-                .flex()
-                .flex_col()
-                .gap(px(4.0))
-                .children(channel_rows(shell, theme, cx)),
+            gpui::list(
+                shell.column_list.clone(),
+                cx.processor(|shell, row: usize, _, cx| shell.render_column_row(row, cx)),
+            )
+            .flex_1()
+            .min_h_0(),
         )
         .child(user_tile(shell, theme, cx))
 }
@@ -120,19 +117,36 @@ fn search_box(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
         )
 }
 
-/// The channel tree, flattened to rows, narrowed by the search field.
-fn channel_rows(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> Vec<AnyElement> {
-    let mut rows = Vec::new();
-    for (channel, depth) in shell.listed_channels(cx) {
-        let open = shell.open == Some(Conversation::Channel(channel.id));
-        rows.push(channel_row(shell, channel, depth, open, theme, cx));
-        // Who is where is the point of the tree: every channel with people
-        // in it lists them.
-        if shell.occupant_count(channel.id) > 0 {
-            rows.push(occupant_list(shell, channel, depth, theme, cx));
-        }
+/// One row of the channel column.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Row {
+    /// The channel at this place in the snapshot, this deep in the tree.
+    Channel { at: usize, depth: usize },
+    /// The people in that channel, on a card under it.
+    People { at: usize, depth: usize },
+}
+
+impl Shell {
+    /// One row of the channel column. Called only for rows in view.
+    pub(super) fn render_column_row(&mut self, row: usize, cx: &mut Context<Self>) -> AnyElement {
+        let theme = crate::theme::ActiveTheme::get(cx);
+        let (at, depth, people) = match self.column.get(row) {
+            Some(Row::Channel { at, depth }) => (*at, *depth, false),
+            Some(Row::People { at, depth }) => (*at, *depth, true),
+            None => return div().into_any_element(),
+        };
+        let Some(channel) = self.snapshot.channels.get(at) else {
+            return div().into_any_element();
+        };
+        let drawn = if people {
+            occupant_list(self, channel, depth, &theme, cx)
+        } else {
+            let open = self.open == Some(Conversation::Channel(channel.id));
+            channel_row(self, channel, depth, open, &theme, cx)
+        };
+        // The gap between rows, which a list does not put there itself.
+        div().w_full().pb(px(4.0)).child(drawn).into_any_element()
     }
-    rows
 }
 
 fn channel_row(

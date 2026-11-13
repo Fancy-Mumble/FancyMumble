@@ -28,8 +28,8 @@ use gpui::{
 };
 
 use crate::engine::{
-    Action, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation, Engine,
-    EngineEvent, Message, Preview, SavedServer, Session, Snapshot, Subject, User, VoiceSettings,
+    Action, AudioDevices, ChannelId, ChosenDevices, Connection, Conversation, Engine, EngineEvent,
+    Message, Preview, SavedServer, Session, Snapshot, Subject, User, VoiceSettings,
 };
 use crate::store::{Settings, Store};
 use crate::theme::{ActiveTheme, Catalog, Mode};
@@ -71,12 +71,20 @@ pub(crate) struct Shell {
     engine: Arc<dyn Engine>,
     /// The server as last read from the engine.
     snapshot: Snapshot,
+    /// What is in the channel column's search field, trimmed and in lower
+    /// case.
+    wanted: String,
     /// What the channel column is drawn from, worked out when the snapshot
     /// is taken rather than on every frame: the channels in tree order,
     /// each as its place in the snapshot and how deep it sits, and who is
     /// in each channel, by name, as places among the snapshot's users.
     tree: Vec<(usize, usize)>,
     people: std::collections::HashMap<ChannelId, Vec<usize>>,
+    /// The channel column's rows, and the list that lays out only those
+    /// in view: a server with thousands of channels costs what is on
+    /// screen.
+    column: Vec<sidebar::Row>,
+    column_list: ListState,
     /// The conversation on screen: a channel, or one other user.
     open: Option<Conversation>,
     /// The channel the local user was in when the conversation last
@@ -212,7 +220,7 @@ impl Shell {
             }),
             cx.subscribe(&composer, Self::on_composer),
             // A search narrows its list as it is typed.
-            cx.subscribe(&search, |_, _, _, cx| cx.notify()),
+            cx.subscribe(&search, |shell, _, _, cx| shell.narrow_column(cx)),
             cx.subscribe(&server_search, |_, _, _, cx| cx.notify()),
             // Enter in the password field connects.
             cx.subscribe(&password, |shell, _, event, cx| {
@@ -231,7 +239,10 @@ impl Shell {
             .map(Into::into);
         let mut shell = Self {
             snapshot: Snapshot::disconnected(),
+            wanted: String::new(),
             tree: Vec::new(),
+            column: Vec::new(),
+            column_list: ListState::new(0, ListAlignment::Top, px(OVERDRAW)),
             people: std::collections::HashMap::new(),
             servers: engine.saved_servers(),
             open: None,
@@ -896,25 +907,60 @@ impl Shell {
         for people in self.people.values_mut() {
             people.sort_by_cached_key(|at| users[*at].name.to_lowercase());
         }
+        self.lay_out_column();
     }
 
-    /// The channels the column lists, each with how deep it sits: the whole
-    /// tree in order, or - flat - those whose name contains what is in the
-    /// search field.
-    fn listed_channels(&self, cx: &gpui::App) -> Vec<(&Channel, usize)> {
-        let wanted = self.search.read(cx).text().trim().to_lowercase();
-        let channels = &self.snapshot.channels;
-        if wanted.is_empty() {
-            return self
-                .tree
-                .iter()
-                .map(|(at, depth)| (&channels[*at], *depth))
-                .collect();
+    /// Work out the channel column's rows: each listed channel, and under
+    /// it the people in it. The reader stays where they had scrolled to.
+    fn lay_out_column(&mut self) {
+        let column: Vec<sidebar::Row> = self
+            .listed(&self.wanted)
+            .into_iter()
+            .flat_map(|(at, depth)| {
+                // Who is where is the point of the tree: every channel
+                // with people in it lists them.
+                let peopled = self.occupant_count(self.snapshot.channels[at].id) > 0;
+                std::iter::once(sidebar::Row::Channel { at, depth })
+                    .chain(peopled.then_some(sidebar::Row::People { at, depth }))
+            })
+            .collect();
+        if column.len() != self.column.len() {
+            let top = self.column_list.logical_scroll_top();
+            self.column_list.reset(column.len());
+            self.column_list.scroll_to(top);
         }
-        channels
+        self.column = column;
+    }
+
+    /// The search field of the channel column changed.
+    fn narrow_column(&mut self, cx: &mut Context<Self>) {
+        self.wanted = self.search.read(cx).text().trim().to_lowercase();
+        self.lay_out_column();
+        cx.notify();
+    }
+
+    /// The channels the column lists, as places in the snapshot with how
+    /// deep each sits: the whole tree in order, or - flat - those whose
+    /// name contains `wanted`.
+    fn listed(&self, wanted: &str) -> Vec<(usize, usize)> {
+        if wanted.is_empty() {
+            return self.tree.clone();
+        }
+        self.snapshot
+            .channels
             .iter()
-            .filter(|channel| channel.name.to_lowercase().contains(&wanted))
-            .map(|channel| (channel, 0))
+            .enumerate()
+            .filter(|(_, channel)| channel.name.to_lowercase().contains(wanted))
+            .map(|(at, _)| (at, 0))
+            .collect()
+    }
+
+    /// The channels the column lists, each with how deep it sits.
+    #[cfg(test)]
+    fn listed_channels(&self, _cx: &gpui::App) -> Vec<(&crate::engine::Channel, usize)> {
+        self.listed(&self.wanted)
+            .into_iter()
+            .map(|(at, depth)| (&self.snapshot.channels[at], depth))
             .collect()
     }
 
