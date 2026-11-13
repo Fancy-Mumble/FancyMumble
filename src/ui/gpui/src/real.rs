@@ -3133,6 +3133,33 @@ mod tests {
         let _ = std::fs::remove_dir_all(bob_dir);
     }
 
+    /// What is typed with marks for emphasis and code arrives set that way,
+    /// and what was not meant as a mark arrives as it was typed.
+    #[test]
+    #[ignore = "needs a live Fancy server; set FANCY_GPUI_TEST_FANCY=host:port"]
+    fn live_fancy_marks_typed_for_emphasis_arrive_as_emphasis() {
+        let (alice, alice_dir) = fancy_client("MarkAlice", None);
+        let (bob, bob_dir) = fancy_client("MarkBob", None);
+        wait_for("both to connect", || {
+            alice.snapshot().users.len() >= 2 && bob.snapshot().users.len() >= 2
+        });
+        let room = Conversation::Channel(alice.snapshot().current_channel.expect("a channel"));
+        alice.send_message(room, "**loud**, `x < y` and 2 * 3 * 4".to_owned());
+        let mut got = None;
+        wait_for("bob to read it", || {
+            got = said(&bob, room, "loud, x < y and 2 * 3 * 4");
+            got.is_some()
+        });
+        let html = got.expect("the message").html;
+        assert!(html.contains("<b>loud</b>"), "{html}");
+        assert!(html.contains("<code>x &lt; y</code>"), "{html}");
+        assert!(html.contains("2 * 3 * 4"), "{html}");
+        alice.shutdown();
+        bob.shutdown();
+        let _ = std::fs::remove_dir_all(alice_dir);
+        let _ = std::fs::remove_dir_all(bob_dir);
+    }
+
     /// A message is left with the server to send in a few seconds: it waits
     /// in the list, a second one is called off, and the first arrives.
     #[test]

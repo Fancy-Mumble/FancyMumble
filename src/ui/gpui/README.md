@@ -37,7 +37,9 @@ real engine and does text and voice.
   notifications and the unread count in the window's title. A long
   conversation opens on its newest page and steps back on asking; an
   arrival does not move a reader who has scrolled up. The search field
-  finds messages as well as channels. On a Fancy server:
+  finds messages as well as channels. What is typed with `**bold**`,
+  `*italic*`, `~~struck~~`, `` `code` ``, a fenced block or a quoting `>`
+  is sent set that way. On a Fancy server:
   reply, mention somebody (`@name`, finished with Tab), edit and delete
   your own, react (six at a click, the rest from a picker that also
   writes into the composer), pin, see who is writing and who has
