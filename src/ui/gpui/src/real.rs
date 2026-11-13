@@ -14,8 +14,8 @@ use mumble_tauri_lib::engine_api::{
 
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation,
-    Engine, EngineEvent, Message, SavedServer, ServerPing, Snapshot, Subject, User, Voice,
-    VoiceSettings,
+    Engine, EngineEvent, Message, SavedServer, ServerPing, SessionEntry, Snapshot, Subject, User,
+    Voice, VoiceSettings,
 };
 use crate::store::Store;
 
@@ -354,9 +354,29 @@ impl Engine for RealEngine {
             api::Connection::Connecting => Connection::Connecting,
             api::Connection::Connected => Connection::Connected,
         };
+        // The other servers stay on the rail whatever this one is doing.
+        let saved = self.saved_servers();
+        let mut sessions: Vec<SessionEntry> = engine
+            .sessions()
+            .into_iter()
+            .filter(|session| session.connection != api::Connection::Disconnected)
+            .map(|session| SessionEntry {
+                name: saved
+                    .iter()
+                    .find(|server| {
+                        server.host.as_ref() == session.host && server.port == session.port
+                    })
+                    .map_or_else(|| session.host.into(), |server| server.label.clone()),
+                id: session.id.into(),
+                active: session.active,
+            })
+            .collect();
+        // The engine keeps them in no order; the rail is not to shuffle.
+        sessions.sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));
         if connection != Connection::Connected {
             return Snapshot {
                 connection,
+                sessions,
                 ..Snapshot::disconnected()
             };
         }
@@ -384,6 +404,7 @@ impl Engine for RealEngine {
             },
             deafened: engine.deafened(),
             welcome: engine.welcome().map(Into::into),
+            sessions,
         }
     }
 
@@ -576,6 +597,29 @@ impl Engine for RealEngine {
         {
             self.shared.tell(EngineEvent::Notice(Some(reason.into())));
         }
+    }
+
+    fn activate_session(&self, id: &str) {
+        let shared = Arc::clone(&self.shared);
+        let id = id.to_owned();
+        drop(self.runtime.spawn(async move {
+            if let Err(reason) = shared.engine.activate_session(&id).await {
+                shared.tell(EngineEvent::Notice(Some(reason.into())));
+            }
+            // Another server altogether: everything is to be read again.
+            shared
+                .first_read
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clear();
+            shared
+                .avatars
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clear();
+            shared.tell(EngineEvent::StateChanged);
+            shared.tell(EngineEvent::CurrentChannelChanged);
+        }));
     }
 
     fn set_focused(&self, focused: bool) {
@@ -1004,5 +1048,81 @@ mod tests {
             );
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
+    }
+    /// One engine on two live servers at once: the second joins the first
+    /// on the rail, and going back and forth swaps what the snapshot is of.
+    ///
+    /// ```text
+    /// FANCY_GPUI_TEST_SERVERS=127.0.0.1:64738,127.0.0.1:64739 cargo test -- --ignored live
+    /// ```
+    #[test]
+    #[ignore = "needs two live servers; set FANCY_GPUI_TEST_SERVERS=host:port,host:port"]
+    fn live_one_client_on_two_servers() {
+        let servers = std::env::var("FANCY_GPUI_TEST_SERVERS").expect("FANCY_GPUI_TEST_SERVERS");
+        let dir = std::env::temp_dir().join(format!("fancy-gpui-live-two-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let engine = RealEngine::start(&dir).expect("the engine starts");
+        for (label, address) in ["first", "second"].into_iter().zip(servers.split(',')) {
+            let (host, port) = address.rsplit_once(':').expect("host:port");
+            engine.save_server(SavedServer {
+                id: label.into(),
+                label: label.into(),
+                host: host.to_owned().into(),
+                port: port.parse().expect("a port"),
+                username: "LiveTwo".into(),
+                certificate: Some("livetwo".into()),
+                favorite: false,
+            });
+        }
+        let active = |engine: &RealEngine| {
+            engine
+                .snapshot()
+                .sessions
+                .iter()
+                .find(|session| session.active)
+                .map(|session| session.name.to_string())
+        };
+
+        engine.connect("first", None);
+        wait_for("the first server", || {
+            engine.snapshot().connection == Connection::Connected
+        });
+        assert_eq!(active(&engine).as_deref(), Some("first"));
+        let first_channels = engine.snapshot().channels.len();
+
+        engine.connect("second", None);
+        wait_for("the second server beside the first", || {
+            let now = engine.snapshot();
+            now.connection == Connection::Connected
+                && now.sessions.len() == 2
+                && active(&engine).as_deref() == Some("second")
+        });
+
+        let now = engine.snapshot();
+        assert_eq!(now.sessions[0].name.as_ref(), "first", "in a settled order");
+        let first = now.sessions[0].id.clone();
+        engine.activate_session(&first);
+        wait_for("the first server again", || {
+            active(&engine).as_deref() == Some("first")
+        });
+        let back = engine.snapshot();
+        assert_eq!(back.connection, Connection::Connected);
+        assert_eq!(back.channels.len(), first_channels);
+        assert_eq!(back.sessions.len(), 2, "still on both");
+
+        // Leaving the one showing falls back to the other.
+        engine.disconnect();
+        wait_for("the second server alone", || {
+            let now = engine.snapshot();
+            now.sessions.len() == 1 && active(&engine).as_deref() == Some("second")
+        });
+        assert_eq!(engine.snapshot().connection, Connection::Connected);
+        engine.disconnect();
+        wait_for("none", || {
+            engine.snapshot().connection == Connection::Disconnected
+        });
+        assert!(engine.snapshot().sessions.is_empty());
+        engine.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

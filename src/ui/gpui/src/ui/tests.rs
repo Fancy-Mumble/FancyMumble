@@ -806,3 +806,30 @@ fn a_click_in_the_text_places_the_caret_there(cx: &mut TestAppContext) {
         assert_eq!(shell.composer.read(cx).text(), ">hello")
     });
 }
+
+#[gpui::test]
+fn the_rail_adds_a_server_over_a_connection_and_goes_back(cx: &mut TestAppContext) {
+    let (shell, engine, cx) = shell(cx);
+    shell.read_with(cx, |shell, _| assert!(!shell.shows_connect_screen()));
+    click(cx, "add-session");
+    shell.read_with(cx, |shell, _| {
+        assert!(
+            shell.shows_connect_screen(),
+            "the saved servers, over the connection"
+        );
+    });
+    assert_eq!(
+        engine.snapshot().connection,
+        Connection::Connected,
+        "still on the server"
+    );
+    // Search goes to the list that is showing.
+    shell.update_in(cx, Shell::focus_search);
+    cx.simulate_keystrokes("k");
+    shell.read_with(cx, |shell, cx| {
+        assert_eq!(shell.server_search.read(cx).text(), "k")
+    });
+    // The server's tile goes back to it.
+    click(cx, "session-magical.rocks");
+    shell.read_with(cx, |shell, _| assert!(!shell.shows_connect_screen()));
+}

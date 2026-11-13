@@ -157,6 +157,17 @@ pub(crate) enum Action {
     SetAvatar(Vec<u8>),
 }
 
+/// One of the servers the engine is on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SessionEntry {
+    /// What names it to [`Engine::activate_session`].
+    pub id: SharedString,
+    /// What the user calls the server: its saved label, or its host.
+    pub name: SharedString,
+    /// Whether it is the one the snapshot is of.
+    pub active: bool,
+}
+
 /// One channel of the server's tree.
 #[derive(Debug, Clone)]
 pub(crate) struct Channel {
@@ -226,6 +237,8 @@ pub(crate) struct Snapshot {
     pub deafened: bool,
     /// The server's welcome message, as HTML.
     pub welcome: Option<SharedString>,
+    /// Every server the engine is on; this snapshot is of the active one.
+    pub sessions: Vec<SessionEntry>,
 }
 
 impl Snapshot {
@@ -240,6 +253,7 @@ impl Snapshot {
             voice: Voice::Off,
             deafened: false,
             welcome: None,
+            sessions: Vec::new(),
         }
     }
 }
@@ -334,6 +348,10 @@ pub(crate) trait Engine: Send + Sync + 'static {
 
     /// Use these devices from now on.
     fn choose_devices(&self, devices: ChosenDevices);
+
+    /// Make the session `id` the one the snapshot, and every command, is
+    /// about.
+    fn activate_session(&self, id: &str);
 
     /// The window gained or lost the user's attention.
     fn set_focused(&self, focused: bool);

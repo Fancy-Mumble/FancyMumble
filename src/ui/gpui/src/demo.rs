@@ -5,8 +5,8 @@ use std::sync::Mutex;
 
 use crate::engine::{
     Action, AudioDevice, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation,
-    Engine, EngineEvent, Message, SavedServer, ServerPing, Session, Snapshot, Subject, User, Voice,
-    VoiceSettings,
+    Engine, EngineEvent, Message, SavedServer, ServerPing, Session, SessionEntry, Snapshot,
+    Subject, User, Voice, VoiceSettings,
 };
 
 /// The local user's session in the demo server.
@@ -277,6 +277,11 @@ impl Engine for DemoEngine {
                 voice: state.voice,
                 deafened: state.deafened,
                 welcome: Some("Welcome to the <b>demo</b> server.".into()),
+                sessions: vec![SessionEntry {
+                    id: "demo".into(),
+                    name: "magical.rocks".into(),
+                    active: true,
+                }],
             }
         })
     }
@@ -469,6 +474,8 @@ impl Engine for DemoEngine {
     fn choose_devices(&self, devices: ChosenDevices) {
         self.with_state(|state| state.devices = devices);
     }
+
+    fn activate_session(&self, _id: &str) {}
 
     fn set_focused(&self, _focused: bool) {}
 

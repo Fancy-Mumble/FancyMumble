@@ -109,6 +109,11 @@ pub(crate) struct Shell {
     welcome: Option<(gpui::SharedString, Arc<conversation::DrawnBody>)>,
     /// Whether the welcome message was dismissed on this connection.
     welcome_dismissed: bool,
+    /// The session the conversation on screen belongs to.
+    active_session: Option<gpui::SharedString>,
+    /// Whether the connect screen is showing over a connection, to add
+    /// another server.
+    adding_server: bool,
     /// The unread count the window's title was last set for.
     titled_unread: u32,
     /// The menu a right click opened, while it is open.
@@ -199,6 +204,8 @@ impl Shell {
             info: None,
             welcome: None,
             welcome_dismissed: false,
+            active_session: None,
+            adding_server: false,
             titled_unread: 0,
             menu: None,
             prompt: None,
@@ -258,6 +265,7 @@ impl Shell {
                     self.welcome_dismissed = false;
                 }
                 self.read_welcome();
+                self.follow_active_session(cx);
                 self.drop_closed_conversation(cx);
                 // Back on the server list: what it says about each server is
                 // as old as the visit just ended.
@@ -297,6 +305,34 @@ impl Shell {
                 }
             }
         }
+    }
+
+    /// The active server changed: what was on screen belonged to the other
+    /// one. Start again from the channel the user is in here.
+    fn follow_active_session(&mut self, cx: &mut Context<Self>) {
+        let active = self
+            .snapshot
+            .sessions
+            .iter()
+            .find(|session| session.active)
+            .map(|session| session.id.clone());
+        if active == self.active_session {
+            return;
+        }
+        self.active_session = active;
+        // Arrived somewhere: the connect screen has done what it was for.
+        self.adding_server = false;
+        self.open = None;
+        self.talking.clear();
+        self.welcome_dismissed = false;
+        self.follow_current_channel(None);
+        self.reload_messages(cx);
+    }
+
+    /// Whether the connect screen is what the window shows: not on a
+    /// server, or adding another.
+    fn shows_connect_screen(&self) -> bool {
+        self.adding_server || self.snapshot.connection != Connection::Connected
     }
 
     /// How many messages wait unread, across channels and people.
@@ -470,9 +506,10 @@ impl Shell {
 
     /// Give the keyboard to the search field of whichever list is showing.
     pub(crate) fn focus_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let search = match self.snapshot.connection {
-            Connection::Connected => &self.search,
-            Connection::Disconnected | Connection::Connecting => &self.server_search,
+        let search = if self.shows_connect_screen() {
+            &self.server_search
+        } else {
+            &self.search
         };
         search.read(cx).focus(window);
         cx.notify();
@@ -686,15 +723,19 @@ impl Render for Shell {
                 shell.child(band::render(&theme, window, cx))
             })
             .child(div().flex_1().min_h_0().flex().map(|body| {
-                match self.snapshot.connection {
-                    // Not on a server: the saved ones, and the way onto one.
-                    Connection::Disconnected | Connection::Connecting => body
-                        .child(connect::server_column(self, &theme, cx))
-                        .child(connect::landing(self, &theme, cx)),
-                    Connection::Connected => body
-                        .child(rail::render(&theme, cx))
+                if self.shows_connect_screen() {
+                    // Not on a server, or adding one: the saved ones, and
+                    // the way onto one. The rail stays while there are
+                    // servers to go back to.
+                    body.when(!self.snapshot.sessions.is_empty(), |body| {
+                        body.child(rail::render(self, &theme, cx))
+                    })
+                    .child(connect::server_column(self, &theme, cx))
+                    .child(connect::landing(self, &theme, cx))
+                } else {
+                    body.child(rail::render(self, &theme, cx))
                         .child(sidebar::render(self, &theme, cx))
-                        .child(conversation::render(self, &theme, cx)),
+                        .child(conversation::render(self, &theme, cx))
                 }
             }))
             .when(!theme.skin.band, |shell| {
