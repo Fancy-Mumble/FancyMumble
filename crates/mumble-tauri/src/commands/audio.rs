@@ -15,43 +15,11 @@ use crate::state::{self, AppState, AudioDevice, AudioSettings, VoiceState};
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 pub(crate) async fn get_audio_devices() -> Vec<AudioDevice> {
-    tauri::async_runtime::spawn_blocking(enumerate_input_devices)
+    tauri::async_runtime::spawn_blocking(state::audio_devices::inputs)
         .await
         .unwrap_or_default()
 }
 
-#[cfg(not(target_os = "android"))]
-fn enumerate_input_devices() -> Vec<AudioDevice> {
-    #[cfg(target_os = "linux")]
-    if audio::pipewire::available() {
-        return pipewire_devices(audio::pipewire::Kind::Source);
-    }
-    audio::devices::inputs()
-        .into_iter()
-        .map(|d| AudioDevice {
-            name: d.name,
-            is_default: d.is_default,
-        })
-        .collect()
-}
-
-/// The PipeWire half of the graph as the picker's device list.
-///
-/// These are the nodes the desktop's own sound settings show, and unlike
-/// the ALSA hint list every entry names a distinct device that can
-/// actually be selected - see [`audio::pipewire`].
-#[cfg(target_os = "linux")]
-fn pipewire_devices(kind: audio::pipewire::Kind) -> Vec<AudioDevice> {
-    audio::pipewire::nodes(kind)
-        .into_iter()
-        .map(|n| AudioDevice {
-            name: n.name,
-            is_default: n.is_default,
-        })
-        .collect()
-}
-
-/// Stub: on Android, return an empty device list.
 #[cfg(target_os = "android")]
 #[tauri::command]
 pub(crate) async fn get_audio_devices() -> Vec<AudioDevice> {
@@ -65,27 +33,11 @@ pub(crate) async fn get_audio_devices() -> Vec<AudioDevice> {
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 pub(crate) async fn get_output_devices() -> Vec<AudioDevice> {
-    tauri::async_runtime::spawn_blocking(enumerate_output_devices)
+    tauri::async_runtime::spawn_blocking(state::audio_devices::outputs)
         .await
         .unwrap_or_default()
 }
 
-#[cfg(not(target_os = "android"))]
-fn enumerate_output_devices() -> Vec<AudioDevice> {
-    #[cfg(target_os = "linux")]
-    if audio::pipewire::available() {
-        return pipewire_devices(audio::pipewire::Kind::Sink);
-    }
-    audio::devices::outputs()
-        .into_iter()
-        .map(|d| AudioDevice {
-            name: d.name,
-            is_default: d.is_default,
-        })
-        .collect()
-}
-
-/// Stub: on Android, return an empty device list.
 #[cfg(target_os = "android")]
 #[tauri::command]
 pub(crate) async fn get_output_devices() -> Vec<AudioDevice> {
@@ -126,28 +78,7 @@ pub(crate) async fn set_audio_settings(
     state: tauri::State<'_, AppState>,
     settings: AudioSettings,
 ) -> Result<(), String> {
-    let force_tcp = settings.force_tcp_audio;
-    // Apply the exclusive-input selection before any pipeline restart below
-    // so the (re)opened capture uses the new mode.
-    audio::set_exclusive_input(settings.exclusive_input);
-    let (needs_outbound, needs_inbound, force_tcp_changed) = state
-        .set_audio_settings(settings)
-        .unwrap_or((false, false, false));
-
-    if needs_outbound {
-        state.restart_outbound()?;
-    }
-    if needs_inbound {
-        state.restart_inbound()?;
-    }
-    if force_tcp_changed
-        && let Ok(inner) = state.inner.snapshot().lock()
-        && let Some(ref handle) = inner.conn.client_handle
-    {
-        handle.set_force_tcp(force_tcp);
-    }
-
-    Ok(())
+    state.apply_audio_settings(settings)
 }
 
 /// Switch the desktop audio backend at runtime.

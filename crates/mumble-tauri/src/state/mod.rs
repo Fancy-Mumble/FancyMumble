@@ -16,6 +16,7 @@
 
 mod admin;
 pub(crate) mod audio;
+pub(crate) mod audio_devices;
 mod audio_tasks;
 mod calibration;
 mod channels;
