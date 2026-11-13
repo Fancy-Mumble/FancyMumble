@@ -107,8 +107,8 @@ pub(crate) struct ChosenDevices {
     pub output: Option<SharedString>,
 }
 
-/// How the microphone is used.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// How the microphone is used. Also how it is written to disk.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct VoiceSettings {
     /// Transmit only while the push-to-talk key is held.
     pub push_to_talk: bool,

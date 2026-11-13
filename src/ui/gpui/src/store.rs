@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::engine::SavedServer;
+use crate::engine::{SavedServer, VoiceSettings};
 
 /// One saved identity, as it is written to disk.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,19 +69,10 @@ pub(crate) struct Settings {
     pub output_device: Option<String>,
     /// How the microphone is used; absent until it has been changed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub voice: Option<StoredVoice>,
+    pub voice: Option<VoiceSettings>,
     /// The push-to-talk key, as GPUI names it (`f9`, `space`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub push_to_talk_key: Option<String>,
-}
-
-/// How the microphone is used, as it is written to disk.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub(crate) struct StoredVoice {
-    pub push_to_talk: bool,
-    pub threshold: f32,
-    pub noise_suppression: bool,
-    pub automatic_gain: bool,
 }
 
 /// The files, in one directory.
@@ -200,7 +191,7 @@ mod tests {
             mode: Some("light".to_owned()),
             input_device: None,
             output_device: Some("USB Headset".to_owned()),
-            voice: Some(StoredVoice {
+            voice: Some(VoiceSettings {
                 push_to_talk: true,
                 threshold: 0.02,
                 noise_suppression: false,

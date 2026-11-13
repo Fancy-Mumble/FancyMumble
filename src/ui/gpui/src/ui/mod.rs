@@ -31,7 +31,7 @@ use crate::engine::{
     Action, AudioDevices, Channel, ChannelId, ChosenDevices, Connection, Conversation, Engine,
     EngineEvent, Message, Preview, SavedServer, Session, Snapshot, Subject, User, VoiceSettings,
 };
-use crate::store::{Settings, Store, StoredVoice};
+use crate::store::{Settings, Store};
 use crate::theme::{ActiveTheme, Catalog, Mode};
 use text_input::{InputEvent, TextInput};
 
@@ -966,12 +966,7 @@ impl Shell {
             }),
             input_device: name(&self.chosen_devices.input),
             output_device: name(&self.chosen_devices.output),
-            voice: Some(StoredVoice {
-                push_to_talk: self.voice_settings.push_to_talk,
-                threshold: self.voice_settings.threshold,
-                noise_suppression: self.voice_settings.noise_suppression,
-                automatic_gain: self.voice_settings.automatic_gain,
-            }),
+            voice: Some(self.voice_settings),
             push_to_talk_key: name(&self.ptt_key),
         };
         if let Err(error) = store.save_settings(&settings) {
