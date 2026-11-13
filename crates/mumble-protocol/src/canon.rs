@@ -1296,14 +1296,23 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                         encrypted_key: Some(deliver.sealed_key.clone()),
                         sender_hash: Some(hex(&deliver.sender_cert)),
                         recipient_hash: Some(hex(&deliver.recipient_cert)),
-                        request_id: Some(deliver.request_id.clone()),
+                        // The canon has no "absent": what the sender left out
+                        // arrives empty, and has to be absent again here. An
+                        // empty countersignature read as one that is present
+                        // is checked, names no signer, and refuses the whole
+                        // exchange - so no shared key was ever accepted.
+                        request_id: (!deliver.request_id.is_empty())
+                            .then(|| deliver.request_id.clone()),
                         timestamp: Some(deliver.delivered_at_ms),
                         algorithm_version: Some(deliver.algorithm_version),
                         signature: Some(deliver.signature.clone()),
-                        parent_fingerprint: Some(deliver.parent_fingerprint.clone()),
+                        parent_fingerprint: (!deliver.parent_fingerprint.is_empty())
+                            .then(|| deliver.parent_fingerprint.clone()),
                         epoch_fingerprint: Some(deliver.epoch_fingerprint.clone()),
-                        countersignature: Some(deliver.countersignature.clone()),
-                        countersigner_hash: Some(hex(&deliver.countersigner_cert)),
+                        countersignature: (!deliver.countersignature.is_empty())
+                            .then(|| deliver.countersignature.clone()),
+                        countersigner_hash: (!deliver.countersigner_cert.is_empty())
+                            .then(|| hex(&deliver.countersigner_cert)),
                     }),
                 ),
                 // One report per holder, which is the shape this client's
@@ -2368,6 +2377,46 @@ mod tests {
             }
             other => panic!("not a livery query: {other:?}"),
         }
+    }
+
+    #[test]
+    fn what_a_key_exchange_leaves_out_is_still_left_out_on_arrival() {
+        // A key shared without a countersignature: the usual case.
+        let sent = ControlMessage::PchatKeyExchange(mumble_tcp::PchatKeyExchange {
+            channel_id: Some(4),
+            epoch: Some(0),
+            encrypted_key: Some(vec![1, 2, 3]),
+            sender_hash: Some("aa".to_owned()),
+            recipient_hash: Some("bb".to_owned()),
+            epoch_fingerprint: Some(vec![9; 8]),
+            ..Default::default()
+        });
+        let (outer, payload) = to_canon(&sent).expect("a key exchange has a canon home");
+        let back = from_canon(outer, &payload).unwrap().expect("decodes");
+        let ControlMessage::PchatKeyExchange(exchange) = back else {
+            panic!("expected a key exchange");
+        };
+        assert_eq!(exchange.countersignature, None);
+        assert_eq!(exchange.countersigner_hash, None);
+        assert_eq!(exchange.parent_fingerprint, None);
+        assert_eq!(exchange.request_id, None);
+        assert_eq!(exchange.encrypted_key, Some(vec![1, 2, 3]));
+
+        // One that carries them keeps them.
+        let ControlMessage::PchatKeyExchange(mut signed) = sent else {
+            unreachable!();
+        };
+        signed.countersignature = Some(vec![7; 64]);
+        signed.countersigner_hash = Some("cc".to_owned());
+        signed.request_id = Some("r-1".to_owned());
+        let (outer, payload) = to_canon(&ControlMessage::PchatKeyExchange(signed)).unwrap();
+        let Some(ControlMessage::PchatKeyExchange(exchange)) = from_canon(outer, &payload).unwrap()
+        else {
+            panic!("expected a key exchange");
+        };
+        assert_eq!(exchange.countersignature, Some(vec![7; 64]));
+        assert_eq!(exchange.countersigner_hash.as_deref(), Some("cc"));
+        assert_eq!(exchange.request_id.as_deref(), Some("r-1"));
     }
 
     #[test]
