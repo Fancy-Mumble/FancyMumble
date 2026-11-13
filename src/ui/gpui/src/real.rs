@@ -2827,6 +2827,41 @@ mod tests {
         alice.shutdown();
         let _ = std::fs::remove_dir_all(alice_dir);
     }
+    /// With voice on, what is heard is written to a WAV file until the
+    /// recording is stopped; with voice off there is nothing to record.
+    #[test]
+    #[ignore = "needs a live Fancy server; set FANCY_GPUI_TEST_FANCY=host:port"]
+    fn live_fancy_what_is_heard_is_recorded_to_a_file() {
+        let (alice, alice_dir) = fancy_client("RecordAlice", None);
+        wait_for("alice to connect", || {
+            alice.snapshot().connection == Connection::Connected
+        });
+        let folder = alice_dir.join("recordings");
+        std::fs::create_dir_all(&folder).expect("a folder");
+        alice.record(Some(folder.clone()));
+        assert!(!alice.is_recording(), "nothing is heard with voice off");
+        alice.toggle_microphone();
+        wait_for("voice to turn on", || alice.snapshot().voice == Voice::On);
+        alice.record(Some(folder.clone()));
+        assert!(alice.is_recording());
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        alice.record(None);
+        assert!(!alice.is_recording());
+        let files: Vec<_> = std::fs::read_dir(&folder)
+            .expect("the folder")
+            .filter_map(Result::ok)
+            .collect();
+        assert_eq!(files.len(), 1);
+        // Nobody else is here to be heard, so the file may hold no more
+        // than its header; it is finished a moment after the stop.
+        wait_for("the file to be a finished WAV", || {
+            std::fs::read(files[0].path())
+                .is_ok_and(|written| written.starts_with(b"RIFF") && written.len() >= 44)
+        });
+        alice.shutdown();
+        let _ = std::fs::remove_dir_all(alice_dir);
+    }
+
     /// An administrator deletes what one user said in a channel that keeps
     /// its messages, then everything: both see it go.
     #[test]
