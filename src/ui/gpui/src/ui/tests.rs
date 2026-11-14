@@ -22,6 +22,10 @@ pub(super) fn shell_on(
     cx: &mut TestAppContext,
 ) -> (Entity<Shell>, Arc<DemoEngine>, &mut VisualTestContext) {
     super::stage::textures_for_tests();
+    // The demo engine's shares, decoders and timers run on threads of their
+    // own, as the real ones do, and wake the view from there: the test
+    // scheduler would take that for a test that is not deterministic.
+    cx.executor().allow_parking();
     cx.update(|cx| {
         let theme = Catalog::get()
             .resolve(DEFAULT_THEME, Mode::Dark, &[])
@@ -857,7 +861,11 @@ fn the_device_panel_lists_devices_and_takes_a_choice(cx: &mut TestAppContext) {
         assert_eq!(devices.inputs.len(), 2);
         assert_eq!(devices.outputs.len(), 2);
     });
-    click(cx, "output-USB Headset");
+    // The panel scrolls, and this row reaches past its foot: pressed where
+    // it is seen.
+    let row = cx.debug_bounds("output-USB Headset").expect("the row");
+    cx.simulate_click(gpui::point(row.center().x, row.top() + gpui::px(4.0)), Modifiers::none());
+    cx.run_until_parked();
     assert_eq!(
         engine.chosen_devices().output.as_ref().map(AsRef::as_ref),
         Some("USB Headset")
@@ -1382,8 +1390,9 @@ fn a_selection_in_the_composer_is_set_apart_by_key_and_by_button(cx: &mut TestAp
     cx.simulate_keystrokes("x");
     assert_eq!(typed(&shell, cx), "***x***");
     // Gone with the selection: a press where a button was sets nothing.
-    // (The place is the one it was last drawn at.)
-    click(cx, "format-italic");
+    assert!(cx.debug_bounds("format-italic").is_none(), "gone");
+    cx.simulate_click(button.center(), Modifiers::none());
+    cx.run_until_parked();
     assert_eq!(typed(&shell, cx), "***x***");
     click(cx, "input-Message #lounge");
     // The marks are what the engine reads: heavier and slanted, with the

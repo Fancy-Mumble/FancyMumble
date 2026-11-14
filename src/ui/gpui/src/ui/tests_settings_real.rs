@@ -256,6 +256,11 @@ fn the_actions_stand_under_every_message_when_asked_and_stay_asked(cx: &mut Test
         reach(&shell, cx, "always-show-actions");
         shell.update(cx, Shell::close_settings);
         cx.run_until_parked();
+        // The pointer, left where the settings' button was, off the
+        // conversation: the view under it now is taken as hovered.
+        cx.simulate_mouse_move(gpui::point(gpui::px(1.0), gpui::px(1.0)), None, gpui::Modifiers::none());
+        cx.executor().advance_clock(std::time::Duration::from_secs(2));
+        cx.run_until_parked();
         let (_, index) = theirs(&shell, cx);
         // Not pointed at, and there.
         assert!(cx.debug_bounds(tag("pinned-actions", index)).is_some());

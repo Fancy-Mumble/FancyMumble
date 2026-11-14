@@ -27,15 +27,18 @@ impl ParentElement for Floating {
 impl gpui::prelude::FluentBuilder for Floating {}
 
 impl Floating {
-    /// Each of them, drawn on `surface` while there is one.
-    pub(crate) fn on(self, surface: Option<CompositionSurfaceId>) -> impl Iterator<Item = AnyElement> {
-        self.children.into_iter().map(move |child| {
-            OnSurface {
-                child,
-                surface,
-            }
-            .into_any_element()
-        })
+    /// Each of them, drawn on `surface` while there is one; as they are
+    /// while there is none.
+    pub(crate) fn on(self, surface: Option<CompositionSurfaceId>) -> Vec<AnyElement> {
+        #[cfg(test)]
+        tests::note(surface);
+        let Some(surface) = surface else {
+            return self.children;
+        };
+        self.children
+            .into_iter()
+            .map(|child| OnSurface { child, surface }.into_any_element())
+            .collect()
     }
 }
 
@@ -43,7 +46,7 @@ impl Floating {
 /// its child is.
 struct OnSurface {
     child: AnyElement,
-    surface: Option<CompositionSurfaceId>,
+    surface: CompositionSurfaceId,
 }
 
 impl OnSurface {
@@ -51,13 +54,10 @@ impl OnSurface {
     /// drawn on (there is none, or the window does not compose), as the
     /// window draws everything else.
     fn on_surface(&mut self, window: &mut Window, cx: &mut App, step: fn(&mut AnyElement, &mut Window, &mut App)) {
-        #[cfg(test)]
-        tests::note(self.surface);
         let child = &mut self.child;
-        if let Some(surface) = self.surface
-            && window
-                .with_composition_surface(surface, |window| step(child, window, cx))
-                .is_ok()
+        if window
+            .with_composition_surface(self.surface, |window| step(child, window, cx))
+            .is_ok()
         {
             return;
         }
