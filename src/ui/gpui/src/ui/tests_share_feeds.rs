@@ -2,7 +2,7 @@
 //! pixel, on the demo engine's made-up shares.
 
 use gpui::{
-    Entity, Modifiers, ScrollDelta, ScrollWheelEvent, TestAppContext, VisualTestContext, point, px,
+    Entity, Modifiers, ScrollDelta, ScrollEvent, TestAppContext, VisualTestContext, point, px,
 };
 
 use super::Shell;
@@ -200,18 +200,18 @@ fn a_share_shown_pixel_for_pixel_is_moved_by_keys_wheel_and_drag_and_never_lost(
     assert_eq!(offset(&shell, cx), kept(-80.0, -40.0));
     // The wheel, as a page scrolls; with Shift, across.
     let large = cx.debug_bounds("stage-large").expect("the stage");
-    cx.simulate_event(ScrollWheelEvent {
+    cx.simulate_event(ScrollEvent {
         position: large.center(),
         delta: ScrollDelta::Lines(point(0.0, 1.0)),
         modifiers: Modifiers::none(),
-        ..ScrollWheelEvent::default()
+        ..ScrollEvent::default()
     });
     assert_eq!(offset(&shell, cx), kept(-80.0, 0.0));
-    cx.simulate_event(ScrollWheelEvent {
+    cx.simulate_event(ScrollEvent {
         position: large.center(),
         delta: ScrollDelta::Lines(point(0.0, 1.0)),
         modifiers: Modifiers::shift(),
-        ..ScrollWheelEvent::default()
+        ..ScrollEvent::default()
     });
     assert_eq!(offset(&shell, cx), kept(kept(-80.0, 0.0).0 + 40.0, 0.0));
     // Dragged further than it reaches: no further than the picture's edge

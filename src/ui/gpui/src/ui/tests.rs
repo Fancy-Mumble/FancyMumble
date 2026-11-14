@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use gpui::Focusable as _;
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
 
 use super::Shell;
@@ -20,6 +21,7 @@ pub(super) fn shell_on(
     engine: DemoEngine,
     cx: &mut TestAppContext,
 ) -> (Entity<Shell>, Arc<DemoEngine>, &mut VisualTestContext) {
+    super::stage::textures_for_tests();
     cx.update(|cx| {
         let theme = Catalog::get()
             .resolve(DEFAULT_THEME, Mode::Dark, &[])

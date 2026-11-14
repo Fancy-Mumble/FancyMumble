@@ -116,11 +116,12 @@ opus = "0.3"
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 notify-rust = { version = "=4.12.0", default-features = false }
 
-# The call that gives memory not in use back to the system (`src/trim.rs`).
-# The bindings GPUI already builds, with a feature it already turns on.
+# The call that gives memory not in use back to the system (`src/trim.rs`),
+# and the player's few calls (`src/player/composed.rs`). The bindings GPUI
+# already builds.
 [target.'cfg(windows)'.dependencies.windows]
-version = "0.61"
-features = ["Win32_Foundation", "Win32_System_Threading", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_System_Console"]
+version = "0.62"
+features = ["Win32_Foundation", "Win32_System_Threading", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_System_Console", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_System_Com"]
 
 # Keys that work while another program has the keyboard (`src/hotkeys.rs`).
 # The crate and the release the web client builds.
@@ -130,9 +131,11 @@ global-hotkey = "=0.7.0"
 # the release the web client builds; its Linux part needs GTK.
 tray-icon = { version = "=0.21.3", default-features = false }
 # A video played in place, over its card (`src/player/`): WebView2, made
-# only when play is pressed. The release the web client builds; its
-# custom scheme serves the page the video is framed in.
-wry = { version = "=0.54.3", default-features = false, features = ["protocol"] }
+# only when play is pressed and drawn into the window's composition. The
+# release gpui-next's own example of that builds (windows 0.62, as GPUI's
+# surfaces are); the window's handle to make it in.
+webview2-com = "0.39"
+raw-window-handle = "0.6"
 
 # Compiles the executable's icon into it (build.rs). The version GPUI
 # already builds its manifest with.

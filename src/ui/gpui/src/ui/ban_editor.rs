@@ -1,6 +1,7 @@
 //! The form that adds a ban by hand, or changes one: in the administrator's
 //! panel, in place of the list while it is open.
 
+use gpui::Focusable as _;
 use gpui::{
     Context, Entity, IntoElement, ParentElement, SharedString, Styled, Subscription, Window, div,
     prelude::*, px,

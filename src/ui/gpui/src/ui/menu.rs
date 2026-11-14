@@ -1,6 +1,7 @@
 //! The menus behind a right click on a user or a channel, and the small
 //! dialog some of their entries need an answer from.
 
+use gpui::Focusable as _;
 use gpui::{
     Context, Entity, IntoElement, ParentElement, Pixels, Point, SharedString, Styled, Subscription,
     Window, div, prelude::*, px,
@@ -1658,7 +1659,7 @@ fn render_sheet(
     // backdrop starts inside the window's frame.
     backdrop(cx).child(
         gpui::anchored()
-            .anchor(gpui::Corner::BottomLeft)
+            .anchor(gpui::Anchor::BottomLeft)
             .position(gpui::point(over.left(), over.top() - px(4.0)))
             .child(
                 div()

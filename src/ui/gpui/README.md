@@ -445,20 +445,22 @@ still gets that family.
 The package is excluded from the workspace and keeps its own `Cargo.lock`,
 so GPUI's dependencies and Tauri's cannot move each other's versions.
 
-GPUI itself is built from `vendor/gpui`: version 0.2.2 with a backdrop blur
-added (`Styled::backdrop_blur`), which a renderer cannot be given from
-outside. `vendor/gpui/FANCY_CHANGES.md` lists what was changed. Only the
-DirectX renderer draws the blur so far; on Linux and macOS the element is
-drawn without it. A release build on Windows compiles GPUI's shaders with
-`fxc.exe` from the Windows SDK, as it did before.
+GPUI is built from `gpui-next`, a checkout beside this repository (for now
+`F:\fancy-migrate\gpui-next`, branch `fancy`): Longbridge's gpui-fast
+(Zed's GPUI with a retained mode, scroll layers, window composition and
+dynamic textures) with Fancy Mumble's own commits on top, each listed in its
+`FANCY_CHANGES.md`: a backdrop blur (`Styled::backdrop_blur`), windows that
+are moved (`Window::set_bounds`) or laid over the screen
+(`WindowKind::Overlay`), and the fixes found here. Only the DirectX renderer
+draws the blur so far; on Linux and macOS the element is drawn without it.
+Retained mode is on; `GPUI_VIEW_RETENTION=0` turns it off for comparing.
+`gpui_platform::application()` starts the app on this system's platform.
 
 On Linux it needs the development files of `libxkbcommon` and
 `libxkbcommon-x11`, Wayland and/or XCB, fontconfig, freetype and a Vulkan
 driver. `--no-default-features --features wayland` (or `x11`) builds for one
 window system only.
 
-`Cargo.lock` holds `libc` at 0.2.186: GPUI 0.2.2 depends on `xattr` 0.2.3,
-which does not build against a newer `libc`.
 
 For development:
 

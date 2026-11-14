@@ -1,5 +1,6 @@
 //! The dialog that adds a saved identity, or changes one.
 
+use gpui::Focusable as _;
 use gpui::{
     Context, Entity, IntoElement, ParentElement, SharedString, Styled, Subscription, Window, div,
     prelude::*, px,

@@ -14,6 +14,7 @@ mod shown;
 
 use std::sync::Arc;
 
+use gpui::Focusable as _;
 use gpui::{
     AnyElement, Context, IntoElement, ParentElement, SharedString, Styled, div, prelude::*, px,
 };

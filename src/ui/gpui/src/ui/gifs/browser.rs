@@ -12,6 +12,7 @@
 use std::rc::Rc;
 use std::time::Duration;
 
+use gpui::Focusable as _;
 use gpui::{
     AnyElement, Context, Entity, IntoElement, ParentElement, Pixels, Point, ScrollStrategy,
     SharedString, Styled, Subscription, UniformListScrollHandle, Window, div, prelude::*, px,

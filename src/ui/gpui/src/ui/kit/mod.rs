@@ -11,6 +11,7 @@ mod action_row;
 mod avatar;
 mod backdrop;
 mod blocks;
+pub(crate) mod floating;
 mod button;
 mod chip;
 mod choice;

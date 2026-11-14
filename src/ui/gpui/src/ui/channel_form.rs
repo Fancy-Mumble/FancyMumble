@@ -1,6 +1,7 @@
 //! The form a channel is made in: its name and everything else that can be
 //! said of one at once, together.
 
+use gpui::Focusable as _;
 use gpui::{
     Context, Entity, IntoElement, ParentElement, SharedString, Styled, Subscription, Window, div,
     prelude::*, px,

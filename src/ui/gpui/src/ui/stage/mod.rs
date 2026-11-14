@@ -26,6 +26,8 @@ use std::time::{Duration, Instant};
 use gpui::{Context, SharedString, Task, Window};
 
 pub(super) use badge::LiveBadge;
+#[cfg(test)]
+pub(super) use screen::textures_for_tests;
 pub(super) use view::{overlays, render};
 #[cfg(test)]
 pub(super) use overlay::FOLLOW_EVERY;

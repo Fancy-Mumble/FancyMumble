@@ -1,5 +1,5 @@
 //! A video played in place, with a made-up player: asked about first,
-//! laid over its card, hidden under what covers it, given the keyboard
+//! laid over its card, with what floats drawn above it, given the keyboard
 //! back, and stopped and let go of when its card goes.
 
 use std::cell::RefCell;
@@ -73,7 +73,7 @@ impl Screens for Made {
     fn open(
         &self,
         page: &Page,
-        _: &gpui::Window,
+        _: &mut gpui::Window,
         said: async_channel::Sender<Said>,
     ) -> Result<Box<dyn Screen>, String> {
         self.log.borrow_mut().push(Done::Opened(page.embed()));
@@ -99,6 +99,10 @@ impl Screen for MadeScreen {
 
     fn rest(&mut self, resting: bool) {
         self.0.borrow_mut().push(Done::Rest(resting));
+    }
+
+    fn overlay(&self) -> Option<gpui::CompositionSurfaceId> {
+        Some(gpui::CompositionSurfaceId::default())
     }
 }
 
@@ -259,24 +263,34 @@ fn where_nothing_plays_in_place_the_link_is_asked_about(cx: &mut TestAppContext)
 }
 
 #[gpui::test]
-fn what_is_drawn_over_the_player_hides_it_until_it_goes(cx: &mut TestAppContext) {
+fn what_floats_is_drawn_over_the_player_which_stays(cx: &mut TestAppContext) {
     let made = Made::playing(true);
     // Not trusted, so that opening it in the browser asks first.
     let (_shell, _engine, cx) = with_video(&made, false, cx);
+    let _ = super::kit::floating::tests::asked();
+    let _ = frame(&made, cx);
+    assert!(
+        super::kit::floating::tests::asked().iter().all(Option::is_none),
+        "nothing playing: drawn as everything else"
+    );
     super::tests::click(cx, "embed-play-5");
     super::tests::click(cx, "embed-load-5");
     assert!(matches!(frame(&made, cx), Some(Placement::Shown { .. })));
-    // The question a link asks lies over the whole window.
+    // The question a link asks lies over the whole window: it is drawn on
+    // the player's overlay, and the player stays where it is under it.
     super::tests::click(cx, "video-browser-5");
-    assert_eq!(
-        frame(&made, cx),
-        Some(Placement::Hidden),
-        "under the question"
+    let _ = super::kit::floating::tests::asked();
+    let placed = frame(&made, cx);
+    assert!(matches!(placed, Some(Placement::Shown { .. })), "{placed:?}");
+    let asked = super::kit::floating::tests::asked();
+    assert!(
+        !asked.is_empty() && asked.iter().all(|surface| *surface == Some(gpui::CompositionSurfaceId::default())),
+        "on the overlay: {asked:?}"
     );
     super::tests::click(cx, "link-cancel");
     assert!(
         matches!(frame(&made, cx), Some(Placement::Shown { .. })),
-        "back"
+        "still there"
     );
 }
 

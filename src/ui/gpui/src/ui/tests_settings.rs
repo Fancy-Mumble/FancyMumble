@@ -3,6 +3,7 @@
 //! setting kept for the next start, and every control reached from the
 //! keyboard.
 
+use gpui::Focusable as _;
 use gpui::{KeyUpEvent, Keystroke, TestAppContext, VisualTestContext};
 
 use super::settings::Page;

@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use gpui::{
     AnyElement, Context, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
-    ParentElement, ScrollWheelEvent, Styled, Window, div, hsla, prelude::*, px,
+    ParentElement, ScrollEvent, Styled, Window, div, hsla, prelude::*, px,
 };
 
 use super::super::Shell;
@@ -108,7 +108,7 @@ fn panning(well: gpui::Stateful<gpui::Div>, cx: &mut Context<Shell>) -> gpui::St
         }
     }))
     .on_mouse_up(MouseButton::Left, cx.listener(|shell, _, _, _| shell.pan_let_go()))
-    .on_scroll_wheel(cx.listener(|shell, event: &ScrollWheelEvent, _, cx| shell.pan_wheel(event, cx)))
+    .on_scroll(cx.listener(|shell, event: &ScrollEvent, _, cx| shell.pan_wheel(event, cx)))
     .on_key_down(cx.listener(|shell, event: &KeyDownEvent, _, cx| {
         if shell.pan_key(event, cx) {
             cx.stop_propagation();

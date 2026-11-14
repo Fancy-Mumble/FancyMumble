@@ -13,9 +13,9 @@
 //! a thread of its own while it is in sight and makes a frame as large as it
 //! is drawn and as often as the window wants one ([`frame::Wanted`]), the
 //! [`frame::FrameSlot`] holds the newest (a frame the window did not take in
-//! time is dropped), and the stage puts its pixels into the texture the
-//! stream already has (`Window::update_image`, added to the vendored GPUI
-//! for this) instead of making a picture a frame.
+//! time is dropped), and the stage uploads its pixels into the texture the
+//! stream already has (GPUI's dynamic textures, `Window::update_dynamic_texture`)
+//! instead of making a picture a frame.
 //!
 //! # One user on several devices
 //!

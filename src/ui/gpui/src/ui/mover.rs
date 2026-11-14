@@ -2,6 +2,7 @@
 //! typed, in a dialog over the window. For one person, or for everybody
 //! who is in a channel.
 
+use gpui::Focusable as _;
 use gpui::{
     Context, Entity, IntoElement, ParentElement, SharedString, Styled, Window, div, prelude::*, px,
 };

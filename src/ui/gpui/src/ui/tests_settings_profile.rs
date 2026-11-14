@@ -1,6 +1,7 @@
 //! The Profile page of the settings: what it reads of the user's own
 //! profile, and what each of its controls sends.
 
+use gpui::Focusable as _;
 use gpui::{TestAppContext, VisualTestContext};
 use serde_json::{Value, json};
 

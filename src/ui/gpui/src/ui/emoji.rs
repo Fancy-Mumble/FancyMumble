@@ -6,6 +6,7 @@
 //! carries Unicode's own table. They are drawn as text, by the system's
 //! emoji font, and only the rows in view are built.
 
+use gpui::Focusable as _;
 use gpui::{
     AnyElement, Context, Entity, IntoElement, ParentElement, ScrollStrategy, SharedString, Styled,
     UniformListScrollHandle, Window, div, prelude::*, px, uniform_list,

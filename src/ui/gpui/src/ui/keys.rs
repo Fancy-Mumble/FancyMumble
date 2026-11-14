@@ -60,7 +60,7 @@ actions!(
 /// once there is a window for them to act on.
 pub(crate) fn bind(cx: &mut App) {
     rebind(&Bindings::default(), cx);
-    cx.on_action(|_: &Quit, cx| cx.quit());
+    let _ = cx.on_action(|_: &Quit, cx| cx.quit());
 }
 
 /// Bind the keys again: those that cannot be chosen, and those the user
@@ -79,31 +79,33 @@ pub(crate) fn rebind(chosen: &Bindings, cx: &mut App) {
     ]);
     // While writing, Ctrl+B sets bold where it is the sidebar's: the field
     // takes it back.
-    cx.bind_keys(
-        chosen
-            .chosen()
-            .filter(|(_, keys)| gpui::Keystroke::parse(keys).is_ok())
-            .filter_map(|(bound, keys)| binding(bound, &keys)),
-    );
+    // Keys a user chose are read as they come (`KeyBinding::load`); one
+    // that cannot be read is left out.
+    let chosen: Vec<KeyBinding> = chosen
+        .chosen()
+        .filter_map(|(bound, keys)| binding(bound, &keys, cx))
+        .collect();
+    cx.bind_keys(chosen);
 }
 
 /// The binding of `keys` to what `bound` does; none for what is held, which
-/// the shell hears itself.
-fn binding(bound: Bound, keys: &str) -> Option<KeyBinding> {
-    Some(match bound {
-        Bound::ToggleMute => KeyBinding::new(keys, ToggleMute, None),
-        Bound::ToggleDeafen => KeyBinding::new(keys, ToggleDeafen, None),
-        Bound::ToggleActivationMode => KeyBinding::new(keys, ToggleActivationMode, None),
-        Bound::MoveChannelUp => KeyBinding::new(keys, ChannelUp, None),
-        Bound::MoveChannelDown => KeyBinding::new(keys, ChannelDown, None),
-        Bound::JumpToRootChannel => KeyBinding::new(keys, ChannelRoot, None),
-        Bound::ToggleChannelSidebar => KeyBinding::new(keys, ToggleColumn, None),
-        Bound::ToggleMemberPanel => KeyBinding::new(keys, ToggleMembers, None),
-        Bound::OpenQuickSearch => KeyBinding::new(keys, FocusSearch, None),
-        Bound::OpenSettings => KeyBinding::new(keys, OpenSettings, None),
-        Bound::ToggleFullscreen => KeyBinding::new(keys, ToggleFullscreen, None),
+/// the shell hears itself, and none for keys that cannot be read.
+fn binding(bound: Bound, keys: &str, cx: &App) -> Option<KeyBinding> {
+    let action: Box<dyn gpui::Action> = match bound {
+        Bound::ToggleMute => Box::new(ToggleMute),
+        Bound::ToggleDeafen => Box::new(ToggleDeafen),
+        Bound::ToggleActivationMode => Box::new(ToggleActivationMode),
+        Bound::MoveChannelUp => Box::new(ChannelUp),
+        Bound::MoveChannelDown => Box::new(ChannelDown),
+        Bound::JumpToRootChannel => Box::new(ChannelRoot),
+        Bound::ToggleChannelSidebar => Box::new(ToggleColumn),
+        Bound::ToggleMemberPanel => Box::new(ToggleMembers),
+        Bound::OpenQuickSearch => Box::new(FocusSearch),
+        Bound::OpenSettings => Box::new(OpenSettings),
+        Bound::ToggleFullscreen => Box::new(ToggleFullscreen),
         Bound::VoicePriority => return None,
-    })
+    };
+    KeyBinding::load(keys, action, None, false, None, cx).ok()
 }
 
 /// Have the action `A` do `what` to the shell in `window`.
@@ -117,7 +119,7 @@ fn on<A: gpui::Action>(
     cx: &mut App,
     what: impl Fn(&mut Shell, &mut Window, &mut Context<Shell>) + Copy + 'static,
 ) {
-    cx.on_action(move |_: &A, cx| {
+    let _ = cx.on_action(move |_: &A, cx| {
         cx.defer(move |cx| {
             let _ = window.update(cx, |shell, window, cx| what(shell, window, cx));
         });
@@ -127,7 +129,7 @@ fn on<A: gpui::Action>(
 /// Have the arrow `A` walk the open menu `way`. With no menu open the key
 /// is not taken: it goes on to the field or list that has the keyboard.
 fn walk_on<A: gpui::Action>(window: WindowHandle<Shell>, cx: &mut App, way: Way) {
-    cx.on_action(move |_: &A, cx| {
+    let _ = cx.on_action(move |_: &A, cx| {
         if !arrows_held(cx) {
             cx.propagate();
             return;

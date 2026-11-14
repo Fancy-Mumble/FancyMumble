@@ -1,6 +1,5 @@
-//! Where the player's window goes in a frame: over the stage drawn for it,
-//! cut where what the stage is drawn in cuts it, and nowhere while
-//! something is drawn over it.
+//! Where the player goes in a frame: over the stage drawn for it, and cut
+//! where what the stage is drawn in cuts it.
 
 use gpui::{Bounds, Pixels};
 
@@ -63,17 +62,11 @@ pub(crate) enum Placement {
 
 impl Placement {
     /// Over `stage`, as far as `mask` lets it be seen, on a screen of
-    /// `scale` device pixels to each of the window's; hidden while
-    /// something is drawn over it.
-    pub(crate) fn of(
-        stage: Bounds<Pixels>,
-        mask: Bounds<Pixels>,
-        scale: f32,
-        covered: bool,
-    ) -> Self {
+    /// `scale` device pixels to each of the window's.
+    pub(crate) fn of(stage: Bounds<Pixels>, mask: Bounds<Pixels>, scale: f32) -> Self {
         let frame = Rect::of(stage, scale);
         let seen = frame.intersect(Rect::of(mask, scale));
-        if covered || frame.is_empty() || seen.is_empty() {
+        if frame.is_empty() || seen.is_empty() {
             return Self::Hidden;
         }
         let shows = (seen != frame).then_some(Rect {
@@ -116,7 +109,7 @@ mod tests {
 
     #[test]
     fn a_stage_in_full_view_is_covered_whole() {
-        let placed = Placement::of(stage(), bounds(0.0, 0.0, 1000.0, 800.0), 1.0, false);
+        let placed = Placement::of(stage(), bounds(0.0, 0.0, 1000.0, 800.0), 1.0);
         let frame = Rect {
             x: 100,
             y: 200,
@@ -132,7 +125,6 @@ mod tests {
             bounds(100.25, 200.5, 420.0, 236.0),
             bounds(0.0, 0.0, 1000.0, 800.0),
             1.5,
-            false,
         );
         let Placement::Shown { frame, shows } = placed else {
             panic!("shown")
@@ -148,7 +140,7 @@ mod tests {
     #[test]
     fn it_is_cut_where_the_conversation_ends() {
         // The conversation's view ends 100 pixels into the stage's top.
-        let placed = Placement::of(stage(), bounds(0.0, 300.0, 1000.0, 400.0), 1.0, false);
+        let placed = Placement::of(stage(), bounds(0.0, 300.0, 1000.0, 400.0), 1.0);
         let Placement::Shown { frame, shows } = placed else {
             panic!("shown")
         };
@@ -164,7 +156,7 @@ mod tests {
             "only the part below the edge shows"
         );
         // And at the bottom.
-        let placed = Placement::of(stage(), bounds(0.0, 0.0, 1000.0, 236.0), 1.0, false);
+        let placed = Placement::of(stage(), bounds(0.0, 0.0, 1000.0, 236.0), 1.0);
         let Placement::Shown { shows, .. } = placed else {
             panic!("shown")
         };
@@ -182,21 +174,20 @@ mod tests {
     #[test]
     fn more_than_half_of_it_must_be_seen_to_start() {
         let view = |top: f32| bounds(0.0, top, 1000.0, 800.0);
-        assert!(Placement::of(stage(), view(0.0), 1.0, false).mostly_seen());
+        assert!(Placement::of(stage(), view(0.0), 1.0).mostly_seen());
         // 100 of 236 rows cut off: 136 seen.
-        assert!(Placement::of(stage(), view(300.0), 1.0, false).mostly_seen());
+        assert!(Placement::of(stage(), view(300.0), 1.0).mostly_seen());
         // 118 cut off: exactly half, not more.
-        assert!(!Placement::of(stage(), view(318.0), 1.0, false).mostly_seen());
+        assert!(!Placement::of(stage(), view(318.0), 1.0).mostly_seen());
         assert!(!Placement::Hidden.mostly_seen());
     }
 
     #[test]
-    fn out_of_view_or_under_something_it_is_hidden() {
+    fn out_of_view_it_is_hidden() {
         let view = bounds(0.0, 0.0, 1000.0, 800.0);
-        assert_eq!(Placement::of(stage(), view, 1.0, true), Placement::Hidden);
         let above = bounds(0.0, 500.0, 1000.0, 300.0);
-        assert_eq!(Placement::of(stage(), above, 1.0, false), Placement::Hidden);
+        assert_eq!(Placement::of(stage(), above, 1.0), Placement::Hidden);
         let flat = bounds(100.0, 200.0, 420.0, 0.0);
-        assert_eq!(Placement::of(flat, view, 1.0, false), Placement::Hidden);
+        assert_eq!(Placement::of(flat, view, 1.0), Placement::Hidden);
     }
 }

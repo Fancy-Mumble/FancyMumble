@@ -454,6 +454,47 @@ fn a_frame_is_copied_to_the_clipboard(cx: &mut TestAppContext) {
     let _ = Arc::clone(&engine);
 }
 
+/// The number the pattern on the clipboard carries.
+fn copied_number(cx: &mut VisualTestContext) -> u32 {
+    click(cx, "stage-copy");
+    let copied = cx.read_from_clipboard().expect("something on the clipboard");
+    let image = copied
+        .entries()
+        .iter()
+        .find_map(|entry| match entry {
+            gpui::ClipboardEntry::Image(image) => Some(image.clone()),
+            _ => None,
+        })
+        .expect("a picture");
+    let decoded = image::load_from_memory(image.bytes()).expect("a PNG").to_rgba8();
+    let pattern = crate::share::pattern::Pattern::new(decoded.width(), decoded.height());
+    pattern.read(decoded.as_raw()).expect("the pattern, read back")
+}
+
+#[gpui::test]
+fn the_frame_copied_is_the_one_on_screen_now(cx: &mut TestAppContext) {
+    // Frames go into the texture where it lies: what is copied is the
+    // newest of them, not the first the texture was made from.
+    let (shell, engine, cx) = shell(cx);
+    says(&engine, RIN, SignalKind::Start, cx);
+    wait_for_picture(&shell, RIN, cx);
+    let first = copied_number(cx);
+    let drawn = |cx: &mut VisualTestContext| {
+        shell.read_with(cx, |shell, _| shell.stage.feeds.get(&RIN).map_or(0, |watched| watched.main().screen.borrow().drawn))
+    };
+    let before = drawn(cx);
+    for _ in 0..300 {
+        if drawn(cx) > before + 2 {
+            break;
+        }
+        shell.update(cx, |_, cx| cx.notify());
+        cx.run_until_parked();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(drawn(cx) > before + 2, "more frames came");
+    assert_ne!(copied_number(cx), first, "the newest frame, not the first");
+}
+
 #[gpui::test]
 fn the_keyboard_reaches_every_control_of_the_stage_and_the_picker(cx: &mut TestAppContext) {
     let (shell, engine, cx) = shell(cx);

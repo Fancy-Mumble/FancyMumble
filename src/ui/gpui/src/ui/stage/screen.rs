@@ -218,3 +218,37 @@ pub(crate) fn video(
     )
     .size_full()
 }
+
+/// GPUI's test platform has no dynamic textures: tests get a backend that
+/// takes every upload, so that they go the way a window on Windows or macOS
+/// goes. Process-wide, as GPUI's backend is; installed once.
+#[cfg(test)]
+pub(crate) fn textures_for_tests() {
+    /// Takes every texture and upload, and keeps nothing.
+    struct Accepting;
+
+    impl gpui::DynamicTexturePlatform for Accepting {
+        fn create_texture(
+            &self,
+            _: gpui::DynamicTextureId,
+            _: gpui::Size<DevicePixels>,
+            _: &[u8],
+        ) -> gpui::Result<()> {
+            Ok(())
+        }
+
+        fn update_texture(
+            &self,
+            _: gpui::DynamicTextureId,
+            _: Bounds<DevicePixels>,
+            _: &[u8],
+        ) -> gpui::Result<()> {
+            Ok(())
+        }
+
+        fn remove_texture(&self, _: gpui::DynamicTextureId) {}
+    }
+
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| gpui::set_dynamic_texture_platform(Arc::new(Accepting)));
+}

@@ -12,8 +12,8 @@
 //!
 //! This is the one place that asks GPUI for a second window, a window kept
 //! over the others, or an overlay (`WindowKind::Floating` and
-//! `WindowKind::Overlay`, and `Window::set_bounds`, which the vendored GPUI
-//! adds): another GPUI underneath is a change to this file.
+//! `WindowKind::Overlay`, and `Window::set_bounds`, which Fancy Mumble's
+//! fork of GPUI adds): another GPUI underneath is a change to this file.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
