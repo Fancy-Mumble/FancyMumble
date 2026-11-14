@@ -11,12 +11,6 @@ publish = false
 description = "Native GPUI view for Fancy Mumble: small memory and CPU footprint"
 license = "MIT"
 
-# The view is a library, so the Android package (a `cdylib` beside this
-# folder) runs the same code the desktop program does.
-[lib]
-name = "fancy_gpui"
-path = "src/lib.rs"
-
 [[bin]]
 name = "fancy-gpui"
 path = "src/main.rs"
@@ -41,6 +35,7 @@ x11 = ["gpui/x11", "gpui_platform/x11"]
 # windows): the fork `gpui-next`, branch `fancy`, whose FANCY_CHANGES.md
 # lists them. `gpui_platform` picks this system's platform.
 gpui = { path = "../../../../gpui-next/crates/gpui", default-features = false, features = ["font-kit", "windows-manifest", "layout-rounding-0-2"] }
+gpui_platform = { path = "../../../../gpui-next/crates/gpui_platform", default-features = false, features = ["font-kit"] }
 # The engine. Still inside the Tauri package, built here without the Tauri
 # view (`default-features = false`), so none of Tauri is compiled or linked.
 mumble-tauri = { path = "../../../crates/mumble-tauri", default-features = false, features = ["logs"] }
@@ -103,6 +98,7 @@ i_overlay = "=9.1.0"
 # Screen sharing (`src/share/`): the web client's own capture, encoder and
 # WebRTC peers, used as they are. Nothing of it runs until a share is
 # started or watched.
+fancy-screenshare = { path = "../../../crates/fancy-screenshare" }
 # Decoding a watched share to pixels, and scaling them to the room they are
 # shown in: the releases that crate already builds.
 openh264 = "0.8"
@@ -111,15 +107,6 @@ fast_image_resize = "5"
 # tone through it as a real share's sound comes. The release that crate
 # already builds.
 opus = "0.3"
-
-# Screen sharing's capture, encoder and peers: not on Android, where the
-# crate does not build (its capture library has no Android support);
-# `src/share/real_absent.rs` stands in there.
-[target.'cfg(not(target_os = "android"))'.dependencies]
-# The desktop platforms; on Android the package that loads the view brings
-# gpui_mobile's instead (`F:\fancy-migrate\android-client`).
-gpui_platform = { path = "../../../../gpui-next/crates/gpui_platform", default-features = false, features = ["font-kit"] }
-fancy-screenshare = { path = "../../../crates/fancy-screenshare" }
 
 # System notifications, where there is no `notify-send` to hand them to.
 # Linux keeps `notify-send`, which links no D-Bus stack into the view.

@@ -9,23 +9,9 @@ use std::path::PathBuf;
 /// lost.
 const APP_DIR: &str = "fancy-mumble-native";
 
-/// The directory the platform gave ([`choose`]), where the environment
-/// names none: an Android app's files directory.
-static CHOSEN: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
-
-/// Keeps the view's files in `dir` (the first choice holds).
-pub(crate) fn choose(dir: PathBuf) {
-    let _ = CHOSEN.set(dir);
-}
-
-/// The data directory: `FANCY_GPUI_DATA_DIR` if set, else the one the
-/// platform gave ([`choose`]), else the platform's place for application data.
+/// The data directory: `FANCY_GPUI_DATA_DIR` if set, else the platform's
+/// place for application data.
 pub(crate) fn data_dir() -> PathBuf {
-    if std::env::var_os("FANCY_GPUI_DATA_DIR").is_none()
-        && let Some(dir) = CHOSEN.get()
-    {
-        return dir.join(APP_DIR);
-    }
     let env = |name: &str| std::env::var_os(name).filter(|value| !value.is_empty());
     data_dir_from(&env, cfg!(target_os = "macos"), cfg!(target_os = "windows"))
 }
