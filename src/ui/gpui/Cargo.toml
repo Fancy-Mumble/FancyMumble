@@ -34,7 +34,7 @@ x11 = ["gpui/x11", "gpui_platform/x11"]
 # (a blur of what is behind an element, `Window::set_bounds`, overlay
 # windows): the fork `gpui-next`, branch `fancy`, whose FANCY_CHANGES.md
 # lists them. `gpui_platform` picks this system's platform.
-gpui = { path = "../../../../gpui-next/crates/gpui", default-features = false, features = ["font-kit", "windows-manifest"] }
+gpui = { path = "../../../../gpui-next/crates/gpui", default-features = false, features = ["font-kit", "windows-manifest", "layout-rounding-0-2"] }
 gpui_platform = { path = "../../../../gpui-next/crates/gpui_platform", default-features = false, features = ["font-kit"] }
 # The engine. Still inside the Tauri package, built here without the Tauri
 # view (`default-features = false`), so none of Tauri is compiled or linked.
