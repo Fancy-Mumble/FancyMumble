@@ -341,6 +341,7 @@ impl Render for Canvas {
                         background_color: Some(gpui::red()),
                         underline: None,
                         strikethrough: None,
+                        letter_spacing: 0.0,
                     };
                     let lines = window
                         .text_system()

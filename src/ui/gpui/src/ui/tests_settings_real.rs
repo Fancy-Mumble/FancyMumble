@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, px};
+use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, point, px};
 
 use super::Shell;
 use super::conversation::Row;
@@ -258,7 +258,7 @@ fn the_actions_stand_under_every_message_when_asked_and_stay_asked(cx: &mut Test
         cx.run_until_parked();
         // The pointer, left where the settings' button was, off the
         // conversation: the view under it now is taken as hovered.
-        cx.simulate_mouse_move(gpui::point(gpui::px(1.0), gpui::px(1.0)), None, gpui::Modifiers::none());
+        cx.simulate_mouse_move(point(px(1.0), px(1.0)), None, Modifiers::none());
         cx.executor().advance_clock(std::time::Duration::from_secs(2));
         cx.run_until_parked();
         let (_, index) = theirs(&shell, cx);
