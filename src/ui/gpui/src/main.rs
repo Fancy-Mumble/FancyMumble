@@ -70,6 +70,10 @@ fn main() {
         .with_assets(assets::Assets)
         .run(move |cx: &mut App| {
             startup.done("platform");
+            // Text is drawn in grey levels, as GPUI 0.2.2 drew it and as the
+            // web UI's look was measured against: this GPUI would use the
+            // system's ClearType (coloured edges) where it is on.
+            cx.set_text_rendering_mode(gpui::TextRenderingMode::Grayscale);
             ui::keys::bind(cx);
 
             let (engine, store) = start_engine();
