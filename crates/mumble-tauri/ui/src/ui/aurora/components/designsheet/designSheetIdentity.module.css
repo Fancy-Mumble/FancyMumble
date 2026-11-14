@@ -1,0 +1,173 @@
+/* Design sheet: dsIdentity. Split from AuroraApp.module.css. */
+
+.brandMark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: var(--ink);
+  border-radius: 10px;
+  background: #72b6df;
+  box-shadow: none;
+}
+
+.avatar {
+  position: relative;
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: #14151a;
+  font-size: 10px;
+  font-weight: 800;
+  border: 2px solid #252933;
+  border-radius: 12px;
+  border-color: rgb(163 213 255 / 20%);
+  box-shadow: none;
+  background: #9db7cc;
+}
+
+.avatar:nth-child(2n) {
+  box-shadow: none;
+  background: #94aaa8;
+}
+
+.avatar:nth-child(3n) {
+  box-shadow: none;
+  background: #aaa6bd;
+}
+
+.avatar i {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--canvas);
+  border-radius: 50%;
+  background: var(--signal);
+}
+
+.avatarRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+}
+
+.avatarGroup {
+  display: flex;
+  align-items: center;
+  margin-left: 10px;
+}
+
+.avatarGroup .avatar {
+  margin-left: -10px;
+  border-color: var(--surface);
+}
+
+.avatarGroup b {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-left: -8px;
+  color: var(--muted);
+  font-size: 9px;
+  border: 2px solid var(--surface);
+  border-radius: 12px;
+  background: #252933;
+}
+
+/* Chips use a shared content-safe box instead of inheriting table layout. */
+.chip {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  align-self: center;
+  min-width: max-content;
+  min-height: 30px;
+  padding: 4px 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: #c3c9d0;
+  border-color: rgb(255 255 255 / 9%);
+  background: rgb(255 255 255 / 4%);
+  box-shadow: none;
+  backdrop-filter: blur(18px);
+}
+
+/* Chips use a shared content-safe box instead of inheriting table layout. */
+.successChip {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  align-self: center;
+  min-width: max-content;
+  min-height: 30px;
+  padding: 4px 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: #9bc8b1;
+  border-color: rgb(255 255 255 / 9%);
+  background: rgb(255 255 255 / 4%);
+  box-shadow: none;
+  backdrop-filter: blur(18px);
+}
+
+/* Chips use a shared content-safe box instead of inheriting table layout. */
+.roleChip {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  align-self: center;
+  min-width: max-content;
+  min-height: 30px;
+  padding: 4px 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: #b7c5d1;
+  border-color: rgb(255 255 255 / 9%);
+  background: rgb(255 255 255 / 4%);
+  backdrop-filter: blur(18px);
+  box-shadow: inset 2px 0 rgb(105 183 232 / 55%);
+}
+
+/* Chips use a shared content-safe box instead of inheriting table layout. */
+.countBadge {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  justify-content: center;
+  color: var(--ink);
+  border-color: var(--signal);
+  border-radius: 999px;
+  align-self: center;
+  min-width: max-content;
+  min-height: 30px;
+  padding: 4px 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  background: #72b6df;
+  box-shadow: none;
+}
+
+.menuDanger {
+  color: #ff8d83;
+}

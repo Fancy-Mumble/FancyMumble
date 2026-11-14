@@ -1,0 +1,1273 @@
+//! Inbound message handlers: decrypt, decode, store, and acknowledge
+//! persistent chat messages received from the server.
+
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+use tracing::{debug, warn};
+
+use mumble_protocol::command;
+use mumble_protocol::persistent::PchatProtocol;
+use mumble_protocol::proto::mumble_tcp;
+
+use crate::state::local_cache::CachedMessage;
+use crate::state::types::ChatMessage;
+use crate::state::{FetchWalk, SharedState};
+
+use super::PchatState;
+use super::PendingSignalEnvelope;
+use super::conversion::proto_to_protocol;
+use super::settings::PLACEHOLDER_BODY;
+
+// -- Message delivery -------------------------------------------------
+
+pub(crate) fn handle_proto_msg_deliver(
+    shared: &Arc<Mutex<SharedState>>,
+    msg: &mumble_tcp::PchatMessageDeliver,
+) {
+    let message_id = msg.message_id.clone().unwrap_or_default();
+    let channel_id = msg.channel_id.unwrap_or(0);
+    let timestamp = msg.timestamp.unwrap_or(0);
+    let sender_hash = msg.sender_hash.clone().unwrap_or_default();
+    let protocol = proto_to_protocol(msg.protocol);
+    let envelope_bytes = msg.envelope.clone().unwrap_or_default();
+    // The canonical wire carries "not an edit" as an empty string rather than
+    // an absent field, so empty is filtered out here once.
+    let replaces_id = msg.replaces_id.clone().filter(|id| !id.is_empty());
+
+    debug!(
+        data_len = envelope_bytes.len(),
+        "pchat: handle_proto_msg_deliver entry"
+    );
+    debug!(
+        message_id = %message_id,
+        channel_id,
+        sender = %sender_hash,
+        "received pchat msg-deliver"
+    );
+
+    let Ok(mut state) = shared.lock() else { return };
+
+    let Some(pchat) = state.pchat_ctx.pchat.as_mut() else {
+        return;
+    };
+
+    let (body, sender_name, decrypted) = decrypt_or_stash(
+        pchat,
+        protocol,
+        &sender_hash,
+        channel_id,
+        &message_id,
+        timestamp,
+        envelope_bytes,
+    );
+    let is_own = is_own_hash(pchat, &sender_hash);
+
+    let cache_signal = protocol == PchatProtocol::SignalV1 && decrypted;
+    // An edit is cached once it has been applied, under the id of the message
+    // it replaced; cached here it would sit beside the original as a second
+    // message the next time the channel is restored from disk.
+    if cache_signal && replaces_id.is_none() {
+        pchat.cache_signal_message(CachedMessage {
+            message_id: message_id.clone(),
+            channel_id,
+            timestamp,
+            sender_hash: sender_hash.clone(),
+            sender_name: sender_name.clone(),
+            body: body.clone(),
+            is_own,
+        });
+    }
+
+    let sender_session = state
+        .users
+        .values()
+        .find(|u| u.hash.as_deref() == Some(&sender_hash))
+        .map(|u| u.session);
+
+    // The server never echoes PchatMessageDeliver back to the sending
+    // session, but another session on the same certificate gets it like
+    // anyone else - and what that one sent is still yours.
+    let chat_msg = ChatMessage {
+        sender_session,
+        sender_name,
+        sender_hash: Some(sender_hash),
+        body,
+        channel_id,
+        is_own,
+        dm_session: None,
+        message_id: Some(message_id.clone()),
+        timestamp: Some(timestamp),
+        is_legacy: false,
+        send_failed: false,
+        edited_at: None,
+        pinned: false,
+        pinned_by: None,
+        pinned_at: None,
+        plugin_name: None,
+        plugin_components: None,
+    };
+
+    let edited = insert_or_replace_message(
+        &mut state,
+        channel_id,
+        &message_id,
+        replaces_id.as_deref(),
+        chat_msg,
+    );
+    if cache_signal
+        && let Some(edited) = edited
+        && let Some(pchat) = state.pchat_ctx.pchat.as_mut()
+    {
+        pchat.recache_signal_message(CachedMessage {
+            message_id: edited.message_id.clone().unwrap_or_default(),
+            channel_id,
+            timestamp: edited.timestamp.unwrap_or(0),
+            sender_hash: edited.sender_hash.clone().unwrap_or_default(),
+            sender_name: edited.sender_name.clone(),
+            body: edited.body.clone(),
+            is_own: edited.is_own,
+        });
+    }
+}
+
+/// Whether `edit` comes from the certificate that wrote `original`.
+///
+/// Both hashes must be present: a message with no known author is nobody's
+/// to rewrite, and two missing hashes are not the same person.
+fn same_author(original: &ChatMessage, edit: &ChatMessage) -> bool {
+    original
+        .sender_hash
+        .as_deref()
+        .is_some_and(|hash| !hash.is_empty() && edit.sender_hash.as_deref() == Some(hash))
+}
+
+/// Whether `sender_hash` is this client's own certificate.
+///
+/// By certificate, not by session: a second session on the same identity -
+/// the phone next to this desktop - is still you, and what it sends belongs
+/// on your side of the conversation. The history fetch always decided it this
+/// way; the live paths going by session is what drew your own messages on the
+/// left the moment they arrived from another device.
+fn is_own_hash(pchat: &PchatState, sender_hash: &str) -> bool {
+    !sender_hash.is_empty() && sender_hash == pchat.own_cert_hash
+}
+
+/// Decrypt an envelope, stashing it for later retry on `SignalV1` failure.
+fn decrypt_or_stash(
+    pchat: &mut PchatState,
+    protocol: PchatProtocol,
+    sender_hash: &str,
+    channel_id: u32,
+    message_id: &str,
+    timestamp: u64,
+    envelope_bytes: Vec<u8>,
+) -> (String, String, bool) {
+    match (super::InboundEnvelope {
+        protocol,
+        sender_hash,
+        channel_id,
+        message_id,
+        timestamp,
+        envelope_bytes: &envelope_bytes,
+        epoch: None,
+        chain_index: None,
+        epoch_fingerprint: [0u8; 8],
+    })
+    .decrypt(pchat)
+    {
+        Ok(env) => {
+            debug!(message_id = %message_id, "pchat msg-deliver: decrypted OK");
+            (env.body, env.sender_name, true)
+        }
+        Err(e) => {
+            warn!(
+                message_id = %message_id,
+                channel_id,
+                sender = %sender_hash,
+                ciphertext_len = envelope_bytes.len(),
+                has_key = pchat.key_manager.has_key(channel_id, protocol),
+                "failed to decrypt message: {e}"
+            );
+            if protocol == PchatProtocol::SignalV1 {
+                pchat.stash_signal_envelope(PendingSignalEnvelope {
+                    message_id: message_id.to_owned(),
+                    channel_id,
+                    timestamp,
+                    sender_hash: sender_hash.to_owned(),
+                    envelope_bytes,
+                });
+            }
+            (PLACEHOLDER_BODY.to_string(), sender_hash.to_owned(), false)
+        }
+    }
+}
+
+/// Insert a message into the channel history, replacing an existing one
+/// if `replaces_id` matches, or deduplicating by `message_id`.
+///
+/// Returns the row an edit produced, when this was an edit that applied.
+fn insert_or_replace_message(
+    state: &mut SharedState,
+    channel_id: u32,
+    message_id: &str,
+    replaces_id: Option<&str>,
+    mut chat_msg: ChatMessage,
+) -> Option<ChatMessage> {
+    if let Some(replaces_id) = replaces_id.filter(|id| !id.is_empty()) {
+        let Some(pos) = state.msgs.by_channel.get(&channel_id).and_then(|msgs| {
+            msgs.iter()
+                .position(|m| m.message_id.as_deref() == Some(replaces_id))
+        }) else {
+            // An edit of a message this client does not hold: scrolled out
+            // of the window, or from before it joined. Appended, it would be
+            // a second copy of a message nobody here has the first of; the
+            // archive has the edited row in place for when it is paged in.
+            debug!(
+                channel_id,
+                message_id = %message_id,
+                replaces_id = %replaces_id,
+                "pchat: an edit of a message not held here was not appended"
+            );
+            return None;
+        };
+        let msgs = state.msgs.by_channel.get_mut(&channel_id)?;
+        // Only the original author may replace their message. The
+        // server can't vouch for replaces_id on protocols without
+        // server-side storage (SignalV1), so an unmatched sender here
+        // is a forged edit - keep the original and fall through to a
+        // plain insert of the new message instead.
+        if same_author(&msgs[pos], &chat_msg) {
+            // Filed under the id it replaced, not the edit's own: that is
+            // the id every later edit, pin, reaction and delete names, and
+            // the one the sender's own row kept. It also stays where it was
+            // said, with the time it was said.
+            let original = &msgs[pos];
+            chat_msg.edited_at = Some(chat_msg.timestamp.unwrap_or(0));
+            chat_msg.message_id = Some(replaces_id.to_owned());
+            chat_msg.timestamp = original.timestamp;
+            chat_msg.pinned = original.pinned;
+            chat_msg.pinned_by = original.pinned_by.clone();
+            chat_msg.pinned_at = original.pinned_at;
+            msgs[pos] = chat_msg.clone();
+            return Some(chat_msg);
+        }
+        warn!(
+            channel_id,
+            message_id = %message_id,
+            replaces_id = %replaces_id,
+            "rejected cross-sender replaces_id (forged edit); inserting as new message"
+        );
+    }
+
+    if let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id)
+        && let Some(pos) = msgs
+            .iter()
+            .position(|m| m.message_id.as_deref() == Some(message_id))
+    {
+        // A Fancy sender sends both halves of the dual path under **one**
+        // id: a plaintext `TextMessage` (the "[Encrypted message]"
+        // placeholder, for a server or peer that cannot read the real
+        // thing) and the encrypted `PchatMessage`. The receiver is meant
+        // to drop the plaintext half on sight, but that test reads the
+        // sender's advertised `FeaturePchatE2ee`, and no shipped client
+        // sets it - so the placeholder is accepted as a legacy message and
+        // whichever half lands first wins this dedup.
+        //
+        // The decrypted copy is the authoritative one and takes the slot.
+        // Left as a plain first-wins, a channel rendered "[Encrypted
+        // message]" forever whenever the text service beat the pchat
+        // service to the client, which is the usual order - the plaintext
+        // is sent first and stores less on the way through.
+        //
+        // Only ever this direction: a placeholder arriving after the real
+        // message is dropped, never written over it.
+        if msgs[pos].is_legacy && !chat_msg.is_legacy {
+            chat_msg.pinned = msgs[pos].pinned;
+            chat_msg.pinned_by = msgs[pos].pinned_by.clone();
+            chat_msg.pinned_at = msgs[pos].pinned_at;
+            msgs[pos] = chat_msg;
+        }
+        return None;
+    }
+
+    // Refused when this client has dropped the thread's tail: the message
+    // does not follow the newest row held, and putting it there would leave a
+    // hole nobody sees until they scroll into it.
+    if !state.msgs.append_live(channel_id, chat_msg) {
+        debug!(
+            channel_id,
+            "pchat: an arrival for a thread detached from its tail was not appended"
+        );
+        return None;
+    }
+
+    // Same as a plain text message: a picture landing in a channel that is
+    // not on screen goes to cold storage straight away.
+    crate::state::offload_ops::offload_newest_if_idle(state, channel_id);
+    None
+}
+
+// -- Fetch response ---------------------------------------------------
+
+pub(crate) fn handle_proto_fetch_resp(
+    shared: &Arc<Mutex<SharedState>>,
+    msg: &mumble_tcp::PchatFetchResponse,
+) {
+    let channel_id = msg.channel_id.unwrap_or(0);
+    let has_more = msg.has_more.unwrap_or(false);
+    let total_stored = msg.total_stored.unwrap_or(0);
+
+    debug!(
+        data_len = msg.messages.len(),
+        "pchat: handle_proto_fetch_resp entry"
+    );
+    debug!(
+        channel_id,
+        count = msg.messages.len(),
+        has_more,
+        total = total_stored,
+        "received pchat fetch-resp"
+    );
+
+    // Phase 1: take PchatState out so we can decrypt without holding
+    //   the lock.
+    let (mut pchat, own_cert_hash, user_hashes) = {
+        let mut state = shared.lock().ok().unwrap_or_else(|| unreachable!());
+        let Some(pchat) = state.pchat_ctx.pchat.take() else {
+            return;
+        };
+        let own_cert_hash = pchat.own_cert_hash.clone();
+        let user_hashes: HashMap<String, u32> = state
+            .users
+            .values()
+            .filter_map(|u| u.hash.as_ref().map(|h| (h.clone(), u.session)))
+            .collect();
+        (pchat, own_cert_hash, user_hashes)
+    };
+
+    // Phase 2: decrypt and decode all messages without a lock.
+    let decrypted_msgs =
+        decrypt_fetched_messages(&mut pchat, &own_cert_hash, &user_hashes, &msg.messages);
+
+    // Phase 3: re-lock briefly to put pchat back and insert messages.
+    let Ok(mut state) = shared.lock() else {
+        return;
+    };
+    state.pchat_ctx.pchat = Some(pchat);
+
+    let walk = state.msgs.window(channel_id).fetching;
+    let decrypted_msgs = reading_order(decrypted_msgs, walk);
+    let decrypted_msgs = match state.msgs.by_channel.get_mut(&channel_id) {
+        Some(held) => fold_fetched_edits(held, decrypted_msgs),
+        None => fold_fetched_edits(&mut [], decrypted_msgs),
+    };
+    merge_decrypted_messages(&mut state, channel_id, decrypted_msgs, has_more);
+}
+
+/// Settle the edits in a fetched page, returning the rows to join.
+///
+/// The archive rewrites an edited message in place, so a page usually carries
+/// it once, under the edit's id and naming the original in `replaces_id`. It
+/// is filed here under the original id, the identity every client uses for
+/// it, and marked edited; a held copy of the original takes the new words too,
+/// because the joins keep a row they already hold over the page's.
+///
+/// An archive written before that stored the edit as a row of its own beside
+/// the original, and a page can carry both. Then the original takes the
+/// newest edit's words and the edit row goes, rather than reading as a second
+/// message. An edit whose sender did not write its target is left standing as
+/// a message of its own, as the live path does.
+fn fold_fetched_edits(
+    held: &mut [ChatMessage],
+    page: Vec<(ChatMessage, Option<String>)>,
+) -> Vec<ChatMessage> {
+    let (mut rows, replaces): (Vec<ChatMessage>, Vec<Option<String>>) = page
+        .into_iter()
+        .map(|(msg, replaces)| (msg, replaces.filter(|id| !id.is_empty())))
+        .unzip();
+    let mut folded = vec![false; rows.len()];
+    let take_edit = |target: &mut ChatMessage, body: &str, edited_at: u64| {
+        if target.edited_at.is_none_or(|at| at <= edited_at) {
+            body.clone_into(&mut target.body);
+            target.edited_at = Some(edited_at);
+        }
+    };
+    for (i, target_id) in replaces.iter().enumerate() {
+        let Some(target_id) = target_id else {
+            continue;
+        };
+        let edited_at = rows[i].timestamp.unwrap_or(0);
+        let in_page = rows.iter().enumerate().position(|(j, m)| {
+            j != i && replaces[j].is_none() && m.message_id.as_deref() == Some(target_id.as_str())
+        });
+        if let Some(j) = in_page {
+            if same_author(&rows[j], &rows[i]) {
+                let body = rows[i].body.clone();
+                take_edit(&mut rows[j], &body, edited_at);
+                folded[i] = true;
+            }
+            continue;
+        }
+        if let Some(original) = held
+            .iter_mut()
+            .find(|m| m.message_id.as_deref() == Some(target_id.as_str()))
+        {
+            if !same_author(original, &rows[i]) {
+                continue;
+            }
+            take_edit(original, &rows[i].body, edited_at);
+        }
+        rows[i].message_id = Some(target_id.clone());
+        rows[i].edited_at = Some(edited_at);
+    }
+    rows.into_iter()
+        .zip(folded)
+        .filter_map(|(row, folded)| (!folded).then_some(row))
+        .collect()
+}
+
+/// A fetched page in reading order, oldest first, which is the order the
+/// joins take one in.
+///
+/// A server that walks back from a cursor hands the page over as it walked
+/// it, newest first; joined like that, a channel read back its history
+/// upside down. Only the direction of the page is read off the two rows at
+/// its ends, which the server stamped: the rows keep the server's order and
+/// are never sorted among themselves.
+fn reading_order<T>(mut page: Vec<(ChatMessage, T)>, walk: FetchWalk) -> Vec<(ChatMessage, T)> {
+    let stamp = |row: Option<&(ChatMessage, T)>| row.and_then(|(message, _)| message.timestamp);
+    let walked_back = matches!(walk, FetchWalk::Newest | FetchWalk::Older);
+    if walked_back
+        && let (Some(first), Some(last)) = (stamp(page.first()), stamp(page.last()))
+        && first > last
+    {
+        page.reverse();
+    }
+    page
+}
+
+/// Decrypt a batch of fetched messages outside the state lock.
+fn decrypt_fetched_messages(
+    pchat: &mut PchatState,
+    own_cert_hash: &str,
+    user_hashes: &HashMap<String, u32>,
+    messages: &[mumble_tcp::PchatMessage],
+) -> Vec<(ChatMessage, Option<String>)> {
+    let mut decrypted_msgs: Vec<(ChatMessage, Option<String>)> = Vec::with_capacity(messages.len());
+
+    for proto_msg in messages {
+        let msg_id = proto_msg.message_id.clone().unwrap_or_default();
+        let msg_channel_id = proto_msg.channel_id.unwrap_or(0);
+        let msg_timestamp = proto_msg.timestamp.unwrap_or(0);
+        let msg_sender_hash = proto_msg.sender_hash.clone().unwrap_or_default();
+        let protocol = proto_to_protocol(proto_msg.protocol);
+        let has_key = pchat.key_manager.has_key(msg_channel_id, protocol);
+
+        debug!(
+            message_id = %msg_id,
+            channel_id = msg_channel_id,
+            timestamp = msg_timestamp,
+            sender = %msg_sender_hash,
+            envelope_len = proto_msg.envelope.as_ref().map(Vec::len).unwrap_or(0),
+            has_key,
+            "pchat fetch-resp: processing message"
+        );
+
+        let epoch_fp: [u8; 8] = proto_msg
+            .epoch_fingerprint
+            .clone()
+            .unwrap_or_default()
+            .try_into()
+            .unwrap_or([0u8; 8]);
+
+        let (body, sender_name, decrypted) = match (super::InboundEnvelope {
+            protocol,
+            sender_hash: &msg_sender_hash,
+            channel_id: msg_channel_id,
+            message_id: &msg_id,
+            timestamp: msg_timestamp,
+            envelope_bytes: &proto_msg.envelope.clone().unwrap_or_default(),
+            epoch: proto_msg.epoch,
+            chain_index: proto_msg.chain_index,
+            epoch_fingerprint: epoch_fp,
+        })
+        .decrypt(pchat)
+        {
+            Ok(env) => {
+                debug!(message_id = %msg_id, "pchat fetch-resp: decrypted OK");
+                (env.body, env.sender_name, true)
+            }
+            Err(e) => {
+                warn!(message_id = %msg_id, channel_id = msg_channel_id, has_key, "fetch-resp: decrypt failed: {e}");
+                (PLACEHOLDER_BODY.to_string(), msg_sender_hash.clone(), false)
+            }
+        };
+
+        let is_own = !msg_sender_hash.is_empty()
+            && !own_cert_hash.is_empty()
+            && msg_sender_hash == own_cert_hash;
+
+        if protocol == PchatProtocol::SignalV1 && decrypted {
+            pchat.cache_signal_message(CachedMessage {
+                message_id: msg_id.clone(),
+                channel_id: msg_channel_id,
+                timestamp: msg_timestamp,
+                sender_hash: msg_sender_hash.clone(),
+                sender_name: sender_name.clone(),
+                body: body.clone(),
+                is_own,
+            });
+        }
+
+        debug!(
+            message_id = %msg_id,
+            msg_sender_hash = %msg_sender_hash,
+            own_cert_hash = %own_cert_hash,
+            is_own,
+            sender_name = %sender_name,
+            "pchat fetch-resp: is_own check"
+        );
+
+        let sender_session = user_hashes.get(&msg_sender_hash).copied();
+
+        decrypted_msgs.push((
+            ChatMessage {
+                sender_session,
+                sender_name,
+                sender_hash: Some(msg_sender_hash),
+                body,
+                channel_id: msg_channel_id,
+                is_own,
+                dm_session: None,
+                message_id: Some(msg_id),
+                timestamp: Some(msg_timestamp),
+                is_legacy: false,
+                send_failed: false,
+                edited_at: None,
+                pinned: false,
+                pinned_by: None,
+                pinned_at: None,
+                plugin_name: None,
+                plugin_components: None,
+            },
+            proto_msg.replaces_id.clone(),
+        ));
+    }
+
+    decrypted_msgs
+}
+
+/// Join a fetched page onto the edge of the channel's range.
+///
+/// The page is attached in the order it arrived and **never sorted**. Both the
+/// page and the range are contiguous runs in the server's order, so joining
+/// them at an edge preserves the order each already had. Sorting by timestamp,
+/// which is what this did before, ordered the whole thread by the *sender's*
+/// clock: that is chosen by the sender, skews between machines, and put a
+/// message in the wrong place permanently once it had.
+fn merge_decrypted_messages(
+    state: &mut SharedState,
+    channel_id: u32,
+    decrypted_msgs: Vec<ChatMessage>,
+    has_more: bool,
+) {
+    let walk = state.msgs.window(channel_id).fetching;
+    if decrypted_msgs.is_empty() {
+        debug!(
+            channel_id,
+            ?walk,
+            "pchat fetch-resp: no messages to insert (all filtered/empty)"
+        );
+        // Still worth recording: an empty page is how the server says there is
+        // nothing further that way, and a reader that never learns it goes on
+        // asking at the same edge forever.
+        match walk {
+            FetchWalk::Newest => state.msgs.join_tail(channel_id, Vec::new(), has_more),
+            FetchWalk::Newer => state.msgs.extend_newer(channel_id, Vec::new(), has_more),
+            FetchWalk::Older => state.msgs.extend_older(channel_id, Vec::new(), has_more),
+        }
+        return;
+    }
+
+    debug!(
+        channel_id,
+        new_count = decrypted_msgs.len(),
+        ?walk,
+        has_more,
+        "pchat fetch-resp: joining a page onto the range"
+    );
+    match walk {
+        FetchWalk::Newest => state.msgs.join_tail(channel_id, decrypted_msgs, has_more),
+        FetchWalk::Newer => state
+            .msgs
+            .extend_newer(channel_id, decrypted_msgs, has_more),
+        FetchWalk::Older => state
+            .msgs
+            .extend_older(channel_id, decrypted_msgs, has_more),
+    }
+
+    debug!(
+        channel_id,
+        total_messages = state.msgs.by_channel.get(&channel_id).map_or(0, Vec::len),
+        "pchat fetch-resp: messages after join"
+    );
+}
+
+// -- Ack --------------------------------------------------------------
+
+/// Process a server ack. For REJECTED/QUOTA acks, mark the matching
+/// optimistically-shown own messages as failed and return a payload the
+/// caller must emit as "pchat-send-rejected" - without this the message
+/// looked delivered to the sender while nobody else ever received it.
+pub(crate) fn handle_proto_ack(
+    shared: &Arc<Mutex<SharedState>>,
+    msg: &mumble_tcp::PchatAck,
+) -> Option<crate::state::types::PchatSendRejectedPayload> {
+    let message_ids = &msg.message_ids;
+    let status = msg.status.unwrap_or(0);
+    let reason = msg.reason.as_deref();
+
+    let rejected = status == mumble_tcp::PchatAckStatus::PchatAckRejected as i32
+        || status == mumble_tcp::PchatAckStatus::PchatAckQuotaExceeded as i32;
+    if !rejected {
+        debug!(?message_ids, status, "received pchat ack");
+        return None;
+    }
+
+    warn!(?message_ids, status, reason = ?reason, "pchat message rejected by server");
+
+    if message_ids.is_empty() {
+        return None;
+    }
+
+    let marked = match shared.lock() {
+        Ok(mut state) => mark_own_messages_failed(&mut state, message_ids),
+        Err(_) => Vec::new(),
+    };
+
+    if marked.is_empty() {
+        None
+    } else {
+        Some(crate::state::types::PchatSendRejectedPayload {
+            message_ids: marked,
+            reason: msg.reason.clone(),
+        })
+    }
+}
+
+/// Flag every own, not-yet-failed cached message whose id is in
+/// `message_ids` as `send_failed`, returning the ids actually marked.
+fn mark_own_messages_failed(state: &mut SharedState, message_ids: &[String]) -> Vec<String> {
+    let mut marked = Vec::new();
+    for msgs in state.msgs.by_channel.values_mut() {
+        for m in msgs.iter_mut() {
+            let matches = m.is_own
+                && !m.send_failed
+                && m.message_id
+                    .as_deref()
+                    .is_some_and(|id| message_ids.iter().any(|x| x == id));
+            if matches {
+                m.send_failed = true;
+                if let Some(ref id) = m.message_id {
+                    marked.push(id.clone());
+                }
+            }
+        }
+    }
+    marked
+}
+
+// -- Delete -----------------------------------------------------------
+
+pub(crate) fn handle_proto_delete_messages(
+    shared: &Arc<Mutex<SharedState>>,
+    msg: &mumble_tcp::PchatDeleteMessages,
+) {
+    let channel_id = msg.channel_id.unwrap_or(0);
+    let Ok(mut state) = shared.lock() else {
+        return;
+    };
+
+    // The on-disk copy first: it outlives the in-memory window below, and a
+    // channel with nothing loaded right now can still have notes on disk.
+    if !msg.message_ids.is_empty()
+        && let Some(ref mut pchat_state) = state.pchat_ctx.pchat
+        && let Some(ref mut cache) = pchat_state.local_cache
+    {
+        let _ = cache.remove(channel_id, &msg.message_ids);
+    }
+
+    let Some(messages) = state.msgs.by_channel.get_mut(&channel_id) else {
+        debug!(channel_id, "pchat delete: no local messages for channel");
+        return;
+    };
+
+    let before = messages.len();
+    let ids = &msg.message_ids;
+    let time_range = msg.time_range.as_ref();
+    let sender_hash = msg.sender_hash.as_deref();
+
+    messages.retain(|m| {
+        if !ids.is_empty()
+            && let Some(ref mid) = m.message_id
+            && ids.iter().any(|id| id == mid)
+        {
+            return false;
+        }
+        if let Some(range) = time_range
+            && let Some(ts) = m.timestamp
+        {
+            let after_from = range.from.is_none_or(|f| ts >= f);
+            let before_to = range.to.is_none_or(|t| ts <= t);
+            if after_from && before_to {
+                return false;
+            }
+        }
+        // By certificate, which is what the request names; the name is
+        // matched too for copies that never learned their sender's hash.
+        if let Some(hash) = sender_hash
+            && (m.sender_hash.as_deref() == Some(hash) || m.sender_name == hash)
+        {
+            return false;
+        }
+        true
+    });
+
+    let removed = before - messages.len();
+    debug!(
+        channel_id,
+        removed, "pchat delete: evicted messages from local store"
+    );
+}
+
+// -- Offline queue drain ----------------------------------------------
+
+pub(crate) fn handle_proto_offline_queue_drain(
+    shared: &Arc<Mutex<SharedState>>,
+    msg: &mumble_tcp::PchatOfflineQueueDrain,
+) {
+    let channel_id = msg.channel_id.unwrap_or(0);
+
+    debug!(
+        channel_id,
+        distribution_count = msg.distributions.len(),
+        message_count = msg.messages.len(),
+        "received offline queue drain"
+    );
+
+    // Process sender key distributions BEFORE attempting to decrypt
+    // messages. The server bundles all relevant SKDMs so we can
+    // establish the sender key state necessary for decryption.
+    for dist in &msg.distributions {
+        let sender_hash = dist.sender_hash.clone().unwrap_or_default();
+        let dist_channel = dist.channel_id.unwrap_or(channel_id);
+        let data = dist.distribution.clone().unwrap_or_default();
+        if !data.is_empty() {
+            let _ =
+                super::handle_signal_sender_key_by_hash(shared, &sender_hash, dist_channel, &data);
+        }
+    }
+
+    if msg.messages.is_empty() {
+        return;
+    }
+
+    let Ok(mut state) = shared.lock() else {
+        return;
+    };
+    let Some(pchat) = state.pchat_ctx.pchat.as_mut() else {
+        return;
+    };
+
+    let decrypted_msgs = decrypt_offline_batch(pchat, channel_id, &msg.messages);
+    let acked_ids = insert_offline_messages(&mut state, channel_id, &decrypted_msgs);
+
+    if let Some(msgs) = state.msgs.by_channel.get_mut(&channel_id) {
+        msgs.sort_by_key(|m| m.timestamp.unwrap_or(0));
+    }
+
+    if !acked_ids.is_empty() {
+        send_offline_queue_ack(&state, channel_id, acked_ids);
+    }
+}
+
+/// Intermediate result after decrypting a single offline-queued message.
+struct DecryptedOfflineMsg {
+    message_id: String,
+    timestamp: u64,
+    sender_hash: String,
+    body: String,
+    sender_name: String,
+    is_own: bool,
+}
+
+fn decrypt_offline_batch(
+    pchat: &mut PchatState,
+    channel_id: u32,
+    messages: &[mumble_tcp::PchatMessageDeliver],
+) -> Vec<DecryptedOfflineMsg> {
+    let mut results = Vec::with_capacity(messages.len());
+
+    for deliver in messages {
+        let message_id = deliver.message_id.clone().unwrap_or_default();
+        let timestamp = deliver.timestamp.unwrap_or(0);
+        let sender_hash = deliver.sender_hash.clone().unwrap_or_default();
+        let protocol = proto_to_protocol(deliver.protocol);
+        let envelope_bytes = deliver.envelope.clone().unwrap_or_default();
+
+        let (body, sender_name, decrypted) = match (super::InboundEnvelope {
+            protocol,
+            sender_hash: &sender_hash,
+            channel_id,
+            message_id: &message_id,
+            timestamp,
+            envelope_bytes: &envelope_bytes,
+            epoch: None,
+            chain_index: None,
+            epoch_fingerprint: [0u8; 8],
+        })
+        .decrypt(pchat)
+        {
+            Ok(env) => {
+                debug!(message_id = %message_id, "offline drain: decrypted OK");
+                (env.body, env.sender_name, true)
+            }
+            Err(e) => {
+                warn!(message_id = %message_id, channel_id, "offline drain: failed to decrypt: {e}");
+                if protocol == PchatProtocol::SignalV1 {
+                    pchat.stash_signal_envelope(PendingSignalEnvelope {
+                        message_id: message_id.clone(),
+                        channel_id,
+                        timestamp,
+                        sender_hash: sender_hash.clone(),
+                        envelope_bytes,
+                    });
+                }
+                (PLACEHOLDER_BODY.to_string(), sender_hash.clone(), false)
+            }
+        };
+        let is_own = is_own_hash(pchat, &sender_hash);
+
+        if protocol == PchatProtocol::SignalV1 && decrypted {
+            pchat.cache_signal_message(CachedMessage {
+                message_id: message_id.clone(),
+                channel_id,
+                timestamp,
+                sender_hash: sender_hash.clone(),
+                sender_name: sender_name.clone(),
+                body: body.clone(),
+                is_own,
+            });
+        }
+
+        results.push(DecryptedOfflineMsg {
+            message_id,
+            timestamp,
+            sender_hash,
+            body,
+            sender_name,
+            is_own,
+        });
+    }
+
+    results
+}
+
+fn insert_offline_messages(
+    state: &mut SharedState,
+    channel_id: u32,
+    decrypted: &[DecryptedOfflineMsg],
+) -> Vec<String> {
+    let mut acked_ids: Vec<String> = Vec::with_capacity(decrypted.len());
+
+    for dm in decrypted {
+        if let Some(msgs) = state.msgs.by_channel.get(&channel_id)
+            && msgs
+                .iter()
+                .any(|m| m.message_id.as_deref() == Some(&dm.message_id))
+        {
+            acked_ids.push(dm.message_id.clone());
+            continue;
+        }
+
+        let sender_session = state
+            .users
+            .values()
+            .find(|u| u.hash.as_deref() == Some(&dm.sender_hash))
+            .map(|u| u.session);
+
+        let chat_msg = ChatMessage {
+            sender_session,
+            sender_name: dm.sender_name.clone(),
+            sender_hash: Some(dm.sender_hash.clone()),
+            body: dm.body.clone(),
+            channel_id,
+            is_own: dm.is_own,
+            dm_session: None,
+            message_id: Some(dm.message_id.clone()),
+            timestamp: Some(dm.timestamp),
+            is_legacy: false,
+            send_failed: false,
+            edited_at: None,
+            pinned: false,
+            pinned_by: None,
+            pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
+        };
+
+        let bucket = state.msgs.by_channel.entry(channel_id).or_default();
+        crate::state::push_capped(bucket, chat_msg);
+
+        acked_ids.push(dm.message_id.clone());
+    }
+
+    acked_ids
+}
+
+fn send_offline_queue_ack(state: &SharedState, channel_id: u32, acked_ids: Vec<String>) {
+    let Some(handle) = state.conn.client_handle.clone() else {
+        return;
+    };
+    let ack = mumble_tcp::PchatAck {
+        message_ids: acked_ids.clone(),
+        status: Some(mumble_tcp::PchatAckStatus::PchatAckStored as i32),
+        reason: None,
+        channel_id: Some(channel_id),
+    };
+    let _ack_task = tokio::spawn(async move {
+        match handle.send(command::SendPchatAck { ack }).await {
+            Err(e) => {
+                warn!(channel_id, "failed to send offline queue ack: {e}");
+            }
+            _ => {
+                debug!(
+                    channel_id,
+                    count = acked_ids.len(),
+                    "sent offline queue ack"
+                );
+            }
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
+    use super::*;
+
+    /// One half of the dual path. A Fancy sender emits both under one id: the
+    /// plaintext placeholder (`is_legacy`) and the encrypted message.
+    fn half(id: &str, body: &str, is_legacy: bool) -> ChatMessage {
+        ChatMessage {
+            sender_session: Some(7),
+            sender_name: "alice".to_owned(),
+            sender_hash: Some("abcd".to_owned()),
+            body: body.to_owned(),
+            channel_id: 4,
+            is_own: false,
+            dm_session: None,
+            message_id: Some(id.to_owned()),
+            timestamp: Some(1_000),
+            is_legacy,
+            send_failed: false,
+            edited_at: None,
+            pinned: false,
+            pinned_by: None,
+            pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
+        }
+    }
+
+    fn bodies(state: &SharedState) -> Vec<String> {
+        state
+            .msgs
+            .by_channel
+            .get(&4)
+            .map(|msgs| msgs.iter().map(|m| m.body.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn the_decrypted_half_replaces_the_placeholder_that_arrived_first() {
+        // The order this actually happens in: the plaintext is sent first and
+        // stores less on the way through, so it lands first. Left as a plain
+        // first-wins dedup, the channel reads "[Encrypted message]" forever
+        // and the real message is thrown away after being decrypted.
+        let mut state = SharedState::default();
+        state
+            .msgs
+            .by_channel
+            .entry(4)
+            .or_default()
+            .push(half("m-1", PLACEHOLDER_BODY, true));
+
+        let _ = insert_or_replace_message(
+            &mut state,
+            4,
+            "m-1",
+            None,
+            half("m-1", "the real body", false),
+        );
+
+        assert_eq!(
+            bodies(&state),
+            vec!["the real body".to_owned()],
+            "the decrypted copy takes the slot, and does not sit beside it"
+        );
+    }
+
+    #[test]
+    fn a_placeholder_never_overwrites_the_message_it_stands_in_for() {
+        // The other order. The placeholder is a fallback for a peer that could
+        // not read the real thing; once the real thing is here it is never
+        // allowed to go back.
+        let mut state = SharedState::default();
+        state
+            .msgs
+            .by_channel
+            .entry(4)
+            .or_default()
+            .push(half("m-1", "the real body", false));
+
+        let _ = insert_or_replace_message(
+            &mut state,
+            4,
+            "m-1",
+            None,
+            half("m-1", PLACEHOLDER_BODY, true),
+        );
+
+        assert_eq!(bodies(&state), vec!["the real body".to_owned()]);
+    }
+
+    #[test]
+    fn a_pin_survives_the_replacement() {
+        // Pin state is held on the message rather than beside it, so replacing
+        // the row would silently unpin whatever the placeholder was pinned as.
+        let mut state = SharedState::default();
+        let mut pinned = half("m-1", PLACEHOLDER_BODY, true);
+        pinned.pinned = true;
+        pinned.pinned_by = Some("abcd".to_owned());
+        pinned.pinned_at = Some(99);
+        state.msgs.by_channel.entry(4).or_default().push(pinned);
+
+        let _ = insert_or_replace_message(
+            &mut state,
+            4,
+            "m-1",
+            None,
+            half("m-1", "the real body", false),
+        );
+
+        let msgs = state.msgs.by_channel.get(&4).unwrap();
+        assert_eq!(msgs[0].body, "the real body");
+        assert!(msgs[0].pinned, "the replacement keeps the pin");
+        assert_eq!(msgs[0].pinned_by.as_deref(), Some("abcd"));
+        assert_eq!(msgs[0].pinned_at, Some(99));
+    }
+
+    /// An edit of `of` by `sender_hash`, under its own id `e-1`.
+    fn edit(of: &str, body: &str, sender_hash: &str) -> (ChatMessage, Option<String>) {
+        let mut msg = half("e-1", body, false);
+        msg.sender_hash = Some(sender_hash.to_owned());
+        msg.timestamp = Some(2_000);
+        (msg, Some(of.to_owned()))
+    }
+
+    #[test]
+    fn a_live_edit_rewrites_the_original_under_its_own_id() {
+        let mut state = SharedState::default();
+        state
+            .msgs
+            .by_channel
+            .entry(4)
+            .or_default()
+            .push(half("m-1", "teh words", false));
+
+        let (msg, of) = edit("m-1", "the words", "abcd");
+        let edited = insert_or_replace_message(&mut state, 4, "e-1", of.as_deref(), msg);
+
+        assert!(edited.is_some());
+        let msgs = state.msgs.by_channel.get(&4).unwrap();
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].body, "the words");
+        assert_eq!(
+            msgs[0].message_id.as_deref(),
+            Some("m-1"),
+            "a later edit names the original id, so the row keeps it"
+        );
+        assert_eq!(msgs[0].edited_at, Some(2_000));
+        assert_eq!(
+            msgs[0].timestamp,
+            Some(1_000),
+            "and stays where it was said"
+        );
+    }
+
+    #[test]
+    fn a_live_edit_from_another_certificate_rewrites_nothing() {
+        let mut state = SharedState::default();
+        state
+            .msgs
+            .by_channel
+            .entry(4)
+            .or_default()
+            .push(half("m-1", "alice's words", false));
+
+        let (msg, of) = edit("m-1", "forged", "mallory");
+        let edited = insert_or_replace_message(&mut state, 4, "e-1", of.as_deref(), msg);
+
+        assert!(edited.is_none());
+        let msgs = state.msgs.by_channel.get(&4).unwrap();
+        assert_eq!(msgs[0].body, "alice's words");
+        assert!(msgs[0].edited_at.is_none());
+    }
+
+    #[test]
+    fn a_live_edit_of_a_message_not_held_is_not_appended() {
+        let mut state = SharedState::default();
+        let (msg, of) = edit("m-gone", "fixed", "abcd");
+        let _ = insert_or_replace_message(&mut state, 4, "e-1", of.as_deref(), msg);
+        assert!(bodies(&state).is_empty());
+    }
+
+    #[test]
+    fn a_page_walked_backwards_is_joined_in_reading_order() {
+        let at = |id: &str, timestamp: u64| {
+            let mut row = half(id, id, false);
+            row.timestamp = Some(timestamp);
+            (row, ())
+        };
+        let ids = |page: Vec<(ChatMessage, ())>| -> Vec<String> {
+            page.into_iter()
+                .filter_map(|(row, ())| row.message_id)
+                .collect()
+        };
+        // As a server hands back the newest page, and one before a cursor.
+        let newest_first = || vec![at("c", 30), at("b", 20), at("a", 10)];
+        assert_eq!(
+            ids(reading_order(newest_first(), FetchWalk::Newest)),
+            ["a", "b", "c"]
+        );
+        assert_eq!(
+            ids(reading_order(newest_first(), FetchWalk::Older)),
+            ["a", "b", "c"]
+        );
+        // Already in reading order: left alone, whichever way it was asked.
+        let oldest_first = || vec![at("a", 10), at("b", 20), at("c", 30)];
+        assert_eq!(
+            ids(reading_order(oldest_first(), FetchWalk::Newest)),
+            ["a", "b", "c"]
+        );
+        assert_eq!(
+            ids(reading_order(oldest_first(), FetchWalk::Newer)),
+            ["a", "b", "c"]
+        );
+        // The rows between the ends keep the server's order: never sorted.
+        let skewed = vec![at("c", 30), at("b", 99), at("a", 10)];
+        assert_eq!(
+            ids(reading_order(skewed, FetchWalk::Newest)),
+            ["a", "b", "c"]
+        );
+        assert!(reading_order(Vec::<(ChatMessage, ())>::new(), FetchWalk::Newest).is_empty());
+    }
+
+    #[test]
+    fn an_archived_edit_is_filed_under_the_original_id() {
+        // The archive rewrites the row in place: the page has it once, under
+        // the edit's id, naming what it replaced.
+        let mut held = vec![half("m-1", "teh words", false)];
+        let page = vec![edit("m-1", "the words", "abcd")];
+
+        let rows = fold_fetched_edits(&mut held, page);
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].message_id.as_deref(), Some("m-1"));
+        assert_eq!(rows[0].edited_at, Some(2_000));
+        assert_eq!(
+            held[0].body, "the words",
+            "the held copy is brought up to date"
+        );
+    }
+
+    #[test]
+    fn an_older_archive_that_kept_both_rows_shows_one_message() {
+        let page = vec![
+            (half("m-1", "teh words", false), None),
+            edit("m-1", "the words", "abcd"),
+        ];
+
+        let rows = fold_fetched_edits(&mut [], page);
+
+        assert_eq!(rows.len(), 1, "the edit row folds into the original");
+        assert_eq!(rows[0].message_id.as_deref(), Some("m-1"));
+        assert_eq!(rows[0].body, "the words");
+    }
+
+    #[test]
+    fn a_fetched_edit_from_another_certificate_stands_alone() {
+        let page = vec![
+            (half("m-1", "alice's words", false), None),
+            edit("m-1", "forged", "mallory"),
+        ];
+
+        let rows = fold_fetched_edits(&mut [], page);
+
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].body, "alice's words");
+        assert_eq!(rows[1].message_id.as_deref(), Some("e-1"));
+    }
+
+    #[test]
+    fn a_genuine_duplicate_is_still_dropped() {
+        // The dedup this rule sits inside still has to hold: two copies of the
+        // same real message are one message.
+        let mut state = SharedState::default();
+        state
+            .msgs
+            .by_channel
+            .entry(4)
+            .or_default()
+            .push(half("m-1", "the real body", false));
+
+        let _ = insert_or_replace_message(
+            &mut state,
+            4,
+            "m-1",
+            None,
+            half("m-1", "the real body", false),
+        );
+
+        assert_eq!(bodies(&state).len(), 1);
+    }
+
+    /// A delivery whose sender is this client's certificate, from another
+    /// session: the desktop sees what the phone sent as its own. By session
+    /// it was somebody else's, and was drawn on the left.
+    #[test]
+    fn a_delivery_from_our_own_certificate_is_own() {
+        let shared = Arc::new(Mutex::new(SharedState::default()));
+        shared.lock().unwrap().pchat_ctx.pchat =
+            Some(PchatState::new([0u8; 32], "cert-me".to_owned(), None).unwrap());
+
+        let deliver = |id: &str, sender: &str| mumble_tcp::PchatMessageDeliver {
+            message_id: Some(id.to_owned()),
+            channel_id: Some(4),
+            timestamp: Some(1_000),
+            sender_hash: Some(sender.to_owned()),
+            ..Default::default()
+        };
+        handle_proto_msg_deliver(&shared, &deliver("mine", "cert-me"));
+        handle_proto_msg_deliver(&shared, &deliver("theirs", "cert-other"));
+
+        let state = shared.lock().unwrap();
+        let own: Vec<(Option<&str>, bool)> = state.msgs.by_channel[&4]
+            .iter()
+            .map(|m| (m.message_id.as_deref(), m.is_own))
+            .collect();
+        assert_eq!(own, vec![(Some("mine"), true), (Some("theirs"), false)]);
+    }
+}

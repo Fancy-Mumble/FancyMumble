@@ -1,0 +1,333 @@
+/* LiveDocReferences: bookmarks, captions and cross-references. */
+
+.bookmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  margin: 0 1px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-surface-elevated, #262a32);
+  border: 1px dashed var(--color-border, rgba(255, 255, 255, 0.18));
+  color: var(--color-text-secondary, #9aa0aa);
+  font-size: 0.82em;
+  line-height: 1.4;
+  user-select: none;
+  vertical-align: baseline;
+}
+
+.bookmarkLabel {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookmarkInput {
+  width: 110px;
+  min-width: 60px;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-primary, #f5f6f8);
+  font: inherit;
+  font-size: 0.82em;
+  line-height: 1.4;
+}
+
+.bookmarkInput::placeholder {
+  color: var(--color-text-secondary, #9aa0aa);
+}
+
+.caption {
+  margin: 4px 0 12px;
+  padding: 0 8px;
+  font-size: 0.9em;
+  font-style: italic;
+  color: var(--color-text-secondary, #9aa0aa);
+  text-align: center;
+}
+
+.captionPrefix {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--color-text-primary, #f5f6f8);
+  user-select: none;
+}
+
+.captionText {
+  font-style: italic;
+}
+
+.xref,
+.xrefBroken {
+  display: inline;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.xref {
+  color: var(--color-accent, #2aabee);
+  text-decoration: none;
+}
+
+.xref:hover,
+.xref:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+.xrefBroken {
+  color: var(--color-danger, #f25c54);
+  cursor: default;
+  text-decoration: line-through;
+}
+
+/* Toolbar controls */
+.controlWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.captionMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  padding: 4px;
+  background: var(--color-surface-elevated, #262a32);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-md, 8px);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.4));
+}
+
+.captionMenuItem {
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.captionMenuItem:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
+}
+
+/* Reference picker popover */
+.picker {
+  position: absolute;
+  z-index: 40;
+  width: 280px;
+  max-height: 340px;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-elevated, #262a32);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+  border-radius: var(--radius-md, 8px);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.4));
+  overflow: hidden;
+}
+
+.pickerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+}
+
+.pickerTitle {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary, #9aa0aa);
+}
+
+.pickerClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-secondary, #9aa0aa);
+  cursor: pointer;
+}
+
+.pickerClose:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
+  color: var(--color-text-primary, #f5f6f8);
+}
+
+.pickerList {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+}
+
+.pickerEmpty {
+  margin: 0;
+  padding: 16px 12px;
+  font-size: 13px;
+  text-align: center;
+  color: var(--color-text-secondary, #9aa0aa);
+}
+
+.pickerItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-primary, #f5f6f8);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickerItem:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
+}
+
+.pickerKind {
+  flex: 0 0 auto;
+  min-width: 54px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-secondary, #9aa0aa);
+}
+
+.pickerLabel {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Endnotes */
+.endnoteRef {
+  color: var(--color-accent, #2aabee);
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0 1px;
+}
+
+.endnoteRef:hover,
+.endnoteRef:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+.endnotes {
+  margin: 16px 0 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  background: var(--color-surface, rgba(255, 255, 255, 0.02));
+  border-radius: var(--radius-md, 8px);
+}
+
+.endnotesHeader {
+  margin-bottom: 6px;
+}
+
+.endnotesTitle {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary, #9aa0aa);
+}
+
+.endnotesEmpty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary, #9aa0aa);
+}
+
+.endnotesList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: none;
+}
+
+.endnoteItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.endnoteNumber {
+  flex: 0 0 auto;
+  min-width: 22px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-secondary, #9aa0aa);
+  text-align: right;
+  user-select: none;
+}
+
+.endnoteInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--color-text-primary, #f5f6f8);
+  font: inherit;
+  font-size: 13px;
+}
+
+.endnoteInput:hover {
+  border-color: var(--color-border, rgba(255, 255, 255, 0.12));
+}
+
+.endnoteInput:focus-visible {
+  outline: none;
+  border-color: var(--color-accent, #2aabee);
+}
+
+.endnoteInput::placeholder {
+  color: var(--color-text-secondary, #9aa0aa);
+}
+
+.endnoteBackRef {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--color-text-secondary, #9aa0aa);
+  cursor: pointer;
+}
+
+.endnoteBackRef:hover {
+  background: var(--color-surface-hover, rgba(255, 255, 255, 0.06));
+  color: var(--color-text-primary, #f5f6f8);
+}

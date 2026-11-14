@@ -1,0 +1,110 @@
+# Flathub manifest for the Fancy Mumble Signal bridge.
+#
+# This is a Flatpak *extension* of com.fancy_mumble.FancyMumble, not an app. It
+# exists for exactly one reason: crates/signal-bridge links libsignal-protocol,
+# which is AGPL-3.0-only, and the client is MIT. Upstream keeps that boundary by
+# building the bridge as a cdylib in its own workspace and dlopening it at
+# runtime; the AUR packaging keeps it by splitting the .so into its own package.
+# A Flatpak app is a single immutable ref with no optional dependencies, so an
+# extension is the only construct that reproduces the same split here.
+#
+# What the split buys, concretely:
+#   * `flatpak install com.fancy_mumble.FancyMumble` puts no AGPL code on the
+#     machine (no-autodownload in the app manifest), so the app ref is MIT and
+#     is tagged MIT.
+#   * A user who wants encrypted private chat installs this ref explicitly and
+#     gets AGPL-3.0-only code, tagged as such, with its own source reference.
+#
+# What it does not buy: it is not a legal opinion. Whether a dlopened plugin and
+# its host are one work or two under the AGPL is a contested question, and
+# shipping both refs from the same store under the same brand is a weaker
+# separation than two unrelated projects. This mirrors the arrangement upstream
+# already ships in the .deb, the AppImage and the AUR packages; if the intent is
+# to be certain rather than consistent, that is a question for a lawyer, not for
+# a manifest.
+id: com.fancy_mumble.FancyMumble.SignalBridge
+branch: stable
+
+# Built against the app itself: the extension's files land in the app's mount
+# point, and the app must exist before this can be built. On Flathub that means
+# this repository is submitted after com.fancy_mumble.FancyMumble is published.
+runtime: com.fancy_mumble.FancyMumble
+runtime-version: stable
+sdk: org.gnome.Sdk//50
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+
+build-extension: true
+separate-locales: false
+# The addon metainfo is installed by hand below, into the extension's own
+# share/metainfo rather than the app's.
+appstream-compose: false
+
+# An extension has no sandbox of its own; it runs inside the app's.
+finish-args: []
+
+build-options:
+  # The extension mount point declared by the app's add-extensions block. It is
+  # also `../lib/fancy-mumble/` relative to /app/bin/mumble-tauri, which is the
+  # third entry in load_signal_bridge()'s candidate list - so dropping the
+  # library here is the whole of the runtime wiring.
+  prefix: /app/lib/fancy-mumble
+  append-path: /usr/lib/sdk/rust-stable/bin:/app/lib/fancy-mumble/bin
+  env:
+    CARGO_HOME: /run/build/signal-bridge/cargo
+    CARGO_NET_OFFLINE: 'true'
+
+modules:
+  # protoc, for libsignal-protocol's build script. Build-time only; see the
+  # same module in the app manifest for why 21.12.
+  - name: protobuf
+    buildsystem: autotools
+    config-opts:
+      - --disable-static
+    sources:
+      - type: archive
+        url: https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protobuf-cpp-3.21.12.tar.gz
+        sha256: 4eab9b524aa5913c6fffb20b2a8abf5ef7f95a80bc0701f3a6dbb4c607f73460
+    cleanup:
+      - '*'
+
+  - name: signal-bridge
+    buildsystem: simple
+    subdir: crates/signal-bridge
+    build-commands:
+      # Its own lockfile: the crate is excluded from the client workspace, so
+      # the root Cargo.lock does not cover it and cargo-sources.json here is
+      # generated from crates/signal-bridge/Cargo.lock specifically.
+      - cargo build --offline --release --locked
+      - install -Dm755 target/release/libsignal_bridge.so
+          ${FLATPAK_DEST}/libsignal_bridge.so
+      - install -Dm644 ../../packaging/flatpak/com.fancy_mumble.FancyMumble.SignalBridge.metainfo.xml
+          ${FLATPAK_DEST}/share/metainfo/com.fancy_mumble.FancyMumble.SignalBridge.metainfo.xml
+      # crates/signal-bridge carries no licence file of its own - only the
+      # header in its Cargo.toml declaring AGPL-3.0-only. libsignal's LICENSE
+      # is the AGPL text, and it sits at the root of the git checkout the
+      # generator lands in flatpak-cargo/git/ (cargo/vendor/ holds only the
+      # crate subdirectories, which have no licence file of their own).
+      # Best-effort: a missing licence file is not a reason to fail the build.
+      - |
+        set -eu
+        agpl=$(find ../../flatpak-cargo/git -maxdepth 2 -name 'LICENSE' -path '*libsignal*' | head -n1 || true)
+        if [ -n "${agpl}" ]; then
+          install -Dm644 "${agpl}" "${FLATPAK_DEST}/share/licenses/signal-bridge/LICENSE"
+        else
+          echo "warning: no libsignal LICENSE found under flatpak-cargo/git" >&2
+        fi
+
+    sources:
+      - type: git
+        url: https://github.com/Fancy-Mumble/FancyMumble.git
+        tag: v0.3.0
+        commit: efa71528ab1c0883498842dbb418796f82c59bab
+        x-checker-data:
+          type: git
+          tag-pattern: ^v([\d.]+)$
+
+      # Generated from crates/signal-bridge/Cargo.lock - see generate-sources.sh.
+      # Note this lockfile pulls two git dependencies (libsignal itself and
+      # SparsePostQuantumRatchet), which the generator vendors as git sources.
+      - signal-bridge-cargo-sources.json

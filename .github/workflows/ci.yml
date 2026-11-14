@@ -1,0 +1,908 @@
+name: CI
+
+on:
+  push:
+    branches: [main, beta]
+  pull_request:
+    branches: [main, develop, beta]
+
+# A newer push supersedes an older pull-request run. A run on `main` or `beta`
+# is never cancelled: it ends in the release job, and one cancelled between
+# creating the tag and publishing the manifest leaves a release no client is
+# told about.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+
+jobs:
+  # ----------------------------------------------------------------
+  # 0. Version consistency guard
+  # ----------------------------------------------------------------
+
+  # Also the single place that decides what this run publishes and where.
+  # `main` releases the version in the config files as-is; `beta` releases it
+  # with a `-beta.<run number>` pre-release suffix, which semver orders below
+  # the eventual stable release and above the last one:
+  #
+  #   0.3.0  <  0.4.0-beta.1  <  0.4.0-beta.2  <  0.4.0
+  #
+  # so an opted-in client rolls onto stable by itself when it ships.
+  version-check:
+    name: Version consistency
+    runs-on: ubuntu-latest
+    outputs:
+      is_beta: ${{ steps.channel.outputs.is_beta }}
+      version: ${{ steps.channel.outputs.version }}
+      tag: ${{ steps.channel.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Verify version sources agree
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAURI=$(jq -r '.version' crates/mumble-tauri/tauri.conf.json)
+          UI=$(jq -r '.version' crates/mumble-tauri/ui/package.json)
+          PROTOCOL=$(grep -m1 -E '^version[[:space:]]*=' crates/mumble-protocol/Cargo.toml | sed -E 's/.*"(.+)".*/\1/')
+          echo "tauri.conf.json:           $TAURI"
+          echo "ui/package.json:           $UI"
+          echo "mumble-protocol Cargo.toml: $PROTOCOL"
+          if [ "$TAURI" != "$UI" ] || [ "$TAURI" != "$PROTOCOL" ]; then
+            echo "::error::Version mismatch - tauri.conf.json/ui/package.json/mumble-protocol Cargo.toml must all agree."
+            exit 1
+          fi
+
+      - name: Resolve release channel and version
+        id: channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=$(jq -r '.version' crates/mumble-tauri/tauri.conf.json)
+          if [ "${{ github.ref }}" = "refs/heads/beta" ] && [ "${{ github.event_name }}" = "push" ]; then
+            IS_BETA=true
+          else
+            IS_BETA=false
+          fi
+
+          if [ "$IS_BETA" = "true" ]; then
+            # The beta branch must carry the *next* stable version. If it
+            # carried the released one, every beta would sort below the stable
+            # release already installed and reach nobody - a silent no-op that
+            # is much harder to spot than a failed build.
+            case "$BASE" in
+              *-*)
+                echo "::error::tauri.conf.json version ($BASE) already has a pre-release part; the beta branch must carry a plain X.Y.Z."
+                exit 1
+                ;;
+            esac
+            LATEST=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name 2>/dev/null | sed 's/^v//' || echo "")
+            if [ -n "$LATEST" ]; then
+              NEWEST=$(printf '%s\n%s\n' "$BASE" "$LATEST" | sort -V | tail -n1)
+              if [ "$BASE" = "$LATEST" ] || [ "$NEWEST" != "$BASE" ]; then
+                echo "::error::Beta base version ($BASE) must be greater than the latest stable release ($LATEST). Bump tauri.conf.json, ui/package.json and mumble-protocol/Cargo.toml to the next version."
+                exit 1
+              fi
+            fi
+            VERSION="$BASE-beta.${{ github.run_number }}"
+          else
+            VERSION="$BASE"
+          fi
+
+          echo "is_beta=$IS_BETA" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Channel: $([ "$IS_BETA" = true ] && echo beta || echo stable); publishing v$VERSION"
+
+  # ----------------------------------------------------------------
+  # 1. Lint & test (runs on every push / PR)
+  # ----------------------------------------------------------------
+
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      # Clippy and the unit tests compile mumble-tauri, whose build.rs would
+      # otherwise probe for the Qt MinGW kit to build the minimal client and,
+      # on a runner that has none, warn that it was skipped. That client is
+      # built and packaged by its own job.
+      SKIP_QT6UI: "1"
+
+    steps:
+      - uses: actions/checkout@v6
+
+      # -- Toolchain -----------------------------------------------
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ matrix.os }}-test
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: crates/mumble-tauri/ui/package-lock.json
+
+      # -- Linux system deps (Tauri + ALSA for cpal) --------------
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          # Direct apt install (was awalsh128/cache-apt-pkgs-action). That
+          # action dropped transitive dev deps on a cache hit - glib-2.0.pc
+          # went missing so glib-sys failed - and 404'd on a cache miss once
+          # the mirror rotated a package (e.g. libasound2-dev) to a newer
+          # version than the runner's stale apt lists, which aborted the whole
+          # install. `apt-get update` first keeps versions current;
+          # libglib2.0-dev stays listed explicitly so glib-sys finds its .pc.
+          # libpipewire-0.3-dev provides libpipewire-0.3.pc, which xcap (via
+          # fancy-screenshare) links against on Linux - libspa-sys' build
+          # script panics without it.
+          # libva-dev/libdrm-dev/libgbm-dev back fancy-screenshare's `gpu`
+          # feature (default-on): cros-codecs -> cros-libva does the VA-API
+          # H.264 encode and needs libva.pc; its cros-codecs deps drm/gbm-sys
+          # pkg-config against libdrm/libgbm in turn.
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+            libasound2-dev libgtk-3-dev libglib2.0-dev libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev protobuf-compiler libpipewire-0.3-dev \
+            libva-dev libdrm-dev libgbm-dev
+
+      - name: Install protoc (Windows)
+        if: runner.os == 'Windows'
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # -- Frontend ------------------------------------------------
+      - name: Install npm dependencies
+        working-directory: crates/mumble-tauri/ui
+        run: npm ci
+
+      - name: TypeScript type-check
+        working-directory: crates/mumble-tauri/ui
+        run: npx tsc --noEmit
+
+      - name: Frontend unit tests
+        working-directory: crates/mumble-tauri/ui
+        run: npm test
+
+      # -- Rust ----------------------------------------------------
+      # Style before correctness: a formatting failure is one command to fix,
+      # and reading a clippy diff through unformatted code wastes the reviewer.
+      # `rustfmt.toml` pins the style edition so this cannot disagree between a
+      # developer's toolchain and the runner's.
+      - name: Formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Rust unit tests (mumble-protocol)
+        run: cargo test --package mumble-protocol --features opus-codec --lib
+
+      - name: Rust unit tests (fancy-utils)
+        run: cargo test --package fancy-utils --lib
+
+      - name: Rust unit tests (mumble-tauri)
+        run: cargo test --package mumble-tauri --lib
+
+      # -- Integration tests (Linux only - Docker) ----------------
+      - name: Start Mumble test server
+        if: runner.os == 'Linux'
+        working-directory: crates/mumble-protocol
+        run: docker compose -f docker-compose.test.yml up -d --wait
+
+      - name: Integration tests
+        if: runner.os == 'Linux'
+        run: cargo test --package mumble-protocol --test integration
+
+      - name: Stop Mumble test server
+        if: runner.os == 'Linux' && always()
+        working-directory: crates/mumble-protocol
+        run: docker compose -f docker-compose.test.yml down
+
+  # ----------------------------------------------------------------
+  # 1b. Dependency policy: RUSTSEC advisories, licences, banned and
+  #     duplicate crates (policy lives in deny.toml at the repo root).
+  #     Mirrors the plugin-host gates in the server tree.
+  # ----------------------------------------------------------------
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # All four checks block: the lockfile was brought current (anyhow,
+      # aws-lc-sys, rustls-webpki, rand, yanked spin/uds_windows) and the
+      # residual advisories are per-ID ignores in deny.toml, each with its
+      # own one-line reason. A new advisory therefore fails the build until
+      # it is either fixed by an upgrade or explicitly triaged there.
+      - name: cargo-deny (advisories, bans, licenses, sources)
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories bans licenses sources
+
+  # ----------------------------------------------------------------
+  # 1c. Miri: real UB detection for the unsafe surface.
+  #
+  #     Scope: mumble-protocol (default features), skipping modules
+  #     Miri cannot or must not execute:
+  #       transport/client/work_queue - sockets, TLS FFI, the tokio
+  #         reactor;
+  #       audio - Miri's first run found real UB there (the AudioFrame
+  #         Vec<u8> -> &mut [f32] reinterpret in audio/sample.rs is
+  #         unaligned); the fix is aligned sample storage, a cross-
+  #         crate refactor tracked separately. Un-skip it once fixed.
+  #     FFI crates (tauri/screenshare/audio-device) can never run
+  #     under Miri; fancy-utils has no unsafe and its image-decoding
+  #     tests take hours under interpretation.
+  # ----------------------------------------------------------------
+
+  miri:
+    name: Miri (unsafe UB check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: miri
+
+      # mumble-protocol's build.rs compiles the .proto files via prost.
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Miri setup
+        run: cargo +nightly miri setup
+
+      - name: Miri (mumble-protocol, non-socket modules)
+        # -Zmiri-disable-isolation lets tests read the clock; without it
+        # anything touching time aborts under Miri. Skips are module-
+        # anchored (see the job comment for why each is skipped);
+        # inclusion filters match substrings and silently over-select.
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation
+        run: >
+          cargo +nightly miri test -p mumble-protocol --lib --
+          --skip "audio::" --skip "transport::" --skip "client::"
+          --skip "work_queue::"
+
+  # ----------------------------------------------------------------
+  # 2. Build Tauri app (runs on every push / PR, parallel with test)
+  # ----------------------------------------------------------------
+
+  build:
+    name: Build (${{ matrix.target.name }})
+    needs: [version-check]
+    runs-on: ${{ matrix.target.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          # `beta-bundles` is what a pre-release build is limited to. The MSI
+          # bundler rejects a non-numeric pre-release identifier outright
+          # ("must be numeric-only ... for msi target"), and a .deb versioned
+          # 0.4.0-beta.N sorts *above* the eventual 0.4.0 for dpkg (the suffix
+          # parses as a Debian revision), which would leave beta testers
+          # unable to install the stable release over it. The updater only
+          # ever consumes the NSIS installer and the AppImage anyway.
+          - name: Linux
+            os: ubuntu-latest
+            beta-bundles: "appimage"
+          - name: Windows
+            os: windows-latest
+            beta-bundles: "nsis"
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ matrix.target.os }}-build
+          workspaces: |
+            .
+            crates/signal-bridge
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: crates/mumble-tauri/ui/package-lock.json
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          # Direct apt install (was awalsh128/cache-apt-pkgs-action). That
+          # action dropped transitive dev deps on a cache hit - glib-2.0.pc
+          # went missing so glib-sys failed - and 404'd on a cache miss once
+          # the mirror rotated a package (e.g. libasound2-dev) to a newer
+          # version than the runner's stale apt lists, which aborted the whole
+          # install. `apt-get update` first keeps versions current;
+          # libglib2.0-dev stays listed explicitly so glib-sys finds its .pc.
+          # libpipewire-0.3-dev provides libpipewire-0.3.pc, which xcap (via
+          # fancy-screenshare) links against on Linux - libspa-sys' build
+          # script panics without it.
+          # libva-dev/libdrm-dev/libgbm-dev back fancy-screenshare's `gpu`
+          # feature (default-on): cros-codecs -> cros-libva does the VA-API
+          # H.264 encode and needs libva.pc; its cros-codecs deps drm/gbm-sys
+          # pkg-config against libdrm/libgbm in turn.
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+            libasound2-dev libgtk-3-dev libglib2.0-dev libsoup-3.0-dev \
+            libjavascriptcoregtk-4.1-dev protobuf-compiler libpipewire-0.3-dev \
+            libva-dev libdrm-dev libgbm-dev
+
+      - name: Install protoc (Windows)
+        if: runner.os == 'Windows'
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install npm dependencies
+        working-directory: crates/mumble-tauri/ui
+        run: npm ci
+
+      - name: Install Tauri CLI
+        uses: taiki-e/install-action@v2
+        with:
+          tool: tauri-cli
+
+      - name: Build Tauri app
+        working-directory: crates/mumble-tauri
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # signal-bridge cdylib is bundled via bundle.resources in the
+          # platform config files (tauri.linux/windows/macos.conf.json),
+          # which Tauri v2 auto-merges. (The old TAURI_CONFIG env var was a
+          # Tauri v1 feature and is ignored by Tauri v2.)
+          #
+          # Skip the nested qt6ui build (build.rs -> build_qt6ui). This job
+          # deliberately doesn't install the MinGW Qt kit, so on Windows the
+          # probe only ever emits "qt6ui skipped: Qt MinGW kit not found"
+          # warnings. The minimal Qt client is built and packaged by the
+          # dedicated "Build (Minimal Qt client)" job below, and the full
+          # client bundles only signal-bridge (not qt6ui), so there is
+          # nothing for this build to gain from it.
+          SKIP_QT6UI: "1"
+          IS_BETA: ${{ needs.version-check.outputs.is_beta }}
+          RELEASE_VERSION: ${{ needs.version-check.outputs.version }}
+          BETA_BUNDLES: ${{ matrix.target.beta-bundles }}
+        shell: bash
+        run: |
+          ARGS=()
+
+          # A beta build carries the pre-release version the release job will
+          # publish under. `--config` reaches the compiled binary too (Tauri
+          # passes it as TAURI_CONFIG, which tauri-build prefers over
+          # CARGO_PKG_VERSION), so the updater compares the right version at
+          # runtime. It also forces a rebuild of the mumble-tauri crate on
+          # every run; its dependencies stay cached.
+          if [ "$IS_BETA" = "true" ]; then
+            ARGS+=(--config "{\"version\":\"$RELEASE_VERSION\"}")
+            ARGS+=(--bundles "$BETA_BUNDLES")
+          fi
+
+          # createUpdaterArtifacts is enabled in tauri.conf.json, so Tauri
+          # signs the bundles for the auto-updater. That needs a valid
+          # TAURI_SIGNING_PRIVATE_KEY. On fork builds the repo secrets are not
+          # exposed, so the key is empty and Tauri aborts with
+          # "failed to decode secret key ... Missing comment in secret key".
+          # When no key is present, disable updater-artifact signing so the
+          # bundle still builds; signed release artifacts are produced only on
+          # the upstream repo where the secret is available.
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::warning::No TAURI_SIGNING_PRIVATE_KEY (fork build); building without signed updater artifacts."
+            ARGS+=(--config '{"bundle":{"createUpdaterArtifacts":false}}')
+          fi
+
+          cargo tauri build "${ARGS[@]}"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fancy-mumble-${{ matrix.target.name }}
+          path: |
+            target/release/bundle/**/*.deb
+            target/release/bundle/**/*.AppImage
+            target/release/bundle/**/*.AppImage.sig
+            target/release/bundle/**/*.msi
+            target/release/bundle/**/*.msi.sig
+            target/release/bundle/**/*.exe
+            target/release/bundle/**/*.exe.sig
+          if-no-files-found: warn
+
+  # ----------------------------------------------------------------
+  # 2b. Build Android APK (runs on every push / PR, parallel with test)
+  # ----------------------------------------------------------------
+
+  build-android:
+    name: Build (Android)
+    needs: [version-check]
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_KEY_PASSWORD_EFFECTIVE: ${{ secrets.ANDROID_KEY_PASSWORD != '' && secrets.ANDROID_KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
+      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ubuntu-latest-android
+          workspaces: |
+            .
+            crates/signal-bridge
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          # The action's default also asks for `tools`, an obsolete package the
+          # SDK repository no longer serves; sdkmanager fails on it.
+          packages: platform-tools
+
+      - name: Install Android NDK
+        run: sdkmanager --install "ndk;27.0.12077973"
+
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: crates/mumble-tauri/ui/package-lock.json
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install npm dependencies
+        working-directory: crates/mumble-tauri/ui
+        run: npm ci
+
+      - name: Install Tauri CLI
+        uses: taiki-e/install-action@v2
+        with:
+          tool: tauri-cli
+
+      - name: Decode google-services.json
+        if: ${{ env.GOOGLE_SERVICES_JSON != '' }}
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          echo "$GOOGLE_SERVICES_JSON" | base64 -d > crates/mumble-tauri/gen/android/app/google-services.json
+
+      - name: Build signal-bridge for Android (arm64 + x86_64)
+        working-directory: crates/signal-bridge
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang
+          CC_aarch64_linux_android: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang
+          CXX_aarch64_linux_android: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang++
+          AR_aarch64_linux_android: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+          CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android34-clang
+          CC_x86_64_linux_android: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android34-clang
+          CXX_x86_64_linux_android: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android34-clang++
+          AR_x86_64_linux_android: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
+        run: |
+          cargo build --release --target aarch64-linux-android
+          cargo build --release --target x86_64-linux-android
+
+      - name: Place signal-bridge .so in jniLibs
+        run: |
+          mkdir -p crates/mumble-tauri/gen/android/app/src/main/jniLibs/arm64-v8a
+          mkdir -p crates/mumble-tauri/gen/android/app/src/main/jniLibs/x86_64
+          cp crates/signal-bridge/target/aarch64-linux-android/release/libsignal_bridge.so \
+             crates/mumble-tauri/gen/android/app/src/main/jniLibs/arm64-v8a/
+          cp crates/signal-bridge/target/x86_64-linux-android/release/libsignal_bridge.so \
+             crates/mumble-tauri/gen/android/app/src/main/jniLibs/x86_64/
+
+      - name: Prepare Android signing keystore
+        id: android_signing
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_KEYSTORE_PASSWORD != '' && env.ANDROID_KEY_ALIAS != '' }}
+        shell: bash
+        run: |
+          KEYSTORE_PATH="$RUNNER_TEMP/android-release.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          echo "keystore_path=$KEYSTORE_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Validate Android signing keystore
+        if: ${{ steps.android_signing.outputs.keystore_path != '' }}
+        shell: bash
+        run: |
+          keytool -list \
+            -keystore "${{ steps.android_signing.outputs.keystore_path }}" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS" > /dev/null
+
+      - name: Build Android APK and App Bundle
+        working-directory: crates/mumble-tauri
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+          ANDROID_KEYSTORE_PATH: ${{ steps.android_signing.outputs.keystore_path }}
+          ANDROID_KEY_PASSWORD: ${{ env.ANDROID_KEY_PASSWORD_EFFECTIVE }}
+          IS_BETA: ${{ needs.version-check.outputs.is_beta }}
+          RELEASE_VERSION: ${{ needs.version-check.outputs.version }}
+          RUN_NUMBER: ${{ github.run_number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Play refuses a second upload at the same versionCode and serves
+          # each tester the highest code their tracks hold, so the code has to
+          # be unique and still sort by version:
+          #   (major*10000 + minor*100 + patch) * 10000 + suffix
+          # where suffix is the run number for a beta and 9999 for stable -
+          # 0.4.0-beta.207 -> 4000207, 0.4.0 -> 4009999, 0.4.1-beta.3 -> 4010003.
+          BASE="${RELEASE_VERSION%%-*}"
+          IFS=. read -r MAJOR MINOR PATCH <<< "$BASE"
+          if [ "$IS_BETA" = "true" ]; then
+            SUFFIX=$(( RUN_NUMBER % 9999 ))
+          else
+            SUFFIX=9999
+          fi
+          VERSION_CODE=$(( (MAJOR * 10000 + MINOR * 100 + PATCH) * 10000 + SUFFIX ))
+          echo "versionName=$RELEASE_VERSION versionCode=$VERSION_CODE"
+          CONFIG="{\"version\":\"$RELEASE_VERSION\",\"bundle\":{\"android\":{\"versionCode\":$VERSION_CODE}}}"
+          # arm64 and x86_64 only: signal-bridge is built for just those two,
+          # and a 32-bit build would silently run without E2E messaging.
+          cargo tauri android build --apk --aab --target aarch64 --target x86_64 --config "$CONFIG"
+
+      - name: Verify Android .so (no unresolved C++ symbols)
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+        run: |
+          chmod +x scripts/check-android-so.sh
+          ./scripts/check-android-so.sh
+
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fancy-mumble-Android
+          path: |
+            crates/mumble-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: warn
+
+      # Kept apart from the APK artifact so the release job, which attaches
+      # everything it downloads by extension, never puts the bundle on GitHub.
+      - name: Upload Android App Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: fancy-mumble-Android-bundle
+          path: |
+            crates/mumble-tauri/gen/android/app/build/outputs/bundle/**/*.aab
+            crates/mumble-tauri/gen/android/app/build/outputs/mapping/**/mapping.txt
+          if-no-files-found: warn
+
+      # Needs a Play Console service account (Setup > API access) stored as
+      # PLAY_SERVICE_ACCOUNT_JSON. Betas go to the internal track; stable goes
+      # to the track in the PLAY_STABLE_TRACK variable ("alpha" = closed
+      # testing until the account may publish to production). Until the first
+      # release has been rolled out by hand, Play only takes drafts: set the
+      # PLAY_RELEASE_STATUS variable to "draft" for that period.
+      - name: Upload to Google Play
+        if: ${{ github.event_name == 'push' && env.PLAY_SERVICE_ACCOUNT_JSON != '' && steps.android_signing.outputs.keystore_path != '' }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.fancymumble.app
+          releaseFiles: crates/mumble-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab
+          mappingFile: crates/mumble-tauri/gen/android/app/build/outputs/mapping/universalRelease/mapping.txt
+          releaseName: ${{ needs.version-check.outputs.version }}
+          track: ${{ needs.version-check.outputs.is_beta == 'true' && 'internal' || (vars.PLAY_STABLE_TRACK || 'alpha') }}
+          status: ${{ vars.PLAY_RELEASE_STATUS || 'completed' }}
+
+  # ----------------------------------------------------------------
+  # 2c. Build minimal Qt client - a standalone archive containing ONLY
+  #     qt6ui and (on Windows) the Qt/MinGW runtime it needs.
+  # ----------------------------------------------------------------
+
+  build-minimal:
+    name: Build (Minimal Qt client, ${{ matrix.target.name }})
+    runs-on: ${{ matrix.target.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          # Windows must use the GNU toolchain: MSVC and the MinGW Qt kit
+          # have incompatible C++ ABIs (see crates/qt6ui/README.md).
+          - name: Windows
+            os: windows-latest
+            rust: stable-x86_64-pc-windows-gnu
+            qt-arch: win64_mingw
+            qt-tools: tools_mingw1310
+          - name: Linux
+            os: ubuntu-latest
+            rust: stable
+            qt-arch: linux_gcc_64
+            qt-tools: ''
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.target.rust }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ matrix.target.os }}-minimal
+          workspaces: crates/qt6ui
+
+      - name: Install Qt 6
+        uses: jurplel/install-qt-action@v4
+        with:
+          # Pinned to 6.10.3 (newest version aqtinstall can install here).
+          # Qt reorganised the Windows online repository at 6.11.0: the desktop
+          # packages moved from one Updates.xml per version (qt6_<ver>/qt6_<ver>/
+          # Updates.xml) to per-arch subdirs nested under that version dir, e.g.
+          # qt6_6111/qt6_6111_mingw/Updates.xml. aqtinstall 3.3.0 (latest) still
+          # looks for qt6_6111/qt6_6111/Updates.xml (404) -> the install fails
+          # with "Failed to locate XML data for Qt version 6.11.1". Only the
+          # Windows repo migrated, so the Linux job happened to pass on 6.11.1.
+          # Bump back to 6.11.x once aqtinstall supports the new layout.
+          # See crates/qt6ui/README.md.
+          version: '6.10.3'
+          arch: ${{ matrix.target.qt-arch }}
+          tools: ${{ matrix.target.qt-tools }}
+          cache: true
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev protobuf-compiler libgl1-mesa-dev libxkbcommon-dev ninja-build
+
+      - name: Install protoc (Windows)
+        if: runner.os == 'Windows'
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install ninja (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja -y
+
+      - name: Build qt6ui (Windows)
+        if: runner.os == 'Windows'
+        working-directory: crates/qt6ui
+        shell: pwsh
+        run: |
+          $mingw = Get-ChildItem "$env:IQTA_TOOLS" -Directory -Filter "mingw*" |
+            Select-Object -First 1 -ExpandProperty FullName
+          "QT_MINGW_BIN=$mingw\bin" >> $env:GITHUB_ENV
+          $env:PATH = "$mingw\bin;$env:QT_ROOT_DIR\bin;$env:PATH"
+          $env:QMAKE = "$env:QT_ROOT_DIR\bin\qmake.exe"
+          # audiopus_sys' CMake build must not fall back to "Unix Makefiles"
+          # with a stray make/sh; Ninja handles paths with spaces.
+          $env:CMAKE_GENERATOR = "Ninja"
+          cargo +stable-x86_64-pc-windows-gnu build --release
+
+      - name: Build qt6ui (Linux)
+        if: runner.os == 'Linux'
+        working-directory: crates/qt6ui
+        run: |
+          export QMAKE="$QT_ROOT_DIR/bin/qmake"
+          export CMAKE_GENERATOR=Ninja
+          cargo build --release
+
+      - name: Package minimal client (Windows, windeployqt)
+        if: runner.os == 'Windows'
+        working-directory: crates/qt6ui
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:QT_MINGW_BIN;$env:QT_ROOT_DIR\bin;$env:PATH"
+          New-Item -ItemType Directory dist-minimal | Out-Null
+          Copy-Item target\release\qt6ui.exe dist-minimal\
+          # LGPL compliance: ship the license texts with the Qt runtime.
+          Copy-Item COPYING, COPYING.LESSER, README.md dist-minimal\
+          & "$env:QT_ROOT_DIR\bin\windeployqt.exe" --release --qmldir qml `
+            --no-translations --no-system-d3d-compiler --no-opengl-sw `
+            --compiler-runtime dist-minimal\qt6ui.exe
+          Compress-Archive -Path dist-minimal\* -DestinationPath fancy-mumble-minimal-win64.zip
+          "minimal zip: {0:N1} MB" -f ((Get-Item fancy-mumble-minimal-win64.zip).Length / 1MB)
+
+      - name: Package minimal client (Linux, tar.gz)
+        if: runner.os == 'Linux'
+        working-directory: crates/qt6ui
+        run: |
+          mkdir dist-minimal
+          cp target/release/qt6ui dist-minimal/
+          cp COPYING COPYING.LESSER README.md dist-minimal/
+          cat > dist-minimal/README-LINUX.txt <<'EOF'
+          Fancy Mumble - minimal Qt client (Linux x86_64)
+
+          Requires the Qt 6 QML runtime from your distribution:
+            Debian/Ubuntu: qml6-module-qtquick-controls qml6-module-qtquick-layouts
+                           qml6-module-qtquick-window libqt6quick6
+            Fedora:        qt6-qtdeclarative
+            Arch:          qt6-declarative
+
+          Then run ./qt6ui
+          EOF
+          tar -C dist-minimal -czf fancy-mumble-minimal-linux-x64.tar.gz .
+          ls -lh fancy-mumble-minimal-linux-x64.tar.gz
+
+      - name: Upload minimal client artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fancy-mumble-minimal-${{ matrix.target.name }}
+          path: |
+            crates/qt6ui/fancy-mumble-minimal-*.zip
+            crates/qt6ui/fancy-mumble-minimal-*.tar.gz
+          if-no-files-found: error
+
+  # ----------------------------------------------------------------
+  # 3. Release. Two channels, one job:
+  #
+  #   main -> stable. Published as a normal release, flagged latest, and
+  #           served to every client through
+  #           releases/latest/download/latest.json.
+  #   beta -> pre-release. Flagged `prerelease`, so GitHub keeps it out of
+  #           releases/latest and off the sidebar while still listing it on
+  #           the Releases tab. Its manifest is copied to beta.json on the
+  #           orphan `updater` branch, which is the only thing a client
+  #           opted into betas fetches - GitHub publishes no "latest
+  #           pre-release" download alias.
+  # ----------------------------------------------------------------
+
+  release:
+    name: Release
+    needs: [version-check, build, build-android, build-minimal]
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve version
+        id: version
+        env:
+          IS_BETA: ${{ needs.version-check.outputs.is_beta }}
+        run: |
+          echo "version=${{ needs.version-check.outputs.version }}" >> "$GITHUB_OUTPUT"
+          echo "tag=${{ needs.version-check.outputs.tag }}" >> "$GITHUB_OUTPUT"
+          echo "is_beta=$IS_BETA" >> "$GITHUB_OUTPUT"
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f | head -50
+
+      - name: Generate latest.json for auto-updater
+        id: latest_json
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          BASE="https://github.com/${{ github.repository }}/releases/download/$TAG"
+          NOTES="https://github.com/${{ github.repository }}/releases/tag/$TAG"
+          chmod +x scripts/make-update-manifest.sh
+          ./scripts/make-update-manifest.sh \
+            "${{ steps.version.outputs.version }}" "$BASE" artifacts "$NOTES" > latest.json
+          cat latest.json
+
+      # The hand-written section for this version leads the release notes and
+      # GitHub's generated list follows it. develop takes direct pushes, so the
+      # generated list alone would be one line: the pull request into main.
+      - name: Release notes from the changelog
+        run: |
+          set -euo pipefail
+          bash scripts/changelog-section.sh "${{ steps.version.outputs.version }}" > release-notes.md
+          cat release-notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md
+          tag_name: ${{ steps.version.outputs.tag }}
+          # The commit the tag is created on. Left unset, the action tags the
+          # repository's default branch - v0.4.0-beta.202 was cut from `beta`
+          # and its tag landed on `main`, at the 0.3.0 commit.
+          target_commitish: ${{ github.sha }}
+          name: Fancy Mumble ${{ steps.version.outputs.tag }}${{ steps.version.outputs.is_beta == 'true' && ' (beta)' || '' }}
+          generate_release_notes: true
+          draft: false
+          # A pre-release is listed on the Releases tab with GitHub's
+          # "Pre-release" marker but is excluded from releases/latest, which
+          # is exactly what keeps stable clients from ever seeing it.
+          prerelease: ${{ steps.version.outputs.is_beta == 'true' }}
+          make_latest: ${{ steps.version.outputs.is_beta != 'true' }}
+          files: |
+            artifacts/**/*.deb
+            artifacts/**/*.AppImage
+            artifacts/**/*.AppImage.sig
+            artifacts/**/*.msi
+            artifacts/**/*.msi.sig
+            artifacts/**/*.exe
+            artifacts/**/*.exe.sig
+            artifacts/**/*.apk
+            artifacts/**/*.so
+            artifacts/**/*.dll
+            artifacts/**/fancy-mumble-minimal-*.zip
+            artifacts/**/fancy-mumble-minimal-*.tar.gz
+            latest.json
+
+      # Runs only after the release exists, so the URLs inside beta.json are
+      # live by the time any client can read it. The `updater` branch holds
+      # nothing but this file and is not in the workflow's trigger list, so
+      # pushing to it starts no CI.
+      - name: Publish beta manifest to the updater branch
+        if: steps.version.outputs.is_beta == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git fetch origin updater; then
+            git worktree add updater-branch FETCH_HEAD
+            git -C updater-branch checkout -B updater
+          else
+            echo "No updater branch yet; creating it."
+            git worktree add --orphan -b updater updater-branch
+          fi
+          cp latest.json updater-branch/beta.json
+          git -C updater-branch add beta.json
+          if git -C updater-branch diff --cached --quiet; then
+            echo "beta.json unchanged; nothing to push."
+          else
+            git -C updater-branch commit -m "beta.json for $TAG"
+            git -C updater-branch push origin updater
+          fi

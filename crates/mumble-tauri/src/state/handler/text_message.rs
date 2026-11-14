@@ -1,0 +1,855 @@
+use fancy_utils::html::{message_preview, strip_legacy_fallback};
+use mumble_protocol::persistent::PchatProtocol;
+use mumble_protocol::proto::mumble_tcp;
+
+use super::{HandleMessage, HandlerContext};
+use crate::state::SharedState;
+use crate::state::core_event::CoreEvent;
+use crate::state::types::*;
+
+// -- Message classification ----------------------------------------
+
+/// Classification of an incoming `TextMessage`.
+enum MessageKind {
+    DirectMessage,
+    Channel,
+}
+
+fn classify(tm: &mumble_tcp::TextMessage) -> MessageKind {
+    let is_dm = !tm.session.is_empty() && tm.channel_id.is_empty();
+    if is_dm {
+        MessageKind::DirectMessage
+    } else {
+        MessageKind::Channel
+    }
+}
+
+// -- Deferred events emitted after releasing the lock --------------
+
+enum DeferredEvent {
+    DirectMessage {
+        sender_session: u32,
+        sender_name: String,
+        body: String,
+    },
+    DmUnreads,
+    /// A conversation changed without news: our own message, sent from
+    /// another of our devices, filed where this device will show it.
+    DmSynced {
+        peer_session: u32,
+    },
+    NewMessage {
+        channel_id: u32,
+        sender_session: Option<u32>,
+    },
+    RequestUserAttention,
+    ChannelMessage {
+        channel_id: u32,
+        sender_name: String,
+        body: String,
+        sender_session: Option<u32>,
+    },
+    ChannelUnreads,
+}
+
+struct DeferredEmitter<'a> {
+    events: Vec<DeferredEvent>,
+    ctx: &'a HandlerContext,
+}
+
+impl<'a> DeferredEmitter<'a> {
+    fn new(ctx: &'a HandlerContext) -> Self {
+        Self {
+            events: Vec::new(),
+            ctx,
+        }
+    }
+
+    fn push(&mut self, event: DeferredEvent) {
+        self.events.push(event);
+    }
+
+    fn flush(self) {
+        for event in &self.events {
+            match event {
+                DeferredEvent::DirectMessage {
+                    sender_session,
+                    sender_name,
+                    body,
+                } => {
+                    self.emit_direct_message(*sender_session, sender_name, body);
+                }
+                DeferredEvent::DmUnreads => self.emit_dm_unreads(),
+                DeferredEvent::DmSynced { peer_session } => {
+                    self.ctx.send(CoreEvent::DmSynced(NewDmPayload {
+                        session: *peer_session,
+                    }));
+                }
+                DeferredEvent::NewMessage {
+                    channel_id,
+                    sender_session,
+                } => {
+                    self.ctx.send(CoreEvent::NewMessage(NewMessagePayload {
+                        channel_id: *channel_id,
+                        sender_session: *sender_session,
+                    }));
+                }
+                DeferredEvent::RequestUserAttention => {
+                    self.ctx.request_user_attention();
+                }
+                DeferredEvent::ChannelMessage {
+                    channel_id,
+                    sender_name,
+                    body,
+                    sender_session,
+                } => {
+                    self.emit_channel_notification(*channel_id, sender_name, body, *sender_session)
+                }
+                DeferredEvent::ChannelUnreads => self.emit_channel_unreads(),
+            }
+        }
+    }
+
+    fn emit_direct_message(&self, sender_session: u32, sender_name: &str, body: &str) {
+        self.ctx.send(CoreEvent::NewDm(NewDmPayload {
+            session: sender_session,
+        }));
+        self.ctx.request_user_attention();
+        let icon = self.lookup_texture(Some(sender_session));
+        self.ctx.send_notification_with_icon(
+            sender_name,
+            &message_preview(body),
+            icon.as_deref(),
+            None,
+        );
+    }
+
+    fn emit_dm_unreads(&self) {
+        let unreads = self
+            .ctx
+            .shared
+            .lock()
+            .map(|s| s.msgs.dm_unread.clone())
+            .unwrap_or_default();
+        self.ctx
+            .send(CoreEvent::DmUnreadChanged(DmUnreadPayload { unreads }));
+    }
+
+    fn emit_channel_unreads(&self) {
+        let unreads = self
+            .ctx
+            .shared
+            .lock()
+            .map(|s| s.msgs.channel_unread.clone())
+            .unwrap_or_default();
+        self.ctx
+            .send(CoreEvent::UnreadChanged(UnreadPayload { unreads }));
+    }
+
+    fn emit_channel_notification(
+        &self,
+        channel_id: u32,
+        sender_name: &str,
+        body: &str,
+        sender_session: Option<u32>,
+    ) {
+        let (channel_name, icon) = self
+            .ctx
+            .shared
+            .lock()
+            .ok()
+            .map(|s| {
+                let name = s.channels.get(&channel_id).map(|c| c.name.clone());
+                let texture = sender_session
+                    .and_then(|sid| s.users.get(&sid).and_then(|u| u.texture.clone()));
+                (name, texture)
+            })
+            .unwrap_or_default();
+        let title = match channel_name {
+            Some(name) => format!("{sender_name} in #{name}"),
+            None => sender_name.to_owned(),
+        };
+        self.ctx.send_notification_with_icon(
+            &title,
+            &message_preview(body),
+            icon.as_deref(),
+            Some(channel_id),
+        );
+    }
+
+    fn lookup_texture(&self, session: Option<u32>) -> Option<Vec<u8>> {
+        let sid = session?;
+        self.ctx
+            .shared
+            .lock()
+            .ok()?
+            .users
+            .get(&sid)?
+            .texture
+            .clone()
+    }
+}
+
+// -- Helpers -------------------------------------------------------
+
+/// Who sent an edit, as far as this client can tell.
+struct Editor<'a> {
+    session: Option<u32>,
+    /// The certificate hash behind `session`, when it is known.
+    hash: Option<&'a str>,
+}
+
+impl Editor<'_> {
+    /// Whether this editor wrote `original`.
+    ///
+    /// By certificate hash whenever both sides have one: it is the identity
+    /// that survives a reconnect, where the session id changes, and that a
+    /// reused session id does not inherit. By session only when a hash is
+    /// missing, because then it is all there is. An edit used to be matched by
+    /// message id alone, so anybody could rewrite anybody's message on every
+    /// Fancy client by naming its id.
+    fn wrote(&self, original: &ChatMessage) -> bool {
+        let theirs = original.sender_hash.as_deref().filter(|h| !h.is_empty());
+        match (theirs, self.hash.filter(|h| !h.is_empty())) {
+            (Some(theirs), Some(mine)) => theirs == mine,
+            _ => self.session.is_some() && original.sender_session == self.session,
+        }
+    }
+}
+
+/// Apply an edit to a message list, returning `true` if it was applied.
+///
+/// Refused when `editor` is not the author of the target. Also refused, in a
+/// channel that runs persistent chat (`sealed_channel`), when the target is
+/// not a legacy message: such a message arrived sealed, the sender's edit
+/// arrives sealed too, and the plain copy beside it is for stock clients. In
+/// an encrypted channel with dual path off that copy is the "[Encrypted
+/// message]" placeholder, which must never overwrite the words it stands in
+/// for.
+fn apply_edit(
+    messages: &mut [ChatMessage],
+    edit_id: &str,
+    new_body: &str,
+    edited_at: u64,
+    editor: &Editor<'_>,
+    sealed_channel: bool,
+) -> bool {
+    let Some(msg) = messages
+        .iter_mut()
+        .find(|m| m.message_id.as_deref() == Some(edit_id))
+    else {
+        return false;
+    };
+    if !editor.wrote(msg) {
+        tracing::warn!(
+            edit_id,
+            editor = ?editor.session,
+            "rejected an edit of somebody else's message"
+        );
+        return false;
+    }
+    if sealed_channel && !msg.is_legacy {
+        return false;
+    }
+    msg.body = new_body.to_owned();
+    msg.edited_at = Some(edited_at);
+    true
+}
+
+/// Cut the legacy-only "(edited)" note off the front of an edit's body.
+///
+/// The sender puts it there for stock clients, which ignore `edit_id` and
+/// draw an edit as a new message (`messaging::LEGACY_EDITED_MARK`). Cut here
+/// as well as by `strip_legacy_fallback`, which only cuts a fence when a Fancy
+/// marker vouches for it, so a sender that left the tag off is still read
+/// right; and only at the very front, where the sender put it, so a fence
+/// somebody wrote into their text stays.
+/// Whatever is inside the fence goes, so a server with HTML off that rewrote
+/// `<i>(edited)</i>` to `(edited)` is handled the same, and so does the
+/// fallback tag in front of it.
+fn strip_legacy_edit_mark(body: &str) -> String {
+    use fancy_utils::html::{LEGACY_FALLBACK_CLOSE, LEGACY_FALLBACK_OPEN, LEGACY_FALLBACK_TAG};
+    let lead = body.trim_start();
+    let lead = lead.strip_prefix(LEGACY_FALLBACK_TAG).unwrap_or(lead);
+    if let Some(rest) = lead.trim_start().strip_prefix(LEGACY_FALLBACK_OPEN)
+        && let Some(end) = rest.find(LEGACY_FALLBACK_CLOSE)
+    {
+        return rest[end + LEGACY_FALLBACK_CLOSE.len()..]
+            .trim_start()
+            .to_owned();
+    }
+    body.to_owned()
+}
+
+fn emit_edit_events(
+    kind: &MessageKind,
+    tm: &mumble_tcp::TextMessage,
+    _state: &SharedState,
+    ctx: &HandlerContext,
+    deferred: &mut DeferredEmitter<'_>,
+) {
+    match kind {
+        MessageKind::DirectMessage => {
+            if let Some(sid) = tm.actor {
+                ctx.send(CoreEvent::DmEdited(NewDmPayload { session: sid }));
+            }
+        }
+        MessageKind::Channel => {
+            let ids = if tm.channel_id.is_empty() {
+                &[0u32][..]
+            } else {
+                &tm.channel_id
+            };
+            for &ch_id in ids {
+                deferred.push(DeferredEvent::NewMessage {
+                    channel_id: ch_id,
+                    sender_session: tm.actor,
+                });
+            }
+        }
+    }
+}
+
+fn try_apply_edit(
+    tm: &mumble_tcp::TextMessage,
+    kind: &MessageKind,
+    edit_id: &str,
+    state: &mut SharedState,
+) -> bool {
+    let edited_at = tm.timestamp.unwrap_or_else(|| {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64
+    });
+    let body = strip_legacy_edit_mark(&strip_legacy_fallback(&tm.message));
+    let editor_hash = resolve_sender_hash(state, tm.actor);
+    let editor = Editor {
+        session: tm.actor,
+        hash: editor_hash.as_deref(),
+    };
+    match kind {
+        MessageKind::DirectMessage => tm
+            .actor
+            .and_then(|sid| state.msgs.by_dm.get_mut(&sid))
+            .is_some_and(|msgs| apply_edit(msgs, edit_id, &body, edited_at, &editor, false)),
+        MessageKind::Channel => {
+            let channel_ids = if tm.channel_id.is_empty() {
+                vec![0u32]
+            } else {
+                tm.channel_id.clone()
+            };
+            channel_ids.iter().any(|ch_id| {
+                let sealed = state
+                    .channels
+                    .get(ch_id)
+                    .and_then(|c| c.pchat_protocol)
+                    .is_some_and(|p| p.uses_pchat());
+                state.msgs.by_channel.get_mut(ch_id).is_some_and(|msgs| {
+                    apply_edit(msgs, edit_id, &body, edited_at, &editor, sealed)
+                })
+            })
+        }
+    }
+}
+
+/// Whether a channel message attributed to this session is one the server
+/// sent on its behalf rather than an echo of a send already stored here.
+///
+/// An echo repeats the id `send_message` stored its local copy under, so only
+/// an id nothing here carries yet qualifies. Without an id the two cannot be
+/// told apart, and the message is treated as the echo it usually is.
+fn is_unseen_own_channel_message(
+    tm: &mumble_tcp::TextMessage,
+    kind: &MessageKind,
+    state: &SharedState,
+) -> bool {
+    let MessageKind::Channel = kind else {
+        return false;
+    };
+    let Some(id) = tm.message_id.as_deref() else {
+        return false;
+    };
+    let channel_ids = if tm.channel_id.is_empty() {
+        &[0u32][..]
+    } else {
+        &tm.channel_id[..]
+    };
+    !channel_ids.iter().any(|ch_id| {
+        state
+            .msgs
+            .by_channel
+            .get(ch_id)
+            .is_some_and(|msgs| msgs.iter().any(|m| m.message_id.as_deref() == Some(id)))
+    })
+}
+
+// -- Per-kind handlers ---------------------------------------------
+
+fn resolve_sender_name(state: &SharedState, actor: Option<u32>) -> String {
+    actor
+        .and_then(|sid| state.users.get(&sid))
+        .map(|u| u.name.clone())
+        .unwrap_or_else(|| "Server".into())
+}
+
+fn resolve_sender_hash(state: &SharedState, actor: Option<u32>) -> Option<String> {
+    actor
+        .and_then(|sid| state.users.get(&sid))
+        .and_then(|u| u.hash.clone())
+}
+
+/// The conversation a direct message belongs to when it is our own, sent from
+/// another of our devices, or `None` when it is somebody else's.
+///
+/// The server copies a direct message to the sender's other sessions so a
+/// conversation started on one device is on all of them. That copy arrives
+/// from a session that is not ours but is our *account*, and read as an
+/// ordinary message it was a DM from ourselves: a conversation with our own
+/// other device, an unread badge and a notification for words we just typed.
+/// It belongs in the conversation with whoever it was sent to.
+fn own_copy_peer(tm: &mumble_tcp::TextMessage, state: &SharedState) -> Option<u32> {
+    let actor = tm.actor?;
+    let own = state.conn.own_session?;
+    if actor == own {
+        return None;
+    }
+    let account = |session: u32| state.users.get(&session).and_then(|user| user.user_id);
+    let ours = account(own)?;
+    if account(actor) != Some(ours) {
+        return None;
+    }
+    // Addressed to this very session is a note from our other device to this
+    // one, which is news here like any other message.
+    let peer = tm.session.first().copied()?;
+    (peer != own).then_some(peer)
+}
+
+fn handle_direct_message(
+    tm: &mumble_tcp::TextMessage,
+    state: &mut SharedState,
+    deferred: &mut DeferredEmitter,
+) {
+    let Some(sender_session) = tm.actor else {
+        return;
+    };
+
+    if let Some(peer) = own_copy_peer(tm, state) {
+        let mut msg = ChatMessage {
+            sender_session: tm.actor,
+            sender_name: resolve_sender_name(state, tm.actor),
+            sender_hash: resolve_sender_hash(state, tm.actor),
+            body: strip_legacy_fallback(&tm.message),
+            channel_id: 0,
+            // Ours, so no unread and no notification: we wrote it.
+            is_own: true,
+            dm_session: Some(peer),
+            message_id: tm.message_id.clone(),
+            timestamp: tm.timestamp,
+            is_legacy: false,
+            send_failed: false,
+            edited_at: None,
+            pinned: false,
+            pinned_by: None,
+            pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
+        };
+        msg.ensure_id();
+        let bucket = state.msgs.by_dm.entry(peer).or_default();
+        crate::state::push_capped(bucket, msg);
+        deferred.push(DeferredEvent::DmSynced { peer_session: peer });
+        return;
+    }
+
+    let sender_name = resolve_sender_name(state, tm.actor);
+    let mut msg = ChatMessage {
+        sender_session: tm.actor,
+        sender_name,
+        sender_hash: resolve_sender_hash(state, tm.actor),
+        body: strip_legacy_fallback(&tm.message),
+        channel_id: 0,
+        is_own: false,
+        dm_session: Some(sender_session),
+        message_id: tm.message_id.clone(),
+        timestamp: tm.timestamp,
+        is_legacy: false,
+        send_failed: false,
+        edited_at: None,
+        pinned: false,
+        pinned_by: None,
+        pinned_at: None,
+        plugin_name: None,
+        plugin_components: None,
+    };
+    msg.ensure_id();
+    state
+        .msgs
+        .by_dm
+        .entry(sender_session)
+        .or_default()
+        .push(msg);
+
+    if state.msgs.selected_dm_user != Some(sender_session) {
+        *state.msgs.dm_unread.entry(sender_session).or_insert(0) += 1;
+        deferred.push(DeferredEvent::DmUnreads);
+    }
+
+    deferred.push(DeferredEvent::DirectMessage {
+        sender_session,
+        sender_name: resolve_sender_name(state, tm.actor),
+        body: strip_legacy_fallback(&tm.message),
+    });
+}
+
+fn handle_channel_message(
+    tm: &mumble_tcp::TextMessage,
+    state: &mut SharedState,
+    deferred: &mut DeferredEmitter,
+) {
+    let target_channels: Vec<u32> = if tm.channel_id.is_empty() {
+        vec![0]
+    } else {
+        tm.channel_id.clone()
+    };
+
+    let selected = state.selected_channel;
+    let app_focused = state.prefs.app_focused;
+    let sender_name = resolve_sender_name(state, tm.actor);
+    // Only reaches here for our own session when the server sent the message
+    // for us (see `is_unseen_own_channel_message`): ours to read, not news.
+    // Another session on our certificate is us too - the phone next to this
+    // desktop - so the hash decides as well as the session.
+    let sender_hash = resolve_sender_hash(state, tm.actor);
+    let own_hash = resolve_sender_hash(state, state.conn.own_session);
+    let is_own = tm.actor.is_some()
+        && (tm.actor == state.conn.own_session || (own_hash.is_some() && sender_hash == own_hash));
+    let mut unreads_changed = false;
+
+    for &ch_id in &target_channels {
+        // For pchat-enabled channels, check whether the sender supports E2EE.
+        // If they do, skip - the authoritative PchatMessageDeliver will arrive
+        // separately.  If they don't (legacy client), accept the TextMessage
+        // and mark it as legacy so the UI can style it differently.
+        let has_pchat = state
+            .channels
+            .get(&ch_id)
+            .and_then(|c| c.pchat_protocol)
+            .is_some_and(|m| !matches!(m, PchatProtocol::None));
+
+        let sender_has_e2ee = tm
+            .actor
+            .and_then(|sid| state.users.get(&sid))
+            .is_some_and(UserEntry::has_pchat_e2ee);
+
+        if has_pchat && sender_has_e2ee {
+            // Fancy sender - PchatMessageDeliver is the authoritative source.
+            continue;
+        }
+
+        let is_legacy = has_pchat && !sender_has_e2ee;
+
+        let mut msg = ChatMessage {
+            sender_session: tm.actor,
+            sender_name: sender_name.clone(),
+            sender_hash: sender_hash.clone(),
+            body: strip_legacy_fallback(&tm.message),
+            channel_id: ch_id,
+            is_own,
+            dm_session: None,
+            message_id: tm.message_id.clone(),
+            timestamp: tm.timestamp,
+            is_legacy,
+            send_failed: false,
+            edited_at: None,
+            pinned: false,
+            pinned_by: None,
+            pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
+        };
+        msg.ensure_id();
+        let bucket = state.msgs.by_channel.entry(ch_id).or_default();
+        crate::state::push_capped(bucket, msg);
+
+        if selected != Some(ch_id) && !is_own {
+            *state.msgs.channel_unread.entry(ch_id).or_insert(0) += 1;
+            unreads_changed = true;
+            // Nothing in a channel that is not on screen is being looked at,
+            // so a pasted picture arriving there goes straight to cold
+            // storage rather than sitting in this process until the reader
+            // happens to open the channel and scroll past it. Only the
+            // message that just arrived: this runs on the protocol thread
+            // with the state lock held, and everything older was already
+            // dealt with when it arrived or when the channel was left.
+            crate::state::offload_ops::offload_newest_if_idle(state, ch_id);
+        }
+
+        deferred.push(DeferredEvent::NewMessage {
+            channel_id: ch_id,
+            sender_session: tm.actor,
+        });
+
+        // Flash the taskbar when a permanently-listened channel gets a
+        // message while it is not the viewed channel.
+        if !is_own && state.permanently_listened.contains(&ch_id) && selected != Some(ch_id) {
+            deferred.push(DeferredEvent::RequestUserAttention);
+        }
+
+        // Native notification for messages arriving in non-viewed channels,
+        // or for ANY channel when the app is not focused (backgrounded).
+        if !is_own && (selected != Some(ch_id) || !app_focused) {
+            deferred.push(DeferredEvent::ChannelMessage {
+                channel_id: ch_id,
+                sender_name: sender_name.clone(),
+                body: strip_legacy_fallback(&tm.message),
+                sender_session: tm.actor,
+            });
+        }
+    }
+
+    if unreads_changed {
+        deferred.push(DeferredEvent::ChannelUnreads);
+    }
+}
+
+// -- Trait implementation ------------------------------------------
+
+impl HandleMessage for mumble_tcp::TextMessage {
+    fn handle(&self, ctx: &HandlerContext) {
+        let kind = classify(self);
+        let mut deferred = DeferredEmitter::new(ctx);
+
+        if let Ok(mut state) = ctx.shared.lock() {
+            // Don't duplicate messages we sent ourselves (regular sends).
+            // For edits from ourselves, we *do* need to process them because
+            // the local edit_message path already applied the change locally,
+            // and the server won't echo edits back to us. A channel message the
+            // server sent on our behalf - a scheduled message coming due - is
+            // not a duplicate of anything, and is kept.
+            if self.actor == state.conn.own_session
+                && self.actor.is_some()
+                && self.edit_id.is_none()
+                && !is_unseen_own_channel_message(self, &kind, &state)
+            {
+                return;
+            }
+
+            // Handle message edits: find and update the existing message.
+            if let Some(ref edit_id) = self.edit_id {
+                if try_apply_edit(self, &kind, edit_id, &mut state) {
+                    emit_edit_events(&kind, self, &state, ctx, &mut deferred);
+                }
+                drop(state);
+                deferred.flush();
+                return;
+            }
+
+            match &kind {
+                MessageKind::DirectMessage => {
+                    handle_direct_message(self, &mut state, &mut deferred);
+                }
+                MessageKind::Channel => {
+                    handle_channel_message(self, &mut state, &mut deferred);
+                }
+            }
+        }
+
+        deferred.flush();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_message(id: &str, body: &str) -> ChatMessage {
+        ChatMessage {
+            sender_session: Some(1),
+            sender_name: "Alice".into(),
+            body: body.into(),
+            channel_id: 0,
+            is_own: false,
+            is_legacy: false,
+            send_failed: false,
+            message_id: Some(id.into()),
+            timestamp: Some(1000),
+            sender_hash: None,
+            edited_at: None,
+            dm_session: None,
+            pinned: false,
+            pinned_by: None,
+            pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
+        }
+    }
+
+    /// Session 1, the author in [`make_message`], with no known hash.
+    const AUTHOR: Editor<'static> = Editor {
+        session: Some(1),
+        hash: None,
+    };
+
+    #[test]
+    fn apply_edit_updates_existing_message() {
+        let mut messages = vec![
+            make_message("msg-1", "original body"),
+            make_message("msg-2", "other message"),
+        ];
+        let result = apply_edit(&mut messages, "msg-1", "updated body", 2000, &AUTHOR, false);
+        assert!(result);
+        assert_eq!(messages[0].body, "updated body");
+        assert_eq!(messages[0].edited_at, Some(2000));
+        assert_eq!(messages[1].body, "other message");
+        assert!(messages[1].edited_at.is_none());
+    }
+
+    #[test]
+    fn apply_edit_returns_false_for_unknown_id() {
+        let mut messages = vec![make_message("msg-1", "original body")];
+        let result = apply_edit(
+            &mut messages,
+            "nonexistent",
+            "new body",
+            2000,
+            &AUTHOR,
+            false,
+        );
+        assert!(!result);
+        assert_eq!(messages[0].body, "original body");
+        assert!(messages[0].edited_at.is_none());
+    }
+
+    #[test]
+    fn apply_edit_on_empty_list() {
+        let mut messages: Vec<ChatMessage> = vec![];
+        let result = apply_edit(&mut messages, "any-id", "body", 1000, &AUTHOR, false);
+        assert!(!result);
+    }
+
+    #[test]
+    fn apply_edit_refuses_somebody_elses_edit() {
+        // The finding: an edit was matched by message id alone, so any member
+        // could rewrite anybody's words on every Fancy client.
+        let mut messages = vec![make_message("msg-1", "alice's words")];
+        let mallory = Editor {
+            session: Some(2),
+            hash: None,
+        };
+        assert!(!apply_edit(
+            &mut messages,
+            "msg-1",
+            "forged",
+            2000,
+            &mallory,
+            false
+        ));
+        assert_eq!(messages[0].body, "alice's words");
+        assert!(messages[0].edited_at.is_none());
+    }
+
+    #[test]
+    fn apply_edit_goes_by_certificate_across_a_reconnect() {
+        // Same person on a new session: the hash decides, not the session.
+        let mut messages = vec![make_message("msg-1", "before")];
+        messages[0].sender_hash = Some("alice-hash".into());
+        let alice_again = Editor {
+            session: Some(9),
+            hash: Some("alice-hash"),
+        };
+        assert!(apply_edit(
+            &mut messages,
+            "msg-1",
+            "after",
+            2000,
+            &alice_again,
+            false
+        ));
+        assert_eq!(messages[0].body, "after");
+    }
+
+    #[test]
+    fn apply_edit_refuses_a_reused_session_with_another_certificate() {
+        let mut messages = vec![make_message("msg-1", "before")];
+        messages[0].sender_hash = Some("alice-hash".into());
+        let newcomer = Editor {
+            session: Some(1),
+            hash: Some("mallory-hash"),
+        };
+        assert!(!apply_edit(
+            &mut messages,
+            "msg-1",
+            "forged",
+            2000,
+            &newcomer,
+            false
+        ));
+        assert_eq!(messages[0].body, "before");
+    }
+
+    #[test]
+    fn a_plain_edit_copy_never_overwrites_a_sealed_message() {
+        // In a persistent channel the sealed edit is the authoritative one, and
+        // the plain copy may be the "[Encrypted message]" placeholder.
+        let mut messages = vec![make_message("msg-1", "the real words")];
+        assert!(!apply_edit(
+            &mut messages,
+            "msg-1",
+            "[Encrypted message]",
+            2000,
+            &AUTHOR,
+            true
+        ));
+        assert_eq!(messages[0].body, "the real words");
+
+        // A legacy message in the same channel only ever had the plain copy.
+        messages[0].is_legacy = true;
+        assert!(apply_edit(
+            &mut messages,
+            "msg-1",
+            "fixed",
+            2000,
+            &AUTHOR,
+            true
+        ));
+        assert_eq!(messages[0].body, "fixed");
+    }
+
+    #[test]
+    fn the_legacy_edited_note_is_cut_from_an_edit() {
+        let sent = format!("{}fixed words", crate::state::messaging::LEGACY_EDITED_MARK);
+        assert_eq!(strip_legacy_edit_mark(&sent), "fixed words");
+        // As a server with HTML off delivers it: the fence's markup stripped.
+        assert_eq!(
+            strip_legacy_edit_mark(
+                "<!-- FANCY_FALLBACK --><!-- FANCY_LEGACY -->(edited) <!-- /FANCY_LEGACY -->fixed words"
+            ),
+            "fixed words"
+        );
+        // And from a sender that put no tag in front of the fence.
+        assert_eq!(
+            strip_legacy_edit_mark(
+                "<!-- FANCY_LEGACY --><i>(edited)</i> <!-- /FANCY_LEGACY -->fixed words"
+            ),
+            "fixed words"
+        );
+    }
+
+    #[test]
+    fn the_edited_note_is_cut_on_the_receive_path() {
+        // The receive path runs both cuts; whichever of them finds the note,
+        // nothing of it is left.
+        let sent = format!("{}fixed", crate::state::messaging::LEGACY_EDITED_MARK);
+        assert_eq!(
+            strip_legacy_edit_mark(&strip_legacy_fallback(&sent)),
+            "fixed"
+        );
+    }
+
+    #[test]
+    fn a_fence_inside_the_text_is_not_an_edited_note() {
+        let body = "see <!-- FANCY_LEGACY -->this<!-- /FANCY_LEGACY -->";
+        assert_eq!(strip_legacy_edit_mark(body), body);
+    }
+}

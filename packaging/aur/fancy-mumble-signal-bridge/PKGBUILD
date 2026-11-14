@@ -1,0 +1,56 @@
+# Maintainer: Fancy Mumble <https://github.com/Fancy-Mumble/FancyMumble/issues>
+
+# The AGPL half of Fancy Mumble, kept in its own package for the same reason
+# upstream keeps it in its own workspace: it links libsignal-protocol, which is
+# AGPL-3.0, and it is loaded with dlopen at runtime rather than linked into the
+# client. Splitting it here means fancy-mumble stays MIT and a user who does not
+# want AGPL code on the machine simply does not install this.
+#
+# Without it, Fancy Mumble runs with encrypted private chat unavailable -- which
+# is exactly what upstream's own .deb and AppImage ship today.
+
+pkgname=fancy-mumble-signal-bridge
+pkgver=0.3.0
+pkgrel=1
+pkgdesc='Signal-protocol bridge for end-to-end encrypted private chat in Fancy Mumble'
+arch=('x86_64' 'aarch64')
+url='https://github.com/Fancy-Mumble/FancyMumble'
+license=('AGPL-3.0-only')
+depends=('gcc-libs' 'glibc' 'fancy-mumble')
+makedepends=('cargo' 'protobuf')
+source=("fancy-mumble-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('a9440f48b7832408590603f56f2fdb02817075cefdd129e06c065e2e8ceb0163')
+_srcdir="FancyMumble-$pkgver/crates/signal-bridge"
+
+prepare() {
+	cd "$_srcdir"
+	export RUSTUP_TOOLCHAIN=stable
+	# Its own lockfile: this crate is excluded from the client workspace, so the
+	# root Cargo.lock does not cover it. libsignal-protocol is a git dependency
+	# pinned to tag v0.90.0, so this clone is what fetches it; the revision in
+	# Cargo.lock is what makes the result reproducible, since makepkg has no
+	# checksum of its own for a source cargo pulls.
+	cargo fetch --locked --target "$(rustc -vV | sed -n 's/^host: //p')"
+}
+
+build() {
+	cd "$_srcdir"
+	export RUSTUP_TOOLCHAIN=stable
+	export CARGO_TARGET_DIR=target
+	cargo build --frozen --release
+}
+
+package() {
+	cd "$_srcdir"
+
+	# load_signal_bridge() in mumble-protocol walks a candidate list relative to
+	# the executable, and `../lib/fancy-mumble/` is on it -- so from
+	# /usr/bin/mumble-tauri this is /usr/lib/fancy-mumble/. Nothing has to be
+	# configured; installing this package is what turns the feature on.
+	install -Dm755 target/release/libsignal_bridge.so \
+		"$pkgdir/usr/lib/fancy-mumble/libsignal_bridge.so"
+
+	# No licence file to install: AGPL-3.0 is in /usr/share/licenses/common, and
+	# crates/signal-bridge carries no LICENSE of its own -- only the header
+	# comment in its Cargo.toml declaring the terms. Worth fixing upstream.
+}

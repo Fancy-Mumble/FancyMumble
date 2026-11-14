@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=Fancy Mumble
+GenericName=Voice Chat
+Comment=Talk, chat and share your screen on a Mumble server
+Exec=mumble-tauri %u
+Icon=mumble-tauri
+Terminal=false
+# One main category only: adding AudioVideo as well makes the entry show up
+# twice in menus that group by main category.
+Categories=Network;InstantMessaging;
+Keywords=mumble;voice;voip;chat;
+StartupWMClass=mumble-tauri
+# The scheme src/app/mod.rs registers at runtime; declared here so the system
+# entry carries it rather than the copy the app writes into ~/.local/share.
+MimeType=x-scheme-handler/fancy;

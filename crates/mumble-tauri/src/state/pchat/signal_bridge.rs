@@ -1,0 +1,543 @@
+//! Signal Protocol bridge loading, sender key distribution, and
+//! stashed envelope retry.
+
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
+
+use tracing::{debug, info, warn};
+
+use mumble_protocol::command;
+use mumble_protocol::persistent::protocol::signal_v1::SignalBridge;
+use mumble_protocol::persistent::wire::{MessageEnvelope, WireCodec};
+
+use crate::state::SharedState;
+use crate::state::local_cache::CachedMessage;
+
+use super::PchatState;
+use super::persistence::load_signal_state;
+
+// -- Bridge loading ---------------------------------------------------
+
+/// File name of the bridge library on this platform.
+pub(crate) const LIB_NAME: &str = if cfg!(windows) {
+    "signal_bridge.dll"
+} else if cfg!(target_os = "macos") {
+    "libsignal_bridge.dylib"
+} else {
+    "libsignal_bridge.so"
+};
+
+/// Where a downloaded bridge add-on lives (`<app data>/addons/signal-bridge`).
+/// Set once at startup; unset on Android, which bundles the bridge.
+static ADDON_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+#[cfg(not(target_os = "android"))]
+pub(crate) fn set_addon_dir(dir: PathBuf) {
+    let _ = ADDON_DIR.set(dir);
+}
+
+pub(crate) fn addon_dir() -> Option<&'static Path> {
+    ADDON_DIR.get().map(PathBuf::as_path)
+}
+
+/// Every place the bridge library may be, in the order they are tried.
+///
+/// 1. Next to the executable (dev builds, where build.rs copies it)
+/// 2. `../lib/...` relative to the exe (distro packages and the Flatpak
+///    extension, which ship the bridge as a package of its own)
+/// 3. The downloaded add-on ([`addon_dir`])
+/// 4. Extra search directory (e.g. Android `nativeLibraryDir`)
+/// 5. The bare filename, for the platform loader's own search
+fn bridge_candidates(extra_search_dir: Option<&Path>) -> Vec<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(Path::to_path_buf));
+
+        if let Some(ref dir) = exe_dir {
+            candidates.push(dir.join(LIB_NAME));
+            candidates.push(dir.join("signal-bridge").join(LIB_NAME));
+            candidates.push(dir.join("../lib/fancy-mumble").join(LIB_NAME));
+            candidates.push(dir.join("../lib/fancy-mumble/signal-bridge").join(LIB_NAME));
+            // Tauri's Linux .deb/AppImage install bundled resources under the
+            // PRODUCT name from tauri.conf.json (productName = "FancyMumble"),
+            // which is case-sensitive and differs from the /usr/bin binary
+            // name (mumble-tauri). The resource lands at
+            // /usr/lib/FancyMumble/signal-bridge/<lib>, so the /usr/bin binary
+            // resolves it via ../lib/FancyMumble/signal-bridge/.
+            candidates.push(dir.join("../lib/FancyMumble/signal-bridge").join(LIB_NAME));
+            candidates.push(dir.join("../lib/FancyMumble").join(LIB_NAME));
+        }
+    }
+
+    if let Some(dir) = addon_dir() {
+        candidates.push(dir.join(LIB_NAME));
+    }
+
+    if let Some(dir) = extra_search_dir {
+        candidates.push(dir.join(LIB_NAME));
+    }
+
+    candidates.push(PathBuf::from(LIB_NAME));
+    candidates
+}
+
+/// The bridge library that [`load_signal_bridge`] would pick, if any.
+#[cfg(not(target_os = "android"))]
+pub(crate) fn find_bridge_library() -> Option<PathBuf> {
+    bridge_candidates(None).into_iter().find(|p| p.exists())
+}
+
+/// Attempt to load the Signal Protocol bridge DLL from the first of
+/// [`bridge_candidates`] that exists.
+///
+/// Returns `None` (with a warning) if the library is not found anywhere.
+pub(crate) fn load_signal_bridge(
+    own_cert_hash: &str,
+    extra_search_dir: Option<&Path>,
+) -> Option<Arc<SignalBridge>> {
+    let candidates = bridge_candidates(extra_search_dir);
+
+    info!(?candidates, "signal bridge: searching for library");
+
+    #[cfg(target_os = "android")]
+    {
+        for candidate in &candidates {
+            match SignalBridge::new(candidate, own_cert_hash) {
+                Ok(bridge) => {
+                    info!(?candidate, "loaded signal bridge");
+                    return Some(Arc::new(bridge));
+                }
+                Err(e) => {
+                    debug!(?candidate, "signal bridge candidate failed: {e}");
+                }
+            }
+        }
+        warn!(
+            ?candidates,
+            "signal bridge library not found; SignalV1 channels will not work"
+        );
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        let lib_path = candidates.iter().find(|p| p.exists());
+
+        let Some(lib_path) = lib_path else {
+            warn!(
+                ?candidates,
+                "signal bridge library not found; SignalV1 channels will not work"
+            );
+            return None;
+        };
+
+        match SignalBridge::new(lib_path, own_cert_hash) {
+            Ok(bridge) => {
+                info!(?lib_path, "loaded signal bridge");
+                return Some(Arc::new(bridge));
+            }
+            Err(e) => {
+                warn!(?lib_path, "failed to load signal bridge: {e}");
+            }
+        }
+    }
+
+    None
+}
+
+/// Try loading the bridge again after an earlier attempt failed.
+///
+/// A failed load is sticky ([`PchatState::signal_bridge_load_failed`]) so a
+/// missing library is searched for once per session, not on every message.
+/// Installing the add-on is the one event that can change the answer.
+#[cfg(all(feature = "self-updater", not(target_os = "android")))]
+pub(crate) fn retry_signal_bridge(shared: &Arc<Mutex<SharedState>>) -> bool {
+    if let Ok(mut s) = shared.lock()
+        && let Some(pchat) = s.pchat_ctx.pchat.as_mut()
+    {
+        pchat.signal_bridge_load_failed = false;
+    }
+    ensure_signal_bridge_unlocked(shared)
+}
+
+// -- Ensure bridge is loaded (PchatState methods) ---------------------
+
+impl PchatState {
+    /// Ensure the signal bridge is loaded and wired into the key manager.
+    ///
+    /// Returns `true` if the bridge is loaded (or was already loaded),
+    /// `false` if loading failed.
+    pub(crate) fn ensure_signal_bridge(&mut self) -> bool {
+        if self.signal_bridge.is_some() {
+            return true;
+        }
+        if self.signal_bridge_load_failed {
+            return false;
+        }
+        let bridge = load_signal_bridge(&self.own_cert_hash, None);
+        if let Some(ref b) = bridge {
+            self.key_manager.set_signal_bridge(Arc::clone(b));
+            load_signal_state(self.identity_dir.as_deref(), b);
+        } else {
+            self.signal_bridge_load_failed = true;
+        }
+        let loaded = bridge.is_some();
+        self.signal_bridge = bridge;
+        loaded
+    }
+}
+
+/// Lock-free variant of [`PchatState::ensure_signal_bridge`] for async
+/// contexts.
+///
+/// Performs the potentially slow DLL search **outside** the `SharedState`
+/// mutex, then briefly re-acquires the lock to store the result.
+pub(crate) fn ensure_signal_bridge_unlocked(shared: &Arc<Mutex<SharedState>>) -> bool {
+    // Fast path: already loaded or already failed.
+    {
+        let s = match shared.lock() {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("ensure_signal_bridge: mutex poisoned (fast path): {e}");
+                return false;
+            }
+        };
+        if let Some(pchat) = s.pchat_ctx.pchat.as_ref() {
+            if pchat.signal_bridge.is_some() {
+                return true;
+            }
+            if pchat.signal_bridge_load_failed {
+                return false;
+            }
+        } else {
+            warn!("ensure_signal_bridge: pchat state not initialised");
+            return false;
+        }
+    }
+
+    let (cert_hash, identity_dir) = {
+        let s = match shared.lock() {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("ensure_signal_bridge: mutex poisoned (cert read): {e}");
+                return false;
+            }
+        };
+        match s.pchat_ctx.pchat.as_ref() {
+            Some(p) => (p.own_cert_hash.clone(), p.identity_dir.clone()),
+            None => return false,
+        }
+    };
+
+    let bridge = load_signal_bridge(&cert_hash, None);
+
+    if let Some(ref b) = bridge {
+        load_signal_state(identity_dir.as_deref(), b);
+    }
+
+    let loaded = bridge.is_some();
+    match shared.lock() {
+        Ok(mut s) => {
+            if let Some(ref mut pchat) = s.pchat_ctx.pchat {
+                if let Some(ref b) = bridge {
+                    pchat.key_manager.set_signal_bridge(Arc::clone(b));
+                } else {
+                    pchat.signal_bridge_load_failed = true;
+                }
+                pchat.signal_bridge = bridge;
+            }
+        }
+        Err(e) => {
+            warn!("ensure_signal_bridge: mutex poisoned (store): {e}");
+        }
+    }
+    loaded
+}
+
+// -- Sender key distribution ------------------------------------------
+
+/// Create our sender key distribution for a channel and send it to
+/// the server via `PchatSenderKeyDistribution`.
+///
+/// The server stores the latest SKDM per (sender, channel) and relays
+/// it to online members.  On offline queue drain the server bundles the
+/// relevant distributions so reconnecting clients can decrypt.
+pub(crate) fn send_signal_distribution(shared: &Arc<Mutex<SharedState>>, channel_id: u32) {
+    {
+        let s = shared.lock().ok();
+        let bridge_unavailable = s
+            .as_ref()
+            .and_then(|s| s.pchat_ctx.pchat.as_ref())
+            .is_some_and(|p| p.signal_bridge_load_failed);
+        if bridge_unavailable {
+            return;
+        }
+    }
+
+    let (handle, distribution, sender_hash) = {
+        let Ok(mut state) = shared.lock() else { return };
+
+        let Some(ref mut pchat) = state.pchat_ctx.pchat else {
+            return;
+        };
+        if !pchat.ensure_signal_bridge() {
+            warn!(
+                channel_id,
+                "cannot send signal distribution: bridge not loaded"
+            );
+            return;
+        }
+        let Some(ref bridge) = pchat.signal_bridge else {
+            warn!(
+                channel_id,
+                "cannot send signal distribution: bridge not loaded"
+            );
+            return;
+        };
+
+        let dist = match bridge.create_distribution(channel_id) {
+            Ok(d) => d,
+            Err(e) => {
+                warn!(channel_id, "create_distribution failed: {e}");
+                return;
+            }
+        };
+        // Our own sender key for this channel now exists in the bridge context,
+        // which is the thing `group_encrypt` looks for. Recorded before the
+        // network send, because it is the mint that makes encryption possible
+        // and the relay that makes it *readable* - a distribution the server
+        // never forwarded still leaves us able to send.
+        let _ = pchat.signal_distributed.insert(channel_id);
+
+        // Taken here, while `pchat` is still borrowed; reading `state.conn`
+        // below ends that borrow.
+        let own_hash = pchat.own_cert_hash.clone();
+
+        (state.conn.client_handle.clone(), dist, own_hash)
+    };
+
+    let Some(handle) = handle else { return };
+
+    let _dist_task = tokio::spawn(async move {
+        match handle
+            .send(command::SendPchatSenderKeyDistribution {
+                channel_id,
+                distribution,
+                sender_hash,
+            })
+            .await
+        {
+            Err(e) => {
+                warn!(channel_id, "failed to send signal distribution: {e}");
+            }
+            _ => {
+                debug!(channel_id, "sent signal sender key distribution");
+            }
+        }
+    });
+}
+
+// -- Stashed envelope retry -------------------------------------------
+
+/// Retry decrypting stashed `SignalV1` envelopes from `sender_hash`.
+///
+/// Called after successfully processing a sender key distribution.
+fn retry_stashed_signal_envelopes(
+    state: &mut SharedState,
+    sender_hash: &str,
+    sender_channel: u32,
+) -> usize {
+    let decoded: Vec<(String, u32, String, String)> = {
+        let Some(pchat) = state.pchat_ctx.pchat.as_mut() else {
+            return 0;
+        };
+
+        let mut remaining = Vec::new();
+        let mut matched = Vec::new();
+        for env in pchat.pending_signal_envelopes.drain(..) {
+            if env.sender_hash == sender_hash && env.channel_id == sender_channel {
+                matched.push(env);
+            } else {
+                remaining.push(env);
+            }
+        }
+        pchat.pending_signal_envelopes = remaining;
+
+        if matched.is_empty() {
+            return 0;
+        }
+
+        debug!(
+            sender = %sender_hash,
+            channel_id = sender_channel,
+            count = matched.len(),
+            "retrying stashed signal envelopes after distribution"
+        );
+
+        let mut results = Vec::new();
+        let mut still_pending = Vec::new();
+
+        for env in matched {
+            let decrypt_result = pchat.key_manager.decrypt_signal(
+                &env.sender_hash,
+                env.channel_id,
+                &env.envelope_bytes,
+            );
+
+            match decrypt_result {
+                Ok(plaintext) => match pchat.codec.decode::<MessageEnvelope>(&plaintext) {
+                    Ok(envelope) => {
+                        pchat.cache_signal_message(CachedMessage {
+                            message_id: env.message_id.clone(),
+                            channel_id: env.channel_id,
+                            timestamp: env.timestamp,
+                            sender_hash: env.sender_hash.clone(),
+                            sender_name: envelope.sender_name.clone(),
+                            body: envelope.body.clone(),
+                            is_own: false,
+                        });
+                        results.push((
+                            env.message_id.clone(),
+                            env.channel_id,
+                            envelope.sender_name,
+                            envelope.body,
+                        ));
+                    }
+                    Err(e) => {
+                        warn!(
+                            message_id = %env.message_id,
+                            "stashed envelope: failed to decode after decrypt: {e}"
+                        );
+                    }
+                },
+                Err(e) => {
+                    warn!(
+                        message_id = %env.message_id,
+                        sender = %env.sender_hash,
+                        "stashed envelope: still failed to decrypt, keeping stashed: {e}"
+                    );
+                    still_pending.push(env);
+                }
+            }
+        }
+
+        pchat.pending_signal_envelopes.extend(still_pending);
+
+        results
+    };
+
+    let mut replaced_count = 0usize;
+    for (message_id, channel_id, sender_name, body) in &decoded {
+        let mid: &str = message_id;
+        if let Some(msgs) = state.msgs.by_channel.get_mut(channel_id)
+            && let Some(msg) = msgs
+                .iter_mut()
+                .find(|m| m.message_id.as_deref() == Some(mid))
+        {
+            msg.body.clone_from(body);
+            msg.sender_name.clone_from(sender_name);
+            replaced_count += 1;
+        }
+    }
+
+    if replaced_count > 0 {
+        debug!(
+            replaced_count,
+            sender = %sender_hash,
+            channel_id = sender_channel,
+            "replaced placeholder messages with decrypted content"
+        );
+    }
+
+    replaced_count
+}
+
+// -- Handle incoming sender key --------------------------------------
+
+/// Process a Signal sender key distribution identified by hash and channel.
+///
+/// Used by the `PchatSenderKeyDistribution` handler where the server
+/// already provides `sender_hash` and `channel_id`.
+/// Returns `true` if stashed envelopes were decrypted.
+pub(crate) fn handle_signal_sender_key_by_hash(
+    shared: &Arc<Mutex<SharedState>>,
+    sender_hash: &str,
+    sender_channel: u32,
+    data: &[u8],
+) -> bool {
+    {
+        let s = shared.lock().ok();
+        let bridge_unavailable = s
+            .as_ref()
+            .and_then(|s| s.pchat_ctx.pchat.as_ref())
+            .is_some_and(|p| p.signal_bridge_load_failed);
+        if bridge_unavailable {
+            return false;
+        }
+    }
+
+    let Ok(mut state) = shared.lock() else {
+        return false;
+    };
+
+    {
+        let Some(ref mut pchat) = state.pchat_ctx.pchat else {
+            return false;
+        };
+        if !pchat.ensure_signal_bridge() {
+            warn!("signal bridge not loaded, cannot process sender key");
+            return false;
+        }
+        let Some(ref bridge) = pchat.signal_bridge else {
+            warn!("signal bridge not loaded, cannot process sender key");
+            return false;
+        };
+
+        match bridge.process_distribution(sender_hash, sender_channel, data) {
+            Ok(()) => {
+                debug!(
+                    sender = %sender_hash,
+                    channel_id = sender_channel,
+                    "processed signal sender key distribution"
+                );
+            }
+            Err(e) => {
+                warn!(
+                    sender = %sender_hash,
+                    channel_id = sender_channel,
+                    "failed to process signal distribution: {e}"
+                );
+                return false;
+            }
+        }
+    }
+
+    retry_stashed_signal_envelopes(&mut state, sender_hash, sender_channel) > 0
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "unwrap is acceptable in test code")]
+    use super::*;
+
+    #[test]
+    fn ensure_signal_bridge_caches_failure() {
+        let mut pchat = PchatState::new([0u8; 32], "test_cert_hash".to_string(), None).unwrap();
+
+        assert!(!pchat.signal_bridge_load_failed);
+        assert!(pchat.signal_bridge.is_none());
+
+        // First call: DLL won't be found, should fail and set the flag.
+        let result = pchat.ensure_signal_bridge();
+        assert!(!result);
+        assert!(pchat.signal_bridge_load_failed);
+
+        // Second call: should short-circuit via the cached flag.
+        let result = pchat.ensure_signal_bridge();
+        assert!(!result);
+        assert!(pchat.signal_bridge_load_failed);
+    }
+}

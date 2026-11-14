@@ -1,0 +1,396 @@
+//! Audio encoder trait and real Opus implementation.
+//!
+//! An [`AudioEncoder`] takes raw PCM [`AudioFrame`]s and produces
+//! compressed packets ready for network transmission. The trait is
+//! codec-agnostic - swap in any encoder by implementing the trait.
+
+use crate::audio::sample::{AudioFormat, AudioFrame};
+use crate::error::Result;
+
+#[cfg(feature = "opus-codec")]
+use crate::error::Error;
+
+/// A compressed audio packet ready for network transmission.
+#[derive(Debug, Clone)]
+pub struct EncodedPacket {
+    /// The compressed payload bytes.
+    pub data: Vec<u8>,
+    /// Mumble `frame_number` for this packet, counted in 10 ms frames
+    /// (480 samples @ 48 kHz), NOT in packets.
+    ///
+    /// This mirrors the official client, whose `iFrameCounter` advances
+    /// once per 10 ms frame and which sends `iFrameCounter - frames` per
+    /// packet. The distinction matters because official receivers place
+    /// packets in their jitter buffer at `timestamp = frame_number *
+    /// 480`: a sender that increments by one per 20 ms packet makes its
+    /// timestamps advance at half real-time, and the receiver's jitter
+    /// buffer perpetually starves - heard as laggy, glitchy audio.
+    pub sequence: u64,
+    /// Duration of audio this packet represents, in samples.
+    pub frame_samples: u32,
+}
+
+/// Encodes raw PCM frames into compressed packets.
+pub trait AudioEncoder: Send + 'static {
+    /// The audio format this encoder expects as input.
+    fn input_format(&self) -> AudioFormat;
+
+    /// Encode a single PCM frame into a compressed packet.
+    fn encode(&mut self, frame: &AudioFrame) -> Result<EncodedPacket>;
+
+    /// Reset encoder state (e.g. at the start of a new transmission).
+    fn reset(&mut self);
+}
+
+// ---------------------------------------------------------------------------
+//  Opus encoder (requires the `opus-codec` feature)
+// ---------------------------------------------------------------------------
+
+/// Opus application mode.
+#[cfg(feature = "opus-codec")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpusApplication {
+    /// Optimised for voice / `VoIP` (lower latency, better speech quality).
+    ///
+    /// Uses the SILK codec for narrowband-to-wideband speech and a
+    /// SILK+CELT hybrid for super-wideband, matching the official Mumble
+    /// desktop client.  Preferred for all Mumble use-cases.
+    Voip,
+    /// Optimised for general audio (higher quality music).
+    ///
+    /// Uses the CELT codec (full-band).  Not recommended for voice -
+    /// wastes bits on empty high-frequency bands and can produce
+    /// artifacts with narrow-bandwidth microphone input.
+    Audio,
+    /// Lowest possible latency (at the cost of quality).
+    ///
+    /// CELT-only with the 4 ms Opus otherwise reserves for switching down to
+    /// SILK removed. **Not** a free 4 ms at the bitrates this client uses: at
+    /// 72 kbps fullband the encoder is in hybrid SILK+CELT mode (see
+    /// `low_delay_would_change_the_coding_mode`), so this would drop SILK's
+    /// speech modelling and its in-band FEC along with the delay.
+    LowDelay,
+}
+
+#[cfg(feature = "opus-codec")]
+impl From<OpusApplication> for opus::Application {
+    fn from(app: OpusApplication) -> Self {
+        match app {
+            OpusApplication::Voip => opus::Application::Voip,
+            OpusApplication::Audio => opus::Application::Audio,
+            OpusApplication::LowDelay => opus::Application::LowDelay,
+        }
+    }
+}
+
+/// Configuration for [`OpusEncoder`].
+#[cfg(feature = "opus-codec")]
+#[derive(Debug, Clone)]
+pub struct OpusEncoderConfig {
+    /// Bit-rate in bits/s (e.g. 72 000).
+    pub bitrate: i32,
+    /// Frame size in samples per channel.
+    ///
+    /// Must be one of: 120, 240, 480, 960, 1920, 2880.
+    /// 960 = 20 ms @ 48 kHz (Mumble default).
+    pub frame_size: usize,
+    /// Encoder application mode.
+    pub application: OpusApplication,
+    /// Enable variable bit-rate.
+    pub vbr: bool,
+    /// Encoder complexity (0-10). Higher = better quality, more CPU.
+    pub complexity: i32,
+    /// Enable in-band forward error correction.
+    pub fec: bool,
+    /// Expected packet loss percentage (0-100). Tunes FEC redundancy.
+    pub packet_loss_percent: i32,
+    /// Enable discontinuous transmission (saves bandwidth in silence
+    /// by sending very small "comfort-noise" packets).
+    ///
+    /// **Disabled by default** - DTX can cause robotic-sounding artefacts
+    /// when the signal is near the noise-gate threshold, because the
+    /// encoder alternates between normal and comfort-noise modes.
+    pub dtx: bool,
+}
+
+#[cfg(feature = "opus-codec")]
+impl Default for OpusEncoderConfig {
+    fn default() -> Self {
+        let application = if cfg!(target_os = "android") {
+            OpusApplication::Voip
+        } else {
+            OpusApplication::Audio
+        };
+
+        Self {
+            bitrate: 72_000,
+            frame_size: 960,
+            application,
+            vbr: true,
+            complexity: 8,
+            fec: true,
+            packet_loss_percent: 3,
+            dtx: false,
+        }
+    }
+}
+
+/// Opus encoder wrapping [`opus::Encoder`].
+///
+/// Accepts F32 frames at the format supplied on construction.
+/// The sample rate and channel count must match the Opus encoder's
+/// configuration (typically mono 48 kHz for Mumble).
+#[cfg(feature = "opus-codec")]
+pub struct OpusEncoder {
+    config: OpusEncoderConfig,
+    format: AudioFormat,
+    inner: opus::Encoder,
+    /// Pre-allocated output buffer (avoids per-frame allocation).
+    out_buf: Vec<u8>,
+    sequence: u64,
+}
+
+#[cfg(feature = "opus-codec")]
+impl std::fmt::Debug for OpusEncoder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpusEncoder")
+            .field("config", &self.config)
+            .field("format", &self.format)
+            .field("sequence", &self.sequence)
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg(feature = "opus-codec")]
+impl OpusEncoder {
+    /// Construct a new Opus encoder.
+    ///
+    /// `format` describes the PCM input; its `sample_rate` and `channels`
+    /// are also used to configure the underlying Opus codec.
+    pub fn new(config: OpusEncoderConfig, format: AudioFormat) -> Result<Self> {
+        let channels = match format.channels {
+            1 => opus::Channels::Mono,
+            2 => opus::Channels::Stereo,
+            n => {
+                return Err(Error::InvalidState(format!(
+                    "Opus only supports 1 or 2 channels, got {n}"
+                )));
+            }
+        };
+
+        let mut inner = opus::Encoder::new(format.sample_rate, channels, config.application.into())
+            .map_err(|e| Error::OpusCodec(e.to_string()))?;
+
+        Self::configure_encoder(&mut inner, &config)?;
+
+        Ok(Self {
+            config,
+            format,
+            inner,
+            out_buf: vec![0u8; 4000],
+            sequence: 0,
+        })
+    }
+
+    /// Apply all quality-relevant settings to an Opus encoder instance.
+    fn configure_encoder(enc: &mut opus::Encoder, config: &OpusEncoderConfig) -> Result<()> {
+        enc.set_bitrate(opus::Bitrate::Bits(config.bitrate))
+            .map_err(|e| Error::OpusCodec(e.to_string()))?;
+        enc.set_vbr(config.vbr)
+            .map_err(|e| Error::OpusCodec(e.to_string()))?;
+        enc.set_complexity(config.complexity)
+            .map_err(|e| Error::OpusCodec(e.to_string()))?;
+        enc.set_inband_fec(config.fec)
+            .map_err(|e| Error::OpusCodec(e.to_string()))?;
+        enc.set_packet_loss_perc(config.packet_loss_percent)
+            .map_err(|e| Error::OpusCodec(e.to_string()))?;
+        enc.set_dtx(config.dtx)
+            .map_err(|e| Error::OpusCodec(e.to_string()))?;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "opus-codec")]
+impl AudioEncoder for OpusEncoder {
+    fn input_format(&self) -> AudioFormat {
+        self.format
+    }
+
+    fn encode(&mut self, frame: &AudioFrame) -> Result<EncodedPacket> {
+        let samples = frame.as_f32_samples();
+        // Max Opus packet is ~4000 bytes per the RFC.
+        let written = self
+            .inner
+            .encode_float(samples, &mut self.out_buf)
+            .map_err(|e| Error::OpusCodec(e.to_string()))?;
+
+        let packet = EncodedPacket {
+            data: self.out_buf[..written].to_vec(),
+            sequence: self.sequence,
+            frame_samples: self.config.frame_size as u32,
+        };
+        // Advance in Mumble sequence units: one per 10 ms frame (480
+        // samples @ 48 kHz), i.e. 2 for a 20 ms packet, 4 for 40 ms.
+        // See the `EncodedPacket::sequence` docs for why this must not
+        // be a plain per-packet increment.
+        self.sequence += (self.config.frame_size as u64 / 480).max(1);
+        Ok(packet)
+    }
+
+    fn reset(&mut self) {
+        self.sequence = 0;
+        // Reset by creating a fresh encoder.
+        let channels = if self.format.channels == 1 {
+            opus::Channels::Mono
+        } else {
+            opus::Channels::Stereo
+        };
+        if let Ok(mut fresh) = opus::Encoder::new(
+            self.format.sample_rate,
+            channels,
+            self.config.application.into(),
+        ) {
+            let _ = OpusEncoder::configure_encoder(&mut fresh, &self.config);
+            self.inner = fresh;
+        }
+    }
+}
+
+#[cfg(all(test, feature = "opus-codec"))]
+mod tests {
+    use super::*;
+    use crate::audio::sample::AudioFormat;
+
+    /// A 440 Hz tone: silence can encode to a degenerate packet, and the TOC
+    /// tests below need a packet the encoder actually made a mode decision for.
+    fn tone_frame(format: AudioFormat, frame_size: usize) -> AudioFrame {
+        let mut data = Vec::with_capacity(frame_size * 4);
+        for i in 0..frame_size {
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "a frame is at most 2880 samples"
+            )]
+            let t = i as f32 / 48_000.0;
+            let s = (std::f32::consts::TAU * 440.0 * t).sin() * 0.5;
+            data.extend_from_slice(&s.to_le_bytes());
+        }
+        AudioFrame {
+            data,
+            format,
+            sequence: 0,
+            is_silent: false,
+        }
+    }
+
+    /// The Opus mode a packet was encoded in, from its TOC byte: configs 0-11
+    /// are SILK-only, 12-15 hybrid, 16-31 CELT-only (RFC 6716 section 3.1).
+    fn is_celt_only(packet: &[u8]) -> bool {
+        packet.first().is_some_and(|toc| (toc >> 3) >= 16)
+    }
+
+    fn silent_frame(format: AudioFormat, frame_size: usize) -> AudioFrame {
+        let bytes = frame_size * format.channels as usize * format.sample_format.byte_width();
+        AudioFrame {
+            data: vec![0u8; bytes],
+            format,
+            sequence: 0,
+            is_silent: false,
+        }
+    }
+
+    #[test]
+    fn encodes_silent_frame_f32() -> Result<()> {
+        let fmt = AudioFormat::MONO_48KHZ_F32;
+        let config = OpusEncoderConfig::default();
+        let frame_size = config.frame_size;
+        let mut enc = OpusEncoder::new(config, fmt)?;
+        let frame = silent_frame(fmt, frame_size);
+        let packet = enc.encode(&frame)?;
+        assert!(
+            !packet.data.is_empty(),
+            "Opus should produce at least 1 byte"
+        );
+        assert_eq!(packet.sequence, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn encodes_silent_frame_large() -> Result<()> {
+        let fmt = AudioFormat::MONO_48KHZ_F32;
+        let config = OpusEncoderConfig {
+            frame_size: 960, // 20 ms
+            ..OpusEncoderConfig::default()
+        };
+        let frame_size = config.frame_size;
+        let mut enc = OpusEncoder::new(config, fmt)?;
+        let frame = silent_frame(fmt, frame_size);
+        let packet = enc.encode(&frame)?;
+        assert!(!packet.data.is_empty());
+        assert_eq!(packet.frame_samples, 960);
+        Ok(())
+    }
+
+    #[test]
+    fn sequence_advances_in_10ms_frame_units() -> Result<()> {
+        // Mumble's frame_number counts 10 ms frames (480 samples @48 kHz),
+        // exactly like the official client's iFrameCounter. Official
+        // receivers compute jitter-buffer timestamps as frame_number*480,
+        // so a per-packet increment would desync them for any packet
+        // duration other than 10 ms.
+        for (frame_size, expected_step) in [(480usize, 1u64), (960, 2), (1920, 4), (2880, 6)] {
+            let fmt = AudioFormat::MONO_48KHZ_F32;
+            let config = OpusEncoderConfig {
+                frame_size,
+                ..OpusEncoderConfig::default()
+            };
+            let mut enc = OpusEncoder::new(config, fmt)?;
+            let frame = silent_frame(fmt, frame_size);
+            let p0 = enc.encode(&frame)?;
+            let p1 = enc.encode(&frame.clone())?;
+            let p2 = enc.encode(&frame.clone())?;
+            assert_eq!(p0.sequence, 0, "frame_size {frame_size}");
+            assert_eq!(p1.sequence, expected_step, "frame_size {frame_size}");
+            assert_eq!(p2.sequence, expected_step * 2, "frame_size {frame_size}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn reset_clears_sequence() -> Result<()> {
+        let fmt = AudioFormat::MONO_48KHZ_F32;
+        let config = OpusEncoderConfig::default();
+        let frame_size = config.frame_size;
+        let mut enc = OpusEncoder::new(config, fmt)?;
+        let frame = silent_frame(fmt, frame_size);
+        let _ = enc.encode(&frame)?;
+        enc.reset();
+        let p = enc.encode(&frame)?;
+        assert_eq!(p.sequence, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn low_delay_would_change_the_coding_mode() -> Result<()> {
+        // The cheap-looking latency win of RESTRICTED_LOWDELAY rests on the
+        // stream already being CELT-only, and at this client's default bitrate
+        // it is not: 72 kbps fullband encodes as hybrid SILK+CELT. Switching
+        // would trade SILK and a live in-band FEC for 4 ms, which is a quality
+        // decision rather than a free one. This test is what says so.
+        let fmt = AudioFormat::MONO_48KHZ_F32;
+        let config = OpusEncoderConfig::default();
+        assert_eq!(config.bitrate, 72_000);
+        let frame_size = config.frame_size;
+        let mut enc = OpusEncoder::new(config, fmt)?;
+        // The first packets prime the encoder's mode decision.
+        let mut packet = enc.encode(&tone_frame(fmt, frame_size))?;
+        for _ in 0..4 {
+            packet = enc.encode(&tone_frame(fmt, frame_size))?;
+        }
+        assert!(
+            !is_celt_only(&packet.data),
+            "TOC {:#04x} is CELT-only; RESTRICTED_LOWDELAY may now be free              and worth revisiting",
+            packet.data[0]
+        );
+        Ok(())
+    }
+}

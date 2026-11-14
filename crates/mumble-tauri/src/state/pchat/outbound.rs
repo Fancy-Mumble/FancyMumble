@@ -1,0 +1,162 @@
+//! Outbound message construction and sending for persistent chat.
+
+use std::sync::{Arc, Mutex};
+
+use tracing::debug;
+
+use mumble_protocol::client::ClientHandle;
+use mumble_protocol::command;
+use mumble_protocol::persistent::PchatProtocol;
+use mumble_protocol::persistent::wire::{MessageEnvelope, WireCodec};
+use mumble_protocol::proto::mumble_tcp;
+
+use crate::state::{FetchWalk, SharedState};
+
+use super::PchatState;
+use super::conversion::protocol_to_proto;
+
+// -- Encrypt and build ------------------------------------------------
+
+/// Parameters for building an encrypted pchat message.
+pub(crate) struct OutboundMessage<'a> {
+    pub channel_id: u32,
+    pub protocol: PchatProtocol,
+    pub message_id: &'a str,
+    pub body: &'a str,
+    pub sender_name: &'a str,
+    pub sender_session: u32,
+    pub timestamp: u64,
+}
+
+impl PchatState {
+    /// Encrypt a message and build a `PchatMessage` proto struct ready to send.
+    ///
+    /// This is a synchronous operation (no network I/O) so it can be called
+    /// while holding the state lock.
+    pub(crate) fn build_encrypted_message(
+        &mut self,
+        msg: &OutboundMessage<'_>,
+    ) -> Result<mumble_tcp::PchatMessage, String> {
+        debug!(
+            msg.channel_id,
+            ?msg.protocol,
+            msg.message_id,
+            msg.timestamp,
+            has_key = self.key_manager.has_key(msg.channel_id, msg.protocol),
+            "pchat: build_encrypted_message"
+        );
+        let envelope = MessageEnvelope {
+            body: msg.body.to_string(),
+            sender_name: msg.sender_name.to_string(),
+            sender_session: msg.sender_session,
+            attachments: vec![],
+        };
+
+        let envelope_bytes = self
+            .codec
+            .encode(&envelope)
+            .map_err(|e| format!("encode envelope: {e}"))?;
+
+        let payload = self
+            .key_manager
+            .encrypt(
+                msg.protocol,
+                msg.channel_id,
+                msg.message_id,
+                msg.timestamp,
+                &envelope_bytes,
+            )
+            .map_err(|e| format!("encrypt message: {e}"))?;
+
+        Ok(mumble_tcp::PchatMessage {
+            message_id: Some(msg.message_id.to_string()),
+            channel_id: Some(msg.channel_id),
+            timestamp: Some(msg.timestamp),
+            sender_hash: Some(self.own_cert_hash.clone()),
+            protocol: Some(protocol_to_proto(msg.protocol)),
+            envelope: Some(payload.ciphertext),
+            epoch: payload.epoch,
+            chain_index: payload.chain_index,
+            epoch_fingerprint: Some(payload.epoch_fingerprint.to_vec()),
+            replaces_id: None,
+        })
+    }
+}
+
+// -- Async send operations --------------------------------------------
+
+/// Which way a fetch walks the archive.
+///
+/// A cursor names one end or neither, never both: both ends is a bounded
+/// window the server does not implement, and it refuses rather than guessing.
+#[derive(Debug, Clone)]
+pub(crate) enum Anchor {
+    /// The newest page. What opening a channel asks for.
+    Newest,
+    /// Older than this message id.
+    Before(String),
+    /// Newer than this message id.
+    ///
+    /// The direction that lets a reader who scrolled up, and whose newer
+    /// messages were dropped to bound memory, get them back without paging
+    /// from the newest message all the way down again.
+    After(String),
+}
+
+/// Send a `PchatFetch` proto to request stored messages.
+pub(crate) async fn send_fetch(
+    handle: &ClientHandle,
+    channel_id: u32,
+    anchor: Anchor,
+    limit: u32,
+) -> Result<(), String> {
+    let (before_id, after_id) = match &anchor {
+        Anchor::Newest => (None, None),
+        Anchor::Before(id) => (Some(id.clone()), None),
+        Anchor::After(id) => (None, Some(id.clone())),
+    };
+    let fetch = mumble_tcp::PchatFetch {
+        channel_id: Some(channel_id),
+        before_id,
+        limit: Some(limit),
+        after_id,
+    };
+
+    handle
+        .send(command::SendPchatFetch { fetch })
+        .await
+        .map_err(|e| format!("send pchat-fetch: {e}"))?;
+
+    debug!(channel_id, ?anchor, "sent pchat-fetch");
+    Ok(())
+}
+
+/// How much of a channel's archive opening it asks for.
+const OPEN_FETCH_LIMIT: u32 = 50;
+
+/// Ask for the newest page of `channel_id`, which is what opening it needs.
+///
+/// One helper for the three moments a channel opens -- the channel this
+/// client lands in on connect, one it joins later, one that gains a
+/// persistence mode while it is being looked at -- because the request has to
+/// record which way it walks in the same breath as sending it. The response
+/// does not echo it, and a tail page joined as though it were a walk backwards
+/// lands at the wrong end of the thread.
+///
+/// Returns whether the request went out.
+pub(crate) async fn send_open_fetch(shared: &Arc<Mutex<SharedState>>, channel_id: u32) -> bool {
+    let handle = {
+        let Ok(mut state) = shared.lock() else {
+            return false;
+        };
+        state.msgs.note_fetch(channel_id, FetchWalk::Newest);
+        state.conn.client_handle.clone()
+    };
+    let Some(handle) = handle else {
+        return false;
+    };
+    send_fetch(&handle, channel_id, Anchor::Newest, OPEN_FETCH_LIMIT)
+        .await
+        .inspect_err(|e| debug!(channel_id, "open fetch not sent: {e}"))
+        .is_ok()
+}

@@ -1,0 +1,95 @@
+.dialog {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-lg, 12px);
+  padding: 24px;
+  width: 420px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.field select,
+.field input {
+  font: inherit;
+  color: var(--color-text-primary);
+}
+
+.link {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.link input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}
+
+.note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-error, #e5484d);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.secondary,
+.primary {
+  appearance: none;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  cursor: pointer;
+}
+
+.secondary {
+  border: 1px solid var(--color-glass-border);
+  background: transparent;
+  color: inherit;
+}
+
+.primary {
+  border: 1px solid transparent;
+  background: var(--color-accent);
+  color: var(--color-on-accent, #fff);
+}
+
+.primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

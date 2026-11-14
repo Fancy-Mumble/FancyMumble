@@ -1,0 +1,71 @@
+/* --- ImageEditor - Crop/resize modal (not the overlay) --------- */
+
+.editorModal {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  border-radius: 12px;
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  box-shadow: 0 8px 32px var(--color-overlay-strong);
+  max-width: 95vw;
+}
+
+.editorTitle {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.editorViewport {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #0a0a0a;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.editorViewport:active {
+  cursor: grabbing;
+}
+
+.editorImg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.editorMask {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.editorControls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.editorZoomIcon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.editorSlider {
+  flex: 1;
+  height: 4px;
+  accent-color: var(--color-accent, #6366f1);
+}
+
+.editorActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}

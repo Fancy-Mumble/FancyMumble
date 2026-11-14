@@ -1,0 +1,332 @@
+//! Audio device enumeration, audio settings, voice toggles, mic test,
+//! latency test and recording.
+
+use crate::audio;
+use crate::state::{self, AppState, AudioDevice, AudioSettings, VoiceState};
+
+/// List available audio input devices (microphones).
+/// Only available on desktop (cpal is not supported on Android).
+///
+/// Runs the enumeration on the blocking pool: WASAPI/COM device enumeration
+/// takes tens of milliseconds, and the Settings page fires this (plus
+/// [`get_output_devices`]) on every mount. Done inline it ties up runtime
+/// workers the protocol event loop needs, which starves `mixer.feed()` and
+/// surfaces as bursts of "dropped oldest samples" playback glitches.
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+pub(crate) async fn get_audio_devices() -> Vec<AudioDevice> {
+    tauri::async_runtime::spawn_blocking(state::audio_devices::inputs)
+        .await
+        .unwrap_or_default()
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub(crate) async fn get_audio_devices() -> Vec<AudioDevice> {
+    Vec::new()
+}
+
+/// List available audio output devices (speakers/headphones).
+/// Only available on desktop (cpal is not supported on Android).
+///
+/// Blocking-pool for the same reason as [`get_audio_devices`].
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+pub(crate) async fn get_output_devices() -> Vec<AudioDevice> {
+    tauri::async_runtime::spawn_blocking(state::audio_devices::outputs)
+        .await
+        .unwrap_or_default()
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub(crate) async fn get_output_devices() -> Vec<AudioDevice> {
+    Vec::new()
+}
+
+/// Get current audio settings.
+#[tauri::command]
+pub(crate) fn get_audio_settings(state: tauri::State<'_, AppState>) -> AudioSettings {
+    state.audio_settings()
+}
+
+/// List the tunable knobs the given denoiser algorithm exposes.
+///
+/// The UI uses this to render dynamic sliders in advanced/expert
+/// mode without hard-coding the knob list per algorithm.
+#[tauri::command]
+pub(crate) fn get_denoiser_param_specs(
+    algorithm: mumble_protocol::audio::filter::denoiser::NoiseSuppressionAlgorithm,
+) -> Vec<mumble_protocol::audio::filter::denoiser::DenoiserParamSpec> {
+    mumble_protocol::audio::filter::denoiser::algorithm_param_specs(algorithm).to_vec()
+}
+
+/// List the noise-suppression algorithms whose backends are actually
+/// compiled into this build.
+#[tauri::command]
+pub(crate) fn get_available_denoiser_algorithms()
+-> Vec<mumble_protocol::audio::filter::denoiser::NoiseSuppressionAlgorithm> {
+    mumble_protocol::audio::filter::denoiser::NoiseSuppressionAlgorithm::available()
+}
+
+/// Update audio settings.
+///
+/// If any pipeline-relevant setting changes while voice is active, the
+/// capture/playback pipelines are automatically restarted as needed.
+#[tauri::command]
+pub(crate) async fn set_audio_settings(
+    state: tauri::State<'_, AppState>,
+    settings: AudioSettings,
+) -> Result<(), String> {
+    state.apply_audio_settings(settings)
+}
+
+/// Switch the desktop audio backend at runtime.
+///
+/// `true` selects the rodio backend (default), `false` selects the
+/// legacy cpal backend. Takes effect on the next voice toggle.
+#[tauri::command]
+pub(crate) fn set_audio_backend(use_rodio: bool) {
+    audio::set_use_rodio_backend(use_rodio);
+}
+
+/// Returns `true` if the rodio backend is selected, `false` for legacy cpal.
+#[tauri::command]
+pub(crate) fn get_audio_backend() -> bool {
+    audio::is_rodio_backend()
+}
+
+/// Probe microphone availability with the current settings, emitting a
+/// `capture-error` event (device-in-use, with the holding app named) or
+/// clearing it. The audio settings page calls this on load so a persisted
+/// exclusive-mode / device-busy state is shown without waiting for the
+/// user to enable voice.
+#[tauri::command]
+pub(crate) fn probe_microphone(state: tauri::State<'_, AppState>) {
+    state.probe_microphone();
+}
+
+/// Return the last known microphone capture state (device-in-use, with the
+/// holding app named, or none). A newly-mounted view (e.g. the sidebar
+/// after returning from the settings route) queries this so it reflects a
+/// busy device it may have missed the live event for.
+#[tauri::command]
+pub(crate) fn get_capture_state() -> Option<state::audio::CaptureState> {
+    state::audio::current_capture_state()
+}
+
+/// Get the current voice state.
+#[tauri::command]
+pub(crate) fn get_voice_state(state: tauri::State<'_, AppState>) -> VoiceState {
+    state.voice_state()
+}
+
+/// Make sure voice may use the microphone, asking the first time voice is
+/// wanted rather than at launch, and say whether it may. Only Android asks;
+/// everywhere else the answer is yes.
+#[tauri::command]
+pub(crate) async fn request_microphone(app: tauri::AppHandle) -> Result<bool, String> {
+    #[cfg(target_os = "android")]
+    {
+        use crate::platform::android::connection_service::{
+            ConnectionServiceHandle, request_microphone,
+        };
+        use tauri::Manager;
+        request_microphone(&app.state::<ConnectionServiceHandle>()).await
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Ok(true)
+    }
+}
+
+/// Enable voice calling for the current channel.
+/// Sends unmute/undeaf to the server.
+#[tauri::command]
+pub(crate) async fn enable_voice(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.enable_voice().await
+}
+
+/// Enable voice calling directly in the muted state (undeaf + mute, inbound
+/// only). Used by the reconnect voice-restore so the muted state is established
+/// in one atomic step instead of `enable_voice` then `toggle_mute`, which can
+/// race on a reconnect and leave the user unmuted.
+#[tauri::command]
+pub(crate) async fn enable_voice_muted(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.enable_voice_muted().await
+}
+
+/// Disable voice calling (go back to deaf+muted).
+#[tauri::command]
+pub(crate) async fn disable_voice(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.disable_voice().await
+}
+
+/// Toggle mute (mic on/off, still hearing).
+#[tauri::command]
+pub(crate) async fn toggle_mute(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.toggle_mute().await
+}
+
+/// Toggle deafen (all audio on/off).
+#[tauri::command]
+pub(crate) async fn toggle_deafen(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.toggle_deafen().await
+}
+
+/// Activate mic for push-to-talk (key pressed).
+#[tauri::command]
+pub(crate) async fn push_to_talk_start(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.push_to_talk_start().await
+}
+
+/// Deactivate mic for push-to-talk (key released).
+#[tauri::command]
+pub(crate) async fn push_to_talk_end(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.push_to_talk_end().await
+}
+
+/// Activate mic for voice priority override (key pressed).
+///
+/// Behaves identically to push-to-talk for now; voice-target routing
+/// will be added in a future iteration.
+#[tauri::command]
+pub(crate) async fn voice_priority_start(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.push_to_talk_start().await
+}
+
+/// Deactivate mic for voice priority override (key released).
+#[tauri::command]
+pub(crate) async fn voice_priority_end(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.push_to_talk_end().await
+}
+
+/// Start whispering to `targets` (whisper key down).
+///
+/// The frontend resolves its configured target to sessions and channel ids at
+/// the moment of the press, because that is the only time the answer is known:
+/// a user bound by certificate hash has a different session on every
+/// reconnect, and a shortcut that whispered to yesterday's session number
+/// would reach whoever holds it today.
+#[tauri::command]
+pub(crate) async fn whisper_start(
+    state: tauri::State<'_, AppState>,
+    slot: u8,
+    targets: Vec<state::WhisperEntry>,
+) -> Result<(), String> {
+    state.whisper_start(slot, targets).await
+}
+
+/// Keep a whisper slot registered ahead of its key, so a press only switches
+/// slots. Returns whether a `VoiceTarget` actually went out.
+#[tauri::command]
+pub(crate) async fn whisper_register(
+    state: tauri::State<'_, AppState>,
+    slot: u8,
+    targets: Vec<state::WhisperEntry>,
+) -> Result<bool, String> {
+    state.whisper_register(slot, targets).await
+}
+
+/// Stop whispering (whisper key up).
+#[tauri::command]
+pub(crate) async fn whisper_end(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.whisper_end().await
+}
+
+/// Whether a whisper is in progress, for a view that mounted after the key
+/// went down.
+#[tauri::command]
+pub(crate) fn get_whisper_active(state: tauri::State<'_, AppState>) -> bool {
+    state.whisper_active()
+}
+
+/// Channels the server currently refuses whispers into.
+#[tauri::command]
+pub(crate) fn get_whisper_denials(state: tauri::State<'_, AppState>) -> Vec<u32> {
+    state.whisper_denials()
+}
+
+/// Set the local playback volume for a specific remote user.
+///
+/// `volume` is a multiplier (0.0 = muted, 1.0 = normal, 2.0 = 200%).
+#[tauri::command]
+pub(crate) fn set_user_volume(state: tauri::State<'_, AppState>, session: u32, volume: f32) {
+    state.set_user_volume(session, volume);
+}
+
+/// Start monitoring the microphone and emitting amplitude events.
+#[tauri::command]
+pub(crate) fn start_mic_test(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.start_mic_test()
+}
+
+/// Stop monitoring the microphone.
+#[tauri::command]
+pub(crate) fn stop_mic_test(state: tauri::State<'_, AppState>) {
+    state.stop_mic_test();
+}
+
+/// Calibrate the voice activation threshold by measuring the ambient
+/// noise floor for ~2 seconds (with AGC applied).  Returns the new threshold.
+#[tauri::command]
+pub(crate) async fn calibrate_voice_threshold(
+    state: tauri::State<'_, AppState>,
+) -> Result<f32, String> {
+    state.calibrate_voice_threshold().await
+}
+
+/// Begin a voice replay session: record up to ~20 s of microphone
+/// audio through the live outbound filter chain, then play it back
+/// through the output device.
+///
+/// Lifecycle events are emitted on `voice-replay-state`.
+#[tauri::command]
+pub(crate) fn start_voice_replay(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.start_voice_replay()
+}
+
+/// Advance the voice replay state machine - stops recording (which
+/// auto-transitions into playback), or stops playback entirely.
+#[tauri::command]
+pub(crate) fn stop_voice_replay(state: tauri::State<'_, AppState>) {
+    state.stop_voice_replay();
+}
+
+/// Start periodic TCP pings for live latency measurement.
+#[tauri::command]
+pub(crate) fn start_latency_test(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    state.start_latency_test()
+}
+
+/// Stop the latency test.
+#[tauri::command]
+pub(crate) fn stop_latency_test(state: tauri::State<'_, AppState>) {
+    state.stop_latency_test();
+}
+
+/// Start recording inbound audio to a file.
+#[tauri::command]
+pub(crate) fn start_recording(
+    state: tauri::State<'_, AppState>,
+    directory: String,
+    filename: String,
+    format: state::recording::RecordingFormat,
+) -> Result<String, String> {
+    state.start_recording(directory, filename, format)
+}
+
+/// Stop the current recording and finalize the file.
+#[tauri::command]
+pub(crate) fn stop_recording(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    state.stop_recording()
+}
+
+/// Get the current recording state.
+#[tauri::command]
+pub(crate) fn get_recording_state(
+    state: tauri::State<'_, AppState>,
+) -> state::recording::RecordingState {
+    state.recording_state()
+}

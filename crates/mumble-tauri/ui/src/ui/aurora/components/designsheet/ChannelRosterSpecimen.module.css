@@ -1,0 +1,42 @@
+/* Sidebar-width stage for the channel roster. */
+
+.rail {
+  width: 272px;
+  padding: 8px;
+  border: 1px solid rgb(235 242 248 / 9%);
+  border-radius: 12px;
+  background: rgb(20 25 33 / 88%);
+}
+
+.channel {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: #97a2b0;
+  font-size: 13px;
+  text-align: left;
+}
+
+.channel svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.channel span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channel b {
+  color: #6b7684;
+  font-size: 11px;
+}

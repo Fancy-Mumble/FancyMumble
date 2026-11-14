@@ -1,0 +1,63 @@
+import { CheckIcon, CloseIcon, ErrorCircleIcon } from "../../icons";
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { createPortal } from "react-dom";
+import styles from "./Toast.module.css";
+
+export interface ToastData {
+  message: string;
+  variant: "success" | "error" | "info";
+  /** Auto-dismiss duration in ms (default 4000). */
+  duration?: number;
+  /** Show a manual dismiss button (default false). */
+  dismissible?: boolean;
+}
+
+interface ToastProps extends ToastData {
+  onDismiss: () => void;
+}
+
+export default function Toast({ message, variant, duration = 4000, dismissible, onDismiss }: ToastProps) {
+  const { t } = useTranslation("common");
+  const [fadeOut, setFadeOut] = useState(false);
+
+  useEffect(() => {
+    const fadeTimer = setTimeout(() => setFadeOut(true), duration);
+    const removeTimer = setTimeout(onDismiss, duration + 300);
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(removeTimer);
+    };
+  }, [duration, onDismiss]);
+
+  let icon;
+  if (variant === "success") {
+    icon = <CheckIcon width={16} height={16} strokeWidth={2.5} />;
+  } else if (variant === "error") {
+    icon = <ErrorCircleIcon width={16} height={16} strokeWidth={2.5} />;
+  } else {
+    icon = <CheckIcon width={16} height={16} strokeWidth={2.5} />;
+  }
+
+  return createPortal(
+    <div
+      className={`${styles.toast} ${styles[variant]} ${fadeOut ? styles.fadeOut : ""}`}
+      role="alert"
+      aria-live="assertive"
+    >
+      <span className={styles.icon}>{icon}</span>
+      <span className={styles.message}>{message}</span>
+      {dismissible && (
+        <button
+          type="button"
+          className={styles.dismissBtn}
+          onClick={onDismiss}
+          aria-label={t("toast.dismissAriaLabel")}
+        >
+          <CloseIcon width={14} height={14} />
+        </button>
+      )}
+    </div>,
+    document.body,
+  );
+}

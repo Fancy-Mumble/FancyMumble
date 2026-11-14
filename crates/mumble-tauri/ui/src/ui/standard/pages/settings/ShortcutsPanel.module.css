@@ -1,0 +1,37 @@
+/* --- ShortcutsPanel - Shortcut list and built-in table --------- */
+
+.shortcutList {
+  display: grid;
+  grid-template-columns: max-content 1fr auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 8px;
+}
+
+.builtinTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.builtinTable td {
+  padding: 5px 0;
+  color: var(--color-text-secondary);
+  vertical-align: middle;
+}
+
+.builtinTable td:first-child {
+  width: 55%;
+}
+
+.builtinTable kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--color-text-primary);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-xs, 4px);
+  box-shadow: 0 1px 0 var(--color-glass-border);
+}

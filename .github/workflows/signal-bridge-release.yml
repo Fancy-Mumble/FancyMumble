@@ -1,0 +1,133 @@
+name: Signal bridge release
+
+# Publishes the AGPL signal-bridge library as a downloadable add-on.
+#
+# Installers do not bundle the bridge. The client downloads it on demand from
+# the release this workflow makes, pinned to the bridge version it was built
+# against, and refuses it unless its minisign signature checks out against
+# the updater key (see crates/mumble-tauri/src/state/pchat/bridge_addon.rs).
+#
+# To publish: bump `version` in crates/signal-bridge/Cargo.toml, then push a
+# tag `signal-bridge-v<that version>`. Publish the tag before any client that
+# expects that version ships, or its "Install" button has nothing to fetch.
+#
+# Asset names are part of the contract with `bridge_addon::asset_name()`.
+
+on:
+  push:
+    tags: ["signal-bridge-v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+  CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+
+jobs:
+  build:
+    name: Build (${{ matrix.target.name }})
+    runs-on: ${{ matrix.target.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        target:
+          # 22.04 rather than latest: the .so is loaded into whatever glibc the
+          # user has, so it is built against an older one.
+          - name: Linux
+            os: ubuntu-22.04
+            lib: libsignal_bridge.so
+            asset: libsignal_bridge-linux-x86_64.so
+          - name: Windows
+            os: windows-latest
+            lib: signal_bridge.dll
+            asset: signal_bridge-windows-x86_64.dll
+          - name: macOS
+            os: macos-14
+            lib: libsignal_bridge.dylib
+            asset: libsignal_bridge-macos-aarch64.dylib
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check the tag matches the crate version
+        shell: bash
+        run: |
+          VERSION=$(sed -n '/^\[package\]/,/^\[/s/^version = "\(.*\)"/\1/p' crates/signal-bridge/Cargo.toml)
+          if [ "${GITHUB_REF_NAME}" != "signal-bridge-v${VERSION}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match crates/signal-bridge version ${VERSION}."
+            exit 1
+          fi
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ matrix.target.os }}-signal-bridge
+          workspaces: crates/signal-bridge
+
+      - name: Install protoc (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install protoc (Windows, macOS)
+        if: runner.os != 'Linux'
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build
+        working-directory: crates/signal-bridge
+        run: cargo build --release --locked
+
+      - name: Install Tauri CLI
+        uses: taiki-e/install-action@v2
+        with:
+          tool: tauri-cli
+
+      - name: Sign
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::No TAURI_SIGNING_PRIVATE_KEY: an unsigned bridge would be refused by every client."
+            exit 1
+          fi
+          mkdir -p dist
+          cp "crates/signal-bridge/target/release/${{ matrix.target.lib }}" "dist/${{ matrix.target.asset }}"
+          cargo tauri signer sign "dist/${{ matrix.target.asset }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signal-bridge-${{ matrix.target.name }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#signal-bridge-v}"
+          # --latest=false matters: the app updater reads
+          # releases/latest/download/latest.json, and a bridge release marked
+          # "latest" would hide the app release from every client.
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Signal bridge $VERSION" \
+            --latest=false \
+            --notes "The Signal Protocol bridge add-on, version $VERSION. The client installs it for you: open an end-to-end encrypted (Signal) channel, or Settings → Plugins. Each file has a minisign signature (.sig) under the updater key.
+
+          Licensed AGPL-3.0-only. Source: https://github.com/$GITHUB_REPOSITORY/tree/$GITHUB_REF_NAME/crates/signal-bridge"

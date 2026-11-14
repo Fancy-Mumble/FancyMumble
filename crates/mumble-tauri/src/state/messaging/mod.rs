@@ -1,0 +1,723 @@
+//! Messaging: channel messages, encryption, and message storage.
+
+mod dm;
+mod unreads;
+
+use fancy_utils::html::strip_legacy_fallback;
+use mumble_protocol::client::ClientHandle;
+use mumble_protocol::command;
+use mumble_protocol::persistent::PchatProtocol;
+
+use super::types::ChatMessage;
+use super::{AppState, FetchWalk, SharedState, pchat};
+use crate::state::core_event::CoreEvent;
+use crate::state::host::Host;
+
+struct OwnMessageData {
+    channel_id: u32,
+    own_session: Option<u32>,
+    own_name: String,
+    own_hash: Option<String>,
+    body: String,
+    message_id: Option<String>,
+    timestamp: Option<u64>,
+    pchat_protocol: Option<PchatProtocol>,
+}
+
+/// What the plain copy of a sealed message says when dual path is off.
+const ENCRYPTED_PLACEHOLDER: &str = "[Encrypted message]";
+
+/// What a stock Mumble client is shown in front of an edit's new words.
+///
+/// A stock client ignores `edit_id` and draws an edit as a brand new message,
+/// so without a word of explanation a corrected typo reads as the sender
+/// saying the same thing twice. Fenced as legacy-only: a Fancy client applies
+/// the edit in place and marks it edited itself, and cuts this out on receipt.
+/// Led by the fallback tag, because `strip_legacy_fallback` only cuts a fence
+/// when the body carries a Fancy marker to vouch for it, and an edit of plain
+/// words has none of its own.
+pub(crate) const LEGACY_EDITED_MARK: &str =
+    "<!-- FANCY_FALLBACK --><!-- FANCY_LEGACY --><i>(edited)</i> <!-- /FANCY_LEGACY -->";
+
+/// The body of an edit's plain `TextMessage`, the copy stock clients read.
+///
+/// The same dual-path decision [`AppState::send_message`] makes: in an
+/// encrypted channel whose user turned dual path off, the plain copy is the
+/// placeholder and never the words. An edit used to send the new words in the
+/// clear whatever the channel was, so editing a message in an end-to-end
+/// channel published it.
+fn legacy_edit_body(body: &str, disable_dual: bool) -> String {
+    let shown = if disable_dual {
+        ENCRYPTED_PLACEHOLDER
+    } else {
+        body
+    };
+    format!("{LEGACY_EDITED_MARK}{shown}")
+}
+
+/// Tell the view that a plugin added or changed a message in each of
+/// `channels`.
+fn emit_plugin_messages(host: Option<&Host>, channels: Vec<u32>) {
+    let Some(host) = host else {
+        return;
+    };
+    for channel_id in channels {
+        host.send(CoreEvent::NewMessage(
+            crate::state::types::NewMessagePayload {
+                channel_id,
+                sender_session: None,
+            },
+        ));
+    }
+}
+
+/// Search `bucket` for the first message whose `plugin_name` and `message_id`
+/// match, apply the requested update fields to it, and return whether a match
+/// was found.
+fn apply_plugin_message_update(
+    bucket: &mut [ChatMessage],
+    plugin_name: &str,
+    message_id: &str,
+    content: Option<&str>,
+    components: Option<&serde_json::Value>,
+    clear_components: bool,
+    now_ms: u64,
+) -> bool {
+    for msg in bucket.iter_mut() {
+        if msg.plugin_name.as_deref() != Some(plugin_name)
+            || msg.message_id.as_deref() != Some(message_id)
+        {
+            continue;
+        }
+        if let Some(c) = content {
+            msg.body = c.to_owned();
+        }
+        if clear_components {
+            msg.plugin_components = None;
+        }
+        if let Some(v) = components {
+            msg.plugin_components = Some(v.clone());
+        }
+        msg.edited_at = Some(now_ms);
+        return true;
+    }
+    false
+}
+
+fn own_session_hash(state: &SharedState) -> Option<String> {
+    state
+        .conn
+        .own_session
+        .and_then(|sid| state.users.get(&sid))
+        .and_then(|u| u.hash.clone())
+}
+
+fn cache_own_signal_message(state: &mut SharedState, msg: &ChatMessage, channel_id: u32) {
+    if let Some(pchat) = state.pchat_ctx.pchat.as_mut() {
+        // Through the same helper the inbound path uses, so a message the
+        // user sent gets the same throttled write-out as one they received.
+        let cached = own_cached_message(pchat, msg, channel_id);
+        pchat.cache_signal_message(cached);
+    }
+}
+
+/// [`cache_own_signal_message`] for a message the user has just edited.
+///
+/// The cache dedups by id, so the edited body would otherwise lose to the
+/// original, and a `SignalV1` channel, which has no server history to put it
+/// right, reopened on the words the user retracted.
+fn recache_own_signal_message(state: &mut SharedState, msg: &ChatMessage, channel_id: u32) {
+    if let Some(pchat) = state.pchat_ctx.pchat.as_mut() {
+        let cached = own_cached_message(pchat, msg, channel_id);
+        pchat.recache_signal_message(cached);
+    }
+}
+
+fn own_cached_message(
+    pchat: &pchat::PchatState,
+    msg: &ChatMessage,
+    channel_id: u32,
+) -> super::local_cache::CachedMessage {
+    super::local_cache::CachedMessage {
+        message_id: msg.message_id.clone().unwrap_or_default(),
+        channel_id,
+        timestamp: msg.timestamp.unwrap_or(0),
+        sender_hash: pchat.own_cert_hash.clone(),
+        sender_name: msg.sender_name.clone(),
+        body: msg.body.clone(),
+        is_own: true,
+    }
+}
+
+/// Which way a fetch for `anchor` walks the archive.
+fn walk_of(anchor: &pchat::Anchor) -> FetchWalk {
+    match anchor {
+        pchat::Anchor::Newest => FetchWalk::Newest,
+        pchat::Anchor::Before(_) => FetchWalk::Older,
+        pchat::Anchor::After(_) => FetchWalk::Newer,
+    }
+}
+
+impl AppState {
+    /// Ask the server for a page of history in either direction.
+    ///
+    /// `fetch_older_messages` keeps its name and its meaning for the callers
+    /// that only ever walk backwards; [`Self::fetch_message_page`] is the one
+    /// that takes a direction.
+    pub async fn fetch_older_messages(
+        &self,
+        channel_id: u32,
+        before_id: Option<String>,
+        limit: u32,
+    ) -> Result<(), String> {
+        let anchor = before_id.map_or(pchat::Anchor::Newest, pchat::Anchor::Before);
+        self.fetch_message_page(channel_id, anchor, limit).await
+    }
+
+    /// Ask the server for a page of history anchored where the caller says.
+    pub async fn fetch_message_page(
+        &self,
+        channel_id: u32,
+        anchor: pchat::Anchor,
+        limit: u32,
+    ) -> Result<(), String> {
+        let handle = {
+            let __session = self.inner.snapshot();
+            let mut state = __session.lock().map_err(|e| e.to_string())?;
+            // The response does not echo the direction it was asked in, and
+            // `has_more` means the opposite thing each way, so the asker
+            // records it while it still knows.
+            state.msgs.note_fetch(channel_id, walk_of(&anchor));
+            state.conn.client_handle.clone()
+        };
+        let handle = handle.ok_or("Not connected")?;
+        pchat::send_fetch(&handle, channel_id, anchor, limit).await
+    }
+
+    pub async fn send_message(&self, channel_id: u32, body: String) -> Result<(), String> {
+        let (handle, own_session, own_name, own_hash, is_fancy, pchat_protocol) = {
+            let __session = self.inner.snapshot();
+            let state = __session.lock().map_err(|e| e.to_string())?;
+            let pchat_proto = state
+                .channels
+                .get(&channel_id)
+                .and_then(|ch| ch.pchat_protocol);
+            let hash = own_session_hash(&state);
+            (
+                state.conn.client_handle.clone(),
+                state.conn.own_session,
+                state.conn.own_name.clone(),
+                hash,
+                state.server.fancy_version.is_some(),
+                pchat_proto,
+            )
+        };
+
+        let handle = handle.ok_or("Not connected")?;
+
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let message_id = is_fancy.then(|| uuid::Uuid::new_v4().to_string());
+        let timestamp = is_fancy.then_some(now_ms);
+
+        let disable_dual = pchat_protocol.is_some_and(|p| p.is_encrypted())
+            && self
+                .inner
+                .snapshot()
+                .lock()
+                .map(|s| s.prefs.disable_dual_path)
+                .unwrap_or(false);
+        // The legacy-only part rides the plain `TextMessage` alone: the sealed
+        // copy and our own row are read by Fancy clients, which draw the card.
+        let fancy_body = strip_legacy_fallback(&body);
+        let text_body = if disable_dual {
+            ENCRYPTED_PLACEHOLDER.to_string()
+        } else {
+            body
+        };
+        let body = fancy_body;
+
+        let prebuilt_pchat = self.prebuilt_pchat_message(
+            pchat_protocol,
+            &message_id,
+            channel_id,
+            &body,
+            &own_name,
+            now_ms,
+        )?;
+
+        handle
+            .send(command::SendTextMessage {
+                channel_ids: vec![channel_id],
+                user_sessions: vec![],
+                tree_ids: vec![],
+                message: text_body,
+                message_id: message_id.clone(),
+                timestamp,
+                edit_id: None,
+            })
+            .await
+            .map_err(|e| format!("Failed to send message: {e}"))?;
+
+        if let Some((proto_msg, client)) = prebuilt_pchat
+            && let Err(e) = client
+                .send(command::SendPchatMessage { message: proto_msg })
+                .await
+        {
+            tracing::warn!("send pchat-msg failed: {e}");
+        }
+
+        self.store_own_message(OwnMessageData {
+            channel_id,
+            own_session,
+            own_name,
+            own_hash,
+            body,
+            message_id,
+            timestamp,
+            pchat_protocol,
+        });
+        Ok(())
+    }
+
+    fn prebuilt_pchat_message(
+        &self,
+        pchat_protocol: Option<PchatProtocol>,
+        message_id: &Option<String>,
+        channel_id: u32,
+        body: &str,
+        own_name: &str,
+        now_ms: u64,
+    ) -> Result<
+        Option<(
+            mumble_protocol::proto::mumble_tcp::PchatMessage,
+            ClientHandle,
+        )>,
+        String,
+    > {
+        // `uses_pchat`, not `is_encrypted`: a server-managed channel's messages
+        // ride the same service and land in the same archive, they are simply
+        // not sealed by this client on the way. Filtering on encryption here
+        // would leave that mode with no persisted history at all.
+        let Some(protocol) = pchat_protocol.filter(PchatProtocol::uses_pchat) else {
+            return Ok(None);
+        };
+        let Some(msg_id) = message_id else {
+            return Ok(None);
+        };
+        self.ensure_signal_sender_key(protocol, channel_id);
+        let __session = self.inner.snapshot();
+        let session = __session
+            .lock()
+            .ok()
+            .and_then(|s| s.conn.own_session)
+            .unwrap_or(0);
+        self.build_pchat_encrypted(&pchat::OutboundMessage {
+            channel_id,
+            protocol,
+            message_id: msg_id,
+            body,
+            sender_name: own_name,
+            sender_session: session,
+            timestamp: now_ms,
+        })
+    }
+
+    /// Mint and hand out our `SignalV1` sender key for `channel_id` if sending
+    /// is the first thing that has needed it.
+    ///
+    /// Every other call site of `create_distribution` hangs off a channel
+    /// *move*, so a room we never moved into - one that turned encrypted under
+    /// us, or one being read without joining - reached the send path with no
+    /// sender key, and `group_encrypt` failed with "missing sender key state
+    /// for distribution ID ...". `send_message` returns that as an error before
+    /// it has sent anything, and a plain text body has no placeholder to fail
+    /// visibly, so the message simply vanished.
+    ///
+    /// Cheap and idempotent: after the first mint the flag is set and this is a
+    /// map lookup.
+    fn ensure_signal_sender_key(&self, protocol: PchatProtocol, channel_id: u32) {
+        if protocol != PchatProtocol::SignalV1 {
+            return;
+        }
+        let shared = self.inner.snapshot();
+        let minted = shared
+            .lock()
+            .ok()
+            .and_then(|s| {
+                s.pchat_ctx
+                    .pchat
+                    .as_ref()
+                    .map(|p| p.signal_distributed.contains(&channel_id))
+            })
+            .unwrap_or(false);
+        if minted {
+            return;
+        }
+        tracing::info!(
+            channel_id,
+            "pchat: no signal sender key for this channel yet, minting one for the send"
+        );
+        pchat::send_signal_distribution(&shared, channel_id);
+    }
+
+    fn store_own_message(&self, msg_data: OwnMessageData) {
+        let __session = self.inner.snapshot();
+        let Ok(mut state) = __session.lock() else {
+            return;
+        };
+        let mut msg = ChatMessage {
+            sender_session: msg_data.own_session,
+            sender_name: msg_data.own_name,
+            sender_hash: msg_data.own_hash,
+            body: msg_data.body,
+            channel_id: msg_data.channel_id,
+            is_own: true,
+            dm_session: None,
+            message_id: msg_data.message_id,
+            timestamp: msg_data.timestamp,
+            is_legacy: false,
+            send_failed: false,
+            edited_at: None,
+            pinned: false,
+            pinned_by: None,
+            pinned_at: None,
+            plugin_name: None,
+            plugin_components: None,
+        };
+        msg.ensure_id();
+
+        if msg_data
+            .pchat_protocol
+            .is_some_and(|p| p == PchatProtocol::SignalV1)
+        {
+            cache_own_signal_message(&mut state, &msg, msg_data.channel_id);
+        }
+
+        let bucket = state
+            .msgs
+            .by_channel
+            .entry(msg_data.channel_id)
+            .or_default();
+        super::push_capped(bucket, msg);
+    }
+
+    /// Inject a plugin-authored chat message into the local channel
+    /// histories selected by `channel_ids` (falling back to the
+    /// currently-viewed channel when empty), then emit `new-message`
+    /// events so the UI scrolls and updates unread counters.
+    ///
+    /// The message is purely local: it is never forwarded to the
+    /// server, so other clients do not see it.  The originating
+    /// plugin is recorded on
+    /// [`ChatMessage::plugin_name`](super::types::ChatMessage::plugin_name)
+    /// so component interactions inside the bubble can be routed
+    /// back to the right plugin.
+    pub fn plugin_inject_chat_message(
+        &self,
+        plugin_name: String,
+        channel_ids: Vec<u32>,
+        message_id: String,
+        content: String,
+        components: Option<serde_json::Value>,
+    ) -> Result<(), String> {
+        let (targets, app_handle) = {
+            let __session = self.inner.snapshot();
+            let state = __session.lock().map_err(|e| e.to_string())?;
+            let targets: Vec<u32> = if channel_ids.is_empty() {
+                state.selected_channel.into_iter().collect()
+            } else {
+                channel_ids
+            };
+            (targets, state.conn.host.clone())
+        };
+
+        if targets.is_empty() {
+            return Err(
+                "plugin_inject_chat_message: empty channel_ids and no channel currently selected"
+                    .to_string(),
+            );
+        }
+
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        {
+            let __session = self.inner.snapshot();
+            let mut state = __session.lock().map_err(|e| e.to_string())?;
+            for &channel_id in &targets {
+                let msg = ChatMessage {
+                    sender_session: None,
+                    sender_name: plugin_name.clone(),
+                    sender_hash: None,
+                    body: content.clone(),
+                    channel_id,
+                    is_own: false,
+                    dm_session: None,
+                    message_id: Some(message_id.clone()),
+                    timestamp: Some(now_ms),
+                    is_legacy: false,
+                    send_failed: false,
+                    edited_at: None,
+                    pinned: false,
+                    pinned_by: None,
+                    pinned_at: None,
+                    plugin_name: Some(plugin_name.clone()),
+                    plugin_components: components.clone(),
+                };
+                let bucket = state.msgs.by_channel.entry(channel_id).or_default();
+                super::push_capped(bucket, msg);
+            }
+        }
+
+        emit_plugin_messages(app_handle.as_ref(), targets);
+        Ok(())
+    }
+
+    /// Update an already-injected plugin chat bubble in place.  Used
+    /// by the TS reducer when a plugin sends `update-message` for a
+    /// `message_id` that was previously produced by `chat_message!`.
+    ///
+    /// Only messages whose `plugin_name` matches `plugin_name` are
+    /// touched, preventing plugin A from rewriting plugin B's
+    /// bubbles or user-authored messages.  Returns `Ok` even when
+    /// nothing was found - the plugin treats updates idempotently.
+    pub fn plugin_update_chat_message(
+        &self,
+        plugin_name: String,
+        message_id: String,
+        content: Option<String>,
+        components: Option<serde_json::Value>,
+        clear_components: bool,
+    ) -> Result<(), String> {
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        let (touched, app_handle) = {
+            let __session = self.inner.snapshot();
+            let mut state = __session.lock().map_err(|e| e.to_string())?;
+            let mut touched: Vec<u32> = Vec::new();
+            for (channel_id, bucket) in state.msgs.by_channel.iter_mut() {
+                if apply_plugin_message_update(
+                    bucket,
+                    &plugin_name,
+                    &message_id,
+                    content.as_deref(),
+                    components.as_ref(),
+                    clear_components,
+                    now_ms,
+                ) {
+                    touched.push(*channel_id);
+                }
+            }
+            (touched, state.conn.host.clone())
+        };
+
+        emit_plugin_messages(app_handle.as_ref(), touched);
+        Ok(())
+    }
+
+    /// Replace the body of one of our channel messages.
+    ///
+    /// An edit travels the way the message did: a plain `TextMessage` naming
+    /// the original in `edit_id`, for the server's relay and for stock
+    /// clients, and in a persistent channel a sealed `PchatMessage` naming it
+    /// in `replaces_id`, which is what Fancy clients apply there and what the
+    /// archive rewrites its row with. Both are sent under one fresh id of the
+    /// edit's own, because the sealed copy is authenticated against its own
+    /// id and clock, and the archive keeps one row per sender id. The original
+    /// id stays the message's identity everywhere: every later edit, pin and
+    /// delete names it.
+    ///
+    /// The edit used to be the plain copy alone, with the new words in the
+    /// clear whatever the channel was, so in an end-to-end channel an edit
+    /// published what it said and the sealed archive kept the old text.
+    pub async fn edit_message(
+        &self,
+        channel_id: u32,
+        message_id: String,
+        new_body: String,
+    ) -> Result<(), String> {
+        let (handle, is_fancy, own_name, pchat_protocol, dual_path_off) = {
+            let __session = self.inner.snapshot();
+            let state = __session.lock().map_err(|e| e.to_string())?;
+            (
+                state.conn.client_handle.clone(),
+                state.server.fancy_version.is_some(),
+                state.conn.own_name.clone(),
+                state
+                    .channels
+                    .get(&channel_id)
+                    .and_then(|ch| ch.pchat_protocol),
+                state.prefs.disable_dual_path,
+            )
+        };
+
+        let handle = handle.ok_or("Not connected")?;
+        if !is_fancy {
+            return Err("Message editing requires a Fancy Mumble server".into());
+        }
+
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let edit_message_id = uuid::Uuid::new_v4().to_string();
+
+        let disable_dual = pchat_protocol.is_some_and(|p| p.is_encrypted()) && dual_path_off;
+        // As in `send_message`: the legacy-only part rides the plain copy
+        // alone, and the sealed copy and our own row get the Fancy body.
+        let fancy_body = strip_legacy_fallback(&new_body);
+        let text_body = legacy_edit_body(&new_body, disable_dual);
+
+        let prebuilt_pchat = self
+            .prebuilt_pchat_message(
+                pchat_protocol,
+                &Some(edit_message_id.clone()),
+                channel_id,
+                &fancy_body,
+                &own_name,
+                now_ms,
+            )?
+            .map(|(mut proto_msg, client)| {
+                proto_msg.replaces_id = Some(message_id.clone());
+                (proto_msg, client)
+            });
+
+        handle
+            .send(command::SendTextMessage {
+                channel_ids: vec![channel_id],
+                user_sessions: vec![],
+                tree_ids: vec![],
+                message: text_body,
+                message_id: Some(edit_message_id),
+                timestamp: Some(now_ms),
+                edit_id: Some(message_id.clone()),
+            })
+            .await
+            .map_err(|e| format!("Failed to send edit: {e}"))?;
+
+        if let Some((proto_msg, client)) = prebuilt_pchat
+            && let Err(e) = client
+                .send(command::SendPchatMessage { message: proto_msg })
+                .await
+        {
+            tracing::warn!("send pchat edit failed: {e}");
+        }
+
+        self.apply_own_edit(channel_id, &message_id, fancy_body, now_ms, pchat_protocol);
+        Ok(())
+    }
+
+    /// Show our own edit locally: the server echoes neither copy back to the
+    /// session that sent it.
+    fn apply_own_edit(
+        &self,
+        channel_id: u32,
+        message_id: &str,
+        body: String,
+        edited_at: u64,
+        pchat_protocol: Option<PchatProtocol>,
+    ) {
+        let __session = self.inner.snapshot();
+        let Ok(mut state) = __session.lock() else {
+            return;
+        };
+        let Some(msg) = state.msgs.by_channel.get_mut(&channel_id).and_then(|msgs| {
+            msgs.iter_mut()
+                .find(|m| m.message_id.as_deref() == Some(message_id))
+        }) else {
+            return;
+        };
+        msg.body = body;
+        msg.edited_at = Some(edited_at);
+        let edited = msg.clone();
+        if pchat_protocol == Some(PchatProtocol::SignalV1) {
+            recache_own_signal_message(&mut state, &edited, channel_id);
+        }
+    }
+
+    /// Build an encrypted `PchatMessage` proto without sending it.
+    pub(super) fn build_pchat_encrypted(
+        &self,
+        outbound: &pchat::OutboundMessage<'_>,
+    ) -> Result<
+        Option<(
+            mumble_protocol::proto::mumble_tcp::PchatMessage,
+            ClientHandle,
+        )>,
+        String,
+    > {
+        let __session = self.inner.snapshot();
+        let mut state = __session.lock().map_err(|e| e.to_string())?;
+        let client = state.conn.client_handle.clone();
+        match (&mut state.pchat_ctx.pchat, client) {
+            (Some(pchat_state), Some(client)) => {
+                if outbound.protocol == PchatProtocol::SignalV1
+                    && pchat_state.signal_bridge.is_none()
+                    && !pchat_state.signal_bridge_load_failed
+                {
+                    tracing::info!("send_message: lazy-loading signal bridge");
+                    let _ = pchat_state.ensure_signal_bridge();
+                }
+                match pchat_state.build_encrypted_message(outbound) {
+                    Ok(proto_msg) => Ok(Some((proto_msg, client))),
+                    Err(e) => {
+                        tracing::warn!("pchat encrypt failed: {e}");
+                        Err(format!("Encryption failed: {e}"))
+                    }
+                }
+            }
+            _ => Ok(None),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_edit_in_a_channel_with_dual_path_off_sends_no_plaintext() {
+        // The leak: an edit's plain copy carried the new words whatever the
+        // channel, so editing in an end-to-end channel published them.
+        let body = legacy_edit_body("the secret plan", true);
+        assert!(
+            !body.contains("secret"),
+            "plaintext in the legacy copy: {body}"
+        );
+        assert!(body.ends_with(ENCRYPTED_PLACEHOLDER));
+    }
+
+    #[test]
+    fn an_edit_with_dual_path_on_shows_stock_clients_the_words() {
+        assert_eq!(
+            legacy_edit_body("fixed", false),
+            format!("{LEGACY_EDITED_MARK}fixed")
+        );
+    }
+
+    #[test]
+    fn the_edited_note_is_fenced_for_stock_clients_only() {
+        use fancy_utils::html::{
+            LEGACY_FALLBACK_CLOSE, LEGACY_FALLBACK_OPEN, LEGACY_FALLBACK_TAG, strip_legacy_fallback,
+        };
+        assert_eq!(
+            LEGACY_EDITED_MARK,
+            format!(
+                "{LEGACY_FALLBACK_TAG}{LEGACY_FALLBACK_OPEN}<i>(edited)</i> {LEGACY_FALLBACK_CLOSE}"
+            )
+        );
+        // What a Fancy client does with it on receipt: nothing of it is left.
+        assert_eq!(
+            strip_legacy_fallback(&legacy_edit_body("fixed", false)),
+            "fixed"
+        );
+    }
+}

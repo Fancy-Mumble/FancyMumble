@@ -1,0 +1,25 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--color-overlay-heavy, rgba(0, 0, 0, 0.55));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  animation: modalOverlayIn 0.12s ease-out;
+}
+
+@keyframes modalOverlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay {
+    animation: none;
+  }
+}

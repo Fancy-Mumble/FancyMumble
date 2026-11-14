@@ -1,0 +1,204 @@
+/* --- Custodian Prompt ------------------------------------------- */
+
+/* Additive backdrop blur layered onto the shared Modal overlay. */
+.overlayBlur {
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.dialog {
+  width: 420px;
+  max-width: 95vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-glass-border);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px var(--color-overlay-strong);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--color-glass-border);
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.closeBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.closeBtn:hover {
+  background: var(--color-glass-hover);
+}
+
+.body {
+  padding: 16px 20px;
+}
+
+.description {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+/* --- Custodian list --------------------------------------------- */
+
+.custodianList {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+}
+
+.custodianItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.12);
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.custodianIcon {
+  width: 16px;
+  height: 16px;
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.custodianHash {
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+}
+
+.custodianName {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+/* --- Change indicators ------------------------------------------ */
+
+.changeAdded {
+  border-left: 3px solid var(--color-online);
+}
+
+.changeRemoved {
+  border-left: 3px solid var(--color-danger);
+  opacity: 0.7;
+}
+
+.changeBadge {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.badgeAdded {
+  background: var(--color-online-bg);
+  color: var(--color-online);
+}
+
+.badgeRemoved {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+/* --- Warning ----------------------------------------------------- */
+
+.warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(234, 179, 8, 0.06);
+  border: 1px solid rgba(234, 179, 8, 0.15);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+  margin-bottom: 14px;
+}
+
+.warningIcon {
+  width: 16px;
+  height: 16px;
+  color: var(--color-warning);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* --- Footer ----------------------------------------------------- */
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-glass-border);
+}
+
+.btnSecondary {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--color-glass-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btnSecondary:hover {
+  background: var(--color-glass-border);
+}
+
+.btnPrimary {
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--color-accent-border-strong);
+  background: linear-gradient(135deg, var(--color-accent-medium), var(--color-accent-gradient-end));
+  color: var(--color-accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btnPrimary:hover {
+  background: linear-gradient(135deg, var(--color-accent-fill), rgba(34, 158, 217, 0.18));
+}
+
+/* --- Mobile ----------------------------------------------------- */
+
+@media (max-width: 768px) {
+  .dialog {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 0;
+  }
+}

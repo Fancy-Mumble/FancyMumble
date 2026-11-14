@@ -1,0 +1,16 @@
+/* Styles for ProfilePreviewCard inside MobileBottomSheet. */
+
+/* Make the ProfilePreviewCard fill the sheet width */
+.cardWrap {
+  width: 100%;
+}
+
+/* Override the fixed 260px width and translucent glass background.
+   backdrop-filter is unreliable on Android WebView, so use an opaque
+   background to keep text readable. */
+.cardWrap > div {
+  width: 100% !important;
+  border-radius: 0;
+  background: var(--color-bg-secondary);
+  border: none;
+}

@@ -1,0 +1,456 @@
+//! Background async tasks for audio: outbound encoding/sending loop,
+//! mic test loop with auto-calibration, and latency ping loop.
+//!
+//! Extracted from `audio.rs` to keep file sizes manageable.
+
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::time::Duration;
+
+use tracing::{debug, warn};
+
+use mumble_protocol::audio::capture::AudioCapture;
+use mumble_protocol::audio::filter::FilterChain;
+use mumble_protocol::audio::pipeline::{OutboundPipeline, OutboundTick};
+use mumble_protocol::client::ClientHandle;
+use mumble_protocol::command;
+use mumble_protocol::message::UdpMessage;
+use mumble_protocol::proto::mumble_udp;
+
+use super::SharedState;
+use super::calibration::{
+    AUTO_CALIBRATION_WINDOW, CalibrationResult, Calibrator, frame_peak, frame_rms,
+};
+use super::local_talking::LocalTalking;
+use super::types::{MicAmplitudePayload, VoiceActivationCalibrationPayload};
+use crate::state::core_event::CoreEvent;
+use crate::state::host::Host;
+
+// -----------------------------------------------------------------------
+//  Outbound audio
+// -----------------------------------------------------------------------
+
+/// Payload queued from the encoding loop to the network send task.
+pub(super) struct AudioPacketOut {
+    pub data: Vec<u8>,
+    pub sequence: u64,
+    pub is_terminator: bool,
+}
+
+/// When dropped, emits a `user-talking` = false event so the frontend
+/// clears the self-talking indicator if the task is cancelled.
+struct TalkingGuard {
+    app: Option<Host>,
+    flag: Arc<LocalTalking>,
+    session: Option<u32>,
+    is_talking: bool,
+}
+
+impl Drop for TalkingGuard {
+    fn drop(&mut self) {
+        if self.is_talking
+            && let (Some(app), Some(session)) = (&self.app, self.session)
+        {
+            report_local_talking(app, &self.flag, session, false);
+        }
+    }
+}
+
+/// The local user started or stopped transmitting: tell the view, and record
+/// it for anything that polls instead of listening.
+fn report_local_talking(app: &Host, flag: &LocalTalking, session: u32, talking: bool) {
+    super::audio::emit_user_talking(app, session, talking);
+    flag.set(talking);
+}
+
+/// Background task that reads from the microphone, encodes, and queues
+/// Opus packets for network transmission.
+///
+/// Encoding and network I/O are decoupled via a bounded channel so
+/// that slow network sends never stall the audio processing loop.
+///
+/// When `app` and `own_session` are provided, the loop emits
+/// `user-talking` events so the frontend can show a self-talking
+/// indicator.
+pub(super) async fn outbound_audio_loop(
+    mut pipeline: OutboundPipeline,
+    handle: ClientHandle,
+    app: Option<Host>,
+    local_talking: Arc<LocalTalking>,
+    own_session: Option<u32>,
+    voice_target: Arc<AtomicU8>,
+) {
+    debug!("outbound_audio_loop: task started");
+
+    // Start the capture device inside the encoding task so the cpal
+    // stream only begins producing samples when we are ready to consume.
+    if let Err(e) = pipeline.start() {
+        warn!("outbound_audio_loop: capture start failed: {e}");
+        super::audio::emit_capture_error(app.as_ref(), &e.to_string());
+        return;
+    }
+    // Microphone opened - clear any previously shown capture error.
+    super::audio::clear_capture_error(app.as_ref());
+
+    // Bounded channel: 50 packets ~ 1 second of audio at 20ms/frame.
+    let (tx, rx) = tokio::sync::mpsc::channel::<AudioPacketOut>(50);
+
+    let _outbound_send_task = tokio::spawn(outbound_send_task(rx, handle, voice_target));
+
+    // Brief yield so the cpal callback can deliver an initial batch of
+    // samples, then drain any that accumulated during startup.
+    tokio::task::yield_now().await;
+    while pipeline
+        .tick()
+        .is_ok_and(|t| !matches!(t, OutboundTick::NoData))
+    {}
+
+    debug!("outbound_audio_loop: entering encoding loop");
+
+    // Poll at 5 ms instead of 20 ms. Each frame is still 960 samples
+    // (20 ms @ 48 kHz), but the shorter interval reduces the chance of
+    // missing the moment when enough samples become available.
+    let mut interval = tokio::time::interval(Duration::from_millis(5));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut stats = OutboundStats::default();
+    let mut last_tick = tokio::time::Instant::now();
+    let mut guard = TalkingGuard {
+        app: app.clone(),
+        flag: local_talking,
+        session: own_session,
+        is_talking: false,
+    };
+
+    loop {
+        let _ = interval.tick().await;
+
+        // Detect when the Tokio runtime was stalled (e.g. Android
+        // throttled the process).  Skip this tick so the capture
+        // `read_frame()` overflow logic can discard stale audio
+        // instead of encoding it all in a burst.
+        let now = tokio::time::Instant::now();
+        let elapsed = now.duration_since(last_tick);
+        last_tick = now;
+        if elapsed > Duration::from_millis(200) {
+            warn!(
+                "outbound_audio: tick delayed by {:.0} ms, skipping to discard stale audio",
+                elapsed.as_millis()
+            );
+            while pipeline
+                .tick()
+                .is_ok_and(|t| !matches!(t, OutboundTick::NoData))
+            {}
+            continue;
+        }
+
+        // Process a bounded number of frames per tick.
+        for _ in 0..5 {
+            if !process_outbound_tick(
+                &mut pipeline,
+                &tx,
+                &app,
+                own_session,
+                &mut guard,
+                &mut stats,
+            ) {
+                break;
+            }
+        }
+    }
+}
+
+/// Counters for periodic outbound audio diagnostics.
+#[derive(Default)]
+struct OutboundStats {
+    packets: u64,
+    silence: u64,
+    total: u64,
+}
+
+/// Process a single outbound pipeline tick.
+///
+/// Returns `true` when more frames may be available in the same tick
+/// batch, `false` when the caller should stop the inner loop.
+fn process_outbound_tick(
+    pipeline: &mut OutboundPipeline,
+    tx: &tokio::sync::mpsc::Sender<AudioPacketOut>,
+    app: &Option<Host>,
+    own_session: Option<u32>,
+    guard: &mut TalkingGuard,
+    stats: &mut OutboundStats,
+) -> bool {
+    match pipeline.tick() {
+        // A voice message is being recorded: the room does not hear it. The
+        // first held frame ends the utterance properly - it goes out as the
+        // terminator, so listeners hear a sentence stop rather than a stream
+        // that breaks off - and the rest are dropped until the take is over.
+        Ok(OutboundTick::Audio(packet))
+            if super::voice_message::HOLDS_TRANSMISSION.load(Ordering::Relaxed) =>
+        {
+            if guard.is_talking {
+                guard.is_talking = false;
+                if let (Some(app), Some(session)) = (app, own_session) {
+                    report_local_talking(app, &guard.flag, session, false);
+                }
+                let _ = tx.try_send(AudioPacketOut {
+                    data: packet.data,
+                    sequence: packet.sequence,
+                    is_terminator: true,
+                });
+            }
+            true
+        }
+        Ok(OutboundTick::Audio(packet)) => {
+            stats.packets += 1;
+            stats.total += 1;
+            if !guard.is_talking {
+                guard.is_talking = true;
+                if let (Some(app), Some(session)) = (app, own_session) {
+                    report_local_talking(app, &guard.flag, session, true);
+                }
+            }
+            if stats.packets == 1 || stats.packets.is_multiple_of(500) {
+                debug!(
+                    "outbound_audio: sending packet #{} (opus {} bytes, seq {})",
+                    stats.packets,
+                    packet.data.len(),
+                    packet.sequence
+                );
+            }
+            if tx
+                .try_send(AudioPacketOut {
+                    data: packet.data,
+                    sequence: packet.sequence,
+                    is_terminator: false,
+                })
+                .is_err()
+            {
+                warn!("outbound_audio: send channel full, dropping packet");
+            }
+            true
+        }
+        Ok(OutboundTick::Terminator(packet)) => {
+            stats.total += 1;
+            if guard.is_talking {
+                guard.is_talking = false;
+                if let (Some(app), Some(session)) = (app, own_session) {
+                    report_local_talking(app, &guard.flag, session, false);
+                }
+            }
+            debug!(
+                "outbound_audio: sending terminator (opus {} bytes)",
+                packet.data.len()
+            );
+            let _ = tx.try_send(AudioPacketOut {
+                data: packet.data,
+                sequence: packet.sequence,
+                is_terminator: true,
+            });
+            true
+        }
+        Ok(OutboundTick::Silence) => {
+            stats.silence += 1;
+            stats.total += 1;
+            if stats.total.is_multiple_of(500) {
+                debug!(
+                    "outbound_audio stats: total={}, sent={}, silenced={}, silence_rate={:.1}%",
+                    stats.total,
+                    stats.packets,
+                    stats.silence,
+                    if stats.total > 0 {
+                        stats.silence as f64 / stats.total as f64 * 100.0
+                    } else {
+                        0.0
+                    },
+                );
+            }
+            true
+        }
+        Ok(OutboundTick::NoData) => false,
+        Err(e) => {
+            warn!("outbound audio error: {e}");
+            false
+        }
+    }
+}
+
+/// Drains encoded audio packets from the channel and sends them to
+/// the server via the high-priority audio path.
+///
+/// `voice_target` is the slot each packet is addressed to: `0` for the
+/// channel, or the whisper slot while the whisper key is held.
+async fn outbound_send_task(
+    mut rx: tokio::sync::mpsc::Receiver<AudioPacketOut>,
+    handle: ClientHandle,
+    voice_target: Arc<AtomicU8>,
+) {
+    let mut sent: u64 = 0;
+    let mut dropped: u64 = 0;
+    while let Some(pkt) = rx.recv().await {
+        // Read per packet, not per utterance: the whisper key can go down and
+        // up inside one, and the target is what decides who hears each frame.
+        let audio = mumble_udp::Audio {
+            header: Some(mumble_udp::audio::Header::Target(u32::from(
+                voice_target.load(Ordering::Relaxed),
+            ))),
+            sender_session: 0,
+            frame_number: pkt.sequence,
+            opus_data: pkt.data,
+            positional_data: Vec::new(),
+            volume_adjustment: 0.0,
+            is_terminator: pkt.is_terminator,
+        };
+        match handle.send_audio(UdpMessage::Audio(audio)) {
+            Ok(()) => {
+                sent += 1;
+                if sent == 1 {
+                    debug!("outbound_send_task: first packet queued to event loop");
+                }
+            }
+            Err(e) => {
+                dropped += 1;
+                if dropped == 1 || dropped.is_multiple_of(100) {
+                    warn!("outbound_audio: send failed (dropped={dropped}, sent={sent}): {e}",);
+                }
+            }
+        }
+    }
+    debug!("outbound_send_task: channel closed, sent={sent}, dropped={dropped}");
+}
+
+// -----------------------------------------------------------------------
+//  Mic test
+// -----------------------------------------------------------------------
+
+/// Background loop for the mic test.
+///
+/// Reads frames from the capture device, runs them through `filters` -
+/// the AGC and denoiser the live pipeline puts in front of the noise
+/// gate - and emits the resulting RMS/peak as `mic-amplitude` events,
+/// so the meter shows the level the gate judges.  When
+/// `auto_sensitivity` is enabled, the same levels feed the calibrator
+/// and the auto-computed `vad_threshold` is written back into
+/// `AudioSettings`.
+pub(super) async fn mic_test_loop(
+    mut capture: Box<dyn AudioCapture>,
+    app: Host,
+    auto_sensitivity: bool,
+    inner: Arc<std::sync::Mutex<SharedState>>,
+    mut filters: FilterChain,
+    frame_size_ms: u32,
+) {
+    let mut interval = tokio::time::interval(Duration::from_millis(33));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    let mut calibrator = Calibrator::new(AUTO_CALIBRATION_WINDOW);
+    let mut frames_since_emit: u32 = 0;
+    const EMIT_INTERVAL_FRAMES: u32 = 10;
+
+    loop {
+        let _ = interval.tick().await;
+
+        // Drain all buffered frames to avoid latency buildup.
+        let mut latest = None;
+        while let Ok(frame) = capture.read_frame() {
+            latest = Some(frame);
+        }
+        let Some(mut frame) = latest else {
+            continue;
+        };
+
+        let raw_rms = frame_rms(&frame);
+        let _ = filters.process(&mut frame);
+        let rms = frame_rms(&frame);
+        let peak = frame_peak(&frame);
+
+        if rms == 0.0 && peak == 0.0 {
+            continue;
+        }
+
+        app.send(CoreEvent::MicAmplitude(MicAmplitudePayload { rms, peak }));
+
+        if !auto_sensitivity {
+            continue;
+        }
+
+        calibrator.push(rms, raw_rms);
+        frames_since_emit += 1;
+
+        if frames_since_emit < EMIT_INTERVAL_FRAMES {
+            continue;
+        }
+        frames_since_emit = 0;
+
+        let Some(calibration) = calibrator.compute(frame_size_ms) else {
+            continue;
+        };
+
+        if let Some(payload) = update_voice_activation_if_changed(&inner, calibration) {
+            app.send(CoreEvent::VoiceActivationCalibrated(payload));
+        }
+    }
+}
+
+// -----------------------------------------------------------------------
+//  Latency test
+// -----------------------------------------------------------------------
+
+/// Background task that sends TCP pings at ~2 Hz so the event handler can
+/// compute RTT and emit `"ping-latency"` events for the latency graph.
+pub(super) async fn latency_ping_loop(client_handle: ClientHandle) {
+    let mut interval = tokio::time::interval(Duration::from_millis(500));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    loop {
+        let _ = interval.tick().await;
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        if client_handle
+            .send(command::SendPing { timestamp: ts })
+            .await
+            .is_err()
+        {
+            break;
+        }
+    }
+}
+
+/// Apply a calibration result to the live audio settings.
+///
+/// Returns a payload to emit if anything actually changed.  The
+/// threshold is the most sensitive value; the close ratio and hold
+/// frames are compared with a small epsilon to avoid spamming events
+/// when the calibrator is stable.
+fn update_voice_activation_if_changed(
+    inner: &std::sync::Mutex<SharedState>,
+    calibration: CalibrationResult,
+) -> Option<VoiceActivationCalibrationPayload> {
+    let Ok(mut state) = inner.lock() else {
+        return None;
+    };
+    let settings = &mut state.audio.settings;
+
+    let threshold_changed = (settings.vad_threshold - calibration.vad_threshold).abs() > 0.002;
+    let ratio_changed =
+        (settings.noise_gate_close_ratio - calibration.noise_gate_close_ratio).abs() > 0.01;
+    let hold_changed = settings.hold_frames != calibration.hold_frames;
+    let gain_changed = (settings.max_gain_db - calibration.max_gain_db).abs() > 0.5;
+
+    if !threshold_changed && !ratio_changed && !hold_changed && !gain_changed {
+        return None;
+    }
+
+    settings.vad_threshold = calibration.vad_threshold;
+    settings.noise_gate_close_ratio = calibration.noise_gate_close_ratio;
+    settings.hold_frames = calibration.hold_frames;
+    settings.max_gain_db = calibration.max_gain_db;
+
+    Some(VoiceActivationCalibrationPayload {
+        vad_threshold: settings.vad_threshold,
+        noise_gate_close_ratio: settings.noise_gate_close_ratio,
+        hold_frames: settings.hold_frames,
+        max_gain_db: settings.max_gain_db,
+    })
+}

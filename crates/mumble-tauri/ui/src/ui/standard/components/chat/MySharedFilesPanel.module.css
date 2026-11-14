@@ -1,0 +1,266 @@
+/* "My shared files" bar - a user's own uploaded files, styled like the other
+   chat-splitting panels (Downloads / Pinned).  Every surface, hairline and
+   badge is drawn from the theme's own tokens, so a light theme gets a light
+   panel instead of the hardcoded dark chips this used to paint.
+
+   The table is fixed-layout with named columns: the name column absorbs the
+   slack and the rest keep their width, so nothing is pushed out of view.  A
+   container query on the scroll box drops the lowest-value columns as the
+   split gets narrower (their content stays reachable from the name cell's
+   tooltip), which is what keeps the actions visible without scrolling. */
+
+.panel {
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-glass-border);
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 44px 10px 14px; /* room for the shared close (×) overlay */
+  border-bottom: 1px solid var(--color-glass-border);
+  flex-shrink: 0;
+}
+
+.title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.count {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 7px;
+  min-width: 18px;
+  text-align: center;
+  border-radius: 10px;
+  background: var(--color-glass-hover);
+  color: var(--color-text-secondary);
+}
+
+.headerActions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.refreshBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 5px 9px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.refreshBtn:hover:not(:disabled) {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+}
+.refreshBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  /* Columns react to the panel's own width, not the viewport: this is a
+     resizable split inside the chat column, so the two disagree. */
+  container-type: inline-size;
+}
+
+.empty {
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.table {
+  width: 100%;
+  min-width: 874px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--color-glass-border);
+}
+.table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-glass-border);
+  vertical-align: middle;
+  color: var(--color-text-primary);
+}
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+.table tbody tr:hover td {
+  background: var(--color-glass);
+}
+
+/* -- Columns ---------------------------------------------------------------
+   Widths live on the shared column classes (fixed layout reads them off the
+   header row); the unsized name column takes whatever is left over. */
+.colThumb {
+  width: 56px;
+}
+.colType {
+  width: 92px;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+.colType span {
+  vertical-align: middle;
+}
+.colSize {
+  width: 72px;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+.colAccess {
+  width: 82px;
+}
+.colChannel {
+  width: 128px;
+}
+.colUploaded {
+  width: 118px;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+.colExpires {
+  width: 82px;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+.colActions {
+  width: 104px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* One line, ellipsised - a wrapping channel name used to blow a row up to
+   five lines and shove the actions off the edge. */
+.ellipsis {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.colChannel .ellipsis {
+  color: var(--color-text-secondary);
+}
+
+.noExpiry {
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+}
+
+/* Shed the least valuable column at each step, and shrink the table's floor
+   with it so the remaining columns still fit without a sideways scroll. */
+@container (max-width: 873px) {
+  .colChannel {
+    display: none;
+  }
+  .table {
+    min-width: 746px;
+  }
+}
+@container (max-width: 745px) {
+  .colType {
+    display: none;
+  }
+  .table {
+    min-width: 654px;
+  }
+}
+@container (max-width: 653px) {
+  .colUploaded {
+    display: none;
+  }
+  .table {
+    min-width: 536px;
+  }
+}
+
+.accessBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.access_public {
+  background: var(--color-online-medium);
+  color: var(--color-online);
+}
+.access_password {
+  background: var(--color-warning-bright-medium);
+  color: var(--color-warning-text);
+}
+.access_session {
+  background: var(--color-accent-medium);
+  color: var(--color-accent);
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  margin-left: 4px;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.iconBtn:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  background: var(--color-glass-hover);
+}
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.deleteBtn:hover:not(:disabled) {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}

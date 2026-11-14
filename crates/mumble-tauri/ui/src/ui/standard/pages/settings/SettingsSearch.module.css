@@ -1,0 +1,83 @@
+.wrap {
+  margin: 0 0 12px;
+}
+
+.inputWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  background: var(--color-bg-input, rgba(0, 0, 0, 0.25));
+  border: 1px solid var(--color-glass-border, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+}
+
+.inputWrap:focus-within {
+  border-color: var(--accent, #2aabee);
+}
+
+.icon {
+  flex: 0 0 auto;
+  color: var(--color-text-secondary, #9aa0a6);
+}
+
+.input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary, #f3f4f6);
+  font-size: 13px;
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--color-text-secondary, #9aa0a6);
+}
+
+/* Clear the native search "x" cancel button so it doesn't clash with theming. */
+.input::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+
+.results {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.resultItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-primary, #f3f4f6);
+  text-align: left;
+  cursor: pointer;
+}
+
+.resultItem:hover {
+  background: var(--color-bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+.resultTab {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.resultCount {
+  font-size: 11px;
+  color: var(--color-text-secondary, #9aa0a6);
+}
+
+.noResults {
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--color-text-secondary, #9aa0a6);
+}

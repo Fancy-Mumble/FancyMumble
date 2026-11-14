@@ -1,0 +1,918 @@
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useAppStore } from "@core/store";
+import { PERM_DELETE_MESSAGE, PERM_WRITE } from "@core/utils/permissions";
+import NebulaApp from "./index";
+
+const { getSavedServersMock, getPreferencesMock, updatePreferencesMock, dragDrop } = vi.hoisted(() => ({
+  getSavedServersMock: vi.fn().mockResolvedValue([]),
+  getPreferencesMock: vi.fn(),
+  updatePreferencesMock: vi.fn(),
+  /** The shell's drag-drop subscriber, as the client last registered it. */
+  dragDrop: { handler: null as null | ((event: { payload: unknown }) => void) },
+}));
+
+// Files are dropped through the shell's own event, which has no source in
+// jsdom: hold the handler the client registers so a test can drop on it.
+vi.mock("@tauri-apps/api/webviewWindow", () => ({
+  getCurrentWebviewWindow: () => ({
+    onDragDropEvent: async (handler: (event: { payload: unknown }) => void) => {
+      dragDrop.handler = handler;
+      return () => {
+        if (dragDrop.handler === handler) dragDrop.handler = null;
+      };
+    },
+  }),
+}));
+
+const DEFAULT_PREFERENCES = {
+  userMode: "normal",
+  hasCompletedSetup: true,
+  defaultUsername: "",
+  timeFormat: "auto",
+  convertToLocalTime: true,
+};
+
+// The admin pages subscribe to backend events that have no source in jsdom.
+// Routing is what these tests are about, so the pane is stubbed down to the
+// page id the shell hands it.
+vi.mock("./components/admin/AdminScreen", () => ({
+  AdminScreen: ({ page }: { page: string }) => <div>admin pane: {page}</div>,
+}));
+
+vi.mock("@core/serverStorage", () => ({
+  getSavedServers: getSavedServersMock,
+  addServer: vi.fn(),
+  updateServer: vi.fn(),
+  removeServer: vi.fn(),
+  setServerPassword: vi.fn(),
+  getServerPassword: vi.fn().mockResolvedValue(null),
+  markServerJoined: vi.fn().mockResolvedValue(undefined),
+}));
+
+// The pack's screens read preferences through the Tauri store plugin, which has
+// no backend in jsdom; stub only the loaders so everything else stays real.
+vi.mock("@core/preferencesStorage", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@core/preferencesStorage")>()),
+  getPreferences: getPreferencesMock,
+  updatePreferences: updatePreferencesMock,
+}));
+
+/** The saved server's own identity, connected. */
+const OPEN_SESSION = {
+  id: "sess",
+  host: "magical.rocks",
+  port: 64738,
+  username: "ZewiWin",
+  label: "magical.rocks",
+  status: "connected",
+};
+
+const SERVER = {
+  id: "s1",
+  label: "magical.rocks",
+  host: "magical.rocks",
+  port: 64738,
+  username: "ZewiWin",
+  cert_label: null,
+};
+
+/**
+ * Leave the server the way the dock now offers it.
+ *
+ * The status card gives the voice controls a row of their own, and `Leave`
+ * sits at its right end rather than inside the overflow - one click, on the
+ * button that says the word.
+ */
+async function leaveFromDock() {
+  fireEvent.click(await screen.findByRole("button", { name: "Disconnect from this server" }));
+}
+
+describe("NebulaApp", () => {
+  beforeEach(() => {
+    getSavedServersMock.mockReset();
+    getSavedServersMock.mockResolvedValue([SERVER]);
+    getPreferencesMock.mockReset();
+    getPreferencesMock.mockResolvedValue(DEFAULT_PREFERENCES);
+    updatePreferencesMock.mockReset();
+    updatePreferencesMock.mockImplementation((patch: unknown) => Promise.resolve(patch));
+    useAppStore.setState({
+      status: "disconnected",
+      sessions: [],
+      activeServerId: null,
+      channels: [],
+      users: [],
+      messages: [],
+      pollMessages: [],
+      dmMessages: [],
+      selectedChannel: null,
+      selectedDmUser: null,
+      selectedUser: null,
+      currentChannel: null,
+      ownSession: null,
+    });
+  });
+
+  it("opens on the connect screen when nothing is connected", async () => {
+    render(<NebulaApp />);
+    // Awaited rather than read straight off the first paint: the client now
+    // settles the first-run question before it draws anything, so the shell
+    // arrives a microtask after render.
+    expect(await screen.findByTestId("nebula-client-root")).toBeTruthy();
+    // The name appears twice by design: once in the server list, once as the
+    // landing page's heading.
+    expect(await screen.findByRole("heading", { name: "magical.rocks" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /connect as zewiwin/i })).toBeTruthy();
+  });
+
+  it("lists the servers once on the connect screen, in the open rail", async () => {
+    // The screen used to carry its own Servers column beside the rail, saying
+    // the same things about the same servers.
+    render(<NebulaApp />);
+    await screen.findByRole("heading", { name: "magical.rocks" });
+    expect(screen.getAllByTestId("nebula-server-rail-panel")).toHaveLength(1);
+    expect(screen.queryByTestId("nebula-server-rail")).toBeNull();
+    expect(screen.getByLabelText("Search servers")).toBeTruthy();
+  });
+
+  it("shows the channel tree and the composer once connected", async () => {
+    render(<NebulaApp />);
+    useAppStore.setState({
+      status: "connected",
+      sessions: [
+        {
+          id: "sess",
+          host: "magical.rocks",
+          port: 64738,
+          username: "ZewiWin",
+          label: "magical.rocks",
+        } as never,
+      ],
+      activeServerId: "sess",
+      channels: [
+        { id: 0, parent_id: null, name: "Root", user_count: 0, position: 0 } as never,
+        { id: 1, parent_id: 0, name: "Gaming", user_count: 2, position: 100 } as never,
+      ],
+      selectedChannel: 1,
+      currentChannel: 1,
+      ownSession: 7,
+      users: [{ session: 7, name: "ZewiWin", channel_id: 1, texture_size: null } as never],
+    });
+
+    // Two places by design: the channel tree and the conversation header. The
+    // voice dock reports the voice state, which is inactive here, rather than
+    // the channel - being in a channel is not the same as being in a call.
+    await waitFor(() => expect(screen.getAllByText("Gaming")).toHaveLength(2));
+    expect(screen.getByLabelText("Message #Gaming")).toBeTruthy();
+    expect(screen.getByText("Voice off")).toBeTruthy();
+    // Leaving means leaving the server, so it is live whenever there is a
+    // session to leave - being in voice has nothing to do with it.
+    expect(screen.getByRole("button", { name: "Disconnect from this server" })).toBeTruthy();
+  });
+
+  describe("dropping files", () => {
+    /**
+     * Connected, in a direct message with someone who is not registered.
+     *
+     * The classic DM is the case worth pinning: selecting one clears the
+     * selected channel, and the drop used to be turned away on that alone
+     * while the overlay still said "Drop files to send".
+     */
+    function openDirectMessage() {
+      useAppStore.setState({
+        status: "connected",
+        sessions: [OPEN_SESSION as never],
+        activeServerId: "sess",
+        channels: [{ id: 0, parent_id: null, name: "Root", user_count: 2, position: 0 } as never],
+        selectedChannel: null,
+        currentChannel: 0,
+        selectedDmUser: 9,
+        ownSession: 7,
+        users: [
+          { session: 7, name: "ZewiWin", channel_id: 0, texture_size: null } as never,
+          { session: 9, name: "Lorelando", channel_id: 0, texture_size: null } as never,
+        ],
+        fileServerConfig: { canShareFiles: true, canShareFilesPublic: false } as never,
+      });
+    }
+
+    function drop(paths: string[]) {
+      act(() => dragDrop.handler?.({ payload: { type: "drop", paths, position: { x: 0, y: 0 } } }));
+    }
+
+    it("stages a file dropped into a direct message straight away, no question asked", async () => {
+      render(<NebulaApp />);
+      openDirectMessage();
+      expect(await screen.findByLabelText("Message @Lorelando")).toBeTruthy();
+      await waitFor(() => expect(dragDrop.handler).not.toBeNull());
+
+      drop(["/home/zewi/notes.pdf"]);
+      // It lands in the tray directly - no dialog, nothing pressed first.
+      expect(await screen.findByText("notes.pdf")).toBeTruthy();
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("turns away a drop that holds no file on disk, and says so", async () => {
+      render(<NebulaApp />);
+      openDirectMessage();
+      await waitFor(() => expect(dragDrop.handler).not.toBeNull());
+
+      // An image dragged out of a browser, or out of this chat, arrives as a
+      // URL - which the uploader cannot stream from. Silence would look like
+      // the drop did nothing.
+      drop(["http://magical.rocks/files/dusk.png"]);
+      expect(await screen.findByText("Only files from this computer can be dropped here")).toBeTruthy();
+      expect(screen.queryByRole("dialog", { name: "Share files" })).toBeNull();
+    });
+  });
+
+  it("asks before leaving a server, then disconnects the session", async () => {
+    const disconnectSession = vi.fn().mockResolvedValue(undefined);
+    render(<NebulaApp />);
+    useAppStore.setState({
+      status: "connected",
+      sessions: [OPEN_SESSION as never],
+      activeServerId: "sess",
+      channels: [{ id: 0, parent_id: null, name: "Root", user_count: 0, position: 0 } as never],
+      disconnectSession,
+    });
+
+    await leaveFromDock();
+    // Nothing has happened yet: the confirmation is the point.
+    expect(disconnectSession).not.toHaveBeenCalled();
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("Leave this server?");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Leave" }));
+    await waitFor(() => expect(disconnectSession).toHaveBeenCalledWith("sess"));
+  });
+
+  it("writes the shared preference when told not to ask again", async () => {
+    // The same flag Standard's Advanced settings owns, so silencing the prompt
+    // in one design silences it in the other.
+    const disconnectSession = vi.fn().mockResolvedValue(undefined);
+    render(<NebulaApp />);
+    useAppStore.setState({
+      status: "connected",
+      sessions: [OPEN_SESSION as never],
+      activeServerId: "sess",
+      channels: [{ id: 0, parent_id: null, name: "Root", user_count: 0, position: 0 } as never],
+      disconnectSession,
+    });
+
+    await leaveFromDock();
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("checkbox"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Leave" }));
+
+    await waitFor(() => expect(updatePreferencesMock).toHaveBeenCalledWith({ showDisconnectWarning: false }));
+  });
+
+  it("stays connected when the confirmation is dismissed", async () => {
+    const disconnectSession = vi.fn().mockResolvedValue(undefined);
+    render(<NebulaApp />);
+    useAppStore.setState({
+      status: "connected",
+      sessions: [OPEN_SESSION as never],
+      activeServerId: "sess",
+      channels: [{ id: 0, parent_id: null, name: "Root", user_count: 0, position: 0 } as never],
+      disconnectSession,
+    });
+
+    await leaveFromDock();
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(disconnectSession).not.toHaveBeenCalled();
+  });
+
+  it("leaves without asking once the warning has been turned off", async () => {
+    getPreferencesMock.mockResolvedValue({ ...DEFAULT_PREFERENCES, showDisconnectWarning: false });
+    const disconnectSession = vi.fn().mockResolvedValue(undefined);
+    render(<NebulaApp />);
+    useAppStore.setState({
+      status: "connected",
+      sessions: [OPEN_SESSION as never],
+      activeServerId: "sess",
+      channels: [{ id: 0, parent_id: null, name: "Root", user_count: 0, position: 0 } as never],
+      disconnectSession,
+    });
+
+    await leaveFromDock();
+    await waitFor(() => expect(disconnectSession).toHaveBeenCalledWith("sess"));
+    expect(screen.queryByText("Leave this server?")).toBeNull();
+  });
+
+  describe("where the server list lives", () => {
+    /** Connected, so the title bar has something to name. */
+    const connect = () =>
+      useAppStore.setState({ status: "connected", sessions: [OPEN_SESSION as never], activeServerId: "sess" });
+
+    it("keeps the rail and leaves the title bar naming the server, by default", async () => {
+      render(<NebulaApp />);
+      connect();
+      expect(await screen.findByTestId("nebula-server-rail")).toBeTruthy();
+      // Named, not tabbed: no plate to click and nothing to close.
+      expect(await screen.findByText("magical.rocks", { selector: "p" })).toBeTruthy();
+    });
+
+    it("takes the rail away when the servers move up into the title bar", async () => {
+      getPreferencesMock.mockResolvedValue({ ...DEFAULT_PREFERENCES, serverSwitcher: "titlebar" });
+      render(<NebulaApp />);
+      connect();
+      expect(await screen.findByLabelText("Quick connect")).toBeTruthy();
+      expect(screen.queryByTestId("nebula-server-rail")).toBeNull();
+    });
+
+    it("draws both when asked for both", async () => {
+      getPreferencesMock.mockResolvedValue({ ...DEFAULT_PREFERENCES, serverSwitcher: "both" });
+      render(<NebulaApp />);
+      connect();
+      expect(await screen.findByTestId("nebula-server-rail")).toBeTruthy();
+      // The strip, not the centred name: one server, drawn as a tab.
+      expect(await screen.findByRole("button", { name: "Friends" })).toBeTruthy();
+    });
+
+    it("keeps the title bar's + out of a window that already has the rail's", async () => {
+      render(<NebulaApp />);
+      connect();
+      await screen.findByTestId("nebula-server-rail");
+      expect(screen.queryByLabelText("Quick connect")).toBeNull();
+      expect(screen.getByLabelText("Add a server")).toBeTruthy();
+    });
+
+    it("moves Friends down into the rail when the strip is off", async () => {
+      render(<NebulaApp />);
+      connect();
+      const rail = await screen.findByTestId("nebula-server-rail");
+      expect(within(rail).getByLabelText("Friends")).toBeTruthy();
+      // Once in the window, not twice: the title bar gave it up.
+      expect(screen.getAllByRole("button", { name: "Friends" })).toHaveLength(1);
+    });
+  });
+
+  describe("a skin that hides the title bar", () => {
+    /** Nimbus is the one skin whose artboard draws no band across the top. */
+    beforeEach(() => {
+      document.documentElement.setAttribute("data-theme", "nimbus");
+    });
+    afterEach(() => {
+      document.documentElement.removeAttribute("data-theme");
+    });
+
+    it("still gives the window somewhere to be dragged by", async () => {
+      // The band was the only thing carrying `data-tauri-drag-region`, so
+      // re-homing its four pieces left the window unmovable: no strip, no
+      // drag region, nothing to grab. A skin may hide the band; it may not
+      // take the window with it.
+      render(<NebulaApp />);
+      useAppStore.setState({
+        status: "connected",
+        sessions: [OPEN_SESSION as never],
+        activeServerId: "sess",
+      });
+      await screen.findByTestId("nebula-client-root");
+      await waitFor(() =>
+        expect(document.querySelectorAll("[data-tauri-drag-region]").length).toBeGreaterThan(0),
+      );
+    });
+
+    it("leaves quick connect to the rail rather than the conversation header", async () => {
+      // The rail is on screen here and ends in its own plus. A second one in
+      // the header is two plus signs a column apart, reading as two different
+      // things - which is the same reason the title bar drops its own when the
+      // rail carries the servers.
+      render(<NebulaApp />);
+      useAppStore.setState({
+        status: "connected",
+        sessions: [OPEN_SESSION as never],
+        activeServerId: "sess",
+      });
+      const rail = await screen.findByTestId("nebula-server-rail");
+      expect(within(rail).getByLabelText("Add a server")).toBeTruthy();
+      expect(screen.queryByLabelText("Quick connect")).toBeNull();
+    });
+  });
+
+  it("offers a saved server as a new tab from the title bar's +", async () => {
+    // Quick connect is the title bar's own +, which it only draws when the
+    // server strip is up there rather than on the rail.
+    getPreferencesMock.mockResolvedValue({ ...DEFAULT_PREFERENCES, serverSwitcher: "titlebar" });
+    render(<NebulaApp />);
+    fireEvent.click(await screen.findByLabelText("Quick connect"));
+
+    const menu = await screen.findByRole("menu", { name: "Quick connect" });
+    expect(menu.textContent).toContain("magical.rocks");
+    expect(menu.textContent).toContain("Add server by address…");
+    expect(menu.textContent).toContain("Browse public servers");
+  });
+
+  it("leaves an already-open login out of quick connect", async () => {
+    // Quick connect is the title bar's own +, which it only draws when the
+    // server strip is up there rather than on the rail.
+    getPreferencesMock.mockResolvedValue({ ...DEFAULT_PREFERENCES, serverSwitcher: "titlebar" });
+    render(<NebulaApp />);
+    useAppStore.setState({ sessions: [OPEN_SESSION as never], activeServerId: "sess" });
+    fireEvent.click(await screen.findByLabelText("Quick connect"));
+
+    const menu = await screen.findByRole("menu", { name: "Quick connect" });
+    expect(menu.textContent).toContain("Every saved login is already open.");
+  });
+
+  it("still offers the second identity on a server it is already connected to", async () => {
+    // Quick connect is the title bar's own +, which it only draws when the
+    // server strip is up there rather than on the rail.
+    getPreferencesMock.mockResolvedValue({ ...DEFAULT_PREFERENCES, serverSwitcher: "titlebar" });
+    // Being in magical.rocks as ZewiWin says nothing about arriving as Sebi:
+    // that is a separate tab, and quick connect is the way to open it.
+    getSavedServersMock.mockResolvedValue([SERVER, { ...SERVER, id: "s2", username: "Sebi" }]);
+    render(<NebulaApp />);
+    useAppStore.setState({ sessions: [OPEN_SESSION as never], activeServerId: "sess" });
+    fireEvent.click(await screen.findByLabelText("Quick connect"));
+
+    const menu = await screen.findByRole("menu", { name: "Quick connect" });
+    expect(menu.textContent).toContain("magical.rocks");
+    expect(menu.textContent).toContain("as Sebi");
+  });
+
+  it("offers a server again after its session disconnects", async () => {
+    // Quick connect is the title bar's own +, which it only draws when the
+    // server strip is up there rather than on the rail.
+    getPreferencesMock.mockResolvedValue({ ...DEFAULT_PREFERENCES, serverSwitcher: "titlebar" });
+    // The title bar draws no tab for a disconnected session, so quick connect
+    // is the only way back to it.
+    render(<NebulaApp />);
+    useAppStore.setState({
+      sessions: [{ ...OPEN_SESSION, status: "disconnected" } as never],
+      activeServerId: "sess",
+    });
+    fireEvent.click(await screen.findByLabelText("Quick connect"));
+
+    const menu = await screen.findByRole("menu", { name: "Quick connect" });
+    expect(menu.textContent).toContain("magical.rocks");
+  });
+
+  it("opens settings on the profile page, with the nav beside it", async () => {
+    // The nav decides what to list from the session and the server, so it is
+    // rendered with the whole client rather than on its own: a nav asking the
+    // shell for something the shell does not pass takes the client down with it.
+    render(<NebulaApp />);
+    useAppStore.setState({
+      status: "connected",
+      sessions: [OPEN_SESSION as never],
+      activeServerId: "sess",
+      channels: [{ id: 0, parent_id: null, name: "Root", user_count: 0, position: 0 } as never],
+      ownSession: 7,
+      users: [{ session: 7, name: "ZewiWin", channel_id: 0, texture_size: null } as never],
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "More" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Settings" }));
+
+    expect(await screen.findByRole("button", { name: "Profile" })).toBeTruthy();
+    for (const page of ["Voice", "Personalize", "Privacy", "Shortcuts", "Advanced"])
+      expect(screen.getByRole("button", { name: page })).toBeTruthy();
+    // Unregistered here, on a server announcing no Fancy version: neither page
+    // would have anything to show.
+    expect(screen.queryByRole("button", { name: "Account" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Plugins" })).toBeNull();
+  });
+
+  it("returns to settings after a visit to administration", async () => {
+    // Administration is a section *of* settings rather than its own surface, so
+    // the admin page outlives the screen it was opened on. The menu's Settings
+    // has to clear it, or it reopens on the admin page every time after.
+    render(<NebulaApp />);
+    useAppStore.setState({
+      status: "connected",
+      sessions: [OPEN_SESSION as never],
+      activeServerId: "sess",
+      channels: [
+        { id: 0, parent_id: null, name: "Root", user_count: 0, position: 0, permissions: 0x1 } as never,
+      ],
+      ownSession: 7,
+      users: [{ session: 7, name: "ZewiWin", channel_id: 0, texture_size: null } as never],
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "More" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Server admin" }));
+    expect(await screen.findByText("admin pane: users")).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Back/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "More" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Settings" }));
+
+    expect(await screen.findByRole("button", { name: "Profile" })).toBeTruthy();
+    expect(screen.queryByText("admin pane: users")).toBeNull();
+  });
+
+  /** The client, connected, with a channel selected and two more to move to. */
+  async function connectedClient(selectChannel = vi.fn().mockResolvedValue(undefined)) {
+    render(<NebulaApp />);
+    useAppStore.setState({
+      status: "connected",
+      sessions: [OPEN_SESSION as never],
+      activeServerId: "sess",
+      channels: [
+        { id: 0, parent_id: null, name: "Root", user_count: 0, position: 0 } as never,
+        { id: 1, parent_id: 0, name: "Gaming", user_count: 2, position: 100 } as never,
+        { id: 2, parent_id: 0, name: "Lounge", user_count: 1, position: 200 } as never,
+      ],
+      selectedChannel: 1,
+      currentChannel: 1,
+      ownSession: 7,
+      users: [
+        { session: 7, name: "ZewiWin", channel_id: 1, texture_size: null } as never,
+        { session: 8, name: "Ada", channel_id: 2, texture_size: null } as never,
+      ],
+      selectChannel,
+    });
+    await screen.findByLabelText("Search channels");
+    return { selectChannel };
+  }
+
+  describe("keyboard shortcuts", () => {
+    // The bindings cannot be read in jsdom - the store is a Tauri plugin - so
+    // these are the defaults every design ships with.
+    it("focuses the column's search field on the quick-search binding", async () => {
+      await connectedClient();
+      fireEvent.keyDown(document.body, { key: "f", ctrlKey: true });
+      await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Search channels")));
+    });
+
+    it("advertises the binding it actually answers to", async () => {
+      await connectedClient();
+      expect(screen.getByText("Ctrl+F")).toBeTruthy();
+    });
+
+    it("hides and restores the channel column", async () => {
+      await connectedClient();
+      fireEvent.keyDown(document.body, { key: "b", ctrlKey: true });
+      await waitFor(() => expect(screen.queryByLabelText("Search channels")).toBeNull());
+      fireEvent.keyDown(document.body, { key: "b", ctrlKey: true });
+      expect(await screen.findByLabelText("Search channels")).toBeTruthy();
+    });
+
+    it("steps through the channels in the order the sidebar draws them", async () => {
+      const { selectChannel } = await connectedClient();
+      fireEvent.keyDown(document.body, { key: "ArrowDown", altKey: true });
+      await waitFor(() => expect(selectChannel).toHaveBeenCalledWith(2));
+      fireEvent.keyDown(document.body, { key: "ArrowUp", altKey: true });
+      await waitFor(() => expect(selectChannel).toHaveBeenCalledWith(0));
+    });
+
+    it("opens the global search, and lands on what is chosen in it", async () => {
+      const { selectChannel } = await connectedClient();
+      fireEvent.keyDown(document.body, { key: "F", ctrlKey: true, shiftKey: true });
+
+      const search = await screen.findByLabelText("Search channels, people and messages");
+      // Somewhere in another channel is reachable from here without first
+      // opening the screen that lists it - and without waiting on the backend,
+      // which the window has not asked yet this early in the keystroke.
+      fireEvent.change(search, { target: { value: "Lounge" } });
+      fireEvent.keyDown(search, { key: "Enter" });
+      await waitFor(() => expect(selectChannel).toHaveBeenCalledWith(2));
+    });
+
+    it("toggles the member roster", async () => {
+      await connectedClient();
+      fireEvent.keyDown(document.body, { key: "u", ctrlKey: true });
+      expect(await screen.findByLabelText("Members")).toBeTruthy();
+      fireEvent.keyDown(document.body, { key: "u", ctrlKey: true });
+      await waitFor(() => expect(screen.queryByLabelText("Members")).toBeNull());
+    });
+  });
+
+  // Full-app coverage for the wiring `NebulaClientApp` does itself, on top of
+  // what `Composer.test.tsx` already proves about the props once they arrive -
+  // a store that says a channel can share files and be polled must actually
+  // reach the composer saying so, not just the component in isolation.
+  //
+  // Every field the ternaries in `NebulaClientApp` actually branch on
+  // (`fileServerConfig`, `selectedDmUser`) is set explicitly by each test
+  // here rather than left to `connectedClient()`'s defaults: the store is a
+  // module singleton that outlives any one `it()`, and an earlier test in
+  // this file (`selectedDmUser: 9`, in "dropping files" above) leaking
+  // forward silently switches these from channel to DM context otherwise.
+  describe("attaching and polling once a channel can do both", () => {
+    it("does not block the attach button once the store has a real file-server config", async () => {
+      await connectedClient();
+      useAppStore.setState({
+        selectedDmUser: null,
+        fileServerConfig: { canShareFiles: true, canShareFilesPublic: false } as never,
+      });
+      expect(await screen.findByLabelText("Attach files")).toBeTruthy();
+      fireEvent.click(screen.getByLabelText("Attach files"));
+      expect(screen.queryByRole("dialog", { name: "Files" })).toBeNull();
+    });
+
+    it("still says why when the server has no file sharing at all", async () => {
+      await connectedClient();
+      useAppStore.setState({ selectedDmUser: null, fileServerConfig: null });
+      const button = await screen.findByLabelText("This server has no file sharing");
+      fireEvent.click(button);
+      expect(screen.getByText(/no file sharing/)).toBeTruthy();
+    });
+
+    it("offers Create a poll from the attach menu in a channel with a file server", async () => {
+      await connectedClient();
+      useAppStore.setState({
+        selectedDmUser: null,
+        fileServerConfig: { canShareFiles: true, canShareFilesPublic: false } as never,
+      });
+      const button = await screen.findByLabelText("Attach files");
+      fireEvent.contextMenu(button);
+      expect(screen.getByText("Create a poll")).toBeTruthy();
+    });
+  });
+
+  // A friend chat is a channel named `__dm:<lo>-<hi>` - a storage detail of the
+  // room the friends plugin provisions, and nobody's business. The header
+  // already resolved it to the friend's name; everything else that names the
+  // conversation has to resolve it too, or the raw id name leaks out beside a
+  // header that reads correctly.
+  describe("naming a friend room", () => {
+    /** Connected and reading the `__dm:` room shared with Sebi. */
+    async function inFriendRoom() {
+      render(<NebulaApp />);
+      useAppStore.setState({
+        status: "connected",
+        sessions: [OPEN_SESSION as never],
+        activeServerId: "sess",
+        channels: [
+          { id: 0, parent_id: null, name: "Root", user_count: 0, position: 0 } as never,
+          {
+            id: 5,
+            parent_id: null,
+            name: "__dm:3-7",
+            user_count: 0,
+            position: 0,
+            detached: true,
+          } as never,
+        ],
+        selectedChannel: 5,
+        currentChannel: 0,
+        selectedDmUser: null,
+        ownSession: 7,
+        users: [
+          { session: 7, name: "ZewiWin", user_id: 3, channel_id: 0, texture_size: null } as never,
+          { session: 8, name: "Sebi", user_id: 7, channel_id: 0, texture_size: null } as never,
+        ],
+      });
+      await screen.findByLabelText("Search channels");
+    }
+
+    it("addresses the composer to the friend, not to the room's id name", async () => {
+      await inFriendRoom();
+      expect(await screen.findByLabelText("Message @Sebi")).toBeTruthy();
+      expect(screen.queryByLabelText(/__dm:/)).toBeNull();
+    });
+
+    it("keeps the room's id name out of the empty conversation", async () => {
+      await inFriendRoom();
+      expect(await screen.findByText("Start a conversation with Sebi")).toBeTruthy();
+      expect(document.body.textContent).not.toContain("__dm:");
+    });
+  });
+
+  describe("entering a channel that asks for a password", () => {
+    /** Connected, with one open room and one the server has restricted. */
+    async function withRestrictedRoom(extra: Record<string, unknown> = {}) {
+      render(<NebulaApp />);
+      useAppStore.setState({
+        status: "connected",
+        sessions: [OPEN_SESSION as never],
+        activeServerId: "sess",
+        channels: [
+          { id: 0, parent_id: null, name: "Root", user_count: 0, position: 0 } as never,
+          { id: 1, parent_id: 0, name: "Gaming", user_count: 0, position: 100 } as never,
+          {
+            id: 2,
+            parent_id: 0,
+            name: "Staff",
+            user_count: 0,
+            position: 200,
+            is_enter_restricted: true,
+          } as never,
+        ],
+        // Sitting in Root, so each room below it is named once - in the
+        // tree - and a query for one is unambiguous.
+        selectedChannel: 0,
+        currentChannel: 0,
+        ownSession: 7,
+        users: [{ session: 7, name: "ZewiWin", channel_id: 0, texture_size: null } as never],
+        ...extra,
+      });
+      await screen.findByLabelText("Search channels");
+    }
+
+    it("asks rather than sending a join the server will silently refuse", async () => {
+      const joinChannel = vi.fn().mockResolvedValue(undefined);
+      const joinChannelWithPassword = vi.fn().mockResolvedValue(undefined);
+      const selectChannel = vi.fn().mockResolvedValue(undefined);
+      await withRestrictedRoom({ joinChannel, joinChannelWithPassword, selectChannel });
+
+      fireEvent.doubleClick(screen.getByText("Staff"));
+      expect(joinChannel).not.toHaveBeenCalled();
+
+      const dialog = await screen.findByRole("dialog");
+      expect(dialog.textContent).toContain("Password required");
+      fireEvent.change(within(dialog).getByLabelText("Channel password"), {
+        target: { value: "hunter2" },
+      });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Join" }));
+      await waitFor(() => expect(joinChannelWithPassword).toHaveBeenCalledWith(2, "hunter2"));
+      // Reading the room is not the same request as entering it, so it opens
+      // either way rather than leaving the user looking at the old channel.
+      await waitFor(() => expect(selectChannel).toHaveBeenCalledWith(2));
+    });
+
+    it("joins an unrestricted channel with no question at all", async () => {
+      const joinChannel = vi.fn().mockResolvedValue(undefined);
+      await withRestrictedRoom({ joinChannel });
+      fireEvent.doubleClick(screen.getByText("Gaming"));
+      await waitFor(() => expect(joinChannel).toHaveBeenCalledWith(1));
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+
+    it("does not prompt an invited user of a hidden room, who has no password to give", async () => {
+      // Private and meeting rooms deny entry to everyone and grant it by id.
+      // Older servers still mark them restricted, and asking would demand a
+      // secret that does not exist.
+      const joinChannel = vi.fn().mockResolvedValue(undefined);
+      render(<NebulaApp />);
+      useAppStore.setState({
+        status: "connected",
+        sessions: [OPEN_SESSION as never],
+        activeServerId: "sess",
+        channels: [
+          { id: 0, parent_id: null, name: "Root", user_count: 0, position: 0 } as never,
+          {
+            id: 3,
+            parent_id: 0,
+            name: "Standup",
+            user_count: 0,
+            position: 100,
+            is_enter_restricted: true,
+            hidden: true,
+          } as never,
+        ],
+        selectedChannel: 0,
+        currentChannel: 0,
+        ownSession: 7,
+        users: [{ session: 7, name: "ZewiWin", channel_id: 0, texture_size: null } as never],
+        joinChannel,
+      });
+      await screen.findByLabelText("Search channels");
+
+      fireEvent.doubleClick(screen.getByText("Standup"));
+      await waitFor(() => expect(joinChannel).toHaveBeenCalledWith(3));
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+  });
+
+  describe("the channel's own panel", () => {
+    it("opens over the shell from the header menu", async () => {
+      await connectedClient();
+      fireEvent.click(screen.getByLabelText("Channel menu"));
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Channel info" }));
+
+      // A sheet over a scrim, as the mock draws it and as the user sheet
+      // already opens - not the rail it used to be beside the conversation.
+      const panel = await screen.findByRole("document", { name: "Channel info" });
+      expect(within(panel).getByText("No description")).toBeTruthy();
+    });
+
+    it("gives way to the server's panel rather than leaving both open", async () => {
+      await connectedClient();
+      fireEvent.click(screen.getByLabelText("Channel menu"));
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Channel info" }));
+      await screen.findByRole("document", { name: "Channel info" });
+
+      fireEvent.click(screen.getByLabelText("Channel menu"));
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Server Info" }));
+      // A sheet, not the rail it used to be: the server details open over the
+      // shell the way the channel and user sheets do, and say so with the same
+      // role. The assertion was left behind when the panel moved.
+      await screen.findByRole("document", { name: "Server info" });
+      expect(screen.queryByRole("document", { name: "Channel info" })).toBeNull();
+    });
+  });
+
+  describe("clearing a room out", () => {
+    /** Connected and standing in Root, with `Gaming` as the menu's target. */
+    async function withRoom(gaming: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+      render(<NebulaApp />);
+      useAppStore.setState({
+        status: "connected",
+        sessions: [OPEN_SESSION as never],
+        activeServerId: "sess",
+        channels: [
+          { id: 0, parent_id: null, name: "Root", user_count: 0, position: 0 } as never,
+          { id: 1, parent_id: 0, name: "Gaming", position: 100, ...gaming } as never,
+          { id: 2, parent_id: 0, name: "Lounge", user_count: 0, position: 200 } as never,
+        ],
+        selectedChannel: 0,
+        currentChannel: 0,
+        ownSession: 7,
+        users: [
+          { session: 7, name: "ZewiWin", channel_id: 0, texture_size: null } as never,
+          { session: 8, name: "Ada", channel_id: 1, texture_size: null } as never,
+        ],
+        ...extra,
+      });
+      await screen.findByText("Gaming");
+    }
+
+    it("moves everyone somewhere else in one act", async () => {
+      const moveChannelUsers = vi.fn().mockResolvedValue(undefined);
+      await withRoom({ user_count: 1, permissions: PERM_WRITE }, { moveChannelUsers });
+
+      fireEvent.contextMenu(screen.getByText("Gaming"));
+      fireEvent.click(await screen.findByText("Move all users to..."));
+
+      const dialog = await screen.findByRole("dialog");
+      fireEvent.change(within(dialog).getByLabelText("Destination channel"), {
+        target: { value: "Lounge" },
+      });
+      fireEvent.click(await screen.findByRole("option", { name: "Lounge" }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Move users" }));
+
+      await waitFor(() => expect(moveChannelUsers).toHaveBeenCalledWith(1, 2));
+    });
+
+    it("asks before emptying a channel's archive, then empties everything up to now", async () => {
+      const deletePchatMessages = vi.fn().mockResolvedValue(undefined);
+      await withRoom(
+        { user_count: 0, permissions: PERM_DELETE_MESSAGE, pchat_protocol: "signal_v1" },
+        { deletePchatMessages },
+      );
+
+      fireEvent.contextMenu(screen.getByText("Gaming"));
+      fireEvent.click(await screen.findByText("Purge chat history"));
+      // Nothing has happened yet: taking everyone's messages is the kind of
+      // act that asks.
+      expect(deletePchatMessages).not.toHaveBeenCalled();
+
+      const dialog = await screen.findByRole("dialog");
+      expect(dialog.textContent).toContain("cannot be undone");
+      fireEvent.click(within(dialog).getByRole("button", { name: "Purge" }));
+      await waitFor(() =>
+        expect(deletePchatMessages).toHaveBeenCalledWith(1, { timeTo: expect.any(Number) }),
+      );
+    });
+  });
+
+  it("routes an auxiliary window to its own page instead of the client", () => {
+    globalThis.history.replaceState({}, "", "/?updater");
+    try {
+      render(<NebulaApp />);
+      expect(screen.queryByTestId("nebula-client-root")).toBeNull();
+    } finally {
+      globalThis.history.replaceState({}, "", "/");
+    }
+  });
+});
+
+describe("NebulaApp on a phone", () => {
+  // `useIsHandheld` reads this before it asks the viewport, which is what
+  // makes the handheld branch reachable from a test at all: jsdom answers
+  // `matches: false` to every media query and its user-agent is a desktop.
+  beforeEach(() => {
+    document.documentElement.setAttribute("data-nebula-handheld", "on");
+    getSavedServersMock.mockResolvedValue([]);
+    getPreferencesMock.mockReset();
+    getPreferencesMock.mockResolvedValue(DEFAULT_PREFERENCES);
+    updatePreferencesMock.mockReset();
+    updatePreferencesMock.mockImplementation((patch: unknown) => Promise.resolve(patch));
+    useAppStore.setState({
+      status: "disconnected",
+      sessions: [],
+      activeServerId: null,
+      channels: [],
+      users: [],
+      messages: [],
+      selectedChannel: null,
+      selectedDmUser: null,
+      currentChannel: null,
+      ownSession: null,
+    });
+  });
+  afterEach(() => document.documentElement.removeAttribute("data-nebula-handheld"));
+
+  it("lays the client out for one hand", async () => {
+    render(<NebulaApp />);
+    expect(await screen.findByTestId("nebula-mobile-shell")).toBeTruthy();
+    // The window's own furniture is a window's: no title bar, and the row of
+    // columns that used to run off the right edge is gone.
+    expect(screen.queryByTestId("nebula-title-bar")).toBeNull();
+  });
+
+  it("leaves the window alone when nothing says otherwise", async () => {
+    document.documentElement.setAttribute("data-nebula-handheld", "off");
+    render(<NebulaApp />);
+    expect(await screen.findByTestId("nebula-client-root")).toBeTruthy();
+    expect(screen.queryByTestId("nebula-mobile-shell")).toBeNull();
+  });
+});

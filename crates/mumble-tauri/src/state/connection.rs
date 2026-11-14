@@ -1,0 +1,552 @@
+//! Connection lifecycle: `connect()` and `disconnect()`.
+
+use std::time::Duration;
+
+use crate::state::host::Host;
+use tracing::info;
+
+use mumble_protocol::client::ClientConfig;
+use mumble_protocol::command;
+use mumble_protocol::transport::tcp::TcpConfig;
+use mumble_protocol::transport::udp::UdpConfig;
+
+use super::event_handler::SessionEventHandler;
+use super::sessions::ServerId;
+use super::types::*;
+use super::{AppState, SharedState};
+use crate::state::core_event::CoreEvent;
+
+/// What a login presents besides the name: the server or account password, a
+/// second factor, and an invite code.
+#[derive(Debug, Default, Clone)]
+pub struct Credentials {
+    pub password: Option<String>,
+    pub totp: Option<String>,
+    /// An invite code from a `fancy://invite/...` link. Sent as the access
+    /// token `invite:<code>`, which is how Starling recognises one and how a
+    /// stock Mumble client could present the same code by hand.
+    pub invite: Option<String>,
+}
+
+impl Credentials {
+    /// The access tokens this login sends.
+    fn tokens(&self) -> Vec<String> {
+        self.invite
+            .iter()
+            .map(|code| format!("invite:{code}"))
+            .collect()
+    }
+}
+
+impl AppState {
+    pub async fn connect(
+        &self,
+        host: String,
+        port: u16,
+        username: String,
+        cert_label: Option<String>,
+        credentials: Credentials,
+    ) -> Result<(), String> {
+        let app_handle = self.host().ok_or("App not initialized")?;
+
+        // Reuse the existing session slot for this exact `(host, port,
+        // username)` target so an automatic reconnect re-binds the *same*
+        // tab instead of spawning a new one on every retry (which spammed
+        // the tab strip when the server was unreachable).  A first connect
+        // - or a connect to a target with no disconnected session - falls
+        // back to allocating a fresh `ServerId` with clean state.  Either
+        // way we make the session active and point `inner` at it.
+        let (server_id, inner) = match self.registry.take_reusable_for(&host, port, &username) {
+            Some((id, arc)) => {
+                info!(host = %host, port, username = %username, server_id = %id, "reusing session slot for reconnect");
+                (id, arc)
+            }
+            None => (ServerId::new(), self.fresh_session_state()),
+        };
+        let _ = self
+            .registry
+            .register_active(server_id, std::sync::Arc::clone(&inner));
+        let _ = self.inner.swap(std::sync::Arc::clone(&inner));
+
+        reset_state_for_connect(
+            &inner,
+            &username,
+            &host,
+            port,
+            cert_label.as_deref(),
+            server_id,
+            &app_handle,
+        )?;
+        init_identity(&inner, &app_handle, &cert_label);
+
+        // Emit status change so the frontend can show a loading screen immediately.
+        app_handle.send(CoreEvent::Connecting);
+
+        // Spawn the actual connection work in the background so we don't
+        // block the Tauri command (which freezes the webview).
+        let registry = self.registry.clone();
+        let active_handle = self.inner.clone();
+        let connect_task = tokio::spawn(async move {
+            // Load client certificate from the per-identity folder.
+            let (client_cert_pem, client_key_pem) = if let Some(ref label) = cert_label {
+                app_handle
+                    .data_dir()
+                    .ok()
+                    .map(|d| super::pchat::IdentityStore::new(d).load_cert(label))
+                    .unwrap_or((None, None))
+            } else {
+                (None, None)
+            };
+
+            let device = device_for(&app_handle, &host, port);
+
+            // Read force_tcp_audio from current audio settings.
+            let force_tcp = inner
+                .lock()
+                .map(|s| s.audio.settings.force_tcp_audio)
+                .unwrap_or(false);
+
+            // Take inbound decoding off the protocol event loop: the socket
+            // reader hands audio straight to this thread through the sink.
+            let epoch = inner.lock().map(|s| s.conn.epoch).unwrap_or(0);
+            let audio_sink =
+                match super::voice_decode::start(inner.clone(), app_handle.clone(), epoch) {
+                    Some((decode, sink)) => {
+                        if let Ok(mut state) = inner.lock() {
+                            state.audio.attach_decode(decode);
+                        }
+                        Some(sink)
+                    }
+                    None => None,
+                };
+
+            let config = ClientConfig {
+                tcp: TcpConfig {
+                    server_host: host.clone(),
+                    server_port: port,
+                    accept_invalid_certs: true,
+                    client_cert_pem,
+                    client_key_pem,
+                },
+                udp: UdpConfig {
+                    server_host: host,
+                    server_port: port,
+                },
+                force_tcp,
+                audio_sink,
+                ..ClientConfig::default()
+            };
+
+            let handler =
+                SessionEventHandler::new(inner.clone(), app_handle.clone(), epoch, server_id);
+
+            let result = mumble_protocol::client::run(config, handler).await;
+            handle_connect_result(
+                result,
+                ConnectResultCtx {
+                    inner: &inner,
+                    app_handle: &app_handle,
+                    username,
+                    credentials,
+                    device,
+                    registry: &registry,
+                    server_id,
+                    active_handle: &active_handle,
+                },
+            )
+            .await;
+        });
+
+        // Store the task handle so disconnect() can abort it if the user
+        // cancels before the TCP handshake completes.
+        if let Ok(mut state) = self.inner.snapshot().lock() {
+            state.conn.connect_task_handle = Some(connect_task);
+        }
+
+        Ok(())
+    }
+
+    pub async fn disconnect(&self) -> Result<(), String> {
+        match self.registry.active_id() {
+            Some(id) => self.disconnect_session(id).await,
+            None => Ok(()),
+        }
+    }
+
+    /// Tear down a specific session by id.  When `id` is the currently
+    /// active session this also stops audio and rebinds `inner` to
+    /// whichever session becomes active next (or the empty default if
+    /// none remain).  When `id` is a non-active session the active
+    /// session's audio pipeline and `inner` pointer are left untouched.
+    pub async fn disconnect_session(&self, id: ServerId) -> Result<(), String> {
+        let arc = self
+            .registry
+            .session(id)
+            .ok_or_else(|| format!("unknown server id: {id}"))?;
+        let is_active = self.registry.active_id() == Some(id);
+
+        if is_active {
+            // Stop audio for the session being torn down (== current inner).
+            self.stop_audio_on(&arc);
+
+            // Stop Android foreground service for the active connection.
+            #[cfg(target_os = "android")]
+            self.stop_android_foreground_service();
+        }
+
+        let (handle, join, connect_task) = {
+            let mut guard = arc.lock().map_err(|e| e.to_string())?;
+            guard.conn.user_initiated_disconnect = true;
+            (
+                guard.conn.client_handle.take(),
+                guard.conn.event_loop_handle.take(),
+                guard.conn.connect_task_handle.take(),
+            )
+        };
+
+        // If we are still in the connecting phase (TCP handshake not done yet)
+        // abort the outer spawn so the attempt is cancelled immediately.
+        if let Some(task) = connect_task {
+            task.abort();
+        }
+
+        if let Some(handle) = handle {
+            let _ = handle.send(command::Disconnect).await;
+        }
+
+        // Wait for the event loop to finish so the TCP stream is properly
+        // closed (TLS close_notify + TCP FIN) before we return.  This
+        // prevents "ghost sessions" on the server that block reconnects.
+        if let Some(join) = join {
+            let abort_handle = join.abort_handle();
+            match tokio::time::timeout(Duration::from_secs(3), join).await {
+                Ok(Ok(())) => info!("event loop shut down cleanly"),
+                Ok(Err(e)) => tracing::warn!("event loop task panicked: {e}"),
+                Err(_) => {
+                    tracing::warn!("event loop did not shut down within 3 s, aborting");
+                    abort_handle.abort();
+                }
+            }
+        }
+        if let Ok(mut state) = arc.lock() {
+            // Persist signal bridge sender key state before dropping pchat.
+            // Note: on_disconnected may have already cleared pchat, so this
+            // is a safety net for cases where disconnect() runs first.
+            if let Some(ref pchat) = state.pchat_ctx.pchat {
+                pchat.save_signal_state();
+                pchat.save_local_cache();
+            }
+            // Outside the `pchat` check: a client with no identity still
+            // collected cards, and they are as worth keeping.
+            if let Err(e) = state.previews.cache.save() {
+                tracing::debug!("could not write the preview cache: {e}");
+            }
+
+            state.conn.status = ConnectionStatus::Disconnected;
+            state.server_id = None;
+            state.cert_label = None;
+            state.conn.client_handle = None;
+            state.conn.connect_task_handle = None;
+            state.conn.event_loop_handle = None;
+            state.users.clear();
+            state.channels.clear();
+            state.msgs.by_channel.clear();
+            state.conn.own_session = None;
+            state.conn.synced = false;
+            state.permanently_listened.clear();
+            state.selected_channel = None;
+            state.current_channel = None;
+            state.msgs.channel_unread.clear();
+            state.server.config = ServerConfig::default();
+            state.audio.voice_state = VoiceState::Inactive;
+            state.server.root_permissions = None;
+            state.pchat_ctx.pchat = None;
+            state.pchat_ctx.seed = None;
+            state.pchat_ctx.identity_dir = None;
+            state.pchat_ctx.pending_key_shares.clear();
+        }
+
+        // Drop the session from the registry so `list_servers` reflects
+        // the disconnect.  If this was the active session, also rebind
+        // `inner` to whichever session (if any) becomes active next.
+        let _ = self.registry.remove(id);
+        if is_active {
+            match self
+                .registry
+                .active_id()
+                .and_then(|nid| self.registry.session(nid))
+            {
+                Some(next_arc) => {
+                    let _ = self.inner.swap(next_arc);
+                }
+                None => self.reset_to_default(),
+            }
+        }
+
+        Ok(())
+    }
+
+    #[cfg(target_os = "android")]
+    fn stop_android_foreground_service(&self) {
+        if let Some(host) = self.host() {
+            host.voice_service(super::host::VoiceService::Stopped);
+        }
+    }
+}
+
+// -- Helpers ----------------------------------------------------------
+
+use std::sync::Mutex;
+
+type SharedInner = std::sync::Arc<Mutex<SharedState>>;
+
+/// Abort stale tasks and reset all connection-related state for a fresh
+/// connection attempt.
+fn reset_state_for_connect(
+    inner: &SharedInner,
+    username: &str,
+    host: &str,
+    port: u16,
+    cert_label: Option<&str>,
+    server_id: ServerId,
+    app_handle: &Host,
+) -> Result<(), String> {
+    let mut state = inner.lock().map_err(|e| e.to_string())?;
+
+    // Abort the old event-loop task (if any).
+    if let Some(handle) = state.conn.event_loop_handle.take() {
+        handle.abort();
+    }
+    // Abort any stale connecting-phase task (in case a previous
+    // connect() was cancelled before the handshake completed).
+    if let Some(task) = state.conn.connect_task_handle.take() {
+        task.abort();
+    }
+
+    state.conn.epoch += 1;
+    state.server_id = Some(server_id);
+    state.cert_label = cert_label.map(str::to_owned);
+    state.conn.status = ConnectionStatus::Connecting;
+    state.conn.own_name = username.to_owned();
+    state.server.host = host.to_owned();
+    state.server.port = port;
+    state.users.clear();
+    state.channels.clear();
+    state.msgs.by_channel.clear();
+    state.conn.own_session = None;
+    state.conn.client_handle = None;
+    state.conn.synced = false;
+    state.permanently_listened.clear();
+    state.selected_channel = None;
+    state.current_channel = None;
+    state.msgs.channel_unread.clear();
+    state.server.config = ServerConfig::default();
+    state.audio.voice_state = VoiceState::Inactive;
+    state.server.root_permissions = None;
+    // Save signal state before dropping pchat (connect-time reset).
+    if let Some(ref pchat) = state.pchat_ctx.pchat {
+        pchat.save_signal_state();
+        pchat.save_local_cache();
+    }
+    if let Err(e) = state.previews.cache.save() {
+        tracing::debug!("could not write the preview cache: {e}");
+    }
+    state.pchat_ctx.pchat = None;
+    state.pchat_ctx.seed = None;
+    state.pchat_ctx.identity_dir = None;
+    state.pchat_ctx.pending_key_shares.clear();
+    state.conn.host = Some(app_handle.clone());
+
+    Ok(())
+}
+
+/// Initialise the cert-hash resolver, migrate legacy storage, and load
+/// the identity seed for the given certificate label.
+fn init_identity(inner: &SharedInner, app_handle: &Host, cert_label: &Option<String>) {
+    // Cert-hash-to-username resolver (persisted across sessions).
+    if let Ok(data_dir) = app_handle.data_dir() {
+        let hash_names_path = data_dir.join("hash_names.json");
+        let resolver = super::hash_names::DefaultHashNameResolver::new(hash_names_path);
+        if let Ok(mut state) = inner.lock() {
+            state.pchat_ctx.hash_name_resolver = Some(std::sync::Arc::new(resolver));
+        }
+    }
+
+    // Migrate legacy storage layout (certs/ + pchat/) to per-identity
+    // folders on first connect after the update.  Idempotent.
+    if let Ok(data_dir) = app_handle.data_dir() {
+        super::pchat::IdentityStore::new(data_dir).migrate_legacy_storage();
+    }
+
+    // Load (or generate) the persistent chat identity seed.
+    let identity_label = cert_label.as_deref().unwrap_or("default");
+    if let Ok(data_dir) = app_handle.data_dir() {
+        let store = super::pchat::IdentityStore::new(data_dir);
+        match store.load_or_generate_seed(identity_label) {
+            Ok(seed) => {
+                if let Ok(mut state) = inner.lock() {
+                    let dir = store.identity_dir(identity_label);
+                    // The earliest point both halves of the key exist. The
+                    // preview cache is not a pchat concern - a plain text
+                    // channel accumulates cards too - but this is where the
+                    // seed that encrypts it becomes known.
+                    if let Err(e) = state.previews.cache.attach(&dir, &seed) {
+                        tracing::warn!("failed to open the local preview cache: {e}");
+                    }
+                    state.pchat_ctx.seed = Some(seed);
+                    state.pchat_ctx.identity_dir = Some(dir);
+                }
+            }
+            Err(e) => {
+                tracing::warn!("failed to load pchat seed: {e}");
+            }
+        }
+    }
+}
+
+/// Which install this is, as the server at `host:port` is to know it.
+///
+/// Derived per server (see `device`), so it is worked out at connect time,
+/// where the target is known, and not once for the whole app.
+fn device_for(app_handle: &Host, host: &str, port: u16) -> Option<command::AuthenticateDevice> {
+    let dir = app_handle.data_dir().ok()?;
+    let device = super::device::credentials_for(&dir, host, port)?;
+    Some(command::AuthenticateDevice {
+        id: device.id,
+        secret: device.secret,
+        name: device.name,
+    })
+}
+
+/// Bundle of context passed to [`handle_connect_result`] so the
+/// function signature stays within Clippy's `too_many_arguments` limit.
+struct ConnectResultCtx<'a> {
+    inner: &'a SharedInner,
+    app_handle: &'a Host,
+    username: String,
+    credentials: Credentials,
+    device: Option<command::AuthenticateDevice>,
+    registry: &'a super::registry::Registry,
+    server_id: ServerId,
+    active_handle: &'a super::shared_handle::SharedHandle,
+}
+
+/// Handle the result of `mumble_protocol::client::run()`: store handles,
+/// send Authenticate, or emit rejection events on failure.
+async fn handle_connect_result(
+    result: Result<
+        (
+            mumble_protocol::client::ClientHandle,
+            tokio::task::JoinHandle<()>,
+        ),
+        mumble_protocol::error::Error,
+    >,
+    ctx: ConnectResultCtx<'_>,
+) {
+    let ConnectResultCtx {
+        inner,
+        app_handle,
+        username,
+        credentials,
+        device,
+        registry,
+        server_id,
+        active_handle,
+    } = ctx;
+    match result {
+        Ok((handle, join)) => {
+            if let Ok(mut state) = inner.lock() {
+                state.conn.client_handle = Some(handle.clone());
+                state.conn.event_loop_handle = Some(join);
+                state.conn.connect_task_handle = None;
+            }
+
+            // Send Authenticate command.
+            if let Err(e) = handle
+                .send(command::Authenticate {
+                    username,
+                    tokens: credentials.tokens(),
+                    password: credentials.password,
+                    totp: credentials.totp,
+                    device,
+                })
+                .await
+            {
+                tracing::error!("Failed to send auth: {e}");
+                mark_disconnected(inner);
+                // Keep the session in the registry (now `Disconnected`),
+                // exactly like a dropped established connection, so its tab
+                // persists and the next reconnect reuses it instead of
+                // spawning a fresh tab.  Only switch the active session away
+                // when another live session exists.
+                if registry.activate_fallback(server_id) {
+                    rebind_active(active_handle, registry);
+                }
+                let reason = format!("Failed to authenticate: {e}");
+                emit_session_rejected(app_handle, server_id, reason);
+                return;
+            }
+
+            info!("TCP connected, authenticate sent - waiting for ServerSync");
+
+            // Start deaf+muted so the user does not transmit or
+            // hear audio until they explicitly enable voice calling.
+            // (SetSelfDeaf already carries self_mute=true.)
+            if let Err(e) = handle.send(command::SetSelfDeaf { deafened: true }).await {
+                tracing::warn!("failed to send initial self-deaf: {e}");
+            }
+        }
+        Err(e) => {
+            tracing::error!("Connection failed: {e}");
+            mark_disconnected(inner);
+            // Keep the session as `Disconnected` (see auth-failure branch
+            // above) so its tab survives the retry loop and the next
+            // reconnect reuses the same slot rather than opening a new tab.
+            if registry.activate_fallback(server_id) {
+                rebind_active(active_handle, registry);
+            }
+            let reason = format!("Connection failed: {e}");
+            emit_session_rejected(app_handle, server_id, reason);
+        }
+    }
+}
+
+/// Emit `connection-rejected` (and matching `server-disconnected`) for
+/// a specific session id, ensuring the frontend can route the events
+/// to the correct tab without affecting other sessions.
+fn emit_session_rejected(app_handle: &Host, server_id: ServerId, reason: String) {
+    let id = server_id.to_string();
+    app_handle.send(CoreEvent::ConnectionRejected(RejectedPayload {
+        server_id: Some(id.clone()),
+        reason: reason.clone(),
+        reject_type: None,
+    }));
+    app_handle.send(CoreEvent::Disconnected(DisconnectedPayload {
+        server_id: Some(id),
+        reason: Some(reason),
+    }));
+}
+
+/// Clear connection handles and set status to `Disconnected`.
+fn mark_disconnected(inner: &SharedInner) {
+    if let Ok(mut state) = inner.lock() {
+        state.conn.status = ConnectionStatus::Disconnected;
+        state.server_id = None;
+        state.cert_label = None;
+        state.conn.client_handle = None;
+        state.conn.event_loop_handle = None;
+        state.conn.connect_task_handle = None;
+    }
+}
+
+/// After a session is removed from the registry, point `active_handle`
+/// at whichever session became active next (or leave it pointing at the
+/// failed session if nothing remains; callers may also explicitly reset).
+fn rebind_active(
+    active_handle: &super::shared_handle::SharedHandle,
+    registry: &super::registry::Registry,
+) {
+    if let Some(arc) = registry.active_id().and_then(|id| registry.session(id)) {
+        let _ = active_handle.swap(arc);
+    }
+}

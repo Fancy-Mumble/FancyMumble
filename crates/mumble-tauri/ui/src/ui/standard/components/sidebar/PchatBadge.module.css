@@ -1,0 +1,32 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  border-radius: 8px;
+  white-space: nowrap;
+  vertical-align: middle;
+  letter-spacing: 0.02em;
+  opacity: 0.85;
+}
+
+.fancy {
+  background: color-mix(in srgb, var(--color-badge-fancy) 18%, transparent);
+  color: var(--color-badge-fancy);
+  border: 1px solid color-mix(in srgb, var(--color-badge-fancy) 35%, transparent);
+}
+
+.signal {
+  background: color-mix(in srgb, var(--color-badge-signal) 18%, transparent);
+  color: var(--color-badge-signal);
+  border: 1px solid color-mix(in srgb, var(--color-badge-signal) 35%, transparent);
+}
+
+.server {
+  background: color-mix(in srgb, var(--color-badge-server) 18%, transparent);
+  color: var(--color-badge-server);
+  border: 1px solid color-mix(in srgb, var(--color-badge-server) 35%, transparent);
+}

@@ -1,0 +1,158 @@
+syntax = "proto3";
+
+// 1019 invites: one-click links into this server.
+//
+// A server with a password is a server you cannot hand to a friend without
+// also handing them the password, and a password once handed out is handed out
+// for good: there is no taking it back from one person without changing it for
+// everybody. An invite is the revocable, countable, expiring version of that
+// sentence - "here is a way in" - and it is what lets a link in a chat window
+// be the whole join flow.
+//
+// The link itself is the client's to build (`fancy://invite/<code>?server=...`):
+// only the client knows which address it dialled, and the server only says
+// which address it would *rather* be reached at (`InviteSupport.address`).
+//
+// The code travels back on the invitee's `Authenticate` as an access token
+// spelled `invite:<code>`. A token rather than a new field so that a stock
+// Mumble client can redeem one by hand, through its own "access tokens" box,
+// and so that no upstream message had to grow. The server strips it before the
+// token list reaches any ACL: an invite is never a channel password.
+//
+// Who may mint one, for how long and how often is the operator's, through the
+// `invites*` rows of the ordinary settings form (server-config, 1013).
+package starling.fancy.invites.v1;
+
+message InvitesEnvelope {
+  oneof body {
+    InviteSupportQuery support_query = 1;
+    InviteSupport support = 2;
+    InviteCreate create = 3;
+    InviteCreated created = 4;
+    InviteListQuery list_query = 5;
+    InviteList list = 6;
+    InviteRevoke revoke = 7;
+    InviteRevoked revoked = 8;
+    InviteRefused refused = 9;
+  }
+}
+
+// "May I invite people here, and on what terms?" Asked once per connection.
+//
+// Answered from configuration and this session's permissions alone. A client
+// draws its "Invite people" entries from the answer, so it has to arrive
+// before anybody opens a menu, and it is re-asked when the settings change.
+message InviteSupportQuery {
+  string request_id = 1;
+}
+
+// The answer to an InviteSupportQuery.
+//
+// A server too old to know the question answers nothing at all, which a client
+// reads the same as `available = false`.
+message InviteSupport {
+  string request_id = 1;
+  // Whether this server takes invites at all. False when the operator set
+  // `invites = "off"`, in which case no invite admits anybody either.
+  bool available = 2;
+  // Whether this session may mint one.
+  bool may_create = 3;
+  // Whether this session may list and revoke everybody's invites rather than
+  // only its own. The same authority that edits the server settings.
+  bool may_manage = 4;
+  // The longest lifetime an invite may be given, in seconds. Zero: no ceiling.
+  uint64 max_age_s = 5;
+  // The most people one invite may admit. Zero: no ceiling.
+  uint32 max_uses = 6;
+  // `host` or `host:port` a link should name, when the operator set one.
+  // Empty means the address the client dialled, which is right unless the
+  // server sits behind something that makes that address private.
+  string address = 7;
+  // Whether an invite admits past the server password. When false an invite
+  // still lands its holder in its channel, but only once they know the
+  // password - which is how an operator uses invites as "go here" links alone.
+  bool skips_password = 8;
+}
+
+// Mint one.
+message InviteCreate {
+  string request_id = 1;
+  // Where the invitee lands. Zero: wherever they would have landed anyway.
+  // The creator must be allowed to enter it.
+  uint32 channel_id = 2;
+  // Seconds from now. Zero asks for the longest the server allows, which is
+  // forever when it sets no ceiling. Longer than the ceiling is clamped to it.
+  uint64 max_age_s = 3;
+  // How many people it admits. Zero asks for the most the server allows,
+  // unlimited when it sets no ceiling. More than the ceiling is clamped.
+  uint32 max_uses = 4;
+}
+
+// One invite, as its creator and the server's administrators see it.
+message Invite {
+  string code = 1;
+  // Zero: no particular channel.
+  uint32 channel_id = 2;
+  uint64 created_ms = 3;
+  // Zero: never.
+  uint64 expires_ms = 4;
+  // Zero: unlimited.
+  uint32 max_uses = 5;
+  // How many distinct people it has admitted. The same person coming back
+  // with the same link is not a second use.
+  uint32 uses = 6;
+  // The name its creator went by when they made it. A label, not an identity.
+  string creator = 7;
+  // Whether the asking session is the one who made it, so a client can offer
+  // "revoke" without knowing how the server identifies people.
+  bool mine = 8;
+}
+
+message InviteCreated {
+  string request_id = 1;
+  Invite invite = 2;
+}
+
+message InviteListQuery {
+  string request_id = 1;
+  // Everybody's rather than the caller's own. Needs `may_manage`.
+  bool everyone = 2;
+}
+
+message InviteList {
+  string request_id = 1;
+  // Newest first. Expired and used-up invites are not listed: they admit
+  // nobody, and are swept.
+  repeated Invite invites = 2;
+}
+
+message InviteRevoke {
+  string request_id = 1;
+  string code = 2;
+}
+
+message InviteRevoked {
+  string request_id = 1;
+  string code = 2;
+}
+
+message InviteRefused {
+  string request_id = 1;
+  Reason reason = 2;
+  // For the person reading it; never parsed.
+  string detail = 3;
+
+  enum Reason {
+    OTHER = 0;
+    // Invites are off on this server.
+    UNAVAILABLE = 1;
+    // This session may not do that.
+    PERMISSION = 2;
+    // The request does not make sense, e.g. a channel that does not exist.
+    INVALID = 3;
+    // No such invite, or not one this session may see.
+    NOT_FOUND = 4;
+    // This session already holds as many live invites as it may.
+    LIMIT = 5;
+  }
+}

@@ -1,0 +1,35 @@
+﻿{
+  "miniMode": {
+    "expand": "Expand window",
+    "latency": "{{ms}} ms",
+    "you": "you"
+  },
+  "search": {
+    "placeholder": "Search channels, people and messages",
+    "close": "Close search",
+    "empty": "Nothing to jump to yet.",
+    "noMatch": "Nothing matches \"{{query}}\".",
+    "headingChannel": "Channels",
+    "headingPerson": "People",
+    "headingMessage": "Messages",
+    "headingServer": "Servers",
+    "results_one": "{{count}} result",
+    "results_other": "{{count}} results",
+    "filters": "Filter results",
+    "filterAll": "All",
+    "filterPhotos": "Photos",
+    "filterLinks": "Links",
+    "photosEmpty": "No photos shared yet.",
+    "linksEmpty": "Type to find a link someone sent.",
+    "photosLoading": "Loading photos…",
+    "photos_one": "{{count}} photo",
+    "photos_other": "{{count}} photos",
+    "photoLabel": "Photo from {{sender}}, {{place}}",
+    "keyEsc": "esc"
+  },
+  "gameOverlay": {
+    "you": "YOU",
+    "more": "+{{count}} more",
+    "channel": "Channel"
+  }
+}

@@ -1,0 +1,341 @@
+//! `EventHandler` implementation that bridges mumble-protocol events
+//! to the view, through the application hosting the engine.
+//!
+//! Control message handling is delegated to the `handler` module,
+//! where each protobuf message type has its own file implementing
+//! `HandleMessage`.  This file retains `on_connected`,
+//! `on_udp_message`, and `on_disconnected` which are thin wrappers.
+
+use std::sync::{Arc, Mutex};
+
+use crate::state::host::Host;
+use tracing::{debug, info, warn};
+
+use mumble_protocol::audio::encoder::EncodedPacket;
+use mumble_protocol::event::EventHandler;
+use mumble_protocol::message::{ControlMessage, UdpMessage};
+
+use super::SharedState;
+use super::core_event::CoreEvent;
+use super::handler::{self, EventEmitter, HandlerContext};
+use super::types::*;
+
+/// Emitter the message handlers use: forwards to the host application.
+///
+/// Sends every event with the session that is active at that moment, so a
+/// view showing several servers can route it to the right one.
+struct HostEmitter {
+    host: Host,
+    shared: Arc<Mutex<SharedState>>,
+}
+
+impl HostEmitter {
+    fn active_server(&self) -> Option<super::sessions::ServerId> {
+        self.shared.lock().ok().and_then(|g| g.server_id)
+    }
+}
+
+impl EventEmitter for HostEmitter {
+    fn emit_event(&self, event: CoreEvent) {
+        self.host.send_for(self.active_server(), event);
+    }
+
+    fn request_user_attention(&self) {
+        self.host.request_user_attention();
+    }
+
+    fn claim_webrtc_signal(
+        &self,
+        sender_session: Option<u32>,
+        signal_type: i32,
+        payload: &str,
+    ) -> bool {
+        self.host
+            .claim_webrtc_signal(sender_session, signal_type, payload)
+    }
+
+    fn send_notification(&self, title: &str, body: &str) {
+        self.send_notification_with_icon(title, body, None, None);
+    }
+
+    fn send_notification_with_icon(
+        &self,
+        title: &str,
+        body: &str,
+        icon: Option<&[u8]>,
+        channel_id: Option<u32>,
+    ) {
+        self.host.show_notification(title, body, icon, channel_id);
+    }
+}
+
+/// Implements `EventHandler` to receive protocol events and push them
+/// to the view.
+pub(super) struct SessionEventHandler {
+    pub shared: Arc<Mutex<SharedState>>,
+    pub app: Host,
+    /// Snapshot of `SharedState::connection_epoch` at construction time.
+    /// `on_disconnected` only acts when this matches the current epoch,
+    /// preventing stale callbacks from orphaned tasks.
+    pub epoch: u64,
+    /// The session id this handler was created for.  Used by
+    /// `on_disconnected` to emit a correctly-scoped
+    /// `DisconnectedPayload` even after `disconnect_session` has
+    /// already cleared `state.server_id` as part of its teardown.
+    pub server_id: super::sessions::ServerId,
+    /// Running count of inbound audio packets (for periodic diagnostics).
+    pub(super) inbound_audio_count: u64,
+    /// What every message handler is given. Built once per connection: a
+    /// busy server sends hundreds of control messages a second, and each used
+    /// to allocate a fresh context.
+    ctx: HandlerContext,
+}
+
+impl SessionEventHandler {
+    /// A handler for the session behind `shared`, reporting to `app`.
+    pub(super) fn new(
+        shared: Arc<Mutex<SharedState>>,
+        app: Host,
+        epoch: u64,
+        server_id: super::sessions::ServerId,
+    ) -> Self {
+        let ctx = HandlerContext {
+            shared: Arc::clone(&shared),
+            emitter: Box::new(HostEmitter {
+                host: app.clone(),
+                shared: Arc::clone(&shared),
+            }),
+        };
+        Self {
+            shared,
+            app,
+            epoch,
+            server_id,
+            inbound_audio_count: 0,
+            ctx,
+        }
+    }
+}
+
+impl EventHandler for SessionEventHandler {
+    fn on_control_message(&mut self, msg: &ControlMessage) {
+        // Drop messages from an orphaned/aborted event loop whose session has
+        // since been reclaimed by a newer `connect()` (epoch bump). Without
+        // this, in-flight messages from a dying TCP stream could mutate the
+        // reused `SharedState` and emit events stamped with the new server's
+        // id. Mirrors the guard in `on_disconnected`.
+        if self
+            .shared
+            .lock()
+            .map(|s| s.conn.epoch != self.epoch)
+            .unwrap_or(true)
+        {
+            return;
+        }
+        handler::dispatch(msg, &self.ctx);
+    }
+
+    fn on_connected(&mut self) {
+        info!("protocol: connected (ServerSync received)");
+    }
+
+    fn on_udp_message(&mut self, msg: &UdpMessage) {
+        if let UdpMessage::Audio(audio) = msg {
+            if audio.opus_data.is_empty() {
+                return;
+            }
+            let session = audio.sender_session;
+            let is_terminator = audio.is_terminator;
+            let context = super::voice_decode::packet_context(audio);
+
+            // e2e decoded-audio dump (no-op unless FANCY_E2E_AUDIO_DUMP_DIR is
+            // set). Started here rather than at audio init because this is the
+            // first point that is guaranteed to run before any audio is
+            // decoded; the call is idempotent.
+            crate::e2e_stats::start_audio_dump();
+
+            // e2e timing assertions (no-op unless FANCY_E2E_AUDIO_STATS_FILE
+            // is set): tallies wire-level packet stats per sender.
+            crate::e2e_stats::record_packet(
+                session,
+                audio.frame_number,
+                &audio.opus_data,
+                is_terminator,
+                context,
+            );
+            self.inbound_audio_count += 1;
+            if self.inbound_audio_count == 1 || self.inbound_audio_count.is_multiple_of(500) {
+                debug!(
+                    "inbound audio #{} from session {} (opus {} bytes, seq {}, term={})",
+                    self.inbound_audio_count,
+                    session,
+                    audio.opus_data.len(),
+                    audio.frame_number,
+                    is_terminator,
+                );
+            }
+
+            // Determine what to emit INSIDE the lock, then emit OUTSIDE.
+            // Calling app.emit() while holding SharedState causes a deadlock:
+            // the webview dispatches the JS event synchronously, JS may invoke
+            // a Tauri command that tries to re-lock SharedState, and both
+            // threads wait on each other.
+            //
+            // The opus payload is only cloned (into `EncodedPacket`) when a
+            // mixer is actually present, so audio packets received before the
+            // pipeline is initialised cost nothing.
+            let emit_action: Option<bool> = 'action: {
+                let Ok(mut state) = self.shared.lock() else {
+                    break 'action None;
+                };
+                // Ignore audio from an orphaned event loop whose session a newer
+                // connect() has reclaimed - otherwise stale packets get mixed
+                // into (and attributed on) the new session. See on_disconnected.
+                if state.conn.epoch != self.epoch {
+                    break 'action None;
+                }
+                let Some(ref mut mixer) = state.audio.mixer else {
+                    break 'action None;
+                };
+
+                let packet = EncodedPacket {
+                    data: audio.opus_data.clone(),
+                    sequence: audio.frame_number,
+                    frame_samples: 960,
+                };
+
+                if let Err(e) = mixer.feed(session, &packet) {
+                    warn!("inbound audio decode error: {e}");
+                }
+
+                if is_terminator {
+                    mixer.reset_speaker(session);
+                    // End of an utterance is a natural, low-frequency
+                    // moment to free decoders with lost terminators and
+                    // drained buffers of past streams (~77 KB each).
+                    mixer.remove_inactive_speakers();
+                    state
+                        .audio
+                        .talking_sessions
+                        .remove(&session)
+                        .then_some(false)
+                } else {
+                    state.audio.talking_sessions.insert(session).then_some(true)
+                }
+            };
+            // SharedState lock is released here.
+
+            if let Some(talking) = emit_action {
+                super::audio::emit_user_talking(&self.app, session, talking);
+                // On the talking edge only: this path has nowhere to remember a
+                // mid-utterance change, and runs only with the decode thread
+                // switched off.
+                if talking {
+                    self.app
+                        .send(CoreEvent::UserVoiceContext { session, context });
+                }
+            }
+        }
+    }
+
+    fn on_disconnected(&mut self) {
+        let mut user_initiated = false;
+        if let Ok(mut state) = self.shared.lock() {
+            // If the epoch has moved on, a newer `connect()` call has already
+            // claimed the shared state.  Silently bail - this callback comes
+            // from an orphaned / aborted event loop.
+            if state.conn.epoch != self.epoch {
+                debug!(
+                    handler_epoch = self.epoch,
+                    current_epoch = state.conn.epoch,
+                    "stale on_disconnected ignored"
+                );
+                return;
+            }
+
+            state.conn.status = ConnectionStatus::Disconnected;
+            state.server_id = None;
+            state.cert_label = None;
+            state.conn.client_handle = None;
+            state.conn.event_loop_handle = None;
+            // Stop audio pipelines on disconnect.
+            state.audio.stop_outbound();
+            if let Some(mut playback) = state.audio.mixing_playback.take() {
+                let _ = playback.stop();
+            }
+            state.audio.uninstall_mixer();
+            state.audio.decode = None;
+            state.audio.voice_state = VoiceState::Inactive;
+            state.audio.talking_sessions.clear();
+            // The roster, the tree and the messages go too. A link that drops
+            // is the common way a session ends, and leaving that half standing
+            // is what made a lost connection look like a server still there.
+            state.clear_session_data();
+            // Save signal state before dropping pchat.
+            if let Some(ref pchat) = state.pchat_ctx.pchat {
+                pchat.save_signal_state();
+                pchat.save_local_cache();
+            }
+            if let Err(e) = state.previews.cache.save() {
+                tracing::debug!("could not write the preview cache: {e}");
+            }
+            state.pchat_ctx.pchat = None;
+            state.pchat_ctx.seed = None;
+            state.pchat_ctx.identity_dir = None;
+            state.pchat_ctx.pending_key_shares.clear();
+            user_initiated = state.conn.user_initiated_disconnect;
+            state.conn.user_initiated_disconnect = false;
+        }
+        let reason = if user_initiated {
+            None
+        } else {
+            Some("Connection to server was lost.".to_string())
+        };
+        self.app.send(CoreEvent::Disconnected(DisconnectedPayload {
+            server_id: Some(self.server_id.to_string()),
+            reason,
+        }));
+
+        // Stop Android foreground service now that we are disconnected.
+        #[cfg(target_os = "android")]
+        {
+            self.app.voice_service(super::host::VoiceService::Stopped);
+
+            // Keep FCM topic subscriptions active after disconnect so the
+            // device continues to receive push notifications while offline.
+            // Subscriptions are idempotent - re-subscribing on the next
+            // connect is harmless.
+        }
+    }
+
+    fn on_audio_transport_changed(&mut self, udp_active: bool, cipher: Option<&'static str>) {
+        info!(udp_active, cipher, "audio transport changed");
+        self.app
+            .send(CoreEvent::AudioTransportChanged(AudioTransportPayload {
+                udp_active,
+                cipher,
+            }));
+    }
+
+    fn on_ping_stats(
+        &mut self,
+        from_client: mumble_protocol::transport::ocb2::PacketStats,
+        to_client: mumble_protocol::transport::ocb2::PacketStats,
+    ) {
+        let payload = CryptoStatsPayload {
+            from_client: PacketStats {
+                good: from_client.good,
+                late: from_client.late,
+                lost: from_client.lost,
+                resync: from_client.resync,
+            },
+            to_client: PacketStats {
+                good: to_client.good,
+                late: to_client.late,
+                lost: to_client.lost,
+                resync: to_client.resync,
+            },
+        };
+        self.app.send(CoreEvent::CryptoStats(payload));
+    }
+}

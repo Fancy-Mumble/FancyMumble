@@ -1,0 +1,302 @@
+syntax = "proto3";
+
+// Outer type 1009, the control-plane half of bulk transfer: ask for a URL,
+// get a short-lived signed one, then move the bytes over HTTP.
+package starling.fancy.files.v1;
+
+import "fancy/wire.proto";
+
+message FilesEnvelope {
+  oneof body {
+    UploadRequest upload = 1;
+    DownloadRequest download = 2;
+    Grant grant = 3;
+    Share share = 4;
+    Listing listing = 5;
+    ListRequest list = 6;
+    Refused refused = 7;
+    ManageRequest manage = 8;
+    ManageListing managed = 9;
+    ForgetRequest forget = 10;
+    EmoteUpload emote_upload = 11;
+    EmoteForget emote_forget = 12;
+    EmoteQuery emote_query = 13;
+    Emotes emotes = 14;
+    VoiceSupportQuery voice_query = 15;
+    VoiceSupport voice_support = 16;
+  }
+}
+
+// Whose files a management listing is about.
+enum Audience {
+  // The caller's own uploads, wherever they were shared. Needs no permission
+  // beyond being the person who uploaded them.
+  AUDIENCE_MINE = 0;
+  // Every file on the server, for an operator. Needs `Write` on the root.
+  AUDIENCE_EVERYONE = 1;
+}
+
+// "My shared files", and the operator's view of the same table.
+message ManageRequest {
+  string request_id = 1;
+  Audience audience = 2;
+  uint32 limit = 3;
+}
+
+message ManagedFile {
+  string key = 1;
+  uint32 channel = 2;
+  string filename = 3;
+  string content_type = 4;
+  uint64 size = 5;
+  Visibility visibility = 6;
+  uint64 shared_at_ms = 7;
+  // `0` for a share with no lifetime.
+  uint64 expires_at_ms = 8;
+  // When it was last read, or `0` if it never has been.
+  uint64 downloaded_at_ms = 9;
+  // The link, for a share that has one.
+  string share_url = 10;
+  // Who shared it, in terms that outlive their connection. `account` is `0`
+  // for a guest, and `cert` empty for a client that presented none.
+  uint64 uploader_account = 11;
+  string uploader_name = 12;
+  bytes uploader_cert = 13;
+  // Whether that person is connected right now, so a dashboard can say so.
+  bool uploader_online = 14;
+  // The sibling object holding a small preview of this one, or empty where
+  // the server derived none: a sealed upload it cannot read, something that
+  // is not a picture, or a format its decoder did not recognise.
+  //
+  // A key rather than a URL, because a URL for it would expire on its own
+  // schedule; the client signs for it the way it signs for any other object.
+  string thumb_key = 15;
+}
+
+// What the server holds, for the header of an operator's view.
+message Storage {
+  uint64 used_bytes = 1;
+  // `0` where the operator set no ceiling.
+  uint64 max_total_bytes = 2;
+  uint64 max_upload_bytes = 3;
+  uint64 file_count = 4;
+}
+
+message ManageListing {
+  string request_id = 1;
+  repeated ManagedFile files = 2;
+  // Only filled for `AUDIENCE_EVERYONE`: a user's own files say nothing about
+  // the server's disk.
+  Storage storage = 3;
+}
+
+// Remove one stored file, rows and bytes together.
+//
+// Your own needs no permission. Anyone else's needs `ResetUserContent` on the
+// root, which is murmur's bit for removing another person's content.
+message ForgetRequest {
+  string request_id = 1;
+  string key = 2;
+}
+
+// Who may reach a shared file.
+//
+// One axis, three points, ordered by how far the file travels. `SESSION` is
+// zero because it is what an upload that says nothing gets: a client too old
+// to know about this field asks for the narrowest sharing, never the widest.
+enum Visibility {
+  // Only the people the share is announced to, each fetch signed for.
+  VISIBILITY_SESSION = 0;
+  // Anyone holding the link, with no account and no signature.
+  VISIBILITY_PUBLIC = 1;
+  // Anyone holding the link who also knows the password.
+  VISIBILITY_PASSWORD = 2;
+}
+
+message UploadRequest {
+  string request_id = 1;
+  uint32 channel = 2;
+  string filename = 3;
+  string content_type = 4;
+  uint64 size = 5;
+  // The SHA-256 of the bytes about to be uploaded, or empty.
+  //
+  // Optional: the server hashes whatever arrives either way. When set it must
+  // be 32 bytes, and a `PUT` whose bytes hash to anything else is refused with
+  // `400` and nothing is stored, because a transfer that contradicts the
+  // uploader's own digest is a corrupted one, not a file to share.
+  bytes sha256 = 6;
+  Visibility visibility = 7;
+  // How long the share should last, in seconds. `0` means it never expires,
+  // which is also what an upload that says nothing gets.
+  uint64 ttl_seconds = 9;
+  // The password for a `VISIBILITY_PASSWORD` share, and nothing otherwise.
+  //
+  // Sent once, on the control connection, and never stored: the server keeps
+  // an Argon2id hash to check against, and derives the file's encryption key
+  // from the same secret. Losing the password loses the file.
+  string password = 8;
+  // Set when the upload is a recorded voice clip rather than a file somebody
+  // picked. A clip is checked against the voice-message settings and the
+  // `SendVoiceMessage` bit *instead of* `ShareFiles`, so a server can allow
+  // voice notes without allowing arbitrary uploads.
+  VoiceClip voice = 10;
+}
+
+// What a voice clip claims to be, checked before a byte moves.
+//
+// The duration is the client's word for it. The server does not decode the
+// audio, so a client lying about it can send a longer clip; the byte cap is
+// the limit it cannot talk its way past.
+message VoiceClip {
+  uint32 duration_ms = 1;
+}
+
+message DownloadRequest {
+  string request_id = 1;
+  string key = 2;
+}
+
+message Grant {
+  string request_id = 1;
+  string url = 2;
+  string method = 3;
+  uint64 expires_at_ms = 4;
+  string key = 5;
+  // Where this object will answer to anyone holding the link, once the bytes
+  // are in. Empty for a session share, which has no such address.
+  //
+  // Carried here rather than built by the client because the address is the
+  // server's to state: it is the operator's `public_url`, which the client
+  // never sees, and it does not expire the way `url` does.
+  string share_url = 6;
+  // When the finished share stops answering, or `0` for never.
+  //
+  // Distinct from `expires_at_ms` above, which is the moment this URL stops
+  // being spendable: one is the life of the link, the other the life of the
+  // file. The server's number rather than the client's arithmetic, so every
+  // reader agrees about when it goes.
+  uint64 share_expires_at_ms = 7;
+}
+
+message Share {
+  string key = 1;
+  uint32 channel = 2;
+  // The session of whoever shared it while they are connected, and `0` while
+  // they are not. Resolved each time the message is built: session ids are
+  // recycled, so a stored one would name whoever holds that number now.
+  uint32 owner = 3;
+  string filename = 4;
+  uint64 size = 5;
+  uint64 shared_at_ms = 6;
+  // Reachable by link at all. Kept as the coarse question every reader had
+  // before there were two ways of answering it; `visibility` says which.
+  bool public = 7;
+  Visibility visibility = 8;
+  // The link, for a share that has one. Empty otherwise.
+  string share_url = 9;
+  // When this share stops answering, or `0` for never.
+  uint64 expires_at_ms = 10;
+  // The sibling object holding a small preview of this one, or empty where
+  // the server derived none: a sealed upload it cannot read, something that
+  // is not a picture, or a format its decoder did not recognise.
+  //
+  // A key rather than a URL, because a URL for it would expire on its own
+  // schedule; the client signs for it the way it signs for any other object.
+  string thumb_key = 11;
+  // Who shared it, in terms that outlive their connection, as `ManagedFile`
+  // carries them. `uploader_account` is `0` for a guest, and `uploader_cert`
+  // empty for a client that presented none.
+  uint64 uploader_account = 12;
+  string uploader_name = 13;
+  bytes uploader_cert = 14;
+}
+
+message ListRequest {
+  uint32 channel = 1;
+  uint32 limit = 2;
+  string before_key = 3;
+}
+
+message Listing {
+  uint32 channel = 1;
+  repeated Share files = 2;
+}
+
+message Refused {
+  string request_id = 1;
+  starling.fancy.wire.v1.Refusal refusal = 2;
+}
+
+// Custom server emotes, as objects the whole server can see.
+//
+// An emote is a *named* object in the server's own `s/emotes/` namespace: the
+// shortcode is the name, and replacing one keeps a single revision because the
+// history of an emoji is not worth a disk. They are stored public because an
+// `<img>` cannot sign a request - the same exposure the plugin's emotes always
+// had, said out loud.
+//
+// Writing needs `ManageEmotes` on the root, which is murmur's own bit for it.
+// Reading needs nothing beyond being here.
+message EmoteUpload {
+  string request_id = 1;
+  // The shortcode, without colons. Also the name the object is stored under.
+  string shortcode = 2;
+  string filename = 3;
+  string content_type = 4;
+  uint64 size = 5;
+  // The emoji this stands in for, shown where the image cannot be.
+  string alias_emoji = 6;
+  string description = 7;
+}
+
+message EmoteForget {
+  string request_id = 1;
+  string shortcode = 2;
+}
+
+// "Send me this server's emotes."
+message EmoteQuery {
+  string request_id = 1;
+}
+
+message Emote {
+  string shortcode = 1;
+  // Where to fetch the image, needing no signature.
+  string url = 2;
+  string alias_emoji = 3;
+  string description = 4;
+  uint64 created_at_ms = 5;
+}
+
+// Sent in answer to a query, and again to everyone whenever the set changes -
+// so a client that did not ask still stops showing an emote somebody deleted.
+message Emotes {
+  string request_id = 1;
+  repeated Emote emotes = 2;
+}
+
+// Voice messages: short recorded clips sent into chat as files.
+//
+// Asked once per connection, like `GifSupportQuery`, and pushed again to
+// everyone with an empty `request_id` whenever the operator changes one of the
+// settings, so a recorder that is already on screen learns its new ceiling
+// without a reconnect. A server too old to know the question answers nothing,
+// which a client reads as `available = false`.
+message VoiceSupportQuery {
+  string request_id = 1;
+}
+
+message VoiceSupport {
+  string request_id = 1;
+  // `allow_voice_messages`. Whether this member may send one in a given
+  // channel is the `SendVoiceMessage` bit on it, which the client already
+  // learns from its permission queries.
+  bool available = 2;
+  // The longest clip in seconds, or zero for no limit. The recorder stops
+  // itself here rather than being refused at the end of a long take.
+  uint32 max_seconds = 3;
+  // The largest clip in bytes, already the smaller of the voice cap and the
+  // file service's own upload ceiling. Zero for no limit.
+  uint64 max_bytes = 4;
+}

@@ -1,0 +1,466 @@
+{
+  "matches": "条件：{{condition}}",
+  "admin": {
+    "saved": "欢迎消息已保存。",
+    "notSaved": "未保存：{{error}}",
+    "viewBlocks": "模块",
+    "viewCanvas": "节点编辑器",
+    "testGreeting": "测试欢迎消息",
+    "saving": "正在保存…",
+    "saveBroadcast": "保存并发布",
+    "reading": "正在读取此服务器的欢迎消息…",
+    "readFailed": "无法读取此服务器的欢迎消息：{{error}}",
+    "retry": "重试",
+    "greetingNumber": "欢迎消息 #{{number}}",
+    "thisGreeting": "此欢迎消息",
+    "nothingWired": "没有内容连接到“何时”",
+    "summary": {
+      "empty": "编辑器中还没有欢迎消息。",
+      "shows": "显示条件：{{condition}}",
+      "unwired": "没有内容连接到“何时” — 这条欢迎消息不会显示给任何人。",
+      "greetings_one": "{{count}} 条欢迎消息，按绘制顺序依次尝试",
+      "greetings_other": "{{count}} 条欢迎消息，按绘制顺序依次尝试",
+      "withoutWhen_one": "{{count}} 条没有连接“何时”",
+      "withoutWhen_other": "{{count}} 条没有连接“何时”",
+      "shadowed_one": "{{count}} 条不会送达任何人",
+      "shadowed_other": "{{count}} 条不会送达任何人"
+    },
+    "blocksView": {
+      "greetings": "欢迎消息",
+      "noneOnCanvas": "— 编辑器中没有 —",
+      "greeting": "欢迎消息",
+      "shownWhen": "显示条件",
+      "nothingWired": "— 未连接 —",
+      "theyRead": "他们看到的内容",
+      "empty": "— 空 —",
+      "plusText": "附加文本",
+      "dismissal": "关闭方式",
+      "once": "只显示一次，之后按账号记住。",
+      "everyConnect": "每次连接时都显示。"
+    }
+  },
+  "editor": {
+    "add": "+ 添加",
+    "browse": "浏览模块",
+    "search": "搜索模块",
+    "favorites": "收藏",
+    "noMatches": "没有匹配的模块。",
+    "complete": "图已完整",
+    "toFix_one": "{{count}} 项待修正",
+    "toFix_other": "{{count}} 项待修正",
+    "reset": "重置",
+    "live": "生效中",
+    "idle": "未连接",
+    "enabled": "已启用"
+  },
+  "gallery": {
+    "open": "模板",
+    "empty": "没有匹配的模板。",
+    "add": "添加到编辑器",
+    "replace": "用此模板重新开始",
+    "replaceHint": "将移除编辑器中已有的全部内容。"
+  },
+  "categories": {
+    "who": "连接者",
+    "logic": "逻辑",
+    "message": "消息"
+  },
+  "portTypes": {
+    "condition": "条件",
+    "text": "文本",
+    "designInputs": "设计声明的每个输入各一个"
+  },
+  "ports": {
+    "when": "何时",
+    "plus": "附加",
+    "text": "文本",
+    "condition": "条件"
+  },
+  "blocks": {
+    "everyone": {
+      "label": "所有人",
+      "description": "对每位到达者都成立。直接连接到欢迎消息，即可向所有人显示 — 最简单的规则。"
+    },
+    "country": {
+      "label": "国家",
+      "description": "当成员从所选国家之一连接时成立。"
+    },
+    "tenure": {
+      "label": "加入服务器时间",
+      "description": "比较账号在此服务器上存在了多久。"
+    },
+    "clientVersion": {
+      "label": "客户端版本",
+      "description": "匹配客户端报告的 Mumble 版本。"
+    },
+    "fancyVersion": {
+      "label": "Fancy 版本",
+      "description": "匹配此分支自己的版本 — 或它的任意构建，原版 Mumble 永远不会匹配。"
+    },
+    "account": {
+      "label": "账号",
+      "description": "对特定的注册用户或证书成立。"
+    },
+    "group": {
+      "label": "群组",
+      "description": "当成员属于某个 ACL 群组时成立。"
+    },
+    "os": {
+      "label": "操作系统",
+      "description": "匹配客户端报告的操作系统。"
+    },
+    "gates": {
+      "and": "两个输入都为真时为真。",
+      "or": "任一输入为真时为真。",
+      "xor": "恰好一个输入为真时为真。",
+      "nand": "除非两个输入都为真，否则为真。",
+      "nor": "两个输入都不为真时为真。",
+      "xnor": "两个输入一致时为真。",
+      "not": "对单个条件取反。"
+    },
+    "filter": {
+      "label": "过滤器",
+      "description": "把不确定的结果转换为明确的“是”或“否”，以便逻辑门使用。"
+    },
+    "text": {
+      "label": "可复用文本",
+      "description": "一行文字，附加到一条欢迎消息，以及所有连接它的其他欢迎消息。"
+    },
+    "textRich": {
+      "label": "可复用文本（带格式）",
+      "description": "同样的文本片段，配有所见即所得编辑器：标题、列表、颜色。适合服务器规则，而不是单句话。"
+    },
+    "greeting": {
+      "label": "显示此欢迎消息",
+      "description": "消息本身：它的内容，以及决定谁能看到它的条件。"
+    },
+    "greetingRich": {
+      "label": "显示此欢迎消息（带格式）",
+      "description": "按阅读时的样子撰写欢迎消息：标题、段落、列表。连接方式与纯文本版本完全相同。"
+    },
+    "greetingScreen": {
+      "label": "欢迎屏幕",
+      "description": "由区块构成的欢迎消息 — 主视觉、按钮、一行链接 — 每个客户端按自己的字号体系绘制。"
+    },
+    "greetingDesign": {
+      "label": "设计模块",
+      "description": "在设计编辑器中排版的欢迎消息：放在画布上的块，带有命名的文本插槽和从节点编辑器连接的开关条件。"
+    },
+    "greetingLegacy": {
+      "label": "Classic Mumble 欢迎屏幕",
+      "description": "同样的区块编译为 Qt 格式：表格、内联颜色、无圆角。请放在客户端版本条件之后；现代版本在这些客户端上会显示错乱。"
+    }
+  },
+  "nodes": {
+    "country": "国家属于",
+    "tenure": "加入服务器时间",
+    "clientVersion": "客户端版本",
+    "fancyVersion": "FANCY 版本",
+    "account": "账号",
+    "group": "群组",
+    "os": "操作系统",
+    "filter": "过滤器",
+    "text": "可复用文本",
+    "greeting": "显示此欢迎消息",
+    "greetingClassic": "欢迎消息 · CLASSIC",
+    "everyone": "所有人",
+    "undecided": "结果可能不确定 — 请通过“过滤器”连接以确定结果"
+  },
+  "body": {
+    "joinedLess": "加入时间少于",
+    "joinedMore": "加入时间多于",
+    "is": "是",
+    "any": "任意",
+    "groupName": "群组名称",
+    "unknown": "未知 →",
+    "no": "否",
+    "yes": "是",
+    "snippetName": "为此片段命名",
+    "snippetNameLabel": "片段名称",
+    "snippetText": "附加到欢迎消息的文本",
+    "snippetTextLabel": "片段文本",
+    "theyRead": "他们看到的内容",
+    "greetingText": "他们到达时看到的内容",
+    "greetingTextLabel": "欢迎消息文本",
+    "plusText": "附加文本",
+    "wireSnippet": "将可复用文本连接到这里",
+    "unnamed": "未命名",
+    "once": "只显示一次，居中"
+  },
+  "windows": {
+    "day": "1 天",
+    "week": "1 周",
+    "month": "1 个月",
+    "halfYear": "6 个月",
+    "year": "1 年"
+  },
+  "accountStates": {
+    "guest": "访客",
+    "registered": "已注册",
+    "strongCertificate": "强证书"
+  },
+  "phrases": {
+    "country": "国家属于 {{codes}}",
+    "countryAny": "国家属于 …",
+    "joinedLess": "加入时间少于 {{window}}",
+    "joinedMore": "加入时间多于 {{window}}",
+    "version": "版本 {{op}} {{version}}",
+    "fancyAny": "使用 Fancy 客户端",
+    "fancyVersion": "Fancy 版本 {{op}} {{version}}",
+    "account": "账号为{{state}}",
+    "group": "属于群组 {{group}}",
+    "groupAny": "属于群组 …",
+    "os": "操作系统为 {{os}}",
+    "everyone": "所有到达者",
+    "unknownYes": "{{condition}}（未知视为是）",
+    "not": "非 {{condition}}",
+    "gates": {
+      "and": "且",
+      "or": "或",
+      "xor": "异或",
+      "nand": "与非",
+      "nor": "或非",
+      "xnor": "同或"
+    }
+  },
+  "problems": {
+    "noGreeting": "没有欢迎消息节点 — 请添加一个，说明大家会看到什么。",
+    "emptyScreen": "欢迎屏幕中没有任何有内容的区块。",
+    "badLink": "欢迎屏幕上的某个链接不是 http:// 或 https://：{{url}}",
+    "noText": "欢迎消息没有文字。",
+    "notWired": "没有内容连接到“何时”，因此这条欢迎消息永远不会显示。",
+    "emptyInput": "{{node}} 的输入 {{port}} 为空。",
+    "noCountries": "有一个国家节点未选择任何国家。",
+    "noGroup": "有一个群组节点未填写群组。",
+    "emptySnippet": "有一个可复用文本节点为空。",
+    "tooLong": "{{node}} 有 {{length}} 个字符；服务器最多接受 {{max}} 个。"
+  },
+  "views": {
+    "plain": "纯文本",
+    "rich": "富文本",
+    "html": "HTML",
+    "screen": "屏幕",
+    "classic": "Classic",
+    "classicHint": "同样的区块，为原版 Mumble 客户端（1.5 及更早版本）编译",
+    "classicNote": "已为 Qt 编译：表格、内联颜色、无圆角。请放在客户端版本条件之后，这样只有旧客户端会收到它。",
+    "lossy": "此标记使用了编辑器无法原样保留的标签 — 很可能是表格。在这里以 HTML 编辑，可以让它保持原样。"
+  },
+  "bands": {
+    "header": {
+      "label": "顶部条",
+      "hint": "顶部的一行小字：服务器名称、版本。"
+    },
+    "hero": {
+      "label": "主视觉",
+      "hint": "徽标、大标题以及下面的一行字。"
+    },
+    "image": {
+      "label": "服务器图片",
+      "hint": "此服务器自己的图标或横幅，来自其外观设置。"
+    },
+    "prose": {
+      "label": "段落",
+      "hint": "带格式的文本，写法与其他正文相同。"
+    },
+    "action": {
+      "label": "按钮",
+      "hint": "一个要执行的操作，下方附说明文字。"
+    },
+    "cards": {
+      "label": "链接行",
+      "hint": "并排的小卡片，每张指向一个地方。"
+    },
+    "divider": {
+      "label": "分隔线",
+      "hint": "两个区块之间的一条线。"
+    }
+  },
+  "screen": {
+    "addBand": "+ 区块",
+    "noBands": "没有区块的屏幕什么也不显示。先从主视觉开始吧。",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "remove": "移除{{label}}",
+    "compact": "列表，而非卡片",
+    "glyph": "徽标，一个字符",
+    "glyphLabel": "主视觉徽标",
+    "buttonTitle": "按钮上的文字",
+    "title": "大家会读到的那一行",
+    "titleLabel": "{{label}}标题",
+    "buttonLink": "按钮链接",
+    "webOnly": "只会发送 http:// 和 https:// 链接。",
+    "buttonSubtitle": "下方的小字",
+    "subtitle": "第二行",
+    "subtitleLabel": "{{label}}副标题",
+    "primary": "最主要的操作",
+    "paragraph": "段落",
+    "paragraphPlaceholder": "这一部分要说的内容",
+    "eyebrow": "浏览",
+    "eyebrowLabel": "卡片眉题",
+    "removeCard": "移除卡片",
+    "cardPlaceholder": "频道查看器",
+    "cardLabel": "卡片标题",
+    "cardLink": "卡片链接",
+    "addCard": "+ 卡片",
+    "anotherLink": "再加一个链接",
+    "align": {
+      "default": "默认",
+      "left": "左对齐",
+      "center": "居中"
+    },
+    "tones": {
+      "none": "无",
+      "accent": "强调",
+      "muted": "柔和",
+      "warn": "警告",
+      "danger": "危险"
+    },
+    "pictures": {
+      "icon": "图标",
+      "banner": "横幅"
+    }
+  },
+  "picture": {
+    "noRoom": "空间不足：只剩 {{room}}，而这张图片无法压缩到这么小。",
+    "unreadable": "这个文件不是可读取的图片。",
+    "fitting": "正在调整…",
+    "drop": "拖放图片，或点击选择",
+    "held": "{{size}} · {{w}}×{{h}} · 剩余 {{room}}",
+    "room": "可用空间 {{room}} · 仅发送给 Fancy 客户端",
+    "remove": "移除"
+  },
+  "preview": {
+    "heading": "预览 · 他们看到的内容",
+    "unwired": "没有内容连接到“何时” — 不会显示给任何人",
+    "dismissed": "关闭后不再显示",
+    "everyConnect": "每次连接时都显示",
+    "gotIt": "知道了",
+    "legacy": "按 Mumble 1.5 及更早版本的方式绘制：表格、内联颜色、直角。它们的富文本是 HTML 4 的子集，因此这里更接近 Qt 的渲染效果，而不是本客户端。",
+    "htmlOff": "此服务器关闭了 allow_html，因此每条欢迎消息只发送纯文本部分。格式会被保留，一旦开启该设置就会开始发送。",
+    "unmatchable": "没有访客能满足这个条件，因此这条欢迎消息不会显示给任何人。",
+    "shadowed": "这条欢迎消息不会显示给任何人：它匹配的每位访客都会被服务器先检查到的另一条欢迎消息接走。请把它拖到那条之上，或收窄另一条的条件。",
+    "overlap": "与前一条欢迎消息重叠 — {{visitor}} 同时匹配两者，先出现的那条生效。如果这是具体情况背后的通用情况，则属正常。",
+    "undecided": "条件组合过多，无法检查欢迎消息之间是否重叠。"
+  },
+  "canvas": {
+    "undo": "撤销",
+    "redo": "重做",
+    "undoTitle": "撤销 (Ctrl+Z)",
+    "redoTitle": "重做 (Ctrl+Shift+Z)",
+    "annotate": "注释",
+    "annotations": {
+      "title": "标题",
+      "note": "备注",
+      "frame": "区域边框",
+      "label": "小标签"
+    },
+    "annotationFields": {
+      "title": "标题注释",
+      "note": "备注注释",
+      "frame": "边框注释",
+      "label": "标签注释"
+    },
+    "placeholders": {
+      "title": "分节",
+      "note": "这部分图的用途，以及为什么这样绘制。",
+      "frame": "区域",
+      "label": "标签"
+    },
+    "removeNode": "移除节点",
+    "resizeNode": "调整节点大小",
+    "removeAnnotation": "移除注释",
+    "resizeAnnotation": "调整注释大小",
+    "colour": "颜色：{{tone}}",
+    "tones": {
+      "muted": "柔和",
+      "accent": "强调",
+      "ok": "正常",
+      "warn": "警告"
+    },
+    "addChip": "+ 添加",
+    "removeTag": "移除 {{label}}"
+  },
+  "templateCategories": {
+    "arriving": "面向新到达者",
+    "housekeeping": "日常管理",
+    "occasion": "特定场合"
+  },
+  "templates": {
+    "warm-welcome": {
+      "label": "热情欢迎，附带规则",
+      "description": "一条带格式的欢迎消息，面向刚加入的人，并把服务器规则做成可复用片段，之后也能连接到其他欢迎消息。",
+      "shows": "显示给注册不满一周的账号。"
+    },
+    "quiet-welcome": {
+      "label": "简短一句",
+      "description": "值得发送的最小欢迎消息：一句话，没有标题，只显示一次。如果带格式的版本显得太多，就从这里开始。",
+      "shows": "显示给注册不满一个月的账号。"
+    },
+    "german-welcome": {
+      "label": "德语欢迎",
+      "description": "面向从 DE、AT 或 CH 连接的人的德语欢迎消息。其他语言也可照此模式：换国家，换文字。",
+      "shows": "当国家为 DE、AT 或 CH 时显示 — 服务器无法判断国家的人则不显示。"
+    },
+    "guest-nudge": {
+      "label": "鼓励访客注册",
+      "description": "面向没有账号的人：注册能带来什么，以及该找谁。只显示一次，不会变成每月提醒。",
+      "shows": "显示给访客。"
+    },
+    "outdated-client": {
+      "label": "提醒旧版客户端更新",
+      "description": "面向使用 1.5 之前客户端的人：哪些功能无法使用，以及更新很快。过滤器设为在不确定时也提醒，而不是保持沉默。",
+      "shows": "当客户端早于 1.5.0 时显示，服务器无法判断时也显示。"
+    },
+    "event-night": {
+      "label": "宣布固定活动之夜",
+      "description": "一条居中的公告，写明时间和集合地点，每次连接都显示而不是只显示一次 — 公告本来就该如此。",
+      "shows": "每次连接时显示给已注册成员。"
+    },
+    "designed-modern": {
+      "label": "现代风格欢迎",
+      "description": "最适合作为起点：左侧一行大而紧凑的标题，上方一个带底色的小徽标，规则放在细线框中，再加一个使用读者强调色的按钮。克制而不花哨，并跟随每位读者的主题和浅色或深色模式。",
+      "shows": "显示给注册不满一个月的账号，仅一次。"
+    },
+    "designed-front-page": {
+      "label": "设计好的首页",
+      "description": "同样的欢迎内容，在设计编辑器中排版而不是写成文字：徽标、标题、两栏链接、一则通知、放在插槽里的服务器规则，以及一个按钮。上面的每个块旧版 Qt 客户端也能绘制。",
+      "shows": "显示给注册不满一个月的账号，仅一次。"
+    },
+    "designed-notice": {
+      "label": "设计好的通知",
+      "description": "简短型设计：一个标题、一张带边框的卡片、截止日期，以及一个为有账号的人准备的低调按钮。如果首页对这个场合来说太多，就从这里开始。",
+      "shows": "显示给所有有账号的人，仅一次。"
+    },
+    "front-door": {
+      "label": "欢迎入口",
+      "description": "完整的欢迎屏幕：徽标、标题、段落、一个关键按钮和一行链接。由区块构成，因此按客户端自己的字号体系绘制，而不是粘贴的 HTML。",
+      "shows": "显示给访客，仅一次。"
+    },
+    "server-front-page": {
+      "label": "完整首页",
+      "description": "欢迎屏幕能包含的一切：着色的标题栏、服务器自己的图片、居中的介绍、版本行、链接列表、按钮以及底部的通知栏。从这里开始，删掉不需要的部分。",
+      "shows": "显示给访客，仅一次。"
+    },
+    "old-and-new": {
+      "label": "新客户端一个屏幕，旧客户端一个",
+      "description": "同样的欢迎内容做两份：给能绘制区块的客户端用区块，给 Mumble 1.5 及更早版本用编译成 Qt 表格的相同区块。按客户端版本区分，谁都不会收到错的那份。",
+      "shows": "两条规则 — 客户端新于 1.5.0，以及 1.5.0 或更早。"
+    },
+    "newcomer-and-regular": {
+      "label": "新人一条，老成员一条",
+      "description": "同一编辑器中的两条欢迎消息：第一周看到完整欢迎，其他人看到简短公告。大多数服务器最终都会采用这种形式。",
+      "shows": "两条规则 — 注册不满一周，以及所有已注册成员。"
+    }
+  },
+  "visitor": {
+    "os": "使用 {{os}}",
+    "country": "来自 {{country}}",
+    "elsewhere": "来自其他任何地方",
+    "client": "客户端 {{version}}",
+    "daysHere_one": "已在此 {{count}} 天",
+    "daysHere_other": "已在此 {{count}} 天",
+    "groups": "属于 {{groups}}",
+    "separator": "，",
+    "anybody": "任何人"
+  }
+}

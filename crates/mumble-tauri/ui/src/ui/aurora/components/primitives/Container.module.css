@@ -1,0 +1,23 @@
+/* Centres a column of content and keeps its gutters on the shared scale. */
+
+.container {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--container-max, 100%);
+  margin-inline: auto;
+  padding-inline: var(--container-gutter, 16px);
+}
+
+/* Below the widest gutter the padding would eat the content, so relax it. */
+@media (max-width: 480px) {
+  .container {
+    padding-inline: min(var(--container-gutter, 16px), 16px);
+  }
+}
+
+.fill {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}

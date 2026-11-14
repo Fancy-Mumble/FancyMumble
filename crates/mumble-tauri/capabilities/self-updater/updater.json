@@ -1,0 +1,24 @@
+{
+  "identifier": "updater",
+  "description": "Permissions for the branded auto-updater bootstrapper window. `store:default` is required because every window boots through UiRoot, which reads the chosen UI pack out of preferences - without it the design never resolves and the window renders nothing at all.",
+  "windows": [
+    "updater"
+  ],
+  "platforms": [
+    "linux",
+    "macOS",
+    "windows"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-start-dragging",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "updater:default",
+    "process:default",
+    "process:allow-restart",
+    "store:default"
+  ]
+}

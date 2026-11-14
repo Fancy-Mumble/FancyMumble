@@ -1,0 +1,59 @@
+# Maintainer: Fancy Mumble <https://github.com/Fancy-Mumble/FancyMumble/issues>
+
+pkgname=fancy-mumble-bin
+_pkgname=fancy-mumble
+pkgver=0.3.0
+pkgrel=1
+pkgdesc='Tauri desktop client for Mumble, with rich text chat, screen sharing and E2EE private chat (binary release)'
+# x86_64 only: upstream publishes no aarch64 Linux build.
+arch=('x86_64')
+url='https://github.com/Fancy-Mumble/FancyMumble'
+license=('MIT')
+depends=(
+	'alsa-lib'
+	'cairo'
+	'gcc-libs'
+	'gdk-pixbuf2'
+	'glib2'
+	'glibc'
+	'gtk3'
+	'hicolor-icon-theme'
+	'libayatana-appindicator'
+	'librsvg'
+	'libsoup3'
+	'webkit2gtk-4.1'
+)
+optdepends=(
+	'pipewire: screen and window capture'
+	'xdg-desktop-portal: screen-capture source picker on Wayland'
+	'libva: hardware video encode for screen sharing'
+)
+provides=("fancy-mumble=$pkgver")
+conflicts=('fancy-mumble')
+source=(
+	"$_pkgname-$pkgver.deb::$url/releases/download/v$pkgver/FancyMumble_${pkgver}_amd64.deb"
+	"LICENSE-$pkgver::$url/raw/v$pkgver/LICENSE"
+	'fancy-mumble.desktop'
+)
+sha256sums=(
+	'12de8ac15bfff11ae8cf4f024d86e17f9f66bafa0a48c60f897c9db6daa130c7'
+	'29564c0ee86651c54c1ebb9af05a2d2e0dee10701fd42c1679450d8e318e1fee'
+	'3b4b18e80ec4fa74164c3f77db4da36792ddd06907d160997d250a85b284e3e2'
+)
+options=('!strip')  # nothing to gain, and the release binary is already stripped
+
+package() {
+	# makepkg unpacks the .deb itself (bsdtar reads ar archives), leaving the
+	# member tarballs in $srcdir.
+	bsdtar -xf "$srcdir/data.tar.gz" -C "$pkgdir"
+
+	# The bundled entry has an empty Categories= line, so it never appears in a
+	# menu; replace it with the one this package ships.
+	rm -f "$pkgdir/usr/share/applications/FancyMumble.desktop"
+	install -Dm644 "$srcdir/fancy-mumble.desktop" \
+		"$pkgdir/usr/share/applications/fancy-mumble.desktop"
+
+	# The .deb carries no licence text.
+	install -Dm644 "$srcdir/LICENSE-$pkgver" \
+		"$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

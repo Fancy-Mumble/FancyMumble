@@ -1,0 +1,44 @@
+{
+  "identifier": "default",
+  "description": "Default permissions for the main window",
+  "windows": ["main", "popout-dm-*", "popout-stream-*", "popout-translation"],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [{ "path": "**" }]
+    },
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://*" }, { "url": "http://*" }]
+    },
+    {
+      "identifier": "opener:allow-reveal-item-in-dir",
+      "allow": [{ "path": "**" }]
+    },
+    "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-start-dragging",
+    "store:default",
+    "core:window:allow-request-user-attention",
+    "core:webview:allow-set-webview-focus",
+    "core:window:allow-set-badge-count",
+    "notification:default",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify",
+    "notification:allow-register-action-types",
+    "notification:allow-get-active",
+    "notification:allow-remove-active",
+    "notification:allow-create-channel",
+    "notification:allow-delete-channel",
+    "dialog:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "deep-link:default"
+  ]
+}

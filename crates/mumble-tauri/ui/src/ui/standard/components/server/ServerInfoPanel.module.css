@@ -1,0 +1,299 @@
+/* ---- Server Info Side Panel ------------------------------------ */
+
+.panel {
+  position: relative;
+  width: 320px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--color-bg-secondary);
+  border-left: 1px solid var(--color-glass-border);
+}
+
+@media (max-width: 768px) {
+  .closeBtn {
+    width: 40px;
+    height: 40px;
+    top: 12px;
+    right: 12px;
+    background: rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* -- Close button ------------------------------------------------ */
+
+.closeBtn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.closeBtn:hover {
+  background: var(--color-overlay-dark);
+  color: var(--color-text-primary);
+}
+
+/* -- Header ------------------------------------------------------ */
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 20px 16px;
+  border-bottom: 1px solid var(--color-glass-border);
+}
+
+.serverIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--color-glass-hover);
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+/* -- Content sections -------------------------------------------- */
+
+.section {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-glass-border);
+}
+
+.section:last-child {
+  border-bottom: none;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-secondary);
+  margin: 0 0 10px;
+}
+
+/* -- Info grid --------------------------------------------------- */
+
+.infoGrid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  font-size: 13px;
+}
+
+.infoLabel {
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.infoValue {
+  color: var(--color-text-primary);
+  word-break: break-all;
+}
+
+/* -- Developer section header ------------------------------------ */
+
+.devHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.devHeader .sectionTitle {
+  margin-bottom: 0;
+}
+
+.refreshBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.refreshBtn:hover {
+  background: var(--color-glass-hover);
+  color: var(--color-text-primary);
+}
+
+/* -- Accordion --------------------------------------------------- */
+
+.accordion {
+  border: 1px solid var(--color-glass-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.accordion + .accordion {
+  margin-top: 8px;
+}
+
+.accordionHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--color-text-primary);
+  background: var(--color-glass-hover);
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+  text-align: left;
+}
+
+.accordionHeader:hover {
+  background: var(--color-glass);
+}
+
+.accordionChevron {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+  transform: rotate(0deg);
+}
+
+.accordionChevronOpen {
+  transform: rotate(90deg);
+}
+
+.accordionBody {
+  padding: 10px 12px;
+  border-top: 1px solid var(--color-glass-border);
+}
+
+.pluginAccordionTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* -- Welcome text ------------------------------------------------ */
+
+.welcomeText {
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.welcomeText a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.welcomeText a:hover {
+  text-decoration: underline;
+}
+
+/* -- Debug grid -------------------------------------------------- */
+
+.debugGrid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  font-size: 12px;
+}
+
+.debugLabel {
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.debugValue {
+  color: var(--color-text-primary);
+  word-break: break-all;
+}
+
+/* -- Server features --------------------------------------------- */
+
+.featureValue {
+  display: flex;
+  /* A value long enough to wrap keeps its dot beside the first line rather
+     than floating to the middle of the block. */
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--color-text-primary);
+  word-break: break-word;
+}
+
+.featureDot {
+  flex-shrink: 0;
+  margin-top: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+
+.supportYes {
+  background: var(--color-online);
+}
+
+.supportPartial {
+  background: var(--color-warning);
+}
+
+/* Absent is not broken: a feature the server simply does not have gets the
+   muted dot, and only a half-working one is allowed to look like a warning. */
+.supportNo {
+  background: var(--color-text-muted);
+  opacity: 0.5;
+}
+
+.supportUnknown {
+  background: transparent;
+  border: 1px solid var(--color-text-muted);
+}
+
+/* When rendered inside a MobileBottomSheet, fill the available width. */
+@media (max-width: 768px) {
+  .panel {
+    position: static;
+    width: 100%;
+    height: auto;
+    max-width: none;
+    border-left: none;
+    box-shadow: none;
+    overflow-y: visible;
+  }
+}

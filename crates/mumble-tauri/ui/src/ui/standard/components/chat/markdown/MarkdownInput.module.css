@@ -1,0 +1,206 @@
+/* --- MarkdownInput: overlay-based live preview ---------------- */
+
+.wrapper {
+  position: relative;
+  flex: 1;
+  min-height: 40px;
+  max-height: 200px;
+  border-radius: var(--radius-lg);
+  background: var(--color-glass);
+  border: 1px solid var(--color-glass-border);
+  transition:
+    border-color 0.2s,
+    height 0.1s ease;
+  overflow: hidden;
+}
+
+.wrapper.focused {
+  border-color: var(--color-accent-glow);
+}
+
+/* Shared positioning for both the textarea and the overlay. */
+.overlay,
+.textarea {
+  position: absolute;
+  inset: 0;
+  padding: 10px 14px;
+  font-family: inherit;
+  /* The two layers hold the same words and must break them in the same
+     places, so every property that decides where a line breaks is stated for
+     both. A textarea's UA sheet resets weight and spacing to its own; on a
+     skin that runs the interface at 500 that left the overlay's text wider
+     than the textarea's, wrapping a line earlier - and the line it gained was
+     one the field had no height for. */
+  font-weight: inherit;
+  font-style: inherit;
+  letter-spacing: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/*
+ * A draft too long for the field says so, in the app's own scrollbar.
+ *
+ * Neither layer states a width: the bar is whichever one the flavour draws
+ * everywhere else (Nebula's thin track-less chip, Standard's 6px rail), so
+ * the composer scrolls like every other pane in the window.
+ *
+ * Both layers keep the gutter, because a gutter is width taken off the text
+ * and the two must break their lines in the same places. Only the textarea
+ * paints a thumb - it is the layer that actually scrolls, and it sits over
+ * the other, so a second thumb underneath would only double the ink of a
+ * translucent one.
+ */
+.overlay {
+  scrollbar-color: transparent transparent;
+}
+
+.overlay::-webkit-scrollbar-thumb,
+.overlay::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/*
+ * The thumb takes a colour from the host, because the field is the one place
+ * the app's own is wrong: the chip tone every other pane scrolls with is
+ * picked to read against the window, and inside a composer it is drawn on a
+ * plate of very nearly that colour - a bar you cannot see is a bar that is
+ * not there. Only the colour is restated; the width, the corner and the inset
+ * stay whatever the flavour draws everywhere else.
+ */
+.textarea {
+  scrollbar-color: var(--editor-scrollbar, var(--color-scrollbar)) transparent;
+}
+
+.textarea::-webkit-scrollbar-thumb {
+  background: var(--editor-scrollbar, var(--color-scrollbar));
+}
+
+.textarea::-webkit-scrollbar-thumb:hover {
+  background: var(--editor-scrollbar-hover, var(--color-scrollbar-hover));
+}
+
+/* The overlay renders the decorated text on top. */
+.overlay {
+  pointer-events: none;
+  color: var(--color-text-primary);
+  z-index: 1;
+}
+
+/* The textarea is fully invisible - used only for keyboard input. */
+.textarea {
+  z-index: 2;
+  color: transparent;
+  caret-color: transparent; /* We render our own caret in the overlay. */
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  width: 100%;
+  height: 100%;
+}
+
+.textarea::placeholder {
+  color: transparent;
+}
+
+/* Hide the browser's native selection highlight - we draw our own. */
+.textarea::selection {
+  background: transparent;
+  color: transparent;
+}
+
+.placeholder {
+  color: var(--color-text-muted);
+}
+
+/* A caret standing in front of the placeholder is the empty-and-focused case.
+   The caret's own negative margins are there to keep it tight between glyphs;
+   against the placeholder they read as a collision, so the words step back. */
+.caret + .placeholder {
+  margin-left: 3px;
+}
+
+/* --- Custom caret (rendered in the overlay) -------------------- */
+
+.caret {
+  display: inline-block;
+  width: 0;
+  height: 1.15em;
+  /* A host that wants the caret in its accent says so; the default is the
+     colour of the text the caret is standing in. */
+  border-left: 1.5px solid var(--color-caret, var(--color-text-primary));
+  vertical-align: text-bottom;
+  margin: 0 -0.75px;
+  animation: caretBlink 1s step-end infinite;
+  pointer-events: none;
+}
+
+@keyframes caretBlink {
+  50% {
+    border-color: transparent;
+  }
+}
+
+/* --- Selection highlight --------------------------------------- */
+
+/* The editor draws the selection itself (the textarea's own is hidden), so a
+   host that wants it to look like its own selection has to be able to say so.
+   The three properties are what a highlight is made of - a fill, a corner and
+   an optional edge - and each falls back to what Standard has always drawn. */
+.selection {
+  background: var(--color-selection, var(--color-accent-glow));
+  border-radius: var(--selection-radius, 1px);
+  box-shadow: var(--selection-ring, none);
+}
+
+/* --- Markdown decoration classes (real WYSIWYG formatting) ---- */
+
+.mdBold {
+  font-weight: 700;
+}
+
+.mdItalic {
+  font-style: italic;
+}
+
+.mdUnderline {
+  text-decoration: underline;
+}
+
+.mdStrike {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.mdCode {
+  font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+  background: var(--color-glass-hover);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 13px;
+}
+
+.mdLink {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-decoration-color: rgba(42, 171, 238, 0.4);
+  text-underline-offset: 2px;
+}
+
+.mdSpoiler {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.mdMention {
+  color: var(--color-accent, #2aabee);
+  background: rgba(42, 171, 238, 0.15);
+  border-radius: 3px;
+  padding: 0 3px;
+}
