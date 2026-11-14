@@ -266,7 +266,15 @@ fn start_engine() -> (Arc<dyn engine::Engine>, Option<store::Store>) {
         if env("FANCY_GPUI_DEMO_DRAW").is_some() {
             demo.draw_on_share();
         }
-        return (Arc::new(demo), None);
+        // For measuring: a long conversation, and a steady flow of messages.
+        if let Some(count) = env("FANCY_GPUI_DEMO_CHAT").and_then(|count| count.parse().ok()) {
+            demo.chatter(count);
+        }
+        let demo = Arc::new(demo);
+        if let Some(every) = env("FANCY_GPUI_DEMO_FLOW").and_then(|ms| ms.parse().ok()) {
+            demo::chatter::flow(Arc::clone(&demo), std::time::Duration::from_millis(every));
+        }
+        return (demo, None);
     }
     let dir = paths::data_dir();
     real::start_logs(&dir, env("FANCY_GPUI_LOG").as_deref());
