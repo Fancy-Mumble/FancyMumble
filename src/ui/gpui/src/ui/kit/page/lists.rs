@@ -54,6 +54,7 @@ impl Painter<'_> {
         // down to its longest word, where the room is narrower; in a table
         // wider than its words, the rest is shared out as they are.
         let naturals = self.columns_natural(table);
+        let leasts = self.columns_least(table);
         div()
             .flex()
             .flex_col()
@@ -63,13 +64,19 @@ impl Painter<'_> {
                 div().flex().gap(gap).children(
                     cells
                         .iter()
-                        .map(|cell| self.cell(cell, table, stretches, &naturals)),
+                        .map(|cell| self.cell(cell, table, stretches, (&naturals, &leasts))),
                 )
             }))
             .into_any_element()
     }
 
-    fn cell(&self, cell: &Cell, table: &Table, stretches: bool, naturals: &[f32]) -> AnyElement {
+    fn cell(
+        &self,
+        cell: &Cell,
+        table: &Table,
+        stretches: bool,
+        (naturals, leasts): (&[f32], &[f32]),
+    ) -> AnyElement {
         let spanned =
             &table.columns[cell.column..(cell.column + cell.span.0).min(table.columns.len())];
         let share: Option<f32> = spanned
@@ -93,8 +100,18 @@ impl Painter<'_> {
             ..cell.frame.clone()
         };
         let tag = self.tag("cell");
+        let end = (cell.column + cell.span.0).min(leasts.len());
+        let least: f32 = leasts
+            .get(cell.column..end)
+            .unwrap_or_default()
+            .iter()
+            .sum();
         let part = self.framed(
-            div().debug_selector(move || tag).flex().flex_col(),
+            div()
+                .debug_selector(move || tag)
+                .flex()
+                .flex_col()
+                .min_w(px(least.ceil())),
             &frame,
             false,
             false,

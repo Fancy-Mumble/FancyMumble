@@ -250,6 +250,7 @@ impl Painter<'_> {
             .when(shrinks, |part| {
                 part.flex_basis(px(self.natural_box(block).ceil()))
                     .flex_shrink_1()
+                    .min_w(px(self.least_box(block).ceil()))
             })
             .children(content);
         self.linked(part, block.frame.link.as_ref())
