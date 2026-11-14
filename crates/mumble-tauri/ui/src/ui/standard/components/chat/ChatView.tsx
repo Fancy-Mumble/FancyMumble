@@ -1520,6 +1520,7 @@ export default function ChatView({
                 {persistent.signalBridgeErrorBanner}
                 {persistent.disputeBanner}
                 {persistent.revokedBanner}
+                {persistent.historyRefusedBanner}
               </BannerStack>
 
               <ActiveWatchBanner />

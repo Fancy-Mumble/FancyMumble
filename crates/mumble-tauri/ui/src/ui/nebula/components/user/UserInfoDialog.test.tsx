@@ -136,6 +136,29 @@ describe("UserInfoDialog", () => {
     expect(screen.getByText("Moderation")).toBeTruthy();
   });
 
+  it("shows an admin the account's devices, and a member none of them", async () => {
+    render(withNebulaTheme(<UserInfoDialog session={26} onClose={vi.fn()} />));
+    await flush();
+    await act(async () => {
+      listeners.get("user-stats")?.({
+        payload: {
+          ...STATS,
+          devices: [
+            { ...STATS, device_name: "Laptop" },
+            { ...STATS, session: 31, device_name: "Phone" },
+          ],
+        },
+      });
+    });
+    expect(screen.getByText("Devices")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Phone" })).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Viewing as admin" }));
+    });
+    expect(screen.queryByText("Devices")).toBeNull();
+  });
+
   it("ignores another session's figures", async () => {
     render(withNebulaTheme(<UserInfoDialog session={26} onClose={vi.fn()} />));
     await flush();

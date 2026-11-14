@@ -40,6 +40,7 @@ import MySharedFilesTable from "./components/chat/MySharedFilesTable";
 import { myFilesAvailable } from "@standard/components/fileserver/fileServerMe";
 import TypingIndicator from "./components/chat/TypingIndicator";
 import FailedSends from "./components/chat/FailedSends";
+import HistoryRefusedNotice from "./components/chat/HistoryRefusedNotice";
 import PublicServersSurface from "./components/connect/PublicServersSurface";
 import { PinnedPanel } from "./components/chat/pinned/PinnedPanel";
 import { ScheduledMessagesDialog } from "./components/chat/scheduled/ScheduledMessagesDialog";
@@ -1213,6 +1214,7 @@ export default function NebulaClientApp() {
       {persistent.signalBridgeErrorBanner}
       {persistent.disputeBanner}
       {persistent.revokedBanner}
+      <HistoryRefusedNotice channelId={selectedDmUser === null ? selectedChannel : null} />
     </>
   );
 

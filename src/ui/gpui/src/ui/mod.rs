@@ -10,6 +10,7 @@ mod connect;
 mod conversation;
 mod devices;
 mod emoji;
+mod facts;
 mod frame;
 mod friends;
 mod kit;
@@ -23,6 +24,8 @@ mod settings;
 mod sidebar;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_user_devices;
 pub(crate) mod text_input;
 mod widgets;
 
@@ -73,6 +76,9 @@ pub(super) struct Info {
     body: Option<Arc<conversation::DrawnBody>>,
     /// What else is known, as names and values.
     facts: Vec<(gpui::SharedString, gpui::SharedString)>,
+    /// For a user on several devices, told to an administrator: what is
+    /// known of each. Empty for everybody else.
+    devices: Vec<crate::engine::DeviceFacts>,
     /// For a user: the profile their comment carries, if it carries one,
     /// and its banner's picture. Held while the card is open and no longer.
     profile: Option<crate::profile::Profile>,
@@ -542,9 +548,14 @@ impl Shell {
                 }
             }
             EngineEvent::About { subject, html } => self.take_about(subject, html, cx),
-            EngineEvent::Facts { subject, facts } => {
+            EngineEvent::Facts {
+                subject,
+                facts,
+                devices,
+            } => {
                 if let Some(info) = self.info.as_mut().filter(|info| info.subject == subject) {
                     info.facts = facts;
+                    info.devices = devices;
                 }
             }
             EngineEvent::ServersChanged => self.servers = self.engine.saved_servers(),
@@ -735,6 +746,7 @@ impl Shell {
             title: title.unwrap_or_default(),
             body: None,
             facts: Vec::new(),
+            devices: Vec::new(),
             profile: None,
             banner: None,
         });

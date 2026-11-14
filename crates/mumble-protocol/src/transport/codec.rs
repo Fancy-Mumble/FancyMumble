@@ -290,6 +290,7 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
         PchatMessage(m) => m.encode_to_vec(),
         PchatFetch(m) => m.encode_to_vec(),
         PchatFetchResponse(m) => m.encode_to_vec(),
+        PchatFetchRefused(m) => m.encode_to_vec(),
         PchatMessageDeliver(m) => m.encode_to_vec(),
         PchatKeyAnnounce(m) => m.encode_to_vec(),
         PchatKeyExchange(m) => m.encode_to_vec(),
@@ -523,6 +524,9 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
         PchatFetchResponse => {
             ControlMessage::PchatFetchResponse(mumble_tcp::PchatFetchResponse::decode(payload)?)
         }
+        PchatFetchRefused => ControlMessage::PchatFetchRefused(
+            crate::proto::fancy::pchat::FetchRefused::decode(payload)?,
+        ),
         PchatMessageDeliver => {
             ControlMessage::PchatMessageDeliver(mumble_tcp::PchatMessageDeliver::decode(payload)?)
         }

@@ -1262,6 +1262,12 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                         ),
                     }),
                 ),
+                // A page the server would not serve. Without this arm the
+                // refusal decoded as nothing, and a reader scrolling back saw
+                // exactly what the end of the archive looks like.
+                Some(fancy::pchat::pchat_envelope::Body::FetchRefused(refused)) => {
+                    Some(ControlMessage::PchatFetchRefused(refused))
+                }
                 // The key ladder, relayed to us by a peer. The inverse of the
                 // arms in `to_canon`, and lossless in the same way: what
                 // arrives here is what the peer's key manager will verify.
@@ -2620,6 +2626,36 @@ mod tests {
             Some([1, 2, 3, 4, 5, 6, 7, 8].as_slice())
         );
         assert_eq!(message.protocol, Some(4));
+    }
+
+    #[test]
+    fn a_refused_page_comes_back_as_a_refusal_not_as_nothing() {
+        // Starling answers a throttled or refused history page with
+        // `FetchRefused`. Decoded as an unknown body it was dropped, and the
+        // client could not tell a refusal from the end of the archive.
+        let refused = fancy::pchat::PchatEnvelope {
+            body: Some(fancy::pchat::pchat_envelope::Body::FetchRefused(
+                fancy::pchat::FetchRefused {
+                    channel: 4,
+                    refusal: Some(fancy::wire::Refusal {
+                        kind: fancy::wire::refusal::Kind::RateLimited as i32,
+                        detail: "slow down".to_owned(),
+                        retry_after_ms: 1_500,
+                    }),
+                },
+            )),
+        };
+        let back = from_canon(PCHAT, &refused.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::PchatFetchRefused(back) = back else {
+            panic!("expected a fetch refusal");
+        };
+        assert_eq!(back.channel, 4);
+        let refusal = back.refusal.expect("carries the refusal");
+        assert_eq!(refusal.kind(), fancy::wire::refusal::Kind::RateLimited);
+        assert_eq!(refusal.detail, "slow down");
+        assert_eq!(refusal.retry_after_ms, 1_500);
     }
 
     #[test]

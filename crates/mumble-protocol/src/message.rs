@@ -307,6 +307,10 @@ pub enum TcpMessageType {
     /// Fancy Mumble: the answer, also pushed unasked when the operator changes
     /// one of the voice-message settings.
     FancyVoiceSupport = 207,
+    /// Fancy Mumble: the server declined to serve a history page, and why.
+    /// Epoch 0 had no answer for a refused fetch at all; this is a local tag
+    /// that never reaches a wire. The canon carries it inside outer type 1006.
+    PchatFetchRefused = 208,
 }
 
 /// Generates both `TryFrom<u16> for TcpMessageType` and
@@ -404,6 +408,8 @@ pub enum ControlMessage {
     PchatFetch(mumble_tcp::PchatFetch),
     /// Fancy: server response to a fetch request.
     PchatFetchResponse(mumble_tcp::PchatFetchResponse),
+    /// Fancy: the server declined to serve a history page.
+    PchatFetchRefused(fancy::pchat::FetchRefused),
     /// Fancy: server delivers a stored message to the client.
     PchatMessageDeliver(mumble_tcp::PchatMessageDeliver),
     /// Fancy: client announces its E2EE identity keys.
@@ -706,7 +712,8 @@ message_type_mapping! {
     ContextActionModify, ContextAction, UserList, VoiceTarget,
     PermissionQuery, CodecVersion, UserStats, RequestBlob,
     ServerConfig, SuggestConfig, PluginDataTransmission,
-    PchatMessage, PchatFetch, PchatFetchResponse, PchatMessageDeliver,
+    PchatMessage, PchatFetch, PchatFetchResponse, PchatFetchRefused,
+    PchatMessageDeliver,
     PchatKeyAnnounce, PchatKeyExchange, PchatKeyRequest, PchatAck,
     PchatEpochCountersig, PchatKeyHolderReport, PchatKeyHoldersQuery,
     PchatKeyHoldersList, PchatKeyChallenge, PchatKeyChallengeResponse,
@@ -917,9 +924,9 @@ mod tests {
         // 191-199 were free and are now the record and emote types, 204-205
         // the GIF support pair and 206-207 the voice one, so the sentinel moved
         // rather than the types: a gap this test names has to be a gap the enum
-        // actually has.
+        // actually has. 208 is the refused history page.
         assert!(TcpMessageType::try_from(250u16).is_err());
-        assert!(TcpMessageType::try_from(208u16).is_err());
+        assert!(TcpMessageType::try_from(209u16).is_err());
         assert!(TcpMessageType::try_from(u16::MAX).is_err());
     }
 

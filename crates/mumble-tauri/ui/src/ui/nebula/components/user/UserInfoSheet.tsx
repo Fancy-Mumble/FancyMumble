@@ -1,16 +1,6 @@
 import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Box,
-  Button,
-  IconButton,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Typography,
-} from "@mui/material";
+import { Box, Button, IconButton, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import type { FancyProfile, UserEntry, UserStats } from "@core/types";
 import { formatBandwidth, formatDuration, formatTimestamp } from "@core/utils/format";
@@ -37,16 +27,10 @@ import {
 import { StatusDot, type Status } from "../primitives/StatusDot";
 import { BarStrip, RoundTripChart } from "./ConnectionCharts";
 import type { ModerationAction } from "./UserMenu";
+import { DevicesCard } from "./UserDevices";
 import type { UserLocation } from "./useUserLocation";
-import {
-  certificateLabel,
-  codecLabel,
-  joinedAt,
-  osLabel,
-  SAMPLE_WINDOW,
-  type BanNote,
-  type StatsSample,
-} from "./userInfoModel";
+import { ClientFacts, ConnectionTables } from "./UserStatFacts";
+import { codecLabel, devicesOf, joinedAt, SAMPLE_WINDOW, type BanNote, type StatsSample } from "./userInfoModel";
 
 /** Leaflet joins the bundle the first time a sheet has somewhere to show. */
 const LocationMap = lazy(() => import("./LocationMap"));
@@ -139,7 +123,6 @@ export function UserInfoSheet({
   const place = location?.state === "located" ? location.place : undefined;
   const latest = samples[samples.length - 1];
   const loss = latest?.loss ?? null;
-  const certificate = stats ? certificateLabel(stats.strong_certificate) : null;
 
   const moderation = [
     actions.canMuteDeafen && {
@@ -297,31 +280,9 @@ export function UserInfoSheet({
                   <InfoFact label={t("nebulaUser:sheet.idle")} value={formatDuration(stats.idlesecs)} />
                 )}
               </InfoCard>
-              {stats && certificate && (
+              {stats && (
                 <InfoCard title={t("nebulaUser:sheet.client")}>
-                  {stats.version && (
-                    <InfoFact label={t("sidebar:userInfo.labelVersion")} value={stats.version} />
-                  )}
-                  {osLabel(stats.os, stats.os_version) && (
-                    <InfoFact
-                      label={t("sidebar:userInfo.labelOs")}
-                      value={osLabel(stats.os, stats.os_version) ?? ""}
-                    />
-                  )}
-                  <InfoFact
-                    label={t("sidebar:userInfo.labelCertificate")}
-                    value={t(certificate.labelKey)}
-                    tone={certificate.tone}
-                  />
-                  <InfoFact
-                    label={t("sidebar:userInfo.labelOpus")}
-                    value={
-                      stats.opus == null
-                        ? t("sidebar:userInfo.notReported")
-                        : t(stats.opus ? "sidebar:userProfile.yes" : "sidebar:userProfile.no")
-                    }
-                    tone={stats.opus == null ? "muted" : undefined}
-                  />
+                  <ClientFacts stats={stats} />
                 </InfoCard>
               )}
             </Box>
@@ -406,6 +367,8 @@ export function UserInfoSheet({
                 )}
               </InfoCard>
             )}
+
+            <DevicesCard devices={devicesOf(stats)} streamerMode={streamerMode} />
           </Box>
 
           {/* How well it is going, and what may be done about it. */}
@@ -468,46 +431,7 @@ export function UserInfoSheet({
                     </Box>
                   </Box>
 
-                  <FactTable
-                    head={[
-                      "",
-                      t("sidebar:userInfo.colPackets"),
-                      t("sidebar:userInfo.colAvgPing"),
-                      t("sidebar:userInfo.colDeviation"),
-                    ]}
-                    rows={[
-                      [
-                        t("nebulaUser:sheet.tcp"),
-                        String(stats.tcp_packets),
-                        t("nebulaUser:sheet.milliseconds", { value: stats.tcp_ping_avg.toFixed(1) }),
-                        t("nebulaUser:sheet.milliseconds", { value: stats.tcp_ping_var.toFixed(1) }),
-                      ],
-                      [
-                        t("nebulaUser:sheet.udp"),
-                        String(stats.udp_packets),
-                        t("nebulaUser:sheet.milliseconds", { value: stats.udp_ping_avg.toFixed(1) }),
-                        t("nebulaUser:sheet.milliseconds", { value: stats.udp_ping_var.toFixed(1) }),
-                      ],
-                    ]}
-                  />
-                  {(stats.from_client || stats.from_server) && (
-                    <FactTable
-                      head={[
-                        "",
-                        t("sidebar:userInfo.colGood"),
-                        t("sidebar:userInfo.colLate"),
-                        t("sidebar:userInfo.colLost"),
-                        t("sidebar:userInfo.colResync"),
-                      ]}
-                      rows={[
-                        stats.from_client && [t("nebulaUser:sheet.inbound"), ...packetRow(stats.from_client)],
-                        stats.from_server && [
-                          t("nebulaUser:sheet.outbound"),
-                          ...packetRow(stats.from_server),
-                        ],
-                      ].filter((row): row is string[] => !!row)}
-                    />
-                  )}
+                  <ConnectionTables stats={stats} />
 
                   <Stack
                     direction="row"
@@ -589,10 +513,6 @@ export function UserInfoSheet({
   );
 }
 
-function packetRow(packets: NonNullable<UserStats["from_client"]>): string[] {
-  return [packets.good, packets.late, packets.lost, packets.resync].map(String);
-}
-
 function Legend({ color, label, dashed }: Readonly<{ color: string; label: string; dashed?: boolean }>) {
   return (
     <Stack direction="row" alignItems="center" gap={0.5}>
@@ -607,58 +527,6 @@ function Legend({ color, label, dashed }: Readonly<{ color: string; label: strin
       />
       <Typography sx={(theme) => ({ fontSize: 10.5, color: theme.palette.nebula.dim })}>{label}</Typography>
     </Stack>
-  );
-}
-
-/**
- * The label-and-figures table the sheet uses for codec and network facts.
- *
- * Rules and padding come off MUI's cells, not out of them: these rows are a
- * reading of numbers, and a line under each one turns four facts into a grid.
- */
-function FactTable({
-  head,
-  rows,
-}: Readonly<{ head: readonly string[]; rows: readonly (readonly string[])[] }>) {
-  return (
-    <Table
-      size="small"
-      sx={(theme) => ({
-        width: "100%",
-        mt: "14px",
-        fontSize: 12,
-        "& th, & td": { border: "none" },
-        "& th": {
-          fontSize: 10,
-          letterSpacing: ".1em",
-          textTransform: "uppercase",
-          fontWeight: 600,
-          color: theme.palette.nebula.dim,
-          textAlign: "right",
-          p: 0,
-          pb: "6px",
-        },
-        "& td": { p: 0, py: "4px", textAlign: "right", color: theme.palette.nebula.text },
-        "& th:first-of-type, & td:first-of-type": { textAlign: "left", color: theme.palette.nebula.muted },
-      })}
-    >
-      <TableHead>
-        <TableRow>
-          {head.map((cell, index) => (
-            <TableCell key={index}>{cell}</TableCell>
-          ))}
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row[0]}>
-            {row.map((cell, index) => (
-              <TableCell key={index}>{cell}</TableCell>
-            ))}
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
   );
 }
 

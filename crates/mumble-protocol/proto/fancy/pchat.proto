@@ -25,6 +25,7 @@ message PchatEnvelope {
     Pin pin = 10;
     PinList pin_list = 11;
     Delete delete = 12;
+    FetchRefused fetch_refused = 13;
   }
 }
 
@@ -104,6 +105,17 @@ message FetchResponse {
   repeated Message messages = 2;
   uint64 total_stored = 3;
   starling.fancy.wire.v1.PageInfo page = 4;
+}
+
+// Why a page was not served.
+//
+// A `Message` is answered by `Ack`, which has carried `RATE_LIMITED` all
+// along. A `Fetch` had no answer of any kind, so a throttled or refused page
+// was silently dropped and looked to the reader exactly like the end of the
+// archive: scrolling back simply stopped, at a different place each time.
+message FetchRefused {
+  uint32 channel = 1;
+  starling.fancy.wire.v1.Refusal refusal = 2;
 }
 
 message Ack {

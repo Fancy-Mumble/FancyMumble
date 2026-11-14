@@ -1473,25 +1473,7 @@ pub(super) fn render_info(
         })
         .when(!info.facts.is_empty(), |card| {
             card.child(
-                div()
-                    .debug_selector(|| "info-facts".to_owned())
-                    .flex()
-                    .flex_col()
-                    .gap(px(4.0))
-                    .text_size(px(12.5))
-                    .children(info.facts.iter().map(|(name, value)| {
-                        div()
-                            .flex()
-                            .gap(px(12.0))
-                            .child(
-                                div()
-                                    .flex_none()
-                                    .w(px(130.0))
-                                    .text_color(theme.c.muted)
-                                    .child(name.clone()),
-                            )
-                            .child(div().flex_1().min_w_0().child(value.clone()))
-                    })),
+                super::facts::rows(&info.facts, theme).debug_selector(|| "info-facts".to_owned()),
             )
         })
         .child(
@@ -1500,7 +1482,11 @@ pub(super) fn render_info(
                 .flex_1()
                 .min_h_0()
                 .overflow_y_scroll()
+                .flex()
+                .flex_col()
+                .gap(px(14.0))
                 .text_size(px(13.5))
+                .children(super::facts::devices(&info.devices, theme))
                 .child(body),
         )
         .child(

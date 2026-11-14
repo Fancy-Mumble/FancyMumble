@@ -77,6 +77,7 @@ fancy_message_support! {
     PchatMessage              => ServerOnly,
     PchatFetch                => ServerOnly,
     PchatFetchResponse        => ServerOnly,
+    PchatFetchRefused         => ServerOnly,
     PchatMessageDeliver       => ServerOnly,
     PchatKeyAnnounce          => ServerOnly,
     PchatKeyExchange          => ServerOnly,

@@ -26,6 +26,7 @@ import type {
   ChannelPersistConfig,
 } from "../../types";
 import type { AppState } from "..";
+import { historyPageRequests, type HistoryRefusal } from "./persistentChat.refusal";
 
 /** State + actions for the persistent-chat concern. `AppState` extends this. */
 export interface PersistentChatSlice {
@@ -47,8 +48,12 @@ export interface PersistentChatSlice {
   pchatKeyRevoked: Set<number>;
   /** Error message when the signal bridge library fails to load. */
   signalBridgeError: string | null;
+  /** The last refused page per channel, shown until a page arrives. */
+  pchatHistoryRefused: Record<number, HistoryRefusal>;
 
   fetchHistory: (channelId: number, beforeId?: string) => Promise<void>;
+  /** Asks again for the page the server last refused for this channel. */
+  retryHistoryFetch: (channelId: number) => Promise<void>;
   getPersistenceMode: (channelId: number) => PersistenceMode;
   verifyKeyFingerprint: (channelId: number) => Promise<void>;
   acceptCustodianChanges: (channelId: number) => Promise<void>;
@@ -81,6 +86,7 @@ type PersistentChatState = Pick<
   | "keyHolders"
   | "pchatKeyRevoked"
   | "signalBridgeError"
+  | "pchatHistoryRefused"
 >;
 
 /**
@@ -98,12 +104,14 @@ export const persistentChatInitialState: PersistentChatState = {
   keyHolders: {},
   pchatKeyRevoked: new Set(),
   signalBridgeError: null,
+  pchatHistoryRefused: {},
 };
 
 export const createPersistentChatSlice: StateCreator<AppState, [], [], PersistentChatSlice> = (set, get) => ({
   ...persistentChatInitialState,
 
   fetchHistory: async (channelId, beforeId) => {
+    historyPageRequests.remember(channelId, beforeId);
     set((prev) => ({
       channelPersistence: {
         ...prev.channelPersistence,
@@ -133,6 +141,14 @@ export const createPersistentChatSlice: StateCreator<AppState, [], [], Persisten
         },
       }));
     }
+  },
+
+  retryHistoryFetch: async (channelId) => {
+    set((prev) => {
+      const { [channelId]: _retried, ...rest } = prev.pchatHistoryRefused;
+      return { pchatHistoryRefused: rest };
+    });
+    await get().fetchHistory(channelId, historyPageRequests.last(channelId));
   },
 
   getPersistenceMode: (channelId) => {

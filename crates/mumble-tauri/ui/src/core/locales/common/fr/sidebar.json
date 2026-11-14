@@ -181,7 +181,9 @@
     "bandwidth": "Bande passante",
     "labelCurrent": "Actuel",
     "labelOnline": "En ligne",
-    "idle": "(inactif : {{duration}})"
+    "idle": "(inactif : {{duration}})",
+    "devices": "Appareils",
+    "deviceFallback": "Appareil {{session}}"
   },
   "superSearch": {
     "placeholder": "Rechercher des canaux, utilisateurs, messages...",

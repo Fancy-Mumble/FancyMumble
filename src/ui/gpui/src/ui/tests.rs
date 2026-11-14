@@ -11,7 +11,9 @@ use crate::engine::{Action, Connection, Conversation, Engine, Voice};
 use crate::theme::{ActiveTheme, Catalog, DEFAULT_THEME, Mode};
 
 /// A shell on a fresh demo server, in the default theme.
-fn shell(cx: &mut TestAppContext) -> (Entity<Shell>, Arc<DemoEngine>, &mut VisualTestContext) {
+pub(super) fn shell(
+    cx: &mut TestAppContext,
+) -> (Entity<Shell>, Arc<DemoEngine>, &mut VisualTestContext) {
     shell_on(DemoEngine::new(), cx)
 }
 
@@ -35,7 +37,7 @@ fn shell_on(
 
 /// Click the middle of the element tagged `selector`.
 #[track_caller]
-fn click(cx: &mut VisualTestContext, selector: &'static str) {
+pub(super) fn click(cx: &mut VisualTestContext, selector: &'static str) {
     let bounds = cx
         .debug_bounds(selector)
         .unwrap_or_else(|| panic!("nothing on screen is tagged `{selector}`"));
@@ -53,7 +55,7 @@ fn own_menu(cx: &mut VisualTestContext, entry: &'static str) {
 
 /// Right-click the middle of the element tagged `selector`.
 #[track_caller]
-fn right_click(cx: &mut VisualTestContext, selector: &'static str) {
+pub(super) fn right_click(cx: &mut VisualTestContext, selector: &'static str) {
     let at = cx
         .debug_bounds(selector)
         .unwrap_or_else(|| panic!("nothing on screen is tagged `{selector}`"))

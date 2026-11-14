@@ -124,7 +124,24 @@ export function plainViewerStats(stats: UserStats | null, isSelf: boolean): User
     address: null,
     strong_certificate: isSelf ? stats.strong_certificate : null,
     opus: isSelf ? stats.opus : null,
+    devices: undefined,
   };
+}
+
+/**
+ * The devices an account is online from, as the server listed them.
+ *
+ * Empty for everyone but an administrator looking at an account on two or
+ * more devices - the server sends the list to no one else - which is what
+ * keeps the section off every other sheet.
+ */
+export function devicesOf(stats: UserStats | null | undefined): readonly UserStats[] {
+  return stats?.devices ?? [];
+}
+
+/** What a device calls itself, or null where it gave no name to show. */
+export function deviceName(device: UserStats): string | null {
+  return device.device_name?.trim() || null;
 }
 
 /** "12 Jun" - a date the mock writes without a year, since bans are recent news.

@@ -729,6 +729,18 @@ impl Snapshot {
     }
 }
 
+/// One device of an account on several at once, as a server tells an
+/// administrator of it: its name, and what it knows of that connection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DeviceFacts {
+    /// The device's own session.
+    pub session: Session,
+    /// What it is called, or `Device <session>` where it is not named.
+    pub name: SharedString,
+    /// The same names and values a user's connection is described with.
+    pub facts: Vec<(SharedString, SharedString)>,
+}
+
 /// Something happened in the engine. Each names what to read again.
 ///
 /// Named after the engine's own events so the adapter is one `match`.
@@ -785,6 +797,9 @@ pub(crate) enum EngineEvent {
     Facts {
         subject: Subject,
         facts: Vec<(SharedString, SharedString)>,
+        /// For a user on several devices, told to an administrator: each
+        /// device. Empty otherwise.
+        devices: Vec<DeviceFacts>,
     },
     /// Somebody is writing in a channel. Said again while they go on;
     /// nothing says when they stop.

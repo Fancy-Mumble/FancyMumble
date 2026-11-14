@@ -3039,3 +3039,131 @@ mod livery_art {
         assert!(state.livery_art_asked.contains("cafe"));
     }
 }
+
+// -- UserStats -----------------------------------------------------
+
+fn device_stats(session: u32, name: Option<&str>, tcp_ping: f32) -> mumble_tcp::UserStats {
+    mumble_tcp::UserStats {
+        session: Some(session),
+        device_name: name.map(str::to_owned),
+        tcp_ping_avg: Some(tcp_ping),
+        onlinesecs: Some(60),
+        version: Some(mumble_tcp::Version {
+            release: Some("1.5.0".into()),
+            os: Some("Linux".into()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn user_stats_carries_each_device_mapped_like_the_user() {
+    let (ctx, emitter) = make_ctx();
+    let stats = mumble_tcp::UserStats {
+        devices: vec![
+            device_stats(7, Some("Laptop"), 12.5),
+            device_stats(8, None, 40.0),
+            // An entry without a session names no device and is dropped.
+            mumble_tcp::UserStats::default(),
+        ],
+        ..device_stats(7, None, 12.5)
+    };
+    stats.handle(&ctx);
+
+    let events = emitter.events();
+    assert_eq!(events.len(), 1);
+    let (name, payload) = &events[0];
+    assert_eq!(name, "user-stats");
+    assert_eq!(payload["session"], 7);
+    let devices = payload["devices"].as_array().unwrap();
+    assert_eq!(devices.len(), 2);
+    assert_eq!(devices[0]["session"], 7);
+    assert_eq!(devices[0]["device_name"], "Laptop");
+    assert_eq!(devices[0]["tcp_ping_avg"], 12.5);
+    assert_eq!(devices[0]["os"], "Linux");
+    assert_eq!(devices[0]["onlinesecs"], 60);
+    assert_eq!(devices[1]["session"], 8);
+    assert!(devices[1].get("device_name").is_none());
+    assert!(devices[1].get("devices").is_none());
+}
+
+#[test]
+fn user_stats_without_devices_sends_no_device_list() {
+    let (ctx, emitter) = make_ctx();
+    device_stats(3, None, 5.0).handle(&ctx);
+    let (_, payload) = &emitter.events()[0];
+    assert!(payload.get("devices").is_none());
+    assert!(payload.get("device_name").is_none());
+}
+
+fn pchat_fetch_refused(kind: fancy::wire::refusal::Kind, detail: &str) -> ControlMessage {
+    ControlMessage::PchatFetchRefused(fancy::pchat::FetchRefused {
+        channel: 4,
+        refusal: Some(fancy::wire::Refusal {
+            kind: kind as i32,
+            detail: detail.to_owned(),
+            retry_after_ms: 1_500,
+        }),
+    })
+}
+
+#[test]
+fn a_refused_pchat_page_ends_loading_and_is_not_the_end_of_history() {
+    let (ctx, emitter) = make_ctx();
+    dispatch(
+        &pchat_fetch_refused(fancy::wire::refusal::Kind::RateLimited, "slow down"),
+        &ctx,
+    );
+
+    let names = emitter.event_names();
+    assert!(!names.contains(&"pchat-fetch-complete".to_owned()));
+    let events = emitter.events();
+    let loading = events
+        .iter()
+        .find(|(name, _)| name == "pchat-history-loading")
+        .map(|(_, payload)| payload)
+        .unwrap();
+    assert_eq!(loading["channel_id"], 4);
+    assert_eq!(loading["loading"], false);
+}
+
+#[test]
+fn a_refused_pchat_page_carries_kind_detail_and_retry_delay() {
+    let (ctx, emitter) = make_ctx();
+    dispatch(
+        &pchat_fetch_refused(fancy::wire::refusal::Kind::RateLimited, "slow down"),
+        &ctx,
+    );
+
+    let events = emitter.events();
+    let (_, refused) = events
+        .iter()
+        .find(|(name, _)| name == "pchat-fetch-refused")
+        .unwrap();
+    assert_eq!(refused["channel_id"], 4);
+    assert_eq!(refused["kind"], "rate_limited");
+    assert_eq!(refused["detail"], "slow down");
+    assert_eq!(refused["retry_after_ms"], 1_500);
+}
+
+#[test]
+fn a_refused_pchat_page_names_each_refusal_kind_in_lowercase() {
+    use fancy::wire::refusal::Kind;
+    for (kind, name) in [
+        (Kind::Other, "other"),
+        (Kind::Permission, "permission"),
+        (Kind::Limit, "limit"),
+        (Kind::Invalid, "invalid"),
+        (Kind::RateLimited, "rate_limited"),
+    ] {
+        let (ctx, emitter) = make_ctx();
+        dispatch(&pchat_fetch_refused(kind, ""), &ctx);
+        let events = emitter.events();
+        let (_, refused) = events
+            .iter()
+            .find(|(event, _)| event == "pchat-fetch-refused")
+            .unwrap();
+        assert_eq!(refused["kind"], name);
+    }
+}

@@ -381,6 +381,10 @@
     "hidePending": "Masquer l'indicateur d'attente",
     "hide": "Masquer"
   },
+  "historyRefused": {
+    "title": "Impossible de charger les messages plus anciens",
+    "retry": "Réessayer de charger les messages plus anciens"
+  },
   "quotePreview": {
     "mediaFallback": "Média",
     "remove": "Supprimer la citation"

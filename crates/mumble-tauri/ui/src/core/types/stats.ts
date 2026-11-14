@@ -57,4 +57,10 @@ export interface UserStats {
   from_server?: PacketStats | null;
   /** Rolling-window packet statistics. */
   rolling_stats?: RollingStats | null;
+  /** The device's name (e.g. "Laptop"); set on the entries of `devices`. */
+  device_name?: string | null;
+  /** One entry per device, each under the device's own session, when a
+   *  registered account is online from several. Only administrators get it;
+   *  absent for everyone else and for a single device. */
+  devices?: UserStats[];
 }

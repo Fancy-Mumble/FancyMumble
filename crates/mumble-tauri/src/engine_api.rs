@@ -230,6 +230,34 @@ pub struct UserStats {
     pub os: Option<String>,
     /// Their address; a server tells only an administrator.
     pub address: Option<String>,
+    /// What the owner calls this device; set on the entries in `devices`.
+    pub device_name: Option<String>,
+    /// Each device of a user on several, each under its own session. A
+    /// server tells only an administrator, and only when there is more than
+    /// one; empty otherwise.
+    pub devices: Vec<UserStats>,
+}
+
+impl From<crate::state::types::UserStatsPayload> for UserStats {
+    fn from(payload: crate::state::types::UserStatsPayload) -> Self {
+        Self {
+            session: payload.session,
+            tcp_ping_ms: whole_ms(payload.tcp_ping_avg),
+            udp_ping_ms: whole_ms(payload.udp_ping_avg),
+            online_secs: payload.onlinesecs,
+            idle_secs: payload.idlesecs,
+            os: match (payload.os, payload.os_version) {
+                (Some(os), Some(version)) if !version.is_empty() => {
+                    Some(format!("{os} {version}"))
+                }
+                (os, _) => os,
+            },
+            version: payload.version,
+            address: payload.address,
+            device_name: payload.device_name,
+            devices: payload.devices.into_iter().map(Self::from).collect(),
+        }
+    }
 }
 
 /// Who a whisper goes to instead of the channel the speaker is in.
@@ -914,21 +942,7 @@ impl EngineEvent {
                     })
                     .collect(),
             ),
-            CoreEvent::UserStats(payload) => Self::UserStats(UserStats {
-                session: payload.session,
-                tcp_ping_ms: whole_ms(payload.tcp_ping_avg),
-                udp_ping_ms: whole_ms(payload.udp_ping_avg),
-                online_secs: payload.onlinesecs,
-                idle_secs: payload.idlesecs,
-                os: match (payload.os, payload.os_version) {
-                    (Some(os), Some(version)) if !version.is_empty() => {
-                        Some(format!("{os} {version}"))
-                    }
-                    (os, _) => os,
-                },
-                version: payload.version,
-                address: payload.address,
-            }),
+            CoreEvent::UserStats(payload) => Self::UserStats(payload.into()),
             _ => return None,
         })
     }

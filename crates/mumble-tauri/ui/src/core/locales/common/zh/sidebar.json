@@ -181,7 +181,9 @@
     "bandwidth": "带宽",
     "labelCurrent": "当前",
     "labelOnline": "在线",
-    "idle": "（空闲 {{duration}}）"
+    "idle": "（空闲 {{duration}}）",
+    "devices": "设备",
+    "deviceFallback": "设备 {{session}}"
   },
   "superSearch": {
     "placeholder": "搜索频道、用户、消息…",

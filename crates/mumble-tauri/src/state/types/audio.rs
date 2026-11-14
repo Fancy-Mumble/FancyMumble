@@ -132,6 +132,13 @@ pub(crate) struct UserStatsPayload {
     /// Rolling-window packet statistics.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rolling_stats: Option<RollingStatsPayload>,
+    /// The device's name (e.g. "Laptop"), set on the entries of `devices`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_name: Option<String>,
+    /// One entry per device when the account is online from several, each
+    /// under the device's own session.  Only an administrator receives it.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub devices: Vec<UserStatsPayload>,
 }
 
 /// An available audio input device.

@@ -25,6 +25,8 @@ use crate::engine::{
 };
 use crate::store::Store;
 
+mod devices;
+
 /// `(host, port)`: what a ping is kept under.
 type Address = (String, u16);
 
@@ -561,10 +563,7 @@ impl Shared {
                 Some(reason) => EngineEvent::Notice(Some(reason.into())),
                 None => EngineEvent::ScheduleTaken,
             }),
-            api::EngineEvent::UserStats(stats) => self.tell(EngineEvent::Facts {
-                subject: Subject::User(stats.session),
-                facts: user_facts(&stats),
-            }),
+            api::EngineEvent::UserStats(stats) => self.tell(stats_facts(&stats)),
             api::EngineEvent::Typing { channel, session } => {
                 self.tell(EngineEvent::Typing { channel, session });
             }
@@ -1563,6 +1562,7 @@ impl Engine for RealEngine {
                     shared.tell(EngineEvent::Facts {
                         subject,
                         facts: server_facts(&shared.engine.server()),
+                        devices: Vec::new(),
                     });
                     shared.engine.welcome()
                 }
@@ -1774,6 +1774,22 @@ fn span(secs: u32) -> String {
         (0, 0, minutes) => format!("{minutes} min"),
         (0, hours, minutes) => format!("{hours} h {minutes} min"),
         (days, hours, _) => format!("{days} d {hours} h"),
+    }
+}
+
+/// A user's connection, and each of their devices where the server listed
+/// them: only for an administrator, and only for a user on several devices,
+/// so empty otherwise, which draws no section.
+fn stats_facts(stats: &api::UserStats) -> EngineEvent {
+    EngineEvent::Facts {
+        subject: Subject::User(stats.session),
+        facts: user_facts(stats),
+        devices: devices::listed(
+            stats
+                .devices
+                .iter()
+                .map(|device| (device.device_name.as_deref(), device)),
+        ),
     }
 }
 
@@ -2676,7 +2692,7 @@ mod tests {
             std::iter::from_fn(|| told.try_recv().ok()).any(|event| {
                 matches!(
                     event,
-                    EngineEvent::Facts { subject, facts }
+                    EngineEvent::Facts { subject, facts, .. }
                         if subject == Subject::User(admin_session)
                             && facts.iter().any(|(name, _)| name.as_ref() == "Ping")
                 )
@@ -2701,7 +2717,7 @@ mod tests {
             std::iter::from_fn(|| told.try_recv().ok()).any(|event| {
                 matches!(
                     event,
-                    EngineEvent::Facts { subject: Subject::Server, facts }
+                    EngineEvent::Facts { subject: Subject::Server, facts, .. }
                         if facts.iter().any(|(name, value)| {
                             name.as_ref() == "Fancy extensions" && value.as_ref() == "yes"
                         })

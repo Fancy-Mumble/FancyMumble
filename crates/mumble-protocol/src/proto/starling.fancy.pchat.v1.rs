@@ -3,7 +3,7 @@
 pub struct PchatEnvelope {
     #[prost(
         oneof = "pchat_envelope::Body",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"
     )]
     pub body: ::core::option::Option<pchat_envelope::Body>,
 }
@@ -35,6 +35,8 @@ pub mod pchat_envelope {
         PinList(super::PinList),
         #[prost(message, tag = "12")]
         Delete(super::Delete),
+        #[prost(message, tag = "13")]
+        FetchRefused(super::FetchRefused),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -107,6 +109,19 @@ pub struct FetchResponse {
     pub total_stored: u64,
     #[prost(message, optional, tag = "4")]
     pub page: ::core::option::Option<crate::proto::fancy::wire::PageInfo>,
+}
+/// Why a page was not served.
+///
+/// A `Message` is answered by `Ack`, which has carried `RATE_LIMITED` all
+/// along. A `Fetch` had no answer of any kind, so a throttled or refused page
+/// was silently dropped and looked to the reader exactly like the end of the
+/// archive: scrolling back simply stopped, at a different place each time.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FetchRefused {
+    #[prost(uint32, tag = "1")]
+    pub channel: u32,
+    #[prost(message, optional, tag = "2")]
+    pub refusal: ::core::option::Option<crate::proto::fancy::wire::Refusal>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Ack {

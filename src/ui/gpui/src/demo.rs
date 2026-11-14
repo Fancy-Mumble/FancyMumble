@@ -1223,6 +1223,7 @@ impl Engine for DemoEngine {
             self.tell(EngineEvent::Facts {
                 subject,
                 facts: vec![("Address".into(), "magical.rocks:64738".into())],
+                devices: Vec::new(),
             });
         }
         self.tell(EngineEvent::About {
