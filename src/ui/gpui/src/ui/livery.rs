@@ -395,6 +395,7 @@ pub(super) fn status_mark(status: Status) -> impl IntoElement + use<> {
                 offset: gpui::point(px(0.0), px(0.0)),
                 blur_radius: px(0.0),
                 spread_radius: px(2.0),
+                inset: false,
             }])
         })
 }

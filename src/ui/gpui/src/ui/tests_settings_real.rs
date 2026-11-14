@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, px};
+use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, point, px};
 
 use super::Shell;
 use super::conversation::Row;
@@ -122,7 +122,7 @@ fn bring(shell: &Entity<Shell>, cx: &mut VisualTestContext, selector: &'static s
         if let Some(search) = &shell.panels.settings.search {
             let (view, at) = (search.scroll.bounds(), search.scroll.offset());
             let y = at.y - (bounds.top() - view.top() - px(60.0));
-            search.scroll.set_offset(gpui::point(at.x, y.min(px(0.0))));
+            search.scroll.set_offset(point(at.x, y.min(px(0.0))));
         }
         cx.notify();
     });
@@ -139,7 +139,7 @@ fn press_bar(cx: &mut VisualTestContext, bar: &'static str, along: f32) {
         .debug_bounds(bar)
         .unwrap_or_else(|| panic!("the bar `{bar}`"));
     let x = bounds.left() + (bounds.size.width - px(1.0)) * along;
-    cx.simulate_click(gpui::point(x, bounds.center().y), Modifiers::none());
+    cx.simulate_click(point(x, bounds.center().y), Modifiers::none());
     cx.run_until_parked();
 }
 
@@ -256,6 +256,11 @@ fn the_actions_stand_under_every_message_when_asked_and_stay_asked(cx: &mut Test
         reach(&shell, cx, "always-show-actions");
         shell.update(cx, Shell::close_settings);
         cx.run_until_parked();
+        // The pointer, left where the settings' button was, off the
+        // conversation: the view under it now is taken as hovered.
+        cx.simulate_mouse_move(point(px(1.0), px(1.0)), None, Modifiers::none());
+        cx.executor().advance_clock(std::time::Duration::from_secs(2));
+        cx.run_until_parked();
         let (_, index) = theirs(&shell, cx);
         // Not pointed at, and there.
         assert!(cx.debug_bounds(tag("pinned-actions", index)).is_some());
@@ -345,7 +350,7 @@ fn the_shelf_keeps_the_pictures_their_focus_and_the_dim(cx: &mut TestAppContext)
         // Its subject at its top left corner.
         bring(&shell, cx, "wall-focus");
         let picker = cx.debug_bounds("wall-focus").expect("the focus point");
-        let corner = picker.origin + gpui::point(px(1.0), px(1.0));
+        let corner = picker.origin + point(px(1.0), px(1.0));
         cx.simulate_click(corner, Modifiers::none());
         cx.run_until_parked();
         bring(&shell, cx, "wall-dim");

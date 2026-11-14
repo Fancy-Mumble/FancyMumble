@@ -137,6 +137,7 @@ mod zoom;
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use gpui::Focusable as _;
 use gpui::{
     Context, Entity, IntoElement, ListAlignment, ListOffset, ListState, ParentElement, Render,
     Styled, Subscription, Task, Window, div, prelude::*, px, relative,
@@ -686,12 +687,22 @@ fn conversation_list() -> (
     let rows = ListState::new(0, ListAlignment::Top, px(OVERDRAW));
     rows.set_scroll_handler({
         let (at_tail, below) = (std::rc::Rc::clone(&at_tail), std::rc::Rc::clone(&below));
-        move |scrolled, _, _| {
+        move |scrolled, window, cx| {
             let at_end = scrolled.visible_range.end >= scrolled.count;
+            let was = (at_tail.get(), below.get());
             at_tail.set(at_end);
             // Back at the newest message: what arrived has been seen.
             if at_end {
                 below.set(0);
+            }
+            // The list tells this as it is laid out, after the view was
+            // drawn from the old values: what shows them (the count of
+            // what arrived below) is drawn again.
+            if (at_tail.get(), below.get()) != was {
+                let handle = window.window_handle();
+                cx.defer(move |cx| {
+                    let _ = handle.update(cx, |_, window, _| window.refresh());
+                });
             }
         }
     });
@@ -1743,7 +1754,7 @@ impl Shell {
         self.editing = Some(id);
         self.composer.update(cx, |composer, cx| {
             composer.set_text(text);
-            composer.focus(window);
+            composer.focus(window, cx);
             cx.notify();
         });
     }
@@ -1765,7 +1776,7 @@ impl Shell {
         // Answering is not correcting: what was being changed is let go.
         self.stop_editing(cx);
         self.replying = Some((id, said));
-        self.composer.read(cx).focus(window);
+        window.focus(&self.composer.focus_handle(cx), cx);
         cx.notify();
     }
 
@@ -1875,7 +1886,7 @@ impl Shell {
         } else {
             &self.search
         };
-        search.read(cx).focus(window);
+        window.focus(&search.focus_handle(cx), cx);
         cx.notify();
     }
 
@@ -2487,17 +2498,7 @@ impl Render for Shell {
             // over the panels and under what floats above them.
             .when(!theme.skin.band, |shell| shell.child(band::drag_strip()))
             .children(self.video_layer(cx))
-            .children(stage::overlays(self, window, cx))
-            .children(reconnect::banner(self, &theme, cx))
-            .children(mover::render(self, &theme, cx))
-            .children(welcome::render(self, &theme, window, cx))
-            .children(links::render(self, &theme, cx))
-            .children(toasts::render(self, &theme, cx))
-            .when(!theme.skin.band, |shell| {
-                shell.child(band::corner_controls(&theme, window))
-            })
-            .map(|shell| self.with_panels(shell, &theme, window, cx))
-            .children(frame::resize_grips(window))
+            .children(self.floating(&theme, window, cx).on(self.video_overlay()))
     }
 }
 
@@ -2541,15 +2542,39 @@ impl Shell {
         self.panels.settings.server_switcher.rail() || !theme.skin.band
     }
 
-    /// What floats over the window: the panels, dialogs, menus and cards
-    /// that are open.
-    fn with_panels(
+    /// What floats over the window, in the order it is drawn: the stage's
+    /// overlays, the banners, toasts and the window's own controls, then
+    /// the panels, dialogs, menus and cards that are open, and the resize
+    /// grips over all. Drawn over a video playing in place
+    /// (`kit::floating`).
+    fn floating(
         &self,
-        shell: gpui::Div,
         theme: &crate::theme::Theme,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> gpui::Div {
+    ) -> kit::floating::Floating {
+        kit::floating::Floating::default()
+            .children(stage::overlays(self, window, cx))
+            .children(reconnect::banner(self, theme, cx))
+            .children(mover::render(self, theme, cx))
+            .children(welcome::render(self, theme, window, cx))
+            .children(links::render(self, theme, cx))
+            .children(toasts::render(self, theme, cx))
+            .when(!theme.skin.band, |shell| {
+                shell.child(band::corner_controls(theme, window))
+            })
+            .map(|shell| self.with_panels(shell, theme, window, cx))
+            .children(frame::resize_grips(window))
+    }
+
+    /// The panels, dialogs, menus and cards that are open.
+    fn with_panels(
+        &self,
+        shell: kit::floating::Floating,
+        theme: &crate::theme::Theme,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> kit::floating::Floating {
         shell
             .when(self.picker_open, |shell| {
                 shell.child(picker::render(self, theme, cx))

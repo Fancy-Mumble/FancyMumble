@@ -407,7 +407,7 @@ fn whisper_key_row(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> imp
                 .on_click(cx.listener(|shell, _, window, cx| {
                     shell.whisper.choosing_key = true;
                     // The key must come to the window, not to a field.
-                    window.focus(&shell.focus);
+                    window.focus(&shell.focus, cx);
                     cx.notify();
                 }))
                 .child(key),
@@ -448,7 +448,7 @@ fn push_to_talk_row(
             .on_click(cx.listener(|shell, _, window, cx| {
                 shell.ptt.choosing = true;
                 // The key must come to the window, not to a field.
-                window.focus(&shell.focus);
+                window.focus(&shell.focus, cx);
                 cx.stop_propagation();
                 cx.notify();
             }))

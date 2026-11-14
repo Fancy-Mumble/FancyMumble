@@ -1,45 +1,43 @@
-//! Playing a video in place: a web view in a window of its own, laid over
-//! the card the video belongs to.
+//! Playing a video in place: a web view laid over the card the video
+//! belongs to.
 //!
-//! The window is a child of the client's, so the system draws it over
-//! whatever the client draws there. It is placed in every frame the card
-//! is painted in, at the end of that frame, from where the card was
-//! painted: it moves with the conversation, is cut where the
-//! conversation's view ends, and is hidden while anything painted later
-//! covers it (a menu, a dialog). A frame the card is not painted in hides
-//! it.
+//! On Windows the web view is a surface of the window's own composition
+//! (GPUI's window composition): the system composes it between what the
+//! client draws under it and what floats over it (menus, dialogs, toasts,
+//! drawn on the composition's overlay), so nothing has to hide it while
+//! something is drawn over it. It is placed in every frame the card is
+//! drawn in, as the frame is laid out, from where the card is: it moves
+//! with the conversation and is cut where the conversation's view ends. A
+//! frame the card is not drawn in hides it.
 //!
 //! Nothing of the web view exists until a video is played, and all of it
 //! goes when it stops. Only Windows has one; elsewhere a video opens in
 //! the browser as it did.
 //!
-//! The boundary, for another way of showing the page (a composited
-//! surface, an off-screen engine, another system's web view): a
-//! [`Screens`] says whether it plays in place and opens a [`Screen`] for a
-//! [`Page`], which reports back as [`Said`] on a channel. The client only
-//! ever tells a screen where it is ([`Placement`], device pixels, with the
-//! part seen; `Hidden` under anything drawn over it), when to start and to
+//! The boundary, for another way of showing the page (an off-screen
+//! engine, another system's web view): a [`Screens`] says whether it plays
+//! in place and opens a [`Screen`] for a [`Page`], which reports back as
+//! [`Said`] on a channel. The client only ever tells a screen where it is
+//! ([`Placement`], device pixels, with the part seen), when to start and to
 //! play on, to give the keyboard back and to rest; a screen that renders off screen
 //! hands its picture over through [`Screen::frame`] and the client draws
 //! it. Nothing outside this module knows which kind it is: [`screens`]
 //! picks this system's.
 
+#[cfg(all(windows, not(test)))]
+mod composed;
 mod page;
 mod place;
-#[cfg(all(windows, not(test)))]
-mod web_view;
-#[cfg(all(windows, not(test)))]
-mod win32;
 
 use std::rc::Rc;
 use std::sync::Arc;
 
-use gpui::{Bounds, PaintMark, Pixels, RenderImage, Window};
+use gpui::{Bounds, CompositionSurfaceId, Pixels, RenderImage, Window};
 
 pub(crate) use page::{Page, Said};
 pub(crate) use place::Placement;
 
-/// A window a page is shown in, over the client's own.
+/// A view a page is shown in, over the client's own.
 pub(crate) trait Screen {
     /// Load the page, which plays at once. Asked once, the first time more
     /// than half of it is seen: `YouTube` lets a player start by itself
@@ -50,14 +48,23 @@ pub(crate) trait Screen {
     fn play_on(&mut self);
     /// Put it at `placement`.
     fn place(&mut self, placement: Placement);
+    /// The window's device pixels to each of its own, for a screen that
+    /// takes the pointer from the client.
+    fn scale(&mut self, _scale: f32) {}
     /// Give the keyboard back to the client's window.
     fn release_keys(&mut self);
     /// Hold as little memory as it can while `resting`, or work normally.
     fn rest(&mut self, resting: bool);
     /// The page's latest picture, for a screen that renders off screen
-    /// and leaves the drawing to the client; a screen that is a window of
-    /// its own has none.
+    /// and leaves the drawing to the client; a screen the system composes
+    /// has none.
     fn frame(&mut self) -> Option<Arc<RenderImage>> {
+        None
+    }
+    /// The surface of the window's composition that is drawn over this
+    /// screen, for a screen the system composes: what floats over the
+    /// window is drawn there.
+    fn overlay(&self) -> Option<CompositionSurfaceId> {
         None
     }
 }
@@ -76,16 +83,26 @@ pub(crate) trait Screens {
     fn open(
         &self,
         page: &Page,
-        window: &Window,
+        window: &mut Window,
         said: async_channel::Sender<Said>,
     ) -> Result<Box<dyn Screen>, String>;
+
+    /// Whether screens that were closed still leave something in the
+    /// window for [`Screens::settle`] to take away.
+    fn unsettled(&self) -> bool {
+        false
+    }
+
+    /// Take away what closed screens left in `window`. Called as the
+    /// window is laid out.
+    fn settle(&self, _window: &mut Window) {}
 }
 
 /// The screens of this platform. Under test, none: a test never makes a
 /// web view, and one that plays gives its own screens.
 pub(crate) fn screens() -> Rc<dyn Screens> {
     #[cfg(all(windows, not(test)))]
-    return Rc::new(web_view::WebViews);
+    return Rc::new(composed::WebViews::default());
     #[cfg(any(not(windows), test))]
     return Rc::new(Browser);
 }
@@ -104,22 +121,21 @@ impl Screens for Browser {
     fn open(
         &self,
         _: &Page,
-        _: &Window,
+        _: &mut Window,
         _: async_channel::Sender<Said>,
     ) -> Result<Box<dyn Screen>, String> {
         Err("no web view on this system".to_owned())
     }
 }
 
-/// Where the stage was painted in the frame being drawn.
+/// Where the stage was laid out in the frame being drawn.
 #[derive(Debug, Clone, Copy)]
 struct Seen {
     stage: Bounds<Pixels>,
     mask: Bounds<Pixels>,
-    mark: PaintMark,
 }
 
-/// The player's window, and where it was put.
+/// The player's view, and where it was put.
 pub(crate) struct Stage {
     screen: Box<dyn Screen>,
     placed: Placement,
@@ -149,24 +165,24 @@ impl Stage {
         }
     }
 
-    /// The stage was painted at `stage`, seen through `mask`, and what is
-    /// painted after `mark` may cover it.
-    pub(crate) fn seen(&mut self, stage: Bounds<Pixels>, mask: Bounds<Pixels>, mark: PaintMark) {
-        self.seen = Some(Seen { stage, mask, mark });
+    /// The stage was laid out at `stage`, seen through `mask`.
+    pub(crate) fn seen(&mut self, stage: Bounds<Pixels>, mask: Bounds<Pixels>) {
+        self.seen = Some(Seen { stage, mask });
     }
 
-    /// The frame is painted: put the window where the stage was, or hide
-    /// it if the stage was not painted.
+    /// Everything that can hold the stage is laid out: put the view where
+    /// the stage was, or hide it if the stage was not laid out.
     pub(crate) fn settle(&mut self, window: &Window) {
-        let placement = self.seen.take().map_or(Placement::Hidden, |seen| {
-            let shown = seen.stage.intersect(&seen.mask);
-            let covered = !shown.is_empty() && window.painted_over(seen.mark, shown);
-            Placement::of(seen.stage, seen.mask, window.scale_factor(), covered)
-        });
+        let scale = window.scale_factor();
+        self.screen.scale(scale);
+        let placement = self
+            .seen
+            .take()
+            .map_or(Placement::Hidden, |seen| Placement::of(seen.stage, seen.mask, scale));
         self.put(placement);
     }
 
-    /// Put the window at `placement`, if it is not there; start it the
+    /// Put the view at `placement`, if it is not there; start it the
     /// first time it is mostly seen, and play on when asked once it is.
     pub(crate) fn put(&mut self, placement: Placement) {
         if placement == self.placed {
@@ -208,5 +224,10 @@ impl Stage {
     /// the client.
     pub(crate) fn frame(&mut self) -> Option<Arc<RenderImage>> {
         self.screen.frame()
+    }
+
+    /// Where what floats over the window is drawn while this plays.
+    pub(crate) fn overlay(&self) -> Option<CompositionSurfaceId> {
+        self.screen.overlay()
     }
 }

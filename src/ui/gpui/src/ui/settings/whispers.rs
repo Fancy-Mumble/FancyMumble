@@ -258,7 +258,7 @@ impl Shell {
     fn record_whisper_key(&mut self, id: String, window: &mut gpui::Window, cx: &mut Context<Self>) {
         self.panels.settings.whispers.recording = Some(id);
         cx.clear_key_bindings();
-        window.focus(&self.focus);
+        window.focus(&self.focus, cx);
         cx.notify();
     }
 }

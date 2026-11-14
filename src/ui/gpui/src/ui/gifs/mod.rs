@@ -14,6 +14,7 @@ mod shown;
 
 use std::sync::Arc;
 
+use gpui::Focusable as _;
 use gpui::{
     AnyElement, Context, IntoElement, ParentElement, SharedString, Styled, div, prelude::*, px,
 };
@@ -159,7 +160,7 @@ impl Shell {
         let reply_to = self.replying.take().map(|(to, _)| to);
         self.engine
             .send_gif(conversation, gif.url.clone(), reply_to);
-        self.composer.read(cx).focus(window);
+        window.focus(&self.composer.focus_handle(cx), cx);
         cx.notify();
     }
 

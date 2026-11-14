@@ -2,6 +2,7 @@
 //! typed, in a dialog over the window. For one person, or for everybody
 //! who is in a channel.
 
+use gpui::Focusable as _;
 use gpui::{
     Context, Entity, IntoElement, ParentElement, SharedString, Styled, Window, div, prelude::*, px,
 };
@@ -38,7 +39,7 @@ impl Shell {
         cx: &mut Context<Self>,
     ) {
         let search = cx.new(|cx| TextInput::new("Search channels", cx));
-        search.read(cx).focus(window);
+        window.focus(&search.focus_handle(cx), cx);
         // What is typed narrows the list, which is drawn from it.
         cx.observe(&search, |_, _, cx| cx.notify()).detach();
         self.panels.mover = Some(Mover { moved, search });

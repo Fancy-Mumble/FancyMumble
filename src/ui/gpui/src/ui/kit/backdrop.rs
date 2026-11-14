@@ -101,12 +101,12 @@ pub(crate) fn backdrop(
                 // costs it the cell of margin, and a dark hair at the edge
                 // is hidden under the surface's own border.
                 let _ =
-                    window.paint_image(bounds, gpui::Corners::all(corner), picture.image, 0, false);
+                    window.paint_image(bounds, bounds, gpui::Corners::all(corner), picture.image, 0, false);
                 return;
             }
             window.with_content_mask(Some(ContentMask { bounds }), |window| {
                 let _ =
-                    window.paint_image(spread, gpui::Corners::default(), picture.image, 0, false);
+                    window.paint_image(spread, spread, gpui::Corners::default(), picture.image, 0, false);
             });
         },
     )

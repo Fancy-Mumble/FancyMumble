@@ -20,8 +20,8 @@ default = ["wayland", "x11"]
 # The two Linux window systems, as GPUI names them. Both by default; a build
 # for one leaves the other's client code out. Either one links
 # libxkbcommon-x11 (Debian: libxkbcommon-x11-dev).
-wayland = ["gpui/wayland"]
-x11 = ["gpui/x11"]
+wayland = ["gpui/wayland", "gpui_platform/wayland"]
+x11 = ["gpui/x11", "gpui_platform/x11"]
 
 [dependencies]
 # `windows-manifest` embeds the Common Controls v6 manifest (and per-monitor
@@ -29,10 +29,13 @@ x11 = ["gpui/x11"]
 # `TaskDialogIndirect` GPUI imports, and the exe dies at load with
 # STATUS_ENTRYPOINT_NOT_FOUND. It does nothing on other platforms.
 #
-# A copy of GPUI 0.2.2 with one addition, a blur of what is behind an element
-# (`Styled::backdrop_blur`), which the renderer cannot be given from outside.
-# What was changed, and where, is in vendor/gpui/FANCY_CHANGES.md.
-gpui = { path = "vendor/gpui", default-features = false, features = ["font-kit", "windows-manifest"] }
+# GPUI as gpui-fast carries it (Zed's GPUI with a retained mode, window
+# composition and dynamic textures), with Fancy Mumble's own changes on top
+# (a blur of what is behind an element, `Window::set_bounds`, overlay
+# windows): the fork `gpui-next`, branch `fancy`, whose FANCY_CHANGES.md
+# lists them. `gpui_platform` picks this system's platform.
+gpui = { path = "../../../../gpui-next/crates/gpui", default-features = false, features = ["font-kit", "windows-manifest", "layout-rounding-0-2"] }
+gpui_platform = { path = "../../../../gpui-next/crates/gpui_platform", default-features = false, features = ["font-kit"] }
 # The engine. Still inside the Tauri package, built here without the Tauri
 # view (`default-features = false`), so none of Tauri is compiled or linked.
 mumble-tauri = { path = "../../../crates/mumble-tauri", default-features = false, features = ["logs"] }
@@ -119,11 +122,12 @@ qrcode = { version = "0.14", default-features = false }
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 notify-rust = { version = "=4.12.0", default-features = false }
 
-# The call that gives memory not in use back to the system (`src/trim.rs`).
-# The bindings GPUI already builds, with a feature it already turns on.
+# The call that gives memory not in use back to the system (`src/trim.rs`),
+# and the player's few calls (`src/player/composed.rs`). The bindings GPUI
+# already builds.
 [target.'cfg(windows)'.dependencies.windows]
-version = "0.61"
-features = ["Win32_Foundation", "Win32_System_Threading", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_System_Console"]
+version = "0.62"
+features = ["Win32_Foundation", "Win32_System_Threading", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_System_Console", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_System_Com"]
 
 # Keys that work while another program has the keyboard (`src/hotkeys.rs`).
 # The crate and the release the web client builds.
@@ -133,9 +137,11 @@ global-hotkey = "=0.7.0"
 # the release the web client builds; its Linux part needs GTK.
 tray-icon = { version = "=0.21.3", default-features = false }
 # A video played in place, over its card (`src/player/`): WebView2, made
-# only when play is pressed. The release the web client builds; its
-# custom scheme serves the page the video is framed in.
-wry = { version = "=0.54.3", default-features = false, features = ["protocol"] }
+# only when play is pressed and drawn into the window's composition. The
+# release gpui-next's own example of that builds (windows 0.62, as GPUI's
+# surfaces are); the window's handle to make it in.
+webview2-com = "0.39"
+raw-window-handle = "0.6"
 
 # Compiles the executable's icon into it (build.rs). The version GPUI
 # already builds its manifest with.
@@ -147,12 +153,20 @@ embed-resource = "3"
 # to hold this client's own against.
 fancy-utils = { path = "../../../crates/fancy-utils" }
 # Drives the views without a display: simulated clicks and keys.
-gpui = { path = "vendor/gpui", default-features = false, features = ["test-support"] }
+gpui = { path = "../../../../gpui-next/crates/gpui", default-features = false, features = ["test-support"] }
+gpui_platform = { path = "../../../../gpui-next/crates/gpui_platform", default-features = false, features = ["test-support"] }
 # The one-time codes a live test of the Account page computes as an
 # authenticator would (RFC 6238); all three already built for the engine.
 hmac = "0.12"
 sha1 = "0.10"
 data-encoding = "2"
+
+# What gpui-next's own workspace patches, repeated: a patch applies only from
+# the manifest at the root of a build. Zed's copies of these crates.
+[patch.crates-io]
+async-process = { git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d" }
+async-task = { git = "https://github.com/zed-industries/async-task.git", rev = "015845a19fc31752c02367567d3b8900a406f9da" }
+calloop = { git = "https://github.com/zed-industries/calloop" }
 
 # Debug information for this package only. With it for all seven hundred
 # dependencies as well, a debug build is tens of gigabytes on disk.

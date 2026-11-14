@@ -133,7 +133,7 @@ impl FormatBar {
     fn ask(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.asking = true;
         self.address.update(cx, |field, _| field.clear());
-        self.address.read(cx).focus(window);
+        window.focus(&self.address.focus_handle(cx), cx);
     }
 
     /// Make the selection a link to what was typed as its address. Nothing
@@ -159,7 +159,7 @@ impl FormatBar {
     fn leave(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.asking = false;
         if let Some(composer) = self.composer.upgrade() {
-            composer.read(cx).focus(window);
+            window.focus(&composer.focus_handle(cx), cx);
         }
         cx.notify();
     }

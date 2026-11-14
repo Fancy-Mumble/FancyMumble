@@ -201,7 +201,7 @@ fn a_long_welcome_scrolls_inside_its_dialog(cx: &mut TestAppContext) {
     cx.update(|window, _| window.refresh());
     cx.run_until_parked();
     assert!(
-        scrolled.list().max_offset_for_scrollbar().height > px(0.0),
+        scrolled.list().max_offset_for_scrollbar().y > px(0.0),
         "and scrolls in it"
     );
     click(cx, "dismiss-welcome");
@@ -317,27 +317,30 @@ fn centred_ground_covers(
     wrap: Option<f32>,
     probes: Vec<gpui::Point<Pixels>>,
 ) -> Vec<bool> {
-    use std::cell::RefCell;
-    use std::rc::Rc;
-    let found = Rc::new(RefCell::new(Vec::new()));
-    let into = Rc::clone(&found);
-    let (_, window) =
-        cx.add_window_view(move |_, _| Canvas(Rc::clone(&into), text, wrap, probes.clone()));
+    let (_, window) = cx.add_window_view(move |_, _| Canvas(text, wrap));
     window.run_until_parked();
-    found.borrow().clone()
+    // The red quads painted: the background. The box is at the window's
+    // top left.
+    let (quads, scale) = window.update(|window, _| (window.painted_quads(), window.scale_factor()));
+    probes
+        .iter()
+        .map(|at| {
+            let at = gpui::point(gpui::ScaledPixels(f32::from(at.x) * scale + 0.5), gpui::ScaledPixels(f32::from(at.y) * scale + 0.5));
+            quads.iter().any(|quad| {
+                quad.background == gpui::red().into()
+                    && quad.bounds.contains(&at)
+                    && quad.content_mask.bounds.contains(&at)
+            })
+        })
+        .collect()
 }
 
-/// Paints one centred line's background and asks what it covered.
-struct Canvas(
-    std::rc::Rc<std::cell::RefCell<Vec<bool>>>,
-    &'static str,
-    Option<f32>,
-    Vec<gpui::Point<Pixels>>,
-);
+/// Paints one centred line's background.
+struct Canvas(&'static str, Option<f32>);
 
 impl Render for Canvas {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        let (found, text, wrap, probes) = (self.0.clone(), self.1, self.2, self.3.clone());
+        let (text, wrap) = (self.0, self.1);
         div().w(px(300.0)).h(px(100.0)).child(
             gpui::canvas(
                 |_, _, _| {},
@@ -355,7 +358,6 @@ impl Render for Canvas {
                         .text_system()
                         .shape_text(text.into(), px(14.0), &[run], wrap.map(px), None)
                         .expect("shaped");
-                    let mark = window.paint_mark();
                     lines[0]
                         .paint_background(
                             bounds.origin,
@@ -366,15 +368,6 @@ impl Render for Canvas {
                             cx,
                         )
                         .expect("painted");
-                    *found.borrow_mut() = probes
-                        .iter()
-                        .map(|at| {
-                            window.painted_over(
-                                mark,
-                                Bounds::new(bounds.origin + *at, gpui::size(px(1.0), px(1.0))),
-                            )
-                        })
-                        .collect();
                 },
             )
             .size_full(),

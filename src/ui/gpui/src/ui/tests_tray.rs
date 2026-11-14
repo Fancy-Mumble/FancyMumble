@@ -47,7 +47,7 @@ fn what_is_picked_in_the_tray_is_done(cx: &mut TestAppContext) {
     let quits = Rc::new(Cell::new(0));
     let heard = Rc::clone(&quits);
     cx.update(|_, cx| {
-        cx.on_action(move |_: &super::keys::Quit, _| heard.set(heard.get() + 1));
+        let _ = cx.on_action(move |_: &super::keys::Quit, _| heard.set(heard.get() + 1));
     });
     pick(&shell, cx, Picked::Quit);
     assert_eq!(quits.get(), 1);

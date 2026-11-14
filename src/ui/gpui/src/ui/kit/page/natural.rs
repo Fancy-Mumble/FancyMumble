@@ -7,6 +7,11 @@
 //! layout engine is not asked: it measures such a table at its narrowest
 //! instead, so the width is worked out here from the text itself, shaped
 //! as it will be drawn.
+//!
+//! Nor is it asked how narrow a part can be (its min-content width): GPUI
+//! measures text there on one unbroken line, so a table of long sentences
+//! would never give way to its room. The least width, each sentence's
+//! longest word, is worked out here too.
 
 use gpui::{Font, FontStyle, FontWeight, SharedString, TextRun, px};
 
@@ -92,6 +97,78 @@ impl Painter<'_> {
             let wide = self.widest(&cell.body) + across(&cell.frame, base);
             if let Some(width) = widths.get_mut(cell.column) {
                 *width = width.max(wide);
+            }
+        }
+        widths
+    }
+
+    /// The least width `block` takes, margins included: what a browser
+    /// calls its min-content width.
+    fn least(&self, block: &Block) -> f32 {
+        let base = self.surface.size;
+        let frame = &block.frame;
+        let room = if frame.centred {
+            0.0
+        } else {
+            frame.margin.left.at(base) + frame.margin.right.at(base)
+        };
+        self.least_box(block) + room
+    }
+
+    /// The least width of `block`'s box, edges included: each text down to
+    /// its longest word.
+    pub(super) fn least_box(&self, block: &Block) -> f32 {
+        let base = self.surface.size;
+        let frame = &block.frame;
+        let inside = match (&block.kind, frame.width) {
+            (_, Extent::Len(_)) | (Kind::Picture(_), _) => return self.natural_box(block),
+            (Kind::Para(para), _) => para
+                .pieces
+                .iter()
+                .map(|piece| match piece {
+                    Piece::Atom(block) => self.least(block),
+                    Piece::Words(words) => self.least_width(words),
+                })
+                .fold(0.0, f32::max),
+            (Kind::Stack(blocks), _) => self.narrowest(blocks),
+            (Kind::Row(row), _) if row.column || row.wrap => self.narrowest(&row.items),
+            (Kind::Row(row), _) => {
+                #[expect(clippy::cast_precision_loss, reason = "a row has few items")]
+                let gaps = row.gap.at(base) * row.items.len().saturating_sub(1) as f32;
+                row.items.iter().map(|item| self.least(item)).sum::<f32>() + gaps
+            }
+            (Kind::List(items), _) => items
+                .iter()
+                .map(|item| self.narrowest(&item.body))
+                .fold(0.0, f32::max),
+            (Kind::Table(table), _) => {
+                self.columns_least(table).iter().sum::<f32>() + table_edges(table)
+            }
+            (Kind::Rule, _) => 0.0,
+        };
+        inside + across(frame, base)
+    }
+
+    /// The widest of `blocks`' least widths.
+    fn narrowest(&self, blocks: &[Block]) -> f32 {
+        blocks
+            .iter()
+            .map(|block| self.least(block))
+            .fold(0.0, f32::max)
+    }
+
+    /// The least width of each column of `table`: the widest least width
+    /// of the cells that stand in it alone.
+    pub(super) fn columns_least(&self, table: &Table) -> Vec<f32> {
+        let base = self.surface.size;
+        let mut widths = vec![0.0_f32; table.columns.len()];
+        for cell in table.rows.iter().flatten() {
+            if cell.span.0 != 1 {
+                continue;
+            }
+            let least = self.narrowest(&cell.body) + across(&cell.frame, base);
+            if let Some(width) = widths.get_mut(cell.column) {
+                *width = width.max(least);
             }
         }
         widths

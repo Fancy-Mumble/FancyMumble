@@ -74,7 +74,7 @@ impl Scrolled {
         if self.scroll.bounds().size.height <= px(0.0) {
             return None;
         }
-        let long = self.scroll.max_offset().height > px(0.5);
+        let long = self.scroll.max_offset().y > px(0.5);
         self.long.set(Some(long));
         Some(long)
     }

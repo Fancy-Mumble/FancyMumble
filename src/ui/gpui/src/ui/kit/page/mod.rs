@@ -179,7 +179,7 @@ fn column(surface: Surface) -> Div {
 /// Draws one page, once.
 pub(super) struct Painter<'a> {
     /// Shapes text, to measure a table nobody gave a width.
-    text: Arc<gpui::WindowTextSystem>,
+    text: Rc<gpui::WindowTextSystem>,
     id: SharedString,
     surface: Surface,
     theme: &'a Theme,
@@ -319,7 +319,8 @@ impl Painter<'_> {
             // longest word.
             .when(shrinks, |part| {
                 part.flex_basis(px(self.natural_box(block).ceil()))
-                    .flex_shrink()
+                    .flex_shrink_1()
+                    .min_w(px(self.least_box(block).ceil()))
             })
             .children(content);
         self.linked(part, block.frame.link.as_ref())

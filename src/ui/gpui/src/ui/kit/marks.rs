@@ -266,7 +266,7 @@ pub(crate) fn halo(halo: Halo, size: f32, talking: bool, theme: &Theme) -> AnyEl
                 move |bounds, (), window, _| {
                     let corners = gpui::Corners::all(px(height / 2.0));
                     for (blur, color) in glows {
-                        window.paint_shadows(
+                        window.paint_drop_shadows(
                             bounds,
                             corners,
                             &[gpui::BoxShadow {
@@ -274,6 +274,7 @@ pub(crate) fn halo(halo: Halo, size: f32, talking: bool, theme: &Theme) -> AnyEl
                                 offset: point(px(0.0), px(0.0)),
                                 blur_radius: px(blur / 2.0),
                                 spread_radius: px(0.0),
+                                inset: false,
                             }],
                         );
                     }

@@ -12,6 +12,7 @@ mod avatar;
 mod backdrop;
 mod blocks;
 mod built;
+pub(crate) mod floating;
 mod button;
 mod chip;
 mod choice;

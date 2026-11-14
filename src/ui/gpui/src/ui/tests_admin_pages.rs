@@ -601,7 +601,9 @@ fn a_role_is_deleted_with_its_rule(cx: &mut TestAppContext) {
     click(cx, "role-tab-1");
     click(cx, "grant-kick");
     click(cx, "role-save");
-    click(cx, "role-row-0");
+    // Saved, the editor stays on the role: the list is not drawn (GPUI
+    // 0.2.2 kept its rows' last bounds, and a press there did nothing).
+    assert!(cx.debug_bounds("role-row-0").is_none(), "still in the editor");
     click(cx, "role-delete");
     let acl = written_root(&engine);
     assert!(acl.groups.iter().all(|group| group.name.as_ref() != "moderators"));

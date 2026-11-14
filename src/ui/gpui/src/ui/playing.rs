@@ -1,6 +1,5 @@
 //! A video playing in place, over its card: starting it, telling the
-//! player's window where the card was painted, and stopping it when the
-//! card goes.
+//! player where the card was laid out, and stopping it when the card goes.
 //!
 //! One plays at a time. It stops when its close control is pressed, when
 //! the conversation it is in is left, when its message goes, when the
@@ -14,7 +13,7 @@ use std::time::Duration;
 
 use gpui::{
     AnyElement, Context, Corners, DispatchPhase, IntoElement, MouseDownEvent, ParentElement,
-    SharedString, Styled, Task, Window, canvas, div, prelude::*, px,
+    SharedString, Styled, Task, Window, canvas, deferred, div, prelude::*, px,
 };
 
 use super::Shell;
@@ -264,23 +263,25 @@ impl Shell {
         }
     }
 
-    /// Where the player goes, drawn on its stage: a still covered by the
-    /// player's window, which is put where this was painted once the
-    /// frame is done.
+    /// Where the player goes, drawn on its stage: the player is put where
+    /// this was laid out, once everything that can hold it is.
     pub(super) fn video_stage(&self) -> Option<AnyElement> {
         let stage = Rc::clone(&self.panels.embeds.playing.as_ref()?.stage);
+        let seen = Rc::clone(&stage);
         Some(
-            canvas(
-                |_, _, _| {},
-                move |bounds, (), window, _| {
-                    let mark = window.paint_mark();
-                    stage
-                        .borrow_mut()
-                        .seen(bounds, window.content_mask().bounds, mark);
+            div()
+                .absolute()
+                .size_full()
+                .child(
+                    canvas(
+                        move |bounds, window, _| {
+                            seen.borrow_mut().seen(bounds, window.content_mask().bounds);
+                        },
+                        move |bounds, (), window, _| {
                     // A screen rendering off screen is drawn here, by the
-                    // client; a window of its own lies over this instead.
+                    // client; one the system composes lies over this instead.
                     if let Some(frame) = stage.borrow_mut().frame() {
-                        let _ = window.paint_image(bounds, Corners::default(), frame, 0, false);
+                        let _ = window.paint_image(bounds, bounds, Corners::default(), frame, 0, false);
                     }
                     // A press anywhere in the client gives it the keyboard
                     // back from the player.
@@ -290,17 +291,21 @@ impl Shell {
                             keys.borrow_mut().release_keys();
                         }
                     });
-                },
-            )
-            .absolute()
-            .size_full()
-            .into_any_element(),
+                        },
+                    )
+                    .size_full(),
+                )
+                // Nothing: but it keeps a conversation scrolled under the
+                // player off a scroll layer, whose tiles would move the
+                // card without laying it out again, and the player with it.
+                .child(deferred(div()))
+                .into_any_element(),
         )
     }
 
-    /// What stands over the window for the video: the watch that places
-    /// its player once each frame is painted, and the video enlarged.
-    /// Stops it first if its card is gone for good.
+    /// What stands over the window for the video: the video enlarged, and
+    /// after it the watch that places the player once everything that can
+    /// hold it is laid out. Stops it first if its card is gone for good.
     pub(super) fn video_layer(&mut self, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let gone = self.panels.embeds.playing.as_ref().is_some_and(|playing| {
             playing.conversation != self.open
@@ -310,22 +315,26 @@ impl Shell {
         if gone {
             self.stop_video(cx);
         }
-        let Some(playing) = self.panels.embeds.playing.as_ref() else {
+        let screens = Rc::clone(&self.panels.embeds.screens);
+        let playing = self.panels.embeds.playing.as_ref();
+        if playing.is_none() && !screens.unsettled() {
             return Vec::new();
-        };
-        let stage = Rc::clone(&playing.stage);
+        }
+        let stage = playing.map(|playing| Rc::clone(&playing.stage));
         let watch = canvas(
-            |_, _, _| {},
-            move |_, (), window, _| {
-                let stage = Rc::clone(&stage);
-                window.on_frame_painted(move |window, _| stage.borrow_mut().settle(window));
+            move |_, window, _| {
+                screens.settle(window);
+                if let Some(stage) = stage {
+                    stage.borrow_mut().settle(window);
+                }
             },
+            |_, (), _, _| {},
         )
         .absolute()
         .size_0()
         .into_any_element();
-        let large = playing.large.then(|| self.large_video(cx));
-        [watch].into_iter().chain(large).collect()
+        let large = playing.is_some_and(|playing| playing.large).then(|| self.large_video(cx));
+        large.into_iter().chain([watch]).collect()
     }
 
     /// The video over the whole window, with the way back.
@@ -358,6 +367,12 @@ impl Shell {
                     .children(self.video_stage()),
             )
             .into_any_element()
+    }
+
+    /// The surface what floats over the window is drawn on while a video
+    /// plays, above it.
+    pub(super) fn video_overlay(&self) -> Option<gpui::CompositionSurfaceId> {
+        self.panels.embeds.playing.as_ref()?.stage.borrow().overlay()
     }
 
     /// The video playing, for the tests.

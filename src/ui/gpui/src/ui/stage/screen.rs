@@ -1,13 +1,16 @@
 //! One share drawn: the newest frame of its stream, laid in its room.
 //!
-//! A stream keeps one picture for as long as it is drawn at one size. Each
-//! frame's pixels go into that picture's texture where it already lies
-//! (`Window::update_image`); only a frame of another size makes a new
-//! picture, and the old one is let go of at once. Drawing it is also what
-//! tells the stream it is in sight, how large it is wanted and how often.
+//! A stream keeps one texture for as long as it is drawn at one size: a
+//! dynamic texture of GPUI's, outside the sprite atlas, that each frame's
+//! pixels are uploaded into where it lies (`Window::update_dynamic_texture`).
+//! Only a frame of another size makes a new texture, and the old one is let
+//! go of at once. Where the platform has no dynamic textures, each frame is
+//! a picture of its own instead, and the one before it is let go of. The
+//! newest frame's pixels are kept either way, for copying it. Drawing it is
+//! also what tells the stream it is in sight, how large it is wanted and
+//! how often.
 //!
-//! This is the one place that writes frames into a texture
-//! (`Window::update_image`, which the vendored GPUI adds): another GPUI's
+//! This is the one place that writes frames into a texture: another GPUI's
 //! streamed textures are a change to this file.
 
 use std::cell::RefCell;
@@ -15,21 +18,43 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui::{
-    Bounds, ContentMask, IntoElement, Pixels, RenderImage, Styled, Window, canvas, point, px, size,
+    Bounds, ContentMask, DevicePixels, DynamicTexture, IntoElement, Pixels, RenderImage, Styled,
+    Window, canvas, point, px, size,
 };
 
 use crate::share::fit::Rect;
 use crate::share::{Fit, FrameSlot, Wanted};
 
+/// What a frame is shown from.
+#[derive(Debug, Clone)]
+pub(crate) enum Picture {
+    /// A texture the next frame is uploaded into.
+    Texture(DynamicTexture),
+    /// A picture of one frame, where the platform has no such textures.
+    Still(Arc<RenderImage>),
+}
+
+impl Picture {
+    /// Give it back to the window: the stream is gone, or the frame is.
+    pub(crate) fn give_back(self, window: &mut Window) {
+        match self {
+            Self::Texture(texture) => window.remove_dynamic_texture(texture),
+            Self::Still(image) => {
+                let _ = window.drop_image(image);
+            }
+        }
+    }
+}
+
 /// What a stream has on screen.
 #[derive(Default)]
 pub(crate) struct Screen {
-    picture: Option<Arc<RenderImage>>,
-    /// The pixels (BGRA) of the frame on screen when they went into the
-    /// picture's texture in place: the picture's own bytes are still the
-    /// first frame's. Kept for copying; the buffer before it goes back to
-    /// the stream.
-    latest: Option<Vec<u8>>,
+    picture: Option<Picture>,
+    /// The newest frame's pixels, BGRA, as they are on screen: what is
+    /// copied. Swapped with the frame each one replaces, which goes back to
+    /// the slot, so no more buffers are held than before. Empty while the
+    /// picture holds them itself (`Picture::Still`).
+    pixels: Vec<u8>,
     /// The size of the frame in `picture`, and the size it was sent at.
     size: (u32, u32),
     sent: (u32, u32),
@@ -63,20 +88,19 @@ impl Screen {
     }
 
     /// The frame on screen, BGRA, and its size: to copy.
-    pub(crate) fn frame(&self) -> Option<(Vec<u8>, (u32, u32))> {
-        let picture = self.picture.as_ref()?;
-        let bgra = match &self.latest {
-            Some(latest) => latest.clone(),
-            None => picture.as_bytes(0)?.to_vec(),
+    pub(crate) fn picture(&self) -> Option<(Vec<u8>, (u32, u32))> {
+        let pixels = match self.picture.as_ref()? {
+            Picture::Texture(_) => self.pixels.clone(),
+            Picture::Still(image) => image.as_bytes(0)?.to_vec(),
         };
-        Some((bgra, self.size))
+        Some((pixels, self.size))
     }
 
-    /// Let go of the picture: the stream is gone. Its texture is given back
-    /// by whoever holds a window.
-    pub(crate) fn release(&mut self) -> Option<Arc<RenderImage>> {
+    /// Let go of the picture: the stream is gone. It is given back by
+    /// whoever holds a window.
+    pub(crate) fn release(&mut self) -> Option<Picture> {
         self.laid = None;
-        self.latest = None;
+        self.pixels = Vec::new();
         self.picture.take()
     }
 
@@ -87,22 +111,41 @@ impl Screen {
         };
         self.drawn += 1;
         self.sent = frame.sent;
-        let same = self.size == (frame.width, frame.height);
-        if let Some(picture) = self.picture.as_ref().filter(|_| same)
-            && window.update_image(picture, 0, &frame.bgra)
-        {
-            if let Some(before) = self.latest.replace(frame.bgra) {
-                slot.give_back(before);
-            }
-            return;
-        }
-        self.latest = None;
-        let Some(pixels) = image::RgbaImage::from_raw(frame.width, frame.height, frame.bgra) else {
+        let (Ok(width), Ok(height)) = (i32::try_from(frame.width), i32::try_from(frame.height))
+        else {
+            slot.give_back(frame.bgra);
             return;
         };
-        let fresh = Arc::new(RenderImage::new(vec![image::Frame::new(pixels)]));
+        let whole = size(DevicePixels(width), DevicePixels(height));
+        let row = frame.width * 4;
+        let same = self.size == (frame.width, frame.height);
+        if let Some(Picture::Texture(texture)) = self.picture.as_ref().filter(|_| same) {
+            let at = Bounds::new(point(DevicePixels(0), DevicePixels(0)), whole);
+            // Refused while earlier uploads wait for the window to draw:
+            // this frame is skipped and the one on screen stays.
+            let kept = match window.update_dynamic_texture(*texture, at, &frame.bgra, row) {
+                Ok(()) => std::mem::replace(&mut self.pixels, frame.bgra),
+                Err(_) => frame.bgra,
+            };
+            slot.give_back(kept);
+            return;
+        }
+        let fresh = match window.create_dynamic_texture(whole, &frame.bgra, row) {
+            Ok(texture) => {
+                slot.give_back(std::mem::replace(&mut self.pixels, frame.bgra));
+                Picture::Texture(texture)
+            }
+            Err(_) => {
+                let Some(pixels) = image::RgbaImage::from_raw(frame.width, frame.height, frame.bgra)
+                else {
+                    return;
+                };
+                self.pixels = Vec::new();
+                Picture::Still(Arc::new(RenderImage::new(vec![image::Frame::new(pixels)])))
+            }
+        };
         if let Some(old) = self.picture.replace(fresh) {
-            let _ = window.drop_image(old);
+            old.give_back(window);
         }
         self.size = (frame.width, frame.height);
     }
@@ -133,8 +176,13 @@ impl Screen {
             point(bounds.origin.x + px(laid.x), bounds.origin.y + px(laid.y)),
             size(px(laid.width), px(laid.height)),
         );
-        window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            let _ = window.paint_image(at, gpui::Corners::default(), picture, 0, false);
+        window.with_content_mask(Some(ContentMask { bounds }), |window| match picture {
+            Picture::Texture(texture) => {
+                let _ = window.paint_dynamic_texture(at, texture);
+            }
+            Picture::Still(image) => {
+                let _ = window.paint_image(at, at, gpui::Corners::default(), image, 0, false);
+            }
         });
     }
 }
@@ -169,4 +217,38 @@ pub(crate) fn video(
         },
     )
     .size_full()
+}
+
+/// GPUI's test platform has no dynamic textures: tests get a backend that
+/// takes every upload, so that they go the way a window on Windows or macOS
+/// goes. Process-wide, as GPUI's backend is; installed once.
+#[cfg(test)]
+pub(crate) fn textures_for_tests() {
+    /// Takes every texture and upload, and keeps nothing.
+    struct Accepting;
+
+    impl gpui::DynamicTexturePlatform for Accepting {
+        fn create_texture(
+            &self,
+            _: gpui::DynamicTextureId,
+            _: gpui::Size<DevicePixels>,
+            _: &[u8],
+        ) -> gpui::Result<()> {
+            Ok(())
+        }
+
+        fn update_texture(
+            &self,
+            _: gpui::DynamicTextureId,
+            _: Bounds<DevicePixels>,
+            _: &[u8],
+        ) -> gpui::Result<()> {
+            Ok(())
+        }
+
+        fn remove_texture(&self, _: gpui::DynamicTextureId) {}
+    }
+
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| gpui::set_dynamic_texture_platform(Arc::new(Accepting)));
 }

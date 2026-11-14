@@ -5,7 +5,7 @@
 //! middle whenever the fit or the share shown changes. The picture view of
 //! the lightbox (`ui::zoom`) does the moving and the keeping in sight.
 
-use gpui::{Context, KeyDownEvent, Pixels, Point, ScrollDelta, ScrollWheelEvent};
+use gpui::{Context, KeyDownEvent, Pixels, Point, ScrollDelta, ScrollEvent};
 
 use super::super::Shell;
 use super::super::zoom::View;
@@ -80,7 +80,7 @@ impl Shell {
 
     /// The wheel over the large share: down and up move the picture up and
     /// down, as a scrolled page moves; with Shift, left and right.
-    pub(super) fn pan_wheel(&mut self, event: &ScrollWheelEvent, cx: &mut Context<Self>) {
+    pub(super) fn pan_wheel(&mut self, event: &ScrollEvent, cx: &mut Context<Self>) {
         if !self.pans() {
             return;
         }

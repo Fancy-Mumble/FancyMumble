@@ -63,7 +63,7 @@ impl RenderOnce for Faded {
             window.request_animation_frame();
         }
         let down = -self.scroll.offset().y;
-        let more_below = down < self.scroll.max_offset().height - px(1.0);
+        let more_below = down < self.scroll.max_offset().y - px(1.0);
         let more_above = down > px(1.0);
         let selector = self.selector.clone();
         div()
