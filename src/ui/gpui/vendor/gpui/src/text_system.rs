@@ -455,8 +455,10 @@ impl WindowTextSystem {
                 };
 
                 let font_id = self.resolve_font(&run.font);
+                let letter_spacing = font_size * run.letter_spacing;
                 if let Some(font_run) = font_runs.last_mut()
                     && font_id == font_run.font_id
+                    && letter_spacing == font_run.letter_spacing
                     && !decoration_changed
                 {
                     font_run.len += run_len_within_line;
@@ -464,6 +466,7 @@ impl WindowTextSystem {
                     font_runs.push(FontRun {
                         len: run_len_within_line,
                         font_id,
+                        letter_spacing,
                     });
                 }
 
@@ -558,8 +561,10 @@ impl WindowTextSystem {
                 true
             };
 
+            let letter_spacing = font_size * run.letter_spacing;
             if let Some(font_run) = font_runs.last_mut()
                 && Some(font_run.font_id) == last_font
+                && letter_spacing == font_run.letter_spacing
                 && !decoration_changed
             {
                 font_run.len += run.len;
@@ -569,6 +574,7 @@ impl WindowTextSystem {
                 font_runs.push(FontRun {
                     len: run.len,
                     font_id,
+                    letter_spacing,
                 });
             }
         }
@@ -729,7 +735,7 @@ impl Display for FontStyle {
 }
 
 /// A styled run of text, for use in [`crate::TextLayout`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TextRun {
     /// A number of utf8 bytes
     pub len: usize,
@@ -743,7 +749,13 @@ pub struct TextRun {
     pub underline: Option<UnderlineStyle>,
     /// The strikethrough style (if any)
     pub strikethrough: Option<StrikethroughStyle>,
+    /// Space added after every character, in ems of the font size, as
+    /// CSS's `letter-spacing` adds it.
+    pub letter_spacing: f32,
 }
+
+// A spacing is a length, never NaN.
+impl Eq for TextRun {}
 
 #[cfg(all(target_os = "macos", test))]
 impl TextRun {

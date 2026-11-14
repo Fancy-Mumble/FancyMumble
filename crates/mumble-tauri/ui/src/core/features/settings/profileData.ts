@@ -31,9 +31,22 @@ export async function loadProfileData(identityLabel?: string | null): Promise<Pr
   return data ? { ...PROFILE_DEFAULTS, ...data } : { ...PROFILE_DEFAULTS };
 }
 
+/**
+ * `data`, keeping the profile fields of another client (`profile.opaque`)
+ * that `stored` has and `data` does not: an editor opened before they were
+ * merged in has never seen them, and saving it must not drop them. Nothing
+ * here edits them, so there is no newer copy to lose.
+ */
+export function keepingOpaque(data: ProfileData, stored: ProfileData | null | undefined): ProfileData {
+  const opaque = stored?.profile?.opaque;
+  if (data.profile.opaque || !opaque) return data;
+  return { ...data, profile: { ...data.profile, opaque } };
+}
+
 export async function saveProfileData(data: ProfileData, identityLabel?: string | null): Promise<void> {
   const store = await load(PROFILE_STORE, { autoSave: true, defaults: {} });
-  await store.set(profileKey(identityLabel), data);
+  const key = profileKey(identityLabel);
+  await store.set(key, keepingOpaque(data, await store.get<ProfileData>(key)));
 }
 
 export async function loadServerProfileData(
@@ -52,7 +65,8 @@ export async function saveServerProfileData(
   identityLabel?: string | null,
 ): Promise<void> {
   const store = await load(PROFILE_STORE, { autoSave: true, defaults: {} });
-  await store.set(serverProfileKey(identityLabel, serverId), data);
+  const key = serverProfileKey(identityLabel, serverId);
+  await store.set(key, keepingOpaque(data, await store.get<ProfileData>(key)));
 }
 
 export async function deleteServerProfileData(

@@ -583,7 +583,9 @@ mod voice_pipeline {
                 let client = client.clone();
                 let app = app.clone();
                 let talking = Arc::clone(&self.local_talking);
-                Some(tokio::spawn(async move {
+                // Through the engine's own runtime: a settings change made
+                // mid-call from a view's own thread restarts this loop.
+                Some(crate::state::runtime::spawn(async move {
                     outbound_audio_loop(outbound, client, app, talking, own_session, voice_target)
                         .await;
                 }))
@@ -1397,6 +1399,38 @@ mod voice_pipeline {
                 (40..=60).contains(&packets),
                 "expected one loop's 50 packets/s, got {packets}"
             );
+        }
+
+        /// A view that is not itself on Tokio changes a setting mid-call
+        /// from its own thread, which restarts the outbound loop: that must
+        /// start on the engine's runtime, not panic for want of one.
+        #[test]
+        fn the_outbound_loop_starts_from_a_thread_outside_any_runtime() {
+            unsafe { std::env::set_var("FANCY_E2E_VIRTUAL_MIC", "sine:48000:440") };
+            assert!(tokio::runtime::Handle::try_current().is_err(), "no runtime here");
+            let state = AppState::new();
+            let (client, mut audio_rx) = ClientHandle::detached();
+            let settings = {
+                let arc = state.inner.snapshot();
+                let mut s = arc.lock().unwrap();
+                s.audio.settings.noise_suppression = false;
+                s.audio.settings.auto_gain = false;
+                s.conn.client_handle = Some(client.clone());
+                s.audio.voice_state = VoiceState::Active;
+                s.audio.settings.clone()
+            };
+            state
+                .start_outbound_pipeline(&settings, &Some(client))
+                .unwrap();
+            // And it runs: packets arrive.
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            let mut sent = false;
+            while std::time::Instant::now() < deadline && !sent {
+                sent = audio_rx.try_recv().is_ok();
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            state.stop_audio();
+            assert!(sent, "the loop sent nothing");
         }
 
         #[test]

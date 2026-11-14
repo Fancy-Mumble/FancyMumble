@@ -261,8 +261,7 @@ impl WindowsPlatform {
                 loop {
                     // Only wake the windows when one of them has asked for a frame; look for
                     // a lost device now and then while none has.
-                    let requested = std::env::var_os("GPUI_ALWAYS_REDRAW").is_some() // TMP-FRAMESTATS
-                        || frame_requests.take(DEVICE_LOST_CHECK_INTERVAL);
+                    let requested = frame_requests.take(DEVICE_LOST_CHECK_INTERVAL);
                     if requested {
                         vsync_provider.wait_for_vsync();
                     }

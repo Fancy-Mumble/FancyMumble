@@ -1,16 +1,17 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Box, Button, TextField } from "@mui/material";
+import { useCallback, useState, type ReactNode } from "react";
+import { Alert, Box, Button, TextField } from "@mui/material";
 import { useTranslation } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import type { BanEntry } from "@core/types";
+import { maxMask, withAddress } from "@core/features/admin/banMask";
+import { useBanList } from "@core/features/admin/useBanList";
 import { Field, SettingsCard } from "../settings/controls";
 import { Stack } from "../primitives";
 import { AdminPage, DetailPlaceholder, ListRow, SplitView } from "./controls";
 
+/** A fresh entry: no address yet, and a mask covering all of whatever is typed. */
 const EMPTY_BAN: BanEntry = {
   address: "",
-  mask: 32,
+  mask: 128,
   name: "",
   hash: "",
   reason: "",
@@ -28,42 +29,18 @@ const EMPTY_BAN: BanEntry = {
  */
 export function BansAdmin() {
   const { t } = useTranslation("settings");
-  const [bans, setBans] = useState<BanEntry[]>([]);
-  const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [editing, setEditing] = useState<BanEntry | null>(null);
   const [dirty, setDirty] = useState(false);
 
-  // The listener must be registered before the request goes out: `listen()` is
-  // an async IPC round trip and a local server can answer faster than an
-  // un-awaited registration commits. Tauri does not replay events to late
-  // subscribers, so losing that race leaves the page loading for ever.
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: (() => void) | null = null;
-    void (async () => {
-      const off = await listen<BanEntry[]>("ban-list", (event) => {
-        setBans(event.payload);
-        setLoading(false);
-        setSelected(null);
-        setEditing(null);
-        setDirty(false);
-      });
-      if (cancelled) return off();
-      unlisten = off;
-      setLoading(true);
-      invoke("request_ban_list").catch(() => setLoading(false));
-    })();
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
+  // Every list that arrives is the server's: whatever was being edited
+  // against the old one is gone, saved or refused.
+  const onList = useCallback(() => {
+    setSelected(null);
+    setEditing(null);
+    setDirty(false);
   }, []);
-
-  const refresh = useCallback(() => {
-    setLoading(true);
-    invoke("request_ban_list").catch(() => setLoading(false));
-  }, []);
+  const { bans, setBans, loading, refresh, save: send, refusal, clearRefusal } = useBanList(onList);
 
   const patch = (changes: Partial<BanEntry>) => {
     setEditing((prev) => (prev ? { ...prev, ...changes } : prev));
@@ -83,9 +60,7 @@ export function BansAdmin() {
         ? bans.map((ban, index) => (index === selected ? { ...editing } : ban))
         : bans;
     try {
-      await invoke("update_ban_list", { bans: finalBans });
-      setDirty(false);
-      refresh();
+      await send(finalBans);
     } catch (e) {
       console.error("Failed to update ban list:", e);
     }
@@ -134,6 +109,11 @@ export function BansAdmin() {
         </>
       }
     >
+      {refusal !== null && (
+        <Alert severity="error" onClose={clearRefusal} sx={{ mb: "12px" }}>
+          {refusal ? t("banList.refused", { reason: refusal }) : t("banList.refusedNoReason")}
+        </Alert>
+      )}
       <SplitView
         list={
           bans.length === 0 ? (
@@ -164,7 +144,12 @@ export function BansAdmin() {
                   {(props) => <TextField {...props} onChange={(e) => patch({ name: e.target.value })} />}
                 </BanField>
                 <BanField label={t("banList.fieldAddress")} value={editing.address} onBlur={commit}>
-                  {(props) => <TextField {...props} onChange={(e) => patch({ address: e.target.value })} />}
+                  {(props) => (
+                    <TextField
+                      {...props}
+                      onChange={(e) => patch(withAddress(editing, e.target.value))}
+                    />
+                  )}
                 </BanField>
                 <BanField label={t("banList.fieldMask")} value={editing.mask} onBlur={commit}>
                   {(props) => (
@@ -173,7 +158,7 @@ export function BansAdmin() {
                       type="number"
                       slotProps={{
                         ...props.slotProps,
-                        htmlInput: { ...props.slotProps.htmlInput, min: 0, max: 128 },
+                        htmlInput: { ...props.slotProps.htmlInput, min: 0, max: maxMask(editing.address) },
                       }}
                       onChange={(e) => patch({ mask: Number(e.target.value) })}
                     />

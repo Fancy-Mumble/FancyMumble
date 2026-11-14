@@ -2995,14 +2995,17 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "cssparser 0.37.0",
+ "data-encoding",
  "embed-resource",
  "emojis",
  "fancy-screenshare",
  "fancy-utils",
  "fast_image_resize",
  "fontdb 0.23.0",
+ "getrandom 0.3.4",
  "global-hotkey",
  "gpui",
+ "hmac",
  "html5ever 0.39.0",
  "i_overlay",
  "icu_locale_core",
@@ -3013,12 +3016,14 @@ dependencies = [
  "notify-rust",
  "openh264",
  "opus",
+ "qrcode",
  "resvg",
  "rodio",
  "rust-embed",
  "rustybuzz 0.20.1",
  "serde",
  "serde_json",
+ "sha1",
  "tokio",
  "tracing",
  "tray-icon",
@@ -5931,7 +5936,6 @@ dependencies = [
  "url",
  "uuid",
  "windows-core 0.61.2",
- "windows-registry 0.5.3",
  "windows-sys 0.61.2",
  "zstd",
 ]
@@ -7687,6 +7691,12 @@ checksum = "7f6d64c71eb498fe9eae14ce4ec935c555749aef511cca85b5568910d6e48001"
 dependencies = [
  "bytemuck",
 ]
+
+[[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
 
 [[package]]
 name = "quick-error"

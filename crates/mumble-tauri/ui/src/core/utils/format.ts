@@ -48,7 +48,9 @@ export function formatBytes(n: number | null | undefined): string {
     i++;
   }
   const digits = v >= 10 || Number.isInteger(v) ? 0 : 1;
-  return `${formatNumber(digits ? v : Math.round(v), digits)} ${units[i]}`;
+  // A size is under 1024 of its unit: its decimal mark is the reader's,
+  // and it is not split into thousands.
+  return `${formatNumber(digits ? v : Math.round(v), digits, false)} ${units[i]}`;
 }
 
 // -- Numbers and dates as the reader chose (Settings, Language & format) --
@@ -74,11 +76,12 @@ export function setNumberAndDateFormat(numberFormat?: NumberFormat, dateFormat?:
 }
 
 /** `value` with `fractionDigits` places, in the number format in force. */
-export function formatNumber(value: number, fractionDigits = 0): string {
+export function formatNumber(value: number, fractionDigits = 0, grouping = true): string {
   const locale = numberFormatInForce === "auto" ? undefined : NUMBER_LOCALES[numberFormatInForce];
   return new Intl.NumberFormat(locale, {
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
+    useGrouping: grouping,
   }).format(value);
 }
 

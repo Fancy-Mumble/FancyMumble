@@ -9,7 +9,7 @@ use std::sync::{Mutex, OnceLock};
 use rustybuzz::ttf_parser::Tag;
 use rustybuzz::{Face, Variation};
 
-use crate::assets::{INTER_BOLD, SAIRA_ITALIC};
+use crate::assets::{INTER_BOLD, INTER_POSTER_ITALIC, SAIRA_ITALIC};
 
 /// The face a lettering asks for.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -25,6 +25,9 @@ pub(crate) enum Typeface {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(super) enum Source {
     Poster,
+    /// Inter's drawn italic at 800: what the browser takes for a letter
+    /// the poster face lacks.
+    PosterItalic,
     Bold,
     System(fontdb::ID),
 }
@@ -33,7 +36,7 @@ impl Source {
     /// Whether the face draws its own italic, or is leant to make one.
     pub(super) fn is_italic(self) -> bool {
         match self {
-            Self::Poster => true,
+            Self::Poster | Self::PosterItalic => true,
             Self::Bold => false,
             Self::System(id) => system().is_some_and(|faces| {
                 faces
@@ -56,11 +59,12 @@ pub(super) enum Found {
 
 impl Typeface {
     /// The faces to look in, in order, before the system's: the web UI's
-    /// stack for each (`"Saira","Archivo","Inter",system-ui` and Inter),
-    /// less the faces it does not ship.
+    /// stack for each (`"Saira","Archivo","Inter",system-ui` set italic,
+    /// which takes Inter's own italic, and Inter), less the faces it does
+    /// not ship.
     fn stack(self) -> &'static [Source] {
         match self {
-            Self::Poster { .. } => &[Source::Poster, Source::Bold],
+            Self::Poster { .. } => &[Source::Poster, Source::PosterItalic],
             Self::Bold => &[Source::Bold],
         }
     }
@@ -116,6 +120,7 @@ pub(super) fn with_face<R>(
             face.set_variations(&typeface.variations());
             Some(read(&face))
         }
+        Source::PosterItalic => Face::from_slice(INTER_POSTER_ITALIC, 0).map(|face| read(&face)),
         Source::Bold => Face::from_slice(INTER_BOLD, 0).map(|face| read(&face)),
         Source::System(id) => system()?
             .with_face_data(id, |data, index| {

@@ -261,7 +261,7 @@ fn legacy_link(url: &str) -> String {
 }
 
 /// `text` made safe inside an attribute (`escapeAttr`).
-fn escaped(text: &str) -> String {
+pub(super) fn escaped(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('"', "&quot;")
         .replace('<', "&lt;")
@@ -270,7 +270,7 @@ fn escaped(text: &str) -> String {
 
 /// Whether the server would take `body` (`serverAccepts`): lengths in
 /// UTF-16 units, as the web client counts them.
-fn accepted(body: &str, limits: MessageLimits) -> bool {
+pub(super) fn accepted(body: &str, limits: MessageLimits) -> bool {
     let over = |length: usize, limit: u32| limit > 0 && length > limit as usize;
     let length = body.encode_utf16().count();
     if over(length, limits.max_image_message_length) {

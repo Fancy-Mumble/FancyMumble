@@ -6,9 +6,8 @@
 //!
 //! Left out, each because this client has nothing it could open or show:
 //! the game overlay's key, the quick switcher's and the developer
-//! overlay's. Not yet built here: keys that jump to one person, and the
-//! web UI's several whisper targets (this client has the one, chosen from
-//! a menu).
+//! overlay's. The whisper chosen from a person's menu keeps its key, and
+//! under it are the web UI's several named targets (`whispers.rs`).
 
 use gpui::{Context, Div, IntoElement, ParentElement, SharedString, Styled, div, prelude::*, px};
 
@@ -50,7 +49,8 @@ impl Shell {
 
     /// Stop waiting for a key to choose, and bind the keys again.
     pub(in crate::ui) fn stop_recording(&mut self, cx: &mut Context<Self>) {
-        if self.panels.settings.recording.take().is_some() {
+        let jump = self.panels.settings.recording_jump.take().is_some();
+        if self.panels.settings.recording.take().is_some() || jump {
             super::super::keys::rebind(&self.panels.settings.shortcuts, cx);
             cx.notify();
         }
@@ -78,6 +78,9 @@ impl Shell {
         keystroke: &gpui::Keystroke,
         cx: &mut Context<Self>,
     ) -> bool {
+        if self.hear_jump_key(keystroke, cx) || self.hear_whisper_key(keystroke, cx) {
+            return true;
+        }
         if let Some(bound) = self.panels.settings.recording {
             if keystroke.key == "escape" && !keystroke.modifiers.modified() {
                 self.stop_recording(cx);
@@ -107,6 +110,9 @@ impl Shell {
 
     /// A key came up: the voice priority key, let go of. Whether it was.
     pub(in crate::ui) fn release_chosen_key(&mut self, keystroke: &gpui::Keystroke) -> bool {
+        if self.release_whisper_key(keystroke) {
+            return true;
+        }
         let priority = self
             .panels
             .settings
@@ -225,7 +231,6 @@ pub(super) fn render(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> D
                     cx,
                 )),
         )
-        .children(crate::hotkeys::AVAILABLE.then(|| global_keys(shell, cx)))
         .children(GROUPS.map(|(group, keys)| {
             div().child(super::heading(lit, group())).child(
                 Card::new().children(
@@ -237,11 +242,18 @@ pub(super) fn render(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> D
         .child(rule(cx))
         .child(whisper(shell, theme, cx))
         .child(rule(cx))
+        .child(super::jumps::render(shell, theme, cx))
+        .child(rule(cx))
         .child(
             super::heading(lit, t!("Chat - built-in (not configurable)"))
                 .hint(t!("These shortcuts are always active inside the message composer.")),
         )
         .child(Card::new().children(BUILT_IN.map(|(does, key)| fixed_row(does(), key, theme))))
+        // This client's own: under every row the web UI has, so that none
+        // of those is moved by it.
+        .when(crate::hotkeys::AVAILABLE, |page| {
+            page.child(rule(cx)).child(global_keys(shell, cx))
+        })
 }
 
 /// The switch that binds the voice keys with the system, where the system
@@ -385,4 +397,5 @@ fn whisper(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoEl
                     }),
             ),
         )
+        .child(div().mt(px(10.0)).child(super::whispers::render(shell, theme, cx)))
 }

@@ -15,7 +15,7 @@ use mumble_tauri_lib::engine_api::{
 };
 
 use crate::engine::{
-    Acl, AclGroup, AclRule, Attachment, KeyRequest, OpenTo, Pin, Pinned, Poll, PollOption, Reach,
+    Acl, AclRule, Attachment, KeyRequest, OpenTo, Pin, Pinned, Poll, PollOption, Reach,
     Reader, Retry, ShareAs, WhisperTarget,
 };
 use crate::engine::{
@@ -37,6 +37,14 @@ pub(crate) fn start_logs(data_dir: &std::path::Path, wanted: Option<&str>) {
     let level = wanted.filter(|_| to_file);
     if let Err(reason) = api::logs::start(data_dir.join("logs"), level, to_file) {
         eprintln!("logging is not as asked ({reason})");
+    }
+}
+
+/// Keep the log as `choices` say, unless the environment asked for a log of
+/// its own (`FANCY_GPUI_LOG`), which wins as it does for the theme.
+pub(crate) fn steer_logs_unless_asked(choices: &crate::store::LogChoices) {
+    if std::env::var_os("FANCY_GPUI_LOG").is_none() {
+        steer_logs(choices);
     }
 }
 
@@ -98,11 +106,19 @@ pub(crate) fn typed(text: &str) -> Vec<(std::ops::Range<usize>, Setting)> {
         .collect()
 }
 
+mod account;
 mod devices;
+mod groups;
 mod livery;
 mod profile;
 #[cfg(test)]
+mod account_live;
+#[cfg(test)]
+mod onboarding_live;
+#[cfg(test)]
 mod share_live;
+#[cfg(test)]
+mod legacy_live;
 
 /// `(host, port)`: what a ping is kept under.
 type Address = (String, u16);
@@ -319,12 +335,7 @@ impl Shared {
             groups: acl
                 .groups
                 .iter()
-                .map(|group| AclGroup {
-                    name: group.name.clone().into(),
-                    inherited: group.inherited_members.clone(),
-                    added: group.add.clone(),
-                    removed: group.remove.clone(),
-                })
+                .map(groups::shown)
                 .collect(),
             rules: acl
                 .rules
@@ -375,7 +386,7 @@ impl Shared {
             .clone()
             .filter(|read| read.channel == changed.channel)
             .ok_or("These rules were not read from the server; open them again.")?;
-        let groups = merged_groups(read.groups.clone(), changed.groups);
+        let groups = changed.groups.into_iter().map(groups::sent).collect();
         self.engine
             .set_acl(api::AclInfo {
                 inherit: changed.inherit,
@@ -470,7 +481,11 @@ impl Shared {
             }
             Action::SetAcl(acl) => shared.set_acl(acl).await,
             Action::SetBans(bans) => engine.set_bans(bans.iter().map(ban_info).collect()).await,
-            Action::Unregister { id } => engine.change_registered(id, None).await,
+            Action::Unregister { id } => {
+                engine.change_registered(id, None).await?;
+                // The list as the server has it now, as after a rename.
+                engine.request_registered().await
+            }
             Action::SendLater {
                 channel,
                 body,
@@ -645,6 +660,17 @@ impl Shared {
             }
             api::EngineEvent::Notify { title, body } => crate::notify::show(&title, &body),
             api::EngineEvent::Livery => self.read_liveries(runtime),
+            api::EngineEvent::UploadProgress {
+                upload_id,
+                bytes_sent,
+                total_bytes,
+            } => self.tell(EngineEvent::Upload {
+                id: upload_id.into(),
+                now: crate::engine::Uploaded::Sent {
+                    bytes: bytes_sent,
+                    of: total_bytes,
+                },
+            }),
             other => self.forward_answer(other),
         }
     }
@@ -732,6 +758,19 @@ impl Shared {
                         .map(|device| (device.device_name.as_deref(), device)),
                 ),
             }),
+            api::EngineEvent::Account(account) => {
+                self.tell(EngineEvent::Account(crate::engine::AccountNews::Settings(account)));
+            }
+            api::EngineEvent::AccountAck(ack) => {
+                self.tell(EngineEvent::Account(crate::engine::AccountNews::Ack(ack)));
+            }
+            api::EngineEvent::OnboardingConfig(_) => {
+                self.tell(EngineEvent::Onboarding(crate::engine::OnboardingNews::Config));
+            }
+            api::EngineEvent::OnboardingResponse(response) => self.tell(EngineEvent::Onboarding(
+                crate::engine::OnboardingNews::Response(response),
+            )),
+            api::EngineEvent::PluginsChanged => self.tell(EngineEvent::PluginsChanged),
             api::EngineEvent::Typing { channel, session } => {
                 self.tell(EngineEvent::Typing { channel, session });
             }
@@ -1502,12 +1541,23 @@ impl Engine for RealEngine {
                 CertificateTask::Import(from) => engine
                     .import_certificate(&from)
                     .map(|label| format!("Imported the certificate \u{201c}{label}\u{201d}.")),
+                CertificateTask::Create(label) => engine
+                    .create_certificate(&label)
+                    .map(|()| format!("Made the identity \u{201c}{label}\u{201d}.")),
             };
             shared.tell(EngineEvent::CertificatesChanged);
             shared.tell(EngineEvent::Notice(Some(
                 said.unwrap_or_else(|problem| problem).into(),
             )));
         }));
+    }
+
+    fn recovery_phrase(&self, label: &str) -> Result<String, String> {
+        self.shared.engine.recovery_phrase(label)
+    }
+
+    fn restore_phrase(&self, label: &str, phrase: &str) -> Result<(), String> {
+        self.shared.engine.restore_recovery_phrase(label, phrase)
     }
 
     fn save_server(&self, server: SavedServer) {
@@ -1636,6 +1686,86 @@ impl Engine for RealEngine {
 
     fn set_dual_path(&self, sending: bool) {
         self.shared.engine.set_dual_path(sending);
+    }
+
+    fn account_offered(&self) -> bool {
+        self.shared.engine.account_offered()
+    }
+
+    fn account(&self) -> Option<crate::engine::AccountSettings> {
+        self.shared.engine.account()
+    }
+
+    fn update_account(&self, action: crate::engine::AccountAction, password: Option<String>) {
+        self.send_account(action, password);
+    }
+
+    fn offer_account(&self, password: Option<String>) {
+        self.offer_link(password);
+    }
+
+    fn withdraw_offer(&self, device: String) {
+        self.withdraw_link(device);
+    }
+
+    fn onboarding_offered(&self) -> bool {
+        self.shared.engine.onboarding_offered()
+    }
+
+    fn onboarding_config(&self) -> Option<crate::engine::OnboardingConfig> {
+        self.shared.engine.onboarding_config()
+    }
+
+    fn onboarding_response(&self) -> Option<crate::engine::OnboardingResponse> {
+        self.shared.engine.onboarding_response()
+    }
+
+    fn request_onboarding_response(&self) {
+        let engine = self.shared.engine.clone();
+        self.spawn(async move { engine.request_onboarding_response().await });
+    }
+
+    fn submit_onboarding(&self, response: crate::engine::OnboardingResponse) {
+        let engine = self.shared.engine.clone();
+        self.spawn(async move { engine.submit_onboarding_response(response).await });
+    }
+
+    fn register_whisper(
+        &self,
+        slot: u8,
+        reach: Option<mumble_tauri_lib::engine_api::whisper::WhisperReach>,
+    ) {
+        let engine = self.shared.engine.clone();
+        self.spawn(async move { engine.register_whisper_slot(slot, reach).await });
+    }
+
+    fn whisper_slot(
+        &self,
+        slot: u8,
+        reach: Option<mumble_tauri_lib::engine_api::whisper::WhisperReach>,
+    ) {
+        let engine = self.shared.engine.clone();
+        self.spawn(async move {
+            match reach {
+                Some(reach) => engine.start_whisper_slot(slot, reach).await,
+                None => engine.whisper_end().await,
+            }
+        });
+    }
+
+    fn find_user(&self, hash: Option<&str>, name: &str, session: Option<&str>) -> Option<(SharedString, u32)> {
+        self.shared
+            .engine
+            .find_user(hash, name, session)
+            .map(|(session, user)| (session.into(), user))
+    }
+
+    fn server_plugins(&self) -> Vec<crate::engine::ServerPlugin> {
+        self.shared.engine.server_plugins()
+    }
+
+    fn signal_bridge(&self) -> Option<crate::engine::SignalBridge> {
+        Some(mumble_tauri_lib::engine_api::plugins::signal_bridge())
     }
 
     fn set_reconnecting(&self, reconnecting: bool) {
@@ -1865,6 +1995,33 @@ impl Engine for RealEngine {
         });
     }
 
+    fn send_pictures(&self, conversation: Conversation, files: Vec<Vec<u8>>) {
+        let engine = self.shared.engine.clone();
+        let limit = engine.picture_limit();
+        self.say(conversation, async move {
+            // Fitting is work, and not for the engine's own threads. Too many
+            // for one message, they go a message each, as before.
+            let htmls = tokio::task::spawn_blocking(move || {
+                match crate::inline_album::message(&files, limit)? {
+                    Some(html) => Ok(vec![html]),
+                    None => files
+                        .iter()
+                        .map(|file| crate::picture::message_html(file, limit))
+                        .collect::<Result<Vec<_>, String>>(),
+                }
+            })
+            .await
+            .map_err(|error| error.to_string())??;
+            for html in htmls {
+                match conversation {
+                    Conversation::Channel(channel) => engine.send_html(channel, html).await?,
+                    Conversation::Direct(session) => engine.send_direct_html(session, html).await?,
+                }
+            }
+            Ok(())
+        });
+    }
+
     fn send_file(&self, conversation: Conversation, path: std::path::PathBuf) {
         let engine = self.shared.engine.clone();
         self.say(conversation, async move {
@@ -1887,29 +2044,87 @@ impl Engine for RealEngine {
         files: Vec<std::path::PathBuf>,
         how: ShareAs,
     ) {
+        let files = files
+            .into_iter()
+            .map(|path| (SharedString::default(), path))
+            .collect();
+        self.share_tracked(conversation, text, files, how);
+    }
+
+    fn share_tracked(
+        &self,
+        conversation: Conversation,
+        text: String,
+        files: Vec<(SharedString, std::path::PathBuf)>,
+        how: ShareAs,
+    ) {
         let engine = self.shared.engine.clone();
+        let shared = Arc::clone(&self.shared);
+        let ids: Vec<SharedString> = files
+            .iter()
+            .map(|(id, _)| id.clone())
+            .filter(|id| !id.is_empty())
+            .collect();
         self.say(conversation, async move {
+            // What came of each file the view follows.
+            let tell = |id: &SharedString, now: crate::engine::Uploaded| {
+                shared.tell(EngineEvent::Upload { id: id.clone(), now });
+            };
+            let all_failed = |why: &str| {
+                for id in &ids {
+                    tell(id, crate::engine::Uploaded::Failed(why.to_owned().into()));
+                }
+            };
             let Conversation::Channel(channel) = conversation else {
-                return Err(
-                    "Files are shared in channels; a direct message takes pictures.".into(),
-                );
+                let why = "Files are shared in channels; a direct message takes pictures.";
+                all_failed(why);
+                return Err(why.into());
             };
             if !engine.fancy() {
-                return Err("This server keeps no files; it takes pictures only.".into());
+                let why = "This server keeps no files; it takes pictures only.";
+                all_failed(why);
+                return Err(why.into());
             }
             // Measuring a picture and making its small copies is work,
             // and not for the engine's own threads.
             let full = how.full;
             let made = tokio::task::spawn_blocking(move || outgoing(&files, full))
                 .await
-                .map_err(|error| error.to_string())??;
-            let shared = engine
+                .map_err(|error| error.to_string())
+                .and_then(|made| made);
+            let made = match made {
+                Ok(made) => made,
+                Err(why) => {
+                    all_failed(&why);
+                    return Err(why);
+                }
+            };
+            let went = engine
                 .share_files(channel, &text, &made.files, &share_as(how))
                 .await;
             // Whatever came of it, what was made for it is no longer needed.
             let _ = std::fs::remove_dir_all(&made.folder);
-            shared
+            let unsent = match went {
+                Ok(unsent) => unsent,
+                Err(why) => {
+                    all_failed(&why);
+                    return Err(why);
+                }
+            };
+            for id in &ids {
+                let now = match unsent.iter().find(|file| file.upload_id == id.as_ref()) {
+                    Some(file) if file.why == api::CANCELLED => crate::engine::Uploaded::Cancelled,
+                    Some(file) => crate::engine::Uploaded::Failed(file.why.clone().into()),
+                    None => crate::engine::Uploaded::Done,
+                };
+                tell(id, now);
+            }
+            Ok(())
         });
+    }
+
+    fn cancel_upload(&self, id: SharedString) {
+        let _ = self.shared.engine.cancel_upload(&id);
     }
 
     fn fetch_shared(&self, key: SharedString) {
@@ -2410,7 +2625,7 @@ struct Made {
 /// copy to stand in for it, and unless `full` a smaller one to go up in
 /// its place where it is large. What is made is written beside nothing of
 /// the user's: into a folder of its own, removed once the files are up.
-fn outgoing(files: &[std::path::PathBuf], full: bool) -> Result<Made, String> {
+fn outgoing(files: &[(SharedString, std::path::PathBuf)], full: bool) -> Result<Made, String> {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let nth = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let folder = std::env::temp_dir().join(format!("fancy-gpui-up-{}-{nth}", std::process::id()));
@@ -2421,7 +2636,7 @@ fn outgoing(files: &[std::path::PathBuf], full: bool) -> Result<Made, String> {
         Ok(path)
     };
     let mut made = Vec::with_capacity(files.len());
-    for (at, path) in files.iter().enumerate() {
+    for (at, (upload_id, path)) in files.iter().enumerate() {
         // Only what may be a picture is read here: anything else goes up
         // a piece at a time, however large it is.
         let picture = crate::picture::at(path)
@@ -2452,6 +2667,8 @@ fn outgoing(files: &[std::path::PathBuf], full: bool) -> Result<Made, String> {
             },
             stand_in,
             pixels: picture.pixels,
+            legacy: picture.legacy,
+            upload_id: upload_id.to_string(),
         });
     }
     Ok(Made {
@@ -2498,6 +2715,7 @@ fn attachments(html: &str) -> Vec<Attachment> {
                 duration_ms: note.duration_ms,
                 waveform: note.waveform.into(),
             }),
+            expires_at: file.expires_at.filter(|at| *at > 0),
         })
         .collect()
 }
@@ -2514,6 +2732,24 @@ fn preview_of(preview: api::LinkPreview) -> Preview {
             .map(Arc::new),
         kind: preview.kind.map(Into::into),
         picture_url: preview.picture_url.map(Into::into),
+        icon: preview.icon.and_then(crate::picture::picture).map(Arc::new),
+        details: crate::engine::PreviewDetails {
+            picture_size: preview.picture_size,
+            author: preview.author.map(Into::into),
+            duration: preview.duration.map(Into::into),
+            published: preview.published.map(Into::into),
+            facts: preview
+                .facts
+                .into_iter()
+                .map(|(name, value)| (name.into(), value.into()))
+                .collect(),
+            price: preview.price.map(|price| crate::engine::PreviewPrice {
+                amount: price.amount.into(),
+                currency: price.currency.into(),
+                was: price.was.into(),
+                availability: price.availability.into(),
+            }),
+        },
     }
 }
 
@@ -2752,37 +2988,6 @@ fn disconnect_notice(reason: Option<String>, refused: bool) -> Option<String> {
 }
 
 /// Unix epoch milliseconds, now.
-/// The groups as the server sent them, with the members the view changed:
-/// everything else a group carries goes back as it came. A group the view
-/// made is new, and takes its parent's members as groups do.
-fn merged_groups(read: Vec<api::AclGroupInfo>, changed: Vec<AclGroup>) -> Vec<api::AclGroupInfo> {
-    let mut groups = read;
-    for group in changed {
-        if let Some(known) = groups
-            .iter_mut()
-            .find(|known| known.name == group.name.as_ref())
-        {
-            known.add = group.added;
-            known.remove = group.removed;
-        } else if !group.added.is_empty() {
-            groups.push(api::AclGroupInfo {
-                name: group.name.to_string(),
-                inherited: false,
-                inherit: true,
-                inheritable: true,
-                add: group.added,
-                remove: group.removed,
-                inherited_members: Vec::new(),
-                color: None,
-                icon: None,
-                style_preset: None,
-                metadata: HashMap::new(),
-            });
-        }
-    }
-    groups
-}
-
 /// The permission to write a channel's rules, as Mumble numbers it.
 const WRITE: u32 = 0x1;
 
@@ -5833,6 +6038,76 @@ mod tests {
             (member, member_dir),
             (guest, guest_dir),
         ] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    /// The next list of registered accounts the server sends `told` that
+    /// `holds` is true of.
+    fn next_registered(
+        told: &async_channel::Receiver<EngineEvent>,
+        what: &str,
+        holds: impl Fn(&[Registered]) -> bool,
+    ) {
+        wait_for(what, || {
+            std::iter::from_fn(|| told.try_recv().ok()).any(|event| match event {
+                EngineEvent::Registered(accounts) => holds(&accounts),
+                _ => false,
+            })
+        });
+    }
+
+    /// What the Users page does to an account reaches the server, and the
+    /// list read again says so: a role taken away through the root's
+    /// groups as its dialog writes them, a new name, and the registration
+    /// gone.
+    #[test]
+    #[ignore = "needs a live Fancy server and its SuperUser password"]
+    fn live_fancy_the_users_page_changes_an_account_and_its_list_follows() {
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        let (member, member_dir) = fancy_client("PageMember", None);
+        wait_for("both to connect", || admin.snapshot().users.len() >= 2);
+        let id = registered(&admin, "PageMember");
+        give_role(&admin, "Keepers", "#3f9fd8", id);
+
+        // The dialog's way: the root's rules as the view has them, the
+        // account taken out of one group, sent back whole.
+        let told = admin.events();
+        admin.request_acl(ROOT);
+        let mut rules = next_rules(&told, ROOT);
+        let keepers = rules
+            .groups
+            .iter_mut()
+            .find(|group| group.name.as_ref() == "Keepers")
+            .expect("the role, as a group");
+        keepers.added.retain(|added| *added != id);
+        admin.act(Action::SetAcl(rules));
+        wait_for("the role to lose its member", || {
+            admin
+                .roles()
+                .iter()
+                .any(|role| role.name.as_ref() == "Keepers" && !role.members.contains(&id))
+        });
+
+        let told = admin.events();
+        admin.act(Action::RenameRegistered {
+            id,
+            name: "PageRenamed".to_owned(),
+        });
+        next_registered(&told, "the list with the new name", |accounts| {
+            accounts
+                .iter()
+                .any(|account| account.id == id && account.name.as_ref() == "PageRenamed")
+        });
+        let told = admin.events();
+        admin.act(Action::Unregister { id });
+        next_registered(&told, "the list without the account", |accounts| {
+            !accounts.iter().any(|account| account.id == id)
+        });
+        for (engine, dir) in [(admin, admin_dir), (member, member_dir)] {
             engine.shutdown();
             let _ = std::fs::remove_dir_all(dir);
         }

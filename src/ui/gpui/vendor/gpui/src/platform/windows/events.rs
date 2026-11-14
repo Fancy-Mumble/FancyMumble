@@ -864,6 +864,31 @@ impl WindowsWindowInner {
             return None;
         }
 
+        // The top edge resizes the window before anything drawn there is
+        // asked about, as the system's own title bar does: a drag area
+        // reaching the top would otherwise take the edge for a caption.
+        if self.hide_title_bar && !self.state.borrow().is_maximized() {
+            let dpi = unsafe { GetDpiForWindow(handle) };
+            let frame_y = unsafe { GetSystemMetricsForDpi(SM_CYFRAME, dpi) };
+            let frame_x = unsafe { GetSystemMetricsForDpi(SM_CXFRAME, dpi) };
+            let mut cursor = POINT {
+                x: lparam.signed_loword().into(),
+                y: lparam.signed_hiword().into(),
+            };
+            unsafe { ScreenToClient(handle, &mut cursor).ok().log_err() };
+            let mut client = RECT::default();
+            unsafe { GetClientRect(handle, &mut client).log_err() };
+            if cursor.y >= 0 && cursor.y <= frame_y {
+                return Some(if cursor.x <= frame_x {
+                    HTTOPLEFT
+                } else if cursor.x >= client.right - frame_x {
+                    HTTOPRIGHT
+                } else {
+                    HTTOP
+                } as _);
+            }
+        }
+
         let mut lock = self.state.borrow_mut();
         if let Some(mut callback) = lock.callbacks.hit_test_window_control.take() {
             drop(lock);

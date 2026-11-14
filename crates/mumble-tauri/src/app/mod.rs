@@ -6,6 +6,7 @@
 //! focused on the event loop. Command registration is in [`crate::commands::registry`].
 
 pub(crate) mod builder;
+pub(crate) mod isolation;
 pub(crate) mod prefs;
 
 #[cfg(any(target_os = "windows", target_os = "android"))]
@@ -45,6 +46,25 @@ pub(crate) fn configure_runtime_env() {
     {
         set_env_if_unset("MIMALLOC_PURGE_DELAY", "100");
     }
+    // A test instance (`FANCY_E2E_DATA_DIR`) keeps its web view's data, and on
+    // Linux everything Tauri resolves, under its own directory - or does not
+    // start where that cannot be done. See `isolation`.
+    #[cfg(not(target_os = "android"))]
+    if let Some(isolation) = isolation::Isolation::from_env() {
+        if let Some(reason) = isolation::refusal(std::env::consts::OS) {
+            eprintln!("{reason}");
+            std::process::exit(2);
+        }
+        // Stores that write a file without making its directory first (the
+        // window-state plugin) need the root to exist.
+        if let Err(e) = std::fs::create_dir_all(isolation.store_dir()) {
+            eprintln!("FANCY_E2E_DATA_DIR: cannot create {}: {e}", isolation.store_dir().display());
+            std::process::exit(2);
+        }
+        for (key, dir) in isolation.process_env(std::env::consts::OS) {
+            set_env_if_unset(key, &dir.to_string_lossy());
+        }
+    }
 }
 
 #[allow(
@@ -56,6 +76,18 @@ fn set_env_if_unset(key: &str, value: &str) {
     if std::env::var_os(key).is_none() {
         unsafe { std::env::set_var(key, value) };
     }
+}
+
+/// The builder's page-load hook. On the desktop it reveals the main window
+/// once its page has loaded (see `updater::init`); Android has no such window.
+pub(crate) fn on_page_load(
+    webview: &tauri::Webview,
+    payload: &tauri::webview::PageLoadPayload<'_>,
+) {
+    #[cfg(not(target_os = "android"))]
+    crate::updater::on_page_load(webview, payload);
+    #[cfg(target_os = "android")]
+    let _ = (webview, payload);
 }
 
 /// Wire the managed `AppState` to the running app: record the app handle, open
@@ -119,10 +151,16 @@ pub(crate) fn setup_deep_link_handler(handle: tauri::AppHandle) {
         }
     }
 
+    // Registering writes the scheme into the user's own settings, pointing it
+    // at this executable: a test instance must leave it with the real client.
     #[cfg(any(target_os = "windows", target_os = "linux"))]
-    match handle.deep_link().register("fancy") {
-        Ok(()) => tracing::info!("deep-link: registered fancy:// scheme"),
-        Err(e) => tracing::warn!("deep-link: failed to register fancy:// scheme: {e}"),
+    if isolation::Isolation::from_env().is_some() {
+        tracing::info!("deep-link: isolated instance; fancy:// left registered as it was");
+    } else {
+        match handle.deep_link().register("fancy") {
+            Ok(()) => tracing::info!("deep-link: registered fancy:// scheme"),
+            Err(e) => tracing::warn!("deep-link: failed to register fancy:// scheme: {e}"),
+        }
     }
 
     let dispatch_handle = handle.clone();

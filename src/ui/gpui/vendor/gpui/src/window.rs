@@ -678,6 +678,9 @@ pub(crate) struct Frame {
     pub(crate) scene: Scene,
     pub(crate) hitboxes: Vec<Hitbox>,
     pub(crate) window_control_hitboxes: Vec<(WindowControlArea, Hitbox)>,
+    /// The hitboxes of elements that take a press: a drag area under one
+    /// of them is not the window's handle there.
+    pub(crate) pressable_hitboxes: FxHashSet<HitboxId>,
     pub(crate) deferred_draws: Vec<DeferredDraw>,
     pub(crate) input_handlers: Vec<Option<PlatformInputHandler>>,
     pub(crate) tooltip_requests: Vec<Option<TooltipRequest>>,
@@ -724,6 +727,7 @@ impl Frame {
             scene: Scene::default(),
             hitboxes: Vec::new(),
             window_control_hitboxes: Vec::new(),
+            pressable_hitboxes: FxHashSet::default(),
             deferred_draws: Vec::new(),
             input_handlers: Vec::new(),
             tooltip_requests: Vec::new(),
@@ -752,6 +756,7 @@ impl Frame {
         self.cursor_styles.clear();
         self.hitboxes.clear();
         self.window_control_hitboxes.clear();
+        self.pressable_hitboxes.clear();
         self.deferred_draws.clear();
         self.tab_stops.clear();
         self.focus = None;
@@ -1047,7 +1052,6 @@ impl Window {
                         && last_input_timestamp.get().elapsed() < Duration::from_secs(1));
 
                 if invalidator.is_dirty() || request_frame_options.force_render {
-                    let tmp_drawn = Instant::now(); // TMP-FRAMESTATS
                     measure("frame duration", || {
                         handle
                             .update(&mut cx, |_, window, cx| {
@@ -1057,8 +1061,7 @@ impl Window {
                                 arena_clear_needed.clear();
                             })
                             .log_err();
-                    });
-                    tmp_frame_stats::frame(tmp_drawn); // TMP-FRAMESTATS
+                    })
                 } else if needs_present {
                     handle
                         .update(&mut cx, |_, window, _| window.present())
@@ -1142,12 +1145,7 @@ impl Window {
             Box::new(move || {
                 handle
                     .update(&mut cx, |_, window, _cx| {
-                        for (area, hitbox) in &window.rendered_frame.window_control_hitboxes {
-                            if window.mouse_hit_test.ids.contains(&hitbox.id) {
-                                return Some(*area);
-                            }
-                        }
-                        None
+                        window.window_control_area_under(&window.mouse_hit_test.ids)
                     })
                     .log_err()
                     .unwrap_or(None)
@@ -2883,6 +2881,15 @@ impl Window {
         let opacity = self.element_opacity();
         for shadow in shadows {
             let shadow_bounds = (bounds + shadow.offset).dilate(shadow.spread_radius);
+            // A shadow with no blur is a hard copy of the box, as CSS draws
+            // `3px 3px 0 <colour>`. The shader samples across the blur, and
+            // with none it has no range to sample and draws nothing.
+            if shadow.blur_radius <= Pixels::ZERO {
+                self.paint_quad(
+                    crate::fill(shadow_bounds, shadow.color).corner_radii(corner_radii),
+                );
+                continue;
+            }
             self.next_frame.scene.insert_primitive(Shadow {
                 order: 0,
                 blur_radius: shadow.blur_radius.scale(scale_factor),
@@ -3437,6 +3444,43 @@ impl Window {
         self.next_frame.window_control_hitboxes.push((area, hitbox));
     }
 
+    /// The window control area the hitboxes `ids` (topmost first) stand
+    /// over. A control over a drag area takes its own presses: the area is
+    /// the window's handle only where nothing above it under the pointer
+    /// takes a press.
+    fn window_control_area_under(&self, ids: &[HitboxId]) -> Option<WindowControlArea> {
+        let frame = &self.rendered_frame;
+        for (area, hitbox) in &frame.window_control_hitboxes {
+            let Some(at) = ids.iter().position(|id| *id == hitbox.id) else {
+                continue;
+            };
+            let covered = ids[..at]
+                .iter()
+                .any(|id| frame.pressable_hitboxes.contains(id));
+            if *area == WindowControlArea::Drag && covered {
+                continue;
+            }
+            return Some(*area);
+        }
+        None
+    }
+
+    /// The window control area at `position` in the frame on screen, as the
+    /// platform is told when it asks what the pointer is over.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn window_control_area_at(&self, position: Point<Pixels>) -> Option<WindowControlArea> {
+        self.window_control_area_under(&self.rendered_frame.hit_test(position).ids)
+    }
+
+    /// Mark a hitbox as one whose element takes a press (a click, a drag,
+    /// the focus): a window drag area under it is not a handle there.
+    ///
+    /// This method should only be called as part of the paint phase of element drawing.
+    pub fn insert_pressable_hitbox(&mut self, hitbox: &Hitbox) {
+        self.invalidator.debug_assert_paint();
+        let _ = self.next_frame.pressable_hitboxes.insert(hitbox.id);
+    }
+
     /// Sets the key context for the current element. This context will be used to translate
     /// keybindings into actions.
     ///
@@ -3691,7 +3735,6 @@ impl Window {
     #[profiling::function]
     pub fn dispatch_event(&mut self, event: PlatformInput, cx: &mut App) -> DispatchEventResult {
         self.last_input_timestamp.set(Instant::now());
-        if matches!(event, PlatformInput::ScrollWheel(_)) { tmp_frame_stats::wheel(); } // TMP-FRAMESTATS
         // Handlers may set this to false by calling `stop_propagation`.
         cx.propagate_event = true;
         // Handlers may set this to true by calling `prevent_default`.
@@ -5211,36 +5254,5 @@ pub fn outline(
         border_widths: (1.).into(),
         border_color: border_color.into(),
         border_style,
-    }
-}
-
-// TMP-FRAMESTATS: one line per drawn frame into the file GPUI_FRAME_STATS names:
-// microseconds since the first, how long draw and present took, and the time
-// from the first wheel event since the last frame to this one's present.
-#[allow(missing_docs)]
-mod tmp_frame_stats {
-    use std::io::Write;
-    use std::sync::Mutex;
-    use std::time::Instant;
-    struct Stats { file: std::fs::File, began: Instant, wheel: Option<Instant> }
-    static STATS: Mutex<Option<Stats>> = Mutex::new(None);
-    fn with(f: impl FnOnce(&mut Stats)) {
-        let mut stats = STATS.lock().unwrap();
-        if stats.is_none() {
-            let Some(path) = std::env::var_os("GPUI_FRAME_STATS") else { return };
-            let Ok(file) = std::fs::File::create(path) else { return };
-            *stats = Some(Stats { file, began: Instant::now(), wheel: None });
-        }
-        if let Some(stats) = stats.as_mut() { f(stats) }
-    }
-    pub(super) fn wheel() {
-        with(|s| { if s.wheel.is_none() { s.wheel = Some(Instant::now()) } });
-    }
-    pub(super) fn frame(drawn: Instant) {
-        let now = Instant::now();
-        with(|s| {
-            let lat = s.wheel.take().map_or(-1, |w| (now - w).as_micros() as i64);
-            let _ = writeln!(s.file, "{}	{}	{}", (now - s.began).as_micros(), (now - drawn).as_micros(), lat);
-        });
     }
 }

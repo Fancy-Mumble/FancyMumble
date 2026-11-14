@@ -11,7 +11,7 @@ use gpui::{
 };
 
 use super::Shell;
-use super::kit::{PageView, Surface};
+use super::kit::{PageView, Scrolled, Surface};
 use super::tests::{click, shell};
 use crate::page::Page;
 use crate::theme::{ActiveTheme, Catalog, DEFAULT_THEME, Mode};
@@ -187,11 +187,22 @@ fn a_long_welcome_scrolls_inside_its_dialog(cx: &mut TestAppContext) {
     cx.run_until_parked();
     let window = cx.update(|window, _| window.viewport_size().height);
     let body = cx.debug_bounds("welcome-body").expect("the welcome's body");
-    let page = cx.debug_bounds("page-welcome").expect("the page");
     assert!(body.size.height < window * 0.8, "{body:?} in {window:?}");
-    assert!(
-        page.size.height > body.size.height,
+    let page = shell
+        .read_with(cx, |shell, _| shell.welcome_to_show())
+        .expect("the welcome");
+    let scrolled = cx.update(|_, cx| Scrolled::of(&page, cx));
+    assert_eq!(
+        scrolled.long(),
+        Some(true),
         "the page is taller than its room"
+    );
+    // From the next frame it is drawn a block at a time.
+    cx.update(|window, _| window.refresh());
+    cx.run_until_parked();
+    assert!(
+        scrolled.list().max_offset_for_scrollbar().height > px(0.0),
+        "and scrolls in it"
     );
     click(cx, "dismiss-welcome");
     shell.read_with(cx, |shell, _| assert!(shell.welcome_to_show().is_none()));
@@ -338,6 +349,7 @@ impl Render for Canvas {
                         background_color: Some(gpui::red()),
                         underline: None,
                         strikethrough: None,
+                        letter_spacing: 0.0,
                     };
                     let lines = window
                         .text_system()
@@ -573,4 +585,38 @@ fn a_link_made_into_a_button_gets_room(cx: &mut TestAppContext) {
         (width - (words + 2.0 * 12.0)).abs() < 1.5,
         "{width} {words}"
     );
+}
+
+/// What a frame of the screen costs, on average, with `html` as the
+/// welcome, open.
+fn frame_with_welcome(html: &str, cx: &mut TestAppContext) -> std::time::Duration {
+    let (shell, engine, cx) = shell(cx);
+    engine.set_welcome(html);
+    cx.run_until_parked();
+    shell.update(cx, Shell::show_welcome_again);
+    // The first frames find out how long the page is.
+    for _ in 0..3 {
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
+    }
+    const FRAMES: u32 = 20;
+    let started = std::time::Instant::now();
+    for _ in 0..FRAMES {
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
+    }
+    started.elapsed() / FRAMES
+}
+
+#[gpui::test]
+fn a_long_welcome_costs_a_frame_about_what_a_short_one_does(cx: &mut TestAppContext) {
+    let rules = "<h2>House rules</h2><p>A line of the house rules, said at some length, \
+                 with <b>bold</b> words and <a href=\"https://example.org\">a link</a>.</p>\
+                 <table><tr><td>Cell</td><td>Another cell</td></tr></table>";
+    let short = frame_with_welcome(&rules.repeat(2), cx);
+    let long = frame_with_welcome(&rules.repeat(120), cx);
+    println!("a frame with the welcome open: short {short:?}, long {long:?}");
+    // Drawn whole, sixty times the page cost many times the frame; drawn a
+    // block at a time, only what is in view is built.
+    assert!(long < short * 3, "short {short:?}, long {long:?}");
 }

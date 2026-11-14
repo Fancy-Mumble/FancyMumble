@@ -621,6 +621,16 @@ pub trait Styled: Sized {
         self
     }
 
+    /// Sets the space added after every character of the text in this
+    /// element and its children, in ems of the font size, as CSS's
+    /// `letter-spacing` does.
+    fn letter_spacing(mut self, ems: f32) -> Self {
+        self.text_style()
+            .get_or_insert_with(Default::default)
+            .letter_spacing = Some(ems);
+        self
+    }
+
     /// Sets the font of this element and its children.
     fn font(mut self, font: Font) -> Self {
         let Font {

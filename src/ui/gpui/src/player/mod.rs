@@ -18,8 +18,8 @@
 //! [`Screens`] says whether it plays in place and opens a [`Screen`] for a
 //! [`Page`], which reports back as [`Said`] on a channel. The client only
 //! ever tells a screen where it is ([`Placement`], device pixels, with the
-//! part seen; `Hidden` under anything drawn over it), when to start, to
-//! give the keyboard back and to rest; a screen that renders off screen
+//! part seen; `Hidden` under anything drawn over it), when to start and to
+//! play on, to give the keyboard back and to rest; a screen that renders off screen
 //! hands its picture over through [`Screen::frame`] and the client draws
 //! it. Nothing outside this module knows which kind it is: [`screens`]
 //! picks this system's.
@@ -45,6 +45,9 @@ pub(crate) trait Screen {
     /// than half of it is seen: `YouTube` lets a player start by itself
     /// only once it is visible.
     fn start(&mut self);
+    /// Play on from a pause: the reader pressed the still it was put away
+    /// behind.
+    fn play_on(&mut self);
     /// Put it at `placement`.
     fn place(&mut self, placement: Placement);
     /// Give the keyboard back to the client's window.
@@ -122,6 +125,8 @@ pub(crate) struct Stage {
     placed: Placement,
     seen: Option<Seen>,
     started: bool,
+    /// Asked to play on from a pause, once it is seen again.
+    playing_on: bool,
 }
 
 impl std::fmt::Debug for Stage {
@@ -140,6 +145,7 @@ impl Stage {
             placed: Placement::Hidden,
             seen: None,
             started: false,
+            playing_on: false,
         }
     }
 
@@ -160,8 +166,8 @@ impl Stage {
         self.put(placement);
     }
 
-    /// Put the window at `placement`, if it is not there, and start it the
-    /// first time it is mostly seen.
+    /// Put the window at `placement`, if it is not there; start it the
+    /// first time it is mostly seen, and play on when asked once it is.
     pub(crate) fn put(&mut self, placement: Placement) {
         if placement == self.placed {
             return;
@@ -172,15 +178,25 @@ impl Stage {
         if was_shown && placement == Placement::Hidden {
             self.screen.release_keys();
         }
-        if !self.started && placement.mostly_seen() {
-            self.started = true;
-            self.screen.start();
+        if placement.mostly_seen() {
+            if !self.started {
+                self.started = true;
+                self.screen.start();
+            }
+            if std::mem::take(&mut self.playing_on) {
+                self.screen.play_on();
+            }
         }
     }
 
     /// Give the keyboard back to the client's window.
     pub(crate) fn release_keys(&mut self) {
         self.screen.release_keys();
+    }
+
+    /// Play on from a pause, once it is seen again.
+    pub(crate) fn play_on(&mut self) {
+        self.playing_on = true;
     }
 
     /// Hold little while `resting`.

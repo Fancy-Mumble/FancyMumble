@@ -10,8 +10,8 @@ mod acl;
 mod acl_people;
 mod actions;
 mod admin;
+mod admin_pages;
 pub(crate) mod aside;
-mod ban_editor;
 mod band;
 mod band_tabs;
 mod card;
@@ -33,6 +33,8 @@ pub(crate) mod keys;
 mod kit;
 mod later;
 mod lightbox;
+mod lightbox_file;
+mod link_card;
 mod links;
 mod livery;
 mod loudness;
@@ -41,6 +43,7 @@ mod members;
 mod mention;
 mod menu;
 mod mover;
+mod onboarding;
 mod picker;
 mod pins;
 mod playing;
@@ -57,6 +60,9 @@ mod sounds;
 mod speaker;
 mod stage;
 mod staged;
+mod uploads;
+mod shared_picture;
+mod album;
 #[cfg(test)]
 mod tests_share;
 #[cfg(test)]
@@ -82,9 +88,13 @@ mod tests_tray;
 #[cfg(test)]
 mod tests_dock;
 #[cfg(test)]
+mod tests_admin_pages;
+#[cfg(test)]
 mod tests_settings;
 #[cfg(test)]
 mod tests_themes;
+#[cfg(test)]
+mod tests_uploads;
 #[cfg(test)]
 mod tests_settings_profile;
 #[cfg(test)]
@@ -94,6 +104,8 @@ mod tests_profile;
 mod profile_page;
 #[cfg(test)]
 mod tests_page;
+#[cfg(test)]
+mod tests_bodies;
 #[cfg(test)]
 mod tests_members;
 #[cfg(test)]
@@ -105,7 +117,15 @@ mod tests_voice_settings;
 #[cfg(test)]
 mod tests_gif;
 #[cfg(test)]
+mod tests_legacy;
+#[cfg(test)]
+mod tests_shared_picture;
+#[cfg(test)]
+mod tests_album;
+#[cfg(test)]
 mod tests_settings_real;
+#[cfg(test)]
+mod tests_settings_more;
 pub(crate) mod text_input;
 mod toasts;
 mod tray;
@@ -186,9 +206,38 @@ pub(super) struct Info {
     sheet: bool,
 }
 
-/// A size in bytes as a person says it: `812 B`, `1.5 KB`, `3.2 MB`.
+/// A size in bytes as the web UI's `formatBytes` says it, in binary units:
+/// `812 B`, `1.5 KiB`, `4.2 MiB`, `12 MiB`. One decimal under ten of a unit,
+/// none from ten up or for a whole number; the decimal mark as the reader
+/// chose.
+pub(crate) fn bytes_in_words(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["KiB", "MiB", "GiB", "TiB", "PiB"];
+    if bytes < 1024 {
+        return format!("{bytes} B");
+    }
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "said to one decimal; nobody shares a file of 2^53 bytes"
+    )]
+    let mut size = bytes as f64 / 1024.0;
+    let mut unit = 0;
+    while size >= 1024.0 && unit + 1 < UNITS.len() {
+        size /= 1024.0;
+        unit += 1;
+    }
+    let digits = usize::from(size < 10.0 && size.fract() != 0.0);
+    let size = if digits == 0 { size.round() } else { size };
+    let written = crate::formats::current()
+        .number
+        .write(size, digits, crate::words::spoken());
+    format!("{written} {}", UNITS[unit])
+}
+
+/// A size in bytes as the web client's `formatBytes` says it, in binary
+/// units: `812 B`, `1.5 KiB`, `3.8 MiB`, `12 MiB` (a decimal only below ten
+/// of a unit, and none where the size is whole).
 pub(crate) fn size_in_words(bytes: u64) -> String {
-    const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
+    const UNITS: [&str; 5] = ["KiB", "MiB", "GiB", "TiB", "PiB"];
     if bytes < 1024 {
         return format!("{bytes} B");
     }
@@ -202,10 +251,15 @@ pub(crate) fn size_in_words(bytes: u64) -> String {
         size /= 1024.0;
         unit += 1;
     }
-    // The decimal mark as the reader chose to have numbers written.
-    let size = crate::formats::current()
-        .number
-        .write(size, 1, crate::words::spoken());
+    // Under 1024 of its unit, so never split into thousands; the decimal
+    // mark as the reader chose to have numbers written.
+    let size = if size >= 10.0 || size.fract() == 0.0 {
+        format!("{}", size.round())
+    } else {
+        crate::formats::current()
+            .number
+            .write(size, 1, crate::words::spoken())
+    };
     format!("{size} {}", UNITS[unit])
 }
 
@@ -241,13 +295,16 @@ struct Whisper {
 struct Panels {
     /// The files waiting to go out with the next message.
     staged: Option<staged::Staged>,
+    /// The files going up, in the order they were sent.
+    uploads: Vec<uploads::Upload>,
     /// The shared pictures fetched to be shown, by what the server keeps
     /// them under; `None` while one is on its way, or is no picture.
     shared: std::collections::HashMap<gpui::SharedString, Option<Arc<gpui::Image>>>,
     /// A channel's permissions.
     acl: Option<acl::Panel>,
-    /// The administrator's lists.
-    admin: Option<admin::Admin>,
+    /// The page of the server's administration in the settings' pane,
+    /// while one is on show.
+    admin_page: Option<admin_pages::Open>,
     /// The certificates.
     certs: certificates::Panel,
     /// The messages waiting to be sent later.
@@ -305,6 +362,8 @@ impl Panels {
                 logs: stored.logs.clone(),
                 disconnect_warning: stored.show_disconnect_warning.0,
                 streamer: stored.streamer_mode,
+                jumps: stored.user_shortcuts.clone(),
+                whispers: settings::Whispers::kept(stored.whisper_targets.clone()),
                 server_switcher: stored.server_switcher,
                 user_mode: stored.user_mode,
                 voice: settings::VoicePage::remembering(
@@ -583,6 +642,8 @@ pub(crate) struct Shell {
     emoji_for: Option<emoji::For>,
     /// The picture being looked at large, while one is.
     lightbox: Option<Arc<gpui::Image>>,
+    /// The shared file open large, whose whole picture is fetched for it.
+    large: Option<lightbox_file::LargeFile>,
     /// The panels that open over the window.
     panels: Panels,
     chrome: Chrome,
@@ -840,6 +901,7 @@ impl Shell {
             titled_unread: 0,
             emoji_for: None,
             lightbox: None,
+            large: None,
             panels: Panels::keeping(&stored),
             chrome,
             whisper: Whisper {
@@ -947,15 +1009,21 @@ impl Shell {
                     self.stick_to_tail();
                 }
             }
+            EngineEvent::Upload { id, now } => self.uploaded(&id, now, cx),
             EngineEvent::Shared { key, picture } => {
-                if !self.took_profile_picture(&key, picture.as_ref()) {
+                if !self.took_large_picture(&key, picture.as_ref(), cx)
+                    && !self.took_profile_picture(&key, picture.as_ref())
+                {
                     let _ = self.panels.shared.insert(key, picture);
                 }
             }
             EngineEvent::AboutSaved(saved) => self.about_saved(saved, cx),
             EngineEvent::ProfilePage { key, page } => self.page_arrived(&key, page),
             EngineEvent::Previews(previews) => self.take_previews(previews),
-            EngineEvent::Acl(acl) => self.take_acl(acl),
+            EngineEvent::Acl(acl) => {
+                self.admin_acl(&acl, cx);
+                self.take_acl(acl);
+            }
             EngineEvent::Bans(bans) => self.take_bans(bans, cx),
             EngineEvent::Registered(users) => self.take_accounts(users, cx),
             EngineEvent::DirectoryRefused => self.directory_refused(),
@@ -965,7 +1033,10 @@ impl Shell {
                 self.panels.certs.held = self.engine.certificates();
                 self.panels.certs.doomed = None;
             }
-            EngineEvent::Notice(notice) => self.notice = notice,
+            EngineEvent::Notice(notice) => {
+                self.admin_notice(notice.as_ref());
+                self.notice = notice;
+            }
             EngineEvent::Wanted(wanted) => self.secrets.asked(wanted, cx),
             EngineEvent::Done(says) => self.toast(says, toasts::Kind::Done, cx),
             EngineEvent::Typing { channel, session } => self.saw_typing(channel, session, cx),
@@ -977,6 +1048,9 @@ impl Shell {
                 self.reload_messages(cx);
             }
             EngineEvent::Share(heard) => self.hear_share(heard, cx),
+            EngineEvent::Account(news) => self.account_news(news, cx),
+            EngineEvent::Onboarding(news) => self.onboarding_news(news, cx),
+            EngineEvent::PluginsChanged => self.read_plugins(),
             EngineEvent::UserTalking { session, talking } => self.user_talking(session, talking),
             EngineEvent::NewMessage { conversation } => self.new_message(conversation, cx),
         }
@@ -998,6 +1072,7 @@ impl Shell {
         self.watch_retry(cx);
         self.drop_gone_whisper_target(cx);
         self.follow_active_session(cx);
+        self.sync_whispers();
         self.drop_closed_conversation(cx);
         // A message deleted by somebody else is announced only as
         // a change of state.
@@ -1060,6 +1135,9 @@ impl Shell {
             return;
         }
         self.active_session = active;
+        self.forget_onboarding();
+        self.forget_whisper_slots();
+        self.read_plugins();
         self.previews.clear();
         // Arrived somewhere: the connect screen has done what it was for.
         self.adding_server = false;
@@ -1750,6 +1828,10 @@ impl Shell {
 
     /// Send what is in the composer to the open conversation, and empty it.
     pub(super) fn send_composed(&mut self, cx: &mut Context<Self>) {
+        // Nothing more goes while a file is still going up, as the web UI's.
+        if self.uploading() {
+            return;
+        }
         let body = self.composer.read(cx).text().to_owned();
         // What waits above the composer goes out with what is typed, or
         // by itself.
@@ -1817,7 +1899,7 @@ impl Shell {
             page if page.starts_with("settings:") => {
                 self.open_settings_at(&page["settings:".len()..], cx);
             }
-            "bans" => self.open_admin(crate::engine::Listing::Bans, cx),
+            "bans" => self.open_admin_page(admin_pages::AdminPage::Bans, cx),
             "channel" => {
                 if let Some(channel) = self.snapshot.current_channel {
                     self.open_channel_form(channel, window, cx);
@@ -1883,12 +1965,12 @@ impl Shell {
             cx.notify();
             return;
         }
-        // A form open in the administrator's panel goes before the panel.
-        if self.close_ban_editor(cx) {
+        // What is open over a page of the administration goes before the
+        // settings it is a page of.
+        if self.dismiss_admin_page(cx) {
             return;
         }
-        if self.panels.admin.take().is_some()
-            || self.panels.acl.take().is_some()
+        if self.panels.acl.take().is_some()
             || self.panels.later.take().is_some()
             || std::mem::take(&mut self.panels.friends.open)
             || std::mem::take(&mut self.panels.settings.open)
@@ -2351,6 +2433,8 @@ impl Shell {
             logs: self.panels.settings.logs.clone(),
             show_disconnect_warning: crate::store::Enabled(self.panels.settings.disconnect_warning),
             streamer_mode: self.panels.settings.streamer,
+            user_shortcuts: self.panels.settings.jumps.clone(),
+            whisper_targets: self.panels.settings.whispers.targets.clone(),
         };
         if let Err(error) = store.save_settings(&settings) {
             self.notice = Some(format!("The settings could not be remembered: {error}").into());
@@ -2360,6 +2444,7 @@ impl Shell {
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.let_go_of_large();
         self.livery_before_drawing(cx);
         let theme = ActiveTheme::get(cx);
         // Only when it changes: setting a title is a round trip to the
@@ -2385,6 +2470,9 @@ impl Render for Shell {
             .text_color(theme.c.text)
             .font_family(theme.skin.font.clone())
             .font_weight(theme.skin.weight)
+            // All its text spaced as the theme spaces it (CSS's
+            // `letter-spacing` on the web UI's body).
+            .letter_spacing(theme.skin.track)
             .text_size(px(14.0))
             .line_height(relative(1.4))
             .when_some(theme.c.window_line, |shell, line| {
@@ -2395,6 +2483,9 @@ impl Render for Shell {
                 shell.child(band::render(self, &theme, window, cx))
             })
             .child(self.render_body(&theme, window, cx))
+            // Without a band the window is held by a strip along its top,
+            // over the panels and under what floats above them.
+            .when(!theme.skin.band, |shell| shell.child(band::drag_strip()))
             .children(self.video_layer(cx))
             .children(stage::overlays(self, window, cx))
             .children(reconnect::banner(self, &theme, cx))
@@ -2469,9 +2560,8 @@ impl Shell {
             .when_some(self.panels.acl.as_ref(), |shell, panel| {
                 shell.child(acl::render(self, panel, theme, cx))
             })
-            .when_some(self.panels.admin.as_ref(), |shell, admin| {
-                shell.child(admin::render(admin, theme, cx))
-            })
+            .children(admin_pages::overlay(self, theme, cx))
+            .children(onboarding::render(self, theme, cx))
             .when_some(self.panels.channel_form.as_ref(), |shell, form| {
                 shell.child(channel_form::render(form, theme, cx))
             })

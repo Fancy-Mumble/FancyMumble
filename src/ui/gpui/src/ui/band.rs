@@ -50,25 +50,7 @@ pub(super) fn render(
         .border_b_1()
         .border_color(theme.c.line)
         .text_color(theme.c.bar_text)
-        // The band is the window's handle: drag to move, double-click to zoom.
-        // Windows does both itself for what it is told is a caption, and
-        // has no other way to be asked; nothing else reads the hint.
-        .window_control_area(WindowControlArea::Drag)
-        // A press here is the band's alone. The shell behind it takes the
-        // focus on any press it sees, and Windows will not drag a window by
-        // a press something claimed.
-        .occlude()
-        // Not on Windows as well: its own double-click already zooms or
-        // restores, and a second zoom would undo the restore.
-        .when(!cfg!(target_os = "windows"), |band| {
-            band.on_mouse_down(MouseButton::Left, |event, window, _| {
-                if event.click_count == 2 {
-                    window.zoom_window();
-                } else {
-                    window.start_window_move();
-                }
-            })
-        })
+        .map(handle)
         .child(
             div()
                 .flex()
@@ -89,6 +71,51 @@ pub(super) fn render(
         })
         .child(controls(Tone::Bar, window))
 }
+
+/// `area` made a handle of the window's: drag to move, double-click to
+/// zoom or restore, as the system's title bar does. A control inside it
+/// (a button, a tab, a field) keeps its own presses: the area holds the
+/// window only where nothing above it takes a press.
+fn handle<E: InteractiveElement + IntoElement + 'static>(area: E) -> E {
+    // Windows moves and zooms by itself for what it is told is a caption,
+    // and has no other way to be asked; nothing else reads the hint.
+    area.window_control_area(WindowControlArea::Drag)
+        // A press here is the handle's alone. The shell behind it takes the
+        // focus on any press it sees, and Windows will not drag a window by
+        // a press something claimed.
+        .occlude()
+        // Not on Windows as well: its own double-click already zooms or
+        // restores, and a second zoom would undo the restore.
+        .when(!cfg!(target_os = "windows"), |area| {
+            area.on_mouse_down(MouseButton::Left, |event, window, _| {
+                if event.click_count == 2 {
+                    window.zoom_window();
+                } else {
+                    window.start_window_move();
+                }
+            })
+        })
+}
+
+/// Where a theme that draws no band is held: a strip along the window's top
+/// edge over whatever panels reach it, as the web UI lays one (24 pixels,
+/// which clears every mark a drawn skin puts up there). The window's corner
+/// controls stand above it.
+pub(super) fn drag_strip() -> impl IntoElement + use<> {
+    handle(
+        div()
+            .id("drag-strip")
+            .debug_selector(|| "drag-strip".to_owned())
+            .absolute()
+            .top_0()
+            .left_0()
+            .right_0()
+            .h(px(STRIP)),
+    )
+}
+
+/// How tall the strip a theme with no band is held by is.
+const STRIP: f32 = 24.0;
 
 /// `name` in the middle of the band, whatever stands at its two ends.
 fn centred(name: &SharedString, theme: &Theme) -> impl IntoElement + use<> {
@@ -117,11 +144,16 @@ pub(super) fn corner_controls(theme: &Theme, window: &Window) -> impl IntoElemen
     // `WindowControls`).
     let tab: Option<crate::theme::Cut> = "polygon(16px 0, 100% 0, 100% 100%, 0 100%)".parse().ok();
     let finish = super::kit::Finish::new(theme.c.rail, None);
-    div()
+    // The tab and its name hold the window too; its buttons take their
+    // own presses.
+    handle(
+        div()
+            .id("corner-controls")
+            .debug_selector(|| "corner-controls".to_owned()),
+    )
         .absolute()
         .top_0()
         .right_0()
-        .occlude()
         .map(|corner| match tab {
             Some(tab) => super::kit::cut_into(corner, tab, finish, px(0.0)),
             None => corner.bg(theme.c.rail),

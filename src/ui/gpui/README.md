@@ -301,6 +301,12 @@ The recording test runs alone: `-- --ignored alone_what_is_heard`.
 name what the other live tests need; each is skipped by filter when its
 server is not there (`-- --ignored live_fancy`).
 
+What a release build holds on its first screens, against stated bounds
+(Windows; exits 1 when a figure is over; the figures and what each
+megabyte buys are in `MEMORY.md`):
+
+    tools\memory.ps1 -Exe target\release\fancy-gpui.exe
+
 ## Measuring the look
 
 Figures are comparable from 14 November 2026, 18:25 on: before then the
@@ -471,6 +477,7 @@ For development:
 | `FANCY_GPUI_DEMO_LIVERY` | `on`: with the demo engine, the server it is on says the made-up livery (the one `kumo.jp` has) is its own, so the rail, the band and the colours show one. |
 | `FANCY_GPUI_DEMO_VOICE` | With the demo engine: have Rin and Alex say this many voice messages in the lounge, taking turns. |
 | `FANCY_GPUI_DEMO_PICTURES`, `FANCY_GPUI_DEMO_FACES` | With the demo engine: have Rin show every picture in this folder (the files of a folder inside it together in one message), and give everybody a face and a banner made from the pictures in this one. |
+| `FANCY_GPUI_DEMO_SHARE` | With the demo engine: the local user has shared these files (separated by `;`) in the lounge in one message by a link that lasts a week: a picture card, or an album for several pictures. The web preview's `?share=1` and `?album=<n>` share the same files from `preview/shares/`. |
 | `FANCY_GPUI_DEMO_BIO`, `FANCY_GPUI_DEMO_BIO_FORMAT` | With the demo engine: give Rin a profile of the older format with every picture in this folder pasted into it whole, for measuring a heavy card; with `new`, the same profile converted. |
 | `FANCY_GPUI_WALL`, `FANCY_GPUI_STAGE` | Put this picture behind the conversation for this run; have the files in this folder wait above the composer. |
 | `FANCY_GPUI_HOLDS` | Every so many seconds, write into the log what the conversation holds: for looking into memory. |

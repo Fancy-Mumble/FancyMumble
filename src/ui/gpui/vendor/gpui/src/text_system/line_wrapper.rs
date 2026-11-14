@@ -141,14 +141,31 @@ impl LineWrapper {
             .chars()
             .map(|c| self.width_for_char(c))
             .fold(px(0.0), |a, x| a + x);
-        let mut char_indices = line.char_indices();
+        // The letter spacing each character's run adds after it; the suffix
+        // takes the last run's.
+        let spacing_of = |run: &TextRun| self.font_size * run.letter_spacing;
+        let last_spacing = runs.last().map_or(Pixels::ZERO, spacing_of);
+        let suffix_letters = truncation_suffix.chars().count() as f32;
+        suffix_width += last_spacing * suffix_letters;
+        let spacings: Vec<(usize, Pixels)> = runs
+            .iter()
+            .map(|run| (run.len, spacing_of(run)))
+            .collect();
+        let mut run_index = 0;
+        let mut run_end = spacings.first().map_or(usize::MAX, |run| run.0);
+        let char_indices = line.char_indices();
         let mut truncate_ix = 0;
         for (ix, c) in char_indices {
             if width + suffix_width < truncate_width {
                 truncate_ix = ix;
             }
 
-            let char_width = self.width_for_char(c);
+            while ix >= run_end && run_index + 1 < spacings.len() {
+                run_index += 1;
+                run_end += spacings[run_index].0;
+            }
+            let spacing = spacings.get(run_index).map_or(Pixels::ZERO, |run| run.1);
+            let char_width = self.width_for_char(c) + spacing;
             width += char_width;
 
             if width.floor() > truncate_width {
@@ -218,6 +235,7 @@ impl LineWrapper {
                 &[FontRun {
                     len: buffer.len(),
                     font_id: self.font_id,
+                    letter_spacing: Pixels::ZERO,
                 }],
             )
             .width
@@ -344,6 +362,7 @@ mod tests {
                 background_color: None,
                 underline: None,
                 strikethrough: None,
+                letter_spacing: 0.0,
             })
             .collect()
     }
@@ -694,6 +713,7 @@ mod tests {
                 underline: Default::default(),
                 strikethrough: None,
                 background_color: None,
+                letter_spacing: 0.0,
             };
             let bold = TextRun {
                 len: 0,
@@ -702,6 +722,7 @@ mod tests {
                 underline: Default::default(),
                 strikethrough: None,
                 background_color: None,
+                letter_spacing: 0.0,
             };
 
             let text = "aa bbb cccc ddddd eeee".into();

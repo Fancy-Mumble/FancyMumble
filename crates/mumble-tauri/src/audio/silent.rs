@@ -161,25 +161,19 @@ impl SilentPlayback {
 impl super::MixingPlayback for SilentPlayback {
     fn start(&mut self) -> Result<()> {
         self.running.store(true, Ordering::Relaxed);
-        let mut mix = super::rodio_desktop::MumbleMixerSource::new(
+        let mix = super::rodio_desktop::MumbleMixerSource::new(
             Arc::clone(&self.buffers),
             Arc::clone(&self.speaker_volumes),
             Arc::clone(&self.volume),
             Arc::clone(&self.running),
         );
         let running = Arc::clone(&self.running);
-        let per_slice = (RATE * SLICE.as_secs_f64()) as usize;
         let thread = std::thread::Builder::new()
             .name("silent-playback".to_owned())
             .spawn(move || {
-                let began = Instant::now();
-                let mut pulled: u64 = 0;
+                let mut drain = Drain::new(mix);
                 while running.load(Ordering::Relaxed) {
-                    let due = (began.elapsed().as_secs_f64() * RATE) as u64;
-                    while pulled < due {
-                        for _ in mix.by_ref().take(per_slice) {}
-                        pulled += per_slice as u64;
-                    }
+                    drain.catch_up();
                     std::thread::sleep(SLICE);
                 }
             })
@@ -194,6 +188,37 @@ impl super::MixingPlayback for SilentPlayback {
             let _ = thread.join();
         }
         Ok(())
+    }
+}
+
+/// The mix of a silent playback, pulled a slice at a time and let go, as
+/// fast as a device would have asked for it since it began.
+struct Drain {
+    mix: super::rodio_desktop::MumbleMixerSource,
+    began: Instant,
+    /// Samples pulled since it began.
+    pulled: u64,
+}
+
+impl Drain {
+    /// Samples a device asks for at a time.
+    const PER_SLICE: usize = (RATE * SLICE.as_secs_f64()) as usize;
+
+    fn new(mix: super::rodio_desktop::MumbleMixerSource) -> Self {
+        Self {
+            mix,
+            began: Instant::now(),
+            pulled: 0,
+        }
+    }
+
+    /// Pull and let go of every slice that is due by now.
+    fn catch_up(&mut self) {
+        let due = (self.began.elapsed().as_secs_f64() * RATE) as u64;
+        while self.pulled < due {
+            self.mix.by_ref().take(Self::PER_SLICE).for_each(drop);
+            self.pulled += Self::PER_SLICE as u64;
+        }
     }
 }
 

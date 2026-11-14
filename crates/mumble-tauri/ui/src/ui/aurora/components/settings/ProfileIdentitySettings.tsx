@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { useAppStore } from "@core/store";
-import { dataUrlToBytes, serializeProfile } from "@core/profileFormat";
+import { dataUrlToBytes } from "@core/profileFormat";
+import { writeOwnProfile } from "@core/features/settings/ownProfile";
 import {
   AVATAR_BORDERS,
   DECORATIONS,
@@ -120,7 +121,8 @@ export default function ProfileIdentitySettings() {
       if (serverOverride && activeServerId) await saveServerProfileData(activeServerId, data, identity);
       else await saveProfileData(data, identity);
       if (identity === connectedIdentity || (!identity && !connectedIdentity)) {
-        await invoke("set_user_comment", { comment: serializeProfile(data.profile, data.bio) });
+        // Merged over the comment the server holds, keeping another client's fields.
+        await writeOwnProfile(useAppStore.getState().ownSession, data.profile, data.bio);
         if (data.avatarDataUrl)
           await invoke("set_user_texture", { texture: dataUrlToBytes(data.avatarDataUrl) });
       }

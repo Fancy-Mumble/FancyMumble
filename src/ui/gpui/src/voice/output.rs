@@ -71,10 +71,46 @@ fn speak(
 /// Pull `out` at the pace a device would, and throw it away, until told to
 /// stop: playing as if heard, with nothing heard.
 fn drain(mut out: SourcesQueueOutput, closed: &std::sync::mpsc::Receiver<()>) {
+    let mut pace = Pace::new();
     while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) = closed.recv_timeout(SLICE) {
-        // Asked each time: what is queued says its own rate.
-        let rate = u64::from(out.sample_rate().get()) * u64::from(out.channels().get());
-        let slice = rate * u64::try_from(SLICE.as_millis()).unwrap_or(20) / 1000;
-        for _ in out.by_ref().take(usize::try_from(slice).unwrap_or(960)) {}
+        for _ in 0..pace.due() {
+            pull_slice(&mut out);
+        }
+    }
+}
+
+/// Pull one slice of `out` and let it go.
+fn pull_slice(out: &mut SourcesQueueOutput) {
+    // Asked each time: what is queued says its own rate.
+    let rate = u64::from(out.sample_rate().get()) * u64::from(out.channels().get());
+    let slice = rate * u64::try_from(SLICE.as_millis()).unwrap_or(20) / 1000;
+    for _ in out.by_ref().take(usize::try_from(slice).unwrap_or(960)) {}
+}
+
+/// The clock a silent way out keeps: slices are due as time passes, so a
+/// thread woken late catches up rather than falling behind, and nothing is
+/// pulled before its time.
+struct Pace {
+    began: std::time::Instant,
+    /// How much has been pulled since it began.
+    pulled: Duration,
+}
+
+impl Pace {
+    fn new() -> Self {
+        Self {
+            began: std::time::Instant::now(),
+            pulled: Duration::ZERO,
+        }
+    }
+
+    /// How many slices are due by now, counted as pulled.
+    fn due(&mut self) -> u32 {
+        let mut due = 0;
+        while self.pulled + SLICE <= self.began.elapsed() {
+            self.pulled += SLICE;
+            due += 1;
+        }
+        due
     }
 }

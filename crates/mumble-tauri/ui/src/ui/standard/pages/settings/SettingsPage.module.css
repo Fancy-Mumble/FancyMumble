@@ -61,8 +61,8 @@
 @keyframes settingSearchFlash {
   0%,
   60% {
-    background: color-mix(in srgb, var(--accent, #2aabee) 30%, transparent);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent, #2aabee) 30%, transparent);
+    background: color-mix(in srgb, var(--color-accent, #2aabee) 30%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent, #2aabee) 30%, transparent);
   }
   100% {
     background: transparent;
@@ -73,7 +73,7 @@
 @media (prefers-reduced-motion: reduce) {
   .searchHighlight {
     animation: none;
-    outline: 2px solid var(--accent, #2aabee);
+    outline: 2px solid var(--color-accent, #2aabee);
     outline-offset: 2px;
   }
 }

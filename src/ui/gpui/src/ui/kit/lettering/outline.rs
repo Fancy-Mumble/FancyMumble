@@ -184,8 +184,9 @@ mod tests {
     /// The stretches of `drawn` that run through the inside of the letter
     /// `parts` fill: filled on both sides, where an edge has the letter on
     /// one side only. Looked at a thousandth of an em (a seventh of a pixel
-    /// at 150px) to each side of each stretch's middle: further out, a
-    /// look across a letter's narrow notch lands in the letter again.
+    /// at 150px) to each side of each stretch's middle, and nearer still:
+    /// a look across a narrow notch (the italic M's, where its diagonal
+    /// meets its stem) lands in the letter again at a thousandth.
     fn inside(drawn: &Contours, parts: &Contours, em: f32) -> usize {
         let reach = em / 1000.0;
         let mut inside = 0;
@@ -198,10 +199,15 @@ mod tests {
                     continue;
                 }
                 let middle = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
-                let (nx, ny) = (-dy / long * reach, dx / long * reach);
-                let left = winding(parts, [middle[0] + nx, middle[1] + ny]) != 0;
-                let right = winding(parts, [middle[0] - nx, middle[1] - ny]) != 0;
-                if left && right {
+                // Inside on both sides however near it is looked at: a
+                // line through the letter is, an edge along a notch narrower
+                // than the first look is not.
+                let through = [reach, reach / 4.0, reach / 20.0].iter().all(|&near| {
+                    let (nx, ny) = (-dy / long * near, dx / long * near);
+                    winding(parts, [middle[0] + nx, middle[1] + ny]) != 0
+                        && winding(parts, [middle[0] - nx, middle[1] - ny]) != 0
+                });
+                if through {
                     inside += 1;
                 }
             }
@@ -238,6 +244,7 @@ mod tests {
         };
         for (source, typeface, em) in [
             (Source::Poster, poster, 1000.0),
+            (Source::PosterItalic, poster, 2048.0),
             (Source::Bold, Typeface::Bold, 2048.0),
         ] {
             let letters = letters_of(source, typeface, LETTERS);

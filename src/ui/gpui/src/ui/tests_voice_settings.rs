@@ -185,7 +185,7 @@ fn a_sample_is_recorded_played_back_and_stops_with_the_page(cx: &mut TestAppCont
     let sample = shell.read_with(cx, |shell, _| shell.panels.settings.voice.sample);
     assert_eq!(sample, Sample::Idle);
     click(cx, "hear-yourself");
-    shell.update(cx, |shell, cx| shell.close_settings(cx));
+    shell.update(cx, Shell::close_settings);
     assert!(!has_check(&shell, cx), "let go of with the page");
 }
 

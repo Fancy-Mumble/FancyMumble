@@ -27,6 +27,8 @@ struct Video {
     title: SharedString,
     /// On the card, over the whole window, or not playing.
     playing: Option<bool>,
+    /// Paused, and its player put away behind the still.
+    tucked: bool,
 }
 
 impl Shell {
@@ -64,6 +66,7 @@ impl Shell {
                 .or_else(|| self.panels.embeds.title(&about_at))
                 .unwrap_or_else(|| "YouTube video".into()),
             playing: self.video_at(index),
+            tucked: self.video_tucked(index),
         };
         let let_in = self.panels.embeds.lets_in_video(id, trusted);
         let asks =
@@ -140,10 +143,11 @@ impl Shell {
     }
 
     /// The still, with the play mark over it; or, while the video plays
-    /// on this card, the place its player lies over.
+    /// on this card, the place its player lies over. Put away while
+    /// paused, the still is back, and a press plays on.
     fn video_still(&self, video: &Video, cx: &mut Context<Self>) -> AnyElement {
         let (index, id) = (video.index, video.id.clone());
-        let on_card = video.playing == Some(false);
+        let on_card = video.playing == Some(false) && !video.tucked;
         div()
             .id(("embed-play", index))
             .debug_selector(move || format!("embed-play-{index}"))
@@ -165,6 +169,12 @@ impl Shell {
                     .on_click(cx.listener(move |shell, _, window, cx| {
                         shell.play_video(index, id.clone(), window, cx);
                     }))
+                    .child(PlayMark)
+            })
+            .when(video.tucked, |stage| {
+                stage
+                    .cursor_pointer()
+                    .on_click(cx.listener(|shell, _, _, cx| shell.play_on(cx)))
                     .child(PlayMark)
             })
             .when(on_card, |stage| stage.children(self.video_stage()))

@@ -24,6 +24,7 @@ pub(crate) struct PageTitle {
     title: SharedString,
     hint: Option<SharedString>,
     action: Option<AnyElement>,
+    below: f32,
 }
 
 impl PageTitle {
@@ -32,7 +33,15 @@ impl PageTitle {
             title: title.into(),
             hint: None,
             action: None,
+            below: 18.0,
         }
+    }
+
+    /// `room` below it, where it is not a settings page's 18 pixels: an
+    /// administration page's head stands 20 above its list.
+    pub(crate) fn below(mut self, room: f32) -> Self {
+        self.below = room;
+        self
     }
 
     /// One line of what the page is for.
@@ -52,7 +61,8 @@ impl RenderOnce for PageTitle {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = ActiveTheme::get(cx);
         div()
-            .mb(px(18.0))
+            .flex_none()
+            .mb(px(self.below))
             .flex()
             .items_start()
             .gap(px(16.0))

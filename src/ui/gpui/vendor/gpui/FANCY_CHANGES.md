@@ -190,3 +190,64 @@ meanwhile.
 | `src/app.rs` | `flush_effects` ends by asking each window for a frame if it wants one; every change to a window happens in an update, which ends there. |
 | `src/platform/windows/vsync.rs` | `FrameRequests`: whether a window asked, and the wait for it. |
 | `src/platform/windows/platform.rs`, `src/platform/windows/window.rs` | The vsync thread waits on `FrameRequests`; `WindowsWindow::request_frame` makes one. |
+
+## Letter spacing in text
+
+GPUI spaced no letters, so a theme whose web UI sets `letter-spacing` on all
+its text (Nimbus: `.01em` on the body) had every sentence a little narrow,
+3 to 7 px over a line, and wrapped later than the browser. `TextStyle` now
+carries `letter_spacing` in ems, inherited like the other text properties.
+After the platform shapes a line, each glyph moves along by the spacing of
+every character before it and the line widens by all of it, the last
+character's too, as CSS adds it; wrapping, painting and hit-testing read the
+moved positions. Done in the shared layout code, so every platform has it.
+
+| File | Change |
+| --- | --- |
+| `src/style.rs` | `TextStyle::letter_spacing` (ems, default 0), passed on by `to_run`. |
+| `src/styled.rs` | `Styled::letter_spacing(ems)`. |
+| `src/text_system.rs` | `TextRun::letter_spacing`; `Eq` by hand (a spacing is never NaN). Font runs carry it in pixels, and runs with different spacing are not merged. |
+| `src/text_system/line_layout.rs` | `FontRun::letter_spacing` (part of the layout cache's key); `space_letters` after the platform's layout; tests. |
+| `src/text_system/line_wrapper.rs` | `truncate_line` counts each character's spacing, and the ellipsis's. |
+| `src/platform/mac/text_system.rs` | Its tests' font runs name the new field. |
+
+## Drag areas that leave controls their presses, and the top edge first
+
+A `WindowControlArea::Drag` held the window wherever its hitbox lay under the
+pointer, controls inside it included; a control kept its press only by
+stopping the mouse-down's propagation. A drag area laid over a header full
+of controls (a theme with no title band is held by a strip along its top)
+would have turned their clicks into drags. Now an element that takes a press
+(mouse down, up or click listeners, a drag, or the focus) marks its hitbox,
+and a drag area holds the window only where nothing above it under the
+pointer is marked: text, hover-only boxes and tooltips still hold it, as the
+words on a system title bar do. On Windows the top resize edge is now
+answered before the drawn areas are asked, as the system's title bar
+resizes from its top pixels; a drag area reaching the top had taken the
+edge for a caption.
+
+| File | Change |
+| --- | --- |
+| `src/window.rs` | `Frame::pressable_hitboxes`; `Window::insert_pressable_hitbox`; `Window::window_control_area_under` (the rule) and, for tests, `Window::window_control_area_at`. |
+| `src/elements/div.rs` | A div that takes a press marks its hitbox. |
+| `src/platform/windows/events.rs` | `handle_hit_test_msg` answers the top edge (and its corners) first while the window is not maximised. |
+## Path batches appended, not discarded, and their colour written once a path
+
+Paths are drawn in a batch for each run of draw order, several a frame when
+a theme lays lettering and rings over a dot lattice. Each batch mapped the
+path buffer with `WRITE_DISCARD`: the driver hands out a fresh copy of the
+whole buffer for every discard while the GPU still reads the old one, and
+keeps the copies. With Nimbus's lattice (25,000 vertices of 104 bytes each)
+the process held 65 MB of them in shared GPU memory, counted in its commit.
+Now each batch is written after the last (`WRITE_NO_OVERWRITE`), the buffer
+is discarded only when full, and each batch is read through a view that
+starts at its first element (`SV_VertexID` counts from zero whatever vertex
+a draw starts at). A vertex carries its position and the index of its path;
+the path's colour and bounds, which were copied into every vertex, are
+written once a path into a second buffer. A driver that refuses
+`NO_OVERWRITE` on a buffer shaders read gets the discard as before.
+
+| File | Change |
+| --- | --- |
+| `src/platform/windows/directx_renderer.rs` | `AppendBuffer` (append, discard when full, range views); `PathRasterizationVertex` and the per-path `PathRasterizationSprite`; `PipelineState::draw_paths`; `create_buffer_range_view`, `map_buffer`. |
+| `src/platform/windows/shaders.hlsl` | `path_rasterization_vertices` (t1) and `path_rasterization_sprites` (t2); a vertex names its path. |

@@ -470,10 +470,12 @@ fn preview(shell: &Shell, form: &Form, theme: &Theme, cx: &mut Context<Shell>) -
         card::preview(
             shell,
             &form.card,
-            user,
-            &filler,
-            named,
-            t!("Banner · Frame · Nameplate · Sticker · Badges · Colours — all yours"),
+            card::Sample {
+                user,
+                filler: &filler,
+                named,
+                footnote: t!("Banner · Frame · Nameplate · Sticker · Badges · Colours — all yours"),
+            },
             theme,
             cx,
         )

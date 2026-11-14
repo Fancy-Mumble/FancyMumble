@@ -8,8 +8,8 @@
 //! Left out, because this client has nothing they could change: maps (it
 //! draws none and asks no service where anybody is), rich presence (no
 //! Discord bridge is built into it), the notepad (it keeps none) and
-//! external embeds (the web UI's switch lets watch-together load YouTube's
-//! player; this client has no watch-together).
+//! external embeds (the web UI's switch lets its watching together load
+//! the player of a video site; this client has no watching together).
 
 use gpui::{Context, Div, IntoElement, ParentElement, SharedString, Styled, div, prelude::*, px};
 
@@ -40,7 +40,8 @@ impl Shell {
         facts
             .iter()
             .map(|(name, value)| {
-                let masked = self.panels.settings.streamer && name.as_ref() == "Address";
+                let masked =
+                    self.panels.settings.streamer && name.as_ref() == super::super::facts::ADDRESS;
                 let value = if masked {
                     SharedString::from("*".repeat(value.chars().count().min(12)))
                 } else {

@@ -23,7 +23,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use gpui::{Context, RenderImage, SharedString, Task, Window};
+use gpui::{AppContext as _, Context, RenderImage, SharedString, Task, Window};
 
 pub(super) use badge::LiveBadge;
 pub(super) use view::{overlays, render};
@@ -102,6 +102,9 @@ impl std::fmt::Debug for Watched {
     }
 }
 
+/// Told of new frames; holds nothing.
+pub(crate) struct Frames;
+
 /// Everything of screen sharing the window keeps.
 pub(crate) struct Stage {
     media: Arc<dyn Media>,
@@ -120,6 +123,9 @@ pub(crate) struct Stage {
     pub(super) large_camera: Option<Session>,
     /// The feed in a window of its own.
     pub(super) popped: Option<popout::Popped>,
+    /// Told when new frames came: what a window of a feed's own is drawn
+    /// again by.
+    pub(super) frames: gpui::Entity<Frames>,
     /// Where a watched share's sound is heard, and how loud each is.
     hearing: Arc<dyn crate::share::audio::Hearing>,
     pub(super) loudness: Arc<Loudness>,
@@ -154,10 +160,7 @@ impl Stage {
         // whole window is drawn for a frame, so its rate is the cost.
         let frames = cx.spawn_in(window, async move |shell, cx| {
             while woken.recv().await.is_ok() {
-                let drawn = shell.update_in(cx, |shell, window, cx| {
-                    shell.give_back_pictures(window);
-                    cx.notify();
-                });
+                let drawn = shell.update_in(cx, Shell::frames_came);
                 if drawn.is_err() {
                     break;
                 }
@@ -173,6 +176,7 @@ impl Stage {
             }
         });
         let hearing = media.hearing();
+        let frame_ticks = cx.new(|_| Frames);
         Self {
             media,
             shares: Shares::default(),
@@ -185,6 +189,7 @@ impl Stage {
             pan: pan::Pan::default(),
             large_camera: None,
             popped: None,
+            frames: frame_ticks,
             hearing,
             loudness: Arc::default(),
             menu: None,
@@ -206,6 +211,12 @@ impl Stage {
     /// Where a watched share's sound is heard.
     pub(super) fn hearing(&self) -> &Arc<dyn crate::share::audio::Hearing> {
         &self.hearing
+    }
+
+    /// Whether this window draws a watched feed: one that is not in a
+    /// window of its own.
+    fn feeds_drawn_here(&self) -> bool {
+        self.feeds.values().map(|watched| watched.tracks.len()).sum::<usize>() > usize::from(self.popped.is_some())
     }
 
     /// Whether the local user is sharing from here.
@@ -425,6 +436,16 @@ impl Shell {
         }
         if let Some(feed) = watched.feed {
             off_the_window(cx, move || feed.stop());
+        }
+    }
+
+    /// New frames came: draw what shows them. A feed in a window of its
+    /// own is drawn there, and this window again only for what it shows.
+    fn frames_came(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.give_back_pictures(window);
+        self.stage.frames.update(cx, |_, cx| cx.notify());
+        if self.stage.feeds_drawn_here() {
+            cx.notify();
         }
     }
 

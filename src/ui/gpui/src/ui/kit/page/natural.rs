@@ -196,6 +196,7 @@ impl Painter<'_> {
             background_color: None,
             underline: None,
             strikethrough: None,
+            letter_spacing: 0.0,
         };
         let line =
             self.text

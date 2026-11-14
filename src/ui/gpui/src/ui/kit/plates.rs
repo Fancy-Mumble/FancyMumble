@@ -55,7 +55,7 @@ pub(crate) fn name_plate(name: &str, theme: &Theme) -> Option<AnyElement> {
                             .text_size(px(15.0))
                             .line_height(px(18.0))
                             .text_color(theme.c.on_accent)
-                            .child(voiced(name, Role::Plate, 15.0, theme)),
+                            .child(voiced(name, Role::Plate, theme)),
                     ),
             )
             .into_any_element(),
@@ -139,7 +139,7 @@ pub(crate) fn section_heading(
                     .text_size(px(10.5))
                     .line_height(px(14.7))
                     .text_color(theme.c.dim)
-                    .child(voiced(label, Role::Heading, 10.5, theme))
+                    .child(voiced(label, Role::Heading, theme))
                     .child(
                         div()
                             .flex_1()
@@ -201,7 +201,7 @@ pub(crate) fn subtitle(about: String, theme: &Theme) -> AnyElement {
                 .rounded_full()
                 .bg(theme.c.ok),
         )
-        .child(voiced(&about, Role::Subtitle, 10.0, theme))
+        .child(voiced(&about, Role::Subtitle, theme))
         .into_any_element()
 }
 
@@ -228,7 +228,7 @@ pub(crate) fn day_plate(day: &str, theme: &Theme) -> Option<AnyElement> {
         Some(cut) => super::shape::cut_into(words, cut, finish, px(0.0)),
         None => words.bg(theme.c.bar),
     }
-    .child(voiced(day, Role::Day, 10.5, theme));
+    .child(voiced(day, Role::Day, theme));
     Some(
         div()
             .debug_selector(|| "mark-day-plate".to_owned())

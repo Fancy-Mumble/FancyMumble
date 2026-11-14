@@ -31,8 +31,10 @@ pub(crate) const WIDTHS: std::ops::RangeInclusive<u32> = 2..=16;
 pub(crate) const WIDTH: u32 = 4;
 /// How often a stroke being drawn is sent on.
 pub(crate) const SEND_EVERY: Duration = Duration::from_millis(300);
-/// Packets with no id (a server that does not carry it, as Starling's
-/// canon does not) this close together are one stroke.
+/// Packets with no id this close together are one stroke: the path for a
+/// server that does not carry the id, as Starling up to 0.2.20 does not.
+/// A later Starling carries a stroke whole, and a clear as a message of
+/// its own.
 const JOINED: Duration = Duration::from_millis(450);
 
 /// One packet of a stroke, going out or come in (`FancyDrawStroke`).
@@ -131,8 +133,8 @@ impl Strokes {
             None => drawn.push((
                 key,
                 Drawn {
-                    // A colour that lost its alpha on the way (Starling's
-                    // canon carries it as `#rrggbb`) is opaque.
+                    // A colour that lost its alpha on the way (Starling up
+                    // to 0.2.20 carries it as `#rrggbb`) is opaque.
                     colour: if stroke.colour >> 24 == 0 {
                         stroke.colour | 0xFF00_0000
                     } else {
@@ -379,7 +381,7 @@ mod tests {
 
     #[test]
     fn packets_that_lost_their_id_and_alpha_on_the_way_are_still_drawn() {
-        // Starling's canon carries neither a stroke's id nor its colour's
+        // Starling up to 0.2.20 carries neither a stroke's id nor its colour's
         // alpha: packets close together are one stroke, a pause starts the
         // next, and the colour is opaque.
         let mut strokes = Strokes::default();

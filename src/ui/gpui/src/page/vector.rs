@@ -16,7 +16,7 @@ const FINENESS: f32 = 2.0;
 /// The SVG in `bytes` drawn as a PNG, `wanted` wide if the document said
 /// how wide, else at its own size; and that own size, which is the size
 /// it is shown at where the document says none (the PNG has more pixels).
-pub(super) fn raster(bytes: &[u8], wanted: Option<f32>) -> Option<(Vec<u8>, (u32, u32))> {
+pub(crate) fn raster(bytes: &[u8], wanted: Option<f32>) -> Option<(Vec<u8>, (u32, u32))> {
     let options = usvg::Options {
         image_href_resolver: usvg::ImageHrefResolver {
             resolve_data: Box::new(|_, _, _| None),

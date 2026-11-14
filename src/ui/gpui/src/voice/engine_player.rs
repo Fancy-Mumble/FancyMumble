@@ -255,21 +255,32 @@ mod tests {
 
     #[test]
     fn a_voice_message_plays_silently_at_its_pace_and_lets_go_at_its_end() {
+        // What is heard may run ahead of the clock by what is decoded at
+        // once (a frame) and pulled at once (a slice), and no more. A busy
+        // machine may make it slower, never faster.
+        const AHEAD_MS: u128 = 100;
+        let began = std::time::Instant::now();
         let mut held = holding(1, 1.0, 0);
         held.start(true);
         assert_eq!((held.state, held.length_ms), (State::Playing, 1000));
-        std::thread::sleep(Duration::from_millis(300));
-        held.look();
-        assert!(
-            held.at_ms > 100 && held.at_ms < 900,
-            "moving: {}",
-            held.at_ms
-        );
-        let took = until_ended(&mut held, Duration::from_secs(3));
-        assert!(
-            took >= Duration::from_millis(500),
-            "heard at its pace: {took:?}"
-        );
+        while held.state != State::Ended {
+            assert!(
+                began.elapsed() < Duration::from_secs(30),
+                "it ends: still {:?} at {} ms",
+                held.state,
+                held.at_ms
+            );
+            held.look();
+            let elapsed = began.elapsed().as_millis();
+            assert!(
+                u128::from(held.at_ms) <= elapsed + AHEAD_MS,
+                "no faster than it is heard: {} ms in {elapsed} ms",
+                held.at_ms
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let took = began.elapsed().as_millis();
+        assert!(took + AHEAD_MS >= 1000, "heard at its pace: {took} ms");
         assert!(held.out.is_none(), "nothing decoded is kept");
         assert!(held.file.is_some(), "the file is, to play again");
         assert_eq!(held.at_ms, 0, "and again from the start");

@@ -25,6 +25,17 @@ pub(crate) fn display_font(theme: &Theme) -> SharedString {
     }
 }
 
+/// The display face for type set `size` pixels high. A browser follows the
+/// size along Inter's optical-size axis, which stops at 32; the bundled
+/// cuts are 24 and 32, and the nearer one is taken.
+pub(crate) fn display_font_at(theme: &Theme, size: f32) -> SharedString {
+    if theme.skin.font.as_ref() == "Inter" && size >= 28.0 {
+        "Inter Display Large".into()
+    } else {
+        display_font(theme)
+    }
+}
+
 /// `color` as it looks painted over `ground`, with no transparency left.
 ///
 /// For a surface that floats over other content. Themes with glass give

@@ -32,8 +32,11 @@ mod page;
 mod paint;
 mod panics;
 mod paths;
+mod inline_album;
 mod picture;
 mod pictures;
+#[cfg(test)]
+mod tests_picture_memory;
 mod player;
 mod profile;
 mod profile_fields;
@@ -227,6 +230,7 @@ fn start_engine() -> (Arc<dyn engine::Engine>, Option<store::Store>) {
         if let Some(folder) = env("FANCY_GPUI_DEMO_PICTURES") {
             demo.show_pictures(std::path::Path::new(&folder));
         }
+        demo.share_from_environment();
         if let Some(folder) = env("FANCY_GPUI_DEMO_FACES") {
             demo.give_faces(std::path::Path::new(&folder));
         }

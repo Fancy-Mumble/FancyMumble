@@ -75,6 +75,8 @@ pub(crate) enum Note {
     Warn,
     /// What costs the user's safety while it is so.
     Danger,
+    /// What was asked for was done.
+    Ok,
 }
 
 /// What a setting does, said where the setting is: a wash of the tone's
@@ -114,6 +116,7 @@ impl RenderOnce for Banner {
             Note::Info => theme.c.accent,
             Note::Warn => theme.c.warn,
             Note::Danger => theme.c.bad,
+            Note::Ok => theme.c.ok,
         };
         let wash = Hsla {
             a: if theme.mode == Mode::Dark { 0.1 } else { 0.07 },

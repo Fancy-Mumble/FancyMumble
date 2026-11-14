@@ -77,7 +77,9 @@ pub(crate) fn share(state: &SharedState, read: Read) {
             return;
         }
     }
-    drop(tokio::spawn(async move {
+    // Through the engine's own runtime, not the caller's: a view that is not
+    // itself running on Tokio marks a conversation read from its own thread.
+    drop(super::runtime::spawn(async move {
         tokio::time::sleep(SETTLE).await;
         if let Ok(mut pending) = PENDING.lock()
             && let Some(keys) = pending.as_mut()
@@ -127,6 +129,40 @@ mod tests {
         assert_eq!(Read::from_key("prefs/v1"), None);
         assert_eq!(Read::from_key("read/ch/not-a-number"), None);
         assert_eq!(Read::from_key("read/xx/4"), None);
+    }
+
+    /// The crash a picture send set off in the native client: its window's
+    /// thread, which runs no Tokio runtime, marked a registered user's
+    /// conversation read, and the write was spawned with `tokio::spawn`.
+    #[test]
+    fn a_marker_shared_from_a_thread_outside_any_runtime_is_written() {
+        let read = Read::Channel(0xdead);
+        std::thread::spawn(move || {
+            assert!(tokio::runtime::Handle::try_current().is_err(), "no runtime here");
+            let mut state = SharedState::default();
+            let mut own = crate::state::types::UserEntry::new(7);
+            own.user_id = Some(3);
+            let _ = state.users.insert(7, own);
+            state.conn.own_session = Some(7);
+            state.conn.client_handle = Some(mumble_protocol::client::ClientHandle::detached().0);
+            share(&state, read);
+        })
+        .join()
+        .expect("sharing a marker from a plain thread must not panic");
+        // The write ran: once it settled, the key is no longer waiting.
+        let waiting = || {
+            PENDING
+                .lock()
+                .unwrap()
+                .as_ref()
+                .is_some_and(|keys| keys.contains(&read.key()))
+        };
+        assert!(waiting(), "scheduled");
+        let deadline = std::time::Instant::now() + SETTLE * 4;
+        while waiting() && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert!(!waiting(), "the write never ran");
     }
 
     #[test]

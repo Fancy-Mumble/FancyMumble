@@ -151,8 +151,21 @@ fn jpeg(picture: &image::RgbImage, quality: u8) -> Result<Vec<u8>, String> {
 }
 
 fn opened(file: &[u8]) -> Result<image::DynamicImage, String> {
-    image::load_from_memory(file)
-        .map_err(|error| format!("That file is not a picture this can read: {error}"))
+    use image::ImageDecoder as _;
+    let unreadable = |error: image::ImageError| format!("That file is not a picture this can read: {error}");
+    let mut decoder = image::ImageReader::new(std::io::Cursor::new(file))
+        .with_guessed_format()
+        .map_err(|error| unreadable(error.into()))?
+        .into_decoder()
+        .map_err(unreadable)?;
+    // The way up a camera says it was held, applied here, once: what is
+    // made from it is written without that note, upright.
+    let orientation = decoder.orientation().ok();
+    let mut picture = image::DynamicImage::from_decoder(decoder).map_err(unreadable)?;
+    if let Some(orientation) = orientation {
+        picture.apply_orientation(orientation);
+    }
+    Ok(picture)
 }
 
 /// A face made from an image file's bytes: scaled to fit [`FACE_SIDE`]
@@ -191,22 +204,29 @@ pub(crate) struct Outgoing {
     pub stand_in: Option<Vec<u8>>,
     /// How large what goes up is, in pixels.
     pub pixels: Option<(u32, u32)>,
+    /// What a stock Mumble client is to be shown of it: made from the same
+    /// decoded picture, no larger than a message's picture may be.
+    pub legacy: Option<mumble_tauri_lib::engine_api::legacy_picture::LegacyPicture>,
 }
 
 /// What goes up for the picture in `file`: with `smaller`, a copy no
 /// larger than [`SHARED_SIDE`] in its place; and a small one to stand in
 /// for it. Nothing for a file that is no picture. An animation is never
-/// made smaller: it would stop moving.
+/// made smaller: it would stop moving. The picture is decoded once, turned
+/// the way up its camera said, and let go of once all of it is made.
 pub(crate) fn outgoing(file: &[u8], smaller: bool) -> Outgoing {
     let (Some(kind), Some(natural)) = (mime(file), dimensions(file)) else {
         return Outgoing::default();
     };
-    let Ok(picture) = image::load_from_memory(file) else {
+    let Ok(picture) = opened(file) else {
         return Outgoing {
             pixels: Some(natural),
             ..Outgoing::default()
         };
     };
+    let legacy = Some(
+        mumble_tauri_lib::engine_api::legacy_picture::LegacyPicture::new(&picture, file),
+    );
     let fitted = |side: u32| picture.thumbnail(side, side).into_rgb8();
     let longer = natural.0.max(natural.1);
     // What lets the page behind it through would lose that as a JPEG.
@@ -221,6 +241,7 @@ pub(crate) fn outgoing(file: &[u8], smaller: bool) -> Outgoing {
         pixels: Some(smaller.as_ref().map_or(natural, |(size, _)| *size)),
         smaller: smaller.map(|(_, bytes)| bytes),
         stand_in,
+        legacy,
     }
 }
 
@@ -328,14 +349,12 @@ mod tests {
         assert!(address.starts_with("data:image/jpeg;base64,/9j/"));
         assert_eq!(data_uri(b"words"), None);
         // Shared as a file: nothing is made of what is small already.
-        assert_eq!(
-            outgoing(&png, true),
-            Outgoing {
-                smaller: None,
-                stand_in: outgoing(&png, false).stand_in,
-                pixels: Some((1200, 600)),
-            }
-        );
+        let made = outgoing(&png, true);
+        assert_eq!(made.smaller, None);
+        assert_eq!(made.stand_in, outgoing(&png, false).stand_in);
+        assert_eq!(made.pixels, Some((1200, 600)));
+        // And from the same picture, what a stock client is shown.
+        assert_eq!(made.legacy.map(|legacy| legacy.size()), Some((1200, 600)));
         assert!(
             outgoing(&png, true).stand_in.is_some(),
             "but a small copy is"

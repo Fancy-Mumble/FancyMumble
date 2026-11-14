@@ -72,6 +72,29 @@ const INDEX: &[Entry] = &[
         "What the card shows",
         ["visibility", "hide fields"]
     ),
+    entry!(Account, "Current password", ["password", "prove", "confirm"]),
+    entry!(
+        Account,
+        "Password sign-in",
+        ["password", "authentication", "login", "certificate"]
+    ),
+    entry!(
+        Account,
+        "Rename account",
+        ["rename", "username", "account name"]
+    ),
+    entry!(Account, "Contact email", ["email", "mail", "recovery"]),
+    entry!(
+        Account,
+        "Two-factor authentication (2FA)",
+        ["2fa", "totp", "two-factor", "authenticator", "mfa"]
+    ),
+    entry!(Account, "Devices", ["device", "sign out", "link"]),
+    entry!(
+        Account,
+        "Delete registration",
+        ["unregister", "delete account", "remove account"]
+    ),
     entry!(Voice, "Input device", ["microphone", "mic"]),
     entry!(Voice, "Output device", ["speaker", "headphones"]),
     entry!(Voice, "Microphone volume", ["input volume"]),
@@ -215,13 +238,30 @@ const INDEX: &[Entry] = &[
     ),
     entry!(
         Shortcuts,
+        "Jump to user (cross-server)",
+        ["user shortcut", "jump"]
+    ),
+    entry!(
+        Shortcuts,
         "Chat - built-in (not configurable)",
         ["composer", "bold", "italic", "emoji", "mention"]
     ),
     entry!(
         Identities,
+        "Recovery phrase",
+        ["recovery", "seed", "words", "restore"]
+    ),
+    entry!(
+        Identities,
         "Identities",
         ["certificate", "key", "identity", "import", "export"]
+    ),
+    entry!(ChannelsRoles, "Visible channels", ["onboarding", "channels"]),
+    entry!(ChannelsRoles, "Your roles", ["onboarding", "groups", "roles"]),
+    entry!(
+        Plugins,
+        "Plugins",
+        ["plugin", "trust", "permissions", "marketplace", "signal"]
     ),
     entry!(Advanced, "Expert Mode", ["expert"]),
     entry!(Advanced, "Developer Mode", ["developer", "debug"]),
@@ -255,15 +295,16 @@ pub(super) struct Hit {
     pub titles: Vec<SharedString>,
 }
 
-/// The pages matching `query`, in the column's order.
-pub(super) fn search(query: &str) -> Vec<Hit> {
+/// The pages matching `query`, in the column's order, among those `shown`
+/// lets the column list.
+pub(super) fn search(query: &str, shown: impl Fn(Page) -> bool) -> Vec<Hit> {
     let lowered = query.trim().to_lowercase();
     let words: Vec<&str> = lowered.split_whitespace().collect();
     if words.is_empty() {
         return Vec::new();
     }
     let mut hits: Vec<Hit> = Vec::new();
-    for entry in INDEX {
+    for entry in INDEX.iter().filter(|entry| shown(entry.page)) {
         let title = (entry.title)();
         let haystack =
             format!("{title} {} {}", entry.english, entry.keywords.join(" ")).to_lowercase();
@@ -322,7 +363,7 @@ impl Shell {
     pub(super) fn on_settings_search(&mut self, event: &InputEvent, cx: &mut Context<Self>) {
         match event {
             InputEvent::Submitted(query) => {
-                if let Some(first) = search(query).into_iter().next() {
+                if let Some(first) = search(query, |page| page.shown(self)).into_iter().next() {
                     self.choose_found(first, cx);
                 }
             }
@@ -385,7 +426,7 @@ pub(super) fn results(
     if query.trim().is_empty() {
         return None;
     }
-    let hits = search(&query);
+    let hits = search(&query, |page| page.shown(shell));
     let list = div().mt(px(8.0)).flex().flex_col().gap(px(1.0));
     if hits.is_empty() {
         return Some(
@@ -438,7 +479,7 @@ mod tests {
     #[test]
     fn every_word_must_be_found_and_a_keyword_finds_what_it_is_not_written_on() {
         let pages = |query: &str| {
-            search(query)
+            search(query, |_| true)
                 .into_iter()
                 .map(|hit| hit.page)
                 .collect::<Vec<_>>()

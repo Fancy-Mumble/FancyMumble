@@ -44,7 +44,7 @@
 }
 
 .activeRow {
-  background: var(--accent-soft, rgba(88, 101, 242, 0.18));
+  background: var(--color-accent-soft, rgba(88, 101, 242, 0.18));
 }
 
 .main {

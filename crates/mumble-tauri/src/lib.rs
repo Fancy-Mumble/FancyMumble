@@ -194,6 +194,7 @@ pub fn run() {
             }
             Ok(())
         })
+        .on_page_load(app::on_page_load)
         .on_window_event(|window, event| {
             #[cfg(not(target_os = "android"))]
             app::window_state::on_window_event(window, event);

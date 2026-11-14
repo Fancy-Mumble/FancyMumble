@@ -23,6 +23,7 @@ const VIDEO: &str = "aqz-KE-bpKQ";
 enum Done {
     Opened(String),
     Started,
+    PlayedOn,
     Placed(Placement),
     Keys,
     Rest(bool),
@@ -87,6 +88,10 @@ struct MadeScreen(Rc<RefCell<Vec<Done>>>);
 impl Screen for MadeScreen {
     fn start(&mut self) {
         self.0.borrow_mut().push(Done::Started);
+    }
+
+    fn play_on(&mut self) {
+        self.0.borrow_mut().push(Done::PlayedOn);
     }
 
     fn place(&mut self, placement: Placement) {
@@ -342,6 +347,41 @@ fn stop_leaving_and_a_long_pause_let_the_player_go(cx: &mut TestAppContext) {
         made.log().contains(&Done::Closed),
         "over and left: let go of"
     );
+}
+
+#[gpui::test]
+fn paused_a_while_it_is_put_away_behind_the_still_and_a_press_plays_on(
+    cx: &mut TestAppContext,
+) {
+    let made = Made::playing(true);
+    let (shell, _engine, cx) = with_video(&made, true, cx);
+    super::tests::click(cx, "embed-play-5");
+    assert!(matches!(frame(&made, cx), Some(Placement::Shown { .. })));
+    let said = made.said.borrow().clone().expect("a page");
+    said.try_send(Said::Paused).expect("heard");
+    cx.run_until_parked();
+    cx.executor().advance_clock(Duration::from_secs(5));
+    assert!(
+        matches!(frame(&made, cx), Some(Placement::Shown { .. })),
+        "a short pause stays in sight"
+    );
+    cx.executor().advance_clock(Duration::from_secs(6));
+    assert_eq!(frame(&made, cx), Some(Placement::Hidden), "put away");
+    assert!(shell.read_with(cx, |shell, _| shell.video_playing().is_some()));
+    made.log.borrow_mut().clear();
+    super::tests::click(cx, "embed-play-5");
+    let _ = frame(&made, cx);
+    let log = made.log();
+    let shown = log
+        .iter()
+        .position(|done| matches!(done, Done::Placed(Placement::Shown { .. })));
+    let on = log.iter().position(|done| *done == Done::PlayedOn);
+    assert!(
+        shown.is_some() && on.is_some() && shown < on,
+        "back in sight, then playing on: {log:?}"
+    );
+    assert_eq!(made.opened(), 0, "the same player, not a new one");
+    assert!(!log.contains(&Done::Closed));
 }
 
 #[gpui::test]

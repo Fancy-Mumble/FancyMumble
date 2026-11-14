@@ -72,6 +72,42 @@ impl DateFormat {
     }
 }
 
+impl DateFormat {
+    /// `date`'s day and month alone, no year, as a short date is written
+    /// this way: `21/11`, `11/21`, `11-21`. "As the language writes it"
+    /// follows the system's regional settings where they say, as the web
+    /// client's `toLocaleDateString(undefined, { month, day })` does, and the
+    /// language's own order elsewhere.
+    pub(crate) fn day_and_month(self, date: NaiveDate, language: Language) -> String {
+        use mumble_tauri_lib::engine_api::clock::DateOrder;
+        let (day, month) = (date.day(), date.month());
+        let order = match self {
+            Self::Dmy => DateOrder::DayFirst,
+            Self::Mdy => DateOrder::MonthFirst,
+            Self::Ymd => DateOrder::YearFirst,
+            Self::Auto => match (system_date_order(), language) {
+                (Some(order), _) => order,
+                (None, Language::German) => return format!("{day}.{month}."),
+                (None, Language::French) => DateOrder::DayFirst,
+                (None, Language::English | Language::Chinese) => DateOrder::MonthFirst,
+            },
+        };
+        match order {
+            DateOrder::DayFirst if language == Language::German => format!("{day}.{month}."),
+            DateOrder::DayFirst => format!("{day}/{month}"),
+            DateOrder::MonthFirst => format!("{month}/{day}"),
+            DateOrder::YearFirst => format!("{month:02}-{day:02}"),
+        }
+    }
+}
+
+/// The order the system writes a short date in, where it says; asked once.
+fn system_date_order() -> Option<mumble_tauri_lib::engine_api::clock::DateOrder> {
+    static ASKED: std::sync::OnceLock<Option<mumble_tauri_lib::engine_api::clock::DateOrder>> =
+        std::sync::OnceLock::new();
+    *ASKED.get_or_init(mumble_tauri_lib::engine_api::clock::system_date_order)
+}
+
 /// A date as `language` writes it at middling length: the web client's
 /// `dateStyle: "medium"`.
 fn medium(date: NaiveDate, language: Language) -> String {

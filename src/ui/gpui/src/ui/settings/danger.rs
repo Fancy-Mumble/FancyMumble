@@ -75,7 +75,9 @@ pub(super) fn render(shell: &Shell, cx: &mut Context<Shell>) -> Div {
                     .child(
                         Button::new("reset-cancel", t!("Cancel"))
                             .size(Size::Compact)
-                            .on_click(cx.listener(|shell, _, _, cx| shell.confirm_reset(false, cx))),
+                            .on_click(
+                                cx.listener(|shell, _, _, cx| shell.confirm_reset(false, cx)),
+                            ),
                     ),
             )
             .into_any_element()

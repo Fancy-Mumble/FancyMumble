@@ -565,6 +565,8 @@ impl LineLayoutCache {
                 .platform_text_system
                 .layout_line(&text, font_size, runs);
 
+            space_letters(&mut layout, &text, runs);
+
             if let Some(force_width) = force_width {
                 let mut glyph_pos = 0;
                 for run in layout.runs.iter_mut() {
@@ -592,11 +594,46 @@ impl LineLayoutCache {
     }
 }
 
+/// Move each glyph along by the letter spacing of every character before
+/// it, and widen the line by all of it: space after every character, the
+/// last too, as CSS's `letter-spacing` adds it. Wrapping, painting and
+/// hit-testing read the moved positions.
+fn space_letters(layout: &mut LineLayout, text: &str, runs: &[FontRun]) {
+    if runs.iter().all(|run| run.letter_spacing == Pixels::ZERO) {
+        return;
+    }
+    // The spacing gathered before each character, by its byte offset.
+    let mut before = Vec::with_capacity(text.len() + 1);
+    let mut gathered = Pixels::ZERO;
+    let mut run_index = 0;
+    let mut run_end = runs.first().map_or(usize::MAX, |run| run.len);
+    for (offset, character) in text.char_indices() {
+        while offset >= run_end && run_index + 1 < runs.len() {
+            run_index += 1;
+            run_end += runs[run_index].len;
+        }
+        let spacing = runs.get(run_index).map_or(Pixels::ZERO, |run| run.letter_spacing);
+        for _ in 0..character.len_utf8() {
+            before.push(gathered);
+        }
+        gathered += spacing;
+    }
+    before.push(gathered);
+    for run in &mut layout.runs {
+        for glyph in &mut run.glyphs {
+            glyph.position.x += before.get(glyph.index).copied().unwrap_or(gathered);
+        }
+    }
+    layout.width += gathered;
+}
+
 /// A run of text with a single font.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct FontRun {
     pub(crate) len: usize,
     pub(crate) font_id: FontId,
+    /// Space added after every character of the run.
+    pub(crate) letter_spacing: Pixels,
 }
 
 trait AsCacheKeyRef {
@@ -668,5 +705,56 @@ impl<'a> Borrow<dyn AsCacheKeyRef + 'a> for Arc<CacheKey> {
 impl AsCacheKeyRef for CacheKeyRef<'_> {
     fn as_cache_key_ref(&self) -> CacheKeyRef<'_> {
         *self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{FontId, GlyphId, point, px};
+
+    fn glyph(index: usize, x: f32) -> ShapedGlyph {
+        ShapedGlyph {
+            id: GlyphId(1),
+            position: point(px(x), px(0.)),
+            index,
+            is_emoji: false,
+        }
+    }
+
+    #[test]
+    fn letter_spacing_follows_every_character_of_its_run() {
+        // "aéb": three characters, "é" two bytes; the first two in a run
+        // spaced 2px, the last in one spaced 5px.
+        let mut layout = LineLayout {
+            width: px(30.),
+            runs: vec![ShapedRun {
+                font_id: FontId(0),
+                glyphs: vec![glyph(0, 0.), glyph(1, 10.), glyph(3, 20.)],
+            }],
+            len: 4,
+            ..LineLayout::default()
+        };
+        let runs = [
+            FontRun { len: 3, font_id: FontId(0), letter_spacing: px(2.) },
+            FontRun { len: 1, font_id: FontId(0), letter_spacing: px(5.) },
+        ];
+        space_letters(&mut layout, "a\u{e9}b", &runs);
+        let xs: Vec<Pixels> = layout.runs[0].glyphs.iter().map(|g| g.position.x).collect();
+        assert_eq!(xs, [px(0.), px(12.), px(24.)]);
+        // After the last character too.
+        assert_eq!(layout.width, px(39.));
+    }
+
+    #[test]
+    fn unspaced_text_is_left_as_it_was() {
+        let mut layout = LineLayout {
+            width: px(10.),
+            runs: vec![ShapedRun { font_id: FontId(0), glyphs: vec![glyph(0, 0.)] }],
+            len: 1,
+            ..LineLayout::default()
+        };
+        space_letters(&mut layout, "a", &[FontRun { len: 1, font_id: FontId(0), letter_spacing: Pixels::ZERO }]);
+        assert_eq!(layout.width, px(10.));
     }
 }

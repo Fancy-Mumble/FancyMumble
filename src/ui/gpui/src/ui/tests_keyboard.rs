@@ -71,7 +71,7 @@ fn tab_walks_the_settings_page_in_the_order_it_is_drawn_and_shift_tab_walks_back
     let mut page: Vec<String> = vec!["settings-close".to_owned()];
     page.extend(Page::ALL.map(|entry| format!("settings-{}", entry.id())));
     // What the demo's administrator may look after.
-    page.extend(["admin-users", "admin-bans", "admin-acl"].map(String::from));
+    page.extend(["admin-users", "admin-roles", "admin-bans", "admin-acl"].map(String::from));
     page.extend(
         Catalog::get()
             .entries(Mode::Dark)

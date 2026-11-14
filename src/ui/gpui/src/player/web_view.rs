@@ -73,6 +73,7 @@ impl Screens for WebViews {
 #[derive(Debug, Clone, Copy)]
 enum Order {
     Start,
+    PlayOn,
     Place(Placement),
     Keys,
     Rest(bool),
@@ -100,6 +101,10 @@ impl Remote {
 impl Screen for Remote {
     fn start(&mut self) {
         self.tell(Order::Start);
+    }
+
+    fn play_on(&mut self) {
+        self.tell(Order::PlayOn);
     }
 
     fn place(&mut self, placement: Placement) {
@@ -211,6 +216,9 @@ impl WebScreen {
         match order {
             Order::Start => {
                 let _ = self.view.load_url(&format!("{ORIGIN}/"));
+            }
+            Order::PlayOn => {
+                let _ = self.view.evaluate_script("play()");
             }
             Order::Place(placement) => self.place(placement),
             Order::Keys => {

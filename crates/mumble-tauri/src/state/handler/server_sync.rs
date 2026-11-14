@@ -23,6 +23,15 @@ use crate::state::{MAX_MESSAGES_PER_THREAD, SharedState};
 /// asking for a single entry would mean asking again immediately.
 const FILE_PROBE_LIMIT: u32 = 100;
 
+/// The oldest Fancy server that asks new members questions, 0.3.1, encoded
+/// as the server announces its version.
+const ONBOARDING_MIN_FANCY_VERSION: u64 = (3 << 32) | (1 << 16);
+
+/// Whether to ask a server announcing `fancy_version` for its questions.
+fn asks_onboarding(fancy_version: Option<u64>) -> bool {
+    fancy_version.is_some_and(|version| version >= ONBOARDING_MIN_FANCY_VERSION)
+}
+
 /// How much of a channel's local cache is worth holding on connect.
 ///
 /// Enough to paint the first screen, for a channel whose archive the server
@@ -58,6 +67,7 @@ impl HandleMessage for mumble_tcp::ServerSync {
         ctx.request_channel_permissions();
         ctx.register_push_subscribe();
         ctx.request_livery();
+        ctx.request_onboarding();
         ctx.probe_file_service();
         ctx.init_pchat();
     }
@@ -449,6 +459,35 @@ impl HandlerContext {
             match handle.send(command::RequestLivery { have_keys }).await {
                 Ok(()) => debug!("livery: requested"),
                 Err(e) => warn!("livery: failed to request: {e}"),
+            }
+        });
+    }
+
+    /// Ask for the questions this server puts to new members, and the
+    /// answers it keeps of this user.
+    ///
+    /// The epoch-0 server pushed the questions after `ServerSync`; a canon
+    /// server answers a question instead (`FlowQuery`, which the response
+    /// query maps to), and a client that does not ask is never told.
+    fn request_onboarding(&self) {
+        let (handle, fancy_version) = {
+            let state = self.shared.lock().ok();
+            state
+                .map(|s| (s.conn.client_handle.clone(), s.server.fancy_version))
+                .unwrap_or_default()
+        };
+        if !asks_onboarding(fancy_version) {
+            debug!("onboarding: skipped (server asks no questions)");
+            return;
+        }
+        let Some(handle) = handle else {
+            warn!("onboarding: no client handle");
+            return;
+        };
+        let _onboarding_task = tokio::spawn(async move {
+            match handle.send(command::RequestFancyOnboardingResponse).await {
+                Ok(()) => debug!("onboarding: asked for the questions and answers"),
+                Err(e) => warn!("onboarding: failed to ask: {e}"),
             }
         });
     }
@@ -969,5 +1008,21 @@ async fn fetch_channel_history(shared: &Arc<Mutex<SharedState>>, ch: u32, mode: 
         });
     } else {
         pchat::emit_history_loading(shared, ch, false);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_server_that_asks_new_members_questions_is_asked_for_them() {
+        // Starling says 0.4.2: without the question it never tells anybody
+        // its questions, since a canon server answers rather than pushes.
+        assert!(asks_onboarding(Some((4 << 32) | (2 << 16))));
+        assert!(asks_onboarding(Some(ONBOARDING_MIN_FANCY_VERSION)));
+        // Too old for onboarding, or not a Fancy server at all.
+        assert!(!asks_onboarding(Some(3 << 32)));
+        assert!(!asks_onboarding(None));
     }
 }

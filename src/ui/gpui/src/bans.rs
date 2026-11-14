@@ -63,6 +63,7 @@ impl Ban {
 
     /// Whether it covers every address of its kind: what a ban counted the
     /// short way and sent as it was comes back as.
+    #[cfg(test)]
     pub(crate) fn covers_everybody(&self) -> bool {
         self.mask == 0
     }

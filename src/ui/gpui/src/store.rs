@@ -10,13 +10,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::engine::{SavedServer, VoiceSettings};
 
+mod jumps;
 mod logs;
 mod look;
 mod reset;
 mod shortcuts;
 mod told;
 mod walls;
+mod whispers;
 
+pub(crate) use jumps::{Someone, UserShortcut};
+pub(crate) use whispers::{ChannelMode, Roster, WhisperBinding, WhisperKind, WhisperUser};
 pub(crate) use logs::{LOG_LEVELS, LogChoices};
 pub(crate) use shortcuts::{Bindings, Bound, accelerator, gpui_keys};
 pub(crate) use told::{Enabled, WelcomeDisplay, WelcomesSeen};
@@ -209,6 +213,12 @@ pub(crate) struct Settings {
     /// off the screen, and the system's notifications with it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub streamer_mode: bool,
+    /// Keys that go to one person.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub user_shortcuts: Vec<UserShortcut>,
+    /// Whisper and shout targets, each with its key.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub whisper_targets: Vec<WhisperBinding>,
 }
 
 
@@ -507,27 +517,80 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// Voice settings other than the defaults in every field that is saved.
+    fn chosen_voice() -> VoiceSettings {
+        VoiceSettings {
+            push_to_talk: true,
+            threshold: 0.02,
+            noise_suppression: false,
+            automatic_gain: true,
+            input_volume: 1.2,
+            output_volume: 0.8,
+            bitrate_bps: 40_000,
+            voice_over_tcp: true,
+            ..VoiceSettings::default()
+        }
+    }
+
+    /// A window and an aside placed somewhere other than where they start.
+    fn chosen_places() -> (Placed, Placed) {
+        let window = Placed {
+            x: -1200.0,
+            y: 40.0,
+            width: 1100.0,
+            height: 700.0,
+            maximized: true,
+        };
+        let aside = Placed {
+            x: 40.0,
+            y: 60.0,
+            width: 960.0,
+            height: 540.0,
+            maximized: false,
+        };
+        (window, aside)
+    }
+
+    /// How text, times and numbers are written, other than the defaults.
+    fn chosen_format() -> Format {
+        Format {
+            text: TextSize::Large,
+            hours: Hours::Twelve,
+            font_size_custom_px: Some(20),
+            convert_to_local_time: false,
+            date_format: crate::formats::DateFormat::Ymd,
+            number_format: crate::formats::NumberFormat::SpaceComma,
+        }
+    }
+
+    /// A shortcut to a user, and a key bound other than by default.
+    fn chosen_keys() -> (Bindings, UserShortcut) {
+        let mut keys = Bindings::default();
+        let _ = keys.set(Bound::VoicePriority, Some("F8"));
+        let shortcut = UserShortcut {
+            id: "a".to_owned(),
+            hotkey: "Ctrl+Alt+1".to_owned(),
+            user_name: "Rin".to_owned(),
+            user_hash: Some("abc".to_owned()),
+            server_id: None,
+            server_label: None,
+        };
+        (keys, shortcut)
+    }
+
     #[test]
     fn settings_round_trip_and_a_damaged_file_reads_as_defaults() {
         let dir = scratch("settings");
         let store = Store::new(&dir);
         assert_eq!(store.settings(), Settings::default());
+        let (window, aside) = chosen_places();
+        let (shortcuts, user_shortcut) = chosen_keys();
         let chosen = Settings {
             theme: Some("rose".to_owned()),
             mode: Some("light".to_owned()),
             input_device: None,
             output_device: Some("USB Headset".to_owned()),
-            voice: Some(VoiceSettings {
-                push_to_talk: true,
-                threshold: 0.02,
-                noise_suppression: false,
-                automatic_gain: true,
-                input_volume: 1.2,
-                output_volume: 0.8,
-                bitrate_bps: 40_000,
-                voice_over_tcp: true,
-                ..VoiceSettings::default()
-            }),
+            voice: Some(chosen_voice()),
             push_to_talk_key: Some("f9".to_owned()),
             whisper_key: Some("f10".to_owned()),
             auto_connect: None,
@@ -540,37 +603,14 @@ mod tests {
             },
             wall_wash: Some(0.5),
             wall_blur: Some(8),
-            window: Some(Placed {
-                x: -1200.0,
-                y: 40.0,
-                width: 1100.0,
-                height: 700.0,
-                maximized: true,
-            }),
-            asides: [(
-                "stream".to_owned(),
-                Placed {
-                    x: 40.0,
-                    y: 60.0,
-                    width: 960.0,
-                    height: 540.0,
-                    maximized: false,
-                },
-            )]
-            .into(),
+            window: Some(window),
+            asides: [("stream".to_owned(), aside)].into(),
             friends: vec![Friend {
                 hash: "abc".to_owned(),
                 name: "Rin".to_owned(),
                 server: "magical.rocks".to_owned(),
             }],
-            format: Format {
-                text: TextSize::Large,
-                hours: Hours::Twelve,
-                font_size_custom_px: Some(20),
-                convert_to_local_time: false,
-                date_format: crate::formats::DateFormat::Ymd,
-                number_format: crate::formats::NumberFormat::SpaceComma,
-            },
+            format: chosen_format(),
             recent_emoji: vec!["🎉".to_owned()],
             klipy_key: Some("a-key".to_owned()),
             display_name: Some("Alex".to_owned()),
@@ -595,11 +635,7 @@ mod tests {
                 shown: Some("walls/a.jpg".to_owned()),
             },
             chat_bg_dim: Some(0.25),
-            shortcuts: {
-                let mut keys = Bindings::default();
-                let _ = keys.set(Bound::VoicePriority, Some("F8"));
-                keys
-            },
+            shortcuts,
             enable_notifications: Enabled(false),
             welcome_message_display: WelcomeDisplay::Always,
             enable_dual_path: true,
@@ -611,6 +647,8 @@ mod tests {
             },
             show_disconnect_warning: Enabled(false),
             streamer_mode: true,
+            user_shortcuts: vec![user_shortcut],
+            whisper_targets: Vec::new(),
             welcome_seen: {
                 let mut seen = WelcomesSeen::default();
                 seen.note("example.org:64738", 1);

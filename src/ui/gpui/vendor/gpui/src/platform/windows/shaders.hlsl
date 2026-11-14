@@ -993,36 +993,44 @@ float4 shadow_fragment(ShadowFragmentInput input): SV_TARGET {
 **
 */
 
-struct PathRasterizationSprite {
+// A path's vertex, and the path it belongs to: what is the same for every
+// vertex of a path (its colour and bounds) is written once per path.
+struct PathRasterizationVertex {
     float2 xy_position;
     float2 st_position;
+    uint path;
+};
+
+struct PathRasterizationSprite {
     Background color;
     Bounds bounds;
 };
 
-StructuredBuffer<PathRasterizationSprite> path_rasterization_sprites: register(t1);
+StructuredBuffer<PathRasterizationVertex> path_rasterization_vertices: register(t1);
+StructuredBuffer<PathRasterizationSprite> path_rasterization_sprites: register(t2);
 
 struct PathVertexOutput {
     float4 position: SV_Position;
     float2 st_position: TEXCOORD0;
-    nointerpolation uint vertex_id: TEXCOORD1;
+    nointerpolation uint path: TEXCOORD1;
     float4 clip_distance: SV_ClipDistance;
 };
 
 struct PathFragmentInput {
     float4 position: SV_Position;
     float2 st_position: TEXCOORD0;
-    nointerpolation uint vertex_id: TEXCOORD1;
+    nointerpolation uint path: TEXCOORD1;
 };
 
 PathVertexOutput path_rasterization_vertex(uint vertex_id: SV_VertexID) {
-    PathRasterizationSprite sprite = path_rasterization_sprites[vertex_id];
+    PathRasterizationVertex vertex = path_rasterization_vertices[vertex_id];
+    PathRasterizationSprite sprite = path_rasterization_sprites[vertex.path];
 
     PathVertexOutput output;
-    output.position = to_device_position_impl(sprite.xy_position);
-    output.st_position = sprite.st_position;
-    output.vertex_id = vertex_id;
-    output.clip_distance = distance_from_clip_rect_impl(sprite.xy_position, sprite.bounds);
+    output.position = to_device_position_impl(vertex.xy_position);
+    output.st_position = vertex.st_position;
+    output.path = vertex.path;
+    output.clip_distance = distance_from_clip_rect_impl(vertex.xy_position, sprite.bounds);
 
     return output;
 }
@@ -1030,7 +1038,7 @@ PathVertexOutput path_rasterization_vertex(uint vertex_id: SV_VertexID) {
 float4 path_rasterization_fragment(PathFragmentInput input): SV_Target {
     float2 dx = ddx(input.st_position);
     float2 dy = ddy(input.st_position);
-    PathRasterizationSprite sprite = path_rasterization_sprites[input.vertex_id];
+    PathRasterizationSprite sprite = path_rasterization_sprites[input.path];
 
     Background background = sprite.color;
     Bounds bounds = sprite.bounds;

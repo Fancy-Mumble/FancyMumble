@@ -58,7 +58,10 @@ mod tests {
         assert!(usual.log_to_file && usual.auto_zip_logs && !usual.terminal_logging);
         let read: LogChoices =
             serde_json::from_str(r#"{"log_level":"trace","log_to_file":false}"#).expect("choices");
-        assert_eq!((read.level(), read.log_to_file, read.auto_zip_logs), ("trace", false, true));
+        assert_eq!(
+            (read.level(), read.log_to_file, read.auto_zip_logs),
+            ("trace", false, true)
+        );
         assert_eq!(serde_json::to_string(&usual).expect("json"), "{}");
     }
 }

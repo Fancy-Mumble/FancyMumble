@@ -2,9 +2,8 @@
 //! each, to export or delete (asked again in place before it goes), and
 //! the way to bring one in from a file.
 //!
-//! What the web UI's page also has is left out for want of an engine call
-//! behind it: making a new identity here (one is made when a saved server
-//! is first connected to), and the recovery phrase.
+//! Under them, as in the web UI, a new identity made by name, and the
+//! recovery phrase (`recovery.rs`).
 
 use gpui::{Context, Div, IntoElement, ParentElement, SharedString, Styled, div, prelude::*, px};
 
@@ -50,6 +49,7 @@ pub(super) fn render(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> D
             "Identities are TLS client certificates used to authenticate with Mumble servers. Each identity is unique to you and persists across sessions."
         )))
         .child(list)
+        .children(super::recovery::create(shell, theme, cx))
         .child(
             div().mt(px(14.0)).flex().child(
                 Button::new("identity-import", t!("Import identity..."))
@@ -58,6 +58,7 @@ pub(super) fn render(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> D
                     .on_click(cx.listener(|shell, _, _, cx| shell.import_certificate(cx))),
             ),
         )
+        .children(super::recovery::render(shell, theme, cx))
 }
 
 /// One identity: its name, whether it is the one in use, and what can be

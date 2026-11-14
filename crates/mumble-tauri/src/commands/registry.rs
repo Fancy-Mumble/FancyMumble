@@ -319,6 +319,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::window::set_window_icon,
         super::window::set_system_bar_style,
         // -- system / diagnostics --------------------------------------
+        crate::app::isolation::isolated_store_dir,
         super::system::reset_app_data,
         super::system::set_log_level,
         super::system::set_log_to_file,

@@ -20,13 +20,125 @@ import type { FancyProfile } from "./profileTypes";
 const FANCY_PREFIX = "<!--FANCY:";
 const FANCY_SUFFIX = "-->";
 
+/**
+ * Every field of the profile JSON this client knows. Typed as a record of the
+ * profile's own keys, so a field added to `FancyProfile` and not here fails to
+ * compile instead of being treated as somebody else's.
+ */
+const KNOWN_FIELDS: Record<Exclude<keyof FancyProfile, "opaque">, true> = {
+  v: true,
+  decoration: true,
+  decorationImage: true,
+  nameplate: true,
+  effect: true,
+  banner: true,
+  nameStyle: true,
+  cardBackground: true,
+  cardBackgroundCustom: true,
+  themeColors: true,
+  cardGlass: true,
+  avatarBorder: true,
+  avatarBorderCustom: true,
+  status: true,
+  pronouns: true,
+  contact: true,
+  sections: true,
+};
+
+function isKnownField(key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(KNOWN_FIELDS, key);
+}
+
+/** The fields of a profile JSON object this client does not know, as they are. */
+function unknownFields(raw: Record<string, unknown>): Record<string, unknown> | undefined {
+  const rest = Object.fromEntries(Object.entries(raw).filter(([key]) => !isKnownField(key)));
+  return Object.keys(rest).length > 0 ? rest : undefined;
+}
+
 /** Build a Mumble comment string from profile data + bio. */
 export function serializeProfile(profile: FancyProfile, bio: string): string {
-  const payload: FancyProfile = { ...profile, v: 1 };
+  const { opaque, ...known } = profile;
+  // Fields somebody else wrote go back beside ours; ours win a clash, which
+  // only a hand-made `opaque` can cause.
+  const payload: FancyProfile = { ...opaque, ...known, v: 1 };
   // Strip undefined keys for a compact string.
   const json = JSON.stringify(payload, (_k, v) => (v === undefined ? undefined : v));
   const marker = `${FANCY_PREFIX}${json}${FANCY_SUFFIX}`;
   return bio ? `${marker}\n${bio}` : marker;
+}
+
+/** A comment's profile JSON exactly as written, and the text after its mark. */
+function rawComment(comment: string): { raw: Record<string, unknown>; bio: string } | null {
+  if (!comment.startsWith(FANCY_PREFIX)) return null;
+  const end = comment.indexOf(FANCY_SUFFIX, FANCY_PREFIX.length);
+  if (end === -1) return null;
+  try {
+    const raw: unknown = JSON.parse(comment.substring(FANCY_PREFIX.length, end));
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return null;
+    const bio = comment.substring(end + FANCY_SUFFIX.length).replace(/^\n/, "");
+    return { raw: raw as Record<string, unknown>, bio };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The profile and visible text to write over `current` (the user's own
+ * comment as the server holds it now, or `null`/empty when there is none).
+ *
+ * Whatever `current` carries that this client does not know is kept as it
+ * is, over any older copy in `profile.opaque`. When the result carries an
+ * `about` (the native client's text, PROFILE_FORMAT.md), the text after the
+ * mark is generated from it and this client cannot regenerate it, so that
+ * text is `current`'s: an older `bio` of this client's is not put back in
+ * front of what Fancy clients draw. Without a current `about` text, `bio` is
+ * kept, which is what this client's own store holds after an earlier merge.
+ */
+export function mergeOwnProfile(
+  current: string | null | undefined,
+  profile: FancyProfile,
+  bio: string,
+): { profile: FancyProfile; bio: string } {
+  const server = current ? rawComment(current) : null;
+  const serverUnknown = server ? unknownFields(server.raw) : undefined;
+  const opaque = profile.opaque || serverUnknown ? { ...profile.opaque, ...serverUnknown } : undefined;
+  const merged: FancyProfile = { ...profile };
+  if (opaque) merged.opaque = opaque;
+  else delete merged.opaque;
+  const visible = server && serverUnknown && "about" in serverUnknown ? server.bio : bio;
+  return { profile: merged, bio: visible };
+}
+
+/**
+ * The comment to write for `profile` and `bio` over `current`, merged as
+ * {@link mergeOwnProfile} says, or `null` when it would say what `current`
+ * already says (so nothing need be sent).
+ */
+export function ownCommentOver(
+  current: string | null | undefined,
+  profile: FancyProfile,
+  bio: string,
+): { comment: string | null; profile: FancyProfile; bio: string } {
+  const merged = mergeOwnProfile(current, profile, bio);
+  const comment = serializeProfile(merged.profile, merged.bio);
+  return { ...merged, comment: current && sameComment(current, comment) ? null : comment };
+}
+
+/** Whether two comments say the same: equal, or the same profile JSON and text. */
+function sameComment(left: string, right: string): boolean {
+  if (left === right) return true;
+  const a = rawComment(left);
+  const b = rawComment(right);
+  return !!a && !!b && a.bio === b.bio && canonical(a.raw) === canonical(b.raw);
+}
+
+/** JSON with object keys in one order, so key order alone is no difference. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, item: unknown) =>
+    item && typeof item === "object" && !Array.isArray(item)
+      ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([x], [y]) => (x < y ? -1 : 1)))
+      : item,
+  );
 }
 
 /** Parse a Mumble comment -> FancyMumble profile + visible bio.
@@ -69,7 +181,13 @@ function parseCommentImpl(comment: string): ParsedComment {
   const bioStart = end + FANCY_SUFFIX.length;
   const bio = comment.substring(bioStart).replace(/^\n/, "");
   try {
-    return { profile: withoutRemoteFetches(JSON.parse(json) as FancyProfile), bio };
+    const raw = JSON.parse(json) as Record<string, unknown>;
+    const known = Object.fromEntries(Object.entries(raw).filter(([key]) => isKnownField(key)));
+    const profile = withoutRemoteFetches(known as FancyProfile);
+    // Kept as written and never drawn here: they are another client's, and
+    // only travel back with the profile when its owner saves it.
+    const opaque = unknownFields(raw);
+    return { profile: opaque ? { ...profile, opaque } : profile, bio };
   } catch {
     return { profile: null, bio: comment };
   }

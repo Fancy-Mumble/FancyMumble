@@ -5,7 +5,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getPreferences, updatePreferences } from "@core/preferencesStorage";
 import { useAppStore } from "@core/store";
-import { dataUrlToBytes, serializeProfile } from "@core/profileFormat";
+import { dataUrlToBytes } from "@core/profileFormat";
+import { writeOwnProfile } from "@core/features/settings/ownProfile";
 import {
   AVATAR_BORDERS,
   DECORATIONS,
@@ -1048,11 +1049,12 @@ export function ProfileSettings({
  * path exists to end. So an absent `connectedCertLabel` matches anything.
  */
 async function applyToServer(data: ProfileData, identityLabel: string | null): Promise<void> {
-  const { status, connectedCertLabel } = useAppStore.getState();
+  const { status, connectedCertLabel, ownSession } = useAppStore.getState();
   if (status !== "connected") return;
   if (connectedCertLabel !== null && connectedCertLabel !== identityLabel) return;
   try {
-    await invoke("set_user_comment", { comment: serializeProfile(data.profile, data.bio) });
+    // Merged over the comment the server holds, keeping another client's fields.
+    await writeOwnProfile(ownSession, data.profile, data.bio);
     await invoke("set_user_texture", {
       texture: data.avatarDataUrl ? dataUrlToBytes(data.avatarDataUrl) : [],
     });

@@ -18,6 +18,7 @@ import { listen } from "@tauri-apps/api/event";
 import { acquireRegisteredTextures, releaseRegisteredTextures } from "@core/registeredTextureLease";
 import { useAppStore } from "@core/store";
 import { rootChannelId } from "@core/features/admin/rootChannel";
+import { compareLastChannels, lastChannel, type LastChannel } from "@core/features/admin/lastChannel";
 import { formatRelativeDate } from "@core/utils/format";
 import { TID } from "@core/testids";
 import type { AclData, AclGroup, RegisteredUser, RegisteredUserUpdate, UserEntry } from "@core/types";
@@ -167,9 +168,18 @@ export function UsersAdmin({ onOpenRole }: Readonly<{ onOpenRole?: (roleName: st
     return rows.sort((a, b) => {
       if (sortKey === "name") return direction * a.name.localeCompare(b.name);
       if (sortKey === "last_seen") return direction * (a.last_seen ?? "").localeCompare(b.last_seen ?? "");
-      return direction * ((a.last_channel ?? 0) - (b.last_channel ?? 0));
+      return (
+        direction * compareLastChannels(lastChannel(a.last_channel, channels), lastChannel(b.last_channel, channels))
+      );
     });
-  }, [users, search, sortKey, sortDir]);
+  }, [users, search, sortKey, sortDir, channels]);
+
+  const lastChannelText = (where: LastChannel) =>
+    where.kind === "named"
+      ? where.name
+      : where.kind === "deleted"
+        ? t("registeredUsers.deletedChannel")
+        : t("registeredUsers.unknown");
 
   const sortable = (key: SortKey, header: string) => (
     <Box
@@ -258,7 +268,7 @@ export function UsersAdmin({ onOpenRole }: Readonly<{ onOpenRole?: (roleName: st
       header: sortable("last_channel", t("registeredUsers.colLastChannel")),
       cell: (user) => (
         <Box component="span" sx={(theme) => ({ color: theme.palette.nebula.muted })}>
-          {user.last_channel ?? t("registeredUsers.unknown")}
+          {lastChannelText(lastChannel(user.last_channel, channels))}
         </Box>
       ),
     },

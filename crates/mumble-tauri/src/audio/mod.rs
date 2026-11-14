@@ -54,17 +54,11 @@ mod shared_capture;
 #[cfg(not(target_os = "android"))]
 mod silent;
 #[cfg(not(target_os = "android"))]
-pub use silent::{is_silent, set_silent};
+pub use silent::set_silent;
 
 /// On Android there is no silent path; nothing is switched.
 #[cfg(target_os = "android")]
 pub fn set_silent(_silent: bool) {}
-
-/// On Android the devices are always the real ones.
-#[cfg(target_os = "android")]
-pub fn is_silent() -> bool {
-    false
-}
 
 #[cfg(not(target_os = "android"))]
 mod virtual_mic;

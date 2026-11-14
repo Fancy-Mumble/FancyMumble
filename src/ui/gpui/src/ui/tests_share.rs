@@ -3,8 +3,6 @@
 //! own account sharing from another device, the picker, starting and
 //! stopping, drawing each way, and the keyboard reaching it all.
 
-use std::sync::Arc;
-
 use gpui::{Entity, Modifiers, MouseButton, TestAppContext, VisualTestContext, point, px};
 
 use super::Shell;
@@ -440,6 +438,22 @@ fn a_frame_is_copied_to_the_clipboard(cx: &mut TestAppContext) {
     let (shell, engine, cx) = shell(cx);
     says(&engine, RIN, SignalKind::Start, cx);
     wait_for_picture(&shell, RIN, cx);
+    // The pattern moves on: the next frame goes into the picture already
+    // on screen, and that one, not the first, is what is copied.
+    let drawn = |cx: &mut VisualTestContext| {
+        shell.read_with(cx, |shell, _| shell.stage.feeds[&RIN].main().screen.borrow().drawn)
+    };
+    let before = drawn(cx);
+    engine.made_up().advance();
+    for _ in 0..200 {
+        shell.update(cx, |_, cx| cx.notify());
+        cx.run_until_parked();
+        if drawn(cx) > before {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(drawn(cx) > before, "the next frame came");
     click(cx, "stage-copy");
     let copied = cx.read_from_clipboard().expect("something on the clipboard");
     let image = copied.entries().iter().find_map(|entry| match entry {
@@ -450,8 +464,7 @@ fn a_frame_is_copied_to_the_clipboard(cx: &mut TestAppContext) {
     assert_eq!(image.format(), gpui::ImageFormat::Png);
     let decoded = image::load_from_memory(image.bytes()).expect("a PNG").to_rgba8();
     let pattern = crate::share::pattern::Pattern::new(decoded.width(), decoded.height());
-    assert!(pattern.read(decoded.as_raw()).is_some(), "the pattern, read back");
-    let _ = Arc::clone(&engine);
+    assert_eq!(pattern.read(decoded.as_raw()), Some(RIN * 1000 + 1), "the frame on screen, not the first");
 }
 
 #[gpui::test]

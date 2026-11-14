@@ -47,9 +47,91 @@ const messages = [
   said(3, 2, "Flora", "The dahlias are blooming in the garden."),
   said(4, 4, "Scout", "Scout says hello from our walk!"),
 ];
+// `?links=<variant>`: Scout's last message is a link and nothing else, as a
+// link pasted into the composer is, and the server's card for it is one of
+// these made-up ones, each a different poster. The same cards,
+// pictures and words as the native demo's `FANCY_GPUI_DEMO_LINKS=<variant>`
+// (`src/ui/gpui/src/demo/link_cards.rs`): change the two together. The
+// pictures are `preview/linkcards/`; nothing reaches the network.
+const LINK_VARIANT = new URLSearchParams(location.search).get("links");
+const media = (file: string, width: number, height: number) => ({
+  url: "", width, height, preview: { data_url: `/linkcards/${file}`, mime: "image/png", width, height },
+});
+const LINK_CARDS: Record<string, Record<string, unknown>> = {
+  full: {
+    url: "https://www.reddit.com/r/LinkCards/comments/1abc2d/where_to_buy_tickets/", type: "link",
+    title: "From the LinkCards community on Reddit",
+    description: "I've tried to buy tickets online but the shop would not take my card. Does anyone know where else to buy them?",
+    site_name: "Reddit", author: { name: "quiet_heron_204" }, favicon: media("icon.png", 32, 32), image: media("wide.png", 1200, 630),
+  },
+  video: {
+    url: "https://vimeo.com/104729384", type: "video", title: "Night drive along the coast",
+    site_name: "Vimeo", author: { name: "Coastline Films" }, media_duration: "4:12", image: media("wide.png", 1200, 630),
+  },
+  contained: {
+    url: "https://art.example.com/works/2817", type: "image", title: "Two by the water",
+    site_name: "art.example.com", author: { name: "ame" }, fields: [{ name: "likes", value: "12.4K", inline: true }],
+    image: media("tall.png", 600, 850),
+  },
+  native: {
+    url: "https://pictures.example.net/posts/1", type: "image", title: "Summer beach, a study",
+    site_name: "pictures.example.net", image: media("small.png", 360, 253),
+  },
+  article: {
+    url: "https://example.org/posts/the-long-way-round", type: "article",
+    title: "The long way round: a field report on latency, jitter and the people who notice",
+    description: "Why the numbers that look fine on a graph still sound wrong in a room.",
+    site_name: "example.org", image: media("wide.png", 1200, 630),
+  },
+  bare: {
+    url: "https://docs.example.org/reference/acl", type: "link", title: "Access control lists",
+    description: "Rules, groups, and the order they are applied in.", site_name: "docs.example.org",
+  },
+  title: { url: "https://notes.example.org/today", type: "link", title: "Notes for today" },
+  shop: {
+    url: "https://deals.example.de/deals/the-c64-maxi", type: "product", title: "THE C64 Maxi, a Commodore remake",
+    site_name: "deals.example.de", price: { amount: "89.99", currency: "EUR", was: "129.99", availability: "instock" },
+    fields: [{ name: "shipping", value: "Free", inline: true }], image: media("product.png", 600, 600),
+  },
+  compare: {
+    url: "https://prices.example.de/compare/headphones-x", type: "product", title: "Headphones X, wireless",
+    site_name: "prices.example.de", price: { amount: "149", currency: "EUR", was: "", availability: "" },
+    fields: [{ name: "sellers", value: "14", inline: true }],
+  },
+};
+const LINK_CARD = LINK_VARIANT ? LINK_CARDS[LINK_VARIANT] : undefined;
+if (LINK_CARD) messages[4] = said(4, 4, "Scout", String(LINK_CARD.url));
+// `?share=1`: Alex shares `preview/shares/card.png` by a public link that
+// lasts a week; `?album=<count>`: that many of `preview/shares/aNN.png` in
+// one message. As the native demo's `FANCY_GPUI_DEMO_SHARE=<files>` does
+// with the same files: change the two together.
+const SHARE_SIZES: Record<string, [number, number, number]> = {
+  "card.png": [38_642, 2000, 1200],
+  "a01.png": [5_294, 600, 900], "a02.png": [6_502, 900, 600], "a03.png": [7_211, 900, 600],
+  "a04.png": [5_861, 600, 900], "a05.png": [6_613, 900, 600], "a06.png": [7_278, 900, 600],
+  "a07.png": [6_135, 600, 900], "a08.png": [7_489, 900, 600], "a09.png": [7_244, 900, 600],
+  "a10.png": [7_956, 600, 900], "a11.png": [4_900, 900, 600],
+};
+const shareParams = new URLSearchParams(location.search);
+const sharedNames = shareParams.has("share")
+  ? ["card.png"]
+  : Array.from({ length: Number(shareParams.get("album") ?? 0) }, (_, n) => `a${String(n + 1).padStart(2, "0")}.png`);
+if (sharedNames.length > 0) {
+  const expiresAt = Math.floor(Date.now() / 1000) + 7 * 86_400;
+  const marks = sharedNames.map((filename) => {
+    const [sizeBytes, width, height] = SHARE_SIZES[filename] ?? [0, 0, 0];
+    const info = { url: `/shares/${filename}`, filename, sizeBytes, mode: "public", expiresAt, width, height };
+    return `<!-- FANCY_FILE:${btoa(JSON.stringify(info))} -->`;
+  });
+  messages.push(said(5, 1, "Alex", marks.join("\n")));
+}
 // The native demo's servers, by name: here and nowhere else in this file,
 // to change together with the demo's (`src/ui/gpui/src/demo.rs`).
-const HOSTS = { home: "magical.rocks", other: "kumo.jp", local: "localhost" } as const;
+// `?host=<name>` names the home server otherwise, as the native demo's
+// `FANCY_GPUI_DEMO_NAME` does: for pictures nobody can take for a real one.
+const HOSTS = {
+  home: new URLSearchParams(location.search).get("host") ?? "magical.rocks", other: "kumo.jp", local: "localhost",
+} as const;
 const session = { id: "sess", label: HOSTS.home, host: HOSTS.home, port: 64738, username: "Alex", certLabel: null, status: "connected" };
 const server = { id: "s1", label: HOSTS.home, host: HOSTS.home, port: 64738, username: "Alex", cert_label: null };
 const connecting = new URLSearchParams(location.search).get("screen") === "connect";
@@ -102,6 +184,9 @@ const answers: Record<string, (args: any) => unknown> = {
   "plugin:event|listen": () => 1,
   "plugin:event|unlisten": () => null,
   get_system_clock_format: () => "24h",
+  // The card for `?links`, answered at once as a card held on this machine is.
+  request_link_preview: (a: any) =>
+    LINK_CARD ? (a?.urls ?? []).filter((url: string) => url === LINK_CARD.url).map((url: string) => ({ requested_url: url, embed: LINK_CARD })) : [],
 };
 // The settings pages ask for more: the native demo engine's voice settings,
 // devices and certificates, and an empty store rather than a failing one.
@@ -127,7 +212,83 @@ if (new URLSearchParams(location.search).has("settings")) {
   // no identity to choose between: the web's is shown with none either.
   if (new URLSearchParams(location.search).get("settings") === "profile")
     Object.assign(answers, { list_certificates: () => [] });
+  adminAnswers();
 }
+// The server-admin pages, on the native demo's made-up register (the
+// `connected` demo: `registered_of` and `roles` in `src/ui/gpui/src/demo.rs`):
+// whoever is here was seen just now in the lounge, Wren twelve days ago,
+// Otto never; Rin is a moderator. Their answers come as events, as the
+// engine's do, to whatever listens for them.
+function adminAnswers() {
+  const heard: Record<string, ((event: unknown) => void)[]> = {};
+  const tell = (event: string, payload: unknown) =>
+    setTimeout(() => (heard[event] ?? []).forEach((handler) => handler({ event, id: 0, payload })), 0);
+  const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 19) + "Z";
+  const account = (user_id: number, name: string, days: number | null, last_channel: number | null) => ({
+    user_id, name, last_seen: days === null ? null : ago(days), last_channel, texture_size: null,
+  });
+  const accounts = [
+    account(101, "Alex", 0, 1), account(102, "Flora", 0, 1), account(103, "Rin", 0, 1),
+    account(105, "Torque", 0, 1), account(120, "Wren", 12, 1), account(121, "Otto", null, null),
+  ];
+  const group = (name: string, add: number[], color: string | null) => ({
+    name, inherited: false, inherit: true, inheritable: true, add, remove: [], inherited_members: [], color,
+  });
+  Object.assign(answers, {
+    "plugin:event|listen": (a: any) => {
+      (heard[a?.event] ??= []).push(a?.handler);
+      return heard[a?.event].length;
+    },
+    request_user_list: () => tell("user-list", accounts),
+    // The demo's two bans (`seeded_bans`), as the wire counts their masks:
+    // one IPv4 address is 128 there, a /24 is 120.
+    request_ban_list: () =>
+      tell("ban-list", [
+        { address: "203.0.113.7", mask: 128, name: "Mallory", hash: "", reason: "spam", start: "2026-01-02", duration: 0 },
+        { address: "198.51.100.0", mask: 120, name: "", hash: "", reason: "", start: "2026-02-03", duration: 7200 },
+      ]),
+    request_acl: (a: any) =>
+      tell("acl", {
+        channel_id: a?.channelId ?? 0, inherit_acls: true, acls: [],
+        groups: (a?.channelId ?? 0) === 0 ? [group("moderators", [103], "#e09a4b")] : [],
+      }),
+  });
+}
+// `?stage=<n>`: the first n of the preview's own pictures (`preview/pictures/`)
+// chosen to send once the client is up, as the native view's
+// `FANCY_GPUI_STAGE=<folder>` stages a folder, on a server that keeps files
+// as the native demo's does. With `&upload` they are sent, and the first is
+// held three quarters of the way up.
+const stageCount = Number(new URLSearchParams(location.search).get("stage") ?? 0);
+const holdUpload = new URLSearchParams(location.search).has("upload");
+const PICTURES: Record<string, number> = {
+  "dawn.png": 31017, "harbour.png": 31381, "meadow.png": 27556,
+  "night.png": 29759, "sand.png": 27233, "storm.png": 28959,
+};
+function stageAnswers() {
+  const heard: Record<string, ((event: unknown) => void)[]> = {};
+  const tell = (event: string, payload: unknown) =>
+    (heard[event] ?? []).forEach((handler) => handler({ event, id: 0, payload }));
+  const named = (path: unknown) => String(path ?? "").split("/").pop() ?? "";
+  Object.assign(answers, {
+    "plugin:event|listen": (a: any) => {
+      (heard[a?.event] ??= []).push(a?.handler);
+      return heard[a?.event].length;
+    },
+    "plugin:dialog|open": () => Object.keys(PICTURES).slice(0, stageCount).map((name) => `/pictures/${name}`),
+    file_size: (a: any) => PICTURES[named(a?.path)] ?? 0,
+    // Never done: a second and a half in, three quarters of it has gone.
+    starling_upload_file: (a: any) => {
+      const total = PICTURES[named(a?.filePath ?? a?.path)] ?? 30_000;
+      setTimeout(
+        () => tell("upload-progress", { uploadId: a?.uploadId, bytesSent: Math.round(total * 0.76), totalBytes: total }),
+        1500,
+      );
+      return new Promise(() => {});
+    },
+  });
+}
+if (stageCount > 0) stageAnswers();
 // What the store holds: set up already, in Nebula; light or dark as asked,
 // as the native view is started in one; and the local user's profile as the
 // native demo's (`demo/profiles.rs`: pronouns, and the words without their
@@ -171,8 +332,25 @@ if (!connecting)
     channels, users, messages, pollMessages: [], dmMessages: [],
     selectedChannel: 1, selectedDmUser: null, selectedUser: null, currentChannel: 1, ownSession: 1,
   } as any);
+if (stageCount > 0) {
+  // A picture chosen is shown from where the dev server serves it.
+  (window as any).__TAURI_INTERNALS__.convertFileSrc = (path: string) => path;
+  useAppStore.setState({
+    fileServerConfig: { canShareFiles: true, canShareFilesPublic: true, deleteOnTtl: true },
+    fileServerKind: "canon",
+  } as any);
+}
 const { default: NebulaApp } = await import("@nebula/index");
 createRoot(document.getElementById("root")!).render(<NebulaApp />);
+if (stageCount > 0) {
+  const press = (selector: string) => {
+    const target = document.querySelector(selector);
+    for (const kind of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"])
+      target?.dispatchEvent(new MouseEvent(kind, { bubbles: true, cancelable: true, view: window }));
+  };
+  setTimeout(() => press('[aria-label="Attach files"]'), 2500);
+  if (holdUpload) setTimeout(() => press('[data-testid="chat-send"]'), 4000);
+}
 // After the app's own start-up, which falls back to the default theme when
 // it finds no stored choice.
 // `?click=<css selector>` presses something once the client is up: a way

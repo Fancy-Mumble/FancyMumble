@@ -8,6 +8,10 @@ use crate::engine::DeviceFacts;
 use crate::theme::Theme;
 
 /// Names and values, one pair to a row, the names in a column of their own.
+/// What a fact naming somebody's or a server's address is called, as the
+/// engine's adapter names it (`real.rs`).
+pub(super) const ADDRESS: &str = "Address";
+
 pub(super) fn rows(facts: &[(SharedString, SharedString)], theme: &Theme) -> Div {
     let muted = theme.c.muted;
     div()

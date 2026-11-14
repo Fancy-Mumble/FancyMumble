@@ -52,13 +52,17 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("fancy-gpui-reset-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store = Store::new(&dir);
-        store.save_settings(&super::super::Settings::default()).expect("writable");
+        store
+            .save_settings(&super::super::Settings::default())
+            .expect("writable");
         let _ = store.keep_chat_background(b"wall").expect("writable");
         std::fs::write(dir.join("other.txt"), b"not ours").expect("writable");
         store.forget_everything().expect("forgotten");
         assert!(!dir.join("view.json").exists() && !dir.join("walls").exists());
         assert!(dir.join("other.txt").exists());
-        store.forget_everything().expect("nothing there is not an error");
+        store
+            .forget_everything()
+            .expect("nothing there is not an error");
         let _ = std::fs::remove_dir_all(dir);
     }
 }

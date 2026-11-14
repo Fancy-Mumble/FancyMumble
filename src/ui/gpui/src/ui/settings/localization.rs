@@ -3,13 +3,15 @@
 //! on and whether it is the local one, and how dates and numbers are
 //! written, each choice showing what it gives.
 
-use std::sync::{Arc, LazyLock};
+use std::sync::LazyLock;
 
 use chrono::Timelike;
 use gpui::{Context, Div, ParentElement, SharedString, Styled, div, px};
 
 use super::super::Shell;
-use super::super::kit::{Choice, Choices, Field, Look, PageTitle, Select, Shape, SwitchRow, rule};
+use super::super::kit::{
+    Choice, Choices, Field, Look, PageTitle, Picture, Select, Shape, SwitchRow, rule,
+};
 use crate::formats::{DateFormat, NumberFormat};
 use crate::store::Hours;
 use crate::theme::Theme;
@@ -18,20 +20,23 @@ use crate::words::{self, Language, t};
 /// Each language's flag, in the order of [`Language::ALL`]: where the
 /// language comes from, as the web UI marks it (`country-flag-icons`, MIT,
 /// see `assets/flags/LICENSE`).
-static FLAGS: LazyLock<[Arc<gpui::Image>; 4]> = LazyLock::new(|| {
-    let flag = |svg: &[u8]| {
-        Arc::new(gpui::Image::from_bytes(
-            gpui::ImageFormat::Svg,
-            svg.to_vec(),
-        ))
-    };
+static FLAGS: LazyLock<Vec<Picture>> = LazyLock::new(|| {
+    // Drawn in their own colours, as pictures: not as icons, which take
+    // the theme's ink.
+    let flag = |svg: &[u8]| Picture::from_svg(svg, FLAG_WIDTH);
     [
         flag(include_bytes!("../../../assets/flags/gb.svg")),
         flag(include_bytes!("../../../assets/flags/de.svg")),
         flag(include_bytes!("../../../assets/flags/fr.svg")),
         flag(include_bytes!("../../../assets/flags/cn.svg")),
     ]
+    .into_iter()
+    .flatten()
+    .collect()
 });
+
+/// How wide a flag is drawn beside its language's name.
+const FLAG_WIDTH: f32 = 20.0;
 
 /// What the page changes about how things are written.
 #[derive(Debug, Clone, Copy)]
@@ -95,7 +100,7 @@ pub(super) fn render(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> D
                                 .into(),
                             speaking.unwrap_or(0),
                         )
-                        .pictures(FLAGS.to_vec())
+                        .pictures(FLAGS.clone())
                         .on_choose(cx.listener(
                             |shell, at: &usize, _, cx| {
                                 if let Some(language) = Language::ALL.get(*at) {
@@ -260,4 +265,44 @@ fn number_format(shell: &Shell, cx: &mut Context<Shell>) -> Div {
                 }
             })),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The colour at `share` of the way down the middle of `flag`.
+    fn down(flag: &image::RgbaImage, share: f32) -> [u8; 4] {
+        let (width, height) = flag.dimensions();
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss,
+            reason = "a place in a small picture"
+        )]
+        let y = (height as f32 * share) as u32;
+        flag.get_pixel(width / 2, y).0
+    }
+
+    #[test]
+    fn a_flag_is_drawn_in_its_own_colours_whatever_the_theme_inks() {
+        assert_eq!(
+            FLAGS.len(),
+            Language::ALL.len(),
+            "every language has its flag"
+        );
+        // Black, red and gold, top to bottom: not the one ink of an icon.
+        // The picture is drawn before any theme is, so no theme reaches it.
+        let german = FLAGS[1].pixels();
+        let [r, g, b, a] = down(&german, 0.15);
+        assert!(
+            r < 40 && g < 40 && b < 40 && a > 200,
+            "black, not {:?}",
+            [r, g, b, a]
+        );
+        let [r, g, b, _] = down(&german, 0.5);
+        assert!(r > 180 && g < 60 && b < 60, "red, not {:?}", [r, g, b]);
+        let [r, g, b, _] = down(&german, 0.85);
+        assert!(r > 200 && g > 150 && b < 80, "gold, not {:?}", [r, g, b]);
+    }
 }

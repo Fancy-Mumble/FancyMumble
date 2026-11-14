@@ -6,7 +6,7 @@
 //! `assets/icons/brand-OFL.txt`) by the web UI's `brandGlyph.ts`.
 //!
 //! The typeface is Inter (OFL, see `assets/fonts/Inter-OFL.txt`), the face
-//! the web UI ships and sets everything in: five static faces cut from its
+//! the web UI ships and sets everything in: eight static faces cut from its
 //! variable font by `assets/fonts/instances.py`. The other is the web UI's
 //! poster face, Saira's italic (OFL, see `assets/fonts/Saira-OFL.txt`), its
 //! variable font as the web UI ships it, whose outlines a drawn theme's
@@ -35,6 +35,7 @@ icons![
     "brand",
     "check",
     "check-check",
+    "clock",
     "chevron-down",
     "chevron-left",
     "chevron-right",
@@ -120,12 +121,21 @@ pub(crate) const INTER_BOLD: &[u8] = include_bytes!("../assets/fonts/Inter-Bold.
 pub(crate) const SAIRA_ITALIC: &[u8] =
     include_bytes!("../assets/fonts/Saira-Italic-VariableFont_wdth,wght.ttf");
 
-/// The bundled faces of Inter: regular, medium, semibold, bold and italic,
-/// and the bold of its display cut (`Inter Display`), which is what a
-/// browser draws a heading in.
+/// Inter's drawn italic at 800 and optical size 32, cut by
+/// `assets/fonts/instances.py`: what the browser sets a letter of the
+/// poster name in that Saira lacks (Greek, Cyrillic). Read as outlines
+/// only (`ui::kit::lettering`), never given to the text system.
+pub(crate) const INTER_POSTER_ITALIC: &[u8] =
+    include_bytes!("../assets/fonts/Inter-PosterItalic.ttf");
+
+/// The bundled faces of Inter: regular, medium, semibold, bold, black and
+/// italic, and the bold of its display cuts (`Inter Display` at optical
+/// size 24, `Inter Display Large` at 32), which is what a browser draws a
+/// heading in. Black (900) is what a drawn theme's poster
+/// labels ask for, such as the voice dock's name in Nimbus.
 ///
 /// About 290 KiB each, and the text system copies what it is given, so this
-/// is some 1.7 MiB held for the whole run. It buys the same letterforms and
+/// is some 2 MiB held for the whole run. It buys the same letterforms and
 /// the same line breaks as the web UI on a system that has no Inter, where
 /// the fallback would be whatever sans the system names.
 pub(crate) fn fonts() -> Vec<Cow<'static, [u8]>> {
@@ -139,8 +149,10 @@ pub(crate) fn fonts() -> Vec<Cow<'static, [u8]>> {
         face!("Medium"),
         face!("SemiBold"),
         Cow::Borrowed(INTER_BOLD),
+        face!("Black"),
         face!("Italic"),
         face!("DisplayBold"),
+        face!("DisplayLargeBold"),
     ]
 }
 

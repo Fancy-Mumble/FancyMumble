@@ -13,10 +13,19 @@
   "Shortcuts marked global work even when the app is in the background. In-app shortcuts only fire while the window is focused.": "Als global markierte Tastenkürzel funktionieren auch, wenn die App im Hintergrund ist. Tastenkürzel in der App wirken nur, solange das Fenster im Fokus ist.",
   "Spectral subtraction": "Spektrale Subtraktion",
   "Stop trusting this site": "Dieser Seite nicht mehr vertrauen",
-  "The folder the client writes what it does into, a file a day: what to send along when something went wrong.": "Der Ordner, in den der Client schreibt, was er tut, eine Datei pro Tag: das, was du mitschickst, wenn etwas schiefgegangen ist.",
   "The picture could not be kept: {{error}}": "Das Bild konnte nicht gespeichert werden: {{error}}",
   "Trusted sites": "Vertrauenswürdige Seiten",
   "Voice": "Audio",
   "Voice quality": "Sprachqualität",
-  "Failed to reset: {{error}}": "Zurücksetzen fehlgeschlagen: {{error}}"
+  "Failed to reset: {{error}}": "Zurücksetzen fehlgeschlagen: {{error}}",
+  "View deal": "Zum Angebot",
+  "from {{price}}": "ab {{price}}",
+  "Thumbnail only · open for full size": "Nur Vorschau · zum Öffnen in voller Größe",
+  "by {{author}}": "von {{author}}",
+  "In stock": "Auf Lager",
+  "Out of stock": "Nicht verfügbar",
+  "Pre-order": "Vorbestellung",
+  "{{value}} shops": "{{value}} Shops",
+  "{{value}} shipping": "Versand: {{value}}",
+  "★ {{value}}": "★ {{value}}"
 }

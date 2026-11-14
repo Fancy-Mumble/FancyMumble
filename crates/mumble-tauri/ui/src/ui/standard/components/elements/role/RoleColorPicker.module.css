@@ -66,6 +66,6 @@
 }
 
 .presetSwatch.active {
-  outline: 2px solid var(--accent-color, #5865f2);
+  outline: 2px solid var(--color-accent, #5865f2);
   outline-offset: 1px;
 }

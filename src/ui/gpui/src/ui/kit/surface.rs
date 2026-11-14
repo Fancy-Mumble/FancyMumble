@@ -18,6 +18,8 @@ enum Cut {
     Field,
     /// A plate of this fill on a ground of this edge, casting nothing.
     Plate { fill: Hsla, edge: Hsla },
+    /// The same, cut as a control is.
+    Control { fill: Hsla, edge: Hsla },
 }
 
 /// A surface cut the way the web UI cuts its cards and bubbles: a ground of
@@ -72,6 +74,12 @@ impl Paper {
         Self::cut(Cut::Plate { fill, edge })
     }
 
+    /// A plate of `fill` on a ground of `edge`, cut as the theme cuts a
+    /// control (as a field is): one of the composer's plates.
+    pub(crate) fn control(fill: Hsla, edge: Hsla) -> Self {
+        Self::cut(Cut::Control { fill, edge })
+    }
+
     /// Edge it in the accent: the keyboard is pointed here.
     pub(crate) fn lit(mut self, lit: bool) -> Self {
         self.lit = lit;
@@ -104,7 +112,7 @@ impl RenderOnce for Paper {
             // Drop, blur and strength, as CSS writes a shadow.
             Cut::Raised => (theme.c.card, theme.c.line2, Some((8.0, 28.0, 0.14))),
             Cut::Field => (theme.c.input, theme.c.line2, Some((6.0, 24.0, 0.12))),
-            Cut::Plate { fill, edge } => (fill, edge, None),
+            Cut::Plate { fill, edge } | Cut::Control { fill, edge } => (fill, edge, None),
         };
         let edge = if self.lit {
             Hsla {
@@ -115,7 +123,7 @@ impl RenderOnce for Paper {
             edge
         };
         let kind = match self.cut {
-            Cut::Field => Kind::Plate,
+            Cut::Field | Cut::Control { .. } => Kind::Plate,
             Cut::Raised | Cut::Plate { .. } => Kind::Card,
         };
         if let Some(cut) = theme.skin.cuts.of(kind) {

@@ -23,6 +23,13 @@ pub(crate) enum Variant {
     Tonal,
     /// A wash and an edge of the tone's own colour: a state worth noticing.
     Soft,
+    /// A dark disc that stays a cross over any picture it sits on: the way
+    /// to take back a file waiting on its tile.
+    Glass,
+    /// The tone's own colour as a heavy edge over its wash: a control a
+    /// drawn skin stands on a plate of its own (the rail's way off a
+    /// server, as the web UI's plated `RailButton`).
+    Plated,
     /// A raised fill and no edge.
     Filled,
     /// The accent itself, with the ink that reads on it.
@@ -39,6 +46,9 @@ pub(crate) enum Corner {
     #[default]
     Medium,
     Pill,
+    /// A circle whatever the theme does to its corners: the disc on a
+    /// waiting file's tile.
+    Round,
 }
 
 impl Corner {
@@ -47,6 +57,7 @@ impl Corner {
             Self::Small => theme.skin.radius_sm,
             Self::Medium => theme.skin.radius_md,
             Self::Pill => theme.skin.radius_pill,
+            Self::Round => px(9999.0),
         }
     }
 }
@@ -84,6 +95,17 @@ fn coat(variant: Variant, tone: Tone, theme: &Theme) -> Coat {
         Variant::Soft => Coat {
             fill: Some(faded(0.16)),
             edge: faded(0.34),
+            ..plain
+        },
+        // The web UI's TileClose: rgba(8,11,18,.78) under #dfe4ec.
+        Variant::Glass => Coat {
+            fill: Some(gpui::Rgba { r: 8.0 / 255.0, g: 11.0 / 255.0, b: 18.0 / 255.0, a: 0.78 }.into()),
+            ink: gpui::Rgba { r: 223.0 / 255.0, g: 228.0 / 255.0, b: 236.0 / 255.0, a: 1.0 }.into(),
+            ..plain
+        },
+        Variant::Plated => Coat {
+            fill: Some(faded(0.14)),
+            edge: ink,
             ..plain
         },
         Variant::Filled => Coat {
@@ -348,6 +370,7 @@ impl RenderOnce for IconButton {
                             blur_radius: px(0.0),
                             spread_radius: px(0.0),
                         }]),
+                        None if self.variant == Variant::Plated => button.border_2(),
                         None => button.border_1(),
                     })
                     .border_color(coat.edge)
@@ -419,6 +442,8 @@ pub(crate) struct Button {
     tone: Tone,
     size: Size,
     wide: bool,
+    /// How tall it is, where it stands as tall as a field beside it.
+    height: Option<f32>,
     on_click: Option<OnClick>,
 }
 
@@ -435,6 +460,7 @@ impl Button {
             tone: Tone::Muted,
             size: Size::default(),
             wide: false,
+            height: None,
             on_click: None,
         }
     }
@@ -442,6 +468,13 @@ impl Button {
     /// What the tests call it, where that is not its id.
     pub(crate) fn selector(mut self, selector: impl Into<SharedString>) -> Self {
         self.selector = selector.into();
+        self
+    }
+
+    /// `height` tall, its size otherwise as it is: as tall as the field it
+    /// stands beside in a toolbar, as the web UI's stretch.
+    pub(crate) fn height(mut self, height: f32) -> Self {
+        self.height = Some(height);
         self
     }
 
@@ -496,6 +529,7 @@ impl RenderOnce for Button {
             Size::Medium => (36.0, 18.0, 14.0),
             Size::Compact => (35.1, 13.0, 12.0),
         };
+        let height = self.height.unwrap_or(height);
         let contained = self.emphasis == Emphasis::Contained;
         let outlined = self.emphasis == Emphasis::Outlined;
         // A contained button is the accent unless it is told it destroys.

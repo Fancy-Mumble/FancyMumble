@@ -247,12 +247,7 @@ impl Shell {
             .iter()
             .position(|group| group.name == *name)
             .unwrap_or_else(|| {
-                acl.groups.push(AclGroup {
-                    name: name.clone(),
-                    inherited: Vec::new(),
-                    added: Vec::new(),
-                    removed: Vec::new(),
-                });
+                acl.groups.push(AclGroup::new(name.clone()));
                 acl.groups.len() - 1
             });
         acl.groups[at].set_member(account, member);

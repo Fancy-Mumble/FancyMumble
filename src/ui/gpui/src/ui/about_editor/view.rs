@@ -91,66 +91,10 @@ pub(crate) fn field(
     theme: &Theme,
     cx: &mut Context<Shell>,
 ) -> AnyElement {
-    let viewer = cx.entity().downgrade();
     let editing = editor.drafts().is_some();
-    let tools: Vec<_> = Kind::ALL
-        .into_iter()
-        .map(|kind| {
-            IconButton::new(kind.add_id(), glyph(kind))
-                .dims(26.0, 24.0)
-                .glyph_size(13.0)
-                .corner(Corner::Small)
-                .faded(!editing)
-                .tip(kind.name())
-                .on_click(cx.listener(move |shell, _, _, cx| {
-                    if shell
-                        .panels
-                        .profiles
-                        .editor
-                        .as_ref()
-                        .is_some_and(|editor| editor.drafts().is_some())
-                    {
-                        shell.add_draft(kind, cx);
-                    }
-                }))
-        })
-        .collect();
+    let tools = field_tools(editing, cx);
     let room = if let Some(words) = before(editor) {
-        div()
-            .flex()
-            .flex_col()
-            .gap(px(8.0))
-            .child(div().debug_selector(|| "about-field-words".to_owned()).children(words_as(
-                ("about-field-words", 0_usize),
-                words,
-                (None, Some(&viewer)),
-                theme.c.accent_text,
-                theme,
-            )))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.0))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .text_size(px(11.0))
-                            .line_height(px(15.0))
-                            .text_color(theme.c.muted)
-                            .child(t!(
-                                "This profile uses the older format: only its words are shown."
-                            )),
-                    )
-                    .child(
-                        Button::new("about-convert", t!("Convert"))
-                            .size(Size::Small)
-                            .on_click(cx.listener(|shell, _, _, cx| {
-                                shell.convert_about_in_dialog(cx);
-                            })),
-                    ),
-            )
+        older_words(words, theme, cx)
     } else if let Some(drafts) = editor.drafts() {
         div().flex().flex_col().gap(px(8.0)).children(
             drafts
@@ -200,6 +144,78 @@ pub(crate) fn field(
         .child(boxed)
         .when(editing, |field| field.child(footer(shell, editor, theme, cx)))
         .into_any_element()
+}
+
+/// The field's strip of buttons, one for each kind of block, faded while
+/// there are no blocks to add to.
+fn field_tools(editing: bool, cx: &mut Context<Shell>) -> Vec<IconButton> {
+    Kind::ALL
+        .into_iter()
+        .map(|kind| {
+            IconButton::new(kind.add_id(), glyph(kind))
+                .dims(26.0, 24.0)
+                .glyph_size(13.0)
+                .corner(Corner::Small)
+                .faded(!editing)
+                .tip(kind.name())
+                .on_click(cx.listener(move |shell, _, _, cx| {
+                    if shell
+                        .panels
+                        .profiles
+                        .editor
+                        .as_ref()
+                        .is_some_and(|editor| editor.drafts().is_some())
+                    {
+                        shell.add_draft(kind, cx);
+                    }
+                }))
+        })
+        .collect()
+}
+
+/// A profile of the older format in the field: its words, and the way to
+/// its conversion.
+fn older_words(words: &crate::rich::Rich, theme: &Theme, cx: &mut Context<Shell>) -> Div {
+    let viewer = cx.entity().downgrade();
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(8.0))
+        .child(
+            div()
+                .debug_selector(|| "about-field-words".to_owned())
+                .children(words_as(
+                    ("about-field-words", 0_usize),
+                    words,
+                    (None, Some(&viewer)),
+                    theme.c.accent_text,
+                    theme,
+                )),
+        )
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(8.0))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .text_size(px(11.0))
+                        .line_height(px(15.0))
+                        .text_color(theme.c.muted)
+                        .child(t!(
+                            "This profile uses the older format: only its words are shown."
+                        )),
+                )
+                .child(
+                    Button::new("about-convert", t!("Convert"))
+                        .size(Size::Small)
+                        .on_click(cx.listener(|shell, _, _, cx| {
+                            shell.convert_about_in_dialog(cx);
+                        })),
+                ),
+        )
 }
 
 /// A column with a heading over it.

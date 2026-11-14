@@ -831,89 +831,176 @@ impl Shell {
     }
 }
 
+/// The composer, as the web UI's `Composer`: what waits to go out and what
+/// is going up, in trays above the row that writes the message. On most
+/// themes one panel holds it all, the trays at its top; a theme that plates
+/// the composer (`marks.composer_plates`) stands the trays on plates of
+/// their own and the row as three: the ways to attach, the field with how
+/// to break a line in it, and a worded Send.
 fn composer(shell: &Shell, window: &Window, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
-    let armed = shell.has_staged() || !shell.composer.read(cx).text().trim().is_empty();
-    let focused = shell.composer.focus_handle(cx).is_focused(window);
     let theme = crate::theme::ActiveTheme::get(cx);
-    let waiting = super::staged::render(shell, &theme, cx);
-    // The same gutter the conversation keeps for its scrollbar.
-    div()
+    let plates = theme.skin.marks.composer_plates;
+    let text = shell.composer.read(cx).text().to_owned();
+    // Nothing goes while a file is still going up, as the web UI's.
+    let uploading = shell.uploading();
+    let armed = !uploading && (shell.has_staged() || !text.trim().is_empty());
+    let focused = shell.composer.focus_handle(cx).is_focused(window);
+    let trays: Vec<AnyElement> = super::staged::render(shell, &theme, cx)
+        .into_iter()
+        .chain(super::uploads::render(shell, &theme, cx))
+        .collect();
+    let tools_height = if plates { 56.0 - 2.0 * f32::from(theme.skin.line_width) } else { 32.0 };
+    // On a plate, the tools fill it corner to corner, square; the chevron
+    // is drawn back onto the clip's leaning edge.
+    let tools = div()
         .flex_none()
-        .p(px(10.0))
-        .pr(px(19.0))
         .flex()
-        .flex_col()
-        .gap(px(6.0))
-        .children(waiting)
+        .items_center()
+        .gap(px(if plates { 0.0 } else { 3.0 }))
         .child(
+            // On a server that takes no files it still sends pictures, in
+            // the message itself.
+            IconButton::new("attach", "paperclip")
+                .dims(if plates { 40.0 } else { 28.0 }, tools_height)
+                .glyph_size(16.0)
+                .tip(crate::words::t!("Attach files"))
+                .faded(!shell.snapshot.fancy)
+                .on_click(cx.listener(|shell, _, _, cx| shell.pick_file_to_send(cx))),
+        )
+        .child(
+            div().when(plates, |chevron| chevron.ml(px(-10.0))).child(
+                IconButton::new("compose-more", "chevron-down")
+                    .dims(if plates { 34.0 } else { 16.0 }, tools_height)
+                    .glyph_size(10.0)
+                    .tip(crate::words::t!("More ways to attach"))
+                    .corner(Corner::Small)
+                    .on_click(cx.listener(|shell, event: &gpui::ClickEvent, _, cx| {
+                        let items = super::menu::compose_items(shell.open, shell.snapshot.fancy);
+                        shell.open_menu(event.position(), items, cx);
+                    })),
+            ),
+        );
+    // The GIF chip leads the field, as in the web client; while a voice
+    // message is recorded, its strip is the field.
+    let gif = super::gifs::chip(shell, cx);
+    let field = shell
+        .voice_take_bar(cx)
+        .unwrap_or_else(|| shell.composer.clone().into_any_element());
+    let waiting_tip = uploading.then(|| crate::words::t!("Waiting for the upload to finish"));
+    // No voice message is offered while a file goes up: Send stands, unlit.
+    let voice = if uploading { None } else { shell.voice_button(armed, cx) };
+    let send = voice.map(IntoElement::into_any_element).unwrap_or_else(|| {
+        let says = waiting_tip.clone().unwrap_or_else(|| crate::words::t!("Send"));
+        if plates {
+            super::kit::SendPlate::new("send", crate::words::t!("Send"))
+                .ready(armed)
+                .tip_with_key(says, "Enter")
+                .on_click(cx.listener(|shell, _, _, cx| shell.send_composed(cx)))
+                .into_any_element()
+        } else {
+            IconButton::new("send", "send")
+                .tip_with_key(says, "Enter")
+                .size(32.0)
+                .corner(Corner::Pill)
+                .variant(if armed { Variant::Solid } else { Variant::Filled })
+                .tone(Tone::Dim)
+                .on_click(cx.listener(|shell, _, _, cx| shell.send_composed(cx)))
+                .into_any_element()
+        }
+    });
+    // The same gutter the conversation keeps for its scrollbar.
+    let column = div().flex_none().p(px(10.0)).pr(px(19.0)).flex().flex_col();
+    if !plates {
+        return column.child(
             Paper::field()
                 .lit(focused)
-                // Grows with what is typed, up to a few lines.
-                .min_h(px(54.0))
-                .max_h(px(180.0))
-                .overflow_hidden()
-                .py(px(11.0))
-                .px(px(15.0))
                 .flex()
-                .items_center()
-                .gap(px(9.0))
-                .text_size(px(14.0))
-                .line_height(px(19.6))
+                .flex_col()
+                .children(trays)
                 .child(
                     div()
-                        .flex_none()
+                        // Grows with what is typed, up to a few lines.
+                        .min_h(px(54.0))
+                        .max_h(px(180.0))
+                        .overflow_hidden()
+                        .py(px(11.0))
+                        .px(px(15.0))
                         .flex()
                         .items_center()
-                        .gap(px(3.0))
-                        .child(
-                            // On a server that takes no files it still sends
-                            // pictures, in the message itself.
-                            IconButton::new("attach", "paperclip")
-                                .dims(28.0, 32.0)
-                                .glyph_size(16.0)
-                                .tip("Attach a file")
-                                .faded(!shell.snapshot.fancy)
-                                .on_click(
-                                    cx.listener(|shell, _, _, cx| shell.pick_file_to_send(cx)),
-                                ),
-                        )
-                        .child(
-                            IconButton::new("compose-more", "chevron-down")
-                                .dims(16.0, 32.0)
-                                .glyph_size(10.0)
-                                .tip("More to send")
-                                .corner(Corner::Small)
-                                .on_click(cx.listener(|shell, event: &gpui::ClickEvent, _, cx| {
-                                    let items = super::menu::compose_items(
-                                        shell.open,
-                                        shell.snapshot.fancy,
-                                    );
-                                    shell.open_menu(event.position(), items, cx);
-                                })),
-                        ),
-                )
-                // The GIF chip leads the field, as in the web client.
-                .children(super::gifs::chip(shell, cx))
-                // While a voice message is recorded, its strip is the field.
-                .child(
-                    shell
-                        .voice_take_bar(cx)
-                        .unwrap_or_else(|| shell.composer.clone().into_any_element()),
-                )
-                .child(shell.voice_button(armed, cx).unwrap_or_else(|| {
-                    IconButton::new("send", "send")
-                        .tip_with_key("Send", "Enter")
-                        .size(32.0)
-                        .corner(Corner::Pill)
-                        .variant(if armed {
-                            Variant::Solid
-                        } else {
-                            Variant::Filled
-                        })
-                        .tone(Tone::Dim)
-                        .on_click(cx.listener(|shell, _, _, cx| shell.send_composed(cx)))
-                })),
-        )
+                        .gap(px(9.0))
+                        .text_size(px(14.0))
+                        .line_height(px(19.6))
+                        .child(tools)
+                        .children(gif)
+                        .child(field)
+                        .child(send),
+                ),
+        );
+    }
+    // The hint says how to break a line for as long as the draft is the one
+    // line it is about; back once the field is empty.
+    let hint = (!text.contains('\n')).then(|| {
+        div()
+            .debug_selector(|| "composer-hint".to_owned())
+            .flex_none()
+            .whitespace_nowrap()
+            .text_size(px(10.0))
+            .font_weight(gpui::FontWeight::BOLD)
+            .letter_spacing(0.14)
+            .text_color(theme.c.muted)
+            .child(SharedString::from(
+                crate::words::t!("Shift+Enter = newline").to_uppercase(),
+            ))
+    });
+    let (card, edge) = (theme.c.card, theme.c.accent_line);
+    let edge = if focused { theme.c.accent } else { edge };
+    column.children(trays).child(
+        div()
+            .min_h(px(56.0))
+            .flex()
+            .items_center()
+            // The plates overlap three of the ten pixels their edges lean,
+            // so a slit of window is left between each two.
+            .child(
+                div()
+                    .debug_selector(|| "composer-tools".to_owned())
+                    .flex_none()
+                    .child(
+                        Paper::control(card, theme.c.accent_line)
+                            .h(px(56.0))
+                            .p(theme.skin.line_width)
+                            .flex()
+                            .items_center()
+                            .child(tools),
+                    ),
+            )
+            .child(
+                div()
+                    .debug_selector(|| "composer-field".to_owned())
+                    .ml(px(-3.0))
+                    .flex_1()
+                    .min_w_0()
+                    .min_h(px(56.0))
+                    .flex()
+                    .child(
+                        Paper::control(card, edge)
+                            .flex_1()
+                            .min_w_0()
+                            .max_h(px(180.0))
+                            .px(px(16.0))
+                            .py(px(16.0))
+                            .flex()
+                            .items_center()
+                            .gap(px(9.0))
+                            .text_size(px(14.0))
+                            .line_height(px(19.6))
+                            .children(gif)
+                            .child(div().flex_1().min_w_0().child(field))
+                            .children(hint),
+                    ),
+            )
+            .child(div().ml(px(-3.0)).child(send)),
+    )
 }
 
 impl Shell {
@@ -1039,7 +1126,13 @@ impl Shell {
             Some(Row::Message(index)) => *index,
             None => return div().into_any_element(),
         };
-        let body = self.drawn_body(index);
+        let body = self.drawn_body_soon(index, cx);
+        // A message that is its link and nothing else is the link's poster.
+        let body = if self.link_is_the_message(&body) {
+            Arc::new(body.without_words())
+        } else {
+            body
+        };
         // Said to the reader: marked down its leading edge.
         let named = body.names(self.snapshot.own_session);
         let Some(message) = self.messages.get(index) else {
@@ -1179,41 +1272,12 @@ pub(super) struct DrawnBody {
     /// Whether what it hides has been asked for: a click on a spoiler
     /// shows the message's spoilers, for as long as the message is held.
     revealed: Arc<AtomicBool>,
-}
-
-/// A picture shared as a file, shown as one: at the size its sender said
-/// it is, or what was fetched of it is, fitted into a conversation. A
-/// click looks at it larger.
-fn shared_picture(
-    picture: &Arc<gpui::Image>,
-    pixels: Option<(u32, u32)>,
-    (index, at): (usize, usize),
-    theme: &Theme,
-    cx: &mut Context<Shell>,
-) -> impl IntoElement + use<> {
-    use crate::pictures::{Fit, shown};
-    let natural = pixels.or_else(|| crate::picture::dimensions(picture.bytes()));
-    let (width, height) = natural.map_or(Shown::MOST, |natural| {
-        crate::picture::fitted(natural, Shown::MOST)
-    });
-    let opened = Arc::clone(picture);
-    div()
-        .id(("shared-picture", index * 16 + at))
-        .debug_selector(move || format!("shared-picture-{index}-{at}"))
-        .flex_none()
-        .w(px(width))
-        .h(px(height))
-        .cursor_pointer()
-        .on_click(cx.listener(move |shell, _, _, cx| {
-            shell.lightbox = Some(Arc::clone(&opened));
-            cx.notify();
-        }))
-        .child(
-            gpui::img(shown(picture, Fit::Tile))
-                .size_full()
-                .rounded(theme.skin.radius_md)
-                .object_fit(gpui::ObjectFit::Contain),
-        )
+    /// Whether this is all of it, or what stands in for it while it is
+    /// read on another thread: its words and the room of its pictures, if
+    /// they are known.
+    whole: bool,
+    /// The read under way, for a stand-in: let go of with it.
+    reading: Option<gpui::Task<()>>,
 }
 
 /// The picture the user put behind the conversation, covering it, under
@@ -1246,6 +1310,9 @@ const BODIES_NEAR: usize = 64;
 /// elsewhere; this is what opening one large, saving it or copying it
 /// reads from.
 const PICTURES_MOST: usize = 8 << 20;
+/// How long a message may be and still be read while its row is drawn:
+/// one longer carries pictures, and reading them waits on another thread.
+const READ_AT_ONCE: usize = 64 * 1024;
 
 /// A picture of a message, and the room it is given.
 #[derive(Debug)]
@@ -1257,6 +1324,9 @@ struct Shown {
     /// before it is decoded, which happens after the row is first laid out:
     /// a row that grew only then would push its picture out of view.
     size: Option<gpui::Size<gpui::Pixels>>,
+    /// Whether it stands in for a picture still being read: nothing is
+    /// drawn in its room, and it is not opened.
+    waiting: bool,
 }
 
 impl Shown {
@@ -1274,7 +1344,26 @@ impl Shown {
             image,
             natural,
             size,
+            waiting: false,
         })
+    }
+
+    /// What holds its room while it is read again: nothing to see, at the
+    /// size it was.
+    fn stand_in(&self) -> Self {
+        static BLANK: std::sync::OnceLock<Arc<gpui::Image>> = std::sync::OnceLock::new();
+        let blank = BLANK.get_or_init(|| {
+            let mut png = Vec::new();
+            let _ = image::RgbaImage::new(1, 1)
+                .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png);
+            Arc::new(gpui::Image::from_bytes(gpui::ImageFormat::Png, png))
+        });
+        Self {
+            image: Arc::clone(blank),
+            natural: self.natural,
+            size: self.size,
+            waiting: true,
+        }
     }
 
     /// What is drawn of it in a conversation: a copy no larger than it is
@@ -1317,6 +1406,41 @@ impl DrawnBody {
             pictures,
             mentions: super::mention::Mentions::read(html),
             revealed: Arc::default(),
+            whole: true,
+            reading: None,
+        }
+    }
+
+    /// Whether this is all of it, not what stands in for it.
+    #[cfg(test)]
+    pub(super) fn is_whole(&self) -> bool {
+        self.whole
+    }
+
+    /// The room each of its pictures takes, where it is known.
+    #[cfg(test)]
+    pub(super) fn picture_sizes(&self) -> Vec<Option<gpui::Size<gpui::Pixels>>> {
+        self.pictures.iter().map(|picture| picture.size).collect()
+    }
+
+    /// What stands in for this body while it is read again: its words, and
+    /// its pictures' room with nothing in it.
+    pub(super) fn stand_in(&self) -> Self {
+        Self {
+            rich: self.rich.clone(),
+            pictures: self.pictures.iter().map(Shown::stand_in).collect(),
+            mentions: self.mentions.clone(),
+            revealed: Arc::clone(&self.revealed),
+            whole: false,
+            reading: None,
+        }
+    }
+
+    /// This stand-in, while `reading` reads the whole of it.
+    fn while_reading(&self, reading: gpui::Task<()>) -> Self {
+        Self {
+            reading: Some(reading),
+            ..self.stand_in()
         }
     }
 
@@ -1328,6 +1452,8 @@ impl DrawnBody {
             pictures: Vec::new(),
             mentions: super::mention::Mentions::default(),
             revealed: Arc::default(),
+            whole: true,
+            reading: None,
         }
     }
 
@@ -1341,7 +1467,10 @@ impl DrawnBody {
 
     /// Its pictures, in the order they stand in it.
     pub(super) fn pictures(&self) -> impl Iterator<Item = &Arc<gpui::Image>> {
-        self.pictures.iter().map(|picture| &picture.image)
+        self.pictures
+            .iter()
+            .filter(|picture| !picture.waiting)
+            .map(|picture| &picture.image)
     }
 
     /// Whether it names `own`, or everybody.
@@ -1352,9 +1481,12 @@ impl DrawnBody {
     /// Whether it is drawn on a plate: anything but pictures alone, which
     /// are the message themselves. A photograph on a padded, edged plate is
     /// a photograph in a frame. A line break around a picture is not words.
+    /// Links whose words were left out (`without_words`) are their poster.
     fn has_plate(&self) -> bool {
         !self.rich.text.trim().is_empty()
-            || (self.pictures.is_empty() && self.rich.web_pictures.is_empty())
+            || (self.pictures.is_empty()
+                && self.rich.web_pictures.is_empty()
+                && self.rich.links.is_empty())
     }
 
     /// The pictures it names by their web addresses, in order.
@@ -1379,6 +1511,37 @@ impl DrawnBody {
     /// Whether there is nothing in it to show.
     pub(super) fn is_empty(&self) -> bool {
         self.rich.text.is_empty() && self.pictures.is_empty() && self.rich.web_pictures.is_empty()
+    }
+
+    /// Whether it is links and nothing else: the web's `isOnlyLinks`.
+    pub(super) fn only_links(&self) -> bool {
+        if self.rich.links.is_empty() || !self.pictures.is_empty() {
+            return false;
+        }
+        let mut rest = self.rich.text.clone();
+        // Last first, so the earlier ranges still point where they did.
+        for (range, _) in self.rich.links.iter().rev() {
+            if rest.get(range.clone()).is_some() {
+                rest.replace_range(range.clone(), "");
+            }
+        }
+        rest.trim().is_empty() && self.rich.web_pictures.is_empty()
+    }
+
+    /// The same body with its words left out and its links kept: a message
+    /// that is its link, drawn as the link's poster (`link_card`).
+    pub(super) fn without_words(&self) -> Self {
+        Self {
+            rich: Rich {
+                links: self.rich.links.clone(),
+                ..Rich::default()
+            },
+            pictures: Vec::new(),
+            mentions: self.mentions.clone(),
+            revealed: Arc::clone(&self.revealed),
+            whole: self.whole,
+            reading: None,
+        }
     }
 }
 
@@ -1618,7 +1781,11 @@ impl Shell {
             if all <= PICTURES_MOST || index == near {
                 break;
             }
-            let _ = self.bodies.remove(&index);
+            // What stands in keeps the row's room, so nothing moves when
+            // it is scrolled back to and read again.
+            if let Some(body) = self.bodies.get_mut(&index) {
+                *body = Arc::new(body.stand_in());
+            }
             all -= weight;
         }
     }
@@ -1626,7 +1793,7 @@ impl Shell {
     /// The body of message `index`, read from its HTML the first time it is
     /// drawn. Only rows near the viewport are ever asked for.
     pub(super) fn drawn_body(&mut self, index: usize) -> Arc<DrawnBody> {
-        if let Some(drawn) = self.bodies.get(&index) {
+        if let Some(drawn) = self.bodies.get(&index).filter(|drawn| drawn.whole) {
             return Arc::clone(drawn);
         }
         // A message held without its pictures is read back whole for as
@@ -1636,6 +1803,98 @@ impl Shell {
             .get(index)
             .and_then(|message| self.whole(message));
         let drawn = Arc::new(DrawnBody::read(whole.as_deref().unwrap_or_default()));
+        self.took_body(index, drawn)
+    }
+
+    /// The body of message `index` as [`Self::drawn_body`] gives it, but one
+    /// heavy with pictures is read on another thread: the row draws what
+    /// stands in for it until it is back, then is laid out again. Read
+    /// once, however often the row is drawn meanwhile; a row let go of
+    /// before then lets the read go with it.
+    pub(super) fn drawn_body_soon(
+        &mut self,
+        index: usize,
+        cx: &mut Context<Self>,
+    ) -> Arc<DrawnBody> {
+        let known = self.bodies.get(&index).cloned();
+        if let Some(known) = &known
+            && (known.whole || known.reading.is_some())
+        {
+            return Arc::clone(known);
+        }
+        let Some(message) = self.messages.get(index) else {
+            return self.drawn_body(index);
+        };
+        let light = crate::away::is_light(&message.html);
+        if !light && message.html.len() <= READ_AT_ONCE {
+            return self.drawn_body(index);
+        }
+        // Its words stand in at once where nothing was kept of it: a light
+        // message's are a quick read; a heavy one's wait with the rest.
+        let stand_in = known.map_or_else(
+            || {
+                if light {
+                    DrawnBody::read(&message.html).stand_in()
+                } else {
+                    DrawnBody::of_words(Rich::default()).stand_in()
+                }
+            },
+            |known| known.stand_in(),
+        );
+        let html = message.html.clone();
+        let asked = (light.then_some(()).and(self.open), message.id.clone());
+        let engine = Arc::clone(&self.engine);
+        let read = cx.background_executor().spawn(async move {
+            let whole = match asked {
+                (Some(open), Some(id)) => engine.whole(open, &id).unwrap_or_default(),
+                _ => html.to_string(),
+            };
+            DrawnBody::read(&whole)
+        });
+        let length = message.html.len();
+        let reading = cx.spawn(async move |shell, cx| {
+            let drawn = read.await;
+            let _ = shell.update(cx, |shell, cx| shell.body_read(index, length, drawn, cx));
+        });
+        let waiting = Arc::new(stand_in.while_reading(reading));
+        let _ = self.bodies.insert(index, Arc::clone(&waiting));
+        waiting
+    }
+
+    /// The body of message `index`, `length` long when it was asked for, is
+    /// read: kept, and its row laid out again, if it is still waited for.
+    fn body_read(
+        &mut self,
+        index: usize,
+        length: usize,
+        drawn: DrawnBody,
+        cx: &mut Context<Self>,
+    ) {
+        let same = self
+            .messages
+            .get(index)
+            .is_some_and(|message| message.html.len() == length);
+        let waited = self
+            .bodies
+            .get(&index)
+            .is_some_and(|known| known.reading.is_some());
+        if !(same && waited) {
+            return;
+        }
+        let _ = self.took_body(index, Arc::new(drawn));
+        let row = self
+            .row_model
+            .iter()
+            .position(|row| matches!(row, Row::Message(at) if *at == index));
+        if let Some(row) = row {
+            self.rows.splice(row..row + 1, 1);
+        }
+        cx.notify();
+    }
+
+    /// Keep `drawn` as the body of message `index`, and let go of what is
+    /// too far from it to keep.
+    fn took_body(&mut self, index: usize, drawn: Arc<DrawnBody>) -> Arc<DrawnBody> {
         self.fetch_shared_pictures(index);
         let _ = self.bodies.insert(index, Arc::clone(&drawn));
         // A body holds its message's pictures as they were sent. Those far
@@ -1672,31 +1931,52 @@ impl Shell {
             return Vec::new();
         };
         let hover = theme.c.hover;
-        message
+        // Two pictures or more are one album, and the other files keep
+        // their cards under it (`AttachmentGallery`).
+        let pictures: Vec<(usize, &Attachment)> = message
             .files
             .iter()
             .enumerate()
+            .filter(|(_, file)| super::album::tileable(file))
+            .collect();
+        let album = (pictures.len() >= 2).then(|| self.album(index, &pictures, theme, cx));
+        let in_album = |at: usize| album.is_some() && pictures.iter().any(|(of, _)| *of == at);
+        let cards: Vec<AnyElement> = message
+            .files
+            .iter()
+            .enumerate()
+            .filter(|(at, _)| !in_album(*at))
             .map(|(at, file)| {
                 // A voice message is drawn as one.
                 if let Some(note) = &file.voice {
                     return self.voice_card((index, at), file, note, cx);
                 }
+                // As the web client draws a shared file: one that has
+                // expired says so; a picture, once fetched, is the card.
+                let now = super::shared_picture::now_secs();
+                if super::shared_picture::expired(file, now) {
+                    return self.expired_card(file, (index, at), theme);
+                }
+                if let Some(picture) = file
+                    .shown_from()
+                    .and_then(|from| self.panels.shared.get(from)?.clone())
+                {
+                    return self.picture_card(file, &picture, (index, at), theme, cx);
+                }
                 let (key, url, name) = (file.key.clone(), file.url.clone(), file.name.clone());
                 let sealed = file.open_to == OpenTo::Password;
                 // Sealed, it is opened where its password is asked for.
                 let key = key.filter(|_| !sealed);
-                let (glyph, kept) = match file.open_to {
-                    OpenTo::Here => ("file", None),
-                    OpenTo::Link => ("file", Some("anyone with the link")),
-                    OpenTo::Password => ("lock", Some("opens with its password")),
-                };
-                let said = match (file.size, kept) {
-                    (Some(size), Some(kept)) => {
-                        Some(format!("{} · {kept}", super::size_in_words(size)))
-                    }
-                    (Some(size), None) => Some(super::size_in_words(size)),
-                    (None, kept) => kept.map(str::to_owned),
-                };
+                let glyph = if sealed { "lock" } else { "file" };
+                // Size, reach and when it goes (`FileFacts`); a public
+                // link says so after them.
+                let mut facts = super::shared_picture::facts(file, now);
+                if file.open_to == OpenTo::Link {
+                    facts.push(crate::words::t!("Public link"));
+                }
+                let said = (!facts.is_empty()).then(|| {
+                    facts.iter().map(SharedString::as_ref).collect::<Vec<_>>().join(" · ")
+                });
                 let card = div()
                     .id(("file", index * 16 + at))
                     .debug_selector(move || format!("file-{index}-{at}"))
@@ -1743,20 +2023,10 @@ impl Shell {
                             }),
                     )
                     .child(icon("download", 14.0, theme.c.muted));
-                // A picture among them is shown as one, above its card.
-                let picture = file
-                    .shown_from()
-                    .and_then(|from| self.panels.shared.get(from)?.clone())
-                    .map(|picture| shared_picture(&picture, file.pixels, (index, at), theme, cx));
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(4.0))
-                    .children(picture)
-                    .child(card)
-                    .into_any_element()
+                card.into_any_element()
             })
-            .collect()
+            .collect();
+        album.into_iter().chain(cards).collect()
     }
 
     /// Ask for the pictures the message `index` shares as files, each
@@ -1775,75 +2045,6 @@ impl Shell {
             let _ = self.panels.shared.insert(from.clone(), None);
             self.engine.fetch_shared(from);
         }
-    }
-
-    /// The card for what lies behind the first link of message `index`,
-    /// once the server has said.
-    pub(super) fn preview_card(&self, index: usize, theme: &Theme) -> Option<AnyElement> {
-        let url = self.bodies.get(&index)?.first_link()?;
-        let preview = Arc::clone(self.previews.get(&url)?.as_ref()?);
-        let address = url.clone();
-        let hover = theme.c.hover;
-        Some(
-            div()
-                .id(("preview", index))
-                .debug_selector(move || format!("preview-{index}"))
-                .max_w(px(420.0))
-                .flex()
-                .gap(px(10.0))
-                .p(px(10.0))
-                .rounded(theme.skin.radius_md)
-                .bg(theme.c.card)
-                .border_1()
-                .border_color(theme.c.line2)
-                .cursor_pointer()
-                .hover(move |style| style.bg(hover))
-                .on_click(move |_, _, cx| cx.open_url(&address))
-                .when_some(preview.picture.clone(), |card, picture| {
-                    card.child(
-                        gpui::img(crate::pictures::shown(&picture, crate::pictures::Fit::Face))
-                            .flex_none()
-                            .size(px(56.0))
-                            .rounded(theme.skin.radius_sm)
-                            .object_fit(gpui::ObjectFit::Cover),
-                    )
-                })
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap(px(2.0))
-                        .when_some(preview.site.clone(), |text, site| {
-                            text.child(
-                                div()
-                                    .truncate()
-                                    .text_size(px(11.0))
-                                    .text_color(theme.c.muted)
-                                    .child(site),
-                            )
-                        })
-                        .child(
-                            div()
-                                .truncate()
-                                .text_size(px(13.0))
-                                .font_weight(EMPHASIS)
-                                .text_color(theme.c.accent_text)
-                                .child(preview.title.clone().unwrap_or(url)),
-                        )
-                        .when_some(preview.description.clone(), |text, description| {
-                            text.child(
-                                div()
-                                    .text_size(px(12.0))
-                                    .text_color(theme.c.muted)
-                                    .line_clamp(2)
-                                    .child(description),
-                            )
-                        }),
-                )
-                .into_any_element(),
-        )
     }
 }
 
@@ -2045,7 +2246,8 @@ fn picture_tile(
     theme: &Theme,
     drawn: impl FnOnce(gpui::Img) -> gpui::Img,
 ) -> gpui::Stateful<gpui::Div> {
-    let (shown, viewer) = (Arc::clone(&picture.image), at.viewer.cloned());
+    let shown = Arc::clone(&picture.image);
+    let viewer = at.viewer.cloned().filter(|_| !picture.waiting);
     div()
         .id(("picture", at.row.wrapping_mul(8).wrapping_add(nth)))
         .debug_selector(move || format!("picture-{}-{nth}", at.row))

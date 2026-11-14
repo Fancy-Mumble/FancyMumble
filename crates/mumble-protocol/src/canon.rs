@@ -74,6 +74,10 @@ use fancy::domain::userdata_envelope::Body as Userdata;
 /// Outer type for runtime-mutable settings, which is where livery lives:
 /// `server-config` owns the document, so its envelope carries it.
 const SERVER_CONFIG: u16 = 1013;
+/// Outer type for the questions a server asks a new member, and the answers.
+const ONBOARDING: u16 = 1014;
+
+mod onboarding;
 
 /// The page size the server caps a query at, mirrored so the client can say
 /// `has_more` from the size of the page it got back.
@@ -423,6 +427,21 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
                 )),
             };
             return Some((PCHAT, envelope.encode_to_vec()));
+        }
+        // Onboarding had no canon arm, so all three went out on the plugin
+        // relay, which a canon server does not read: the questions were never
+        // saved and nobody was asked them.
+        ControlMessage::FancyOnboardingConfigUpdate(update) => {
+            return Some((
+                ONBOARDING,
+                onboarding::envelope(onboarding::update(update.config.as_ref())),
+            ));
+        }
+        ControlMessage::FancyOnboardingResponse(given) => {
+            return Some((ONBOARDING, onboarding::envelope(onboarding::answers(given))));
+        }
+        ControlMessage::FancyOnboardingResponseQuery(_) => {
+            return Some((ONBOARDING, onboarding::envelope(onboarding::query())));
         }
         ControlMessage::FancyServerSettingsQuery(query) => {
             return Some((
@@ -1226,6 +1245,22 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 // The stored client settings, which this client keeps locally,
                 // plus the client->server bodies.
                 _ => None,
+            })
+        }
+        ONBOARDING => {
+            use fancy::feature::onboarding_envelope::Body;
+            let Ok(envelope) = fancy::feature::OnboardingEnvelope::decode(payload) else {
+                return Ok(None);
+            };
+            Ok(match envelope.body {
+                Some(Body::Flow(flow)) => {
+                    Some(ControlMessage::FancyOnboardingConfig(onboarding::config(flow)))
+                }
+                Some(Body::Response(stored)) => Some(
+                    ControlMessage::FancyOnboardingResponseDeliver(onboarding::kept(stored)),
+                ),
+                // The client->server bodies, which a client only sends.
+                Some(Body::Query(_) | Body::Update(_)) | None => None,
             })
         }
         SERVER_CONFIG => {

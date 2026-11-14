@@ -1852,6 +1852,18 @@ impl Interactivity {
                                                 );
                                             }
 
+                                            // An element that takes a press is not
+                                            // part of a window drag area it sits in.
+                                            if self.window_control.is_none()
+                                                && (!self.mouse_down_listeners.is_empty()
+                                                    || !self.mouse_up_listeners.is_empty()
+                                                    || !self.click_listeners.is_empty()
+                                                    || self.drag_listener.is_some()
+                                                    || self.tracked_focus_handle.is_some())
+                                            {
+                                                window.insert_pressable_hitbox(hitbox);
+                                            }
+
                                             self.paint_mouse_listeners(
                                                 hitbox,
                                                 element_state.as_mut(),

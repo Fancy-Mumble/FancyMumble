@@ -243,28 +243,38 @@ pub(super) struct Filler {
     pub presence: Option<SharedString>,
 }
 
-/// The card of `user` from `info`, drawn where it is put rather than over
-/// the window: the Profile page's preview of one's own card, with `filler`
-/// in place of what a server says, and `footnote` at its foot.
+/// Who a preview of a card is of, and what stands in for what only a
+/// server says.
+pub(super) struct Sample<'a> {
+    /// Whose card it is.
+    pub user: &'a User,
+    /// In place of what a server says.
+    pub filler: &'a Filler,
+    /// The name the card shows.
+    pub named: SharedString,
+    /// What is said at its foot.
+    pub footnote: SharedString,
+}
+
+/// The card of `sample`'s user from `info`, drawn where it is put rather
+/// than over the window: the Profile page's preview of one's own card.
 pub(super) fn preview(
     shell: &Shell,
     info: &Info,
-    user: &User,
-    filler: &Filler,
-    named: SharedString,
-    footnote: SharedString,
+    sample: Sample<'_>,
     theme: &Theme,
     cx: &mut Context<Shell>,
 ) -> gpui::Stateful<Div> {
+    let footnote = sample.footnote.to_uppercase();
     let card = Card {
         shell,
         info,
-        user,
+        user: sample.user,
         theme,
         ink: Ink::of(theme),
         pinned: false,
-        filler: Some(filler),
-        named: Some(named),
+        filler: Some(sample.filler),
+        named: Some(sample.named),
     };
     let ink = card.ink;
     surface("card-preview", &card, cx).child(
@@ -277,7 +287,7 @@ pub(super) fn preview(
             .line_height(px(15.3))
             .font_weight(EMPHASIS)
             .text_color(ink.dim)
-            .child(footnote.to_uppercase()),
+            .child(footnote),
     )
 }
 

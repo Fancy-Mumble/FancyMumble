@@ -199,10 +199,10 @@ impl Shell {
         };
         let preview = self.previews.get(&link).cloned().flatten();
         let Some(embed) = Embed::of(&link, preview.as_deref()) else {
-            return self.preview_card(index, theme).into_iter().collect();
+            return self.link_card(index, theme, cx).into_iter().collect();
         };
         let card = (!embed.replaces_card())
-            .then(|| self.preview_card(index, theme))
+            .then(|| self.link_card(index, theme, cx))
             .flatten();
         let trusted = embed
             .host()

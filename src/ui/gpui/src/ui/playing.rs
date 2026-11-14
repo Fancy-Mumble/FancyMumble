@@ -26,6 +26,11 @@ use crate::player::{Page, Said, Stage};
 /// How long a video that is paused or over keeps its player.
 const KEPT_PAUSED: Duration = Duration::from_secs(5 * 60);
 
+/// How long a video that is paused or over stays in sight before its
+/// player is put away behind the still: `YouTube`'s page keeps working
+/// while it is seen, paused or not, and stops once hidden.
+const SEEN_PAUSED: Duration = Duration::from_secs(10);
+
 /// Which message a video plays on: by its name where the server gave it
 /// one, so that earlier messages arriving do not move it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,6 +48,9 @@ pub(super) struct Playing {
     stage: Rc<RefCell<Stage>>,
     /// Shown over the whole window rather than on its card.
     large: bool,
+    /// Paused long enough to be put away: the card shows its still, and a
+    /// press on it plays on.
+    tucked: bool,
     /// Lets the player go once it has rested long enough; dropped, it
     /// does not.
     resting: Option<Task<()>>,
@@ -120,6 +128,7 @@ impl Shell {
             message,
             stage: Rc::new(RefCell::new(stage)),
             large: false,
+            tucked: false,
             resting: None,
             _hearing: hearing,
         });
@@ -192,13 +201,43 @@ impl Shell {
         }
         let resting = said != Said::Playing;
         playing.stage.borrow_mut().rest(resting);
+        playing.tucked &= resting;
         playing.resting = resting.then(|| {
-            let timer = cx.background_executor().timer(KEPT_PAUSED);
+            let executor = cx.background_executor().clone();
             cx.spawn(async move |shell, cx| {
-                timer.await;
+                executor.timer(SEEN_PAUSED).await;
+                let _ = shell.update(cx, Self::tuck_video);
+                executor.timer(KEPT_PAUSED.saturating_sub(SEEN_PAUSED)).await;
                 let _ = shell.update(cx, Self::stop_video);
             })
         });
+    }
+
+    /// Put the paused player away behind its card's still.
+    fn tuck_video(&mut self, cx: &mut Context<Self>) {
+        if let Some(playing) = self.panels.embeds.playing.as_mut() {
+            playing.tucked = true;
+            playing.large = false;
+            cx.notify();
+        }
+    }
+
+    /// Bring the put-away player back and play on.
+    pub(super) fn play_on(&mut self, cx: &mut Context<Self>) {
+        if let Some(playing) = self.panels.embeds.playing.as_mut() {
+            playing.tucked = false;
+            playing.stage.borrow_mut().play_on();
+            cx.notify();
+        }
+    }
+
+    /// Whether the video on message `index` is put away behind its still.
+    pub(super) fn video_tucked(&self, index: usize) -> bool {
+        self.panels
+            .embeds
+            .playing
+            .as_ref()
+            .is_some_and(|playing| playing.tucked && self.playing_index(playing) == Some(index))
     }
 
     /// Whether the video plays on message `index`'s card, and over the

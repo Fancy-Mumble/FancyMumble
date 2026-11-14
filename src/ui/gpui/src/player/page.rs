@@ -62,12 +62,14 @@ impl Page {
 
     /// The framing page: the player, filling it, and a script that passes
     /// on when it starts, pauses and ends, once each time it changes, and
-    /// how far the wheel turned over it.
+    /// how far the wheel turned over it. Its `play()` plays on from a
+    /// pause.
     pub(crate) fn framing(&self) -> String {
         let embed = self.embed();
         format!(
             r#"<!doctype html><html><head><meta charset="utf-8"><style>html{{overflow:scroll;scrollbar-width:none}}body{{margin:0;height:300vh;background:#000}}iframe{{position:fixed;left:0;top:0;border:0;width:100%;height:100%;display:block}}</style></head><body><iframe id="p" src="{embed}" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe><script>
-const p=document.getElementById("p");let last=null;const mid=innerHeight;scrollTo(0,mid);
+const p=document.getElementById("p");let last=null;
+function play(){{p.contentWindow.postMessage(JSON.stringify({{event:"command",func:"playVideo",args:[]}}),"https://www.youtube-nocookie.com")}}const mid=innerHeight;scrollTo(0,mid);
 addEventListener("scroll",()=>{{const d=Math.round(scrollY-mid);if(d){{window.ipc.postMessage("wheel:"+d);scrollTo(0,mid)}}}},{{passive:true}});
 p.addEventListener("load",()=>p.contentWindow.postMessage(JSON.stringify({{event:"listening",id:1,channel:"widget"}}),"*"));
 addEventListener("message",e=>{{if(e.origin!=="https://www.youtube-nocookie.com")return;let d;try{{d=JSON.parse(e.data)}}catch(_){{return}}

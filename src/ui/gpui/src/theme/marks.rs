@@ -180,8 +180,10 @@ pub(crate) struct Marks {
     /// What floats stands on a hard plate this far down and across, not on
     /// a soft shadow.
     pub hard_shadow: Option<f32>,
-    /// The composer says how to break a line.
-    pub composer_hint: bool,
+    /// The composer stands as three plates, as the web UI's drawn skin has
+    /// it: the attach tools, the field (saying how to break a line), and a
+    /// worded Send; what waits to go out stands on a plate above them.
+    pub composer_plates: bool,
     pub voices: Voices,
 }
 
@@ -287,7 +289,7 @@ impl Marks {
             }),
             face_ring: Some(2.0),
             hard_shadow: Some(6.0),
-            composer_hint: true,
+            composer_plates: true,
             voices: Voices {
                 heading: caps(0.18, 700.0),
                 subtitle: caps(0.18, 700.0),

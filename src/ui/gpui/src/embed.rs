@@ -205,13 +205,11 @@ mod tests {
     fn preview(kind: Option<&'static str>, named: Option<&'static str>, sent: bool) -> Preview {
         Preview {
             url: "https://example.org/page".into(),
-            title: None,
-            description: None,
-            site: None,
             picture: sent
                 .then(|| Arc::new(gpui::Image::from_bytes(gpui::ImageFormat::Png, vec![1]))),
             kind: kind.map(Into::into),
             picture_url: named.map(Into::into),
+            ..Preview::default()
         }
     }
 

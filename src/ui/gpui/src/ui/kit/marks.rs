@@ -3,7 +3,8 @@
 //!
 //! Each is asked for by the theme (`theme::Marks`) and drawn here with
 //! paths and quads, every frame it is on screen, from the theme's own
-//! colours: nothing is drawn into a picture and kept. Where the theme asks
+//! colours: nothing is drawn into a picture and kept, but a path is built
+//! once for as long as its mark stays where it is (`super::built`). Where the theme asks
 //! for a mark it does not draw, the function answers `None` and the view
 //! has nothing to place.
 
@@ -12,6 +13,7 @@ use gpui::{
     Styled, Window, canvas, div, point, prelude::*, px, size,
 };
 
+use super::built::{self, bits};
 use super::lettering::{Ink, Lettering, OBLIQUE, Typeface};
 use super::shape::polygon;
 use crate::theme::{Ground, Halo, Ring, Stripes, Theme, Watermark};
@@ -49,7 +51,17 @@ pub(crate) fn paint_stripes(
         [(left, top), (left, bottom), (right, top), (right, bottom)].map(|(x, y)| line.along(x, y));
     let first = (reach.iter().copied().fold(f32::MAX, f32::min) / period).floor();
     let last = (reach.iter().copied().fold(f32::MIN, f32::max) / period).ceil();
-    window.with_content_mask(Some(ContentMask { bounds }), |window| {
+    let from = bits(&[
+        left,
+        top,
+        right,
+        bottom,
+        stripes.angle,
+        stripes.dash,
+        period,
+    ]);
+    let paths = built::paths(&("stripes", from), || {
+        let mut paths = Vec::new();
         let mut step = first;
         while step <= last {
             let (from, to) = (step * period, step * period + stripes.dash);
@@ -59,10 +71,14 @@ pub(crate) fn paint_stripes(
                 point(px(line.x_at(to, bottom)), px(bottom)),
                 point(px(line.x_at(from, bottom)), px(bottom)),
             ];
-            if let Some(path) = polygon(&corners) {
-                window.paint_path(path, ink);
-            }
+            paths.extend(polygon(&corners));
             step += 1.0;
+        }
+        paths
+    });
+    window.with_content_mask(Some(ContentMask { bounds }), |window| {
+        for path in paths.iter() {
+            window.paint_path(path.clone(), ink);
         }
     });
 }
@@ -165,11 +181,27 @@ fn paint_expander(bounds: Bounds<Pixels>, track: Hsla, core: Hsla, window: &mut 
         a: track.a * 0.3,
         ..track
     };
-    paint_arc(centre, 9.75 * scale, (0.0, 360.0), stroke, faint, window);
-    // The spinner's arc, three hundred degrees of the circle.
-    paint_arc(centre, 9.75 * scale, (-90.0, 210.0), stroke, track, window);
-    if let Some(dot) = circle(centre, 4.5 * scale) {
-        window.paint_path(dot, core);
+    let from = bits(&[centre.x.into(), centre.y.into(), scale]);
+    let parts = [
+        built::paths(&("expander-circle", &from), || {
+            stroke_arc(centre, 9.75 * scale, (0.0, 360.0), stroke, None)
+                .into_iter()
+                .collect()
+        }),
+        // The spinner's arc, three hundred degrees of the circle.
+        built::paths(&("expander-arc", &from), || {
+            stroke_arc(centre, 9.75 * scale, (-90.0, 210.0), stroke, None)
+                .into_iter()
+                .collect()
+        }),
+        built::paths(&("expander-core", &from), || {
+            circle(centre, 4.5 * scale).into_iter().collect()
+        }),
+    ];
+    for (paths, ink) in parts.iter().zip([faint, track, core]) {
+        for path in paths.iter() {
+            window.paint_path(path.clone(), ink);
+        }
     }
 }
 
@@ -212,19 +244,6 @@ fn stroke_arc(
     path.build().ok()
 }
 
-fn paint_arc(
-    centre: Point<Pixels>,
-    radius: f32,
-    span: (f32, f32),
-    width: f32,
-    ink: Hsla,
-    window: &mut Window,
-) {
-    if let Some(path) = stroke_arc(centre, radius, span, width, None) {
-        window.paint_path(path, ink);
-    }
-}
-
 /// The gold ellipse floated above a face `size` across, in its own glow,
 /// brighter while its owner speaks. Placed against the face's box.
 pub(crate) fn halo(halo: Halo, size: f32, talking: bool, theme: &Theme) -> AnyElement {
@@ -258,8 +277,18 @@ pub(crate) fn halo(halo: Halo, size: f32, talking: bool, theme: &Theme) -> AnyEl
                             }],
                         );
                     }
-                    if let Some(path) = ellipse(bounds, line) {
-                        window.paint_path(path, gold);
+                    let from = bits(&[
+                        bounds.origin.x.into(),
+                        bounds.origin.y.into(),
+                        bounds.size.width.into(),
+                        bounds.size.height.into(),
+                        line,
+                    ]);
+                    let paths = built::paths(&("halo", from), || {
+                        ellipse(bounds, line).into_iter().collect()
+                    });
+                    for path in paths.iter() {
+                        window.paint_path(path.clone(), gold);
                     }
                 },
             )
@@ -434,14 +463,20 @@ fn paint_ring(bounds: Bounds<Pixels>, ring: Ring, ink: Hsla, window: &mut Window
     // a line in. A dashed border's dashes are three lines long, two apart,
     // as the browser draws them.
     let dashes = ring.dashed.then_some((ring.width * 3.0, ring.width * 2.0));
-    if let Some(path) = stroke_arc(
-        centre,
-        radius - ring.width / 2.0,
-        (0.0, 360.0),
-        ring.width,
-        dashes,
-    ) {
-        window.paint_path(path, ink);
+    let from = bits(&[centre.x.into(), centre.y.into(), radius, ring.width]);
+    let paths = built::paths(&("ring", from, ring.dashed), || {
+        stroke_arc(
+            centre,
+            radius - ring.width / 2.0,
+            (0.0, 360.0),
+            ring.width,
+            dashes,
+        )
+        .into_iter()
+        .collect()
+    });
+    for path in paths.iter() {
+        window.paint_path(path.clone(), ink);
     }
 }
 

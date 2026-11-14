@@ -13,6 +13,7 @@ import { RoleChip } from "../../components/elements/role/RoleChip";
 import UserHoverCard from "../../components/sidebar/user/UserHoverCard";
 import { useAppStore } from "@core/store";
 import { rootChannelId } from "@core/features/admin/rootChannel";
+import { compareLastChannels, lastChannel, type LastChannel } from "@core/features/admin/lastChannel";
 import { UserRoleManagerDialog } from "./UserRoleManagerDialog";
 import styles from "./AdminPanel.module.css";
 import { ToolbarSearch } from "../../components/elements/SearchFields";
@@ -257,11 +258,20 @@ export function RegisteredUsersTab() {
         case "last_seen":
           return dir * (a.last_seen ?? "").localeCompare(b.last_seen ?? "");
         case "last_channel":
-          return dir * ((a.last_channel ?? 0) - (b.last_channel ?? 0));
+          return (
+            dir * compareLastChannels(lastChannel(a.last_channel, channels), lastChannel(b.last_channel, channels))
+          );
         default:
           return 0;
       }
     });
+
+  const lastChannelText = (where: LastChannel) =>
+    where.kind === "named"
+      ? where.name
+      : where.kind === "deleted"
+        ? t("registeredUsers.deletedChannel")
+        : t("registeredUsers.unknown");
 
   const sortArrow = (key: SortKey) => {
     if (sortKey !== key) return null;
@@ -366,7 +376,7 @@ export function RegisteredUsersTab() {
                   <td className={styles.dimText} title={u.last_seen ?? undefined}>
                     {u.last_seen ? formatRelativeDate(u.last_seen) : t("registeredUsers.never")}
                   </td>
-                  <td className={styles.dimText}>{u.last_channel ?? t("registeredUsers.unknown")}</td>
+                  <td className={styles.dimText}>{lastChannelText(lastChannel(u.last_channel, channels))}</td>
                   <td>
                     <span className={styles.userRoleChips}>
                       {(userRoleMap.get(u.user_id) ?? []).map((g) => (

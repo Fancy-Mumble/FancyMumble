@@ -675,10 +675,70 @@ fn status_line(shell: &Shell, status: SharedString, theme: &Theme) -> gpui::Div 
     if off && tag.voice(theme).caps {
         line.text_size(px(10.0))
             .text_color(theme.c.bad)
-            .child(super::kit::voiced(&status, tag, 10.0, theme))
+            .child(super::kit::voiced(&status, tag, theme))
     } else {
         line.child(status)
     }
+}
+
+/// The user's name, what the voice is doing under it, and whom the whisper
+/// key speaks to. A drawn skin's bank sets the name large.
+fn own_name_column(
+    shell: &Shell,
+    name: SharedString,
+    status: SharedString,
+    whisper_to: Option<SharedString>,
+    theme: &Theme,
+) -> gpui::Div {
+    let bank = theme.skin.marks.dock_bank;
+    div()
+        .flex_1()
+        .min_w_0()
+        .flex()
+        .flex_col()
+        .gap(px(1.0))
+        .child(
+            div()
+                .truncate()
+                .map(|line| match bank {
+                    Some(bank) => line
+                        .text_size(px(bank.name_size))
+                        .line_height(px(bank.name_size * 1.15))
+                        .font_weight(gpui::FontWeight(bank.name_weight)),
+                    None => line
+                        .text_size(px(13.0))
+                        .line_height(px(14.95))
+                        .font_weight(EMPHASIS),
+                })
+                .child(name),
+        )
+        .child(status_line(shell, status, theme))
+        .when_some(whisper_to, |column, says| {
+            column.child(
+                div()
+                    .debug_selector(|| "whisper-target".to_owned())
+                    .truncate()
+                    .text_size(px(10.5))
+                    .line_height(px(14.175))
+                    .text_color(theme.c.accent_text)
+                    .child(says),
+            )
+        })
+}
+
+/// The overflow: the sheet of what the row has no room for, worn on while
+/// it is open.
+fn own_menu_button(shell: &Shell, cx: &mut Context<Shell>) -> IconButton {
+    let sheet_open = shell.menu.as_ref().is_some_and(|menu| menu.over.is_some());
+    IconButton::new("own-menu", "ellipsis-vertical")
+        .glyph_size(15.0)
+        .variant(if sheet_open {
+            Variant::Filled
+        } else {
+            Variant::Ghost
+        })
+        .tip(crate::words::t!("More"))
+        .on_click(cx.listener(|shell, _, _, cx| shell.open_own_sheet(cx)))
 }
 
 fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
@@ -703,57 +763,13 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
     // and the face, the name large; any other has the switches beside the
     // face, under the name.
     let bank = theme.skin.marks.dock_bank;
-    let sheet_open = shell.menu.as_ref().is_some_and(|menu| menu.over.is_some());
-    let named = div()
-        .flex_1()
-        .min_w_0()
-        .flex()
-        .flex_col()
-        .gap(px(1.0))
-        .child(
-            div()
-                .truncate()
-                .map(|line| match bank {
-                    Some(bank) => line
-                        .text_size(px(bank.name_size))
-                        .line_height(px(bank.name_size * 1.15))
-                        .font_weight(gpui::FontWeight(bank.name_weight)),
-                    None => line
-                        .text_size(px(13.0))
-                        .line_height(px(14.95))
-                        .font_weight(EMPHASIS),
-                })
-                .child(name.clone()),
-        )
-        .child(status_line(shell, status, theme))
-        .when_some(whisper_to, |column, says| {
-            column.child(
-                div()
-                    .debug_selector(|| "whisper-target".to_owned())
-                    .truncate()
-                    .text_size(px(10.5))
-                    .line_height(px(14.175))
-                    .text_color(theme.c.accent_text)
-                    .child(says),
-            )
-        });
-    // The overflow: the sheet of what the row has no room for, worn on
-    // while it is open.
-    let more = IconButton::new("own-menu", "ellipsis-vertical")
-        .glyph_size(15.0)
-        .variant(if sheet_open {
-            Variant::Filled
-        } else {
-            Variant::Ghost
-        })
-        .tip(crate::words::t!("More"))
-        .on_click(cx.listener(|shell, _, _, cx| shell.open_own_sheet(cx)));
+    let named = own_name_column(shell, name.clone(), status, whisper_to, theme);
     let top = div()
         .flex()
         .items_center()
         .gap(px(8.0))
         .child(named)
-        .child(more);
+        .child(own_menu_button(shell, cx));
     let switches = voice_row(
         shell.snapshot.voice,
         deafened,

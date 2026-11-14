@@ -85,12 +85,20 @@ pub(crate) fn create_base_builder() -> tauri::Builder<tauri::Wry> {
     // persists it as the geometry changes, so a `tauri dev` restart or a crash
     // doesn't resurrect the geometry from the last graceful shutdown.
     #[cfg(not(target_os = "android"))]
-    let builder = builder.plugin(
-        tauri_plugin_window_state::Builder::new()
+    let builder = {
+        let window_state = tauri_plugin_window_state::Builder::new()
             .with_state_flags(crate::app::window_state::state_flags())
-            .with_denylist(&crate::app::window_state::DENYLIST)
-            .build(),
-    );
+            .with_denylist(&crate::app::window_state::DENYLIST);
+        // An isolated test instance keeps its geometry in its own directory
+        // (an absolute name replaces the plugin's config dir).
+        let window_state = match crate::app::isolation::Isolation::from_env() {
+            Some(isolation) => {
+                window_state.with_filename(isolation.window_state_file().to_string_lossy())
+            }
+            None => window_state,
+        };
+        builder.plugin(window_state.build())
+    };
 
     #[cfg(not(target_os = "android"))]
     let builder = builder.plugin(tauri_plugin_global_shortcut::Builder::new().build());

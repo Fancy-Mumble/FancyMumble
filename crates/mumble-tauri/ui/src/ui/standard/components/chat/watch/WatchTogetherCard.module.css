@@ -37,7 +37,7 @@
 }
 
 .hostBadge {
-  background: var(--accent, #4f8df7);
+  background: var(--color-accent, #4f8df7);
   color: white;
   border-radius: 999px;
   font-size: 0.6875rem;

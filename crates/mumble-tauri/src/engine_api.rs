@@ -10,14 +10,21 @@
 //! commands call; nothing is implemented twice.
 
 pub mod about;
+pub mod account;
 pub mod carry;
 pub mod clock;
+pub mod identity;
+pub mod jumps;
 pub mod privacy;
 pub mod reset;
 pub mod gifs;
+pub mod legacy_picture;
 pub mod livery;
 pub mod media;
+pub mod onboarding;
+pub mod plugins;
 pub mod voice;
+pub mod whisper;
 pub mod audio;
 pub use livery::{LiveryArt, LiveryColours, LiveryInfo, LiveryTagInfo};
 #[cfg(feature = "logs")]
@@ -260,6 +267,16 @@ pub enum EngineEvent {
     /// A server the engine is on said what it looks like, or changed it:
     /// read [`EngineHandle::livery`] again.
     Livery,
+    /// A file given to [`EngineHandle::share_files`] under `upload_id` has
+    /// gone this far up.
+    UploadProgress {
+        /// The id it was given to share under.
+        upload_id: String,
+        /// How much has gone.
+        bytes_sent: u64,
+        /// How much there is.
+        total_bytes: u64,
+    },
     /// What the server allows of voice messages: in answer to
     /// [`EngineHandle::request_voice_support`], and whenever it changes.
     VoiceSupport(voice::VoiceSupport),
@@ -294,6 +311,21 @@ pub enum EngineEvent {
     /// The server would not search: in answer to
     /// [`EngineHandle::request_gif_search`].
     GifRefused(gifs::GifRefused),
+    /// How the local user's account stands, as the server said: asked
+    /// for with [`account::AccountAction::Query`], and after each change.
+    Account(account::AccountSettings),
+    /// How one change asked with [`EngineHandle::update_account`] went.
+    AccountAck(account::AccountAck),
+    /// The questions the server asks new members, as it said them after
+    /// connecting or changed them.
+    OnboardingConfig(onboarding::OnboardingConfig),
+    /// The local user's answers as the server keeps them, or that it keeps
+    /// none: in answer to
+    /// [`EngineHandle::request_onboarding_response`].
+    OnboardingResponse(Option<onboarding::OnboardingResponse>),
+    /// The server said which plugins it runs: read
+    /// [`EngineHandle::server_plugins`] again.
+    PluginsChanged,
 }
 
 /// What a server says of itself once connected.
@@ -543,6 +575,41 @@ pub struct ToShare {
     pub stand_in: Option<PathBuf>,
     /// How large the picture is in pixels, where it is one.
     pub pixels: Option<(u32, u32)>,
+    /// The picture as a stock Mumble client is to be shown it, where it is
+    /// one: a copy goes inline beside its mark.
+    pub legacy: Option<legacy_picture::LegacyPicture>,
+    /// What its upload is called in [`EngineEvent::UploadProgress`] and to
+    /// [`EngineHandle::cancel_upload`]; empty for an upload nobody follows.
+    pub upload_id: String,
+}
+
+/// A file of a batch that did not go: cancelled, or refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unsent {
+    /// The `upload_id` it was given to share under.
+    pub upload_id: String,
+    /// Why: [`CANCELLED`] where it was cancelled.
+    pub why: String,
+}
+
+/// Why a file that was cancelled did not go, as [`Unsent::why`] says it.
+pub const CANCELLED: &str = "upload cancelled";
+
+/// Uploads cancelled before they started: a batch skips each when it comes
+/// to it.
+fn cancelled_early() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static EARLY: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::OnceLock::new();
+    EARLY.get_or_init(std::sync::Mutex::default)
+}
+
+/// Whether the upload `upload_id` was cancelled before it started; it is
+/// forgotten as it is asked.
+fn was_cancelled_early(upload_id: &str) -> bool {
+    !upload_id.is_empty()
+        && cancelled_early()
+            .lock()
+            .is_ok_and(|mut early| early.remove(upload_id))
 }
 
 /// The mark a shared file is written into a message as: a comment, so a
@@ -700,6 +767,40 @@ fn file_message(filename: &str, size: u64, key: &str, expires_at: u64) -> String
 /// client that does not know the mark shows in its place: with the file's
 /// link, where anybody may follow it.
 fn file_mark(file: &AttachmentInfo) -> String {
+    let (mark, line) = file_mark_parts(file);
+    mark + &line
+}
+
+/// The part of a message that shares `file`, described as `info`.
+fn shared_part(file: &ToShare, info: AttachmentInfo) -> legacy_picture::Part {
+    let (mark, _) = file_mark_parts(&info);
+    // The web client's `durableLink`: a public share's own `https` address,
+    // where the share does not expire: an expiring link would sit in every
+    // stock client's log after it stopped working.
+    let link = info.url.clone().filter(|url| {
+        info.mode.as_deref() == Some("public")
+            && info.expires_at.is_none()
+            && url.len() > 8
+            && url.get(..8).is_some_and(|scheme| scheme.eq_ignore_ascii_case("https://"))
+            && !url.chars().any(char::is_whitespace)
+    });
+    let line = legacy_picture::file_line(
+        &info.filename,
+        info.size,
+        link.as_deref(),
+        info.mode.as_deref() == Some("password"),
+    );
+    legacy_picture::Part {
+        mark,
+        line,
+        picture: file.legacy.clone(),
+        name: info.filename,
+        link,
+    }
+}
+
+/// [`file_mark`] in its two parts: the mark, and the fenced line.
+fn file_mark_parts(file: &AttachmentInfo) -> (String, String) {
     use base64::Engine as _;
     let size = file.size.unwrap_or_default();
     let mut stated = serde_json::json!({
@@ -721,10 +822,15 @@ fn file_mark(file: &AttachmentInfo) -> String {
         Some(url) => format!(": {}", escape_html(url)),
         None => String::new(),
     };
-    format!(
-        "{FILE_MARK}{}{MARK_END}<!-- FANCY_LEGACY -->{} ({size} bytes), shared as a file{link}<!-- /FANCY_LEGACY -->",
-        base64::engine::general_purpose::STANDARD.encode(stated.to_string()),
-        escape_html(&file.filename),
+    (
+        format!(
+            "{FILE_MARK}{}{MARK_END}",
+            base64::engine::general_purpose::STANDARD.encode(stated.to_string()),
+        ),
+        format!(
+            "<!-- FANCY_LEGACY -->{} ({size} bytes), shared as a file{link}<!-- /FANCY_LEGACY -->",
+            escape_html(&file.filename),
+        ),
     )
 }
 
@@ -877,34 +983,96 @@ pub struct LinkPreview {
     /// Where the card's picture lives at its origin, whole. Fetching it
     /// tells that host who is reading: only where the reader asks.
     pub picture_url: Option<String>,
+    /// How large the page says its picture is whole, width by height:
+    /// what a card states about a piece of art.
+    pub picture_size: Option<(u32, u32)>,
+    /// The site's own icon, as an encoded image fetched by the server.
+    pub icon: Option<Vec<u8>>,
+    /// Who made it: a channel, an account, an author.
+    pub author: Option<String>,
+    /// Its playing time, as a clock ("1:00:14"), for video and audio.
+    pub duration: Option<String>,
+    /// When the page says it was published, as it wrote it.
+    pub published: Option<String>,
+    /// The page's own labelled facts, in its order: a name the server
+    /// recognised ("score", "comments", "views", "sellers"...) or the
+    /// page's own label, and the value.
+    pub facts: Vec<(String, String)>,
+    /// What it costs, for a listing.
+    pub price: Option<LinkPrice>,
+}
+
+/// What a listing behind a link costs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkPrice {
+    /// The amount, decimal point and all: "89.99".
+    pub amount: String,
+    /// ISO 4217 where the page named one, empty where it did not.
+    pub currency: String,
+    /// What it cost before, where it advertises a reduction; empty if not.
+    pub was: String,
+    /// "instock", "oos", "preorder", as the page wrote it.
+    pub availability: String,
 }
 
 impl LinkPreview {
     fn from_embed(url: String, embed: LinkEmbed) -> Self {
         use base64::Engine as _;
         let said = |text: Option<String>| text.filter(|text| !text.trim().is_empty());
+        // A data URL's bytes.
+        let decoded = |data_url: Option<&String>| {
+            let (_, encoded) = data_url?.split_once(";base64,")?;
+            base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .ok()
+        };
+        // The web client's order: the page's picture, then its thumbnail.
+        let picture = [&embed.image, &embed.thumbnail]
+            .into_iter()
+            .flatten()
+            .find(|media| media.preview.is_some());
         let picture_url = [&embed.image, &embed.thumbnail]
             .into_iter()
             .flatten()
             .find_map(|media| said(Some(media.url.clone())));
-        let thumbnail = [embed.thumbnail, embed.image]
-            .into_iter()
-            .flatten()
-            .find_map(|media| media.preview)
-            .and_then(|preview| {
-                let (_, encoded) = preview.data_url.split_once(";base64,")?;
-                base64::engine::general_purpose::STANDARD
-                    .decode(encoded)
-                    .ok()
-            });
+        let picture_size = picture.and_then(|media| {
+            let width = media.width.or(media.preview.as_ref()?.width)?;
+            let height = media.height.or(media.preview.as_ref()?.height)?;
+            Some((u32::try_from(width).ok()?, u32::try_from(height).ok()?))
+        });
         Self {
             url,
             title: said(embed.title),
             description: said(embed.description).or_else(|| said(embed.summary)),
-            site: said(embed.site_name).or_else(|| embed.provider.map(|provider| provider.name)),
-            thumbnail,
+            site: said(embed.site_name)
+                .or_else(|| embed.provider.as_ref().map(|provider| provider.name.clone())),
+            thumbnail: decoded(picture.and_then(|media| Some(&media.preview.as_ref()?.data_url))),
             kind: said(embed.r#type),
             picture_url,
+            picture_size,
+            icon: decoded(
+                embed
+                    .favicon
+                    .as_ref()
+                    .and_then(|media| Some(&media.preview.as_ref()?.data_url)),
+            ),
+            author: embed.author.and_then(|author| said(Some(author.name))),
+            duration: said(embed.media_duration),
+            published: said(embed.published_time),
+            facts: embed
+                .fields
+                .into_iter()
+                .map(|field| (field.name, field.value))
+                .collect(),
+            price: embed
+                .price
+                .filter(|price| !price.amount.trim().is_empty())
+                .map(|price| LinkPrice {
+                    amount: price.amount,
+                    currency: price.currency,
+                    was: price.was,
+                    availability: price.availability,
+                }),
         }
     }
 }
@@ -1117,6 +1285,11 @@ impl EngineEvent {
             // channel, listening or not: the refusal says what it was.
             CoreEvent::ListenDenied(_) => return None,
             CoreEvent::ServerLivery(_) => Self::Livery,
+            CoreEvent::UploadProgress(payload) => Self::UploadProgress {
+                upload_id: payload.upload_id,
+                bytes_sent: payload.bytes_sent,
+                total_bytes: payload.total_bytes,
+            },
             CoreEvent::PchatPinDelivered(payload) => Self::Pin {
                 channel: payload.channel_id,
                 pinned: payload.pinned,
@@ -1305,6 +1478,11 @@ impl EngineEvent {
             CoreEvent::GifSupport(payload) => Self::GifSupport(payload.into()),
             CoreEvent::GifPage(payload) => Self::GifPage(payload.into()),
             CoreEvent::GifSearchRefused(payload) => Self::GifRefused(payload.into()),
+            CoreEvent::AccountSettings(account) => Self::Account(account),
+            CoreEvent::AccountAck(ack) => Self::AccountAck(ack),
+            CoreEvent::OnboardingConfig(config) => Self::OnboardingConfig(config),
+            CoreEvent::OnboardingResponse(response) => Self::OnboardingResponse(response),
+            CoreEvent::PluginRegistry(_) => Self::PluginsChanged,
             _ => return None,
         })
     }
@@ -2164,7 +2342,8 @@ impl EngineHandle {
         };
         let state = self.state.clone();
         let sender = by.clone();
-        drop(tokio::spawn(async move {
+        // On the engine's own runtime, whatever the caller polls this on.
+        drop(crate::state::runtime::spawn(async move {
             // No answer is not an error: see above.
             let _ = state
                 .delete_pchat_messages(channel, Vec::new(), from, to, sender)
@@ -2285,6 +2464,22 @@ impl EngineHandle {
             .await
     }
 
+    /// Stop the upload given to [`Self::share_files`] as `upload_id`: it is
+    /// answered among the [`Unsent`], [`CANCELLED`], and the rest go on.
+    /// Whether there was such an upload still going.
+    pub fn cancel_upload(&self, upload_id: &str) -> bool {
+        if self.state.cancel_upload(upload_id) {
+            return true;
+        }
+        // Not going up yet: it is not to start.
+        if !upload_id.is_empty()
+            && let Ok(mut waiting) = cancelled_early().lock()
+        {
+            let _ = waiting.insert(upload_id.to_owned());
+        }
+        false
+    }
+
     /// Share `files` with `channel` in one message that also says `text`:
     /// each is given to the server to keep as `how` says, and the message
     /// names them all. A picture's small copy goes up beside it, kept the
@@ -2293,16 +2488,17 @@ impl EngineHandle {
     ///
     /// # Errors
     ///
-    /// When a password share has no password, a file cannot be read, the
-    /// server keeps no files, or it refuses one. Nothing is said then: a
-    /// message naming half its files would be one nobody asked for.
+    /// When a password share has no password, the server keeps no files,
+    /// or the message cannot be sent. A file that is cancelled or refused
+    /// does not stop the rest: it is answered among the [`Unsent`], and the
+    /// message names the files that went. Where none went, nothing is said.
     pub async fn share_files(
         &self,
         channel: u32,
         text: &str,
         files: &[ToShare],
         how: &ShareAs,
-    ) -> Result<(), String> {
+    ) -> Result<Vec<Unsent>, String> {
         use mumble_protocol::proto::fancy::files::Visibility;
         if let Reach::Password(password) = &how.reach
             && password.is_empty()
@@ -2320,49 +2516,68 @@ impl EngineHandle {
             }
             Reach::Password(password) => (Visibility::Password, password.clone()),
         };
-        let upload = |path: &Path, filename: &str| {
+        let upload = |path: &Path, filename: &str, upload_id: String| {
             self.state.starling_upload_file(
                 path.to_string_lossy().into_owned(),
                 channel,
                 kind_of(filename),
-                String::new(),
+                upload_id,
                 visibility,
                 how.lasts_secs,
                 password.clone(),
                 None,
             )
         };
-        let mut message = match text.trim() {
+        let lead = match text.trim() {
             "" => String::new(),
             said => self.composed(said),
         };
+        let mut parts = Vec::with_capacity(files.len());
+        let mut unsent = Vec::new();
         for file in files {
-            let filename = file
-                .path
-                .file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-                .ok_or("that is not a file")?;
-            let shared = upload(&file.path, &filename).await?;
+            let Some(filename) = file.path.file_name().map(|name| name.to_string_lossy().into_owned()) else {
+                unsent.push(Unsent { upload_id: file.upload_id.clone(), why: "that is not a file".to_owned() });
+                continue;
+            };
+            if was_cancelled_early(&file.upload_id) {
+                unsent.push(Unsent { upload_id: file.upload_id.clone(), why: CANCELLED.to_owned() });
+                continue;
+            }
+            let shared = match upload(&file.path, &filename, file.upload_id.clone()).await {
+                Ok(shared) => shared,
+                Err(why) => {
+                    unsent.push(Unsent { upload_id: file.upload_id.clone(), why });
+                    continue;
+                }
+            };
             // A courtesy: the file is shared whether or not this goes up.
             let thumb_key = match &file.stand_in {
                 Some(small) if !matches!(how.reach, Reach::Password(_)) => {
-                    upload(small, &filename).await.ok().map(|small| small.key)
+                    upload(small, &filename, String::new()).await.ok().map(|small| small.key)
                 }
                 _ => None,
             };
-            message.push_str(&file_mark(&AttachmentInfo {
-                filename,
-                size: Some(shared.size),
-                key: Some(shared.key),
-                url: Some(shared.share_url).filter(|url| !url.is_empty()),
-                mode: Some(how.reach.mode().to_owned()),
-                expires_at: Some(shared.expires_at).filter(|at| *at > 0),
-                thumb_key,
-                pixels: file.pixels,
-                voice: None,
-            }));
+            parts.push(shared_part(
+                file,
+                AttachmentInfo {
+                    filename,
+                    size: Some(shared.size),
+                    key: Some(shared.key),
+                    url: Some(shared.share_url).filter(|url| !url.is_empty()),
+                    mode: Some(how.reach.mode().to_owned()),
+                    expires_at: Some(shared.expires_at).filter(|at| *at > 0),
+                    thumb_key,
+                    pixels: file.pixels,
+                    voice: None,
+                },
+            ));
         }
-        self.state.send_message(channel, message).await
+        if parts.is_empty() {
+            return Ok(unsent);
+        }
+        let message = self.shared_message(channel, lead, parts, how).await;
+        self.state.send_message(channel, message).await?;
+        Ok(unsent)
     }
 
     /// The file server this server runs as a plugin, if it runs one and
@@ -2388,24 +2603,29 @@ impl EngineHandle {
         text: &str,
         files: &[ToShare],
         how: &ShareAs,
-    ) -> Result<(), String> {
+    ) -> Result<Vec<Unsent>, String> {
         use crate::state::{FileAccessMode, UploadRequest};
         let (mode, password) = match &how.reach {
             Reach::Here => (FileAccessMode::Session, None),
             Reach::Link => (FileAccessMode::Public, None),
             Reach::Password(password) => (FileAccessMode::Password, Some(password.clone())),
         };
-        let mut message = match text.trim() {
+        let lead = match text.trim() {
             "" => String::new(),
             said => self.composed(said),
         };
+        let mut parts = Vec::with_capacity(files.len());
+        let mut unsent = Vec::new();
         for file in files {
-            let filename = file
-                .path
-                .file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-                .ok_or("that is not a file")?;
-            let shared = self
+            let Some(filename) = file.path.file_name().map(|name| name.to_string_lossy().into_owned()) else {
+                unsent.push(Unsent { upload_id: file.upload_id.clone(), why: "that is not a file".to_owned() });
+                continue;
+            };
+            if was_cancelled_early(&file.upload_id) {
+                unsent.push(Unsent { upload_id: file.upload_id.clone(), why: CANCELLED.to_owned() });
+                continue;
+            }
+            let uploaded = self
                 .state
                 .upload_file(UploadRequest {
                     base_url: plugin.base_url.clone(),
@@ -2418,22 +2638,37 @@ impl EngineHandle {
                     mode,
                     password: password.clone(),
                     ttl_seconds: Some(how.lasts_secs),
-                    upload_id: String::new(),
+                    upload_id: file.upload_id.clone(),
                 })
-                .await?;
-            message.push_str(&file_mark(&AttachmentInfo {
-                filename,
-                size: Some(shared.size_bytes),
-                key: None,
-                url: Some(shared.download_url),
-                mode: Some(how.reach.mode().to_owned()),
-                expires_at: shared.expires_at.filter(|at| *at > 0),
-                thumb_key: None,
-                pixels: file.pixels,
-                voice: None,
-            }));
+                .await;
+            let shared = match uploaded {
+                Ok(shared) => shared,
+                Err(why) => {
+                    unsent.push(Unsent { upload_id: file.upload_id.clone(), why });
+                    continue;
+                }
+            };
+            parts.push(shared_part(
+                file,
+                AttachmentInfo {
+                    filename,
+                    size: Some(shared.size_bytes),
+                    key: None,
+                    url: Some(shared.download_url),
+                    mode: Some(how.reach.mode().to_owned()),
+                    expires_at: shared.expires_at.filter(|at| *at > 0),
+                    thumb_key: None,
+                    pixels: file.pixels,
+                    voice: None,
+                },
+            ));
         }
-        self.state.send_message(channel, message).await
+        if parts.is_empty() {
+            return Ok(unsent);
+        }
+        let message = self.shared_message(channel, lead, parts, how).await;
+        self.state.send_message(channel, message).await?;
+        Ok(unsent)
     }
 
     /// Fetch the shared file kept under `key` and write it to `to`; says

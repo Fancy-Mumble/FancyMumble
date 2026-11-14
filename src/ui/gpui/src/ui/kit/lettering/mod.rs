@@ -41,6 +41,10 @@ pub(crate) struct Lettering {
     pub turned: bool,
 }
 
+/// Everything a lettering is set by, as bits: its weight, width, size,
+/// slant and track, and whether it is turned.
+type Setting = ([u32; 5], bool);
+
 /// What a lettering is drawn as.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum Ink {
@@ -86,16 +90,39 @@ impl Lettering {
         }
     }
 
-    /// The primary face's ascent and descent below the baseline, in pixels.
+    /// Everything a lettering is set by, as bits: a key to keep what is
+    /// laid or built from it by.
+    fn setting(&self) -> Setting {
+        let (weight, width) = match self.typeface {
+            Typeface::Poster { weight, width } => (weight, width),
+            Typeface::Bold => (-1.0, -1.0),
+        };
+        (
+            [weight, width, self.size, self.slant, self.track].map(f32::to_bits),
+            self.turned,
+        )
+    }
+
+    /// The primary face's ascent and descent below the baseline, in pixels:
+    /// read from the face once for each setting.
     fn metrics(&self) -> (f32, f32) {
-        with_face(self.primary(), self.typeface, |face| {
+        thread_local! {
+            static READ: RefCell<HashMap<Setting, (f32, f32)>> = RefCell::new(HashMap::new());
+        }
+        let key = self.setting();
+        if let Some(known) = READ.with_borrow(|read| read.get(&key).copied()) {
+            return known;
+        }
+        let metrics = with_face(self.primary(), self.typeface, |face| {
             let scale = self.size / em(face);
             (
                 f32::from(face.ascender()) * scale,
                 -f32::from(face.descender()) * scale,
             )
         })
-        .unwrap_or((0.0, 0.0))
+        .unwrap_or((0.0, 0.0));
+        let _ = READ.with_borrow_mut(|read| read.insert(key, metrics));
+        metrics
     }
 
     /// How long `text` runs, and how deep it is from its top to the foot of
@@ -130,19 +157,11 @@ impl Lettering {
     /// `text` laid on a line. A few lines are remembered, so a mark drawn
     /// each frame is shaped once.
     fn lay(&self, text: &str) -> Rc<Line> {
-        type Key = (String, [u32; 6], bool);
+        type Key = (String, Setting);
         thread_local! {
             static LAID: RefCell<HashMap<Key, Rc<Line>>> = RefCell::new(HashMap::new());
         }
-        let (weight, width) = match self.typeface {
-            Typeface::Poster { weight, width } => (weight, width),
-            Typeface::Bold => (0.0, 0.0),
-        };
-        let key = (
-            text.to_owned(),
-            [weight, width, self.size, self.slant, self.track, 0.0].map(f32::to_bits),
-            self.turned,
-        );
+        let key = (text.to_owned(), self.setting());
         if let Some(line) = LAID.with_borrow(|laid| laid.get(&key).cloned()) {
             return line;
         }
@@ -306,9 +325,40 @@ impl Lettering {
         color: Hsla,
         window: &mut Window,
     ) -> bool {
-        let (path, waiting) = self.path(text, origin, ink);
-        if let Some(path) = path {
-            window.paint_path(path, color);
+        // Built once while it stays where it is; letters still waiting for
+        // the system's faces are built again until they are all there.
+        let (weight, width) = match self.typeface {
+            Typeface::Poster { weight, width } => (weight, width),
+            Typeface::Bold => (-1.0, -1.0),
+        };
+        let line = match ink {
+            Ink::Solid => -1.0,
+            Ink::Hollow(width) => width,
+        };
+        let numbers = [
+            weight,
+            width,
+            self.size,
+            self.slant,
+            self.track,
+            line,
+            origin.x.into(),
+            origin.y.into(),
+        ];
+        let from = (text, super::built::bits(&numbers), self.turned);
+        let mut waiting = false;
+        let mut build = || -> Vec<Path<Pixels>> {
+            let (path, waits) = self.path(text, origin, ink);
+            waiting = waits;
+            path.into_iter().collect()
+        };
+        let paths = if self.lay(text).waiting {
+            build().into()
+        } else {
+            super::built::paths(&from, build)
+        };
+        for path in paths.iter() {
+            window.paint_path(path.clone(), color);
         }
         waiting
     }
@@ -474,6 +524,16 @@ mod tests {
             assert_eq!(bundled.len(), 2, "{text}: A and B, from the poster face");
             assert!(line.run >= alone - 0.01, "{text}");
         }
+        // A letter Saira lacks is Inter's own italic, as the browser takes
+        // it, and is not leant again.
+        let cyrillic = POSTER.lay("ЖИЗНЬ");
+        assert!(!cyrillic.placed.is_empty());
+        assert!(
+            cyrillic
+                .placed
+                .iter()
+                .all(|placed| placed.source == Source::PosterItalic && placed.lean == 0.0)
+        );
         // Umlauts are the poster face's own.
         let umlauts = POSTER.lay("GRÜSSE MÜNCHEN");
         assert!(
@@ -542,5 +602,27 @@ mod tests {
             PLAIN.at((50.0, 10.0), 8.0, &leant, 0.0, 8.0),
             point(px(74.0), px(10.0))
         );
+    }
+
+    #[test]
+    #[ignore = "a probe: prints the poster face's vertical metrics"]
+    fn probe_poster_metrics() {
+        let _ = with_face(Source::Poster, POSTER.typeface, |face| {
+            let f: &ttf_parser::Face<'_> = face;
+            println!(
+                "upm {} hhea {} {} {} typo {:?} {:?} {:?} win {:?} {:?} use_typo {}",
+                f.units_per_em(),
+                f.ascender(),
+                f.descender(),
+                f.line_gap(),
+                f.typographic_ascender(),
+                f.typographic_descender(),
+                f.typographic_line_gap(),
+                f.tables().os2.map(|os2| os2.windows_ascender()),
+                f.tables().os2.map(|os2| os2.windows_descender()),
+                f.tables().os2.is_some_and(|os2| os2.use_typographic_metrics()),
+            );
+        });
+        println!("metrics {:?}", POSTER.metrics());
     }
 }

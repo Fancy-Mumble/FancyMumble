@@ -92,6 +92,9 @@ fontdb = { version = "=0.23.0", default-features = false, features = ["std", "fs
 # merged into one outline before it is stroked. The boolean operations
 # `geo` uses; four small crates, nothing else.
 i_overlay = "=9.1.0"
+# Twelve characters nobody has to think up for a link's password, from the
+# system's own randomness. The release GPUI's `rand` already builds.
+getrandom = "=0.3.4"
 # Screen sharing (`src/share/`): the web client's own capture, encoder and
 # WebRTC peers, used as they are. Nothing of it runs until a share is
 # started or watched.
@@ -104,6 +107,9 @@ fast_image_resize = "5"
 # tone through it as a real share's sound comes. The release that crate
 # already builds.
 opus = "0.3"
+# The QR code an authenticator scans to enrol a second factor (Settings,
+# Account); the encoder alone, drawn through the kit's picture path.
+qrcode = { version = "0.14", default-features = false }
 
 # System notifications, where there is no `notify-send` to hand them to.
 # Linux keeps `notify-send`, which links no D-Bus stack into the view.
@@ -142,6 +148,11 @@ embed-resource = "3"
 fancy-utils = { path = "../../../crates/fancy-utils" }
 # Drives the views without a display: simulated clicks and keys.
 gpui = { path = "vendor/gpui", default-features = false, features = ["test-support"] }
+# The one-time codes a live test of the Account page computes as an
+# authenticator would (RFC 6238); all three already built for the engine.
+hmac = "0.12"
+sha1 = "0.10"
+data-encoding = "2"
 
 # Debug information for this package only. With it for all seven hundred
 # dependencies as well, a debug build is tens of gigabytes on disk.

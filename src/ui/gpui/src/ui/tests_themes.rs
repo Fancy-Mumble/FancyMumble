@@ -122,9 +122,10 @@ fn a_drawn_theme_costs_a_frame_not_much_more_than_the_default(cx: &mut TestAppCo
     let plain = frame_time("dark", cx);
     let drawn = frame_time("nimbus", cx);
     println!("a frame of the main screen: dark {plain:?}, nimbus {drawn:?}");
-    // A guard, not a measure: a debug build pays many times over what a
-    // release build does for the marks' paths and quads.
-    assert!(drawn < plain * 10, "dark {plain:?}, nimbus {drawn:?}");
+    // A guard, not a measure: the marks' paths are built once and kept, so
+    // a drawn theme's frame stays within a small multiple of the default's
+    // (about twice, in a debug build).
+    assert!(drawn < plain * 3, "dark {plain:?}, nimbus {drawn:?}");
 }
 
 #[gpui::test]
@@ -157,6 +158,136 @@ fn the_kits_parts_keep_their_size_from_theme_to_theme(cx: &mut TestAppContext) {
     let plain = sizes(cx);
     for id in ids() {
         wear(&id, Mode::Dark, cx);
-        assert_eq!(sizes(cx), plain, "{id}");
+        let theme = cx.update(|_, cx| ActiveTheme::get(cx));
+        let now = sizes(cx);
+        if !theme.skin.marks.composer_plates {
+            assert_eq!(now, plain, "{id}");
+            continue;
+        }
+        // A theme that plates the composer sizes its tools as the web UI's
+        // drawn skin does: the clip filling its 56px plate inside the
+        // plate's edge, twelve pixels either side of its glyph, and Send a
+        // worded plate as tall. The rest keep their size.
+        assert_eq!(now[0], plain[0], "{id}: own-menu");
+        assert_eq!(now[1].height, gpui::px(56.0), "{id}: send");
+        let edge = f32::from(theme.skin.line_width);
+        assert_eq!(
+            now[2],
+            gpui::size(gpui::px(40.0), gpui::px(56.0 - 2.0 * edge)),
+            "{id}: attach"
+        );
     }
+}
+
+/// The same sentence plain and spaced, and spaced in a box that holds it
+/// only plain.
+struct Spacing(f32);
+
+impl gpui::Render for Spacing {
+    fn render(&mut self, _: &mut gpui::Window, _: &mut gpui::Context<Self>) -> impl gpui::IntoElement {
+        use gpui::{div, prelude::*, px};
+        const SENTENCE: &str = "Speak to hear yourself";
+        let line = |name: &'static str| div().flex_none().debug_selector(move || name.to_owned());
+        div()
+            .text_size(px(10.0))
+            .line_height(px(14.0))
+            .font_family("Inter")
+            .child(div().flex().child(line("plain").child(SENTENCE)))
+            .child(div().flex().letter_spacing(0.1).child(line("spaced").child(SENTENCE)))
+            .child(
+                div()
+                    .w(px(self.0 + 2.0))
+                    .letter_spacing(0.1)
+                    .child(line("wrapped").child(SENTENCE)),
+            )
+    }
+}
+
+/// What the voice agent measured: in Nimbus a sentence came out narrower
+/// than the browser sets it, the theme's letter spacing not applied. The
+/// text style carries it now: one tenth of 10px after each of the 22
+/// characters, and a line that no longer fits wraps.
+#[gpui::test]
+fn a_sentence_takes_the_letter_spacing_it_inherits(cx: &mut TestAppContext) {
+    cx.update(|cx| {
+        cx.text_system()
+            .add_fonts(crate::assets::fonts())
+            .expect("the bundled faces");
+    });
+    let (_, window) = cx.add_window_view(|_, _| Spacing(0.0));
+    window.run_until_parked();
+    let width = |window: &mut VisualTestContext, name: &'static str| {
+        window.debug_bounds(name).expect(name).size
+    };
+    let plain = width(window, "plain");
+    let spaced = width(window, "spaced");
+    let added = f32::from(spaced.width - plain.width);
+    assert!((added - 22.0).abs() < 0.5, "{plain:?} {spaced:?}");
+    let (_, window) = cx.add_window_view(move |_, _| Spacing(f32::from(plain.width)));
+    window.run_until_parked();
+    let wrapped = width(window, "wrapped");
+    assert!(wrapped.height > plain.height * 1.5, "{wrapped:?}");
+}
+
+/// A drawn theme's poster labels are set at 900 (the voice dock's name in
+/// Nimbus), which the web UI's variable Inter has: the bundled faces have
+/// it too, named so the system lists it as Inter's black, not the bold
+/// standing in for it. (Tests lay text out with no real faces, so the face
+/// itself is looked at.)
+#[test]
+fn inter_is_bundled_at_the_weight_poster_labels_ask_for() {
+    let blacks: Vec<_> = crate::assets::fonts()
+        .iter()
+        .filter_map(|bytes| {
+            let face = ttf_parser::Face::parse(bytes, 0).ok()?;
+            let named = |id: u16| {
+                face.names()
+                    .into_iter()
+                    .find(|name| name.name_id == id && name.is_unicode())
+                    .and_then(|name| name.to_string())
+            };
+            (face.weight().to_number() == 900).then(|| (named(16), named(17)))
+        })
+        .collect();
+    assert_eq!(blacks, [(Some("Inter".to_owned()), Some("Black".to_owned()))]);
+}
+/// What the window is held by at `x`, `y` (window pixels).
+fn area_at(cx: &mut VisualTestContext, x: f32, y: f32) -> Option<gpui::WindowControlArea> {
+    cx.update(|window, _| window.window_control_area_at(gpui::point(gpui::px(x), gpui::px(y))))
+}
+
+/// The user could not move the window in Nimbus: with the band went the
+/// thing it was held by. A theme with no band is held, as the web UI holds
+/// it, by a strip along the top edge over every column (and by the corner
+/// tab's plate); what takes presses there keeps them, and a theme with a
+/// band is held by the band as before.
+#[gpui::test]
+fn a_window_without_a_band_is_held_along_its_top(cx: &mut TestAppContext) {
+    use gpui::WindowControlArea::Drag;
+    let (_shell, _engine, cx) = shell(cx);
+    wear("nimbus", Mode::Dark, cx);
+    let strip = cx.debug_bounds("drag-strip").expect("a strip");
+    let corner = cx.debug_bounds("corner-controls").expect("the corner tab");
+    assert!((f32::from(strip.size.height) - 24.0).abs() < 0.5, "{strip:?}");
+    // Across every column, rail, channels and conversation, up to the
+    // corner tab.
+    let mut x = f32::from(strip.left()) + 4.0;
+    while x < f32::from(corner.left()) {
+        assert_eq!(area_at(cx, x, 8.0), Some(Drag), "at {x}");
+        x += 37.0;
+    }
+    // The tab's name holds it too.
+    let name = (f32::from(corner.left()) + 30.0, f32::from(corner.center().y));
+    assert_eq!(area_at(cx, name.0, name.1), Some(Drag));
+    // Below the strip a control takes its own press.
+    let widen = cx.debug_bounds("rail-widen").expect("the rail's expander");
+    assert!(widen.top() >= strip.bottom(), "{widen:?} clears the strip");
+    let (wx, wy) = (f32::from(widen.center().x), f32::from(widen.center().y));
+    assert_ne!(area_at(cx, wx, wy), Some(Drag));
+
+    wear("dark", Mode::Dark, cx);
+    let band = cx.debug_bounds("band").expect("the band");
+    let middle = (f32::from(band.center().x), f32::from(band.center().y));
+    assert_eq!(area_at(cx, middle.0, middle.1), Some(Drag), "held by its band");
+    assert_eq!(area_at(cx, middle.0, f32::from(band.bottom()) + 10.0), None);
 }

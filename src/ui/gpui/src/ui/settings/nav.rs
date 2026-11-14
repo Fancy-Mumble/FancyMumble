@@ -21,7 +21,11 @@ pub(super) fn render(
     theme: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
-    let open = shell.panels.settings.page;
+    // A page of the administration on show lights its own entry instead.
+    let open = shell
+        .admin_page()
+        .is_none()
+        .then_some(shell.panels.settings.page);
     div()
         .flex_none()
         .w(theme.skin.column_width)
@@ -62,7 +66,12 @@ pub(super) fn render(
                         .flex()
                         .flex_col()
                         .gap(px(1.0))
-                        .children(Page::ALL.map(|page| entry(page, page == open, theme, cx))),
+                        .children(
+                            Page::ALL
+                                .into_iter()
+                                .filter(|page| page.shown(shell))
+                                .map(|page| entry(page, Some(page) == open, theme, cx)),
+                        ),
                 )
                 .children(administration(shell, theme, cx)),
         )
@@ -74,7 +83,7 @@ pub(super) fn render(
 fn heading(label: &str, above: f32, theme: &Theme) -> impl IntoElement + use<> {
     let rule = super::super::kit::heading_rule(theme);
     let words = if rule.is_some() {
-        super::super::kit::voiced(label, super::super::kit::Role::Heading, 10.5, theme)
+        super::super::kit::voiced(label, super::super::kit::Role::Heading, theme)
     } else {
         super::super::kit::spaced(&label.to_uppercase(), 1.05).into_any_element()
     };
@@ -98,8 +107,8 @@ fn heading(label: &str, above: f32, theme: &Theme) -> impl IntoElement + use<> {
 }
 
 /// What the server lets the user look after, as the web UI lists it under
-/// its own heading: each opens the panel this client has for it, over the
-/// page.
+/// its own heading: a page of the administration in the pane, or the panel
+/// this client still has for it, over the page.
 fn administration(
     shell: &Shell,
     theme: &Theme,
@@ -118,16 +127,17 @@ fn administration(
                     .flex()
                     .flex_col()
                     .gap(px(1.0))
-                    .children(entries.into_iter().map(|admin| admin.entry(theme, cx))),
+                    .children(entries.into_iter().map(|admin| {
+                        let open = matches!(admin, Admin::Page(page) if shell.admin_page() == Some(page));
+                        admin.entry(open, theme, cx)
+                    })),
             ),
     )
 }
 
 /// What the server lets the user look after, in the column's order.
 fn admin_entries(shell: &Shell) -> Vec<Admin> {
-    use crate::engine::Listing;
     use crate::rights::Right;
-    let root = shell.root_rights();
     let channel = shell
         .snapshot
         .current_channel
@@ -140,17 +150,11 @@ fn admin_entries(shell: &Shell) -> Vec<Admin> {
         })
         .filter(|channel| channel.rights.may(Right::WRITE))
         .map(|channel| channel.id);
-    let mut entries = Vec::new();
-    if root.has(Right::REGISTER) {
-        entries.push(Admin::Listing(
-            "admin-users",
-            t!("Users"),
-            Listing::Registered,
-        ));
-    }
-    if root.has(Right::BAN) {
-        entries.push(Admin::Listing("admin-bans", t!("Ban List"), Listing::Bans));
-    }
+    let mut entries: Vec<Admin> = super::super::admin_pages::AdminPage::ALL
+        .into_iter()
+        .filter(|page| page.allowed(shell))
+        .map(Admin::Page)
+        .collect();
     if let Some(channel) = channel {
         entries.push(Admin::Channel(t!("Channels / ACL"), channel));
     }
@@ -176,8 +180,8 @@ impl Shell {
 
 /// An entry of the administration.
 enum Admin {
-    /// One of the server's lists.
-    Listing(&'static str, SharedString, crate::engine::Listing),
+    /// A page of it, in the pane.
+    Page(super::super::admin_pages::AdminPage),
     /// The permissions of the channel the user is in.
     Channel(SharedString, crate::engine::ChannelId),
 }
@@ -186,18 +190,18 @@ impl Admin {
     /// Open the panel this client has for it.
     fn open(&self, shell: &mut Shell, cx: &mut Context<Shell>) {
         match self {
-            Self::Listing(_, _, listing) => shell.open_admin(*listing, cx),
+            Self::Page(page) => shell.open_admin_page(*page, cx),
             Self::Channel(_, channel) => shell.open_acl(*channel, cx),
         }
     }
 
-    fn entry(self, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
-        let (id, name) = match &self {
-            Self::Listing(id, name, _) => (*id, name.clone()),
-            Self::Channel(name, _) => ("admin-acl", name.clone()),
+    fn entry(self, open: bool, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+        let (id, name): (SharedString, SharedString) = match &self {
+            Self::Page(page) => (format!("admin-{}", page.id()).into(), page.name()),
+            Self::Channel(name, _) => ("admin-acl".into(), name.clone()),
         };
         let button =
-            row(id.into(), name, false, theme).on_click(cx.listener(move |shell, _, _, cx| {
+            row(id.clone(), name, open, theme).on_click(cx.listener(move |shell, _, _, cx| {
                 self.open(shell, cx);
             }));
         Reachable::new(id, button)

@@ -100,7 +100,7 @@ fn each_row_of_the_sheet_does_what_the_web_uis_does(cx: &mut TestAppContext) {
     click(cx, "menu-Server admin");
     shell.read_with(cx, |shell, _| {
         assert!(shell.panels.settings.open, "the settings, under the panel");
-        assert!(shell.panels.admin.is_some(), "the panel the column opens first");
+        assert!(shell.admin_page().is_some(), "the page the column lists first");
     });
 }
 

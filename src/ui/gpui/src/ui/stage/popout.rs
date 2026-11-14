@@ -121,17 +121,26 @@ impl Shell {
 /// a frame comes.
 struct StreamWindow {
     shell: WeakEntity<Shell>,
-    _shell_changed: Option<Subscription>,
+    _watched: Vec<Subscription>,
 }
 
 impl StreamWindow {
     fn new(shell: WeakEntity<Shell>, _window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let changed = shell
+        // Drawn again when the shell changes, and when a frame comes: the
+        // main window is not drawn for frames it does not show.
+        let watched = shell
             .upgrade()
-            .map(|shell| cx.observe(&shell, |_, _, cx| cx.notify()));
+            .map(|shell| {
+                let frames = shell.read(cx).stage.frames.clone();
+                vec![
+                    cx.observe(&shell, |_, _, cx| cx.notify()),
+                    cx.observe(&frames, |_, _, cx| cx.notify()),
+                ]
+            })
+            .unwrap_or_default();
         Self {
             shell,
-            _shell_changed: changed,
+            _watched: watched,
         }
     }
 }

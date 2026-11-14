@@ -3,10 +3,13 @@
 //!
 //! The gradients under it are drawn once into a small picture and
 //! stretched, which would smear a pattern into a tint. A pattern is drawn
-//! instead, every frame, as the handful of small quads that cover what is in
-//! view: each dot or line is one quad, and nothing is kept between frames.
+//! instead, every frame: each line as one quad, the dots as one path of
+//! small polygons, built once for the box they fill and kept while it does
+//! not change (a thousand quads cost a frame more than a millisecond).
 
-use gpui::{Bounds, Hsla, Pixels, Window, point, px, size};
+use std::cell::RefCell;
+
+use gpui::{Bounds, Hsla, Path, Pixels, Point, Window, point, px, size};
 
 use crate::theme::parse_color;
 
@@ -45,21 +48,23 @@ impl Pattern {
                 radius,
                 spacing: (across, down),
             } => {
-                if across < 1.0 || down < 1.0 {
+                if across < 1.0 || down < 1.0 || radius <= 0.0 {
                     return;
                 }
-                let side = px(radius * 2.0);
-                let mut y = top + down / 2.0 - radius;
-                while y < top + height {
-                    let mut x = left + across / 2.0 - radius;
-                    while x < left + width {
-                        window.paint_quad(
-                            gpui::fill(Bounds::new(point(px(x), px(y)), size(side, side)), color)
-                                .corner_radii(px(radius)),
-                        );
-                        x += across;
+                let key = [left, top, width, height, radius, across, down].map(f32::to_bits);
+                let lattice = LATTICE.with_borrow_mut(|kept| match kept {
+                    Some(known) if known.from == key => known.lattice.clone(),
+                    _ => {
+                        let lattice = lattice(bounds, radius, (across, down));
+                        *kept = Some(Kept {
+                            from: key,
+                            lattice: lattice.clone(),
+                        });
+                        lattice
                     }
-                    y += down;
+                });
+                if let Some(lattice) = lattice {
+                    window.paint_path(lattice, color);
                 }
             }
             Self::Lines {
@@ -83,6 +88,59 @@ impl Pattern {
             }
         }
     }
+}
+
+/// The dots last built, and the box, size and spacing they were built for.
+#[derive(Debug)]
+struct Kept {
+    from: [u32; 7],
+    lattice: Option<Path<Pixels>>,
+}
+
+thread_local! {
+    static LATTICE: RefCell<Option<Kept>> = const { RefCell::new(None) };
+}
+
+/// How many sides a dot is drawn with: round at the size of a dot. A
+/// hexagon strays at most an eighth of its radius from the circle, a fifth
+/// of a pixel for Nimbus's 1.5px dots, under what anti-aliasing shows; it
+/// is half the vertices of ten sides, which a frame copies and scales.
+const SIDES: usize = 6;
+
+/// A dot of `radius` in the middle of every `spacing` cell of `bounds`,
+/// all in one path.
+fn lattice(
+    bounds: Bounds<Pixels>,
+    radius: f32,
+    (across, down): (f32, f32),
+) -> Option<Path<Pixels>> {
+    let (left, top) = (f32::from(bounds.origin.x), f32::from(bounds.origin.y));
+    let (right, bottom) = (
+        left + f32::from(bounds.size.width),
+        top + f32::from(bounds.size.height),
+    );
+    let mut path: Option<Path<Pixels>> = None;
+    let mut y = top + down / 2.0;
+    while y - radius < bottom {
+        let mut x = left + across / 2.0;
+        while x - radius < right {
+            let corners: Vec<Point<Pixels>> = (0..SIDES)
+                .map(|side| {
+                    #[expect(clippy::cast_precision_loss, reason = "six sides")]
+                    let angle = std::f32::consts::TAU * side as f32 / SIDES as f32;
+                    point(px(x + radius * angle.cos()), px(y + radius * angle.sin()))
+                })
+                .collect();
+            let path = path.get_or_insert_with(|| Path::new(corners[0]));
+            path.move_to(corners[0]);
+            for corner in &corners[1..] {
+                path.line_to(*corner);
+            }
+            x += across;
+        }
+        y += down;
+    }
+    path
 }
 
 /// `radial-gradient(<color> <r>px, transparent <r>px) <x> <y>/<w>px <h>px`.

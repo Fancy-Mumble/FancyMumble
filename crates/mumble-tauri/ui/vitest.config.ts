@@ -23,8 +23,10 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.ts"],
     css: {
       // Vitest blanks every stylesheet it is not told to process, `?raw`
-      // included. themeTokens.test.ts reads the bundled themes as text.
-      include: [/src\/ui\/standard\/themes\/.+\.css/],
+      // included. themeTokens.test.ts reads the bundled themes as text, and
+      // cssVariables.test.ts every stylesheet (a `?raw` import only, so no
+      // other test's stylesheets change).
+      include: [/src\/ui\/standard\/themes\/.+\.css/, /\.css\?raw$/],
       modules: {
         classNameStrategy: "non-scoped",
       },

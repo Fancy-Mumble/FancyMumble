@@ -28,6 +28,9 @@ pub(crate) struct Finish {
     pub hover: Option<Hsla>,
     /// A hard plate behind it, this far down and across, in this colour.
     pub hard: Option<(f32, Hsla)>,
+    /// The fill running into this colour at this angle (CSS degrees), as
+    /// a `linear-gradient`.
+    pub fill_to: Option<(f32, Hsla)>,
 }
 
 impl Finish {
@@ -38,7 +41,15 @@ impl Finish {
             edge,
             hover: None,
             hard: None,
+            fill_to: None,
         }
+    }
+
+    /// The fill running into `to` at `angle` degrees, as CSS writes a
+    /// `linear-gradient(<angle>deg, <fill>, <to>)`.
+    pub(crate) fn fading_to(mut self, angle: f32, to: Hsla) -> Self {
+        self.fill_to = Some((angle, to));
+        self
     }
 
     pub(crate) fn hover(mut self, hover: Hsla) -> Self {
@@ -128,7 +139,21 @@ fn paint_plate(
         }
         _ => cut.points(bounds),
     };
-    fill(&inside, finish.fill, window);
+    match finish.fill_to {
+        Some((angle, to)) => {
+            if let Some(path) = polygon(&inside) {
+                window.paint_path(
+                    path,
+                    gpui::linear_gradient(
+                        angle,
+                        gpui::linear_color_stop(finish.fill, 0.0),
+                        gpui::linear_color_stop(to, 1.0),
+                    ),
+                );
+            }
+        }
+        None => fill(&inside, finish.fill, window),
+    }
     if let Some(hover) = finish.hover.filter(|_| hovered) {
         fill(&inside, hover, window);
     }
@@ -146,10 +171,50 @@ pub(crate) fn inset(bounds: Bounds<Pixels>, by: Pixels) -> Bounds<Pixels> {
 }
 
 /// The closed polygon through `corners`, filled.
+///
+/// Every shape a theme cuts is convex, and a convex one is a fan of
+/// triangles from its first corner: laid down directly, without the
+/// tessellator a path of any shape needs, which cost most of a frame
+/// drawn in such a theme.
 pub(crate) fn polygon(corners: &[Point<Pixels>]) -> Option<Path<Pixels>> {
+    if let [first, rest @ ..] = corners
+        && rest.len() >= 2
+        && convex(corners)
+    {
+        let mut path = Path::new(*first);
+        for corner in rest {
+            path.line_to(*corner);
+        }
+        return Some(path);
+    }
     let mut path = PathBuilder::fill();
     path.add_polygon(corners, true);
     path.build().ok()
+}
+
+/// Whether the polygon through `corners` turns the same way at every
+/// corner: convex, whichever way round it runs. Corners on a straight
+/// line turn neither way and do not count against it.
+fn convex(corners: &[Point<Pixels>]) -> bool {
+    let count = corners.len();
+    let mut turning = 0.0_f32;
+    for at in 0..count {
+        let (a, b, c) = (
+            corners[at],
+            corners[(at + 1) % count],
+            corners[(at + 2) % count],
+        );
+        let cross = f32::from(b.x - a.x) * f32::from(c.y - b.y)
+            - f32::from(b.y - a.y) * f32::from(c.x - b.x);
+        if cross.abs() <= f32::EPSILON {
+            continue;
+        }
+        if turning != 0.0 && cross.signum() != turning {
+            return false;
+        }
+        turning = cross.signum();
+    }
+    turning != 0.0
 }
 
 /// The closed polygon through `corners`, outlined `width` wide.
@@ -200,6 +265,26 @@ mod tests {
         assert_eq!(inner.center(), outer.center());
         // Never inside out.
         assert_eq!(inset(outer, px(50.0)).size.height, px(0.0));
+    }
+
+    #[test]
+    fn a_convex_shape_is_told_from_one_that_is_not() {
+        let at = |x: f32, y: f32| point(px(x), px(y));
+        let leaning = [at(10.0, 0.0), at(100.0, 0.0), at(90.0, 30.0), at(0.0, 30.0)];
+        assert!(convex(&leaning));
+        let mut backwards = leaning;
+        backwards.reverse();
+        assert!(convex(&backwards), "either way round");
+        let notched = [
+            at(0.0, 0.0),
+            at(50.0, 20.0),
+            at(100.0, 0.0),
+            at(100.0, 30.0),
+            at(0.0, 30.0),
+        ];
+        assert!(!convex(&notched));
+        let flat = [at(0.0, 0.0), at(50.0, 0.0), at(100.0, 0.0)];
+        assert!(!convex(&flat), "no area");
     }
 
     #[test]

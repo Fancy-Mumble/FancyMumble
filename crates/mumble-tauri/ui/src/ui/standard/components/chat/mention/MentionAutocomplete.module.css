@@ -35,7 +35,7 @@
 }
 
 .itemActive {
-  background: var(--accent-soft, rgba(88, 101, 242, 0.18));
+  background: var(--color-accent-soft, rgba(88, 101, 242, 0.18));
 }
 
 .itemLabel {
@@ -78,7 +78,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--accent, #5865f2);
+  background: var(--color-accent, #5865f2);
   color: white;
   font-size: 12px;
   font-weight: 700;

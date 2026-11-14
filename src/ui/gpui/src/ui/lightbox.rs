@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use gpui::{
-    Context, IntoElement, MouseButton, ParentElement, SharedString, Styled, Window, div,
+    AnimationExt as _, Context, IntoElement, MouseButton, ParentElement, SharedString, Styled, Window, div,
     prelude::*, px,
 };
 
@@ -20,16 +20,15 @@ const SHARE: f32 = 0.9;
 /// What the buttons under the picture take of the window's height.
 const UNDER: f32 = 56.0;
 
-/// The room a picture has in `window`, and the size it fits into it at;
-/// `None` for a file that does not say how large it is.
-fn placed(picture: &gpui::Image, window: &Window) -> Option<((f32, f32), (f32, f32))> {
+/// The room a picture `natural` pixels large has in `window`, and the size
+/// it fits into it at; `None` for a file that does not say how large it is.
+fn placed(natural: Option<(u32, u32)>, window: &Window) -> Option<((f32, f32), (f32, f32))> {
     let viewport = window.viewport_size();
     let room = (
         f32::from(viewport.width) * SHARE,
         (f32::from(viewport.height) * SHARE - UNDER).max(1.0),
     );
-    let natural = crate::picture::dimensions(picture.bytes())?;
-    Some((crate::picture::fitted(natural, room), room))
+    Some((crate::picture::fitted(natural?, room), room))
 }
 
 /// Whether `html` carries a picture of its own: what is worth reading a
@@ -71,6 +70,11 @@ impl Shell {
 
     /// Put the picture being looked at on the clipboard.
     fn copy_lightbox_picture(&mut self, cx: &mut Context<Self>) {
+        // A shared file's whole picture, not the copy standing in for it.
+        if self.copy_large(cx) {
+            self.toast("Copied the picture", Kind::Done, cx);
+            return;
+        }
         let Some(picture) = self.lightbox.clone() else {
             return;
         };
@@ -97,6 +101,10 @@ impl Shell {
     /// `forward` false one before it. Told from the messages as they were
     /// sent, without reading any of them.
     fn has_picture_beyond(&self, forward: bool) -> bool {
+        // An album opened large steps through its own pictures.
+        if let Some(beyond) = self.album_has_beyond(forward) {
+            return beyond;
+        }
         let Some((index, nth)) = self.lightbox_place() else {
             return false;
         };
@@ -119,6 +127,9 @@ impl Shell {
     /// false the one before it: in its own message first, then in the
     /// nearest message that has one. Says whether there was one.
     pub(super) fn step_lightbox(&mut self, forward: bool, cx: &mut Context<Self>) -> bool {
+        if let Some(stepped) = self.step_album(forward, cx) {
+            return stepped;
+        }
         let Some((index, nth)) = self.lightbox_place() else {
             return false;
         };
@@ -165,6 +176,10 @@ impl Shell {
 
     /// Ask where to, and write the picture being looked at there.
     fn save_lightbox_picture(&mut self, cx: &mut Context<Self>) {
+        // A shared file is saved as the server keeps it.
+        if self.save_large(cx) {
+            return;
+        }
         let Some(picture) = self.lightbox.clone() else {
             return;
         };
@@ -212,6 +227,8 @@ fn picture_file_name(picture: &gpui::Image) -> &'static str {
 /// as `view` has it and moved as far, with what hangs over cut off.
 fn stage(
     picture: &Arc<gpui::Image>,
+    natural: Option<(u32, u32)>,
+    waiting: bool,
     view: View,
     window: &Window,
     cx: &mut Context<Shell>,
@@ -230,7 +247,7 @@ fn stage(
         .items_center()
         .justify_center()
         .overflow_hidden();
-    match placed(picture, window) {
+    match placed(natural, window) {
         Some((fitted, room)) => {
             let view = view.kept_in(fitted, room);
             let (across, down) = view.offset();
@@ -266,7 +283,9 @@ fn stage(
                     .when(!crate::pictures::is_read(picture, Fit::Large, cx), |held| {
                         held.child(drawn(Fit::Tile).absolute().size_full())
                     })
-                    .child(drawn(Fit::Large).absolute().size_full()),
+                    .child(drawn(Fit::Large).absolute().size_full())
+                    // The whole picture is on its way.
+                    .when(waiting, |held| held.child(fetching_mark())),
             )
         }
         // A file that does not say how large it is: all the room.
@@ -333,10 +352,8 @@ pub(super) fn render(
                     return;
                 }
                 let at = (f32::from(event.position.x), f32::from(event.position.y));
-                let placed = shell
-                    .lightbox
-                    .as_ref()
-                    .and_then(|open| placed(open, window));
+                let natural = shell.lightbox.as_ref().and_then(|open| shell.natural_of(open));
+                let placed = placed(natural, window);
                 shell.look(
                     |view| match placed {
                         Some((fitted, room)) => view.dragged_to(at).kept_in(fitted, room),
@@ -348,8 +365,39 @@ pub(super) fn render(
         )
         .children(step(shell, false, cx))
         .children(step(shell, true, cx))
-        .child(stage(picture, view, window, cx))
+        .child(stage(
+            picture,
+            shell.natural_of(picture),
+            shell.large_file().is_some_and(super::lightbox_file::LargeFile::waiting),
+            view,
+            window,
+            cx,
+        ))
         .child(under(view, theme, cx))
+}
+
+/// The mark over a picture whose whole is still on its way: a bar along
+/// its foot that runs while it waits.
+fn fetching_mark() -> impl IntoElement {
+    div()
+        .debug_selector(|| "lightbox-fetching".to_owned())
+        .absolute()
+        .left_0()
+        .right_0()
+        .bottom_0()
+        .h(px(3.0))
+        .overflow_hidden()
+        .child(
+            div()
+                .h_full()
+                .w(gpui::relative(0.3))
+                .bg(gpui::white().opacity(0.85))
+                .with_animation(
+                    "lightbox-fetching",
+                    gpui::Animation::new(std::time::Duration::from_millis(1100)).repeat(),
+                    |bar, delta| bar.ml(gpui::relative(delta * 1.3 - 0.3)),
+                ),
+        )
 }
 
 /// What stands under the picture: saving it, copying it, and how much

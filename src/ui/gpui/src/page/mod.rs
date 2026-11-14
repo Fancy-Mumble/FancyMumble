@@ -28,6 +28,10 @@ mod tree;
 mod values;
 mod vector;
 
+/// An SVG drawn into an ordinary picture, in its own colours: for anything
+/// else that shows one (a language's flag).
+pub(crate) use vector::raster as raster_svg;
+
 pub(crate) use tree::{
     Align, Block, Cell, Extent, Family, Fit, Frame, Ink, Item, Kind, Lead, Len, Look, Para,
     Picture, Piece, Role, Row, Sides, Table, Valign, Words,

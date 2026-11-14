@@ -497,10 +497,10 @@ fn dates_and_numbers_are_written_as_chosen_and_stay_so(cx: &mut TestAppContext) 
     {
         let (shell, cx) = open_keeping(&dir, cx);
         reach(&shell, cx, "settings-localization");
-        assert_eq!(super::size_in_words(1_536), "1.5 KB");
+        assert_eq!(super::size_in_words(1_536), "1.5 KiB");
         reach(&shell, cx, "number-format-2");
         // A shared file's size, as its card and the composer's tray say it.
-        assert_eq!(super::size_in_words(1_536), "1,5 KB");
+        assert_eq!(super::size_in_words(1_536), "1,5 KiB");
         reach(&shell, cx, "date-format-3");
         assert_eq!(crate::formats::current().date, DateFormat::Ymd);
         let ago = chrono::NaiveDate::from_ymd_opt(2026, 1, 2).expect("a day");
@@ -519,7 +519,7 @@ fn dates_and_numbers_are_written_as_chosen_and_stay_so(cx: &mut TestAppContext) 
     // Back to the defaults on this thread, then a start reads them again.
     crate::formats::set(crate::formats::Formats::default());
     let (_shell, _cx) = restarted(&dir, cx);
-    assert_eq!(super::size_in_words(1_536), "1,5 KB");
+    assert_eq!(super::size_in_words(1_536), "1,5 KiB");
     assert_eq!(crate::formats::current().date, DateFormat::Ymd);
     crate::formats::set(crate::formats::Formats::default());
     let _ = std::fs::remove_dir_all(dir);
@@ -768,7 +768,9 @@ fn a_developer_keeps_the_log_as_asked_and_it_is_kept(cx: &mut TestAppContext) {
     let dir = data_dir("logs");
     {
         let (shell, cx) = open_keeping(&dir, cx);
-        shell.update(cx, |shell, _| shell.panels.settings.user_mode = UserMode::Developer);
+        shell.update(cx, |shell, _| {
+            shell.panels.settings.user_mode = UserMode::Developer
+        });
         reach(&shell, cx, "settings-advanced");
         reach(&shell, cx, "log-level");
         click(cx, "log-level-4");
@@ -785,7 +787,9 @@ fn a_developer_keeps_the_log_as_asked_and_it_is_kept(cx: &mut TestAppContext) {
     let kept = Store::new(&dir).settings().logs;
     assert_eq!((kept.level(), kept.log_to_file), ("trace", false));
     let (shell, cx) = restarted(&dir, cx);
-    shell.read_with(cx, |shell, _| assert!(shell.panels.settings.logs.terminal_logging));
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.panels.settings.logs.terminal_logging)
+    });
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -801,12 +805,17 @@ fn leaving_is_not_asked_about_once_switched_off(cx: &mut TestAppContext) {
         click(cx, "leave");
         shell.read_with(cx, |shell, _| {
             assert!(shell.prompt.is_none(), "not asked");
-            assert_ne!(shell.snapshot.connection, crate::engine::Connection::Connected);
+            assert_ne!(
+                shell.snapshot.connection,
+                crate::engine::Connection::Connected
+            );
         });
     }
     assert!(!Store::new(&dir).settings().show_disconnect_warning.0);
     let (shell, cx) = restarted(&dir, cx);
-    shell.read_with(cx, |shell, _| assert!(!shell.panels.settings.disconnect_warning));
+    shell.read_with(cx, |shell, _| {
+        assert!(!shell.panels.settings.disconnect_warning)
+    });
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -828,7 +837,10 @@ fn reset_asks_first_then_deletes_everything_kept_in_its_own_directory(cx: &mut T
     reach(&shell, cx, "reset-all");
     reach(&shell, cx, "reset-confirm");
     assert!(!dir.join("view.json").exists() && !dir.join("walls").exists());
-    assert!(!dir.join("identities").exists(), "the engine's identities too");
+    assert!(
+        !dir.join("identities").exists(),
+        "the engine's identities too"
+    );
     assert!(dir.join("not-ours.txt").exists(), "nothing else");
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -844,12 +856,16 @@ fn a_share_starting_is_heard_as_the_web_ui_hears_it(cx: &mut TestAppContext) {
     assert!(played[before..].contains(&"univ-051"), "{played:?}");
     // Switched off on the Notifications page: not heard.
     shell.update(cx, |shell, _| {
-        shell.panels.settings.sounds.change(crate::sounds::Event::StreamStart, |chosen| {
-            crate::sounds::Chosen {
-                enabled: false,
-                ..chosen
-            }
-        });
+        shell
+            .panels
+            .settings
+            .sounds
+            .change(crate::sounds::Event::StreamStart, |chosen| {
+                crate::sounds::Chosen {
+                    enabled: false,
+                    ..chosen
+                }
+            });
     });
     let before = crate::sounds::played().len();
     engine.share_screens(2);
@@ -883,4 +899,185 @@ fn streamer_mode_stars_out_addresses_and_silences_notifications(cx: &mut TestApp
     let _ = cx;
     crate::notify::allow(true);
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[gpui::test]
+fn a_key_bound_to_somebody_opens_the_conversation_with_them(cx: &mut TestAppContext) {
+    let dir = data_dir("jumps");
+    let rin = {
+        let (shell, cx) = open_keeping(&dir, cx);
+        reach(&shell, cx, "settings-shortcuts");
+        reach(&shell, cx, "jump-add");
+        bring(&shell, cx, "jump-pick");
+        click(cx, "jump-pick");
+        click(cx, "jump-pick-1");
+        reach(&shell, cx, "jump-confirm");
+        let (id, rin) = shell.read_with(cx, |shell, _| {
+            let jump = shell
+                .panels
+                .settings
+                .jumps
+                .first()
+                .expect("a shortcut")
+                .clone();
+            let rin = shell
+                .snapshot
+                .users
+                .iter()
+                .find(|user| user.name.as_ref() == jump.user_name)
+                .expect("somebody picked")
+                .session;
+            (jump.id, rin)
+        });
+        reach(&shell, cx, tag("jump", &id));
+        cx.simulate_keystrokes("ctrl-alt-1");
+        shell.update(cx, Shell::close_settings);
+        cx.run_until_parked();
+        cx.simulate_keystrokes("ctrl-alt-1");
+        shell.read_with(cx, |shell, _| {
+            assert_eq!(shell.open, Some(crate::engine::Conversation::Direct(rin)));
+        });
+        rin
+    };
+    let kept = Store::new(&dir).settings().user_shortcuts;
+    assert_eq!(kept[0].hotkey, "Ctrl+Alt+1");
+    let (shell, cx) = restarted(&dir, cx);
+    // A second test window is not handed simulated keys (as `say` found):
+    // the key is given to the shell as its window gives it one.
+    let pressed = gpui::Keystroke::parse("ctrl-alt-1").expect("a key");
+    let heard = shell.update(cx, |shell, cx| shell.hear_jump_key(&pressed, cx));
+    shell.read_with(cx, |shell, _| {
+        assert!(heard, "bound at start");
+        assert_eq!(shell.open, Some(crate::engine::Conversation::Direct(rin)));
+    });
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[gpui::test]
+fn an_identity_is_made_by_name_and_its_phrase_shown_and_restored(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell(cx);
+    cx.simulate_keystrokes("ctrl-,");
+    reach(&shell, cx, "settings-identities");
+    click(cx, "identity-name");
+    cx.simulate_keystrokes("s t r e a m");
+    reach(&shell, cx, "identity-create");
+    shell.read_with(cx, |shell, _| {
+        assert!(
+            shell
+                .panels
+                .certs
+                .held
+                .iter()
+                .any(|held| held.as_ref() == "stream")
+        );
+    });
+    reach(&shell, cx, "recovery-show");
+    shell.read_with(cx, |shell, _| {
+        let phrase = shell
+            .panels
+            .settings
+            .recovery
+            .as_ref()
+            .and_then(|r| r.phrase.clone());
+        assert_eq!(phrase.map(|p| p.split_whitespace().count()), Some(24));
+    });
+    // Restoring asks for all 24 words: fewer do nothing.
+    bring(&shell, cx, "recovery-draft");
+    click(cx, "recovery-draft");
+    cx.simulate_keystrokes("a b c");
+    reach(&shell, cx, "recovery-restore");
+    shell.read_with(cx, |shell, _| {
+        assert!(
+            shell
+                .panels
+                .settings
+                .recovery
+                .as_ref()
+                .is_some_and(|r| r.said.is_none())
+        );
+    });
+    // All 24: typed at once, as a phrase is pasted.
+    shell.update(cx, |shell, cx| {
+        let draft = shell
+            .panels
+            .settings
+            .recovery
+            .as_ref()
+            .expect("the page")
+            .draft
+            .clone();
+        draft.update(cx, |field, _| field.set_text(vec!["word"; 24].join(" ")));
+        cx.notify();
+    });
+    cx.run_until_parked();
+    reach(&shell, cx, "recovery-restore");
+    shell.read_with(cx, |shell, _| {
+        let said = shell
+            .panels
+            .settings
+            .recovery
+            .as_ref()
+            .and_then(|r| r.said.clone());
+        assert_eq!(said, Some(Ok(())), "restored");
+    });
+}
+
+/// A JPEG whose top half is red and bottom half blue, with an EXIF note
+/// that it is to be turned half round (orientation 3) to be looked at.
+fn upside_down_jpeg() -> Vec<u8> {
+    let picture = image::RgbImage::from_fn(32, 32, |_, y| {
+        if y < 16 {
+            image::Rgb([220, 20, 20])
+        } else {
+            image::Rgb([20, 20, 220])
+        }
+    });
+    let mut jpeg = Vec::new();
+    image::DynamicImage::ImageRgb8(picture)
+        .write_to(
+            &mut std::io::Cursor::new(&mut jpeg),
+            image::ImageFormat::Jpeg,
+        )
+        .expect("a jpeg");
+    // An APP1 segment: "Exif", a little-endian TIFF header, one entry.
+    let mut tiff = b"II*\0\x08\0\0\0".to_vec();
+    tiff.extend([1, 0]); // one entry
+    tiff.extend([0x12, 0x01, 3, 0, 1, 0, 0, 0, 3, 0, 0, 0]); // Orientation = 3
+    tiff.extend([0, 0, 0, 0]); // no next directory
+    let mut app1 = b"Exif\0\0".to_vec();
+    app1.extend(tiff);
+    let length = u16::try_from(app1.len() + 2).expect("small");
+    let mut out = jpeg[..2].to_vec();
+    out.extend([0xFF, 0xE1]);
+    out.extend(length.to_be_bytes());
+    out.extend(app1);
+    out.extend(&jpeg[2..]);
+    out
+}
+
+#[test]
+fn a_photograph_turned_by_its_camera_is_kept_the_right_way_up_once() {
+    let kept = crate::picture::wallpaper(&upside_down_jpeg()).expect("a wallpaper");
+    let upright = image::load_from_memory(&kept).expect("readable").to_rgb8();
+    // Turned half round: blue on top now, red below.
+    let top = upright.get_pixel(16, 4).0;
+    let bottom = upright.get_pixel(16, 28).0;
+    assert!(top[2] > 150 && top[0] < 100, "blue on top, not {top:?}");
+    assert!(
+        bottom[0] > 150 && bottom[2] < 100,
+        "red below, not {bottom:?}"
+    );
+    // And written without the note, so nothing turns it a second time:
+    // the tile, the focus point and the conversation all read these pixels.
+    assert_eq!(crate::picture::dimensions(&kept), Some((32, 32)));
+    let mut again = image::ImageReader::new(std::io::Cursor::new(&kept))
+        .with_guessed_format()
+        .expect("a format")
+        .into_decoder()
+        .expect("a decoder");
+    use image::ImageDecoder as _;
+    assert_eq!(
+        again.orientation().ok(),
+        Some(image::metadata::Orientation::NoTransforms)
+    );
 }

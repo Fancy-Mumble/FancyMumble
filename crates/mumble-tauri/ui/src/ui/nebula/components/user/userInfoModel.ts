@@ -5,6 +5,7 @@
  * the loss figure, the chart window - are testable without a session behind
  * them. The sheet draws; this decides.
  */
+import { banCovers } from "@core/features/admin/banMask";
 import type { BanEntry, ChannelEntry, UserStats } from "@core/types";
 import { PERM_WRITE } from "@core/utils/permissions";
 
@@ -160,6 +161,7 @@ export type BanNote =
  * latest one.
  *
  * Matched on the certificate hash where the ban has one and on the address
+ * (with its mask, so a ban on a network counts for everyone in it)
  * otherwise, which is how the server itself matches them. A ban with no
  * parsable start is still counted - the count is the fact that matters - and
  * described as simply on record.
@@ -171,7 +173,7 @@ export function describeBans(
   now: number,
 ): { count: number; note: BanNote } | null {
   const matching = bans.filter(
-    (ban) => (!!user.hash && ban.hash === user.hash) || (!!address && ban.address === address),
+    (ban) => (!!user.hash && ban.hash === user.hash) || (!!address && !!ban.address && banCovers(ban, address)),
   );
   if (matching.length === 0) return null;
 

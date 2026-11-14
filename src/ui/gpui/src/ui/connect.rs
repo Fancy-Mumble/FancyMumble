@@ -457,7 +457,7 @@ pub(super) fn landing(
         .child(presented(&server, &name, livery, ping.as_ref(), theme, cx))
         .child(
             div()
-                .mt(px(19.0))
+                .mt(px(20.0))
                 .w(px(556.0))
                 .max_w_full()
                 .flex()
@@ -532,6 +532,7 @@ fn presented(
         .child(
             // In a frame of the window's own colour.
             div()
+                .debug_selector(|| "landing-tile".to_owned())
                 .mt(px(-48.0))
                 .p(px(3.0))
                 .rounded(theme.skin.radius_xl)
@@ -546,8 +547,8 @@ fn presented(
         )
         .child(
             div()
-                .mt(px(9.0))
-                .mb(px(1.0))
+                .debug_selector(|| "landing-name".to_owned())
+                .mt(px(10.0))
                 .font_family(display_font(theme))
                 .text_size(px(23.0))
                 .line_height(px(27.6))
@@ -704,9 +705,11 @@ fn faint_name(name: &SharedString, theme: &Theme) -> impl IntoElement + use<> {
         .w_full()
         .flex()
         .justify_center()
-        .font_family(display_font(theme))
+        .font_family(super::widgets::display_font_at(theme, 44.0))
         .text_size(px(44.0))
         .line_height(px(68.2))
+        // The web UI's `letter-spacing: 2.2px`.
+        .letter_spacing(0.05)
         .font_weight(gpui::FontWeight::BOLD)
         .text_color(gpui::hsla(0.0, 0.0, 1.0, 0.25))
         .child(name.clone())
@@ -721,6 +724,7 @@ fn facts(
 ) -> impl IntoElement + use<> {
     let chip = || Chip::new(ChipTone::Neutral);
     let row = div()
+        .debug_selector(|| "landing-facts".to_owned())
         .mt(px(12.0))
         .max_w(px(620.0))
         .flex()
@@ -793,8 +797,10 @@ fn identity_line(
 ) -> impl IntoElement + use<> {
     let edit_tag = identity.id.clone();
     let edited = identity.clone();
+    // The web UI's card is 57.6 tall with its edge: the line is that, less
+    // the card's edge above and below it.
     div()
-        .h(px(57.6))
+        .h(px(57.6 - 2.0))
         .flex()
         .items_center()
         .gap(px(11.0))
@@ -984,7 +990,7 @@ fn connect_row(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl In
     };
     let automatic = picked.is_some() && shell.chrome.auto_connect == picked;
     div()
-        .mt(px(19.0))
+        .mt(px(18.0))
         .flex()
         .items_center()
         .gap(px(12.0))

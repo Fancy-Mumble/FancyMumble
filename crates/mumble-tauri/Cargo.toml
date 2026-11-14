@@ -46,6 +46,7 @@ tauri-view = [
     "dep:gtk",
     "dep:webkit2gtk",
     "dep:webview2-com",
+    "dep:windows-registry",
     "dep:notify-rust",
     "dep:fancy-gamedetect",
     "dep:mimalloc",
@@ -241,7 +242,7 @@ webview2-com = { version = "0.38", optional = true }
 windows-core = "0.61"
 # Reading which browser owns `https`, for "open in a private window". A safe
 # wrapper rather than the raw Win32 calls: `unsafe_code` is denied here.
-windows-registry = "0.5"
+windows-registry = { version = "0.5", optional = true }
 
 # DeepFilterNet3, on top of the features the desktop block above already asks
 # for - cargo unions the matching target tables, so this adds the backend
@@ -298,6 +299,8 @@ workspace = true
 
 [dev-dependencies]
 tempfile = "3"
+# The legacy picture tests make and read an animation.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

@@ -92,7 +92,9 @@ struct DirectXRenderPipelines {
     backdrop_blur_pipeline: PipelineState<BackdropBlur>,
     shadow_pipeline: PipelineState<Shadow>,
     quad_pipeline: PipelineState<Quad>,
-    path_rasterization_pipeline: PipelineState<PathRasterizationSprite>,
+    path_rasterization_pipeline: PipelineState<PathRasterizationVertex>,
+    path_vertices: AppendBuffer<PathRasterizationVertex>,
+    path_rasterization_sprites: AppendBuffer<PathRasterizationSprite>,
     path_sprite_pipeline: PipelineState<PathSprite>,
     underline_pipeline: PipelineState<Underline>,
     mono_sprites: PipelineState<MonochromeSprite>,
@@ -528,30 +530,43 @@ impl DirectXRenderer {
                 .OMSetRenderTargets(Some(&self.resources.path_intermediate_msaa_view), None);
         }
 
-        // Collect all vertices and sprites for a single draw call
+        // Collect all vertices and sprites for a single draw call: each
+        // vertex names its path, whose colour and bounds are written once.
         let mut vertices = Vec::new();
+        let mut sprites = Vec::with_capacity(paths.len());
 
         for path in paths {
-            vertices.extend(path.vertices.iter().map(|v| PathRasterizationSprite {
-                xy_position: v.xy_position,
-                st_position: v.st_position,
+            let index = sprites.len() as u32;
+            sprites.push(PathRasterizationSprite {
                 color: path.color,
                 bounds: path.clipped_bounds(),
+            });
+            vertices.extend(path.vertices.iter().map(|v| PathRasterizationVertex {
+                xy_position: v.xy_position,
+                st_position: v.st_position,
+                path: index,
             }));
         }
 
-        self.pipelines.path_rasterization_pipeline.update_buffer(
-            &self.devices.device,
-            &self.devices.device_context,
-            &vertices,
-        )?;
-        self.pipelines.path_rasterization_pipeline.draw(
-            &self.devices.device_context,
+        // Appended after the batches drawn before it, so a frame of several
+        // batches does not discard the buffers once for each.
+        let device = &self.devices.device;
+        let device_context = &self.devices.device_context;
+        let vertex_view = self
+            .pipelines
+            .path_vertices
+            .append(device, device_context, &vertices)?;
+        let sprite_view = self
+            .pipelines
+            .path_rasterization_sprites
+            .append(device, device_context, &sprites)?;
+        self.pipelines.path_rasterization_pipeline.draw_paths(
+            device_context,
             &self.resources.viewport,
             &self.globals.global_params_buffer,
-            D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
+            &vertex_view,
+            &sprite_view,
             vertices.len() as u32,
-            1,
         )?;
 
         // Resolve MSAA to non-MSAA intermediate texture
@@ -869,13 +884,18 @@ impl DirectXRenderPipelines {
             64,
             create_blend_state(device)?,
         )?;
+        // Its own buffer stays unused (one element): the paths' vertices and
+        // sprites go into the two append buffers below.
         let path_rasterization_pipeline = PipelineState::new(
             device,
             "path_rasterization_pipeline",
             ShaderModule::PathRasterization,
-            32,
+            1,
             create_blend_state_for_path_rasterization(device)?,
         )?;
+        let path_vertices = AppendBuffer::new(device, "path_vertices", 1024)?;
+        let path_rasterization_sprites =
+            AppendBuffer::new(device, "path_rasterization_sprites", 64)?;
         let path_sprite_pipeline = PipelineState::new(
             device,
             "path_sprite_pipeline",
@@ -911,6 +931,8 @@ impl DirectXRenderPipelines {
             shadow_pipeline,
             quad_pipeline,
             path_rasterization_pipeline,
+            path_vertices,
+            path_rasterization_sprites,
             path_sprite_pipeline,
             underline_pipeline,
             mono_sprites,
@@ -1004,6 +1026,107 @@ struct PipelineState<T> {
     _marker: std::marker::PhantomData<T>,
 }
 
+/// A buffer for shaders that each write goes after the last, so that it is
+/// discarded only when full rather than on every write.
+///
+/// A write that discards (`update_buffer`) makes the driver hand out a fresh
+/// copy of the whole buffer while the GPU still reads the old one, and the
+/// driver keeps those copies. Paths are drawn in a batch for each run of
+/// draw order, several a frame when a theme lays lettering and rings over a
+/// dot lattice; discarding a buffer of megabytes for each, the driver held
+/// 60 MB of copies in shared memory, all of it counted in the process's
+/// commit.
+struct AppendBuffer<T> {
+    label: &'static str,
+    buffer: ID3D11Buffer,
+    /// How many elements it holds.
+    size: usize,
+    /// How many have been written since it was last discarded.
+    written: usize,
+    /// Whether the driver lets a dynamic buffer read by shaders be mapped
+    /// without discarding it; false once it has refused.
+    no_overwrite: bool,
+    _marker: std::marker::PhantomData<T>,
+}
+
+impl<T> AppendBuffer<T> {
+    fn new(device: &ID3D11Device, label: &'static str, size: usize) -> Result<Self> {
+        Ok(Self {
+            label,
+            buffer: create_buffer(device, std::mem::size_of::<T>(), size)?,
+            size,
+            written: 0,
+            no_overwrite: true,
+            _marker: std::marker::PhantomData,
+        })
+    }
+
+    /// Write `data` after what the buffer already holds, and answer a view
+    /// of just that: a shader reads it from its index 0.
+    fn append(
+        &mut self,
+        device: &ID3D11Device,
+        device_context: &ID3D11DeviceContext,
+        data: &[T],
+    ) -> Result<[Option<ID3D11ShaderResourceView>; 1]> {
+        let start = self.write(device, device_context, data)?;
+        create_buffer_range_view(device, &self.buffer, start as u32, data.len().max(1) as u32)
+    }
+
+    /// Write `data` and answer where it starts.
+    fn write(
+        &mut self,
+        device: &ID3D11Device,
+        device_context: &ID3D11DeviceContext,
+        data: &[T],
+    ) -> Result<usize> {
+        if self.size < data.len() {
+            let size = data.len().next_power_of_two();
+            log::info!("Updating {} buffer size from {} to {}", self.label, self.size, size);
+            self.buffer = create_buffer(device, std::mem::size_of::<T>(), size)?;
+            self.size = size;
+        } else if self.no_overwrite && self.written > 0 && self.written + data.len() <= self.size {
+            let start = self.written;
+            match map_buffer(device_context, &self.buffer, D3D11_MAP_WRITE_NO_OVERWRITE) {
+                Ok(dest) => {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            data.as_ptr(),
+                            (dest.pData as *mut T).add(start),
+                            data.len(),
+                        );
+                        device_context.Unmap(&self.buffer, 0);
+                    }
+                    self.written = start + data.len();
+                    return Ok(start);
+                }
+                Err(error) => {
+                    log::info!(
+                        "{} buffer cannot be appended to ({error}); discarding on each write",
+                        self.label
+                    );
+                    self.no_overwrite = false;
+                }
+            }
+        }
+        update_buffer(device_context, &self.buffer, data)?;
+        self.written = data.len();
+        Ok(0)
+    }
+}
+
+fn map_buffer(
+    device_context: &ID3D11DeviceContext,
+    buffer: &ID3D11Buffer,
+    how: D3D11_MAP,
+) -> Result<D3D11_MAPPED_SUBRESOURCE> {
+    unsafe {
+        let mut dest = std::mem::zeroed();
+        device_context.Map(buffer, 0, how, 0, Some(&mut dest))?;
+        Ok(dest)
+    }
+}
+
 impl<T> PipelineState<T> {
     fn new(
         device: &ID3D11Device,
@@ -1083,6 +1206,35 @@ impl<T> PipelineState<T> {
         Ok(())
     }
 
+    /// Draw `vertex_count` triangle-list vertices read from `vertices`, each
+    /// naming its path in `paths` (bound at the next slot).
+    fn draw_paths(
+        &self,
+        device_context: &ID3D11DeviceContext,
+        viewport: &[D3D11_VIEWPORT],
+        global_params: &[Option<ID3D11Buffer>],
+        vertices: &[Option<ID3D11ShaderResourceView>; 1],
+        paths: &[Option<ID3D11ShaderResourceView>; 1],
+        vertex_count: u32,
+    ) -> Result<()> {
+        set_pipeline_state(
+            device_context,
+            vertices,
+            D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
+            viewport,
+            &self.vertex,
+            &self.fragment,
+            global_params,
+            &self.blend_state,
+        );
+        unsafe {
+            device_context.VSSetShaderResources(2, Some(paths));
+            device_context.PSSetShaderResources(2, Some(paths));
+            device_context.Draw(vertex_count, 0);
+        }
+        Ok(())
+    }
+
     fn draw_with_texture(
         &self,
         device_context: &ID3D11DeviceContext,
@@ -1113,11 +1265,20 @@ impl<T> PipelineState<T> {
     }
 }
 
+/// A path's vertex, and which of the batch's paths it belongs to.
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct PathRasterizationVertex {
+    xy_position: Point<ScaledPixels>,
+    st_position: Point<f32>,
+    path: u32,
+}
+
+/// What every vertex of a path shares: written once per path, not per vertex
+/// (it is 88 of what were 104 bytes a vertex).
 #[derive(Clone, Copy)]
 #[repr(C)]
 struct PathRasterizationSprite {
-    xy_position: Point<ScaledPixels>,
-    st_position: Point<f32>,
     color: Background,
     bounds: Bounds<ScaledPixels>,
 }
@@ -1505,6 +1666,32 @@ fn create_buffer(
 }
 
 #[inline]
+/// A view of `count` elements of a structured buffer, the first at `first`.
+fn create_buffer_range_view(
+    device: &ID3D11Device,
+    buffer: &ID3D11Buffer,
+    first: u32,
+    count: u32,
+) -> Result<[Option<ID3D11ShaderResourceView>; 1]> {
+    let desc = D3D11_SHADER_RESOURCE_VIEW_DESC {
+        Format: DXGI_FORMAT_UNKNOWN,
+        ViewDimension: D3D11_SRV_DIMENSION_BUFFER,
+        Anonymous: D3D11_SHADER_RESOURCE_VIEW_DESC_0 {
+            Buffer: D3D11_BUFFER_SRV {
+                Anonymous1: D3D11_BUFFER_SRV_0 {
+                    FirstElement: first,
+                },
+                Anonymous2: D3D11_BUFFER_SRV_1 {
+                    NumElements: count,
+                },
+            },
+        },
+    };
+    let mut view = None;
+    unsafe { device.CreateShaderResourceView(buffer, Some(&desc), Some(&mut view)) }?;
+    Ok([view])
+}
+
 fn create_buffer_view(
     device: &ID3D11Device,
     buffer: &ID3D11Buffer,

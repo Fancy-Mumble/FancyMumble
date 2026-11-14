@@ -105,7 +105,7 @@ pub(super) fn render(
                 .glyph_size(15.0)
                 .settle_left()
                 .tone(Tone::Danger)
-                .when(marks.leave_plate, |leave| leave.variant(Variant::Soft))
+                .when(marks.leave_plate, |leave| leave.variant(Variant::Plated))
                 .tip("Leave server")
                 .on_click(cx.listener(|shell, _, window, cx| shell.ask_to_leave(window, cx))),
         )

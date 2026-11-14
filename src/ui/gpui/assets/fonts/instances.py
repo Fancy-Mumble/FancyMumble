@@ -1,27 +1,40 @@
 """Cut the static Inter faces this view bundles from the variable font the web UI ships.
 
-    uv run --with fonttools python3 instances.py <web fonts dir> <this dir>
+    uv run --with fonttools python3 instances.py <web fonts dir> <this dir> [face ...]
 
 The text system here draws only the default instance of a variable font, so
 each weight has to be a face of its own. Optical size is fixed at 14, which is
-what a browser picks for everything this view sets below 15px.
+what a browser picks for everything this view sets below 15px. Naming faces
+cuts only those.
 """
 import sys
 from fontTools.ttLib import TTFont
 from fontTools.varLib.instancer import instantiateVariableFont
 from fontTools.subset import Subsetter, Options
-src, out = sys.argv[1], sys.argv[2]
-# (face, weight, italic, optical size, family). The last is the display cut:
-# what a browser draws a heading in, since it follows the size it is set at.
+src, out, only = sys.argv[1], sys.argv[2], set(sys.argv[3:])
+# (face, weight, italic, optical size, family). Black is what a drawn
+# theme's poster labels ask for (900: the voice dock's name in Nimbus). The
+# last is the display cut: what a browser draws a heading in, since it
+# follows the size it is set at.
 FACES = [
     ("Regular", 400, False, 14, "Inter"),
     ("Medium", 500, False, 14, "Inter"),
     ("SemiBold", 600, False, 14, "Inter"),
     ("Bold", 700, False, 14, "Inter"),
+    ("Black", 900, False, 14, "Inter"),
     ("Italic", 400, True, 14, "Inter"),
     ("DisplayBold", 700, False, 24, "Inter Display"),
+    # The top of the optical-size axis, which a browser draws anything set
+    # at 32px or more in (a server's name across a banner, at 44px).
+    ("DisplayLargeBold", 700, False, 32, "Inter Display Large"),
+    # Where a drawn theme's poster face (Saira) has no letter, the browser
+    # takes Inter's italic at 800, at 150px: read as outlines only
+    # (`ui::kit::lettering`), never given to the text system.
+    ("PosterItalic", 800, True, 32, "Inter Poster"),
 ]
 for name, wght, italic, opsz, family in FACES:
+    if only and name not in only:
+        continue
     path = f"{src}/Inter-Italic-VariableFont_opsz,wght.ttf" if italic else f"{src}/Inter-VariableFont_opsz,wght.ttf"
     f = instantiateVariableFont(TTFont(path), {"wght": wght, "opsz": opsz}, inplace=False)
     o = Options()
@@ -32,10 +45,10 @@ for name, wght, italic, opsz, family in FACES:
     # The style within the family. Not the file's own name: DirectWrite
     # reads a word it does not know as a style ("Display") as part of the
     # family, and would list "Inter Display Display" with no "Inter Display".
-    style = "Bold" if name == "DisplayBold" else name
+    style = {"DisplayBold": "Bold", "DisplayLargeBold": "Bold", "PosterItalic": "ExtraBold Italic"}.get(name, name)
     for rec in f["name"].names:
         if rec.nameID == 1: rec.string = family
-        elif rec.nameID == 2: rec.string = {"Regular": "Regular", "Bold": "Bold", "Italic": "Italic", "DisplayBold": "Bold"}.get(name, "Regular")
+        elif rec.nameID == 2: rec.string = {"Regular": "Regular", "Bold": "Bold", "Italic": "Italic", "DisplayBold": "Bold", "DisplayLargeBold": "Bold"}.get(name, "Regular")
         elif rec.nameID == 4: rec.string = f"{family} {style}"
         elif rec.nameID == 6: rec.string = f"{family.replace(' ', '')}-{style}"
         elif rec.nameID == 16: rec.string = family

@@ -372,6 +372,7 @@ impl Render for Aside {
             .text_color(theme.c.text)
             .font_family(theme.skin.font.clone())
             .font_weight(theme.skin.weight)
+            .letter_spacing(theme.skin.track)
             .text_size(px(14.0))
             .line_height(relative(1.4))
             // Taken here before the main window's own keys hear them.

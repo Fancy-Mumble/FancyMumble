@@ -209,7 +209,7 @@ export function AdvancedPanel({
               href="https://klipy.com"
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: "var(--accent)" }}
+              style={{ color: "var(--color-accent)" }}
             >
               Klipy
             </a>{" "}

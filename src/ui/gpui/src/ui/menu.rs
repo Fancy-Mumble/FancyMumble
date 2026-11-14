@@ -92,6 +92,9 @@ pub(super) enum Command {
     Administer,
     /// Leave the server on screen, once asked.
     LeaveServer,
+    /// Do something to a registered account, from its row of the Users
+    /// page.
+    Account(u32, super::admin_pages::Act),
 }
 
 /// The panels the local user's own menu opens.
@@ -115,8 +118,6 @@ pub(super) enum Question {
     DeleteChannel(ChannelId),
     JoinPassword(ChannelId),
     Comment,
-    /// What a registered account is to be called.
-    RenameRegistered(u32),
     /// The group a new rule of a channel's permissions is for.
     AclGroup(ChannelId),
     /// What is said about a channel, and the password it is entered with.
@@ -157,7 +158,6 @@ impl Question {
             Self::DeleteChannel(_) => ("Delete this channel and everything in it?", None, "Delete"),
             Self::JoinPassword(_) => ("Join with a password", Some("Password"), "Join"),
             Self::Comment => ("Your comment", Some("What others read about you"), "Save"),
-            Self::RenameRegistered(_) => ("Rename this account", Some("Name"), "Rename"),
             Self::AclGroup(_) => (
                 "A rule for which group?",
                 Some("all, auth, in, sub, admin, or a group of this channel"),
@@ -253,10 +253,6 @@ impl Question {
                 password: answer.to_owned(),
             },
             Self::Comment => Action::SetComment(text),
-            Self::RenameRegistered(id) => Action::RenameRegistered {
-                id,
-                name: Some(text).filter(|name| !name.is_empty())?,
-            },
             // Answered into the permissions panel, not to the server.
             Self::AclGroup(_) | Self::SendLater(_) | Self::Leave => return None,
             Self::DescribeChannel(channel) => Action::DescribeChannel { channel, text },
@@ -313,7 +309,7 @@ pub(super) struct Item {
 }
 
 impl Item {
-    fn new(name: &str, command: Command) -> Self {
+    pub(super) fn new(name: &str, command: Command) -> Self {
         Self {
             name: name.to_owned().into(),
             command,
@@ -353,12 +349,12 @@ impl Item {
         self
     }
 
-    fn selector(mut self, selector: &str) -> Self {
+    pub(super) fn selector(mut self, selector: &str) -> Self {
         self.selector = Some(selector.to_owned().into());
         self
     }
 
-    fn danger(mut self) -> Self {
+    pub(super) fn danger(mut self) -> Self {
         self.danger = true;
         self
     }
@@ -1168,6 +1164,7 @@ impl Shell {
                 }
             }
             Command::Administer => self.administer(cx),
+            Command::Account(id, act) => self.act_on_account(id, act, window, cx),
             Command::LeaveServer => self.ask_to_leave(window, cx),
             Command::EditServer(key) => {
                 let saved = self
@@ -1196,16 +1193,6 @@ impl Shell {
             }
         }
         cx.notify();
-    }
-
-    /// Ask what the registered account `id` is to be called.
-    pub(super) fn ask_to_rename_registered(
-        &mut self,
-        id: u32,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.ask(Question::RenameRegistered(id), window, cx);
     }
 
     /// Ask for the password of `channel`, to move into it.
@@ -1400,13 +1387,16 @@ impl Shell {
         .detach();
     }
 
-    /// Send the files at `paths` to the open conversation, in order: each
-    /// picture in a message of its own, anything else shared as a file.
+    /// Send the files at `paths` to the open conversation: the pictures
+    /// together in one message, as the web client sends pictures put in its
+    /// composer together (a message each where the server's limit leaves
+    /// too little for that), anything else shared as a file.
     pub(super) fn send_files(&mut self, paths: Vec<std::path::PathBuf>, cx: &mut Context<Self>) {
         let Some(conversation) = self.open else {
             return;
         };
         cx.spawn(async move |shell, cx| {
+            let mut pictures = Vec::new();
             for path in paths {
                 // Only a picture is read here, and off the view's thread;
                 // a file is read by whoever uploads it, a piece at a time.
@@ -1415,14 +1405,23 @@ impl Shell {
                     .background_executor()
                     .spawn(async move { crate::picture::at(&read) })
                     .await;
-                let sent = shell.update(cx, |shell, _| match picture {
-                    Some(picture) => shell.engine.send_picture(conversation, picture),
-                    None => shell.engine.send_file(conversation, path),
-                });
-                if sent.is_err() {
-                    return;
+                match picture {
+                    Some(picture) => pictures.push(picture),
+                    None => {
+                        if shell
+                            .update(cx, |shell, _| shell.engine.send_file(conversation, path))
+                            .is_err()
+                        {
+                            return;
+                        }
+                    }
                 }
             }
+            let _ = shell.update(cx, |shell, _| match pictures.len() {
+                0 => {}
+                1 => shell.engine.send_picture(conversation, pictures.remove(0)),
+                _ => shell.engine.send_pictures(conversation, pictures),
+            });
         })
         .detach();
     }

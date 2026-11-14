@@ -18,7 +18,7 @@ use gpui::{
 };
 
 use super::Shell;
-use super::kit::{Button, Dialog, Emphasis, PageView, Surface};
+use super::kit::{Button, Dialog, Emphasis, PageView, Scrolled, Surface};
 use crate::page::Page;
 use crate::theme::Theme;
 use crate::words::t;
@@ -170,28 +170,42 @@ pub(super) fn render(
         ..Surface::text(TEXT, LEAD, theme).inked(theme.c.muted)
     };
     let tallest = window.viewport_size().height * 0.8;
+    let scrolled = Scrolled::of(&page, cx);
+    let view = PageView::new("welcome", page, surface).on_link(move |url, _, cx| {
+        let _ = viewer.update(cx, |shell, cx| shell.follow_link(url, cx));
+    });
+    // Drawn whole the first time, to find out whether it is longer than
+    // its room; a long page is then drawn a block at a time.
+    let long = scrolled.long();
+    if long.is_none() {
+        window.request_animation_frame();
+    }
+    let body = div()
+        .id("welcome-body")
+        .debug_selector(|| "welcome-body".to_owned())
+        .flex_1()
+        .min_h_0();
+    let body = if long == Some(true) {
+        body.child(view.listed(scrolled.list(), cx))
+            .into_any_element()
+    } else {
+        body.overflow_y_scroll()
+            .track_scroll(scrolled.scroll())
+            .child(view)
+            .into_any_element()
+    };
     Some(
         Dialog::new("welcome")
             .title(t!("Welcome"))
             .w(px(WIDE))
             .max_w(relative(0.92))
             .max_h(tallest)
+            // A page longer than its room fills it, as it did drawn whole.
+            .when(long == Some(true), |dialog| dialog.h(tallest))
             .p(px(24.0))
             .gap(px(14.0))
             .on_dismiss(cx.listener(|shell, _, _, cx| shell.close_welcome(cx)))
-            .child(
-                div()
-                    .id("welcome-body")
-                    .debug_selector(|| "welcome-body".to_owned())
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .child(
-                        PageView::new("welcome", page, surface).on_link(move |url, _, cx| {
-                            let _ = viewer.update(cx, |shell, cx| shell.follow_link(url, cx));
-                        }),
-                    ),
-            )
+            .child(body)
             .child(
                 div().flex_none().flex().justify_end().child(
                     Button::new("dismiss-welcome", t!("Close"))

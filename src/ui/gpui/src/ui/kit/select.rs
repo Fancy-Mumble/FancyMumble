@@ -33,7 +33,7 @@ pub(crate) struct Select {
     id: &'static str,
     choices: Vec<SharedString>,
     /// A small picture before each choice, where the choices have one.
-    pictures: Vec<std::sync::Arc<gpui::Image>>,
+    pictures: Vec<super::Picture>,
     chosen: usize,
     on_choose: Option<OnChoose>,
 }
@@ -53,7 +53,7 @@ impl Select {
 
     /// A picture before each choice, in the list and in the field: a
     /// language's flag. Drawn twenty by fifteen.
-    pub(crate) fn pictures(mut self, pictures: Vec<std::sync::Arc<gpui::Image>>) -> Self {
+    pub(crate) fn pictures(mut self, pictures: Vec<super::Picture>) -> Self {
         self.pictures = pictures;
         self
     }
@@ -116,9 +116,10 @@ impl Select {
     }
 }
 
-/// A choice's small picture: twenty by fifteen, its corners the small ones.
-fn picture(picture: &std::sync::Arc<gpui::Image>) -> impl IntoElement + use<> {
-    gpui::img(std::sync::Arc::clone(picture))
+/// A choice's small picture: twenty by fifteen, its corners the small ones,
+/// drawn in its own colours.
+fn picture(picture: &super::Picture) -> impl IntoElement + use<> {
+    gpui::img(std::sync::Arc::clone(&picture.0))
         .flex_none()
         .w(px(20.0))
         .h(px(15.0))

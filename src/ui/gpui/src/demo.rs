@@ -2,11 +2,17 @@
 //! memory, so the view can be drawn, driven and measured on its own.
 
 pub(crate) mod livery;
+mod account;
 mod directory;
+mod onboarding;
 mod gifs;
+mod file_wire;
+mod link_cards;
 mod profiles;
+mod register;
 mod shares;
 mod voice;
+mod uploads;
 
 use std::sync::Mutex;
 
@@ -41,11 +47,37 @@ pub(crate) struct DemoEngine {
     media: std::sync::Arc<crate::share::made_up::MadeUp>,
     /// The made-up GIF service, if the server has one, and what was sent.
     gifs: gifs::Gifs,
+    /// What went on the wire for each share of files.
+    wire: file_wire::Wire,
     /// Whether a message to an encrypted channel would also go out plain.
     dual_path: std::sync::atomic::AtomicBool,
+    /// The local user's account, as the server keeps it.
+    account: Mutex<account::Desk>,
+    /// What the server asks new members, and what Alex answered.
+    questions: Mutex<onboarding::Questions>,
+    /// People on other servers, for a test: the session they are on, theirs
+    /// there, and their certificate's hash; and the session last turned to.
+    elsewhere: Mutex<Elsewhere>,
+    /// Files sent to go up, where a test moves them along by hand.
+    #[cfg(test)]
+    uploads: Mutex<uploads::Uploads>,
 }
 
 impl State {
+    /// The server said the local user's account is now called `name`, or
+    /// is gone.
+    fn account_said(&mut self, name: Option<String>, registered: bool) {
+        let Some(own) = self.users.iter_mut().find(|user| user.session == OWN) else {
+            return;
+        };
+        if let Some(name) = name {
+            own.name = name.into();
+        }
+        if !registered {
+            own.account = None;
+        }
+    }
+
     /// Count one more message of `conversation` unread (`more` of 1), or
     /// all of them read (`more` of 0).
     fn count_unread(&mut self, conversation: Conversation, more: u32) {
@@ -65,6 +97,19 @@ impl State {
             *unread = if more == 0 { 0 } else { *unread + more };
         }
     }
+}
+
+/// People on other servers the demo pretends to be on, for a test: the
+/// session they are on, theirs there and their certificate's hash; and the
+/// session last turned to.
+#[derive(Debug, Default)]
+pub(crate) struct Elsewhere {
+    pub people: Vec<(String, u32, String)>,
+    pub turned_to: Option<String>,
+    /// What each whisper slot was registered with, and the slot whose key
+    /// is held.
+    pub slots: std::collections::BTreeMap<u8, mumble_tauri_lib::engine_api::whisper::WhisperReach>,
+    pub whispering: Option<u8>,
 }
 
 #[derive(Debug)]
@@ -132,6 +177,8 @@ struct State {
     /// The made-up members beyond the seed's people, and what was asked
     /// of them.
     directory: directory::Directory,
+    /// What its administrator changed in its register and its roles.
+    register: register::Register,
     /// What people say about themselves, and the files kept for that.
     profiles: profiles::Profiles,
     /// The changes the local user made to their profile, in order, each
@@ -181,7 +228,28 @@ impl State {
     fn registered(&mut self) -> Vec<Registered> {
         let mut all = registered_of(&self.users);
         all.extend_from_slice(self.directory.accounts());
-        all
+        self.register.over(all)
+    }
+
+    /// The roles the server has to begin with: Rin moderates, in the
+    /// colour the server gave the role, besides the made-up members' roles.
+    /// None on the plain server.
+    fn seeded_roles(&self) -> Vec<Role> {
+        if self.plain {
+            return Vec::new();
+        }
+        let mut roles = vec![Role {
+            name: "moderators".into(),
+            color: Some(gpui::rgb(0xe0_9a4b).into()),
+            members: vec![103],
+        }];
+        roles.extend(self.directory.roles().to_vec());
+        roles
+    }
+
+    /// The roles as they are now: as seeded, or as last written.
+    fn roles(&self) -> Vec<Role> {
+        self.register.roles(self.seeded_roles())
     }
 }
 
@@ -246,11 +314,13 @@ impl DemoEngine {
 
     fn starting(connected: bool) -> Self {
         let (events, inbox) = async_channel::unbounded();
+        let mut state = State {
+            connected,
+            ..State::seeded()
+        };
+        link_cards::put(&mut state.messages);
         Self {
-            state: Mutex::new(State {
-                connected,
-                ..State::seeded()
-            }),
+            state: Mutex::new(state),
             // The pattern moves in the demo, and stands still in a test.
             media: std::sync::Arc::new(crate::share::made_up::MadeUp::new(
                 events.clone(),
@@ -260,7 +330,13 @@ impl DemoEngine {
             inbox,
             voice: crate::voice::made_up::Studio::default(),
             gifs: gifs::Gifs::from_environment(),
+            wire: file_wire::Wire::default(),
             dual_path: std::sync::atomic::AtomicBool::new(true),
+            account: Mutex::new(account::Desk::seeded("Alex")),
+            questions: Mutex::new(onboarding::Questions::seeded()),
+            elsewhere: Mutex::new(Elsewhere::default()),
+            #[cfg(test)]
+            uploads: Mutex::default(),
         }
     }
 
@@ -533,6 +609,41 @@ impl DemoEngine {
         self.tell(EngineEvent::StateChanged);
     }
 
+    /// People on other servers, for a test, and the session last turned to.
+    pub(crate) fn elsewhere(&self) -> std::sync::MutexGuard<'_, Elsewhere> {
+        self.elsewhere
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// The questions and the answers kept.
+    pub(crate) fn questions(&self) -> std::sync::MutexGuard<'_, onboarding::Questions> {
+        self.questions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// The account desk.
+    fn desk(&self) -> std::sync::MutexGuard<'_, account::Desk> {
+        self.account
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Tell what the server said of the account; where its name changed or
+    /// it is gone, the local user is renamed or unregistered too, as a
+    /// server says of them.
+    fn account_changed(&self, news: Vec<crate::engine::AccountNews>) {
+        for news in news {
+            if let crate::engine::AccountNews::Settings(account) = &news {
+                let (name, registered) = (account.name.clone(), account.registered);
+                self.with_state(|state| state.account_said(name, registered));
+                self.tell(EngineEvent::StateChanged);
+            }
+            self.tell(EngineEvent::Account(news));
+        }
+    }
+
     fn with_state<R>(&self, f: impl FnOnce(&mut State) -> R) -> R {
         let mut state = self
             .state
@@ -632,13 +743,13 @@ impl State {
             }
             Action::CancelScheduled(id) => self.scheduled.retain(|waiting| waiting.id != *id),
             Action::SetBans(bans) => self.bans.clone_from(bans),
+            Action::RenameRegistered { .. } | Action::Unregister { .. } | Action::SetAcl(_) => {
+                self.register.apply(action);
+            }
             Action::SetUserVolume { .. }
             | Action::ResetComment { .. }
-            | Action::RenameRegistered { .. }
-            | Action::SetAcl(_)
             | Action::DescribeChannel { .. }
             | Action::SetChannelPassword { .. }
-            | Action::Unregister { .. }
             | Action::Register { .. }
             | Action::SetComment(_) => {}
         }
@@ -904,6 +1015,7 @@ impl State {
             kept: std::collections::HashMap::new(),
             liveries: livery::Liveries::seeded(),
             directory: directory::Directory::default(),
+            register: register::Register::default(),
             profiles: profiles::Profiles::seeded(),
             own_profile: Vec::new(),
             certificates: vec!["alex".into(), "work".into()],
@@ -1067,6 +1179,9 @@ fn demo_markup(body: &str) -> String {
         )
 }
 
+/// The made-up recovery phrase every demo identity has.
+const DEMO_PHRASE: &str = "abandon ability able about above absent absorb abstract absurd abuse access accident account accuse achieve acid acoustic acquire across act action actor actress actual";
+
 impl Engine for DemoEngine {
     fn events(&self) -> async_channel::Receiver<EngineEvent> {
         self.inbox.clone()
@@ -1165,20 +1280,28 @@ impl Engine for DemoEngine {
     fn previews(&self, urls: Vec<gpui::SharedString>) {
         self.tell(EngineEvent::Previews(
             urls.into_iter()
-                .map(|url| Preview {
-                    title: Some("A walk by the river".into()),
-                    description: Some("Photos from the towpath, taken on Sunday.".into()),
-                    site: Some("example.org".into()),
-                    picture: None,
-                    kind: None,
-                    picture_url: None,
-                    url,
+                .map(|url| {
+                    link_cards::preview(&url).unwrap_or_else(|| Preview {
+                        title: Some("A walk by the river".into()),
+                        description: Some("Photos from the towpath, taken on Sunday.".into()),
+                        site: Some("example.org".into()),
+                        url,
+                        ..Preview::default()
+                    })
                 })
                 .collect(),
         ));
     }
 
     fn request_acl(&self, channel: ChannelId) {
+        // The root's rules as they were last written, once they were.
+        let written = (channel == 0)
+            .then(|| self.with_state(|state| state.register.root().cloned()))
+            .flatten();
+        if let Some(root) = written {
+            self.tell(EngineEvent::Acl(root));
+            return;
+        }
         let rule = |group: &str, inherited, grant, deny| AclRule {
             here: true,
             subs: true,
@@ -1192,15 +1315,19 @@ impl Engine for DemoEngine {
             rule("all", true, 0x2 | 0x4 | 0x8 | 0x200, 0),
             rule("auth", false, 0x40, 0),
         ];
-        let mut groups = Vec::new();
+        // The root keeps the server's roles, as groups.
+        let mut groups = if channel == 0 {
+            register::groups(&self.roles())
+        } else {
+            Vec::new()
+        };
         // The lounge has moderators: Rin, by the parent's say.
         if channel == LOUNGE {
             rules.push(rule("moderators", false, 0x1_0000, 0));
             groups.push(AclGroup {
-                name: "moderators".into(),
                 inherited: vec![103],
-                added: Vec::new(),
-                removed: Vec::new(),
+                from_parent: true,
+                ..AclGroup::new("moderators")
             });
         }
         self.tell(EngineEvent::Acl(Acl {
@@ -1212,17 +1339,7 @@ impl Engine for DemoEngine {
     }
 
     fn roles(&self) -> Vec<Role> {
-        if self.with_state(|state| state.plain) {
-            return Vec::new();
-        }
-        // Rin moderates, in the colour the server gave the role.
-        let mut roles = vec![Role {
-            name: "moderators".into(),
-            color: Some(gpui::rgb(0xe0_9a4b).into()),
-            members: vec![103],
-        }];
-        roles.extend(self.with_state(|state| state.directory.roles().to_vec()));
-        roles
+        self.with_state(|state| state.roles())
     }
 
     fn signal_available(&self) -> bool {
@@ -1276,10 +1393,33 @@ impl Engine for DemoEngine {
         self.with_state(|state| state.certificates.clone())
     }
 
+    fn recovery_phrase(&self, label: &str) -> Result<String, String> {
+        let held = self.with_state(|state| state.certificates.iter().any(|known| known.as_ref() == label));
+        if !held {
+            return Err(format!("There is no identity called {label}."));
+        }
+        // Made up, and the same every time: twenty-four words.
+        Ok(DEMO_PHRASE.to_owned())
+    }
+
+    fn restore_phrase(&self, label: &str, phrase: &str) -> Result<(), String> {
+        if phrase.split_whitespace().count() != 24 {
+            return Err("That is not a recovery phrase of 24 words.".to_owned());
+        }
+        let _ = label;
+        Ok(())
+    }
+
     fn manage_certificate(&self, task: CertificateTask) {
         self.with_state(|state| match task {
             CertificateTask::Delete(label) => {
                 state.certificates.retain(|held| held.as_ref() != label);
+            }
+            CertificateTask::Create(label) => {
+                if !state.certificates.iter().any(|held| held.as_ref() == label) {
+                    state.certificates.push(label.into());
+                    state.certificates.sort();
+                }
             }
             CertificateTask::Import(from) => {
                 let label = from
@@ -1421,6 +1561,86 @@ impl Engine for DemoEngine {
 
     fn set_dual_path(&self, sending: bool) {
         self.dual_path.store(sending, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn account_offered(&self) -> bool {
+        self.with_state(|state| state.connected && !state.plain)
+    }
+
+    fn account(&self) -> Option<crate::engine::AccountSettings> {
+        Some(self.desk().account())
+    }
+
+    fn update_account(&self, action: crate::engine::AccountAction, password: Option<String>) {
+        let news = self.desk().answer(action, password.as_deref());
+        self.account_changed(news);
+    }
+
+    fn offer_account(&self, _: Option<String>) {
+        let link = self.desk().offer();
+        let account = self.desk().account();
+        self.tell(EngineEvent::Account(crate::engine::AccountNews::Link(Ok(link))));
+        self.tell(EngineEvent::Account(crate::engine::AccountNews::Settings(account)));
+    }
+
+    fn onboarding_offered(&self) -> bool {
+        self.with_state(|state| state.connected && !state.plain)
+    }
+
+    fn onboarding_config(&self) -> Option<crate::engine::OnboardingConfig> {
+        Some(self.questions().config.clone())
+    }
+
+    fn onboarding_response(&self) -> Option<crate::engine::OnboardingResponse> {
+        self.questions().response.clone()
+    }
+
+    fn request_onboarding_response(&self) {
+        let kept = self.questions().response.clone();
+        self.tell(EngineEvent::Onboarding(
+            crate::engine::OnboardingNews::Response(kept),
+        ));
+    }
+
+    fn submit_onboarding(&self, response: crate::engine::OnboardingResponse) {
+        self.questions().response = Some(response);
+    }
+
+    fn server_plugins(&self) -> Vec<crate::engine::ServerPlugin> {
+        if !self.onboarding_offered() {
+            return Vec::new();
+        }
+        let plugin = |name: &str, version: &str, description: &str, asks: &[&str]| {
+            crate::engine::ServerPlugin {
+                name: name.to_owned(),
+                version: version.to_owned(),
+                description: Some(description.to_owned()),
+                capabilities: asks.iter().map(|capability| (*capability).to_owned()).collect(),
+            }
+        };
+        vec![
+            plugin(
+                "fancy-live-doc",
+                "1.4.0",
+                "Shared notes everybody in a channel writes at once.",
+                &["slash_commands", "settings_panel"],
+            ),
+            plugin("dice-roller", "0.3.1", "Rolls dice for the table.", &[]),
+        ]
+    }
+
+    fn signal_bridge(&self) -> Option<crate::engine::SignalBridge> {
+        Some(crate::engine::SignalBridge {
+            installed: false,
+            addon: false,
+            version: "0.1.0",
+        })
+    }
+
+    fn withdraw_offer(&self, device: String) {
+        self.desk().withdraw(&device);
+        let account = self.desk().account();
+        self.tell(EngineEvent::Account(crate::engine::AccountNews::Settings(account)));
     }
 
     fn retry_now(&self) {
@@ -1612,6 +1832,10 @@ impl Engine for DemoEngine {
         }
     }
 
+    fn send_pictures(&self, conversation: Conversation, files: Vec<Vec<u8>>) {
+        self.send_pictures_now(conversation, &files);
+    }
+
     fn send_file(&self, conversation: Conversation, path: std::path::PathBuf) {
         let name = path
             .file_name()
@@ -1663,6 +1887,9 @@ impl Engine for DemoEngine {
             Reach::Link => OpenTo::Link,
             Reach::Password(_) => OpenTo::Password,
         };
+        self.wire
+            .said(&text, &files, open_to != OpenTo::Password);
+        let lasts = how.lasts.secs();
         self.with_state(|state| {
             let attached: Vec<Attachment> = files
                 .iter()
@@ -1688,6 +1915,12 @@ impl Engine for DemoEngine {
                         stand_in: None,
                         pixels,
                         voice: None,
+                        expires_at: (lasts > 0).then(|| {
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map_or(0, |since| since.as_secs())
+                                + lasts
+                        }),
                     }
                 })
                 .collect();
@@ -1719,7 +1952,22 @@ impl Engine for DemoEngine {
         self.tell(EngineEvent::NewMessage { conversation });
     }
 
+    fn share_tracked(
+        &self,
+        conversation: Conversation,
+        text: String,
+        files: Vec<(gpui::SharedString, std::path::PathBuf)>,
+        how: crate::engine::ShareAs,
+    ) {
+        self.share_made_up(conversation, text, files, how);
+    }
+
+    fn cancel_upload(&self, id: gpui::SharedString) {
+        self.cancel_made_up(&id);
+    }
+
     fn fetch_shared(&self, key: gpui::SharedString) {
+        self.wire.asked(&key);
         let picture = self
             .with_state(|state| {
                 (state.kept.get(&key))
@@ -1850,7 +2098,47 @@ impl Engine for DemoEngine {
         crate::real::source(html)
     }
 
-    fn activate_session(&self, _id: &str) {}
+    fn activate_session(&self, id: &str) {
+        self.elsewhere().turned_to = Some(id.to_owned());
+    }
+
+    fn register_whisper(
+        &self,
+        slot: u8,
+        reach: Option<mumble_tauri_lib::engine_api::whisper::WhisperReach>,
+    ) {
+        let slots = &mut self.elsewhere().slots;
+        match reach {
+            Some(reach) => drop(slots.insert(slot, reach)),
+            None => drop(slots.remove(&slot)),
+        }
+    }
+
+    fn whisper_slot(
+        &self,
+        slot: u8,
+        reach: Option<mumble_tauri_lib::engine_api::whisper::WhisperReach>,
+    ) {
+        self.elsewhere().whispering = reach.map(|_| slot);
+    }
+
+    fn find_user(&self, hash: Option<&str>, name: &str, session: Option<&str>) -> Option<(gpui::SharedString, u32)> {
+        if let Some(hash) = hash
+            && let Some((on, user, _)) = self.elsewhere().people.iter().find(|(_, _, held)| held.as_str() == hash)
+        {
+            return Some((on.clone().into(), *user));
+        }
+        self.with_state(|state| {
+            state
+                .users
+                .iter()
+                .find(|user| match hash {
+                    Some(hash) => user.hash.as_ref().map(AsRef::as_ref) == Some(hash),
+                    None => session == Some("demo") && user.name.as_ref() == name,
+                })
+                .map(|user| ("demo".into(), user.session))
+        })
+    }
 
     fn leave_session(&self, _id: &str) {
         self.disconnect();
@@ -1873,10 +2161,24 @@ impl Engine for DemoEngine {
             action,
             Action::SendLater { .. } | Action::CancelScheduled(_)
         );
+        // A ban list from somebody the root does not let ban is refused,
+        // with words, as a server refuses it; the list stays as it was.
+        let refused = matches!(action, Action::SetBans(_))
+            && !self.with_state(|state| {
+                let root = state.channels.iter().find(|channel| channel.parent.is_none());
+                root.is_some_and(|root| root.rights.has(crate::rights::Right::BAN))
+            });
         self.with_state(|state| {
-            state.apply(&action);
+            if !refused {
+                state.apply(&action);
+            }
             state.actions.push(action);
         });
+        if refused {
+            self.tell(EngineEvent::Notice(Some(
+                "Permission denied: you may not change the ban list.".into(),
+            )));
+        }
         if scheduling {
             self.tell(EngineEvent::ScheduleTaken);
         }

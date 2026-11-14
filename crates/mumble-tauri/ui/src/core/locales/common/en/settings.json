@@ -798,6 +798,7 @@
     "colUsername": "Username",
     "colLastSeen": "Last Seen",
     "colLastChannel": "Last Channel",
+    "deletedChannel": "Deleted channel",
     "colRoles": "Roles",
     "colActions": "Actions",
     "save": "Save",
@@ -832,7 +833,9 @@
     "fieldHash": "Hash",
     "fieldStart": "Start",
     "fieldStartPlaceholder": "e.g. 2025-01-01T00:00:00",
-    "fieldDuration": "Duration (seconds, 0 = permanent)"
+    "fieldDuration": "Duration (seconds, 0 = permanent)",
+    "refused": "The ban list was not saved, nothing was changed: {{reason}}",
+    "refusedNoReason": "The server refused the ban list, nothing was changed."
   },
   "channelAcl": {
     "title": "Channels / ACL",

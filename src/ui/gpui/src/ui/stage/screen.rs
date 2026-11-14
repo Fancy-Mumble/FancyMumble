@@ -25,6 +25,11 @@ use crate::share::{Fit, FrameSlot, Wanted};
 #[derive(Default)]
 pub(crate) struct Screen {
     picture: Option<Arc<RenderImage>>,
+    /// The pixels (BGRA) of the frame on screen when they went into the
+    /// picture's texture in place: the picture's own bytes are still the
+    /// first frame's. Kept for copying; the buffer before it goes back to
+    /// the stream.
+    latest: Option<Vec<u8>>,
     /// The size of the frame in `picture`, and the size it was sent at.
     size: (u32, u32),
     sent: (u32, u32),
@@ -57,15 +62,21 @@ impl Screen {
         self.picture.is_some()
     }
 
-    /// The picture on screen, to copy.
-    pub(crate) fn picture(&self) -> Option<(Arc<RenderImage>, (u32, u32))> {
-        self.picture.clone().map(|picture| (picture, self.size))
+    /// The frame on screen, BGRA, and its size: to copy.
+    pub(crate) fn frame(&self) -> Option<(Vec<u8>, (u32, u32))> {
+        let picture = self.picture.as_ref()?;
+        let bgra = match &self.latest {
+            Some(latest) => latest.clone(),
+            None => picture.as_bytes(0)?.to_vec(),
+        };
+        Some((bgra, self.size))
     }
 
     /// Let go of the picture: the stream is gone. Its texture is given back
     /// by whoever holds a window.
     pub(crate) fn release(&mut self) -> Option<Arc<RenderImage>> {
         self.laid = None;
+        self.latest = None;
         self.picture.take()
     }
 
@@ -80,9 +91,12 @@ impl Screen {
         if let Some(picture) = self.picture.as_ref().filter(|_| same)
             && window.update_image(picture, 0, &frame.bgra)
         {
-            slot.give_back(frame.bgra);
+            if let Some(before) = self.latest.replace(frame.bgra) {
+                slot.give_back(before);
+            }
             return;
         }
+        self.latest = None;
         let Some(pixels) = image::RgbaImage::from_raw(frame.width, frame.height, frame.bgra) else {
             return;
         };

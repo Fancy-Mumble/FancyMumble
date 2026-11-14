@@ -107,6 +107,37 @@ fn laid(room: Size<Pixels>, shape: (u32, u32), focus: (f32, f32), overscan: f32)
     )
 }
 
+/// What is painted for a wall: which copy of the picture is read (blurred
+/// how far), how much past its room, and the two layers over it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Painted {
+    fit: Fit,
+    overscan: f32,
+    /// Black, as far as the picture is darkened: `brightness(1 - dim)`.
+    dim: Hsla,
+    /// The window's colour, as far as the picture is washed out.
+    wash: Hsla,
+}
+
+impl Wall {
+    /// What is painted for this wall.
+    fn painted(&self) -> Painted {
+        let (fit, overscan) = if self.small {
+            (Fit::Tile, 1.0)
+        } else {
+            (Fit::Wall(self.blur), OVERSCAN)
+        };
+        let mut dim = gpui::black();
+        dim.a = self.dim;
+        Painted {
+            fit,
+            overscan,
+            dim,
+            wash: self.wash,
+        }
+    }
+}
+
 impl RenderOnce for Wall {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let held = window.use_keyed_state("wall-laid", cx, |_, _| Laid::default());
@@ -123,11 +154,12 @@ impl RenderOnce for Wall {
             }
         };
         let room = held.read(cx).room;
-        let (fit, overscan) = if self.small {
-            (Fit::Tile, 1.0)
-        } else {
-            (Fit::Wall(self.blur), OVERSCAN)
-        };
+        let Painted {
+            fit,
+            overscan,
+            dim,
+            wash,
+        } = self.painted();
         let picture = gpui::img(shown(&self.picture, fit)).absolute();
         let picture = match room.zip(shape) {
             Some((room, shape)) => {
@@ -164,8 +196,6 @@ impl RenderOnce for Wall {
         .top_0()
         .left_0()
         .size_full();
-        let mut dim = gpui::black();
-        dim.a = self.dim;
         div()
             .debug_selector(|| "wall".to_owned())
             .absolute()
@@ -176,7 +206,7 @@ impl RenderOnce for Wall {
             .child(measure)
             .child(picture)
             .child(div().absolute().top_0().left_0().size_full().bg(dim))
-            .child(div().absolute().top_0().left_0().size_full().bg(self.wash))
+            .child(div().absolute().top_0().left_0().size_full().bg(wash))
     }
 }
 
@@ -186,6 +216,32 @@ mod tests {
 
     fn room(width: f32, height: f32) -> Size<Pixels> {
         gpui::size(px(width), px(height))
+    }
+
+    fn picture() -> Arc<gpui::Image> {
+        Arc::new(gpui::Image::from_bytes(gpui::ImageFormat::Png, vec![1]))
+    }
+
+    #[test]
+    fn each_bar_changes_what_is_painted() {
+        let window = gpui::hsla(0.6, 0.3, 0.1, 1.0);
+        let washed = |opacity: f32| {
+            let mut wash = window;
+            wash.a = 1.0 - opacity;
+            Wall::new(picture()).wash(wash).painted().wash
+        };
+        // Blur: the copy read is blurred that far.
+        assert_eq!(Wall::new(picture()).painted().fit, Fit::Wall(0));
+        assert_eq!(Wall::new(picture()).blur(40).painted().fit, Fit::Wall(40));
+        // Dim: black over it, as far as asked.
+        assert!(Wall::new(picture()).dim(0.0).painted().dim.a.abs() < f32::EPSILON);
+        assert!((Wall::new(picture()).dim(0.5).painted().dim.a - 0.5).abs() < f32::EPSILON);
+        // Opacity: the window's colour over it, the rest of the way.
+        assert!((washed(0.25).a - 0.75).abs() < 1e-6);
+        assert!(washed(1.0).a.abs() < 1e-6);
+        // A tile reads a tile's copy and is laid exactly.
+        let tile = Wall::new(picture()).blur(40).tile().painted();
+        assert_eq!((tile.fit, tile.overscan), (Fit::Tile, 1.0));
     }
 
     #[test]

@@ -10,6 +10,13 @@
 
 use gpui::SharedString;
 
+mod account;
+pub(crate) use account::*;
+mod onboarding;
+pub(crate) use onboarding::*;
+mod plugins;
+pub(crate) use plugins::*;
+
 /// A channel's id on its server.
 pub(crate) type ChannelId = u32;
 /// A connected user's session id.
@@ -417,9 +424,47 @@ pub(crate) struct AclGroup {
     pub added: Vec<u32>,
     /// and those of the parent's taken out in this one.
     pub removed: Vec<u32>,
+    /// Whether the group itself is a parent channel's: read here, changed
+    /// there.
+    pub from_parent: bool,
+    /// Whether it takes the parent's members,
+    pub inherit: bool,
+    /// and whether the channels under it have it too.
+    pub inheritable: bool,
+    /// How a Fancy server has it drawn, where it is a role.
+    pub look: GroupLook,
+}
+
+/// How a Fancy server has a group drawn as a role: kept as the server sent
+/// it, so what the view does not change goes back as it came.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct GroupLook {
+    /// Its colour, as the server writes it (`#e09a4b`).
+    pub color: Option<SharedString>,
+    /// Its icon: a picture's bytes.
+    pub icon: Option<std::sync::Arc<[u8]>>,
+    /// The style it is drawn in (`neon`, `gradient`, `minimal`).
+    pub style: Option<SharedString>,
+    /// Whatever else the server says of it, by key.
+    pub metadata: std::collections::BTreeMap<SharedString, SharedString>,
 }
 
 impl AclGroup {
+    /// A group of this channel's own called `name`, with nobody in it: as
+    /// groups are made, it takes its parent's members and passes them on.
+    pub(crate) fn new(name: impl Into<SharedString>) -> Self {
+        Self {
+            name: name.into(),
+            inherited: Vec::new(),
+            added: Vec::new(),
+            removed: Vec::new(),
+            from_parent: false,
+            inherit: true,
+            inheritable: true,
+            look: GroupLook::default(),
+        }
+    }
+
     /// Who is in the group here: the parent's and those added, less those
     /// taken out. In order, each once.
     pub(crate) fn members(&self) -> Vec<u32> {
@@ -552,6 +597,8 @@ pub(crate) enum CertificateTask {
     },
     /// Take in one exported to this file.
     Import(std::path::PathBuf),
+    /// Make a new one with this label.
+    Create(String),
 }
 
 /// One of the servers the engine is on.
@@ -791,7 +838,7 @@ pub(crate) struct Found {
 }
 
 /// What a server found behind a link, for a card under the message.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct Preview {
     /// The link as it stands in the message.
     pub url: SharedString,
@@ -805,22 +852,60 @@ pub(crate) struct Preview {
     /// Where the card's picture lives at its origin: fetched only where
     /// the reader asks.
     pub picture_url: Option<SharedString>,
+    /// The site's own icon, fetched by the server.
+    pub icon: Option<std::sync::Arc<gpui::Image>>,
+    /// The rest of what the server said of it.
+    pub details: PreviewDetails,
+}
+
+/// What else a server said of a link: what the card's poster prints.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct PreviewDetails {
+    /// How large the page says its picture is whole, width by height.
+    pub picture_size: Option<(u32, u32)>,
+    /// Who made it: a channel, an account, an author.
+    pub author: Option<SharedString>,
+    /// Its playing time, as a clock: "1:00:14".
+    pub duration: Option<SharedString>,
+    /// When the page says it was published, as it wrote it.
+    pub published: Option<SharedString>,
+    /// The page's own labelled facts, name and value, in its order.
+    pub facts: Vec<(SharedString, SharedString)>,
+    /// What it costs, for a listing.
+    pub price: Option<PreviewPrice>,
+}
+
+/// What a listing costs.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct PreviewPrice {
+    /// "89.99".
+    pub amount: SharedString,
+    /// ISO 4217, or empty.
+    pub currency: SharedString,
+    /// What it cost before, or empty.
+    pub was: SharedString,
+    /// "instock", "oos", "preorder", as the page wrote it.
+    pub availability: SharedString,
 }
 
 impl PartialEq for Preview {
-    /// The same card: the same words, and the very same picture.
+    /// The same card: the same words, and the very same pictures.
     fn eq(&self, other: &Self) -> bool {
+        let same = |one: &Option<std::sync::Arc<gpui::Image>>,
+                    other: &Option<std::sync::Arc<gpui::Image>>| match (one, other) {
+            (Some(one), Some(other)) => std::sync::Arc::ptr_eq(one, other),
+            (None, None) => true,
+            _ => false,
+        };
         self.url == other.url
             && self.title == other.title
             && self.description == other.description
             && self.site == other.site
             && self.kind == other.kind
             && self.picture_url == other.picture_url
-            && match (&self.picture, &other.picture) {
-                (Some(one), Some(other)) => std::sync::Arc::ptr_eq(one, other),
-                (None, None) => true,
-                _ => false,
-            }
+            && self.details == other.details
+            && same(&self.picture, &other.picture)
+            && same(&self.icon, &other.icon)
     }
 }
 
@@ -884,6 +969,8 @@ pub(crate) struct Attachment {
     /// Where it is a recorded voice message: how long it is and its
     /// shape, as its sender said.
     pub voice: Option<crate::voice::Note>,
+    /// When the server lets it go, in Unix epoch seconds, where it does.
+    pub expires_at: Option<u64>,
 }
 
 impl Attachment {
@@ -946,9 +1033,6 @@ pub(crate) enum Lasts {
 }
 
 impl Lasts {
-    /// Every one, in the order they are offered.
-    pub(crate) const ALL: [Self; 3] = [Self::Day, Self::Week, Self::Always];
-
     /// In seconds, as a server is told; nought for always.
     pub(crate) const fn secs(self) -> u64 {
         match self {
@@ -957,6 +1041,19 @@ impl Lasts {
             Self::Always => 0,
         }
     }
+}
+
+/// Where a file going up has got.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Uploaded {
+    /// This much of this much has gone.
+    Sent { bytes: u64, of: u64 },
+    /// All of it, and the message naming it went too.
+    Done,
+    /// It did not go, for this reason.
+    Failed(SharedString),
+    /// It was stopped, as asked with [`Engine::cancel_upload`].
+    Cancelled,
 }
 
 /// How a batch of files is shared: one answer for all of them.
@@ -1093,6 +1190,8 @@ pub(crate) enum EngineEvent {
         key: SharedString,
         picture: Option<std::sync::Arc<gpui::Image>>,
     },
+    /// What became of a file given to [`Engine::share_tracked`] under `id`.
+    Upload { id: SharedString, now: Uploaded },
     /// A channel's rules, asked for with [`Engine::request_acl`].
     Acl(Acl),
     /// The server's ban list, asked for with [`Engine::list`].
@@ -1147,6 +1246,14 @@ pub(crate) enum EngineEvent {
     /// Something of screen sharing: a share began or ended, a stroke was
     /// drawn, a peer's standing changed.
     Share(crate::share::Heard),
+    /// What the server said of the local user's account.
+    Account(AccountNews),
+    /// What the server said of the questions it asks new members, or of
+    /// the local user's answers.
+    Onboarding(OnboardingNews),
+    /// The server said which plugins it runs: read
+    /// [`Engine::server_plugins`] again.
+    PluginsChanged,
 }
 
 /// An engine, as this view sees one.
@@ -1244,6 +1351,18 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// notice; a change in [`EngineEvent::CertificatesChanged`].
     fn manage_certificate(&self, task: CertificateTask);
 
+    /// The 24-word recovery phrase of the identity `label`.
+    fn recovery_phrase(&self, label: &str) -> Result<String, String> {
+        Err(format!("no recovery phrase for {label}"))
+    }
+
+    /// Give the identity `label` the seed the recovery phrase `phrase`
+    /// stands for.
+    fn restore_phrase(&self, label: &str, phrase: &str) -> Result<(), String> {
+        let _ = phrase;
+        Err(format!("nothing to restore {label} with"))
+    }
+
     /// Ask every saved server again whether it is up. The answers arrive
     /// later, each announced by [`EngineEvent::ServersChanged`].
     fn refresh_pings(&self);
@@ -1340,6 +1459,16 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// scaled down as far as the server's limit on a message asks.
     fn send_picture(&self, conversation: Conversation, file: Vec<u8>);
 
+    /// Send the pictures in `files` to `conversation` in one message, as the
+    /// web client sends pictures put in its composer together: they share
+    /// what the server's limit on a message allows. Where that is too little
+    /// for each, they go a message each.
+    fn send_pictures(&self, conversation: Conversation, files: Vec<Vec<u8>>) {
+        for file in files {
+            self.send_picture(conversation, file);
+        }
+    }
+
     /// Send the GIF at `url` to `conversation`, answering the message
     /// `reply_to` if one is given: as the web client sends one picked.
     fn send_gif(
@@ -1369,6 +1498,25 @@ pub(crate) trait Engine: Send + Sync + 'static {
         files: Vec<std::path::PathBuf>,
         how: ShareAs,
     );
+
+    /// [`Self::share`], each file under an id the view follows it by: how
+    /// far it has gone up, and whether it went, arrive as
+    /// [`EngineEvent::Upload`]. A file that fails or is cancelled does not
+    /// stop the rest. Where an engine follows nothing, as [`Self::share`].
+    fn share_tracked(
+        &self,
+        conversation: Conversation,
+        text: String,
+        files: Vec<(SharedString, std::path::PathBuf)>,
+        how: ShareAs,
+    ) {
+        let files = files.into_iter().map(|(_, path)| path).collect();
+        self.share(conversation, text, files, how);
+    }
+
+    /// Stop the file going up under `id`, or not yet going up: it does not
+    /// go, and the rest of its batch does.
+    fn cancel_upload(&self, _id: SharedString) {}
 
     /// Fetch the shared picture kept under `key`, to be shown. It arrives
     /// as an [`EngineEvent::Shared`], with no picture if it is not one or
@@ -1498,6 +1646,100 @@ pub(crate) trait Engine: Send + Sync + 'static {
     /// [`EngineEvent::ProfilePage`].
     fn fetch_page(&self, page: mumble_tauri_lib::engine_api::about::PageRef) {
         let _ = page;
+    }
+
+    /// Whether the server on show answers about the local user's account:
+    /// a Fancy server new enough.
+    fn account_offered(&self) -> bool {
+        false
+    }
+
+    /// The account as the server last said it stands; `None` before then.
+    fn account(&self) -> Option<AccountSettings> {
+        None
+    }
+
+    /// Ask `action` of the server, proved with the account's `password`
+    /// where it has one. Answered with [`EngineEvent::Account`]: an
+    /// acknowledgement, and the account after it.
+    fn update_account(&self, action: AccountAction, password: Option<String>) {
+        let _ = (action, password);
+    }
+
+    /// Offer the account to a new device, with the `password` this device
+    /// signs in with where it has one. Answered with
+    /// [`AccountNews::Link`].
+    fn offer_account(&self, password: Option<String>) {
+        let _ = password;
+    }
+
+    /// Withdraw the offer that would become the device `device`.
+    fn withdraw_offer(&self, device: String) {
+        let _ = device;
+    }
+
+    /// Whether the server on show asks new members questions: a Fancy
+    /// server new enough.
+    fn onboarding_offered(&self) -> bool {
+        false
+    }
+
+    /// The questions the server on show asks, as it last said them.
+    fn onboarding_config(&self) -> Option<OnboardingConfig> {
+        None
+    }
+
+    /// The local user's answers, as the server last said them or as they
+    /// were last given from here.
+    fn onboarding_response(&self) -> Option<OnboardingResponse> {
+        None
+    }
+
+    /// Ask the server for the answers it keeps of the local user. Answered
+    /// with [`OnboardingNews::Response`].
+    fn request_onboarding_response(&self) {}
+
+    /// Give the server the local user's answers.
+    fn submit_onboarding(&self, response: OnboardingResponse) {
+        let _ = response;
+    }
+
+    /// Tell the server ahead of time who the slot `slot` reaches; `None`
+    /// empties it.
+    fn register_whisper(
+        &self,
+        slot: u8,
+        reach: Option<mumble_tauri_lib::engine_api::whisper::WhisperReach>,
+    ) {
+        let _ = (slot, reach);
+    }
+
+    /// The key of the slot `slot` went down (`reach` given) or came up.
+    fn whisper_slot(
+        &self,
+        slot: u8,
+        reach: Option<mumble_tauri_lib::engine_api::whisper::WhisperReach>,
+    ) {
+        let _ = (slot, reach);
+    }
+
+    /// Where somebody is on any server the engine is on: by `hash` on every
+    /// one, else by `name` on the session `session`. The session they were
+    /// found on, and theirs there.
+    fn find_user(&self, hash: Option<&str>, name: &str, session: Option<&str>) -> Option<(SharedString, u32)> {
+        let _ = (hash, name, session);
+        None
+    }
+
+    /// The plugins the server on show says it runs.
+    fn server_plugins(&self) -> Vec<ServerPlugin> {
+        Vec::new()
+    }
+
+    /// Where the Signal bridge stands; `None` where nothing could say.
+    /// Looks on the disk: ask when it is about to be shown, not each frame.
+    fn signal_bridge(&self) -> Option<SignalBridge> {
+        None
     }
 
     /// Screen sharing: what can be shared, sharing it, watching others',

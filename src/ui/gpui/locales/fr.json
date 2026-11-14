@@ -13,9 +13,18 @@
   "Shortcuts marked global work even when the app is in the background. In-app shortcuts only fire while the window is focused.": "Les raccourcis marqués globaux fonctionnent même lorsque l’application est en arrière-plan. Les raccourcis internes ne fonctionnent que lorsque la fenêtre a le focus.",
   "Spectral subtraction": "Soustraction spectrale",
   "Stop trusting this site": "Ne plus faire confiance à ce site",
-  "The folder the client writes what it does into, a file a day: what to send along when something went wrong.": "Le dossier où le client consigne ce qu’il fait, un fichier par jour : à joindre quand quelque chose s’est mal passé.",
   "The picture could not be kept: {{error}}": "L’image n’a pas pu être conservée : {{error}}",
   "Trusted sites": "Sites de confiance",
   "Voice quality": "Qualité de la voix",
-  "Failed to reset: {{error}}": "Échec de la réinitialisation : {{error}}"
+  "Failed to reset: {{error}}": "Échec de la réinitialisation : {{error}}",
+  "View deal": "Voir l'offre",
+  "from {{price}}": "à partir de {{price}}",
+  "Thumbnail only · open for full size": "Miniature seule · ouvrir en taille réelle",
+  "by {{author}}": "par {{author}}",
+  "In stock": "En stock",
+  "Out of stock": "Rupture de stock",
+  "Pre-order": "Précommande",
+  "{{value}} shops": "{{value}} boutiques",
+  "{{value}} shipping": "Livraison : {{value}}",
+  "★ {{value}}": "★ {{value}}"
 }

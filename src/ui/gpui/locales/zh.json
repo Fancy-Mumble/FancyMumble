@@ -13,9 +13,18 @@
   "Shortcuts marked global work even when the app is in the background. In-app shortcuts only fire while the window is focused.": "标记为全局的快捷键即使在应用处于后台时也有效。应用内快捷键仅在窗口获得焦点时生效。",
   "Spectral subtraction": "谱减法",
   "Stop trusting this site": "不再信任此网站",
-  "The folder the client writes what it does into, a file a day: what to send along when something went wrong.": "客户端记录其操作的文件夹，每天一个文件：出现问题时可附上这些文件。",
   "The picture could not be kept: {{error}}": "无法保存图片：{{error}}",
   "Trusted sites": "受信任的网站",
   "Voice quality": "语音质量",
-  "Failed to reset: {{error}}": "重置失败：{{error}}"
+  "Failed to reset: {{error}}": "重置失败：{{error}}",
+  "View deal": "查看优惠",
+  "from {{price}}": "起价 {{price}}",
+  "Thumbnail only · open for full size": "仅缩略图 · 打开查看原图",
+  "by {{author}}": "作者 {{author}}",
+  "In stock": "有货",
+  "Out of stock": "缺货",
+  "Pre-order": "预售",
+  "{{value}} shops": "{{value}} 家商店",
+  "{{value}} shipping": "配送：{{value}}",
+  "★ {{value}}": "★ {{value}}"
 }

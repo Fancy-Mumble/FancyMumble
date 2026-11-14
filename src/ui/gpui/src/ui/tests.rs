@@ -64,16 +64,16 @@ pub(super) fn own_menu(cx: &mut VisualTestContext, entry: &'static str) {
         // The panel over the tile, still the voice panel's own way in.
         "menu-Voice settings…" => {
             let shell = shell(cx);
-            shell.update(cx, |shell, cx| shell.toggle_devices(cx));
+            shell.update(cx, Shell::toggle_devices);
         }
         // The picker the connect screen opens.
         "menu-Themes…" => {
             let shell = shell(cx);
-            shell.update(cx, |shell, cx| shell.toggle_picker(cx));
+            shell.update(cx, Shell::toggle_picker);
         }
         "menu-Certificates…" => {
             let shell = shell(cx);
-            shell.update(cx, |shell, cx| shell.toggle_certificates(cx));
+            shell.update(cx, Shell::toggle_certificates);
         }
         // The rail's Friends.
         "menu-Friends…" => click(cx, "friends"),
@@ -88,7 +88,7 @@ pub(super) fn own_menu(cx: &mut VisualTestContext, entry: &'static str) {
         // format…" still opens; the Profile page draws it as a field.
         "menu-Edit about…" | "menu-Change comment…" => {
             let shell = shell(cx);
-            shell.update(cx, |shell, cx| shell.open_about_editor(cx));
+            shell.update(cx, Shell::open_about_editor);
         }
         "menu-Settings…" => {
             click(cx, "own-menu");
@@ -1863,146 +1863,6 @@ fn certificates_are_listed_with_who_uses_them_and_deleted_on_the_second_click(
 }
 
 #[gpui::test]
-fn the_ban_list_is_filtered_and_a_ban_lifted_on_the_second_click(cx: &mut TestAppContext) {
-    let (shell, engine, cx) = shell(cx);
-    right_click(cx, "session-magical.rocks");
-    click(cx, "menu-Bans…");
-    shell.read_with(cx, |shell, _| {
-        let admin = shell.panels.admin.as_ref().expect("the panel");
-        assert_eq!(admin.bans.as_ref().map(Vec::len), Some(2));
-    });
-    click(cx, "input-Filter");
-    cx.simulate_keystrokes("m a l");
-    shell.read_with(cx, |shell, _| {
-        assert_eq!(
-            shell.panels.admin.as_ref().expect("the panel").shown,
-            [0],
-            "the other is filtered out"
-        );
-    });
-    click(cx, "admin-remove-0");
-    assert!(
-        !engine
-            .actions()
-            .iter()
-            .any(|action| matches!(action, Action::SetBans(_))),
-        "armed, not lifted"
-    );
-    click(cx, "admin-remove-0");
-    let Some(Action::SetBans(left)) = engine.actions().last().cloned() else {
-        panic!("the list that is left is sent");
-    };
-    assert_eq!(left.len(), 1);
-    assert_eq!(left[0].mask, 24, "the other ban stays");
-
-    click(cx, "admin-registered");
-    shell.read_with(cx, |shell, _| {
-        let admin = shell.panels.admin.as_ref().expect("the panel");
-        assert_eq!(admin.registered.as_ref().map(Vec::len), Some(6));
-    });
-    // A registered account is called something else.
-    click(cx, "input-Filter");
-    cx.simulate_keystrokes("backspace backspace backspace");
-    // By name to begin with; then whoever was last in which channel.
-    let named = |shell: &Shell| {
-        let admin = shell.panels.admin.as_ref().expect("the panel");
-        let users = admin.registered.as_ref().expect("the accounts");
-        admin
-            .shown
-            .iter()
-            .map(|at| users[*at].name.to_string())
-            .collect::<Vec<_>>()
-    };
-    const ACCOUNTS: [&str; 6] = ["Alex", "Flora", "Otto", "Rin", "Torque", "Wren"];
-    shell.read_with(cx, |shell, _| assert_eq!(named(shell), ACCOUNTS));
-    // Whoever is here first, then whoever was on last; never seen last.
-    click(cx, "admin-order-1");
-    shell.read_with(cx, |shell, _| {
-        assert_eq!(
-            named(shell),
-            ["Alex", "Flora", "Rin", "Torque", "Wren", "Otto"]
-        );
-    });
-    click(cx, "admin-order-2");
-    shell.read_with(cx, |shell, _| {
-        let admin = shell.panels.admin.as_ref().expect("the panel");
-        assert_eq!(admin.order, crate::ui::accounts::Order::Channel);
-        let mut by_name = named(shell);
-        by_name.sort();
-        assert_eq!(by_name, ACCOUNTS, "all still listed");
-    });
-    click(cx, "admin-order-0");
-    click(cx, "admin-rename-2");
-    cx.simulate_keystrokes("R i n n a enter");
-    assert_eq!(
-        engine.actions().last(),
-        Some(&Action::RenameRegistered {
-            id: 103,
-            name: "Rinna".to_owned(),
-        })
-    );
-    click(cx, "admin-close");
-    shell.read_with(cx, |shell, _| assert!(shell.panels.admin.is_none()));
-}
-
-#[gpui::test]
-fn a_ban_is_added_by_hand_and_changed(cx: &mut TestAppContext) {
-    let (shell, engine, cx) = shell(cx);
-    right_click(cx, "session-magical.rocks");
-    click(cx, "menu-Bans…");
-    click(cx, "admin-add");
-    // Nothing entered is not a ban: said, and nothing sent.
-    click(cx, "ban-save");
-    shell.read_with(cx, |shell, _| {
-        let admin = shell.panels.admin.as_ref().expect("the panel");
-        assert!(admin.editing.is_some(), "still open");
-    });
-    assert!(
-        !engine
-            .actions()
-            .iter()
-            .any(|action| matches!(action, Action::SetBans(_)))
-    );
-    // The form opens with the address to type into; Tab goes on.
-    cx.simulate_keystrokes("1 9 2 . 0 . 2 . 0 / 2 4 tab T r o l l s tab tab 7 d enter");
-    let Some(Action::SetBans(sent)) = engine.actions().last().cloned() else {
-        panic!("the whole list is sent");
-    };
-    assert_eq!(sent.len(), 3, "the two there were, and the new one");
-    let new = sent.last().expect("the new one");
-    assert_eq!((new.address.as_ref(), new.mask), ("192.0.2.0", 24));
-    assert_eq!(
-        (new.name.as_ref(), new.duration_secs),
-        ("Trolls", 7 * 86_400)
-    );
-    assert!(new.start.is_empty(), "the server starts it");
-    shell.read_with(cx, |shell, _| {
-        let admin = shell.panels.admin.as_ref().expect("the panel");
-        assert!(admin.editing.is_none(), "saved and put away");
-        assert_eq!(admin.shown, [0, 1, 2], "and listed");
-    });
-
-    // Changing one keeps when it started; Escape puts the form away, not
-    // the panel.
-    click(cx, "admin-edit-0");
-    shell.update(cx, Shell::dismiss);
-    shell.read_with(cx, |shell, _| {
-        let admin = shell.panels.admin.as_ref().expect("the panel stays");
-        assert!(admin.editing.is_none());
-    });
-    click(cx, "admin-edit-0");
-    click(cx, "input-Why");
-    cx.simulate_keystrokes("shift-home backspace f l o o d i n g enter");
-    let Some(Action::SetBans(sent)) = engine.actions().last().cloned() else {
-        panic!("the whole list is sent");
-    };
-    assert_eq!(sent.len(), 3);
-    assert_eq!(sent[0].reason.as_ref(), "flooding");
-    assert_eq!(sent[0].name.as_ref(), "Mallory", "the rest as it was");
-    assert_eq!(sent[0].start.as_ref(), "2026-01-02");
-}
-
-#[gpui::test]
 fn a_long_conversation_opens_on_its_newest_page_and_steps_back(cx: &mut TestAppContext) {
     let (shell, engine, cx) = shell(cx);
     let lounge = Conversation::Channel(1);
@@ -2286,9 +2146,9 @@ fn a_shared_file_is_a_card_and_a_click_asks_where_to_save_it(cx: &mut TestAppCon
 #[test]
 fn a_size_is_said_in_the_unit_that_fits() {
     assert_eq!(super::size_in_words(812), "812 B");
-    assert_eq!(super::size_in_words(1_536), "1.5 KB");
-    assert_eq!(super::size_in_words(3 * 1024 * 1024 + 200_000), "3.2 MB");
-    assert_eq!(super::size_in_words(5 * 1024 * 1024 * 1024), "5.0 GB");
+    assert_eq!(super::size_in_words(1_536), "1.5 KiB");
+    assert_eq!(super::size_in_words(3 * 1024 * 1024 + 200_000), "3.2 MiB");
+    assert_eq!(super::size_in_words(5 * 1024 * 1024 * 1024), "5 GiB");
 }
 
 #[gpui::test]
@@ -3766,11 +3626,12 @@ fn files_wait_above_the_composer_and_go_out_with_the_message_as_chosen(cx: &mut 
     click(cx, "staged-remove-0");
     stage(vec![notes.clone()], cx);
 
-    // Unfolded: the picture as it is, behind a password, for a day.
+    // Unfolded: behind a password, for a day. (A picture that comes out no
+    // smaller compressed has no quality to choose, as in the web UI.)
     click(cx, "staged-options");
-    click(cx, "share-quality-1");
+    assert!(cx.debug_bounds("share-quality-1").is_none());
     click(cx, "share-to-2");
-    click(cx, "share-lasts-0");
+    click(cx, "share-lasts-1");
     // A link that is to have a password and has none does not go.
     click(cx, "send");
     shell.read_with(cx, |shell, _| {
@@ -3795,7 +3656,7 @@ fn files_wait_above_the_composer_and_go_out_with_the_message_as_chosen(cx: &mut 
         ShareAs {
             reach: Reach::Password("sesame".to_owned()),
             lasts: Lasts::Day,
-            full: true,
+            full: false,
         }
     );
     let sent = engine

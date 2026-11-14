@@ -19,6 +19,7 @@ mod audit;
 mod boxes;
 pub(crate) mod ink;
 mod lists;
+mod long;
 mod natural;
 mod text;
 
@@ -28,9 +29,11 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui::{
-    AnyElement, App, Div, ElementId, Hsla, IntoElement, ParentElement, RenderOnce, SharedString,
-    Styled, Window, div, prelude::*, px,
+    AnyElement, App, Div, ElementId, Hsla, IntoElement, ListState, ParentElement, RenderOnce,
+    SharedString, Styled, Window, div, prelude::*, px,
 };
+
+pub(crate) use long::Scrolled;
 
 use crate::page::{Block, Frame, Ink, Kind, Look, Page};
 use crate::theme::{ActiveTheme, Theme};
@@ -103,35 +106,74 @@ impl PageView {
     }
 }
 
+impl PageView {
+    /// The page as a list of its blocks, of which only those in view are
+    /// built and laid out each frame: for a page longer than its room,
+    /// which the list scrolls. Its parts are named after the block they
+    /// are in as well: `page-<id>-<block>-<kind>-<n>`.
+    pub(crate) fn listed(self, list: ListState, cx: &mut App) -> impl IntoElement + use<> {
+        let mut families = boxes::Families::take(cx);
+        families.learn(boxes::stacks(&self.page.blocks).into_iter(), cx);
+        families.give_back(cx);
+        let Self {
+            id,
+            page,
+            surface,
+            follow,
+        } = self;
+        let selector = id.clone();
+        let list = gpui::list(list, move |at, window, cx| {
+            let theme = ActiveTheme::get(cx);
+            let painter = Painter::new(
+                format!("{id}-{at}").into(),
+                surface,
+                &theme,
+                follow.clone(),
+                window,
+                cx,
+            );
+            let element = column(surface).child(painter.stacked(&page.blocks, at, (true, true)));
+            painter.families.give_back(cx);
+            element.into_any_element()
+        })
+        .size_full();
+        div()
+            .debug_selector(move || format!("page-{selector}"))
+            .size_full()
+            .child(list)
+    }
+}
+
 impl RenderOnce for PageView {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = ActiveTheme::get(cx);
-        let painter = Painter {
-            text: window.text_system().clone(),
-            id: self.id.clone(),
-            surface: self.surface,
-            theme: &theme,
-            follow: self.follow.clone(),
-            next: Cell::new(0),
-            counted: RefCell::default(),
-            grounds: ink::Grounds::new(&theme, self.surface),
-            families: {
-                let mut families = boxes::Families::take(cx);
-                families.learn(boxes::stacks(&self.page.blocks).into_iter(), cx);
-                families
-            },
-        };
-        let element = div()
+        let mut painter = Painter::new(
+            self.id.clone(),
+            self.surface,
+            &theme,
+            self.follow.clone(),
+            window,
+            cx,
+        );
+        painter
+            .families
+            .learn(boxes::stacks(&self.page.blocks).into_iter(), cx);
+        let element = column(self.surface)
             .debug_selector(move || format!("page-{}", self.id))
-            .w_full()
-            .flex()
-            .flex_col()
-            .text_size(px(self.surface.size))
-            .text_color(self.surface.ink)
             .children(painter.stack(&self.page.blocks, (true, true)));
         painter.families.give_back(cx);
         element
     }
+}
+
+/// The column a page's blocks stand in, in its surface's text.
+fn column(surface: Surface) -> Div {
+    div()
+        .w_full()
+        .flex()
+        .flex_col()
+        .text_size(px(surface.size))
+        .text_color(surface.ink)
 }
 
 /// Draws one page, once.
@@ -149,6 +191,30 @@ pub(super) struct Painter<'a> {
     /// What the part being drawn stands on, and the colours it is drawn in.
     grounds: ink::Grounds<'a>,
     families: boxes::Families,
+}
+
+impl<'a> Painter<'a> {
+    /// A painter for a page whose parts are named after `id`.
+    fn new(
+        id: SharedString,
+        surface: Surface,
+        theme: &'a Theme,
+        follow: Option<Follow>,
+        window: &Window,
+        cx: &mut App,
+    ) -> Self {
+        Self {
+            text: window.text_system().clone(),
+            id,
+            surface,
+            theme,
+            follow,
+            next: Cell::new(0),
+            counted: RefCell::default(),
+            grounds: ink::Grounds::new(theme, surface),
+            families: boxes::Families::take(cx),
+        }
+    }
 }
 
 impl Painter<'_> {
@@ -190,35 +256,39 @@ impl Painter<'_> {
     /// its edges (`kept`: above, below) the room the first and last ask for
     /// is inside it; elsewhere it was taken out to the box around.
     fn stack(&self, blocks: &[Block], kept: (bool, bool)) -> Vec<AnyElement> {
-        let base = self.surface.size;
-        let count = blocks.len();
-        let mut above = 0.0_f32;
-        blocks
-            .iter()
-            .enumerate()
-            .map(|(at, block)| {
-                let (top, bottom) = boxes::margins(block, base);
-                let room = if at == 0 && !kept.0 {
-                    0.0
-                } else {
-                    above.max(top)
-                };
-                above = bottom;
-                let last = at + 1 == count;
-                let element = self.block(block);
-                // A table that is as wide as its words stands in a row of its
-                // own, where its width can give way to the room's.
-                let column = !block_shrinks(block);
-                div()
-                    .flex_none()
-                    .flex()
-                    .when(column, Styled::flex_col)
-                    .mt(px(room))
-                    .when(last && kept.1, |held| held.mb(px(bottom)))
-                    .child(element)
-                    .into_any_element()
-            })
+        (0..blocks.len())
+            .map(|at| self.stacked(blocks, at, kept))
             .collect()
+    }
+
+    /// The block at `at` of `blocks`, as [`Self::stack`] stands it: with
+    /// the room above it that it and the block before ask for.
+    fn stacked(&self, blocks: &[Block], at: usize, kept: (bool, bool)) -> AnyElement {
+        let base = self.surface.size;
+        let block = &blocks[at];
+        let (top, bottom) = boxes::margins(block, base);
+        let above = match at.checked_sub(1) {
+            Some(before) => boxes::margins(&blocks[before], base).1,
+            None => 0.0,
+        };
+        let room = if at == 0 && !kept.0 {
+            0.0
+        } else {
+            above.max(top)
+        };
+        let last = at + 1 == blocks.len();
+        let element = self.block(block);
+        // A table that is as wide as its words stands in a row of its
+        // own, where its width can give way to the room's.
+        let column = !block_shrinks(block);
+        div()
+            .flex_none()
+            .flex()
+            .when(column, Styled::flex_col)
+            .mt(px(room))
+            .when(last && kept.1, |held| held.mb(px(bottom)))
+            .child(element)
+            .into_any_element()
     }
 
     /// One block in its box.

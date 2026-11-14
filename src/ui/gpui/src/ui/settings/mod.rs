@@ -8,15 +8,20 @@
 //! has nothing real behind yet is left out of the column rather than drawn
 //! with controls that do nothing.
 
+pub(super) mod account;
 mod advanced;
+mod channels_roles;
 mod danger;
 mod identities;
+mod jumps;
 mod localization;
 mod logs;
 mod nav;
 mod notifications;
 mod personalize;
+mod plugins;
 mod privacy;
+mod recovery;
 mod profile;
 mod search;
 mod shortcuts;
@@ -32,6 +37,9 @@ pub(super) fn voice_check_signature(shell: &Shell) -> String {
 mod voice_gate;
 mod voice_more;
 mod wall;
+mod whispers;
+pub(super) use whispers::Whispers;
+use account::fields::boxed as account_box;
 
 use gpui::{
     AnyElement, Context, Entity, IntoElement, ParentElement, ScrollHandle, SharedString, Styled,
@@ -52,6 +60,7 @@ pub(super) use wall::{WALL_DIM, WALL_WASH};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(super) enum Page {
     Profile,
+    Account,
     Voice,
     #[default]
     Personalize,
@@ -60,13 +69,16 @@ pub(super) enum Page {
     Localization,
     Shortcuts,
     Identities,
+    ChannelsRoles,
+    Plugins,
     Advanced,
 }
 
 impl Page {
     /// Every page, in the web UI's order.
-    pub(super) const ALL: [Self; 9] = [
+    pub(super) const ALL: [Self; 12] = [
         Self::Profile,
+        Self::Account,
         Self::Voice,
         Self::Personalize,
         Self::Notifications,
@@ -74,6 +86,8 @@ impl Page {
         Self::Localization,
         Self::Shortcuts,
         Self::Identities,
+        Self::ChannelsRoles,
+        Self::Plugins,
         Self::Advanced,
     ];
 
@@ -82,6 +96,7 @@ impl Page {
     pub(super) fn id(self) -> &'static str {
         match self {
             Self::Profile => "profile",
+            Self::Account => "account",
             Self::Voice => "voice",
             Self::Personalize => "personalize",
             Self::Notifications => "notifications",
@@ -89,7 +104,21 @@ impl Page {
             Self::Localization => "localization",
             Self::Shortcuts => "shortcuts",
             Self::Identities => "identities",
+            Self::ChannelsRoles => "channels-roles",
+            Self::Plugins => "plugins",
             Self::Advanced => "advanced",
+        }
+    }
+
+    /// Whether the column lists the page: some only where the server and
+    /// the session have something for them, as the web UI's
+    /// `visibleSettingsPages`.
+    pub(super) fn shown(self, shell: &Shell) -> bool {
+        match self {
+            Self::Account => shell.account_offered(),
+            Self::ChannelsRoles => shell.engine.onboarding_offered(),
+            Self::Plugins => !shell.panels.settings.plugins.listed.is_empty(),
+            _ => true,
         }
     }
 
@@ -102,6 +131,7 @@ impl Page {
     pub(super) fn name(self) -> SharedString {
         match self {
             Self::Profile => t!("Profile"),
+            Self::Account => t!("Account"),
             Self::Voice => t!("Voice"),
             Self::Personalize => t!("Personalize"),
             Self::Notifications => t!("Notifications"),
@@ -109,6 +139,8 @@ impl Page {
             Self::Localization => t!("Language & format"),
             Self::Shortcuts => t!("Shortcuts"),
             Self::Identities => t!("Identities"),
+            Self::ChannelsRoles => t!("Channels & roles"),
+            Self::Plugins => t!("Plugins"),
             Self::Advanced => t!("Advanced"),
         }
     }
@@ -185,12 +217,31 @@ pub(super) struct Settings {
     pub confirming_reset: bool,
     /// Whether addresses are kept off the screen, notifications with them.
     pub streamer: bool,
+    /// Keys that go to one person; which one's key is being chosen; and
+    /// the picker of somebody new, with whom it has picked.
+    pub jumps: Vec<crate::store::UserShortcut>,
+    /// The Identities page's fields, once it has been open.
+    pub recovery: Option<recovery::Recovery>,
+    /// The Account page's fields and what the server said, once it has
+    /// been open.
+    pub account: Option<account::AccountPage>,
+    /// The questions the server on show asks new members, and the user's
+    /// answers: shown on the Channels & roles page, and asked again from it.
+    pub onboarding: super::onboarding::Onboarding,
+    /// The server's plugins and the Signal bridge, as the Plugins page
+    /// shows them.
+    pub plugins: plugins::Plugins,
+    /// Whisper and shout targets, each with its key.
+    pub whispers: Whispers,
+    pub recording_jump: Option<String>,
+    pub picking_jump: Option<Option<u32>>,
 }
 
 impl Shell {
     /// Show the settings, on the page they were last left on.
     pub(super) fn open_settings(&mut self, cx: &mut Context<Self>) {
         self.panels.settings.open = true;
+        self.read_plugins();
         if self.panels.settings.search.is_none() {
             let field = cx.new(|cx| TextInput::new(t!("Search settings"), cx));
             let watch = cx.subscribe(&field, |shell, _, event: &InputEvent, cx| {
@@ -215,6 +266,10 @@ impl Shell {
             self.panels.settings.page = page;
         }
         self.open_settings(cx);
+        // A page of the server's administration, by the web UI's id.
+        if let Some(page) = super::admin_pages::AdminPage::named(id) {
+            self.open_admin_page(page, cx);
+        }
         if let (Ok(down), Some(search)) = (down.parse::<f32>(), &self.panels.settings.search) {
             search.scroll.set_offset(gpui::point(px(0.0), px(-down)));
         }
@@ -223,6 +278,8 @@ impl Shell {
     /// Turn to `page`, with nothing on it lit.
     pub(super) fn turn_to(&mut self, page: Page, cx: &mut Context<Self>) {
         self.panels.settings.about_dialog = false;
+        // A page of the administration gives the pane back.
+        self.panels.admin_page = None;
         // The about editor drawn on the Profile page goes with it.
         if page != Page::Profile && self.about_on_settings_page() {
             self.panels.profiles.editor = None;
@@ -237,6 +294,7 @@ impl Shell {
             self.leave_voice_page();
         }
         if page == Page::Identities {
+            self.open_identities(cx);
             self.panels.certs.held = self.engine.certificates();
         }
         if page == Page::Profile {
@@ -247,6 +305,17 @@ impl Shell {
         }
         if page == Page::Advanced {
             self.open_advanced(cx);
+        }
+        if page == Page::ChannelsRoles {
+            self.open_channels_roles();
+        }
+        if page == Page::Plugins {
+            self.open_plugins();
+        }
+        if page == Page::Account {
+            self.open_account(cx);
+        } else {
+            self.leave_account();
         }
         // The shelf's pictures are read while their page shows them.
         if page == Page::Personalize {
@@ -274,7 +343,9 @@ impl Shell {
         }
         self.panels.settings.open = false;
         self.panels.settings.about_dialog = false;
+        self.panels.admin_page = None;
         self.leave_voice_page();
+        self.leave_account();
         self.put_shelf_away();
         self.stop_recording(cx);
         cx.notify();
@@ -308,10 +379,7 @@ pub(super) fn apply_kept(
     crate::formats::set(stored.format.formats());
     crate::notify::allow(stored.enable_notifications.0 && !stored.streamer_mode);
     engine.set_dual_path(stored.enable_dual_path);
-    // What the environment asks for wins, as it does for the theme.
-    if std::env::var_os("FANCY_GPUI_LOG").is_none() {
-        crate::real::steer_logs(&stored.logs);
-    }
+    crate::real::steer_logs_unless_asked(&stored.logs);
     let chosen_keys = stored.shortcuts.clone();
     cx.defer(move |cx| super::keys::rebind(&chosen_keys, cx));
 }
@@ -339,7 +407,10 @@ pub(super) fn render(
             surface.child(super::rail::render(shell, theme, cx))
         })
         .child(nav::render(shell, theme, cx))
-        .child(pane(shell, theme, cx))
+        .map(|surface| match super::admin_pages::render(shell, theme, cx) {
+            Some(admin) => surface.child(admin),
+            None => surface.child(pane(shell, theme, cx)),
+        })
 }
 
 /// The open page, scrolled to what a search result lit the first time it
@@ -400,6 +471,7 @@ fn pane(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoEleme
 fn page(shell: &Shell, page: Page, theme: &Theme, cx: &mut Context<Shell>) -> AnyElement {
     match page {
         Page::Profile => profile::render(shell, theme, cx).into_any_element(),
+        Page::Account => account::render(shell, theme, cx).into_any_element(),
         Page::Voice => voice::render(shell, theme, cx).into_any_element(),
         Page::Personalize => personalize::render(shell, theme, cx).into_any_element(),
         Page::Notifications => notifications::render(shell, cx).into_any_element(),
@@ -407,6 +479,8 @@ fn page(shell: &Shell, page: Page, theme: &Theme, cx: &mut Context<Shell>) -> An
         Page::Localization => localization::render(shell, theme, cx).into_any_element(),
         Page::Shortcuts => shortcuts::render(shell, theme, cx).into_any_element(),
         Page::Identities => identities::render(shell, theme, cx).into_any_element(),
+        Page::ChannelsRoles => channels_roles::render(shell, theme, cx).into_any_element(),
+        Page::Plugins => plugins::render(shell, theme, cx).into_any_element(),
         Page::Advanced => advanced::render(shell, theme, cx).into_any_element(),
     }
 }

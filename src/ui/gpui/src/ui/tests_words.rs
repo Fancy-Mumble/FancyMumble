@@ -27,6 +27,19 @@ const SETTINGS: &str = concat!(
     include_str!("settings/voice_gate.rs"),
     include_str!("settings/voice_more.rs"),
     include_str!("settings/wall.rs"),
+    include_str!("settings/logs.rs"),
+    include_str!("settings/danger.rs"),
+    include_str!("settings/jumps.rs"),
+    include_str!("settings/recovery.rs"),
+    include_str!("settings/account/mod.rs"),
+    include_str!("settings/account/page.rs"),
+    include_str!("settings/account/totp.rs"),
+    include_str!("settings/account/devices.rs"),
+    include_str!("settings/account/fields.rs"),
+    include_str!("settings/channels_roles.rs"),
+    include_str!("settings/plugins.rs"),
+    include_str!("settings/whispers.rs"),
+    include_str!("onboarding.rs"),
 );
 
 #[test]
