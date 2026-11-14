@@ -13,9 +13,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+#[cfg(not(target_os = "android"))]
 use fancy_screenshare::encode::{EncodeSettings, H264Encoder, VideoEncoder};
 
 use super::decode::{Decoding, Unit};
+#[cfg(not(target_os = "android"))]
 use super::pattern::{Order, Pattern};
 
 /// Whether this run's demo shares go through the codec.
@@ -90,6 +92,14 @@ fn split_nals(stream: &[u8]) -> Vec<&[u8]> {
 }
 
 /// The pattern encoded: `frames` of it at `size`, the first a keyframe.
+/// Nothing on Android, which has no encoder yet.
+#[cfg(target_os = "android")]
+pub(crate) fn encoded(_size: (u32, u32), _frames: u32) -> Vec<Unit> {
+    Vec::new()
+}
+
+/// The pattern encoded: `frames` of it at `size`, the first a keyframe.
+#[cfg(not(target_os = "android"))]
 pub(crate) fn encoded(size: (u32, u32), frames: u32) -> Vec<Unit> {
     let pattern = Pattern::new(size.0, size.1);
     let mut encoder = H264Encoder::new(EncodeSettings {
@@ -133,7 +143,18 @@ pub(crate) fn play(mut decoding: Decoding, stop: &Arc<AtomicBool>) {
 }
 
 /// Encode the pattern at `size` and `fps` as a broadcaster would, and throw
+/// it away, until `stop`: what sharing costs here. On Android, which has
+/// no encoder yet, it waits for `stop`.
+#[cfg(target_os = "android")]
+pub(crate) fn encode_away(_size: (u32, u32), _fps: u32, stop: &Arc<AtomicBool>) {
+    while !stop.load(Ordering::Relaxed) {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// Encode the pattern at `size` and `fps` as a broadcaster would, and throw
 /// it away, until `stop`: what sharing costs here.
+#[cfg(not(target_os = "android"))]
 pub(crate) fn encode_away(size: (u32, u32), fps: u32, stop: &Arc<AtomicBool>) {
     let pattern = Pattern::new(size.0, size.1);
     let mut encoder = H264Encoder::new(EncodeSettings {

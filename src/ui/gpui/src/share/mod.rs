@@ -47,6 +47,9 @@ pub(crate) mod fit;
 pub(crate) mod frame;
 pub(crate) mod made_up;
 pub(crate) mod pattern;
+// Android has no capture or peers yet (`fancy-screenshare` does not build
+// there): a stand-in that knows of shares without making them.
+#[cfg_attr(target_os = "android", path = "real_absent.rs")]
 pub(crate) mod real;
 pub(crate) mod replay;
 pub(crate) mod shares;
