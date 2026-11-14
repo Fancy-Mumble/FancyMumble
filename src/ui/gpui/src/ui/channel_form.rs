@@ -174,7 +174,7 @@ impl Shell {
                 })
             })
             .collect();
-        fields[0].read(cx).focus(window);
+        window.focus(&fields[0].focus_handle(cx), cx);
         self.panels.channel_form = Some(ChannelForm {
             parent,
             within,
@@ -212,7 +212,7 @@ impl Shell {
                 let count = shown.len();
                 let next = if *back { at + count - 1 } else { at + 1 } % count;
                 if let Some(input) = shown.get(next).and_then(|next| form.fields.get(*next)) {
-                    input.read(cx).focus(window);
+                    window.focus(&input.focus_handle(cx), cx);
                 }
                 cx.notify();
             }

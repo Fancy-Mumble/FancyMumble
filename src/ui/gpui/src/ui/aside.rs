@@ -115,7 +115,7 @@ impl Asides {
             return;
         }
         let open = Rc::clone(&self.open);
-        self.main_closed = Some(cx.on_window_closed(move |cx| {
+        self.main_closed = Some(cx.on_window_closed(move |cx, _| {
             let main_open = cx
                 .windows()
                 .iter()
@@ -333,7 +333,7 @@ impl Aside {
         });
         let focus = cx.focus_handle();
         if !overlay {
-            window.focus(&focus);
+            window.focus(&focus, cx);
         }
         Self {
             made,

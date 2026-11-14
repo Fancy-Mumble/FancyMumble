@@ -23,7 +23,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use gpui::{Context, RenderImage, SharedString, Task, Window};
+use gpui::{Context, SharedString, Task, Window};
 
 pub(super) use badge::LiveBadge;
 pub(super) use view::{overlays, render};
@@ -133,7 +133,7 @@ pub(crate) struct Stage {
     wake: Wake,
     rounds: u64,
     /// Pictures of streams that ended, to be given back to the window.
-    retired: Vec<Arc<RenderImage>>,
+    retired: Vec<screen::Picture>,
     _tasks: Vec<Task<()>>,
 }
 
@@ -431,7 +431,7 @@ impl Shell {
     /// Give the window back the pictures of streams that ended.
     fn give_back_pictures(&mut self, window: &mut Window) {
         for picture in self.stage.retired.drain(..) {
-            let _ = window.drop_image(picture);
+            picture.give_back(window);
         }
     }
 

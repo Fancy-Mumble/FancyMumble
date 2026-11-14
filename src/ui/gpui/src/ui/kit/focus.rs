@@ -37,10 +37,10 @@ pub(crate) enum Way {
 
 impl Way {
     /// Move the keyboard one stop this way along the whole window.
-    fn step(self, window: &mut Window) {
+    fn step(self, window: &mut Window, cx: &mut App) {
         match self {
-            Self::Next => window.focus_next(),
-            Self::Back => window.focus_prev(),
+            Self::Next => window.focus_next(cx),
+            Self::Back => window.focus_prev(cx),
         }
     }
 }
@@ -77,9 +77,9 @@ impl Ring {
                             self.ink,
                             BorderStyle::Solid,
                         ));
-                        window.on_mouse_event(move |_: &MouseDownEvent, phase, window, _| {
+                        window.on_mouse_event(move |_: &MouseDownEvent, phase, window, cx| {
                             if phase == DispatchPhase::Capture && holder.is_focused(window) {
-                                window.blur();
+                                window.blur(cx);
                             }
                         });
                     },
@@ -286,16 +286,16 @@ impl Holder {
             if came_from.is_none() {
                 *came_from = Some(window.focused(cx));
             }
-            self.end(way).focus(window);
+            self.end(way).focus(window, cx);
         }
-        way.step(window);
+        way.step(window, cx);
         if !self.holds_keyboard(window, cx) {
-            self.end(way).focus(window);
-            way.step(window);
+            self.end(way).focus(window, cx);
+            way.step(window, cx);
         }
         // Nothing inside to stop at: the surface keeps the keyboard itself.
         if !self.holds_keyboard(window, cx) {
-            self.head.focus(window);
+            self.head.focus(window, cx);
         }
         *self.last.borrow_mut() = window.focused(cx);
     }
@@ -316,8 +316,8 @@ impl Drop for Holder {
                         return;
                     }
                     match came_from {
-                        Some(back) => window.focus(&back),
-                        None => window.blur(),
+                        Some(back) => window.focus(&back, cx),
+                        None => window.blur(cx),
                     }
                 })
             })
@@ -357,7 +357,7 @@ impl KeyTrap {
 pub(crate) fn walk(way: Way, window: &mut Window, cx: &mut App) {
     match Holder::current(window.window_handle(), cx) {
         Some(holder) => holder.walk(way, window, cx),
-        None => way.step(window),
+        None => way.step(window, cx),
     }
 }
 

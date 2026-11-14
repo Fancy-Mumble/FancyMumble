@@ -56,7 +56,7 @@ mod words;
 use std::sync::Arc;
 
 use gpui::{
-    App, AppContext, Application, TitlebarOptions, WindowDecorations, WindowOptions, px, size,
+    App, AppContext, TitlebarOptions, WindowDecorations, WindowOptions, px, size,
 };
 
 use theme::{ActiveTheme, Catalog, DEFAULT_THEME, Mode};
@@ -66,7 +66,7 @@ fn main() {
     let mut startup = startup::Startup::begin();
     console::attach();
     panics::keep_in_log();
-    Application::new()
+    gpui_platform::application()
         .with_assets(assets::Assets)
         .run(move |cx: &mut App| {
             startup.done("platform");
@@ -149,7 +149,7 @@ fn main() {
             say_what_is_held(window, cx);
             // Closing the main window ends the application; a window beside
             // it (a share popped out) only closes.
-            cx.on_window_closed(|cx| {
+            cx.on_window_closed(|cx, _| {
                 if !cx.windows().iter().any(|window| window.downcast::<Shell>().is_some()) {
                     cx.quit();
                 }

@@ -900,6 +900,7 @@ fn push_to_talk_transmits_while_its_key_is_held(cx: &mut TestAppContext) {
     cx.simulate_event(gpui::KeyDownEvent {
         keystroke: key.clone(),
         is_held: false,
+        prefer_character_input: false,
     });
     cx.run_until_parked();
     assert_eq!(engine.snapshot().voice, Voice::On, "held: transmitting");
@@ -1670,7 +1671,7 @@ fn somebody_writing_is_named_and_the_local_user_writing_is_passed_on(cx: &mut Te
 
     assert_eq!(engine.typed(), 0);
     shell.update_in(cx, |shell, window, cx| {
-        shell.composer.read(cx).focus(window)
+        window.focus(&shell.composer.focus_handle(cx), cx)
     });
     cx.simulate_keystrokes("h");
     assert_eq!(engine.typed(), 1);
@@ -1773,7 +1774,7 @@ fn a_picture_on_the_clipboard_is_sent_when_pasted_into_the_composer(cx: &mut Tes
     )));
     assert!(cx.debug_bounds("attach").is_some());
     shell.update_in(cx, |shell, window, cx| {
-        shell.composer.read(cx).focus(window)
+        window.focus(&shell.composer.focus_handle(cx), cx)
     });
     cx.simulate_keystrokes("ctrl-v");
     let sent = engine.messages(Conversation::Channel(1));
@@ -2352,7 +2353,7 @@ fn a_channels_description_is_edited_from_the_one_it_has(cx: &mut TestAppContext)
 fn tab_finishes_a_name_begun_after_an_at_sign(cx: &mut TestAppContext) {
     let (shell, _engine, cx) = shell(cx);
     shell.update_in(cx, |shell, window, cx| {
-        shell.composer.read(cx).focus(window)
+        window.focus(&shell.composer.focus_handle(cx), cx)
     });
     cx.simulate_keystrokes("h i space @ s c tab");
     shell.read_with(cx, |shell, cx| {
@@ -2369,7 +2370,7 @@ fn tab_finishes_a_name_begun_after_an_at_sign(cx: &mut TestAppContext) {
 fn an_at_sign_opens_a_list_of_names_taken_by_key_or_by_click(cx: &mut TestAppContext) {
     let (shell, engine, cx) = shell(cx);
     shell.update_in(cx, |shell, window, cx| {
-        shell.composer.read(cx).focus(window)
+        window.focus(&shell.composer.focus_handle(cx), cx)
     });
     cx.simulate_keystrokes("@");
     shell.read_with(cx, |shell, _| {
@@ -2587,6 +2588,7 @@ fn the_whisper_key_speaks_to_whoever_was_chosen_while_it_is_held(cx: &mut TestAp
         cx.simulate_event(gpui::KeyDownEvent {
             keystroke: key.clone(),
             is_held,
+            prefer_character_input: false,
         });
     }
     cx.run_until_parked();
@@ -3442,7 +3444,7 @@ fn several_messages_are_picked_and_deleted_together(cx: &mut TestAppContext) {
 fn a_press_on_the_band_is_left_for_the_system_to_move_the_window_by(cx: &mut TestAppContext) {
     let (shell, _engine, cx) = shell(cx);
     let focus = shell.read_with(cx, |shell, _| shell.focus.clone());
-    cx.update(|window, _| window.blur());
+    cx.update(|window, cx| window.blur(cx));
     let at = cx
         .debug_bounds("band")
         .expect("the default theme draws the band")

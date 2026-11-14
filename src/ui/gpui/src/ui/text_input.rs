@@ -462,8 +462,8 @@ impl TextInput {
     }
 
     /// Give the field the keyboard.
-    pub(crate) fn focus(&self, window: &mut Window) {
-        window.focus(&self.focus);
+    pub(crate) fn focus(&self, window: &mut Window, cx: &mut gpui::App) {
+        window.focus(&self.focus, cx);
     }
 
     /// The placeholder shown while the field is empty.
@@ -542,7 +542,7 @@ impl TextInput {
                     .and_then(|item| {
                         item.entries().iter().find_map(|entry| match entry {
                             gpui::ClipboardEntry::Image(image) => Some(image.bytes.clone()),
-                            gpui::ClipboardEntry::String(_) => None,
+                            gpui::ClipboardEntry::String(_) | gpui::ClipboardEntry::ExternalPaths(_) => None,
                         })
                     });
                 if let Some(picture) = picture {
@@ -665,7 +665,7 @@ impl TextInput {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        window.focus(&self.focus);
+        window.focus(&self.focus, cx);
         if let Some(offset) = self.offset_at(event.position) {
             match event.click_count {
                 // A double click takes the word, a triple click everything.
@@ -945,7 +945,7 @@ fn float_over(
         size,
         room: window.viewport_size(),
     };
-    window.defer_draw(floating, stand(spot), 1);
+    window.defer_draw(floating, stand(spot), 1, None);
 }
 
 /// How a stretch of the field is drawn apart from plain text.

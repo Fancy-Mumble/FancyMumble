@@ -279,7 +279,7 @@ fn the_search_finds_a_setting_by_a_word_not_on_it_and_lights_it(cx: &mut TestApp
             .field
             .clone()
     });
-    cx.update(|window, cx| field.read(cx).focus(window));
+    cx.update(|window, cx| window.focus(&field.focus_handle(cx), cx));
     type_in(cx, "wallpaper");
     assert!(cx.debug_bounds("found-personalize").is_some());
     click(cx, "settings-voice");
@@ -290,7 +290,7 @@ fn the_search_finds_a_setting_by_a_word_not_on_it_and_lights_it(cx: &mut TestApp
         assert!(field.read(cx).text().is_empty(), "the search is emptied");
     });
     // Enter takes the first; a word on no setting finds nothing.
-    cx.update(|window, cx| field.read(cx).focus(window));
+    cx.update(|window, cx| window.focus(&field.focus_handle(cx), cx));
     type_in(cx, "ptt");
     cx.simulate_keystrokes("enter");
     shell.read_with(cx, |shell, _| {
@@ -377,7 +377,7 @@ fn a_klipy_key_of_ones_own_is_typed_on_advanced_and_kept(cx: &mut TestAppContext
             .field
             .clone()
     });
-    cx.update(|window, cx| field.read(cx).focus(window));
+    cx.update(|window, cx| window.focus(&field.focus_handle(cx), cx));
     type_in(cx, "a-key");
     shell.read_with(cx, |shell, _| {
         assert_eq!(shell.panels.gifs.key.as_deref(), Some("a-key"));

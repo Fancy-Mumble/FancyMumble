@@ -200,6 +200,7 @@ impl Shadow {
             offset: gpui::point(px(0.0), px(self.drop)),
             blur_radius: px(self.blur / 2.0),
             spread_radius: px(0.0),
+            inset: false,
         }]
     }
 }

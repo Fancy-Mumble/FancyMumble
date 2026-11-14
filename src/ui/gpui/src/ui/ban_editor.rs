@@ -98,7 +98,7 @@ impl Shell {
                 })
             })
             .collect();
-        fields[0].read(cx).focus(window);
+        window.focus(&fields[0].focus_handle(cx), cx);
         if let Some(admin) = self.panels.admin.as_mut() {
             admin.editing = Some(BanEditor {
                 at,
@@ -132,7 +132,7 @@ impl Shell {
                 let Some(editor) = editing else { return };
                 let count = editor.fields.len();
                 let next = if *back { nth + count - 1 } else { nth + 1 } % count;
-                editor.fields[next].read(cx).focus(window);
+                window.focus(&editor.fields[next].focus_handle(cx), cx);
                 cx.notify();
             }
             InputEvent::Changed | InputEvent::PastedPicture(_) | InputEvent::Pick(_) => {}

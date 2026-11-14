@@ -1261,7 +1261,7 @@ impl Shell {
                 }
                 input
             });
-            input.read(cx).focus(window);
+            window.focus(&input.focus_handle(cx), cx);
             // A description starts from the one there is, which has to be
             // asked for: it is not sent with the tree.
             if let Question::DescribeChannel(id) = question {

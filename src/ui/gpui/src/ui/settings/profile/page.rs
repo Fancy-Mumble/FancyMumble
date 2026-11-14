@@ -76,7 +76,7 @@ pub(in crate::ui::settings) fn render(
 /// `column` taking `share` of the room its row leaves, as a CSS `flex`
 /// of that number does: the web UI's rows split 1 : 1.4.
 fn share(column: Div, share: f32) -> Div {
-    let mut column = column.flex_basis(relative(0.0)).flex_shrink().min_w_0();
+    let mut column = column.flex_basis(relative(0.0)).flex_shrink_1().min_w_0();
     column.style().flex_grow = Some(share);
     column
 }

@@ -109,7 +109,7 @@ impl Shell {
         let typing = cx.subscribe_in(&search, window, |shell, _, event, window, cx| {
             shell.on_gif_search(event, window, cx);
         });
-        search.read(cx).focus(window);
+        window.focus(&search.focus_handle(cx), cx);
         self.panels.gifs.browser = Some(Browser {
             plan: Rc::new(plan),
             search,
@@ -477,7 +477,7 @@ fn grid(browser: &Browser, theme: &Theme, cx: &mut Context<Shell>) -> AnyElement
     #[expect(clippy::cast_precision_loss, reason = "a few hundred rows at most")]
     let tall = browser.rows() as f32 * (TILE + GAP);
     uniform_list("gif-rows", browser.rows(), cx.processor(Shell::gif_rows))
-        .track_scroll(browser.scroll.clone())
+        .track_scroll(&browser.scroll)
         .flex_none()
         .h(px(tall.min(GRID_MOST)))
         .px(px(INSET))

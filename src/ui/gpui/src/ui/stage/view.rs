@@ -222,8 +222,7 @@ impl Shell {
     /// drawn.
     pub(super) fn copy_frame(&mut self, cx: &mut Context<Self>) {
         let picture = self.large_track().and_then(|track| track.screen.borrow().picture());
-        let png = picture.and_then(|(picture, (width, height))| {
-            let mut rgba = picture.as_bytes(0)?.to_vec();
+        let png = picture.and_then(|(mut rgba, (width, height))| {
             for pixel in rgba.as_chunks_mut::<4>().0 {
                 pixel.swap(0, 2);
             }

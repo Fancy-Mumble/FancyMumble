@@ -104,8 +104,8 @@ impl Painter<'_> {
         // what does not fit then runs past the table rather than into a
         // column of single letters.
         let part = match (share, pixels) {
-            (Some(share), _) if share > 0.0 => part.flex_basis(relative(share)).flex_shrink(),
-            (_, Some(pixels)) => part.flex_basis(px(pixels)).flex_shrink(),
+            (Some(share), _) if share > 0.0 => part.flex_basis(relative(share)).flex_shrink_1(),
+            (_, Some(pixels)) => part.flex_basis(px(pixels)).flex_shrink_1(),
             _ => {
                 let end = (cell.column + cell.span.0).min(naturals.len());
                 let natural: f32 = naturals
@@ -113,7 +113,7 @@ impl Painter<'_> {
                     .unwrap_or_default()
                     .iter()
                     .sum();
-                let mut part = part.flex_basis(px(natural.ceil())).flex_shrink();
+                let mut part = part.flex_basis(px(natural.ceil())).flex_shrink_1();
                 if stretches {
                     part.style().flex_grow = Some(natural.max(1.0));
                 }

@@ -20,8 +20,8 @@ default = ["wayland", "x11"]
 # The two Linux window systems, as GPUI names them. Both by default; a build
 # for one leaves the other's client code out. Either one links
 # libxkbcommon-x11 (Debian: libxkbcommon-x11-dev).
-wayland = ["gpui/wayland"]
-x11 = ["gpui/x11"]
+wayland = ["gpui/wayland", "gpui_platform/wayland"]
+x11 = ["gpui/x11", "gpui_platform/x11"]
 
 [dependencies]
 # `windows-manifest` embeds the Common Controls v6 manifest (and per-monitor
@@ -29,10 +29,13 @@ x11 = ["gpui/x11"]
 # `TaskDialogIndirect` GPUI imports, and the exe dies at load with
 # STATUS_ENTRYPOINT_NOT_FOUND. It does nothing on other platforms.
 #
-# A copy of GPUI 0.2.2 with one addition, a blur of what is behind an element
-# (`Styled::backdrop_blur`), which the renderer cannot be given from outside.
-# What was changed, and where, is in vendor/gpui/FANCY_CHANGES.md.
-gpui = { path = "vendor/gpui", default-features = false, features = ["font-kit", "windows-manifest"] }
+# GPUI as gpui-fast carries it (Zed's GPUI with a retained mode, window
+# composition and dynamic textures), with Fancy Mumble's own changes on top
+# (a blur of what is behind an element, `Window::set_bounds`, overlay
+# windows): the fork `gpui-next`, branch `fancy`, whose FANCY_CHANGES.md
+# lists them. `gpui_platform` picks this system's platform.
+gpui = { path = "../../../../gpui-next/crates/gpui", default-features = false, features = ["font-kit", "windows-manifest"] }
+gpui_platform = { path = "../../../../gpui-next/crates/gpui_platform", default-features = false, features = ["font-kit"] }
 # The engine. Still inside the Tauri package, built here without the Tauri
 # view (`default-features = false`), so none of Tauri is compiled or linked.
 mumble-tauri = { path = "../../../crates/mumble-tauri", default-features = false, features = ["logs"] }
@@ -141,7 +144,15 @@ embed-resource = "3"
 # to hold this client's own against.
 fancy-utils = { path = "../../../crates/fancy-utils" }
 # Drives the views without a display: simulated clicks and keys.
-gpui = { path = "vendor/gpui", default-features = false, features = ["test-support"] }
+gpui = { path = "../../../../gpui-next/crates/gpui", default-features = false, features = ["test-support"] }
+gpui_platform = { path = "../../../../gpui-next/crates/gpui_platform", default-features = false, features = ["test-support"] }
+
+# What gpui-next's own workspace patches, repeated: a patch applies only from
+# the manifest at the root of a build. Zed's copies of these crates.
+[patch.crates-io]
+async-process = { git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d" }
+async-task = { git = "https://github.com/zed-industries/async-task.git", rev = "015845a19fc31752c02367567d3b8900a406f9da" }
+calloop = { git = "https://github.com/zed-industries/calloop" }
 
 # Debug information for this package only. With it for all seven hundred
 # dependencies as well, a debug build is tens of gigabytes on disk.

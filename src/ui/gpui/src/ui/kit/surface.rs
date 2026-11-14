@@ -142,6 +142,7 @@ impl RenderOnce for Paper {
                     // A CSS blur is twice the deviation the renderer takes.
                     blur_radius: px(blur / 2.0),
                     spread_radius: px(0.0),
+                    inset: false,
                 }])
             })
             // The fill, a pixel inside the ground: what is left showing

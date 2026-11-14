@@ -76,7 +76,7 @@ fn away(shell: &Shell) -> usize {
 }
 
 /// Press `key` and let it go, as a hand does.
-fn press(cx: &mut VisualTestContext, key: &str) {
+fn press(cx: &mut VisualTestContext, key: &'static str) {
     cx.simulate_keystrokes(key);
     cx.simulate_event(KeyUpEvent {
         keystroke: Keystroke::parse(key).expect("a key"),

@@ -190,7 +190,7 @@ impl Shell {
         } else {
             1
         };
-        fields[first].read(cx).focus(window);
+        window.focus(&fields[first].focus_handle(cx), cx);
         self.editor = Some(ServerEditor {
             certificate: existing
                 .as_ref()
@@ -218,7 +218,7 @@ impl Shell {
                 let Some(editor) = &self.editor else { return };
                 let count = editor.fields.len();
                 let next = if *back { at + count - 1 } else { at + 1 } % count;
-                editor.fields[next].read(cx).focus(window);
+                window.focus(&editor.fields[next].focus_handle(cx), cx);
                 cx.notify();
             }
             InputEvent::Changed | InputEvent::PastedPicture(_) | InputEvent::Pick(_) => {}

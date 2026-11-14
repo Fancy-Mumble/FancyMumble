@@ -175,7 +175,7 @@ impl Shell {
         };
         search.update(cx, |search, _| search.clear());
         if let Some(window) = window {
-            search.read(cx).focus(window);
+            window.focus(&search.focus_handle(cx), cx);
         }
         self.emoji_for = Some(purpose);
         self.narrow_emoji(cx);
@@ -215,7 +215,7 @@ impl Shell {
             Some(For::Composer) => {
                 self.composer.update(cx, |composer, cx| {
                     composer.type_text(emoji);
-                    composer.focus(window);
+                    composer.focus(window, cx);
                     cx.notify();
                 });
             }
@@ -385,7 +385,7 @@ pub(super) fn render(
                 picker.rows.len(),
                 cx.processor(Shell::emoji_rows),
             )
-            .track_scroll(picker.scroll.clone())
+            .track_scroll(&picker.scroll)
             .flex_1()
             .min_h_0(),
         )

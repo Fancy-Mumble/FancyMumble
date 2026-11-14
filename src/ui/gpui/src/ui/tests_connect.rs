@@ -35,6 +35,7 @@ fn a_server_with_many_identities_scrolls_down_to_its_way_in(cx: &mut TestAppCont
             delta: ScrollDelta::Pixels(point(px(0.0), px(-200.0))),
             modifiers: Modifiers::none(),
             touch_phase: TouchPhase::Moved,
+            ..ScrollWheelEvent::default()
         });
     }
     cx.run_until_parked();

@@ -1665,7 +1665,7 @@ impl Shell {
         self.editing = Some(id);
         self.composer.update(cx, |composer, cx| {
             composer.set_text(text);
-            composer.focus(window);
+            composer.focus(window, cx);
             cx.notify();
         });
     }
@@ -1687,7 +1687,7 @@ impl Shell {
         // Answering is not correcting: what was being changed is let go.
         self.stop_editing(cx);
         self.replying = Some((id, said));
-        self.composer.read(cx).focus(window);
+        window.focus(&self.composer.focus_handle(cx), cx);
         cx.notify();
     }
 
@@ -1793,7 +1793,7 @@ impl Shell {
         } else {
             &self.search
         };
-        search.read(cx).focus(window);
+        window.focus(&search.focus_handle(cx), cx);
         cx.notify();
     }
 

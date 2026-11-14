@@ -19,7 +19,7 @@ fn at(cx: &mut VisualTestContext) -> Option<String> {
 
 /// Press `key` and let it go, as a hand does: a control is worked when
 /// the key comes up.
-fn press(cx: &mut VisualTestContext, key: &str) {
+fn press(cx: &mut VisualTestContext, key: &'static str) {
     cx.simulate_keystrokes(key);
     cx.simulate_event(KeyUpEvent {
         keystroke: Keystroke::parse(key).expect("a key"),
@@ -39,7 +39,7 @@ fn tab_to(cx: &mut VisualTestContext, name: &str) {
 }
 
 /// Press `key` `times` times, and say where the keyboard was after each.
-fn walk(cx: &mut VisualTestContext, key: &str, times: usize) -> Vec<Option<String>> {
+fn walk(cx: &mut VisualTestContext, key: &'static str, times: usize) -> Vec<Option<String>> {
     (0..times)
         .map(|_| {
             cx.simulate_keystrokes(key);
@@ -156,7 +156,7 @@ fn a_press_of_the_pointer_works_a_control_without_handing_it_the_keyboard(cx: &m
         })
     };
     shell.update_in(cx, |shell, window, cx| {
-        shell.composer.read(cx).focus(window)
+        window.focus(&shell.composer.focus_handle(cx), cx)
     });
     click(cx, "own-menu");
     shell.read_with(cx, |shell, _| assert!(shell.menu.is_some()));
@@ -175,7 +175,7 @@ fn an_open_menu_is_walked_with_the_arrows_taken_with_enter_and_put_away_with_esc
         })
     };
     shell.update_in(cx, |shell, window, cx| {
-        shell.composer.read(cx).focus(window)
+        window.focus(&shell.composer.focus_handle(cx), cx)
     });
     click(cx, "own-menu");
     // Each entry is known by its place.
