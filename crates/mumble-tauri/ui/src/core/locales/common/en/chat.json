@@ -398,6 +398,10 @@
     "hidePending": "Hide pending indicator",
     "hide": "Hide"
   },
+  "historyRefused": {
+    "title": "Couldn't load older messages",
+    "retry": "Retry loading older messages"
+  },
   "quotePreview": {
     "mediaFallback": "Media",
     "remove": "Remove quote"

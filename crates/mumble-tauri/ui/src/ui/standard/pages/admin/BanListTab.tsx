@@ -1,14 +1,15 @@
-﻿import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import type { BanEntry } from "@core/types";
+import { maxMask, withAddress } from "@core/features/admin/banMask";
+import { useBanList } from "@core/features/admin/useBanList";
 import { Field, TextInput } from "../../components/elements/TextInput";
 import styles from "./AdminPanel.module.css";
 
+/** A fresh entry: no address yet, and a mask covering all of whatever is typed. */
 const EMPTY_BAN: BanEntry = {
   address: "",
-  mask: 32,
+  mask: 128,
   name: "",
   hash: "",
   reason: "",
@@ -17,47 +18,19 @@ const EMPTY_BAN: BanEntry = {
 };
 
 export function BanListTab() {
-  const [bans, setBans] = useState<BanEntry[]>([]);
   const { t } = useTranslation("settings");
-  const [loading, setLoading] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [editing, setEditing] = useState<BanEntry | null>(null);
   const [dirty, setDirty] = useState(false);
 
-  // Listen for ban-list events and request the list on mount. The listener
-  // registration must complete BEFORE the request goes out: `listen()` is an
-  // async IPC round-trip, and a fast (local) server can answer before an
-  // un-awaited registration commits. Tauri does not replay events to late
-  // subscribers, so losing that race left the tab on "Loading..." forever.
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: (() => void) | null = null;
-    (async () => {
-      const un = await listen<BanEntry[]>("ban-list", (event) => {
-        setBans(event.payload);
-        setLoading(false);
-        setSelectedIdx(null);
-        setEditing(null);
-        setDirty(false);
-      });
-      if (cancelled) {
-        un();
-        return;
-      }
-      unlisten = un;
-      setLoading(true);
-      invoke("request_ban_list").catch(() => setLoading(false));
-    })();
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
+  // Every list that arrives is the server's: whatever was being edited
+  // against the old one is gone, saved or refused.
+  const onList = useCallback(() => {
+    setSelectedIdx(null);
+    setEditing(null);
+    setDirty(false);
   }, []);
-
-  const handleRefresh = useCallback(() => {
-    setLoading(true);
-    invoke("request_ban_list").catch(() => setLoading(false));
-  }, []);
+  const { bans, setBans, loading, refresh: handleRefresh, save: send, refusal } = useBanList(onList);
 
   const handleSelect = useCallback(
     (idx: number) => {
@@ -100,14 +73,11 @@ export function BanListTab() {
     const finalBans =
       selectedIdx != null && editing ? bans.map((b, i) => (i === selectedIdx ? { ...editing } : b)) : bans;
     try {
-      await invoke("update_ban_list", { bans: finalBans });
-      setDirty(false);
-      // Refresh from server.
-      handleRefresh();
+      await send(finalBans);
     } catch (err) {
       console.error("Failed to update ban list:", err);
     }
-  }, [bans, selectedIdx, editing, handleRefresh]);
+  }, [bans, selectedIdx, editing, send]);
 
   return (
     <>
@@ -134,6 +104,12 @@ export function BanListTab() {
           </button>
         )}
       </div>
+
+      {refusal !== null && (
+        <p role="alert" className={styles.errorText}>
+          {refusal ? t("banList.refused", { reason: refusal }) : t("banList.refusedNoReason")}
+        </p>
+      )}
 
       <div className={styles.splitView}>
         {/* Ban list */}
@@ -174,7 +150,7 @@ export function BanListTab() {
                 <TextInput
                   type="text"
                   value={editing.address}
-                  onChange={(e) => patchEditing({ address: e.target.value })}
+                  onChange={(e) => patchEditing(withAddress(editing, e.target.value))}
                   onBlur={handleApplyEdit}
                 />
               </Field>
@@ -182,7 +158,7 @@ export function BanListTab() {
                 <TextInput
                   type="number"
                   min={0}
-                  max={128}
+                  max={maxMask(editing.address)}
                   value={editing.mask}
                   onChange={(e) => patchEditing({ mask: Number(e.target.value) })}
                   onBlur={handleApplyEdit}

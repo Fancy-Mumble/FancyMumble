@@ -198,7 +198,8 @@ function HtmlField({ setting, value, onChange }: FieldProps) {
  */
 function HtmlPreview({ html, label }: Readonly<{ html: string; label: string }>) {
   const { t } = useTranslation("settings");
-  const clean = useMemo(() => sanitizeHtml(html), [html]);
+  // Drawn as the welcome dialog draws it, boxes padded as there.
+  const clean = useMemo(() => sanitizeHtml(html, { padBoxes: true }), [html]);
   return (
     <Box
       aria-label={t("serverSettings.previewOf", { label })}

@@ -35,6 +35,14 @@ message PageInfo {
   bool more = 1;
   // Pass as Cursor.before_id of the next request.
   string next_before_id = 2;
+  // Pass as Cursor.after_id of the next request, when walking forward.
+  //
+  // Empty on a forward page that was not cut off, which is how a reader knows
+  // it has caught up with the newest entry and may follow the live tail
+  // instead of asking again. A backward page leaves this empty and fills
+  // `next_before_id`; the direction a caller walked is the direction it
+  // continues in.
+  string next_after_id = 3;
 }
 
 // The coordinate every message-scoped feature shares: reactions, pins,

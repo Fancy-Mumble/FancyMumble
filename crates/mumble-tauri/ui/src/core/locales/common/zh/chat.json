@@ -381,6 +381,10 @@
     "hidePending": "隐藏发送状态",
     "hide": "隐藏"
   },
+  "historyRefused": {
+    "title": "无法加载更早的消息",
+    "retry": "重新加载更早的消息"
+  },
   "quotePreview": {
     "mediaFallback": "媒体",
     "remove": "移除引用"

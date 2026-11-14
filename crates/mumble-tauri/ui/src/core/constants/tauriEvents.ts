@@ -32,6 +32,7 @@ export enum TauriEvent {
   OnboardingConfig = "onboarding-config",
   OnboardingResponse = "onboarding-response",
   PchatFetchComplete = "pchat-fetch-complete",
+  PchatFetchRefused = "pchat-fetch-refused",
   PchatHistoryLoading = "pchat-history-loading",
   PchatKeyHoldersChanged = "pchat-key-holders-changed",
   PchatKeyRestored = "pchat-key-restored",

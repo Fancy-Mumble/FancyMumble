@@ -55,6 +55,9 @@ export default function UserInfoPanel({ stats }: Readonly<Props>) {
 
       {/* Bandwidth */}
       <BandwidthInfo stats={stats} />
+
+      {/* Per-device stats: only admins get them, only for 2+ devices */}
+      {stats.devices && stats.devices.length > 0 && <DevicesSection devices={stats.devices} />}
     </>
   );
 }
@@ -240,6 +243,28 @@ function PacketStatsRow({ label, data }: Readonly<{ label: string; data: PacketS
       </td>
       <td>{data.resync}</td>
     </tr>
+  );
+}
+
+/**
+ * The devices a registered account is online from, each opening to the same
+ * sections the user's own stats are drawn with.  The server sends the list
+ * only to administrators, and only for an account on two or more devices.
+ */
+function DevicesSection({ devices }: Readonly<{ devices: readonly UserStats[] }>) {
+  const { t } = useTranslation("sidebar");
+  return (
+    <section className={styles.section}>
+      <h3 className={styles.sectionTitle}>{t("userInfo.devices")}</h3>
+      {devices.map((device) => (
+        <details key={device.session} className={styles.device}>
+          <summary className={styles.deviceSummary}>
+            {device.device_name?.trim() || t("userInfo.deviceFallback", { session: device.session })}
+          </summary>
+          <UserInfoPanel stats={device} />
+        </details>
+      ))}
+    </section>
   );
 }
 

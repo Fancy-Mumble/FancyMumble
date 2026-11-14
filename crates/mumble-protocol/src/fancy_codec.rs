@@ -674,6 +674,23 @@ mod tests {
     }
 
     #[test]
+    fn neither_codec_carries_a_read_state_query() {
+        // The canon models a receipt as a relayed event, not stored state, and
+        // the relay keeps server-only messages off a server: a query reaches
+        // no server at all, so the client no longer sends one.
+        let state = state_with_users();
+        let query = || {
+            ControlMessage::FancyReadReceipt(mumble_tcp::FancyReadReceipt {
+                channel_id: Some(0),
+                query: Some(true),
+                ..Default::default()
+            })
+        };
+        assert!(NativeCodec.encode(query(), &state).is_none());
+        assert!(LegacyCodec.encode(query(), &state).is_none());
+    }
+
+    #[test]
     fn legacy_codec_wraps_sender_key_distribution() {
         let codec = LegacyCodec;
         let state = state_with_users();

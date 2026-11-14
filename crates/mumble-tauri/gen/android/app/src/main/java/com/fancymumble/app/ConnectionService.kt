@@ -1,5 +1,6 @@
 package com.fancymumble.app
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.drawable.Icon
 import android.os.Build
@@ -33,6 +35,25 @@ class ConnectionService : Service() {
         private const val EXTRA_SERVER_NAME = "server_name"
         private const val EXTRA_CHANNEL_NAME = "channel_name"
         const val ACTION_DISCONNECT = "com.fancymumble.app.ACTION_DISCONNECT"
+        private const val ACTION_REFRESH = "com.fancymumble.app.ACTION_REFRESH"
+
+        /** Whether the service is up, so a refresh never starts one. */
+        @Volatile
+        private var running = false
+
+        /**
+         * Claim the foreground again, with the types the app is now allowed:
+         * the microphone, once granted after the service started without it.
+         */
+        fun refreshForeground(context: Context) {
+            if (!running) return
+            val intent = Intent(context, ConnectionService::class.java).setAction(ACTION_REFRESH)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
 
         fun start(context: Context, serverName: String) {
             val intent = Intent(context, ConnectionService::class.java).apply {
@@ -66,14 +87,20 @@ class ConnectionService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /** What the notification shows, kept so a refresh can show it again. */
+    private var serverName = "server"
+    private var channelName: String? = null
+
     override fun onCreate() {
         super.onCreate()
+        running = true
         createNotificationChannel()
         acquireWakeLock()
         audioRoute = VoiceAudioRoute(this).also { it.acquire() }
     }
 
     override fun onDestroy() {
+        running = false
         audioRoute?.release()
         audioRoute = null
         releaseWakeLock()
@@ -106,16 +133,23 @@ class ConnectionService : Service() {
             return START_NOT_STICKY
         }
 
-        val serverName = intent?.getStringExtra(EXTRA_SERVER_NAME) ?: "server"
-        val channelName = intent?.getStringExtra(EXTRA_CHANNEL_NAME)
+        if (intent?.action != ACTION_REFRESH) {
+            serverName = intent?.getStringExtra(EXTRA_SERVER_NAME) ?: "server"
+            channelName = intent?.getStringExtra(EXTRA_CHANNEL_NAME)
+        }
         val notification = buildNotification(serverName, channelName)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            // From API 34 a service may claim the microphone only while the
+            // microphone is granted; claiming it without throws, and the app
+            // dies on connecting. Text works without it.
+            val microphone = if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+            ) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
             startForeground(
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING
-                    or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING or microphone
             )
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // Below API 34 a type is optional and NONE is how it is left out.

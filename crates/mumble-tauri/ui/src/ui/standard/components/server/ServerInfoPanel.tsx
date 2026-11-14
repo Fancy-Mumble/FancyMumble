@@ -271,7 +271,7 @@ export default function ServerInfoPanel({ onClose }: ServerInfoPanelProps) {
           {welcomeText && (
             <section className={styles.section}>
               <Accordion title={t("infoPanel.accordionWelcome")}>
-                <SafeHtml html={welcomeText} className={styles.welcomeText} />
+                <SafeHtml html={welcomeText} className={styles.welcomeText} padBoxes />
               </Accordion>
             </section>
           )}

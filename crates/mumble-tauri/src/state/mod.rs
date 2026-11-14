@@ -31,13 +31,14 @@ mod event_handler;
 mod file_server;
 pub use file_server::{
     AdminDeleteDocumentRequest, AdminDeleteRequest, AdminListRequest, AdminPreviewRequest,
-    DownloadBytesRequest, DownloadRequest, PrivateStorageRequest, UploadBinaryRequest,
-    UploadBytesRequest, UploadRequest, UploadResponse,
+    DownloadBytesRequest, DownloadCredential, DownloadRequest, FileAccessMode,
+    PrivateStorageRequest, UploadBinaryRequest, UploadBytesRequest, UploadRequest, UploadResponse,
 };
 mod handler;
 pub(crate) mod host;
 pub(crate) use handler::link_preview::LinkEmbed;
-pub(crate) use handler::{LiverySnapshot, data_uri, to_snapshot};
+pub(crate) use handler::gifs::{GifPagePayload, GifRefusedPayload, GifSupportPayload};
+pub(crate) use handler::{LiveryPalette, LiverySnapshot, data_uri, to_snapshot};
 mod account;
 mod account_seal;
 mod audit;
@@ -45,11 +46,13 @@ pub(crate) mod canon_emotes;
 pub(crate) mod hash_names;
 mod invites;
 pub(crate) mod local_cache;
+pub(crate) mod livery_probe;
 mod local_talking;
 pub(crate) mod media_server;
 mod messaging;
 pub mod offload;
 mod offload_ops;
+pub(crate) use offload_ops::OFFLOADED_PREFIX;
 mod onboarding;
 pub(crate) mod operator_http;
 mod overlay_query;

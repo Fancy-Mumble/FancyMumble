@@ -25,6 +25,17 @@ pub(crate) fn display_font(theme: &Theme) -> SharedString {
     }
 }
 
+/// The display face for type set `size` pixels high. A browser follows the
+/// size along Inter's optical-size axis, which stops at 32; the bundled
+/// cuts are 24 and 32, and the nearer one is taken.
+pub(crate) fn display_font_at(theme: &Theme, size: f32) -> SharedString {
+    if theme.skin.font.as_ref() == "Inter" && size >= 28.0 {
+        "Inter Display Large".into()
+    } else {
+        display_font(theme)
+    }
+}
+
 /// `color` as it looks painted over `ground`, with no transparency left.
 ///
 /// For a surface that floats over other content. Themes with glass give
@@ -57,6 +68,8 @@ pub(crate) enum Zone {
     /// The system's, with the offset it had at the time being read: a
     /// message from last summer is shown in summer time.
     Local,
+    /// Universal time, for a reader who asked not to have times converted.
+    Utc,
     /// This many seconds east of UTC, always: a clock a test can rely on.
     #[cfg(test)]
     Fixed(i64),
@@ -70,6 +83,7 @@ impl Zone {
         match self {
             #[cfg(test)]
             Self::Fixed(seconds) => seconds,
+            Self::Utc => 0,
             Self::Local => i64::try_from(at_ms)
                 .ok()
                 .and_then(|at| chrono::Local.timestamp_millis_opt(at).single())
@@ -84,23 +98,52 @@ impl Zone {
     }
 }
 
-/// `HH:MM` on `zone`, for a Unix epoch time in milliseconds; nothing for a
-/// message that carries no time.
-pub(crate) fn clock(sent_at_ms: Option<u64>, zone: Zone) -> String {
-    let Some(sent_at_ms) = sent_at_ms else {
-        return String::new();
-    };
-    let minutes = zone.wall_seconds(sent_at_ms).div_euclid(60);
-    format!(
-        "{:02}:{:02}",
-        (minutes / 60).rem_euclid(24),
-        minutes.rem_euclid(60)
-    )
+/// How a time of day is read: on which clock, counted in which hours.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Clock {
+    pub zone: Zone,
+    pub hours: crate::store::Hours,
+}
+
+impl Clock {
+    /// The time of day of `sent_at_ms`, a Unix epoch time in milliseconds;
+    /// nothing for a message that carries no time.
+    pub(crate) fn read(self, sent_at_ms: Option<u64>) -> String {
+        let Some(sent_at_ms) = sent_at_ms else {
+            return String::new();
+        };
+        let minutes = self.zone.wall_seconds(sent_at_ms).div_euclid(60);
+        let (hour, minute) = ((minutes / 60).rem_euclid(24), minutes.rem_euclid(60));
+        match self.hours {
+            crate::store::Hours::Twelve => {
+                // Twelve stands where a count from zero would have nought.
+                let shown = match hour % 12 {
+                    0 => 12,
+                    hour => hour,
+                };
+                #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "an hour and a minute")]
+                let (shown, minute) = (shown as u32, minute as u32);
+                crate::formats::twelve_hours(crate::words::spoken(), shown, minute, hour < 12)
+            }
+            crate::store::Hours::Auto | crate::store::Hours::TwentyFour => {
+                format!("{hour:02}:{minute:02}")
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A time of day on the twenty-four hour clock.
+    fn clock(sent_at_ms: Option<u64>, zone: Zone) -> String {
+        Clock {
+            zone,
+            hours: crate::store::Hours::TwentyFour,
+        }
+        .read(sent_at_ms)
+    }
 
     #[test]
     fn a_translucent_colour_flattens_onto_its_ground() {
@@ -133,5 +176,20 @@ mod tests {
             "an hour west, the day before"
         );
         assert_eq!(clock(None, Zone::Fixed(0)), "");
+        // Counted in twelves: midnight and noon are twelve, not nought.
+        let twelve = Clock {
+            zone: Zone::Fixed(0),
+            hours: crate::store::Hours::Twelve,
+        };
+        // With two digits for the hour, as the web client writes it.
+        assert_eq!(twelve.read(Some(0)), "12:00 AM");
+        assert_eq!(twelve.read(Some(1_760_045_820_000)), "09:37 PM");
+        assert_eq!(twelve.read(Some(12 * 3_600_000 + 5 * 60_000)), "12:05 PM");
+        assert_eq!(twelve.read(None), "");
+        let auto = Clock {
+            zone: Zone::Fixed(0),
+            hours: crate::store::Hours::Auto,
+        };
+        assert_eq!(auto.read(Some(1_760_045_820_000)), "21:37");
     }
 }

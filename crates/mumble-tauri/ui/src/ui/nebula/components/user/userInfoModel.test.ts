@@ -5,9 +5,12 @@ import {
   certificateLabel,
   codecLabel,
   describeBans,
+  deviceName,
+  devicesOf,
   joinedAt,
   lossPercent,
   osLabel,
+  plainViewerStats,
   sampleOf,
   SAMPLE_WINDOW,
   viewerIsAdmin,
@@ -173,5 +176,26 @@ describe("describeBans", () => {
       count: 1,
       note: { key: "nebulaUser:info.bansOnRecord" },
     });
+  });
+});
+
+describe("devices", () => {
+  const LAPTOP: UserStats = { ...STATS, session: 27, device_name: "Laptop" };
+  const PHONE: UserStats = { ...STATS, session: 28, device_name: "  " };
+
+  it("lists the devices the server sent, and none where it sent none", () => {
+    expect(devicesOf({ ...STATS, devices: [LAPTOP, PHONE] })).toEqual([LAPTOP, PHONE]);
+    expect(devicesOf(STATS)).toEqual([]);
+    expect(devicesOf(null)).toEqual([]);
+  });
+
+  it("names a device by its own name, and leaves a blank one to the fallback", () => {
+    expect(deviceName(LAPTOP)).toBe("Laptop");
+    expect(deviceName(PHONE)).toBeNull();
+    expect(deviceName(STATS)).toBeNull();
+  });
+
+  it("keeps the device list from the member's view, as the server does", () => {
+    expect(devicesOf(plainViewerStats({ ...STATS, devices: [LAPTOP] }, false))).toEqual([]);
   });
 });

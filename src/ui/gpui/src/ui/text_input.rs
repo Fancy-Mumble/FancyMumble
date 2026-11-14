@@ -13,13 +13,16 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use gpui::{
-    Bounds, ClipboardItem, Context, ElementInputHandler, EntityInputHandler, EventEmitter,
+    AnyView, Bounds, ClipboardItem, Context, ElementInputHandler, EntityInputHandler, EventEmitter,
     FocusHandle, Focusable, HighlightStyle, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent,
-    MouseMoveEvent, ParentElement, Pixels, Point, Render, SharedString, Styled, StyledText,
-    TextLayout, UTF16Selection, Window, canvas, div, fill, prelude::*, px, size,
+    MouseMoveEvent, ParentElement, Pixels, Point, Render, SharedString, Size, Styled, StyledText,
+    TextLayout, UTF16Selection, Window, canvas, div, fill, point, prelude::*, px, size,
 };
 
-use crate::theme::ActiveTheme;
+use super::marking::{Draft, Mark, Rewritten};
+use super::widgets::EMPHASIS;
+use crate::engine::Setting;
+use crate::theme::{ActiveTheme, Theme};
 
 /// What a [`TextInput`] tells whoever holds it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +42,9 @@ pub(crate) enum InputEvent {
     /// A picture was pasted: its encoded bytes. Only a field that asked
     /// for pictures says this.
     PastedPicture(Vec<u8>),
+    /// A key that belongs to the list open over the field was pressed:
+    /// said instead of what the key does in the field, while there is one.
+    Pick(super::mention::Pick),
 }
 
 /// The text of a field, its caret and its selection: the editing itself,
@@ -113,6 +119,19 @@ impl Line {
     fn select_all(&mut self) {
         self.anchor = 0;
         self.caret = self.text.len();
+    }
+
+    /// Take `rewritten` as the text, with what it says is selected
+    /// selected, its moving end where the moving end was.
+    fn rewrite(&mut self, rewritten: Rewritten) {
+        let Rewritten { text, selected } = rewritten;
+        let backwards = self.caret < self.anchor;
+        self.text = text;
+        (self.anchor, self.caret) = if backwards {
+            (selected.end, selected.start)
+        } else {
+            (selected.start, selected.end)
+        };
     }
 
     /// Select the word `offset` is in or beside: the run of letters and
@@ -192,8 +211,35 @@ impl Line {
 /// What each character of a password is drawn as.
 const DOT: &str = "•";
 
+/// Says how the stretches of what is typed will be set once it is sent: in
+/// order, not overlapping, the plain ones left out.
+pub(crate) type ReadsMarks = Rc<dyn Fn(&str) -> Vec<(Range<usize>, Setting)>>;
+
+/// Where a field's selection is on screen, for what floats over it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Spot {
+    /// What is selected of the first line the selection is on.
+    pub selected: Bounds<Pixels>,
+    /// Where the field's text is drawn.
+    pub field: Bounds<Pixels>,
+    /// The size of what floats, laid out.
+    pub size: Size<Pixels>,
+    /// The window's size.
+    pub room: Size<Pixels>,
+}
+
+/// What floats over a field's selection while there is one: a view, and
+/// where it stands for the place the selection is.
+struct OverSelection {
+    view: AnyView,
+    stand: fn(Spot) -> Point<Pixels>,
+}
+
 /// A text field.
 pub(crate) struct TextInput {
+    /// What reads the marks typed for emphasis, in a field that sets what
+    /// is typed the way it will be sent: the composer.
+    marks: Option<ReadsMarks>,
     line: Line,
     /// Text an input method is still composing, as a byte range.
     marked: Option<Range<usize>>,
@@ -202,6 +248,9 @@ pub(crate) struct TextInput {
     obscured: bool,
     /// Whether Shift+Enter starts a new line.
     multiline: bool,
+    /// Whether a list is open over the field: the arrows, Enter, Tab and
+    /// Escape are then the list's.
+    picking: bool,
     /// Whether a pasted picture is passed on rather than ignored.
     takes_pictures: bool,
     /// Where the text was laid out in the frame last painted: what turns a
@@ -210,6 +259,12 @@ pub(crate) struct TextInput {
     layout: Rc<RefCell<Option<TextLayout>>>,
     /// Whether the pointer is dragging out a selection.
     selecting: bool,
+    /// What floats over the selection, if anything does.
+    over_selection: Option<OverSelection>,
+    /// Whether the text has run to a second line since the field was last
+    /// empty: a latch, so that putting a hint away, which gives its width
+    /// back, cannot unwrap the line and bring the hint back.
+    broken: std::cell::Cell<bool>,
     focus: FocusHandle,
 }
 
@@ -225,15 +280,20 @@ impl TextInput {
     /// An empty field showing `placeholder` until something is typed.
     pub(crate) fn new(placeholder: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
         Self {
+            marks: None,
             line: Line::default(),
             marked: None,
             placeholder: placeholder.into(),
             obscured: false,
             multiline: false,
+            picking: false,
             takes_pictures: false,
             layout: Rc::default(),
             selecting: false,
-            focus: cx.focus_handle(),
+            over_selection: None,
+            broken: std::cell::Cell::new(false),
+            // Tab reaches the field in its place among the window's stops.
+            focus: cx.focus_handle().tab_stop(true),
         }
     }
 
@@ -247,6 +307,145 @@ impl TextInput {
     pub(crate) fn multiline(mut self) -> Self {
         self.multiline = true;
         self
+    }
+
+    /// The same field, setting what is typed the way `reads` says it will
+    /// be sent - `**this**` heavier, its marks faint - with keys and, over
+    /// a selection, buttons that put the marks there.
+    pub(crate) fn setting_marks(mut self, reads: ReadsMarks) -> Self {
+        self.marks = Some(reads);
+        self
+    }
+
+    /// Set the selection apart with `mark`, or stop setting it apart: what
+    /// its key and its button on the format bar do.
+    pub(crate) fn toggle_mark(&mut self, mark: Mark, cx: &mut Context<Self>) {
+        self.rewrite_selection(|draft| draft.toggle(mark), cx);
+    }
+
+    /// `look` at what is selected and how the text is read, in a field that
+    /// reads marks, while something is selected.
+    pub(crate) fn read_selection<R>(&self, look: impl FnOnce(&Draft) -> R) -> Option<R> {
+        let reads = self.marks.as_ref()?;
+        let selected = self.line.selection();
+        if selected.is_empty() {
+            return None;
+        }
+        let read = reads(&self.line.text);
+        Some(look(&Draft::new(&self.line.text, selected, read)))
+    }
+
+    /// Change the text and what is selected in it as `change` says, in a
+    /// field that reads marks.
+    pub(crate) fn rewrite_selection(
+        &mut self,
+        change: impl FnOnce(&Draft) -> Rewritten,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(reads) = self.marks.clone() else {
+            return;
+        };
+        let before = self.line.clone();
+        let read = reads(&before.text);
+        self.line
+            .rewrite(change(&Draft::new(&before.text, before.selection(), read)));
+        self.marked = None;
+        self.after_edit(&before, cx);
+    }
+
+    /// Float `view` over the selection while there is one, standing where
+    /// `stand` says.
+    pub(crate) fn float_over_selection(&mut self, view: AnyView, stand: fn(Spot) -> Point<Pixels>) {
+        self.over_selection = Some(OverSelection { view, stand });
+    }
+
+    /// What floats over the selection.
+    #[cfg(test)]
+    pub(crate) fn floating(&self) -> Option<AnyView> {
+        self.over_selection.as_ref().map(|over| over.view.clone())
+    }
+
+    /// Where the selection is, in bytes.
+    #[cfg(test)]
+    pub(crate) fn selection(&self) -> Range<usize> {
+        self.line.selection()
+    }
+
+    /// A key the window has bound to something of its own was pressed in
+    /// this field: where marks are set, and the field has the keyboard, it
+    /// sets `mark`; anywhere else it is the window's.
+    fn take_back(&mut self, mark: Mark, window: &Window, cx: &mut Context<Self>) {
+        if self.marks.is_some() && self.focus.is_focused(window) {
+            self.toggle_mark(mark, cx);
+        } else {
+            cx.propagate();
+        }
+    }
+
+    /// The window's key for its column: bold, while writing.
+    fn on_column_key(
+        &mut self,
+        _: &super::keys::ToggleColumn,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.take_back(Mark::Bold, window, cx);
+    }
+
+    /// The window's key for its members: underlined, while writing.
+    fn on_members_key(
+        &mut self,
+        _: &super::keys::ToggleMembers,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.take_back(Mark::Underlined, window, cx);
+    }
+
+    /// Tab was pressed in this field: while a list is open over it, Tab
+    /// takes from the list; otherwise the keyboard goes on to the window's
+    /// next stop.
+    fn on_tab_key(&mut self, _: &super::keys::FocusNext, _: &mut Window, cx: &mut Context<Self>) {
+        if self.picking {
+            cx.emit(InputEvent::Pick(super::mention::Pick::Take));
+        } else {
+            cx.propagate();
+        }
+    }
+
+    /// The mark `keystroke` sets the selection apart by, in a field that
+    /// sets marks and has the keyboard: not one whose keys only pass
+    /// through it from a field floating over it.
+    fn mark_key(&self, keystroke: &gpui::Keystroke, window: &Window) -> Option<Mark> {
+        let modifiers = keystroke.modifiers;
+        let command = (modifiers.control || modifiers.platform) && !modifiers.alt;
+        if self.marks.is_none() || !command || !self.focus.is_focused(window) {
+            return None;
+        }
+        Mark::ALL
+            .into_iter()
+            .find(|mark| mark.key() == (keystroke.key.as_str(), modifiers.shift))
+    }
+
+    /// Say whether a list is open over the field, which takes its arrows,
+    /// Enter, Tab and Escape while it is.
+    pub(crate) fn set_picking(&mut self, picking: bool) {
+        self.picking = picking;
+    }
+
+    /// The step in the list open over the field that `key` is, if it is one.
+    fn pick_key(&self, key: &str, shift: bool) -> Option<super::mention::Pick> {
+        use super::mention::Pick;
+        if !self.picking || shift {
+            return None;
+        }
+        match key {
+            "up" => Some(Pick::Up),
+            "down" => Some(Pick::Down),
+            "enter" | "tab" => Some(Pick::Take),
+            "escape" => Some(Pick::Leave),
+            _ => None,
+        }
     }
 
     /// The same field, drawing what is typed as dots.
@@ -297,9 +496,19 @@ impl TextInput {
 
     /// Keys that are not text. Text itself is left to propagate, and comes
     /// back through the input handler once the platform has made it text.
-    fn on_key(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
+    fn on_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let keystroke = &event.keystroke;
         let command = keystroke.modifiers.control || keystroke.modifiers.platform;
+        if let Some(mark) = self.mark_key(keystroke, window) {
+            cx.stop_propagation();
+            self.toggle_mark(mark, cx);
+            return;
+        }
+        if let Some(pick) = self.pick_key(&keystroke.key, keystroke.modifiers.shift) {
+            cx.stop_propagation();
+            cx.emit(InputEvent::Pick(pick));
+            return;
+        }
         let before = self.line.clone();
         let handled = match keystroke.key.as_str() {
             "enter" if self.multiline && keystroke.modifiers.shift => {
@@ -420,6 +629,25 @@ impl TextInput {
             .char_indices()
             .nth(offset / DOT.len())
             .map_or(self.line.text.len(), |(at, _)| at)
+    }
+
+    /// Whether the text has run to more than one line, by a break typed
+    /// into it or by a line too long for the field, since the field was
+    /// last empty (the web composer's `hintSpent`): what its newline hint
+    /// asks before it stands.
+    pub(crate) fn has_broken(&self) -> bool {
+        if self.line.text.is_empty() {
+            self.broken.set(false);
+            return false;
+        }
+        let runs_over = self.line.text.contains('\n')
+            || self.layout.borrow().as_ref().is_some_and(|layout| {
+                layout.bounds().size.height > layout.line_height() * 1.5
+            });
+        if runs_over {
+            self.broken.set(true);
+        }
+        self.broken.get()
     }
 
     /// The place in the text nearest `position` in the window.
@@ -606,28 +834,24 @@ impl Render for TextInput {
         let focused = self.focus.is_focused(window);
         let caret_ink = theme.c.accent_text;
         let empty = self.line.text.is_empty();
+        let selection = self.line.selection();
+        let selected = self.text_to_drawn(selection.start)..self.text_to_drawn(selection.end);
         let text = (!empty).then(|| {
-            let selection = self.line.selection();
-            let selected = self.text_to_drawn(selection.start)..self.text_to_drawn(selection.end);
             let marked = self
                 .marked
                 .as_ref()
                 .map(|range| self.text_to_drawn(range.start)..self.text_to_drawn(range.end));
+            // A password is drawn as dots, and dots are not read for marks.
+            let typed = self
+                .marks
+                .as_ref()
+                .filter(|_| !self.obscured)
+                .map(|reads| reads(&self.line.text))
+                .unwrap_or_default();
             StyledText::new(self.shown(&self.line.text)).with_highlights(
-                marks(selected, marked)
+                stretches(selected.clone(), marked, &typed)
                     .into_iter()
-                    .map(|(range, selected, composing)| {
-                        let style = HighlightStyle {
-                            background_color: selected.then_some(theme.c.accent_soft),
-                            underline: composing.then(|| gpui::UnderlineStyle {
-                                thickness: px(1.0),
-                                color: Some(caret_ink),
-                                wavy: false,
-                            }),
-                            ..HighlightStyle::default()
-                        };
-                        (range, style)
-                    }),
+                    .map(|(range, drawn)| (range, drawn.style(&theme))),
             )
         });
         // What the pointer can be mapped against: this frame's text, once
@@ -636,6 +860,14 @@ impl Render for TextInput {
         if layout.is_none() {
             *self.layout.borrow_mut() = None;
         }
+        // Over a selection: what floats there, placed once this frame's text
+        // says where that is.
+        let floating = self
+            .over_selection
+            .as_ref()
+            .filter(|_| !selection.is_empty())
+            .zip(layout.clone())
+            .map(|(over, layout)| (over.view.clone(), over.stand, layout));
         let painted = Rc::clone(&self.layout);
         let caret_at = self.text_to_drawn(self.line.caret);
         let entity = cx.entity();
@@ -648,6 +880,12 @@ impl Render for TextInput {
             .min_w_0()
             .cursor_text()
             .track_focus(&self.focus)
+            // The key that puts the window's column away is, while
+            // writing, the key that sets bold: a bound key is the window's
+            // before it is a key press, so it is taken back here.
+            .on_action(cx.listener(Self::on_column_key))
+            .on_action(cx.listener(Self::on_members_key))
+            .on_action(cx.listener(Self::on_tab_key))
             .on_key_down(cx.listener(Self::on_key))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
@@ -677,7 +915,11 @@ impl Render for TextInput {
             // each frame it has focus, that text typed now belongs to it.
             .child(
                 canvas(
-                    |_, _, _| {},
+                    move |_, window, cx| {
+                        if let Some((view, stand, layout)) = floating {
+                            float_over(view, stand, &layout, &selected, window, cx);
+                        }
+                    },
                     move |bounds, (), window, cx| {
                         window.handle_input(&focus, ElementInputHandler::new(bounds, entity), cx);
                         let Some(layout) = layout else { return };
@@ -694,14 +936,112 @@ impl Render for TextInput {
     }
 }
 
-/// The stretches of drawn text that are selected or being composed, in
-/// order and not overlapping, each with which of the two it is.
-fn marks(
+/// Draw `view` over everything else, where `stand` says for the selection
+/// `selected` (as drawn) of `layout`.
+fn float_over(
+    view: AnyView,
+    stand: fn(Spot) -> Point<Pixels>,
+    layout: &TextLayout,
+    selected: &Range<usize>,
+    window: &mut Window,
+    cx: &mut gpui::App,
+) {
+    let Some(start) = layout.position_for_index(selected.start) else {
+        return;
+    };
+    // The field is where its text is drawn: the box the field is laid out
+    // in can stand lower than its first line.
+    let field = layout.bounds();
+    // To where it ends, or to the end of the line where it goes on.
+    let end = layout
+        .position_for_index(selected.end)
+        .filter(|end| end.y == start.y)
+        .map_or(field.right(), |end| end.x);
+    let mut floating = view.into_any_element();
+    let room = size(
+        gpui::AvailableSpace::MaxContent,
+        gpui::AvailableSpace::MinContent,
+    );
+    let size = floating.layout_as_root(room, window, cx);
+    let spot = Spot {
+        selected: Bounds::from_corners(start, point(end, start.y + layout.line_height())),
+        field,
+        size,
+        room: window.viewport_size(),
+    };
+    window.defer_draw(floating, stand(spot), 1);
+}
+
+/// How a stretch of the field is drawn apart from plain text.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Drawn {
+    selected: bool,
+    /// Still being composed by an input method.
+    composing: bool,
+    /// How it will be set once sent, in a field that reads marks.
+    setting: Setting,
+}
+
+impl Drawn {
+    fn style(self, theme: &Theme) -> HighlightStyle {
+        let setting = self.setting;
+        HighlightStyle {
+            // The marks are there to be edited, and faint, since the
+            // message will not show them.
+            color: if setting.mark {
+                Some(theme.c.dim)
+            } else if setting.linked {
+                Some(theme.c.accent_text)
+            } else {
+                setting.quoted.then_some(theme.c.muted)
+            },
+            font_weight: setting.bold.then_some(EMPHASIS),
+            font_style: setting.italic.then_some(gpui::FontStyle::Italic),
+            // What will be hidden is on the ground code is, while it is
+            // typed: its writer has to see it.
+            background_color: if self.selected {
+                Some(theme.c.accent_soft)
+            } else {
+                ((setting.code || setting.hidden) && !setting.mark).then_some(theme.c.card2)
+            },
+            underline: if self.composing {
+                Some(gpui::UnderlineStyle {
+                    thickness: px(1.0),
+                    color: Some(theme.c.accent_text),
+                    wavy: false,
+                })
+            } else {
+                ((setting.underlined || setting.linked) && !setting.mark).then(|| {
+                    gpui::UnderlineStyle {
+                        thickness: px(1.0),
+                        color: None,
+                        wavy: false,
+                    }
+                })
+            },
+            strikethrough: (setting.struck && !setting.mark).then(|| gpui::StrikethroughStyle {
+                thickness: px(1.0),
+                color: None,
+            }),
+            fade_out: None,
+        }
+    }
+}
+
+/// The stretches of drawn text that are selected, being composed or set
+/// apart by a mark, in order and not overlapping, each with which of those
+/// it is. `typed` is in order and does not overlap itself.
+fn stretches(
     selected: Range<usize>,
     composing: Option<Range<usize>>,
-) -> Vec<(Range<usize>, bool, bool)> {
+    typed: &[(Range<usize>, Setting)],
+) -> Vec<(Range<usize>, Drawn)> {
     let composing = composing.unwrap_or(0..0);
-    let mut cuts = vec![selected.start, selected.end, composing.start, composing.end];
+    let mut cuts: Vec<usize> = [&selected, &composing]
+        .into_iter()
+        .chain(typed.iter().map(|(range, _)| range))
+        .flat_map(|range| [range.start, range.end])
+        .collect();
     cuts.sort_unstable();
     cuts.dedup();
     cuts.windows(2)
@@ -709,8 +1049,16 @@ fn marks(
             let range = cut[0]..cut[1];
             let within =
                 |other: &Range<usize>| other.start <= range.start && range.end <= other.end;
-            let (is_selected, is_composing) = (within(&selected), within(&composing));
-            (is_selected || is_composing).then_some((range, is_selected, is_composing))
+            let drawn = Drawn {
+                selected: within(&selected),
+                composing: within(&composing),
+                setting: typed
+                    .iter()
+                    .find(|(typed, _)| within(typed))
+                    .map(|(_, setting)| *setting)
+                    .unwrap_or_default(),
+            };
+            (drawn != Drawn::default()).then_some((range, drawn))
         })
         .collect()
 }
@@ -808,16 +1156,62 @@ mod tests {
     }
 
     #[test]
-    fn marked_stretches_are_cut_where_selection_and_composition_meet() {
+    fn stretches_are_cut_where_selection_composition_and_marks_meet() {
+        let drawn = |selected, composing| Drawn {
+            selected,
+            composing,
+            setting: Setting::default(),
+        };
         assert!(
-            marks(3..3, None).is_empty(),
+            stretches(3..3, None, &[]).is_empty(),
             "nothing selected, nothing composing"
         );
-        assert_eq!(marks(2..5, None), [(2..5, true, false)]);
+        assert_eq!(stretches(2..5, None, &[]), [(2..5, drawn(true, false))]);
         assert_eq!(
-            marks(2..6, Some(4..8)),
-            [(2..4, true, false), (4..6, true, true), (6..8, false, true)]
+            stretches(2..6, Some(4..8), &[]),
+            [
+                (2..4, drawn(true, false)),
+                (4..6, drawn(true, true)),
+                (6..8, drawn(false, true))
+            ]
         );
+        // "a **b** c" with "b**" selected: the bold stretch is cut at the
+        // selection's start, and stays bold on both sides of it.
+        let bold = Setting {
+            bold: true,
+            ..Setting::default()
+        };
+        let mark = Setting {
+            mark: true,
+            ..Setting::default()
+        };
+        let typed = [(2..4, mark), (4..5, bold), (5..7, mark)];
+        let cut = stretches(4..7, None, &typed);
+        let ranges: Vec<_> = cut.iter().map(|(range, _)| range.clone()).collect();
+        assert_eq!(ranges, [2..4, 4..5, 5..7], "in order, not overlapping");
+        assert_eq!(
+            cut[1].1,
+            Drawn {
+                selected: true,
+                composing: false,
+                setting: bold
+            }
+        );
+        assert!(!cut[0].1.selected && cut[0].1.setting.mark);
+    }
+
+    #[test]
+    fn a_rewrite_keeps_what_is_selected_and_its_moving_end() {
+        let rewritten = |text: &str, selected| Rewritten {
+            text: text.to_owned(),
+            selected,
+        };
+        let mut forwards = selected("so loud now", 3, 7);
+        forwards.rewrite(rewritten("so **loud** now", 5..9));
+        assert_eq!(forwards, selected("so **loud** now", 5, 9));
+        let mut backwards = selected("code", 4, 0);
+        backwards.rewrite(rewritten("`code`", 1..5));
+        assert_eq!(backwards, selected("`code`", 5, 1));
     }
 
     #[test]

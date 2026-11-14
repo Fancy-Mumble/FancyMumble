@@ -1,6 +1,19 @@
 //! An engine with nothing behind it: a small server that exists only in
 //! memory, so the view can be drawn, driven and measured on its own.
 
+pub(crate) mod livery;
+mod account;
+mod directory;
+mod onboarding;
+mod gifs;
+mod file_wire;
+mod link_cards;
+mod profiles;
+mod register;
+mod shares;
+mod voice;
+mod uploads;
+
 use std::sync::Mutex;
 
 use crate::engine::{
@@ -27,19 +40,101 @@ pub(crate) struct DemoEngine {
     state: Mutex<State>,
     events: async_channel::Sender<EngineEvent>,
     inbox: async_channel::Receiver<EngineEvent>,
+    /// The made-up recorder and player of voice messages, and what the
+    /// server allows of them.
+    voice: crate::voice::made_up::Studio,
+    /// Screen sharing with the test pattern, and what it would have sent.
+    media: std::sync::Arc<crate::share::made_up::MadeUp>,
+    /// The made-up GIF service, if the server has one, and what was sent.
+    gifs: gifs::Gifs,
+    /// What went on the wire for each share of files.
+    wire: file_wire::Wire,
+    /// Whether a message to an encrypted channel would also go out plain.
+    dual_path: std::sync::atomic::AtomicBool,
+    /// The local user's account, as the server keeps it.
+    account: Mutex<account::Desk>,
+    /// What the server asks new members, and what Alex answered.
+    questions: Mutex<onboarding::Questions>,
+    /// People on other servers, for a test: the session they are on, theirs
+    /// there, and their certificate's hash; and the session last turned to.
+    elsewhere: Mutex<Elsewhere>,
+    /// Files sent to go up, where a test moves them along by hand.
+    #[cfg(test)]
+    uploads: Mutex<uploads::Uploads>,
+}
+
+impl State {
+    /// The server said the local user's account is now called `name`, or
+    /// is gone.
+    fn account_said(&mut self, name: Option<String>, registered: bool) {
+        let Some(own) = self.users.iter_mut().find(|user| user.session == OWN) else {
+            return;
+        };
+        if let Some(name) = name {
+            own.name = name.into();
+        }
+        if !registered {
+            own.account = None;
+        }
+    }
+
+    /// Count one more message of `conversation` unread (`more` of 1), or
+    /// all of them read (`more` of 0).
+    fn count_unread(&mut self, conversation: Conversation, more: u32) {
+        let unread = match conversation {
+            Conversation::Channel(id) => self
+                .channels
+                .iter_mut()
+                .find(|channel| channel.id == id)
+                .map(|channel| &mut channel.unread),
+            Conversation::Direct(session) => self
+                .users
+                .iter_mut()
+                .find(|user| user.session == session)
+                .map(|user| &mut user.unread),
+        };
+        if let Some(unread) = unread {
+            *unread = if more == 0 { 0 } else { *unread + more };
+        }
+    }
+}
+
+/// People on other servers the demo pretends to be on, for a test: the
+/// session they are on, theirs there and their certificate's hash; and the
+/// session last turned to.
+#[derive(Debug, Default)]
+pub(crate) struct Elsewhere {
+    pub people: Vec<(String, u32, String)>,
+    pub turned_to: Option<String>,
+    /// What each whisper slot was registered with, and the slot whose key
+    /// is held.
+    pub slots: std::collections::BTreeMap<u8, mumble_tauri_lib::engine_api::whisper::WhisperReach>,
+    pub whispering: Option<u8>,
 }
 
 #[derive(Debug)]
 struct State {
     connected: bool,
+    /// The picture across the head of somebody's card, where they have one.
+    banners: std::collections::HashMap<Session, Vec<u8>>,
+    /// What there is to bring over from the web client, in a test.
+    carry: Option<crate::engine::CarryOver>,
+    /// The attempt to get a lost connection back that is waited for.
+    retry: Option<crate::engine::Retry>,
     /// Whether this is the server without anything of Fancy Mumble's.
     plain: bool,
+    /// The server's welcome message, as HTML.
+    welcome: gpui::SharedString,
     voice: Voice,
     deafened: bool,
     servers: Vec<SavedServer>,
     certificates: Vec<gpui::SharedString>,
     devices: ChosenDevices,
     voice_settings: VoiceSettings,
+    /// How the noise suppressor was last tuned.
+    tuning: std::collections::BTreeMap<String, f32>,
+    /// How the voice packets fared: none until a test says.
+    stats: Option<crate::sound_check::Stats>,
     /// Every action asked for, in order: the demo's record of what a server
     /// would have been sent.
     actions: Vec<Action>,
@@ -54,6 +149,9 @@ struct State {
     snapshots: u32,
     /// The message the view last said it had read up to.
     read_up_to: Option<gpui::SharedString>,
+    /// The conversation the view has on screen: what is said anywhere else
+    /// counts as unread until it is opened.
+    opened: Option<Conversation>,
     polls: Vec<Poll>,
     /// Who the whisper key speaks to, whether it is held, and how often
     /// a whisper has started.
@@ -62,12 +160,122 @@ struct State {
     key_requests: Vec<KeyRequest>,
     /// What the local user has asked to have sent later.
     scheduled: Vec<Scheduled>,
+    /// Who is banned.
+    bans: Vec<Ban>,
     /// The second-factor code the last connect came with.
     code: Option<String>,
     /// Where what is heard is being recorded to, while it is.
     recording: Option<std::path::PathBuf>,
     /// The shared files the view asked to have saved, and where to.
     saved: Vec<(gpui::SharedString, std::path::PathBuf)>,
+    /// What was shared: what was said with it, the files, and how.
+    shared: Vec<(String, Vec<std::path::PathBuf>, crate::engine::ShareAs)>,
+    /// The pictures among what was shared, by what they are kept under.
+    kept: std::collections::HashMap<gpui::SharedString, Vec<u8>>,
+    /// What the servers say of their liveries.
+    liveries: livery::Liveries,
+    /// The made-up members beyond the seed's people, and what was asked
+    /// of them.
+    directory: directory::Directory,
+    /// What its administrator changed in its register and its roles.
+    register: register::Register,
+    /// What people say about themselves, and the files kept for that.
+    profiles: profiles::Profiles,
+    /// The changes the local user made to their profile, in order, each
+    /// merged over what it said before.
+    own_profile: Vec<serde_json::Map<String, serde_json::Value>>,
+}
+
+/// The accounts the demo's server has registered: everybody of `users` who
+/// has one, and two who are not here, one of them never seen.
+fn registered_of(users: &[User]) -> Vec<Registered> {
+    // As a server writes it: the date and the time of day, in UTC.
+    let ago = |days: i64| -> gpui::SharedString {
+        let at = chrono::Utc::now() - chrono::Duration::days(days);
+        at.format("%Y-%m-%dT%H:%M:%SZ").to_string().into()
+    };
+    let here = users.iter().filter_map(|user| {
+        Some(Registered {
+            id: user.account?,
+            name: user.name.clone(),
+            last_seen: Some(ago(0)),
+            last_channel: Some(user.channel),
+            picture: false,
+        })
+    });
+    let away = [
+        Registered {
+            id: 120,
+            name: "Wren".into(),
+            last_seen: Some(ago(12)),
+            last_channel: Some(1),
+            picture: false,
+        },
+        Registered {
+            id: 121,
+            name: "Otto".into(),
+            last_seen: None,
+            last_channel: None,
+            picture: false,
+        },
+    ];
+    here.chain(away).collect()
+}
+
+impl State {
+    /// Every account the server has registered: the seed's, and the
+    /// made-up members it was filled with.
+    fn registered(&mut self) -> Vec<Registered> {
+        let mut all = registered_of(&self.users);
+        all.extend_from_slice(self.directory.accounts());
+        self.register.over(all)
+    }
+
+    /// The roles the server has to begin with: Rin moderates, in the
+    /// colour the server gave the role, besides the made-up members' roles.
+    /// None on the plain server.
+    fn seeded_roles(&self) -> Vec<Role> {
+        if self.plain {
+            return Vec::new();
+        }
+        let mut roles = vec![Role {
+            name: "moderators".into(),
+            color: Some(gpui::rgb(0xe0_9a4b).into()),
+            members: vec![103],
+        }];
+        roles.extend(self.directory.roles().to_vec());
+        roles
+    }
+
+    /// The roles as they are now: as seeded, or as last written.
+    fn roles(&self) -> Vec<Role> {
+        self.register.roles(self.seeded_roles())
+    }
+}
+
+/// Who the demo's server has banned to begin with: one person for good,
+/// and a network for a while.
+fn seeded_bans() -> Vec<Ban> {
+    vec![
+        Ban {
+            address: "203.0.113.7".into(),
+            mask: 32,
+            name: "Mallory".into(),
+            hash: gpui::SharedString::default(),
+            reason: "spam".into(),
+            start: "2026-01-02".into(),
+            duration_secs: 0,
+        },
+        Ban {
+            address: "198.51.100.0".into(),
+            mask: 24,
+            name: gpui::SharedString::default(),
+            hash: gpui::SharedString::default(),
+            reason: gpui::SharedString::default(),
+            start: "2026-02-03".into(),
+            duration_secs: 7200,
+        },
+    ]
 }
 
 impl DemoEngine {
@@ -106,14 +314,42 @@ impl DemoEngine {
 
     fn starting(connected: bool) -> Self {
         let (events, inbox) = async_channel::unbounded();
+        let mut state = State {
+            connected,
+            ..State::seeded()
+        };
+        link_cards::put(&mut state.messages);
         Self {
-            state: Mutex::new(State {
-                connected,
-                ..State::seeded()
-            }),
+            state: Mutex::new(state),
+            // The pattern moves in the demo, and stands still in a test.
+            media: std::sync::Arc::new(crate::share::made_up::MadeUp::new(
+                events.clone(),
+                !cfg!(test),
+            )),
             events,
             inbox,
+            voice: crate::voice::made_up::Studio::default(),
+            gifs: gifs::Gifs::from_environment(),
+            wire: file_wire::Wire::default(),
+            dual_path: std::sync::atomic::AtomicBool::new(true),
+            account: Mutex::new(account::Desk::seeded("Alex")),
+            questions: Mutex::new(onboarding::Questions::seeded()),
+            elsewhere: Mutex::new(Elsewhere::default()),
+            #[cfg(test)]
+            uploads: Mutex::default(),
         }
+    }
+
+    /// Whether a message to an encrypted channel would also go out plain.
+    #[cfg(test)]
+    pub(crate) fn dual_path(&self) -> bool {
+        self.dual_path.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// The made-up screen sharing: what it was asked to send.
+    #[cfg(test)]
+    pub(crate) fn made_up(&self) -> &crate::share::made_up::MadeUp {
+        &self.media
     }
 
     /// The second-factor code the last connect came with.
@@ -170,8 +406,8 @@ impl DemoEngine {
         self.with_state(|state| state.typed)
     }
 
-    /// Have somebody else say `body` in `conversation`.
-    #[cfg(test)]
+    /// Have somebody else say `body`, which is HTML as a message is, in
+    /// `conversation`.
     pub(crate) fn say_as(
         &self,
         session: Session,
@@ -191,7 +427,7 @@ impl DemoEngine {
                     sender: Some(session),
                     sender_name: name.to_owned().into(),
                     html: body.to_owned().into(),
-                    body: body.to_owned().into(),
+                    body: crate::rich::Rich::parse(body).text.into(),
                     sent_at_ms: Some(sent_at_ms),
                     own: false,
                     id: Some(format!("demo-said-{sent_at_ms}").into()),
@@ -203,8 +439,73 @@ impl DemoEngine {
                     reactions: Vec::new(),
                 },
             ));
+            // Said where nobody is looking: unread until it is looked at.
+            if state.opened != Some(conversation) {
+                state.count_unread(conversation, 1);
+            }
         });
         self.tell(EngineEvent::NewMessage { conversation });
+    }
+
+    /// Have Rin show the pictures in `folder` in the lounge, in the order of
+    /// their names: each file a message of its own, and the files of each
+    /// folder inside together in one. For looking at real pictures, which
+    /// are larger than anything an environment variable holds.
+    pub(crate) fn show_pictures(&self, folder: &std::path::Path) {
+        for entry in sorted(folder) {
+            let files = if entry.is_dir() {
+                sorted(&entry)
+            } else {
+                vec![entry]
+            };
+            let html: String = files
+                .iter()
+                .filter_map(|file| std::fs::read(file).ok())
+                .filter_map(|file| crate::picture::message_html(&file, 0).ok())
+                .collect();
+            if !html.is_empty() {
+                self.say_as(3, "Rin", Conversation::Channel(1), &html);
+            }
+        }
+    }
+
+    /// Give the people here faces and banners made from the pictures in
+    /// `folder`, one after another in the order of their names: for
+    /// looking at real pictures where faces and banners are drawn.
+    pub(crate) fn give_faces(&self, folder: &std::path::Path) {
+        let files: Vec<Vec<u8>> = sorted(folder)
+            .into_iter()
+            .filter(|path| path.is_file())
+            .filter_map(|path| std::fs::read(path).ok())
+            .collect();
+        if files.is_empty() {
+            return;
+        }
+        self.with_state(|state| {
+            let sessions: Vec<Session> = state.users.iter().map(|user| user.session).collect();
+            for (nth, session) in sessions.into_iter().enumerate() {
+                // As a client would send them: scaled for the purpose.
+                let face = files.get(nth % files.len());
+                let over = files.get((nth + 1) % files.len());
+                let face = face
+                    .and_then(|file| crate::picture::avatar(file).ok())
+                    .and_then(crate::picture::picture)
+                    .map(std::sync::Arc::new);
+                if let Some(user) = state.users.iter_mut().find(|user| user.session == session) {
+                    user.avatar = face;
+                }
+                if let Some(banner) = over.and_then(|file| crate::picture::banner(file).ok()) {
+                    let _ = state.banners.insert(session, banner);
+                }
+            }
+        });
+        self.tell(EngineEvent::StateChanged);
+    }
+
+    /// What was shared so far: what was said with it, the files, and how.
+    #[cfg(test)]
+    pub(crate) fn shares(&self) -> Vec<(String, Vec<std::path::PathBuf>, crate::engine::ShareAs)> {
+        self.with_state(|state| state.shared.clone())
     }
 
     /// Say something happened, as a server would.
@@ -213,10 +514,84 @@ impl DemoEngine {
         self.tell(event);
     }
 
+    /// Change what the server says of the channel `id`, and say that it did.
+    #[cfg(test)]
+    pub(crate) fn alter_channel(&self, id: ChannelId, change: impl FnOnce(&mut Channel)) {
+        self.with_state(|state| {
+            if let Some(channel) = state.channels.iter_mut().find(|known| known.id == id) {
+                change(channel);
+            }
+        });
+        self.tell(EngineEvent::StateChanged);
+    }
+
+    /// Register `count` made-up members who are not here, every
+    /// `pictured`th with a picture, under made-up roles: a server with a
+    /// long list of members.
+    pub(crate) fn fill_directory(&self, count: usize, pictured: usize) {
+        self.with_state(|state| state.directory.fill(count, pictured));
+        self.tell(EngineEvent::StateChanged);
+    }
+
+    /// Refuse to list the accounts to the member list from now on, as a
+    /// server does to a guest.
+    #[cfg(test)]
+    pub(crate) fn refuse_directory(&self) {
+        self.with_state(|state| state.directory.refuses = true);
+    }
+
+    /// How often the member list asked for the accounts, whose pictures it
+    /// asked for, and how often it let go of them.
+    #[cfg(test)]
+    pub(crate) fn directory_asked(&self) -> (u32, Vec<u32>, u32) {
+        self.with_state(|state| {
+            let directory = &state.directory;
+            (
+                directory.asked,
+                directory.pictures_asked.clone(),
+                directory.put_away,
+            )
+        })
+    }
+
+    /// Lose the connection, as a server going away does: it is tried
+    /// again after `pause`.
+    #[cfg(test)]
+    pub(crate) fn lose_connection(&self, pause: std::time::Duration) {
+        self.with_state(|state| {
+            state.connected = false;
+            state.retry = Some(crate::engine::Retry {
+                attempt: 1,
+                at: std::time::Instant::now() + pause,
+            });
+        });
+        self.tell(EngineEvent::StateChanged);
+        self.tell(EngineEvent::CurrentChannelChanged);
+    }
+
+    /// Have there be this much to bring over from the web client.
+    #[cfg(test)]
+    pub(crate) fn offer_carry(&self, servers: usize, certificates: usize) {
+        self.with_state(|state| {
+            state.carry = Some(crate::engine::CarryOver {
+                servers,
+                certificates,
+            });
+        });
+        self.tell(EngineEvent::ServersChanged);
+    }
+
     /// Every action asked of the demo so far.
     #[cfg(test)]
     pub(crate) fn actions(&self) -> Vec<Action> {
         self.with_state(|state| state.actions.clone())
+    }
+
+    /// Turn the user away as a server does that wants something typed.
+    #[cfg(test)]
+    pub(crate) fn refuse(&self, wanted: crate::engine::Wanted, words: &str) {
+        self.tell(EngineEvent::Wanted(wanted));
+        self.notify(Some(words));
     }
 
     /// Tell the user something, as a refused connection would.
@@ -227,12 +602,70 @@ impl DemoEngine {
         ));
     }
 
+    /// Have the server send `html` as its welcome from now on.
+    #[cfg(test)]
+    pub(crate) fn set_welcome(&self, html: &str) {
+        self.with_state(|state| state.welcome = html.to_owned().into());
+        self.tell(EngineEvent::StateChanged);
+    }
+
+    /// People on other servers, for a test, and the session last turned to.
+    pub(crate) fn elsewhere(&self) -> std::sync::MutexGuard<'_, Elsewhere> {
+        self.elsewhere
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// The questions and the answers kept.
+    pub(crate) fn questions(&self) -> std::sync::MutexGuard<'_, onboarding::Questions> {
+        self.questions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// The account desk.
+    fn desk(&self) -> std::sync::MutexGuard<'_, account::Desk> {
+        self.account
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Tell what the server said of the account; where its name changed or
+    /// it is gone, the local user is renamed or unregistered too, as a
+    /// server says of them.
+    fn account_changed(&self, news: Vec<crate::engine::AccountNews>) {
+        for news in news {
+            if let crate::engine::AccountNews::Settings(account) = &news {
+                let (name, registered) = (account.name.clone(), account.registered);
+                self.with_state(|state| state.account_said(name, registered));
+                self.tell(EngineEvent::StateChanged);
+            }
+            self.tell(EngineEvent::Account(news));
+        }
+    }
+
     fn with_state<R>(&self, f: impl FnOnce(&mut State) -> R) -> R {
         let mut state = self
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         f(&mut state)
+    }
+
+    /// What the servers say of their liveries, for a test to read or change.
+    #[cfg(test)]
+    pub(crate) fn liveries<R>(&self, f: impl FnOnce(&mut livery::Liveries) -> R) -> R {
+        self.with_state(|state| f(&mut state.liveries))
+    }
+
+    /// Answer the probe of `key` that was held back, as the server would.
+    #[cfg(test)]
+    pub(crate) fn answer_probe(&self, key: &str) {
+        let livery = self.with_state(|state| state.liveries.held(key));
+        self.tell(EngineEvent::LiveryProbed {
+            key: key.to_owned().into(),
+            livery,
+        });
     }
 
     fn tell(&self, event: EngineEvent) {
@@ -249,33 +682,14 @@ impl State {
             Action::Kick { session, .. } | Action::Ban { session, .. } => {
                 self.users.retain(|user| user.session != *session);
             }
-            Action::ServerMute { session, muted } => {
-                if let Some(user) = self.users.iter_mut().find(|user| user.session == *session) {
-                    user.muted = *muted;
-                }
-            }
-            Action::ServerDeafen { session, deafened } => {
-                if let Some(user) = self.users.iter_mut().find(|user| user.session == *session) {
-                    user.deafened = *deafened;
-                }
-            }
-            Action::MoveUser { session, channel } => {
-                if let Some(user) = self.users.iter_mut().find(|user| user.session == *session) {
-                    user.channel = *channel;
-                }
-            }
-            Action::CreateChannel {
-                parent,
-                name,
-                history,
-                encrypted,
-            } => self.add_channel(*parent, name, *history, *encrypted),
-            Action::CreateSignalChannel { parent, name } => {
-                self.add_channel(*parent, name, true, true);
-            }
-            Action::CreateTemporaryChannel { parent, name } => {
-                self.add_channel(*parent, name, false, false);
-            }
+            Action::ServerMute { .. }
+            | Action::ServerDeafen { .. }
+            | Action::MoveUser { .. }
+            | Action::RemovePicture { .. }
+            | Action::SetAvatar(_)
+            | Action::PatchProfile(_)
+            | Action::SetBanner(_) => self.apply_to_people(action),
+            Action::MakeChannel(new) => self.make_channel(new),
             Action::MoveEveryone { from, to } => {
                 for user in self.users.iter_mut().filter(|user| user.channel == *from) {
                     user.channel = *to;
@@ -328,28 +742,82 @@ impl State {
                 });
             }
             Action::CancelScheduled(id) => self.scheduled.retain(|waiting| waiting.id != *id),
+            Action::SetBans(bans) => self.bans.clone_from(bans),
+            Action::RenameRegistered { .. } | Action::Unregister { .. } | Action::SetAcl(_) => {
+                self.register.apply(action);
+            }
+            Action::SetUserVolume { .. }
+            | Action::ResetComment { .. }
+            | Action::DescribeChannel { .. }
+            | Action::SetChannelPassword { .. }
+            | Action::Register { .. }
+            | Action::SetComment(_) => {}
+        }
+    }
+
+    /// The part of [`Self::apply`] that changes somebody: their mute, deafness,
+    /// channel or picture, and the local user's own profile and banner.
+    fn apply_to_people(&mut self, action: &Action) {
+        match action {
+            Action::ServerMute { session, muted } => {
+                if let Some(user) = self.users.iter_mut().find(|user| user.session == *session) {
+                    user.muted = *muted;
+                }
+            }
+            Action::ServerDeafen { session, deafened } => {
+                if let Some(user) = self.users.iter_mut().find(|user| user.session == *session) {
+                    user.deafened = *deafened;
+                }
+            }
+            Action::MoveUser { session, channel } => {
+                if let Some(user) = self.users.iter_mut().find(|user| user.session == *session) {
+                    user.channel = *channel;
+                }
+            }
             Action::RemovePicture { session } => {
                 if let Some(user) = self.users.iter_mut().find(|user| user.session == *session) {
                     user.avatar = None;
                 }
             }
-            Action::SetUserVolume { .. }
-            | Action::ResetComment { .. }
-            | Action::RenameRegistered { .. }
-            | Action::SetAcl(_)
-            | Action::DescribeChannel { .. }
-            | Action::SetChannelPassword { .. }
-            | Action::SetBans(_)
-            | Action::Unregister { .. }
-            | Action::Register { .. }
-            | Action::SetComment(_)
-            | Action::SetAvatar(_) => {}
+            Action::SetAvatar(face) => {
+                let face = crate::picture::picture(face.clone()).map(std::sync::Arc::new);
+                if let Some(own) = self.users.iter_mut().find(|user| user.session == OWN) {
+                    own.avatar = face;
+                }
+            }
+            Action::PatchProfile(change) => self.own_profile.push(change.clone()),
+            Action::SetBanner(banner) => {
+                let _ = if banner.is_empty() {
+                    self.banners.remove(&OWN)
+                } else {
+                    self.banners.insert(OWN, banner.clone())
+                };
+            }
+            _ => {}
         }
     }
 
     /// The rest of [`Self::apply`]: messages, polls, and what is set on a
     /// channel or a user for the local user alone.
     /// A new channel under `parent`, with the next id.
+    /// Make the channel the form for one describes.
+    fn make_channel(&mut self, new: &crate::engine::NewChannel) {
+        use crate::engine::Kept;
+        self.add_channel(
+            new.parent,
+            &new.name,
+            new.kept != Kept::No,
+            matches!(new.kept, Kept::Sealed | Kept::Signal),
+        );
+        if let Some(made) = self.channels.last_mut() {
+            made.position = new.position.unwrap_or(0);
+            made.restricted = !new.password.is_empty();
+            made.signal = new.kept == Kept::Signal;
+            made.temporary = new.temporary;
+            made.max_users = new.most.unwrap_or(0);
+        }
+    }
+
     fn add_channel(&mut self, parent: ChannelId, name: &str, history: bool, encrypted: bool) {
         let id = self
             .channels
@@ -367,6 +835,12 @@ impl State {
             history,
             encrypted,
             listening: false,
+            rights: crate::rights::Rights::ALL,
+            restricted: false,
+            signal: false,
+            temporary: false,
+            max_users: 0,
+            private: false,
         });
     }
 
@@ -467,22 +941,14 @@ impl State {
     }
 
     fn seeded() -> Self {
-        let channel = |id, parent, name: &str| Channel {
-            id,
-            parent,
-            name: name.to_owned().into(),
-            position: 0,
-            unread: 0,
-            history: false,
-            encrypted: false,
-            listening: false,
-        };
         let user = |session, name: &str| User {
             session,
             name: name.to_owned().into(),
             channel: LOUNGE,
             muted: session == OWN,
             deafened: false,
+            server_muted: false,
+            server_deafened: false,
             avatar: None,
             unread: 0,
             priority: false,
@@ -512,24 +978,21 @@ impl State {
         };
         Self {
             connected: true,
+            banners: std::collections::HashMap::new(),
             plain: false,
+            welcome: welcome_html().into(),
             voice: Voice::Off,
             deafened: false,
             devices: ChosenDevices::default(),
             actions: Vec::new(),
             voice_settings: seeded_voice(),
+            tuning: std::collections::BTreeMap::new(),
+            stats: None,
             servers: seeded_servers(),
+            retry: None,
+            carry: None,
             current_channel: LOUNGE,
-            channels: vec![
-                channel(0, None, "Root"),
-                Channel {
-                    history: true,
-                    encrypted: false,
-                    ..channel(LOUNGE, Some(0), "lounge")
-                },
-                channel(2, Some(0), "studio"),
-                channel(3, Some(0), "afk"),
-            ],
+            channels: seeded_channels(),
             users: vec![
                 user(OWN, "Alex"),
                 user(2, "Flora"),
@@ -540,13 +1003,22 @@ impl State {
             typed: 0,
             snapshots: 0,
             read_up_to: None,
+            opened: None,
             polls: Vec::new(),
             whisper: (None, false, 0),
             key_requests: Vec::new(),
             scheduled: Vec::new(),
+            bans: seeded_bans(),
             recording: None,
             code: None,
             saved: Vec::new(),
+            shared: Vec::new(),
+            kept: std::collections::HashMap::new(),
+            liveries: livery::Liveries::seeded(),
+            directory: directory::Directory::default(),
+            register: register::Register::default(),
+            profiles: profiles::Profiles::seeded(),
+            own_profile: Vec::new(),
             certificates: vec!["alex".into(), "work".into()],
             messages: vec![
                 said(0, OWN, "Alex", "Welcome to our creative lounge!"),
@@ -565,6 +1037,18 @@ impl State {
 }
 
 /// How the demo's microphone starts out set.
+/// What `folder` holds, in the order of the names.
+fn sorted(folder: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut held: Vec<_> = std::fs::read_dir(folder)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|entry| entry.path())
+        .collect();
+    held.sort();
+    held
+}
+
 fn seeded_voice() -> VoiceSettings {
     VoiceSettings {
         push_to_talk: false,
@@ -575,7 +1059,40 @@ fn seeded_voice() -> VoiceSettings {
         output_volume: 1.0,
         bitrate_bps: 72_000,
         voice_over_tcp: false,
+        ..VoiceSettings::default()
     }
+}
+
+/// The demo server's channels: a root, the lounge that keeps what is said,
+/// and two more. `FANCY_GPUI_DEMO_ROOM` names the lounge otherwise, as the
+/// web preview's `?room=` does: a way to look at a drawn theme's wordmark.
+fn seeded_channels() -> Vec<Channel> {
+    let lounge = std::env::var("FANCY_GPUI_DEMO_ROOM").unwrap_or_else(|_| "lounge".to_owned());
+    let channel = |id, parent, name: &str| Channel {
+        id,
+        parent,
+        name: name.to_owned().into(),
+        position: 0,
+        unread: 0,
+        history: false,
+        encrypted: false,
+        listening: false,
+        rights: crate::rights::Rights::ALL,
+        restricted: false,
+        signal: false,
+        temporary: false,
+        max_users: 0,
+        private: false,
+    };
+    vec![
+        channel(0, None, "Root"),
+        Channel {
+            history: true,
+            ..channel(LOUNGE, Some(0), &lounge)
+        },
+        channel(2, Some(0), "studio"),
+        channel(3, Some(0), "afk"),
+    ]
 }
 
 /// The identities the demo starts with saved.
@@ -664,16 +1181,26 @@ fn demo_markup(body: &str) -> String {
         )
 }
 
+/// The made-up recovery phrase every demo identity has.
+const DEMO_PHRASE: &str = "abandon ability able about above absent absorb abstract absurd abuse access accident account accuse achieve acid acoustic acquire across act action actor actress actual";
+
 impl Engine for DemoEngine {
     fn events(&self) -> async_channel::Receiver<EngineEvent> {
         self.inbox.clone()
+    }
+
+    fn media(&self) -> std::sync::Arc<dyn crate::share::Media> {
+        self.media.clone()
     }
 
     fn snapshot(&self) -> Snapshot {
         self.with_state(|state| {
             state.snapshots += 1;
             if !state.connected {
-                return Snapshot::disconnected();
+                return Snapshot {
+                    retry: state.retry,
+                    ..Snapshot::disconnected()
+                };
             }
             Snapshot {
                 connection: Connection::Connected,
@@ -683,14 +1210,17 @@ impl Engine for DemoEngine {
                 users: state.users.clone(),
                 voice: state.voice,
                 deafened: state.deafened,
-                welcome: (!state.plain).then(|| "Welcome to the <b>demo</b> server.".into()),
+                welcome: (!state.plain).then(|| state.welcome.clone()),
                 sessions: vec![SessionEntry {
                     id: "demo".into(),
-                    name: "magical.rocks".into(),
+                    name: session_name().into(),
                     key: "magical.rocks:64738".into(),
                     active: true,
+                    connecting: false,
                 }],
-                fancy: !state.plain,
+                // A made-up link card is a Fancy server's answer.
+                fancy: !state.plain || link_cards::chosen().is_some(),
+                retry: None,
             }
         })
     }
@@ -726,6 +1256,12 @@ impl Engine for DemoEngine {
     fn search_messages(&self, query: &str) -> Vec<Found> {
         let wanted = query.to_lowercase();
         self.with_state(|state| {
+            let held = |conversation: Conversation| {
+                state
+                    .messages
+                    .iter()
+                    .filter(move |(of, _)| *of == conversation)
+            };
             state
                 .messages
                 .iter()
@@ -734,6 +1270,11 @@ impl Engine for DemoEngine {
                     text: message.body.clone(),
                     about: format!("{} · in the demo", message.sender_name).into(),
                     conversation: *conversation,
+                    at: message.id.clone().and_then(|id| {
+                        let place = held(*conversation)
+                            .position(|(_, other)| other.id.as_ref() == Some(&id))?;
+                        Some((id, held(*conversation).count() - place))
+                    }),
                 })
                 .collect()
         })
@@ -742,18 +1283,26 @@ impl Engine for DemoEngine {
     fn previews(&self, urls: Vec<gpui::SharedString>) {
         self.tell(EngineEvent::Previews(
             urls.into_iter()
-                .map(|url| Preview {
-                    title: Some("A walk by the river".into()),
-                    description: Some("Photos from the towpath, taken on Sunday.".into()),
-                    site: Some("example.org".into()),
-                    picture: None,
-                    url,
+                .map(|url| {
+                    link_cards::preview(&url).unwrap_or_else(|| Preview {
+                        title: Some("A walk by the river".into()),
+                        description: Some("Photos from the towpath, taken on Sunday.".into()),
+                        site: Some("example.org".into()),
+                        url,
+                        ..Preview::default()
+                    })
                 })
                 .collect(),
         ));
     }
 
     fn request_acl(&self, channel: ChannelId) {
+        // The rules as they were last written, once they were.
+        let written = self.with_state(|state| state.register.rules(channel).cloned());
+        if let Some(root) = written {
+            self.tell(EngineEvent::Acl(root));
+            return;
+        }
         let rule = |group: &str, inherited, grant, deny| AclRule {
             here: true,
             subs: true,
@@ -767,15 +1316,19 @@ impl Engine for DemoEngine {
             rule("all", true, 0x2 | 0x4 | 0x8 | 0x200, 0),
             rule("auth", false, 0x40, 0),
         ];
-        let mut groups = Vec::new();
+        // The root keeps the server's roles, as groups.
+        let mut groups = if channel == 0 {
+            register::groups(&self.roles())
+        } else {
+            Vec::new()
+        };
         // The lounge has moderators: Rin, by the parent's say.
         if channel == LOUNGE {
             rules.push(rule("moderators", false, 0x1_0000, 0));
             groups.push(AclGroup {
-                name: "moderators".into(),
                 inherited: vec![103],
-                added: Vec::new(),
-                removed: Vec::new(),
+                from_parent: true,
+                ..AclGroup::new("moderators")
             });
         }
         self.tell(EngineEvent::Acl(Acl {
@@ -787,15 +1340,7 @@ impl Engine for DemoEngine {
     }
 
     fn roles(&self) -> Vec<Role> {
-        if self.with_state(|state| state.plain) {
-            return Vec::new();
-        }
-        // Rin moderates, in the colour the server gave the role.
-        vec![Role {
-            name: "moderators".into(),
-            color: Some(gpui::rgb(0xe0_9a4b).into()),
-            members: vec![103],
-        }]
+        self.with_state(|state| state.roles())
     }
 
     fn signal_available(&self) -> bool {
@@ -818,49 +1363,64 @@ impl Engine for DemoEngine {
 
     fn list(&self, listing: Listing) {
         self.tell(match listing {
-            Listing::Bans => EngineEvent::Bans(vec![
-                Ban {
-                    address: "203.0.113.7".into(),
-                    mask: 32,
-                    name: "Mallory".into(),
-                    hash: gpui::SharedString::default(),
-                    reason: "spam".into(),
-                    start: "2026-01-02".into(),
-                    duration_secs: 0,
-                },
-                Ban {
-                    address: "198.51.100.0".into(),
-                    mask: 24,
-                    name: gpui::SharedString::default(),
-                    hash: gpui::SharedString::default(),
-                    reason: gpui::SharedString::default(),
-                    start: "2026-02-03".into(),
-                    duration_secs: 7200,
-                },
-            ]),
-            Listing::Registered => EngineEvent::Registered(self.with_state(|state| {
-                state
-                    .users
-                    .iter()
-                    .map(|user| Registered {
-                        id: user.session,
-                        name: user.name.clone(),
-                        last_seen: Some("2026-01-02".into()),
-                        last_channel: Some(user.channel),
-                    })
-                    .collect()
-            })),
+            Listing::Bans => EngineEvent::Bans(self.with_state(|state| state.bans.clone())),
+            Listing::Registered => EngineEvent::Registered(self.with_state(State::registered)),
         });
+    }
+
+    fn directory(&self) {
+        let refused = self.with_state(|state| {
+            state.directory.asked += 1;
+            state.directory.refuses
+        });
+        if refused {
+            self.tell(EngineEvent::DirectoryRefused);
+        } else {
+            self.list(Listing::Registered);
+        }
+    }
+
+    fn account_picture(&self, account: u32) -> Option<std::sync::Arc<gpui::Image>> {
+        self.with_state(|state| state.directory.picture(account))
+            .and_then(crate::picture::picture)
+            .map(std::sync::Arc::new)
+    }
+
+    fn put_directory_away(&self) {
+        self.with_state(|state| state.directory.put_away());
     }
 
     fn certificates(&self) -> Vec<gpui::SharedString> {
         self.with_state(|state| state.certificates.clone())
     }
 
+    fn recovery_phrase(&self, label: &str) -> Result<String, String> {
+        let held = self.with_state(|state| state.certificates.iter().any(|known| known.as_ref() == label));
+        if !held {
+            return Err(format!("There is no identity called {label}."));
+        }
+        // Made up, and the same every time: twenty-four words.
+        Ok(DEMO_PHRASE.to_owned())
+    }
+
+    fn restore_phrase(&self, label: &str, phrase: &str) -> Result<(), String> {
+        if phrase.split_whitespace().count() != 24 {
+            return Err("That is not a recovery phrase of 24 words.".to_owned());
+        }
+        let _ = label;
+        Ok(())
+    }
+
     fn manage_certificate(&self, task: CertificateTask) {
         self.with_state(|state| match task {
             CertificateTask::Delete(label) => {
                 state.certificates.retain(|held| held.as_ref() != label);
+            }
+            CertificateTask::Create(label) => {
+                if !state.certificates.iter().any(|held| held.as_ref() == label) {
+                    state.certificates.push(label.into());
+                    state.certificates.sort();
+                }
             }
             CertificateTask::Import(from) => {
                 let label = from
@@ -911,6 +1471,35 @@ impl Engine for DemoEngine {
         }
     }
 
+    fn pinged(&self, host: &str, port: u16) -> Option<crate::livery::Pinged> {
+        let up = self.ping(host, port).is_some();
+        self.with_state(|state| state.liveries.pinged(&format!("{host}:{port}"), up))
+    }
+
+    fn live_livery(&self, key: &str) -> Option<std::sync::Arc<crate::livery::Livery>> {
+        self.with_state(|state| {
+            let (at, livery) = state.liveries.live.as_ref().filter(|_| state.connected)?;
+            (at == key).then(|| std::sync::Arc::clone(livery))
+        })
+    }
+
+    fn probe_livery(&self, host: &str, port: u16) {
+        let key = format!("{host}:{port}");
+        let answer = self.with_state(|state| {
+            state.liveries.probes.push(key.clone());
+            state
+                .liveries
+                .answering
+                .then(|| state.liveries.held(&key))
+        });
+        if let Some(livery) = answer {
+            self.tell(EngineEvent::LiveryProbed {
+                key: key.into(),
+                livery,
+            });
+        }
+    }
+
     fn connect(&self, id: &str, _password: Option<String>) {
         let known = self.saved_servers().iter().any(|saved| saved.id == id);
         let connected = self.with_state(|state| {
@@ -930,8 +1519,139 @@ impl Engine for DemoEngine {
     }
 
     fn disconnect(&self) {
-        let left = self.with_state(|state| std::mem::replace(&mut state.connected, false));
+        let left = self.with_state(|state| {
+            let waited = state.retry.take().is_some();
+            std::mem::replace(&mut state.connected, false) || waited
+        });
         if left {
+            self.tell(EngineEvent::StateChanged);
+            self.tell(EngineEvent::CurrentChannelChanged);
+        }
+    }
+
+    fn carry_over(&self) -> Option<crate::engine::CarryOver> {
+        self.with_state(|state| state.carry)
+    }
+
+    fn carry_now(&self) {
+        // The demo brings a server of the name it was told there were.
+        let brought = self.with_state(|state| {
+            let carry = state.carry.take()?;
+            for nth in 0..carry.servers {
+                state.servers.push(SavedServer {
+                    id: format!("carried-{nth}").into(),
+                    label: format!("Brought over {}", nth + 1).into(),
+                    host: format!("carried{nth}.example").into(),
+                    port: 64738,
+                    username: "Alex".into(),
+                    certificate: None,
+                    favorite: false,
+                });
+            }
+            Some(carry)
+        });
+        if let Some(carry) = brought {
+            self.tell(EngineEvent::ServersChanged);
+            self.tell(EngineEvent::Done(
+                format!("Brought over {} servers.", carry.servers).into(),
+            ));
+        }
+    }
+
+    fn set_reconnecting(&self, _: bool) {}
+
+    fn set_dual_path(&self, sending: bool) {
+        self.dual_path.store(sending, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn account_offered(&self) -> bool {
+        self.with_state(|state| state.connected && !state.plain)
+    }
+
+    fn account(&self) -> Option<crate::engine::AccountSettings> {
+        Some(self.desk().account())
+    }
+
+    fn update_account(&self, action: crate::engine::AccountAction, password: Option<String>) {
+        let news = self.desk().answer(action, password.as_deref());
+        self.account_changed(news);
+    }
+
+    fn offer_account(&self, _: Option<String>) {
+        let link = self.desk().offer();
+        let account = self.desk().account();
+        self.tell(EngineEvent::Account(crate::engine::AccountNews::Link(Ok(link))));
+        self.tell(EngineEvent::Account(crate::engine::AccountNews::Settings(account)));
+    }
+
+    fn onboarding_offered(&self) -> bool {
+        self.with_state(|state| state.connected && !state.plain)
+    }
+
+    fn onboarding_config(&self) -> Option<crate::engine::OnboardingConfig> {
+        Some(self.questions().config.clone())
+    }
+
+    fn onboarding_response(&self) -> Option<crate::engine::OnboardingResponse> {
+        self.questions().response.clone()
+    }
+
+    fn request_onboarding_response(&self) {
+        let kept = self.questions().response.clone();
+        self.tell(EngineEvent::Onboarding(
+            crate::engine::OnboardingNews::Response(kept),
+        ));
+    }
+
+    fn submit_onboarding(&self, response: crate::engine::OnboardingResponse) {
+        self.questions().response = Some(response);
+    }
+
+    fn server_plugins(&self) -> Vec<crate::engine::ServerPlugin> {
+        if !self.onboarding_offered() {
+            return Vec::new();
+        }
+        let plugin = |name: &str, version: &str, description: &str, asks: &[&str]| {
+            crate::engine::ServerPlugin {
+                name: name.to_owned(),
+                version: version.to_owned(),
+                description: Some(description.to_owned()),
+                capabilities: asks.iter().map(|capability| (*capability).to_owned()).collect(),
+            }
+        };
+        vec![
+            plugin(
+                "fancy-live-doc",
+                "1.4.0",
+                "Shared notes everybody in a channel writes at once.",
+                &["slash_commands", "settings_panel"],
+            ),
+            plugin("dice-roller", "0.3.1", "Rolls dice for the table.", &[]),
+        ]
+    }
+
+    fn signal_bridge(&self) -> Option<crate::engine::SignalBridge> {
+        Some(crate::engine::SignalBridge {
+            installed: false,
+            addon: false,
+            version: "0.1.0",
+        })
+    }
+
+    fn withdraw_offer(&self, device: String) {
+        self.desk().withdraw(&device);
+        let account = self.desk().account();
+        self.tell(EngineEvent::Account(crate::engine::AccountNews::Settings(account)));
+    }
+
+    fn retry_now(&self) {
+        // The demo's server is always there to come back to.
+        let waited = self.with_state(|state| {
+            let waited = state.retry.take().is_some();
+            state.connected |= waited;
+            waited
+        });
+        if waited {
             self.tell(EngineEvent::StateChanged);
             self.tell(EngineEvent::CurrentChannelChanged);
         }
@@ -953,6 +1673,37 @@ impl Engine for DemoEngine {
 
     fn load_earlier(&self, _conversation: Conversation, _before: Option<gpui::SharedString>) {}
 
+    fn pins(&self, conversation: Conversation) -> Vec<crate::engine::Pin> {
+        self.with_state(|state| {
+            let held: Vec<&Message> = state
+                .messages
+                .iter()
+                .filter(|(of, _)| *of == conversation)
+                .map(|(_, message)| message)
+                .collect();
+            let mut pins: Vec<_> = held
+                .iter()
+                .enumerate()
+                .filter(|(_, message)| message.pinned)
+                .filter_map(|(at, message)| {
+                    Some(crate::engine::Pin {
+                        id: message.id.clone()?,
+                        by: Some("Alex".into()),
+                        at_ms: message.sent_at_ms,
+                        said: Some(crate::engine::Pinned {
+                            sender_name: message.sender_name.clone(),
+                            text: message.body.clone(),
+                            sent_at_ms: message.sent_at_ms,
+                            from_newest: held.len() - at,
+                        }),
+                    })
+                })
+                .collect();
+            pins.reverse();
+            pins
+        })
+    }
+
     fn message_count(&self, conversation: Conversation) -> usize {
         self.with_state(|state| {
             state
@@ -963,7 +1714,12 @@ impl Engine for DemoEngine {
         })
     }
 
-    fn open(&self, _conversation: Conversation) {}
+    fn open(&self, conversation: Conversation) {
+        self.with_state(|state| {
+            state.opened = Some(conversation);
+            state.count_unread(conversation, 0);
+        });
+    }
 
     fn join_channel(&self, channel: ChannelId) {
         let moved = self.with_state(|state| {
@@ -1030,6 +1786,19 @@ impl Engine for DemoEngine {
         });
     }
 
+    fn send_gif(
+        &self,
+        conversation: Conversation,
+        url: gpui::SharedString,
+        reply_to: Option<gpui::SharedString>,
+    ) {
+        self.send_gif_now(conversation, &url, reply_to);
+    }
+
+    fn gif_service(&self) -> Option<crate::gif::Service> {
+        self.gifs.service()
+    }
+
     fn send_picture(&self, conversation: Conversation, file: Vec<u8>) {
         match crate::picture::message_html(&file, 0) {
             Ok(html) => {
@@ -1064,6 +1833,14 @@ impl Engine for DemoEngine {
         }
     }
 
+    fn file_sharing(&self) -> crate::engine::FileSharing {
+        self.wire.sharing()
+    }
+
+    fn send_pictures(&self, conversation: Conversation, files: Vec<Vec<u8>>) {
+        self.send_pictures_now(conversation, &files);
+    }
+
     fn send_file(&self, conversation: Conversation, path: std::path::PathBuf) {
         let name = path
             .file_name()
@@ -1092,7 +1869,7 @@ impl Engine for DemoEngine {
                         key: Some(format!("demo/{name}").into()),
                         name: name.into(),
                         size: Some(1_536),
-                        url: None,
+                        ..Attachment::default()
                     }],
                     reply_to: None,
                     reactions: Vec::new(),
@@ -1100,6 +1877,140 @@ impl Engine for DemoEngine {
             ));
         });
         self.tell(EngineEvent::NewMessage { conversation });
+    }
+
+    fn share(
+        &self,
+        conversation: Conversation,
+        text: String,
+        files: Vec<std::path::PathBuf>,
+        how: crate::engine::ShareAs,
+    ) {
+        use crate::engine::{OpenTo, Reach};
+        let open_to = match how.reach {
+            Reach::Here => OpenTo::Here,
+            Reach::Link => OpenTo::Link,
+            Reach::Password(_) => OpenTo::Password,
+        };
+        self.wire
+            .said(&text, &files, open_to != OpenTo::Password);
+        let lasts = how.lasts.secs();
+        self.with_state(|state| {
+            let attached: Vec<Attachment> = files
+                .iter()
+                .map(|path| {
+                    let name = path
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    let key = gpui::SharedString::from(format!("demo/{name}"));
+                    let file = std::fs::read(path).unwrap_or_default();
+                    let pixels = crate::picture::dimensions(&file);
+                    let size = Some(file.len() as u64);
+                    if pixels.is_some() {
+                        let _ = state.kept.insert(key.clone(), file);
+                    }
+                    Attachment {
+                        name: name.into(),
+                        size,
+                        url: (open_to != OpenTo::Here)
+                            .then(|| format!("https://files.example/s/{key}").into()),
+                        key: Some(key),
+                        open_to,
+                        stand_in: None,
+                        pixels,
+                        voice: None,
+                        expires_at: (lasts > 0).then(|| {
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map_or(0, |since| since.as_secs())
+                                + lasts
+                        }),
+                    }
+                })
+                .collect();
+            let sent_at_ms = state
+                .messages
+                .last()
+                .and_then(|(_, last)| last.sent_at_ms)
+                .map_or(FIRST_MESSAGE_MS, |last| last + MINUTE_MS);
+            state.messages.push((
+                conversation,
+                Message {
+                    sender: Some(OWN),
+                    sender_name: "Alex".into(),
+                    html: demo_markup(&text).into(),
+                    body: text.clone().into(),
+                    sent_at_ms: Some(sent_at_ms),
+                    own: true,
+                    id: Some(format!("demo-sent-{sent_at_ms}").into()),
+                    edited: false,
+                    failed: false,
+                    pinned: false,
+                    files: attached,
+                    reply_to: None,
+                    reactions: Vec::new(),
+                },
+            ));
+            state.shared.push((text, files, how));
+        });
+        self.tell(EngineEvent::NewMessage { conversation });
+    }
+
+    fn share_tracked(
+        &self,
+        conversation: Conversation,
+        text: String,
+        files: Vec<(gpui::SharedString, std::path::PathBuf)>,
+        how: crate::engine::ShareAs,
+    ) {
+        self.share_made_up(conversation, text, files, how);
+    }
+
+    fn cancel_upload(&self, id: gpui::SharedString) {
+        self.cancel_made_up(&id);
+    }
+
+    fn fetch_shared(&self, key: gpui::SharedString) {
+        self.wire.asked(&key);
+        let picture = self
+            .with_state(|state| {
+                (state.kept.get(&key))
+                    .or_else(|| state.profiles.file(&key))
+                    .cloned()
+            })
+            .and_then(crate::picture::picture)
+            .map(std::sync::Arc::new);
+        self.tell(EngineEvent::Shared { key, picture });
+    }
+
+    fn save_about(&self, save: crate::profile::Save) {
+        let saved = self.with_state(|state| state.profiles.save(&save));
+        self.tell(EngineEvent::AboutSaved(saved.map_err(Into::into)));
+    }
+
+    fn fetch_page(&self, page: mumble_tauri_lib::engine_api::about::PageRef) {
+        let fetched = self.with_state(|state| state.profiles.page(&page));
+        self.tell(EngineEvent::ProfilePage {
+            key: page.key.into(),
+            page: fetched.map(std::sync::Arc::new).map_err(Into::into),
+        });
+    }
+
+    fn voice_support(&self) -> Option<crate::voice::Support> {
+        self.voice.support()
+    }
+
+    fn recorder(&self) -> Box<dyn crate::voice::Recorder> {
+        Box::new(self.voice.recorder())
+    }
+
+    fn voice_player(&self) -> Box<dyn crate::voice::Player> {
+        Box::new(self.voice.player())
+    }
+
+    fn send_voice(&self, conversation: Conversation, clip: crate::voice::Clip) {
+        self.say_voice(conversation, &clip);
     }
 
     fn save_file(&self, key: gpui::SharedString, to: std::path::PathBuf) {
@@ -1120,6 +2031,18 @@ impl Engine for DemoEngine {
             if let Some(own) = state.users.iter_mut().find(|user| user.session == OWN) {
                 own.muted = muted;
                 own.deafened = deafened;
+            }
+        });
+        self.tell(EngineEvent::StateChanged);
+    }
+
+    fn turn_voice_off(&self) {
+        self.with_state(|state| {
+            state.voice = Voice::Off;
+            state.deafened = false;
+            if let Some(own) = state.users.iter_mut().find(|user| user.session == OWN) {
+                own.muted = true;
+                own.deafened = false;
             }
         });
         self.tell(EngineEvent::StateChanged);
@@ -1170,7 +2093,57 @@ impl Engine for DemoEngine {
         self.with_state(|state| state.typed += 1);
     }
 
-    fn activate_session(&self, _id: &str) {}
+    fn typed(&self, text: &str) -> Vec<(std::ops::Range<usize>, crate::engine::Setting)> {
+        // Read as the real engine reads it: a second reading here would be
+        // a second dialect, and this one needs no engine running.
+        crate::real::typed(text)
+    }
+
+    fn source(&self, html: &str) -> String {
+        crate::real::source(html)
+    }
+
+    fn activate_session(&self, id: &str) {
+        self.elsewhere().turned_to = Some(id.to_owned());
+    }
+
+    fn register_whisper(
+        &self,
+        slot: u8,
+        reach: Option<mumble_tauri_lib::engine_api::whisper::WhisperReach>,
+    ) {
+        let slots = &mut self.elsewhere().slots;
+        match reach {
+            Some(reach) => drop(slots.insert(slot, reach)),
+            None => drop(slots.remove(&slot)),
+        }
+    }
+
+    fn whisper_slot(
+        &self,
+        slot: u8,
+        reach: Option<mumble_tauri_lib::engine_api::whisper::WhisperReach>,
+    ) {
+        self.elsewhere().whispering = reach.map(|_| slot);
+    }
+
+    fn find_user(&self, hash: Option<&str>, name: &str, session: Option<&str>) -> Option<(gpui::SharedString, u32)> {
+        if let Some(hash) = hash
+            && let Some((on, user, _)) = self.elsewhere().people.iter().find(|(_, _, held)| held.as_str() == hash)
+        {
+            return Some((on.clone().into(), *user));
+        }
+        self.with_state(|state| {
+            state
+                .users
+                .iter()
+                .find(|user| match hash {
+                    Some(hash) => user.hash.as_ref().map(AsRef::as_ref) == Some(hash),
+                    None => session == Some("demo") && user.name.as_ref() == name,
+                })
+                .map(|user| ("demo".into(), user.session))
+        })
+    }
 
     fn leave_session(&self, _id: &str) {
         self.disconnect();
@@ -1193,10 +2166,24 @@ impl Engine for DemoEngine {
             action,
             Action::SendLater { .. } | Action::CancelScheduled(_)
         );
+        // A ban list from somebody the root does not let ban is refused,
+        // with words, as a server refuses it; the list stays as it was.
+        let refused = matches!(action, Action::SetBans(_))
+            && !self.with_state(|state| {
+                let root = state.channels.iter().find(|channel| channel.parent.is_none());
+                root.is_some_and(|root| root.rights.has(crate::rights::Right::BAN))
+            });
         self.with_state(|state| {
-            state.apply(&action);
+            if !refused {
+                state.apply(&action);
+            }
             state.actions.push(action);
         });
+        if refused {
+            self.tell(EngineEvent::Notice(Some(
+                "Permission denied: you may not change the ban list.".into(),
+            )));
+        }
         if scheduling {
             self.tell(EngineEvent::ScheduleTaken);
         }
@@ -1209,30 +2196,84 @@ impl Engine for DemoEngine {
     }
 
     fn about(&self, subject: Subject) {
+        // Those whose profiles are kept apart, and what the local user saved.
+        if let Subject::User(session) = subject
+            && let Some(written) = self.with_state(|state| {
+                let banner = state.banners.get(&session);
+                let written = state.profiles.comment_of(session, banner)?;
+                if session != OWN {
+                    return Some(written);
+                }
+                Some(state.own_profile.iter().fold(written, |written, change| {
+                    let profile = crate::profile_fields::patched(&written, change);
+                    crate::profile_fields::rewritten(&written, &profile)
+                }))
+            })
+        {
+            self.tell(EngineEvent::About {
+                subject,
+                html: Some(written.into()),
+            });
+            return;
+        }
         let html = match subject {
             Subject::User(3) => Some(concat!(
                 r##"<!--FANCY:{"v":1,"status":"Sketching","pronouns":"she/her","##,
                 r##""banner":{"color":"#7a4e9a"},"nameStyle":{"color":"#e09a4b","bold":true}}-->"##,
                 "\nDraws <i>characters</i>."
             )),
+            // Torque: a banner in two colours, a name in a face and a colour
+            // of its own, a status that carries markup, and a row switched off.
+            Subject::User(5) => Some(concat!(
+                r##"<!--FANCY:{"v":1,"status":"On the <b>coast road</b>","contact":"torque@example.org","##,
+                r##""banner":{"color":"linear-gradient(135deg, #0f4c5c, #e36414)"},"##,
+                r##""nameStyle":{"color":"#101828","font":"serif","bold":false},"##,
+                r##""sections":{"stats":false}}-->"##,
+                "
+Drives, mostly."
+            )),
             Subject::Channel(LOUNGE) => Some("Where everybody starts."),
-            Subject::Server => Some("Welcome to the <b>demo</b> server."),
+            Subject::Server => Some(welcome_html()),
             _ => None,
         };
+        // Whoever was given a banner has it in the profile they carry.
+        let pictured = match subject {
+            Subject::User(session) => self.with_state(|state| {
+                let banner = state.banners.get(&session)?;
+                let held = html.unwrap_or_default();
+                let profile = crate::profile::with_banner(held, banner);
+                let words = held.split_once("-->").map_or(held, |(_, words)| words);
+                Some(format!("<!--FANCY:{profile}-->{words}"))
+            }),
+            _ => None,
+        };
+        let html: Option<gpui::SharedString> = pictured.map(Into::into).or(html.map(Into::into));
         if subject == Subject::Server {
             self.tell(EngineEvent::Facts {
                 subject,
                 facts: vec![("Address".into(), "magical.rocks:64738".into())],
+                devices: Vec::new(),
             });
         }
-        self.tell(EngineEvent::About {
-            subject,
-            html: html.map(Into::into),
-        });
+        self.tell(EngineEvent::About { subject, html });
     }
 
     fn voice_settings(&self) -> VoiceSettings {
         self.with_state(|state| state.voice_settings)
+    }
+
+    fn tune_denoiser(&self, knobs: std::collections::BTreeMap<String, f32>) {
+        self.with_state(|state| state.tuning = knobs);
+    }
+
+    fn sound_check(&self) -> Box<dyn crate::sound_check::SoundCheck> {
+        Box::new(crate::sound_check::made_up::MadeUpCheck::new(
+            self.voice.clone(),
+        ))
+    }
+
+    fn voice_stats(&self) -> Option<crate::sound_check::Stats> {
+        self.with_state(|state| state.stats)
     }
 
     fn set_voice_settings(&self, settings: VoiceSettings) {
@@ -1269,6 +2310,28 @@ impl Engine for DemoEngine {
             });
         }
     }
+}
+
+/// The name the demo's server is shown by: `magical.rocks`, or what
+/// `FANCY_GPUI_DEMO_NAME` says, for pictures nobody can take for a real
+/// server's.
+fn session_name() -> &'static str {
+    static NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    NAME.get_or_init(|| {
+        std::env::var("FANCY_GPUI_DEMO_NAME").unwrap_or_else(|_| "magical.rocks".to_owned())
+    })
+}
+
+/// The demo server's welcome: a designed page like the ones the web
+/// client's welcome designer makes, or the file `FANCY_GPUI_DEMO_WELCOME`
+/// names, to look at another.
+fn welcome_html() -> &'static str {
+    static WELCOME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    WELCOME.get_or_init(|| {
+        std::env::var_os("FANCY_GPUI_DEMO_WELCOME")
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .unwrap_or_else(|| include_str!("page/samples/banner.html").to_owned())
+    })
 }
 
 #[cfg(test)]

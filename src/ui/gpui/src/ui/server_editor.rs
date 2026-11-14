@@ -121,6 +121,14 @@ fn new_id() -> String {
     format!("{nanos:x}-{count:x}")
 }
 
+impl ServerEditor {
+    /// The name the form says the server is joined under.
+    #[cfg(test)]
+    pub(super) fn username(&self, cx: &gpui::App) -> String {
+        self.fields[3].read(cx).text().to_owned()
+    }
+}
+
 impl Shell {
     /// Open the dialog: on `existing` to change it, or empty - with
     /// `address` filled in when the identity is for a server already saved.
@@ -157,10 +165,12 @@ impl Shell {
             field("64738", port, cx),
             field(
                 "Your name on this server",
-                existing
-                    .as_ref()
-                    .map(|existing| existing.username.to_string())
-                    .unwrap_or_default(),
+                // A new server starts with the display name, as the web
+                // UI's connect form starts with its `defaultUsername`.
+                existing.as_ref().map_or_else(
+                    || self.panels.settings.display_name.clone().unwrap_or_default(),
+                    |existing| existing.username.to_string(),
+                ),
                 cx,
             ),
         ];
@@ -211,7 +221,7 @@ impl Shell {
                 editor.fields[next].read(cx).focus(window);
                 cx.notify();
             }
-            InputEvent::Changed | InputEvent::PastedPicture(_) => {}
+            InputEvent::Changed | InputEvent::PastedPicture(_) | InputEvent::Pick(_) => {}
         }
     }
 
@@ -313,7 +323,8 @@ pub(super) fn render(
         .child(buttons(editor.editing.is_some(), cx))
 }
 
-fn field_row(
+/// A field of a form under what it is called.
+pub(super) fn field_row(
     name: &'static str,
     input: &Entity<TextInput>,
     theme: &Theme,

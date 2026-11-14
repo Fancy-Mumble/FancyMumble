@@ -44,6 +44,12 @@ impl Shell {
             return;
         };
         self.forget_friend(&hash);
+        let says = if keep {
+            format!("{name} is now a friend")
+        } else {
+            format!("{name} is no longer a friend")
+        };
+        self.toast(says, super::toasts::Kind::Done, cx);
         if keep {
             let server = self
                 .snapshot
@@ -191,6 +197,7 @@ fn row(
         )
         .child(
             IconButton::at("friend-remove", at, "x")
+                .tip("Remove from friends")
                 .tone(Tone::Dim)
                 .on_click(cx.listener(move |shell, _, _, cx| {
                     shell.forget_friend(&hash);

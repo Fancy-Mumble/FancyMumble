@@ -9,7 +9,10 @@ use crate::message::{ControlMessage, TcpMessageType};
 use crate::proto::mumble_tcp;
 
 /// Maximum allowed payload size (8 MiB, generous upper bound).
-const MAX_PAYLOAD_SIZE: u32 = 8 * 1024 * 1024;
+///
+/// A server holds its clients to the same bound, and closes the connection
+/// of one that sends a larger packet.
+pub const MAX_PAYLOAD_SIZE: u32 = 8 * 1024 * 1024;
 
 /// Header size: 2 bytes type + 4 bytes length.
 pub const HEADER_SIZE: usize = 6;
@@ -290,6 +293,7 @@ pub(crate) fn serialize_control_message(msg: &ControlMessage) -> Result<(u16, Ve
         PchatMessage(m) => m.encode_to_vec(),
         PchatFetch(m) => m.encode_to_vec(),
         PchatFetchResponse(m) => m.encode_to_vec(),
+        PchatFetchRefused(m) => m.encode_to_vec(),
         PchatMessageDeliver(m) => m.encode_to_vec(),
         PchatKeyAnnounce(m) => m.encode_to_vec(),
         PchatKeyExchange(m) => m.encode_to_vec(),
@@ -523,6 +527,9 @@ pub(crate) fn deserialize_control_message(type_id: u16, payload: &[u8]) -> Resul
         PchatFetchResponse => {
             ControlMessage::PchatFetchResponse(mumble_tcp::PchatFetchResponse::decode(payload)?)
         }
+        PchatFetchRefused => ControlMessage::PchatFetchRefused(
+            crate::proto::fancy::pchat::FetchRefused::decode(payload)?,
+        ),
         PchatMessageDeliver => {
             ControlMessage::PchatMessageDeliver(mumble_tcp::PchatMessageDeliver::decode(payload)?)
         }

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.ViewGroup
 import android.webkit.WebView
 import androidx.activity.OnBackPressedCallback
 import androidx.core.app.ActivityCompat
@@ -24,15 +25,14 @@ class MainActivity : TauriActivity() {
         // FCM message can arrive (required on Android 8+).
         FcmService.ensureChannel(this)
 
-        // Ask for everything the app needs from the start in one request: the
-        // microphone, so the Oboe capture stream can open when the user
-        // unmutes, and on Android 13+ notifications. Android shows one
-        // permission dialog at a time and silently drops a second request
-        // made while it is up - which is what happened to the notification
-        // prompt the page used to raise a moment after this one, so a fresh
-        // install never got to allow notifications at all.
+        // Ask at launch only for what the app needs before anyone does
+        // anything: on Android 13+, notifications. The microphone is asked for
+        // when voice is first turned on (`ConnectionServicePlugin
+        // .requestMicrophone`), where the question makes sense - asked here,
+        // it came up on every launch of a text-only user until denied twice.
+        // The page raises no permission prompt of its own at launch, so this
+        // one is never dropped for coming second.
         val wanted = buildList {
-            add(Manifest.permission.RECORD_AUDIO)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
             }
@@ -59,6 +59,32 @@ class MainActivity : TauriActivity() {
 
         // Handle channel navigation from notification tap at cold start.
         handleChannelIntent(intent)
+    }
+
+    /**
+     * Come back from the page's renderer going away instead of crashing.
+     *
+     * The dead WebView is taken out and destroyed, as the platform asks, and
+     * the app starts again from its launch screen. It cannot keep its
+     * connection: the connection lives in this process, and the page cannot
+     * be given a new WebView in it - Tauri builds the WebView once per app,
+     * and building the activity again (`recreate()`) runs the whole app a
+     * second time, which panics. So the process is ended on purpose, the
+     * connection service with it (left running, the system would restart it
+     * on its own into a process with no page), and the activity is started
+     * fresh; a server set to connect on launch reconnects.
+     */
+    override fun onWebViewCreate(webView: WebView) {
+        super.onWebViewCreate(webView)
+        webView.post {
+            RenderGoneGuard.install(webView) { gone ->
+                (gone.parent as? ViewGroup)?.removeView(gone)
+                gone.destroy()
+                ConnectionService.stop(this)
+                startActivity(Intent.makeRestartActivityTask(componentName))
+                Runtime.getRuntime().exit(0)
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

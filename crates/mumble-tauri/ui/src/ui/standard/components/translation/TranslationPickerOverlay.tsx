@@ -101,7 +101,7 @@ function setOverlay(el: HTMLElement | null): void {
   Object.assign(div.style, {
     position: "fixed",
     pointerEvents: "none",
-    border: "2px solid var(--accent, #2aabee)",
+    border: "2px solid var(--color-accent, #2aabee)",
     borderRadius: "3px",
     boxShadow: "0 0 0 1px rgba(0,0,0,0.55)",
     background: "rgba(42, 171, 238, 0.08)",

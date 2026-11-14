@@ -2,45 +2,10 @@
 
 // --- Windows system clock detection ------------------------------
 
-/// Returns true when the Windows regional settings use a 24-hour clock.
-///
-/// Reads `LOCALE_ITIME` ("0" = 12-hour, "1" = 24-hour) via `GetLocaleInfoW`.
-#[cfg(target_os = "windows")]
-#[allow(
-    unsafe_code,
-    reason = "GetLocaleInfoW is a read-only locale query; the buffer and its length are passed together"
-)]
+/// Whether the system's regional settings use a 24-hour clock: asked by
+/// the engine, so that a view without this platform layer can ask too.
 fn system_uses_24h() -> Option<bool> {
-    use windows_sys::Win32::Globalization::{GetLocaleInfoW, LOCALE_ITIME, LOCALE_USER_DEFAULT};
-
-    let mut buf = [0u16; 4];
-    // SAFETY: `buf` is live for the call and its length is passed alongside
-    // it in `u16`s, which is the unit GetLocaleInfoW counts in.
-    let len = unsafe {
-        GetLocaleInfoW(
-            LOCALE_USER_DEFAULT,
-            LOCALE_ITIME,
-            buf.as_mut_ptr(),
-            buf.len() as i32,
-        )
-    };
-    if len <= 0 {
-        return None;
-    }
-    Some(
-        buf[..(len as usize).saturating_sub(1)]
-            .first()
-            .copied()
-            .map(|c| c != b'0' as u16)
-            .unwrap_or(false),
-    )
-}
-
-/// On non-Windows, `WebView` Intl resolution is reliable so we return `None`
-/// and let the frontend probe it directly.
-#[cfg(not(target_os = "windows"))]
-fn system_uses_24h() -> Option<bool> {
-    None
+    crate::engine_api::clock::system_uses_24h()
 }
 
 /// Returns the OS-detected clock format for the "auto" time setting.

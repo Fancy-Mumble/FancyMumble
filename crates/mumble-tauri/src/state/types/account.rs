@@ -48,11 +48,16 @@ pub struct AccountSettings {
 /// One device the own account is used from.
 #[derive(Debug, Clone, Default, Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct AccountDevice {
+    /// The device's identifier on the server.
     pub id: String,
+    /// What the device is called, as its user named it.
     pub name: String,
+    /// When the device was added, in milliseconds since the Unix epoch.
     pub added_at_ms: u64,
+    /// When it was last seen, in milliseconds since the Unix epoch.
     /// Zero for a device registered ahead that has not logged in yet.
     pub last_seen_ms: u64,
+    /// Whether the device is connected now.
     pub online: bool,
 }
 
@@ -61,6 +66,7 @@ pub struct AccountDevice {
 pub struct AccountAck {
     /// Echo of the `FancyAccountSettingsUpdate.Action` this ack belongs to.
     pub action: u32,
+    /// Whether the operation succeeded.
     pub ok: bool,
     /// Machine-readable error code when `ok` is false.
     #[serde(default, skip_serializing_if = "Option::is_none")]

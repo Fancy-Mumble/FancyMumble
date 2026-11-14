@@ -60,6 +60,8 @@ export interface LightboxHandle {
    * conversation's own gallery.
    */
   openGallery: (items: readonly LightboxGalleryItem[], index: number) => void;
+  /** Close it, as its own close button does. */
+  close: () => void;
 }
 
 export interface LightboxProps {
@@ -70,6 +72,11 @@ export interface LightboxProps {
   readonly timeFormat?: TimeFormat;
   readonly convertToLocalTime?: boolean;
   readonly systemUses24h?: boolean;
+  /**
+   * Told whenever it opens or closes, so a caller can let a phone's back
+   * gesture close it rather than leave the page behind it.
+   */
+  readonly onOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -622,6 +629,7 @@ export const Lightbox = forwardRef<LightboxHandle, LightboxProps>(function Light
     timeFormat = "auto",
     convertToLocalTime = true,
     systemUses24h,
+    onOpenChange,
   },
   ref,
 ) {
@@ -740,11 +748,16 @@ export const Lightbox = forwardRef<LightboxHandle, LightboxProps>(function Light
 
   useImperativeHandle(
     ref,
-    () => ({ open: handleOpenLightbox, openGallery: handleOpenGallery }),
-    [handleOpenLightbox, handleOpenGallery],
+    () => ({ open: handleOpenLightbox, openGallery: handleOpenGallery, close: handleClose }),
+    [handleOpenLightbox, handleOpenGallery, handleClose],
   );
 
-  if (lightboxIndex === null || !items[lightboxIndex]) return null;
+  const shown = lightboxIndex !== null && items[lightboxIndex] !== undefined;
+  useEffect(() => {
+    onOpenChange?.(shown);
+  }, [shown, onOpenChange]);
+
+  if (!shown) return null;
 
   return (
     <LightboxOverlay

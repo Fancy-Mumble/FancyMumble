@@ -228,6 +228,7 @@ export default function ChannelInfoPanel({ onClose }: ChannelInfoPanelProps) {
               <SafeHtml
                 html={channelDescription ?? ""}
                 className={styles.descriptionContent}
+                padBoxes
                 fallback={<em>{t("channelInfoPanel.noDescription")}</em>}
               />
             </div>

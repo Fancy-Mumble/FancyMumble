@@ -77,6 +77,7 @@ fancy_message_support! {
     PchatMessage              => ServerOnly,
     PchatFetch                => ServerOnly,
     PchatFetchResponse        => ServerOnly,
+    PchatFetchRefused         => ServerOnly,
     PchatMessageDeliver       => ServerOnly,
     PchatKeyAnnounce          => ServerOnly,
     PchatKeyExchange          => ServerOnly,
@@ -268,12 +269,6 @@ mod tests {
         "PchatOfflineQueueDrain",
         "PchatReactionFetchResponse",
         "FancyCustomReactionsConfig",
-        // Onboarding, whole.
-        "FancyOnboardingConfig",
-        "FancyOnboardingConfigUpdate",
-        "FancyOnboardingResponse",
-        "FancyOnboardingResponseQuery",
-        "FancyOnboardingResponseDeliver",
         // Plugins: the admin surface. The registry and the envelope a plugin
         // talks over are carried at outer type 1010.
         "FancyPluginAdminListRequest",

@@ -44,7 +44,7 @@
     }
   },
   "audio": {
-    "panelTitle": "Sprache",
+    "panelTitle": "Sprachchat",
     "inputDevice": "Eingabegerät",
     "outputDevice": "Ausgabegerät",
     "systemDefault": "Systemstandard",
@@ -109,7 +109,7 @@
     }
   },
   "voice": {
-    "panelTitle": "Sprache",
+    "panelTitle": "Sprachchat",
     "vadThreshold": "Sprachaktivierungs-Schwelle",
     "vadThresholdHint": "Audio unterhalb dieses Pegels wird unterdrückt, um Hintergrundgeräusche herauszufiltern.",
     "noiseGateClose": "Schließverhältnis des Gates",
@@ -482,7 +482,7 @@
   "tabs": {
     "profile": "Profil",
     "account": "Konto",
-    "voice": "Sprache",
+    "voice": "Sprachchat",
     "shortcuts": "Tastenkürzel",
     "identities": "Identitäten",
     "notifications": "Benachrichtigungen",
@@ -798,6 +798,7 @@
     "colUsername": "Nutzername",
     "colLastSeen": "Zuletzt gesehen",
     "colLastChannel": "Letzter Kanal",
+    "deletedChannel": "Gelöschter Kanal",
     "colRoles": "Rollen",
     "colActions": "Aktionen",
     "save": "Speichern",
@@ -832,7 +833,9 @@
     "fieldHash": "Hash",
     "fieldStart": "Beginn",
     "fieldStartPlaceholder": "z.B. 2025-01-01T00:00:00",
-    "fieldDuration": "Dauer (Sekunden, 0 = dauerhaft)"
+    "fieldDuration": "Dauer (Sekunden, 0 = dauerhaft)",
+    "refused": "Die Banliste wurde nicht gespeichert, nichts wurde geändert: {{reason}}",
+    "refusedNoReason": "Der Server hat die Banliste abgelehnt, nichts wurde geändert."
   },
   "channelAcl": {
     "title": "Kanäle / ACL",

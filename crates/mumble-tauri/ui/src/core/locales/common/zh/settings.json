@@ -947,6 +947,7 @@
     "colUsername": "用户名",
     "colLastSeen": "最后在线",
     "colLastChannel": "最后所在频道",
+    "deletedChannel": "已删除的频道",
     "colRoles": "身份组",
     "colActions": "操作",
     "save": "保存",
@@ -981,7 +982,9 @@
     "fieldHash": "哈希",
     "fieldStart": "开始时间",
     "fieldStartPlaceholder": "如：2025-01-01T00:00:00",
-    "fieldDuration": "持续时间（秒，0 = 永久）"
+    "fieldDuration": "持续时间（秒，0 = 永久）",
+    "refused": "封禁列表未保存，未做任何更改：{{reason}}",
+    "refusedNoReason": "服务器拒绝了封禁列表，未做任何更改。"
   },
   "channelAcl": {
     "title": "频道 / ACL",

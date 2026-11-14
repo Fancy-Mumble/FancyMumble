@@ -2,29 +2,137 @@
 //! out - a band across the top, the server rail, the channel column and the
 //! conversation.
 
-mod acl;
+mod about;
+mod about_editor;
+mod about_view;
+pub(crate) mod accounts;
+mod actions;
 mod admin;
+mod admin_pages;
+pub(crate) mod aside;
 mod band;
+mod band_tabs;
+mod card;
 mod certificates;
+mod channel_form;
 mod connect;
 mod conversation;
 mod devices;
+mod embeds;
 mod emoji;
+mod facts;
+mod format_bar;
 mod frame;
 mod friends;
+mod gifs;
+mod global_keys;
+mod hover_card;
+pub(crate) mod keys;
 mod kit;
 mod later;
+mod lightbox;
+mod lightbox_file;
+mod link_card;
+mod links;
+mod livery;
+mod loudness;
+mod marking;
 mod members;
+mod mention;
 mod menu;
+mod mover;
+mod onboarding;
 mod picker;
+mod pins;
+mod playing;
+pub(crate) mod placed;
+mod pages;
+mod prose;
 mod rail;
+mod video_card;
+mod reconnect;
 mod server_editor;
 mod settings;
 mod sidebar;
+mod sounds;
+mod speaker;
+mod stage;
+mod staged;
+mod uploads;
+mod shared_picture;
+mod album;
+#[cfg(test)]
+mod tests_share;
+#[cfg(test)]
+mod tests_share_windows;
+#[cfg(test)]
+mod tests_share_feeds;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_connect;
+#[cfg(test)]
+mod tests_embeds;
+#[cfg(test)]
+mod tests_player;
+#[cfg(test)]
+mod tests_format_bar;
+#[cfg(test)]
+mod tests_keyboard;
+#[cfg(test)]
+mod tests_livery;
+#[cfg(test)]
+mod tests_tray;
+#[cfg(test)]
+mod tests_dock;
+#[cfg(test)]
+mod tests_admin_pages;
+#[cfg(test)]
+mod tests_settings;
+#[cfg(test)]
+mod tests_themes;
+#[cfg(test)]
+mod tests_uploads;
+#[cfg(test)]
+mod tests_settings_profile;
+#[cfg(test)]
+mod tests_words;
+#[cfg(test)]
+mod tests_profile;
+mod profile_page;
+#[cfg(test)]
+mod tests_page;
+#[cfg(test)]
+mod tests_bodies;
+#[cfg(test)]
+mod tests_members;
+#[cfg(test)]
+mod tests_user_devices;
+#[cfg(test)]
+mod tests_voice_message;
+#[cfg(test)]
+mod tests_voice_settings;
+#[cfg(test)]
+mod tests_gif;
+#[cfg(test)]
+mod tests_legacy;
+#[cfg(test)]
+mod tests_shared_picture;
+#[cfg(test)]
+mod tests_album;
+#[cfg(test)]
+mod tests_sharing;
+#[cfg(test)]
+mod tests_settings_real;
+#[cfg(test)]
+mod tests_settings_more;
 pub(crate) mod text_input;
+mod toasts;
+mod tray;
+mod voice_messages;
+mod welcome;
 mod widgets;
+mod zoom;
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -38,7 +146,7 @@ use crate::engine::WhisperTarget;
 use crate::engine::{
     Action, AudioDevices, ChannelId, ChosenDevices, Connection, Conversation, Engine, EngineEvent,
     Found, KeyRequest, Message, Poll, Preview, Reader, SavedServer, Session, Snapshot, Subject,
-    User, VoiceSettings,
+    User, Voice, VoiceSettings,
 };
 use crate::store::{Settings, Store};
 use crate::theme::{ActiveTheme, Catalog, Mode};
@@ -71,17 +179,69 @@ pub(super) struct Info {
     title: gpui::SharedString,
     /// The text, once it has arrived; `None` while it is being fetched.
     body: Option<Arc<conversation::DrawnBody>>,
+    /// A channel's description or the server's welcome, read as a page;
+    /// `None` for a user, and while it is being read.
+    page: Option<Arc<crate::page::Page>>,
     /// What else is known, as names and values.
     facts: Vec<(gpui::SharedString, gpui::SharedString)>,
+    /// For a user on several devices, told to an administrator: what is
+    /// known of each. Empty for anybody else.
+    devices: Vec<crate::engine::DeviceFacts>,
     /// For a user: the profile their comment carries, if it carries one,
     /// and its banner's picture. Held while the card is open and no longer.
     profile: Option<crate::profile::Profile>,
+    /// The family their name is set in, where their profile names a face.
+    name_family: Option<gpui::SharedString>,
     banner: Option<Arc<gpui::Image>>,
+    /// For a user: what they wrote about themselves, as their card shows it.
+    written: card::Written,
+    /// Where the pointer rested to ask for it, for a card that floats
+    /// beside the pointer while it stays; `None` for one that is kept.
+    hover: Option<gpui::Point<gpui::Pixels>>,
+    /// Where a card that is kept was asked for, to stand beside; `None`
+    /// rests it at the window's top right.
+    anchor: Option<gpui::Point<gpui::Pixels>>,
+    /// For a user: the sheet of what the server knows of them, asked for
+    /// from their menu, and not their card.
+    sheet: bool,
 }
 
-/// A size in bytes as a person says it: `812 B`, `1.5 KB`, `3.2 MB`.
+/// A colour as CSS writes it, `#rrggbb`: for what keeps a colour as a
+/// server writes one.
+pub(crate) use kit::hex;
+
+/// A size in bytes as the web UI's `formatBytes` says it, in binary units:
+/// `812 B`, `1.5 KiB`, `4.2 MiB`, `12 MiB`. One decimal under ten of a unit,
+/// none from ten up or for a whole number; the decimal mark as the reader
+/// chose.
+pub(crate) fn bytes_in_words(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["KiB", "MiB", "GiB", "TiB", "PiB"];
+    if bytes < 1024 {
+        return format!("{bytes} B");
+    }
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "said to one decimal; nobody shares a file of 2^53 bytes"
+    )]
+    let mut size = bytes as f64 / 1024.0;
+    let mut unit = 0;
+    while size >= 1024.0 && unit + 1 < UNITS.len() {
+        size /= 1024.0;
+        unit += 1;
+    }
+    let digits = usize::from(size < 10.0 && size.fract() != 0.0);
+    let size = if digits == 0 { size.round() } else { size };
+    let written = crate::formats::current()
+        .number
+        .write(size, digits, crate::words::spoken());
+    format!("{written} {}", UNITS[unit])
+}
+
+/// A size in bytes as the web client's `formatBytes` says it, in binary
+/// units: `812 B`, `1.5 KiB`, `3.8 MiB`, `12 MiB` (a decimal only below ten
+/// of a unit, and none where the size is whole).
 pub(crate) fn size_in_words(bytes: u64) -> String {
-    const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
+    const UNITS: [&str; 5] = ["KiB", "MiB", "GiB", "TiB", "PiB"];
     if bytes < 1024 {
         return format!("{bytes} B");
     }
@@ -95,7 +255,16 @@ pub(crate) fn size_in_words(bytes: u64) -> String {
         size /= 1024.0;
         unit += 1;
     }
-    format!("{size:.1} {}", UNITS[unit])
+    // Under 1024 of its unit, so never split into thousands; the decimal
+    // mark as the reader chose to have numbers written.
+    let size = if size >= 10.0 || size.fract() == 0.0 {
+        format!("{}", size.round())
+    } else {
+        crate::formats::current()
+            .number
+            .write(size, 1, crate::words::spoken())
+    };
+    format!("{size} {}", UNITS[unit])
 }
 
 /// A key that does something for as long as it is held.
@@ -128,37 +297,99 @@ struct Whisper {
 /// it is open.
 #[derive(Default)]
 struct Panels {
-    /// A channel's permissions.
-    acl: Option<acl::Panel>,
-    /// The administrator's lists.
-    admin: Option<admin::Admin>,
+    /// The files waiting to go out with the next message.
+    staged: Option<staged::Staged>,
+    /// The files going up, in the order they were sent.
+    uploads: Vec<uploads::Upload>,
+    /// The shared pictures fetched to be shown, by what the server keeps
+    /// them under; `None` while one is on its way, or is no picture.
+    shared: std::collections::HashMap<gpui::SharedString, Option<Arc<gpui::Image>>>,
+    /// The page of the server's administration in the settings' pane,
+    /// while one is on show.
+    admin_page: Option<admin_pages::Open>,
     /// The certificates.
     certs: certificates::Panel,
     /// The messages waiting to be sent later.
     later: Option<later::Panel>,
     /// The friends kept, and their list.
     friends: friends::Friends,
-    /// The view's own settings, and their dialog.
+    /// The view's own settings, and their page.
     settings: settings::Settings,
     /// Who is in the channel on screen, and the server's roles.
     members: members::Panel,
+    /// The links let through without asking, and the one asked about.
+    links: links::Guard,
+    /// Where somebody is being moved to, while that is being chosen.
+    mover: Option<mover::Mover>,
+    /// The form a channel is being made in.
+    channel_form: Option<channel_form::ChannelForm>,
+    /// How the picture opened large is being looked at.
+    looking: zoom::View,
+    /// Whether a picture was open the last time the window was drawn: what
+    /// was read of it for that is let go of once none is.
+    looked_large: bool,
+    /// The emoji picker: what narrows it, and what was used last.
+    emoji: emoji::Picker,
+    /// The names offered while one is being typed after an `@`.
+    mention: Option<mention::Offer>,
+    /// What links show from the web, as far as the reader let it in.
+    embeds: embeds::Embeds,
+    /// GIFs: the user's key, the servers' own addresses, the browser.
+    gifs: gifs::Gifs,
+    /// Somebody's full profile, and the local user's about being edited.
+    profiles: profile_page::Profiles,
 }
 
 impl Panels {
-    /// All closed, with the friends remembered.
-    fn keeping(friends: Vec<crate::store::Friend>, privacy: crate::store::Privacy) -> Self {
+    /// All closed, with what was `stored` remembered.
+    fn keeping(stored: &Settings) -> Self {
         Self {
             friends: friends::Friends {
                 open: false,
-                kept: friends,
+                kept: stored.friends.clone(),
             },
             settings: settings::Settings {
-                open: false,
-                privacy,
+                privacy: stored.privacy,
+                sounds: stored.sounds.clone(),
+                format: stored.format,
+                global_keys: stored.global_keys,
+                display_name: stored.display_name.clone(),
+                stay_disconnected: stored.stay_disconnected,
+                look: stored.look,
+                shortcuts: stored.shortcuts.clone(),
+                notifications: stored.enable_notifications.0,
+                welcome_display: stored.welcome_message_display,
+                welcome_seen: stored.welcome_seen.clone(),
+                dual_path: stored.enable_dual_path,
+                logs: stored.logs.clone(),
+                disconnect_warning: stored.show_disconnect_warning.0,
+                streamer: stored.streamer_mode,
+                jumps: stored.user_shortcuts.clone(),
+                whispers: settings::Whispers::kept(stored.whisper_targets.clone()),
+                server_switcher: stored.server_switcher,
+                user_mode: stored.user_mode,
+                voice: settings::VoicePage::remembering(
+                    stored.gate_calibrated_for.clone(),
+                    stored.denoiser_knobs.clone(),
+                ),
+                ..settings::Settings::default()
             },
+            links: links::Guard::trusting(stored.trusted_hosts.clone()),
+            emoji: emoji::Picker::remembering(stored.recent_emoji.clone()),
+            gifs: gifs::Gifs::keeping(stored.klipy_key.clone()),
+            members: members::Panel::remembering(stored),
             ..Self::default()
         }
     }
+}
+
+/// What the pointer is resting on, of what shows something for it.
+#[derive(Debug, Default)]
+struct Pointed {
+    /// Somebody, in a list: whose card is shown once it has rested.
+    user: Option<Session>,
+    /// A message: which has its pill of actions up.
+    pill: actions::Hovered,
 }
 
 /// How the window's own furniture is set.
@@ -174,16 +405,80 @@ struct Chrome {
     /// The messages picked, by id, while several are being picked to be
     /// deleted together.
     picked: Option<Vec<gpui::SharedString>>,
+    /// Where the window is, as last noted.
+    placed: Option<crate::store::Placed>,
+    /// The picture behind a conversation, where one was chosen, and how
+    /// far it is washed out with the window's colour.
+    wall: Option<Arc<gpui::Image>>,
+    wall_wash: f32,
+    /// How far it is blurred, in pixels.
+    wall_blur: u8,
+    /// How far it is darkened, from not at all to black.
+    wall_dim: f32,
+    /// The pictures kept to put there, and which is.
+    walls: crate::store::Backgrounds,
+    /// Whether light or dark is the system's to choose, and follows it.
+    follows_system: bool,
+    /// Whether the countdown to a retry is being kept moving.
+    retry_watched: bool,
+    /// Whether the column of channels is put away, to give the
+    /// conversation the room.
+    column_hidden: bool,
+    /// What the web client on this computer holds that this one does not,
+    /// while that is on offer.
+    carry: Option<crate::engine::CarryOver>,
+    /// Whether the offer was declined: it is made once.
+    carry_declined: bool,
+    /// What is being said at the foot of the window, in passing.
+    toasts: toasts::Toasts,
+    /// The voice keys bound with the system, while the user has asked for
+    /// them to work from other programs.
+    hotkeys: Option<crate::hotkeys::Hotkeys>,
+    /// The keys last said to be taken by another program: said once, not
+    /// at every change of something else.
+    told_of_keys: Vec<String>,
+    /// The icon in the system's tray, where there is one.
+    tray: Option<crate::tray::Tray>,
+    /// The windows open beside this one, and where each was left.
+    asides: aside::Asides,
+    /// Where the user's own dock was last drawn: the sheet over it grows
+    /// out of it.
+    dock: std::rc::Rc<std::cell::Cell<Option<gpui::Bounds<gpui::Pixels>>>>,
 }
 
 impl Chrome {
     /// As it starts, with the identity remembered for connecting at launch.
-    fn remembering(auto_connect: Option<String>, hide_empty: bool) -> Self {
+    fn remembering(stored: &Settings, store: Option<&Store>) -> Self {
+        let walls = store.map_or_else(
+            || stored.chat_backgrounds.clone(),
+            |store| store.backgrounds(&stored.chat_backgrounds),
+        );
         Self {
             rail_wide: false,
-            auto_connect: auto_connect.map(Into::into),
-            hide_empty,
+            auto_connect: stored.auto_connect.clone().map(Into::into),
+            hide_empty: stored.hide_empty,
             picked: None,
+            placed: stored.window,
+            follows_system: stored.mode.as_deref() == Some(crate::theme::SYSTEM),
+            retry_watched: false,
+            column_hidden: false,
+            carry: None,
+            carry_declined: stored.carry_declined,
+            wall: store
+                .zip(walls.current())
+                .and_then(|(store, current)| store.chat_background(&current.file))
+                .and_then(crate::picture::picture)
+                .map(Arc::new),
+            wall_wash: stored.wall_wash.unwrap_or(settings::WALL_WASH),
+            wall_blur: stored.wall_blur.unwrap_or(0),
+            wall_dim: stored.chat_bg_dim.unwrap_or(settings::WALL_DIM),
+            walls,
+            toasts: toasts::Toasts::default(),
+            hotkeys: None,
+            told_of_keys: Vec::new(),
+            tray: None,
+            asides: aside::Asides::remembering(stored.asides.clone()),
+            dock: std::rc::Rc::default(),
         }
     }
 }
@@ -197,6 +492,32 @@ pub(super) struct Seen {
     pub(super) until: Option<usize>,
     /// The message the local user last said they had read up to.
     said: Option<gpui::SharedString>,
+    /// The first message that had not been read when the conversation was
+    /// opened, by its id and when it was sent: where the rule goes that
+    /// marks where reading left off, for as long as the conversation is open.
+    unread_from: Option<(Option<gpui::SharedString>, Option<u64>)>,
+    /// The message just gone to, which stands out for a moment.
+    pub(super) flashed: Option<gpui::SharedString>,
+}
+
+impl Seen {
+    /// Note that the last `unread` of `messages` had not been read.
+    fn leave_off(&mut self, messages: &[Message], unread: usize) {
+        self.unread_from = messages
+            .len()
+            .checked_sub(unread)
+            .filter(|_| unread > 0)
+            .and_then(|at| messages.get(at))
+            .map(|first| (first.id.clone(), first.sent_at_ms));
+    }
+
+    /// Where among `messages` the first that had not been read is now.
+    fn left_off(&self, messages: &[Message]) -> Option<usize> {
+        let (id, sent) = self.unread_from.as_ref()?;
+        messages
+            .iter()
+            .position(|message| message.id == *id && message.sent_at_ms == *sent)
+    }
 }
 
 /// The application's one window.
@@ -239,13 +560,18 @@ pub(crate) struct Shell {
     shown: Option<Conversation>,
     window: usize,
     earlier: bool,
-    /// How many messages the open conversation holds, shown or not, and
-    /// how many of them are pinned.
+    /// How many messages the open conversation holds, shown or not.
     held: usize,
-    pins: usize,
+    /// Everything pinned in the open conversation, the pin put on last
+    /// first: also what is further back than the messages shown.
+    pins: Vec<crate::engine::Pin>,
     /// Whether the reader is at the newest message: set by their own
     /// scrolling, and what decides whether an arrival moves them.
     at_tail: std::rc::Rc<std::cell::Cell<bool>>,
+    /// How many messages arrived below a reader who was further up: what
+    /// tells them one did, since they are not carried down to it. Reaching
+    /// the newest message again clears it.
+    below: std::rc::Rc<std::cell::Cell<usize>>,
     /// The conversation's rows: only the visible ones are laid out.
     rows: ListState,
     /// The bodies of the messages drawn so far, by message index.
@@ -259,9 +585,13 @@ pub(crate) struct Shell {
     zone: widgets::Zone,
     /// Who is talking right now.
     talking: HashSet<Session>,
+    /// What was last seen of the server: what a sound is played against.
+    watch: sounds::Watch,
     composer: Entity<TextInput>,
-    /// Whether the conversation shows only its pinned messages.
-    only_pinned: bool,
+    /// The line on somebody's card that writes to them.
+    card_line: Entity<TextInput>,
+    /// Whether the list of what is pinned is showing.
+    pins_open: bool,
     /// The message being answered: its id, and what the strip above the
     /// composer says of it.
     replying: Option<(gpui::SharedString, gpui::SharedString)>,
@@ -274,6 +604,8 @@ pub(crate) struct Shell {
     servers: Vec<SavedServer>,
     /// The `host:port` whose landing page is showing, once one was picked.
     selected_server: Option<String>,
+    /// The livery of the server whose landing page is showing.
+    livery: crate::livery::Landing,
     /// The identity picked to connect as, once one was.
     selected_identity: Option<gpui::SharedString>,
     server_search: Entity<TextInput>,
@@ -295,9 +627,10 @@ pub(crate) struct Shell {
     chosen_devices: ChosenDevices,
     /// The card showing a user's comment or a channel's description.
     info: Option<Info>,
-    /// The server's welcome message as drawn, and the HTML it was read
-    /// from, so it is read once per message rather than once per frame.
-    welcome: Option<(gpui::SharedString, Arc<conversation::DrawnBody>)>,
+    /// What the pointer is resting on.
+    pointed: Pointed,
+    /// The server's welcome message, read once per message.
+    welcome: welcome::Welcome,
     /// Whether the welcome message was dismissed on this connection.
     welcome_dismissed: bool,
     /// The session the conversation on screen belongs to.
@@ -311,6 +644,8 @@ pub(crate) struct Shell {
     emoji_for: Option<emoji::For>,
     /// The picture being looked at large, while one is.
     lightbox: Option<Arc<gpui::Image>>,
+    /// The shared file open large, whose whole picture is fetched for it.
+    large: Option<lightbox_file::LargeFile>,
     /// The panels that open over the window.
     panels: Panels,
     chrome: Chrome,
@@ -321,7 +656,10 @@ pub(crate) struct Shell {
     /// The dialog a menu entry asked a question in, while it is open.
     prompt: Option<menu::Prompt>,
     /// How loud each user is played here, where that is not as sent.
-    volumes: std::collections::HashMap<Session, f32>,
+    volumes: loudness::Loudness,
+    /// What was being written in each conversation other than the open
+    /// one, to be found again on coming back.
+    drafts: std::collections::HashMap<Conversation, String>,
     /// How the microphone is used.
     voice_settings: VoiceSettings,
     /// The push-to-talk key and what it is doing.
@@ -329,6 +667,10 @@ pub(crate) struct Shell {
     /// The window's own focus: where keys go when no field has them, so
     /// push to talk works without clicking into anything.
     focus: gpui::FocusHandle,
+    /// The voice message being recorded, and the one playing.
+    voice: voice_messages::VoiceMessages,
+    /// Screen sharing: the shares in the channel, one's own, drawing.
+    stage: stage::Stage,
     _events: Task<()>,
     _subscriptions: Vec<Subscription>,
 }
@@ -336,52 +678,174 @@ pub(crate) struct Shell {
 /// The list the conversation's rows are laid out in, and the flag it keeps
 /// of whether the reader is at the newest message: their own scrolling
 /// sets it.
-fn conversation_list() -> (ListState, std::rc::Rc<std::cell::Cell<bool>>) {
+fn conversation_list() -> (
+    ListState,
+    std::rc::Rc<std::cell::Cell<bool>>,
+    std::rc::Rc<std::cell::Cell<usize>>,
+) {
     let at_tail = std::rc::Rc::new(std::cell::Cell::new(true));
+    let below = std::rc::Rc::new(std::cell::Cell::new(0));
     let rows = ListState::new(0, ListAlignment::Top, px(OVERDRAW));
     rows.set_scroll_handler({
-        let at_tail = std::rc::Rc::clone(&at_tail);
-        move |scrolled, _, _| at_tail.set(scrolled.visible_range.end >= scrolled.count)
+        let (at_tail, below) = (std::rc::Rc::clone(&at_tail), std::rc::Rc::clone(&below));
+        move |scrolled, _, _| {
+            let at_end = scrolled.visible_range.end >= scrolled.count;
+            at_tail.set(at_end);
+            // Back at the newest message: what arrived has been seen.
+            if at_end {
+                below.set(0);
+            }
+        }
     });
-    (rows, at_tail)
+    (rows, at_tail, below)
+}
+
+/// The composer: as many lines as are typed, pictures taken from the
+/// clipboard, and what is typed set the way `engine` will send it.
+fn composer(engine: &Arc<dyn Engine>, cx: &mut Context<Shell>) -> Entity<TextInput> {
+    let engine = Arc::clone(engine);
+    let reads_marks: text_input::ReadsMarks =
+        std::rc::Rc::new(move |text: &str| engine.typed(text));
+    let composer = cx.new(|cx| {
+        TextInput::new("", cx)
+            .multiline()
+            .taking_pictures()
+            .setting_marks(reads_marks)
+    });
+    // Over a selection, the bar of marks; its emoji goes where typing does.
+    let shell = cx.weak_entity();
+    format_bar::FormatBar::attach(
+        &composer,
+        move |window, cx| {
+            let _ = shell.update(cx, |shell, cx| {
+                shell.open_emoji(emoji::For::Composer, Some(window), cx);
+            });
+        },
+        cx,
+    );
+    composer
 }
 
 impl Shell {
     /// A shell showing whatever `engine` is connected to, remembering the
     /// chosen theme in `store`.
+    /// The line on somebody's card that writes to them, and the hearing of
+    /// what is entered on it.
+    fn card_line(cx: &mut Context<Self>) -> (Entity<TextInput>, Subscription) {
+        let line = cx.new(|cx| TextInput::new("Message", cx));
+        let said = cx.subscribe(&line, |shell, line, event, cx| {
+            shell.on_card_line(&line, event, cx);
+        });
+        (line, said)
+    }
+
+    /// What the shell keeps an eye on of its window: where it is, and
+    /// whether the user is looking at it.
+    fn watch_window(window: &mut Window, cx: &mut Context<Self>) -> Vec<Subscription> {
+        vec![
+            cx.observe_window_bounds(window, |shell, window, cx| shell.window_moved(window, cx)),
+            cx.observe_window_appearance(window, |shell, window, cx| {
+                shell.follow_system(window, cx);
+            }),
+            // The engine counts messages unread, and notifies, by whether
+            // the user is looking.
+            cx.observe_window_activation(window, |shell, window, cx| {
+                shell.engine.set_focused(window.is_window_active());
+                shell.retitle(window);
+                // Nobody is looking: what is not in use can go.
+                if !window.is_window_active() {
+                    crate::trim::soon(cx);
+                }
+                cx.notify();
+            }),
+        ]
+    }
+
+    /// Read the engine for the first time: the server it is on already,
+    /// if it is on one, is the one on screen and not one just arrived at.
+    fn begin(&mut self, cx: &mut Context<Self>) {
+        self.take_snapshot();
+        self.active_session = self
+            .snapshot
+            .sessions
+            .iter()
+            .find(|session| session.active)
+            .map(|session| session.id.clone());
+        self.engine
+            .set_reconnecting(!self.panels.settings.stay_disconnected);
+        self.rebind_global_keys(cx);
+        self.follow_current_channel(None);
+        self.begin_welcome(cx);
+        self.look_for_carry();
+        self.reload_messages(cx);
+    }
+
+    /// See what the web client on this computer holds that this one does
+    /// not, unless bringing it over was already declined.
+    fn look_for_carry(&mut self) {
+        self.chrome.carry = (!self.chrome.carry_declined)
+            .then(|| self.engine.carry_over())
+            .flatten();
+    }
+
+    /// Bring the web client's servers and certificates over.
+    pub(super) fn carry_now(&mut self, cx: &mut Context<Self>) {
+        self.engine.carry_now();
+        self.chrome.carry = None;
+        cx.notify();
+    }
+
+    /// Leave the web client's servers where they are, and do not ask again.
+    pub(super) fn decline_carry(&mut self, cx: &mut Context<Self>) {
+        self.chrome.carry = None;
+        self.chrome.carry_declined = true;
+        self.remember_settings(cx);
+        cx.notify();
+    }
+
+    /// What the shell does when its own fields are written in: the
+    /// composer, the channel search, the server search and the password.
+    fn watch_fields(
+        [composer, search, server_search, password]: [&Entity<TextInput>; 4],
+        cx: &mut Context<Self>,
+    ) -> [Subscription; 4] {
+        [
+            cx.subscribe(composer, Self::on_composer),
+            cx.subscribe(search, |shell, _, _, cx| shell.narrow_column(cx)),
+            cx.subscribe(server_search, |_, _, _, cx| cx.notify()),
+            // Enter in the password field connects.
+            cx.subscribe(password, |shell, _, event, cx| {
+                if matches!(event, InputEvent::Submitted(_)) {
+                    shell.connect_selected(cx);
+                }
+            }),
+        ]
+    }
+
     pub(crate) fn new(
         engine: Arc<dyn Engine>,
         store: Option<Store>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let (rows, at_tail) = conversation_list();
-        let composer = cx.new(|cx| TextInput::new("", cx).multiline().taking_pictures());
+        let (rows, at_tail, below) = conversation_list();
+        let composer = composer(&engine, cx);
         let search = cx.new(|cx| TextInput::new("Search channels", cx));
         let server_search = cx.new(|cx| TextInput::new("Search servers", cx));
-        let password = cx.new(|cx| TextInput::new("Server password, if it has one", cx).obscured());
-        let subscriptions = vec![
-            // The engine counts messages unread, and notifies, by whether
-            // the user is looking.
-            cx.observe_window_activation(window, |shell, window, cx| {
-                shell.engine.set_focused(window.is_window_active());
-                shell.retitle(window);
-                cx.notify();
-            }),
-            cx.subscribe(&composer, Self::on_composer),
-            cx.subscribe(&search, |shell, _, _, cx| shell.narrow_column(cx)),
-            cx.subscribe(&server_search, |_, _, _, cx| cx.notify()),
-            // Enter in the password field connects.
-            cx.subscribe(&password, |shell, _, event, cx| {
-                if matches!(event, InputEvent::Submitted(_)) {
-                    shell.connect_selected(cx);
-                }
-            }),
-        ];
+        let password = cx.new(|cx| TextInput::new("Password", cx).obscured());
+        let (card_line, card_line_said) = Self::card_line(cx);
+        let mut subscriptions = Self::watch_window(window, cx);
+        subscriptions.push(card_line_said);
+        subscriptions.extend(Self::watch_fields(
+            [&composer, &search, &server_search, &password],
+            cx,
+        ));
         // Asked here, and whenever the list changes or is returned to.
         engine.refresh_pings();
         let events = Self::listen(engine.events(), cx);
         let stored = store.as_ref().map(Store::settings).unwrap_or_default();
+        let chrome = Chrome::remembering(&stored, store.as_ref());
+        settings::apply_kept(&stored, engine.as_ref(), cx);
         let mut shell = Self {
             snapshot: Snapshot::disconnected(),
             wanted: String::new(),
@@ -401,21 +865,25 @@ impl Shell {
             window: PAGE,
             earlier: false,
             held: 0,
-            pins: 0,
+            pins: Vec::new(),
             rows,
             at_tail,
+            below,
             bodies: std::collections::HashMap::new(),
             previews: std::collections::HashMap::new(),
             row_model: Vec::new(),
             zone: widgets::Zone::Local,
             talking: HashSet::new(),
+            watch: sounds::Watch::default(),
             composer,
-            only_pinned: false,
+            card_line,
+            pins_open: false,
             replying: None,
             editing: None,
             typing: std::collections::HashMap::new(),
             search,
             selected_server: None,
+            livery: crate::livery::Landing::default(),
             selected_identity: None,
             server_search,
             secrets: connect::Secrets::new(password, cx),
@@ -427,36 +895,38 @@ impl Shell {
             devices: None,
             chosen_devices: engine.chosen_devices(),
             info: None,
-            welcome: None,
+            pointed: Pointed::default(),
+            welcome: welcome::Welcome::default(),
             welcome_dismissed: false,
             active_session: None,
             adding_server: false,
             titled_unread: 0,
             emoji_for: None,
             lightbox: None,
-            panels: Panels::keeping(stored.friends.clone(), stored.privacy),
-            chrome: Chrome::remembering(stored.auto_connect.clone(), stored.hide_empty),
+            large: None,
+            panels: Panels::keeping(&stored),
+            chrome,
             whisper: Whisper {
                 key: stored.whisper_key.map(Into::into),
                 ..Whisper::default()
             },
             menu: None,
             prompt: None,
-            volumes: std::collections::HashMap::new(),
+            volumes: loudness::Loudness::remembering(stored.volumes),
+            drafts: std::collections::HashMap::new(),
             voice_settings: engine.voice_settings(),
             ptt: HeldKey {
                 key: stored.push_to_talk_key.map(Into::into),
                 ..HeldKey::default()
             },
             focus: cx.focus_handle(),
+            voice: voice_messages::VoiceMessages::default(),
+            stage: stage::Stage::new(engine.media(), window, cx),
             engine,
             _events: events,
             _subscriptions: subscriptions,
         };
-        shell.take_snapshot();
-        shell.follow_current_channel(None);
-        shell.read_welcome();
-        shell.reload_messages(cx);
+        shell.begin(cx);
         shell
     }
 
@@ -509,45 +979,25 @@ impl Shell {
         if stale {
             self.apply(EngineEvent::StateChanged, cx);
         }
+        // The shares follow who is where, once a burst is applied.
+        self.follow_shares(cx);
+        self.mirror_tray();
         cx.notify();
     }
 
     fn apply(&mut self, event: EngineEvent, cx: &mut Context<Self>) {
         match event {
-            EngineEvent::StateChanged => {
-                let was = self.snapshot.connection;
-                self.take_snapshot();
-                // A new connection has a welcome of its own to show.
-                if was != Connection::Connected && self.snapshot.connection == Connection::Connected
-                {
-                    self.welcome_dismissed = false;
-                }
-                self.read_welcome();
-                self.drop_gone_whisper_target(cx);
-                self.follow_active_session(cx);
-                self.drop_closed_conversation(cx);
-                // A message deleted by somebody else is announced only as
-                // a change of state.
-                if let Some(open) = self.open
-                    && self.engine.message_count(open) != self.held
-                {
-                    self.reload_messages(cx);
-                }
-                // Back on the server list: what it says about each server is
-                // as old as the visit just ended.
-                if was == Connection::Connected
-                    && self.snapshot.connection == Connection::Disconnected
-                {
-                    self.engine.refresh_pings();
-                }
-            }
+            EngineEvent::StateChanged => self.state_changed(cx),
             EngineEvent::About { subject, html } => self.take_about(subject, html, cx),
-            EngineEvent::Facts { subject, facts } => {
-                if let Some(info) = self.info.as_mut().filter(|info| info.subject == subject) {
-                    info.facts = facts;
-                }
+            EngineEvent::Facts {
+                subject,
+                facts,
+                devices,
+            } => self.take_facts(subject, facts, devices),
+            EngineEvent::ServersChanged => {
+                self.servers = self.engine.saved_servers();
+                self.look_for_carry();
             }
-            EngineEvent::ServersChanged => self.servers = self.engine.saved_servers(),
             EngineEvent::Whispering(active) => self.whisper.active = active,
             EngineEvent::KeyRequests { channel } => {
                 if self.open == Some(Conversation::Channel(channel)) {
@@ -561,56 +1011,114 @@ impl Shell {
                     self.stick_to_tail();
                 }
             }
-            EngineEvent::Previews(previews) => {
-                for preview in previews {
-                    let _ = self
-                        .previews
-                        .insert(preview.url.clone(), Some(Arc::new(preview)));
-                }
-                self.stick_to_tail();
-            }
-            EngineEvent::Acl(acl) => self.take_acl(acl),
-            EngineEvent::Bans(bans) => {
-                if let Some(admin) = self.panels.admin.as_mut() {
-                    admin.bans = Some(bans);
-                    self.refilter_admin(cx);
+            EngineEvent::Upload { id, now } => self.uploaded(&id, now, cx),
+            EngineEvent::Shared { key, picture } => {
+                if !self.took_large_picture(&key, picture.as_ref(), cx)
+                    && !self.took_profile_picture(&key, picture.as_ref())
+                {
+                    self.shared_arrived(&key);
+                    let _ = self.panels.shared.insert(key, picture);
                 }
             }
-            EngineEvent::Registered(users) => {
-                if let Some(admin) = self.panels.admin.as_mut() {
-                    admin.registered = Some(users);
-                    self.refilter_admin(cx);
-                }
-            }
+            EngineEvent::AboutSaved(saved) => self.about_saved(saved, cx),
+            EngineEvent::ProfilePage { key, page } => self.page_arrived(&key, page),
+            EngineEvent::Previews(previews) => self.take_previews(previews),
+            EngineEvent::Acl(acl) => self.admin_acl(&acl, cx),
+            EngineEvent::Bans(bans) => self.take_bans(bans, cx),
+            EngineEvent::Registered(users) => self.take_accounts(users, cx),
+            EngineEvent::DirectoryRefused => self.directory_refused(),
             EngineEvent::Scheduled(waiting) => self.take_scheduled(waiting),
             EngineEvent::ScheduleTaken => self.schedule_taken(),
             EngineEvent::CertificatesChanged => {
                 self.panels.certs.held = self.engine.certificates();
                 self.panels.certs.doomed = None;
             }
-            EngineEvent::Notice(notice) => self.notice = notice,
+            EngineEvent::Notice(notice) => {
+                self.admin_notice(notice.as_ref());
+                self.notice = notice;
+            }
+            EngineEvent::Wanted(wanted) => self.secrets.asked(wanted, cx),
+            EngineEvent::Done(says) => self.toast(says, toasts::Kind::Done, cx),
             EngineEvent::Typing { channel, session } => self.saw_typing(channel, session, cx),
+            EngineEvent::LiveryProbed { key, livery } => self.livery_probed(&key, livery, cx),
+            EngineEvent::LiveryChanged => self.liveries_changed(cx),
             EngineEvent::CurrentChannelChanged => {
                 self.take_snapshot();
                 self.follow_current_channel(self.was_in);
                 self.reload_messages(cx);
             }
-            EngineEvent::UserTalking { session, talking } => {
-                let _ = if talking {
-                    self.talking.insert(session)
-                } else {
-                    self.talking.remove(&session)
-                };
-            }
-            EngineEvent::NewMessage { conversation } => {
-                if self.open == Some(conversation) {
-                    // On screen, so read: it must not also count as unread.
-                    self.engine.open(conversation);
-                    self.reload_messages(cx);
-                } else {
-                    self.take_snapshot();
-                }
-            }
+            EngineEvent::Share(heard) => self.hear_share(heard, cx),
+            EngineEvent::Account(news) => self.account_news(news, cx),
+            EngineEvent::Onboarding(news) => self.onboarding_news(news, cx),
+            EngineEvent::PluginsChanged => self.read_plugins(),
+            EngineEvent::UserTalking { session, talking } => self.user_talking(session, talking),
+            EngineEvent::NewMessage { conversation } => self.new_message(conversation, cx),
+        }
+    }
+
+    /// Channels, users or the connection changed: read the server again, and
+    /// follow what that changed.
+    fn state_changed(&mut self, cx: &mut Context<Self>) {
+        let was = self.snapshot.connection;
+        self.take_snapshot();
+        // A new connection has a welcome of its own to show.
+        if was != Connection::Connected && self.snapshot.connection == Connection::Connected {
+            self.welcome_dismissed = false;
+            // On the server: what was typed to get there is let go of.
+            self.secrets.forget(cx);
+        }
+        self.read_welcome(cx);
+        self.hear_changes();
+        self.watch_retry(cx);
+        self.drop_gone_whisper_target(cx);
+        self.follow_active_session(cx);
+        self.sync_whispers();
+        self.drop_closed_conversation(cx);
+        // A message deleted by somebody else is announced only as
+        // a change of state.
+        if let Some(open) = self.open
+            && self.engine.message_count(open) != self.held
+        {
+            self.reload_messages(cx);
+        }
+        // Back on the server list: what it says about each server is
+        // as old as the visit just ended.
+        if was == Connection::Connected && self.snapshot.connection == Connection::Disconnected {
+            self.engine.refresh_pings();
+        }
+    }
+
+    /// What a server found behind links has come.
+    fn take_previews(&mut self, previews: Vec<Preview>) {
+        for preview in previews {
+            let _ = self
+                .previews
+                .insert(preview.url.clone(), Some(Arc::new(preview)));
+        }
+        self.stick_to_tail();
+    }
+
+    /// `session` started or stopped talking.
+    fn user_talking(&mut self, session: Session, talking: bool) {
+        if talking && Some(session) != self.snapshot.own_session {
+            self.hear(crate::sounds::Event::Talking);
+        }
+        let _ = if talking {
+            self.talking.insert(session)
+        } else {
+            self.talking.remove(&session)
+        };
+    }
+
+    /// `conversation` received, changed or lost a message.
+    fn new_message(&mut self, conversation: Conversation, cx: &mut Context<Self>) {
+        self.hear_message(conversation);
+        if self.open == Some(conversation) {
+            // On screen, so read: it must not also count as unread.
+            self.engine.open(conversation);
+            self.reload_messages(cx);
+        } else {
+            self.take_snapshot();
         }
     }
 
@@ -627,6 +1135,9 @@ impl Shell {
             return;
         }
         self.active_session = active;
+        self.forget_onboarding();
+        self.forget_whisper_slots();
+        self.read_plugins();
         self.previews.clear();
         // Arrived somewhere: the connect screen has done what it was for.
         self.adding_server = false;
@@ -660,27 +1171,18 @@ impl Shell {
         window.set_window_title(&window_title(self.unread_total()));
     }
 
-    /// Read the server's welcome message, if it is not the one already read.
-    fn read_welcome(&mut self) {
-        let Some(html) = self.snapshot.welcome.clone() else {
-            self.welcome = None;
-            return;
-        };
-        if self.welcome.as_ref().is_none_or(|(read, _)| *read != html) {
-            let drawn = Arc::new(conversation::DrawnBody::read(&html));
-            self.welcome = Some((html, drawn));
+    /// What the server told of a user's connection, and of each of their
+    /// devices, for the information view open on them; dropped otherwise.
+    fn take_facts(
+        &mut self,
+        subject: Subject,
+        facts: Vec<(gpui::SharedString, gpui::SharedString)>,
+        devices: Vec<crate::engine::DeviceFacts>,
+    ) {
+        if let Some(info) = self.info.as_mut().filter(|info| info.subject == subject) {
+            info.facts = facts;
+            info.devices = devices;
         }
-    }
-
-    /// The welcome message, while it is to be shown: not dismissed, with
-    /// something in it, and over the channel the user is in.
-    fn welcome_to_show(&self) -> Option<Arc<conversation::DrawnBody>> {
-        let in_own_channel = self.open.is_some()
-            && self.open == self.snapshot.current_channel.map(Conversation::Channel);
-        self.welcome
-            .as_ref()
-            .filter(|(_, drawn)| !self.welcome_dismissed && in_own_channel && !drawn.is_empty())
-            .map(|(_, drawn)| Arc::clone(drawn))
     }
 
     /// Show what there is to read about `subject`, fetching it.
@@ -693,13 +1195,33 @@ impl Shell {
         cx: &mut Context<Self>,
     ) {
         self.fill_description(subject, html.as_ref().map(AsRef::as_ref), cx);
+        self.hear_own_profile(subject, html.as_ref().map(AsRef::as_ref), cx);
+        self.take_own_comment(subject, html.as_ref().map(AsRef::as_ref), cx);
         let Some(info) = self.info.as_mut().filter(|info| info.subject == subject) else {
             return;
         };
         let html = html.unwrap_or_default();
-        info.body = Some(Arc::new(conversation::DrawnBody::read(&html)));
+        if !matches!(subject, Subject::User(_)) {
+            // A description or a welcome is a page, drawn as the web client
+            // draws one.
+            info.body = Some(Arc::new(conversation::DrawnBody::read("")));
+            self.read_page(html, cx, move |shell, page, _| {
+                if let Some(info) = shell.info.as_mut().filter(|info| info.subject == subject) {
+                    info.page = Some(page);
+                }
+            });
+            return;
+        }
+        // What somebody wrote about themselves: its pictures are not read.
+        card::read_comment(info, &html);
         if matches!(subject, Subject::User(_)) {
             info.profile = crate::profile::Profile::of(&html);
+            // Asked of the system once, when the profile is read.
+            info.name_family = info
+                .profile
+                .as_ref()
+                .and_then(|profile| profile.name_face)
+                .map(|face| crate::theme::family(face.stack(), cx));
             info.banner = info
                 .profile
                 .as_mut()
@@ -730,14 +1252,43 @@ impl Shell {
                 .find(|session| session.active)
                 .map(|session| session.name.clone()),
         };
+        // A channel's facts are in hand; anybody else's are asked for.
+        let facts = match subject {
+            Subject::Channel(id) => self
+                .snapshot
+                .channels
+                .iter()
+                .find(|channel| channel.id == id)
+                .map(|channel| {
+                    about::channel_facts(channel, &self.snapshot.channels, &self.snapshot.users)
+                }),
+            _ => None,
+        };
         self.info = Some(Info {
             subject,
             title: title.unwrap_or_default(),
             body: None,
-            facts: Vec::new(),
+            page: None,
+            facts: facts.unwrap_or_default(),
+            devices: Vec::new(),
             profile: None,
+            name_family: None,
             banner: None,
+            written: card::Written::default(),
+            hover: None,
+            anchor: None,
+            sheet: false,
         });
+        if let Subject::User(_) = subject {
+            let line = self
+                .info
+                .as_ref()
+                .map(|info| format!("Message @{}", info.title));
+            self.card_line.update(cx, |field, _| {
+                field.clear();
+                field.set_placeholder(line.unwrap_or_default());
+            });
+        }
         self.engine.about(subject);
         cx.notify();
     }
@@ -834,6 +1385,90 @@ impl Shell {
         }
     }
 
+    /// How many messages of `conversation` the server state last read
+    /// counts as unread.
+    fn unread_in(&self, conversation: Conversation) -> usize {
+        let unread = match conversation {
+            Conversation::Channel(id) => self
+                .snapshot
+                .channels
+                .iter()
+                .find(|channel| channel.id == id)
+                .map(|channel| channel.unread),
+            Conversation::Direct(session) => self
+                .snapshot
+                .users
+                .iter()
+                .find(|user| user.session == session)
+                .map(|user| user.unread),
+        };
+        unread.unwrap_or(0) as usize
+    }
+
+    /// What the server lets the local user do at its root: what is the
+    /// whole server's to grant.
+    pub(super) fn root_rights(&self) -> crate::rights::Rights {
+        self.snapshot
+            .channels
+            .iter()
+            .find(|channel| channel.parent.is_none())
+            .map(|channel| channel.rights)
+            .unwrap_or_default()
+    }
+
+    /// Move into `channel` and read it, asking for its password first
+    /// where it wants one: a plain join there is refused without a word,
+    /// which reads as a click ignored. Says whether the user is on their
+    /// way in, not waiting to be asked.
+    pub(super) fn enter(
+        &mut self,
+        channel: ChannelId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let restricted = self
+            .snapshot
+            .channels
+            .iter()
+            .any(|known| known.id == channel && known.restricted);
+        if restricted && self.snapshot.current_channel != Some(channel) {
+            self.ask_join_password(channel, window, cx);
+            return false;
+        }
+        self.engine.join_channel(channel);
+        self.open_conversation(Conversation::Channel(channel), cx);
+        true
+    }
+
+    /// Move into `channel` to talk: voice comes on with it, where it was
+    /// off. Moving alone leaves somebody who never turned voice on in the
+    /// room and hearing nothing. Behind a password, voice waits until they
+    /// are in.
+    pub(super) fn enter_to_talk(
+        &mut self,
+        channel: ChannelId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.enter(channel, window, cx) && self.snapshot.voice == Voice::Off {
+            self.engine.toggle_microphone();
+        }
+    }
+
+    /// Put the column of channels away, or bring it back.
+    pub(super) fn toggle_column(&mut self, cx: &mut Context<Self>) {
+        self.chrome.column_hidden = !self.chrome.column_hidden;
+        cx.notify();
+    }
+
+    /// Go to the newest message, from wherever the reader was.
+    pub(super) fn jump_to_latest(&mut self, cx: &mut Context<Self>) {
+        self.at_tail.set(true);
+        self.below.set(0);
+        self.stick_to_tail();
+        cx.notify();
+    }
+
     /// Show a page more of the open conversation's history, asking the
     /// server for it where the engine does not hold it.
     pub(super) fn show_earlier(&mut self, cx: &mut Context<Self>) {
@@ -857,8 +1492,9 @@ impl Shell {
             // What was being written and corrected belonged to the other.
             self.stop_editing(cx);
             self.chrome.picked = None;
-            self.only_pinned = false;
+            self.pins_open = false;
             self.typing.clear();
+            self.swap_draft(conversation, cx);
             self.open = Some(conversation);
             self.engine.open(conversation);
             self.reload_messages(cx);
@@ -871,11 +1507,31 @@ impl Shell {
         cx.notify();
     }
 
+    /// Put what is being written aside for the conversation it was written
+    /// in, and take up what was left unsent in `next`.
+    fn swap_draft(&mut self, next: Conversation, cx: &mut Context<Self>) {
+        let written = self.composer.read(cx).text().to_owned();
+        if let Some(leaving) = self.open {
+            if written.trim().is_empty() {
+                let _ = self.drafts.remove(&leaving);
+            } else {
+                let _ = self.drafts.insert(leaving, written);
+            }
+        }
+        let draft = self.drafts.remove(&next).unwrap_or_default();
+        self.composer.update(cx, |composer, cx| {
+            composer.set_text(draft);
+            cx.notify();
+        });
+    }
+
     /// Read the open conversation's messages again and lay the rows out
     /// afresh.
     fn reload_messages(&mut self, cx: &mut Context<Self>) {
         // Another conversation starts from its newest page again.
         let same_conversation = self.shown == self.open;
+        // What the conversation held unread, before opening it reads it.
+        let unread = self.open.map_or(0, |open| self.unread_in(open));
         if !same_conversation {
             self.shown = self.open;
             self.window = PAGE;
@@ -885,22 +1541,22 @@ impl Shell {
             };
             self.seen.readers.clear();
             self.seen.said = None;
+            self.leave_voice_messages();
         }
         let window = self
             .open
             .map(|conversation| self.engine.window(conversation, self.window))
             .unwrap_or_default();
-        let mut messages = window.messages;
+        let messages = window.messages;
         self.earlier = window.earlier;
         self.held = self
             .open
             .map_or(0, |conversation| self.engine.message_count(conversation));
-        self.pins = messages.iter().filter(|message| message.pinned).count();
-        // The last pin taken off ends the view that showed only pins.
-        self.only_pinned &= self.pins > 0;
-        if self.only_pinned {
-            messages.retain(|message| message.pinned);
-        }
+        // Everything pinned here, not only what is among these messages.
+        self.pins = self
+            .open
+            .map(|conversation| self.engine.pins(conversation))
+            .unwrap_or_default();
         // A message drawn before is kept as drawn while it is still the same
         // message; an edit, a deletion or another channel starts over.
         let kept = same_conversation
@@ -920,7 +1576,11 @@ impl Shell {
                 .map(|message| (message.id.clone(), message.sent_at_ms, message.html.len()))
         };
         let same_newest = same_conversation && newest(&self.messages) == newest(&messages);
+        let arrived = messages.len().saturating_sub(self.messages.len()).max(1);
         self.messages = messages;
+        if !same_conversation {
+            self.seen.leave_off(&self.messages, unread);
+        }
         self.note_seen();
         self.say_read();
         // A short conversation starts under the header, as the web UI draws
@@ -934,7 +1594,6 @@ impl Shell {
         self.row_model = conversation::rows(&self.messages, now_ms, self.zone);
         let polls = self
             .open
-            .filter(|_| !self.only_pinned)
             .map(|conversation| self.engine.polls(conversation))
             .unwrap_or_default();
         // A vote changes a poll's row without adding one: that is a change
@@ -942,7 +1601,8 @@ impl Shell {
         let kept = kept && polls == self.polls;
         self.polls = polls;
         conversation::place_polls(&mut self.row_model, &self.messages, &self.polls);
-        if self.earlier && !self.only_pinned {
+        conversation::place_unread(&mut self.row_model, self.seen.left_off(&self.messages));
+        if self.earlier {
             self.row_model.insert(0, conversation::Row::Earlier);
         }
         let rows = self.row_model.len();
@@ -952,6 +1612,12 @@ impl Shell {
         let follows = !same_conversation
             || self.at_tail.get()
             || (!same_newest && self.messages.last().is_some_and(|message| message.own));
+        if follows {
+            self.below.set(0);
+        } else if !same_newest {
+            // Not carried down to it: told that it is there.
+            self.below.set(self.below.get() + arrived);
+        }
         if rows == rows_before && kept {
             // The same rows with something on them changed, a reaction
             // say: they stay where the reader has them.
@@ -994,7 +1660,9 @@ impl Shell {
                 {
                     self.engine.typing(conversation);
                 }
+                self.offer_mentions(cx);
             }
+            InputEvent::Pick(pick) => self.pick_mention(*pick, cx),
             InputEvent::Cancelled => self.stop_editing(cx),
             InputEvent::PastedPicture(picture) => {
                 if let Some(conversation) = self.open {
@@ -1003,6 +1671,30 @@ impl Shell {
             }
             InputEvent::Tabbed { .. } => self.complete_mention(cx),
         }
+    }
+
+    /// Enter on a card's line: say it to whoever the card is of, and go to
+    /// the conversation with them, where it is seen to land.
+    fn on_card_line(
+        &mut self,
+        line: &Entity<TextInput>,
+        event: &InputEvent,
+        cx: &mut Context<Self>,
+    ) {
+        let InputEvent::Submitted(text) = event else {
+            return;
+        };
+        let Some(Subject::User(session)) = self.info.as_ref().map(|info| info.subject) else {
+            return;
+        };
+        if text.trim().is_empty() {
+            return;
+        }
+        let to = Conversation::Direct(session);
+        self.engine.send_message(to, text.clone());
+        line.update(cx, |field, _| field.clear());
+        self.info = None;
+        self.open_conversation(to, cx);
     }
 
     /// Tab in the composer: finish the `@name` being typed at its end
@@ -1095,6 +1787,11 @@ impl Shell {
     /// The names of those writing in the open channel right now, the local
     /// user aside.
     pub(super) fn writers(&self) -> Vec<gpui::SharedString> {
+        // Not saying when you write is not being told when others do: the
+        // switch is one bargain, as the web UI has it.
+        if self.panels.settings.privacy.hide_writing {
+            return Vec::new();
+        }
         let mut names: Vec<_> = self
             .snapshot
             .users
@@ -1131,7 +1828,23 @@ impl Shell {
 
     /// Send what is in the composer to the open conversation, and empty it.
     pub(super) fn send_composed(&mut self, cx: &mut Context<Self>) {
+        // Nothing more goes while a file is still going up, as the web UI's.
+        if self.uploading() {
+            return;
+        }
         let body = self.composer.read(cx).text().to_owned();
+        // What waits above the composer goes out with what is typed, or
+        // by itself.
+        if self.has_staged() && self.editing.is_none() {
+            if self.send_staged(body, cx) {
+                self.replying = None;
+                self.composer.update(cx, |composer, cx| {
+                    composer.clear();
+                    cx.notify();
+                });
+            }
+            return;
+        }
         if body.trim().is_empty() {
             return;
         }
@@ -1167,7 +1880,7 @@ impl Shell {
     }
 
     /// Start with something open: `picker`, `devices`, `certificates`,
-    /// `permissions` or `editor`. For
+    /// `permissions`, `bans`, `channel` or `editor`. For
     /// looking at them where nothing can click.
     pub(crate) fn open_for_inspection(
         &mut self,
@@ -1177,9 +1890,21 @@ impl Shell {
     ) {
         match what {
             "picker" => self.toggle_picker(cx),
+            "welcome" => self.show_welcome_again(cx),
             "devices" => self.toggle_devices(cx),
             "certificates" => self.toggle_certificates(cx),
             "members" => self.toggle_members(cx),
+            "settings" => self.open_settings(cx),
+            // `settings:voice` and the like: on that page.
+            page if page.starts_with("settings:") => {
+                self.open_settings_at(&page["settings:".len()..], cx);
+            }
+            "bans" => self.open_admin_page(admin_pages::AdminPage::Bans, cx),
+            "channel" => {
+                if let Some(channel) = self.snapshot.current_channel {
+                    self.open_channel_form(channel, window, cx);
+                }
+            }
             // The first user who is not the local one.
             "profile" => {
                 let other = self.snapshot.users.iter().map(|user| user.session);
@@ -1187,24 +1912,37 @@ impl Shell {
                     .filter(|s| Some(*s) != self.snapshot.own_session)
                     .nth(1)
                 {
-                    self.show_about(Subject::User(session), cx);
+                    self.pin_card(session, None, cx);
                 }
             }
-            "emoji" => self.emoji_for = Some(emoji::For::Composer),
+            "emoji" => self.open_emoji(emoji::For::Composer, None, cx),
             "permissions" => {
                 if let Some(channel) = self.snapshot.current_channel {
                     self.open_acl(channel, cx);
                 }
             }
             "editor" => self.open_editor(None, None, window, cx),
+            // `share:popout` and the like: see `stage::inspect`.
+            share if share.starts_with("share:") => {
+                self.open_share_for_inspection(&share["share:".len()..], cx);
+            }
             _ => {}
         }
     }
 
     /// Escape: close whatever is open on top of the window.
     pub(crate) fn dismiss(&mut self, cx: &mut Context<Self>) {
+        if self.shrink_video(cx) || self.dismiss_stage(cx) {
+            return;
+        }
+        // The smallest thing open goes first: a list over what is written.
+        if self.panels.mention.is_some() {
+            self.pick_mention(mention::Pick::Leave, cx);
+            return;
+        }
         if self.lightbox.take().is_some()
             || self.emoji_for.take().is_some()
+            || self.close_gifs(cx)
             || self.menu.take().is_some()
             || self.prompt.take().is_some()
             || self.info.take().is_some()
@@ -1220,9 +1958,19 @@ impl Shell {
             cx.notify();
             return;
         }
-        if self.panels.admin.take().is_some()
-            || self.panels.acl.take().is_some()
-            || self.panels.later.take().is_some()
+        if self.panels.mover.take().is_some()
+            || self.panels.channel_form.take().is_some()
+            || std::mem::take(&mut self.pins_open)
+        {
+            cx.notify();
+            return;
+        }
+        // What is open over a page of the administration goes before the
+        // settings it is a page of.
+        if self.dismiss_admin_page(cx) {
+            return;
+        }
+        if self.panels.later.take().is_some()
             || std::mem::take(&mut self.panels.friends.open)
             || std::mem::take(&mut self.panels.settings.open)
         {
@@ -1270,6 +2018,8 @@ impl Shell {
         }
         self.lay_out_column();
         self.take_roles();
+        self.volumes
+            .meet(&self.snapshot.users, self.engine.as_ref());
     }
 
     /// Work out the channel column's rows: each listed channel, and under
@@ -1280,8 +2030,11 @@ impl Shell {
             .into_iter()
             .flat_map(|(at, depth)| {
                 // Who is where is the point of the tree: every channel
-                // with people in it lists them.
-                let peopled = self.occupant_count(self.snapshot.channels[at].id) > 0;
+                // with people in it lists them, by name under it or as
+                // faces on its own row.
+                let peopled = self.occupant_count(self.snapshot.channels[at].id) > 0
+                    && self.panels.settings.look.channel_viewer_style.drawn()
+                        == crate::store::ChannelViewer::Flat;
                 std::iter::once(sidebar::Row::Channel { at, depth })
                     .chain(peopled.then_some(sidebar::Row::People { at, depth }))
             })
@@ -1428,10 +2181,42 @@ impl Shell {
         }
     }
 
-    /// Flip between the light and dark drawing of the current theme.
+    /// Flip between the light and dark drawing of the current theme. A
+    /// choice made by hand is no longer the system's.
     pub(crate) fn toggle_mode(&mut self, cx: &mut Context<Self>) {
         let theme = ActiveTheme::get(cx);
+        self.chrome.follows_system = false;
         self.set_theme(&theme.id, theme.mode.toggled(), cx);
+    }
+
+    /// Whether light or dark is the system's to choose.
+    pub(super) fn follows_system(&self) -> bool {
+        self.chrome.follows_system
+    }
+
+    /// Go to the next of dark, light and whichever the system is in.
+    pub(super) fn next_mode(&mut self, window: &Window, cx: &mut Context<Self>) {
+        let theme = ActiveTheme::get(cx);
+        if self.chrome.follows_system {
+            self.chrome.follows_system = false;
+            self.set_theme(&theme.id, Mode::Dark, cx);
+        } else if theme.mode == Mode::Dark {
+            self.set_theme(&theme.id, Mode::Light, cx);
+        } else {
+            self.chrome.follows_system = true;
+            self.set_theme(&theme.id, Mode::of(window.appearance()), cx);
+        }
+    }
+
+    /// The system went light or dark: so does the theme, if that is the
+    /// system's to choose.
+    fn follow_system(&mut self, window: &Window, cx: &mut Context<Self>) {
+        let theme = ActiveTheme::get(cx);
+        let mode = Mode::of(window.appearance());
+        if self.chrome.follows_system && theme.mode != mode {
+            ActiveTheme::set(&theme.id, mode, cx);
+            cx.notify();
+        }
     }
 
     /// Switch to `id` in `mode`, and remember the choice.
@@ -1444,11 +2229,23 @@ impl Shell {
     /// key that is to become it.
     fn on_key_down(&mut self, event: &gpui::KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
         let key = event.keystroke.key.as_str();
+        // While a picture is open the arrows go from picture to picture.
+        if self.lightbox.is_some() && self.lightbox_key(key, cx) {
+            cx.stop_propagation();
+            return;
+        }
+        // A key being chosen on the Shortcuts page, or the voice priority
+        // key.
+        if self.hear_chosen_key(&event.keystroke, cx) {
+            cx.stop_propagation();
+            return;
+        }
         if self.ptt.choosing {
             self.ptt.choosing = false;
             // Escape keeps the key there was.
             if key != "escape" {
                 self.ptt.key = Some(key.to_owned().into());
+                self.rebind_global_keys(cx);
                 self.remember_settings(cx);
             }
             cx.stop_propagation();
@@ -1459,6 +2256,7 @@ impl Shell {
             self.whisper.choosing_key = false;
             if key != "escape" {
                 self.whisper.key = Some(key.to_owned().into());
+                self.rebind_global_keys(cx);
                 self.remember_settings(cx);
             }
             cx.stop_propagation();
@@ -1547,6 +2345,10 @@ impl Shell {
     }
 
     fn on_key_up(&mut self, event: &gpui::KeyUpEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if self.release_chosen_key(&event.keystroke) {
+            cx.stop_propagation();
+            return;
+        }
         let key = event.keystroke.key.as_str();
         if self
             .whisper
@@ -1584,6 +2386,7 @@ impl Shell {
         let settings = Settings {
             theme: Some(theme.id.to_string()),
             mode: Some(match theme.mode {
+                _ if self.chrome.follows_system => crate::theme::SYSTEM.to_owned(),
                 Mode::Light => "light".to_owned(),
                 Mode::Dark => "dark".to_owned(),
             }),
@@ -1595,7 +2398,42 @@ impl Shell {
             auto_connect: name(&self.chrome.auto_connect),
             friends: self.panels.friends.kept.clone(),
             hide_empty: self.chrome.hide_empty,
+            hide_offline: !self.panels.members.show_offline,
             privacy: self.panels.settings.privacy,
+            sounds: self.panels.settings.sounds.clone(),
+            wall_wash: Some(self.chrome.wall_wash)
+                .filter(|wash| (wash - settings::WALL_WASH).abs() > f32::EPSILON),
+            wall_blur: Some(self.chrome.wall_blur).filter(|blur| *blur > 0),
+            window: self.chrome.placed,
+            asides: self.chrome.asides.places().clone(),
+            format: self.panels.settings.format,
+            trusted_hosts: self.panels.links.trusted.clone(),
+            recent_emoji: self.panels.emoji.recent.clone(),
+            klipy_key: self.panels.gifs.kept_key(),
+            display_name: self.panels.settings.display_name.clone(),
+            global_keys: self.panels.settings.global_keys,
+            stay_disconnected: self.panels.settings.stay_disconnected,
+            carry_declined: self.chrome.carry_declined,
+            volumes: self.volumes.kept().clone(),
+            language: crate::words::spoken(),
+            gate_calibrated_for: self.panels.settings.voice.calibrated_for.clone(),
+            denoiser_knobs: self.panels.settings.voice.knobs.clone(),
+            look: self.panels.settings.look,
+            server_switcher: self.panels.settings.server_switcher,
+            user_mode: self.panels.settings.user_mode,
+            chat_backgrounds: self.chrome.walls.clone(),
+            chat_bg_dim: Some(self.chrome.wall_dim)
+                .filter(|dim| (dim - settings::WALL_DIM).abs() > f32::EPSILON),
+            shortcuts: self.panels.settings.shortcuts.clone(),
+            enable_notifications: crate::store::Enabled(self.panels.settings.notifications),
+            welcome_message_display: self.panels.settings.welcome_display,
+            welcome_seen: self.panels.settings.welcome_seen.clone(),
+            enable_dual_path: self.panels.settings.dual_path,
+            logs: self.panels.settings.logs.clone(),
+            show_disconnect_warning: crate::store::Enabled(self.panels.settings.disconnect_warning),
+            streamer_mode: self.panels.settings.streamer,
+            user_shortcuts: self.panels.settings.jumps.clone(),
+            whisper_targets: self.panels.settings.whispers.targets.clone(),
         };
         if let Err(error) = store.save_settings(&settings) {
             self.notice = Some(format!("The settings could not be remembered: {error}").into());
@@ -1605,12 +2443,18 @@ impl Shell {
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.let_go_of_large();
+        self.livery_before_drawing(cx);
         let theme = ActiveTheme::get(cx);
         // Only when it changes: setting a title is a round trip to the
         // window system.
         let unread = self.unread_total();
         if std::mem::replace(&mut self.titled_unread, unread) != unread {
             self.retitle(window);
+        }
+        let open = self.lightbox.is_some();
+        if std::mem::replace(&mut self.panels.looked_large, open) && !open {
+            crate::pictures::close_large(window, cx);
         }
         div()
             .size_full()
@@ -1625,6 +2469,9 @@ impl Render for Shell {
             .text_color(theme.c.text)
             .font_family(theme.skin.font.clone())
             .font_weight(theme.skin.weight)
+            // All its text spaced as the theme spaces it (CSS's
+            // `letter-spacing` on the web UI's body).
+            .letter_spacing(theme.skin.track)
             .text_size(px(14.0))
             .line_height(relative(1.4))
             .when_some(theme.c.window_line, |shell, line| {
@@ -1632,69 +2479,128 @@ impl Render for Shell {
             })
             .child(kit::backdrop(&theme.c.window, theme.c.bg0, px(0.0)))
             .when(theme.skin.band, |shell| {
-                shell.child(band::render(self, &theme, window))
+                shell.child(band::render(self, &theme, window, cx))
             })
-            .child(div().flex_1().min_h_0().flex().map(|body| {
-                if self.shows_connect_screen() {
-                    // Not on a server, or adding one: the saved ones, and
-                    // the way onto one. The rail stays while there are
-                    // servers to go back to.
-                    body.when(!self.snapshot.sessions.is_empty(), |body| {
-                        body.child(rail::render(self, &theme, cx))
-                    })
-                    .child(connect::server_column(self, &theme, cx))
-                    .child(connect::landing(self, &theme, cx))
-                } else {
-                    body.child(rail::render(self, &theme, cx))
-                        .child(sidebar::render(self, &theme, cx))
-                        .child(conversation::render(self, &theme, window, cx))
-                }
-            }))
+            .child(self.render_body(&theme, window, cx))
+            // Without a band the window is held by a strip along its top,
+            // over the panels and under what floats above them.
+            .when(!theme.skin.band, |shell| shell.child(band::drag_strip()))
+            .children(self.video_layer(cx))
+            .children(stage::overlays(self, window, cx))
+            .children(reconnect::banner(self, &theme, cx))
+            .children(mover::render(self, &theme, cx))
+            .children(welcome::render(self, &theme, window, cx))
+            .children(links::render(self, &theme, cx))
+            .children(toasts::render(self, &theme, cx))
             .when(!theme.skin.band, |shell| {
                 shell.child(band::corner_controls(&theme, window))
             })
+            .map(|shell| self.with_panels(shell, &theme, window, cx))
+            .children(frame::resize_grips(window))
+    }
+}
+
+impl Shell {
+    /// The window's body under the band: the settings, the connect screen,
+    /// or the server with its rail, channels and conversation.
+    fn render_body(
+        &self,
+        theme: &crate::theme::Theme,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> gpui::Div {
+        div().flex_1().min_h_0().flex().map(|body| {
+            if self.panels.settings.open {
+                // The settings take the window's body while they are
+                // open; the band above stays what it was.
+                body.child(settings::render(self, theme, cx))
+            } else if self.shows_connect_screen() {
+                // Not on a server, or adding one: the saved ones, and
+                // the way onto one. The rail stays while there are
+                // servers to go back to.
+                body.when(!self.snapshot.sessions.is_empty() && self.rail_drawn(theme), |body| {
+                    body.child(rail::render(self, theme, cx))
+                })
+                .child(connect::server_column(self, theme, cx))
+                .child(connect::landing(self, theme, cx))
+            } else {
+                body.when(self.rail_drawn(theme), |body| body.child(rail::render(self, theme, cx)))
+                    .when(!self.chrome.column_hidden, |body| {
+                        body.child(sidebar::render(self, theme, cx))
+                    })
+                    .child(conversation::render(self, theme, window, cx))
+            }
+        })
+    }
+
+    /// Whether the rail is drawn: the servers are listed there, unless the
+    /// user lists them only in the band, which a theme without a band
+    /// cannot carry.
+    pub(super) fn rail_drawn(&self, theme: &crate::theme::Theme) -> bool {
+        self.panels.settings.server_switcher.rail() || !theme.skin.band
+    }
+
+    /// What floats over the window: the panels, dialogs, menus and cards
+    /// that are open.
+    fn with_panels(
+        &self,
+        shell: gpui::Div,
+        theme: &crate::theme::Theme,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> gpui::Div {
+        shell
             .when(self.picker_open, |shell| {
-                shell.child(picker::render(&theme, cx))
+                shell.child(picker::render(self, theme, cx))
             })
             .when(self.devices_open, |shell| {
-                shell.child(devices::render(self, &theme, cx))
+                shell.child(devices::render(self, theme, cx))
             })
-            .when_some(self.panels.acl.as_ref(), |shell, panel| {
-                shell.child(acl::render(self, panel, &theme, cx))
-            })
-            .when_some(self.panels.admin.as_ref(), |shell, admin| {
-                shell.child(admin::render(admin, &theme, cx))
+            .children(admin_pages::overlay(self, theme, cx))
+            .children(onboarding::render(self, theme, cx))
+            .when_some(self.panels.channel_form.as_ref(), |shell, form| {
+                shell.child(channel_form::render(form, theme, cx))
             })
             .when_some(self.panels.later.as_ref(), |shell, panel| {
-                shell.child(later::render(self, panel, &theme, cx))
-            })
-            .when(self.panels.settings.open, |shell| {
-                shell.child(settings::render(self, &theme, cx))
+                shell.child(later::render(self, panel, theme, cx))
             })
             .when(self.panels.friends.open, |shell| {
-                shell.child(friends::render(self, &theme, cx))
+                shell.child(friends::render(self, theme, cx))
             })
             .when(self.panels.certs.open, |shell| {
-                shell.child(certificates::render(self, &theme, cx))
+                shell.child(certificates::render(self, theme, cx))
             })
             .when_some(self.editor.as_ref(), |shell, editor| {
-                shell.child(server_editor::render(editor, &theme, cx))
+                shell.child(server_editor::render(editor, theme, cx))
             })
             .when(self.emoji_for.is_some(), |shell| {
-                shell.child(emoji::render(&theme, cx))
+                shell.child(emoji::render(self, theme, cx))
             })
+            .children(gifs::render(self, theme, window, cx))
+            .children(profile_page::render(self, theme, cx))
+            // On the Profile page of the settings the editor is drawn in
+            // the page, not over it.
+            .children(
+                (!self.about_on_settings_page())
+                    .then(|| about_editor::render(self, theme, cx))
+                    .flatten(),
+            )
             .when_some(self.lightbox.as_ref(), |shell, picture| {
-                shell.child(conversation::render_lightbox(picture, &theme, cx))
+                shell.child(lightbox::render(self, picture, theme, window, cx))
             })
             .when_some(self.menu.as_ref(), |shell, menu| {
-                shell.child(menu::render_menu(menu, &theme, window, cx))
+                shell.child(menu::render_menu(menu, theme, window, cx))
             })
             .when_some(self.prompt.as_ref(), |shell, prompt| {
-                shell.child(menu::render_prompt(prompt, &theme, cx))
+                shell.child(menu::render_prompt(prompt, theme, cx))
             })
-            .when_some(self.info.as_ref(), |shell, info| {
-                shell.child(menu::render_info(self, info, &theme, cx))
+            .when_some(self.info.as_ref(), |shell, info| match info.subject {
+                // Somebody's card is the same card rested on or kept; it is
+                // put away when they leave.
+                Subject::User(_) if !info.sheet => {
+                    shell.children(card::render(self, info, theme, window, cx))
+                }
+                _ => shell.child(menu::render_info(self, info, theme, cx)),
             })
-            .children(frame::resize_grips(window))
     }
 }

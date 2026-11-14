@@ -24,10 +24,18 @@ wayland = ["gpui/wayland"]
 x11 = ["gpui/x11"]
 
 [dependencies]
-gpui = { version = "0.2.2", default-features = false, features = ["font-kit"] }
+# `windows-manifest` embeds the Common Controls v6 manifest (and per-monitor
+# DPI awareness): without it Windows loads comctl32 v5.82, which lacks the
+# `TaskDialogIndirect` GPUI imports, and the exe dies at load with
+# STATUS_ENTRYPOINT_NOT_FOUND. It does nothing on other platforms.
+#
+# A copy of GPUI 0.2.2 with one addition, a blur of what is behind an element
+# (`Styled::backdrop_blur`), which the renderer cannot be given from outside.
+# What was changed, and where, is in vendor/gpui/FANCY_CHANGES.md.
+gpui = { path = "vendor/gpui", default-features = false, features = ["font-kit", "windows-manifest"] }
 # The engine. Still inside the Tauri package, built here without the Tauri
 # view (`default-features = false`), so none of Tauri is compiled or linked.
-mumble-tauri = { path = "../../../crates/mumble-tauri", default-features = false }
+mumble-tauri = { path = "../../../crates/mumble-tauri", default-features = false, features = ["logs"] }
 # The engine's background work runs on a runtime the view owns.
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 # The engine reports to the view over a channel the UI thread can await.
@@ -36,16 +44,115 @@ async-channel = "2"
 base64 = "0.22"
 # Scaling a chosen picture down to an avatar. The version GPUI already builds.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
+# Reads a JPEG at a half, a quarter or an eighth of its size without
+# decoding all of it first: a photograph is shown far smaller than it is
+# taken (`src/pictures/scaled.rs`). One thread: what it reads is small.
+jpeg-decoder = { version = "0.3", default-features = false }
 # Local time, for the clock beside a message and the rule between days.
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 # The theme table (assets/themes.json) is generated from the web UI's
 # catalogue and read once at startup.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Reading a link apart: whether it is a picture or a YouTube video, and
+# where it goes. The crate and release the engine already builds.
+url = "2"
+# Unicode's table of emoji: each with its name, its group and the shortcodes
+# people type. The picker lists and finds them by it.
+emojis = "0.9"
+# The view says what it does into the same log the engine writes.
+tracing = "0.1"
+# Plays the sounds that say something happened (`src/sounds.rs`). The crate
+# and the release the engine already builds for the microphone.
+rodio = "0.22"
+# The words in other languages (`src/words/`): this client's own files and
+# the web client's, compiled in. The crate GPUI already builds.
+rust-embed = { version = "8", features = ["include-exclude"] }
+# Which plural form a count takes in a language: Unicode's rules, from the
+# ICU4X family the URL parser already builds.
+icu_plurals = "2.4"
+icu_locale_core = "2.4"
+# Reading the HTML a server or a user writes (a welcome, a description, a
+# bio) as a browser does (`src/page/`). The releases Tauri's build already
+# compiles; nothing new is fetched.
+html5ever = "=0.39.0"
+cssparser = "=0.37.0"
+# A picture such a document carries as SVG, drawn once at the size it is
+# shown into an ordinary picture. The release GPUI draws its icons with.
+resvg = { version = "=0.45.1", default-features = false }
+# The outlines of a few letters, for the marks a drawn theme sets as shapes
+# rather than as text: a word hollowed to an outline, a word turned on its
+# side (`src/ui/kit/lettering.rs`). The release resvg already builds.
+ttf-parser = { version = "=0.25.1", default-features = false, features = ["std", "variable-fonts", "opentype-layout"] }
+# Set as a browser sets them: shaped, kerned, and a letter the face lacks
+# from a system face that has it. The releases usvg already builds.
+rustybuzz = "=0.20.1"
+fontdb = { version = "=0.23.0", default-features = false, features = ["std", "fs", "memmap"] }
+# A letter's overlapping parts (a stem and a diagonal drawn as two shapes)
+# merged into one outline before it is stroked. The boolean operations
+# `geo` uses; four small crates, nothing else.
+i_overlay = "=9.1.0"
+# Twelve characters nobody has to think up for a link's password, from the
+# system's own randomness. The release GPUI's `rand` already builds.
+getrandom = "=0.3.4"
+# Screen sharing (`src/share/`): the web client's own capture, encoder and
+# WebRTC peers, used as they are. Nothing of it runs until a share is
+# started or watched.
+fancy-screenshare = { path = "../../../crates/fancy-screenshare" }
+# Decoding a watched share to pixels, and scaling them to the room they are
+# shown in: the releases that crate already builds.
+openh264 = "0.8"
+fast_image_resize = "5"
+# A share's sound comes as Opus: the made-up shares encode and decode a
+# tone through it as a real share's sound comes. The release that crate
+# already builds.
+opus = "0.3"
+# The QR code an authenticator scans to enrol a second factor (Settings,
+# Account); the encoder alone, drawn through the kit's picture path.
+qrcode = { version = "0.14", default-features = false }
+
+# System notifications, where there is no `notify-send` to hand them to.
+# Linux keeps `notify-send`, which links no D-Bus stack into the view.
+# Held at the release the web client builds: it speaks to Windows through
+# the `windows` crate GPUI already builds, where a newer one brings a third
+# copy of that crate for a toast.
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+notify-rust = { version = "=4.12.0", default-features = false }
+
+# The call that gives memory not in use back to the system (`src/trim.rs`).
+# The bindings GPUI already builds, with a feature it already turns on.
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.61"
+features = ["Win32_Foundation", "Win32_System_Threading", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_System_Console", "Win32_UI_Accessibility"]
+
+# Keys that work while another program has the keyboard (`src/hotkeys.rs`).
+# The crate and the release the web client builds.
+[target.'cfg(windows)'.dependencies]
+global-hotkey = "=0.7.0"
+# The icon in the system's tray, and its menu (`src/tray.rs`). The crate and
+# the release the web client builds; its Linux part needs GTK.
+tray-icon = { version = "=0.21.3", default-features = false }
+# A video played in place, over its card (`src/player/`): WebView2, made
+# only when play is pressed. The release the web client builds; its
+# custom scheme serves the page the video is framed in.
+wry = { version = "=0.54.3", default-features = false, features = ["protocol"] }
+
+# Compiles the executable's icon into it (build.rs). The version GPUI
+# already builds its manifest with.
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = "3"
 
 [dev-dependencies]
+# The table of permissions the engine and the web client are written from,
+# to hold this client's own against.
+fancy-utils = { path = "../../../crates/fancy-utils" }
 # Drives the views without a display: simulated clicks and keys.
-gpui = { version = "0.2.2", default-features = false, features = ["test-support"] }
+gpui = { path = "vendor/gpui", default-features = false, features = ["test-support"] }
+# The one-time codes a live test of the Account page computes as an
+# authenticator would (RFC 6238); all three already built for the engine.
+hmac = "0.12"
+sha1 = "0.10"
+data-encoding = "2"
 
 # Debug information for this package only. With it for all seven hundred
 # dependencies as well, a debug build is tens of gigabytes on disk.

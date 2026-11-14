@@ -43,7 +43,7 @@
 }
 
 .welcomeText a {
-  color: var(--accent, #2aabee);
+  color: var(--color-accent, #2aabee);
 }
 
 .checkboxRow {
@@ -69,7 +69,7 @@
   padding: 8px 18px;
   border-radius: 6px;
   border: none;
-  background: var(--accent, #2aabee);
+  background: var(--color-accent, #2aabee);
   color: #fff;
   font-size: 13px;
   font-weight: 600;

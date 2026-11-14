@@ -5,24 +5,38 @@
 //! (`nebula/themeCatalog.ts`, resolved by `themeScheme.ts`) and a test there
 //! keeps current, so the two views cannot drift apart.
 //!
-//! What this view leaves out is what costs the most to draw: backdrop blur
-//! and clip paths. The window's mesh and the conversation's backdrop are
+//! A theme's shapes (`cut`) and the marks of a drawn skin (`marks`) are
+//! read from the same table and drawn by the kit as paths.
+//!
+//! What this view leaves out is what costs the most to draw: backdrop
+//! blur. The window's mesh and the conversation's backdrop are
 //! drawn once into a small picture and stretched (see `paint`), and chrome
 //! the web UI draws as glass over them is drawn as the same colour over
-//! them, unblurred: a blurred gradient is the gradient.
+//! them, unblurred: a blurred gradient is the gradient. The one blur drawn
+//! is behind a picture opened to its full size, where what is behind is the
+//! conversation and not a gradient, and only for as long as it is open.
 
 use std::sync::Arc;
 
 use gpui::{App, FontWeight, Global, Hsla, Pixels, Rgba, SharedString, px};
 use serde::Deserialize;
 
-use crate::paint::Paint;
+use crate::paint::{Paint, Pattern};
+
+mod cut;
+mod marks;
+
+pub(crate) use cut::{Cut, Cuts, Kind};
+pub(crate) use marks::{Ground, Halo, Marks, Ring, Stripes, Voice, Watermark};
 
 /// The generated table: every theme, both modes, already resolved.
 const TABLE: &str = include_str!("../assets/themes.json");
 
 /// The theme a profile with no stored choice opens in.
 pub(crate) const DEFAULT_THEME: &str = "dark";
+
+/// What is stored for the mode when it is the system's to choose.
+pub(crate) const SYSTEM: &str = "system";
 
 /// Light or dark. Every theme is drawn in both.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,6 +48,24 @@ pub(crate) enum Mode {
 }
 
 impl Mode {
+    /// The mode that goes with how the system draws its own windows.
+    pub(crate) fn of(appearance: gpui::WindowAppearance) -> Self {
+        match appearance {
+            gpui::WindowAppearance::Light | gpui::WindowAppearance::VibrantLight => Self::Light,
+            gpui::WindowAppearance::Dark | gpui::WindowAppearance::VibrantDark => Self::Dark,
+        }
+    }
+
+    /// The mode stored as `name`, with the system in `appearance`: dark
+    /// unless it says otherwise, as the web UI is.
+    pub(crate) fn named(name: Option<&str>, appearance: gpui::WindowAppearance) -> Self {
+        match name {
+            Some("light") => Self::Light,
+            Some(SYSTEM) => Self::of(appearance),
+            _ => Self::Dark,
+        }
+    }
+
     /// The other mode.
     pub(crate) fn toggled(self) -> Self {
         match self {
@@ -68,6 +100,17 @@ pub(crate) struct Colors {
     /// The server rail and what is drawn on it.
     pub rail: Hsla,
     pub rail_dim: Hsla,
+    /// The rail's own hairline, and the accent where it stands on the rail.
+    pub rail_line: Hsla,
+    pub accent_on_rail: Hsla,
+    /// What an avatar with no picture stands on, and the ground a drawn
+    /// skin deepens to.
+    pub tile: Hsla,
+    /// The theme's second hue: what keeps a mesh from being monochrome, and
+    /// a drawn skin's gold.
+    pub accent2: Hsla,
+    /// The dots or lines laid over the conversation, if the theme has some.
+    pub pattern: Option<Pattern>,
     /// A raised surface, and its edge.
     pub card: Hsla,
     /// Chips, badges, the keyboard hint.
@@ -139,6 +182,16 @@ impl Shadow {
         }
     }
 
+    /// A hard plate `offset` down, in `color`: what a drawn
+    /// theme stands a floating surface on in place of a shadow.
+    fn hard(offset: f32, color: Hsla) -> Self {
+        Self {
+            drop: offset,
+            blur: 0.0,
+            color,
+        }
+    }
+
     /// This shadow for the renderer, which takes a blur as its deviation:
     /// half of what CSS calls the blur.
     pub(crate) fn cast(self) -> Vec<gpui::BoxShadow> {
@@ -156,6 +209,9 @@ impl Shadow {
 pub(crate) struct Skin {
     /// The first family of the theme's stack that this system has.
     pub font: SharedString,
+    /// The face code is set in: the first this system has of the web
+    /// UI's, or of what stands for `monospace`.
+    pub mono: SharedString,
     /// Whether the theme sets its labels in capitals.
     pub caps: bool,
     /// Base weight for body copy and rows.
@@ -185,6 +241,14 @@ pub(crate) struct Skin {
     pub message_run_gap: Pixels,
     /// Whether the theme draws the band across the top of the window.
     pub band: bool,
+    /// Letter spacing, in ems, of what is set in one of the theme's voices.
+    pub track: f32,
+    /// The silhouette of each kind of surface, where it is not a rectangle.
+    pub cuts: Cuts,
+    /// A bar this wide down the selected row's leading edge.
+    pub selection_bar: Option<Pixels>,
+    /// What the theme draws besides colour and corners.
+    pub marks: Marks,
 }
 
 /// One theme in one mode: what the view paints with.
@@ -204,9 +268,10 @@ pub(crate) struct ActiveTheme(pub Arc<Theme>);
 impl Global for ActiveTheme {}
 
 impl ActiveTheme {
-    /// The theme in force.
+    /// The theme in force: the user's, with the colours of the server on
+    /// screen folded in while it offers some ([`crate::livery::Dressed`]).
     pub(crate) fn get(cx: &App) -> Arc<Theme> {
-        Arc::clone(&cx.global::<Self>().0)
+        crate::livery::Dressed::over(&cx.global::<Self>().0, cx)
     }
 
     /// Switch to `id` in `mode` and repaint every window. An id the
@@ -225,8 +290,21 @@ impl ActiveTheme {
 pub(crate) struct ThemeEntry {
     pub id: SharedString,
     pub name: SharedString,
-    /// Window, accent and second hue, in `mode`: enough to tell themes apart.
-    pub swatches: [Hsla; 3],
+    /// Window, card, accent and second hue, in `mode`, as the web UI's
+    /// theme picker draws them: enough to tell themes apart.
+    pub swatches: [Hsla; 4],
+}
+
+/// `top` as it looks laid over `under`, with no transparency left.
+fn over(top: Hsla, under: Hsla) -> Hsla {
+    let (top, under) = (Rgba::from(top), Rgba::from(under));
+    let mix = |over: f32, below: f32| over * top.a + below * (1.0 - top.a);
+    Hsla::from(Rgba {
+        r: mix(top.r, under.r),
+        g: mix(top.g, under.g),
+        b: mix(top.b, under.b),
+        a: 1.0,
+    })
 }
 
 /// The generated table, parsed.
@@ -262,6 +340,7 @@ impl Catalog {
                     name: theme.name.clone().into(),
                     swatches: [
                         color(&tokens.bg0),
+                        over(color(&tokens.card), color(&tokens.bg0)),
                         color(&tokens.accent),
                         color(&tokens.accent2),
                     ],
@@ -287,11 +366,18 @@ impl Catalog {
     ) -> Option<Theme> {
         let raw = self.themes.iter().find(|theme| theme.id == id)?;
         let scheme = raw.mode(mode);
+        let skin = raw.skin.resolve(installed_fonts);
+        let mut c = scheme.colors();
+        // A drawn theme has no light to cast a shadow by: what floats stands
+        // on a hard plate of the stronger hairline instead.
+        if let Some(offset) = skin.marks.hard_shadow {
+            c.shadow = Shadow::hard(offset, c.line2);
+        }
         Some(Theme {
             id: raw.id.clone().into(),
             mode,
-            c: scheme.colors(),
-            skin: raw.skin.resolve(installed_fonts),
+            c,
+            skin,
         })
     }
 }
@@ -315,6 +401,11 @@ pub(crate) fn emergency_theme() -> Theme {
             header: raised,
             rail: ground,
             rail_dim: ink,
+            rail_line: raised,
+            accent_on_rail: accent,
+            tile: raised,
+            accent2: accent,
+            pattern: None,
             card: raised,
             card2: raised,
             input: raised,
@@ -380,6 +471,11 @@ impl RawMode {
             header: color(&t.header),
             rail: color(&t.rail),
             rail_dim: color(&t.rail_dim),
+            rail_line: color(&t.rail_line),
+            accent_on_rail: color(&t.accent_on_rail),
+            tile: color(&t.tile),
+            accent2: color(&t.accent2),
+            pattern: Pattern::find(&t.backdrop),
             card: color(&t.card),
             card2: color(&t.card2),
             input: color(&t.input),
@@ -424,6 +520,9 @@ struct RawTokens {
     header: String,
     rail: String,
     rail_dim: String,
+    rail_line: String,
+    accent_on_rail: String,
+    tile: String,
     card: String,
     card2: String,
     input: String,
@@ -467,6 +566,13 @@ struct RawSkin {
     message_gap_px: f32,
     message_run_gap_px: f32,
     chrome_slots: RawChromeSlots,
+    track: String,
+    clip_plate: String,
+    clip_selection: String,
+    clip_bubble: String,
+    chrome: String,
+    selection_bar: bool,
+    selection_bar_px: f32,
 }
 
 /// The catalogue's own defaults (`DEFAULT_SKIN`), for the emergency theme.
@@ -492,6 +598,13 @@ impl Default for RawSkin {
             message_gap_px: 26.0,
             message_run_gap_px: 4.0,
             chrome_slots: RawChromeSlots::default(),
+            track: "0".to_owned(),
+            clip_plate: "none".to_owned(),
+            clip_selection: "none".to_owned(),
+            clip_bubble: "none".to_owned(),
+            chrome: "plain".to_owned(),
+            selection_bar: false,
+            selection_bar_px: 3.0,
         }
     }
 }
@@ -500,6 +613,7 @@ impl RawSkin {
     fn resolve(&self, installed_fonts: &[String]) -> Skin {
         Skin {
             font: first_installed(&self.font, installed_fonts),
+            mono: first_installed(MONO_STACK, installed_fonts),
             caps: self.caps == "uppercase",
             weight: FontWeight(self.weight),
             radius_sm: length(&self.radius_sm),
@@ -519,8 +633,25 @@ impl RawSkin {
             message_gap: px(self.message_gap_px),
             message_run_gap: px(self.message_run_gap_px),
             band: self.chrome_slots.band != "hidden",
+            track: em(&self.track),
+            cuts: Cuts {
+                plate: self.clip_plate.parse().ok(),
+                row: self.clip_selection.parse().ok(),
+                card: self.clip_bubble.parse().ok(),
+            },
+            selection_bar: self.selection_bar.then(|| px(self.selection_bar_px)),
+            marks: Marks::of(&self.chrome),
         }
     }
+}
+
+/// A CSS length in ems (`".04em"`, `"0"`); anything else reads as none.
+fn em(value: &str) -> f32 {
+    value
+        .trim()
+        .trim_end_matches("em")
+        .parse::<f32>()
+        .unwrap_or(0.0)
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -562,6 +693,16 @@ const SANS: &[&str] = &[
 ];
 const SERIF: &[&str] = &["Noto Serif", "DejaVu Serif", "Georgia", "Times New Roman"];
 const MONO: &[&str] = &["Noto Sans Mono", "DejaVu Sans Mono", "Consolas", "Menlo"];
+
+/// The web UI's stack for code (`NEBULA_MONO`).
+const MONO_STACK: &str = r#""Geist Mono","Space Mono",ui-monospace,"Cascadia Mono",monospace"#;
+
+/// The first family of the CSS font `stack` that this system has: for a
+/// face asked for by name outside a theme, a profile's say. Asks the
+/// system for its fonts, so it is for once, not for every frame.
+pub(crate) fn family(stack: &str, cx: &App) -> SharedString {
+    first_installed(stack, &cx.text_system().all_font_names())
+}
 
 /// The first family in a CSS font stack that is installed, keeping the
 /// stack's voice (a serif stack ends in a serif), or the system's default UI
@@ -675,6 +816,33 @@ mod tests {
                 assert!(theme.skin.rail_width > px(0.0));
             }
         }
+    }
+
+    #[test]
+    fn a_theme_says_its_shapes_and_marks_and_one_that_says_none_has_none() {
+        let catalog = Catalog::get();
+        let nimbus = catalog
+            .resolve("nimbus", Mode::Dark, &[])
+            .expect("nimbus");
+        let cuts = nimbus.skin.cuts;
+        assert!(cuts.plate.is_some() && cuts.row.is_some() && cuts.card.is_some());
+        assert!(nimbus.skin.marks.any());
+        assert_eq!(nimbus.skin.selection_bar, Some(px(18.0)));
+        assert!(matches!(nimbus.c.pattern, Some(Pattern::Dots { .. })));
+        let midnight = catalog
+            .resolve("midnight-pretenders", Mode::Dark, &[])
+            .expect("midnight");
+        assert!(midnight.skin.cuts.row.is_some() && midnight.skin.cuts.plate.is_none());
+        assert!(!midnight.skin.marks.any(), "notched, but not drawn");
+        assert!(matches!(midnight.c.pattern, Some(Pattern::Lines { .. })));
+        assert!((midnight.skin.track - 0.04).abs() < 1e-6);
+        let dark = catalog
+            .resolve(DEFAULT_THEME, Mode::Dark, &[])
+            .expect("dark");
+        assert_eq!(dark.skin.cuts, Cuts::default());
+        assert!(!dark.skin.marks.any());
+        assert_eq!(dark.skin.selection_bar, None);
+        assert!(dark.c.pattern.is_none());
     }
 
     #[test]

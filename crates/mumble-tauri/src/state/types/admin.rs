@@ -50,6 +50,10 @@ pub struct RegisteredUserUpdate {
 }
 
 /// A ban list entry sent to the frontend.
+///
+/// `mask` is the wire's count over the sixteen bytes every address travels
+/// in (one IPv4 address is 128, not 32); the frontend turns it into the
+/// address's own terms in `banMask.ts`. The same holds for [`BanEntryInput`].
 #[derive(Debug, Clone, Serialize)]
 pub struct BanEntryPayload {
     pub address: String,

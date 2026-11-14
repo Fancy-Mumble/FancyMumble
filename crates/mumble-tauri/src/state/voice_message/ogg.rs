@@ -37,7 +37,9 @@ pub(super) struct OggOpusWriter {
     sequence: u32,
     /// Packets waiting for the next page.
     pending: Vec<Vec<u8>>,
-    /// Samples encoded so far, pre-skip included, at 48 kHz.
+    /// Samples a decoder has put out by the end of the packets queued so
+    /// far, at 48 kHz: the encoder's look-ahead (the pre-skip) included,
+    /// as RFC 7845 §4 counts a granule position.
     granule: u64,
 }
 
@@ -49,7 +51,7 @@ impl OggOpusWriter {
             serial,
             sequence: 0,
             pending: Vec::new(),
-            granule: u64::from(PRE_SKIP),
+            granule: 0,
         };
         writer.write_page(&[opus_head()], 0, FLAG_BOS);
         writer.write_page(&[opus_tags(vendor)], 0, 0);
@@ -71,11 +73,15 @@ impl OggOpusWriter {
         }
     }
 
-    /// Close the stream and hand back the file.
+    /// Close the stream and hand back the file, saying that it plays up to
+    /// sample `end` of what the packets decode to (the pre-skip included):
+    /// a take's last packet decodes past its end, which is trimmed there
+    /// (RFC 7845 §4.4). Never later than the packets reach.
     ///
     /// The last page carries the end-of-stream flag even when it holds no
     /// packet, because a player that never sees one waits for more audio.
-    pub(super) fn finish(mut self) -> Vec<u8> {
+    pub(super) fn finish(mut self, end: u64) -> Vec<u8> {
+        self.granule = self.granule.min(end);
         self.flush(FLAG_EOS);
         self.out
     }
@@ -152,7 +158,7 @@ fn opus_tags(vendor: &str) -> Vec<u8> {
 
 /// Ogg's CRC-32: polynomial 0x04c11db7, unreflected, zero initial value and no
 /// final XOR - not the zlib one, which is why `crc32fast` would be wrong here.
-fn crc32(bytes: &[u8]) -> u32 {
+pub(super) fn crc32(bytes: &[u8]) -> u32 {
     let mut crc = 0u32;
     for &byte in bytes {
         crc ^= u32::from(byte) << 24;
@@ -245,7 +251,7 @@ mod tests {
         for _ in 0..3 {
             writer.push(vec![0xAA; 40], 960);
         }
-        let pages = pages(&writer.finish());
+        let pages = pages(&writer.finish(u64::MAX));
 
         assert_eq!(pages.len(), 3);
         assert_eq!(pages[0].flags, FLAG_BOS);
@@ -255,8 +261,8 @@ mod tests {
         assert_eq!(pages[2].flags, FLAG_EOS);
         assert_eq!(
             pages[2].granule,
-            u64::from(PRE_SKIP) + 3 * 960,
-            "the last granule is every sample plus the pre-skip"
+            3 * 960,
+            "the last granule is every sample the packets decode to"
         );
         let sequences: Vec<u32> = pages.iter().map(|p| p.sequence).collect();
         assert_eq!(sequences, vec![0, 1, 2]);
@@ -268,7 +274,7 @@ mod tests {
         for _ in 0..(PACKETS_PER_PAGE * 2 + 5) {
             writer.push(vec![1; 60], 960);
         }
-        let pages = pages(&writer.finish());
+        let pages = pages(&writer.finish(u64::MAX));
         let audio: Vec<&Page> = pages.iter().skip(2).collect();
         assert_eq!(audio.len(), 3);
         assert!(audio.windows(2).all(|w| w[0].granule < w[1].granule));
@@ -279,14 +285,14 @@ mod tests {
     fn a_packet_of_exactly_255_bytes_is_terminated_by_a_zero() {
         let mut writer = OggOpusWriter::new(1, "t");
         writer.push(vec![9; 255], 960);
-        let pages = pages(&writer.finish());
+        let pages = pages(&writer.finish(u64::MAX));
         assert_eq!(pages[2].lacing, vec![255, 0]);
         assert_eq!(pages[2].body.len(), 255);
     }
 
     #[test]
     fn an_empty_take_still_closes_the_stream() {
-        let pages = pages(&OggOpusWriter::new(1, "t").finish());
+        let pages = pages(&OggOpusWriter::new(1, "t").finish(0));
         assert_eq!(pages.len(), 3);
         assert_eq!(pages[2].flags, FLAG_EOS);
         assert!(pages[2].body.is_empty());

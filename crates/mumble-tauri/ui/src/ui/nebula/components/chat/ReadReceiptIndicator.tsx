@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getPreferences } from "@core/preferencesStorage";
 import { Box } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "@core/store";
@@ -33,6 +34,18 @@ export default function ReadReceiptIndicator({
   const channelHashKey = useAppStore(selectChannelHashKey(channelId));
 
   const { t } = useTranslation("chat");
+  // "Disable read receipts" is one bargain, as its hint says: not telling
+  // others what you read is not being told what they read.
+  const [disabled, setDisabled] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void getPreferences()
+      .then((prefs) => live && setDisabled(prefs.disableReadReceipts ?? false))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const activeHashes = useMemo(() => hashesOf(channelHashKey), [channelHashKey]);
 
@@ -46,7 +59,7 @@ export default function ReadReceiptIndicator({
     return ownHash ? readers.filter((r) => r.cert_hash !== ownHash).length : readers.length;
   }, [channelId, messageId, allMessageIds, ownHash, readReceiptVersion]);
 
-  const read = readerCount > 0;
+  const read = !disabled && readerCount > 0;
   const title = !read
     ? t("readReceipt.sent")
     : allRead

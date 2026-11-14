@@ -18,7 +18,11 @@ pub(crate) fn hydrate_persisted_prefs(app: &tauri::AppHandle, state: &AppState) 
     // Record the log directory now that the app handle exists, so the
     // developer log tooling (file logging, export, "view folder") has a
     // target even before the user touches a setting.
-    if let Ok(log_dir) = app.path().app_log_dir() {
+    let log_dir = match super::isolation::Isolation::from_env() {
+        Some(isolation) => Some(isolation.log_dir()),
+        None => app.path().app_log_dir().ok(),
+    };
+    if let Some(log_dir) = log_dir {
         logging::set_log_dir(log_dir);
     }
 
@@ -153,10 +157,15 @@ fn start_rich_presence(app: tauri::AppHandle, resolve_artwork: bool) {
 pub(crate) fn read_preferences_file(
     app: &tauri::AppHandle,
 ) -> Option<(std::path::PathBuf, Vec<u8>)> {
-    let candidates = [
-        app.path().app_data_dir().ok(),
-        app.path().app_config_dir().ok(),
-    ];
+    // An isolated test instance reads its own preferences and never the
+    // user's: the web UI keeps its stores in the isolation directory.
+    let candidates = match super::isolation::Isolation::from_env() {
+        Some(isolation) => [Some(isolation.store_dir().to_path_buf()), None],
+        None => [
+            app.path().app_data_dir().ok(),
+            app.path().app_config_dir().ok(),
+        ],
+    };
     for dir in candidates.into_iter().flatten() {
         let path = dir.join("preferences.json");
         match std::fs::read(&path) {

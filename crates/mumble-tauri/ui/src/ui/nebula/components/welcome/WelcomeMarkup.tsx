@@ -81,7 +81,8 @@ export function WelcomeMarkup({
    */
   live?: boolean;
 }>) {
-  const clean = useMemo(() => sanitizeHtml(html), [html]);
+  // A greeting is a server's own document: its boxes get room inside.
+  const clean = useMemo(() => sanitizeHtml(html, { padBoxes: true }), [html]);
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [slots, setSlots] = useState<{ node: HTMLElement; label: string }[]>([]);
 

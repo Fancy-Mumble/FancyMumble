@@ -49,7 +49,7 @@ impl Shell {
     }
 
     /// Delete `label` on the second asking; the first only arms it.
-    fn delete_certificate(&mut self, label: &SharedString, cx: &mut Context<Self>) {
+    pub(super) fn delete_certificate(&mut self, label: &SharedString, cx: &mut Context<Self>) {
         if self.panels.certs.doomed.as_ref() == Some(label) {
             self.panels.certs.doomed = None;
             self.engine
@@ -61,7 +61,7 @@ impl Shell {
     }
 
     /// Ask where to, and write `label` there.
-    fn export_certificate(&mut self, label: &SharedString, cx: &mut Context<Self>) {
+    pub(super) fn export_certificate(&mut self, label: &SharedString, cx: &mut Context<Self>) {
         let home = std::env::var_os("HOME").map_or_else(std::env::temp_dir, Into::into);
         let chosen = cx.prompt_for_new_path(&home, Some(&format!("{label}.fancy-identity.json")));
         let label = label.to_string();
@@ -79,7 +79,7 @@ impl Shell {
     }
 
     /// Ask for an exported certificate, and take it in.
-    fn import_certificate(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn import_certificate(&mut self, cx: &mut Context<Self>) {
         let chosen = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
             directories: false,
@@ -147,6 +147,7 @@ fn row(
         )
         .child(
             IconButton::at("certificate-export", at, "download")
+                .tip("Export")
                 .selector(format!("export-{tag}"))
                 .on_click(cx.listener(move |shell, _, _, cx| {
                     shell.export_certificate(&for_export, cx);
@@ -154,6 +155,7 @@ fn row(
         )
         .child(
             IconButton::at("certificate-delete", at, "trash-2")
+                .tip("Delete")
                 .tone(Tone::Danger)
                 .selector(format!("delete-{tag_delete}"))
                 .on_click(cx.listener(move |shell, _, _, cx| {

@@ -398,9 +398,9 @@ impl SpeakerBuffer {
         // is a click.
         let ramp = self.ramp_samples().min(self.samples.len());
         let from = self.last_out;
-        for i in 0..ramp {
+        for (i, sample) in self.samples.iter_mut().take(ramp).enumerate() {
             let w = (i as f32 + 1.0) / ramp as f32;
-            self.samples[i] = from * (1.0 - w) + self.samples[i] * w;
+            *sample = from * (1.0 - w) + *sample * w;
         }
     }
 }

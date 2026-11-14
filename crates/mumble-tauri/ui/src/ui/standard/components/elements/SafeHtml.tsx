@@ -24,10 +24,15 @@ interface SafeHtmlProps {
   readonly style?: React.CSSProperties;
   /** Rendered when `html` is empty or only whitespace. */
   readonly fallback?: React.ReactNode;
+  /**
+   * Give the boxes a server's document draws room inside (`boxPadding.ts`):
+   * for welcome messages and channel descriptions, never bios or messages.
+   */
+  readonly padBoxes?: boolean;
 }
 
-export function SafeHtml({ html, className, style, fallback }: SafeHtmlProps) {
-  const clean = useMemo(() => sanitizeHtml(html), [html]);
+export function SafeHtml({ html, className, style, fallback, padBoxes = false }: SafeHtmlProps) {
+  const clean = useMemo(() => sanitizeHtml(html, { padBoxes }), [html, padBoxes]);
   // Stable, so a re-render does not rebuild the markup under a selection.
   const markup = useInnerHtml(clean);
 

@@ -107,6 +107,16 @@ describe("legacy fallback", () => {
     expect(await legacyImageFallbacks([{ filePath: "a.png", filename: "a.png" }], body, 131_072)).toEqual([]);
   });
 
+  it("copies an album's first four with the engine's rule and names the rest", async () => {
+    const sources = Array.from({ length: 11 }, (_, n) => ({ filePath: `p${n}.png`, filename: `p${n}.png` }));
+    const blocks = await legacyImageFallbacks(sources, "<!-- FANCY_FILE:abc -->", 131_072);
+    expect(blocks).toHaveLength(4);
+    expect(fitDataUrl).toHaveBeenCalledTimes(4);
+    for (const call of fitDataUrl.mock.calls) {
+      expect(call[2]).toMatchObject({ maxWidth: 1600, maxHeight: 450, legacy: true });
+    }
+  });
+
   it("stacks several copies no taller than a legacy client lays out", async () => {
     await legacyImageFallbacks(
       [
@@ -271,6 +281,20 @@ describe("shared files", () => {
     );
     expect(legacyView(out)).toContain("report.pdf</a>");
     expect(legacyView(out)).toContain('<img src="data:image/jpeg;base64,AAAA" alt="a.png" />');
+    expect(stripLegacyFallback(out)).toBe(marker);
+  });
+
+  it("put a durable public picture's link under its copy, as the native client does", async () => {
+    const marker = "<!-- FANCY_FILE:abc -->";
+    const out = await withLegacyFallback(
+      marker,
+      [{ info: { ...pdf, filename: "a&b.png", url: "https://files.example/s/a?x=1&y=2" }, filePath: "C:/a.png" }],
+      { mode: "public" },
+    );
+    expect(out).toBe(
+      `${marker}\n<!-- FANCY_LEGACY --><img src="data:image/jpeg;base64,AAAA" alt="a&amp;b.png" />` +
+        '<br><a href="https://files.example/s/a?x=1&amp;y=2">a&amp;b.png</a><!-- /FANCY_LEGACY -->',
+    );
     expect(stripLegacyFallback(out)).toBe(marker);
   });
 

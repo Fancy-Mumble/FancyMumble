@@ -16,6 +16,10 @@ use gpui::{RenderImage, Rgba};
 
 use crate::theme::parse_color;
 
+mod pattern;
+
+pub(crate) use pattern::Pattern;
+
 /// How much smaller than the area it covers the picture is, each way.
 const SHRINK: f32 = 8.0;
 

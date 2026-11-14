@@ -8,6 +8,7 @@ const invoke = vi.fn().mockResolvedValue({ total_memory_mb: 32_768, cpu_cores: 1
 const completeSetup = vi.fn().mockResolvedValue(undefined);
 const savePersonalization = vi.fn().mockResolvedValue(undefined);
 const applyTheme = vi.fn();
+const applyColorMode = vi.fn();
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
 vi.mock("@core/preferencesStorage", () => ({
@@ -19,6 +20,8 @@ vi.mock("@standard/personalizationStorage", () => ({
 }));
 vi.mock("@standard/themes", () => ({
   applyTheme: (...args: unknown[]) => applyTheme(...args),
+  applyColorMode: (...args: unknown[]) => applyColorMode(...args),
+  colorModeForTheme: (id: string, fallback: string) => (id === "dark" || id === "light" ? id : fallback),
   THEMES: [
     { id: "dark", label: "Dark", swatches: ["#000", "#111"] },
     { id: "rose", label: "Rose", swatches: ["#1a0f14", "#f472b6"] },
@@ -64,6 +67,21 @@ describe("FirstRunSetup", () => {
 
     fireEvent.click(screen.getByRole("radio", { name: "Rose" }));
     expect(applyTheme).toHaveBeenCalledWith("rose");
+  });
+
+  it("wears Dark dark, whatever the system's own scheme is", async () => {
+    // Left on "system", a light phone showed the "Dark" it had just chosen in
+    // light: the theme left at its default is worn when setup finishes.
+    const onComplete = draw();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Sebastian" } });
+    fireEvent.click(screen.getByRole("button", { name: /next/i }));
+    fireEvent.click(screen.getByRole("button", { name: /next/i }));
+    fireEvent.click(screen.getByRole("button", { name: /next/i }));
+    fireEvent.click(screen.getByRole("button", { name: /get started/i }));
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalled());
+    expect(applyColorMode).toHaveBeenCalledWith("dark");
+    expect(savePersonalization).toHaveBeenCalledWith({ theme: "dark", colorMode: "dark" });
   });
 
   it("writes the name, the mode and the theme, then hands back", async () => {

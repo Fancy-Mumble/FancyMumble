@@ -73,6 +73,8 @@ mod audio;
 pub(crate) mod constants;
 pub(crate) mod e2e_stats;
 pub mod engine_api;
+#[cfg(feature = "logs")]
+pub(crate) mod logging;
 mod markup;
 pub(crate) mod media;
 mod state;
@@ -84,8 +86,6 @@ mod adapter;
 mod app;
 #[cfg(feature = "tauri-view")]
 pub(crate) mod commands;
-#[cfg(feature = "tauri-view")]
-pub(crate) mod logging;
 #[cfg(feature = "tauri-view")]
 pub mod platform;
 #[cfg(feature = "tauri-view")]
@@ -194,6 +194,7 @@ pub fn run() {
             }
             Ok(())
         })
+        .on_page_load(app::on_page_load)
         .on_window_event(|window, event| {
             #[cfg(not(target_os = "android"))]
             app::window_state::on_window_event(window, event);

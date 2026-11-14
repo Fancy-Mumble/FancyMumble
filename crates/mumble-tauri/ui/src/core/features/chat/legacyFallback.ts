@@ -61,6 +61,9 @@ const MIN_FALLBACK_BYTES = 8_000;
  */
 const MAX_SOURCE_BYTES = 25 * 1024 * 1024;
 
+/** The most copies one message carries: an album's first four. */
+const ALBUM_COPIES = 4;
+
 /** The longest name a copy's `alt` carries, so the name cannot eat the budget. */
 const MAX_ALT_CHARS = 64;
 
@@ -101,6 +104,8 @@ export interface LegacyFallbackSource {
   readonly filePath: string;
   readonly filename: string;
   readonly sizeBytes?: number;
+  /** The file's durable public address, put under the copy so the original is a click away. */
+  readonly link?: string | null;
 }
 
 /** One shared file: what its marker says, and where the sender still has it. */
@@ -142,7 +147,10 @@ async function legacyCopies(
   const isCandidate = (source: LegacyFallbackSource) =>
     previewKindForFilename(source.filename) === "image" &&
     (source.sizeBytes === undefined || source.sizeBytes <= MAX_SOURCE_BYTES);
-  const count = sources.filter(isCandidate).length;
+  // An album's first four get a copy, as many as a Fancy client draws as
+  // tiles before its "+n" (the engine's `ALBUM_COPIES`); the rest keep their
+  // line, which names each.
+  const count = Math.min(ALBUM_COPIES, sources.filter(isCandidate).length);
   if (count === 0) return sources.map(() => null);
   const limit = imageMessageLength > 0 ? imageMessageLength : DEFAULT_IMAGE_MESSAGE_LENGTH;
   const maxHeight = Math.floor(LEGACY_STACK_HEIGHT / count);
@@ -151,7 +159,7 @@ async function legacyCopies(
   let left = count;
   const out: (string | null)[] = [];
   for (const source of sources) {
-    if (!isCandidate(source)) {
+    if (!isCandidate(source) || left === 0) {
       out.push(null);
       continue;
     }
@@ -170,8 +178,11 @@ async function legacyImageFallback(
   maxChars: number,
   maxHeight: number,
 ): Promise<string | null> {
+  const under = source.link
+    ? `<br><a href="${escapeAttr(source.link)}">${escapeAttr(source.filename)}</a>`
+    : "";
   const wrap = (src: string) =>
-    legacyFence(mediaToHtml(src, "image", source.filename.slice(0, MAX_ALT_CHARS)));
+    legacyFence(`${mediaToHtml(src, "image", source.filename.slice(0, MAX_ALT_CHARS))}${under}`);
   const reserve = wrap("").length;
   if (maxChars - reserve < MIN_FALLBACK_BYTES) return null;
   try {
@@ -181,6 +192,7 @@ async function legacyImageFallback(
       reserve,
       maxWidth: INLINE_MAX_WIDTH,
       maxHeight,
+      legacy: true,
     });
     const block = wrap(fitted);
     // `fitDataUrl`'s last resort can still overshoot a small budget.
@@ -238,12 +250,11 @@ export function legacyFileLine(info: FileAttachmentInfo, share: LegacyFallbackSh
  * copy - gets a line naming it, with a link where there is a durable public
  * one (see {@link durableLink}).
  *
- * Two kinds of share get no copy. A password share is sealed so the server
- * cannot read it, and an inline copy beside it would hand over exactly what
- * the password withholds. A share that expires would outlive itself: the copy
- * sits in every legacy client's log, and in the server's archive, long after
- * the link is dead. Both still get their line - the name was never secret,
- * it is in the marker every member of the channel receives.
+ * A password share gets no copy: it is sealed so the server cannot read it,
+ * and an inline copy beside it would hand over exactly what the password
+ * withholds. It still gets its line - the name was never secret, it is in
+ * the marker every member of the channel receives. A share that expires does
+ * get a copy (see `copiesAllowed`), but no link under it: the link dies.
  */
 export async function withLegacyFallback(
   body: string,
@@ -252,11 +263,15 @@ export async function withLegacyFallback(
 ): Promise<string> {
   const limits = await currentLimits();
   if (!limits.allow_html || files.length === 0) return body;
-  const copiesAllowed = share.mode !== "password" && (share.ttlSeconds ?? 0) <= 0;
+  // An expiring share gets a copy all the same: a week is what a share
+  // lasts unless the sender says otherwise, and without one a legacy reader
+  // would see no picture at all. The copy outlives the file in their log.
+  const copiesAllowed = share.mode !== "password";
   const sources: LegacyFallbackSource[] = files.map((file) => ({
     filePath: copiesAllowed && file.filePath && !file.info.voice ? file.filePath : "",
     filename: copiesAllowed && file.filePath && !file.info.voice ? file.info.filename : "",
     sizeBytes: file.info.sizeBytes,
+    link: durableLink(file.info, share),
   }));
   // The lines are budgeted first, as if no picture got a copy: they are a
   // few dozen characters each, and a copy that ate their room would leave a

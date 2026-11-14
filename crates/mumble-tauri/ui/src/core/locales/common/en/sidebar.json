@@ -181,7 +181,9 @@
     "bandwidth": "Bandwidth",
     "labelCurrent": "Current",
     "labelOnline": "Online",
-    "idle": "(idle: {{duration}})"
+    "idle": "(idle: {{duration}})",
+    "devices": "Devices",
+    "deviceFallback": "Device {{session}}"
   },
   "superSearch": {
     "placeholder": "Search channels, users, messages...",

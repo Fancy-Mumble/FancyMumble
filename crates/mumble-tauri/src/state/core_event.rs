@@ -41,13 +41,14 @@ use super::types::{
     CurrentChannelPayload, CustodianPinPayload, DisconnectedPayload, DmUnreadPayload,
     KeyHoldersChangedPayload, KeyShareRequestPayload, KeyShareRequestsChangedPayload,
     LatencyPayload, ListenDeniedPayload, MicAmplitudePayload, NewDmPayload, NewMessagePayload,
-    OnboardingConfig, OnboardingResponse, PchatFetchCompletePayload, PchatHistoryLoadingPayload,
-    PchatKeyRevokedPayload, PchatSendRejectedPayload, PermissionDeniedPayload, PinDeliverPayload,
-    PinFetchResponsePayload, PluginDataPayload, PluginRegistryEntryPayload, ReactionDeliverPayload,
-    ReactionFetchResponsePayload, RegisteredUserPayload, RejectedPayload, ServerLogEntry,
-    ServerSettingsSnapshot, SignalBridgeErrorPayload, UnreadPayload, UploadProgressPayload,
-    UserCommentPayload, UserStatsPayload, VoiceActivationCalibrationPayload, VoiceReplayState,
-    VoiceState, WebRtcSignalPayload,
+    OnboardingConfig, OnboardingResponse, PchatFetchCompletePayload, PchatFetchRefusedPayload,
+    PchatHistoryLoadingPayload, PchatKeyRevokedPayload, PchatSendRejectedPayload,
+    PermissionDeniedPayload, PinDeliverPayload, PinFetchResponsePayload, PluginDataPayload,
+    PluginRegistryEntryPayload, ReactionDeliverPayload, ReactionFetchResponsePayload,
+    RegisteredUserPayload, RejectedPayload, ServerLogEntry, ServerSettingsSnapshot,
+    SignalBridgeErrorPayload, UnreadPayload, UploadProgressPayload, UserCommentPayload,
+    UserStatsPayload, VoiceActivationCalibrationPayload, VoiceReplayState, VoiceState,
+    WebRtcSignalPayload,
 };
 use super::voice_message::RecorderState;
 use super::whisper::WhisperDenials;
@@ -88,6 +89,8 @@ pub(crate) enum CoreEvent {
     PchatHistoryLoading(PchatHistoryLoadingPayload),
     /// A page of stored history has been merged into its channel.
     PchatFetchComplete(PchatFetchCompletePayload),
+    /// The server refused a page of stored history; not the end of it.
+    PchatFetchRefused(PchatFetchRefusedPayload),
     /// The server refused to store messages the view already shows as sent.
     PchatSendRejected(PchatSendRejectedPayload),
     /// The set of users holding a channel's key changed.
@@ -270,6 +273,7 @@ impl CoreEvent {
             Self::NewDm(_) => "new-dm",
             Self::PchatHistoryLoading(_) => "pchat-history-loading",
             Self::PchatFetchComplete(_) => "pchat-fetch-complete",
+            Self::PchatFetchRefused(_) => "pchat-fetch-refused",
             Self::PchatSendRejected(_) => "pchat-send-rejected",
             Self::PchatKeyHoldersChanged(_) => "pchat-key-holders-changed",
             Self::PchatKeyShareRequested(_) => "pchat-key-share-request",
@@ -366,6 +370,7 @@ impl CoreEvent {
                 | Self::NewDm(_)
                 | Self::PchatHistoryLoading(_)
                 | Self::PchatFetchComplete(_)
+                | Self::PchatFetchRefused(_)
                 | Self::PchatSendRejected(_)
                 | Self::PchatKeyHoldersChanged(_)
                 | Self::PchatKeyShareRequested(_)
@@ -459,6 +464,7 @@ impl Serialize for CoreEvent {
             Self::NewDm(payload) => payload.serialize(serializer),
             Self::PchatHistoryLoading(payload) => payload.serialize(serializer),
             Self::PchatFetchComplete(payload) => payload.serialize(serializer),
+            Self::PchatFetchRefused(payload) => payload.serialize(serializer),
             Self::PchatSendRejected(payload) => payload.serialize(serializer),
             Self::PchatKeyHoldersChanged(payload) => payload.serialize(serializer),
             Self::PchatKeyShareRequested(payload) => payload.serialize(serializer),

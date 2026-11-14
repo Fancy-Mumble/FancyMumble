@@ -25,6 +25,18 @@ pub(super) fn is_client_decorated(window: &Window) -> bool {
         || matches!(window.window_decorations(), Decorations::Client { .. })
 }
 
+/// Whether the window draws its own minimise, maximise and close.
+///
+/// Where it draws its own frame, and always on Windows: there the title
+/// bar is the window's own once it has asked for a transparent one, which
+/// leaves no system controls at all, and GPUI does not say so - it answers
+/// that the system decorates wherever it was never told otherwise. Resizing
+/// stays the system's there, by the frame it keeps outside the window, so
+/// this is not the same question as [`is_client_decorated`].
+pub(super) fn draws_controls(window: &Window) -> bool {
+    cfg!(target_os = "windows") || is_client_decorated(window)
+}
+
 /// The resize strips, or nothing where there is nothing to resize: a window
 /// the system frames, or one that is maximised.
 pub(super) fn resize_grips(window: &Window) -> Option<impl IntoElement + use<>> {

@@ -88,6 +88,7 @@ import { Lightbox, type LightboxHandle } from "../elements/Lightbox";
 import { useAclGroups } from "../../hooks/useAclGroups";
 import { rolesForUser } from "@core/features/roster/roles";
 import { usePublishOwnRoles } from "@core/features/chat/selfMention";
+import { resolvePickedFile } from "@core/features/chat/pickedFile";
 
 const PollCreator = lazy(() => import("./poll/PollCreator"));
 const EmojiPicker = lazy(() => import("../elements/EmojiPicker"));
@@ -771,8 +772,8 @@ export default function ChatView({
       const { open } = await import("@tauri-apps/plugin-dialog");
       const picked = await open({ multiple: false, directory: false });
       if (typeof picked !== "string") return;
-      const filename = picked.replaceAll("\\", "/").split("/").pop() ?? "file";
-      setShareDialog({ filePath: picked, filename });
+      // A `content://` address on Android, which only the backend can read.
+      setShareDialog(await resolvePickedFile(picked));
     } catch (e) {
       console.error("file picker failed:", e);
       const detail = e instanceof Error ? e.message : String(e);
@@ -1520,6 +1521,7 @@ export default function ChatView({
                 {persistent.signalBridgeErrorBanner}
                 {persistent.disputeBanner}
                 {persistent.revokedBanner}
+                {persistent.historyRefusedBanner}
               </BannerStack>
 
               <ActiveWatchBanner />

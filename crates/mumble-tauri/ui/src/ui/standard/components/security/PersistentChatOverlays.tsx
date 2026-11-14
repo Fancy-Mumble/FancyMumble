@@ -24,6 +24,8 @@ interface PersistentChatResult {
   disputeBanner: ReactNode;
   keyShareBanner: ReactNode;
   revokedBanner: ReactNode;
+  /** The server refused a page of history; offers to ask again. */
+  historyRefusedBanner: ReactNode;
   signalBridgeErrorBanner: ReactNode;
   keyRevoked: boolean;
   /** True when the user cannot send messages (key revoked or Signal bridge unavailable). */
@@ -104,6 +106,8 @@ export function usePersistentChat(channelId: number | null, channelName: string)
   const dismissKeyShare = useAppStore((s) => s.dismissKeyShare);
   const pchatKeyRevoked = useAppStore((s) => s.pchatKeyRevoked);
   const signalBridgeError = useAppStore((s) => s.signalBridgeError);
+  const pchatHistoryRefused = useAppStore((s) => s.pchatHistoryRefused);
+  const retryHistoryFetch = useAppStore((s) => s.retryHistoryFetch);
   const channels = useAppStore((s) => s.channels);
 
   const [showVerifyDialog, setShowVerifyDialog] = useState(false);
@@ -113,7 +117,7 @@ export function usePersistentChat(channelId: number | null, channelName: string)
   const [showBridgeInstall, setShowBridgeInstall] = useState(false);
   const bridge = useSignalBridgeAddon();
   const [userMode, setUserMode] = useState<UserMode>("normal");
-  const { t } = useTranslation("sidebar");
+  const { t } = useTranslation(["sidebar", "chat", "common"]);
   const tStr = t as (k: string) => string;
 
   useEffect(() => {
@@ -126,6 +130,7 @@ export function usePersistentChat(channelId: number | null, channelName: string)
   const custodian = channelId === null ? undefined : custodianPins[channelId];
   const dispute = channelId === null ? undefined : pendingDisputes[channelId];
   const keyRevoked = channelId !== null && pchatKeyRevoked.has(channelId);
+  const historyRefused = channelId === null ? undefined : pchatHistoryRefused[channelId];
   const persistenceMode: PersistenceMode = persistence?.mode ?? "NONE";
 
   // A KeyOwner admin can un-brick a channel whose key challenge failed by
@@ -230,6 +235,29 @@ export function usePersistentChat(channelId: number | null, channelName: string)
         )}
       </InfoBanner>
     ) : null,
+    historyRefusedBanner:
+      historyRefused && channelId !== null ? (
+        <div data-testid={TID.pchatHistoryRefused}>
+          <InfoBanner
+            icon={warningIcon}
+            actions={
+              <button
+                className={infoBannerStyles.approveButton}
+                data-testid={TID.pchatHistoryRetry}
+                aria-label={t("chat:historyRefused.retry")}
+                onClick={() => void retryHistoryFetch(channelId)}
+              >
+                {t("common:actions.retry")}
+              </button>
+            }
+          >
+            <p className={infoBannerStyles.description}>
+              <strong>{t("chat:historyRefused.title")}</strong>
+              {historyRefused.detail ? ` - ${historyRefused.detail}` : null}
+            </p>
+          </InfoBanner>
+        </div>
+      ) : null,
     keyRevoked,
     sendBlocked: keyRevoked || bridgeMissing,
     signalBridgeErrorBanner: bridgeMissing ? (

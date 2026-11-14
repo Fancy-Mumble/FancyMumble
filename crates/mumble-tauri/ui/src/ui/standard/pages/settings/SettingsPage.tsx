@@ -20,7 +20,8 @@ import {
   getSavedAudioSettings,
   saveAudioSettings,
 } from "@core/preferencesStorage";
-import { serializeProfile, dataUrlToBytes } from "@core/profileFormat";
+import { dataUrlToBytes } from "@core/profileFormat";
+import { writeOwnProfile } from "@core/features/settings/ownProfile";
 import { setKlipyApiKey } from "@core/features/chat/gif/klipyConfig";
 import { useAppStore } from "@core/store";
 import {
@@ -578,8 +579,8 @@ export default function SettingsPage() {
     const timer = setTimeout(async () => {
       setProfileError(null);
       try {
-        const comment = serializeProfile(profile, bio);
-        await invoke("set_user_comment", { comment });
+        // Merged over the comment the server holds, keeping another client's fields.
+        await writeOwnProfile(useAppStore.getState().ownSession, profile, bio);
 
         const texture = avatarDataUrl ? dataUrlToBytes(avatarDataUrl) : [];
         await invoke("set_user_texture", { texture });

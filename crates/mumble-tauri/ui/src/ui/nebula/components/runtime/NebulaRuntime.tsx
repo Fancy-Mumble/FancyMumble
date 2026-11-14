@@ -1,3 +1,4 @@
+import { setNumberAndDateFormat } from "@core/utils/format";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -62,8 +63,20 @@ function NebulaRuntimeInner({ onOpenMarketplace, onOpenInvite }: NebulaRuntimePr
   useCodeHighlight();
   useWatchLifecycle();
 
+  // Numbers and dates as the reader chose (Language & format), after every
+  // change too: the formatters read them where they write a size or a day.
+  useEffect(() => {
+    const readFormats = () =>
+      void getPreferences()
+        .then((preferences) => setNumberAndDateFormat(preferences.numberFormat, preferences.dateFormat))
+        .catch(() => undefined);
+    globalThis.addEventListener("preferences-changed", readFormats);
+    return () => globalThis.removeEventListener("preferences-changed", readFormats);
+  }, []);
+
   useEffect(() => {
     void getPreferences().then((preferences) => {
+      setNumberAndDateFormat(preferences.numberFormat, preferences.dateFormat);
       setKlipyApiKey(preferences.klipyApiKey);
       useAppStore.setState({
         disableLinkPreviews: preferences.disableLinkPreviews ?? false,

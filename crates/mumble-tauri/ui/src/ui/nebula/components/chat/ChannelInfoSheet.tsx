@@ -735,7 +735,7 @@ function ConversationFacts({ channelId }: Readonly<{ channelId: number }>) {
  * without it a click navigates the app's own window away with no way back.
  */
 function Description({ html, empty }: Readonly<{ html: string; empty: string }>) {
-  const clean = useMemo(() => sanitizeHtml(html), [html]);
+  const clean = useMemo(() => sanitizeHtml(html, { padBoxes: true }), [html]);
   if (!clean)
     return (
       <Typography sx={(theme) => ({ fontSize: 12, fontStyle: "italic", color: theme.palette.nebula.dim })}>

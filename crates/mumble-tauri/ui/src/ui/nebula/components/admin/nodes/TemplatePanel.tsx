@@ -136,7 +136,7 @@ function TemplateCard<N extends GraphNode>({
   // Through the same allow-list every surface in this app renders untrusted
   // markup through, so the card is not an impression of the message - it is
   // the message, and anything the sanitiser drops is missing here too.
-  const preview = useMemo(() => (template.preview ? sanitizeHtml(template.preview) : ""), [template]);
+  const preview = useMemo(() => (template.preview ? sanitizeHtml(template.preview, { padBoxes: true }) : ""), [template]);
 
   return (
     <Stack

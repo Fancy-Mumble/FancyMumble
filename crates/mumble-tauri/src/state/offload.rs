@@ -24,6 +24,13 @@ const NONCE_LEN: usize = 12;
 const KEY_LEN: usize = 32;
 /// Sub-directory name inside the system temp folder.
 const OFFLOAD_DIR_NAME: &str = "fancy-mumble-offload";
+/// The file a running client holds locked in its own folder there, for as
+/// long as it runs: what tells a folder in use from one left behind.
+const OWNER_FILE: &str = "owner.lock";
+/// How old a file lying directly in the shared folder is before it is
+/// taken for left behind. Clients from before each had a folder of its own
+/// wrote there, and one of those may still be running.
+const LEFT_BEHIND_AFTER: std::time::Duration = std::time::Duration::from_secs(7 * 24 * 60 * 60);
 
 // --- Provider trait -----------------------------------------------
 
@@ -88,6 +95,9 @@ pub struct EncryptedFileProvider {
     dir: PathBuf,
     /// Keys that are currently offloaded to disk.
     offloaded: HashSet<String>,
+    /// [`OWNER_FILE`], held locked while this provider lives. Another
+    /// client starting up leaves a folder alone while its owner holds it.
+    owner: Option<fs::File>,
 }
 
 impl EncryptedFileProvider {
@@ -97,8 +107,15 @@ impl EncryptedFileProvider {
     /// the app's cache directory on Android).  The offload sub-folder
     /// is created inside it.
     pub fn new(base_dir: PathBuf) -> Result<Self, String> {
-        let dir = base_dir.join(OFFLOAD_DIR_NAME);
-        Self::with_dir(dir)
+        // A folder of this client's own under the shared one: several
+        // clients run at once (two windows, a test beside the real one),
+        // and each can read only what it put away itself.
+        let mut tag = [0u8; 8];
+        SystemRandom::new()
+            .fill(&mut tag)
+            .map_err(|_| "Failed to name the offload directory")?;
+        let own = format!("{}-{}", std::process::id(), u64::from_le_bytes(tag));
+        Self::with_dir(base_dir.join(OFFLOAD_DIR_NAME).join(own))
     }
 
     /// Create a new provider that stores files in the given directory.
@@ -115,6 +132,11 @@ impl EncryptedFileProvider {
         let key = LessSafeKey::new(unbound);
 
         fs::create_dir_all(&dir).map_err(|e| format!("Failed to create offload directory: {e}"))?;
+        // Best effort: without the lock the folder is merely not known
+        // to be in use, which is how it was before.
+        let owner = fs::File::create(dir.join(OWNER_FILE))
+            .ok()
+            .filter(|file| file.try_lock().is_ok());
 
         debug!("EncryptedFileProvider initialised at {}", dir.display());
 
@@ -123,17 +145,58 @@ impl EncryptedFileProvider {
             rng,
             dir,
             offloaded: HashSet::new(),
+            owner,
         })
     }
 
     /// Remove stale offload data left behind by a previous session that
     /// did not shut down cleanly.  Called once during application startup.
+    ///
+    /// Only what nobody holds is removed. The folder is shared by every
+    /// client on the machine, and one that is running still needs what it
+    /// put away: removing the lot, as this once did, cost a running client
+    /// every body it had on disk the moment a second one was started.
     pub fn cleanup_stale(base_dir: &std::path::Path) {
-        let dir = base_dir.join(OFFLOAD_DIR_NAME);
-        if dir.exists() {
-            debug!("Removing stale offload directory from a previous session");
-            let _ = fs::remove_dir_all(&dir);
+        let Ok(entries) = fs::read_dir(base_dir.join(OFFLOAD_DIR_NAME)) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if !Self::in_use(&path) {
+                    debug!("Removing an offload directory nobody holds");
+                    let _ = fs::remove_dir_all(&path);
+                }
+            } else if Self::left_behind(&path) {
+                let _ = fs::remove_file(&path);
+            }
         }
+    }
+
+    /// Whether the client that made the folder `dir` is still running: it
+    /// holds [`OWNER_FILE`] locked for as long as it is.
+    fn in_use(dir: &std::path::Path) -> bool {
+        match fs::File::open(dir.join(OWNER_FILE)) {
+            // Ours to lock means nobody else has it; let go at once.
+            Ok(owner) => match owner.try_lock() {
+                Ok(()) => {
+                    let _ = owner.unlock();
+                    false
+                }
+                Err(_) => true,
+            },
+            Err(_) => false,
+        }
+    }
+
+    /// Whether the file `path`, lying directly in the shared folder, is old
+    /// enough that no running client can still want it.
+    fn left_behind(path: &std::path::Path) -> bool {
+        fs::metadata(path)
+            .and_then(|meta| meta.modified())
+            .ok()
+            .and_then(|written| written.elapsed().ok())
+            .is_some_and(|age| age > LEFT_BEHIND_AFTER)
     }
 
     /// Build a filesystem path for the given key.
@@ -161,31 +224,37 @@ impl EncryptedFileProvider {
             .map_err(|_| "Failed to generate nonce")?;
         let nonce = Nonce::assume_unique_for_key(nonce_bytes);
 
-        let mut data = plaintext.to_vec();
-        self.key
-            .seal_in_place_append_tag(nonce, Aad::empty(), &mut data)
-            .map_err(|_| "Encryption failed")?;
-
-        let mut out = Vec::with_capacity(NONCE_LEN + data.len());
+        // Sealed where it will be written from: a body is megabytes, and
+        // every copy of it on the way is that much held at once.
+        let mut out = Vec::with_capacity(NONCE_LEN + plaintext.len() + CHACHA20_POLY1305.tag_len());
         out.extend_from_slice(&nonce_bytes);
-        out.extend_from_slice(&data);
+        out.extend_from_slice(plaintext);
+        let tag = self
+            .key
+            .seal_in_place_separate_tag(nonce, Aad::empty(), &mut out[NONCE_LEN..])
+            .map_err(|_| "Encryption failed")?;
+        out.extend_from_slice(tag.as_ref());
         Ok(out)
     }
 
-    /// Decrypt `[nonce || ciphertext || tag]` back to plaintext bytes.
-    fn decrypt(key: &LessSafeKey, file_data: &[u8]) -> Result<Vec<u8>, String> {
+    /// Decrypt `[nonce || ciphertext || tag]` back to plaintext bytes, in
+    /// the buffer it was read into.
+    fn decrypt(key: &LessSafeKey, mut file_data: Vec<u8>) -> Result<Vec<u8>, String> {
         if file_data.len() <= NONCE_LEN {
             return Err("Corrupted offload file: too short".into());
         }
-        let (nonce_bytes, ciphertext) = file_data.split_at(NONCE_LEN);
+        let (nonce_bytes, ciphertext) = file_data.split_at_mut(NONCE_LEN);
         let nonce = Nonce::try_assume_unique_for_key(nonce_bytes)
             .map_err(|_| "Invalid nonce in offload file")?;
 
-        let mut buf = ciphertext.to_vec();
-        let plaintext = key
-            .open_in_place(nonce, Aad::empty(), &mut buf)
-            .map_err(|_| "Decryption failed (file may be corrupted or from another session)")?;
-        Ok(plaintext.to_vec())
+        let opened = key
+            .open_in_place(nonce, Aad::empty(), ciphertext)
+            .map_err(|_| "Decryption failed (file may be corrupted or from another session)")?
+            .len();
+        // What is left is the nonce, the body, and where the tag was.
+        file_data.truncate(NONCE_LEN + opened);
+        drop(file_data.drain(..NONCE_LEN));
+        Ok(file_data)
     }
 }
 
@@ -201,7 +270,7 @@ impl OffloadProvider for EncryptedFileProvider {
     fn load(&self, key: &str) -> Result<String, String> {
         let path = self.file_path(key);
         let file_data = fs::read(&path).map_err(|e| format!("Failed to read offload file: {e}"))?;
-        let plaintext = Self::decrypt(&self.key, &file_data)?;
+        let plaintext = Self::decrypt(&self.key, file_data)?;
         String::from_utf8(plaintext)
             .map_err(|e| format!("Decrypted content is not valid UTF-8: {e}"))
     }
@@ -233,13 +302,18 @@ impl OffloadProvider for EncryptedFileProvider {
         self.offloaded.clear();
         if let Ok(entries) = fs::read_dir(&self.dir) {
             for entry in entries.flatten() {
-                let _ = fs::remove_file(entry.path());
+                // The folder is still this client's: its mark stays.
+                if entry.file_name() != OWNER_FILE {
+                    let _ = fs::remove_file(entry.path());
+                }
             }
         }
     }
 
     fn cleanup(&mut self) {
         self.offloaded.clear();
+        // Let go of the folder before removing it.
+        drop(self.owner.take());
         if self.dir.exists() {
             if let Err(e) = fs::remove_dir_all(&self.dir) {
                 warn!("Failed to clean up offload directory: {e}");
@@ -388,6 +462,41 @@ mod tests {
             .join(format!("test-{name}-{}", std::process::id()));
         let provider = EncryptedFileProvider::with_dir(dir).expect("failed to create provider");
         OffloadStore::with_provider(Box::new(provider))
+    }
+
+    #[test]
+    fn a_client_starting_up_leaves_what_a_running_one_put_away() {
+        let base =
+            std::env::temp_dir().join(format!("fancy-offload-shared-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        // One client is running and has put something away.
+        let mut running = EncryptedFileProvider::new(base.clone()).expect("a provider");
+        running.store("kept", "a heavy body").unwrap();
+        // One that stopped without cleaning up, and a file from long ago
+        // would be here too; a file written just now is somebody's.
+        let gone = base.join(OFFLOAD_DIR_NAME).join("1-gone");
+        fs::create_dir_all(&gone).unwrap();
+        fs::write(gone.join("old.enc"), b"unreadable").unwrap();
+        let loose = base.join(OFFLOAD_DIR_NAME).join("loose.enc");
+        fs::write(&loose, b"another client's").unwrap();
+
+        // A second client starts: what it does first.
+        EncryptedFileProvider::cleanup_stale(&base);
+        let second = EncryptedFileProvider::new(base.clone()).expect("a second provider");
+
+        assert_eq!(running.load("kept").unwrap(), "a heavy body");
+        assert!(!gone.exists(), "what nobody holds is removed");
+        assert!(loose.exists(), "a recent file may be a running client's");
+        assert!(second.load("kept").is_err(), "and each reads only its own");
+
+        // Once the first has stopped, its folder is nobody's.
+        let was = running.dir.clone();
+        drop(running);
+        EncryptedFileProvider::cleanup_stale(&base);
+        assert!(!was.exists());
+        assert!(second.dir.exists(), "the one still running keeps its own");
+        drop(second);
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]

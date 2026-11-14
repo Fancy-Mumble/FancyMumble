@@ -8,6 +8,7 @@ use gpui::{
 };
 
 use super::backdrop;
+use super::focus::{Hold, KeyTrap};
 use crate::theme::ActiveTheme;
 use crate::ui::widgets::EMPHASIS;
 
@@ -25,6 +26,8 @@ pub(crate) struct Sheet {
     scrolls: bool,
     /// The extra-large corner of a dialog, not the large one of a menu.
     roomy: bool,
+    /// How it holds the keyboard while it is open, if it does.
+    hold: Option<Hold>,
 }
 
 impl Sheet {
@@ -35,12 +38,20 @@ impl Sheet {
             children: Vec::new(),
             scrolls: false,
             roomy: false,
+            hold: None,
         }
     }
 
     /// Let what does not fit be scrolled to, down the sheet.
     pub(crate) fn scrolls(mut self) -> Self {
         self.scrolls = true;
+        self
+    }
+
+    /// Keep the keyboard inside while it is open: a menu, walked with the
+    /// arrows as well as with Tab.
+    pub(crate) fn holds(mut self, hold: Hold) -> Self {
+        self.hold = Some(hold);
         self
     }
 }
@@ -58,7 +69,7 @@ impl Styled for Sheet {
 }
 
 impl RenderOnce for Sheet {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = ActiveTheme::get(cx);
         let corner = if self.roomy {
             theme.skin.radius_xl
@@ -71,7 +82,11 @@ impl RenderOnce for Sheet {
         if base.style().position.is_none() {
             base = base.relative();
         }
-        base.id(self.id)
+        let trap = self
+            .hold
+            .map(|hold| KeyTrap::new(self.id.clone(), hold, window, cx));
+        let sheet = base
+            .id(self.id)
             .when(self.scrolls, StatefulInteractiveElement::overflow_y_scroll)
             .occlude()
             .rounded(corner)
@@ -82,7 +97,11 @@ impl RenderOnce for Sheet {
             .child(backdrop(&theme.c.tint, theme.c.bg0, corner))
             // A press on the sheet is not a press on what it floats over.
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .children(self.children)
+            .children(self.children);
+        match trap {
+            Some(trap) => trap.around(sheet),
+            None => sheet,
+        }
     }
 }
 
@@ -160,6 +179,8 @@ impl RenderOnce for Dialog {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let mut sheet = self.sheet.flex().flex_col();
         sheet.roomy = true;
+        // Tab goes round what is in the dialog, never behind it.
+        sheet.hold = Some(Hold::Tab);
         if let Some(title) = self.title {
             // First, whatever was added before it was given.
             sheet.children.insert(

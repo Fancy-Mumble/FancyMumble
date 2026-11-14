@@ -9,7 +9,7 @@ use super::Shell;
 use super::kit::{Avatar, Badge, IconButton, Kbd, Paper, Tone, Variant};
 use super::widgets::{EMPHASIS, icon, label};
 use crate::engine::{Channel, Connection, Conversation, User, Voice};
-use crate::theme::{Fill, Theme};
+use crate::theme::{Fill, Kind, Theme};
 
 /// `channels` in the order a tree lists them - each parent, then its
 /// children by position and then by name - as `(index, depth)`.
@@ -70,6 +70,10 @@ pub(super) fn render(
     theme: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
+    // A theme that heads the column with the server's name on a plate
+    // gives its search more room, and heads the channels with a count.
+    let server = server_name(shell);
+    let plated = theme.skin.marks.column_plate;
     div()
         .flex_none()
         .w(theme.skin.column_width)
@@ -79,13 +83,26 @@ pub(super) fn render(
         .bg(theme.c.panel)
         .border_r_1()
         .border_color(theme.c.line)
+        .children(
+            server
+                .as_ref()
+                .and_then(|name| super::kit::name_plate(name, theme)),
+        )
         .child(
             div()
                 .flex_none()
-                .p(px(12.0))
-                .pb(px(6.0))
+                .map(|around| {
+                    if plated {
+                        around.px(px(18.0)).pt(px(16.0)).pb(px(10.0))
+                    } else {
+                        around.p(px(12.0)).pb(px(6.0))
+                    }
+                })
                 .child(search_box(shell, theme)),
         )
+        .children(server.as_ref().and_then(|name| {
+            super::kit::section_heading(name, Some(shell.snapshot.channels.len()), theme)
+        }))
         .child(
             gpui::list(
                 shell.column_list.clone(),
@@ -98,22 +115,37 @@ pub(super) fn render(
         .child(
             div()
                 .flex_none()
-                .p(px(10.0))
+                // A drawn skin stands the dock further off the edges.
+                .p(px(theme.skin.marks.dock_bank.map_or(10.0, |bank| bank.margin)))
                 .child(user_tile(shell, theme, cx)),
         )
 }
 
+/// The name of the server on screen: what its operator calls it, else
+/// what it was saved as.
+fn server_name(shell: &Shell) -> Option<SharedString> {
+    let session = shell
+        .snapshot
+        .sessions
+        .iter()
+        .find(|session| session.active)?;
+    Some(
+        shell
+            .session_livery(&session.key)
+            .and_then(|livery| livery.name.clone())
+            .unwrap_or_else(|| session.name.clone()),
+    )
+}
+
 fn search_box(shell: &Shell, theme: &Theme) -> impl IntoElement + use<> {
+    let finish = super::kit::Finish::new(theme.c.input, Some(theme.c.line2));
     div()
         .h(px(47.0))
         .flex()
         .items_center()
         .gap(px(8.0))
         .px(px(14.0))
-        .rounded(theme.skin.radius_lg)
-        .bg(theme.c.input)
-        .border_1()
-        .border_color(theme.c.line2)
+        .map(|field| super::kit::shaped(field, Kind::Plate, finish, theme.skin.radius_lg, theme))
         .text_size(px(12.5))
         .child(icon("search", 12.0, theme.c.dim).mt(px(-1.0)))
         .child(shell.search.clone())
@@ -186,7 +218,7 @@ impl Shell {
             return div().into_any_element();
         };
         let hover = theme.c.hover;
-        let conversation = found.conversation;
+        let (conversation, said_at) = (found.conversation, found.at.clone());
         div()
             .w_full()
             .px(px(10.0))
@@ -203,8 +235,12 @@ impl Shell {
                     .rounded(theme.skin.radius_md)
                     .cursor_pointer()
                     .hover(move |style| style.bg(hover))
+                    // To where it was said, and to it there.
                     .on_click(cx.listener(move |shell, _, _, cx| {
                         shell.open_conversation(conversation, cx);
+                        if let Some((id, back)) = &said_at {
+                            let _ = shell.jump_to(id, Some(*back), cx);
+                        }
                     }))
                     .child(
                         div()
@@ -233,13 +269,22 @@ fn channel_row(
     cx: &mut Context<Shell>,
 ) -> AnyElement {
     let occupants = shell.occupant_count(channel.id);
-    // A channel with people in it is the head of the card that lists them.
-    let carded = occupants > 0;
+    // Its people as faces on its own row, where that is how they are shown.
+    let stacked = occupants > 0
+        && shell.panels.settings.look.channel_viewer_style.drawn()
+            == crate::store::ChannelViewer::Modern;
+    // A channel with people in it is the head of the card that lists them,
+    // unless the theme stands every row on a plate of its own.
+    let carded = occupants > 0 && !theme.skin.marks.plated_rows && !stacked;
+    let finish = super::kit::row_finish(current, theme);
     let solid = current && theme.skin.selection == Fill::Solid;
     let (ink, hash) = if solid {
         (theme.c.on_accent, theme.c.on_accent)
     } else if current {
         (theme.c.text, theme.c.accent_text)
+    } else if theme.skin.marks.plated_rows {
+        // A row on a card of its own reads in the text's ink.
+        (theme.c.text, theme.c.dim)
     } else {
         (theme.c.muted, theme.c.dim)
     };
@@ -252,25 +297,41 @@ fn channel_row(
         .flex()
         .items_center()
         .gap(px(8.2))
-        // A carded row gives two pixels each way to the card's own edge.
-        .px(px(if carded { 10.0 } else { 12.0 }))
-        // 37.4 in the web UI, which a browser draws as 38 whole pixels.
-        .when(carded, |row| row.h(px(38.0)))
-        .when(!carded, |row| row.py(px(10.0)))
-        .rounded(theme.skin.radius_md)
-        .when(carded, |row| row.rounded_b(px(0.0)))
-        .border_1()
-        .border_color(clear)
         .cursor_pointer()
         .text_size(px(12.5))
         .line_height(px(LINE))
         .text_color(ink)
-        .map(|row| match (current, solid) {
-            (true, true) => row.bg(theme.c.accent),
-            (true, false) => row
-                .bg(theme.c.accent_soft)
-                .border_color(theme.c.accent_line),
-            _ => row.hover(move |style| style.bg(hover)),
+        // A carded row gives two pixels each way to the card's own edge; a
+        // row on a plate of its own is as tall as the web UI's cards.
+        .map(|row| match (theme.skin.marks.plated_rows, carded) {
+            (true, _) => row.px(px(16.0)).min_h(px(49.0)),
+            // 37.4 in the web UI, which a browser draws as 38 whole pixels.
+            (false, true) => row.px(px(10.0)).h(px(38.0)),
+            (false, false) => row.px(px(12.0)).py(px(10.0)),
+        })
+        .map(|row| match (finish, theme.skin.cuts.of(Kind::Row)) {
+            // A row the theme cuts: the plate and its bar under what it says.
+            (Some(finish), Some(cut)) => {
+                // The same clear border as any row, so the cut moves nothing.
+                let row = row.border_1().border_color(clear);
+                super::kit::cut_into(row, cut, finish, theme.skin.line_width)
+                    .when(current, |row| row.children(super::kit::selection_bar(theme)))
+            }
+            _ => row
+                .rounded(theme.skin.radius_md)
+                .when(carded, |row| row.rounded_b(px(0.0)))
+                .border_1()
+                .border_color(clear)
+                .map(|row| match (current, solid) {
+                    (true, true) => row.bg(theme.c.accent),
+                    (true, false) => row
+                        .bg(theme.c.accent_soft)
+                        .border_color(theme.c.accent_line),
+                    _ => row.hover(move |style| style.bg(hover)),
+                })
+                .when(current && theme.skin.selection_bar.is_some(), |row| {
+                    row.relative().children(super::kit::selection_bar(theme))
+                }),
         })
         .when(current, |row| row.font_weight(EMPHASIS))
         .on_mouse_down(
@@ -280,29 +341,20 @@ fn channel_row(
             }),
         )
         // A click reads the channel; a double click moves into it.
-        .on_click(cx.listener(move |shell, event: &gpui::ClickEvent, _, cx| {
-            if event.click_count() >= 2 {
-                shell.engine.join_channel(id);
-            }
-            shell.open_conversation(Conversation::Channel(id), cx);
-        }))
-        .child(
-            div()
-                .flex_none()
-                .text_size(px(13.0))
-                .line_height(px(13.0))
-                .font_weight(theme.skin.weight)
-                .text_color(hash)
-                .child("#"),
+        .on_click(
+            cx.listener(move |shell, event: &gpui::ClickEvent, window, cx| {
+                if event.click_count() >= 2 {
+                    let _ = shell.enter(id, window, cx);
+                } else {
+                    shell.open_conversation(Conversation::Channel(id), cx);
+                }
+            }),
         )
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .truncate()
-                .child(label(&channel.name, theme)),
-        )
-        .children(row_marks(channel, occupants, current, solid, hash, theme));
+        .child(channel_glyph(channel, hash, theme))
+        .children(channel_name(shell, channel, stacked, theme))
+        .children(row_marks(
+            channel, occupants, current, solid, hash, theme, cx,
+        ));
     let indent = px(INDENT * depth as f32);
     if carded {
         // The top of the card; the people under it are its bottom.
@@ -320,6 +372,102 @@ fn channel_row(
     }
 }
 
+/// A channel's name on its row, and where its people are shown as faces,
+/// the faces after it.
+fn channel_name(
+    shell: &Shell,
+    channel: &Channel,
+    stacked: bool,
+    theme: &Theme,
+) -> Vec<AnyElement> {
+    let name = div()
+        .when(!stacked, Styled::flex_1)
+        .min_w_0()
+        .truncate()
+        .child(label(&channel.name, theme))
+        .into_any_element();
+    if !stacked {
+        return vec![name];
+    }
+    vec![
+        name,
+        stacked_faces(shell, channel.id).into_any_element(),
+        div().flex_1().into_any_element(),
+    ]
+}
+
+/// The people in channel `id` as faces, for the row the channel is on.
+fn stacked_faces(shell: &Shell, id: crate::engine::ChannelId) -> super::kit::FaceStack {
+    let faces = shell
+        .occupants(id)
+        .map(|user| super::kit::Face {
+            name: user.name.clone(),
+            picture: user.avatar.clone(),
+            talking: shell.talking.contains(&user.session),
+        })
+        .collect();
+    super::kit::FaceStack::new(format!("faces-{id}"), faces)
+}
+
+/// What stands before a channel's name: a lock on one behind a password,
+/// in the colour of a warning, and otherwise the mark of a channel in `ink`.
+fn channel_glyph(channel: &Channel, ink: gpui::Hsla, theme: &Theme) -> AnyElement {
+    if channel.restricted {
+        let id = channel.id;
+        return div()
+            .debug_selector(move || format!("locked-{id}"))
+            .flex_none()
+            .child(icon("lock", 12.0, theme.c.warn))
+            .into_any_element();
+    }
+    div()
+        .flex_none()
+        .text_size(px(13.0))
+        .line_height(px(13.0))
+        .font_weight(theme.skin.weight)
+        .text_color(ink)
+        .child("#")
+        .into_any_element()
+}
+
+/// The mark on a channel whose history is kept sealed, saying which way:
+/// with the archive's one key in the accent, the Signal way in the tone of
+/// what is well.
+fn sealed_badge(channel: &Channel, theme: &Theme) -> Option<AnyElement> {
+    if !channel.encrypted {
+        return None;
+    }
+    let (says, tells, ink) = if channel.signal {
+        ("SIGNAL", "Signal Protocol encryption", theme.c.ok)
+    } else {
+        ("FANCY", "Fancy E2EE (full archive)", theme.c.accent)
+    };
+    let (ground, edge) = if channel.signal {
+        (gpui::Hsla { a: 0.14, ..ink }, gpui::Hsla { a: 0.33, ..ink })
+    } else {
+        (theme.c.accent_soft, theme.c.accent_line)
+    };
+    let id = channel.id;
+    Some(
+        div()
+            .id(("sealed", id as usize))
+            .debug_selector(move || format!("sealed-{id}"))
+            .flex_none()
+            .px(px(5.0))
+            .py(px(1.0))
+            .rounded(theme.skin.radius_sm)
+            .text_size(px(9.5))
+            .font_weight(EMPHASIS)
+            .text_color(ink)
+            .bg(ground)
+            .border_1()
+            .border_color(edge)
+            .tooltip(super::kit::keyed_tip(tells, None::<&str>))
+            .child(says)
+            .into_any_element(),
+    )
+}
+
 /// What rides at a channel row's trailing end: that it is listened to, how
 /// much waits unread, how many are in it.
 fn row_marks(
@@ -329,6 +477,7 @@ fn row_marks(
     solid: bool,
     hash: gpui::Hsla,
     theme: &Theme,
+    cx: &mut Context<Shell>,
 ) -> Vec<AnyElement> {
     let id = channel.id;
     let mut marks = Vec::new();
@@ -340,6 +489,7 @@ fn row_marks(
                 .into_any_element(),
         );
     }
+    marks.extend(sealed_badge(channel, theme));
     if channel.unread > 0 && !current {
         marks.push(Badge::new(channel.unread).into_any_element());
     }
@@ -347,6 +497,8 @@ fn row_marks(
         let voice = if solid { theme.c.on_accent } else { theme.c.ok };
         marks.push(
             div()
+                .id(("join", id as usize))
+                .debug_selector(move || format!("join-{id}"))
                 .flex()
                 .items_center()
                 .gap(px(4.2))
@@ -354,6 +506,14 @@ fn row_marks(
                 .text_size(px(10.5))
                 .line_height(px(16.275))
                 .text_color(voice)
+                // How many are talking in there is the way in: a click on
+                // it joins them, where one on the row only reads.
+                .cursor_pointer()
+                .tooltip(super::kit::keyed_tip("Join voice", None::<&str>))
+                .on_click(cx.listener(move |shell, _, window, cx| {
+                    cx.stop_propagation();
+                    let _ = shell.enter(id, window, cx);
+                }))
                 .child(icon("volume-2", 10.0, voice))
                 .child(SharedString::from(occupants.to_string()))
                 .into_any_element(),
@@ -378,11 +538,16 @@ fn occupant_list(
         .gap(px(1.0))
         .px(px(8.0))
         .pb(px(8.0))
-        .rounded_b(theme.skin.radius_md)
-        .bg(theme.c.card)
-        .border_1()
-        .border_t_0()
-        .border_color(theme.c.line)
+        // Where every row is a plate of its own, the people stand under it
+        // on no card.
+        .when(!theme.skin.marks.plated_rows, |list| {
+            list.rounded_b(theme.skin.radius_md)
+                .bg(theme.c.card)
+                .border_1()
+                .border_t_0()
+                .border_color(theme.c.line)
+        })
+        .when(theme.skin.marks.plated_rows, |list| list.pt(px(4.0)))
         .children(
             shell
                 .occupants(channel.id)
@@ -416,38 +581,21 @@ fn occupant_row(
         .on_mouse_down(
             gpui::MouseButton::Right,
             cx.listener(move |shell, event: &gpui::MouseDownEvent, _, cx| {
-                let Some(user) = shell.snapshot.users.iter().find(|u| u.session == session) else {
-                    return;
-                };
-                let mut items = super::menu::user_items(
-                    user,
-                    shell.snapshot.own_session,
-                    shell.snapshot.current_channel,
-                    shell.volumes.get(&session).copied().unwrap_or(1.0),
-                    shell.whisper_target(),
-                    user.hash.as_ref().is_some_and(|hash| shell.is_friend(hash)),
-                );
-                let open = match shell.open {
-                    Some(Conversation::Channel(id)) => {
-                        shell.snapshot.channels.iter().find(|c| c.id == id)
-                    }
-                    _ => None,
-                };
-                if shell.snapshot.own_session != Some(session) {
-                    items.extend(super::menu::purge_item(user, open));
-                }
-                shell.open_menu(event.position, items, cx);
+                shell.open_user_menu(session, event.position, cx);
             }),
         )
+        // The pointer resting here brings up their card.
+        .on_hover(cx.listener(move |shell, over: &bool, window, cx| {
+            shell.hover_user(session, *over, window, cx);
+        }))
         .when(open, |row| row.bg(theme.c.accent_soft))
-        // A click on somebody else opens the direct conversation with them.
-        .when(!own, |row| {
-            row.cursor_pointer()
-                .when(!open, |row| row.hover(move |style| style.bg(hover)))
-                .on_click(cx.listener(move |shell, _, _, cx| {
-                    shell.open_conversation(Conversation::Direct(session), cx);
-                }))
-        })
+        // A click keeps their card, the user's own too; the card is where
+        // to write to them.
+        .cursor_pointer()
+        .when(!open, |row| row.hover(move |style| style.bg(hover)))
+        .on_click(cx.listener(move |shell, event: &gpui::ClickEvent, _, cx| {
+            shell.pin_card(session, Some(event.position()), cx);
+        }))
         .child(
             Avatar::new(&user.name)
                 .picture(user.avatar.as_ref())
@@ -466,12 +614,11 @@ fn occupant_row(
                 }))
                 .child(user.name.clone()),
         )
-        .when(user.deafened && !own, |row| {
-            row.child(icon("headphone-off", 12.0, theme.c.dim))
-        })
-        .when(user.muted && !user.deafened && !own, |row| {
-            row.child(icon("mic-off", 12.0, theme.c.dim))
-        })
+        // Beside the name: they qualify whoever is being read. On the
+        // user's own row too, where the server's mute is news.
+        .children(super::speaker::priority_mark(user, theme))
+        .children(super::speaker::voice_marks(user, theme))
+        .children(shell.live_badge(session))
         .when(own, |row| {
             row.child(
                 div()
@@ -514,6 +661,86 @@ fn voice_status(shell: &Shell, deafened: bool) -> (SharedString, Option<SharedSt
     (status, whisper_to)
 }
 
+/// What the voice is doing, under the user's name. Voice off is said
+/// aloud where the theme gives such a state a voice of its own.
+fn status_line(shell: &Shell, status: SharedString, theme: &Theme) -> gpui::Div {
+    let line = div()
+        .debug_selector(|| "voice-status".to_owned())
+        .truncate()
+        .text_size(px(10.5))
+        .line_height(px(14.175))
+        .text_color(theme.c.muted);
+    let off = shell.snapshot.voice == Voice::Off && !shell.whisper.active;
+    let tag = super::kit::Role::Tag;
+    if off && tag.voice(theme).caps {
+        line.text_size(px(10.0))
+            .text_color(theme.c.bad)
+            .child(super::kit::voiced(&status, tag, theme))
+    } else {
+        line.child(status)
+    }
+}
+
+/// The user's name, what the voice is doing under it, and whom the whisper
+/// key speaks to. A drawn skin's bank sets the name large.
+fn own_name_column(
+    shell: &Shell,
+    name: SharedString,
+    status: SharedString,
+    whisper_to: Option<SharedString>,
+    theme: &Theme,
+) -> gpui::Div {
+    let bank = theme.skin.marks.dock_bank;
+    div()
+        .flex_1()
+        .min_w_0()
+        .flex()
+        .flex_col()
+        .gap(px(1.0))
+        .child(
+            div()
+                .truncate()
+                .map(|line| match bank {
+                    Some(bank) => line
+                        .text_size(px(bank.name_size))
+                        .line_height(px(bank.name_size * 1.15))
+                        .font_weight(gpui::FontWeight(bank.name_weight)),
+                    None => line
+                        .text_size(px(13.0))
+                        .line_height(px(14.95))
+                        .font_weight(EMPHASIS),
+                })
+                .child(name),
+        )
+        .child(status_line(shell, status, theme))
+        .when_some(whisper_to, |column, says| {
+            column.child(
+                div()
+                    .debug_selector(|| "whisper-target".to_owned())
+                    .truncate()
+                    .text_size(px(10.5))
+                    .line_height(px(14.175))
+                    .text_color(theme.c.accent_text)
+                    .child(says),
+            )
+        })
+}
+
+/// The overflow: the sheet of what the row has no room for, worn on while
+/// it is open.
+fn own_menu_button(shell: &Shell, cx: &mut Context<Shell>) -> IconButton {
+    let sheet_open = shell.menu.as_ref().is_some_and(|menu| menu.over.is_some());
+    IconButton::new("own-menu", "ellipsis-vertical")
+        .glyph_size(15.0)
+        .variant(if sheet_open {
+            Variant::Filled
+        } else {
+            Variant::Ghost
+        })
+        .tip(crate::words::t!("More"))
+        .on_click(cx.listener(|shell, _, _, cx| shell.open_own_sheet(cx)))
+}
+
 fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     let own = shell.own_user();
     let name = own.map_or_else(
@@ -525,7 +752,6 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
     let deafened = shell.snapshot.deafened && shell.snapshot.voice != Voice::Off;
     // The microphone is "off" both when voice is off and when it is muted:
     // either way nobody hears the user, which is what the red says.
-    let silent = shell.snapshot.voice != Voice::On;
     let (status, whisper_to) = voice_status(shell, deafened);
     // The pip says how the user is heard: not at all, muted, or live.
     let pip = match (shell.snapshot.voice, deafened) {
@@ -533,93 +759,129 @@ fn user_tile(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl Into
         (_, true) | (Voice::Muted, _) => theme.c.bad,
         (Voice::On, false) => theme.c.ok,
     };
-    Paper::raised()
+    // A drawn skin sets the dock out as a bank of switches under the name
+    // and the face, the name large; any other has the switches beside the
+    // face, under the name.
+    let bank = theme.skin.marks.dock_bank;
+    let named = own_name_column(shell, name.clone(), status, whisper_to, theme);
+    let top = div()
         .flex()
         .items_center()
-        .gap(px(14.0))
-        .p(px(10.0))
+        .gap(px(8.0))
+        .child(named)
+        .child(own_menu_button(shell, cx));
+    let switches = voice_row(
+        shell.snapshot.voice,
+        deafened,
+        shell.stage.sharing(),
+        bank.is_some(),
+        (
+            shell.key_caption(crate::store::Bound::ToggleMute),
+            shell.key_caption(crate::store::Bound::ToggleDeafen),
+        ),
+        cx,
+    );
+    let (pad_y, pad_x) = bank.map_or((10.0, 10.0), |bank| bank.padding);
+    // Where it is drawn, for the sheet that grows out of it.
+    let dock = shell.chrome.dock.clone();
+    let measure = gpui::canvas(
+        move |bounds, _, _| dock.set(Some(bounds)),
+        |_, (), _, _| {},
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full();
+    let card = match bank {
+        Some(_) => Paper::raised()
+            .flex()
+            .flex_col()
+            .gap(px(8.0))
+            .py(px(pad_y))
+            .px(px(pad_x))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(14.0))
+                    .child(own_face(&name, own, pip, cx))
+                    .child(div().flex_1().min_w_0().child(top)),
+            )
+            .child(switches),
+        None => Paper::raised()
+            .flex()
+            .items_center()
+            .gap(px(14.0))
+            .py(px(pad_y))
+            .px(px(pad_x))
+            .child(own_face(&name, own, pip, cx))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.0))
+                    .child(top)
+                    .child(switches),
+            ),
+    };
+    div()
+        .debug_selector(|| "own-dock".to_owned())
+        .relative()
+        .child(card)
+        .child(measure)
+}
+
+/// The user's own face on their tile: a click keeps their own card, a
+/// right click opens what they can change about themselves.
+fn own_face(
+    name: &str,
+    own: Option<&User>,
+    pip: gpui::Hsla,
+    cx: &mut Context<Shell>,
+) -> impl IntoElement + use<> {
+    div()
+        .id("own-face")
+        .debug_selector(|| "own-face".to_owned())
+        .flex_none()
+        .when_some(own.map(|user| user.session), |face, session| {
+            face.cursor_pointer()
+                .on_click(cx.listener(move |shell, event: &gpui::ClickEvent, _, cx| {
+                    shell.pin_card(session, Some(event.position()), cx);
+                }))
+                .on_mouse_down(
+                    gpui::MouseButton::Right,
+                    cx.listener(move |shell, event: &gpui::MouseDownEvent, _, cx| {
+                        shell.open_user_menu(session, event.position, cx);
+                    }),
+                )
+        })
         .child(
-            Avatar::new(&name)
+            Avatar::new(name)
                 .picture(own.and_then(|user| user.avatar.as_ref()))
                 .size(42.0)
                 .status(Some(pip)),
-        )
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .gap(px(8.0))
-                .child(
-                    div()
-                        .flex()
-                        .items_start()
-                        .justify_between()
-                        .gap(px(8.0))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .flex()
-                                .flex_col()
-                                .gap(px(1.0))
-                                .child(
-                                    div()
-                                        .truncate()
-                                        .text_size(px(13.0))
-                                        .line_height(px(14.95))
-                                        .font_weight(EMPHASIS)
-                                        .child(name),
-                                )
-                                .child(
-                                    div()
-                                        .debug_selector(|| "voice-status".to_owned())
-                                        .truncate()
-                                        .text_size(px(10.5))
-                                        .line_height(px(14.175))
-                                        .text_color(theme.c.muted)
-                                        .child(status),
-                                )
-                                .when_some(whisper_to, |column, says| {
-                                    column.child(
-                                        div()
-                                            .debug_selector(|| "whisper-target".to_owned())
-                                            .truncate()
-                                            .text_size(px(10.5))
-                                            .line_height(px(14.175))
-                                            .text_color(theme.c.accent_text)
-                                            .child(says),
-                                    )
-                                }),
-                        )
-                        .child(
-                            div().child(
-                                IconButton::new("own-menu", "ellipsis-vertical")
-                                    .glyph_size(15.0)
-                                    .on_click(cx.listener(
-                                        |shell, event: &gpui::ClickEvent, _, cx| {
-                                            let items = super::menu::own_items(
-                                                shell.chrome.hide_empty,
-                                                shell.engine.is_recording(),
-                                            );
-                                            shell.open_menu(event.position(), items, cx);
-                                        },
-                                    )),
-                            ),
-                        ),
-                )
-                .child(voice_row(silent, deafened, cx)),
         )
 }
 
 /// The voice controls under the user's name: the microphone, the
 /// headphones, and at the far end the screen.
-fn voice_row(silent: bool, deafened: bool, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+fn voice_row(
+    voice: Voice,
+    deafened: bool,
+    sharing: bool,
+    banked: bool,
+    (mute_key, deafen_key): (Option<SharedString>, Option<SharedString>),
+    cx: &mut Context<Shell>,
+) -> impl IntoElement + use<> {
+    let silent = voice != Voice::On;
+    // On is a warning for these two, a muted microphone and stopped ears.
     let voice_button = |id, glyph, off: bool| {
         IconButton::new(id, glyph)
             .dims(30.0, 28.0)
             .glyph_size(15.0)
+            .spread()
             .tone(if off { Tone::Danger } else { Tone::Muted })
             .variant(if off { Variant::Soft } else { Variant::Ghost })
     };
@@ -629,6 +891,15 @@ fn voice_row(silent: bool, deafened: bool, cx: &mut Context<Shell>) -> impl Into
         .gap(px(8.0))
         .child(
             voice_button("mute", if silent { "mic-off" } else { "mic" }, silent)
+                // What a press will do, which is not the same thing twice.
+                .tip_with_chosen_key(
+                    match voice {
+                        Voice::Off => "Turn voice on",
+                        Voice::Muted => "Unmute",
+                        Voice::On => "Mute",
+                    },
+                    mute_key,
+                )
                 .on_click(cx.listener(|shell, _, _, _| shell.engine.toggle_microphone())),
         )
         .child(
@@ -641,17 +912,28 @@ fn voice_row(silent: bool, deafened: bool, cx: &mut Context<Shell>) -> impl Into
                 },
                 deafened,
             )
+            .tip_with_chosen_key(
+                if deafened { "Undeafen" } else { "Deafen" },
+                deafen_key,
+            )
             .on_click(cx.listener(|shell, _, _, _| shell.engine.toggle_deafen())),
         )
-        .child(div().flex_1())
-        .child(
-            voice_button("share-screen", "screen-share", false).on_click(cx.listener(
-                |shell, _, _, cx| {
-                    shell.notice = Some("Screen sharing is not in this view yet.".into());
-                    cx.notify();
-                },
-            )),
-        )
+        // At the far end, unless the row is a bank of equal switches.
+        .when(!banked, |row| row.child(div().flex_1()))
+        .child({
+            // On, a share is running, not a fault: the accent's colours.
+            IconButton::new("share-screen", "screen-share")
+                .dims(30.0, 28.0)
+                .glyph_size(15.0)
+                .spread()
+                .variant(if sharing { Variant::Lit } else { Variant::Ghost })
+                .tip(if sharing {
+                    crate::words::t!("Stop sharing your screen")
+                } else {
+                    crate::words::t!("Share your screen")
+                })
+                .on_click(cx.listener(|shell, _, _, cx| shell.share_pressed(cx)))
+        })
 }
 
 #[cfg(test)]
@@ -668,6 +950,12 @@ mod tests {
             history: false,
             encrypted: false,
             listening: false,
+            rights: crate::rights::Rights::ALL,
+            restricted: false,
+            signal: false,
+            temporary: false,
+            max_users: 0,
+            private: false,
         }
     }
 

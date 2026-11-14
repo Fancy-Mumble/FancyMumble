@@ -381,6 +381,10 @@
     "hidePending": "Sendeanzeige ausblenden",
     "hide": "Ausblenden"
   },
+  "historyRefused": {
+    "title": "Ältere Nachrichten konnten nicht geladen werden",
+    "retry": "Laden älterer Nachrichten erneut versuchen"
+  },
   "quotePreview": {
     "mediaFallback": "Medien",
     "remove": "Zitat entfernen"

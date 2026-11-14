@@ -13,7 +13,7 @@
 }
 
 .inputWrap:focus-within {
-  border-color: var(--accent, #2aabee);
+  border-color: var(--color-accent, #2aabee);
 }
 
 .icon {

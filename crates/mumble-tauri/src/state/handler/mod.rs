@@ -15,12 +15,12 @@ pub(super) mod custom_reactions_config;
 pub(super) mod draw_stroke;
 pub(super) mod files;
 pub(super) mod forum;
-pub(super) mod gifs;
+pub(crate) mod gifs;
 pub(super) mod invites;
 pub(crate) mod link_preview;
 pub(super) mod livery;
 pub(super) mod records;
-pub(crate) use livery::{LiverySnapshot, data_uri, to_snapshot};
+pub(crate) use livery::{LiveryPalette, LiverySnapshot, data_uri, to_snapshot};
 mod onboarding;
 pub(super) mod operator_ticket;
 mod pchat;
@@ -174,6 +174,7 @@ pub(crate) fn dispatch(msg: &ControlMessage, ctx: &HandlerContext) {
         ControlMessage::UserStats(m) => m.handle(ctx),
         ControlMessage::PchatMessageDeliver(m) => m.handle(ctx),
         ControlMessage::PchatFetchResponse(m) => m.handle(ctx),
+        ControlMessage::PchatFetchRefused(m) => m.handle(ctx),
         ControlMessage::PchatKeyAnnounce(m) => m.handle(ctx),
         ControlMessage::PchatKeyExchange(m) => m.handle(ctx),
         ControlMessage::PchatKeyRequest(m) => m.handle(ctx),

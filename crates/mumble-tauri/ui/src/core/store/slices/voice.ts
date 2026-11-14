@@ -18,6 +18,24 @@ import type { VoiceState } from "../../types";
 import type { AppState } from "..";
 import { cancelVoicePersist, persistVoiceState } from "..";
 import { updatePreferences } from "../../preferencesStorage";
+import { isMobile } from "../../utils/platform";
+
+/**
+ * Whether voice may use the microphone, asking the first time it is wanted.
+ *
+ * Only a phone asks, and only here: the question used to come at launch, to
+ * everyone, before they had done anything with voice. A desktop has no
+ * question to ask, so nothing is sent from one.
+ */
+export async function microphoneAllowed(): Promise<boolean> {
+  if (!isMobile) return true;
+  try {
+    return await invoke<boolean>("request_microphone");
+  } catch (e) {
+    console.error("request_microphone error:", e);
+    return false;
+  }
+}
 
 export interface VoiceSlice {
   voiceState: VoiceState;
@@ -80,7 +98,7 @@ export function voiceContextKind(context: number | undefined): "whisper" | "shou
   return null;
 }
 
-export const createVoiceSlice: StateCreator<AppState, [], [], VoiceSlice> = (set) => ({
+export const createVoiceSlice: StateCreator<AppState, [], [], VoiceSlice> = (set, get) => ({
   ...voiceInitialState,
 
   toggleListen: async (channelId) => {
@@ -101,6 +119,13 @@ export const createVoiceSlice: StateCreator<AppState, [], [], VoiceSlice> = (set
 
   enableVoice: async () => {
     try {
+      // Without the microphone, voice still turns on to listen.
+      if (!(await microphoneAllowed())) {
+        await invoke("enable_voice_muted");
+        set({ voiceState: "muted", inCall: true });
+        persistVoiceState();
+        return;
+      }
       await invoke("enable_voice");
       set({ voiceState: "active", inCall: true });
       persistVoiceState();
@@ -127,6 +152,8 @@ export const createVoiceSlice: StateCreator<AppState, [], [], VoiceSlice> = (set
 
   toggleMute: async () => {
     try {
+      // Unmuting is the other first use of the microphone.
+      if (get().voiceState === "muted" && !(await microphoneAllowed())) return;
       await invoke("toggle_mute");
       // What the mute *became* is the backend's answer, delivered as a
       // `voice-state-changed` event; this only asks for the write, and the

@@ -9,9 +9,32 @@
 //! Everything here is a thin, typed layer over the same `state/` the Tauri
 //! commands call; nothing is implemented twice.
 
+pub mod about;
+pub mod account;
+pub mod carry;
+pub mod clock;
+pub mod identity;
+pub mod jumps;
+pub mod privacy;
+pub mod reset;
+pub mod gifs;
+pub mod legacy_picture;
+pub mod sharing;
+pub mod livery;
+pub mod media;
+pub mod onboarding;
+pub mod plugins;
+pub mod voice;
+pub mod whisper;
+pub mod audio;
+pub use livery::{LiveryArt, LiveryColours, LiveryInfo, LiveryTagInfo};
+#[cfg(feature = "logs")]
+pub mod logs;
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::constants::DM_CHANNEL_PREFIX;
 use crate::state::core_event::{CoreEvent, Event};
 use crate::state::host::{
     AppDirs, EventSink, Host, HostParts, NoBackgroundService, NoSignalInterceptor, Notifier,
@@ -24,6 +47,10 @@ use crate::state::types::{
 use crate::state::types::{AclPayload, PageRequest, SearchFilter};
 use crate::state::{AppState, Credentials, LinkEmbed, WhisperEntry};
 use mumble_protocol::state::PchatProtocol;
+
+/// How what is typed will be set once it is sent: for a field that sets it
+/// so while it is typed. The reading is the one a sent message is made by.
+pub use crate::markup::{Setting, Typed, source, typed};
 
 /// Where the engine keeps its files.
 #[derive(Debug, Clone)]
@@ -56,6 +83,39 @@ pub enum Voice {
     Muted,
 }
 
+/// What a server that refused a connection wants typed before the next try.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Wanted {
+    /// Nothing that typing would mend.
+    #[default]
+    Nothing,
+    /// A password: the name's own, or the server's.
+    Password,
+    /// The one-time code of an account with a second factor.
+    Code,
+}
+
+impl Wanted {
+    /// Read from the kind of refusal, as the server numbers it, and from
+    /// its words where it gave no kind: older servers refuse a wrong
+    /// password without one.
+    #[must_use]
+    pub fn of(kind: Option<i32>, reason: &str) -> Self {
+        use mumble_protocol::proto::mumble_tcp::reject::RejectType;
+        let said = reason.to_lowercase();
+        match kind.map(RejectType::try_from) {
+            Some(Ok(RejectType::TotpRequired | RejectType::TotpInvalid)) => Self::Code,
+            Some(Ok(RejectType::WrongUserPw | RejectType::WrongServerPw)) => Self::Password,
+            Some(_) => Self::Nothing,
+            None if said.contains("two-factor") || said.contains("authentication code") => {
+                Self::Code
+            }
+            None if said.contains("password") || said.contains("certificate") => Self::Password,
+            None => Self::Nothing,
+        }
+    }
+}
+
 /// Something that happened in the engine. Each says what to read again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -73,6 +133,8 @@ pub enum EngineEvent {
     Rejected {
         /// The server's words.
         reason: String,
+        /// What it wants typed before the next try.
+        wants: Wanted,
     },
     /// Channels, users or their properties changed.
     StateChanged,
@@ -185,6 +247,86 @@ pub enum EngineEvent {
         /// Every reaction on its messages.
         reactions: Vec<ReactionInfo>,
     },
+    /// A message was pinned in a channel, or its pin taken off. The
+    /// message, if it is held, already says so.
+    Pin {
+        /// The channel the message is in.
+        channel: u32,
+        /// The pin.
+        pin: PinInfo,
+        /// Whether it was put on; `false` when it was taken off.
+        pinned: bool,
+    },
+    /// Everything pinned in a channel, read from the server's store:
+    /// also the messages too far back to be held.
+    Pins {
+        /// The channel.
+        channel: u32,
+        /// Every pin in it.
+        pins: Vec<PinInfo>,
+    },
+    /// A server the engine is on said what it looks like, or changed it:
+    /// read [`EngineHandle::livery`] again.
+    Livery,
+    /// A file given to [`EngineHandle::share_files`] under `upload_id` has
+    /// gone this far up.
+    UploadProgress {
+        /// The id it was given to share under.
+        upload_id: String,
+        /// How much has gone.
+        bytes_sent: u64,
+        /// How much there is.
+        total_bytes: u64,
+    },
+    /// What the server allows of voice messages: in answer to
+    /// [`EngineHandle::request_voice_support`], and whenever it changes.
+    VoiceSupport(voice::VoiceSupport),
+    /// How the voice message being recorded is going.
+    VoiceRecording(voice::VoiceRecording),
+    /// The microphone's level while the meter runs
+    /// ([`EngineHandle::start_meter`]), after the filters: what the gate
+    /// sees, from 0 to 1 in millionths.
+    MicLevel {
+        /// Its loudness.
+        rms: u32,
+        /// Its loudest sample.
+        peak: u32,
+    },
+    /// The gate calibrated itself from what the meter heard: read
+    /// [`EngineHandle::audio_settings`] again.
+    GateCalibrated,
+    /// How hearing oneself is going.
+    Replay(audio::Replay),
+    /// How the voice packets fared since connecting.
+    VoiceStats(audio::VoiceStats),
+    /// WebRTC signalling for a screen share: an announcement, or what a
+    /// peer of the view's waits for. Arrives on the engine's receive thread.
+    WebRtcSignal(media::SignalInfo),
+    /// A stroke drawn over a shared screen, or a clearing of strokes.
+    DrawStroke(media::StrokeInfo),
+    /// What the server's GIF service offers: in answer to
+    /// [`EngineHandle::request_gif_support`].
+    GifSupport(gifs::GifSupport),
+    /// A page of GIFs: in answer to [`EngineHandle::request_gif_search`].
+    GifPage(gifs::GifPage),
+    /// The server would not search: in answer to
+    /// [`EngineHandle::request_gif_search`].
+    GifRefused(gifs::GifRefused),
+    /// How the local user's account stands, as the server said: asked
+    /// for with [`account::AccountAction::Query`], and after each change.
+    Account(account::AccountSettings),
+    /// How one change asked with [`EngineHandle::update_account`] went.
+    AccountAck(account::AccountAck),
+    /// The questions the server asks new members, as it said them after
+    /// connecting or changed them.
+    OnboardingConfig(onboarding::OnboardingConfig),
+    /// The local user's answers as the server keeps them, or that it keeps
+    /// none: in answer to
+    /// [`EngineHandle::request_onboarding_response`].
+    OnboardingResponse(Option<onboarding::OnboardingResponse>),
+    /// The server said which plugins it runs: read
+    /// [`EngineHandle::server_plugins`] again.
+    PluginsChanged,
 }
 
 /// What a server says of itself once connected.
@@ -230,6 +372,34 @@ pub struct UserStats {
     pub os: Option<String>,
     /// Their address; a server tells only an administrator.
     pub address: Option<String>,
+    /// What the owner calls this device; set on the entries in `devices`.
+    pub device_name: Option<String>,
+    /// Each device of a user on several, each under its own session. A
+    /// server tells only an administrator, and only when there is more than
+    /// one; empty otherwise.
+    pub devices: Vec<UserStats>,
+}
+
+impl From<crate::state::types::UserStatsPayload> for UserStats {
+    fn from(payload: crate::state::types::UserStatsPayload) -> Self {
+        Self {
+            session: payload.session,
+            tcp_ping_ms: whole_ms(payload.tcp_ping_avg),
+            udp_ping_ms: whole_ms(payload.udp_ping_avg),
+            online_secs: payload.onlinesecs,
+            idle_secs: payload.idlesecs,
+            os: match (payload.os, payload.os_version) {
+                (Some(os), Some(version)) if !version.is_empty() => {
+                    Some(format!("{os} {version}"))
+                }
+                (os, _) => os,
+            },
+            version: payload.version,
+            address: payload.address,
+            device_name: payload.device_name,
+            devices: payload.devices.into_iter().map(Self::from).collect(),
+        }
+    }
 }
 
 /// Who a whisper goes to instead of the channel the speaker is in.
@@ -281,6 +451,30 @@ pub struct ChannelChange {
 /// How many messages one deletion names at most, when many are deleted.
 const PURGE_CHUNK: usize = 100;
 
+/// A channel to be made, with everything that can be said of one at once.
+/// What is left as it defaults is left to the server.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct NewChannel {
+    /// The channel it is made in.
+    pub parent: u32,
+    /// What it is called.
+    pub name: String,
+    /// What is said about it.
+    pub description: Option<String>,
+    /// What it is entered with; only a Fancy server keeps one.
+    pub password: Option<String>,
+    /// How many may be in it at once.
+    pub max_users: Option<u32>,
+    /// Where it stands among its siblings: lower comes first.
+    pub position: Option<i32>,
+    /// Gone when the last one in it leaves.
+    pub temporary: bool,
+    /// Shown only to those let in; only a Fancy server hides any.
+    pub hidden: bool,
+    /// What becomes of what is said in it.
+    pub history: History,
+}
+
 /// What becomes of the messages of a channel being created.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum History {
@@ -320,6 +514,103 @@ pub struct AttachmentInfo {
     pub key: Option<String>,
     /// A link anyone holding it can fetch the file from, where it has one.
     pub url: Option<String>,
+    /// Who can reach it, as the sender said: `session`, `public` or
+    /// `password`.
+    pub mode: Option<String>,
+    /// When the server lets go of it, in seconds since 1970; `None` for
+    /// never, or not said.
+    pub expires_at: Option<u64>,
+    /// What a small picture standing in for it is kept under, where there
+    /// is one: fetched the way the file is.
+    pub thumb_key: Option<String>,
+    /// How large the picture is in pixels, where it is one and the sender
+    /// measured it.
+    pub pixels: Option<(u32, u32)>,
+    /// Where it is a recorded voice message: its length and loudness, as
+    /// its sender said.
+    pub voice: Option<voice::VoiceNote>,
+}
+
+/// Who can reach a shared file.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Reach {
+    /// Those it is shared with: every fetch is signed for whoever asks.
+    #[default]
+    Here,
+    /// Anybody holding its link.
+    Link,
+    /// Anybody holding its link who also knows this password. The file is
+    /// sealed with it: the server cannot read it.
+    Password(String),
+}
+
+impl Reach {
+    /// What a message says of it.
+    const fn mode(&self) -> &'static str {
+        match self {
+            Self::Here => "session",
+            Self::Link => "public",
+            Self::Password(_) => "password",
+        }
+    }
+}
+
+/// How a batch of files is shared: one answer for all of them, because who
+/// may see it is a property of the message.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ShareAs {
+    /// Who can reach them.
+    pub reach: Reach,
+    /// How long the server keeps them, in seconds; 0 for as long as it
+    /// keeps anything.
+    pub lasts_secs: u64,
+}
+
+/// One file of a batch to share.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToShare {
+    /// The file.
+    pub path: PathBuf,
+    /// A small copy that stands in for it where it is a picture, so that a
+    /// reader sees it without fetching all of it.
+    pub stand_in: Option<PathBuf>,
+    /// How large the picture is in pixels, where it is one.
+    pub pixels: Option<(u32, u32)>,
+    /// The picture as a stock Mumble client is to be shown it, where it is
+    /// one: a copy goes inline beside its mark.
+    pub legacy: Option<legacy_picture::LegacyPicture>,
+    /// What its upload is called in [`EngineEvent::UploadProgress`] and to
+    /// [`EngineHandle::cancel_upload`]; empty for an upload nobody follows.
+    pub upload_id: String,
+}
+
+/// A file of a batch that did not go: cancelled, or refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unsent {
+    /// The `upload_id` it was given to share under.
+    pub upload_id: String,
+    /// Why: [`CANCELLED`] where it was cancelled.
+    pub why: String,
+}
+
+/// Why a file that was cancelled did not go, as [`Unsent::why`] says it.
+pub const CANCELLED: &str = "upload cancelled";
+
+/// Uploads cancelled before they started: a batch skips each when it comes
+/// to it.
+fn cancelled_early() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static EARLY: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::OnceLock::new();
+    EARLY.get_or_init(std::sync::Mutex::default)
+}
+
+/// Whether the upload `upload_id` was cancelled before it started; it is
+/// forgotten as it is asked.
+fn was_cancelled_early(upload_id: &str) -> bool {
+    !upload_id.is_empty()
+        && cancelled_early()
+            .lock()
+            .is_ok_and(|mut early| early.remove(upload_id))
 }
 
 /// The mark a shared file is written into a message as: a comment, so a
@@ -353,13 +644,20 @@ pub fn attachments_in(html: &str) -> Vec<AttachmentInfo> {
                 .map(str::to_owned)
         };
         let (key, url) = (text("key"), text("url"));
+        let number = |name: &str| stated.get(name).and_then(serde_json::Value::as_u64);
+        let side = |name: &str| number(name).and_then(|side| u32::try_from(side).ok());
         // A mark that names no file, or no way to it, is not a file.
         if let Some(filename) = text("filename").filter(|_| key.is_some() || url.is_some()) {
             found.push(AttachmentInfo {
                 filename,
-                size: stated.get("sizeBytes").and_then(serde_json::Value::as_u64),
+                size: number("sizeBytes"),
                 key,
                 url,
+                mode: text("mode"),
+                expires_at: number("expiresAt").filter(|at| *at > 0),
+                thumb_key: text("thumbKey"),
+                pixels: side("width").zip(side("height")),
+                voice: stated.get("voice").and_then(voice::VoiceNote::stated),
             });
         }
     }
@@ -453,20 +751,153 @@ fn with_mentions(html: &str, users: &[(u32, String)]) -> String {
 /// client draws a card from, and beside it a line for a client that draws
 /// a comment as nothing.
 fn file_message(filename: &str, size: u64, key: &str, expires_at: u64) -> String {
-    use base64::Engine as _;
-    let stated = serde_json::json!({
-        "url": "",
-        "filename": filename,
-        "sizeBytes": size,
-        "mode": "session",
-        "expiresAt": (expires_at > 0).then_some(expires_at),
-        "key": key,
+    file_mark(&AttachmentInfo {
+        filename: filename.to_owned(),
+        size: Some(size),
+        key: Some(key.to_owned()),
+        url: None,
+        mode: None,
+        expires_at: Some(expires_at).filter(|at| *at > 0),
+        thumb_key: None,
+        pixels: None,
+        voice: None,
+    })
+}
+
+/// The mark one shared file is written into a message as, and the line a
+/// client that does not know the mark shows in its place: with the file's
+/// link, where anybody may follow it.
+fn file_mark(file: &AttachmentInfo) -> String {
+    let (mark, line) = file_mark_parts(file);
+    mark + &line
+}
+
+/// The part of a message that shares `file`, described as `info`.
+fn shared_part(file: &ToShare, info: AttachmentInfo) -> legacy_picture::Part {
+    let (mark, _) = file_mark_parts(&info);
+    // The web client's `durableLink`: a public share's own `https` address,
+    // where the share does not expire: an expiring link would sit in every
+    // stock client's log after it stopped working.
+    let link = info.url.clone().filter(|url| {
+        info.mode.as_deref() == Some("public")
+            && info.expires_at.is_none()
+            && url.len() > 8
+            && url.get(..8).is_some_and(|scheme| scheme.eq_ignore_ascii_case("https://"))
+            && !url.chars().any(char::is_whitespace)
     });
-    format!(
-        "{FILE_MARK}{}{MARK_END}<!-- FANCY_LEGACY -->{} ({size} bytes), shared as a file<!-- /FANCY_LEGACY -->",
-        base64::engine::general_purpose::STANDARD.encode(stated.to_string()),
-        escape_html(filename),
+    let line = legacy_picture::file_line(
+        &info.filename,
+        info.size,
+        link.as_deref(),
+        info.mode.as_deref() == Some("password"),
+    );
+    legacy_picture::Part {
+        mark,
+        line,
+        picture: file.legacy.clone(),
+        name: info.filename,
+        link,
+    }
+}
+
+/// [`file_mark`] in its two parts: the mark, and the fenced line.
+fn file_mark_parts(file: &AttachmentInfo) -> (String, String) {
+    use base64::Engine as _;
+    let size = file.size.unwrap_or_default();
+    let mut stated = serde_json::json!({
+        "url": file.url.as_deref().unwrap_or_default(),
+        "filename": file.filename,
+        "sizeBytes": size,
+        "mode": file.mode.as_deref().unwrap_or("session"),
+        "expiresAt": file.expires_at,
+        "key": file.key.as_deref().unwrap_or_default(),
+    });
+    if let Some(thumb) = &file.thumb_key {
+        stated["thumbKey"] = thumb.as_str().into();
+    }
+    if let Some((width, height)) = file.pixels {
+        stated["width"] = width.into();
+        stated["height"] = height.into();
+    }
+    let link = match file.url.as_deref().filter(|url| !url.is_empty()) {
+        Some(url) => format!(": {}", escape_html(url)),
+        None => String::new(),
+    };
+    (
+        format!(
+            "{FILE_MARK}{}{MARK_END}",
+            base64::engine::general_purpose::STANDARD.encode(stated.to_string()),
+        ),
+        format!(
+            "<!-- FANCY_LEGACY -->{} ({size} bytes), shared as a file{link}<!-- /FANCY_LEGACY -->",
+            escape_html(&file.filename),
+        ),
     )
+}
+
+/// The file server a server runs as a plugin, as it told this client it
+/// is reached: one that takes files over HTTP, where a server that speaks
+/// the canon hands out a place to put each one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PluginFiles {
+    /// Where it is reached from here.
+    base_url: String,
+    /// Where it says it is, which is what the links it hands out start
+    /// with: behind a proxy the two differ.
+    told_url: String,
+    session: u32,
+    upload_token: String,
+    /// What a fetch of a file shared with those here is signed with.
+    session_jwt: String,
+}
+
+impl PluginFiles {
+    /// Read out of what the plugin sent on connecting; `over` is where the
+    /// server says its HTTP side is reached, which wins where it says.
+    fn told(told: &[u8], over: Option<&str>) -> Option<Self> {
+        let told: serde_json::Value = serde_json::from_slice(told).ok()?;
+        let text = |name: &str| told.get(name).and_then(serde_json::Value::as_str);
+        let told_url = text("base_url")?.trim_end_matches('/').to_owned();
+        let base_url = over
+            .map(|over| over.trim_end_matches('/'))
+            .filter(|over| !over.is_empty())
+            .map_or_else(|| told_url.clone(), str::to_owned);
+        Some(Self {
+            base_url,
+            told_url,
+            session: u32::try_from(told.get("session_id")?.as_u64()?).ok()?,
+            upload_token: text("upload_token")?.to_owned(),
+            session_jwt: text("session_jwt").unwrap_or_default().to_owned(),
+        })
+    }
+
+    /// `url`, a link the plugin handed out, as it is reached from here.
+    fn reached(&self, url: &str) -> String {
+        match url.strip_prefix(&self.told_url) {
+            Some(rest) if self.told_url != self.base_url => format!("{}{rest}", self.base_url),
+            _ => url.to_owned(),
+        }
+    }
+}
+
+/// What kind of file `filename` says it is, for the kinds a browser shows
+/// instead of saving: a link to a picture then opens as a picture.
+fn kind_of(filename: &str) -> Option<String> {
+    let ending = filename.rsplit_once('.')?.1.to_ascii_lowercase();
+    let kind = match ending.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "mp4" | "m4v" => "video/mp4",
+        "webm" => "video/webm",
+        "mp3" => "audio/mpeg",
+        "ogg" => "audio/ogg",
+        "pdf" => "application/pdf",
+        "txt" => "text/plain",
+        _ => return None,
+    };
+    Some(kind.to_owned())
 }
 
 /// A poll put to a channel.
@@ -528,6 +959,9 @@ pub struct FoundMessage {
     pub direct: Option<u32>,
     /// When it was sent, in Unix epoch milliseconds, where known.
     pub sent_at_ms: Option<u64>,
+    /// What names the message, where the server gave it a name: what a
+    /// view finds it by, to go to it.
+    pub id: Option<String>,
 }
 
 /// What a server found behind a link: enough for a small card.
@@ -544,28 +978,102 @@ pub struct LinkPreview {
     /// A small picture for the card, as an encoded image. Fetched by the
     /// server: showing it contacts nobody.
     pub thumbnail: Option<Vec<u8>>,
+    /// What the server says the link is: "image", "gifv", "video",
+    /// "article", "link" and so on.
+    pub kind: Option<String>,
+    /// Where the card's picture lives at its origin, whole. Fetching it
+    /// tells that host who is reading: only where the reader asks.
+    pub picture_url: Option<String>,
+    /// How large the page says its picture is whole, width by height:
+    /// what a card states about a piece of art.
+    pub picture_size: Option<(u32, u32)>,
+    /// The site's own icon, as an encoded image fetched by the server.
+    pub icon: Option<Vec<u8>>,
+    /// Who made it: a channel, an account, an author.
+    pub author: Option<String>,
+    /// Its playing time, as a clock ("1:00:14"), for video and audio.
+    pub duration: Option<String>,
+    /// When the page says it was published, as it wrote it.
+    pub published: Option<String>,
+    /// The page's own labelled facts, in its order: a name the server
+    /// recognised ("score", "comments", "views", "sellers"...) or the
+    /// page's own label, and the value.
+    pub facts: Vec<(String, String)>,
+    /// What it costs, for a listing.
+    pub price: Option<LinkPrice>,
+}
+
+/// What a listing behind a link costs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkPrice {
+    /// The amount, decimal point and all: "89.99".
+    pub amount: String,
+    /// ISO 4217 where the page named one, empty where it did not.
+    pub currency: String,
+    /// What it cost before, where it advertises a reduction; empty if not.
+    pub was: String,
+    /// "instock", "oos", "preorder", as the page wrote it.
+    pub availability: String,
 }
 
 impl LinkPreview {
     fn from_embed(url: String, embed: LinkEmbed) -> Self {
         use base64::Engine as _;
-        let thumbnail = [embed.thumbnail, embed.image]
+        let said = |text: Option<String>| text.filter(|text| !text.trim().is_empty());
+        // A data URL's bytes.
+        let decoded = |data_url: Option<&String>| {
+            let (_, encoded) = data_url?.split_once(";base64,")?;
+            base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .ok()
+        };
+        // The web client's order: the page's picture, then its thumbnail.
+        let picture = [&embed.image, &embed.thumbnail]
             .into_iter()
             .flatten()
-            .find_map(|media| media.preview)
-            .and_then(|preview| {
-                let (_, encoded) = preview.data_url.split_once(";base64,")?;
-                base64::engine::general_purpose::STANDARD
-                    .decode(encoded)
-                    .ok()
-            });
-        let said = |text: Option<String>| text.filter(|text| !text.trim().is_empty());
+            .find(|media| media.preview.is_some());
+        let picture_url = [&embed.image, &embed.thumbnail]
+            .into_iter()
+            .flatten()
+            .find_map(|media| said(Some(media.url.clone())));
+        let picture_size = picture.and_then(|media| {
+            let width = media.width.or(media.preview.as_ref()?.width)?;
+            let height = media.height.or(media.preview.as_ref()?.height)?;
+            Some((u32::try_from(width).ok()?, u32::try_from(height).ok()?))
+        });
         Self {
             url,
             title: said(embed.title),
             description: said(embed.description).or_else(|| said(embed.summary)),
-            site: said(embed.site_name).or_else(|| embed.provider.map(|provider| provider.name)),
-            thumbnail,
+            site: said(embed.site_name)
+                .or_else(|| embed.provider.as_ref().map(|provider| provider.name.clone())),
+            thumbnail: decoded(picture.and_then(|media| Some(&media.preview.as_ref()?.data_url))),
+            kind: said(embed.r#type),
+            picture_url,
+            picture_size,
+            icon: decoded(
+                embed
+                    .favicon
+                    .as_ref()
+                    .and_then(|media| Some(&media.preview.as_ref()?.data_url)),
+            ),
+            author: embed.author.and_then(|author| said(Some(author.name))),
+            duration: said(embed.media_duration),
+            published: said(embed.published_time),
+            facts: embed
+                .fields
+                .into_iter()
+                .map(|field| (field.name, field.value))
+                .collect(),
+            price: embed
+                .price
+                .filter(|price| !price.amount.trim().is_empty())
+                .map(|price| LinkPrice {
+                    amount: price.amount,
+                    currency: price.currency,
+                    was: price.was,
+                    availability: price.availability,
+                }),
         }
     }
 }
@@ -715,6 +1223,20 @@ pub struct RegisteredInfo {
     pub last_seen: Option<String>,
     /// The channel it was last in.
     pub last_channel: Option<u32>,
+    /// Whether the server sent its picture with the list; the picture
+    /// itself is read with [`EngineHandle::registered_avatar`].
+    pub picture: bool,
+}
+
+/// A pin on a message: which, who put it there and when.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PinInfo {
+    /// The message pinned.
+    pub message: String,
+    /// The name of whoever pinned it.
+    pub by: String,
+    /// When, in Unix epoch milliseconds.
+    pub at_ms: u64,
 }
 
 /// One user's reaction to one message.
@@ -741,6 +1263,7 @@ impl EngineEvent {
                 reason: payload.reason,
             },
             CoreEvent::ConnectionRejected(payload) => Self::Rejected {
+                wants: Wanted::of(payload.reject_type, &payload.reason),
                 reason: payload.reason,
             },
             CoreEvent::StateChanged => Self::StateChanged,
@@ -762,11 +1285,32 @@ impl EngineEvent {
             // Sent beside the refusal above for anything refused in a
             // channel, listening or not: the refusal says what it was.
             CoreEvent::ListenDenied(_) => return None,
-            CoreEvent::PchatPinDelivered(payload) => Self::NewMessage {
-                channel: payload.channel_id,
+            CoreEvent::ServerLivery(_) => Self::Livery,
+            CoreEvent::UploadProgress(payload) => Self::UploadProgress {
+                upload_id: payload.upload_id,
+                bytes_sent: payload.bytes_sent,
+                total_bytes: payload.total_bytes,
             },
-            CoreEvent::PchatPinsFetched(payload) => Self::NewMessage {
+            CoreEvent::PchatPinDelivered(payload) => Self::Pin {
                 channel: payload.channel_id,
+                pinned: payload.pinned,
+                pin: PinInfo {
+                    message: payload.message_id,
+                    by: payload.pinner_name,
+                    at_ms: payload.timestamp,
+                },
+            },
+            CoreEvent::PchatPinsFetched(payload) => Self::Pins {
+                channel: payload.channel_id,
+                pins: payload
+                    .pins
+                    .into_iter()
+                    .map(|stored| PinInfo {
+                        message: stored.message_id,
+                        by: stored.pinner_name,
+                        at_ms: stored.timestamp,
+                    })
+                    .collect(),
             },
             CoreEvent::TypingIndicator(payload) => Self::Typing {
                 channel: payload.channel_id,
@@ -911,24 +1455,35 @@ impl EngineEvent {
                         name: user.name,
                         last_seen: user.last_seen,
                         last_channel: user.last_channel,
+                        picture: user.texture_size.is_some(),
                     })
                     .collect(),
             ),
-            CoreEvent::UserStats(payload) => Self::UserStats(UserStats {
-                session: payload.session,
-                tcp_ping_ms: whole_ms(payload.tcp_ping_avg),
-                udp_ping_ms: whole_ms(payload.udp_ping_avg),
-                online_secs: payload.onlinesecs,
-                idle_secs: payload.idlesecs,
-                os: match (payload.os, payload.os_version) {
-                    (Some(os), Some(version)) if !version.is_empty() => {
-                        Some(format!("{os} {version}"))
-                    }
-                    (os, _) => os,
-                },
-                version: payload.version,
-                address: payload.address,
+            CoreEvent::UserStats(payload) => Self::UserStats(payload.into()),
+            CoreEvent::VoiceSupport(payload) => Self::VoiceSupport(voice::VoiceSupport {
+                available: payload.available,
+                max_seconds: payload.max_seconds,
+                max_bytes: payload.max_bytes,
             }),
+            CoreEvent::VoiceMessageState(state) => Self::VoiceRecording(state.into()),
+            CoreEvent::MicAmplitude(level) => Self::MicLevel {
+                rms: audio::millionths(level.rms),
+                peak: audio::millionths(level.peak),
+            },
+            CoreEvent::VoiceActivationCalibrated(_) => Self::GateCalibrated,
+            CoreEvent::VoiceReplayState(state) => Self::Replay(state.into()),
+            CoreEvent::CryptoStats(stats) => Self::VoiceStats(audio::VoiceStats {
+                to_client: (&stats.to_client).into(),
+                from_client: (&stats.from_client).into(),
+            }),
+            CoreEvent::GifSupport(payload) => Self::GifSupport(payload.into()),
+            CoreEvent::GifPage(payload) => Self::GifPage(payload.into()),
+            CoreEvent::GifSearchRefused(payload) => Self::GifRefused(payload.into()),
+            CoreEvent::AccountSettings(account) => Self::Account(account),
+            CoreEvent::AccountAck(ack) => Self::AccountAck(ack),
+            CoreEvent::OnboardingConfig(config) => Self::OnboardingConfig(config),
+            CoreEvent::OnboardingResponse(response) => Self::OnboardingResponse(response),
+            CoreEvent::PluginRegistry(_) => Self::PluginsChanged,
             _ => return None,
         })
     }
@@ -951,11 +1506,39 @@ pub struct ChannelInfo {
     /// Whether what is kept is sealed with a key the server does not
     /// have: only those in the channel who were given it can read it.
     pub encrypted: bool,
+    /// Whether it is a friend chat or the user's own notepad: a detached
+    /// room named `__dm:...`, reached through the friends list and never
+    /// drawn in the tree.
+    pub friend_chat: bool,
+    /// What the server last said the user may do here, as Mumble's
+    /// permission bits; `None` until it has answered.
+    pub permissions: Option<u32>,
+    /// Whether what is kept is sealed the Signal way: a key of each
+    /// sender's, and nothing from before one joined.
+    pub signal: bool,
+    /// Whether the server removes it once it is empty.
+    pub temporary: bool,
+    /// How many may be in it at once; 0 for no limit.
+    pub max_users: u32,
+    /// Whether a password is what lets one in. A hidden room marked so is
+    /// one its invitees are let into by name: it has no password to ask
+    /// for, and is not counted.
+    pub restricted: bool,
+    /// Whether it is a private room: detached from the tree, its members
+    /// let in by name.
+    pub private: bool,
 }
 
 impl From<ChannelEntry> for ChannelInfo {
     fn from(channel: ChannelEntry) -> Self {
         Self {
+            friend_chat: channel.detached && channel.name.starts_with(DM_CHANNEL_PREFIX),
+            private: channel.detached,
+            permissions: channel.permissions,
+            signal: channel.pchat_protocol == Some(PchatProtocol::SignalV1),
+            temporary: channel.temporary,
+            max_users: channel.max_users,
+            restricted: channel.is_enter_restricted && !channel.hidden,
             id: channel.id,
             parent: channel.parent_id,
             name: channel.name,
@@ -984,6 +1567,11 @@ pub struct UserInfo {
     pub muted: bool,
     /// Deafened, by themselves or by the server.
     pub deafened: bool,
+    /// Muted by the server, or kept from speaking in this channel: what
+    /// somebody with the right can lift, where a mute of their own is theirs.
+    pub muted_by_server: bool,
+    /// Deafened by the server.
+    pub deafened_by_server: bool,
     /// Present when the user has a picture; changes when the picture does.
     /// The picture itself is fetched with [`EngineHandle::user_avatar`].
     pub avatar: Option<u32>,
@@ -1005,6 +1593,8 @@ impl From<UserEntry> for UserInfo {
             channel: user.channel_id,
             muted: user.self_mute || user.mute || user.suppress,
             deafened: user.self_deaf || user.deaf,
+            muted_by_server: user.mute || user.suppress,
+            deafened_by_server: user.deaf,
             avatar: user.texture_marker.filter(|size| *size > 0),
             priority_speaker: user.priority_speaker,
             account: user.user_id,
@@ -1036,6 +1626,8 @@ pub struct MessageInfo {
     pub edited: bool,
     /// Whether it is pinned in its channel.
     pub pinned: bool,
+    /// When it was pinned, in Unix epoch milliseconds, where known.
+    pub pinned_at_ms: Option<u64>,
     /// Whether the server refused it: nobody else has seen it.
     pub failed: bool,
 }
@@ -1052,6 +1644,7 @@ impl From<ChatMessage> for MessageInfo {
             id: message.message_id,
             edited: message.edited_at.is_some(),
             pinned: message.pinned,
+            pinned_at_ms: message.pinned_at,
             failed: message.send_failed,
         }
     }
@@ -1064,6 +1657,15 @@ pub struct MessageWindow {
     pub messages: Vec<MessageInfo>,
     /// Whether there are older ones: held here, or kept by the server.
     pub earlier: bool,
+}
+
+/// What [`EngineHandle::fetch_web`] brought back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WebFile {
+    /// What the host sent.
+    pub bytes: Vec<u8>,
+    /// What the host said it is, as its `Content-Type`.
+    pub content_type: Option<String>,
 }
 
 /// What a server answered when asked, without connecting, whether it is up.
@@ -1079,6 +1681,9 @@ pub struct PingInfo {
     pub max_users: Option<u32>,
     /// The server's version, as it reports it.
     pub version: Option<String>,
+    /// The digest of the server's livery, as lowercase hex: `None` from a
+    /// server that does not say, empty from one that says it has none.
+    pub livery_digest: Option<String>,
 }
 
 /// One of the servers the engine is on, or was and may be again.
@@ -1167,9 +1772,39 @@ struct Embedder {
 
 impl EventSink for Embedder {
     fn emit(&self, event: Event) {
-        if let Some(event) = EngineEvent::from_core(event.kind) {
+        if let Some(event) = EngineEvent::from_event(event) {
             (self.on_event)(event);
         }
+    }
+}
+
+impl EngineEvent {
+    /// The engine's event as this API reports it: those that must say which
+    /// server they came from, and then [`Self::from_core`].
+    fn from_event(event: Event) -> Option<Self> {
+        let server = event.server.map(|id| id.to_string());
+        Some(match event.kind {
+            CoreEvent::WebRtcSignal(payload) => Self::WebRtcSignal(media::SignalInfo {
+                server,
+                sender: payload.sender_session,
+                target: payload.target_session,
+                kind: payload.signal_type,
+                payload: payload.payload,
+            }),
+            CoreEvent::DrawStroke(payload) => Self::DrawStroke(media::StrokeInfo {
+                sender: payload.sender_session,
+                channel: payload.channel_id,
+                id: payload.stroke_id,
+                colour: payload.color,
+                width: payload.width,
+                width_frac: payload.width_frac,
+                points: payload.points,
+                end: payload.is_end,
+                clear: payload.is_clear,
+                clear_all: payload.clear_all,
+            }),
+            kind => return Self::from_core(kind),
+        })
     }
 }
 
@@ -1303,6 +1938,17 @@ impl EngineHandle {
         IdentityStore::new(self.data_dir.clone()).import(from)
     }
 
+    /// Take in the certificates `labels` of the install whose data
+    /// directory is `from`; one this install already has under the same
+    /// label is left as it is. Says which were taken.
+    ///
+    /// # Errors
+    ///
+    /// When one of them could not be read or written.
+    pub fn take_certificates(&self, from: &Path, labels: &[String]) -> Result<Vec<String>, String> {
+        carry::take_certificates(from, &self.data_dir, labels)
+    }
+
     /// Leave the server.
     ///
     /// # Errors
@@ -1355,6 +2001,19 @@ impl EngineHandle {
     /// uploaded; `None` if they have none. Asks the server on first use.
     pub async fn user_avatar(&self, session: u32) -> Option<Vec<u8>> {
         self.state.user_texture_or_fetch(session).await
+    }
+
+    /// The picture of the registered account `id`, as the last list of
+    /// accounts brought it; `None` if it brought none, or the pictures
+    /// were let go of with [`Self::release_registered_avatars`].
+    pub fn registered_avatar(&self, id: u32) -> Option<Vec<u8>> {
+        self.state.registered_user_texture(id)
+    }
+
+    /// Let go of the pictures the last list of accounts brought: nothing
+    /// that shows them is open. The next list brings them again.
+    pub fn release_registered_avatars(&self) {
+        self.state.release_registered_user_textures();
     }
 
     /// The messages of `channel`, oldest first.
@@ -1430,6 +2089,7 @@ impl EngineHandle {
                     channel,
                     direct,
                     sent_at_ms: message.timestamp,
+                    id: found.string_id,
                 })
             })
             .collect()
@@ -1541,10 +2201,10 @@ impl EngineHandle {
         self.state.send_dm(session, html).await
     }
 
-    /// The longest message carrying a picture the server takes, in bytes;
-    /// zero when it sets no limit.
+    /// The longest message carrying a picture that can be sent, in bytes:
+    /// what the server takes, and never more than one packet carries.
     pub fn picture_limit(&self) -> usize {
-        self.state.server_config().max_image_message_length as usize
+        picture_limit(self.state.server_config().max_image_message_length as usize)
     }
 
     /// Unread messages per channel; channels with none are absent.
@@ -1628,9 +2288,19 @@ impl EngineHandle {
     ///
     /// When not connected, or the server is not a Fancy one.
     pub async fn edit_text(&self, channel: u32, id: &str, text: &str) -> Result<(), String> {
-        self.state
-            .edit_message(channel, id.to_owned(), self.composed(text))
-            .await
+        // What the message answers is said in a mark ahead of its words:
+        // changing the words does not make it answer nothing.
+        let answered = self
+            .messages(channel)
+            .into_iter()
+            .find(|message| message.id.as_deref() == Some(id))
+            .and_then(|message| reply_target(&message.html).map(str::to_owned));
+        let words = self.composed(text);
+        let html = match answered {
+            Some(to) => reply_html(&to, &words),
+            None => words,
+        };
+        self.state.edit_message(channel, id.to_owned(), html).await
     }
 
     /// Delete the messages `ids` of `channel` from the server's store.
@@ -1677,7 +2347,8 @@ impl EngineHandle {
         };
         let state = self.state.clone();
         let sender = by.clone();
-        drop(tokio::spawn(async move {
+        // On the engine's own runtime, whatever the caller polls this on.
+        drop(crate::state::runtime::spawn(async move {
             // No answer is not an error: see above.
             let _ = state
                 .delete_pchat_messages(channel, Vec::new(), from, to, sender)
@@ -1798,16 +2469,253 @@ impl EngineHandle {
             .await
     }
 
+    /// Stop the upload given to [`Self::share_files`] as `upload_id`: it is
+    /// answered among the [`Unsent`], [`CANCELLED`], and the rest go on.
+    /// Whether there was such an upload still going.
+    pub fn cancel_upload(&self, upload_id: &str) -> bool {
+        if self.state.cancel_upload(upload_id) {
+            return true;
+        }
+        // Not going up yet: it is not to start.
+        if !upload_id.is_empty()
+            && let Ok(mut waiting) = cancelled_early().lock()
+        {
+            let _ = waiting.insert(upload_id.to_owned());
+        }
+        false
+    }
+
+    /// Share `files` with `channel` in one message that also says `text`:
+    /// each is given to the server to keep as `how` says, and the message
+    /// names them all. A picture's small copy goes up beside it, kept the
+    /// same way; not beside one sealed with a password, which the server
+    /// is not to be able to look at.
+    ///
+    /// # Errors
+    ///
+    /// When a password share has no password, the server keeps no files,
+    /// or the message cannot be sent. A file that is cancelled or refused
+    /// does not stop the rest: it is answered among the [`Unsent`], and the
+    /// message names the files that went. Where none went, nothing is said.
+    pub async fn share_files(
+        &self,
+        channel: u32,
+        text: &str,
+        files: &[ToShare],
+        how: &ShareAs,
+    ) -> Result<Vec<Unsent>, String> {
+        use mumble_protocol::proto::fancy::files::Visibility;
+        if let Reach::Password(password) = &how.reach
+            && password.is_empty()
+        {
+            return Err("a password share needs a password".to_owned());
+        }
+        if let Some(plugin) = self.plugin_files() {
+            return self.share_over_plugin(&plugin, channel, text, files, how).await;
+        }
+        let (visibility, password) = match &how.reach {
+            Reach::Here => (Visibility::Session, String::new()),
+            Reach::Link => (Visibility::Public, String::new()),
+            Reach::Password(password) if password.is_empty() => {
+                return Err("a password share needs a password".to_owned());
+            }
+            Reach::Password(password) => (Visibility::Password, password.clone()),
+        };
+        let upload = |path: &Path, filename: &str, upload_id: String| {
+            self.state.starling_upload_file(
+                path.to_string_lossy().into_owned(),
+                channel,
+                kind_of(filename),
+                upload_id,
+                visibility,
+                how.lasts_secs,
+                password.clone(),
+                None,
+            )
+        };
+        let lead = match text.trim() {
+            "" => String::new(),
+            said => self.composed(said),
+        };
+        let mut parts = Vec::with_capacity(files.len());
+        let mut unsent = Vec::new();
+        for file in files {
+            let Some(filename) = file.path.file_name().map(|name| name.to_string_lossy().into_owned()) else {
+                unsent.push(Unsent { upload_id: file.upload_id.clone(), why: "that is not a file".to_owned() });
+                continue;
+            };
+            if was_cancelled_early(&file.upload_id) {
+                unsent.push(Unsent { upload_id: file.upload_id.clone(), why: CANCELLED.to_owned() });
+                continue;
+            }
+            let shared = match upload(&file.path, &filename, file.upload_id.clone()).await {
+                Ok(shared) => shared,
+                Err(why) => {
+                    unsent.push(Unsent { upload_id: file.upload_id.clone(), why });
+                    continue;
+                }
+            };
+            // A courtesy: the file is shared whether or not this goes up.
+            let thumb_key = match &file.stand_in {
+                Some(small) if !matches!(how.reach, Reach::Password(_)) => {
+                    upload(small, &filename, String::new()).await.ok().map(|small| small.key)
+                }
+                _ => None,
+            };
+            parts.push(shared_part(
+                file,
+                AttachmentInfo {
+                    filename,
+                    size: Some(shared.size),
+                    key: Some(shared.key),
+                    url: Some(shared.share_url).filter(|url| !url.is_empty()),
+                    mode: Some(how.reach.mode().to_owned()),
+                    expires_at: Some(shared.expires_at).filter(|at| *at > 0),
+                    thumb_key,
+                    pixels: file.pixels,
+                    voice: None,
+                },
+            ));
+        }
+        if parts.is_empty() {
+            return Ok(unsent);
+        }
+        let message = self.shared_message(channel, lead, parts, how).await;
+        self.state.send_message(channel, message).await?;
+        Ok(unsent)
+    }
+
+    /// The file server this server runs as a plugin, if it runs one and
+    /// has said how it is reached.
+    fn plugin_files(&self) -> Option<PluginFiles> {
+        let told = self
+            .state
+            .get_plugin_broadcasts()
+            .into_iter()
+            .rev()
+            .find(|told| told.data_id == "fancy-file-server-config")?;
+        let over = self.state.server_config().fancy_rest_api_url;
+        PluginFiles::told(&told.data, over.as_deref())
+    }
+
+    /// [`Self::share_files`] on a server whose files are kept by its
+    /// plugin: each goes up over HTTP, and the message names the link the
+    /// plugin gave it. No small copies: the plugin keeps one file a share.
+    async fn share_over_plugin(
+        &self,
+        plugin: &PluginFiles,
+        channel: u32,
+        text: &str,
+        files: &[ToShare],
+        how: &ShareAs,
+    ) -> Result<Vec<Unsent>, String> {
+        use crate::state::{FileAccessMode, UploadRequest};
+        let (mode, password) = match &how.reach {
+            Reach::Here => (FileAccessMode::Session, None),
+            Reach::Link => (FileAccessMode::Public, None),
+            Reach::Password(password) => (FileAccessMode::Password, Some(password.clone())),
+        };
+        let lead = match text.trim() {
+            "" => String::new(),
+            said => self.composed(said),
+        };
+        let mut parts = Vec::with_capacity(files.len());
+        let mut unsent = Vec::new();
+        for file in files {
+            let Some(filename) = file.path.file_name().map(|name| name.to_string_lossy().into_owned()) else {
+                unsent.push(Unsent { upload_id: file.upload_id.clone(), why: "that is not a file".to_owned() });
+                continue;
+            };
+            if was_cancelled_early(&file.upload_id) {
+                unsent.push(Unsent { upload_id: file.upload_id.clone(), why: CANCELLED.to_owned() });
+                continue;
+            }
+            let uploaded = self
+                .state
+                .upload_file(UploadRequest {
+                    base_url: plugin.base_url.clone(),
+                    session: plugin.session,
+                    upload_token: plugin.upload_token.clone(),
+                    channel_id: channel,
+                    file_path: file.path.clone(),
+                    mime_type: kind_of(&filename),
+                    filename: Some(filename.clone()),
+                    mode,
+                    password: password.clone(),
+                    ttl_seconds: Some(how.lasts_secs),
+                    upload_id: file.upload_id.clone(),
+                })
+                .await;
+            let shared = match uploaded {
+                Ok(shared) => shared,
+                Err(why) => {
+                    unsent.push(Unsent { upload_id: file.upload_id.clone(), why });
+                    continue;
+                }
+            };
+            parts.push(shared_part(
+                file,
+                AttachmentInfo {
+                    filename,
+                    size: Some(shared.size_bytes),
+                    key: None,
+                    url: Some(shared.download_url),
+                    mode: Some(how.reach.mode().to_owned()),
+                    expires_at: shared.expires_at.filter(|at| *at > 0),
+                    thumb_key: None,
+                    pixels: file.pixels,
+                    voice: None,
+                },
+            ));
+        }
+        if parts.is_empty() {
+            return Ok(unsent);
+        }
+        let message = self.shared_message(channel, lead, parts, how).await;
+        self.state.send_message(channel, message).await?;
+        Ok(unsent)
+    }
+
     /// Fetch the shared file kept under `key` and write it to `to`; says
-    /// how many bytes were written.
+    /// how many bytes were written. A file kept by a server's plugin is
+    /// named by its link, and that is what `key` then is.
     ///
     /// # Errors
     ///
     /// When the server no longer has it, or the file cannot be written.
     pub async fn save_shared_file(&self, key: &str, to: &Path) -> Result<u64, String> {
+        if key.starts_with("http://") || key.starts_with("https://") {
+            return self.save_linked_file(key, to).await;
+        }
         self.state
             .starling_download_to_file(key.to_owned(), to.to_string_lossy().into_owned(), None)
             .await
+    }
+
+    /// Fetch the file a server's plugin keeps behind the link `url`. One
+    /// anybody may fetch is fetched as it is; one shared with those here
+    /// is asked for again as who this client is there.
+    async fn save_linked_file(&self, url: &str, to: &Path) -> Result<u64, String> {
+        use crate::state::{DownloadCredential, DownloadRequest};
+        let plugin = self.plugin_files();
+        let url = plugin.as_ref().map_or_else(|| url.to_owned(), |plugin| plugin.reached(url));
+        let asked = |credential| DownloadRequest {
+            url: url.clone(),
+            dest_path: to.to_path_buf(),
+            credential,
+        };
+        match self.state.download_file(asked(None)).await {
+            Ok(written) => Ok(written),
+            Err(refused) => {
+                let signed = plugin
+                    .map(|plugin| plugin.session_jwt)
+                    .filter(|signed| !signed.is_empty())
+                    .ok_or(refused)?;
+                self.state
+                    .download_file(asked(Some(DownloadCredential::Session { value: signed })))
+                    .await
+            }
+        }
     }
 
     /// Who is asking for the key of the encrypted channel `channel`.
@@ -1917,6 +2825,58 @@ impl EngineHandle {
             .into_iter()
             .map(|hit| LinkPreview::from_embed(hit.requested_url, hit.embed))
             .collect())
+    }
+
+    /// Fetch what lies at the web address `url`, for a reader who asked
+    /// to see it: a picture a message links to, say. Gives up past `most`
+    /// bytes or after `within`. No cookie and no referrer go with the
+    /// request; the host still learns who is asking.
+    ///
+    /// # Errors
+    ///
+    /// When `url` is not a web address, its host does not answer in time
+    /// or with success, or what it sends is larger than `most`.
+    pub async fn fetch_web(
+        url: &str,
+        most: usize,
+        within: std::time::Duration,
+    ) -> Result<WebFile, String> {
+        let address = url::Url::parse(url).map_err(|error| error.to_string())?;
+        if !matches!(address.scheme(), "http" | "https") {
+            return Err("not a web address".to_owned());
+        }
+        let client = reqwest::Client::builder()
+            .timeout(within)
+            .redirect(reqwest::redirect::Policy::limited(5))
+            .user_agent(concat!("FancyMumble/", env!("CARGO_PKG_VERSION")))
+            .build()
+            .map_err(|error| error.to_string())?;
+        let mut response = client
+            .get(address)
+            .send()
+            .await
+            .and_then(reqwest::Response::error_for_status)
+            .map_err(|error| error.to_string())?;
+        let too_large = || format!("larger than {most} bytes");
+        if response.content_length().is_some_and(|length| length > most as u64) {
+            return Err(too_large());
+        }
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned);
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(|error| error.to_string())? {
+            if bytes.len() + chunk.len() > most {
+                return Err(too_large());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        Ok(WebFile {
+            bytes,
+            content_type,
+        })
     }
 
     /// Have the server send `text` to `channel` at `at_ms`, Unix epoch
@@ -2103,6 +3063,19 @@ impl EngineHandle {
         match self.state.voice_state() {
             VoiceState::Inactive => self.state.enable_voice().await,
             VoiceState::Active | VoiceState::Muted => self.state.toggle_mute().await,
+        }
+    }
+
+    /// Turn voice off: nothing is captured and nothing is heard, until the
+    /// microphone button turns it on again.
+    ///
+    /// # Errors
+    ///
+    /// When the audio devices cannot be let go of.
+    pub async fn turn_voice_off(&self) -> Result<(), String> {
+        match self.state.voice_state() {
+            VoiceState::Inactive => Ok(()),
+            VoiceState::Active | VoiceState::Muted => self.state.disable_voice().await,
         }
     }
 
@@ -2398,15 +3371,31 @@ impl EngineHandle {
         history: History,
         temporary: bool,
     ) -> Result<(), String> {
+        self.create_channel_as(NewChannel {
+            parent,
+            name,
+            temporary,
+            history,
+            ..NewChannel::default()
+        })
+        .await
+    }
+
+    /// Create a channel with everything `new` says of it.
+    ///
+    /// # Errors
+    ///
+    /// When not connected.
+    pub async fn create_channel_as(&self, new: NewChannel) -> Result<(), String> {
         self.state
             .create_channel(
-                parent,
-                name,
-                None,
-                None,
-                temporary.then_some(true),
-                None,
-                match history {
+                new.parent,
+                new.name,
+                new.description,
+                new.position,
+                new.temporary.then_some(true),
+                new.max_users,
+                match new.history {
                     History::None => None,
                     History::OnServer => Some("server_managed".to_owned()),
                     History::EndToEnd => Some("fancy_v1_full_archive".to_owned()),
@@ -2414,8 +3403,8 @@ impl EngineHandle {
                 },
                 None,
                 None,
-                None,
-                None,
+                new.password,
+                new.hidden.then_some(true),
                 None,
                 None,
                 Vec::new(),
@@ -2492,7 +3481,34 @@ impl EngineHandle {
     ///
     /// When not connected.
     pub async fn set_comment(&self, text: &str) -> Result<(), String> {
-        self.state.set_user_comment(escape_html(text)).await
+        // The comment also carries the user's profile, in a mark ahead of
+        // the words. Changing the words is not giving up the profile.
+        let held = match self.state.get_own_session() {
+            Some(own) => self.user_comment(own).await,
+            None => None,
+        };
+        let words = escape_html(text);
+        let comment = match held.as_deref().and_then(profile_mark) {
+            Some(mark) => format!("{mark}\n{words}"),
+            None => words,
+        };
+        self.state.set_user_comment(comment).await
+    }
+
+    /// Set the profile the local user's comment carries: `profile` is the
+    /// profile as JSON, which goes into the mark ahead of the words. The
+    /// words stay as they are.
+    ///
+    /// # Errors
+    ///
+    /// When `profile` is not a JSON object, or not connected.
+    pub async fn set_profile(&self, profile: &str) -> Result<(), String> {
+        let held = match self.state.get_own_session() {
+            Some(own) => self.user_comment(own).await,
+            None => None,
+        };
+        let comment = with_profile(held.as_deref().unwrap_or_default(), profile)?;
+        self.state.set_user_comment(comment).await
     }
 
     /// Set the local user's picture, from an encoded image; empty removes it.
@@ -2597,7 +3613,78 @@ impl EngineHandle {
             users: answer.user_count,
             max_users: answer.max_user_count,
             version: answer.server_version,
+            livery_digest: answer.livery_digest,
         }
+    }
+
+    /// Ask the server at `host:port` what it looks like, without joining
+    /// it: a connection that asks one question and hangs up, with no
+    /// certificate. `Ok(None)` from a server that did not answer the
+    /// question.
+    ///
+    /// # Errors
+    ///
+    /// When the server cannot be reached, or does not answer in time.
+    pub async fn probe_livery(host: &str, port: u16) -> Result<Option<LiveryInfo>, String> {
+        let answer = crate::state::livery_probe::probe(host.to_owned(), port, Vec::new()).await?;
+        Ok(answer.as_ref().map(LiveryInfo::from))
+    }
+
+    /// What the server of the session `id` says it looks like, once it has
+    /// said; [`EngineEvent::Livery`] says when that changes.
+    pub fn livery(&self, id: &str) -> Option<LiveryInfo> {
+        let session = self.state.registry.session(id.parse().ok()?)?;
+        let state = session.lock().ok()?;
+        state.livery.as_ref().map(LiveryInfo::from)
+    }
+
+    /// Put the body of the message `id` of `channel` away: out of memory,
+    /// sealed in a file for as long as the engine runs. What the engine
+    /// hands out for that message afterwards is a mark where the body was;
+    /// [`Self::put_away_body`] reads the body itself. For bodies that carry
+    /// pictures, which a view holds as it draws them and not as they came.
+    ///
+    /// # Errors
+    ///
+    /// When there is no such message, or its body cannot be written.
+    pub fn put_away(&self, channel: u32, id: &str) -> Result<(), String> {
+        self.put_away_in("channel", channel, id)
+    }
+
+    /// The same for a direct message exchanged with `session`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::put_away`].
+    pub fn put_away_direct(&self, session: u32, id: &str) -> Result<(), String> {
+        self.put_away_in("dm", session, id)
+    }
+
+    fn put_away_in(&self, scope: &str, of: u32, id: &str) -> Result<(), String> {
+        // Made once for a connection, and never again while it lasts: a
+        // new one could not read what the last one put away.
+        if !self.state.has_offload_store() {
+            self.state.init_offload_store()?;
+        }
+        self.state
+            .offload_message(id.to_owned(), scope.to_owned(), of.to_string())
+    }
+
+    /// Whether `body`, as the engine hands a message's out, is the mark of
+    /// one that was put away.
+    #[must_use]
+    pub fn is_put_away(body: &str) -> bool {
+        body.starts_with(crate::state::OFFLOADED_PREFIX)
+    }
+
+    /// The body of the message `id` that was put away, read back without
+    /// taking it back: it stays away.
+    ///
+    /// # Errors
+    ///
+    /// When it was not put away, or cannot be read.
+    pub fn put_away_body(&self, id: &str) -> Result<String, String> {
+        self.state.peek_offloaded_message(id)
     }
 
     /// Write out what the engine holds only in memory. Call before exiting.
@@ -2618,8 +3705,51 @@ const MAX_VOLUME: f32 = 2.0;
 const MIN_BITRATE: u32 = 8_000;
 const MAX_BITRATE: u32 = 192_000;
 
+/// The mark a comment opens with when it carries a Fancy Mumble profile:
+/// an HTML comment holding the profile, which other clients show as nothing.
+fn profile_mark(comment: &str) -> Option<&str> {
+    const OPENS: &str = "<!--FANCY:";
+    const CLOSES: &str = "-->";
+    let from = comment.len() - comment.trim_start().len();
+    let rest = comment[from..].strip_prefix(OPENS)?;
+    let end = rest.find(CLOSES)?;
+    Some(&comment[from..from + OPENS.len() + end + CLOSES.len()])
+}
+
+/// `comment` with `profile`, a JSON object, in the mark it opens with, in
+/// place of whatever profile it carried.
+fn with_profile(comment: &str, profile: &str) -> Result<String, String> {
+    let read: serde_json::Value =
+        serde_json::from_str(profile).map_err(|error| format!("not a profile: {error}"))?;
+    // The mark is an HTML comment: nothing in it may end one.
+    if !read.is_object() || profile.contains("-->") {
+        return Err("not a profile".to_owned());
+    }
+    let words = match profile_mark(comment) {
+        Some(mark) => comment.trim_start().get(mark.len()..).unwrap_or_default(),
+        None => comment,
+    };
+    Ok(format!("<!--FANCY:{profile}-->\n{}", words.trim_start()))
+}
+
 /// The most messages a view is handed at once, whatever it asks for.
 const MAX_WINDOW: usize = 10_000;
+
+/// What of a packet is left for the rest of a message: its id, whom it is
+/// for, and in a channel that keeps messages the sealing of its second copy.
+const PACKET_HEADROOM: usize = 64 * 1024;
+
+/// The longest message carrying a picture that can be sent when the server
+/// states `stated`, where zero is no limit. A server with no limit, or a
+/// generous one, still closes the connection of whoever sends it more than
+/// a packet holds: without this a large picture logs its sender out.
+fn picture_limit(stated: usize) -> usize {
+    let fits = mumble_protocol::transport::codec::MAX_PAYLOAD_SIZE as usize - PACKET_HEADROOM;
+    match stated {
+        0 => fits,
+        stated => stated.min(fits),
+    }
+}
 
 /// A measured time in whole milliseconds; nonsense reads as zero.
 #[allow(
@@ -2660,6 +3790,40 @@ mod tests {
     };
 
     #[test]
+    fn a_profile_is_written_ahead_of_the_words_that_were_there() {
+        let written = with_profile("Draws.", r#"{"v":1}"#).expect("written");
+        assert_eq!(written, "<!--FANCY:{\"v\":1}-->\nDraws.");
+        // Another one takes its place, and the words are the same words.
+        let again = with_profile(&written, r#"{"v":1,"status":"Out"}"#).expect("written");
+        assert_eq!(again, "<!--FANCY:{\"v\":1,\"status\":\"Out\"}-->\nDraws.");
+        assert_eq!(profile_mark(&again), again.split('\n').next());
+        assert!(with_profile("Draws.", "[]").is_err(), "an object");
+        assert!(with_profile("Draws.", r#"{"a":"-->"}"#).is_err());
+        assert!(with_profile("Draws.", "not json").is_err());
+    }
+
+    #[test]
+    fn the_profile_a_comment_carries_is_found_whole_or_not_at_all() {
+        let mark = r##"<!--FANCY:{"v":1,"pronouns":"she/her"}-->"##;
+        assert_eq!(profile_mark(&format!("{mark}\nDraws.")), Some(mark));
+        assert_eq!(profile_mark(&format!("  \n{mark}")), Some(mark));
+        // Words alone, a mark that is not first, and one never closed.
+        assert_eq!(profile_mark("Draws."), None);
+        assert_eq!(profile_mark(&format!("Draws. {mark}")), None);
+        assert_eq!(profile_mark("<!--FANCY:{\"v\":1"), None);
+    }
+
+    #[test]
+    fn a_picture_is_never_allowed_more_than_a_packet_holds() {
+        let packet = mumble_protocol::transport::codec::MAX_PAYLOAD_SIZE as usize;
+        // What the server states, where that fits.
+        assert_eq!(picture_limit(131_072), 131_072);
+        // No limit, or one beyond a packet, is still a packet at the most.
+        assert!(picture_limit(0) < packet && picture_limit(0) > packet / 2);
+        assert_eq!(picture_limit(64 * 1024 * 1024), picture_limit(0));
+    }
+
+    #[test]
     fn a_name_after_an_at_sign_becomes_a_mention() {
         let users = [
             (3, "Rin".to_owned()),
@@ -2689,6 +3853,58 @@ mod tests {
     }
 
     #[test]
+    fn only_a_detached_dm_room_is_a_friend_chat() {
+        let channel = |name: &str, detached: bool| ChannelEntry {
+            id: 7,
+            parent_id: None,
+            name: name.to_owned(),
+            description: String::new(),
+            description_hash: None,
+            user_count: 0,
+            permissions: None,
+            temporary: false,
+            position: 0,
+            max_users: 0,
+            pchat_protocol: None,
+            pchat_max_history: None,
+            pchat_retention_days: None,
+            pchat_key_custodians: Vec::new(),
+            is_enter_restricted: false,
+            hidden: false,
+            detached,
+            attributes: 0,
+            expiry_mode: 0,
+            expiry_duration_secs: 0,
+            expires_at: 0,
+        };
+        let friend_chat =
+            |name: &str, detached: bool| ChannelInfo::from(channel(name, detached)).friend_chat;
+        // A room behind a password asks for it; a hidden one marked the
+        // same lets its invitees in by name, and has none to ask for.
+        let restricted = |hidden: bool| {
+            ChannelInfo::from(ChannelEntry {
+                is_enter_restricted: true,
+                permissions: Some(0x4),
+                hidden,
+                ..channel("x", false)
+            })
+        };
+        assert!(restricted(false).restricted);
+        assert!(!restricted(true).restricted);
+        assert_eq!(restricted(false).permissions, Some(0x4));
+        assert!(friend_chat("__dm:3-9", true), "a chat between two friends");
+        assert!(friend_chat("__dm:3", true), "the user's own notepad");
+        assert!(
+            !friend_chat("Sprint Review [a1b2c3d4]", true),
+            "a meeting room"
+        );
+        assert!(
+            !friend_chat("__dm:3-9", false),
+            "an ordinary channel that only looks like one"
+        );
+    }
+
+    #[test]
     fn a_reply_names_what_it_answers_and_is_read_back() {
         let reply = reply_html("0191-abcd", "yes &amp; no");
         assert_eq!(reply, "<!-- FANCY_QUOTE:0191-abcd -->yes &amp; no");
@@ -2711,8 +3927,45 @@ mod tests {
                 size: Some(42),
                 key: Some("k/1".to_owned()),
                 url: None,
+                mode: Some("session".to_owned()),
+                expires_at: None,
+                thumb_key: None,
+                pixels: None,
+                voice: None,
             }]
         );
+        // One shared by link, for a week, with a small copy and its size:
+        // all of it comes back out, and other clients are given the link.
+        let photo = AttachmentInfo {
+            filename: "cat.jpg".to_owned(),
+            size: Some(9),
+            key: Some("k/2".to_owned()),
+            url: Some("https://files.example/s/abc".to_owned()),
+            mode: Some("public".to_owned()),
+            expires_at: Some(1_800_000_000),
+            thumb_key: Some("k/2-small".to_owned()),
+            pixels: Some((4000, 3000)),
+            voice: None,
+        };
+        let two = format!("{message}{}", file_mark(&photo));
+        assert_eq!(attachments_in(&two).get(1), Some(&photo));
+        assert!(two.contains("shared as a file: https://files.example/s/abc"));
+        assert_eq!(kind_of("Cat.JPG").as_deref(), Some("image/jpeg"));
+        // What a server's file plugin says of itself on connecting, and a
+        // link of its own as it is reached from behind a proxy.
+        let told = br#"{"base_url":"http://10.0.0.5:64739/","session_id":7,"upload_token":"t","session_jwt":"j"}"#;
+        let plain = PluginFiles::told(told, None).expect("read");
+        assert_eq!((plain.base_url.as_str(), plain.session), ("http://10.0.0.5:64739", 7));
+        assert_eq!(plain.reached("http://10.0.0.5:64739/files/a"), "http://10.0.0.5:64739/files/a");
+        let proxied = PluginFiles::told(told, Some("https://files.example/")).expect("read");
+        assert_eq!(
+            proxied.reached("http://10.0.0.5:64739/files/a?x=1"),
+            "https://files.example/files/a?x=1"
+        );
+        assert_eq!(proxied.reached("https://elsewhere.example/a"), "https://elsewhere.example/a");
+        assert!(PluginFiles::told(br#"{"base_url":"http://x"}"#, None).is_none());
+        assert_eq!(kind_of("notes"), None);
+        assert_eq!(Reach::Password("x".to_owned()).mode(), "password");
         assert!(
             message.contains("notes &lt;1&gt;.txt"),
             "the line for other clients"
@@ -2766,9 +4019,19 @@ mod tests {
                 reject_type: Some(3),
             })),
             Some(EngineEvent::Rejected {
-                reason: "wrong password".to_owned()
+                reason: "wrong password".to_owned(),
+                wants: Wanted::Password,
             })
         );
+        // A second factor is asked for by its own kinds, and a server that
+        // gives no kind is read by its words.
+        assert_eq!(Wanted::of(Some(10), "a code is needed"), Wanted::Code);
+        assert_eq!(Wanted::of(Some(11), "that code is wrong"), Wanted::Code);
+        assert_eq!(Wanted::of(Some(4), "no"), Wanted::Password);
+        assert_eq!(Wanted::of(Some(6), "the password of the day"), Wanted::Nothing);
+        assert_eq!(Wanted::of(None, "Wrong certificate or password"), Wanted::Password);
+        assert_eq!(Wanted::of(None, "Two-factor code needed"), Wanted::Code);
+        assert_eq!(Wanted::of(None, "Server is full"), Wanted::Nothing);
         assert_eq!(
             reported(CoreEvent::CurrentChannelChanged(CurrentChannelPayload {
                 channel_id: 3

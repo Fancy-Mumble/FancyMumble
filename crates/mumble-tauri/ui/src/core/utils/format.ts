@@ -1,3 +1,4 @@
+import type { DateFormat, NumberFormat } from "@core/types";
 ﻿import type { TimeFormat } from "../types";
 
 // -- Duration / uptime ---------------------------------------------
@@ -46,7 +47,63 @@ export function formatBytes(n: number | null | undefined): string {
     v /= 1024;
     i++;
   }
-  return `${v >= 10 || Number.isInteger(v) ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
+  const digits = v >= 10 || Number.isInteger(v) ? 0 : 1;
+  // A size is under 1024 of its unit: its decimal mark is the reader's,
+  // and it is not split into thousands.
+  return `${formatNumber(digits ? v : Math.round(v), digits, false)} ${units[i]}`;
+}
+
+// -- Numbers and dates as the reader chose (Settings, Language & format) --
+
+/** The locale whose marks each number format names. */
+const NUMBER_LOCALES: Record<Exclude<NumberFormat, "auto">, string> = {
+  "comma-period": "en-US",
+  "period-comma": "de-DE",
+  "space-comma": "fr-FR",
+};
+
+let numberFormatInForce: NumberFormat = "auto";
+let dateFormatInForce: DateFormat = "auto";
+
+/**
+ * How numbers and dates are written from now on: the Language & format
+ * page's choices, set where the preferences are read and again whenever they
+ * change, so that a formatter called anywhere need not be handed them.
+ */
+export function setNumberAndDateFormat(numberFormat?: NumberFormat, dateFormat?: DateFormat): void {
+  numberFormatInForce = numberFormat ?? "auto";
+  dateFormatInForce = dateFormat ?? "auto";
+}
+
+/** `value` with `fractionDigits` places, in the number format in force. */
+export function formatNumber(value: number, fractionDigits = 0, grouping = true): string {
+  const locale = numberFormatInForce === "auto" ? undefined : NUMBER_LOCALES[numberFormatInForce];
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+    useGrouping: grouping,
+  }).format(value);
+}
+
+/**
+ * What the rule over a day of messages says of a day before yesterday: its
+ * weekday and date, the date in the date format in force. "Auto" is the
+ * short weekday, day and month the conversation has always shown.
+ */
+export function formatDayLabel(date: Date): string {
+  const weekday = date.toLocaleDateString(undefined, { weekday: "short" });
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const [d, m, y] = [pad(date.getDate()), pad(date.getMonth() + 1), String(date.getFullYear())];
+  switch (dateFormatInForce) {
+    case "dmy":
+      return `${weekday}, ${d}/${m}/${y}`;
+    case "mdy":
+      return `${weekday}, ${m}/${d}/${y}`;
+    case "ymd":
+      return `${weekday}, ${y}-${m}-${d}`;
+    default:
+      return date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  }
 }
 
 // -- Timestamp -----------------------------------------------------

@@ -8,7 +8,7 @@ import {
   savePersonalization,
   type PersonalizationData,
 } from "../personalizationStorage";
-import { THEMES, applyTheme, getCurrentTheme, type ThemeId } from "../themes";
+import { THEMES, applyColorMode, applyTheme, colorModeForTheme, getCurrentTheme, type ThemeId } from "../themes";
 import { RadioCardGroup, type RadioCardOption } from "../components/elements/RadioCardGroup";
 import BrandLogo from "../components/elements/BrandLogo";
 import {
@@ -88,6 +88,7 @@ export default function WelcomePage({ onComplete }: Readonly<{ onComplete?: () =
   const pickTheme = useCallback((id: ThemeId) => {
     setTheme(id);
     applyTheme(id); // live preview
+    applyColorMode(colorModeForTheme(id, personalizationRef.current?.colorMode ?? "system"));
   }, []);
 
   const finish = useCallback(async () => {
@@ -95,7 +96,11 @@ export default function WelcomePage({ onComplete }: Readonly<{ onComplete?: () =
     setSaving(true);
     try {
       const base = personalizationRef.current ?? (await loadPersonalization());
-      await savePersonalization({ ...base, theme });
+      // Worn now too: a theme left at its default was never picked, so
+      // nothing has applied its mode yet.
+      const colorMode = colorModeForTheme(theme, base.colorMode);
+      applyColorMode(colorMode);
+      await savePersonalization({ ...base, theme, colorMode });
       await completeSetup(mode, username.trim());
       // Generate a default certificate for TLS client auth (non-fatal).
       try {

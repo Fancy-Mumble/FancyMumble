@@ -30,6 +30,10 @@ default = ["tauri-view", "self-updater"]
 # What is left is `state/`, `audio/`, `media/` and the public `engine_api`
 # module over them; none of that names Tauri (a test in `state/host.rs` keeps
 # it so), so none of the dependencies below are built.
+# Log output: a level that can be changed while running, a terminal and a
+# file to write to, old files compressed. The Tauri application has it, and
+# so does any other view that asks: it names nothing of Tauri's.
+logs = ["dep:tracing-subscriber", "dep:zstd"]
 tauri-view = [
     "dep:tauri",
     "dep:tauri-plugin-store",
@@ -42,12 +46,12 @@ tauri-view = [
     "dep:gtk",
     "dep:webkit2gtk",
     "dep:webview2-com",
+    "dep:windows-registry",
     "dep:notify-rust",
     "dep:fancy-gamedetect",
     "dep:mimalloc",
     "dep:dns-lookup",
-    "dep:tracing-subscriber",
-    "dep:zstd",
+    "logs",
     "dep:quick-xml",
     "dep:png",
     "dep:fancy-screenshare",
@@ -238,7 +242,7 @@ webview2-com = { version = "0.38", optional = true }
 windows-core = "0.61"
 # Reading which browser owns `https`, for "open in a private window". A safe
 # wrapper rather than the raw Win32 calls: `unsafe_code` is denied here.
-windows-registry = "0.5"
+windows-registry = { version = "0.5", optional = true }
 
 # DeepFilterNet3, on top of the features the desktop block above already asks
 # for - cargo unions the matching target tables, so this adds the backend
@@ -295,6 +299,8 @@ workspace = true
 
 [dev-dependencies]
 tempfile = "3"
+# The legacy picture tests make and read an animation.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

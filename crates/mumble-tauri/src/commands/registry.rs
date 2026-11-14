@@ -121,6 +121,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::audio::probe_microphone,
         super::audio::get_capture_state,
         super::audio::get_voice_state,
+        super::audio::request_microphone,
         super::audio::enable_voice,
         super::audio::enable_voice_muted,
         super::audio::disable_voice,
@@ -282,6 +283,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::image::blur_image,
         super::image::process_background,
         super::image::write_attachment_bytes,
+        super::picked::resolve_picked_file,
         super::image::save_image_as,
         super::chat_background::pick_chat_background,
         super::chat_background::read_chat_background,
@@ -317,6 +319,7 @@ pub(crate) fn register(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
         super::window::set_window_icon,
         super::window::set_system_bar_style,
         // -- system / diagnostics --------------------------------------
+        crate::app::isolation::isolated_store_dir,
         super::system::reset_app_data,
         super::system::set_log_level,
         super::system::set_log_to_file,

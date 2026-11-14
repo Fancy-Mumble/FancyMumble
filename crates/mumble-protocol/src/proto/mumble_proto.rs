@@ -1143,6 +1143,16 @@ pub struct UserStats {
     /// Rolling packet statistics
     #[prost(message, optional, tag = "20")]
     pub rolling_stats: ::core::option::Option<user_stats::RollingStats>,
+    /// Client extension (FancyMumble): one entry per device when the user is
+    /// online from several, each a full UserStats about that device under its
+    /// own session id. Sent only to administrators; everyone else sees the
+    /// user as one.
+    #[prost(message, repeated, tag = "1000")]
+    pub devices: ::prost::alloc::vec::Vec<UserStats>,
+    /// Client extension (FancyMumble): what the owner calls this device, e.g.
+    /// "Laptop". Set on the entries in `devices`.
+    #[prost(string, optional, tag = "1001")]
+    pub device_name: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Nested message and enum types in `UserStats`.
 pub mod user_stats {

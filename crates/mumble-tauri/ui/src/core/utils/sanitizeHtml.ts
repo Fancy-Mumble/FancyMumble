@@ -21,6 +21,7 @@
  */
 
 import DOMPurify from "dompurify";
+import { padBoxes } from "./boxPadding";
 import { neutraliseRemoteMedia, styleValueFetches } from "./remoteMedia";
 
 // -- Regular expressions ------------------------------------------------
@@ -258,6 +259,16 @@ function sanitiseStyle(value: string): string {
 
 // -- Main sanitization function -----------------------------------------
 
+/** What {@link sanitizeHtml} does beyond making the markup safe. */
+export interface SanitizeOptions {
+  /**
+   * Give a box the document drew (a border or a fill) and left without
+   * padding the room `boxPadding.ts` describes. On for the surfaces that show
+   * a server's own documents: the welcome message and channel descriptions.
+   */
+  readonly padBoxes?: boolean;
+}
+
 /**
  * Sanitize untrusted HTML for safe rendering via `dangerouslySetInnerHTML`.
  *
@@ -269,9 +280,13 @@ function sanitiseStyle(value: string): string {
  *    `target="_blank"`, and `rel="noopener noreferrer"`.
  * 4. Inline `style` attributes are filtered to safe CSS properties.
  *
+ * 5. With `padBoxes`, a box the document drew without room inside gets some
+ *    ({@link padBoxes}): for a server's welcome message and a channel's
+ *    description, never for a chat message or a bio.
+ *
  * The returned string is safe to render inside an `ExternalLinkGuard`.
  */
-export function sanitizeHtml(html: string): string {
+export function sanitizeHtml(html: string, options: SanitizeOptions = {}): string {
   if (!html) return "";
 
   // A body that parses as a `<frameset>` document has no `<body>`, and
@@ -283,6 +298,7 @@ export function sanitizeHtml(html: string): string {
     }) as unknown as DocumentFragment | null) ?? document.createDocumentFragment();
 
   postProcess(fragment);
+  if (options.padBoxes === true) padBoxes(fragment);
 
   const wrapper = document.createElement("div");
   wrapper.appendChild(fragment);

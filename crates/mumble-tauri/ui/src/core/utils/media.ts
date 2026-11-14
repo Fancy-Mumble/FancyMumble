@@ -6,6 +6,8 @@
  * The server enforces `image_message_length` as the max byte length.
  */
 
+import { searchLegacyCopy, type CopyMaker } from "./legacyCopy";
+
 /** Detected media type from file. */
 export type MediaKind = "image" | "gif" | "video";
 
@@ -113,6 +115,12 @@ export interface FitOptions {
   /** A smaller box than the default, for a picture that shares the layout. */
   readonly maxWidth?: number;
   readonly maxHeight?: number;
+  /**
+   * Fit as the engine fits a legacy client's copy (`legacyCopy.ts`): a
+   * quality worth looking at before a smaller picture. Throws when nothing
+   * worth showing fits.
+   */
+  readonly legacy?: boolean;
 }
 
 /**
@@ -184,6 +192,12 @@ export async function fitDataUrl(
   // Every scale below is relative to the picture already fitted into the box.
   const srcW = naturalW * boxScale;
   const srcH = naturalH * boxScale;
+
+  if (options.legacy) {
+    const copy = await searchLegacyCopy(legacyMaker(img, srcW, srcH), budget);
+    if (copy === null) throw new Error("No copy worth showing fits.");
+    return copy;
+  }
 
   /** Render at `scale` x original dimensions with given JPEG `quality`. */
   async function tryEncode(scale: number, quality: number): Promise<string> {
@@ -434,6 +448,51 @@ async function extractVideoFrame(file: File): Promise<Blob> {
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+/**
+ * The engine's copy maker over a decoded picture fitted to `width` x
+ * `height`: what lets the page through is laid on white for a JPEG, as the
+ * engine lays it, and a PNG is worth trying at every size where the picture
+ * has transparency or few colours.
+ */
+function legacyMaker(img: HTMLImageElement, width: number, height: number): CopyMaker {
+  const draw = (scale: number, opaque: boolean) => {
+    const w = Math.max(1, Math.round(width * scale));
+    const h = Math.max(1, Math.round(height * scale));
+    const canvas = new OffscreenCanvas(w, h);
+    const ctx = canvas.getContext("2d");
+    if (ctx && opaque) {
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, w, h);
+    }
+    ctx?.drawImage(img, 0, 0, w, h);
+    return { canvas, ctx };
+  };
+  const pngEverywhere = (() => {
+    const { ctx, canvas } = draw(1, false);
+    const pixels = ctx?.getImageData(0, 0, canvas.width, canvas.height).data;
+    if (!pixels) return false;
+    const colours = new Set<number>();
+    for (let at = 0; at < pixels.length; at += 4) {
+      if (pixels[at + 3]! < 255) return true;
+      if (colours.size <= 256) colours.add((pixels[at]! << 16) | (pixels[at + 1]! << 8) | pixels[at + 2]!);
+    }
+    return colours.size <= 256;
+  })();
+  return {
+    longSide: Math.max(width, height),
+    pngEverywhere,
+    async make(scale, quality) {
+      await yieldToUI();
+      const { canvas } = draw(scale, quality !== null);
+      const blob =
+        quality === null
+          ? await canvas.convertToBlob({ type: "image/png" })
+          : await canvas.convertToBlob({ type: "image/jpeg", quality: quality / 100 });
+      return blobToDataUrl(blob);
+    },
+  };
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {

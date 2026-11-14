@@ -760,6 +760,15 @@ message UserStats {
 
 	// Rolling packet statistics
 	optional RollingStats rolling_stats = 20;
+
+	// Client extension (FancyMumble): one entry per device when the user is
+	// online from several, each a full UserStats about that device under its
+	// own session id. Sent only to administrators; everyone else sees the
+	// user as one.
+	repeated UserStats devices = 1000;
+	// Client extension (FancyMumble): what the owner calls this device, e.g.
+	// "Laptop". Set on the entries in `devices`.
+	optional string device_name = 1001;
 }
 
 // Used by the client to request binary data from the server. By default large

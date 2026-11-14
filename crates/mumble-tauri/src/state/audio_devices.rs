@@ -5,7 +5,10 @@
 //! offer the same devices and apply a change the same way.
 
 use super::AppState;
-use super::types::{AudioDevice, AudioSettings};
+use super::types::AudioSettings;
+// Only the device lists name a device, and Android has none to list.
+#[cfg(not(target_os = "android"))]
+use super::types::AudioDevice;
 use crate::audio;
 
 /// The microphones the system offers.

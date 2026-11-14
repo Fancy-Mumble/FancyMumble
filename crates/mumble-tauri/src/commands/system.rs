@@ -122,31 +122,10 @@ pub(crate) async fn reset_app_data(app: tauri::AppHandle) -> Result<(), String> 
         remove_if_present(&data_dir.join(name), false)?;
     }
 
-    for dir in &[
-        crate::state::pchat::IDENTITIES_DIR,
-        crate::state::pchat::LEGACY_CERTS_DIR,
-    ] {
-        remove_if_present(&data_dir.join(dir), true)?;
-    }
-    Ok(())
+    crate::engine_api::reset::forget_identities(&data_dir)
 }
 
-/// Delete a path, treating "it was not there" as success.
-///
-/// Checking `exists()` first and then deleting races anything that removes
-/// the path in between, and reports that race as a hard failure.
-fn remove_if_present(path: &std::path::Path, recursive: bool) -> Result<(), String> {
-    let result = if recursive {
-        std::fs::remove_dir_all(path)
-    } else {
-        std::fs::remove_file(path)
-    };
-    match result {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(format!("could not remove {}: {e}", path.display())),
-    }
-}
+use crate::engine_api::reset::remove_if_present;
 
 /// Set the taskbar badge count.
 ///

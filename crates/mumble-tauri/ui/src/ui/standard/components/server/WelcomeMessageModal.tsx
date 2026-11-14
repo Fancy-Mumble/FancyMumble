@@ -90,7 +90,7 @@ export default function WelcomeMessageModal() {
       >
         <h2 className={styles.title}>{t("welcomeModal.title", { defaultValue: "Welcome" })}</h2>
         <div className={styles.body}>
-          <SafeHtml html={html} className={styles.welcomeText} />
+          <SafeHtml html={html} className={styles.welcomeText} padBoxes />
         </div>
         {canSwitchToOnce && (
           <label className={styles.checkboxRow}>

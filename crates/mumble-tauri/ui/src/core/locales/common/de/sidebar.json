@@ -181,7 +181,9 @@
     "bandwidth": "Bandbreite",
     "labelCurrent": "Aktuell",
     "labelOnline": "Online",
-    "idle": "(inaktiv: {{duration}})"
+    "idle": "(inaktiv: {{duration}})",
+    "devices": "Geräte",
+    "deviceFallback": "Gerät {{session}}"
   },
   "superSearch": {
     "placeholder": "Kanäle, Nutzer oder Nachrichten suchen...",

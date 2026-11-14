@@ -121,6 +121,26 @@ pub(crate) fn get_voice_state(state: tauri::State<'_, AppState>) -> VoiceState {
     state.voice_state()
 }
 
+/// Make sure voice may use the microphone, asking the first time voice is
+/// wanted rather than at launch, and say whether it may. Only Android asks;
+/// everywhere else the answer is yes.
+#[tauri::command]
+pub(crate) async fn request_microphone(app: tauri::AppHandle) -> Result<bool, String> {
+    #[cfg(target_os = "android")]
+    {
+        use crate::platform::android::connection_service::{
+            ConnectionServiceHandle, request_microphone,
+        };
+        use tauri::Manager;
+        request_microphone(&app.state::<ConnectionServiceHandle>()).await
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Ok(true)
+    }
+}
+
 /// Enable voice calling for the current channel.
 /// Sends unmute/undeaf to the server.
 #[tauri::command]

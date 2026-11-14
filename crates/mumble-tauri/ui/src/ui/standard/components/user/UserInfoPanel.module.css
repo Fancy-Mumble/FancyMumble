@@ -105,3 +105,24 @@
   border-radius: 8px;
   overflow: hidden;
 }
+
+/* Devices of a multi-device account: each opens to its own sections */
+.device {
+  border-radius: 6px;
+}
+
+.device + .device {
+  margin-top: 4px;
+}
+
+.deviceSummary {
+  cursor: pointer;
+  padding: 6px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.device .section {
+  padding: 10px 4px;
+}

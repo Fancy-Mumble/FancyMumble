@@ -58,6 +58,21 @@ export function applyColorMode(mode: "system" | "light" | "dark"): void {
   else document.documentElement.setAttribute("data-color-mode", mode);
 }
 
+/**
+ * The colour mode a theme picked at setup is worn in.
+ *
+ * "Dark" and "Light" name a scheme, not a brand, so picking one has to wear it
+ * whatever the system's own scheme is - left on "system", Nebula followed the
+ * phone and "Dark" came out light. Every other theme is drawn in both schemes
+ * and keeps `fallback`, the mode already chosen.
+ */
+export function colorModeForTheme(
+  id: ThemeId,
+  fallback: "system" | "light" | "dark",
+): "system" | "light" | "dark" {
+  return id === "dark" || id === "light" ? id : fallback;
+}
+
 export function getCurrentColorMode(): "system" | "light" | "dark" {
   const value = document.documentElement.getAttribute("data-color-mode");
   return value === "light" || value === "dark" ? value : "system";

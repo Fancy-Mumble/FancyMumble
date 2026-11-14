@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use fancy_utils::html::message_preview;
-use mumble_protocol::proto::mumble_tcp;
+use mumble_protocol::proto::{fancy, mumble_tcp};
 use tracing::{debug, warn};
 
 use super::{HandleMessage, HandlerContext};
@@ -10,8 +10,9 @@ use crate::state::local_cache::{CachedReaction, LocalMessageCache};
 use crate::state::pchat;
 use crate::state::types::{
     ChatMessage, KeyHoldersChangedPayload, NewMessagePayload, PchatFetchCompletePayload,
-    PchatHistoryLoadingPayload, PinDeliverPayload, PinFetchResponsePayload, ReactionDeliverPayload,
-    ReactionFetchResponsePayload, StoredPinPayload, StoredReactionPayload, UnreadPayload,
+    PchatFetchRefusedPayload, PchatHistoryLoadingPayload, PinDeliverPayload,
+    PinFetchResponsePayload, ReactionDeliverPayload, ReactionFetchResponsePayload,
+    StoredPinPayload, StoredReactionPayload, UnreadPayload,
 };
 
 impl HandleMessage for mumble_tcp::PchatMessageDeliver {
@@ -134,6 +135,41 @@ impl HandleMessage for mumble_tcp::PchatFetchResponse {
             sender_session: None,
         }));
         ctx.send(CoreEvent::StateChanged);
+    }
+}
+
+/// A refused history page ends the wait for it, and nothing more.
+///
+/// It is not the end of the archive, so no `PchatFetchComplete` (which would
+/// say `has_more: false`). Nor is it retried here: which page was asked for
+/// is known only to the view that asked, so that view re-asks.
+impl HandleMessage for fancy::pchat::FetchRefused {
+    fn handle(&self, ctx: &HandlerContext) {
+        let refusal = self.refusal.clone().unwrap_or_default();
+        let kind = refusal_kind_name(&refusal);
+        debug!(channel = self.channel, kind, detail = %refusal.detail, "a history page was refused");
+        ctx.send(CoreEvent::PchatHistoryLoading(PchatHistoryLoadingPayload {
+            channel_id: self.channel,
+            loading: false,
+        }));
+        ctx.send(CoreEvent::PchatFetchRefused(PchatFetchRefusedPayload {
+            channel_id: self.channel,
+            kind,
+            detail: refusal.detail,
+            retry_after_ms: refusal.retry_after_ms,
+        }));
+    }
+}
+
+/// The refusal kind as the lowercase name the views switch on.
+fn refusal_kind_name(refusal: &fancy::wire::Refusal) -> &'static str {
+    use fancy::wire::refusal::Kind;
+    match Kind::try_from(refusal.kind) {
+        Ok(Kind::Permission) => "permission",
+        Ok(Kind::Limit) => "limit",
+        Ok(Kind::Invalid) => "invalid",
+        Ok(Kind::RateLimited) => "rate_limited",
+        Ok(Kind::Other) | Err(_) => "other",
     }
 }
 

@@ -75,4 +75,12 @@ export interface FancyProfile {
   contact?: string;
   /** Which optional rows the card draws. Absent keys mean "show". */
   sections?: ProfileSections;
+  /**
+   * The fields of the profile JSON this client does not know (another
+   * client's, such as the native client's `about` and `page`), kept exactly
+   * as they came. Never on the wire under this name: `serializeProfile`
+   * writes them back beside the known fields, so a round trip through this
+   * client, its local store included, does not drop them.
+   */
+  opaque?: Record<string, unknown>;
 }

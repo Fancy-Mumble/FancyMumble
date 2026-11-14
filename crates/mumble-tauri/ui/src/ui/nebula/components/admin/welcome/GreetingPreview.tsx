@@ -67,7 +67,7 @@ export function GreetingPreview({
   // plain form instead - and a preview showing headings on such a server would
   // be showing a document nobody receives.
   const html = useMemo(
-    () => (markup !== null && subject.allowHtml ? sanitizeHtml(markup) : ""),
+    () => (markup !== null && subject.allowHtml ? sanitizeHtml(markup, { padBoxes: true }) : ""),
     [markup, subject.allowHtml],
   );
 

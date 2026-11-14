@@ -90,9 +90,8 @@ import {
 import { createDownloadsSlice, downloadsInitialState, type DownloadsSlice } from "./slices/downloads";
 import { createPresenceSlice, type PresenceSlice } from "./slices/presence";
 import { createScheduledSlice, scheduledInitialState, type ScheduledSlice } from "./slices/scheduled";
-import { loadProfileData, loadServerProfileData } from "../features/settings/profileData";
+import { applySavedProfileOnConnect } from "../features/settings/ownProfile";
 import { base64ToBytes } from "../utils/base64";
-import { serializeProfile, dataUrlToBytes } from "../profileFormat";
 import { sanitiseWsUrl } from "../features/chat/livedoc/sanitiseWsUrl";
 import { addCanonEmote, fetchCanonEmotes, removeCanonEmote, watchCanonEmotes } from "../features/canonEmotes";
 import { TauriEvent } from "../constants/tauriEvents";
@@ -1463,6 +1462,15 @@ export const useAppStore = create<AppState>()((set, get, store) => ({
     try {
       // Notify backend - marks channel as read and clears DM selection.
       await invoke("select_channel", { channelId: id });
+      // A channel whose history the server keeps is read without joining it,
+      // the way the server allows (it asks Enter, not presence). The backend
+      // fetched it only on join, so opening one from the list showed "the
+      // start of" a channel with messages in it. Server-managed only: the
+      // other kept modes are sealed with keys that come with membership.
+      const opened = get().channels.find((channel) => channel.id === id);
+      if (opened?.pchat_protocol === "server_managed" && get().currentChannel !== id) {
+        await invoke("peek_pchat_channel", { channelId: id });
+      }
       await loadMessageWindow(id, LOADED_WINDOW);
     } catch (e) {
       console.error("select_channel error:", e);
@@ -3119,23 +3127,13 @@ export async function initEventListeners(navigate: (path: string) => void): Prom
             const ownUser = useAppStore.getState().users.find((u) => u.session === ownSession);
             const isRegistered = ownUser?.user_id != null && ownUser.user_id > 0;
             if (!isRegistered) {
+              // Merged over what the session already carries, so another
+              // client's profile fields are not dropped (see ownProfile.ts).
               const identityLabel = useAppStore.getState().connectedCertLabel ?? null;
               const activeServerId = useAppStore.getState().activeServerId;
-              const profileRequest = activeServerId
-                ? loadServerProfileData(activeServerId, identityLabel).then(({ data }) => data)
-                : loadProfileData(identityLabel);
-              profileRequest
-                .then(async ({ profile, bio, avatarDataUrl }) => {
-                  const comment = serializeProfile(profile, bio);
-                  if (comment) {
-                    await invoke("set_user_comment", { comment });
-                  }
-                  const texture = avatarDataUrl ? dataUrlToBytes(avatarDataUrl) : [];
-                  if (texture.length > 0) {
-                    await invoke("set_user_texture", { texture });
-                  }
-                })
-                .catch((err) => console.error("Auto-apply profile error:", err));
+              applySavedProfileOnConnect(ownSession, identityLabel, activeServerId ?? null).catch((err) =>
+                console.error("Auto-apply profile error:", err),
+              );
             }
           }
 

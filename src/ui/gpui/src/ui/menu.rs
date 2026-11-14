@@ -7,14 +7,16 @@ use gpui::{
 };
 
 use super::Shell;
-use super::kit::{Avatar, Button, Dialog, Emphasis, MenuItem, Sheet, Tone};
+use super::kit::{Avatar, Button, Dialog, Emphasis, MenuItem, Sheet, Tone, frame_radius, icon};
 use super::text_input::{InputEvent, TextInput};
-use super::widgets::label;
+use super::widgets::{EMPHASIS, label};
 use crate::engine::{
-    Action, Channel, ChannelId, Conversation, Listing, Message, Session, Subject, User,
+    Action, Channel, ChannelId, Connection, Conversation, Listing, Message, Session, Subject, User,
     WhisperTarget,
 };
+use crate::rights::{Right, Rights};
 use crate::theme::Theme;
+use crate::words::t;
 
 /// The loudness steps a user can be played at, with what each is called.
 const VOLUMES: &[(f32, &str)] = &[
@@ -41,10 +43,12 @@ pub(super) enum Command {
     Ask(Question),
     /// Choose a picture file for the local user.
     PickAvatar,
-    /// Put a message's text in the composer, to be changed.
+    /// Choose one for the head of their card.
+    PickBanner,
+    /// Put a message in the composer as it was typed, to be changed.
     Edit {
         id: SharedString,
-        text: SharedString,
+        html: SharedString,
     },
     /// Put text on the clipboard.
     Copy(SharedString),
@@ -74,15 +78,28 @@ pub(super) enum Command {
     Record(bool),
     /// Mark the saved server at this address a favourite, or not.
     Favourite(SharedString, bool),
+    /// Choose a channel to move somebody, or everybody somewhere, into.
+    MoveTo(super::mover::Moved),
+    /// Open the form a channel is made in, for one inside this channel.
+    NewChannel(ChannelId),
+    /// Put the server of a session on screen.
+    Switch(SharedString),
+    /// Change how the server at this address is saved.
+    EditServer(SharedString),
+    /// Open the share picker on its cameras.
+    ShareCamera,
+    /// Open the settings on what the user may look after first.
+    Administer,
+    /// Leave the server on screen, once asked.
+    LeaveServer,
+    /// Do something to a registered account, from its row of the Users
+    /// page.
+    Account(u32, super::admin_pages::Act),
 }
 
 /// The panels the local user's own menu opens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Panel {
-    Voice,
-    Themes,
-    Certificates,
-    Friends,
     Settings,
     /// The messages waiting to be sent later.
     Later,
@@ -93,15 +110,6 @@ pub(super) enum Panel {
 pub(super) enum Question {
     KickReason(Session),
     BanReason(Session),
-    NewChannel(ChannelId),
-    /// A channel whose messages the server keeps.
-    NewChannelWithHistory(ChannelId),
-    /// A channel whose messages are kept sealed from the server.
-    NewEncryptedChannel(ChannelId),
-    /// A channel sealed the Signal way.
-    NewSignalChannel(ChannelId),
-    /// A channel that lasts while somebody is in it.
-    NewTemporaryChannel(ChannelId),
     /// Whether to delete everything the server keeps of a channel,
     PurgeChannel(ChannelId),
     /// or what one user said in it.
@@ -110,10 +118,6 @@ pub(super) enum Question {
     DeleteChannel(ChannelId),
     JoinPassword(ChannelId),
     Comment,
-    /// What a registered account is to be called.
-    RenameRegistered(u32),
-    /// The group a new rule of a channel's permissions is for.
-    AclGroup(ChannelId),
     /// What is said about a channel, and the password it is entered with.
     DescribeChannel(ChannelId),
     ChannelPassword(ChannelId),
@@ -122,6 +126,13 @@ pub(super) enum Question {
     NewPollSeveral(ChannelId),
     /// When the server is to send what is in the composer to a channel.
     SendLater(ChannelId),
+    /// Whether to leave the server: a press beside the others on the rail
+    /// is easily one that was not meant.
+    Leave,
+    /// Whether to give whoever is on this session an account here.
+    Register(Session),
+    /// Whether to take this account away, with what the server keeps for it.
+    Deregister(u32),
 }
 
 impl Question {
@@ -131,25 +142,6 @@ impl Question {
         match self {
             Self::KickReason(_) => ("Kick", Some("Reason, if you want to give one"), "Kick"),
             Self::BanReason(_) => ("Ban", Some("Reason, if you want to give one"), "Ban"),
-            Self::NewChannel(_) => ("New channel", Some("Name"), "Create"),
-            Self::NewChannelWithHistory(_) => (
-                "New channel that keeps its messages",
-                Some("Name"),
-                "Create",
-            ),
-            Self::NewEncryptedChannel(_) => (
-                "New channel that keeps its messages, encrypted",
-                Some("Name"),
-                "Create",
-            ),
-            Self::NewSignalChannel(_) => {
-                ("New channel, sealed the Signal way", Some("Name"), "Create")
-            }
-            Self::NewTemporaryChannel(_) => (
-                "New channel, gone when the last one leaves",
-                Some("Name"),
-                "Create",
-            ),
             Self::PurgeChannel(_) => (
                 "Delete every message kept of this channel, for everyone?",
                 None,
@@ -164,12 +156,6 @@ impl Question {
             Self::DeleteChannel(_) => ("Delete this channel and everything in it?", None, "Delete"),
             Self::JoinPassword(_) => ("Join with a password", Some("Password"), "Join"),
             Self::Comment => ("Your comment", Some("What others read about you"), "Save"),
-            Self::RenameRegistered(_) => ("Rename this account", Some("Name"), "Rename"),
-            Self::AclGroup(_) => (
-                "A rule for which group?",
-                Some("all, auth, in, sub, admin, or a group of this channel"),
-                "Add",
-            ),
             Self::DescribeChannel(_) => (
                 "About this channel",
                 Some("What it is for (Shift+Enter for a new line)"),
@@ -179,6 +165,17 @@ impl Question {
                 "Channel password",
                 Some("Leave empty to let anybody in"),
                 "Set",
+            ),
+            Self::Leave => ("Leave this server?", None, "Leave"),
+            Self::Register(_) => (
+                "Give them an account on this server? Their name is then theirs alone here.",
+                None,
+                "Register",
+            ),
+            Self::Deregister(_) => (
+                "Take their account away? What the server keeps for it goes with it.",
+                None,
+                "Deregister",
             ),
             Self::SendLater(_) => (
                 "Send what is written, later",
@@ -215,6 +212,7 @@ impl Question {
                 | Self::DeleteChannel(_)
                 | Self::PurgeChannel(_)
                 | Self::PurgeSender(..)
+                | Self::Deregister(_)
         )
     }
 
@@ -231,38 +229,14 @@ impl Question {
                 session,
                 reason: text,
             },
-            Self::NewChannel(parent) => Action::CreateChannel {
-                parent,
-                name: Some(text).filter(|name| !name.is_empty())?,
-                history: false,
-                encrypted: false,
-            },
-            Self::NewChannelWithHistory(parent) => Action::CreateChannel {
-                parent,
-                name: Some(text).filter(|name| !name.is_empty())?,
-                history: true,
-                encrypted: false,
-            },
-            Self::NewEncryptedChannel(parent) => Action::CreateChannel {
-                parent,
-                name: Some(text).filter(|name| !name.is_empty())?,
-                history: true,
-                encrypted: true,
-            },
-            Self::NewSignalChannel(parent) => Action::CreateSignalChannel {
-                parent,
-                name: Some(text).filter(|name| !name.is_empty())?,
-            },
             Self::RenameChannel(channel) => Action::RenameChannel {
                 channel,
                 name: Some(text).filter(|name| !name.is_empty())?,
             },
             Self::DeleteChannel(channel) => Action::DeleteChannel { channel },
-            Self::NewTemporaryChannel(parent) => Action::CreateTemporaryChannel {
-                parent,
-                name: Some(text).filter(|name| !name.is_empty())?,
-            },
             Self::PurgeChannel(channel) => Action::Purge { channel, by: None },
+            Self::Register(session) => Action::Register { session },
+            Self::Deregister(id) => Action::Unregister { id },
             Self::PurgeSender(channel, session) => Action::Purge {
                 channel,
                 by: Some(session),
@@ -272,12 +246,8 @@ impl Question {
                 password: answer.to_owned(),
             },
             Self::Comment => Action::SetComment(text),
-            Self::RenameRegistered(id) => Action::RenameRegistered {
-                id,
-                name: Some(text).filter(|name| !name.is_empty())?,
-            },
             // Answered into the permissions panel, not to the server.
-            Self::AclGroup(_) | Self::SendLater(_) => return None,
+            Self::SendLater(_) | Self::Leave => return None,
             Self::DescribeChannel(channel) => Action::DescribeChannel { channel, text },
             Self::ChannelPassword(channel) => Action::SetChannelPassword {
                 channel,
@@ -316,19 +286,68 @@ pub(super) struct Item {
     pub danger: bool,
     /// Drawn with a tick: the state it would set is the one in force.
     pub ticked: bool,
+    /// The glyph it leads with, in the sheet over the dock.
+    pub icon: Option<&'static str>,
+    /// A line under its name, saying what it does.
+    pub hint: Option<SharedString>,
+    /// A switch at its end, showing the state it changes, in place of a
+    /// tick.
+    pub switch: Option<bool>,
+    /// A chevron at its end: it opens somewhere else.
+    pub chevron: bool,
+    /// A rule above it, between it and the cluster before.
+    pub rule: bool,
+    /// What the tests call it, where its name is not that.
+    pub selector: Option<SharedString>,
 }
 
 impl Item {
-    fn new(name: &str, command: Command) -> Self {
+    pub(super) fn new(name: &str, command: Command) -> Self {
         Self {
             name: name.to_owned().into(),
             command,
             danger: false,
             ticked: false,
+            icon: None,
+            hint: None,
+            switch: None,
+            chevron: false,
+            rule: false,
+            selector: None,
         }
     }
 
-    fn danger(mut self) -> Self {
+    fn icon(mut self, glyph: &'static str) -> Self {
+        self.icon = Some(glyph);
+        self
+    }
+
+    fn hint(mut self, hint: SharedString) -> Self {
+        self.hint = Some(hint);
+        self
+    }
+
+    fn switch(mut self, on: bool) -> Self {
+        self.switch = Some(on);
+        self
+    }
+
+    fn chevron(mut self) -> Self {
+        self.chevron = true;
+        self
+    }
+
+    fn rule(mut self, rule: bool) -> Self {
+        self.rule = rule;
+        self
+    }
+
+    pub(super) fn selector(mut self, selector: &str) -> Self {
+        self.selector = Some(selector.to_owned().into());
+        self
+    }
+
+    pub(super) fn danger(mut self) -> Self {
         self.danger = true;
         self
     }
@@ -348,6 +367,11 @@ pub(super) struct Menu {
     /// Entries drawn side by side above the others: the quick reactions.
     /// Counted after `items` by [`Shell::choose`].
     pub quick: Vec<Item>,
+    /// A head over the entries: a name, and a line under it.
+    pub head: Option<(SharedString, SharedString)>,
+    /// Where the menu is a sheet grown out of something: as wide as it, and
+    /// standing on its top edge, as the web UI's sheet over the dock does.
+    pub over: Option<gpui::Bounds<Pixels>>,
 }
 
 /// The emoji a message's menu offers at a click.
@@ -365,6 +389,7 @@ pub(super) fn message_items(
     channel: Option<ChannelId>,
     fancy: bool,
     kept: bool,
+    moderates: bool,
 ) -> (Vec<Item>, Vec<Item>) {
     let mut items = vec![Item::new("Copy text", Command::Copy(message.body.clone()))];
     // A reply names a message by its id, which only a Fancy server gives.
@@ -411,7 +436,7 @@ pub(super) fn message_items(
             }),
         ));
     }
-    if kept {
+    if moderates {
         // The way to more than one at a time: to delete them together.
         items.push(Item::new("Select…", Command::Select(index)));
     }
@@ -420,23 +445,58 @@ pub(super) fn message_items(
             "Edit",
             Command::Edit {
                 id: id.clone(),
-                text: message.body.clone(),
+                html: message.html.clone(),
             },
         ));
-        if kept {
-            items.push(
-                Item::new(
-                    "Delete",
-                    Command::Do(Action::DeleteMessage {
-                        channel,
-                        id: id.to_string(),
-                    }),
-                )
-                .danger(),
-            );
-        }
+    }
+    // One's own is one's own to take back wherever it landed; anybody
+    // else's takes the right to.
+    if message.own || moderates {
+        items.push(
+            Item::new(
+                "Delete",
+                Command::Do(Action::DeleteMessage {
+                    channel,
+                    id: id.to_string(),
+                }),
+            )
+            .danger(),
+        );
     }
     (items, quick)
+}
+
+impl Shell {
+    /// Open the menu of what can be done with, or to, the user `session`,
+    /// at `at`. It is the same menu wherever somebody is right-clicked: the
+    /// channel list, the member panel, beside a message.
+    pub(super) fn open_user_menu(
+        &mut self,
+        session: Session,
+        at: Point<Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(user) = self.snapshot.users.iter().find(|u| u.session == session) else {
+            return;
+        };
+        let mut items = user_items(
+            user,
+            self.snapshot.own_session,
+            self.snapshot.current_channel,
+            self.volumes.get(&session).copied().unwrap_or(1.0),
+            self.whisper_target(),
+            user.hash.as_ref().is_some_and(|hash| self.is_friend(hash)),
+            Over::of(user, &self.snapshot.channels),
+        );
+        let open = match self.open {
+            Some(Conversation::Channel(id)) => self.snapshot.channels.iter().find(|c| c.id == id),
+            _ => None,
+        };
+        if self.snapshot.own_session != Some(session) {
+            items.extend(purge_item(user, open));
+        }
+        self.open_menu(at, items, cx);
+    }
 }
 
 /// The entries for a right click on `user`.
@@ -450,28 +510,40 @@ pub(super) fn user_items(
     volume: f32,
     whispered_to: Option<WhisperTarget>,
     friend: bool,
+    over: Over,
 ) -> Vec<Item> {
     let session = user.session;
     if own == Some(session) {
-        return vec![
+        let mut items = vec![
             Item::new("Set comment…", Command::Ask(Question::Comment)),
             Item::new("Change picture…", Command::PickAvatar),
             Item::new("Remove picture", Command::Do(Action::SetAvatar(Vec::new()))),
-            Item::new(
+            Item::new("Change banner…", Command::PickBanner),
+            Item::new("Remove banner", Command::Do(Action::SetBanner(Vec::new()))),
+        ];
+        // Where the server lets people register themselves, and they have not.
+        if user.account.is_none() && over.root.has(Right::SELF_REGISTER) {
+            items.push(Item::new(
                 "Register on this server",
                 Command::Do(Action::Register { session }),
-            ),
-        ];
+            ));
+        }
+        return items;
     }
     let mut items = vec![
         Item::new("Message", Command::Open(Conversation::Direct(session))),
-        Item::new("View comment", Command::About(Subject::User(session))),
+        // What the server knows of them; their card is a click on them.
+        Item::new("User information", Command::About(Subject::User(session))),
         Item::new(
             "Whisper with the whisper key",
             Command::Whisper(WhisperTarget::User(session), user.name.clone()),
         )
         .ticked(whispered_to == Some(WhisperTarget::User(session))),
     ];
+    // Where they are, for whoever is somewhere else.
+    if own_channel.is_some_and(|channel| channel != user.channel) {
+        items.push(Item::new("Join their channel", Command::Join(user.channel)));
+    }
     // Somebody with a certificate can be found again on any server.
     if user.hash.is_some() {
         items.push(if friend {
@@ -483,13 +555,73 @@ pub(super) fn user_items(
     items.extend(VOLUMES.iter().map(|(level, name)| {
         Item::new(name, Command::Volume(session, *level)).ticked((volume - level).abs() < 0.01)
     }));
-    if let Some(channel) = own_channel.filter(|channel| *channel != user.channel) {
+    items.extend(moderation(user, own_channel, over));
+    items
+}
+
+/// What the server lets the local user do to somebody else: nothing it
+/// would refuse is offered. Muting and moving are decided by the channel
+/// they are in, the rest by the root.
+fn moderation(user: &User, own_channel: Option<ChannelId>, over: Over) -> Vec<Item> {
+    let session = user.session;
+    let mut items = Vec::new();
+    let elsewhere = own_channel.filter(|channel| *channel != user.channel);
+    if let Some(channel) = elsewhere.filter(|_| over.there.has(Right::MOVE)) {
         items.push(Item::new(
             "Move to my channel",
             Command::Do(Action::MoveUser { session, channel }),
         ));
     }
-    items.extend([
+    if over.there.has(Right::MOVE) {
+        items.push(Item::new(
+            "Move to…",
+            Command::MoveTo(super::mover::Moved::User(session)),
+        ));
+    }
+    if over.there.has(Right::MUTE_DEAFEN) {
+        items.extend(voice_moderation(user));
+    }
+    // An account is given, or taken away with everything the server keeps
+    // for it: asked about first either way. The first account is the
+    // server's own, and is not anybody's to take away.
+    match user.account {
+        None if over.root.has(Right::REGISTER) => {
+            items.push(Item::new(
+                "Register…",
+                Command::Ask(Question::Register(session)),
+            ));
+        }
+        Some(account) if over.root.has(Right::REGISTER) && account != 0 => {
+            items.push(
+                Item::new("Deregister…", Command::Ask(Question::Deregister(account))).danger(),
+            );
+        }
+        _ => {}
+    }
+    if over.root.has(Right::RESET_CONTENT) {
+        items.push(Item::new(
+            "Reset their comment",
+            Command::Do(Action::ResetComment { session }),
+        ));
+        items.push(Item::new(
+            "Remove their picture",
+            Command::Do(Action::RemovePicture { session }),
+        ));
+    }
+    if over.root.has(Right::KICK) {
+        items.push(Item::new("Kick…", Command::Ask(Question::KickReason(session))).danger());
+    }
+    if over.root.has(Right::BAN) {
+        items.push(Item::new("Ban…", Command::Ask(Question::BanReason(session))).danger());
+    }
+    items
+}
+
+/// Raising somebody over the others, and muting or deafening them for
+/// everybody.
+fn voice_moderation(user: &User) -> [Item; 3] {
+    let session = user.session;
+    [
         Item::new(
             "Priority speaker",
             Command::Do(Action::PrioritySpeaker {
@@ -498,41 +630,58 @@ pub(super) fn user_items(
             }),
         )
         .ticked(user.priority),
+        // What the server did, the server can undo. Somebody who muted
+        // themselves is not unmuted by anybody else.
         Item::new(
-            if user.muted {
+            if user.server_muted {
                 "Unmute for everyone"
             } else {
                 "Mute for everyone"
             },
             Command::Do(Action::ServerMute {
                 session,
-                muted: !user.muted,
+                muted: !user.server_muted,
             }),
         ),
         Item::new(
-            if user.deafened {
+            if user.server_deafened {
                 "Undeafen for everyone"
             } else {
                 "Deafen for everyone"
             },
             Command::Do(Action::ServerDeafen {
                 session,
-                deafened: !user.deafened,
+                deafened: !user.server_deafened,
             }),
         ),
-        Item::new("Register", Command::Do(Action::Register { session })),
-        Item::new(
-            "Reset their comment",
-            Command::Do(Action::ResetComment { session }),
-        ),
-        Item::new(
-            "Remove their picture",
-            Command::Do(Action::RemovePicture { session }),
-        ),
-        Item::new("Kick…", Command::Ask(Question::KickReason(session))).danger(),
-        Item::new("Ban…", Command::Ask(Question::BanReason(session))).danger(),
-    ]);
-    items
+    ]
+}
+
+/// What the server lets the local user do to somebody: by the channel
+/// they are in, and by the root for what is the whole server's.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Over {
+    /// In the channel they are in.
+    pub(super) there: Rights,
+    /// At the root.
+    pub(super) root: Rights,
+}
+
+impl Over {
+    /// What the local user may do to `user`, by what `channels` say.
+    pub(super) fn of(user: &User, channels: &[Channel]) -> Self {
+        let rights = |wanted: &dyn Fn(&Channel) -> bool| {
+            channels
+                .iter()
+                .find(|channel| wanted(channel))
+                .map(|channel| channel.rights)
+                .unwrap_or_default()
+        };
+        Self {
+            there: rights(&|channel| channel.id == user.channel),
+            root: rights(&|channel| channel.parent.is_none()),
+        }
+    }
 }
 
 /// The entries for a right click on `channel`. `fancy` is whether the
@@ -545,12 +694,16 @@ pub(super) fn channel_items(
 ) -> Vec<Item> {
     let id = channel.id;
     let mut items = vec![Item::new("Open", Command::Open(Conversation::Channel(id)))];
+    let rights = channel.rights;
     if own_channel != Some(id) {
         items.push(Item::new("Join", Command::Join(id)));
-        items.push(Item::new(
-            "Join with a password…",
-            Command::Ask(Question::JoinPassword(id)),
-        ));
+        // A room marked as behind a password asks for it by itself.
+        if !channel.restricted {
+            items.push(Item::new(
+                "Join with a password…",
+                Command::Ask(Question::JoinPassword(id)),
+            ));
+        }
     }
     if own_channel != Some(id) {
         items.push(
@@ -575,30 +728,19 @@ pub(super) fn channel_items(
         "About this channel",
         Command::About(Subject::Channel(id)),
     ));
-    items.push(Item::new(
-        "New channel inside…",
-        Command::Ask(Question::NewChannel(id)),
-    ));
-    items.push(Item::new(
-        "New temporary channel inside…",
-        Command::Ask(Question::NewTemporaryChannel(id)),
-    ));
+    // One form makes a channel of any kind; what it offers follows what
+    // may be made here.
+    if rights.has(Right::MAKE_CHANNEL) || rights.has(Right::MAKE_TEMPORARY) {
+        items.push(Item::new("New channel inside…", Command::NewChannel(id)));
+    }
     // Everybody in the user's own channel can be brought along.
-    if let Some(from) = own_channel.filter(|own| *own != id) {
+    if let Some(from) = own_channel.filter(|own| *own != id && rights.has(Right::MOVE)) {
         items.push(Item::new(
             "Move everyone with me here",
             Command::Do(Action::MoveEveryone { from, to: id }),
         ));
     }
     if fancy {
-        items.push(Item::new(
-            "New channel with history inside…",
-            Command::Ask(Question::NewChannelWithHistory(id)),
-        ));
-        items.push(Item::new(
-            "New encrypted channel inside…",
-            Command::Ask(Question::NewEncryptedChannel(id)),
-        ));
         items.push(Item::new(
             "New poll: choose one…",
             Command::Ask(Question::NewPoll(id)),
@@ -608,20 +750,34 @@ pub(super) fn channel_items(
             Command::Ask(Question::NewPollSeveral(id)),
         ));
     }
-    items.push(Item::new(
-        "Rename…",
-        Command::Ask(Question::RenameChannel(id)),
-    ));
-    items.push(Item::new(
-        "Describe…",
-        Command::Ask(Question::DescribeChannel(id)),
-    ));
-    items.push(Item::new(
-        "Set a password…",
-        Command::Ask(Question::ChannelPassword(id)),
-    ));
-    items.push(Item::new("Permissions…", Command::Permissions(id)));
-    if channel.history {
+    if rights.has(Right::MOVE) {
+        items.push(Item::new(
+            "Move everyone in here to…",
+            Command::MoveTo(super::mover::Moved::Everyone(id)),
+        ));
+    }
+    items.extend(administration(channel));
+    items
+}
+
+/// The entries that change `channel` itself, for whoever the server lets.
+fn administration(channel: &Channel) -> Vec<Item> {
+    let id = channel.id;
+    let mut items = Vec::new();
+    // Offered until the server has said otherwise, as the web UI does: a
+    // refusal then explains itself, where a missing entry would not.
+    if channel.rights.may(Right::WRITE) {
+        items.extend([
+            Item::new("Rename…", Command::Ask(Question::RenameChannel(id))),
+            Item::new("Describe…", Command::Ask(Question::DescribeChannel(id))),
+            Item::new(
+                "Set a password…",
+                Command::Ask(Question::ChannelPassword(id)),
+            ),
+            Item::new("Permissions…", Command::Permissions(id)),
+        ]);
+    }
+    if channel.moderated() {
         items.push(
             Item::new(
                 "Delete all messages…",
@@ -631,26 +787,50 @@ pub(super) fn channel_items(
         );
     }
     // The root cannot be deleted; a server would only refuse.
-    if channel.parent.is_some() {
+    if channel.parent.is_some() && channel.rights.has(Right::WRITE) {
         items.push(Item::new("Delete…", Command::Ask(Question::DeleteChannel(id))).danger());
     }
     items
 }
 
 /// The entries for a right click on a server's tile on the rail.
-/// `showing` is whether it is the server on screen.
-pub(super) fn session_items(id: &SharedString, showing: bool) -> Vec<Item> {
+/// `showing` is what the user may do at its root, if it is the server on
+/// screen: the lists are offered to whoever may read them. `saved` is its
+/// address and whether it is a favourite, if it is a saved server.
+pub(super) fn session_items(
+    id: &SharedString,
+    showing: Option<Rights>,
+    saved: Option<(&SharedString, bool)>,
+) -> Vec<Item> {
     let mut items = Vec::new();
-    if showing {
+    if showing.is_none() {
+        items.push(Item::new("Switch to", Command::Switch(id.clone())));
+    }
+    if let Some(root) = showing {
         items.push(Item::new(
             "Server information",
             Command::About(Subject::Server),
         ));
-        items.push(Item::new("Bans…", Command::Admin(Listing::Bans)));
-        items.push(Item::new(
-            "Registered users…",
-            Command::Admin(Listing::Registered),
-        ));
+        if root.has(Right::BAN) {
+            items.push(Item::new("Bans…", Command::Admin(Listing::Bans)));
+        }
+        if root.has(Right::REGISTER) {
+            items.push(Item::new(
+                "Registered users…",
+                Command::Admin(Listing::Registered),
+            ));
+        }
+    }
+    // What is known of it as a saved server, where it is one.
+    if let Some((key, favorite)) = saved {
+        items.extend([
+            Item::new("Favourite", Command::Favourite(key.clone(), !favorite)).ticked(favorite),
+            Item::new(
+                "Copy address",
+                Command::Copy(format!("mumble://{key}").into()),
+            ),
+            Item::new("Edit…", Command::EditServer(key.clone())),
+        ]);
     }
     items.push(Item::new("Disconnect", Command::Leave(id.clone())).danger());
     items
@@ -660,7 +840,7 @@ pub(super) fn session_items(id: &SharedString, showing: bool) -> Vec<Item> {
 /// the server keeps that channel's messages and knows the user by a
 /// certificate.
 pub(super) fn purge_item(user: &User, open: Option<&Channel>) -> Option<Item> {
-    let channel = open.filter(|channel| channel.history && user.hash.is_some())?;
+    let channel = open.filter(|channel| channel.moderated() && user.hash.is_some())?;
     Some(
         Item::new(
             "Delete their messages here…",
@@ -686,20 +866,81 @@ pub(super) fn saved_server_items(key: &str, host: &str, port: u16, favorite: boo
     ]
 }
 
-/// The entries of the local user's own menu, on their tile: the view's
-/// settings, and what there is to change about themselves.
-pub(super) fn own_items(hide_empty: bool, recording: bool) -> Vec<Item> {
-    vec![
-        Item::new("Hide empty channels", Command::HideEmpty(!hide_empty)).ticked(hide_empty),
-        Item::new("Record what is heard…", Command::Record(!recording)).ticked(recording),
-        Item::new("Settings…", Command::Panel(Panel::Settings)),
-        Item::new("Voice settings…", Command::Panel(Panel::Voice)),
-        Item::new("Themes…", Command::Panel(Panel::Themes)),
-        Item::new("Certificates…", Command::Panel(Panel::Certificates)),
-        Item::new("Friends…", Command::Panel(Panel::Friends)),
-        Item::new("Change picture…", Command::PickAvatar),
-        Item::new("Change comment…", Command::Ask(Question::Comment)),
-    ]
+impl Shell {
+    /// The sheet over the user's own dock, as the web UI's `VoiceDock` has
+    /// it: the server's head; the camera; the column's filter, the settings
+    /// and what the user may look after; recording; and the way off the
+    /// server.
+    pub(super) fn own_sheet(&self) -> (Vec<Item>, (SharedString, SharedString)) {
+        let connected = self.snapshot.connection == Connection::Connected;
+        let in_channel = connected && self.snapshot.current_channel.is_some();
+        let hidden = self.chrome.hide_empty;
+        let recording = self.engine.is_recording();
+        let mut items = Vec::new();
+        // Only where there is a channel to show it in.
+        if in_channel {
+            items.push(Item::new(&t!("Share your camera"), Command::ShareCamera).icon("webcam"));
+        }
+        items.push(
+            Item::new(&t!("Hide empty channels"), Command::HideEmpty(!hidden))
+                .icon("user-x")
+                .hint(t!("Channels you can't post in stay collapsed"))
+                .switch(hidden)
+                .rule(in_channel),
+        );
+        items.push(
+            Item::new(&t!("Settings"), Command::Panel(Panel::Settings))
+                .icon("settings")
+                .chevron(),
+        );
+        if self.may_administer() {
+            items.push(
+                Item::new(&t!("Server admin"), Command::Administer)
+                    .icon("shield")
+                    .chevron(),
+            );
+        }
+        // The web UI offers it in developer mode; here it is always there,
+        // where the web UI puts it.
+        let record = if recording {
+            Item::new(&t!("Recording"), Command::Record(false)).danger()
+        } else {
+            Item::new(&t!("Record audio"), Command::Record(true))
+        };
+        items.push(record.icon("circle-dot").selector("menu-record"));
+        if connected {
+            items.push(
+                Item::new(&t!("Leave server"), Command::LeaveServer)
+                    .icon("log-out")
+                    .danger()
+                    .rule(true),
+            );
+        }
+        let server = self
+            .snapshot
+            .sessions
+            .iter()
+            .find(|session| session.active)
+            .map(|session| session.name.clone())
+            .unwrap_or_default();
+        (items, (server, t!("Server & app options")))
+    }
+
+    /// Open the sheet over the user's own dock.
+    pub(super) fn open_own_sheet(&mut self, cx: &mut Context<Self>) {
+        let Some(over) = self.chrome.dock.get() else {
+            return;
+        };
+        let (items, head) = self.own_sheet();
+        self.menu = Some(Menu {
+            at: over.origin,
+            items,
+            quick: Vec::new(),
+            head: Some(head),
+            over: Some(over),
+        });
+        cx.notify();
+    }
 }
 
 /// What else there is to put in a message, beside the composer's paperclip:
@@ -729,6 +970,8 @@ pub(super) struct Prompt {
     question: Question,
     /// The field, for a question that wants more than a yes.
     input: Option<Entity<TextInput>>,
+    /// What whoever answers ought to know first.
+    pub(super) caution: Option<SharedString>,
     _subscription: Option<Subscription>,
 }
 
@@ -744,30 +987,6 @@ impl Prompt {
 
 /// The largest picture file this will read, before it is scaled down.
 const MAX_PICTURE_FILE: u64 = 20 * 1024 * 1024;
-/// The side a picture is scaled to fit: what avatars are drawn at, twice
-/// over, and small enough for a server's size limit on pictures.
-const AVATAR_SIDE: u32 = 256;
-
-/// An avatar made from an image file's bytes: scaled to fit
-/// [`AVATAR_SIDE`] and encoded as JPEG, which keeps it under the size a
-/// stock server accepts.
-pub(super) fn avatar_from(file: &[u8]) -> Result<Vec<u8>, String> {
-    let picture = image::load_from_memory(file)
-        .map_err(|error| format!("That file is not a picture this can read: {error}"))?;
-    let scaled = picture
-        .resize(
-            AVATAR_SIDE,
-            AVATAR_SIDE,
-            image::imageops::FilterType::Triangle,
-        )
-        .into_rgb8();
-    let mut encoded = Vec::new();
-    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut encoded, 85)
-        .encode_image(&scaled)
-        .map_err(|error| format!("The picture could not be encoded: {error}"))?;
-    Ok(encoded)
-}
-
 impl Shell {
     pub(super) fn open_menu(
         &mut self,
@@ -779,6 +998,8 @@ impl Shell {
             at,
             items,
             quick: Vec::new(),
+            head: None,
+            over: None,
         });
         cx.notify();
     }
@@ -800,20 +1021,10 @@ impl Shell {
             self.snapshot.fancy,
             self.whisper_target(),
         );
-        // Offered beside the other encrypted kind, where the library that
-        // does the sealing is installed.
-        let beside = items
-            .iter()
-            .position(|item| item.name.as_ref() == "New encrypted channel inside…");
-        if let Some(beside) = beside.filter(|_| self.engine.signal_available()) {
-            items.insert(
-                beside + 1,
-                Item::new(
-                    "New Signal-sealed channel inside…",
-                    Command::Ask(Question::NewSignalChannel(id)),
-                ),
-            );
-        }
+        // About the list, not this channel, and so the last of them: where
+        // the web UI's channel menu has it too.
+        let hidden = self.chrome.hide_empty;
+        items.push(Item::new("Hide empty channels", Command::HideEmpty(!hidden)).ticked(hidden));
         self.open_menu(at, items, cx);
     }
 
@@ -823,22 +1034,38 @@ impl Shell {
         index: usize,
         cx: &mut Context<Self>,
     ) {
-        let Some(message) = self.messages.get(index) else {
+        let Some((items, quick)) = self.message_entries(index) else {
             return;
         };
+        self.menu = Some(Menu {
+            at,
+            items,
+            quick,
+            head: None,
+            over: None,
+        });
+        cx.notify();
+    }
+
+    /// What may be done to the message at `index` of the open
+    /// conversation: the entries of its menu, and the quick reactions.
+    pub(super) fn message_entries(&self, index: usize) -> Option<(Vec<Item>, Vec<Item>)> {
+        let message = self.messages.get(index)?;
         let channel = match self.open {
             Some(Conversation::Channel(channel)) => Some(channel),
             _ => None,
         };
-        let kept = channel.is_some_and(|id| {
-            self.snapshot
-                .channels
-                .iter()
-                .any(|known| known.id == id && known.history)
-        });
-        let (items, quick) = message_items(message, index, channel, self.snapshot.fancy, kept);
-        self.menu = Some(Menu { at, items, quick });
-        cx.notify();
+        let known = channel.and_then(|id| self.snapshot.channels.iter().find(|c| c.id == id));
+        let kept = known.is_some_and(|channel| channel.history);
+        let moderates = known.is_some_and(Channel::moderated);
+        Some(message_items(
+            message,
+            index,
+            channel,
+            self.snapshot.fancy,
+            kept,
+            moderates,
+        ))
     }
 
     /// The description asked for when its editor opened has arrived: put
@@ -878,79 +1105,107 @@ impl Shell {
         }) else {
             return;
         };
-        match item.command {
+        self.run(item.command, window, cx);
+    }
+
+    /// Do what `command` says: a menu's entry, or a button that stands for
+    /// one.
+    pub(super) fn run(&mut self, command: Command, window: &mut Window, cx: &mut Context<Self>) {
+        match command {
             Command::Do(action) => self.engine.act(action),
             Command::Open(conversation) => self.open_conversation(conversation, cx),
             Command::Join(channel) => {
-                self.engine.join_channel(channel);
-                self.open_conversation(Conversation::Channel(channel), cx);
+                let _ = self.enter(channel, window, cx);
             }
-            Command::Volume(session, volume) => {
-                let _ = self.volumes.insert(session, volume);
-                self.engine.act(Action::SetUserVolume { session, volume });
+            Command::Volume(session, volume) => self.set_volume(session, volume, cx),
+            Command::About(subject) => {
+                self.show_about(subject, cx);
+                if let Some(info) = self.info.as_mut() {
+                    info.sheet = true;
+                }
             }
-            Command::About(subject) => self.show_about(subject, cx),
             Command::Ask(question) => self.ask(question, window, cx),
             Command::PickAvatar => self.pick_avatar(cx),
-            Command::Edit { id, text } => self.start_editing(id, text.as_ref(), window, cx),
+            Command::PickBanner => self.pick_banner(cx),
+            Command::Edit { id, html } => {
+                // As it was typed, marks and all: starting from the bare
+                // words would send it back without its emphasis.
+                // One held without its pictures is changed as it is whole.
+                let whole = self
+                    .open
+                    .filter(|_| crate::away::is_light(&html))
+                    .and_then(|open| self.engine.whole(open, &id));
+                let typed = self.engine.source(whole.as_deref().unwrap_or(&html));
+                self.start_editing(id, &typed, window, cx);
+            }
             Command::Leave(session) => self.engine.leave_session(&session),
             Command::Permissions(channel) => self.open_acl(channel, cx),
             Command::Whisper(target, name) => self.toggle_whisper_target(target, name, cx),
             Command::Admin(listing) => self.open_admin(listing, cx),
             Command::Friend(session, keep) => self.set_friend(session, keep, cx),
             Command::Favourite(key, favorite) => self.set_favourite(&key, favorite, cx),
+            Command::MoveTo(moved) => self.ask_where_to_move(moved, window, cx),
+            Command::NewChannel(parent) => self.open_channel_form(parent, window, cx),
+            Command::Switch(session) => {
+                self.adding_server = false;
+                self.engine.activate_session(&session);
+            }
+            Command::ShareCamera => {
+                self.open_share_picker(cx);
+                if let Some(picker) = self.stage.picker.as_mut() {
+                    picker.tab = crate::share::SourceKind::Device;
+                }
+            }
+            Command::Administer => self.administer(cx),
+            Command::Account(id, act) => self.act_on_account(id, act, window, cx),
+            Command::LeaveServer => self.ask_to_leave(window, cx),
+            Command::EditServer(key) => {
+                let saved = self
+                    .servers
+                    .iter()
+                    .find(|server| format!("{}:{}", server.host, server.port) == key.as_ref())
+                    .cloned();
+                if saved.is_some() {
+                    self.open_editor(saved, None, window, cx);
+                }
+            }
             Command::Select(index) => self.start_picking(index, cx),
             Command::Record(start) => self.record(start, cx),
-            Command::HideEmpty(hide) => {
-                self.chrome.hide_empty = hide;
-                self.lay_out_column();
-                self.remember_settings(cx);
-            }
-            Command::Emoji => {
-                self.emoji_for = Some(super::emoji::For::Composer);
-                cx.notify();
-            }
-            Command::Panel(Panel::Voice) => self.toggle_devices(cx),
-            Command::Panel(Panel::Themes) => self.toggle_picker(cx),
-            Command::Panel(Panel::Certificates) => self.toggle_certificates(cx),
+            Command::HideEmpty(hide) => self.set_hide_empty(hide, cx),
+            Command::Emoji => self.open_emoji(super::emoji::For::Composer, Some(window), cx),
             Command::Panel(Panel::Later) => self.open_later(cx),
-            Command::Panel(Panel::Settings) => {
-                self.panels.settings.open = true;
-                cx.notify();
-            }
-            Command::Panel(Panel::Friends) => {
-                self.panels.friends.open = true;
-                cx.notify();
-            }
+            Command::Panel(Panel::Settings) => self.open_settings(cx),
             Command::Reply(index) => self.start_replying(index, window, cx),
             Command::MoreReactions { channel, id } => {
-                self.emoji_for = Some(super::emoji::For::Reaction { channel, id });
+                let purpose = super::emoji::For::Reaction { channel, id };
+                self.open_emoji(purpose, Some(window), cx);
             }
             Command::Copy(text) => {
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.to_string()));
+                self.toast("Copied", super::toasts::Kind::Told, cx);
             }
         }
         cx.notify();
     }
 
-    /// Ask what the registered account `id` is to be called.
-    pub(super) fn ask_to_rename_registered(
-        &mut self,
-        id: u32,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self.ask(Question::RenameRegistered(id), window, cx);
-    }
-
-    /// Ask which group a new rule of `channel`'s permissions is for.
-    pub(super) fn ask_for_acl_group(
+    /// Ask for the password of `channel`, to move into it.
+    pub(super) fn ask_join_password(
         &mut self,
         channel: ChannelId,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.ask(Question::AclGroup(channel), window, cx);
+        self.ask(Question::JoinPassword(channel), window, cx);
+    }
+
+    /// Ask whether to leave the server.
+    pub(super) fn ask_to_leave(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Unless the user asked not to be asked (Settings, Advanced).
+        if !self.panels.settings.disconnect_warning {
+            self.engine.disconnect();
+            return;
+        }
+        self.ask(Question::Leave, window, cx);
     }
 
     /// Open the dialog for `question`.
@@ -988,15 +1243,33 @@ impl Shell {
             cx.subscribe(input, |shell, _, event, cx| match event {
                 InputEvent::Submitted(_) => shell.answer_prompt(cx),
                 InputEvent::Cancelled => shell.close_prompt(cx),
-                InputEvent::Changed | InputEvent::Tabbed { .. } | InputEvent::PastedPicture(_) => {}
+                InputEvent::Changed
+                | InputEvent::Tabbed { .. }
+                | InputEvent::PastedPicture(_)
+                | InputEvent::Pick(_) => {}
             })
         });
         self.prompt = Some(Prompt {
+            caution: self.caution_for(&question),
             question,
             input,
             _subscription: subscription,
         });
         cx.notify();
+    }
+
+    /// What whoever answers `question` ought to know first: a message that
+    /// waits to be sent waits with the server as it was written, also
+    /// where what is said is sealed from the server.
+    fn caution_for(&self, question: &Question) -> Option<SharedString> {
+        let Question::SendLater(channel) = question else {
+            return None;
+        };
+        let known = self.snapshot.channels.iter().find(|c| c.id == *channel)?;
+        (known.encrypted || known.signal).then(|| {
+            "Messages here are sealed from the server. One that waits to be sent is not:              the server keeps it as written until then."
+                .into()
+        })
     }
 
     pub(super) fn close_prompt(&mut self, cx: &mut Context<Self>) {
@@ -1013,14 +1286,14 @@ impl Shell {
             .as_ref()
             .map(|input| input.read(cx).text().to_owned())
             .unwrap_or_default();
-        if matches!(prompt.question, Question::AclGroup(_)) {
-            self.prompt = None;
-            self.add_acl_rule(&answer, cx);
-        } else if let Question::SendLater(channel) = prompt.question {
+        if let Question::SendLater(channel) = prompt.question {
             // An answer that names no time leaves the question open.
             if self.send_later(channel, &answer, cx) {
                 self.prompt = None;
             }
+        } else if matches!(prompt.question, Question::Leave) {
+            self.prompt = None;
+            self.engine.disconnect();
         } else if let Some(action) = prompt.question.answered(&answer) {
             self.engine.act(action);
             self.prompt = None;
@@ -1030,8 +1303,24 @@ impl Shell {
 
     /// Let the user choose a picture file, and make it their avatar.
     fn pick_avatar(&mut self, cx: &mut Context<Self>) {
-        self.pick_picture(cx, avatar_from, |shell, avatar| {
+        self.pick_picture(cx, crate::picture::avatar, |shell, avatar, _| {
             shell.engine.act(Action::SetAvatar(avatar));
+        });
+    }
+
+    /// Let the user choose a picture file, and put it behind every
+    /// conversation.
+    pub(super) fn pick_wall(&mut self, cx: &mut Context<Self>) {
+        self.pick_picture(cx, crate::picture::wallpaper, |shell, wall, cx| {
+            shell.set_wall(Some(wall), cx);
+        });
+    }
+
+    /// Let the user choose a picture file, and put it across the head of
+    /// their card.
+    fn pick_banner(&mut self, cx: &mut Context<Self>) {
+        self.pick_picture(cx, crate::picture::banner, |shell, banner, _| {
+            shell.engine.act(Action::SetBanner(banner));
         });
     }
 
@@ -1042,14 +1331,15 @@ impl Shell {
         let chosen = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
             directories: false,
-            multiple: false,
-            prompt: Some("Choose a file to send".into()),
+            multiple: true,
+            prompt: Some("Choose files to send".into()),
         });
         cx.spawn(async move |shell, cx| {
             let Ok(Ok(Some(paths))) = chosen.await else {
                 return;
             };
-            let _ = shell.update(cx, |shell, cx| shell.send_files(paths, cx));
+            // They wait above the composer, and go out with the message.
+            let _ = shell.update(cx, |shell, cx| shell.stage_files(paths, cx));
         })
         .detach();
     }
@@ -1077,29 +1367,41 @@ impl Shell {
         .detach();
     }
 
-    /// Send the files at `paths` to the open conversation, in order: each
-    /// picture in a message of its own, anything else shared as a file.
+    /// Send the files at `paths` to the open conversation: the pictures
+    /// together in one message, as the web client sends pictures put in its
+    /// composer together (a message each where the server's limit leaves
+    /// too little for that), anything else shared as a file.
     pub(super) fn send_files(&mut self, paths: Vec<std::path::PathBuf>, cx: &mut Context<Self>) {
         let Some(conversation) = self.open else {
             return;
         };
         cx.spawn(async move |shell, cx| {
+            let mut pictures = Vec::new();
             for path in paths {
                 // Only a picture is read here, and off the view's thread;
                 // a file is read by whoever uploads it, a piece at a time.
                 let read = path.clone();
                 let picture = cx
                     .background_executor()
-                    .spawn(async move { picture_at(&read) })
+                    .spawn(async move { crate::picture::at(&read) })
                     .await;
-                let sent = shell.update(cx, |shell, _| match picture {
-                    Some(picture) => shell.engine.send_picture(conversation, picture),
-                    None => shell.engine.send_file(conversation, path),
-                });
-                if sent.is_err() {
-                    return;
+                match picture {
+                    Some(picture) => pictures.push(picture),
+                    None => {
+                        if shell
+                            .update(cx, |shell, _| shell.engine.send_file(conversation, path))
+                            .is_err()
+                        {
+                            return;
+                        }
+                    }
                 }
             }
+            let _ = shell.update(cx, |shell, _| match pictures.len() {
+                0 => {}
+                1 => shell.engine.send_picture(conversation, pictures.remove(0)),
+                _ => shell.engine.send_pictures(conversation, pictures),
+            });
         })
         .detach();
     }
@@ -1124,11 +1426,11 @@ impl Shell {
 
     /// Ask for a picture file, read it and put it through `prepare` on
     /// another thread, and hand what comes out to `then`.
-    fn pick_picture(
+    pub(super) fn pick_picture(
         &mut self,
         cx: &mut Context<Self>,
         prepare: fn(&[u8]) -> Result<Vec<u8>, String>,
-        then: fn(&mut Self, Vec<u8>),
+        then: fn(&mut Self, Vec<u8>, &mut Context<Self>),
     ) {
         let chosen = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
@@ -1156,7 +1458,7 @@ impl Shell {
                 .await;
             let _ = shell.update(cx, |shell, cx| {
                 match made {
-                    Ok(picture) => then(shell, picture),
+                    Ok(picture) => then(shell, picture, cx),
                     Err(problem) => shell.notice = Some(problem.into()),
                 }
                 cx.notify();
@@ -1164,25 +1466,6 @@ impl Shell {
         })
         .detach();
     }
-}
-
-/// The file at `path` whole, if it is a picture small enough to go in a
-/// message; `None` for anything else, a file that cannot be read included.
-fn picture_at(path: &std::path::Path) -> Option<Vec<u8>> {
-    use std::io::Read as _;
-    let mut file = std::fs::File::open(path).ok()?;
-    if file.metadata().ok()?.len() > MAX_PICTURE_FILE {
-        return None;
-    }
-    // The first bytes say what it is; the rest is read only if it is one.
-    let mut bytes = vec![0; 16];
-    let read = file.read(&mut bytes).ok()?;
-    bytes.truncate(read);
-    if !crate::picture::is_picture(&bytes) {
-        return None;
-    }
-    let _ = file.read_to_end(&mut bytes).ok()?;
-    Some(bytes)
 }
 
 /// The entries drawn side by side above a menu's others: the reactions at
@@ -1225,7 +1508,10 @@ pub(super) fn render_menu(
     theme: &Theme,
     window: &Window,
     cx: &mut Context<Shell>,
-) -> impl IntoElement + use<> {
+) -> gpui::AnyElement {
+    if let Some(over) = menu.over {
+        return render_sheet(menu, over, theme, cx).into_any_element();
+    }
     const WIDTH: f32 = 220.0;
     const ROW: f32 = 30.0;
     const QUICK: f32 = 34.0;
@@ -1243,6 +1529,43 @@ pub(super) fn render_menu(
         .y
         .min(viewport.height - height - px(8.0))
         .max(px(4.0));
+    backdrop(cx)
+        .child(
+            Sheet::new("menu")
+                .holds(super::kit::Hold::Arrows)
+                .absolute()
+                .left(left)
+                .top(top)
+                .w(px(WIDTH))
+                .flex()
+                .flex_col()
+                .p(px(6.0))
+                .when(!menu.quick.is_empty(), |list| {
+                    list.child(quick_row(menu, theme, cx))
+                })
+                .children(menu.items.iter().enumerate().map(|(index, item)| {
+                    MenuItem::new(("menu-item", index), item.name.clone())
+                        .selector(selector_of(item))
+                        .height(ROW)
+                        .danger(item.danger)
+                        .ticked(item.ticked)
+                        .on_click(cx.listener(move |shell, _, window, cx| {
+                            shell.choose(index, window, cx);
+                        }))
+                })),
+        )
+        .into_any_element()
+}
+
+/// What the tests call an entry: `menu-<name>`, unless it says otherwise.
+fn selector_of(item: &Item) -> SharedString {
+    item.selector
+        .clone()
+        .unwrap_or_else(|| format!("menu-{}", item.name).into())
+}
+
+/// The backdrop that puts a menu away when pressed.
+fn backdrop(cx: &mut Context<Shell>) -> gpui::Stateful<gpui::Div> {
     div()
         .id("menu-backdrop")
         .debug_selector(|| "menu-backdrop".to_owned())
@@ -1258,34 +1581,144 @@ pub(super) fn render_menu(
                 cx.notify();
             }),
         )
+}
+
+/// A menu that is a sheet grown out of `over`: as wide as it, standing 4px
+/// above its top edge, with its head and its clusters, as the web UI's
+/// sheet over the dock is drawn.
+fn render_sheet(
+    menu: &Menu,
+    over: gpui::Bounds<Pixels>,
+    theme: &Theme,
+    cx: &mut Context<Shell>,
+) -> impl IntoElement + use<> {
+    let head = menu
+        .head
+        .clone()
+        .map(|(name, caption)| sheet_head(name, caption, theme));
+    let rule = || div().my(px(6.0)).h(px(1.0)).flex_none().bg(theme.c.line);
+    let mut rows: Vec<gpui::AnyElement> = Vec::new();
+    if let Some(head) = head {
+        rows.push(head.into_any_element());
+        rows.push(rule().into_any_element());
+    }
+    for (index, item) in menu.items.iter().enumerate() {
+        if item.rule {
+            rows.push(rule().into_any_element());
+        }
+        let ink = if item.danger {
+            theme.c.bad
+        } else {
+            theme.c.muted
+        };
+        let row = MenuItem::new(("menu-item", index), item.name.clone())
+            .selector(selector_of(item))
+            .roomy()
+            .danger(item.danger)
+            .when_some(item.icon, |row, glyph| row.lead(icon(glyph, 15.0, ink)))
+            .when_some(item.hint.clone(), MenuItem::hint)
+            .when_some(item.switch, |row, on| {
+                row.trail(super::kit::Switch::new(on))
+            })
+            .when(item.chevron, |row| {
+                row.trail(
+                    div()
+                        .flex()
+                        .pl(px(8.0))
+                        .child(icon("chevron-right", 14.0, theme.c.dim)),
+                )
+            })
+            .on_click(cx.listener(move |shell, _, window, cx| {
+                shell.choose(index, window, cx);
+            }));
+        rows.push(row.into_any_element());
+    }
+    // Placed in the window's own measure, as the dock was measured: the
+    // backdrop starts inside the window's frame.
+    backdrop(cx).child(
+        gpui::anchored()
+            .anchor(gpui::Corner::BottomLeft)
+            .position(gpui::point(over.left(), over.top() - px(4.0)))
+            .child(
+                div()
+                    .debug_selector(|| "menu-sheet".to_owned())
+                    .w(over.size.width)
+                    .child(
+                        Sheet::new("menu")
+                            .holds(super::kit::Hold::Arrows)
+                            .w_full()
+                            .flex()
+                            .flex_col()
+                            .p(px(6.0))
+                            .children(rows),
+                    ),
+            ),
+    )
+}
+
+/// The head of the sheet over the dock: the server's letter on a tile, its
+/// name, and what the sheet is.
+fn sheet_head(
+    name: SharedString,
+    caption: SharedString,
+    theme: &Theme,
+) -> impl IntoElement + use<> {
+    let letter: String = name
+        .trim()
+        .chars()
+        .take(1)
+        .flat_map(char::to_uppercase)
+        .collect();
+    div()
+        .debug_selector(|| "menu-head".to_owned())
+        .flex()
+        .items_center()
+        .gap(px(10.0))
+        .pt(px(6.0))
+        .px(px(12.0))
+        .pb(px(8.0))
         .child(
-            Sheet::new("menu")
-                .absolute()
-                .left(left)
-                .top(top)
-                .w(px(WIDTH))
+            div()
+                .flex_none()
+                .size(px(32.0))
+                .rounded(theme.skin.radius_md)
+                .bg(theme.c.accent_soft)
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_size(px(13.0))
+                .font_weight(EMPHASIS)
+                .text_color(theme.c.accent)
+                .child(letter),
+        )
+        .child(
+            div()
+                .min_w_0()
                 .flex()
                 .flex_col()
-                .p(px(6.0))
-                .when(!menu.quick.is_empty(), |list| {
-                    list.child(quick_row(menu, theme, cx))
-                })
-                .children(menu.items.iter().enumerate().map(|(index, item)| {
-                    MenuItem::new(("menu-item", index), item.name.clone())
-                        .selector(format!("menu-{}", item.name))
-                        .height(ROW)
-                        .danger(item.danger)
-                        .ticked(item.ticked)
-                        .on_click(cx.listener(move |shell, _, window, cx| {
-                            shell.choose(index, window, cx);
-                        }))
-                })),
+                .gap(px(1.0))
+                .child(
+                    div()
+                        .truncate()
+                        .text_size(px(13.5))
+                        .line_height(px(16.875))
+                        .font_weight(EMPHASIS)
+                        .child(name),
+                )
+                .child(
+                    div()
+                        .truncate()
+                        .text_size(px(11.0))
+                        .line_height(px(14.85))
+                        .text_color(theme.c.muted)
+                        .child(caption),
+                ),
         )
 }
 
 /// What an info card says: the text once it has come, or that it is on
 /// its way, or that there is none.
-fn info_body(info: &super::Info, theme: &Theme) -> gpui::AnyElement {
+pub(super) fn info_body(info: &super::Info, theme: &Theme) -> gpui::AnyElement {
     match &info.body {
         None => div()
             .text_color(theme.c.muted)
@@ -1334,6 +1767,14 @@ pub(super) fn render_prompt(
                     .child(input),
             )
         })
+        .when_some(prompt.caution.clone(), |dialog, caution| {
+            dialog.child(
+                div()
+                    .text_size(px(12.5))
+                    .text_color(theme.c.warn)
+                    .child(caution),
+            )
+        })
         .child(
             div()
                 .flex()
@@ -1362,12 +1803,15 @@ pub(super) fn render_prompt(
 /// edge, their name as their profile sets it, and what they say of
 /// themselves in a line. Somebody with no profile has the theme's banner
 /// and their name as it is.
-fn profile_head(
+pub(super) fn profile_head(
     shell: &Shell,
     info: &super::Info,
     user: &User,
     theme: &Theme,
 ) -> impl IntoElement + use<> {
+    /// The face on a card, and the frame that sets it off from the banner.
+    const FACE: f32 = 56.0;
+    const FRAME: f32 = 3.0;
     let profile = info.profile.as_ref();
     let line: Vec<&str> = profile
         .into_iter()
@@ -1392,9 +1836,12 @@ fn profile_head(
                     .unwrap_or(theme.c.accent_soft))
                 .when_some(info.banner.clone(), |banner, picture| {
                     banner.child(
-                        gpui::img(picture)
-                            .size_full()
-                            .object_fit(gpui::ObjectFit::Cover),
+                        gpui::img(crate::pictures::shown(
+                            &picture,
+                            crate::pictures::Fit::Banner,
+                        ))
+                        .size_full()
+                        .object_fit(gpui::ObjectFit::Cover),
                     )
                 }),
         )
@@ -1402,14 +1849,14 @@ fn profile_head(
             div()
                 .mt(px(-30.0))
                 .ml(px(14.0))
-                .p(px(3.0))
-                .w(px(62.0))
-                .rounded_full()
+                .p(px(FRAME))
+                .w(px(FACE + 2.0 * FRAME))
+                .rounded(frame_radius(FACE, FRAME, theme))
                 .bg(theme.c.bg0)
                 .child(
                     Avatar::new(&user.name)
                         .picture(user.avatar.as_ref())
-                        .size(56.0),
+                        .size(FACE),
                 ),
         )
         .child(
@@ -1456,7 +1903,10 @@ pub(super) fn render_info(
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     let hover = theme.c.hover;
-    let body = info_body(info, theme);
+    let body = match &info.page {
+        Some(page) => super::pages::about(info.subject, page, theme, cx),
+        None => info_body(info, theme),
+    };
     // A person gets a card's head; anything else, its name.
     let person = match info.subject {
         Subject::User(session) => shell.snapshot.users.iter().find(|u| u.session == session),
@@ -1469,29 +1919,15 @@ pub(super) fn render_info(
         .p(px(22.0))
         .map(|card| match person {
             Some(user) => card.child(profile_head(shell, info, user, theme)),
-            None => card.title(info.title.clone()),
+            None => match super::livery::server_head(shell, info.subject, theme) {
+                Some(head) => card.child(head),
+                None => card.title(info.title.clone()),
+            },
         })
         .when(!info.facts.is_empty(), |card| {
             card.child(
-                div()
-                    .debug_selector(|| "info-facts".to_owned())
-                    .flex()
-                    .flex_col()
-                    .gap(px(4.0))
-                    .text_size(px(12.5))
-                    .children(info.facts.iter().map(|(name, value)| {
-                        div()
-                            .flex()
-                            .gap(px(12.0))
-                            .child(
-                                div()
-                                    .flex_none()
-                                    .w(px(130.0))
-                                    .text_color(theme.c.muted)
-                                    .child(name.clone()),
-                            )
-                            .child(div().flex_1().min_w_0().child(value.clone()))
-                    })),
+                super::facts::rows(&shell.shown_facts(&info.facts), theme)
+                    .debug_selector(|| "info-facts".to_owned()),
             )
         })
         .child(
@@ -1500,7 +1936,11 @@ pub(super) fn render_info(
                 .flex_1()
                 .min_h_0()
                 .overflow_y_scroll()
+                .flex()
+                .flex_col()
+                .gap(px(14.0))
                 .text_size(px(13.5))
+                .children(super::facts::devices(&shell.shown_devices(&info.devices), theme))
                 .child(body),
         )
         .child(
@@ -1536,6 +1976,8 @@ mod tests {
             channel,
             muted: false,
             deafened: false,
+            server_muted: false,
+            server_deafened: false,
             avatar: None,
             unread: 0,
             priority: false,
@@ -1544,27 +1986,34 @@ mod tests {
         }
     }
 
+    /// Somebody the server lets do everything.
+    const ALL: Over = Over {
+        there: Rights::ALL,
+        root: Rights::ALL,
+    };
+
     fn names(items: &[Item]) -> Vec<&str> {
         items.iter().map(|item| item.name.as_ref()).collect()
     }
 
     #[test]
     fn somebody_else_gets_message_volume_and_moderation() {
-        let items = user_items(&user(3, 1), Some(1), Some(1), 1.0, None, false);
+        let items = user_items(&user(3, 1), Some(1), Some(1), 1.0, None, false, ALL);
         assert_eq!(
             names(&items),
             [
                 "Message",
-                "View comment",
+                "User information",
                 "Whisper with the whisper key",
                 "Mute here",
                 "Volume 50%",
                 "Volume 100%",
                 "Volume 150%",
+                "Move to…",
                 "Priority speaker",
                 "Mute for everyone",
                 "Deafen for everyone",
-                "Register",
+                "Register…",
                 "Reset their comment",
                 "Remove their picture",
                 "Kick…",
@@ -1584,7 +2033,11 @@ mod tests {
     fn a_user_elsewhere_can_be_moved_here_and_a_muted_one_unmuted() {
         let mut elsewhere = user(3, 2);
         elsewhere.muted = true;
-        let items = user_items(&elsewhere, Some(1), Some(1), 0.0, None, false);
+        // Muted by themselves: theirs to lift, and nobody else's.
+        let items = user_items(&elsewhere, Some(1), Some(1), 0.0, None, false, ALL);
+        assert!(names(&items).contains(&"Mute for everyone"));
+        elsewhere.server_muted = true;
+        let items = user_items(&elsewhere, Some(1), Some(1), 0.0, None, false, ALL);
         assert!(names(&items).contains(&"Move to my channel"));
         assert!(names(&items).contains(&"Unmute for everyone"));
         let ticked: Vec<_> = items
@@ -1596,14 +2049,155 @@ mod tests {
     }
 
     #[test]
+    fn what_the_server_would_refuse_is_not_offered() {
+        // Nothing granted, anywhere: nobody to moderate, nothing to manage.
+        let none = Over {
+            there: Rights::only(&[]),
+            root: Rights::only(&[]),
+        };
+        let items = user_items(&user(3, 2), Some(1), Some(1), 1.0, None, false, none);
+        assert_eq!(
+            names(&items),
+            [
+                "Message",
+                "User information",
+                "Whisper with the whisper key",
+                "Join their channel",
+                "Mute here",
+                "Volume 50%",
+                "Volume 100%",
+                "Volume 150%",
+            ]
+        );
+        // Each right brings what it is for, and only that: moving and
+        // muting by the channel they are in, the rest by the root.
+        let some = Over {
+            there: Rights::only(&[Right::MOVE]),
+            root: Rights::only(&[Right::KICK]),
+        };
+        let items = user_items(&user(3, 2), Some(1), Some(1), 1.0, None, false, some);
+        let offered = names(&items);
+        assert!(offered.contains(&"Move to my channel") && offered.contains(&"Kick…"));
+        assert!(!offered.contains(&"Ban…") && !offered.contains(&"Mute for everyone"));
+        // Somebody registered is not offered registering again.
+        let mut registered = user(3, 1);
+        registered.account = Some(7);
+        let items = user_items(&registered, Some(1), Some(1), 1.0, None, false, ALL);
+        assert!(!names(&items).contains(&"Register…"));
+        assert!(names(&items).contains(&"Deregister…"), "taken away instead");
+        // The server's own account is nobody's to take away.
+        registered.account = Some(0);
+        let items = user_items(&registered, Some(1), Some(1), 1.0, None, false, ALL);
+        assert!(!names(&items).contains(&"Deregister…"));
+        // Oneself: registering is offered where the server lets people.
+        let items = user_items(&user(1, 1), Some(1), Some(1), 1.0, None, false, none);
+        assert!(!names(&items).contains(&"Register on this server"));
+    }
+
+    #[test]
+    fn a_channel_offers_what_its_rights_allow() {
+        let channel = |rights, restricted| Channel {
+            id: 2,
+            parent: Some(0),
+            name: "x".into(),
+            position: 0,
+            unread: 0,
+            history: true,
+            encrypted: false,
+            listening: false,
+            signal: false,
+            rights,
+            restricted,
+            temporary: false,
+            max_users: 0,
+            private: false,
+        };
+        let reader = channel_items(&channel(Rights::only(&[]), false), Some(1), true, None);
+        assert_eq!(
+            names(&reader),
+            [
+                "Open",
+                "Join",
+                "Join with a password…",
+                "Listen without joining",
+                "Shout here with the whisper key",
+                "About this channel",
+                "New poll: choose one…",
+                "New poll: choose any…",
+            ]
+        );
+        // Until the server has answered, changing the channel is offered,
+        // as the web UI offers it; making and deleting are not.
+        let unknown = channel_items(&channel(Rights::default(), false), Some(1), false, None);
+        let offered = names(&unknown);
+        assert!(offered.contains(&"Rename…") && offered.contains(&"Permissions…"));
+        assert!(!offered.contains(&"Delete…") && !offered.contains(&"New channel inside…"));
+        // Somebody who may only make temporary channels is offered those.
+        let guest = Rights::only(&[Right::MAKE_TEMPORARY]);
+        let offered = channel_items(&channel(guest, false), Some(1), true, None);
+        let offered = names(&offered);
+        assert!(offered.contains(&"New channel inside…"));
+        // A moderator of what is said: all of it, or one sender's.
+        let moderator = channel(Rights::only(&[Right::DELETE_MESSAGE]), false);
+        assert!(
+            names(&channel_items(&moderator, Some(1), true, None))
+                .contains(&"Delete all messages…")
+        );
+        let mut known = user(3, 2);
+        known.hash = Some("abc".into());
+        assert!(purge_item(&known, Some(&moderator)).is_some());
+        assert!(purge_item(&known, Some(&channel(Rights::only(&[]), false))).is_none());
+        // A room behind a password asks for it on a plain join.
+        let locked = channel_items(&channel(Rights::ALL, true), Some(1), false, None);
+        assert!(!names(&locked).contains(&"Join with a password…"));
+        // The server's lists, for whoever may read them.
+        let listed = |root| {
+            let items = session_items(&"s".into(), Some(root), None);
+            names(&items)
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            listed(Rights::only(&[])),
+            ["Server information", "Disconnect"]
+        );
+        assert_eq!(
+            listed(Rights::only(&[Right::BAN])),
+            ["Server information", "Bans…", "Disconnect"]
+        );
+        // A server on the rail that is not the one on screen is switched
+        // to; a saved one can be starred, handed on and changed.
+        let key = SharedString::from("kumo.jp:64738");
+        let other = session_items(&"s".into(), None, Some((&key, true)));
+        assert_eq!(
+            names(&other),
+            [
+                "Switch to",
+                "Favourite",
+                "Copy address",
+                "Edit…",
+                "Disconnect"
+            ]
+        );
+        assert!(other[1].ticked);
+        assert_eq!(
+            other[2].command,
+            Command::Copy("mumble://kumo.jp:64738".into())
+        );
+    }
+
+    #[test]
     fn oneself_gets_the_profile_entries_only() {
-        let items = user_items(&user(1, 1), Some(1), Some(1), 1.0, None, false);
+        let items = user_items(&user(1, 1), Some(1), Some(1), 1.0, None, false, ALL);
         assert_eq!(
             names(&items),
             [
                 "Set comment…",
                 "Change picture…",
                 "Remove picture",
+                "Change banner…",
+                "Remove banner",
                 "Register on this server"
             ]
         );
@@ -1620,6 +2214,12 @@ mod tests {
             history: false,
             encrypted: false,
             listening: false,
+            rights: Rights::ALL,
+            restricted: false,
+            signal: false,
+            temporary: false,
+            max_users: 0,
+            private: false,
         };
         assert_eq!(
             names(&channel_items(&channel(0, None), Some(1), false, None)),
@@ -1631,8 +2231,8 @@ mod tests {
                 "Shout here with the whisper key",
                 "About this channel",
                 "New channel inside…",
-                "New temporary channel inside…",
                 "Move everyone with me here",
+                "Move everyone in here to…",
                 "Rename…",
                 "Describe…",
                 "Set a password…",
@@ -1646,7 +2246,7 @@ mod tests {
                 "Shout here with the whisper key",
                 "About this channel",
                 "New channel inside…",
-                "New temporary channel inside…",
+                "Move everyone in here to…",
                 "Rename…",
                 "Describe…",
                 "Set a password…",
@@ -1673,34 +2273,6 @@ mod tests {
             }),
             "a reason is optional"
         );
-        assert_eq!(Question::NewChannel(1).answered("   "), None);
-        assert_eq!(
-            Question::NewChannel(1).answered(" Games "),
-            Some(Action::CreateChannel {
-                parent: 1,
-                name: "Games".to_owned(),
-                history: false,
-                encrypted: false,
-            })
-        );
-        assert_eq!(
-            Question::NewChannelWithHistory(1).answered("Notes"),
-            Some(Action::CreateChannel {
-                parent: 1,
-                name: "Notes".to_owned(),
-                history: true,
-                encrypted: false,
-            })
-        );
-        assert_eq!(
-            Question::NewEncryptedChannel(1).answered("Secrets"),
-            Some(Action::CreateChannel {
-                parent: 1,
-                name: "Secrets".to_owned(),
-                history: true,
-                encrypted: true,
-            })
-        );
         assert_eq!(
             Question::NewPollSeveral(1).answered("Tea?\n\n Yes \nNo\n"),
             Some(Action::CreatePoll {
@@ -1719,23 +2291,5 @@ mod tests {
             Question::DeleteChannel(2).answered(""),
             Some(Action::DeleteChannel { channel: 2 })
         );
-    }
-
-    #[test]
-    fn a_picture_file_becomes_a_small_jpeg() {
-        let mut png = Vec::new();
-        image::ImageBuffer::from_pixel(1200, 600, image::Rgb([200u8, 40, 40]))
-            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
-            .expect("a png");
-        let avatar = avatar_from(&png).expect("an avatar");
-        assert!(avatar.starts_with(&[0xff, 0xd8, 0xff]), "a jpeg");
-        let decoded = image::load_from_memory(&avatar).expect("decodes");
-        assert_eq!(
-            (decoded.width(), decoded.height()),
-            (256, 128),
-            "scaled to fit, shape kept"
-        );
-        assert!(avatar.len() < 64 * 1024, "well under a server's limit");
-        assert!(avatar_from(b"not a picture").is_err());
     }
 }

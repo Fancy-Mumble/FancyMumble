@@ -74,6 +74,10 @@ use fancy::domain::userdata_envelope::Body as Userdata;
 /// Outer type for runtime-mutable settings, which is where livery lives:
 /// `server-config` owns the document, so its envelope carries it.
 const SERVER_CONFIG: u16 = 1013;
+/// Outer type for the questions a server asks a new member, and the answers.
+const ONBOARDING: u16 = 1014;
+
+mod onboarding;
 
 /// The page size the server caps a query at, mirrored so the client can say
 /// `has_more` from the size of the page it got back.
@@ -156,6 +160,15 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
             // it could have kept is one nobody can reason about.
             channel: vote.channel_id.unwrap_or_default(),
         }),
+        // A clear is its own canon message: sent as a stroke it arrived as an
+        // empty one, and no receiver cleared anything.
+        ControlMessage::FancyDrawStroke(stroke) if stroke.is_clear.unwrap_or_default() => {
+            Social::Clear(fancy::social::DrawClear {
+                channel: stroke.channel_id.unwrap_or_default(),
+                actor: stroke.sender_session.unwrap_or_default(),
+                all: stroke.clear_all.unwrap_or_default(),
+            })
+        }
         ControlMessage::FancyDrawStroke(stroke) => Social::Stroke(fancy::social::DrawStroke {
             channel: stroke.channel_id.unwrap_or_default(),
             actor: stroke.sender_session.unwrap_or_default(),
@@ -165,6 +178,11 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
             // screen is the wrong thickness on every other screen.
             width: stroke.width_frac.or(stroke.width).unwrap_or_default(),
             points: stroke.points.clone(),
+            stroke_id: stroke.stroke_id.clone().unwrap_or_default(),
+            end: stroke.is_end.unwrap_or_default(),
+            width_px: stroke.width.unwrap_or_default(),
+            // The colour is ARGB; `colour` carries the RGB.
+            alpha: stroke.color.unwrap_or_default() >> 24,
         }),
         ControlMessage::FancyLinkPreviewRequest(request) => {
             // Every URL in one frame. The canon takes `repeated urls` for this
@@ -410,6 +428,21 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
             };
             return Some((PCHAT, envelope.encode_to_vec()));
         }
+        // Onboarding had no canon arm, so all three went out on the plugin
+        // relay, which a canon server does not read: the questions were never
+        // saved and nobody was asked them.
+        ControlMessage::FancyOnboardingConfigUpdate(update) => {
+            return Some((
+                ONBOARDING,
+                onboarding::envelope(onboarding::update(update.config.as_ref())),
+            ));
+        }
+        ControlMessage::FancyOnboardingResponse(given) => {
+            return Some((ONBOARDING, onboarding::envelope(onboarding::answers(given))));
+        }
+        ControlMessage::FancyOnboardingResponseQuery(_) => {
+            return Some((ONBOARDING, onboarding::envelope(onboarding::query())));
+        }
         ControlMessage::FancyServerSettingsQuery(query) => {
             return Some((
                 SERVER_CONFIG,
@@ -491,6 +524,8 @@ pub fn to_canon(msg: &ControlMessage) -> Option<(u16, Vec<u8>)> {
                     message_id: pin.message_id.clone().unwrap_or_default(),
                     channel: pin.channel_id.unwrap_or_default(),
                     unpin: pin.unpin.unwrap_or_default(),
+                    // The server's to write; see above.
+                    ..Default::default()
                 })),
             };
             return Some((PCHAT, envelope.encode_to_vec()));
@@ -1017,13 +1052,27 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                         ..Default::default()
                     }))
                 }
+                // What an older sender or server leaves out reads as before:
+                // no id, no end, no pixel width, and a colour with no alpha.
                 Some(Social::Stroke(stroke)) => Some(ControlMessage::FancyDrawStroke(
                     mumble_tcp::FancyDrawStroke {
                         channel_id: Some(stroke.channel),
                         sender_session: session(stroke.actor),
-                        color: Some(packed_colour(&stroke.colour)),
+                        color: Some(packed_colour(&stroke.colour) | (stroke.alpha.min(0xff) << 24)),
                         width_frac: Some(stroke.width),
                         points: stroke.points,
+                        stroke_id: (!stroke.stroke_id.is_empty()).then_some(stroke.stroke_id),
+                        is_end: stroke.end.then_some(true),
+                        width: (stroke.width_px > 0.0).then_some(stroke.width_px),
+                        ..Default::default()
+                    },
+                )),
+                Some(Social::Clear(clear)) => Some(ControlMessage::FancyDrawStroke(
+                    mumble_tcp::FancyDrawStroke {
+                        channel_id: Some(clear.channel),
+                        sender_session: session(clear.actor),
+                        is_clear: Some(true),
+                        clear_all: Some(clear.all),
                         ..Default::default()
                     },
                 )),
@@ -1198,6 +1247,22 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                 _ => None,
             })
         }
+        ONBOARDING => {
+            use fancy::feature::onboarding_envelope::Body;
+            let Ok(envelope) = fancy::feature::OnboardingEnvelope::decode(payload) else {
+                return Ok(None);
+            };
+            Ok(match envelope.body {
+                Some(Body::Flow(flow)) => {
+                    Some(ControlMessage::FancyOnboardingConfig(onboarding::config(flow)))
+                }
+                Some(Body::Response(stored)) => Some(
+                    ControlMessage::FancyOnboardingResponseDeliver(onboarding::kept(stored)),
+                ),
+                // The client->server bodies, which a client only sends.
+                Some(Body::Query(_) | Body::Update(_)) | None => None,
+            })
+        }
         SERVER_CONFIG => {
             let envelope = fancy::domain::ServerConfigEnvelope::decode(payload)?;
             Ok(match envelope.body {
@@ -1262,6 +1327,12 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                         ),
                     }),
                 ),
+                // A page the server would not serve. Without this arm the
+                // refusal decoded as nothing, and a reader scrolling back saw
+                // exactly what the end of the archive looks like.
+                Some(fancy::pchat::pchat_envelope::Body::FetchRefused(refused)) => {
+                    Some(ControlMessage::PchatFetchRefused(refused))
+                }
                 // The key ladder, relayed to us by a peer. The inverse of the
                 // arms in `to_canon`, and lossless in the same way: what
                 // arrives here is what the peer's key manager will verify.
@@ -1331,37 +1402,49 @@ pub fn from_canon(type_id: u16, payload: &[u8]) -> Result<Option<ControlMessage>
                         channel_id: Some(query.channel),
                     }),
                 ),
-                // The server relays a pin to the channel verbatim, so what
-                // arrives is the pinner's own `Pin` rather than a delivery the
-                // server composed. The canon has no room for who pinned it,
-                // which is why `pinner_hash` and `pinner_name` come through
-                // absent: the handler resolves a name from the hash and shows
-                // nothing when there is none, which beats attributing the pin
-                // to whoever wrote the message.
+                // Who pinned it and when are the server's to write. A server
+                // too old to write them leaves them empty, and they come
+                // through absent: the handler resolves a name from the hash and
+                // shows nothing when there is none, which beats attributing
+                // the pin to whoever wrote the message.
                 Some(fancy::pchat::pchat_envelope::Body::Pin(pin)) => Some(
                     ControlMessage::PchatPinDeliver(mumble_tcp::PchatPinDeliver {
                         channel_id: Some(pin.channel),
                         message_id: Some(pin.message_id),
                         unpin: Some(pin.unpin),
-                        ..Default::default()
+                        pinner_hash: (!pin.pinner_cert.is_empty()).then(|| hex(&pin.pinner_cert)),
+                        pinner_name: (!pin.pinner_name.is_empty()).then_some(pin.pinner_name),
+                        timestamp: (pin.pinned_at_ms != 0).then_some(pin.pinned_at_ms),
                     }),
                 ),
-                // A pin list carries the pinned *messages*, so the only thing
-                // it can say about each pin is which message it sits on. The
-                // pinner and the moment are not in the canon at all.
+                // `pins` says who and when; a server too old to send it sends
+                // only the pinned messages, which say which message and no more.
                 Some(fancy::pchat::pchat_envelope::Body::PinList(list)) => Some(
                     ControlMessage::PchatPinFetchResponse(mumble_tcp::PchatPinFetchResponse {
                         channel_id: Some(list.channel),
-                        pins: list
-                            .pinned
-                            .into_iter()
-                            .map(
-                                |message| mumble_tcp::pchat_pin_fetch_response::PinnedMessage {
-                                    message_id: Some(message.message_id),
-                                    ..Default::default()
-                                },
-                            )
-                            .collect(),
+                        pins: if list.pins.is_empty() {
+                            list.pinned
+                                .into_iter()
+                                .map(
+                                    |message| mumble_tcp::pchat_pin_fetch_response::PinnedMessage {
+                                        message_id: Some(message.message_id),
+                                        ..Default::default()
+                                    },
+                                )
+                                .collect()
+                        } else {
+                            list.pins
+                                .into_iter()
+                                .map(|pin| mumble_tcp::pchat_pin_fetch_response::PinnedMessage {
+                                    message_id: Some(pin.message_id),
+                                    pinner_hash: (!pin.pinner_cert.is_empty())
+                                        .then(|| hex(&pin.pinner_cert)),
+                                    pinner_name: (!pin.pinner_name.is_empty())
+                                        .then_some(pin.pinner_name),
+                                    timestamp: (pin.pinned_at_ms != 0).then_some(pin.pinned_at_ms),
+                                })
+                                .collect()
+                        },
                     }),
                 ),
                 // Relayed once the rows are gone, to the deleter as well: their
@@ -2594,6 +2677,7 @@ mod tests {
                     page: Some(fancy::wire::PageInfo {
                         more: true,
                         next_before_id: "m-1".to_owned(),
+                        next_after_id: String::new(),
                     }),
                 },
             )),
@@ -2620,6 +2704,36 @@ mod tests {
             Some([1, 2, 3, 4, 5, 6, 7, 8].as_slice())
         );
         assert_eq!(message.protocol, Some(4));
+    }
+
+    #[test]
+    fn a_refused_page_comes_back_as_a_refusal_not_as_nothing() {
+        // Starling answers a throttled or refused history page with
+        // `FetchRefused`. Decoded as an unknown body it was dropped, and the
+        // client could not tell a refusal from the end of the archive.
+        let refused = fancy::pchat::PchatEnvelope {
+            body: Some(fancy::pchat::pchat_envelope::Body::FetchRefused(
+                fancy::pchat::FetchRefused {
+                    channel: 4,
+                    refusal: Some(fancy::wire::Refusal {
+                        kind: fancy::wire::refusal::Kind::RateLimited as i32,
+                        detail: "slow down".to_owned(),
+                        retry_after_ms: 1_500,
+                    }),
+                },
+            )),
+        };
+        let back = from_canon(PCHAT, &refused.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::PchatFetchRefused(back) = back else {
+            panic!("expected a fetch refusal");
+        };
+        assert_eq!(back.channel, 4);
+        let refusal = back.refusal.expect("carries the refusal");
+        assert_eq!(refusal.kind(), fancy::wire::refusal::Kind::RateLimited);
+        assert_eq!(refusal.detail, "slow down");
+        assert_eq!(refusal.retry_after_ms, 1_500);
     }
 
     #[test]
@@ -3103,6 +3217,8 @@ mod tests {
                         sender_cert: vec![0xab, 0xcd],
                         ..fancy::pchat::Message::default()
                     }],
+                    // What a server before `pins` sends.
+                    pins: Vec::new(),
                 },
             )),
         };
@@ -3119,6 +3235,207 @@ mod tests {
             response.pins[0].pinner_hash.is_none(),
             "the message's author is not the person who pinned it"
         );
+    }
+
+    #[test]
+    fn a_stroke_keeps_its_id_end_pixel_width_and_alpha_through_the_canon() {
+        // The canon stroke had channel, actor, colour, width and points only,
+        // so a receiver could not tell one stroke from the next or where one
+        // ended, and the web client joined all of a person's strokes into one
+        // line.
+        let sent = mumble_tcp::FancyDrawStroke {
+            sender_session: Some(5),
+            channel_id: Some(4),
+            stroke_id: Some("s-1".to_owned()),
+            color: Some(0x80_00_88_ff),
+            width: Some(6.0),
+            points: vec![0.25, 0.5, 0.75, 0.5],
+            is_end: Some(true),
+            width_frac: Some(0.01),
+            ..Default::default()
+        };
+        let (outer, payload) =
+            to_canon(&ControlMessage::FancyDrawStroke(sent.clone())).expect("a stroke");
+        let back = from_canon(outer, &payload).unwrap().expect("decodes");
+        let ControlMessage::FancyDrawStroke(back) = back else {
+            panic!("expected a stroke");
+        };
+        assert_eq!(back.stroke_id.as_deref(), Some("s-1"));
+        assert_eq!(back.is_end, Some(true));
+        assert_eq!(back.width, Some(6.0));
+        assert_eq!(back.width_frac, Some(0.01));
+        assert_eq!(back.color, Some(0x80_00_88_ff), "alpha and all");
+        assert_eq!(back.points, sent.points);
+        assert_eq!(back.channel_id, Some(4));
+        assert_eq!(back.sender_session, Some(5));
+    }
+
+    #[test]
+    fn a_clear_travels_as_a_clear_and_not_as_an_empty_stroke() {
+        let sent = mumble_tcp::FancyDrawStroke {
+            sender_session: Some(5),
+            channel_id: Some(4),
+            is_clear: Some(true),
+            clear_all: Some(true),
+            ..Default::default()
+        };
+        let (outer, payload) =
+            to_canon(&ControlMessage::FancyDrawStroke(sent)).expect("a clear");
+        let back = from_canon(outer, &payload).unwrap().expect("decodes");
+        let ControlMessage::FancyDrawStroke(back) = back else {
+            panic!("expected a stroke message");
+        };
+        assert_eq!(back.is_clear, Some(true));
+        assert_eq!(back.clear_all, Some(true));
+        assert!(back.points.is_empty());
+    }
+
+    #[test]
+    fn a_forward_page_says_whether_newer_messages_remain() {
+        // A forward page that was cut off names where to continue; one that
+        // reached the newest message names nothing, and that is the reader's
+        // sign to follow the live tail. A server before `next_after_id` sends
+        // only `more`, which reads the same.
+        let page = |info: fancy::wire::PageInfo| fancy::pchat::PchatEnvelope {
+            body: Some(fancy::pchat::pchat_envelope::Body::FetchResponse(
+                fancy::pchat::FetchResponse {
+                    channel: 4,
+                    page: Some(info),
+                    ..Default::default()
+                },
+            )),
+        };
+        let more = |info: fancy::wire::PageInfo| {
+            let ControlMessage::PchatFetchResponse(response) =
+                from_canon(PCHAT, &page(info).encode_to_vec())
+                    .unwrap()
+                    .expect("decodes")
+            else {
+                panic!("expected a page");
+            };
+            response.has_more
+        };
+        let cut_off = fancy::wire::PageInfo {
+            more: true,
+            next_before_id: String::new(),
+            next_after_id: "m-9".to_owned(),
+        };
+        assert_eq!(more(cut_off), Some(true));
+        assert_eq!(more(fancy::wire::PageInfo::default()), Some(false), "caught up");
+        let without_the_field = fancy::wire::PageInfo {
+            more: true,
+            ..Default::default()
+        };
+        assert_eq!(more(without_the_field), Some(true));
+    }
+
+    #[test]
+    fn a_stroke_from_a_server_that_carries_only_the_old_fields_reads_as_before() {
+        // Starling 0.2.20 decodes a stroke and re-encodes it, so what it relays
+        // has none of the newer fields: the receiver's own fallbacks (strokes
+        // joined by time, a colour without alpha as opaque) still apply.
+        let old = fancy::social::SocialEnvelope {
+            body: Some(fancy::social::social_envelope::Body::Stroke(
+                fancy::social::DrawStroke {
+                    channel: 4,
+                    actor: 5,
+                    colour: "#0088ff".to_owned(),
+                    width: 0.01,
+                    points: vec![0.5, 0.5],
+                    ..Default::default()
+                },
+            )),
+        };
+        let back = from_canon(SOCIAL, &old.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::FancyDrawStroke(back) = back else {
+            panic!("expected a stroke");
+        };
+        assert_eq!(back.stroke_id, None);
+        assert_eq!(back.is_end, None);
+        assert_eq!(back.width, None);
+        assert_eq!(back.color, Some(0x00_00_88_ff), "no alpha, as before");
+        assert_eq!(back.width_frac, Some(0.01));
+    }
+
+    #[test]
+    fn a_pin_from_a_server_says_who_pinned_it_and_when() {
+        let pinned = fancy::pchat::PchatEnvelope {
+            body: Some(fancy::pchat::pchat_envelope::Body::Pin(fancy::pchat::Pin {
+                message_id: "m-1".to_owned(),
+                channel: 4,
+                unpin: false,
+                pinner: 3,
+                pinner_cert: vec![0xab, 0xcd],
+                pinner_name: "SuperUser".to_owned(),
+                pinned_at_ms: 1_700_000_000_000,
+            })),
+        };
+        let back = from_canon(PCHAT, &pinned.encode_to_vec())
+            .unwrap()
+            .expect("decodes");
+        let ControlMessage::PchatPinDeliver(deliver) = back else {
+            panic!("expected a pin delivery");
+        };
+        assert_eq!(deliver.pinner_hash.as_deref(), Some("abcd"));
+        assert_eq!(deliver.pinner_name.as_deref(), Some("SuperUser"));
+        assert_eq!(deliver.timestamp, Some(1_700_000_000_000));
+
+        // From a server that writes none of it (0.2.20), the same as before.
+        let bare = fancy::pchat::PchatEnvelope {
+            body: Some(fancy::pchat::pchat_envelope::Body::Pin(fancy::pchat::Pin {
+                message_id: "m-1".to_owned(),
+                channel: 4,
+                ..Default::default()
+            })),
+        };
+        let ControlMessage::PchatPinDeliver(bare) = from_canon(PCHAT, &bare.encode_to_vec())
+            .unwrap()
+            .expect("decodes")
+        else {
+            panic!("expected a pin delivery");
+        };
+        assert_eq!(
+            (bare.pinner_hash, bare.pinner_name, bare.timestamp),
+            (None, None, None)
+        );
+    }
+
+    #[test]
+    fn a_pin_list_with_who_and_when_is_read_from_its_pins() {
+        let listed = fancy::pchat::PchatEnvelope {
+            body: Some(fancy::pchat::pchat_envelope::Body::PinList(
+                fancy::pchat::PinList {
+                    channel: 7,
+                    // What an older client reads; a newer one reads `pins`.
+                    pinned: vec![fancy::pchat::Message {
+                        message_id: "m-1".to_owned(),
+                        ..fancy::pchat::Message::default()
+                    }],
+                    pins: vec![fancy::pchat::Pin {
+                        message_id: "m-1".to_owned(),
+                        channel: 7,
+                        pinner_cert: vec![0x01],
+                        pinner_name: "alice".to_owned(),
+                        pinned_at_ms: 42,
+                        ..Default::default()
+                    }],
+                },
+            )),
+        };
+        let ControlMessage::PchatPinFetchResponse(response) =
+            from_canon(PCHAT, &listed.encode_to_vec())
+                .unwrap()
+                .expect("decodes")
+        else {
+            panic!("expected a pin list");
+        };
+        assert_eq!(response.pins.len(), 1, "one pin, not one per field");
+        assert_eq!(response.pins[0].message_id.as_deref(), Some("m-1"));
+        assert_eq!(response.pins[0].pinner_hash.as_deref(), Some("01"));
+        assert_eq!(response.pins[0].pinner_name.as_deref(), Some("alice"));
+        assert_eq!(response.pins[0].timestamp, Some(42));
     }
 
     #[test]

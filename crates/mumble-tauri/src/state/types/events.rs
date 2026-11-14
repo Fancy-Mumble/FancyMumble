@@ -135,6 +135,22 @@ pub(crate) struct PchatFetchCompletePayload {
     pub total_stored: u32,
 }
 
+/// Payload emitted when the server refused a page of stored history.
+///
+/// Not the end of the archive: the view that asked for the page decides
+/// whether to ask again (`kind == "rate_limited"`, after `retry_after_ms`) or
+/// to tell the reader.
+#[derive(Clone, Serialize)]
+pub(crate) struct PchatFetchRefusedPayload {
+    pub channel_id: u32,
+    /// `rate_limited`, `permission`, `limit`, `invalid` or `other`.
+    pub kind: &'static str,
+    /// The server's own words; empty when it gave none.
+    pub detail: String,
+    /// Only meaningful for `rate_limited`; zero elsewhere.
+    pub retry_after_ms: u32,
+}
+
 /// Payload emitted when a `PchatReactionDeliver` is received (single reaction event).
 #[derive(Clone, Serialize)]
 pub(crate) struct ReactionDeliverPayload {

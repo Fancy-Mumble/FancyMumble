@@ -5,7 +5,8 @@ use gpui::{
     StyleRefinement, Styled, Window, div, point, prelude::*, px,
 };
 
-use crate::theme::ActiveTheme;
+use super::Finish;
+use crate::theme::{ActiveTheme, Cut as CutShape, Kind, Theme};
 use crate::ui::widgets::EMPHASIS;
 
 /// What a paper is cut from.
@@ -17,6 +18,8 @@ enum Cut {
     Field,
     /// A plate of this fill on a ground of this edge, casting nothing.
     Plate { fill: Hsla, edge: Hsla },
+    /// The same, cut as a control is.
+    Control { fill: Hsla, edge: Hsla },
 }
 
 /// A surface cut the way the web UI cuts its cards and bubbles: a ground of
@@ -71,6 +74,12 @@ impl Paper {
         Self::cut(Cut::Plate { fill, edge })
     }
 
+    /// A plate of `fill` on a ground of `edge`, cut as the theme cuts a
+    /// control (as a field is): one of the composer's plates.
+    pub(crate) fn control(fill: Hsla, edge: Hsla) -> Self {
+        Self::cut(Cut::Control { fill, edge })
+    }
+
     /// Edge it in the accent: the keyboard is pointed here.
     pub(crate) fn lit(mut self, lit: bool) -> Self {
         self.lit = lit;
@@ -103,7 +112,7 @@ impl RenderOnce for Paper {
             // Drop, blur and strength, as CSS writes a shadow.
             Cut::Raised => (theme.c.card, theme.c.line2, Some((8.0, 28.0, 0.14))),
             Cut::Field => (theme.c.input, theme.c.line2, Some((6.0, 24.0, 0.12))),
-            Cut::Plate { fill, edge } => (fill, edge, None),
+            Cut::Plate { fill, edge } | Cut::Control { fill, edge } => (fill, edge, None),
         };
         let edge = if self.lit {
             Hsla {
@@ -113,6 +122,13 @@ impl RenderOnce for Paper {
         } else {
             edge
         };
+        let kind = match self.cut {
+            Cut::Field | Cut::Control { .. } => Kind::Plate,
+            Cut::Raised | Cut::Plate { .. } => Kind::Card,
+        };
+        if let Some(cut) = theme.skin.cuts.of(kind) {
+            return self.cut_to(cut, fill, edge, &theme).into_any_element();
+        }
         let large = theme.skin.radius_lg;
         let small = theme.skin.radius_sm.min(large);
         let (leading, trailing) = match self.nearest {
@@ -151,6 +167,27 @@ impl RenderOnce for Paper {
                     .bg(fill),
             )
             .children(self.children)
+            .into_any_element()
+    }
+}
+
+impl Paper {
+    /// This paper in the theme's `cut`: no soft shadow, which would stand
+    /// square under a slanted shape, but the hard plate a drawn theme puts
+    /// under a card, and the heavier edge it gives the user's own.
+    fn cut_to(self, cut: CutShape, fill: Hsla, edge: Hsla, theme: &Theme) -> Div {
+        let raised = self.cut == Cut::Raised;
+        let hard = theme.skin.marks.hard_shadow.filter(|_| raised);
+        let edge = if raised && hard.is_some() && !self.lit {
+            theme.c.rail_line
+        } else {
+            edge
+        };
+        let finish = Finish {
+            hard: hard.map(|offset| (offset, theme.c.line2)),
+            ..Finish::new(fill, Some(edge))
+        };
+        super::cut_into(self.base, cut, finish, theme.skin.line_width).children(self.children)
     }
 }
 

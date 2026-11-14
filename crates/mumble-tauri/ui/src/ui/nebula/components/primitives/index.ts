@@ -13,6 +13,7 @@ export { richTextSurvives, richTextExtensions, type RichTextPreset } from "./ric
 export { LiveBadge, VoiceContextBadge, PriorityBadge, VoiceStateBadges, speakerState } from "./SpeakerBadges";
 export { DmUnreadBadge } from "./DmUnreadBadge";
 export { StatChip, type StatChipTone } from "./StatChip";
+export { Disclosure } from "./Disclosure";
 export { RoleChip, type RoleChipProps } from "./RoleChip";
 export { OfficialBadge } from "./OfficialBadge";
 export { PchatBadge } from "./PchatBadge";

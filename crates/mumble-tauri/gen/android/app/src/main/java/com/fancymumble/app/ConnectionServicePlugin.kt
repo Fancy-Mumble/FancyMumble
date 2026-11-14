@@ -9,8 +9,12 @@ import android.util.Log
 import android.webkit.WebView
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import android.Manifest
+import app.tauri.PermissionState
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
+import app.tauri.annotation.Permission
+import app.tauri.annotation.PermissionCallback
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
@@ -52,7 +56,11 @@ internal class ChatNotificationArgs {
  * to send an event through the Tauri channel system back to Rust,
  * which then calls `AppState::disconnect()`.
  */
-@TauriPlugin
+@TauriPlugin(
+    permissions = [
+        Permission(strings = [Manifest.permission.RECORD_AUDIO], alias = "microphone"),
+    ],
+)
 class ConnectionServicePlugin(private val activity: Activity) : Plugin(activity) {
 
     companion object {
@@ -95,6 +103,27 @@ class ConnectionServicePlugin(private val activity: Activity) : Plugin(activity)
         Log.d(TAG, "startService serverName='${args.serverName}'")
         ConnectionService.start(activity, args.serverName)
         invoke.resolve()
+    }
+
+    /**
+     * Ask for the microphone, the first time voice is turned on rather than at
+     * launch. Answers `{ granted }`; once granted, a running connection service
+     * claims the microphone too, so voice keeps working in the background.
+     */
+    @Command
+    fun requestMicrophone(invoke: Invoke) {
+        if (getPermissionState("microphone") == PermissionState.GRANTED) {
+            invoke.resolve(JSObject().put("granted", true))
+        } else {
+            requestPermissionForAlias("microphone", invoke, "microphoneAnswered")
+        }
+    }
+
+    @PermissionCallback
+    private fun microphoneAnswered(invoke: Invoke) {
+        val granted = getPermissionState("microphone") == PermissionState.GRANTED
+        if (granted) ConnectionService.refreshForeground(activity)
+        invoke.resolve(JSObject().put("granted", granted))
     }
 
     @Command

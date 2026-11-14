@@ -27,6 +27,15 @@ pub struct PageInfo {
     /// Pass as Cursor.before_id of the next request.
     #[prost(string, tag = "2")]
     pub next_before_id: ::prost::alloc::string::String,
+    /// Pass as Cursor.after_id of the next request, when walking forward.
+    ///
+    /// Empty on a forward page that was not cut off, which is how a reader knows
+    /// it has caught up with the newest entry and may follow the live tail
+    /// instead of asking again. A backward page leaves this empty and fills
+    /// `next_before_id`; the direction a caller walked is the direction it
+    /// continues in.
+    #[prost(string, tag = "3")]
+    pub next_after_id: ::prost::alloc::string::String,
 }
 /// The coordinate every message-scoped feature shares: reactions, pins,
 /// receipts, edits and deletes all address (channel, message).

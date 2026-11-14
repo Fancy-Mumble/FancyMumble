@@ -13,6 +13,12 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useAppStore } from "..";
 import { TauriEvent } from "../../constants/tauriEvents";
 import { applyReaction } from "../../features/chat/reaction/reactionStore";
+import {
+  applyHistoryRefusal,
+  historyPageRequests,
+  historyRetryTimers,
+  type PchatFetchRefusedEvent,
+} from "./persistentChat.refusal";
 import type {
   ChannelPersistConfig,
   KeyTrustState,
@@ -148,23 +154,45 @@ export async function registerPersistentChatEvents(unlisteners: UnlistenFn[]): P
       TauriEvent.PchatFetchComplete,
       async (event) => {
         const { channel_id, has_more, total_stored } = event.payload;
-        useAppStore.setState((prev) => ({
-          channelPersistence: {
-            ...prev.channelPersistence,
-            [channel_id]: {
-              ...prev.channelPersistence[channel_id],
-              hasMore: has_more,
-              isFetching: false,
-              totalStored: total_stored,
+        // A page arrived: whatever was refused before is answered.
+        historyPageRequests.forget(channel_id);
+        useAppStore.setState((prev) => {
+          const { [channel_id]: _answered, ...otherRefusals } = prev.pchatHistoryRefused;
+          return {
+            channelPersistence: {
+              ...prev.channelPersistence,
+              [channel_id]: {
+                ...prev.channelPersistence[channel_id],
+                hasMore: has_more,
+                isFetching: false,
+                totalStored: total_stored,
+              },
             },
-          },
-        }));
+            pchatHistoryRefused: otherRefusals,
+          };
+        });
         const { selectedChannel } = useAppStore.getState();
         if (selectedChannel === channel_id) {
           await useAppStore.getState().refreshMessages(channel_id);
         }
       },
     ),
+
+    // The server refused a page of history: not the end of it. See
+    // `persistentChat.refusal` for what happens per kind.
+    await listen<PchatFetchRefusedEvent>(TauriEvent.PchatFetchRefused, (event) => {
+      applyHistoryRefusal(useAppStore, event.payload);
+    }),
+
+    // A re-ask waiting on a rate limit is for the channel on screen; leaving
+    // it, or tearing the listeners down, drops it.
+    useAppStore.subscribe((state, prev) => {
+      if (state.selectedChannel !== prev.selectedChannel) historyRetryTimers.cancelAll();
+    }),
+    () => {
+      historyRetryTimers.cancelAll();
+      historyPageRequests.clear();
+    },
 
     // A new key-share consent request from the backend.
     await listen<PendingKeyShareRequest>(TauriEvent.PchatKeyShareRequest, (event) => {

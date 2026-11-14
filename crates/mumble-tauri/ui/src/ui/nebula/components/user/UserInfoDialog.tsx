@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert, Dialog, Snackbar } from "@mui/material";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { listenBanList } from "@core/features/admin/useBanList";
 import { useUserAvatar, useUserComment } from "@core/lazyBlobs";
 import { parseComment } from "@core/profileFormat";
 import { useAppStore } from "@core/store";
@@ -206,8 +206,8 @@ function useBansAgainst(
     let cancelled = false;
     let unlisten: (() => void) | null = null;
     void (async () => {
-      const off = await listen<BanEntry[]>("ban-list", (event) => {
-        if (!cancelled) setBans(event.payload);
+      const off = await listenBanList((next) => {
+        if (!cancelled) setBans(next);
       });
       if (cancelled) {
         off();

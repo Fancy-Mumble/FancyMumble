@@ -11,7 +11,7 @@ import {
   savePersonalization,
   type PersonalizationData,
 } from "@standard/personalizationStorage";
-import { applyTheme, THEMES, type ThemeId } from "@standard/themes";
+import { applyColorMode, applyTheme, colorModeForTheme, THEMES, type ThemeId } from "@standard/themes";
 import { CheckIcon, SettingsIcon, SparklesIcon } from "@ui/icons";
 import { SAFE_AREA, radius } from "../../tokens";
 import { Stack } from "../primitives";
@@ -120,6 +120,7 @@ export function FirstRunSetup({ onComplete }: Readonly<{ onComplete: () => void 
     // Applied on pick rather than on finish: the whole point of the step is
     // seeing it, and Nebula's own light/dark mode follows the app theme.
     applyTheme(id);
+    applyColorMode(colorModeForTheme(id, personalization.current?.colorMode ?? "system"));
   }, []);
 
   const finish = useCallback(async () => {
@@ -127,7 +128,11 @@ export function FirstRunSetup({ onComplete }: Readonly<{ onComplete: () => void 
     setSaving(true);
     try {
       const base = personalization.current ?? (await loadPersonalization());
-      await savePersonalization({ ...base, theme });
+      // Worn now too: a theme left at its default was never picked, so
+      // nothing has applied its mode yet.
+      const colorMode = colorModeForTheme(theme, base.colorMode);
+      applyColorMode(colorMode);
+      await savePersonalization({ ...base, theme, colorMode });
       await completeSetup(mode, username.trim());
       // A default client certificate, so the first connect can be an identity
       // rather than an anonymous session. Not fatal: without one the user can

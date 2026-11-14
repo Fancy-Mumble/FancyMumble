@@ -30,6 +30,9 @@ mod camera_directshow;
 /// one broadcast.
 mod congestion;
 pub mod encode;
+/// Frames an embedder draws itself (a test pattern), broadcast in place of a
+/// capture.
+pub mod frames;
 #[cfg(all(windows, feature = "gpu"))]
 mod gpu_windows;
 #[cfg(all(windows, feature = "gpu"))]
@@ -46,6 +49,7 @@ pub mod viewer;
 
 pub use broadcast::{BroadcastSource, BroadcastState, ScreenBroadcaster, SignalSink};
 pub use congestion::CongestionSnapshot;
+pub use frames::FrameSource;
 #[cfg(all(target_os = "linux", feature = "portal-probe"))]
 pub use linux::portal_probe_main;
 pub use sources::{CaptureSource, SourceKind};

@@ -135,9 +135,23 @@ message DrawStroke {
   // Flat x,y pairs. Bounded before it is stored: an unbounded point list from
   // an unauthenticated peer is an allocation attack.
   repeated float points = 5;
+  // Which stroke this packet is part of. A stroke is sent in pieces while it
+  // is drawn, and without this a receiver cannot tell where one stroke ends
+  // and the next begins. Empty from a sender or server too old to carry it.
+  string stroke_id = 6;
+  // This packet is the stroke's last.
+  bool end = 7;
+  // The width in the drawer's pixels, for a receiver that does not scale by
+  // `width`. 0 when not said.
+  float width_px = 8;
+  // The colour's alpha, 1 to 255. 0 means not said and reads as opaque:
+  // `colour` is CSS `#rrggbb`, and a sender too old to set this drew opaque.
+  uint32 alpha = 9;
 }
 
 message DrawClear {
   uint32 channel = 1;
   uint32 actor = 2;
+  // Every stroke in the channel, everybody's, rather than the actor's own.
+  bool all = 3;
 }

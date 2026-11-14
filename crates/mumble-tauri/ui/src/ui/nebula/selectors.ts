@@ -1,3 +1,4 @@
+import { formatDayLabel } from "@core/utils/format";
 /**
  * Pure derivations behind the Nebula screens.
  *
@@ -304,32 +305,39 @@ export function rosterGroups(input: RosterInput): RosterGroup[] {
 export interface ChannelPresence {
   /** People sitting in the channel right now. */
   inVoice: number;
-  /** Everyone the channel counts as its own: the people in it, plus the people
-   *  who belong to it and are somewhere else. */
+  /** Everyone the channel counts as its own who is here now: the people in it,
+   *  plus the people who belong to it and are connected somewhere else. */
   members: number;
 }
 
 /**
- * How many people are in a channel, and how many belong to it.
+ * How many people are in a channel, and how many of those who belong to it are
+ * here now.
  *
  * A plain channel has no membership beyond who is standing in it, so both
- * numbers are the same. A persisted one does: the server names the people
- * holding the key its history is stored under, and someone who has stepped out
+ * numbers are the same, whatever key holders the server has reported for it.
+ * A persisted one does: the server names the people holding the key its
+ * history is stored under, and someone who has stepped into another channel
  * still belongs to the room their messages are kept in.
  *
- * Absent members are counted by key rather than by "offline", so the number
- * does not drop when one of them connects and sits in a different channel -
- * a membership that shrank whenever a member appeared would be worse than no
- * membership at all.
+ * Only holders who are connected count. The server's list keeps every key it
+ * was ever told about - a guest gets a new certificate on every visit - so
+ * counting all of them gave "5 in voice · 13 members" on a server with five
+ * people on it.
  */
 export function channelPresence(
   users: readonly UserEntry[],
-  channelId: number,
+  channel: Pick<ChannelEntry, "id" | "pchat_protocol">,
   keyHolders: readonly KeyHolderEntry[] = [],
 ): ChannelPresence {
-  const present = users.filter((user) => user.channel_id === channelId);
+  const present = users.filter((user) => user.channel_id === channel.id);
+  const persisted = channel.pchat_protocol !== undefined && channel.pchat_protocol !== "none";
+  if (!persisted) return { inVoice: present.length, members: present.length };
   const hereByHash = new Set(present.map((user) => user.hash).filter(Boolean));
-  const away = keyHolders.filter((holder) => !hereByHash.has(holder.cert_hash)).length;
+  const connected = new Set(users.map((user) => user.hash).filter(Boolean));
+  const away = keyHolders.filter(
+    (holder) => !hereByHash.has(holder.cert_hash) && (holder.is_online || connected.has(holder.cert_hash)),
+  ).length;
   return { inVoice: present.length, members: present.length + away };
 }
 
@@ -508,11 +516,7 @@ export function groupMessagesByDay<T extends { timestamp?: number | null }>(
         ? t("day.today")
         : key === yesterday
           ? t("day.yesterday")
-          : new Date(stamp ?? now.getTime()).toLocaleDateString(undefined, {
-              weekday: "short",
-              day: "numeric",
-              month: "short",
-            });
+          : formatDayLabel(new Date(stamp ?? now.getTime()));
     sections.push({ key, label, messages: [message] });
   }
   return sections;

@@ -80,6 +80,27 @@ impl AppState {
         Ok(body)
     }
 
+    /// Whether there is somewhere to put bodies away on this connection.
+    pub fn has_offload_store(&self) -> bool {
+        self.inner
+            .snapshot()
+            .lock()
+            .is_ok_and(|state| state.offload_store.is_some())
+    }
+
+    /// The body of a message that was put away, read from where it is kept
+    /// and left there: for a reader that wants to look at it and not to
+    /// hold it.
+    pub fn peek_offloaded_message(&self, message_id: &str) -> Result<String, String> {
+        let __session = self.inner.snapshot();
+        let state = __session.lock().map_err(|e| e.to_string())?;
+        state
+            .offload_store
+            .as_ref()
+            .ok_or("Offload store not initialised")?
+            .load(message_id)
+    }
+
     pub fn load_offloaded_messages_batch(
         &self,
         message_ids: Vec<String>,
@@ -152,7 +173,7 @@ pub(super) fn is_heavy_body(body: &str) -> bool {
 }
 
 /// How every offload marker starts. The frontend parses the same shape.
-pub(super) const OFFLOADED_PREFIX: &str = "<!-- OFFLOADED:";
+pub(crate) const OFFLOADED_PREFIX: &str = "<!-- OFFLOADED:";
 
 /// The marker a put-away body leaves behind, carrying its size so a row can
 /// hold the right amount of room open for it.

@@ -219,6 +219,44 @@ describe("UserInfoSheet", () => {
     expect(screen.getByText("Registered")).toBeTruthy();
   });
 
+  it("lists no devices for an account on one device", () => {
+    renderSheet();
+    expect(screen.queryByText("Devices")).toBeNull();
+  });
+
+  it("lists each device by name, and opens one to its own stats", () => {
+    renderSheet({
+      stats: {
+        ...STATS,
+        devices: [
+          { ...STATS, session: 26, device_name: "Laptop" },
+          {
+            ...STATS,
+            session: 31,
+            device_name: null,
+            version: "Fancy Mumble 0.5.0",
+            os: "Android",
+            os_version: "15",
+            address: "198.51.100.7",
+            from_client: null,
+            from_server: null,
+          },
+        ],
+      },
+    });
+    expect(screen.getByText("Devices")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Laptop" })).toBeTruthy();
+    const phone = screen.getByRole("button", { name: "Device 31" });
+    expect(phone.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("Android 15")).toBeNull();
+
+    fireEvent.click(phone);
+    expect(phone.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Android 15")).toBeTruthy();
+    expect(screen.getByText("Fancy Mumble 0.5.0")).toBeTruthy();
+    expect(screen.getByText("198.51.100.7")).toBeTruthy();
+  });
+
   it("closes from the banner", () => {
     const { onClose } = renderSheet();
     fireEvent.click(screen.getByLabelText("Close"));

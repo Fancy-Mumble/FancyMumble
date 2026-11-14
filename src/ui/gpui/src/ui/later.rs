@@ -239,6 +239,7 @@ fn row(
         )
         .child(
             IconButton::at("later-cancel", at, "trash-2")
+                .tip("Call it off")
                 .tone(Tone::Danger)
                 .on_click(cx.listener(move |shell, _, _, cx| shell.call_off(&id, cx))),
         )

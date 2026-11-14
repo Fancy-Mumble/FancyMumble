@@ -15,15 +15,110 @@ use mumble_tauri_lib::engine_api::{
 };
 
 use crate::engine::{
-    Acl, AclGroup, AclRule, Attachment, KeyRequest, Poll, PollOption, Reader, WhisperTarget,
+    Acl, AclRule, Attachment, KeyRequest, OpenTo, Pin, Pinned, Poll, PollOption, Reach,
+    Reader, Retry, ShareAs, WhisperTarget,
 };
 use crate::engine::{
-    Action, AudioDevice, AudioDevices, Ban, CertificateTask, Channel, ChannelId, ChosenDevices,
-    Connection, Conversation, Engine, EngineEvent, Found, Listing, Message, Preview, Reaction,
-    Registered, Role, SavedServer, Scheduled, ServerPing, SessionEntry, Snapshot, Subject, User,
-    Voice, VoiceSettings, Window,
+    Action, AudioDevice, AudioDevices, Ban, CarryOver, CertificateTask, Channel, ChannelId,
+    ChosenDevices, Connection, Conversation, Engine, EngineEvent, Found, Listing, Message, Preview,
+    Reaction, Registered, Role, SavedServer, Scheduled, ServerPing, SessionEntry, Setting,
+    Snapshot, Subject, User, Voice, VoiceSettings, Window,
 };
 use crate::store::Store;
+
+/// Keep what the engine says of what it does: on the terminal in a debug
+/// build, and in a file of the day under `logs` in `data_dir`.
+///
+/// `wanted` is what the user asked for, if anything: a filter as `RUST_LOG`
+/// takes one, or `off` for no file. Left alone it is the engine's `info`,
+/// which is a few lines a connection: enough to say afterwards why one ended.
+pub(crate) fn start_logs(data_dir: &std::path::Path, wanted: Option<&str>) {
+    let to_file = wanted != Some("off");
+    let level = wanted.filter(|_| to_file);
+    if let Err(reason) = api::logs::start(data_dir.join("logs"), level, to_file) {
+        eprintln!("logging is not as asked ({reason})");
+    }
+}
+
+/// Keep the log as `choices` say, unless the environment asked for a log of
+/// its own (`FANCY_GPUI_LOG`), which wins as it does for the theme.
+pub(crate) fn steer_logs_unless_asked(choices: &crate::store::LogChoices) {
+    if std::env::var_os("FANCY_GPUI_LOG").is_none() {
+        steer_logs(choices);
+    }
+}
+
+/// Keep the log as `choices` say, while running.
+pub(crate) fn steer_logs(choices: &crate::store::LogChoices) {
+    api::logs::set_auto_zip(choices.auto_zip_logs);
+    api::logs::set_terminal_logging(choices.terminal_logging);
+    // Before logging has started (a made-up engine) these say so; nothing
+    // is lost by that.
+    let _ = api::logs::set_level(choices.level());
+    let _ = api::logs::set_file_logging(choices.log_to_file);
+}
+
+/// Write every kept log file into the one compressed file `to`.
+pub(crate) fn export_logs(to: &std::path::Path) -> Result<(), String> {
+    api::logs::export(to)
+}
+
+/// Delete the identities the engine keeps under `data_dir`.
+pub(crate) fn forget_identities(data_dir: &std::path::Path) -> Result<(), String> {
+    api::reset::forget_identities(data_dir)
+}
+
+/// What, typed, is sent as `html`: the engine's own reading, the other way.
+pub(crate) fn source(html: &str) -> String {
+    api::source(html)
+}
+
+/// How the stretches of `text` will be set once it is sent: the engine's
+/// own reading of the marks people type, which needs no engine running.
+pub(crate) fn typed(text: &str) -> Vec<(std::ops::Range<usize>, Setting)> {
+    api::typed(text)
+        .into_iter()
+        .map(|typed| {
+            let api::Setting {
+                bold,
+                italic,
+                struck,
+                underlined,
+                hidden,
+                code,
+                quoted,
+                mark,
+                linked,
+            } = typed.setting;
+            let setting = Setting {
+                bold,
+                italic,
+                struck,
+                underlined,
+                hidden,
+                code,
+                quoted,
+                mark,
+                linked,
+            };
+            (typed.range, setting)
+        })
+        .collect()
+}
+
+mod account;
+mod devices;
+mod groups;
+mod livery;
+mod profile;
+#[cfg(test)]
+mod account_live;
+#[cfg(test)]
+mod onboarding_live;
+#[cfg(test)]
+mod share_live;
+#[cfg(test)]
+mod legacy_live;
 
 /// `(host, port)`: what a ping is kept under.
 type Address = (String, u16);
@@ -38,16 +133,26 @@ struct Shared {
     events: async_channel::Sender<EngineEvent>,
     servers: Mutex<Vec<SavedServer>>,
     pings: Mutex<HashMap<Address, ServerPing>>,
+    /// What the pings said of each server's livery, and the livery of each
+    /// server the engine is on.
+    liveries: crate::livery::Ledger,
     /// When each message that carries no time of its own was first read,
     /// per channel and in order: a stock server sends none, and "when it
     /// arrived here" is the time a reader expects beside it.
     first_read: Mutex<HashMap<Conversation, Vec<u64>>>,
+    /// The messages whose bodies the engine was asked to put away, by id,
+    /// as they are handed to the view: without their pictures.
+    light: Mutex<HashMap<String, Light>>,
     /// Each user's picture: the marker it was fetched for, and the picture
     /// once it has arrived.
     avatars: Mutex<HashMap<u32, AvatarSlot>>,
     /// Who put which emoji on which message, by channel and then by
     /// message: the engine passes reactions on and keeps none.
     reactions: Mutex<HashMap<u32, HashMap<String, Vec<api::ReactionInfo>>>>,
+    /// What is pinned, by channel, as the server listed it: the engine
+    /// marks the messages it holds and keeps no list, and a pin may be on
+    /// a message further back than those.
+    pins: Mutex<HashMap<u32, Vec<api::PinInfo>>>,
     /// The polls seen, by channel, with who answered what: the engine
     /// passes polls and votes on and keeps neither.
     polls: Mutex<HashMap<u32, Vec<HeldPoll>>>,
@@ -59,6 +164,9 @@ struct Shared {
     /// refusal of it is not shown as if the user had asked for something.
     roles: Mutex<Vec<Role>>,
     roles_asked: Mutex<Option<std::time::Instant>>,
+    /// When the member list asked for the registered accounts, while that
+    /// answer is awaited: a refusal of it is no news either.
+    directory_asked: Mutex<Option<std::time::Instant>>,
     /// Who the whisper key speaks to.
     whisper_target: Mutex<Option<api::WhisperTarget>>,
     /// The channel whose readers were last asked for.
@@ -70,11 +178,27 @@ struct Shared {
     wanted: Mutex<Option<(String, Option<String>)>>,
     /// How many retries have been made since the connection was last up.
     retries: std::sync::atomic::AtomicU32,
+    /// Whether a lost connection is left lost: the user's choice.
+    stay_disconnected: std::sync::atomic::AtomicBool,
+    /// The retry that is waited for, while one is. Whoever waits for it
+    /// makes it only if it is still theirs: retrying at once, or giving
+    /// up, takes it away.
+    retry: Mutex<Option<Retry>>,
     /// Whether the server refused this connection. The disconnect that
     /// follows a refusal has a reason of its own ("connection lost"), which
     /// must not replace the one that says why.
     refused: std::sync::atomic::AtomicBool,
     store: Store,
+    /// What the engine says of voice messages: what the server allows, and
+    /// how the take is going.
+    voice: Arc<crate::voice::heard::Heard>,
+    /// What the engine says of the voice check and the voice packets.
+    sound: Arc<crate::sound_check::heard::Heard>,
+    /// Screen sharing over this engine.
+    media: Arc<crate::share::real::RealMedia>,
+    /// The server's GIF service: what it offers, and the searches waiting
+    /// for its answers.
+    gifs: crate::gif::server::ServerGifs,
 }
 
 impl Shared {
@@ -123,6 +247,21 @@ impl Shared {
                 .is_some_and(|asked| asked.elapsed() < ROLES_ANSWER_WITHIN)
     }
 
+    /// Whether a refusal arriving now is of the member list's question for
+    /// the registered accounts: a right to read them, missing at the root,
+    /// moments after it was asked for. Answered once.
+    fn directory_refused(&self, permission: Option<u32>, channel: Option<u32>) -> bool {
+        let about_accounts = channel == Some(ROOT)
+            && permission.is_some_and(|bits| bits & (REGISTER | READ_REGISTER) != 0);
+        about_accounts
+            && self
+                .directory_asked
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take()
+                .is_some_and(|asked| asked.elapsed() < ROLES_ANSWER_WITHIN)
+    }
+
     /// The root channel's groups, as roles.
     fn take_roles(&self, acl: &api::AclInfo) {
         let roles = acl
@@ -151,6 +290,9 @@ impl Shared {
     }
 
     fn forget_server(&self) {
+        self.voice.forget();
+        self.sound.forget_stats();
+        self.gifs.forget();
         self.roles
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -193,12 +335,7 @@ impl Shared {
             groups: acl
                 .groups
                 .iter()
-                .map(|group| AclGroup {
-                    name: group.name.clone().into(),
-                    inherited: group.inherited_members.clone(),
-                    added: group.add.clone(),
-                    removed: group.remove.clone(),
-                })
+                .map(groups::shown)
                 .collect(),
             rules: acl
                 .rules
@@ -249,7 +386,7 @@ impl Shared {
             .clone()
             .filter(|read| read.channel == changed.channel)
             .ok_or("These rules were not read from the server; open them again.")?;
-        let groups = merged_groups(read.groups.clone(), changed.groups);
+        let groups = changed.groups.into_iter().map(groups::sent).collect();
         self.engine
             .set_acl(api::AclInfo {
                 inherit: changed.inherit,
@@ -344,7 +481,11 @@ impl Shared {
             }
             Action::SetAcl(acl) => shared.set_acl(acl).await,
             Action::SetBans(bans) => engine.set_bans(bans.iter().map(ban_info).collect()).await,
-            Action::Unregister { id } => engine.change_registered(id, None).await,
+            Action::Unregister { id } => {
+                engine.change_registered(id, None).await?;
+                // The list as the server has it now, as after a rename.
+                engine.request_registered().await
+            }
             Action::SendLater {
                 channel,
                 body,
@@ -435,13 +576,17 @@ impl Shared {
             }
             api::EngineEvent::Connected => {
                 self.retries.store(0, std::sync::atomic::Ordering::Relaxed);
+                self.set_retry(None);
                 self.tell(EngineEvent::Notice(None));
                 self.tell(EngineEvent::StateChanged);
                 self.open_current_conversation(runtime);
                 self.ask_for_roles(runtime);
+                self.ask_for_voice_support(runtime);
+                self.gifs.ask_support();
             }
             api::EngineEvent::Disconnected { reason } => {
                 self.forget_server();
+                self.read_liveries(runtime);
                 let refused = self
                     .refused
                     .swap(false, std::sync::atomic::Ordering::Relaxed);
@@ -452,15 +597,29 @@ impl Shared {
                 if refused {
                     // Asking again would only be refused again.
                     *self.wanted.lock().unwrap_or_else(PoisonError::into_inner) = None;
-                } else if lost {
+                    self.set_retry(None);
+                } else if lost
+                    && !self
+                        .stay_disconnected
+                        .load(std::sync::atomic::Ordering::Relaxed)
+                {
                     self.reconnect_later(runtime);
                 }
                 self.tell(EngineEvent::StateChanged);
                 self.tell(EngineEvent::CurrentChannelChanged);
             }
-            api::EngineEvent::Rejected { reason } => {
+            api::EngineEvent::Rejected { reason, wants } => {
                 self.refused
                     .store(true, std::sync::atomic::Ordering::Relaxed);
+                match wants {
+                    api::Wanted::Password => {
+                        self.tell(EngineEvent::Wanted(crate::engine::Wanted::Password));
+                    }
+                    api::Wanted::Code => {
+                        self.tell(EngineEvent::Wanted(crate::engine::Wanted::Code));
+                    }
+                    api::Wanted::Nothing => {}
+                }
                 self.tell(EngineEvent::Notice(Some(reason.into())));
                 self.tell(EngineEvent::StateChanged);
             }
@@ -490,10 +649,28 @@ impl Shared {
                 if self.roles_refused(permission, channel) {
                     return;
                 }
+                // So were the accounts the member list asked for: it lists
+                // who is on instead.
+                if self.directory_refused(permission, channel) {
+                    self.tell(EngineEvent::DirectoryRefused);
+                    return;
+                }
                 let reason = reason.unwrap_or_else(|| "The server did not allow that.".to_owned());
                 self.tell(EngineEvent::Notice(Some(reason.into())));
             }
             api::EngineEvent::Notify { title, body } => crate::notify::show(&title, &body),
+            api::EngineEvent::Livery => self.read_liveries(runtime),
+            api::EngineEvent::UploadProgress {
+                upload_id,
+                bytes_sent,
+                total_bytes,
+            } => self.tell(EngineEvent::Upload {
+                id: upload_id.into(),
+                now: crate::engine::Uploaded::Sent {
+                    bytes: bytes_sent,
+                    of: total_bytes,
+                },
+            }),
             other => self.forward_answer(other),
         }
     }
@@ -551,9 +728,17 @@ impl Shared {
             api::EngineEvent::Bans(bans) => {
                 self.tell(EngineEvent::Bans(bans.into_iter().map(ban_of).collect()));
             }
-            api::EngineEvent::Registered(users) => self.tell(EngineEvent::Registered(
-                users.into_iter().map(registered_of).collect(),
-            )),
+            api::EngineEvent::Registered(users) => {
+                // Answered: a refusal from now on is of something else.
+                let _ = self
+                    .directory_asked
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .take();
+                self.tell(EngineEvent::Registered(
+                    users.into_iter().map(registered_of).collect(),
+                ));
+            }
             api::EngineEvent::Scheduled(waiting) => self.tell(EngineEvent::Scheduled(
                 waiting.into_iter().map(scheduled_of).collect(),
             )),
@@ -564,10 +749,39 @@ impl Shared {
             api::EngineEvent::UserStats(stats) => self.tell(EngineEvent::Facts {
                 subject: Subject::User(stats.session),
                 facts: user_facts(&stats),
+                // Only for an administrator, and only for a user on several
+                // devices: empty otherwise, which draws no section.
+                devices: devices::listed(
+                    stats
+                        .devices
+                        .iter()
+                        .map(|device| (device.device_name.as_deref(), device)),
+                ),
             }),
+            api::EngineEvent::Account(account) => {
+                self.tell(EngineEvent::Account(crate::engine::AccountNews::Settings(account)));
+            }
+            api::EngineEvent::AccountAck(ack) => {
+                self.tell(EngineEvent::Account(crate::engine::AccountNews::Ack(ack)));
+            }
+            api::EngineEvent::OnboardingConfig(_) => {
+                self.tell(EngineEvent::Onboarding(crate::engine::OnboardingNews::Config));
+            }
+            api::EngineEvent::OnboardingResponse(response) => self.tell(EngineEvent::Onboarding(
+                crate::engine::OnboardingNews::Response(response),
+            )),
+            api::EngineEvent::PluginsChanged => self.tell(EngineEvent::PluginsChanged),
             api::EngineEvent::Typing { channel, session } => {
                 self.tell(EngineEvent::Typing { channel, session });
             }
+            other => self.forward_marks(other),
+        }
+    }
+
+    /// The rest of [`Self::forward_answer`]: what is put on messages,
+    /// reactions and pins. The engine passes each on and keeps no list.
+    fn forward_marks(&self, event: api::EngineEvent) {
+        match event {
             api::EngineEvent::Reaction {
                 channel,
                 reaction,
@@ -600,9 +814,72 @@ impl Shared {
                     conversation: Conversation::Channel(channel),
                 });
             }
+            api::EngineEvent::Pin {
+                channel,
+                pin,
+                pinned,
+            } => {
+                note_pin(
+                    self.pins
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .entry(channel)
+                        .or_default(),
+                    pin,
+                    pinned,
+                );
+                self.tell(EngineEvent::NewMessage {
+                    conversation: Conversation::Channel(channel),
+                });
+            }
+            api::EngineEvent::Pins { channel, pins } => {
+                let _ = self
+                    .pins
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .insert(channel, pins);
+                self.tell(EngineEvent::NewMessage {
+                    conversation: Conversation::Channel(channel),
+                });
+            }
+            api::EngineEvent::VoiceSupport(support) => {
+                self.voice.allow(support);
+                self.tell(EngineEvent::StateChanged);
+            }
+            api::EngineEvent::VoiceRecording(recording) => self.voice.note(recording),
+            api::EngineEvent::MicLevel { rms, peak } => self.sound.hear_level(rms, peak),
+            api::EngineEvent::GateCalibrated => self.sound.hear_calibrated(),
+            api::EngineEvent::Replay(replay) => self.sound.hear_replay(replay),
+            api::EngineEvent::VoiceStats(stats) => self.sound.hear_stats(stats),
+            api::EngineEvent::GifSupport(support) => {
+                if self.gifs.noted_support(&support) {
+                    self.tell(EngineEvent::StateChanged);
+                }
+            }
+            api::EngineEvent::GifPage(page) => self.gifs.noted_page(page),
+            api::EngineEvent::GifRefused(refused) => self.gifs.noted_refused(refused),
+            // An answer for a peer of a share is taken here, on the
+            // receive thread; what the view needs goes on.
+            api::EngineEvent::WebRtcSignal(signal) => {
+                if let Some(heard) = self.media.heard(signal) {
+                    self.tell(EngineEvent::Share(heard));
+                }
+            }
+            api::EngineEvent::DrawStroke(stroke) => {
+                self.tell(EngineEvent::Share(crate::share::real::heard_stroke(stroke)));
+            }
             // The engine API may grow events this view does not draw yet.
             _ => {}
         }
+    }
+
+    /// Ask what the server allows of voice messages; a server that predates
+    /// them never answers, which reads as no.
+    fn ask_for_voice_support(self: &Arc<Self>, runtime: &tokio::runtime::Handle) {
+        let shared = Arc::clone(self);
+        drop(runtime.spawn(async move {
+            let _ = shared.engine.request_voice_support().await;
+        }));
     }
 
     /// The connection was lost, not ended: try again after a pause that
@@ -612,38 +889,66 @@ impl Shared {
         let attempt = self
             .retries
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let Some(pause) = retry_pause(attempt) else {
-            return;
+        let pause = retry_pause(attempt);
+        let waited = Retry {
+            attempt: attempt.saturating_add(1),
+            at: std::time::Instant::now() + pause,
         };
+        self.set_retry(Some(waited));
         let shared = Arc::clone(self);
         drop(runtime.spawn(async move {
             tokio::time::sleep(pause).await;
-            let wanted = shared
-                .wanted
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .clone();
-            let Some((id, password)) = wanted else {
-                return;
-            };
-            if shared.engine.connection() != api::Connection::Disconnected {
-                return;
+            // Made at once meanwhile, or given up: no longer this one's.
+            if shared.retry() == Some(waited) {
+                shared.try_again().await;
             }
-            let Some(server) = shared
-                .servers
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .iter()
-                .find(|saved| saved.id == id)
-                .cloned()
-            else {
-                return;
-            };
-            shared.tell(EngineEvent::Notice(Some(
-                "Connection lost. Reconnecting…".into(),
-            )));
-            let _ = shared.engine.connect(target_of(&server, password)).await;
         }));
+    }
+
+    /// The retry that is waited for.
+    fn retry(&self) -> Option<Retry> {
+        *self.retry.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn set_retry(&self, retry: Option<Retry>) {
+        *self.retry.lock().unwrap_or_else(PoisonError::into_inner) = retry;
+    }
+
+    /// Connect again as the user last did, if they still want to be on
+    /// that server and are not.
+    async fn try_again(self: Arc<Self>) {
+        let wanted = self
+            .wanted
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        let Some((id, password)) = wanted else {
+            return;
+        };
+        if self.engine.connection() != api::Connection::Disconnected {
+            return;
+        }
+        let Some(server) = self
+            .servers
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .find(|saved| saved.id == id)
+            .cloned()
+        else {
+            return;
+        };
+        // The attempt is under way: what is waited for now is its answer.
+        if let Some(retry) = self
+            .retry
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_mut()
+        {
+            retry.at = std::time::Instant::now();
+        }
+        self.tell(EngineEvent::StateChanged);
+        let _ = self.engine.connect(target_of(&server, password)).await;
     }
 
     /// The local user is in a channel (again): open its conversation, then
@@ -679,6 +984,10 @@ impl RealEngine {
     ///
     /// When the runtime's threads cannot be started.
     pub(crate) fn start(data_dir: &std::path::Path) -> std::io::Result<Self> {
+        // A run that must stay silent touches no audio device at all.
+        if crate::voice::silent() {
+            api::audio::keep_silent();
+        }
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .thread_name("fancy-engine")
@@ -694,7 +1003,9 @@ impl RealEngine {
         let engine = EngineHandle::start(
             EngineDirs {
                 data: data_dir.to_path_buf(),
-                cache: None,
+                // What is put away out of memory stays with this
+                // client's own files, not in a folder shared with others.
+                cache: Some(data_dir.join("cache")),
             },
             runtime.handle().clone(),
             move |event| {
@@ -703,12 +1014,23 @@ impl RealEngine {
                 }
             },
         );
+        let media = Arc::new(crate::share::real::RealMedia::new(
+            engine.clone(),
+            runtime.handle().clone(),
+            events.clone(),
+        ));
+        let gifs =
+            crate::gif::server::ServerGifs::new(Arc::new(engine.clone()), runtime.handle().clone());
         let shared = Arc::new(Shared {
+            media,
+            gifs,
             engine,
             events,
             servers: Mutex::new(store.servers()),
             pings: Mutex::default(),
+            liveries: crate::livery::Ledger::default(),
             first_read: Mutex::default(),
+            light: Mutex::default(),
             avatars: Mutex::default(),
             reactions: Mutex::default(),
             typed_at: Mutex::default(),
@@ -717,11 +1039,17 @@ impl RealEngine {
             acl: Mutex::default(),
             roles: Mutex::default(),
             roles_asked: Mutex::default(),
+            directory_asked: Mutex::default(),
+            pins: Mutex::default(),
             polls: Mutex::default(),
             wanted: Mutex::default(),
             retries: std::sync::atomic::AtomicU32::new(0),
+            retry: Mutex::default(),
+            stay_disconnected: std::sync::atomic::AtomicBool::new(false),
             refused: std::sync::atomic::AtomicBool::new(false),
             store,
+            voice: Arc::default(),
+            sound: Arc::default(),
         });
         let _ = slot.set(Arc::clone(&shared));
         Ok(Self {
@@ -734,6 +1062,23 @@ impl RealEngine {
     /// Run `command` on the engine's runtime, telling the user if it fails.
     fn spawn(&self, command: impl Future<Output = Result<(), String>> + Send + 'static) {
         drop(self.runtime.spawn(Arc::clone(&self.shared).run(command)));
+    }
+
+    /// Run `send`, which says something in `conversation`, and then have the
+    /// view read the conversation again. The engine announces what others
+    /// say; what the local user said it keeps without a word, and a view
+    /// that waited for the next thing to happen would show it only then.
+    fn say(
+        &self,
+        conversation: Conversation,
+        send: impl Future<Output = Result<(), String>> + Send + 'static,
+    ) {
+        let shared = Arc::clone(&self.shared);
+        self.spawn(async move {
+            send.await?;
+            shared.tell(EngineEvent::NewMessage { conversation });
+            Ok(())
+        });
     }
 
     /// The engine's users as the view's, each with its picture if that has
@@ -768,6 +1113,8 @@ impl RealEngine {
                     channel: user.channel,
                     muted: user.muted,
                     deafened: user.deafened,
+                    server_muted: user.muted_by_server,
+                    server_deafened: user.deafened_by_server,
                     avatar,
                     priority: user.priority_speaker,
                     account: user.account,
@@ -805,6 +1152,19 @@ impl RealEngine {
     }
 
     /// Change the saved servers, write them out, and say so.
+    /// Where the web client keeps its files on this computer, and what it
+    /// holds that this client does not.
+    fn to_carry(&self) -> Option<(std::path::PathBuf, crate::carry::New)> {
+        let from = crate::paths::other_install()?;
+        let held = api::carry::held_in(&from);
+        let new = crate::carry::New::of(
+            &held,
+            &self.saved_servers(),
+            &self.shared.engine.certificates(),
+        );
+        Some((from, new))
+    }
+
     fn edit_servers(&self, edit: impl FnOnce(&mut Vec<SavedServer>)) {
         let saved = {
             let mut servers = self
@@ -827,6 +1187,10 @@ impl RealEngine {
 impl Engine for RealEngine {
     fn events(&self) -> async_channel::Receiver<EngineEvent> {
         self.inbox.clone()
+    }
+
+    fn media(&self) -> Arc<dyn crate::share::Media> {
+        self.shared.media.clone()
     }
 
     fn snapshot(&self) -> Snapshot {
@@ -852,6 +1216,7 @@ impl Engine for RealEngine {
                     .map_or_else(|| session.host.into(), |server| server.label.clone()),
                 id: session.id.into(),
                 active: session.active,
+                connecting: session.connection == api::Connection::Connecting,
             })
             .collect();
         // The engine keeps them in no order; the rail is not to shuffle.
@@ -860,17 +1225,30 @@ impl Engine for RealEngine {
             return Snapshot {
                 connection,
                 sessions,
+                retry: self.shared.retry(),
                 ..Snapshot::disconnected()
             };
         }
         let unread_channels = engine.unread_channels();
         let listening = engine.listening();
+        // Friend chats are not drawn in the tree; whoever sits in one is
+        // shown in the root, where a client that cannot see the room puts
+        // them too.
+        let (channels, friend_chats): (Vec<_>, Vec<_>) = engine
+            .channels()
+            .into_iter()
+            .partition(|channel| !channel.friend_chat);
+        let mut users = self.users_with_avatars(engine.users());
+        for user in &mut users {
+            if friend_chats.iter().any(|chat| chat.id == user.channel) {
+                user.channel = ROOT;
+            }
+        }
         Snapshot {
             connection,
             own_session: engine.own_session(),
             current_channel: engine.current_channel(),
-            channels: engine
-                .channels()
+            channels: channels
                 .into_iter()
                 .map(|channel| Channel {
                     unread: unread_channels.get(&channel.id).copied().unwrap_or(0),
@@ -881,9 +1259,15 @@ impl Engine for RealEngine {
                     history: channel.keeps_history,
                     encrypted: channel.encrypted,
                     listening: listening.contains(&channel.id),
+                    signal: channel.signal,
+                    rights: crate::rights::Rights::new(channel.permissions),
+                    restricted: channel.restricted,
+                    temporary: channel.temporary,
+                    max_users: channel.max_users,
+                    private: channel.private,
                 })
                 .collect(),
-            users: self.users_with_avatars(engine.users()),
+            users,
             voice: match engine.voice() {
                 api::Voice::Off => Voice::Off,
                 api::Voice::On => Voice::On,
@@ -892,6 +1276,7 @@ impl Engine for RealEngine {
             deafened: engine.deafened(),
             welcome: engine.welcome().map(Into::into),
             sessions,
+            retry: None,
             fancy: engine.fancy(),
         }
     }
@@ -913,6 +1298,27 @@ impl Engine for RealEngine {
             .cloned()
     }
 
+    fn pinged(&self, host: &str, port: u16) -> Option<crate::livery::Pinged> {
+        self.shared.liveries.pinged(&format!("{host}:{port}"))
+    }
+
+    fn live_livery(&self, key: &str) -> Option<Arc<crate::livery::Livery>> {
+        self.shared.liveries.live(key)
+    }
+
+    fn probe_livery(&self, host: &str, port: u16) {
+        self.shared
+            .probe_livery(self.runtime.handle(), host, port);
+    }
+
+    fn save_about(&self, save: crate::profile::Save) {
+        self.shared.save_about(self.runtime.handle(), save);
+    }
+
+    fn fetch_page(&self, page: mumble_tauri_lib::engine_api::about::PageRef) {
+        self.shared.fetch_page(self.runtime.handle(), page);
+    }
+
     fn refresh_pings(&self) {
         let mut addresses: Vec<Address> = self
             .saved_servers()
@@ -924,7 +1330,10 @@ impl Engine for RealEngine {
         for address in addresses {
             let shared = Arc::clone(&self.shared);
             drop(self.runtime.spawn(async move {
-                let answer = answered(EngineHandle::ping(&address.0, address.1).await);
+                let ping = EngineHandle::ping(&address.0, address.1).await;
+                let key = format!("{}:{}", address.0, address.1);
+                shared.liveries.heard(key, livery::pinged(&ping));
+                let answer = answered(ping);
                 {
                     let mut pings = shared.pings.lock().unwrap_or_else(PoisonError::into_inner);
                     let _ = match answer {
@@ -992,10 +1401,26 @@ impl Engine for RealEngine {
                     (None, Some(session)) => Conversation::Direct(session),
                     (None, None) => return None,
                 };
+                // How far back it is among what is held: what has to be
+                // shown to show it.
+                let at = found.id.and_then(|id| {
+                    let ids: Vec<Option<String>> = match conversation {
+                        Conversation::Channel(channel) => self.shared.engine.messages(channel),
+                        Conversation::Direct(session) => {
+                            self.shared.engine.direct_messages(session)
+                        }
+                    }
+                    .into_iter()
+                    .map(|message| message.id)
+                    .collect();
+                    let place = ids.iter().position(|held| held.as_deref() == Some(&id))?;
+                    Some((id.into(), ids.len() - place))
+                });
                 Some(Found {
                     text: found.text.into(),
                     about: format!("{} · {}", found.sender_name, found.place).into(),
                     conversation,
+                    at,
                 })
             })
             .collect()
@@ -1062,6 +1487,10 @@ impl Engine for RealEngine {
         self.spawn(async move { engine.request_scheduled().await });
     }
 
+    fn picture_limit(&self) -> usize {
+        self.shared.engine.picture_limit()
+    }
+
     fn list(&self, listing: Listing) {
         let engine = self.shared.engine.clone();
         self.spawn(async move {
@@ -1070,6 +1499,27 @@ impl Engine for RealEngine {
                 Listing::Registered => engine.request_registered().await,
             }
         });
+    }
+
+    fn directory(&self) {
+        *self
+            .shared
+            .directory_asked
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(std::time::Instant::now());
+        self.list(Listing::Registered);
+    }
+
+    fn account_picture(&self, account: u32) -> Option<Arc<gpui::Image>> {
+        self.shared
+            .engine
+            .registered_avatar(account)
+            .and_then(crate::picture::picture)
+            .map(Arc::new)
+    }
+
+    fn put_directory_away(&self) {
+        self.shared.engine.release_registered_avatars();
     }
 
     fn certificates(&self) -> Vec<SharedString> {
@@ -1096,12 +1546,23 @@ impl Engine for RealEngine {
                 CertificateTask::Import(from) => engine
                     .import_certificate(&from)
                     .map(|label| format!("Imported the certificate \u{201c}{label}\u{201d}.")),
+                CertificateTask::Create(label) => engine
+                    .create_certificate(&label)
+                    .map(|()| format!("Made the identity \u{201c}{label}\u{201d}.")),
             };
             shared.tell(EngineEvent::CertificatesChanged);
             shared.tell(EngineEvent::Notice(Some(
                 said.unwrap_or_else(|problem| problem).into(),
             )));
         }));
+    }
+
+    fn recovery_phrase(&self, label: &str) -> Result<String, String> {
+        self.shared.engine.recovery_phrase(label)
+    }
+
+    fn restore_phrase(&self, label: &str, phrase: &str) -> Result<(), String> {
+        self.shared.engine.restore_recovery_phrase(label, phrase)
     }
 
     fn save_server(&self, server: SavedServer) {
@@ -1137,6 +1598,7 @@ impl Engine for RealEngine {
         self.shared
             .retries
             .store(0, std::sync::atomic::Ordering::Relaxed);
+        self.shared.set_retry(None);
         let password = password.filter(|password| !password.is_empty());
         *self
             .shared
@@ -1160,8 +1622,175 @@ impl Engine for RealEngine {
             .wanted
             .lock()
             .unwrap_or_else(PoisonError::into_inner) = None;
+        // Given up while it was waited for: there is no session to end,
+        // and nothing else would say so.
+        if self
+            .shared
+            .retry
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+            .is_some()
+        {
+            self.shared.tell(EngineEvent::Notice(None));
+            self.shared.tell(EngineEvent::StateChanged);
+        }
         let engine = self.shared.engine.clone();
         self.spawn(async move { engine.disconnect().await });
+    }
+
+    fn carry_over(&self) -> Option<CarryOver> {
+        self.to_carry()?.1.counted()
+    }
+
+    fn carry_now(&self) {
+        let Some((from, new)) = self.to_carry() else {
+            return;
+        };
+        let crate::carry::New {
+            servers,
+            certificates,
+        } = new;
+        // Who one is first: a server saved without its certificate would
+        // arrive as a stranger.
+        let taken = match self.shared.engine.take_certificates(&from, &certificates) {
+            Ok(taken) => taken.len(),
+            Err(reason) => {
+                self.shared.tell(EngineEvent::Notice(Some(
+                    format!("Not everything could be brought over: {reason}").into(),
+                )));
+                return;
+            }
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| since.as_nanos());
+        let brought = servers.len();
+        self.edit_servers(|saved| {
+            saved.extend(
+                servers
+                    .into_iter()
+                    .enumerate()
+                    .map(|(nth, server)| crate::carry::as_saved(server, nth, now)),
+            );
+        });
+        self.refresh_pings();
+        let counted = |count: usize, one: &str| match count {
+            1 => format!("1 {one}"),
+            more => format!("{more} {one}s"),
+        };
+        self.shared.tell(EngineEvent::Done(
+            format!(
+                "Brought over {} and {}.",
+                counted(brought, "server"),
+                counted(taken, "certificate")
+            )
+            .into(),
+        ));
+    }
+
+    fn set_dual_path(&self, sending: bool) {
+        self.shared.engine.set_dual_path(sending);
+    }
+
+    fn account_offered(&self) -> bool {
+        self.shared.engine.account_offered()
+    }
+
+    fn account(&self) -> Option<crate::engine::AccountSettings> {
+        self.shared.engine.account()
+    }
+
+    fn update_account(&self, action: crate::engine::AccountAction, password: Option<String>) {
+        self.send_account(action, password);
+    }
+
+    fn offer_account(&self, password: Option<String>) {
+        self.offer_link(password);
+    }
+
+    fn withdraw_offer(&self, device: String) {
+        self.withdraw_link(device);
+    }
+
+    fn onboarding_offered(&self) -> bool {
+        self.shared.engine.onboarding_offered()
+    }
+
+    fn onboarding_config(&self) -> Option<crate::engine::OnboardingConfig> {
+        self.shared.engine.onboarding_config()
+    }
+
+    fn onboarding_response(&self) -> Option<crate::engine::OnboardingResponse> {
+        self.shared.engine.onboarding_response()
+    }
+
+    fn request_onboarding_response(&self) {
+        let engine = self.shared.engine.clone();
+        self.spawn(async move { engine.request_onboarding_response().await });
+    }
+
+    fn submit_onboarding(&self, response: crate::engine::OnboardingResponse) {
+        let engine = self.shared.engine.clone();
+        self.spawn(async move { engine.submit_onboarding_response(response).await });
+    }
+
+    fn register_whisper(
+        &self,
+        slot: u8,
+        reach: Option<mumble_tauri_lib::engine_api::whisper::WhisperReach>,
+    ) {
+        let engine = self.shared.engine.clone();
+        self.spawn(async move { engine.register_whisper_slot(slot, reach).await });
+    }
+
+    fn whisper_slot(
+        &self,
+        slot: u8,
+        reach: Option<mumble_tauri_lib::engine_api::whisper::WhisperReach>,
+    ) {
+        let engine = self.shared.engine.clone();
+        self.spawn(async move {
+            match reach {
+                Some(reach) => engine.start_whisper_slot(slot, reach).await,
+                None => engine.whisper_end().await,
+            }
+        });
+    }
+
+    fn find_user(&self, hash: Option<&str>, name: &str, session: Option<&str>) -> Option<(SharedString, u32)> {
+        self.shared
+            .engine
+            .find_user(hash, name, session)
+            .map(|(session, user)| (session.into(), user))
+    }
+
+    fn server_plugins(&self) -> Vec<crate::engine::ServerPlugin> {
+        self.shared.engine.server_plugins()
+    }
+
+    fn signal_bridge(&self) -> Option<crate::engine::SignalBridge> {
+        Some(mumble_tauri_lib::engine_api::plugins::signal_bridge())
+    }
+
+    fn set_reconnecting(&self, reconnecting: bool) {
+        self.shared
+            .stay_disconnected
+            .store(!reconnecting, std::sync::atomic::Ordering::Relaxed);
+        // Told to stop while one was waited for: that one is not made.
+        if !reconnecting && self.shared.retry().is_some() {
+            self.shared.set_retry(None);
+            self.shared.tell(EngineEvent::StateChanged);
+        }
+    }
+
+    fn retry_now(&self) {
+        // Whoever was waiting finds the retry is no longer theirs.
+        if self.shared.retry().is_none() {
+            return;
+        }
+        let shared = Arc::clone(&self.shared);
+        drop(self.runtime.spawn(shared.try_again()));
     }
 
     fn load_earlier(&self, conversation: Conversation, before: Option<SharedString>) {
@@ -1218,6 +1847,7 @@ impl Engine for RealEngine {
         let own_hash = on_channel.and_then(|_| self.shared.engine.own_hash());
         let messages = messages
             .into_iter()
+            .map(|message| self.shared.lightened(conversation, message))
             .zip(read_at.iter())
             .map(|(message, read_at)| Message {
                 reactions: message
@@ -1241,6 +1871,24 @@ impl Engine for RealEngine {
             })
             .collect();
         Window { messages, earlier }
+    }
+
+    fn whole(&self, _: Conversation, id: &str) -> Option<String> {
+        self.shared.engine.put_away_body(id).ok()
+    }
+
+    fn pins(&self, conversation: Conversation) -> Vec<Pin> {
+        // Only a channel keeps what is pinned in it.
+        let Conversation::Channel(channel) = conversation else {
+            return Vec::new();
+        };
+        let listed = self
+            .shared
+            .pins
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let listed = listed.get(&channel).map_or(&[][..], Vec::as_slice);
+        pins_of(listed, &self.shared.engine.messages(channel))
     }
 
     fn message_count(&self, conversation: Conversation) -> usize {
@@ -1292,7 +1940,7 @@ impl Engine for RealEngine {
             return;
         }
         let engine = self.shared.engine.clone();
-        self.spawn(async move {
+        self.say(conversation, async move {
             match conversation {
                 Conversation::Channel(channel) => engine.send_text(channel, &body).await,
                 Conversation::Direct(session) => engine.send_direct_text(session, &body).await,
@@ -1305,7 +1953,7 @@ impl Engine for RealEngine {
             return;
         }
         let engine = self.shared.engine.clone();
-        self.spawn(async move {
+        self.say(conversation, async move {
             match conversation {
                 Conversation::Channel(channel) => engine.reply_text(channel, &to, &body).await,
                 Conversation::Direct(session) => {
@@ -1315,10 +1963,30 @@ impl Engine for RealEngine {
         });
     }
 
+    fn send_gif(
+        &self,
+        conversation: Conversation,
+        url: SharedString,
+        reply_to: Option<SharedString>,
+    ) {
+        let engine = self.shared.engine.clone();
+        self.say(conversation, async move {
+            let html = engine.picked_gif_html(&url, reply_to.as_ref().map(AsRef::as_ref));
+            match conversation {
+                Conversation::Channel(channel) => engine.send_html(channel, html).await,
+                Conversation::Direct(session) => engine.send_direct_html(session, html).await,
+            }
+        });
+    }
+
+    fn gif_service(&self) -> Option<crate::gif::Service> {
+        self.shared.gifs.service()
+    }
+
     fn send_picture(&self, conversation: Conversation, file: Vec<u8>) {
         let engine = self.shared.engine.clone();
         let limit = engine.picture_limit();
-        self.spawn(async move {
+        self.say(conversation, async move {
             // Decoding and scaling is work, and not for the engine's own
             // threads.
             let html =
@@ -1332,9 +2000,44 @@ impl Engine for RealEngine {
         });
     }
 
+    fn file_sharing(&self) -> crate::engine::FileSharing {
+        let sharing = self.shared.engine.file_sharing();
+        crate::engine::FileSharing {
+            by_link: sharing.by_link,
+            expiring: sharing.expiring,
+        }
+    }
+
+    fn send_pictures(&self, conversation: Conversation, files: Vec<Vec<u8>>) {
+        let engine = self.shared.engine.clone();
+        let limit = engine.picture_limit();
+        self.say(conversation, async move {
+            // Fitting is work, and not for the engine's own threads. Too many
+            // for one message, they go a message each, as before.
+            let htmls = tokio::task::spawn_blocking(move || {
+                match crate::inline_album::message(&files, limit)? {
+                    Some(html) => Ok(vec![html]),
+                    None => files
+                        .iter()
+                        .map(|file| crate::picture::message_html(file, limit))
+                        .collect::<Result<Vec<_>, String>>(),
+                }
+            })
+            .await
+            .map_err(|error| error.to_string())??;
+            for html in htmls {
+                match conversation {
+                    Conversation::Channel(channel) => engine.send_html(channel, html).await?,
+                    Conversation::Direct(session) => engine.send_direct_html(session, html).await?,
+                }
+            }
+            Ok(())
+        });
+    }
+
     fn send_file(&self, conversation: Conversation, path: std::path::PathBuf) {
         let engine = self.shared.engine.clone();
-        self.spawn(async move {
+        self.say(conversation, async move {
             let Conversation::Channel(channel) = conversation else {
                 return Err(
                     "Files are shared in channels; a direct message takes pictures.".into(),
@@ -1344,6 +2047,146 @@ impl Engine for RealEngine {
                 return Err("This server keeps no files; it takes pictures only.".into());
             }
             engine.share_file(channel, &path).await
+        });
+    }
+
+    fn share(
+        &self,
+        conversation: Conversation,
+        text: String,
+        files: Vec<std::path::PathBuf>,
+        how: ShareAs,
+    ) {
+        let files = files
+            .into_iter()
+            .map(|path| (SharedString::default(), path))
+            .collect();
+        self.share_tracked(conversation, text, files, how);
+    }
+
+    fn share_tracked(
+        &self,
+        conversation: Conversation,
+        text: String,
+        files: Vec<(SharedString, std::path::PathBuf)>,
+        how: ShareAs,
+    ) {
+        let engine = self.shared.engine.clone();
+        let shared = Arc::clone(&self.shared);
+        let ids: Vec<SharedString> = files
+            .iter()
+            .map(|(id, _)| id.clone())
+            .filter(|id| !id.is_empty())
+            .collect();
+        self.say(conversation, async move {
+            // What came of each file the view follows.
+            let tell = |id: &SharedString, now: crate::engine::Uploaded| {
+                shared.tell(EngineEvent::Upload { id: id.clone(), now });
+            };
+            let all_failed = |why: &str| {
+                for id in &ids {
+                    tell(id, crate::engine::Uploaded::Failed(why.to_owned().into()));
+                }
+            };
+            let Conversation::Channel(channel) = conversation else {
+                let why = "Files are shared in channels; a direct message takes pictures.";
+                all_failed(why);
+                return Err(why.into());
+            };
+            if !engine.fancy() {
+                let why = "This server keeps no files; it takes pictures only.";
+                all_failed(why);
+                return Err(why.into());
+            }
+            // Measuring a picture and making its small copies is work,
+            // and not for the engine's own threads.
+            let full = how.full;
+            let made = tokio::task::spawn_blocking(move || outgoing(&files, full))
+                .await
+                .map_err(|error| error.to_string())
+                .and_then(|made| made);
+            let made = match made {
+                Ok(made) => made,
+                Err(why) => {
+                    all_failed(&why);
+                    return Err(why);
+                }
+            };
+            let went = engine
+                .share_files(channel, &text, &made.files, &share_as(how))
+                .await;
+            // Whatever came of it, what was made for it is no longer needed.
+            let _ = std::fs::remove_dir_all(&made.folder);
+            let unsent = match went {
+                Ok(unsent) => unsent,
+                Err(why) => {
+                    all_failed(&why);
+                    return Err(why);
+                }
+            };
+            for id in &ids {
+                let now = match unsent.iter().find(|file| file.upload_id == id.as_ref()) {
+                    Some(file) if file.why == api::CANCELLED => crate::engine::Uploaded::Cancelled,
+                    Some(file) => crate::engine::Uploaded::Failed(file.why.clone().into()),
+                    None => crate::engine::Uploaded::Done,
+                };
+                tell(id, now);
+            }
+            Ok(())
+        });
+    }
+
+    fn cancel_upload(&self, id: SharedString) {
+        let _ = self.shared.engine.cancel_upload(&id);
+    }
+
+    fn fetch_shared(&self, key: SharedString) {
+        let shared = Arc::clone(&self.shared);
+        self.spawn(async move {
+            let picture = fetched(&shared.engine, &key).await;
+            shared.tell(EngineEvent::Shared { key, picture });
+            Ok(())
+        });
+    }
+
+    fn voice_support(&self) -> Option<crate::voice::Support> {
+        self.shared.voice.support()
+    }
+
+    fn recorder(&self) -> Box<dyn crate::voice::Recorder> {
+        if crate::voice::silent() {
+            return Box::new(crate::voice::tone_recorder::ToneRecorder::default());
+        }
+        Box::new(crate::voice::engine_recorder::EngineRecorder::new(
+            self.shared.engine.clone(),
+            self.runtime.handle().clone(),
+            Arc::clone(&self.shared.voice),
+        ))
+    }
+
+    fn voice_player(&self) -> Box<dyn crate::voice::Player> {
+        Box::new(crate::voice::engine_player::EnginePlayer::new(
+            self.shared.engine.clone(),
+            self.runtime.handle().clone(),
+            crate::voice::silent(),
+        ))
+    }
+
+    fn send_voice(&self, conversation: Conversation, clip: crate::voice::Clip) {
+        let engine = self.shared.engine.clone();
+        let channel = self.shared.engine.current_channel();
+        self.say(conversation, async move {
+            let clip = crate::voice::engine_recorder::engine_clip(clip);
+            // A direct message goes up to the channel the user is in.
+            let (channel, direct) = match conversation {
+                Conversation::Channel(channel) => (Some(channel), None),
+                Conversation::Direct(session) => (channel, Some(session)),
+            };
+            let Some(channel) = channel else {
+                let _ = engine.discard_voice_clip(&clip.path);
+                return Err("Join a channel to send a voice message from.".to_owned());
+            };
+            engine.send_voice_message(channel, direct, &clip).await
         });
     }
 
@@ -1371,6 +2214,11 @@ impl Engine for RealEngine {
     fn toggle_deafen(&self) {
         let engine = self.shared.engine.clone();
         self.spawn(async move { engine.toggle_deafen().await });
+    }
+
+    fn turn_voice_off(&self) {
+        let engine = self.shared.engine.clone();
+        self.spawn(async move { engine.turn_voice_off().await });
     }
 
     fn audio_devices(&self) -> AudioDevices {
@@ -1402,6 +2250,14 @@ impl Engine for RealEngine {
         {
             self.shared.tell(EngineEvent::Notice(Some(reason.into())));
         }
+    }
+
+    fn typed(&self, text: &str) -> Vec<(std::ops::Range<usize>, Setting)> {
+        typed(text)
+    }
+
+    fn source(&self, html: &str) -> String {
+        source(html)
     }
 
     fn typing(&self, conversation: Conversation) {
@@ -1440,6 +2296,8 @@ impl Engine for RealEngine {
             }
             // Another server altogether: everything is to be read again.
             shared.forget_server();
+            let _ = shared.engine.request_voice_support().await;
+            shared.gifs.ask_support();
             shared.tell(EngineEvent::StateChanged);
             shared.tell(EngineEvent::CurrentChannelChanged);
         }));
@@ -1485,29 +2343,9 @@ impl Engine for RealEngine {
                 Action::Register { session } => engine.register(session).await,
                 Action::ResetComment { session } => engine.reset_comment(session).await,
                 Action::RemovePicture { session } => engine.remove_avatar(session).await,
-                Action::CreateChannel {
-                    parent,
-                    name,
-                    history,
-                    encrypted,
-                } => {
-                    let history = match (history, encrypted) {
-                        (_, true) => api::History::EndToEnd,
-                        (true, false) => api::History::OnServer,
-                        (false, false) => api::History::None,
-                    };
-                    engine.create_channel(parent, name, history).await
-                }
-                Action::CreateTemporaryChannel { parent, name } => {
-                    engine.create_temporary_channel(parent, name).await
-                }
+                Action::MakeChannel(new) => engine.create_channel_as(new_channel(new)).await,
                 Action::MoveEveryone { from, to } => engine.move_everyone(from, to).await,
                 Action::Purge { channel, by } => shared.purge(channel, by).await,
-                Action::CreateSignalChannel { parent, name } => {
-                    engine
-                        .create_channel(parent, name, api::History::Signal)
-                        .await
-                }
                 Action::AnswerKeyRequest {
                     channel,
                     hash,
@@ -1544,6 +2382,24 @@ impl Engine for RealEngine {
                 }
                 Action::SetComment(text) => engine.set_comment(&text).await,
                 Action::SetAvatar(image) => engine.set_avatar(image).await,
+                Action::SetBanner(image) => {
+                    let held = match engine.own_session() {
+                        Some(own) => engine.user_comment(own).await,
+                        None => None,
+                    };
+                    let profile =
+                        crate::profile::with_banner(held.as_deref().unwrap_or_default(), &image);
+                    engine.set_profile(&profile).await
+                }
+                Action::PatchProfile(change) => {
+                    let held = match engine.own_session() {
+                        Some(own) => engine.user_comment(own).await,
+                        None => None,
+                    };
+                    let profile =
+                        crate::profile_fields::patched(held.as_deref().unwrap_or_default(), &change);
+                    engine.set_profile(&profile).await
+                }
                 other => shared.act_on_conversation(other).await,
             }
         });
@@ -1563,6 +2419,7 @@ impl Engine for RealEngine {
                     shared.tell(EngineEvent::Facts {
                         subject,
                         facts: server_facts(&shared.engine.server()),
+                        devices: Vec::new(),
                     });
                     shared.engine.welcome()
                 }
@@ -1575,32 +2432,35 @@ impl Engine for RealEngine {
     }
 
     fn voice_settings(&self) -> VoiceSettings {
-        let voice = self.shared.engine.voice_settings();
-        VoiceSettings {
-            push_to_talk: voice.push_to_talk,
-            threshold: voice.activation_threshold,
-            noise_suppression: voice.noise_suppression,
-            automatic_gain: voice.automatic_gain,
-            input_volume: voice.input_volume,
-            output_volume: voice.output_volume,
-            bitrate_bps: voice.bitrate_bps,
-            voice_over_tcp: voice.voice_over_tcp,
-        }
+        crate::sound_check::settings::voice_of(&self.shared.engine.audio_settings())
     }
 
     fn set_voice_settings(&self, settings: VoiceSettings) {
-        if let Err(reason) = self.shared.engine.set_voice_settings(api::VoiceSettings {
-            push_to_talk: settings.push_to_talk,
-            activation_threshold: settings.threshold,
-            noise_suppression: settings.noise_suppression,
-            automatic_gain: settings.automatic_gain,
-            input_volume: settings.input_volume,
-            output_volume: settings.output_volume,
-            bitrate_bps: settings.bitrate_bps,
-            voice_over_tcp: settings.voice_over_tcp,
-        }) {
+        let mut audio = self.shared.engine.audio_settings();
+        crate::sound_check::settings::apply(&mut audio, &settings);
+        api::audio::set_legacy_backend(settings.legacy_backend);
+        if let Err(reason) = self.shared.engine.set_audio_settings(audio) {
             self.shared.tell(EngineEvent::Notice(Some(reason.into())));
         }
+    }
+
+    fn tune_denoiser(&self, knobs: std::collections::BTreeMap<String, f32>) {
+        let mut audio = self.shared.engine.audio_settings();
+        audio.denoiser_params = knobs;
+        if let Err(reason) = self.shared.engine.set_audio_settings(audio) {
+            self.shared.tell(EngineEvent::Notice(Some(reason.into())));
+        }
+    }
+
+    fn sound_check(&self) -> Box<dyn crate::sound_check::SoundCheck> {
+        Box::new(crate::sound_check::engine_check::EngineCheck::new(
+            self.shared.engine.clone(),
+            Arc::clone(&self.shared.sound),
+        ))
+    }
+
+    fn voice_stats(&self) -> Option<crate::sound_check::Stats> {
+        self.shared.sound.stats()
     }
 
     fn set_whisper_target(&self, target: Option<WhisperTarget>) {
@@ -1703,6 +2563,145 @@ impl HeldPoll {
     }
 }
 
+/// A message whose body was put away, as it is handed to the view: its
+/// words and a mark where each picture was, and what it says in a line.
+#[derive(Debug)]
+struct Light {
+    html: String,
+    text: String,
+}
+
+impl Shared {
+    /// `message` as the view is to hold it. One heavy with pictures has
+    /// its body put away by the engine and is handed on without them; one
+    /// put away before is handed on as it was then.
+    fn lightened(
+        &self,
+        conversation: Conversation,
+        mut message: api::MessageInfo,
+    ) -> api::MessageInfo {
+        let Some(id) = message.id.clone() else {
+            return message;
+        };
+        let mut light = self.light.lock().unwrap_or_else(PoisonError::into_inner);
+        if EngineHandle::is_put_away(&message.html) {
+            // What stood in its place says nothing: the words come from
+            // what was kept of it.
+            if let Some(kept) = light.get(&id) {
+                message.html.clone_from(&kept.html);
+                message.text.clone_from(&kept.text);
+            }
+            return message;
+        }
+        if !crate::away::is_heavy(&message.html) {
+            return message;
+        }
+        let put = match conversation {
+            Conversation::Channel(channel) => self.engine.put_away(channel, &id),
+            Conversation::Direct(session) => self.engine.put_away_direct(session, &id),
+        };
+        match put {
+            Ok(()) => {
+                message.html = crate::away::light(&message.html);
+                let kept = Light {
+                    html: message.html.clone(),
+                    text: message.text.clone(),
+                };
+                let _ = light.insert(id, kept);
+            }
+            // Held whole, as before there was anywhere to put it.
+            Err(error) => tracing::debug!(%error, "a heavy message was not put away"),
+        }
+        message
+    }
+}
+
+/// How the engine is told to share, from how the view says it.
+fn share_as(how: ShareAs) -> api::ShareAs {
+    api::ShareAs {
+        reach: match how.reach {
+            Reach::Here => api::Reach::Here,
+            Reach::Link => api::Reach::Link,
+            Reach::Password(password) => api::Reach::Password(password),
+        },
+        lasts_secs: how.lasts.secs(),
+    }
+}
+
+/// Files made ready to go up, and the folder what was made for them is in.
+struct Made {
+    files: Vec<api::ToShare>,
+    folder: std::path::PathBuf,
+}
+
+/// Make `files` ready to go up: each picture measured and given a small
+/// copy to stand in for it, and unless `full` a smaller one to go up in
+/// its place where it is large. What is made is written beside nothing of
+/// the user's: into a folder of its own, removed once the files are up.
+fn outgoing(files: &[(SharedString, std::path::PathBuf)], full: bool) -> Result<Made, String> {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let nth = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let folder = std::env::temp_dir().join(format!("fancy-gpui-up-{}-{nth}", std::process::id()));
+    std::fs::create_dir_all(&folder).map_err(|error| error.to_string())?;
+    let written = |name: String, bytes: &[u8]| -> Result<std::path::PathBuf, String> {
+        let path = folder.join(name);
+        std::fs::write(&path, bytes).map_err(|error| error.to_string())?;
+        Ok(path)
+    };
+    let mut made = Vec::with_capacity(files.len());
+    for (at, (upload_id, path)) in files.iter().enumerate() {
+        // Only what may be a picture is read here: anything else goes up
+        // a piece at a time, however large it is.
+        let picture = crate::picture::at(path)
+            .map(|file| crate::picture::outgoing(&file, !full))
+            .unwrap_or_default();
+        let stem = path
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let smaller = match &picture.smaller {
+            // Under its own name, in a folder of its own: the name is what
+            // its message will call it.
+            Some(bytes) => {
+                std::fs::create_dir_all(folder.join(at.to_string()))
+                    .map_err(|error| error.to_string())?;
+                Some(written(format!("{at}/{stem}.jpg"), bytes))
+            }
+            None => None,
+        };
+        let stand_in = match &picture.stand_in {
+            Some(bytes) => Some(written(format!("{at}-small.jpg"), bytes)?),
+            None => None,
+        };
+        made.push(api::ToShare {
+            path: match smaller {
+                Some(smaller) => smaller?,
+                None => path.clone(),
+            },
+            stand_in,
+            pixels: picture.pixels,
+            legacy: picture.legacy,
+            upload_id: upload_id.to_string(),
+        });
+    }
+    Ok(Made {
+        files: made,
+        folder,
+    })
+}
+
+/// The shared picture kept under `key`, fetched: by way of a file, which
+/// is how the engine hands shared files over, read and removed at once.
+async fn fetched(engine: &EngineHandle, key: &str) -> Option<Arc<gpui::Image>> {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let nth = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let to = std::env::temp_dir().join(format!("fancy-gpui-down-{}-{nth}", std::process::id()));
+    let fetched = engine.save_shared_file(key, &to).await;
+    let bytes = fetched.ok().and_then(|_| std::fs::read(&to).ok());
+    let _ = std::fs::remove_file(&to);
+    crate::picture::picture(bytes?).map(Arc::new)
+}
+
 /// The files the message `html` shares. Most messages share none, and
 /// that is found out without taking the message apart.
 fn attachments(html: &str) -> Vec<Attachment> {
@@ -1714,8 +2713,22 @@ fn attachments(html: &str) -> Vec<Attachment> {
         .map(|file| Attachment {
             name: file.filename.into(),
             size: file.size,
-            key: file.key.map(Into::into),
+            // A server's plugin keeps a file under its link and nothing
+            // else: the link is then what it is fetched by.
+            key: file.key.or_else(|| file.url.clone()).map(Into::into),
             url: file.url.map(Into::into),
+            open_to: match file.mode.as_deref() {
+                Some("public") => OpenTo::Link,
+                Some("password") => OpenTo::Password,
+                _ => OpenTo::Here,
+            },
+            stand_in: file.thumb_key.map(Into::into),
+            pixels: file.pixels,
+            voice: file.voice.map(|note| crate::voice::Note {
+                duration_ms: note.duration_ms,
+                waveform: note.waveform.into(),
+            }),
+            expires_at: file.expires_at.filter(|at| *at > 0),
         })
         .collect()
 }
@@ -1730,13 +2743,56 @@ fn preview_of(preview: api::LinkPreview) -> Preview {
             .thumbnail
             .and_then(crate::picture::picture)
             .map(Arc::new),
+        kind: preview.kind.map(Into::into),
+        picture_url: preview.picture_url.map(Into::into),
+        icon: preview.icon.and_then(crate::picture::picture).map(Arc::new),
+        details: crate::engine::PreviewDetails {
+            picture_size: preview.picture_size,
+            author: preview.author.map(Into::into),
+            duration: preview.duration.map(Into::into),
+            published: preview.published.map(Into::into),
+            facts: preview
+                .facts
+                .into_iter()
+                .map(|(name, value)| (name.into(), value.into()))
+                .collect(),
+            price: preview.price.map(|price| crate::engine::PreviewPrice {
+                amount: price.amount.into(),
+                currency: price.currency.into(),
+                was: price.was.into(),
+                availability: price.availability.into(),
+            }),
+        },
+    }
+}
+
+/// A channel to be made, as the engine takes it: what was left empty is
+/// left to the server.
+fn new_channel(new: crate::engine::NewChannel) -> api::NewChannel {
+    use crate::engine::Kept;
+    let said = |text: String| Some(text).filter(|text| !text.trim().is_empty());
+    api::NewChannel {
+        parent: new.parent,
+        name: new.name,
+        description: said(new.about),
+        password: said(new.password),
+        max_users: new.most,
+        position: new.position,
+        temporary: new.temporary,
+        hidden: new.hidden,
+        history: match new.kept {
+            Kept::No => api::History::None,
+            Kept::OnServer => api::History::OnServer,
+            Kept::Sealed => api::History::EndToEnd,
+            Kept::Signal => api::History::Signal,
+        },
     }
 }
 
 fn ban_of(ban: api::BanInfo) -> Ban {
     Ban {
+        mask: crate::bans::bits_from_wire(&ban.address, ban.mask),
         address: ban.address.into(),
-        mask: ban.mask,
         name: ban.name.into(),
         hash: ban.hash.into(),
         reason: ban.reason.into(),
@@ -1748,7 +2804,7 @@ fn ban_of(ban: api::BanInfo) -> Ban {
 fn ban_info(ban: &Ban) -> api::BanInfo {
     api::BanInfo {
         address: ban.address.to_string(),
-        mask: ban.mask,
+        mask: crate::bans::bits_to_wire(&ban.address, ban.mask),
         name: ban.name.to_string(),
         hash: ban.hash.to_string(),
         reason: ban.reason.to_string(),
@@ -1763,6 +2819,7 @@ fn registered_of(user: api::RegisteredInfo) -> Registered {
         name: user.name.into(),
         last_seen: user.last_seen.map(Into::into),
         last_channel: user.last_channel,
+        picture: user.picture,
     }
 }
 
@@ -1840,6 +2897,57 @@ const EARLIER_PAGE: u32 = 100;
 /// How often, at most, the server is told the local user is writing.
 const TYPING_EVERY: std::time::Duration = std::time::Duration::from_secs(3);
 
+/// Put `pin` among a channel's, or with `pinned` false take it out.
+fn note_pin(channel: &mut Vec<api::PinInfo>, pin: api::PinInfo, pinned: bool) {
+    channel.retain(|known| known.message != pin.message);
+    if pinned {
+        channel.push(pin);
+    }
+}
+
+/// What is pinned in a channel: what the server `listed`, and whatever
+/// else the `held` messages (oldest first) say is pinned. Each with its
+/// message, where that is held. The pin put on last comes first.
+fn pins_of(listed: &[api::PinInfo], held: &[api::MessageInfo]) -> Vec<Pin> {
+    let said = |id: &str| {
+        let at = held
+            .iter()
+            .position(|message| message.id.as_deref() == Some(id))?;
+        let message = &held[at];
+        Some(Pinned {
+            sender_name: message.sender_name.clone().into(),
+            text: message.text.clone().into(),
+            sent_at_ms: message.sent_at_ms,
+            from_newest: held.len() - at,
+        })
+    };
+    let mut pins: Vec<Pin> = listed
+        .iter()
+        .map(|pin| Pin {
+            id: pin.message.clone().into(),
+            by: (!pin.by.is_empty()).then(|| pin.by.clone().into()),
+            at_ms: (pin.at_ms > 0).then_some(pin.at_ms),
+            said: said(&pin.message),
+        })
+        .collect();
+    // Pinned while this client was not listening for the list.
+    for message in held.iter().filter(|message| message.pinned) {
+        let Some(id) = message.id.as_deref() else {
+            continue;
+        };
+        if !pins.iter().any(|pin| pin.id.as_ref() == id) {
+            pins.push(Pin {
+                id: id.to_owned().into(),
+                by: None,
+                at_ms: message.pinned_at_ms,
+                said: said(id),
+            });
+        }
+    }
+    pins.sort_by_key(|pin| std::cmp::Reverse(pin.at_ms));
+    pins
+}
+
 /// Put `reaction` among a channel's, or with `added` false take it out.
 fn note_reaction(
     channel: &mut HashMap<String, Vec<api::ReactionInfo>>,
@@ -1879,11 +2987,11 @@ fn tally(given: &[api::ReactionInfo], own_hash: Option<&str>) -> Vec<Reaction> {
 }
 
 /// How long to wait before retry number `attempt` (from zero) of a lost
-/// connection: two seconds, doubling, at most thirty; `None` once it has
-/// been tried often enough that the server is simply gone.
-fn retry_pause(attempt: u32) -> Option<std::time::Duration> {
-    const ATTEMPTS: u32 = 10;
-    (attempt < ATTEMPTS).then(|| std::time::Duration::from_secs((2u64 << attempt.min(4)).min(30)))
+/// connection: two seconds, doubling, at most thirty. There is no last
+/// attempt: a server that is down for an evening is come back to when it
+/// is up, and what ends the trying is the user leaving.
+fn retry_pause(attempt: u32) -> std::time::Duration {
+    std::time::Duration::from_secs((2u64 << attempt.min(4)).min(30))
 }
 
 /// What to tell the user when a session ends: the engine's reason, unless
@@ -1893,39 +3001,13 @@ fn disconnect_notice(reason: Option<String>, refused: bool) -> Option<String> {
 }
 
 /// Unix epoch milliseconds, now.
-/// The groups as the server sent them, with the members the view changed:
-/// everything else a group carries goes back as it came. A group the view
-/// made is new, and takes its parent's members as groups do.
-fn merged_groups(read: Vec<api::AclGroupInfo>, changed: Vec<AclGroup>) -> Vec<api::AclGroupInfo> {
-    let mut groups = read;
-    for group in changed {
-        if let Some(known) = groups
-            .iter_mut()
-            .find(|known| known.name == group.name.as_ref())
-        {
-            known.add = group.added;
-            known.remove = group.removed;
-        } else if !group.added.is_empty() {
-            groups.push(api::AclGroupInfo {
-                name: group.name.to_string(),
-                inherited: false,
-                inherit: true,
-                inheritable: true,
-                add: group.added,
-                remove: group.removed,
-                inherited_members: Vec::new(),
-                color: None,
-                icon: None,
-                style_preset: None,
-                metadata: HashMap::new(),
-            });
-        }
-    }
-    groups
-}
-
 /// The permission to write a channel's rules, as Mumble numbers it.
 const WRITE: u32 = 0x1;
+
+/// The permissions to read the registered accounts, as Mumble numbers
+/// them: an administrator's, and the lookup every registered user has.
+const REGISTER: u32 = 0x4_0000;
+const READ_REGISTER: u32 = 0x80_0000;
 
 /// How long after asking for the roles an answer is taken to be to that.
 const ROLES_ANSWER_WITHIN: std::time::Duration = std::time::Duration::from_secs(5);
@@ -2069,16 +3151,113 @@ mod tests {
         assert_eq!(span(2 * 86_400 + 7 * 3600 + 59), "2 d 7 h");
     }
 
+    /// The whole way: another install's directory is read, its certificate
+    /// and servers arrive here, and a second look finds nothing left. The
+    /// other install is made for the test; the user's own is never read.
     #[test]
-    fn retries_back_off_and_then_give_up() {
-        let seconds = |attempt| retry_pause(attempt).map(|pause| pause.as_secs());
-        assert_eq!(seconds(0), Some(2));
-        assert_eq!(seconds(1), Some(4));
-        assert_eq!(seconds(2), Some(8));
-        assert_eq!(seconds(3), Some(16));
-        assert_eq!(seconds(4), Some(30), "held at thirty");
-        assert_eq!(seconds(9), Some(30));
-        assert_eq!(seconds(10), None, "then no more");
+    #[allow(unsafe_code, reason = "`std::env::set_var` is unsafe in Rust 2024")]
+    fn what_another_install_holds_is_brought_over_once() {
+        let scratch = std::env::temp_dir().join(format!("fancy-gpui-carry-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&scratch);
+        let (other, here) = (scratch.join("other"), scratch.join("here"));
+        // The other install: a certificate under its label, and its store
+        // of saved servers.
+        let identity = other.join("identities").join("sebi");
+        std::fs::create_dir_all(&identity).expect("the other install is made");
+        for (name, text) in [
+            ("tls.cert.pem", "a certificate"),
+            ("tls.key.pem", "its key"),
+        ] {
+            std::fs::write(identity.join(name), text).expect("the identity is written");
+        }
+        std::fs::write(
+            other.join("servers.json"),
+            r#"{"servers":[{"id":"1","label":"Home","host":"magical.example","port":64738,
+                "username":"Sebi","cert_label":"sebi","favorite":true}]}"#,
+        )
+        .expect("the store is written");
+        // SAFETY: no other test of this binary reads this variable.
+        unsafe { std::env::set_var("FANCY_GPUI_IMPORT_FROM", &other) };
+        let engine = RealEngine::start(&here).expect("the engine starts");
+        assert_eq!(
+            engine.carry_over(),
+            Some(CarryOver {
+                servers: 1,
+                certificates: 1
+            })
+        );
+        engine.carry_now();
+        let saved = engine.saved_servers();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].label.as_ref(), "Home");
+        assert_eq!(
+            saved[0].certificate.as_ref().map(AsRef::as_ref),
+            Some("sebi")
+        );
+        assert_eq!(engine.certificates(), ["sebi"]);
+        let key = here.join("identities").join("sebi").join("tls.key.pem");
+        assert_eq!(
+            std::fs::read_to_string(key).ok().as_deref(),
+            Some("its key")
+        );
+        assert!(identity.join("tls.key.pem").exists(), "copied, not moved");
+        assert_eq!(engine.carry_over(), None, "nothing left to bring");
+        // Kept across a restart, as any saved server is.
+        engine.shutdown();
+        let again = RealEngine::start(&here).expect("the engine starts again");
+        assert_eq!(again.saved_servers().len(), 1);
+        again.shutdown();
+        unsafe { std::env::remove_var("FANCY_GPUI_IMPORT_FROM") };
+        let _ = std::fs::remove_dir_all(scratch);
+    }
+
+    #[test]
+    fn what_is_pinned_is_the_servers_list_and_what_the_messages_say() {
+        let message = |id: &str, pinned: bool| api::MessageInfo {
+            sender: Some(3),
+            sender_name: "Rin".to_owned(),
+            text: format!("said {id}"),
+            html: String::new(),
+            sent_at_ms: Some(10),
+            own: false,
+            id: Some(id.to_owned()),
+            edited: false,
+            pinned,
+            pinned_at_ms: pinned.then_some(50),
+            failed: false,
+        };
+        let pin = |id: &str, at_ms| api::PinInfo {
+            message: id.to_owned(),
+            by: "Alex".to_owned(),
+            at_ms,
+        };
+        let held = [message("a", false), message("b", true), message("c", true)];
+        // The server listed one that is held and one too far back to be;
+        // "c" was pinned without the list saying so.
+        let pins = pins_of(&[pin("b", 70), pin("old", 20)], &held);
+        let ids: Vec<_> = pins.iter().map(|pin| pin.id.as_ref()).collect();
+        assert_eq!(ids, ["b", "c", "old"], "the pin put on last comes first");
+        assert_eq!(pins[0].by.as_ref().map(AsRef::as_ref), Some("Alex"));
+        let said = pins[0].said.as_ref().expect("held");
+        assert_eq!((said.text.as_ref(), said.from_newest), ("said b", 2));
+        assert_eq!(pins[1].by, None, "nobody said who");
+        assert!(pins[2].said.is_none(), "further back than what is held");
+        // A pin taken off is off the list.
+        let mut listed = vec![pin("b", 70)];
+        note_pin(&mut listed, pin("b", 90), false);
+        assert!(listed.is_empty());
+    }
+
+    #[test]
+    fn retries_back_off_and_never_give_up() {
+        let seconds = |attempt| retry_pause(attempt).as_secs();
+        assert_eq!(seconds(0), 2);
+        assert_eq!(seconds(1), 4);
+        assert_eq!(seconds(2), 8);
+        assert_eq!(seconds(3), 16);
+        assert_eq!(seconds(4), 30, "held at thirty");
+        assert_eq!(seconds(10), 30, "for as long as the server is wanted");
+        assert_eq!(seconds(u32::MAX), 30);
     }
 
     #[test]
@@ -2089,6 +3268,7 @@ mod tests {
             users: None,
             max_users: None,
             version: None,
+            livery_digest: None,
         };
         assert!(answered(down).is_none());
         let up = answered(PingInfo {
@@ -2097,6 +3277,7 @@ mod tests {
             users: Some(3),
             max_users: Some(101),
             version: Some("1.6.0".to_owned()),
+            livery_digest: Some(String::new()),
         })
         .expect("an answer");
         assert_eq!((up.users, up.max_users, up.latency_ms), (3, 101, 18));
@@ -2269,7 +3450,23 @@ mod tests {
 
         // The same picture as a message: it arrives as one, whole.
         let room = Conversation::Channel(painter.snapshot().current_channel.expect("a channel"));
+        let told = painter.events();
+        while told.try_recv().is_ok() {}
         painter.send_picture(room, jpeg.clone());
+        // Nobody else announces what the painter said: it is told to read
+        // again itself, and by then the picture is among its messages.
+        let shows = |engine: &RealEngine| {
+            engine
+                .messages(room)
+                .iter()
+                .any(|message| crate::rich::Rich::parse(&message.html).images == [jpeg.clone()])
+        };
+        wait_for("the painter to be told of its own picture", || {
+            std::iter::from_fn(|| told.try_recv().ok()).any(|event| {
+                matches!(event, EngineEvent::NewMessage { conversation } if conversation == room)
+                    && shows(&painter)
+            })
+        });
         wait_for("the viewer to receive the picture", || {
             viewer
                 .messages(room)
@@ -2292,6 +3489,209 @@ mod tests {
         drop((painter, viewer));
         let _ = std::fs::remove_dir_all(painter_dir);
         let _ = std::fs::remove_dir_all(viewer_dir);
+    }
+
+    /// The picture of somebody with an account is seen by who is there and
+    /// by who comes later. On Starling 0.2.20 it is the only kind that is: a
+    /// guest's picture is announced there too, but the request for it is
+    /// answered from accounts alone
+    /// (`live_a_picture_set_by_one_is_seen_by_the_other` shows that).
+    #[test]
+    #[ignore = "needs a live Fancy server and its SuperUser password"]
+    fn live_fancy_the_picture_of_somebody_registered_is_seen_by_the_others() {
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        let (painter, painter_dir) = fancy_client("PicKept", None);
+        wait_for("both to connect", || {
+            admin.snapshot().users.len() >= 2 && painter.snapshot().users.len() >= 2
+        });
+        let _ = registered(&admin, "PicKept");
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new(&mut jpeg)
+            .encode_image(&image::RgbImage::from_pixel(
+                8,
+                8,
+                image::Rgb([40, 40, 200]),
+            ))
+            .expect("a jpeg");
+        painter.act(Action::SetAvatar(jpeg));
+        let has_it = |engine: &RealEngine| {
+            let users = engine.snapshot().users;
+            users
+                .iter()
+                .any(|user| user.name.as_ref() == "PicKept" && user.avatar.is_some())
+        };
+        wait_for("the administrator to have the picture", || has_it(&admin));
+        let (late, late_dir) = fancy_client("PicLate", None);
+        wait_for("somebody who comes later to have it too", || has_it(&late));
+        for (engine, dir) in [
+            (admin, admin_dir),
+            (painter, painter_dir),
+            (late, late_dir),
+        ] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    /// A profile of the older format is converted by its owner and saved;
+    /// somebody else then reads it in the new format, and what follows the
+    /// profile's mark is plain HTML for any other client. The owner is
+    /// registered, as a guest's long comment is not served on Starling.
+    /// With `FANCY_GPUI_TEST_FILES=1` (the server's file store reachable at
+    /// the address it gives out) the full pictures are kept there too, and
+    /// the reader opens the full profile.
+    #[test]
+    #[ignore = "needs a live Fancy server and its SuperUser password"]
+    fn live_fancy_a_profile_is_converted_and_read_in_the_new_format() {
+        use mumble_tauri_lib::engine_api::about::{Limits, Migration, Written};
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let files = std::env::var("FANCY_GPUI_TEST_FILES").is_ok_and(|on| on == "1");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        let (owner, owner_dir) = fancy_client("AboutOwner", None);
+        let (reader, reader_dir) = fancy_client("AboutReader", None);
+        wait_for("all three to connect", || {
+            [&admin, &owner, &reader]
+                .iter()
+                .all(|engine| engine.snapshot().users.len() >= 3)
+        });
+        let _ = registered(&admin, "AboutOwner");
+        let session = owner.snapshot().own_session.expect("the owner's session");
+        let older = older_profile();
+        owner
+            .runtime
+            .block_on(owner.shared.engine.set_written_comment(&older))
+            .expect("the older profile written");
+        let told = reader.events();
+        let read_by = |engine: &RealEngine, told: &async_channel::Receiver<EngineEvent>, wanted: &str| {
+            comment_read(engine, told, session, wanted)
+        };
+        let before = read_by(&reader, &told, "data:image");
+        assert!(crate::profile::Said::of(&before).0.is_older(), "the older format");
+
+        // The owner converts, from their own comment as the server holds it.
+        let own_told = owner.events();
+        let own = read_by(&owner, &own_told, "data:image");
+        let mut migration = Migration::read(&own);
+        migration.thumbnail(Limits::CARD.thumbs);
+        let keep = if files {
+            migration
+                .embedded
+                .iter()
+                .enumerate()
+                .map(|(at, picture)| (at, Arc::new(picture.bytes.clone())))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        owner.save_about(crate::profile::Save {
+            about: migration.card(),
+            keep,
+            full_text: None,
+            page: None,
+            titles: ("About".into(), "Pictures".into()),
+        });
+        wait_for("the conversion to be saved", || {
+            std::iter::from_fn(|| own_told.try_recv().ok()).any(|event| match event {
+                EngineEvent::AboutSaved(saved) => {
+                    assert!(saved.is_ok(), "saved: {saved:?}");
+                    true
+                }
+                _ => false,
+            })
+        });
+
+        // Somebody else reads it in the new format, thumbnails and all.
+        let after = read_by(&reader, &told, "\"about\"");
+        let written = Written::read(&after);
+        read_in_the_new_format(&written);
+        if files {
+            let page = written.page().expect("a full profile");
+            reader.fetch_page(page);
+            wait_for("the full profile", || {
+                std::iter::from_fn(|| told.try_recv().ok()).any(|event| {
+                    matches!(event, EngineEvent::ProfilePage { page: Ok(page), .. }
+                        if !page.sections.is_empty())
+                })
+            });
+        }
+        for (engine, dir) in [
+            (admin, admin_dir),
+            (owner, owner_dir),
+            (reader, reader_dir),
+        ] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    /// The profile of the older format the conversion test starts from: its
+    /// words, a list, a link, and the same picture twice, pasted in whole.
+    fn older_profile() -> String {
+        let mut picture = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new(&mut picture)
+            .encode_image(&image::RgbImage::from_fn(240, 160, |x, y| {
+                image::Rgb([(x % 256) as u8, (y % 256) as u8, 120])
+            }))
+            .expect("a jpeg");
+        let address = crate::picture::data_uri(&picture).expect("an address");
+        format!(
+            concat!(
+                r#"<!--FANCY:{{"v":1,"status":"Testing"}}-->"#,
+                r#"<p style="text-align:center"><strong>Hello World!</strong></p>"#,
+                r#"<p style="text-align:center"><a href="https://example.org/x">A link</a></p>"#,
+                r#"<p style="text-align:center"><strong>Quotes</strong></p>"#,
+                r#"<ul><li>Make the world more exciting</li><li>うるさい</li></ul>"#,
+                r#"<p><img src="{0}"><img src="{0}"></p>"#,
+            ),
+            address
+        )
+    }
+
+    /// `session`'s comment as `engine` reads it, once it holds `wanted`:
+    /// asked for again until it does.
+    fn comment_read(
+        engine: &RealEngine,
+        told: &async_channel::Receiver<EngineEvent>,
+        session: u32,
+        wanted: &str,
+    ) -> String {
+        let mut held = None;
+        wait_for(wanted, || {
+            engine.about(Subject::User(session));
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            held = std::iter::from_fn(|| told.try_recv().ok()).find_map(|event| match event {
+                EngineEvent::About {
+                    subject,
+                    html: Some(html),
+                } if subject == Subject::User(session) && html.contains(wanted) => {
+                    Some(html.to_string())
+                }
+                _ => None,
+            });
+            held.is_some()
+        });
+        held.expect("the comment")
+    }
+
+    /// The converted profile as somebody else reads it: the about with its
+    /// two thumbnails and its status, and for a plain client sensible HTML
+    /// (the words, a list as lines, a link, and no picture at all).
+    fn read_in_the_new_format(written: &mumble_tauri_lib::engine_api::about::Written) {
+        let about = written.about().expect("an about");
+        assert_eq!(about.pictures().count(), 2);
+        assert!(about.pictures().all(|picture| picture.thumb_weight().is_some()));
+        assert_eq!(written.profile.as_ref().map(|p| p["status"].clone()), Some("Testing".into()));
+        let plain = &written.html;
+        assert!(plain.contains("<strong>Hello World!</strong>"), "{plain}");
+        assert!(plain.contains(r#"<a href="https://example.org/x">A link</a>"#));
+        assert!(!plain.contains("<img") && !plain.contains("data:"));
+        assert_eq!(
+            crate::rich::Rich::parse(plain).text,
+            "Hello World!\nA link\nQuotes\n\u{2022} Make the world more exciting\n\u{2022} うるさい"
+        );
     }
 
     /// A direct message reaches only the one it is for, and counts as
@@ -2358,7 +3758,10 @@ mod tests {
     }
 
     fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        // Longer than anything takes: the throwaway server built from the
+        // source of August 2026 answers nobody for about fifteen seconds
+        // after somebody connects, and then everybody at once.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
         while !done() {
             assert!(
                 std::time::Instant::now() < deadline,
@@ -2471,6 +3874,12 @@ mod tests {
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
+        // `FANCY_GPUI_TEST_LOGS=<folder>` keeps what the engines say there,
+        // for a test that fails without saying why.
+        static LOGGED: std::sync::Once = std::sync::Once::new();
+        if let Ok(logs) = std::env::var("FANCY_GPUI_TEST_LOGS") {
+            LOGGED.call_once(|| start_logs(std::path::Path::new(&logs), Some("debug")));
+        }
         let engine = RealEngine::start(&dir).expect("the engine starts");
         engine.save_server(SavedServer {
             id: "live".into(),
@@ -2676,7 +4085,7 @@ mod tests {
             std::iter::from_fn(|| told.try_recv().ok()).any(|event| {
                 matches!(
                     event,
-                    EngineEvent::Facts { subject, facts }
+                    EngineEvent::Facts { subject, facts, .. }
                         if subject == Subject::User(admin_session)
                             && facts.iter().any(|(name, _)| name.as_ref() == "Ping")
                 )
@@ -2701,7 +4110,7 @@ mod tests {
             std::iter::from_fn(|| told.try_recv().ok()).any(|event| {
                 matches!(
                     event,
-                    EngineEvent::Facts { subject: Subject::Server, facts }
+                    EngineEvent::Facts { subject: Subject::Server, facts, .. }
                         if facts.iter().any(|(name, value)| {
                             name.as_ref() == "Fancy extensions" && value.as_ref() == "yes"
                         })
@@ -2730,12 +4139,12 @@ mod tests {
         });
         let name = format!("kept-{}", std::process::id());
         let root = admin.snapshot().current_channel.expect("the root");
-        admin.act(Action::CreateChannel {
+        admin.act(Action::MakeChannel(crate::engine::NewChannel {
             parent: root,
             name: name.clone(),
-            history: true,
-            encrypted: false,
-        });
+            kept: crate::engine::Kept::OnServer,
+            ..crate::engine::NewChannel::default()
+        }));
         let kept = |engine: &RealEngine| {
             engine
                 .snapshot()
@@ -2785,6 +4194,14 @@ mod tests {
         wait_for("alice to see the pin", || {
             said(&alice, room, "to be kept").is_some_and(|message| message.pinned)
         });
+        // It is on the list of what is pinned there, with who pinned it, as
+        // the server says (Starling from 0.2.21 stamps it; before, absent).
+        let listed = alice.pins(room);
+        assert_eq!(listed.len(), 1, "{listed:?}");
+        let by = listed[0].by.as_ref().map(AsRef::as_ref);
+        assert_eq!(by, Some("SuperUser"), "{by:?}");
+        let text = listed[0].said.as_ref().map(|said| said.text.to_string());
+        assert_eq!(text.as_deref(), Some("to be kept"));
 
         // Somebody who was not there reads what was kept, and only that.
         let (late, late_dir) = fancy_client("KeptLate", None);
@@ -2803,6 +4220,265 @@ mod tests {
             engine.shutdown();
             let _ = std::fs::remove_dir_all(dir);
         }
+    }
+
+    /// Whoever comes later is told what is pinned in a channel that keeps
+    /// its messages. Starling 0.2.20 does not do this: it passes a pin on
+    /// to who is there and keeps none, so this fails there at the last
+    /// wait.
+    #[test]
+    #[ignore = "needs a live Fancy server and its SuperUser password"]
+    fn live_fancy_a_pin_is_told_to_who_comes_later() {
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        wait_for("the administrator to connect", || {
+            admin.snapshot().connection == Connection::Connected
+        });
+        let name = format!("pinned-{}", std::process::id());
+        let root = admin.snapshot().current_channel.expect("the root");
+        admin.act(Action::MakeChannel(crate::engine::NewChannel {
+            parent: root,
+            name: name.clone(),
+            kept: crate::engine::Kept::OnServer,
+            ..crate::engine::NewChannel::default()
+        }));
+        let kept = |engine: &RealEngine| {
+            let channels = engine.snapshot().channels;
+            channels
+                .into_iter()
+                .find(|channel| channel.name.as_ref() == name)
+                .map(|channel| channel.id)
+        };
+        wait_for("the channel", || kept(&admin).is_some());
+        let channel = kept(&admin).expect("the channel");
+        let room = Conversation::Channel(channel);
+        admin.join_channel(channel);
+        wait_for("the administrator to be in it", || {
+            admin.snapshot().current_channel == Some(channel)
+        });
+        admin.send_message(room, "worth keeping".to_owned());
+        wait_for("the message to have its id", || {
+            said(&admin, room, "worth keeping").is_some_and(|message| message.id.is_some())
+        });
+        let id = said(&admin, room, "worth keeping")
+            .and_then(|message| message.id)
+            .expect("an id")
+            .to_string();
+        admin.act(Action::Pin {
+            channel,
+            id,
+            pinned: true,
+        });
+        wait_for("the pin to take", || admin.pins(room).len() == 1);
+
+        let (late, late_dir) = fancy_client("PinLate", None);
+        wait_for("the latecomer to connect", || kept(&late).is_some());
+        late.join_channel(channel);
+        late.open(room);
+        wait_for("the latecomer to read the history", || {
+            said(&late, room, "worth keeping").is_some()
+        });
+        wait_for("the latecomer to be told of the pin", || {
+            late.pins(room).len() == 1
+        });
+        for (engine, dir) in [(admin, admin_dir), (late, late_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+    /// A server that goes away is waited for, and come back to when it
+    /// is there again; giving up meanwhile ends the waiting.
+    ///
+    /// The server has to be a Docker container this test may stop and
+    /// start: `FANCY_GPUI_TEST_CONTAINER` names it.
+    #[test]
+    #[ignore = "stops and starts the server's container; set FANCY_GPUI_TEST_CONTAINER"]
+    fn live_fancy_a_lost_connection_is_waited_for_and_comes_back() {
+        let container =
+            std::env::var("FANCY_GPUI_TEST_CONTAINER").expect("FANCY_GPUI_TEST_CONTAINER");
+        let docker = |verb: &str| {
+            let done = std::process::Command::new("docker")
+                .args([verb, &container])
+                .output()
+                .expect("docker runs");
+            assert!(done.status.success(), "docker {verb}: {done:?}");
+        };
+        let (alice, dir) = fancy_client("RetryAlice", None);
+        let connection = || alice.snapshot().connection;
+        wait_for("alice to connect", || connection() == Connection::Connected);
+        docker("stop");
+        wait_for("the retry to be waited for", || {
+            alice.snapshot().retry.is_some()
+        });
+        assert_ne!(connection(), Connection::Connected);
+        let first = alice.snapshot().retry.expect("a retry").attempt;
+        docker("start");
+        wait_for("alice to be back", || connection() == Connection::Connected);
+        assert!(alice.snapshot().retry.is_none(), "nothing left to wait for");
+        // Gone again, and this time not wanted back.
+        docker("stop");
+        wait_for("the next retry", || alice.snapshot().retry.is_some());
+        assert_eq!(
+            alice.snapshot().retry.expect("a retry").attempt,
+            first,
+            "counted from the last time it was up"
+        );
+        alice.disconnect();
+        wait_for("the waiting to end", || alice.snapshot().retry.is_none());
+        docker("start");
+        std::thread::sleep(std::time::Duration::from_secs(6));
+        assert_eq!(
+            connection(),
+            Connection::Disconnected,
+            "given up is given up"
+        );
+        alice.shutdown();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    /// An engine that is on no server: what the live Fancy server's ping
+    /// says of its livery, once it has come back.
+    fn livery_pinged() -> (RealEngine, std::path::PathBuf, String, u16, Option<String>) {
+        let address = std::env::var("FANCY_GPUI_TEST_FANCY").expect("FANCY_GPUI_TEST_FANCY");
+        let (host, port) = address.rsplit_once(':').expect("host:port");
+        let port: u16 = port.parse().expect("a port");
+        let dir = std::env::temp_dir().join(format!("fancy-gpui-livery-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let engine = RealEngine::start(&dir).expect("the engine starts");
+        engine.save_server(SavedServer {
+            id: "looked-at".into(),
+            label: "looked at".into(),
+            host: host.to_owned().into(),
+            port,
+            username: "Onlooker".into(),
+            certificate: None,
+            favorite: false,
+        });
+        engine.refresh_pings();
+        wait_for("the ping", || engine.pinged(host, port).is_some());
+        let Some(crate::livery::Pinged::Up { digest }) = engine.pinged(host, port) else {
+            panic!("the server is down");
+        };
+        (engine, dir, host.to_owned(), port, digest.map(|digest| digest.to_string()))
+    }
+
+    /// What `engine` was told when it asked the server at `key` for its
+    /// livery.
+    fn probed(engine: &RealEngine, key: &str) -> Option<Arc<crate::livery::Livery>> {
+        let heard = engine.events();
+        let mut answer = None;
+        wait_for("the server to answer the probe", || {
+            for event in std::iter::from_fn(|| heard.try_recv().ok()) {
+                if let EngineEvent::LiveryProbed { key: of, livery } = event
+                    && of.as_ref() == key
+                {
+                    answer = Some(livery);
+                }
+            }
+            answer.is_some()
+        });
+        answer.flatten()
+    }
+
+    /// The livery of the live Fancy server as a client that joins it is
+    /// told it, once it has all its pictures; with the digest its ping says.
+    fn livery_told(digest: &str, key: &str) -> (RealEngine, std::path::PathBuf, Arc<crate::livery::Livery>) {
+        let (guest, dir) = fancy_client("LiveryGuest", None);
+        wait_for("the livery of the server joined", || {
+            guest.live_livery(key).is_some_and(|livery| {
+                livery.digest.as_ref() == digest && livery.banner.is_some() && livery.icon.is_some()
+            })
+        });
+        let told = guest.live_livery(key).expect("told");
+        (guest, dir, told)
+    }
+
+    /// A server with a livery tells it to a client that joins, under the
+    /// digest its ping carries. The server must have a livery with a banner
+    /// and an icon: its operator sets them (Starling's operator API,
+    /// `POST /v1/livery`, `PUT /v1/livery/banner` and `/icon`).
+    #[test]
+    #[ignore = "needs a live Fancy server with a livery; set FANCY_GPUI_TEST_FANCY=host:port"]
+    fn live_fancy_a_livery_is_told_on_joining_under_the_pings_digest() {
+        let (onlooker, onlooker_dir, host, port, digest) = livery_pinged();
+        let digest = digest.expect("a Fancy server says whether it has a livery");
+        assert!(!digest.is_empty(), "the server has a livery");
+        let (guest, guest_dir, told) = livery_told(&digest, &format!("{host}:{port}"));
+        assert!(told.name.is_some(), "its name: {told:?}");
+        for (engine, dir) in [(onlooker, onlooker_dir), (guest, guest_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    /// A server with a livery is asked for it without joining, and the
+    /// answer is the livery a client that joins is told.
+    #[test]
+    #[ignore = "needs a live Fancy server with a livery; set FANCY_GPUI_TEST_FANCY=host:port"]
+    fn live_fancy_a_livery_is_asked_for_without_joining() {
+        let (onlooker, onlooker_dir, host, port, digest) = livery_pinged();
+        let key = format!("{host}:{port}");
+        let digest = digest.expect("a Fancy server says whether it has a livery");
+        assert!(!digest.is_empty(), "the server has a livery");
+        onlooker.probe_livery(&host, port);
+        let asked = probed(&onlooker, &key);
+        assert!(
+            onlooker.snapshot().sessions.is_empty(),
+            "asking joined nothing"
+        );
+        let asked = asked.expect("the livery, asked without joining");
+        assert_eq!(asked.digest.as_ref(), digest, "the one the ping vouches for");
+        let (guest, guest_dir, told) = livery_told(&digest, &key);
+        assert_eq!(*told, *asked, "the same livery, pictures and all");
+        for (engine, dir) in [(onlooker, onlooker_dir), (guest, guest_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    /// A Fancy server with no livery says so in its ping, and has none to
+    /// give when asked.
+    #[test]
+    #[ignore = "needs a live Fancy server with no livery; set FANCY_GPUI_TEST_FANCY=host:port"]
+    fn live_fancy_a_server_without_a_livery_says_so() {
+        let (onlooker, dir, host, port, digest) = livery_pinged();
+        assert_eq!(digest.as_deref(), Some(""), "an empty digest: none");
+        onlooker.probe_livery(&host, port);
+        let asked = probed(&onlooker, &format!("{host}:{port}"));
+        assert!(
+            asked
+                .as_ref()
+                .is_none_or(|livery| livery.digest.is_empty() && livery.banner.is_none()),
+            "nothing to draw: {asked:?}"
+        );
+        onlooker.shutdown();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// What the server allows arrives with the channels: somebody who
+    /// just walked in is told what they may do at the root, and it is not
+    /// what an administrator may.
+    #[test]
+    #[ignore = "needs a live Fancy server; set FANCY_GPUI_TEST_FANCY=host:port"]
+    fn live_fancy_a_guest_is_told_what_they_may_do() {
+        use crate::rights::Right;
+        let (guest, dir) = fancy_client("RightsGuest", None);
+        let root = || {
+            guest
+                .snapshot()
+                .channels
+                .into_iter()
+                .find(|channel| channel.parent.is_none())
+                .map(|channel| channel.rights)
+                .unwrap_or_default()
+        };
+        // Known once anything at all is answered: `may` is true of
+        // everything until then, and of nothing a guest lacks after.
+        wait_for("the root's rights", || !root().may(Right::KICK));
+        assert!(!root().has(Right::WRITE) && !root().has(Right::BAN));
+        assert!(root().has(Right::SELF_REGISTER) || !root().has(Right::REGISTER));
+        guest.shutdown();
+        let _ = std::fs::remove_dir_all(dir);
     }
     /// The administrator's lists arrive for the `SuperUser`, and are
     /// refused, with words, to somebody who is not one.
@@ -2841,6 +4517,117 @@ mod tests {
             let _ = std::fs::remove_dir_all(dir);
         }
     }
+    /// A ban added by hand is on the address it names and no other. The
+    /// wire counts an IPv4 address's bits behind ninety-six more; the same
+    /// ban sent with the short count would turn every IPv4 address away,
+    /// and a server refuses it, with words. A ban on somebody connected
+    /// sends them off, and keeps them off.
+    #[test]
+    #[ignore = "needs a live Fancy server and its SuperUser password"]
+    fn live_fancy_a_ban_added_by_hand_is_on_the_address_it_names() {
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        let on = |engine: &RealEngine| engine.snapshot().connection == Connection::Connected;
+        wait_for("the administrator to connect", || on(&admin));
+        let told = admin.events();
+        let listed = || {
+            // No faster than a server takes them.
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            admin.list(Listing::Bans);
+            let mut held = None;
+            wait_for("the ban list", || {
+                held = std::iter::from_fn(|| told.try_recv().ok()).find_map(|event| match event {
+                    EngineEvent::Bans(bans) => Some(bans),
+                    _ => None,
+                });
+                held.is_some()
+            });
+            held.unwrap_or_default()
+        };
+        // An address set aside for examples: nobody connects from it.
+        let entered = crate::bans::Entered {
+            address: "203.0.113.7".to_owned(),
+            name: "Nobody".to_owned(),
+            ..Default::default()
+        };
+        let ban = entered.ban(SharedString::default()).expect("a ban");
+        admin.act(Action::SetBans(vec![ban]));
+        let held = listed();
+        assert_eq!(held.len(), 1);
+        assert_eq!(
+            (held[0].address.as_ref(), held[0].mask),
+            ("203.0.113.7", 32)
+        );
+        assert!(!held[0].start.is_empty(), "the server started it");
+        let (guest, guest_dir) = fancy_client("BanGuest", None);
+        wait_for("a guest at another address to get in", || on(&guest));
+        guest.shutdown();
+        let _ = std::fs::remove_dir_all(guest_dir);
+
+        // The same ban, with the short count as the wire's.
+        let short = api::BanInfo {
+            address: "203.0.113.7".to_owned(),
+            mask: 32,
+            name: String::new(),
+            hash: String::new(),
+            reason: String::new(),
+            start: String::new(),
+            duration_secs: 0,
+        };
+        let noticed = |events: &async_channel::Receiver<EngineEvent>| {
+            std::iter::from_fn(|| events.try_recv().ok())
+                .any(|event| matches!(event, EngineEvent::Notice(Some(_))))
+        };
+        admin
+            .runtime
+            .block_on(admin.shared.engine.set_bans(vec![short]))
+            .expect("the list is sent");
+        wait_for("the short mask to be refused, with words", || noticed(&told));
+        let held = listed();
+        assert_eq!(held.len(), 1, "nothing of a refused list is applied");
+        assert!(!held[0].covers_everybody(), "{held:?}");
+        let (other, other_dir) = fancy_client("BanGuestTwo", None);
+        wait_for("everybody on IPv4 still to get in", || on(&other));
+
+        // A ban on somebody connected, by their certificate: they are sent
+        // off, and turned away when they come back.
+        let hash = admin
+            .snapshot()
+            .users
+            .into_iter()
+            .find(|user| user.name.as_ref() == "BanGuestTwo")
+            .and_then(|user| user.hash)
+            .expect("the guest's certificate");
+        let on_them = crate::bans::Entered {
+            address: "203.0.113.8".to_owned(),
+            name: "BanGuestTwo".to_owned(),
+            hash: hash.to_string(),
+            ..Default::default()
+        }
+        .ban(SharedString::default())
+        .expect("a ban");
+        let turned = other.events();
+        admin.act(Action::SetBans(vec![held[0].clone(), on_them]));
+        let mut was_told = false;
+        wait_for("the banned guest to be sent off and kept off", || {
+            was_told |= noticed(&turned);
+            was_told && !on(&other)
+        });
+        // Coming back with the same certificate is refused at login.
+        other.connect("live", None);
+        wait_for("the banned guest to be refused again", || noticed(&turned));
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        assert!(!on(&other), "still off");
+        assert!(on(&admin), "and nobody else");
+        admin.act(Action::SetBans(Vec::new()));
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        assert!(listed().is_empty(), "lifted");
+        for (engine, dir) in [(admin, admin_dir), (other, other_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
     /// A kept channel's history is read a page at a time: the newest
     /// first, and further back on asking, from the server.
     #[test]
@@ -2855,12 +4642,12 @@ mod tests {
         });
         let name = format!("paged-{}", std::process::id());
         let root = admin.snapshot().current_channel.expect("the root");
-        admin.act(Action::CreateChannel {
+        admin.act(Action::MakeChannel(crate::engine::NewChannel {
             parent: root,
             name: name.clone(),
-            history: true,
-            encrypted: false,
-        });
+            kept: crate::engine::Kept::OnServer,
+            ..crate::engine::NewChannel::default()
+        }));
         let paged = |engine: &RealEngine| {
             engine
                 .snapshot()
@@ -2968,6 +4755,52 @@ mod tests {
         alice.shutdown();
         let _ = std::fs::remove_dir_all(alice_dir);
     }
+    /// The card of a picture says it is one and brings the picture, and a
+    /// video's card comes with its still and title: what the view's embeds
+    /// are drawn from (`src/ui/embeds.rs`).
+    #[test]
+    #[ignore = "needs a live Fancy server that can reach the web"]
+    fn live_fancy_a_card_says_what_a_link_is() {
+        let picture = "https://upload.wikimedia.org/wikipedia/commons/a/a9/Example.jpg";
+        let video = "https://www.youtube.com/watch?v=aqz-KE-bpKQ";
+        let (alice, alice_dir) = fancy_client("CardAlice", None);
+        wait_for("alice to connect", || {
+            alice.snapshot().connection == Connection::Connected
+        });
+        let told = alice.events();
+        alice.previews(vec![picture.into(), video.into()]);
+        let mut cards: Vec<Preview> = Vec::new();
+        wait_for("both cards", || {
+            for event in std::iter::from_fn(|| told.try_recv().ok()) {
+                if let EngineEvent::Previews(more) = event {
+                    cards.extend(more);
+                }
+            }
+            [picture, video]
+                .iter()
+                .all(|url| cards.iter().any(|card| card.url.as_ref() == *url))
+        });
+        let card = |url: &str| cards.iter().find(|card| card.url.as_ref() == url);
+        for url in [picture, video] {
+            let card = card(url).expect("a card");
+            eprintln!(
+                "{url}: kind {:?}, picture_url {:?}, title {:?}, picture sent {}",
+                card.kind,
+                card.picture_url,
+                card.title,
+                card.picture.is_some()
+            );
+        }
+        let picture_card = card(picture).expect("a card");
+        assert_eq!(picture_card.kind.as_ref().map(AsRef::as_ref), Some("image"));
+        // Starling sends the picture's copy and never where it lives, so
+        // nothing has to be fetched from the origin to see it.
+        assert!(picture_card.picture.is_some());
+        let video_card = card(video).expect("a card");
+        assert!(video_card.title.is_some() && video_card.picture.is_some());
+        alice.shutdown();
+        let _ = std::fs::remove_dir_all(alice_dir);
+    }
     /// With voice on, what is heard is written to a WAV file until the
     /// recording is stopped; with voice off there is nothing to record.
     ///
@@ -3026,12 +4859,12 @@ mod tests {
         });
         let name = format!("purged-{}", std::process::id());
         let root = admin.snapshot().current_channel.expect("the root");
-        admin.act(Action::CreateChannel {
+        admin.act(Action::MakeChannel(crate::engine::NewChannel {
             parent: root,
             name: name.clone(),
-            history: true,
-            encrypted: false,
-        });
+            kept: crate::engine::Kept::OnServer,
+            ..crate::engine::NewChannel::default()
+        }));
         let made = |engine: &RealEngine| {
             engine
                 .snapshot()
@@ -3105,10 +4938,12 @@ mod tests {
         assert!(admin.signal_available(), "the bridge library is not here");
         let name = format!("signal-{}", std::process::id());
         let root = admin.snapshot().current_channel.expect("the root");
-        admin.act(Action::CreateSignalChannel {
+        admin.act(Action::MakeChannel(crate::engine::NewChannel {
             parent: root,
             name: name.clone(),
-        });
+            kept: crate::engine::Kept::Signal,
+            ..crate::engine::NewChannel::default()
+        }));
         let made = |engine: &RealEngine| {
             engine
                 .snapshot()
@@ -3354,6 +5189,142 @@ mod tests {
             let _ = std::fs::remove_dir_all(dir);
         }
     }
+    /// The first file's mark in `html`, read as the web client reads it,
+    /// with the fields it has checked to be those `sendVoiceMessage.ts`
+    /// writes.
+    fn web_mark(html: &str) -> serde_json::Value {
+        let mark = html
+            .split("<!-- FANCY_FILE:")
+            .nth(1)
+            .and_then(|rest| rest.split(" -->").next())
+            .expect("a file's mark");
+        let stated: serde_json::Value = serde_json::from_slice(
+            &base64::Engine::decode(&base64::engine::general_purpose::STANDARD, mark)
+                .expect("base64"),
+        )
+        .expect("JSON");
+        let mut fields: Vec<&str> = stated
+            .as_object()
+            .expect("an object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        fields.sort_unstable();
+        assert_eq!(
+            fields,
+            ["expiresAt", "filename", "key", "mode", "sizeBytes", "url", "voice"]
+        );
+        stated
+    }
+    /// A voice message recorded from a made-up tone (no microphone is
+    /// touched) is sent by one and arrives at the other as a voice message:
+    /// its length and shape in its message, as the web client writes it,
+    /// and a file that decodes to that length and plays, silently, to its
+    /// end.
+    #[test]
+    #[ignore = "needs a live Fancy server that keeps files on 8080, and its SuperUser password"]
+    fn live_fancy_a_voice_message_is_sent_and_arrives_as_one() {
+        use crate::voice::State;
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (alice, alice_dir) = fancy_client("SuperUser", Some(password));
+        let (bob, bob_dir) = fancy_client("VoiceBob", None);
+        wait_for("both to connect", || {
+            alice.snapshot().users.len() >= 2 && bob.snapshot().users.len() >= 2
+        });
+        wait_for("the server to say it takes voice messages", || {
+            alice.voice_support().is_some_and(|support| support.available)
+        });
+        // In a channel of its own, gone again at the end: the server may
+        // be one others use.
+        let name = format!("voice-{}", std::process::id());
+        let root = alice.snapshot().current_channel.expect("the root");
+        alice.act(Action::MakeChannel(crate::engine::NewChannel {
+            parent: root,
+            name: name.clone(),
+            ..crate::engine::NewChannel::default()
+        }));
+        let made = |engine: &RealEngine| {
+            engine
+                .snapshot()
+                .channels
+                .into_iter()
+                .find(|channel| channel.name.as_ref() == name)
+                .map(|channel| channel.id)
+        };
+        wait_for("the channel", || made(&alice).is_some() && made(&bob).is_some());
+        let channel = made(&alice).expect("the channel");
+        alice.join_channel(channel);
+        bob.join_channel(channel);
+        wait_for("both to be in it", || {
+            alice.snapshot().current_channel == Some(channel)
+                && bob.snapshot().current_channel == Some(channel)
+        });
+        let room = Conversation::Channel(channel);
+
+        let mut recorder = alice.recorder();
+        recorder.start(0).expect("a take starts");
+        std::thread::sleep(std::time::Duration::from_millis(1_600));
+        let clip = recorder
+            .finish()
+            .recv_blocking()
+            .expect("an answer")
+            .expect("a clip");
+        assert!(clip.duration_ms >= 1_500, "{clip:?}");
+        let (length, shape, kept_at) = (clip.duration_ms, clip.waveform.clone(), clip.path.clone());
+        alice.send_voice(room, clip);
+        let voiced = |engine: &RealEngine| {
+            engine.messages(room).into_iter().find_map(|message| {
+                let file = message.files.into_iter().find(|file| file.voice.is_some())?;
+                Some((message.html, file))
+            })
+        };
+        wait_for("both to have the voice message", || {
+            voiced(&alice).is_some() && voiced(&bob).is_some()
+        });
+        assert!(!kept_at.exists(), "the take's file is let go of once sent");
+        let (html, file) = voiced(&bob).expect("the voice message");
+        let note = file.voice.clone().expect("a voice message");
+        assert_eq!(file.name.as_ref(), "voice-message.ogg");
+        assert_eq!(note.duration_ms, length);
+        assert_eq!(&note.waveform[..], &shape[..]);
+
+        // What the web client reads it from: the mark's every field, as
+        // `sendVoiceMessage.ts` writes them.
+        let stated = web_mark(&html);
+        assert_eq!(stated["url"], "");
+        assert_eq!(stated["mode"], "session");
+        assert_eq!(stated["voice"]["durationMs"], length);
+        assert_eq!(stated["voice"]["waveform"].as_array().map(Vec::len), Some(48));
+        assert_eq!(stated["sizeBytes"], file.size.expect("its size"));
+
+        // The file is the clip: it decodes to the length its message says.
+        let key = file.key.clone().expect("a key");
+        let saved = bob_dir.join("voice.ogg");
+        let written = bob
+            .runtime
+            .block_on(bob.shared.engine.save_shared_file(&key, &saved))
+            .expect("fetched");
+        assert_eq!(Some(written), file.size, "the whole file");
+        let bytes = std::fs::read(&saved).expect("saved");
+        let reader = mumble_tauri_lib::engine_api::voice::VoiceClipReader::new(&bytes)
+            .expect("Ogg Opus");
+        assert_eq!(reader.duration_ms(), length);
+
+        // And it plays, silently, at twice the speed, to its end.
+        let mut player = bob.voice_player();
+        player.play(&key, note.duration_ms, 0, 2.0);
+        wait_for("it to play", || player.now().state == State::Playing);
+        wait_for("it to end", || player.now().state == State::Ended);
+        alice.join_channel(root);
+        bob.join_channel(root);
+        alice.act(Action::DeleteChannel { channel });
+        wait_for("the channel to go", || made(&alice).is_none());
+        for (engine, dir) in [(alice, alice_dir), (bob, bob_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
     /// A channel kept under a key the server does not have: the one who
     /// made it holds the key, a newcomer asks for it, and reads what was
     /// said before they came once it is shared with them.
@@ -3368,12 +5339,12 @@ mod tests {
         });
         let name = format!("sealed-{}", std::process::id());
         let root = admin.snapshot().current_channel.expect("the root");
-        admin.act(Action::CreateChannel {
+        admin.act(Action::MakeChannel(crate::engine::NewChannel {
             parent: root,
             name: name.clone(),
-            history: true,
-            encrypted: true,
-        });
+            kept: crate::engine::Kept::Sealed,
+            ..crate::engine::NewChannel::default()
+        }));
         let sealed = |engine: &RealEngine| {
             engine
                 .snapshot()
@@ -3452,12 +5423,12 @@ mod tests {
         });
         let name = format!("ruled-{}", std::process::id());
         let root = admin.snapshot().current_channel.expect("the root");
-        admin.act(Action::CreateChannel {
+        admin.act(Action::MakeChannel(crate::engine::NewChannel {
             parent: root,
             name: name.clone(),
-            history: false,
-            encrypted: false,
-        });
+            kept: crate::engine::Kept::No,
+            ..crate::engine::NewChannel::default()
+        }));
         let ruled = |engine: &RealEngine| {
             engine
                 .snapshot()
@@ -3529,6 +5500,828 @@ mod tests {
         admin.act(Action::DeleteChannel { channel });
         wait_for("the channel to go", || ruled(&guest).is_none());
         for (engine, dir) in [(admin, admin_dir), (guest, guest_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+    /// A channel made with its options together arrives with its limit and
+    /// its place. Its password and that its messages are kept are sent the
+    /// same way and not looked for here: the server image these tests run
+    /// on is older than both (it does not keep history for a channel made
+    /// by the older, name-only way either).
+    #[test]
+    #[ignore = "needs a live Fancy server and its SuperUser password"]
+    fn live_fancy_a_channel_is_made_with_its_options_together() {
+        use crate::engine::{Kept, NewChannel};
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        let (guest, guest_dir) = fancy_client("FormGuest", None);
+        wait_for("both to connect", || {
+            admin.snapshot().users.len() >= 2 && guest.snapshot().users.len() >= 2
+        });
+        let name = format!("formed-{}", std::process::id());
+        let root = admin.snapshot().current_channel.expect("the root");
+        admin.act(Action::MakeChannel(NewChannel {
+            parent: root,
+            name: name.clone(),
+            about: "Made in one go".to_owned(),
+            password: "sesame".to_owned(),
+            most: Some(3),
+            position: Some(5),
+            temporary: false,
+            hidden: false,
+            kept: Kept::OnServer,
+        }));
+        let formed = |engine: &RealEngine| {
+            let channels = engine.snapshot().channels;
+            channels
+                .into_iter()
+                .find(|channel| channel.name.as_ref() == name)
+        };
+        // Everything said of it is the server's to send, and not at once.
+        wait_for("the channel with its limit", || {
+            formed(&guest).is_some_and(|made| made.max_users == 3)
+        });
+        let made = formed(&guest).expect("the channel");
+        assert_eq!((made.parent, made.position), (Some(root), 5));
+        assert!(!made.temporary, "{made:?}");
+        admin.act(Action::DeleteChannel { channel: made.id });
+        wait_for("the channel to go", || formed(&guest).is_none());
+        for (engine, dir) in [(admin, admin_dir), (guest, guest_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    /// Every picture in a folder, sent one after another, arrives as a
+    /// picture and leaves both clients connected: whatever its kind and
+    /// however large, since one too large for the server is made smaller
+    /// first. For pictures as people send them, which no made-up one is.
+    ///
+    /// ```text
+    /// FANCY_GPUI_TEST_PICTURES=<folder> FANCY_GPUI_TEST_FANCY=host:port \
+    ///     cargo test --release -- --ignored live_fancy_pictures --nocapture
+    /// ```
+    #[test]
+    #[ignore = "needs a live Fancy server and FANCY_GPUI_TEST_PICTURES=<folder>"]
+    fn live_fancy_pictures_from_a_folder_arrive_whatever_their_size() {
+        let folder = std::env::var("FANCY_GPUI_TEST_PICTURES").expect("FANCY_GPUI_TEST_PICTURES");
+        let mut files: Vec<_> = std::fs::read_dir(&folder)
+            .expect("a folder")
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path.is_file())
+            .collect();
+        files.sort();
+        assert!(!files.is_empty(), "no pictures in {folder}");
+        let (alice, alice_dir) = fancy_client("PictureAlice", None);
+        let (bob, bob_dir) = fancy_client("PictureBob", None);
+        wait_for("both to connect", || {
+            alice.snapshot().users.len() >= 2 && bob.snapshot().users.len() >= 2
+        });
+        let room = Conversation::Channel(alice.snapshot().current_channel.expect("a channel"));
+        let limit = alice.shared.engine.picture_limit();
+        // A heavy message is held without its pictures: read back whole.
+        let pictures = |engine: &RealEngine| -> Vec<Vec<u8>> {
+            engine
+                .messages(room)
+                .iter()
+                .flat_map(|message| {
+                    let whole = message
+                        .id
+                        .as_ref()
+                        .filter(|_| crate::away::is_light(&message.html))
+                        .and_then(|id| engine.whole(room, id))
+                        .unwrap_or_else(|| message.html.to_string());
+                    crate::rich::Rich::parse(&whole).images
+                })
+                .collect()
+        };
+        for (nth, path) in files.iter().enumerate() {
+            let file = std::fs::read(path).expect("readable");
+            let sent = crate::picture::dimensions(&file);
+            let started = std::time::Instant::now();
+            alice.send_picture(room, file.clone());
+            // Longer than anything else is waited for: a picture of thirty
+            // megapixels is read, scaled and encoded before it is sent.
+            let deadline = started + std::time::Duration::from_secs(180);
+            while pictures(&bob).len() <= nth {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "{} did not arrive ({:?})",
+                    path.display(),
+                    alice.snapshot().connection
+                );
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            let arrived = pictures(&bob).pop().expect("a picture");
+            let size = crate::picture::dimensions(&arrived).expect("a readable picture");
+            eprintln!(
+                "{}: {} bytes, {sent:?} -> {} bytes, {size:?} in {:.1}s{}",
+                path.file_name().unwrap_or_default().display(),
+                file.len(),
+                arrived.len(),
+                started.elapsed().as_secs_f32(),
+                if arrived == file { " (as it was)" } else { "" },
+            );
+            assert!(
+                arrived.len() * 4 / 3 <= limit,
+                "within what the server takes"
+            );
+            // Heavy, it is held light, and the engine holds a mark for it.
+            let held = bob.messages(room).pop().expect("a message");
+            assert_eq!(
+                crate::away::is_light(&held.html),
+                arrived.len() * 4 / 3 > 64 * 1024,
+                "{} bytes held as {} of message",
+                arrived.len(),
+                held.html.len()
+            );
+            // The sender shows it too, and nobody was logged out by it.
+            wait_for("the sender to show it", || pictures(&alice).len() > nth);
+            for engine in [&alice, &bob] {
+                assert_eq!(engine.snapshot().connection, Connection::Connected);
+            }
+            // No faster than a server takes them.
+            std::thread::sleep(std::time::Duration::from_millis(1200));
+        }
+        for (engine, dir) in [(alice, alice_dir), (bob, bob_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    /// As `admin`, let everybody in `channel` share files: with those there,
+    /// and by link. A guest is let do neither until somebody says so.
+    fn let_everybody_share(admin: &RealEngine, channel: ChannelId) {
+        let heard = admin.events();
+        admin.request_acl(channel);
+        let mut rules = next_rules(&heard, channel);
+        rules.rules.push(AclRule {
+            here: true,
+            subs: true,
+            inherited: false,
+            user: None,
+            group: Some("all".into()),
+            grant: 0x4000 | 0x8000,
+            deny: 0,
+        });
+        admin.act(Action::SetAcl(rules));
+        std::thread::sleep(std::time::Duration::from_secs(2));
+    }
+
+    /// Files shared from the tray arrive as their message says: several in
+    /// one message with what was typed, open to whom the sender chose, a
+    /// picture with its size and a small copy that can be fetched and is a
+    /// picture; and one sealed with a password says so and has no small
+    /// copy for the server to look at.
+    #[test]
+    #[ignore = "needs a live Fancy server that keeps files, and its SuperUser password"]
+    fn live_fancy_files_are_shared_as_the_sender_chose() {
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        let (alice, alice_dir) = fancy_client("ShareAlice", None);
+        let (bob, bob_dir) = fancy_client("ShareBob", None);
+        wait_for("all three to connect", || {
+            [&admin, &alice, &bob]
+                .iter()
+                .all(|engine| engine.snapshot().users.len() >= 3)
+        });
+        let root = alice.snapshot().current_channel.expect("a channel");
+        let room = Conversation::Channel(root);
+        let_everybody_share(&admin, root);
+        let folder = std::env::temp_dir().join(format!("fancy-gpui-share-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).expect("writable");
+        let (notes, photo) = (folder.join("notes.txt"), folder.join("photo.png"));
+        std::fs::write(&notes, b"what was agreed").expect("writable");
+        let mut png = Vec::new();
+        image::DynamicImage::ImageRgb8(image::RgbImage::from_fn(1200, 800, |x, y| {
+            image::Rgb([(x % 251) as u8, (y % 241) as u8, 90])
+        }))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .expect("a png");
+        std::fs::write(&photo, &png).expect("writable");
+
+        let told = bob.events();
+        alice.share(
+            room,
+            "from the meeting".to_owned(),
+            vec![photo.clone(), notes.clone()],
+            ShareAs {
+                reach: Reach::Link,
+                lasts: crate::engine::Lasts::Day,
+                full: false,
+            },
+        );
+        let shared = |engine: &RealEngine, with: &str| {
+            engine
+                .messages(room)
+                .into_iter()
+                .find(|message| message.body.contains(with))
+        };
+        wait_for("the message with both files", || {
+            shared(&bob, "from the meeting").is_some_and(|message| message.files.len() == 2)
+        });
+        let message = shared(&bob, "from the meeting").expect("the message");
+        let (picture, text) = (&message.files[0], &message.files[1]);
+        assert_eq!(picture.name.as_ref(), "photo.png");
+        assert_eq!(text.name.as_ref(), "notes.txt");
+        for file in &message.files {
+            assert_eq!(file.open_to, OpenTo::Link, "{file:?}");
+            assert!(file.url.is_some() && file.key.is_some(), "{file:?}");
+        }
+        assert_eq!(picture.pixels, Some((1200, 800)));
+        assert!(text.pixels.is_none() && text.stand_in.is_none());
+        // What it is shown from is fetched, and is a picture: the small
+        // copy where the server keeps one beside it, the file itself where
+        // the server's plugin keeps one file a share.
+        let from = picture.shown_from().cloned().expect("a way to show it");
+        bob.fetch_shared(from.clone());
+        let mut fetched = None;
+        wait_for("what it is shown from", || {
+            fetched = std::iter::from_fn(|| told.try_recv().ok()).find_map(|event| match event {
+                EngineEvent::Shared { key, picture } if key == from => Some(picture),
+                _ => None,
+            });
+            fetched.is_some()
+        });
+        let fetched = fetched.flatten().expect("a picture");
+        let expected = if picture.stand_in.is_some() {
+            (480, 320)
+        } else {
+            (1200, 800)
+        };
+        assert_eq!(crate::picture::dimensions(fetched.bytes()), Some(expected));
+
+        // Sealed with a password: said so, and nothing beside it.
+        alice.share(
+            room,
+            "for those who know".to_owned(),
+            vec![photo],
+            ShareAs {
+                reach: Reach::Password("sesame".to_owned()),
+                ..ShareAs::default()
+            },
+        );
+        wait_for("the sealed one", || {
+            shared(&bob, "for those who know").is_some_and(|message| message.files.len() == 1)
+        });
+        let sealed = shared(&bob, "for those who know").expect("the message");
+        assert_eq!(sealed.files[0].open_to, OpenTo::Password);
+        assert!(sealed.files[0].stand_in.is_none(), "{:?}", sealed.files[0]);
+        assert!(sealed.files[0].shown_from().is_none());
+        for (engine, dir) in [(admin, admin_dir), (alice, alice_dir), (bob, bob_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+        let _ = std::fs::remove_dir_all(folder);
+    }
+
+    /// Fills a server with what a busy one has, and stays: four people,
+    /// each with a face and a banner made from the pictures of a folder,
+    /// who then say every picture in it, one after another. Not a test of
+    /// anything by itself: it is what a client is measured beside. It stays
+    /// for `FANCY_GPUI_TEST_HOLD_SECS` seconds after the last picture, and
+    /// says `filled` when that one has arrived.
+    ///
+    /// ```text
+    /// FANCY_GPUI_TEST_PICTURES=<folder> FANCY_GPUI_TEST_HOLD_SECS=600 \
+    ///     cargo test --release -- --ignored live_fancy_a_room_is_filled --nocapture
+    /// ```
+    #[test]
+    #[ignore = "needs a live Fancy server and FANCY_GPUI_TEST_PICTURES=<folder>"]
+    fn live_fancy_a_room_is_filled_with_faces_and_pictures() {
+        let folder = std::env::var("FANCY_GPUI_TEST_PICTURES").expect("FANCY_GPUI_TEST_PICTURES");
+        let hold = std::env::var("FANCY_GPUI_TEST_HOLD_SECS")
+            .ok()
+            .and_then(|secs| secs.parse().ok())
+            .unwrap_or(0);
+        let mut files: Vec<_> = std::fs::read_dir(&folder)
+            .expect("a folder")
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path.is_file())
+            .filter_map(|path| std::fs::read(path).ok())
+            .collect();
+        files.sort_by_key(Vec::len);
+        assert!(!files.is_empty(), "no pictures in {folder}");
+        let people: Vec<(RealEngine, std::path::PathBuf)> = ["Mika", "Ren", "Sora", "Yuki"]
+            .into_iter()
+            .map(|name| fancy_client(name, None))
+            .collect();
+        wait_for("all four to connect", || {
+            people
+                .iter()
+                .all(|(engine, _)| engine.snapshot().users.len() >= people.len())
+        });
+        // A face and a banner each, as this client would send them.
+        for (nth, (engine, _)) in people.iter().enumerate() {
+            let face = files.get(nth % files.len()).expect("a file");
+            let over = files.get((nth + 4) % files.len()).expect("a file");
+            if let Ok(face) = crate::picture::avatar(face) {
+                engine.act(Action::SetAvatar(face));
+            }
+            if let Ok(banner) = crate::picture::banner(over) {
+                engine.act(Action::SetBanner(banner));
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let (first, _) = people.first().expect("somebody");
+        let room = Conversation::Channel(first.snapshot().current_channel.expect("a channel"));
+        // Counted where they stand: a heavy message is held without them.
+        let pictures = |engine: &RealEngine| -> usize {
+            engine
+                .messages(room)
+                .iter()
+                .map(|message| message.html.matches("<img").count())
+                .sum()
+        };
+        for (nth, file) in files.iter().enumerate() {
+            let (says, _) = people.get(nth % people.len()).expect("somebody");
+            let (hears, _) = people.get((nth + 1) % people.len()).expect("somebody");
+            says.send_picture(room, file.clone());
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+            while pictures(hears) <= nth {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "picture {nth} did not arrive"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(400));
+        }
+        eprintln!(
+            "filled: {} pictures from {} people",
+            files.len(),
+            people.len()
+        );
+        std::thread::sleep(std::time::Duration::from_secs(hold));
+        for (engine, dir) in people {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    /// A channel made keeping its messages keeps them, and one made hidden
+    /// is shown to whoever made it and not to a guest. Needs a server that
+    /// does both when a channel is made: one built from source of August
+    /// 2026 or later.
+    #[test]
+    #[ignore = "needs a live Fancy server of August 2026 or later and its SuperUser password"]
+    fn live_fancy_a_channel_is_made_hidden_or_keeping_its_messages() {
+        use crate::engine::{Kept, NewChannel};
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        let (guest, guest_dir) = fancy_client("HiddenGuest", None);
+        wait_for("both to connect", || {
+            admin.snapshot().users.len() >= 2 && guest.snapshot().users.len() >= 2
+        });
+        let root = admin.snapshot().current_channel.expect("the root");
+        let (kept, hidden) = (
+            format!("kept-{}", std::process::id()),
+            format!("hidden-{}", std::process::id()),
+        );
+        let new = |name: &str, hidden, kept| NewChannel {
+            parent: root,
+            name: name.to_owned(),
+            about: String::new(),
+            password: String::new(),
+            most: None,
+            position: None,
+            temporary: false,
+            hidden,
+            kept,
+        };
+        admin.act(Action::MakeChannel(new(&kept, false, Kept::OnServer)));
+        admin.act(Action::MakeChannel(new(&hidden, true, Kept::No)));
+        let seen = |engine: &RealEngine, name: &str| {
+            let channels = engine.snapshot().channels;
+            channels
+                .into_iter()
+                .find(|channel| channel.name.as_ref() == name)
+        };
+        wait_for("the channel that keeps its messages", || {
+            seen(&guest, &kept).is_some_and(|made| made.history)
+        });
+        wait_for("the hidden channel, for who made it", || {
+            seen(&admin, &hidden).is_some()
+        });
+        // The guest was told of the other one, made first, so would have
+        // been told of this one by now.
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        assert!(seen(&guest, &hidden).is_none(), "a guest sees it");
+        for (engine, dir) in [(admin, admin_dir), (guest, guest_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    /// Register whoever is called `name`, as `admin`, and say which account
+    /// they were given.
+    fn registered(admin: &RealEngine, name: &str) -> u32 {
+        let named = || {
+            let users = admin.snapshot().users;
+            users.into_iter().find(|user| user.name.as_ref() == name)
+        };
+        let session = named().expect("somebody of that name").session;
+        admin.act(Action::Register { session });
+        let mut account = None;
+        wait_for("the account", || {
+            account = named().and_then(|user| user.account);
+            account.is_some()
+        });
+        account.expect("the account")
+    }
+
+    /// The accounts `engine` is given when the member list asks for them.
+    fn directory_of(engine: &RealEngine) -> Vec<Registered> {
+        let told = engine.events();
+        engine.directory();
+        let mut listed = None;
+        wait_for("the registered accounts", || {
+            listed = std::iter::from_fn(|| told.try_recv().ok()).find_map(|event| match event {
+                EngineEvent::Registered(accounts) => Some(accounts),
+                _ => None,
+            });
+            listed.is_some()
+        });
+        listed.unwrap_or_default()
+    }
+
+    /// Put `account` in a new role `name` of the colour `color`, as
+    /// `admin`, and wait until `admin` has the role.
+    fn give_role(admin: &RealEngine, name: &str, color: &str, account: u32) {
+        let told = admin.events();
+        admin.request_acl(ROOT);
+        let _ = next_rules(&told, ROOT);
+        let mut rules = admin
+            .shared
+            .acl
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+            .expect("the root's rules");
+        rules.groups.push(api::AclGroupInfo {
+            name: name.to_owned(),
+            inherited: false,
+            inherit: true,
+            inheritable: true,
+            add: vec![account],
+            remove: Vec::new(),
+            inherited_members: Vec::new(),
+            color: Some(color.to_owned()),
+            icon: None,
+            style_preset: None,
+            metadata: HashMap::new(),
+        });
+        admin
+            .runtime
+            .block_on(admin.shared.engine.set_acl(rules))
+            .expect("the rules are sent");
+        let has_it = || admin.roles().iter().any(|role| role.name.as_ref() == name);
+        for _ in 0..20 {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            admin.request_acl(ROOT);
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            if has_it() {
+                return;
+            }
+        }
+        panic!("the role never arrived");
+    }
+
+    /// A registered member who is not on is listed to another member for
+    /// the member list, and to an administrator, who also has the role
+    /// they were given; a guest is refused, without a word, and the
+    /// member list lists who is on instead.
+    #[test]
+    #[ignore = "needs a live Fancy server and its SuperUser password"]
+    fn live_fancy_registered_members_who_are_away_are_listed_with_their_roles() {
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        let (gone, gone_dir) = fancy_client("MemberGone", None);
+        let (member, member_dir) = fancy_client("MemberStays", None);
+        let (guest, guest_dir) = fancy_client("MemberGuest", None);
+        wait_for("all four to connect", || {
+            [&admin, &gone, &member, &guest]
+                .iter()
+                .all(|engine| engine.snapshot().users.len() >= 4)
+        });
+        let gone_id = registered(&admin, "MemberGone");
+        let _ = registered(&admin, "MemberStays");
+        give_role(&admin, "Wardens", "#3f9fd8", gone_id);
+        gone.shutdown();
+        let _ = std::fs::remove_dir_all(gone_dir);
+        wait_for("them to be gone", || {
+            let users = member.snapshot().users;
+            !users.iter().any(|user| user.name.as_ref() == "MemberGone")
+        });
+
+        let listed = directory_of(&member);
+        let entry = listed.iter().find(|account| account.id == gone_id);
+        assert_eq!(
+            entry.map(|account| account.name.as_ref()),
+            Some("MemberGone"),
+            "listed to a member: {listed:?}"
+        );
+        assert!(directory_of(&admin).iter().any(|account| account.id == gone_id));
+        let role = admin.roles().into_iter().find(|role| role.name.as_ref() == "Wardens");
+        let role = role.expect("the administrator has the role");
+        assert!(role.members.contains(&gone_id));
+        assert!(role.color.is_some(), "the role keeps its colour");
+
+        let told = guest.events();
+        guest.directory();
+        wait_for("the guest to be refused", || {
+            std::iter::from_fn(|| told.try_recv().ok())
+                .any(|event| matches!(event, EngineEvent::DirectoryRefused))
+        });
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        assert!(
+            !std::iter::from_fn(|| told.try_recv().ok())
+                .any(|event| matches!(event, EngineEvent::Notice(Some(_)))),
+            "a refusal is no news"
+        );
+        for (engine, dir) in [
+            (admin, admin_dir),
+            (member, member_dir),
+            (guest, guest_dir),
+        ] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    /// What the Roles page writes reaches the server and comes back: a
+    /// role made with its style, what else it keeps and what it grants,
+    /// renamed, then deleted with its rule. How it is drawn is asked for
+    /// last: Starling keeps none of it today (reported), and that alone
+    /// fails here.
+    #[test]
+    #[ignore = "needs a live Fancy server and its SuperUser password"]
+    fn live_fancy_a_role_is_made_renamed_and_deleted_as_the_roles_page_writes_it() {
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        wait_for("the administrator to connect", || {
+            admin.snapshot().connection == Connection::Connected
+        });
+        let read = |admin: &RealEngine| {
+            let told = admin.events();
+            admin.request_acl(ROOT);
+            next_rules(&told, ROOT)
+        };
+        // Sent, and the rules waited for until they say what was written:
+        // an answer to an earlier question can still be on its way.
+        let write = |admin: &RealEngine, rules: Acl, holds: &dyn Fn(&Acl) -> bool| {
+            let told = admin.events();
+            admin.act(Action::SetAcl(rules));
+            let mut back = next_rules(&told, ROOT);
+            for _ in 0..20 {
+                if holds(&back) {
+                    break;
+                }
+                admin.request_acl(ROOT);
+                back = next_rules(&told, ROOT);
+            }
+            back
+        };
+        let named = |acl: &Acl, name: &str| acl.groups.iter().any(|group| group.name.as_ref() == name);
+        let mut rules = read(&admin);
+        let mut keepers = crate::engine::AclGroup::new("Keepers");
+        keepers.look.style = Some("neon".into());
+        keepers.look.color = Some("#3f9fd8".into());
+        let _ = keepers.look.metadata.insert("motto".into(), "keep".into());
+        rules.groups.push(keepers);
+        rules.rules.push(AclRule {
+            here: true,
+            subs: true,
+            inherited: false,
+            user: None,
+            group: Some("Keepers".into()),
+            grant: 0x1_0000,
+            deny: 0,
+        });
+        let back = write(&admin, rules, &|acl| named(acl, "Keepers"));
+        let made = back.groups.iter().find(|group| group.name.as_ref() == "Keepers");
+        let made = made.expect("the role, made").clone();
+        assert!(back.rules.iter().any(|rule| {
+            rule.group.as_ref().is_some_and(|group| group.as_ref() == "Keepers") && rule.grant == 0x1_0000
+        }));
+
+        let mut renamed = back.clone();
+        for group in renamed.groups.iter_mut().filter(|group| group.name.as_ref() == "Keepers") {
+            group.name = "Wardens".into();
+        }
+        for rule in renamed.rules.iter_mut().filter(|rule| {
+            rule.group.as_ref().is_some_and(|group| group.as_ref() == "Keepers")
+        }) {
+            rule.group = Some("Wardens".into());
+        }
+        let back = write(&admin, renamed, &|acl| named(acl, "Wardens"));
+        assert!(back.groups.iter().all(|group| group.name.as_ref() != "Keepers"), "not beside the old");
+        assert!(back.groups.iter().any(|group| group.name.as_ref() == "Wardens"));
+
+        let mut gone = back.clone();
+        gone.groups.retain(|group| group.name.as_ref() != "Wardens");
+        gone.rules.retain(|rule| !rule.group.as_ref().is_some_and(|group| group.as_ref() == "Wardens"));
+        let back = write(&admin, gone, &|acl| !named(acl, "Wardens"));
+        assert!(back.groups.iter().all(|group| group.name.as_ref() != "Wardens"), "deleted");
+        // How it is drawn, last: Starling keeps none of it today (reported).
+        assert_eq!(made.look.style.as_ref().map(ToString::to_string).as_deref(), Some("neon"));
+        assert_eq!(
+            made.look.metadata.get("motto").map(ToString::to_string).as_deref(),
+            Some("keep")
+        );
+        assert!(made.look.color.is_some(), "the colour kept by the server");
+        admin.shutdown();
+        let _ = std::fs::remove_dir_all(admin_dir);
+    }
+
+    /// The next list of registered accounts the server sends `told` that
+    /// `holds` is true of.
+    fn next_registered(
+        told: &async_channel::Receiver<EngineEvent>,
+        what: &str,
+        holds: impl Fn(&[Registered]) -> bool,
+    ) {
+        wait_for(what, || {
+            std::iter::from_fn(|| told.try_recv().ok()).any(|event| match event {
+                EngineEvent::Registered(accounts) => holds(&accounts),
+                _ => false,
+            })
+        });
+    }
+
+    /// What the Users page does to an account reaches the server, and the
+    /// list read again says so: a role taken away through the root's
+    /// groups as its dialog writes them, a new name, and the registration
+    /// gone.
+    #[test]
+    #[ignore = "needs a live Fancy server and its SuperUser password"]
+    fn live_fancy_the_users_page_changes_an_account_and_its_list_follows() {
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        let (member, member_dir) = fancy_client("PageMember", None);
+        wait_for("both to connect", || admin.snapshot().users.len() >= 2);
+        let id = registered(&admin, "PageMember");
+        give_role(&admin, "Keepers", "#3f9fd8", id);
+
+        // The dialog's way: the root's rules as the view has them, the
+        // account taken out of one group, sent back whole.
+        let told = admin.events();
+        admin.request_acl(ROOT);
+        let mut rules = next_rules(&told, ROOT);
+        let keepers = rules
+            .groups
+            .iter_mut()
+            .find(|group| group.name.as_ref() == "Keepers")
+            .expect("the role, as a group");
+        keepers.added.retain(|added| *added != id);
+        admin.act(Action::SetAcl(rules));
+        wait_for("the role to lose its member", || {
+            admin
+                .roles()
+                .iter()
+                .any(|role| role.name.as_ref() == "Keepers" && !role.members.contains(&id))
+        });
+
+        let told = admin.events();
+        admin.act(Action::RenameRegistered {
+            id,
+            name: "PageRenamed".to_owned(),
+        });
+        next_registered(&told, "the list with the new name", |accounts| {
+            accounts
+                .iter()
+                .any(|account| account.id == id && account.name.as_ref() == "PageRenamed")
+        });
+        let told = admin.events();
+        admin.act(Action::Unregister { id });
+        next_registered(&told, "the list without the account", |accounts| {
+            !accounts.iter().any(|account| account.id == id)
+        });
+        for (engine, dir) in [(admin, admin_dir), (member, member_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    /// The rules of `channel`, the next time the server sends them.
+    fn next_rules(told: &async_channel::Receiver<EngineEvent>, channel: ChannelId) -> Acl {
+        let mut rules = None;
+        wait_for("the channel's rules", || {
+            rules = std::iter::from_fn(|| told.try_recv().ok()).find_map(|event| match event {
+                EngineEvent::Acl(acl) if acl.channel == channel => Some(acl),
+                _ => None,
+            });
+            rules.is_some()
+        });
+        rules.expect("the rules")
+    }
+
+    /// A rule for one account holds for whoever is connected as it and
+    /// for nobody else; and the list of accounts names it, with when it was
+    /// last on written in a way this client reads.
+    #[test]
+    #[ignore = "needs a live Fancy server and its SuperUser password"]
+    fn live_fancy_a_rule_for_one_person_holds_for_them_alone() {
+        let password =
+            std::env::var("FANCY_GPUI_TEST_SUPERUSER").expect("FANCY_GPUI_TEST_SUPERUSER");
+        let (admin, admin_dir) = fancy_client("SuperUser", Some(password));
+        let (one, one_dir) = fancy_client("RuledOne", None);
+        let (other, other_dir) = fancy_client("RuledOther", None);
+        wait_for("all three to connect", || {
+            [&admin, &one, &other]
+                .iter()
+                .all(|engine| engine.snapshot().users.len() >= 3)
+        });
+        let account = registered(&admin, "RuledOne");
+
+        let told = admin.events();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        admin.list(Listing::Registered);
+        let mut listed = None;
+        wait_for("the registered accounts", || {
+            listed = std::iter::from_fn(|| told.try_recv().ok()).find_map(|event| match event {
+                EngineEvent::Registered(users) => Some(users),
+                _ => None,
+            });
+            listed.is_some()
+        });
+        let listed = listed.unwrap_or_default();
+        let entry = listed.iter().find(|user| user.id == account);
+        let entry = entry.expect("the account is listed");
+        assert_eq!(entry.name.as_ref(), "RuledOne");
+        if let Some(seen) = entry.last_seen.as_ref().filter(|seen| !seen.is_empty()) {
+            assert!(crate::ui::accounts::seen_ms(seen).is_some(), "{seen}");
+        }
+
+        // No faster than a server takes them: what comes too fast is
+        // dropped without a word.
+        let breathe = || std::thread::sleep(std::time::Duration::from_secs(3));
+        breathe();
+        let name = format!("ruled-one-{}", std::process::id());
+        let root = admin.snapshot().current_channel.expect("the root");
+        admin.act(Action::MakeChannel(crate::engine::NewChannel {
+            parent: root,
+            name: name.clone(),
+            kept: crate::engine::Kept::No,
+            ..crate::engine::NewChannel::default()
+        }));
+        let ruled = |engine: &RealEngine| {
+            let channels = engine.snapshot().channels;
+            let found = channels
+                .into_iter()
+                .find(|channel| channel.name.as_ref() == name);
+            found.map(|channel| channel.id)
+        };
+        wait_for("the channel", || {
+            ruled(&one).is_some() && ruled(&other).is_some()
+        });
+        let channel = ruled(&one).expect("the channel");
+        admin.request_acl(channel);
+        let mut acl = next_rules(&told, channel);
+        breathe();
+        // The one account may not enter.
+        acl.rules.push(AclRule {
+            here: true,
+            subs: true,
+            inherited: false,
+            user: Some(account),
+            group: None,
+            grant: 0,
+            deny: 0x4,
+        });
+        admin.act(Action::SetAcl(acl));
+        let taken = next_rules(&told, channel);
+        assert!(
+            taken.rules.iter().any(|rule| rule.user == Some(account)),
+            "{taken:?}"
+        );
+        let refused = one.events();
+        one.join_channel(channel);
+        wait_for("the one to be refused", || {
+            std::iter::from_fn(|| refused.try_recv().ok())
+                .any(|event| matches!(event, EngineEvent::Notice(Some(_))))
+        });
+        assert_eq!(one.snapshot().current_channel, Some(root));
+        other.join_channel(channel);
+        wait_for("the other to be let in", || {
+            other.snapshot().current_channel == Some(channel)
+        });
+
+        other.join_channel(root);
+        admin.act(Action::DeleteChannel { channel });
+        wait_for("the channel to go", || ruled(&one).is_none());
+        admin.act(Action::Unregister { id: account });
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        for (engine, dir) in [(admin, admin_dir), (one, one_dir), (other, other_dir)] {
             engine.shutdown();
             let _ = std::fs::remove_dir_all(dir);
         }
@@ -3611,6 +6404,59 @@ mod tests {
         });
 
         for (engine, dir) in [(alice, alice_dir), (bob, bob_dir), (carol, carol_dir)] {
+            engine.shutdown();
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    /// GIFs on a Fancy server: its own GIF service is asked about on
+    /// joining, and on a server with no provider key it says it has none,
+    /// so nobody is offered a GIF without a key of their own. One client
+    /// then picks a GIF from a stand-in for Klipy on this machine and sends
+    /// it as the web client does; the other reads a picture by its address
+    /// and fetches an animation from there.
+    #[test]
+    #[ignore = "needs a live Fancy server"]
+    fn live_fancy_a_picked_gif_is_sent_and_seen_as_a_playing_picture() {
+        use crate::gif::stand_in::{KEY, StandIn};
+        use crate::gif::{Source as _, Why, klipy::Klipy, wait};
+        let (alice, alice_dir) = fancy_client("GifAlice", None);
+        let (bob, bob_dir) = fancy_client("GifBob", None);
+        wait_for("both to connect", || {
+            alice.snapshot().users.len() >= 2 && bob.snapshot().users.len() >= 2
+        });
+        // Twelve seconds of silence also reads as an answer.
+        wait_for("the server to say what its GIF service is", || {
+            alice.gif_service().is_some()
+        });
+        let service = alice.gif_service().expect("said");
+        let fetch: Arc<dyn crate::embed::Fetch> = Arc::new(crate::embed::Web);
+        if !service.support.available {
+            assert!(crate::gif::Plan::of(Some(&service), None, Arc::clone(&fetch)).is_none());
+            let refused = wait(service.source.trending(1)).expect_err("no provider key");
+            assert_eq!(refused.why, Why::Unavailable);
+        }
+        let stand_in = StandIn::start();
+        let klipy = Klipy::at(&stand_in.api(), KEY, fetch);
+        let picked = wait(klipy.search("party", 1)).expect("a page").gifs[0].clone();
+        let room = Conversation::Channel(alice.snapshot().current_channel.expect("a channel"));
+        alice.send_gif(room, picked.url.clone(), None);
+        let seen = |engine: &RealEngine| {
+            engine.messages(room).iter().any(|message| {
+                crate::rich::Rich::parse(&message.html).web_pictures == [picked.url.to_string()]
+            })
+        };
+        wait_for("bob to read the GIF by its address", || seen(&bob));
+        let bytes =
+            crate::embed::Fetch::fetch(&crate::embed::Web, &picked.url, crate::embed::PICTURE_MOST)
+                .recv_blocking()
+                .expect("an answer")
+                .expect("the GIF");
+        let decoder =
+            image::codecs::gif::GifDecoder::new(std::io::Cursor::new(bytes)).expect("a GIF");
+        let frames = image::AnimationDecoder::into_frames(decoder).count();
+        assert!(frames >= 2, "an animation, of {frames} frames");
+        for (engine, dir) in [(alice, alice_dir), (bob, bob_dir)] {
             engine.shutdown();
             let _ = std::fs::remove_dir_all(dir);
         }

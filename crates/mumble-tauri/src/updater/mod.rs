@@ -57,21 +57,52 @@ pub(crate) fn register_plugins(builder: tauri::Builder<Wry>) -> tauri::Builder<W
 /// Install the shared [`UpdaterState`] and kick off the background
 /// check-on-startup task. Safe to call once from the main `setup` hook.
 ///
-/// With `self-updater` off there is nothing to check, but the main window
-/// still starts hidden (`visible: false` in `tauri.conf.json`) and this is
-/// what reveals it - so the no-op path has to show it immediately, or the
-/// app launches to no window at all.
+/// The main window starts hidden (`visible: false` in `tauri.conf.json`) so
+/// its first frame is a loaded page rather than an empty web view: it is
+/// revealed when its page has loaded ([`reveal_main_window_once`], called
+/// from the builder's page-load hook), or after [`REVEAL_FALLBACK`] if that
+/// never comes. It no longer waits for the update check, which goes to
+/// GitHub and held the window back for up to six seconds on a slow network.
 pub(crate) fn init(app: &tauri::AppHandle) {
-    #[cfg(not(feature = "self-updater"))]
-    {
-        show_main_window(app);
-    }
+    spawn_reveal_fallback(app.clone());
     #[cfg(feature = "self-updater")]
     {
         let _ = app.manage(UpdaterState::default());
         load_persisted_prefs(app);
-        spawn_startup_check(app.clone());
+        // A test instance (`FANCY_E2E_DATA_DIR`) is a build under test, not
+        // an install to bring up to date.
+        if crate::app::isolation::Isolation::from_env().is_none() {
+            spawn_startup_check(app.clone());
+        }
     }
+}
+
+/// How long the main window waits for its page before it is shown anyway, so
+/// a page that never finishes loading still leaves the app on screen.
+const REVEAL_FALLBACK: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Whether the main window has been revealed at start-up. Set once: a later
+/// page load (a reload of the web view, say) must not pop a window the user
+/// has since hidden in the tray.
+static STARTUP_REVEALED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether this is the first call, for the one start-up reveal.
+fn first_reveal(flag: &std::sync::atomic::AtomicBool) -> bool {
+    !flag.swap(true, std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Show the main window, the first time this is called and never again.
+pub(crate) fn reveal_main_window_once(app: &tauri::AppHandle) {
+    if first_reveal(&STARTUP_REVEALED) {
+        show_main_window(app);
+    }
+}
+
+fn spawn_reveal_fallback(app: tauri::AppHandle) {
+    drop(tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(REVEAL_FALLBACK).await;
+        reveal_main_window_once(&app);
+    }));
 }
 
 /// Read `preferences.json` (written by `@tauri-apps/plugin-store`) and
@@ -113,22 +144,22 @@ fn load_persisted_prefs(app: &tauri::AppHandle) {
 
 /// Spawn an async task that checks for updates shortly after launch.
 ///
-/// * If an update is available and not skipped: open the branded
-///   bootstrapper window and keep the main window hidden.
-/// * Otherwise: reveal the main window immediately.
+/// The main window does not wait for it (see [`init`]). If an update is
+/// available and not skipped, the branded bootstrapper window opens over the
+/// main one and takes the focus, and with auto-install on it starts
+/// installing at once; that window is the update's state on screen, and the
+/// app behind it is replaced when the installer runs, as it was when it
+/// waited hidden. Otherwise nothing more happens.
 #[cfg(feature = "self-updater")]
 fn spawn_startup_check(app: tauri::AppHandle) {
     drop(tauri::async_runtime::spawn(async move {
         // Tiny delay so the main webview has a chance to register its
         // `updater_set_auto_install` and `updater_set_skipped_version`
-        // preferences before we open the window.
+        // preferences before we open the window (they are also read from
+        // the preferences file in `load_persisted_prefs`).
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         // Bound the update check: it hits GitHub over HTTPS, and on a slow,
         // captive or offline network `updater.check()` can hang indefinitely.
-        // The main window is `visible: false` and is only revealed after this
-        // returns, so an unbounded check would leave the app (and the
-        // onboarding flow) permanently invisible. Always fall through to
-        // showing the window.
         const STARTUP_CHECK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(6);
         match tokio::time::timeout(STARTUP_CHECK_TIMEOUT, commands::run_check(&app)).await {
             Ok(Ok(true)) => {
@@ -138,24 +169,39 @@ fn spawn_startup_check(app: tauri::AppHandle) {
                     .unwrap_or(false);
                 if let Err(e) = window::open_updater_window(&app, auto) {
                     tracing::warn!("Failed to open updater window: {e}");
-                    show_main_window(&app);
                 }
             }
-            Ok(Ok(false)) => {
-                tracing::debug!("Updater: no update available");
-                show_main_window(&app);
-            }
-            Ok(Err(e)) => {
-                tracing::info!("Updater: startup check failed: {e}");
-                show_main_window(&app);
-            }
-            Err(_) => {
-                tracing::warn!(
-                    "Updater: startup check timed out after {}s; showing main window",
-                    STARTUP_CHECK_TIMEOUT.as_secs()
-                );
-                show_main_window(&app);
-            }
+            Ok(Ok(false)) => tracing::debug!("Updater: no update available"),
+            Ok(Err(e)) => tracing::info!("Updater: startup check failed: {e}"),
+            Err(_) => tracing::warn!(
+                "Updater: startup check timed out after {}s",
+                STARTUP_CHECK_TIMEOUT.as_secs()
+            ),
         }
     }));
+}
+
+/// The builder's page-load hook: the main window is shown once its page has
+/// loaded, so its first frame is the app rather than an empty web view.
+pub(crate) fn on_page_load(
+    webview: &tauri::Webview,
+    payload: &tauri::webview::PageLoadPayload<'_>,
+) {
+    use tauri::Manager;
+    if payload.event() == tauri::webview::PageLoadEvent::Finished
+        && webview.label() == MAIN_WINDOW_LABEL
+    {
+        reveal_main_window_once(webview.app_handle());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_start_up_reveal_happens_once() {
+        let flag = std::sync::atomic::AtomicBool::new(false);
+        assert!(super::first_reveal(&flag));
+        assert!(!super::first_reveal(&flag));
+        assert!(!super::first_reveal(&flag));
+    }
 }

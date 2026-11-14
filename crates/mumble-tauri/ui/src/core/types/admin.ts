@@ -30,8 +30,28 @@ export interface RegisteredUserUpdate {
   name: string | null;
 }
 
-/** A ban list entry from the server's BanList message. */
+/**
+ * A ban list entry as the UI shows and edits it. `mask` counts bits of the
+ * address itself: 0 to 32 for IPv4, 0 to 128 for IPv6. The engine carries
+ * the wire's count instead ({@link WireBanEntry}); the two only meet in
+ * `core/features/admin/banMask.ts`.
+ */
 export interface BanEntry {
+  address: string;
+  mask: number;
+  name: string;
+  hash: string;
+  reason: string;
+  start: string;
+  duration: number;
+}
+
+/**
+ * A ban list entry as the `ban-list` event and the `update_ban_list` command
+ * carry it: `mask` counts bits over the sixteen bytes every address travels
+ * in, so one IPv4 address is 128 and an IPv4 /24 is 120.
+ */
+export interface WireBanEntry {
   address: string;
   mask: number;
   name: string;

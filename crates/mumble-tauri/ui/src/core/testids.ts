@@ -165,6 +165,10 @@ export const TID = {
   /** The "Reset channel key" action on the key-challenge-failed banner
    *  (shown to KeyOwner admins; performs a key takeover). */
   pchatResetKey: "pchat-reset-key",
+  /** The notice shown when the server refused a page of chat history. */
+  pchatHistoryRefused: "pchat-history-refused",
+  /** Its "Retry" action, asking for the refused page again. */
+  pchatHistoryRetry: "pchat-history-retry",
   signalBridgeInstall: "signal-bridge-install",
   signalBridgeSettingsInstall: "signal-bridge-settings-install",
   /** Root of the generic ConfirmDialog modal (register/unregister user,

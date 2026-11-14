@@ -46,6 +46,28 @@ function empty() {
 }
 
 describe("Lightbox", () => {
+  it("says when it opens and closes, and closes from its handle", () => {
+    // What a phone's back gesture needs: to know a picture is up, and a way
+    // to take it down that is not a click on the close button.
+    const ref = createRef<LightboxHandle>();
+    const changes: boolean[] = [];
+    render(
+      <Lightbox
+        ref={ref}
+        allMessages={[]}
+        selectedChannel={1}
+        selectedDmUser={null}
+        currentScope={() => null}
+        onOpenChange={(open) => changes.push(open)}
+      />,
+    );
+    act(() => ref.current?.openGallery([{ src: "asset://dusk", alt: "dusk.png" }], 0));
+    expect(screen.getByAltText("dusk.png")).toBeTruthy();
+    act(() => ref.current?.close());
+    expect(screen.queryByAltText("dusk.png")).toBeNull();
+    expect(changes).toEqual([false, true, false]);
+  });
+
   it("opens on the src the gallery was built from", () => {
     open('<img src="cat.png" alt="cat">', "cat.png");
     expect(screen.getByAltText("cat")).toBeTruthy();

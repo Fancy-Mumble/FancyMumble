@@ -52,6 +52,15 @@ pub(crate) mod stream_audio;
 mod shared_capture;
 
 #[cfg(not(target_os = "android"))]
+mod silent;
+#[cfg(not(target_os = "android"))]
+pub use silent::set_silent;
+
+/// On Android there is no silent path; nothing is switched.
+#[cfg(target_os = "android")]
+pub fn set_silent(_silent: bool) {}
+
+#[cfg(not(target_os = "android"))]
 mod virtual_mic;
 
 #[cfg(target_os = "android")]
@@ -180,6 +189,9 @@ impl AudioDeviceFactory for PlatformAudioFactory {
         let factory: shared_capture::CaptureFactory = Box::new(move || {
             const PUMP_FRAME: usize = 480;
             let neutral = Arc::new(AtomicU32::new(1.0_f32.to_bits()));
+            if silent::is_silent() {
+                return Ok(Box::new(silent::MadeUpVoice::new(PUMP_FRAME, neutral)) as _);
+            }
             if let Ok(spec) = std::env::var(virtual_mic::ENV_VIRTUAL_MIC) {
                 return virtual_mic::VirtualCapture::from_spec(&spec, PUMP_FRAME, neutral)
                     .map(|c| Box::new(c) as _)
@@ -233,6 +245,13 @@ impl AudioDeviceFactory for PlatformAudioFactory {
         buffers: SpeakerBuffers,
         speaker_volumes: SpeakerVolumes,
     ) -> std::result::Result<Box<dyn MixingPlayback>, String> {
+        if silent::is_silent() {
+            return Ok(Box::new(silent::SilentPlayback::new(
+                volume,
+                buffers,
+                speaker_volumes,
+            )));
+        }
         #[cfg(target_os = "linux")]
         if pipewire::available() {
             return Ok(Box::new(pipewire::PwMixingPlayback::new(

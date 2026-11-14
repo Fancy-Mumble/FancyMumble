@@ -16,6 +16,40 @@ pub(crate) fn data_dir() -> PathBuf {
     data_dir_from(&env, cfg!(target_os = "macos"), cfg!(target_os = "windows"))
 }
 
+/// The directory name the web client uses under the same place: its
+/// application identifier.
+const WEB_CLIENT_DIR: &str = "com.fancymumble.app";
+
+/// The data directory of the web client on this computer, if it has one:
+/// where what it holds can be brought over from.
+///
+/// `FANCY_GPUI_IMPORT_FROM` names another directory to read. A run whose
+/// own directory was chosen by `FANCY_GPUI_DATA_DIR` is a test or a look
+/// at something, and is not offered the user's real data unless told to.
+pub(crate) fn other_install() -> Option<PathBuf> {
+    let env = |name: &str| std::env::var_os(name).filter(|value| !value.is_empty());
+    let dir = other_install_from(&env, cfg!(target_os = "macos"), cfg!(target_os = "windows"))?;
+    dir.is_dir().then_some(dir)
+}
+
+/// [`other_install`], with the environment and the platform passed in,
+/// and without looking whether the directory is there.
+fn other_install_from(
+    env: &dyn Fn(&str) -> Option<std::ffi::OsString>,
+    macos: bool,
+    windows: bool,
+) -> Option<PathBuf> {
+    if let Some(chosen) = env("FANCY_GPUI_IMPORT_FROM") {
+        return Some(PathBuf::from(chosen));
+    }
+    if env("FANCY_GPUI_DATA_DIR").is_some() {
+        return None;
+    }
+    data_dir_from(env, macos, windows)
+        .parent()
+        .map(|base| base.join(WEB_CLIENT_DIR))
+}
+
 /// [`data_dir`], with the environment and the platform passed in.
 fn data_dir_from(
     env: &dyn Fn(&str) -> Option<std::ffi::OsString>,
@@ -56,6 +90,34 @@ mod tests {
         assert_eq!(
             data_dir_from(&env(&vars), false, false),
             PathBuf::from("/tmp/x")
+        );
+    }
+
+    #[test]
+    fn the_web_client_is_looked_for_beside_this_one_unless_this_run_is_a_test() {
+        let windows = [("APPDATA", "C:/Users/a/AppData/Roaming")];
+        assert_eq!(
+            other_install_from(&env(&windows), false, true),
+            Some(PathBuf::from(
+                "C:/Users/a/AppData/Roaming/com.fancymumble.app"
+            ))
+        );
+        let home = [("HOME", "/home/a")];
+        assert_eq!(
+            other_install_from(&env(&home), false, false),
+            Some(PathBuf::from("/home/a/.local/share/com.fancymumble.app"))
+        );
+        // A run with a directory of its own is not shown the user's data,
+        let scratch = [("FANCY_GPUI_DATA_DIR", "/tmp/x"), ("HOME", "/home/a")];
+        assert_eq!(other_install_from(&env(&scratch), false, false), None);
+        // unless it is told where to read.
+        let told = [
+            ("FANCY_GPUI_DATA_DIR", "/tmp/x"),
+            ("FANCY_GPUI_IMPORT_FROM", "/tmp/other"),
+        ];
+        assert_eq!(
+            other_install_from(&env(&told), false, false),
+            Some(PathBuf::from("/tmp/other"))
         );
     }
 

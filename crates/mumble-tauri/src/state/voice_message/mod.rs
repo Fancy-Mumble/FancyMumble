@@ -16,7 +16,10 @@
 //! frontend as a path, which uploads it with the ordinary file-sharing path
 //! and a voice flag, then asks for the file to be discarded.
 
+mod clip;
 mod ogg;
+
+pub use clip::{ClipReader, ClipWriter};
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -24,9 +27,6 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 use mumble_protocol::audio::capture::AudioCapture;
-use mumble_protocol::audio::encoder::{
-    AudioEncoder, OpusApplication, OpusEncoder, OpusEncoderConfig,
-};
 use mumble_protocol::audio::filter::FilterChain;
 use mumble_protocol::audio::sample::{AudioFormat, AudioFrame};
 use serde::Serialize;
@@ -108,11 +108,14 @@ pub(crate) enum RecorderState {
 /// One finished clip, as the frontend uploads it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct VoiceClip {
+pub struct VoiceClip {
     /// Where the Ogg file is, until it is discarded.
     pub path: String,
+    /// How long it plays.
     pub duration_ms: u32,
+    /// How large the file is, in bytes.
     pub size: u64,
+    /// What the file is: `audio/ogg`.
     pub mime_type: &'static str,
     /// [`WAVEFORM_BARS`] loudness values, 0 to 100, for drawing the clip
     /// before anyone plays it.
@@ -133,7 +136,7 @@ pub(crate) struct Recording {
 struct Take {
     capture: Box<dyn AudioCapture>,
     filters: FilterChain,
-    encoder: OpusEncoder,
+    clip: ClipWriter,
     limit_ms: u32,
     dir: PathBuf,
     app: Host,
@@ -142,7 +145,7 @@ struct Take {
 }
 
 /// Where clips wait between recording and upload.
-fn clip_dir() -> PathBuf {
+pub(crate) fn clip_dir() -> PathBuf {
     std::env::temp_dir().join("fancy-mumble-voice")
 }
 
@@ -236,13 +239,6 @@ impl Take {
         }
         super::audio::clear_capture_error(Some(&self.app));
 
-        // Any value will do; random so two clips spliced together by some
-        // tool downstream do not claim to be one stream.
-        let serial = uuid::Uuid::new_v4().as_fields().0;
-        let mut writer = ogg::OggOpusWriter::new(serial, "Fancy Mumble");
-        let mut pending: Vec<f32> = Vec::with_capacity(FRAME * 2);
-        let mut levels: Vec<f32> = Vec::new();
-        let mut samples: u64 = 0;
         let mut last_report = Instant::now();
         let limit_samples = u64::from(self.limit_ms) * SAMPLE_RATE / 1000;
 
@@ -256,20 +252,9 @@ impl Take {
                 if let Err(error) = self.filters.process(&mut frame) {
                     debug!("voice message: filter chain error: {error}");
                 }
-                pending.extend_from_slice(frame.as_f32_samples());
+                self.clip.push(frame.as_f32_samples(), limit_samples)?;
             }
-            // Cut into exact Opus frames, whatever size the device delivers.
-            while pending.len() >= FRAME && samples < limit_samples {
-                let chunk: Vec<f32> = pending.drain(..FRAME).collect();
-                levels.push(rms(&chunk));
-                let packet = self
-                    .encoder
-                    .encode(&frame_of(&chunk))
-                    .map_err(|e| e.to_string())?;
-                writer.push(packet.data, FRAME as u64);
-                samples += FRAME as u64;
-            }
-            if samples >= limit_samples {
+            if self.clip.samples() >= limit_samples {
                 break true;
             }
             if last_report.elapsed() >= REPORT_EVERY {
@@ -277,8 +262,8 @@ impl Take {
                 emit(
                     &self.app,
                     RecorderState::Recording {
-                        elapsed_ms: millis(samples),
-                        level: levels.last().copied().unwrap_or(0.0),
+                        elapsed_ms: self.clip.elapsed_ms(),
+                        level: self.clip.level(),
                     },
                 );
             }
@@ -295,29 +280,11 @@ impl Take {
             emit(
                 &self.app,
                 RecorderState::Limit {
-                    elapsed_ms: millis(samples),
+                    elapsed_ms: self.clip.elapsed_ms(),
                 },
             );
         }
-        if samples == 0 {
-            return Err("nothing was recorded".to_owned());
-        }
-        self.write(writer.finish(), samples, &levels).map(Some)
-    }
-
-    fn write(&self, bytes: Vec<u8>, samples: u64, levels: &[f32]) -> Result<VoiceClip, String> {
-        std::fs::create_dir_all(&self.dir)
-            .map_err(|e| format!("create {}: {e}", self.dir.display()))?;
-        let short = uuid::Uuid::new_v4().simple().to_string();
-        let path = self.dir.join(format!("voice-message-{}.ogg", &short[..8]));
-        std::fs::write(&path, &bytes).map_err(|e| format!("write {}: {e}", path.display()))?;
-        Ok(VoiceClip {
-            path: path.to_string_lossy().into_owned(),
-            duration_ms: millis(samples),
-            size: bytes.len() as u64,
-            mime_type: "audio/ogg",
-            waveform: waveform(levels),
-        })
+        self.clip.finish(&self.dir).map(Some)
     }
 }
 
@@ -351,20 +318,7 @@ impl AppState {
             FRAME,
             volume,
         )?;
-        let encoder = OpusEncoder::new(
-            OpusEncoderConfig {
-                bitrate: BITRATE,
-                frame_size: FRAME,
-                application: OpusApplication::Voip,
-                complexity: 10,
-                // Nothing is lost on the way to a file.
-                fec: false,
-                packet_loss_percent: 0,
-                ..OpusEncoderConfig::default()
-            },
-            AudioFormat::MONO_48KHZ_F32,
-        )
-        .map_err(|e| e.to_string())?;
+        let clip = ClipWriter::new()?;
 
         let dir = clip_dir();
         sweep_stale(&dir);
@@ -373,7 +327,7 @@ impl AppState {
         let take = Take {
             capture,
             filters: super::audio::voice_message_filters(&settings),
-            encoder,
+            clip,
             limit_ms: if limit_ms == 0 {
                 HARD_LIMIT_MS
             } else {
@@ -499,6 +453,9 @@ mod tests {
         // encode a second of tone, read the packets back out of the pages,
         // and check they are the encoder's own and that libopus takes them.
         use mumble_protocol::audio::decoder::{AudioDecoder, OpusDecoder};
+        use mumble_protocol::audio::encoder::{
+            AudioEncoder, OpusApplication, OpusEncoder, OpusEncoderConfig,
+        };
 
         let mut encoder = OpusEncoder::new(
             OpusEncoderConfig {
@@ -522,7 +479,7 @@ mod tests {
             writer.push(packet.data.clone(), FRAME as u64);
             sent.push(packet);
         }
-        let read_back = ogg::packets(&writer.finish());
+        let read_back = ogg::packets(&writer.finish(u64::MAX));
 
         // Two header packets, then every audio packet in order.
         assert_eq!(read_back.len(), sent.len() + 2);

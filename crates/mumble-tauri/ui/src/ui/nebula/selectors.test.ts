@@ -249,18 +249,31 @@ describe("channelPresence", () => {
     { ...user(3, "Elsewhere", 5), hash: "cc" },
   ];
 
+  const kept = { id: 4, pchat_protocol: "server_managed" as const };
+
   it("counts a plain channel as its occupants and nothing more", () => {
-    expect(channelPresence(here, 4)).toEqual({ inVoice: 2, members: 2 });
+    expect(channelPresence(here, { id: 4 })).toEqual({ inVoice: 2, members: 2 });
   });
 
-  it("adds the key holders who are not in the channel", () => {
+  it("ignores key holders on a channel that keeps nothing", () => {
+    // What Starling's root showed: holders reported for a plain channel,
+    // counted as members - "5 in voice · 13 members" with five people on.
+    const holders = [holder("dd", "Gone"), { ...holder("cc", "Elsewhere"), is_online: true }];
+    expect(channelPresence(here, { id: 4, pchat_protocol: "none" }, holders)).toEqual({ inVoice: 2, members: 2 });
+  });
+
+  it("leaves out the key holders who are not connected", () => {
+    // A guest has a new certificate every visit, so the server's list only grows.
     const holders = [holder("aa", "Zoe"), holder("dd", "Sebi"), holder("ee", "Mia")];
-    expect(channelPresence(here, 4, holders)).toEqual({ inVoice: 2, members: 4 });
+    expect(channelPresence(here, kept, holders)).toEqual({ inVoice: 2, members: 2 });
   });
 
   it("keeps counting a holder who is connected but sitting elsewhere", () => {
-    const holders = [holder("cc", "Elsewhere")];
-    expect(channelPresence(here, 4, holders)).toEqual({ inVoice: 2, members: 3 });
+    expect(channelPresence(here, kept, [holder("cc", "Elsewhere")])).toEqual({ inVoice: 2, members: 3 });
+    expect(channelPresence(here, kept, [{ ...holder("dd", "Sebi"), is_online: true }])).toEqual({
+      inVoice: 2,
+      members: 3,
+    });
   });
 });
 

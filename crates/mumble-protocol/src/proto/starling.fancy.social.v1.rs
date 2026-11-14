@@ -234,6 +234,22 @@ pub struct DrawStroke {
     /// an unauthenticated peer is an allocation attack.
     #[prost(float, repeated, tag = "5")]
     pub points: ::prost::alloc::vec::Vec<f32>,
+    /// Which stroke this packet is part of. A stroke is sent in pieces while it
+    /// is drawn, and without this a receiver cannot tell where one stroke ends
+    /// and the next begins. Empty from a sender or server too old to carry it.
+    #[prost(string, tag = "6")]
+    pub stroke_id: ::prost::alloc::string::String,
+    /// This packet is the stroke's last.
+    #[prost(bool, tag = "7")]
+    pub end: bool,
+    /// The width in the drawer's pixels, for a receiver that does not scale by
+    /// `width`. 0 when not said.
+    #[prost(float, tag = "8")]
+    pub width_px: f32,
+    /// The colour's alpha, 1 to 255. 0 means not said and reads as opaque:
+    /// `colour` is CSS `#rrggbb`, and a sender too old to set this drew opaque.
+    #[prost(uint32, tag = "9")]
+    pub alpha: u32,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DrawClear {
@@ -241,4 +257,7 @@ pub struct DrawClear {
     pub channel: u32,
     #[prost(uint32, tag = "2")]
     pub actor: u32,
+    /// Every stroke in the channel, everybody's, rather than the actor's own.
+    #[prost(bool, tag = "3")]
+    pub all: bool,
 }

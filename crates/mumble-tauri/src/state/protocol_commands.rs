@@ -574,25 +574,21 @@ impl AppState {
         Ok(())
     }
 
+    /// Ask the server for a channel's stored read states - which no server
+    /// this client talks to can answer, so nothing is sent.
+    ///
+    /// The canon carries a read *watermark* (`send_read_receipt`, relayed as a
+    /// `Social` receipt) but models a receipt as an event the server relays,
+    /// not state it keeps, so a query has no canon form: on a canon server
+    /// (Starling) the codec dropped every one, logging `codec dropped
+    /// outbound message type_id=126`. The legacy relay drops it too, as a message only
+    /// a server can process. Read states arrive as the relayed receipts
+    /// instead.
     pub async fn query_read_receipts(&self, channel_id: u32) -> Result<(), String> {
-        let handle = {
-            let __session = self.inner.snapshot();
-            let state = __session.lock().map_err(|e| e.to_string())?;
-            state.conn.client_handle.clone()
-        };
-
-        let handle = handle.ok_or("Not connected")?;
-
-        handle
-            .send(command::SendReadReceipt {
-                channel_id,
-                last_read_message_id: None,
-                query: true,
-                query_message_id: None,
-            })
-            .await
-            .map_err(|e| format!("Failed to query read receipts: {e}"))?;
-
+        tracing::debug!(
+            channel_id,
+            "read-state query not sent: no server keeps read state to query"
+        );
         Ok(())
     }
 

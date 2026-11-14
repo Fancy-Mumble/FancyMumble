@@ -3,7 +3,7 @@
 pub struct PchatEnvelope {
     #[prost(
         oneof = "pchat_envelope::Body",
-        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13"
     )]
     pub body: ::core::option::Option<pchat_envelope::Body>,
 }
@@ -35,6 +35,8 @@ pub mod pchat_envelope {
         PinList(super::PinList),
         #[prost(message, tag = "12")]
         Delete(super::Delete),
+        #[prost(message, tag = "13")]
+        FetchRefused(super::FetchRefused),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
@@ -107,6 +109,19 @@ pub struct FetchResponse {
     pub total_stored: u64,
     #[prost(message, optional, tag = "4")]
     pub page: ::core::option::Option<crate::proto::fancy::wire::PageInfo>,
+}
+/// Why a page was not served.
+///
+/// A `Message` is answered by `Ack`, which has carried `RATE_LIMITED` all
+/// along. A `Fetch` had no answer of any kind, so a throttled or refused page
+/// was silently dropped and looked to the reader exactly like the end of the
+/// archive: scrolling back simply stopped, at a different place each time.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FetchRefused {
+    #[prost(uint32, tag = "1")]
+    pub channel: u32,
+    #[prost(message, optional, tag = "2")]
+    pub refusal: ::core::option::Option<crate::proto::fancy::wire::Refusal>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Ack {
@@ -302,13 +317,31 @@ pub struct Pin {
     pub channel: u32,
     #[prost(bool, tag = "3")]
     pub unpin: bool,
+    /// The pinner, named as the reader knows them, while they are connected; 0
+    /// once they are not.
+    #[prost(uint32, tag = "4")]
+    pub pinner: u32,
+    /// The pinner's certificate hash, which outlives the connection. Empty for a
+    /// pinner who presented none.
+    #[prost(bytes = "vec", tag = "5")]
+    pub pinner_cert: ::prost::alloc::vec::Vec<u8>,
+    /// The name the pinner had when they pinned it.
+    #[prost(string, tag = "6")]
+    pub pinner_name: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "7")]
+    pub pinned_at_ms: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PinList {
     #[prost(uint32, tag = "1")]
     pub channel: u32,
+    /// Each pinned message by its id alone. Kept for clients that read nothing
+    /// else; a reader that knows `pins` reads that instead.
     #[prost(message, repeated, tag = "2")]
     pub pinned: ::prost::alloc::vec::Vec<Message>,
+    /// Each pin with who made it and when, oldest first.
+    #[prost(message, repeated, tag = "3")]
+    pub pins: ::prost::alloc::vec::Vec<Pin>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Delete {

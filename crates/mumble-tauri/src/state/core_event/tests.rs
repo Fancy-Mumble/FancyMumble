@@ -173,6 +173,26 @@ fn persistent_chat_history_events_keep_their_wire_format() {
     assert_eq!(
         wire(
             None,
+            CoreEvent::PchatFetchRefused(PchatFetchRefusedPayload {
+                channel_id: 3,
+                kind: "rate_limited",
+                detail: "slow down".to_owned(),
+                retry_after_ms: 1_500,
+            })
+        ),
+        (
+            "pchat-fetch-refused",
+            json!({
+                "channel_id": 3,
+                "kind": "rate_limited",
+                "detail": "slow down",
+                "retry_after_ms": 1_500
+            })
+        )
+    );
+    assert_eq!(
+        wire(
+            None,
             CoreEvent::PchatSendRejected(PchatSendRejectedPayload {
                 message_ids: vec!["m1".to_owned()],
                 reason: None,

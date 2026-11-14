@@ -61,6 +61,7 @@ use crate::congestion::{
     BitrateAllocator, CongestionController, CongestionSnapshot, FeedbackSample, TrackBudget,
 };
 use crate::encode::{EncodeSettings, EncodedFrame};
+use crate::frames::{FramePipeline, FrameSource};
 use crate::pipeline::{EncodePipeline, create_pipeline};
 use crate::sources::{self, SourceKind};
 
@@ -214,7 +215,44 @@ impl ScreenBroadcaster {
                 }
             }
         }
+        let frames = sources.iter().map(|_| None).collect();
+        Self::launch(sources, frames, settings, share_audio, sink)
+    }
 
+    /// Broadcast frames the embedder makes itself, one track per
+    /// [`FrameSource`], in place of a capture: nothing of the desktop is
+    /// touched. Everything after capture (scaling, encoding, the peer, the
+    /// offer and its retries) is what [`Self::start`] runs. The tracks are
+    /// announced as screens; there is no desktop audio.
+    pub fn start_frames(
+        frames: Vec<Box<dyn FrameSource>>,
+        settings: EncodeSettings,
+        sink: Arc<dyn SignalSink>,
+    ) -> Result<Self, String> {
+        if frames.is_empty() {
+            return Err("no sources to broadcast".to_owned());
+        }
+        let sources = frames
+            .iter()
+            .map(|_| BroadcastSource {
+                kind: SourceKind::Screen,
+                id: 0,
+            })
+            .collect();
+        let frames = frames.into_iter().map(Some).collect();
+        Self::launch(sources, frames, settings, false, sink)
+    }
+
+    /// The broadcast itself, once its sources are known to be there: each
+    /// track captures its source, or reads its frames where it was given a
+    /// [`FrameSource`].
+    fn launch(
+        sources: Vec<BroadcastSource>,
+        mut frames: Vec<Option<Box<dyn FrameSource>>>,
+        settings: EncodeSettings,
+        share_audio: bool,
+        sink: Arc<dyn SignalSink>,
+    ) -> Result<Self, String> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(1)
             .enable_all()
@@ -283,7 +321,8 @@ impl ScreenBroadcaster {
             .zip(tracks)
             .zip(keyframe_flags)
             .zip(allocator.budgets().iter().cloned())
-            .map(|(((source, track), keyframe_flag), budget)| {
+            .enumerate()
+            .map(|(index, (((source, track), keyframe_flag), budget))| {
                 // The user's stream settings are display-oriented; the
                 // "screen share" text mode caps at 5 fps, which would turn a
                 // CAMERA track into a slideshow. A webcam never benefits from
@@ -301,6 +340,7 @@ impl ScreenBroadcaster {
                 Self::spawn_capture_thread(
                     CaptureTask {
                         source: *source,
+                        frames: frames.get_mut(index).and_then(Option::take),
                         settings,
                         track,
                         stop: Arc::clone(&stop),
@@ -711,14 +751,14 @@ impl ScreenBroadcaster {
 
     /// The blocking capture -> encode -> write loop on its own OS thread.
     fn spawn_capture_thread(
-        task: CaptureTask,
+        mut task: CaptureTask,
         sink: &Arc<dyn SignalSink>,
     ) -> std::thread::JoinHandle<()> {
         let sink = Arc::clone(sink);
         std::thread::Builder::new()
             .name("screenshare-capture".into())
             .spawn(move || {
-                capture_loop(&task);
+                capture_loop(&mut task);
             })
             .unwrap_or_else(|e| {
                 // Spawning a thread only fails under resource exhaustion; the
@@ -1110,6 +1150,8 @@ fn moved_materially(applied_bps: u32, target_bps: u32) -> bool {
 /// travels together anyway.
 struct CaptureTask {
     source: BroadcastSource,
+    /// The embedder's own frames, read in place of capturing `source`.
+    frames: Option<Box<dyn FrameSource>>,
     settings: EncodeSettings,
     track: Arc<TrackLocalStaticRTP>,
     stop: Arc<AtomicBool>,
@@ -1121,8 +1163,9 @@ struct CaptureTask {
     budget: Arc<TrackBudget>,
 }
 
-fn capture_loop(task: &CaptureTask) {
+fn capture_loop(task: &mut CaptureTask) {
     let source = task.source;
+    let frames = task.frames.take();
     let settings = task.settings;
     let track = &task.track;
     let stop = &task.stop;
@@ -1131,8 +1174,12 @@ fn capture_loop(task: &CaptureTask) {
     let keyframe_flag = &task.keyframe_flag;
     let budget = &task.budget;
 
+    let created = match frames {
+        Some(frames) => Ok(Box::new(FramePipeline::new(frames, settings)) as Box<dyn EncodePipeline>),
+        None => create_pipeline(source.kind, source.id, settings),
+    };
     let mut pipeline: Box<dyn EncodePipeline> =
-        match create_pipeline(source.kind, source.id, settings) {
+        match created {
             Ok(p) => p,
             Err(e) => {
                 sink.on_state(BroadcastState::Failed(format!(

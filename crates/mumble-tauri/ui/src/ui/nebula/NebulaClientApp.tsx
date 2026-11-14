@@ -40,6 +40,7 @@ import MySharedFilesTable from "./components/chat/MySharedFilesTable";
 import { myFilesAvailable } from "@standard/components/fileserver/fileServerMe";
 import TypingIndicator from "./components/chat/TypingIndicator";
 import FailedSends from "./components/chat/FailedSends";
+import HistoryRefusedNotice from "./components/chat/HistoryRefusedNotice";
 import PublicServersSurface from "./components/connect/PublicServersSurface";
 import { PinnedPanel } from "./components/chat/pinned/PinnedPanel";
 import { ScheduledMessagesDialog } from "./components/chat/scheduled/ScheduledMessagesDialog";
@@ -207,6 +208,7 @@ import { radius } from "./tokens";
 import { MobileShell } from "./components/mobile";
 import { useIsHandheld } from "./useIsHandheld";
 import { useBackStep } from "./backGesture";
+import { pickedFile, resolvePickedFile, type PickedFile } from "@core/features/chat/pickedFile";
 import { useDeveloperMode } from "./useDeveloperMode";
 import type {
   ChannelPaneModel,
@@ -245,21 +247,6 @@ const WINDOW_HEIGHT = {
 /** Nothing unseen: a channel with no new pins, and what "Mark read" leaves. */
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 
-/** A file chosen from the picker or a drop, before the share question. */
-interface PickedFile {
-  readonly filePath: string;
-  readonly filename: string;
-}
-
-/**
- * Name a path.
- *
- * Both separators, because a Windows path arrives with backslashes and the
- * same build runs against a Linux drop.
- */
-function pickedFile(filePath: string): PickedFile {
-  return { filePath, filename: filePath.replaceAll("\\", "/").split("/").pop() ?? "file" };
-}
 
 /** `convertFileSrc`, tolerant of a shell that has not wired the asset protocol. */
 function previewUrlFor(filePath: string): string | undefined {
@@ -1156,7 +1143,7 @@ export default function NebulaClientApp() {
 
   const presence = useMemo(
     () =>
-      activeChannel === null ? null : channelPresence(users, activeChannel.id, keyHolders[activeChannel.id]),
+      activeChannel === null ? null : channelPresence(users, activeChannel, keyHolders[activeChannel.id]),
     [activeChannel, keyHolders, users],
   );
 
@@ -1213,6 +1200,7 @@ export default function NebulaClientApp() {
       {persistent.signalBridgeErrorBanner}
       {persistent.disputeBanner}
       {persistent.revokedBanner}
+      <HistoryRefusedNotice channelId={selectedDmUser === null ? selectedChannel : null} />
     </>
   );
 
@@ -1306,7 +1294,7 @@ export default function NebulaClientApp() {
               : undefined,
         });
         const paths = typeof picked === "string" ? [picked] : (picked ?? []);
-        if (paths.length > 0) stageFiles(paths.map(pickedFile));
+        if (paths.length > 0) stageFiles(await Promise.all(paths.map(resolvePickedFile)));
       } catch (e) {
         console.error("file picker failed:", e);
       }
@@ -1453,6 +1441,11 @@ export default function NebulaClientApp() {
   }, [canAttach, stageFiles]);
 
   const lightboxRef = useRef<LightboxHandle>(null);
+  // A phone's back gesture closes an open picture before it steps out of the
+  // conversation behind it: the lightbox is not an MUI modal, so the gesture
+  // would otherwise not know it is there.
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  useBackStep(lightboxOpen ? () => lightboxRef.current?.close() : null);
   // Stable, because it is a prop of every mounted message row: a closure made
   // here on each render is a changed prop on each render, and the rows compare
   // their props now.
@@ -2992,6 +2985,7 @@ export default function NebulaClientApp() {
 
           <Lightbox
             ref={lightboxRef}
+            onOpenChange={setLightboxOpen}
             allMessages={conversationMessages}
             selectedChannel={selectedChannel}
             selectedDmUser={selectedDmUser}

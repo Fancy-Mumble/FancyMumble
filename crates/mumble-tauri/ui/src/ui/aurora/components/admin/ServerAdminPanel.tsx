@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "@core/store";
 import type { AclData, AclEntry, BanEntry, RegisteredUser } from "@core/types";
+import { maxMask, withAddress } from "@core/features/admin/banMask";
+import { useBanList } from "@core/features/admin/useBanList";
 import { PERMISSIONS } from "@core/utils/permissions";
 import { Button, Checkbox, ModalSurface, TextField } from "../primitives";
 import ServerSettingsEditor from "./ServerSettingsEditor";
@@ -43,7 +45,7 @@ export default function ServerAdminPanel({
   const [tab, setTab] = useState<Tab>(initialTab);
   const [users, setUsers] = useState<RegisteredUser[]>([]);
   const [removedUserIds, setRemovedUserIds] = useState<number[]>([]);
-  const [bans, setBans] = useState<BanEntry[]>([]);
+  const { bans, setBans, refresh: refreshBans, save: sendBans } = useBanList();
   const [acl, setAcl] = useState<AclData | null>(null);
   const [channelId, setChannelId] = useState(0);
   const [status, setStatus] = useState<string | null>(null);
@@ -61,9 +63,6 @@ export default function ServerAdminPanel({
           setRemovedUserIds([]);
         }
       }),
-      listen<BanEntry[]>("ban-list", (event) => {
-        if (!disposed) setBans(event.payload);
-      }),
       listen<AclData>("acl", (event) => {
         if (!disposed && event.payload.channel_id === channelId) setAcl(event.payload);
       }),
@@ -73,11 +72,7 @@ export default function ServerAdminPanel({
         else offs.push(...values);
       })
       .then(() =>
-        Promise.all([
-          invoke("request_user_list"),
-          invoke("request_ban_list"),
-          invoke("request_acl", { channelId }),
-        ]),
+        Promise.all([invoke("request_user_list"), invoke("request_acl", { channelId })]),
       )
       .catch((reason) => setStatus(String(reason)));
     return () => {
@@ -85,14 +80,12 @@ export default function ServerAdminPanel({
       offs.forEach((off) => off());
     };
   }, [channelId]);
-  const refresh = () =>
-    void (
-      tab === "users"
-        ? invoke("request_user_list")
-        : tab === "bans"
-          ? invoke("request_ban_list")
-          : invoke("request_acl", { channelId })
-    ).catch((reason) => setStatus(String(reason)));
+  const refresh = () => {
+    if (tab === "bans") return refreshBans();
+    void (tab === "users" ? invoke("request_user_list") : invoke("request_acl", { channelId })).catch(
+      (reason) => setStatus(String(reason)),
+    );
+  };
   const saveUsers = async () => {
     await invoke("update_user_list", {
       users: [
@@ -104,10 +97,16 @@ export default function ServerAdminPanel({
     refresh();
     setStatus("Registered users saved.");
   };
+  // Said once the server has answered, never before: a refused list comes
+  // back as a refusal, and the list on screen is then the server's again.
   const saveBans = async () => {
-    await invoke("update_ban_list", { bans });
-    refresh();
-    setStatus("Ban list saved.");
+    try {
+      const refusal = await sendBans(bans);
+      if (refusal === null) setStatus("Ban list saved.");
+      else setStatus(`The server refused the ban list, nothing was changed${refusal ? `: ${refusal}` : "."}`);
+    } catch (reason) {
+      setStatus(String(reason));
+    }
   };
   const saveAcl = async () => {
     if (!acl) return;
@@ -257,7 +256,7 @@ export default function ServerAdminPanel({
                       onChange={(event) =>
                         setBans((current) =>
                           current.map((entry, entryIndex) =>
-                            entryIndex === index ? { ...entry, address: event.target.value } : entry,
+                            entryIndex === index ? withAddress(entry, event.target.value) : entry,
                           ),
                         )
                       }
@@ -266,7 +265,7 @@ export default function ServerAdminPanel({
                       label="Mask"
                       type="number"
                       min={0}
-                      max={128}
+                      max={maxMask(ban.address)}
                       value={ban.mask}
                       onChange={(event) =>
                         setBans((current) =>

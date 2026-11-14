@@ -153,3 +153,20 @@ pub fn show_chat_notification(
         tracing::warn!("failed to show chat notification: {e}");
     }
 }
+
+/// What `requestMicrophone` answers.
+#[derive(serde::Deserialize)]
+struct MicrophoneAnswer {
+    granted: bool,
+}
+
+/// Ask for the microphone, if it is not granted yet, and say whether it is.
+/// The plugin waits for the user's answer before it resolves.
+pub async fn request_microphone(handle: &ConnectionServiceHandle) -> Result<bool, String> {
+    handle
+        .0
+        .run_mobile_plugin_async::<MicrophoneAnswer>("requestMicrophone", serde_json::json!({}))
+        .await
+        .map(|answer| answer.granted)
+        .map_err(|e| e.to_string())
+}
