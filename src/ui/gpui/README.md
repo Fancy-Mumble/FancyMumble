@@ -322,11 +322,11 @@ UI never applied its theme's typeface (it drew in Segoe UI) and its rail held
 one server where this view's demo holds three.
 
 The main screen is measured against the web UI, not judged by eye. The web
-UI's side is `crates/mumble-tauri/ui/preview/native.tsx`: the whole client
+UI's side is `src/ui/tauri/ui/preview/native.tsx`: the whole client
 on a stubbed backend, serving the same small server as this view's plain
 demo. Both are drawn at 1410 by 758 and compared pixel for pixel:
 
-    # the web UI (from crates/mumble-tauri/ui)
+    # the web UI (from src/ui/tauri/ui)
     node_modules/.bin/vite --config preview/vite.rail.config.ts --port 5393
     node tools/webshot.mjs --out web.png \
         --url 'http://localhost:5393/native.html?mode=dark'
@@ -420,12 +420,12 @@ directory: two programs writing one set of keys is how a key gets lost.
 ## Themes
 
 `assets/themes.json` is generated, not written. The web UI's catalogue
-(`crates/mumble-tauri/ui/src/ui/nebula/themeCatalog.ts`) is the source, and a
+(`src/ui/tauri/ui/src/ui/nebula/themeCatalog.ts`) is the source, and a
 test next to it resolves every theme in both modes and compares the result
 with the file, so the two views cannot drift apart. After changing the
 catalogue:
 
-    cd crates/mumble-tauri/ui
+    cd src/ui/tauri/ui
     npx vitest run src/ui/nebula/nativeThemes.test.ts -u
 
 The window's mesh and the conversation's backdrop are CSS gradient stacks

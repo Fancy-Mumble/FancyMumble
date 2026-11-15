@@ -46,9 +46,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAURI=$(jq -r '.version' crates/mumble-tauri/tauri.conf.json)
-          UI=$(jq -r '.version' crates/mumble-tauri/ui/package.json)
-          PROTOCOL=$(grep -m1 -E '^version[[:space:]]*=' crates/mumble-protocol/Cargo.toml | sed -E 's/.*"(.+)".*/\1/')
+          TAURI=$(jq -r '.version' src/ui/tauri/tauri.conf.json)
+          UI=$(jq -r '.version' src/ui/tauri/ui/package.json)
+          PROTOCOL=$(grep -m1 -E '^version[[:space:]]*=' src/crates/mumble-protocol/Cargo.toml | sed -E 's/.*"(.+)".*/\1/')
           echo "tauri.conf.json:           $TAURI"
           echo "ui/package.json:           $UI"
           echo "mumble-protocol Cargo.toml: $PROTOCOL"
@@ -64,7 +64,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BASE=$(jq -r '.version' crates/mumble-tauri/tauri.conf.json)
+          BASE=$(jq -r '.version' src/ui/tauri/tauri.conf.json)
           if [ "${{ github.ref }}" = "refs/heads/beta" ] && [ "${{ github.event_name }}" = "push" ]; then
             IS_BETA=true
           else
@@ -137,7 +137,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: crates/mumble-tauri/ui/package-lock.json
+          cache-dependency-path: src/ui/tauri/ui/package-lock.json
 
       # -- Linux system deps (Tauri + ALSA for cpal) --------------
       - name: Install Linux system dependencies
@@ -172,15 +172,15 @@ jobs:
 
       # -- Frontend ------------------------------------------------
       - name: Install npm dependencies
-        working-directory: crates/mumble-tauri/ui
+        working-directory: src/ui/tauri/ui
         run: npm ci
 
       - name: TypeScript type-check
-        working-directory: crates/mumble-tauri/ui
+        working-directory: src/ui/tauri/ui
         run: npx tsc --noEmit
 
       - name: Frontend unit tests
-        working-directory: crates/mumble-tauri/ui
+        working-directory: src/ui/tauri/ui
         run: npm test
 
       # -- Rust ----------------------------------------------------
@@ -206,7 +206,7 @@ jobs:
       # -- Integration tests (Linux only - Docker) ----------------
       - name: Start Mumble test server
         if: runner.os == 'Linux'
-        working-directory: crates/mumble-protocol
+        working-directory: src/crates/mumble-protocol
         run: docker compose -f docker-compose.test.yml up -d --wait
 
       - name: Integration tests
@@ -215,7 +215,7 @@ jobs:
 
       - name: Stop Mumble test server
         if: runner.os == 'Linux' && always()
-        working-directory: crates/mumble-protocol
+        working-directory: src/crates/mumble-protocol
         run: docker compose -f docker-compose.test.yml down
 
   # ----------------------------------------------------------------
@@ -329,14 +329,14 @@ jobs:
           shared-key: ${{ matrix.target.os }}-build
           workspaces: |
             .
-            crates/signal-bridge
+            src/crates/signal-bridge
 
       - name: Install Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: crates/mumble-tauri/ui/package-lock.json
+          cache-dependency-path: src/ui/tauri/ui/package-lock.json
 
       - name: Install Linux system dependencies
         if: runner.os == 'Linux'
@@ -369,7 +369,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install npm dependencies
-        working-directory: crates/mumble-tauri/ui
+        working-directory: src/ui/tauri/ui
         run: npm ci
 
       - name: Install Tauri CLI
@@ -378,7 +378,7 @@ jobs:
           tool: tauri-cli
 
       - name: Build Tauri app
-        working-directory: crates/mumble-tauri
+        working-directory: src/ui/tauri
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -472,7 +472,7 @@ jobs:
           shared-key: ubuntu-latest-android
           workspaces: |
             .
-            crates/signal-bridge
+            src/crates/signal-bridge
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -495,7 +495,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: crates/mumble-tauri/ui/package-lock.json
+          cache-dependency-path: src/ui/tauri/ui/package-lock.json
 
       - name: Install system dependencies
         run: |
@@ -503,7 +503,7 @@ jobs:
           sudo apt-get install -y protobuf-compiler
 
       - name: Install npm dependencies
-        working-directory: crates/mumble-tauri/ui
+        working-directory: src/ui/tauri/ui
         run: npm ci
 
       - name: Install Tauri CLI
@@ -516,10 +516,10 @@ jobs:
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          echo "$GOOGLE_SERVICES_JSON" | base64 -d > crates/mumble-tauri/gen/android/app/google-services.json
+          echo "$GOOGLE_SERVICES_JSON" | base64 -d > src/ui/tauri/gen/android/app/google-services.json
 
       - name: Build signal-bridge for Android (arm64 + x86_64)
-        working-directory: crates/signal-bridge
+        working-directory: src/crates/signal-bridge
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
@@ -537,12 +537,12 @@ jobs:
 
       - name: Place signal-bridge .so in jniLibs
         run: |
-          mkdir -p crates/mumble-tauri/gen/android/app/src/main/jniLibs/arm64-v8a
-          mkdir -p crates/mumble-tauri/gen/android/app/src/main/jniLibs/x86_64
-          cp crates/signal-bridge/target/aarch64-linux-android/release/libsignal_bridge.so \
-             crates/mumble-tauri/gen/android/app/src/main/jniLibs/arm64-v8a/
-          cp crates/signal-bridge/target/x86_64-linux-android/release/libsignal_bridge.so \
-             crates/mumble-tauri/gen/android/app/src/main/jniLibs/x86_64/
+          mkdir -p src/ui/tauri/gen/android/app/src/main/jniLibs/arm64-v8a
+          mkdir -p src/ui/tauri/gen/android/app/src/main/jniLibs/x86_64
+          cp src/crates/signal-bridge/target/aarch64-linux-android/release/libsignal_bridge.so \
+             src/ui/tauri/gen/android/app/src/main/jniLibs/arm64-v8a/
+          cp src/crates/signal-bridge/target/x86_64-linux-android/release/libsignal_bridge.so \
+             src/ui/tauri/gen/android/app/src/main/jniLibs/x86_64/
 
       - name: Prepare Android signing keystore
         id: android_signing
@@ -563,7 +563,7 @@ jobs:
             -alias "$ANDROID_KEY_ALIAS" > /dev/null
 
       - name: Build Android APK and App Bundle
-        working-directory: crates/mumble-tauri
+        working-directory: src/ui/tauri
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
           ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
@@ -607,7 +607,7 @@ jobs:
         with:
           name: fancy-mumble-Android
           path: |
-            crates/mumble-tauri/gen/android/app/build/outputs/apk/**/*.apk
+            src/ui/tauri/gen/android/app/build/outputs/apk/**/*.apk
           if-no-files-found: warn
 
       # Kept apart from the APK artifact so the release job, which attaches
@@ -617,8 +617,8 @@ jobs:
         with:
           name: fancy-mumble-Android-bundle
           path: |
-            crates/mumble-tauri/gen/android/app/build/outputs/bundle/**/*.aab
-            crates/mumble-tauri/gen/android/app/build/outputs/mapping/**/mapping.txt
+            src/ui/tauri/gen/android/app/build/outputs/bundle/**/*.aab
+            src/ui/tauri/gen/android/app/build/outputs/mapping/**/mapping.txt
           if-no-files-found: warn
 
       # Needs a Play Console service account (Setup > API access) stored as
@@ -633,8 +633,8 @@ jobs:
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: com.fancymumble.app
-          releaseFiles: crates/mumble-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab
-          mappingFile: crates/mumble-tauri/gen/android/app/build/outputs/mapping/universalRelease/mapping.txt
+          releaseFiles: src/ui/tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab
+          mappingFile: src/ui/tauri/gen/android/app/build/outputs/mapping/universalRelease/mapping.txt
           releaseName: ${{ needs.version-check.outputs.version }}
           track: ${{ needs.version-check.outputs.is_beta == 'true' && 'internal' || (vars.PLAY_STABLE_TRACK || 'alpha') }}
           status: ${{ vars.PLAY_RELEASE_STATUS || 'completed' }}
@@ -652,7 +652,7 @@ jobs:
       matrix:
         target:
           # Windows must use the GNU toolchain: MSVC and the MinGW Qt kit
-          # have incompatible C++ ABIs (see crates/qt6ui/README.md).
+          # have incompatible C++ ABIs (see src/ui/qt6/README.md).
           - name: Windows
             os: windows-latest
             rust: stable-x86_64-pc-windows-gnu
@@ -676,7 +676,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: ${{ matrix.target.os }}-minimal
-          workspaces: crates/qt6ui
+          workspaces: src/ui/qt6
 
       - name: Install Qt 6
         uses: jurplel/install-qt-action@v4
@@ -690,7 +690,7 @@ jobs:
           # with "Failed to locate XML data for Qt version 6.11.1". Only the
           # Windows repo migrated, so the Linux job happened to pass on 6.11.1.
           # Bump back to 6.11.x once aqtinstall supports the new layout.
-          # See crates/qt6ui/README.md.
+          # See src/ui/qt6/README.md.
           version: '6.10.3'
           arch: ${{ matrix.target.qt-arch }}
           tools: ${{ matrix.target.qt-tools }}
@@ -715,7 +715,7 @@ jobs:
 
       - name: Build qt6ui (Windows)
         if: runner.os == 'Windows'
-        working-directory: crates/qt6ui
+        working-directory: src/ui/qt6
         shell: pwsh
         run: |
           $mingw = Get-ChildItem "$env:IQTA_TOOLS" -Directory -Filter "mingw*" |
@@ -730,7 +730,7 @@ jobs:
 
       - name: Build qt6ui (Linux)
         if: runner.os == 'Linux'
-        working-directory: crates/qt6ui
+        working-directory: src/ui/qt6
         run: |
           export QMAKE="$QT_ROOT_DIR/bin/qmake"
           export CMAKE_GENERATOR=Ninja
@@ -738,7 +738,7 @@ jobs:
 
       - name: Package minimal client (Windows, windeployqt)
         if: runner.os == 'Windows'
-        working-directory: crates/qt6ui
+        working-directory: src/ui/qt6
         shell: pwsh
         run: |
           $env:PATH = "$env:QT_MINGW_BIN;$env:QT_ROOT_DIR\bin;$env:PATH"
@@ -754,7 +754,7 @@ jobs:
 
       - name: Package minimal client (Linux, tar.gz)
         if: runner.os == 'Linux'
-        working-directory: crates/qt6ui
+        working-directory: src/ui/qt6
         run: |
           mkdir dist-minimal
           cp target/release/qt6ui dist-minimal/
@@ -778,8 +778,8 @@ jobs:
         with:
           name: fancy-mumble-minimal-${{ matrix.target.name }}
           path: |
-            crates/qt6ui/fancy-mumble-minimal-*.zip
-            crates/qt6ui/fancy-mumble-minimal-*.tar.gz
+            src/ui/qt6/fancy-mumble-minimal-*.zip
+            src/ui/qt6/fancy-mumble-minimal-*.tar.gz
           if-no-files-found: error
 
   # ----------------------------------------------------------------

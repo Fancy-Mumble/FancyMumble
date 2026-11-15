@@ -1,6 +1,6 @@
 # Parity with the web UI
 
-What the web UI (Nebula, `crates/mumble-tauri/ui/src/ui/nebula`) has and this native client does not, feature by feature. Taken on 2026-11-14 by reading both sources, area by area. Nothing was run for it, and where a component was only skimmed the section says so at its end.
+What the web UI (Nebula, `src/ui/tauri/ui/src/ui/nebula`) has and this native client does not, feature by feature. Taken on 2026-11-14 by reading both sources, area by area. Nothing was run for it, and where a component was only skimmed the section says so at its end.
 
 ## How to read it
 
@@ -867,7 +867,7 @@ The engine surface is the structural gap. The web UI reaches 319 Tauri commands;
 
 Roughly at parity: the theme catalogue, lazy history paging, list virtualisation, several servers at once, auto-connect at launch, reconnect with backoff, safe HTML rendering.
 
-Web and Tauri sources are under `crates/mumble-tauri/src/` (Tauri side) and `crates/mumble-tauri/ui/src/` (web side).
+Web and Tauri sources are under `src/ui/tauri/src/` (Tauri side) and `src/ui/tauri/ui/src/` (web side).
 
 ### App shell and OS integration
 

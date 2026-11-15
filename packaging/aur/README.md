@@ -15,7 +15,7 @@ reason — that is what the shipped `.desktop` entry's `StartupWMClass` matches.
 
 ## Why the bridge is its own package
 
-`crates/signal-bridge` links `libsignal-protocol`, which is AGPL-3.0, and the
+`src/crates/signal-bridge` links `libsignal-protocol`, which is AGPL-3.0, and the
 client `dlopen`s it at runtime rather than linking it — a boundary the crate's
 own header comment says is deliberate. Splitting it keeps `fancy-mumble` MIT and
 lets a user decline the AGPL half.
@@ -61,7 +61,7 @@ the AUR's other Tauri and Electron packages follow.
 - Re-run `updpkgsums` and `makepkg --printsrcinfo > .SRCINFO` in each directory
   on every version bump. `fancy-mumble-bin` has three sums: the `.deb`, the
   licence fetched from the tag, and the local `.desktop` file.
-- Tags up to `v0.3.0` carry no licence text in `crates/signal-bridge` — only the
+- Tags up to `v0.3.0` carry no licence text in `src/crates/signal-bridge` — only the
   AGPL declaration in its `Cargo.toml` header — which is why the package leans
   on Arch's common licences. From `v0.4.0` the directory has a `LICENSE`.
 - A distro package should not update itself. Tags up to `v0.3.0` compile the

@@ -72,22 +72,22 @@ Fancy Mumble is built as a Rust workspace with multiple crates:
 
 | Crate | Purpose |
 |-------|---------|
-| [`mumble-protocol`](crates/mumble-protocol) | Core Mumble protocol implementation - TCP/UDP, TLS, Opus, the audio pipeline, persistent chat |
-| [`mumble-tauri`](crates/mumble-tauri) | Tauri app for desktop and Android - backend commands, state management, updater |
-| [`mumble-tauri/ui`](crates/mumble-tauri/ui) | React frontend - a shared core and the UI packs drawn on top of it |
-| [`fancy-audio-device`](crates/fancy-audio-device) | Audio capture and mixing playback shared by both clients (cpal, with a WASAPI path of its own) |
-| [`fancy-screenshare`](crates/fancy-screenshare) | Screen and camera capture, hardware encoding, WebRTC delivery |
-| [`fancy-denoiser-deepfilter`](crates/fancy-denoiser-deepfilter) | AI noise suppression using DeepFilterNet3 |
-| [`fancy-gamedetect`](crates/fancy-gamedetect) | Finds the game in the foreground and the launchers that installed it |
-| [`fancy-presence`](crates/fancy-presence) | Rich presence over Discord's IPC endpoint |
-| [`fancy-utils`](crates/fancy-utils) | Shared utility functions |
-| [`signal-bridge`](crates/signal-bridge) | Signal sender keys for encrypted chat. AGPL-3.0, built on its own and loaded at runtime, so the client stays MIT. Installers leave it out; the client downloads it from the `signal-bridge-v*` release when a Signal channel needs it |
-| [`qt6ui`](crates/qt6ui) | Minimal native Qt 6 / QML client. LGPL-3.0, built outside the workspace |
+| [`mumble-protocol`](src/crates/mumble-protocol) | Core Mumble protocol implementation - TCP/UDP, TLS, Opus, the audio pipeline, persistent chat |
+| [`mumble-tauri`](src/ui/tauri) | Tauri app for desktop and Android - backend commands, state management, updater |
+| [`mumble-tauri/ui`](src/ui/tauri/ui) | React frontend - a shared core and the UI packs drawn on top of it |
+| [`fancy-audio-device`](src/crates/fancy-audio-device) | Audio capture and mixing playback shared by both clients (cpal, with a WASAPI path of its own) |
+| [`fancy-screenshare`](src/crates/fancy-screenshare) | Screen and camera capture, hardware encoding, WebRTC delivery |
+| [`fancy-denoiser-deepfilter`](src/crates/fancy-denoiser-deepfilter) | AI noise suppression using DeepFilterNet3 |
+| [`fancy-gamedetect`](src/crates/fancy-gamedetect) | Finds the game in the foreground and the launchers that installed it |
+| [`fancy-presence`](src/crates/fancy-presence) | Rich presence over Discord's IPC endpoint |
+| [`fancy-utils`](src/crates/fancy-utils) | Shared utility functions |
+| [`signal-bridge`](src/crates/signal-bridge) | Signal sender keys for encrypted chat. AGPL-3.0, built on its own and loaded at runtime, so the client stays MIT. Installers leave it out; the client downloads it from the `signal-bridge-v*` release when a Signal channel needs it |
+| [`qt6ui`](src/ui/qt6) | Minimal native Qt 6 / QML client. LGPL-3.0, built outside the workspace |
 
 **Tech Stack:** Rust 2024 + Tauri 2 + React 19 + TypeScript 5 + MUI + Tokio async runtime
 
-For detailed documentation, see [`crates/mumble-protocol/doc/`](crates/mumble-protocol/doc/)
-for the protocol library and [`crates/mumble-tauri/ui/src/README.md`](crates/mumble-tauri/ui/src/README.md)
+For detailed documentation, see [`src/crates/mumble-protocol/doc/`](src/crates/mumble-protocol/doc/)
+for the protocol library and [`src/ui/tauri/ui/src/README.md`](src/ui/tauri/ui/src/README.md)
 for how the frontend is laid out.
 
 ---
@@ -155,14 +155,14 @@ See [ANDROID_DEV.md](ANDROID_DEV.md) for complete Android development setup inst
 
 2. **Install frontend dependencies**
    ```bash
-   cd crates/mumble-tauri/ui
+   cd src/ui/tauri/ui
    npm install
    cd ../../..
    ```
 
 3. **Run the development server**
    ```bash
-   cd crates/mumble-tauri
+   cd src/ui/tauri
    cargo tauri dev
    ```
 
@@ -175,7 +175,7 @@ The app will launch with hot-reloading enabled for both Rust and TypeScript chan
 ### Desktop (Windows/Linux)
 
 ```bash
-cd crates/mumble-tauri
+cd src/ui/tauri
 cargo tauri build
 ```
 
@@ -186,7 +186,7 @@ Production installers will be generated in `target/release/bundle/`:
 ### Android
 
 ```bash
-cd crates/mumble-tauri
+cd src/ui/tauri
 cargo tauri android build
 ```
 
@@ -205,8 +205,8 @@ Or use the helper script (Windows):
 ### Releases and update channels
 
 Releases are cut by CI from a branch, never by hand. The version in
-`crates/mumble-tauri/tauri.conf.json` is the source of truth for the tag, and
-`ui/package.json` plus `crates/mumble-protocol/Cargo.toml` must agree with it
+`src/ui/tauri/tauri.conf.json` is the source of truth for the tag, and
+`ui/package.json` plus `src/crates/mumble-protocol/Cargo.toml` must agree with it
 or the build fails before anything is published.
 
 | Branch | Publishes | Visible to |
@@ -257,7 +257,7 @@ FANCY_UPDATER_BETA_URL=http://127.0.0.1:8787/beta.json cargo tauri dev
 
 ### Frontend Unit Tests
 ```bash
-cd crates/mumble-tauri/ui
+cd src/ui/tauri/ui
 npm test              # Single run
 npm run test:watch    # Watch mode
 npm run lint          # ESLint
@@ -276,7 +276,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 Integration tests run against a real Mumble server in Docker:
 
 ```bash
-cd crates/mumble-protocol
+cd src/crates/mumble-protocol
 
 # Start test server
 docker compose -f docker-compose.test.yml up -d --wait

@@ -52,7 +52,7 @@ For a language other than English, in this order:
    ```
 
 2. **The web client's files**, for wording both clients share. They are
-   read where they are, `crates/mumble-tauri/ui/src/core/locales/`
+   read where they are, `src/ui/tauri/ui/src/core/locales/`
    (`common/` and `nebula/`), compiled in, never copied.
    `locales/shared.json` says which key of theirs means the same as which
    English of ours:

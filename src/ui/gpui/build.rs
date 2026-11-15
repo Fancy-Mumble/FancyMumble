@@ -43,7 +43,7 @@ fn embed_icon() -> Result<(), Box<dyn Error>> {
     use std::path::PathBuf;
 
     let icon = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?)
-        .join("../../../crates/mumble-tauri/icons/icon.ico");
+        .join("../tauri/icons/icon.ico");
     println!("cargo:rerun-if-changed={}", icon.display());
     // A backslash starts an escape in a resource script's string.
     let icon = icon.display().to_string().replace('\\', "/");

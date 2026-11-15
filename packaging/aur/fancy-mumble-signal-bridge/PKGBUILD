@@ -20,7 +20,7 @@ depends=('gcc-libs' 'glibc' 'fancy-mumble')
 makedepends=('cargo' 'protobuf')
 source=("fancy-mumble-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('a9440f48b7832408590603f56f2fdb02817075cefdd129e06c065e2e8ceb0163')
-_srcdir="FancyMumble-$pkgver/crates/signal-bridge"
+_srcdir="FancyMumble-$pkgver/src/crates/signal-bridge"
 
 prepare() {
 	cd "$_srcdir"
@@ -51,6 +51,6 @@ package() {
 		"$pkgdir/usr/lib/fancy-mumble/libsignal_bridge.so"
 
 	# No licence file to install: AGPL-3.0 is in /usr/share/licenses/common, and
-	# crates/signal-bridge carries no LICENSE of its own -- only the header
+	# src/crates/signal-bridge carries no LICENSE of its own -- only the header
 	# comment in its Cargo.toml declaring the terms. Worth fixing upstream.
 }

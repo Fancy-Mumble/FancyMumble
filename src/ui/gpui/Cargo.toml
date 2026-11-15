@@ -35,7 +35,7 @@ x11 = ["gpui/x11"]
 gpui = { path = "vendor/gpui", default-features = false, features = ["font-kit", "windows-manifest"] }
 # The engine. Still inside the Tauri package, built here without the Tauri
 # view (`default-features = false`), so none of Tauri is compiled or linked.
-mumble-tauri = { path = "../../../crates/mumble-tauri", default-features = false, features = ["logs"] }
+mumble-tauri = { path = "../tauri", default-features = false, features = ["logs"] }
 # The engine's background work runs on a runtime the view owns.
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 # The engine reports to the view over a channel the UI thread can await.
@@ -98,7 +98,7 @@ getrandom = "=0.3.4"
 # Screen sharing (`src/share/`): the web client's own capture, encoder and
 # WebRTC peers, used as they are. Nothing of it runs until a share is
 # started or watched.
-fancy-screenshare = { path = "../../../crates/fancy-screenshare" }
+fancy-screenshare = { path = "../../crates/fancy-screenshare" }
 # Decoding a watched share to pixels, and scaling them to the room they are
 # shown in: the releases that crate already builds.
 openh264 = "0.8"
@@ -145,7 +145,7 @@ embed-resource = "3"
 [dev-dependencies]
 # The table of permissions the engine and the web client are written from,
 # to hold this client's own against.
-fancy-utils = { path = "../../../crates/fancy-utils" }
+fancy-utils = { path = "../../crates/fancy-utils" }
 # Drives the views without a display: simulated clicks and keys.
 gpui = { path = "vendor/gpui", default-features = false, features = ["test-support"] }
 # The one-time codes a live test of the Account page computes as an

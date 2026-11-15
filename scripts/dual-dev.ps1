@@ -25,9 +25,9 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot  = Split-Path $PSScriptRoot -Parent
-$tauriDir  = Join-Path $repoRoot "crates\mumble-tauri"
+$tauriDir  = Join-Path $repoRoot "src\ui\tauri"
 $uiDir     = Join-Path $tauriDir "ui"
-$bridgeDir = Join-Path $repoRoot "crates\signal-bridge"
+$bridgeDir = Join-Path $repoRoot "src\crates\signal-bridge"
 
 # -------------------------------------------------------------------
 # Helpers

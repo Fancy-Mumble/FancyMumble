@@ -9,7 +9,7 @@ opening a card meant fetching, holding and decoding all of them.
 The new format moves the text into the profile JSON as a short, bounded list
 of typed blocks ("about"), keeps pictures there only as small thumbnails, and
 puts anything large into a second, separately fetched document ("page").
-The code is `crates/mumble-tauri/src/engine_api/about/` (shared by both
+The code is `src/ui/tauri/src/engine_api/about/` (shared by both
 clients); this client reads it in `src/profile.rs` and draws it in
 `src/ui/about_view.rs`, `src/ui/card.rs` and `src/ui/profile_page.rs`.
 

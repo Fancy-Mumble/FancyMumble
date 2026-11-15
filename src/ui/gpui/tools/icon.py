@@ -4,7 +4,7 @@
     tools/icon.py zap [text-quote ...]         write assets/icons/<name>.svg
     tools/icon.py --check                      compare every bundled icon with the package
 
-The shapes are read from `crates/mumble-tauri/ui/node_modules/lucide-react`,
+The shapes are read from `src/ui/tauri/ui/node_modules/lucide-react`,
 so an icon here is the icon the web UI draws and not one written from memory.
 An icon filled in this client (`star`) keeps its fill; the rest are stroked.
 After adding one, name it in `src/assets.rs`.
@@ -15,7 +15,7 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent.parent
 ICONS = HERE / "assets" / "icons"
-PACKAGE = HERE.parents[2] / "crates" / "mumble-tauri" / "ui" / "node_modules" / "lucide-react" / "dist" / "esm" / "icons"
+PACKAGE = HERE.parents[2] / "src" / "ui" / "tauri" / "ui" / "node_modules" / "lucide-react" / "dist" / "esm" / "icons"
 HEAD = ('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" '
         'fill="{fill}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">')
 

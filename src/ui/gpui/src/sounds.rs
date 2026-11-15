@@ -121,7 +121,7 @@ macro_rules! sound {
             id: $id,
             name: $name,
             file: include_bytes!(concat!(
-                "../../../../crates/mumble-tauri/ui/src/core/assets/",
+                "../../tauri/ui/src/core/assets/",
                 $file
             )),
         }

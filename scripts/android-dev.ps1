@@ -447,7 +447,7 @@ Write-Host ("=" * 48)
 # Only a hard error if gen/android has not been initialized yet.
 $devModeKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock"
 $devModeValue = (Get-ItemProperty -Path $devModeKey -Name "AllowDevelopmentWithoutDevLicense" -ErrorAction SilentlyContinue).AllowDevelopmentWithoutDevLicense
-$genAndroidExists = Test-Path "$PSScriptRoot\..\crates\mumble-tauri\gen\android"
+$genAndroidExists = Test-Path "$PSScriptRoot\..\src\ui\tauri\gen\android"
 if ($devModeValue -eq 1) {
     Write-Check "Developer Mode" $true "Symlink creation enabled"
 } elseif ($genAndroidExists) {
@@ -759,7 +759,7 @@ if ($Run) {
         Start-Sleep -Milliseconds 500
     }
 
-    Push-Location "$PSScriptRoot\..\crates\mumble-tauri"
+    Push-Location "$PSScriptRoot\..\src\ui\tauri"
     try {
         # --no-watch: disable the Tauri file watcher so frontend file changes
         # (handled by Vite HMR) do not trigger expensive full Rust+Gradle
@@ -795,7 +795,7 @@ if ($Run) {
     [void](Start-WebViewInspect @inspectArgs)
 } else {
     Write-Host "Run with -Run to start the dev server, or manually:" -ForegroundColor DarkGray
-    Write-Host "  cd crates\mumble-tauri" -ForegroundColor DarkGray
+    Write-Host "  cd src\ui\tauri" -ForegroundColor DarkGray
     Write-Host "  cargo tauri android dev" -ForegroundColor DarkGray
     Write-Host "Run with -Emulator to launch an emulator:" -ForegroundColor DarkGray
     Write-Host "  .\scripts\android-dev.ps1 -Emulator" -ForegroundColor DarkGray

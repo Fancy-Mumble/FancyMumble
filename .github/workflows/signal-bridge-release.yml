@@ -5,9 +5,9 @@ name: Signal bridge release
 # Installers do not bundle the bridge. The client downloads it on demand from
 # the release this workflow makes, pinned to the bridge version it was built
 # against, and refuses it unless its minisign signature checks out against
-# the updater key (see crates/mumble-tauri/src/state/pchat/bridge_addon.rs).
+# the updater key (see src/ui/tauri/src/state/pchat/bridge_addon.rs).
 #
-# To publish: bump `version` in crates/signal-bridge/Cargo.toml, then push a
+# To publish: bump `version` in src/crates/signal-bridge/Cargo.toml, then push a
 # tag `signal-bridge-v<that version>`. Publish the tag before any client that
 # expects that version ships, or its "Install" button has nothing to fetch.
 #
@@ -50,9 +50,9 @@ jobs:
       - name: Check the tag matches the crate version
         shell: bash
         run: |
-          VERSION=$(sed -n '/^\[package\]/,/^\[/s/^version = "\(.*\)"/\1/p' crates/signal-bridge/Cargo.toml)
+          VERSION=$(sed -n '/^\[package\]/,/^\[/s/^version = "\(.*\)"/\1/p' src/crates/signal-bridge/Cargo.toml)
           if [ "${GITHUB_REF_NAME}" != "signal-bridge-v${VERSION}" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match crates/signal-bridge version ${VERSION}."
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match src/crates/signal-bridge version ${VERSION}."
             exit 1
           fi
 
@@ -63,7 +63,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: ${{ matrix.target.os }}-signal-bridge
-          workspaces: crates/signal-bridge
+          workspaces: src/crates/signal-bridge
 
       - name: Install protoc (Linux)
         if: runner.os == 'Linux'
@@ -76,7 +76,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build
-        working-directory: crates/signal-bridge
+        working-directory: src/crates/signal-bridge
         run: cargo build --release --locked
 
       - name: Install Tauri CLI
@@ -95,7 +95,7 @@ jobs:
             exit 1
           fi
           mkdir -p dist
-          cp "crates/signal-bridge/target/release/${{ matrix.target.lib }}" "dist/${{ matrix.target.asset }}"
+          cp "src/crates/signal-bridge/target/release/${{ matrix.target.lib }}" "dist/${{ matrix.target.asset }}"
           cargo tauri signer sign "dist/${{ matrix.target.asset }}"
 
       - uses: actions/upload-artifact@v4
@@ -130,4 +130,4 @@ jobs:
             --latest=false \
             --notes "The Signal Protocol bridge add-on, version $VERSION. The client installs it for you: open an end-to-end encrypted (Signal) channel, or Settings → Plugins. Each file has a minisign signature (.sig) under the updater key.
 
-          Licensed AGPL-3.0-only. Source: https://github.com/$GITHUB_REPOSITORY/tree/$GITHUB_REF_NAME/crates/signal-bridge"
+          Licensed AGPL-3.0-only. Source: https://github.com/$GITHUB_REPOSITORY/tree/$GITHUB_REF_NAME/src/crates/signal-bridge"

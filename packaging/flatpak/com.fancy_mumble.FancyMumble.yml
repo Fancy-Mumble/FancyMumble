@@ -264,7 +264,7 @@ modules:
         ESBUILD_BINARY_PATH: /run/build/fancy-mumble/flatpak-node/cache/esbuild/bin/esbuild-current
 
     build-commands:
-      # 1. Frontend first. The Rust build embeds crates/mumble-tauri/ui/dist as
+      # 1. Frontend first. The Rust build embeds src/ui/tauri/ui/dist as
       #    the asset bundle (the custom-protocol feature below), so it has to
       #    exist before cargo runs.
       #
@@ -281,7 +281,7 @@ modules:
       #    the same locked tree.
       - |
         set -e
-        cd crates/mumble-tauri/ui
+        cd src/ui/tauri/ui
         npm ci --offline --legacy-peer-deps
         npm run build
 
@@ -290,7 +290,7 @@ modules:
       #    --no-default-features drops `self-updater`. Flathub installs are
       #    updated by Flathub; an app that downloads and swaps its own binary is
       #    both against the submission rules and impossible inside the sandbox.
-      #    See the feature's definition in crates/mumble-tauri/Cargo.toml.
+      #    See the feature's definition in src/ui/tauri/Cargo.toml.
       #
       #    SKIP_* stop mumble-tauri's build.rs shelling out to two nested cargo
       #    builds that would each want the network:
@@ -322,7 +322,7 @@ modules:
       - install -d /app/lib/fancy-mumble
 
       # 4. Desktop integration.
-      - install -Dm644 crates/mumble-tauri/icons/icon.png
+      - install -Dm644 src/ui/tauri/icons/icon.png
           /app/share/icons/hicolor/128x128/apps/com.fancy_mumble.FancyMumble.png
       - install -Dm644 packaging/flatpak/com.fancy_mumble.FancyMumble.desktop
           /app/share/applications/com.fancy_mumble.FancyMumble.desktop

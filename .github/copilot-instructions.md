@@ -14,19 +14,19 @@ against any Mumble server.
 
 | Layer | Crate / package | Tech |
 |-------|-----------------|------|
-| Protocol library | `crates/mumble-protocol` | Rust, tokio, prost (protobuf), rustls, optional Opus codec |
-| OMLSA denoiser | `crates/mumble-protocol` | Inlined in `src/audio/filter/denoiser/omlsa/` (Cohen 2001/2003), uses `realfft` |
-| DeepFilterNet denoiser | `crates/fancy-denoiser-deepfilter` | Standalone Rust crate, `DeepFilterNet3` (Schroeter et al. 2023) via upstream `deep_filter` git dep + pinned `tract-onnx`/`ndarray` |
-| Tauri backend | `crates/mumble-tauri` | Rust, Tauri 2, rcgen (self-signed certs), oboe (Android audio) |
-| Audio devices | `crates/fancy-audio-device` | cpal capture and mixing playback shared by both clients, plus a WASAPI path |
-| Screen sharing | `crates/fancy-screenshare` | Capture, hardware encode (Media Foundation, NVENC, VA-API), WebRTC |
-| Game detection | `crates/fancy-gamedetect` | Foreground-window probe and launcher indexes (Steam, Epic, Heroic, registry) |
-| Rich presence | `crates/fancy-presence` | Hosts Discord's IPC endpoint |
-| Shared helpers | `crates/fancy-utils` | Permissions table, markdown, version and net helpers |
-| Tauri frontend | `crates/mumble-tauri/ui` | React 19, Vite 8, Zustand 5, react-router-dom 7, TypeScript 5, MUI 9 (Nebula), CSS Modules (Standard) |
-| Tauri Android | `crates/mumble-tauri/gen/android` | Gradle/Kotlin, Android API 34, NDK 27 |
-| Signal bridge | `crates/signal-bridge` | AGPL-3.0 cdylib, excluded from the workspace, `dlopen`ed at runtime so the client stays MIT |
-| Minimal client | `crates/qt6ui` | LGPL-3.0 Qt 6 / QML client, excluded from the workspace, same protocol lib |
+| Protocol library | `src/crates/mumble-protocol` | Rust, tokio, prost (protobuf), rustls, optional Opus codec |
+| OMLSA denoiser | `src/crates/mumble-protocol` | Inlined in `src/audio/filter/denoiser/omlsa/` (Cohen 2001/2003), uses `realfft` |
+| DeepFilterNet denoiser | `src/crates/fancy-denoiser-deepfilter` | Standalone Rust crate, `DeepFilterNet3` (Schroeter et al. 2023) via upstream `deep_filter` git dep + pinned `tract-onnx`/`ndarray` |
+| Tauri backend | `src/ui/tauri` | Rust, Tauri 2, rcgen (self-signed certs), oboe (Android audio) |
+| Audio devices | `src/crates/fancy-audio-device` | cpal capture and mixing playback shared by both clients, plus a WASAPI path |
+| Screen sharing | `src/crates/fancy-screenshare` | Capture, hardware encode (Media Foundation, NVENC, VA-API), WebRTC |
+| Game detection | `src/crates/fancy-gamedetect` | Foreground-window probe and launcher indexes (Steam, Epic, Heroic, registry) |
+| Rich presence | `src/crates/fancy-presence` | Hosts Discord's IPC endpoint |
+| Shared helpers | `src/crates/fancy-utils` | Permissions table, markdown, version and net helpers |
+| Tauri frontend | `src/ui/tauri/ui` | React 19, Vite 8, Zustand 5, react-router-dom 7, TypeScript 5, MUI 9 (Nebula), CSS Modules (Standard) |
+| Tauri Android | `src/ui/tauri/gen/android` | Gradle/Kotlin, Android API 34, NDK 27 |
+| Signal bridge | `src/crates/signal-bridge` | AGPL-3.0 cdylib, excluded from the workspace, `dlopen`ed at runtime so the client stays MIT |
+| Minimal client | `src/ui/qt6` | LGPL-3.0 Qt 6 / QML client, excluded from the workspace, same protocol lib |
 
 ## Workspace layout
 
@@ -40,7 +40,7 @@ deny.toml  .clippy.toml  rustfmt.toml
 docs/                           # RELEASING.md, design notes
 packaging/                      # aur/, flatpak/
 scripts/                        # android helpers, update manifest, changelog section
-crates/
+src/crates/
   mumble-protocol/
     proto/                      # Mumble.proto, MumbleUDP.proto, fancy/*.proto (the epoch-1 canon)
     src/
@@ -53,7 +53,8 @@ crates/
       proto/                    # prost output, written by build.rs and checked in
     doc/                        # architecture, detailed design, persistent chat, diagrams
     tests/                      # integration.rs (Docker), denoiser corpus
-  mumble-tauri/
+src/ui/
+  tauri/                        # the mumble-tauri package
     build.rs                    # tauri-build, signal-bridge, generated TS (see below)
     capabilities/               # Tauri ACL, hand-written
     gen/android/                # Kotlin sources and Gradle project - hand-edited despite the name
@@ -67,7 +68,7 @@ crates/
     ui/                         # the React frontend - see below
 ```
 
-### Frontend (`crates/mumble-tauri/ui/src`)
+### Frontend (`src/ui/tauri/ui/src`)
 
 Read `src/README.md`, `src/ui/README.md` and `src/ui/nebula/ARCHITECTURE.md`
 first; they are kept current.  In short:
@@ -293,7 +294,7 @@ steps before declaring the task done:
 - CI: GitHub Actions (`.github/workflows/ci.yml`) - lint, test, build,
   Android APK build, auto-release on `main`, and beta pre-releases on `beta`
   (see "Releases and update channels" in `README.md`)
-- Workspace managed with `cargo` (Rust) and `npm` (frontend, in `crates/mumble-tauri/ui`)
+- Workspace managed with `cargo` (Rust) and `npm` (frontend, in `src/ui/tauri/ui`)
 - **No non-ASCII characters in code comments** (Rust `//`/`/* */`, TypeScript `//`/`/* */`).
   Box-drawing characters and other Unicode glyphs (e.g. `┌──┐`, `│`, `└──┘`, `▼`, `─`)
   are forbidden in source-code comments.  They are fine in Markdown documentation
@@ -303,12 +304,12 @@ steps before declaring the task done:
 
 ```bash
 # Run the Tauri dev server (auto-starts Vite + cargo build)
-cd crates/mumble-tauri
+cd src/ui/tauri
 cargo tauri dev
 
 # Run the Tauri Android dev server (requires emulator/device)
 # See ANDROID_DEV.md for prerequisites
-cd crates/mumble-tauri
+cd src/ui/tauri
 cargo tauri android dev
 
 # Android development helper script (Windows only)
@@ -331,7 +332,7 @@ cargo tauri android dev
 .\scripts\android-dev.ps1 -Inspect -Serial emulator-5554  # Target a specific device
 #
 # To perform a release APK/AAB build instead of the dev server:
-cd crates/mumble-tauri
+cd src/ui/tauri
 cargo tauri android build
 
 # Build the protocol library only
@@ -341,17 +342,17 @@ cargo build -p mumble-protocol
 cargo test --package mumble-protocol --features opus-codec --lib
 
 # Run integration tests (requires Docker - see section below)
-cd crates/mumble-protocol
+cd src/crates/mumble-protocol
 docker compose -f docker-compose.test.yml up -d --wait
 cargo test --package mumble-protocol --test integration
 docker compose -f docker-compose.test.yml down
 
 # Frontend only (standalone Vite dev server for UI iteration)
-cd crates/mumble-tauri/ui
+cd src/ui/tauri/ui
 npm run dev
 
 # Run frontend unit tests, lint and type check
-cd crates/mumble-tauri/ui
+cd src/ui/tauri/ui
 npm test
 npm run lint
 npx tsc --noEmit
@@ -361,7 +362,7 @@ npx tsc --noEmit
 
 The protocol library includes integration tests that run against a real
 Mumble server in Docker.  They live in
-`crates/mumble-protocol/tests/integration.rs`.
+`src/crates/mumble-protocol/tests/integration.rs`.
 
 ### Prerequisites
 
@@ -376,7 +377,7 @@ Mumble server in Docker.  They live in
 ### Server configuration
 
 The Docker Compose file
-(`crates/mumble-protocol/docker-compose.test.yml`) starts a
+(`src/crates/mumble-protocol/docker-compose.test.yml`) starts a
 `mumblevoip/mumble-server:latest` container configured via
 `MUMBLE_CONFIG_*` environment variables that relax limits for testing:
 
@@ -392,7 +393,7 @@ The Docker Compose file
 
 ```bash
 # 1. Start the test server (waits for healthy status)
-cd crates/mumble-protocol
+cd src/crates/mumble-protocol
 docker compose -f docker-compose.test.yml up -d --wait
 
 # On Windows with Hyper-V port conflict, set an alternative port first:
@@ -449,7 +450,7 @@ a `__tests__/` directory next to it.  Nebula components render through
 `withNebulaTheme` from `@nebula/testTheme`.
 
 ```bash
-cd crates/mumble-tauri/ui
+cd src/ui/tauri/ui
 npm test                                  # single run
 npm run test:watch                        # watch mode
 npx vitest run src/ui/nebula/theme.test.tsx   # one file
@@ -461,11 +462,11 @@ lists the ones a test reads as text.
 ## Tauri commands (Rust -> JS bridge)
 
 There are several hundred, so there is no table here to go stale.  They live in
-`crates/mumble-tauri/src/commands/`, one file per area (`connection.rs`,
+`src/ui/tauri/src/commands/`, one file per area (`connection.rs`,
 `messaging.rs`, `channels.rs`, `audio.rs`, `screenshare.rs`, `admin.rs`, ...),
 and are registered in `commands/registry.rs`.  A new command needs its
 function, its registration, and - if it is not covered by an existing
-permission - an entry under `crates/mumble-tauri/capabilities/`.
+permission - an entry under `src/ui/tauri/capabilities/`.
 
 Blocking work inside a command goes through `spawn_blocking`: a command that
 blocks a runtime worker starves the protocol event loop, and the first symptom

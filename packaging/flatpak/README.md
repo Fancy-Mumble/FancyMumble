@@ -32,13 +32,13 @@ flatpak install flathub com.fancy_mumble.FancyMumble.SignalBridge
 | `com.fancy_mumble.FancyMumble.SignalBridge.yml` | The AGPL add-on, built as a Flatpak extension |
 | `com.fancy_mumble.FancyMumble.SignalBridge.metainfo.xml` | AppStream metadata for the add-on (`addon`) |
 | `cargo-sources.json` | Generated. Every crate in the workspace `Cargo.lock` |
-| `signal-bridge-cargo-sources.json` | Generated. Every crate in `crates/signal-bridge/Cargo.lock` |
+| `signal-bridge-cargo-sources.json` | Generated. Every crate in `src/crates/signal-bridge/Cargo.lock` |
 | `node-sources.json` | Generated. Every npm package in `ui/package-lock.json` |
 | `generate-sources.sh` | Regenerates all three |
 
 ## Two refs, one licence boundary
 
-`crates/signal-bridge` links libsignal-protocol, which is **AGPL-3.0-only**.
+`src/crates/signal-bridge` links libsignal-protocol, which is **AGPL-3.0-only**.
 The client is **MIT**. Upstream keeps those apart by building the bridge as a
 cdylib in its own workspace and `dlopen`ing it at runtime; the AUR packaging
 keeps them apart by shipping two packages.
@@ -76,7 +76,7 @@ cargo build --release --no-default-features --features custom-protocol
 ```
 
 which drops the `self-updater` feature added for this purpose
-(`crates/mumble-tauri/Cargo.toml`). That takes `updater/{commands,manager}.rs`,
+(`src/ui/tauri/Cargo.toml`). That takes `updater/{commands,manager}.rs`,
 the six `updater_*` commands and the `updater`/`process` plugins out of the
 binary, and `build.rs` narrows the capability glob so
 `capabilities/self-updater/` is not fed to the ACL. Everything else - including
@@ -141,7 +141,7 @@ error: failed to fetch some objects from
 
 The obvious shortcut - just drop the package, since the non-default
 `deepfilternet-denoiser` feature leaves it uncompiled - does not work either.
-`crates/fancy-denoiser-deepfilter` is a workspace member and depends on it
+`src/crates/fancy-denoiser-deepfilter` is a workspace member and depends on it
 unconditionally, so cargo resolves it whatever features are on:
 
 ```
@@ -254,7 +254,7 @@ flatpak run org.flatpak.Builder --user --force-clean --install builddir-bridge \
       Re-point them when those images change, or they will drift from the UI
       being shipped.
 - [ ] Ship a scalable icon if there is one. Only a 128x128 PNG exists today
-      (`crates/mumble-tauri/icons/icon.png`), which meets the minimum but looks
+      (`src/ui/tauri/icons/icon.png`), which meets the minimum but looks
       soft on HiDPI.
 - [ ] `tauri.conf.json` still carries the `updater` plugin config and
       `createUpdaterArtifacts`. Both are correct for the .deb/AppImage/Windows

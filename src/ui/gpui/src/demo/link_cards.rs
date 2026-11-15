@@ -4,7 +4,7 @@
 //! from `FANCY_GPUI_DEMO_LINK_FILES` (the web preview's `preview/linkcards`).
 //!
 //! The same cards, pictures and words as the web preview's `?links=<variant>`
-//! (`crates/mumble-tauri/ui/preview/native.tsx`): change the two together.
+//! (`src/ui/tauri/ui/preview/native.tsx`): change the two together.
 
 use std::sync::Arc;
 

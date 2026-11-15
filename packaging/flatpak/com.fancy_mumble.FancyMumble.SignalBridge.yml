@@ -1,7 +1,7 @@
 # Flathub manifest for the Fancy Mumble Signal bridge.
 #
 # This is a Flatpak *extension* of com.fancy_mumble.FancyMumble, not an app. It
-# exists for exactly one reason: crates/signal-bridge links libsignal-protocol,
+# exists for exactly one reason: src/crates/signal-bridge links libsignal-protocol,
 # which is AGPL-3.0-only, and the client is MIT. Upstream keeps that boundary by
 # building the bridge as a cdylib in its own workspace and dlopening it at
 # runtime; the AUR packaging keeps it by splitting the .so into its own package.
@@ -70,17 +70,17 @@ modules:
 
   - name: signal-bridge
     buildsystem: simple
-    subdir: crates/signal-bridge
+    subdir: src/crates/signal-bridge
     build-commands:
       # Its own lockfile: the crate is excluded from the client workspace, so
       # the root Cargo.lock does not cover it and cargo-sources.json here is
-      # generated from crates/signal-bridge/Cargo.lock specifically.
+      # generated from src/crates/signal-bridge/Cargo.lock specifically.
       - cargo build --offline --release --locked
       - install -Dm755 target/release/libsignal_bridge.so
           ${FLATPAK_DEST}/libsignal_bridge.so
       - install -Dm644 ../../packaging/flatpak/com.fancy_mumble.FancyMumble.SignalBridge.metainfo.xml
           ${FLATPAK_DEST}/share/metainfo/com.fancy_mumble.FancyMumble.SignalBridge.metainfo.xml
-      # crates/signal-bridge carries no licence file of its own - only the
+      # src/crates/signal-bridge carries no licence file of its own - only the
       # header in its Cargo.toml declaring AGPL-3.0-only. libsignal's LICENSE
       # is the AGPL text, and it sits at the root of the git checkout the
       # generator lands in flatpak-cargo/git/ (cargo/vendor/ holds only the
@@ -104,7 +104,7 @@ modules:
           type: git
           tag-pattern: ^v([\d.]+)$
 
-      # Generated from crates/signal-bridge/Cargo.lock - see generate-sources.sh.
+      # Generated from src/crates/signal-bridge/Cargo.lock - see generate-sources.sh.
       # Note this lockfile pulls two git dependencies (libsignal itself and
       # SparsePostQuantumRatchet), which the generator vendors as git sources.
       - signal-bridge-cargo-sources.json

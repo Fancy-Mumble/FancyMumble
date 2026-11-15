@@ -116,7 +116,7 @@ Nothing is collected for analytics, advertising, or fraud prevention.
 
 **Graphics** Play asks for:
 
-- App icon 512×512 PNG (from `crates/mumble-tauri/icons/`).
+- App icon 512×512 PNG (from `src/ui/tauri/icons/`).
 - Feature graphic 1024×500 PNG/JPG.
 - At least 2 phone screenshots (16:9 or 9:16, 320–3840 px on each side).
   7-inch and 10-inch tablet screenshots are optional.

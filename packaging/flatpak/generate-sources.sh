@@ -7,8 +7,8 @@
 # that:
 #
 #   Cargo.lock                          -> cargo-sources.json
-#   crates/signal-bridge/Cargo.lock     -> signal-bridge-cargo-sources.json
-#   crates/mumble-tauri/ui/package-lock.json -> node-sources.json
+#   src/crates/signal-bridge/Cargo.lock     -> signal-bridge-cargo-sources.json
+#   src/ui/tauri/ui/package-lock.json -> node-sources.json
 #
 # Run this whenever a lockfile changes AND whenever the tag in the manifests
 # moves. The generated files describe one exact commit; a manifest pointing at
@@ -49,7 +49,7 @@ echo ">> cargo: the client workspace"
 
 # Fetch DeepFilterNet as a tarball instead of a git clone.
 #
-# `deep_filter` is a git dependency of crates/fancy-denoiser-deepfilter, so the
+# `deep_filter` is a git dependency of src/crates/fancy-denoiser-deepfilter, so the
 # generator emits a `type: git` source for it and flatpak-builder clones it.
 # That clone fails: the upstream repository uses git-lfs and at least one LFS
 # object is missing from the server, which aborts the build during source
@@ -119,11 +119,11 @@ PY
 # generator vendors those as git sources pinned to the resolved commit.
 echo ">> cargo: signal-bridge (separate workspace, AGPL)"
 "${workdir}/venv/bin/python" "${workdir}/flatpak-cargo-generator.py" \
-    crates/signal-bridge/Cargo.lock -o packaging/flatpak/signal-bridge-cargo-sources.json
+    src/crates/signal-bridge/Cargo.lock -o packaging/flatpak/signal-bridge-cargo-sources.json
 
 echo ">> npm: the React frontend"
 "${workdir}/venv/bin/flatpak-node-generator" npm \
-    crates/mumble-tauri/ui/package-lock.json -o packaging/flatpak/node-sources.json
+    src/ui/tauri/ui/package-lock.json -o packaging/flatpak/node-sources.json
 
 echo
 echo "done. Regenerated:"

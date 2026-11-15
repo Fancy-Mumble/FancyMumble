@@ -92,7 +92,7 @@ Or open Android Studio > Device Manager > Play button.
 ### Dev mode (hot-reload)
 
 ```bash
-cd crates/mumble-tauri
+cd src/ui/tauri
 cargo tauri android dev
 ```
 
@@ -105,7 +105,7 @@ This will:
 ### Release build
 
 ```bash
-cd crates/mumble-tauri
+cd src/ui/tauri
 cargo tauri android build --apk
 ```
 
@@ -124,7 +124,7 @@ local `key.properties` file or CI environment variables.
 
 ### Local signing setup
 
-Create `crates/mumble-tauri/gen/android/key.properties` with:
+Create `src/ui/tauri/gen/android/key.properties` with:
 
 ```properties
 storeFile=/absolute/path/to/your/upload-keystore.jks
@@ -137,7 +137,7 @@ Notes:
 
 - `key.properties` is already ignored by Git.
 - The keystore file itself should also stay out of the repository.
-- If `storeFile` is relative, it is resolved from `crates/mumble-tauri/gen/android/app`.
+- If `storeFile` is relative, it is resolved from `src/ui/tauri/gen/android/app`.
 
 ### CI signing setup
 

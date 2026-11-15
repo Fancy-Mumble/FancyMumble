@@ -11,19 +11,19 @@
 !.env.example
 !.env.sample
 
-# ---- Node / frontend (crates/mumble-tauri/ui) ----
+# ---- Node / frontend (src/ui/tauri/ui) ----
 # Any node_modules, including the stray vitest cache a root-level test run leaves.
 node_modules/
-crates/mumble-tauri/ui/node_modules/
-crates/mumble-tauri/ui/dist/
-crates/mumble-tauri/ui/.vite/
-crates/mumble-tauri/ui/coverage/
-crates/mumble-tauri/ui/.eslintcache
-crates/mumble-tauri/ui/*.tsbuildinfo
-crates/mumble-tauri/ui/npm-debug.log*
-crates/mumble-tauri/ui/yarn-debug.log*
-crates/mumble-tauri/ui/yarn-error.log*
-crates/mumble-tauri/ui/pnpm-debug.log*
+src/ui/tauri/ui/node_modules/
+src/ui/tauri/ui/dist/
+src/ui/tauri/ui/.vite/
+src/ui/tauri/ui/coverage/
+src/ui/tauri/ui/.eslintcache
+src/ui/tauri/ui/*.tsbuildinfo
+src/ui/tauri/ui/npm-debug.log*
+src/ui/tauri/ui/yarn-debug.log*
+src/ui/tauri/ui/yarn-error.log*
+src/ui/tauri/ui/pnpm-debug.log*
 
 # ---- Tauri / desktop runtime artifacts ----
 **/*.pdb
@@ -33,9 +33,9 @@ crates/mumble-tauri/ui/pnpm-debug.log*
 
 # ---- Signal bridge (AGPL dynamic library) ----
 # Built binaries go here for Tauri bundling; only .gitkeep is tracked.
-crates/mumble-tauri/signal-bridge/*.dll
-crates/mumble-tauri/signal-bridge/*.so
-crates/mumble-tauri/signal-bridge/*.dylib
+src/ui/tauri/signal-bridge/*.dll
+src/ui/tauri/signal-bridge/*.so
+src/ui/tauri/signal-bridge/*.dylib
 
 # ---- IDE / editor ----
 .vscode/
@@ -66,13 +66,13 @@ dhat-heap*.json
 .flatpak-builder/
 
 # vitest cache, written next to the crate rather than under ui/
-crates/mumble-tauri/node_modules/
+src/ui/tauri/node_modules/
 # built preview bundles; the entries beside them are the source
-crates/mumble-tauri/ui/preview/dist-*/
+src/ui/tauri/ui/preview/dist-*/
 
 # ---- Tauri ----
 # Rewritten by tauri-build on every compile; an editor aid, nothing reads it.
-crates/mumble-tauri/gen/schemas/
+src/ui/tauri/gen/schemas/
 
 # ---- Benchmarks ----
 # Appended to by scripts/bench-app.ps1 -Save.

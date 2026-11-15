@@ -57,17 +57,17 @@ prepare() {
 	# outside makepkg's own source fetching: the tree ships a package-lock.json
 	# but not the packages it pins, and there is no npm equivalent of
 	# `cargo vendor` that makepkg understands.
-	cd crates/mumble-tauri/ui
+	cd src/ui/tauri/ui
 	npm ci --cache "$srcdir/npm-cache"
 }
 
 build() {
 	cd "$_srcdir"
 
-	# Vite first: the Rust build embeds crates/mumble-tauri/ui/dist as the
+	# Vite first: the Rust build embeds src/ui/tauri/ui/dist as the
 	# frontend asset bundle (the `custom-protocol` feature below), so it has to
 	# exist before cargo runs.
-	(cd crates/mumble-tauri/ui && npm run build)
+	(cd src/ui/tauri/ui && npm run build)
 
 	export RUSTUP_TOOLCHAIN=stable
 	export CARGO_TARGET_DIR=target
@@ -98,7 +98,7 @@ package() {
 	# desktop entry's StartupWMClass matches it. Keep both.
 	install -Dm755 target/release/mumble-tauri "$pkgdir/usr/bin/mumble-tauri"
 
-	install -Dm644 crates/mumble-tauri/icons/icon.png \
+	install -Dm644 src/ui/tauri/icons/icon.png \
 		"$pkgdir/usr/share/icons/hicolor/128x128/apps/mumble-tauri.png"
 	install -Dm644 "$srcdir/fancy-mumble.desktop" \
 		"$pkgdir/usr/share/applications/fancy-mumble.desktop"

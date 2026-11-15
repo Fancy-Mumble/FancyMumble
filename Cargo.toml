@@ -7,14 +7,14 @@
 # own edition-2024 default and with Starling.
 resolver = "3"
 members = [
-    "crates/fancy-utils",
-    "crates/fancy-denoiser-deepfilter",
-    "crates/mumble-protocol",
-    "crates/fancy-audio-device",
-    "crates/fancy-screenshare",
-    "crates/fancy-presence",
-    "crates/fancy-gamedetect",
-    "crates/mumble-tauri",
+    "src/crates/fancy-utils",
+    "src/crates/fancy-denoiser-deepfilter",
+    "src/crates/mumble-protocol",
+    "src/crates/fancy-audio-device",
+    "src/crates/fancy-screenshare",
+    "src/crates/fancy-presence",
+    "src/crates/fancy-gamedetect",
+    "src/ui/tauri",
 ]
 # The Mumble server-side plugin host crates (mumble-plugin-api, mumble-file-server,
 # mumble-plugin-host) live in the mumble-server repository under
@@ -26,12 +26,12 @@ members = [
 # toolchain against the MinGW Qt 6 kit (MSVC and MinGW have incompatible C++
 # ABIs), so it cannot participate in the default MSVC workspace build.  It
 # path-depends on the workspace crates and is built on its own - see
-# crates/qt6ui/README.md.
+# src/ui/qt6/README.md.
 #
 # fancy-gpui (the native GPUI view) is excluded so that its few hundred
 # dependencies resolve on their own: sharing a lockfile would let either UI
 # move the other's versions.
-exclude = ["crates/signal-bridge", "crates/qt6ui", "src/ui/gpui"]
+exclude = ["src/crates/signal-bridge", "src/ui/qt6", "src/ui/gpui"]
 
 # -- Workspace-wide lints --------------------------------------------
 # These apply to every crate in the workspace automatically.

@@ -20,7 +20,7 @@ pub(crate) use held::Tray;
 const TOOLTIP: &str = "Fancy Mumble";
 
 /// The application's icon, the one the web client puts in the tray.
-const APP_ICON: &[u8] = include_bytes!("../../../../crates/mumble-tauri/icons/icon.png");
+const APP_ICON: &[u8] = include_bytes!("../../tauri/icons/icon.png");
 
 /// How many pixels a side the icon is handed to the system at: what a
 /// tray draws at twice the usual scale. The system shrinks it from there.

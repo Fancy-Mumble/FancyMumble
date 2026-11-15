@@ -18,11 +18,11 @@ expect to iterate.
 
 1. **Versions agree.** CI checks the first three and fails the build otherwise;
    the rest are not checked by anything.
-   - `crates/mumble-tauri/tauri.conf.json` - the source of truth
-   - `crates/mumble-tauri/ui/package.json`
-   - `crates/mumble-protocol/Cargo.toml`
-   - `crates/mumble-tauri/Cargo.toml`
-   - `crates/mumble-tauri/ui/package-lock.json` (two places at the top;
+   - `src/ui/tauri/tauri.conf.json` - the source of truth
+   - `src/ui/tauri/ui/package.json`
+   - `src/crates/mumble-protocol/Cargo.toml`
+   - `src/ui/tauri/Cargo.toml`
+   - `src/ui/tauri/ui/package-lock.json` (two places at the top;
      `npm install --package-lock-only` rewrites them)
    - `Cargo.lock` (any `cargo` command rewrites it)
 2. **The changelog has the section.** `CHANGELOG.md` needs a `## [X.Y.Z] - DATE`
@@ -35,7 +35,7 @@ expect to iterate.
    cargo fmt --all -- --check
    cargo clippy --workspace --all-targets -- -D warnings
    cargo test --package mumble-protocol --features opus-codec --lib
-   cd crates/mumble-tauri/ui && npx tsc --noEmit && npm run lint && npm test
+   cd src/ui/tauri/ui && npx tsc --noEmit && npm run lint && npm test
    ```
    A green clippy on Windows says nothing about the Linux-only code; only CI
    compiles that.

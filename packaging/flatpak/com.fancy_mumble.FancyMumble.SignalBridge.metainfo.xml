@@ -33,7 +33,7 @@
 
   <url type="homepage">https://fancy-mumble.com/</url>
   <url type="bugtracker">https://github.com/Fancy-Mumble/FancyMumble/issues</url>
-  <url type="vcs-browser">https://github.com/Fancy-Mumble/FancyMumble/tree/main/crates/signal-bridge</url>
+  <url type="vcs-browser">https://github.com/Fancy-Mumble/FancyMumble/tree/main/src/crates/signal-bridge</url>
 
   <releases>
     <release version="0.3.0" date="2026-06-14"/>

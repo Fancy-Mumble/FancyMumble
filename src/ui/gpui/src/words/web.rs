@@ -23,7 +23,7 @@ const FORMS: [&str; 6] = ["zero", "one", "two", "few", "many", "other"];
 
 /// The web client's files, compiled in.
 #[derive(RustEmbed)]
-#[folder = "../../../crates/mumble-tauri/ui/src/core/locales/"]
+#[folder = "../tauri/ui/src/core/locales/"]
 #[include = "common/*/*.json"]
 #[include = "nebula/*/*.json"]
 struct Files;

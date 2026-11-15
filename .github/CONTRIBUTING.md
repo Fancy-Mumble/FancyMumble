@@ -17,7 +17,7 @@ By participating you agree to abide by its terms.
 5. Run the checks CI runs, so the pull request does not find out for you:
    ```bash
    # Frontend
-   cd crates/mumble-tauri/ui
+   cd src/ui/tauri/ui
    npm test
    npm run lint
    npx tsc --noEmit
@@ -33,11 +33,11 @@ By participating you agree to abide by its terms.
 
 ```bash
 # Start the dev server (hot-reloads Rust + JS)
-cd crates/mumble-tauri
+cd src/ui/tauri
 cargo tauri dev
 
 # Frontend-only iteration (faster, no Rust rebuild)
-cd crates/mumble-tauri/ui
+cd src/ui/tauri/ui
 npm run dev
 ```
 
@@ -71,7 +71,7 @@ issue template. Describe the use case and why it would be valuable.
 ## Project Structure
 
 The [README](../README.md#architecture) lists the crates, and
-[`ui/src/README.md`](../crates/mumble-tauri/ui/src/README.md) explains how the
+[`ui/src/README.md`](../src/ui/tauri/ui/src/README.md) explains how the
 frontend is split into a shared core and its UI packs. The
 [copilot instructions](copilot-instructions.md) hold the coding conventions.
 
