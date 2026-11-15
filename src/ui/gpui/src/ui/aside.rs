@@ -12,8 +12,8 @@
 //!
 //! This is the one place that asks GPUI for a second window, a window kept
 //! over the others, or an overlay (`WindowKind::Floating` and
-//! `WindowKind::Overlay`, and `Window::set_bounds`, which the vendored GPUI
-//! adds): another GPUI underneath is a change to this file.
+//! `WindowKind::Overlay`, and `Window::set_bounds`, which Fancy Mumble's
+//! fork of GPUI adds): another GPUI underneath is a change to this file.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -115,7 +115,7 @@ impl Asides {
             return;
         }
         let open = Rc::clone(&self.open);
-        self.main_closed = Some(cx.on_window_closed(move |cx| {
+        self.main_closed = Some(cx.on_window_closed(move |cx, _| {
             let main_open = cx
                 .windows()
                 .iter()
@@ -333,7 +333,7 @@ impl Aside {
         });
         let focus = cx.focus_handle();
         if !overlay {
-            window.focus(&focus);
+            window.focus(&focus, cx);
         }
         Self {
             made,

@@ -43,7 +43,7 @@ impl Shell {
             }
         }
         // The key must come to the window, not to a field.
-        window.focus(&self.focus);
+        window.focus(&self.focus, cx);
         cx.notify();
     }
 

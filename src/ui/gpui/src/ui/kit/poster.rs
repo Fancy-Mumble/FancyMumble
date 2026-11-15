@@ -390,7 +390,7 @@ pub(crate) fn outside(cut: Option<Cut>, behind: Hsla) -> impl IntoElement {
                     gpui::size(size, size),
                 );
                 let image = corner_picture(behind, window.scale_factor());
-                let _ = window.paint_image(corner, gpui::Corners::default(), image, 0, false);
+                let _ = window.paint_image(corner, corner, gpui::Corners::default(), image, 0, false);
             }
         },
     )

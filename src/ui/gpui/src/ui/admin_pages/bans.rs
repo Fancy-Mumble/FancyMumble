@@ -8,6 +8,7 @@
 
 use std::net::IpAddr;
 
+use gpui::Focusable as _;
 use gpui::{AppContext as _, Context, Entity, SharedString, Subscription, Window};
 
 use super::super::Shell;
@@ -323,7 +324,7 @@ impl Shell {
             return;
         };
         let next = if back { at + count - 1 } else { at + 1 } % count;
-        form.fields[next].1.read(cx).focus(window);
+        window.focus(&form.fields[next].1.focus_handle(cx), cx);
         cx.notify();
     }
 
@@ -339,7 +340,7 @@ impl Shell {
         if let Some(form) = self.bans_page().and_then(|bans| bans.form.as_ref())
             && let Some((_, address)) = form.fields.iter().find(|(part, _)| *part == Part::Address)
         {
-            address.read(cx).focus(window);
+            window.focus(&address.focus_handle(cx), cx);
         }
     }
 

@@ -1,6 +1,6 @@
 //! The page of a saved server, before connecting.
 
-use gpui::{Modifiers, ScrollDelta, ScrollWheelEvent, TestAppContext, TouchPhase, point, px};
+use gpui::{Modifiers, ScrollDelta, ScrollEvent, TestAppContext, TouchPhase, point, px};
 
 use super::tests::{click, shell_on};
 use crate::demo::DemoEngine;
@@ -30,11 +30,12 @@ fn a_server_with_many_identities_scrolls_down_to_its_way_in(cx: &mut TestAppCont
     let over = point(room.width - px(300.0), room.height / 2.0);
     cx.simulate_mouse_move(over, None, Modifiers::none());
     for _ in 0..40 {
-        cx.simulate_event(ScrollWheelEvent {
+        cx.simulate_event(ScrollEvent {
             position: over,
             delta: ScrollDelta::Pixels(point(px(0.0), px(-200.0))),
             modifiers: Modifiers::none(),
             touch_phase: TouchPhase::Moved,
+            ..ScrollEvent::default()
         });
     }
     cx.run_until_parked();

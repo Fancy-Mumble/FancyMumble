@@ -268,12 +268,12 @@ impl RenderOnce for Table {
         // has less room: the CSS `flex: 0 1 auto` of the web UI's table,
         // which a list that measures itself does not take from its rows.
         .flex_basis(px(row_height(&theme) * count as f32))
-        .flex_shrink()
+        .flex_shrink_1()
         .min_h_0();
         div()
             .id(self.id)
             .debug_selector(move || self.id.to_owned())
-            .flex_shrink()
+            .flex_shrink_1()
             .min_h_0()
             .flex()
             .flex_col()

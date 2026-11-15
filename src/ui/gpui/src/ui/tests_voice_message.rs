@@ -90,7 +90,9 @@ fn the_microphone_is_offered_only_where_a_voice_message_may_be_sent(cx: &mut Tes
     click(cx, "input-Message #lounge");
     cx.simulate_keystrokes("h i");
     assert!(!offered(&shell, cx));
-    click(cx, "voice-record");
+    // The button where the microphone was is Send again (GPUI draws the
+    // tags of this frame only, so it is found by its own).
+    click(cx, "send");
     let said = engine.messages(Conversation::Channel(1));
     assert_eq!(
         said.last().map(|message| message.body.to_string()),

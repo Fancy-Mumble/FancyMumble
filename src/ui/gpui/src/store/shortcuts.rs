@@ -242,7 +242,7 @@ mod tests {
     use super::*;
 
     fn keystroke(text: &str) -> gpui::Keystroke {
-        gpui::Keystroke::parse(text).expect("a keystroke")
+        gpui::Keystroke::parse_with_os(text, gpui::OperatingSystem::Windows).expect("a keystroke")
     }
 
     #[test]

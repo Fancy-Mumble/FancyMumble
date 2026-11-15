@@ -221,8 +221,8 @@ impl Shell {
     /// Put the frame of the feed shown large on the clipboard, as it is
     /// drawn.
     pub(super) fn copy_frame(&mut self, cx: &mut Context<Self>) {
-        let frame = self.large_track().and_then(|track| track.screen.borrow().frame());
-        let png = frame.and_then(|(mut rgba, (width, height))| {
+        let picture = self.large_track().and_then(|track| track.screen.borrow().picture());
+        let png = picture.and_then(|(mut rgba, (width, height))| {
             for pixel in rgba.as_chunks_mut::<4>().0 {
                 pixel.swap(0, 2);
             }

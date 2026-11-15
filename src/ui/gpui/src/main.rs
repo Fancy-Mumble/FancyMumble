@@ -59,7 +59,7 @@ mod words;
 use std::sync::Arc;
 
 use gpui::{
-    App, AppContext, Application, TitlebarOptions, WindowDecorations, WindowOptions, px, size,
+    App, AppContext, TitlebarOptions, WindowDecorations, WindowOptions, px, size,
 };
 
 use theme::{ActiveTheme, Catalog, DEFAULT_THEME, Mode};
@@ -69,10 +69,14 @@ fn main() {
     let mut startup = startup::Startup::begin();
     console::attach();
     panics::keep_in_log();
-    Application::new()
+    gpui_platform::application()
         .with_assets(assets::Assets)
         .run(move |cx: &mut App| {
             startup.done("platform");
+            // Text is drawn in grey levels, as GPUI 0.2.2 drew it and as the
+            // web UI's look was measured against: this GPUI would use the
+            // system's ClearType (coloured edges) where it is on.
+            cx.set_text_rendering_mode(gpui::TextRenderingMode::Grayscale);
             ui::keys::bind(cx);
 
             let (engine, store) = start_engine();
@@ -152,7 +156,7 @@ fn main() {
             say_what_is_held(window, cx);
             // Closing the main window ends the application; a window beside
             // it (a share popped out) only closes.
-            cx.on_window_closed(|cx| {
+            cx.on_window_closed(|cx, _| {
                 if !cx.windows().iter().any(|window| window.downcast::<Shell>().is_some()) {
                     cx.quit();
                 }
@@ -270,7 +274,15 @@ fn start_engine() -> (Arc<dyn engine::Engine>, Option<store::Store>) {
         if env("FANCY_GPUI_DEMO_DRAW").is_some() {
             demo.draw_on_share();
         }
-        return (Arc::new(demo), None);
+        // For measuring: a long conversation, and a steady flow of messages.
+        if let Some(count) = env("FANCY_GPUI_DEMO_CHAT").and_then(|count| count.parse().ok()) {
+            demo.chatter(count);
+        }
+        let demo = Arc::new(demo);
+        if let Some(every) = env("FANCY_GPUI_DEMO_FLOW").and_then(|ms| ms.parse().ok()) {
+            demo::chatter::flow(Arc::clone(&demo), std::time::Duration::from_millis(every));
+        }
+        return (demo, None);
     }
     let dir = paths::data_dir();
     real::start_logs(&dir, env("FANCY_GPUI_LOG").as_deref());

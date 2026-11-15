@@ -211,7 +211,7 @@ fn paint_bar(bounds: Bounds<Pixels>, at: f32, inks: (Hsla, Hsla, Hsla), window: 
         point(knob_middle - px(KNOB / 2.0), middle - px(KNOB / 2.0)),
         size(px(KNOB), px(KNOB)),
     );
-    window.paint_shadows(
+    window.paint_drop_shadows(
         knob_at,
         gpui::Corners::all(px(KNOB / 2.0)),
         &[gpui::BoxShadow {
@@ -219,6 +219,7 @@ fn paint_bar(bounds: Bounds<Pixels>, at: f32, inks: (Hsla, Hsla, Hsla), window: 
             offset: point(px(0.0), px(1.0)),
             blur_radius: px(1.5),
             spread_radius: px(0.0),
+            inset: false,
         }],
     );
     window.paint_quad(fill(knob_at, knob).corner_radii(px(KNOB / 2.0)));

@@ -18,12 +18,22 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Has the system load Media Foundation, which only the camera and screen
-/// sharing call, at their first call instead of before `main` on every
-/// start. `tests/imports.rs` keeps it so.
+/// Has the system load, at their first call instead of before `main` on
+/// every start: Media Foundation, which only the camera and screen sharing
+/// call; UI Automation, which GPUI answers a screen reader with
+/// (`WM_GETOBJECT`); the timer resolution GPUI raises while a timer needs
+/// it; and the user's profile folder, which the standard library looks up
+/// when asked for the home directory. `tests/imports.rs` keeps it so.
 #[cfg(windows)]
 fn load_when_used() {
-    const LOADED_WHEN_USED: &[&str] = &["mf.dll", "mfplat.dll", "mfreadwrite.dll"];
+    const LOADED_WHEN_USED: &[&str] = &[
+        "mf.dll",
+        "mfplat.dll",
+        "mfreadwrite.dll",
+        "uiautomationcore.dll",
+        "userenv.dll",
+        "winmm.dll",
+    ];
     if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() != Ok("msvc") {
         return;
     }

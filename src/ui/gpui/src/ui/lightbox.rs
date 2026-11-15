@@ -298,7 +298,7 @@ fn stage(
 ///
 /// What is behind the veil is blurred, as the web UI has it. That is the one
 /// blur this view draws, and only while a picture is open: the renderer
-/// (the copy of GPUI in `vendor/gpui`) draws it on Windows so far, and
+/// (Fancy Mumble's fork of GPUI, Fancy-Mumble/gpui) draws it on Windows so far, and
 /// elsewhere the veil alone is what is seen.
 pub(super) fn render(
     shell: &Shell,
@@ -339,7 +339,7 @@ pub(super) fn render(
                 cx.notify();
             }
         }))
-        .on_scroll_wheel(cx.listener(|shell, event: &gpui::ScrollWheelEvent, _, cx| {
+        .on_scroll(cx.listener(|shell, event: &gpui::ScrollEvent, _, cx| {
             let line = px(20.0);
             let notches = event.delta.pixel_delta(line).y / line;
             shell.look(|view| view.zoomed(notches), cx);

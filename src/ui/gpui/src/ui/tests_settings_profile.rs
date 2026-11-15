@@ -1,6 +1,7 @@
 //! The Profile page of the settings: what it reads of the user's own
 //! profile, and what each of its controls sends.
 
+use gpui::Focusable as _;
 use gpui::{TestAppContext, VisualTestContext};
 use serde_json::{Value, json};
 
@@ -61,7 +62,7 @@ fn the_page_reads_the_profile_and_sends_what_is_typed_once_typing_pauses(cx: &mu
         pronouns.read_with(cx, |field, _| field.text().to_owned()),
         "they/them"
     );
-    cx.update(|window, cx| contact.read(cx).focus(window));
+    cx.update(|window, cx| window.focus(&contact.focus_handle(cx), cx));
     cx.simulate_input("me@example.org");
     cx.run_until_parked();
     assert_eq!(sent(&engine).get("contact"), None, "not while typing");
@@ -70,7 +71,7 @@ fn the_page_reads_the_profile_and_sends_what_is_typed_once_typing_pauses(cx: &mu
     cx.run_until_parked();
     assert_eq!(sent(&engine)["contact"], "me@example.org");
     // Emptied, the field takes the key away.
-    cx.update(|window, cx| pronouns.read(cx).focus(window));
+    cx.update(|window, cx| window.focus(&pronouns.focus_handle(cx), cx));
     pronouns.update(cx, |field, cx| {
         field.clear();
         cx.notify();
@@ -170,7 +171,7 @@ fn type_into(shell: &gpui::Entity<super::Shell>, at: usize, text: &str, cx: &mut
     let field = shell.read_with(cx, |shell, _| {
         shell.panels.settings.profile.as_ref().expect("the form").fields()[at].clone()
     });
-    cx.update(|window, cx| field.read(cx).focus(window));
+    cx.update(|window, cx| window.focus(&field.focus_handle(cx), cx));
     cx.simulate_input(text);
     cx.executor()
         .advance_clock(std::time::Duration::from_millis(900));
@@ -236,7 +237,7 @@ fn the_preview_draws_the_card_as_typed_and_its_examples_on_asking(cx: &mut TestA
     let contact = shell.read_with(cx, |shell, _| {
         shell.panels.settings.profile.as_ref().expect("the form").fields()[1].clone()
     });
-    cx.update(|window, cx| contact.read(cx).focus(window));
+    cx.update(|window, cx| window.focus(&contact.focus_handle(cx), cx));
     cx.simulate_input("me@example.org");
     cx.run_until_parked();
     shell.read_with(cx, |shell, _| {

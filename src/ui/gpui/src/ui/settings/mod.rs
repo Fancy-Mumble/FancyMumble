@@ -435,7 +435,7 @@ fn pane(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoEleme
                 };
                 seek.set(false);
                 let (view, at) = (scroll.bounds(), scroll.offset());
-                let most = scroll.max_offset().height;
+                let most = scroll.max_offset().y;
                 let y = (at.y - (heading.center().y - view.center().y)).clamp(-most, px(0.0));
                 scroll.set_offset(gpui::point(at.x, y));
                 window.refresh();

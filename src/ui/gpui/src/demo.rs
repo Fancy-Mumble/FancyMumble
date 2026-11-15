@@ -1,6 +1,7 @@
 //! An engine with nothing behind it: a small server that exists only in
 //! memory, so the view can be drawn, driven and measured on its own.
 
+pub(crate) mod chatter;
 pub(crate) mod livery;
 mod account;
 mod directory;

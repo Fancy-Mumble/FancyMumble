@@ -4,6 +4,7 @@
 
 use std::cmp::Ordering;
 
+use gpui::Focusable as _;
 use gpui::{AppContext as _, Context, Entity, Pixels, Point, SharedString, Subscription, Window};
 
 use super::super::Shell;
@@ -416,7 +417,7 @@ impl Shell {
             InputEvent::Cancelled => shell.stop_renaming_account(cx),
             _ => {}
         });
-        field.read(cx).focus(window);
+        window.focus(&field.focus_handle(cx), cx);
         if let Some(users) = self.users_page_mut() {
             users.unregistering = None;
             users.renaming = Some(Renaming {

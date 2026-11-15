@@ -6,6 +6,7 @@
 //! what it grants is the one rule of the root that names it, and how it is
 //! drawn is what a Fancy server keeps with the group.
 
+use gpui::Focusable as _;
 use gpui::{AppContext as _, Context, Entity, SharedString, Subscription, Window};
 
 use super::super::Shell;
@@ -264,7 +265,7 @@ impl Shell {
         }
         self.make_role_form(cx);
         if let Some(form) = self.roles_page().and_then(|page| page.form.as_ref()) {
-            form.name.read(cx).focus(window);
+            window.focus(&form.name.focus_handle(cx), cx);
         }
         cx.notify();
     }
@@ -543,7 +544,7 @@ impl Shell {
         self.role_metadata(key.into(), Some(value.into()), cx);
         self.make_role_form(cx);
         if let Some(form) = self.roles_page().and_then(|page| page.form.as_ref()) {
-            form.new_key.read(cx).focus(window);
+            window.focus(&form.new_key.focus_handle(cx), cx);
         }
     }
 

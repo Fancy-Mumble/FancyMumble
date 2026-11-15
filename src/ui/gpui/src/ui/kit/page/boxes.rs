@@ -158,6 +158,7 @@ impl Painter<'_> {
                 offset: point(px(shadow.x), px(shadow.y)),
                 blur_radius: px(shadow.blur / 2.0),
                 spread_radius: px(shadow.spread),
+                inset: false,
             }]);
         }
         self.grounded(part, frame, radius)

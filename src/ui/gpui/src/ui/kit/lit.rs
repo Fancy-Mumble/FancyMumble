@@ -31,6 +31,7 @@ pub(crate) fn lit(heading: Div, on: bool, cx: &App) -> Div {
             offset: point(px(0.0), px(0.0)),
             blur_radius: px(0.0),
             spread_radius: px(6.0),
+            inset: false,
         }])
         .child(
             div().absolute().top_0().left_0().size_full().child(

@@ -369,6 +369,7 @@ impl RenderOnce for IconButton {
                             offset: gpui::point(px(3.0), px(3.0)),
                             blur_radius: px(0.0),
                             spread_radius: px(0.0),
+                            inset: false,
                         }]),
                         None if self.variant == Variant::Plated => button.border_2(),
                         None => button.border_1(),

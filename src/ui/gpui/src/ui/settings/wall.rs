@@ -330,6 +330,7 @@ fn saved_tile(
                     offset: gpui::point(px(0.0), px(0.0)),
                     blur_radius: px(0.0),
                     spread_radius: px(2.0),
+                    inset: false,
                 }])
             } else {
                 shows.border_1().border_color(theme.c.line)

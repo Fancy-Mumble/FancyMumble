@@ -71,7 +71,7 @@ impl Shell {
     fn record_jump(&mut self, id: String, window: &mut gpui::Window, cx: &mut Context<Self>) {
         self.panels.settings.recording_jump = Some(id);
         cx.clear_key_bindings();
-        window.focus(&self.focus);
+        window.focus(&self.focus, cx);
         cx.notify();
     }
 

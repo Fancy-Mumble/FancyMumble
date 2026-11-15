@@ -467,6 +467,55 @@ fn a_frame_is_copied_to_the_clipboard(cx: &mut TestAppContext) {
     assert_eq!(pattern.read(decoded.as_raw()), Some(RIN * 1000 + 1), "the frame on screen, not the first");
 }
 
+/// The number the pattern on the clipboard carries.
+fn copied_number(cx: &mut VisualTestContext) -> u32 {
+    click(cx, "stage-copy");
+    let copied = cx.read_from_clipboard().expect("something on the clipboard");
+    let image = copied
+        .entries()
+        .iter()
+        .find_map(|entry| match entry {
+            gpui::ClipboardEntry::Image(image) => Some(image.clone()),
+            _ => None,
+        })
+        .expect("a picture");
+    let decoded = image::load_from_memory(image.bytes()).expect("a PNG").to_rgba8();
+    let pattern = crate::share::pattern::Pattern::new(decoded.width(), decoded.height());
+    pattern.read(decoded.as_raw()).expect("the pattern, read back")
+}
+
+#[gpui::test]
+fn the_frame_copied_is_the_one_on_screen_now(cx: &mut TestAppContext) {
+    // Frames go into the texture where it lies: what is copied is the
+    // newest of them, not the first the texture was made from.
+    let (shell, engine, cx) = shell(cx);
+    says(&engine, RIN, SignalKind::Start, cx);
+    wait_for_picture(&shell, RIN, cx);
+    let first = copied_number(cx);
+    // A frame of the same size, numbered otherwise, as the stream's next.
+    let drawn = |cx: &mut VisualTestContext| {
+        shell.read_with(cx, |shell, _| shell.stage.feeds.get(&RIN).map_or(0, |watched| watched.main().screen.borrow().drawn))
+    };
+    let before = drawn(cx);
+    shell.read_with(cx, |shell, _| {
+        let track = shell.stage.feeds.get(&RIN).expect("watched").main();
+        let (bgra, (width, height)) = track.screen.borrow().picture().expect("on screen");
+        assert_eq!(bgra.len(), (width * height * 4) as usize);
+        let pattern = crate::share::pattern::Pattern::new(width, height);
+        let next = first.wrapping_add(4242) & 0xffff;
+        let _ = track.slot.put(crate::share::frame::Frame {
+            width,
+            height,
+            bgra: pattern.frame(next, crate::share::pattern::Order::Bgra),
+            sent: (width, height),
+        });
+    });
+    shell.update(cx, |_, cx| cx.notify());
+    cx.run_until_parked();
+    assert_eq!(drawn(cx), before + 1, "the frame was taken into the texture");
+    assert_eq!(copied_number(cx), first.wrapping_add(4242) & 0xffff, "the newest frame, not the first");
+}
+
 #[gpui::test]
 fn the_keyboard_reaches_every_control_of_the_stage_and_the_picker(cx: &mut TestAppContext) {
     let (shell, engine, cx) = shell(cx);

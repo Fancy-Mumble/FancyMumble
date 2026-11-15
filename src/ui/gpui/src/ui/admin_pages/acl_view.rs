@@ -151,7 +151,7 @@ fn tree(shell: &Shell, page: &AclPage, theme: &Theme, cx: &mut Context<Shell>) -
                 .id("acl-tree")
                 .mt(px(10.0))
                 .p(px(6.0))
-                .flex_shrink()
+                .flex_shrink_1()
                 .min_h_0()
                 .overflow_y_scroll()
                 .rounded(theme.skin.radius_lg)
