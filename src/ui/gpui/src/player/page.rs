@@ -25,14 +25,17 @@
 //! says where the video stood and how fast it ran when it paused, and the
 //! next page starts there.
 
+#[cfg_attr(all(not(windows), not(test)), expect(dead_code, reason = "only the Windows web view frames the player; elsewhere a video opens in the browser"))]
 /// Where the embedded player comes from: the address the web client uses.
 const EMBED: &str = "https://www.youtube-nocookie.com/embed/";
 
+#[cfg_attr(all(not(windows), not(test)), expect(dead_code, reason = "only the Windows web view frames the player; elsewhere a video opens in the browser"))]
 /// Where the framing page is served: the application's identifier as an
 /// https origin. The identifier is the project's, `appIdentifier` in
 /// `config/constants.json`, which the web client is installed under.
 pub(crate) const ORIGIN: &str = "https://com.fancymumble.app";
 
+#[cfg_attr(all(not(windows), not(test)), expect(dead_code, reason = "only the Windows web view frames the player; elsewhere a video opens in the browser"))]
 /// What the embedded player is asked for, each with why. All of them are
 /// the `IFrame` API's own parameters: the player is `YouTube`'s, unchanged.
 ///
@@ -91,6 +94,7 @@ impl Page {
         self
     }
 
+    #[cfg_attr(all(not(windows), not(test)), expect(dead_code, reason = "only the Windows web view frames the player; elsewhere a video opens in the browser"))]
     /// The embedded player's address: see [`PARAMETERS`]. Started part
     /// way, it is asked to start at that second; the framing page seeks to
     /// the exact moment once the player is ready.
@@ -106,6 +110,7 @@ impl Page {
         )
     }
 
+    #[cfg_attr(all(not(windows), not(test)), expect(dead_code, reason = "only the Windows web view frames the player; elsewhere a video opens in the browser"))]
     /// The framing page: the player, filling it, and a script that passes
     /// on when it starts, pauses and ends, once each time it changes, with
     /// where it stood and how fast it ran; and how far the wheel turned
@@ -138,10 +143,12 @@ pub(crate) enum Said {
     /// Paused here.
     Paused(Moment),
     Ended,
+    #[cfg_attr(all(not(windows), not(test)), expect(dead_code, reason = "only the Windows web view frames the player; elsewhere a video opens in the browser"))]
     /// No web view could be made to show it in.
     Failed,
     /// The wheel turned over it, as this many pixels down.
     Wheel(i32),
+    #[cfg_attr(all(not(windows), not(test)), expect(dead_code, reason = "only the Windows web view frames the player; elsewhere a video opens in the browser"))]
     /// The window it is in was minimised.
     Minimised,
 }

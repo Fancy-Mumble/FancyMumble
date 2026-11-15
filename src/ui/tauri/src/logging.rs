@@ -210,11 +210,18 @@ pub(crate) fn init() {
         .with_ansi(false)
         .with_writer(file_writer);
 
-    tracing_subscriber::registry()
+    // `try_init`: the subscriber is installed first, then the bridge from the
+    // `log` crate, which fails where a `log` logger is set already (the
+    // native client's Android platform sends `log` to logcat). That is no
+    // reason to stop the program: `log` records keep going where they went.
+    if let Err(error) = tracing_subscriber::registry()
         .with(filter_layer)
         .with(stdout_layer)
         .with(file_layer)
-        .init();
+        .try_init()
+    {
+        eprintln!("logging: {error}");
+    }
 
     let _ = LEVEL_RELOAD.set(reload_handle);
     let _ = FILE_HANDLE.set(file_handle);

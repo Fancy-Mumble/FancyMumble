@@ -24,6 +24,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 /// (`WM_GETOBJECT`); the timer resolution GPUI raises while a timer needs
 /// it; and the user's profile folder, which the standard library looks up
 /// when asked for the home directory. `tests/imports.rs` keeps it so.
+///
+/// For the program only: the library half (`lib.rs`, which the Android
+/// package loads) links nothing, and the test binaries are not started.
 #[cfg(windows)]
 fn load_when_used() {
     const LOADED_WHEN_USED: &[&str] = &[
@@ -37,9 +40,9 @@ fn load_when_used() {
     if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() != Ok("msvc") {
         return;
     }
-    println!("cargo:rustc-link-lib=delayimp");
+    println!("cargo:rustc-link-arg-bins=delayimp.lib");
     for library in LOADED_WHEN_USED {
-        println!("cargo:rustc-link-arg=/DELAYLOAD:{library}");
+        println!("cargo:rustc-link-arg-bins=/DELAYLOAD:{library}");
     }
 }
 

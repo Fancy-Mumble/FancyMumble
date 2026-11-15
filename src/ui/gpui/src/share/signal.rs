@@ -68,6 +68,7 @@ pub(crate) struct Signal {
     pub payload: String,
 }
 
+#[cfg_attr(target_os = "android", expect(dead_code, reason = "what uses it is not built on Android, where share/real_absent.rs stands in"))]
 /// A peer that waits for the SFU's answer to its offer.
 pub(crate) trait Answerable: Send + Sync {
     /// Whether its offer is still unanswered.
@@ -76,6 +77,7 @@ pub(crate) trait Answerable: Send + Sync {
     fn accept(&self, sdp: String);
 }
 
+#[cfg_attr(target_os = "android", expect(dead_code, reason = "what uses it is not built on Android, where share/real_absent.rs stands in"))]
 /// Which peer an answer is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum For {
@@ -85,6 +87,7 @@ enum For {
     Viewer(Session),
 }
 
+#[cfg_attr(target_os = "android", expect(dead_code, reason = "what uses it is not built on Android, where share/real_absent.rs stands in"))]
 impl For {
     /// Who `payload`, sent as from `sender`, can be the answer for: either,
     /// or both while the broadcaster's section count is not known.
@@ -101,9 +104,11 @@ impl For {
     }
 }
 
+#[cfg_attr(target_os = "android", expect(dead_code, reason = "what uses it is not built on Android, where share/real_absent.rs stands in"))]
 /// How long an answer nobody claimed is held for a peer registered late.
 const HELD_FOR: Duration = Duration::from_secs(3);
 
+#[cfg_attr(target_os = "android", expect(dead_code, reason = "what uses it is not built on Android, where share/real_absent.rs stands in"))]
 /// Where answers go: the peers waiting for one, and the answers that came
 /// before their peer.
 #[derive(Default)]
@@ -111,6 +116,7 @@ pub(crate) struct Answers {
     waiting: Mutex<Waiting>,
 }
 
+#[cfg_attr(target_os = "android", expect(dead_code, reason = "what uses it is not built on Android, where share/real_absent.rs stands in"))]
 #[derive(Default)]
 struct Waiting {
     peers: Vec<(For, Arc<dyn Answerable>)>,
@@ -123,6 +129,7 @@ impl std::fmt::Debug for Answers {
     }
 }
 
+#[cfg_attr(target_os = "android", expect(dead_code, reason = "what uses it is not built on Android, where share/real_absent.rs stands in"))]
 impl Answers {
     /// Take `payload`, an answer sent as from `sender`, for the peer it is
     /// for. Runs on the engine's receive thread, so it never waits: when the

@@ -47,6 +47,9 @@ pub(crate) mod fit;
 pub(crate) mod frame;
 pub(crate) mod made_up;
 pub(crate) mod pattern;
+// Android has no capture or peers yet (`fancy-screenshare` does not build
+// there): a stand-in that knows of shares without making them.
+#[cfg_attr(target_os = "android", path = "real_absent.rs")]
 pub(crate) mod real;
 pub(crate) mod replay;
 pub(crate) mod shares;
@@ -117,6 +120,7 @@ pub(crate) enum Heard {
 /// A share to start.
 #[derive(Debug, Clone)]
 pub(crate) struct Start {
+    #[cfg_attr(target_os = "android", expect(dead_code, reason = "what uses it is not built on Android, where share/real_absent.rs stands in"))]
     /// The server it is on: its signalling goes there, whatever is on
     /// screen later.
     pub server: Option<SharedString>,
@@ -127,6 +131,7 @@ pub(crate) struct Start {
 /// A share to watch, and where its frames go.
 #[derive(Debug, Clone)]
 pub(crate) struct Watch {
+    #[cfg_attr(target_os = "android", expect(dead_code, reason = "what uses it is not built on Android, where share/real_absent.rs stands in"))]
     pub server: Option<SharedString>,
     pub session: Session,
     /// The local user's own share (its preview), or their account's on
@@ -143,6 +148,7 @@ pub(crate) struct Watch {
 /// One track of a watched share, and where its frames go.
 #[derive(Debug, Clone)]
 pub(crate) struct WatchTrack {
+    #[cfg_attr(target_os = "android", expect(dead_code, reason = "what uses it is not built on Android, where share/real_absent.rs stands in"))]
     pub mid: String,
     pub wanted: Arc<Wanted>,
     pub slot: FrameSlot,

@@ -42,6 +42,7 @@ impl Area {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Lies {
     At(Area),
+    #[cfg_attr(target_os = "android", expect(dead_code, reason = "what uses it is not built on Android, where share/real_absent.rs stands in"))]
     /// Out of sight for now: a minimized window.
     Hidden,
     /// No more: a closed window, an unplugged monitor, or nowhere to lie.

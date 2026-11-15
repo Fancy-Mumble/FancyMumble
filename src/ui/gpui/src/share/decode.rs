@@ -22,8 +22,10 @@ use super::frame::{Frame, FrameSlot, Pace, Wanted};
 /// What the viewer hands over for one track.
 #[derive(Debug, Clone)]
 pub(crate) enum Unit {
+    #[cfg_attr(target_os = "android", expect(dead_code, reason = "what uses it is not built on Android, where share/real_absent.rs stands in"))]
     /// A new `avcC` record: the parameter sets every unit after it needs.
     Config(Vec<u8>),
+    #[cfg_attr(target_os = "android", expect(dead_code, reason = "what uses it is not built on Android, where share/real_absent.rs stands in"))]
     /// One access unit, length-prefixed.
     Sample { data: Vec<u8>, keyframe: bool },
 }
@@ -163,6 +165,7 @@ impl Decoding {
         })
     }
 
+    #[cfg_attr(target_os = "android", expect(dead_code, reason = "what uses it is not built on Android, where share/real_absent.rs stands in"))]
     /// Take units until the viewer stops sending them.
     pub(crate) fn run(mut self, units: &std::sync::mpsc::Receiver<Unit>) {
         for unit in units {

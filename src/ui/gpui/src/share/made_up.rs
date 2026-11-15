@@ -146,6 +146,7 @@ fn sources() -> Vec<Source> {
     ]
 }
 
+#[cfg_attr(target_os = "android", expect(dead_code, reason = "what uses it is not built on Android, where share/real_absent.rs stands in"))]
 /// The pattern's sources: what is offered wherever no real screen may be.
 pub(crate) fn pattern_sources() -> Vec<Source> {
     sources()
