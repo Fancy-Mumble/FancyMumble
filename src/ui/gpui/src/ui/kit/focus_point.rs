@@ -1,13 +1,14 @@
-//! Where a picture's subject is: the whole picture, small, with a ring on
-//! the point that stays in view when a room cuts the picture (the web
-//! UI's `FocusPicker`). Pressed or dragged to a point, or moved with the
-//! arrow keys.
+//! Where a picture's subject is: the whole picture, with a ring on the
+//! point that stays in view when a room cuts the picture (the web UI's
+//! `FocusPicker`). Pressed or dragged to a point, or moved with the arrow
+//! keys. Drawn blurred, darkened and washed as the wall is, so the bars
+//! beside it can be judged on it.
 
 use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui::{
-    App, Bounds, DispatchPhase, ElementId, Hitbox, HitboxBehavior, IntoElement, MouseButton,
+    App, Bounds, DispatchPhase, ElementId, Hitbox, HitboxBehavior, Hsla, IntoElement, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, RenderOnce, SharedString,
     Styled, Window, canvas, div, prelude::*, px,
 };
@@ -17,7 +18,7 @@ use crate::pictures::{Fit, shown};
 use crate::theme::ActiveTheme;
 
 /// The box the picture is letterboxed in.
-const FRAME: (f32, f32) = (232.0, 130.0);
+const FRAME: (f32, f32) = (440.0, 248.0);
 /// How large the ring is.
 const MARK: f32 = 16.0;
 /// How far one press of an arrow key moves the point.
@@ -36,6 +37,9 @@ pub(crate) struct FocusPicker {
     id: SharedString,
     picture: Arc<gpui::Image>,
     at: (f32, f32),
+    blur: u8,
+    dim: f32,
+    wash: Hsla,
     on_change: Option<Moved>,
 }
 
@@ -50,8 +54,21 @@ impl FocusPicker {
             id: id.into(),
             picture,
             at,
+            blur: 0,
+            dim: 0.0,
+            wash: gpui::transparent_black(),
             on_change: None,
         }
+    }
+
+    /// Draw it as the wall is drawn: blurred `blur` pixels, darkened by
+    /// `dim`, under `wash`. The blurred copy is the wall's own, so showing
+    /// it here reads nothing the conversation has not read already.
+    pub(crate) fn looks(mut self, blur: u8, dim: f32, wash: Hsla) -> Self {
+        self.blur = blur;
+        self.dim = dim.clamp(0.0, 1.0);
+        self.wash = wash;
+        self
     }
 
     /// Called with the point, at a press, all through a drag, and at each
@@ -159,6 +176,9 @@ impl RenderOnce for FocusPicker {
             .then(|| TabStop::new(id.clone(), window, cx));
         let selector = self.id;
         let accent = theme.c.accent;
+        let mut dim = gpui::black();
+        dim.a = self.dim;
+        let layer = || div().absolute().top_0().left_0().size_full();
         let mark = div()
             .absolute()
             .left(px(at.0 * width - MARK / 2.0))
@@ -188,9 +208,17 @@ impl RenderOnce for FocusPicker {
             .h(px(height))
             .cursor_crosshair()
             .child(
-                gpui::img(shown(&self.picture, Fit::Tile))
-                    .size_full()
-                    .object_fit(gpui::ObjectFit::Fill),
+                // Clipped on its own, so a blurred edge stays inside the
+                // picture while the ring may still sit on its border.
+                layer()
+                    .overflow_hidden()
+                    .child(
+                        gpui::img(shown(&self.picture, Fit::Wall(self.blur)))
+                            .size_full()
+                            .object_fit(gpui::ObjectFit::Fill),
+                    )
+                    .child(layer().bg(dim))
+                    .child(layer().bg(self.wash)),
             )
             .child(mark)
             .child(grip)

@@ -193,6 +193,9 @@ fn hundredths(share: f32) -> f32 {
 pub(super) fn render(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> Div {
     let opacity = 1.0 - shell.chrome.wall_wash;
     let (blur, dim) = (shell.chrome.wall_blur, shell.chrome.wall_dim);
+    // The conversation's wash, so the picker shows what the wall will.
+    let mut wash = theme.c.canvas_b;
+    wash.a = shell.chrome.wall_wash.clamp(0.0, 1.0);
     let walls = &shell.chrome.walls;
     let lit = &shell.panels.settings.lit;
     let shown = walls.current().zip(shell.chrome.wall.clone());
@@ -224,6 +227,7 @@ pub(super) fn render(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> D
                 )))
                 .child(
                     FocusPicker::new("wall-focus", picture, (current.focus_x, current.focus_y))
+                        .looks(blur, dim, wash)
                         .on_change(cx.listener(|shell, at: &(f32, f32), _, cx| {
                             shell.set_wall_focus(*at, cx);
                         })),
@@ -305,7 +309,15 @@ fn default_tile(active: bool, theme: &Theme, cx: &mut Context<Shell>) -> impl In
         .text_color(theme.c.dim)
         .child("\u{2205}");
     let tile = tile("wall-default".into(), shows, t!("Default"), active, theme)
-        .on_click(cx.listener(|shell, _, _, cx| shell.set_wall(None, cx)));
+        // Already on the default there is nothing to switch to, so the tile
+        // opens the picker instead of doing nothing.
+        .on_click(cx.listener(move |shell, _, _, cx| {
+            if active {
+                shell.pick_wall(cx);
+            } else {
+                shell.set_wall(None, cx);
+            }
+        }));
     Reachable::new("wall-default", tile)
 }
 
