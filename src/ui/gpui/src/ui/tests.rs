@@ -1578,6 +1578,34 @@ fn the_message_under_the_pointer_has_a_pill_of_what_can_be_done_to_it(cx: &mut T
 }
 
 #[gpui::test]
+fn resting_on_the_pill_keeps_it(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell(cx);
+    let theirs = cx.debug_bounds("message-1").expect("their message");
+    let on_it = gpui::point(
+        theirs.left() + gpui::px(200.0),
+        theirs.bottom() - gpui::px(8.0),
+    );
+    cx.simulate_mouse_move(on_it, None, Modifiers::none());
+    cx.run_until_parked();
+    // The pill hides the reach under it from a hit test if it is the one
+    // that occludes: then the pointer on it read as gone, and it blinked.
+    let react = cx
+        .debug_bounds("pill-Add reaction")
+        .expect("react")
+        .center();
+    cx.simulate_mouse_move(react, None, Modifiers::none());
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| assert!(shell.on_pill(), "on the pill"));
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(400));
+    cx.run_until_parked();
+    shell.read_with(cx, |shell, _| {
+        assert!(shell.on_pill());
+        assert_eq!(shell.hovered_message(), Some(1));
+    });
+}
+
+#[gpui::test]
 fn what_a_message_hides_is_shown_at_a_click_on_it(cx: &mut TestAppContext) {
     let (shell, engine, cx) = shell(cx);
     // Long enough to fill its bubble, so the middle of the row is on it.

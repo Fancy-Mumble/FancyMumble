@@ -147,6 +147,12 @@ impl Shell {
         self.pointed.pill.message
     }
 
+    /// Whether the pointer is on the pill, as its hover listener heard it.
+    #[cfg(test)]
+    pub(super) fn on_pill(&self) -> bool {
+        self.pointed.pill.on_pill
+    }
+
     /// Do what the pill's button `act` says to message `index`.
     fn act_on_message(
         &mut self,
@@ -193,6 +199,10 @@ impl Shell {
             .absolute()
             .top(gap - px(GAP + HEIGHT))
             .pb(px(GAP))
+            // The reach blocks what lies under it, not the pill: an
+            // occluding pill would hide the reach's own hitbox, so resting on
+            // the pill would read as leaving it and the pill would blink.
+            .occlude()
             .on_hover(cx.listener(|shell, over: &bool, _, cx| shell.hover_pill(*over, cx)))
             .child(pill);
         Some(
@@ -217,7 +227,7 @@ impl Shell {
         if self.chrome.picked.is_some() {
             return None;
         }
-        let pill = self.pill(index, theme, cx)?.h(px(PINNED_HEIGHT));
+        let pill = self.pill(index, theme, cx)?.h(px(PINNED_HEIGHT)).occlude();
         Some(
             div()
                 .debug_selector(move || format!("pinned-actions-{index}"))
@@ -282,7 +292,6 @@ impl Shell {
             .bg(theme.c.bg0)
             .border_1()
             .border_color(theme.c.line2)
-            .occlude()
             .children(rest.iter().filter_map(|act| button(*act)))
             // The only divider, and only before the destructive end.
             .when_some(delete, |pill, delete| {
