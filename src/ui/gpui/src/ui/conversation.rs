@@ -91,10 +91,6 @@ fn day_label(day: i64, today: i64) -> String {
     }
 }
 
-/// How wide the column of messages grows: the web UI's
-/// `CHAT_COLUMN_MAX_WIDTH`.
-const COLUMN_MOST: f32 = 1360.0;
-
 /// What an empty conversation says, in the middle of where its messages
 /// would be: an empty pane reads as one that failed to load.
 fn nothing_said(theme: &Theme) -> impl IntoElement + use<> {
@@ -200,13 +196,14 @@ pub(super) fn render(
                                 .flex_1()
                                 .min_h_0()
                                 .relative()
-                                // On a wide window the column stops growing
-                                // and stands in the middle: a line of text
-                                // from one edge of a screen to the other is
-                                // not read, it is followed with a finger.
+                                // The river spans the pane, as the composer
+                                // under it does: own messages hug the right
+                                // edge, everyone else's the left. Each bubble
+                                // caps its own line length.
                                 .flex()
-                                .justify_center()
-                                .child(
+                                .child(super::kit::ScrollArea::list(
+                                    "conversation",
+                                    &shell.rows,
                                     list(
                                         shell.rows.clone(),
                                         cx.processor(|shell, row: usize, _, cx| {
@@ -214,7 +211,6 @@ pub(super) fn render(
                                         }),
                                     )
                                     .w_full()
-                                    .max_w(px(COLUMN_MOST))
                                     .h_full()
                                     // What is said, in the size chosen for
                                     // it; names and times keep their own.
@@ -223,7 +219,7 @@ pub(super) fn render(
                                         .settings
                                         .format
                                         .text_px())),
-                                )
+                                ))
                                 .when(shell.row_model.is_empty(), |river| {
                                     river.child(nothing_said(theme))
                                 })

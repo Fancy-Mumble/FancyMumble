@@ -136,7 +136,7 @@ pub(super) fn render(
     let mover = shell.panels.mover.as_ref()?;
     let title = format!("Move {} to…", shell.moved_name(mover.moved));
     let rooms = shell.destinations(mover, cx);
-    let list = div()
+    let list = crate::ui::kit::ScrollArea::div("mover-list", div()
         .id("mover-list")
         .max_h(px(320.0))
         .overflow_y_scroll()
@@ -155,7 +155,7 @@ pub(super) fn render(
                     .lead(icon("hash", 13.0, theme.c.dim))
                     .on_click(cx.listener(move |shell, _, _, cx| shell.move_to(id, cx))),
             )
-        }));
+        })));
     Some(
         Dialog::new("mover")
             .title(title)

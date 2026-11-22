@@ -85,6 +85,7 @@ impl RenderOnce for Sheet {
         let trap = self
             .hold
             .map(|hold| KeyTrap::new(self.id.clone(), hold, window, cx));
+        let id = self.id.clone();
         let sheet = base
             .id(self.id)
             .when(self.scrolls, StatefulInteractiveElement::overflow_y_scroll)
@@ -98,9 +99,14 @@ impl RenderOnce for Sheet {
             // A press on the sheet is not a press on what it floats over.
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .children(self.children);
-        match trap {
+        let sheet = match trap {
             Some(trap) => trap.around(sheet),
             None => sheet,
+        };
+        if self.scrolls {
+            super::ScrollArea::div(id, sheet).into_any_element()
+        } else {
+            sheet.into_any_element()
         }
     }
 }

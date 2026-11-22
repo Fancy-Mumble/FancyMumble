@@ -103,7 +103,9 @@ pub(super) fn render(
         .children(server.as_ref().and_then(|name| {
             super::kit::section_heading(name, Some(shell.snapshot.channels.len()), theme)
         }))
-        .child(
+        .child(super::kit::ScrollArea::list(
+            "channel-column",
+            &shell.column_list,
             gpui::list(
                 shell.column_list.clone(),
                 cx.processor(|shell, row: usize, _, cx| shell.render_column_row(row, cx)),
@@ -111,7 +113,7 @@ pub(super) fn render(
             .flex_1()
             .min_h_0()
             .py(px(8.0)),
-        )
+        ))
         .child(
             div()
                 .flex_none()

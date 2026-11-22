@@ -62,7 +62,8 @@ impl RenderOnce for SplitView {
             .flex()
             .gap(px(12.0))
             .min_h_0()
-            .child(
+            .child(super::ScrollArea::div(
+                ElementId::Name(list.clone()),
                 div()
                     .id(ElementId::Name(list))
                     .flex_none()
@@ -75,8 +76,9 @@ impl RenderOnce for SplitView {
                     .map(|list| edged(list, Edge::All, theme.skin.line_width))
                     .border_color(theme.c.line)
                     .children(self.list),
-            )
-            .child(
+            ))
+            .child(super::ScrollArea::div(
+                ElementId::Name(detail.clone()),
                 div()
                     .id(ElementId::Name(detail))
                     .flex_1()
@@ -84,7 +86,7 @@ impl RenderOnce for SplitView {
                     .max_h(most)
                     .overflow_y_scroll()
                     .child(self.detail),
-            )
+            ))
     }
 }
 

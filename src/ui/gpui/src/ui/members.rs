@@ -468,11 +468,13 @@ pub(super) fn render(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> i
         }))
         .child(offline_switch(members.show_offline, theme, cx))
         .child(div().flex_none().h(px(1.0)).bg(theme.c.line))
-        .child(
+        .child(super::kit::ScrollArea::list(
+            "member-list",
+            &members.list,
             gpui::list(members.list.clone(), cx.processor(Shell::member_row))
                 .flex_1()
                 .min_h_0()
                 .px(px(8.0))
                 .py(px(4.0)),
-        )
+        ))
 }

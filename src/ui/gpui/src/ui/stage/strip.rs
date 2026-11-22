@@ -33,7 +33,7 @@ pub(super) fn strip(
         .enumerate()
         .map(|(at, feed)| tile(shell, feed, at, focused == Some(feed), theme, cx))
         .collect();
-    div()
+    crate::ui::kit::ScrollArea::div("stage-strip", div()
         .id("stage-strip")
         .debug_selector(|| "stage-strip".to_owned())
         .w(px(RAIL))
@@ -42,7 +42,7 @@ pub(super) fn strip(
         .flex_col()
         .gap(px(6.0))
         .overflow_y_scroll()
-        .children(tiles)
+        .children(tiles))
         .into_any_element()
 }
 

@@ -173,7 +173,7 @@ pub(super) fn server_column(
         )
         .children(shell.chrome.carry.map(|carry| carry_card(carry, theme, cx)))
         .child(
-            div()
+            crate::ui::kit::ScrollArea::div("servers", div()
                 .id("servers")
                 .mt(px(8.0))
                 .flex_1()
@@ -205,7 +205,7 @@ pub(super) fn server_column(
                         }))
                         .child(icon("plus", 14.0, theme.c.dim))
                         .child("Add a server"),
-                ),
+                )),
         )
         .child(
             div()
@@ -442,7 +442,7 @@ pub(super) fn landing(
         .map(|identity| identity.id.clone());
     // The page scrolls: a server with many identities, or a low window,
     // puts the way onto it below the window's edge.
-    div()
+    crate::ui::kit::ScrollArea::div("landing", div()
         .id("landing")
         .flex_1()
         .min_w_0()
@@ -509,7 +509,7 @@ pub(super) fn landing(
                     },
                 ),
         )
-        .child(address_pill(&server, status))
+        .child(address_pill(&server, status)))
         .into_any_element()
 }
 

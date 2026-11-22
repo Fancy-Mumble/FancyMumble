@@ -1932,7 +1932,7 @@ pub(super) fn render_info(
             )
         })
         .child(
-            div()
+            crate::ui::kit::ScrollArea::div("info-body", div()
                 .id("info-body")
                 .flex_1()
                 .min_h_0()
@@ -1942,7 +1942,7 @@ pub(super) fn render_info(
                 .gap(px(14.0))
                 .text_size(px(13.5))
                 .children(super::facts::devices(&shell.shown_devices(&info.devices), theme))
-                .child(body),
+                .child(body)),
         )
         .child(
             div().flex().justify_end().child(

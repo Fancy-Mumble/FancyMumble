@@ -380,16 +380,17 @@ pub(super) fn render(
         // The tabs go to a group: with a search there are none to go to.
         .when(!searching, |dialog| dialog.child(tabs(theme, cx)))
         .children(nothing)
-        .child(
+        .child(super::kit::ScrollArea::uniform(
+            "emoji-rows",
+            Some(&picker.scroll),
             uniform_list(
                 "emoji-rows",
                 picker.rows.len(),
                 cx.processor(Shell::emoji_rows),
             )
-            .track_scroll(&picker.scroll)
             .flex_1()
             .min_h_0(),
-        )
+        ))
 }
 
 #[cfg(test)]

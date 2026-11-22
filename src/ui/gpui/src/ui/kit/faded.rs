@@ -70,14 +70,17 @@ impl RenderOnce for Faded {
             .relative()
             .w_full()
             .child(
-                div()
-                    .id(self.id)
-                    .debug_selector(move || selector.to_string())
-                    .w_full()
-                    .max_h(px(self.most))
-                    .overflow_y_scroll()
-                    .track_scroll(&self.scroll)
-                    .child(self.column),
+                super::ScrollArea::div(
+                    self.id.clone(),
+                    div()
+                        .id(self.id)
+                        .debug_selector(move || selector.to_string())
+                        .w_full()
+                        .max_h(px(self.most))
+                        .overflow_y_scroll()
+                        .child(self.column),
+                )
+                .tracked(Some(&self.scroll)),
             )
             .when(more_below, |area| {
                 area.child(fade(self.ground, &self.selector, false))

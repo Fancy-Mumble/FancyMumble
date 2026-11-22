@@ -197,7 +197,7 @@ pub(super) fn render(
                              another machine; an exported file holds its private key.",
         ))
         .child(
-            div()
+            crate::ui::kit::ScrollArea::div("certificate-list", div()
                 .id("certificate-list")
                 .flex_1()
                 .min_h_0()
@@ -222,7 +222,7 @@ pub(super) fn render(
                         .iter()
                         .enumerate()
                         .map(|(at, label)| row(shell, at, label, theme, cx)),
-                ),
+                )),
         )
         .child(
             div()

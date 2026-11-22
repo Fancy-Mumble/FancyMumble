@@ -45,13 +45,13 @@ pub(super) fn render(shell: &Shell, page: &AclPage, theme: &Theme, cx: &mut Cont
                 .gap(px(12.0))
                 .child(tree(shell, page, theme, cx))
                 .child(
-                    div()
+                    crate::ui::kit::ScrollArea::div("acl-detail", div()
                         .id("acl-detail")
                         .flex_1()
                         .min_w_0()
                         .max_h_full()
                         .overflow_y_scroll()
-                        .child(detail(shell, page, theme, cx)),
+                        .child(detail(shell, page, theme, cx))),
                 )
                 .child(filters(page.filters, theme, cx)),
         )
@@ -147,7 +147,7 @@ fn tree(shell: &Shell, page: &AclPage, theme: &Theme, cx: &mut Context<Shell>) -
         .flex_col()
         .child(SearchField::new(page.search.clone()))
         .child(
-            div()
+            crate::ui::kit::ScrollArea::div("acl-tree", div()
                 .id("acl-tree")
                 .mt(px(10.0))
                 .p(px(6.0))
@@ -158,7 +158,7 @@ fn tree(shell: &Shell, page: &AclPage, theme: &Theme, cx: &mut Context<Shell>) -
                 .bg(theme.c.card)
                 .map(|tree| edged(tree, Edge::All, theme.skin.line_width))
                 .border_color(theme.c.line)
-                .children(rows.collect::<Vec<_>>()),
+                .children(rows.collect::<Vec<_>>())),
         )
 }
 

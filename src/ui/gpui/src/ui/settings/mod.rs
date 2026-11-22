@@ -47,7 +47,7 @@ use gpui::{
 };
 
 use super::Shell;
-use super::kit::LINE;
+use super::kit::{LINE, ScrollArea};
 use super::text_input::{InputEvent, TextInput};
 use crate::store::{Format, Privacy};
 use crate::theme::Theme;
@@ -444,13 +444,12 @@ fn pane(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoEleme
         .absolute()
         .size_0()
     });
-    div()
+    let pane = div()
         .id("settings-page")
         .flex_1()
         .min_w_0()
         .h_full()
         .overflow_y_scroll()
-        .when_some(scroll, |pane, scroll| pane.track_scroll(&scroll))
         .px(px(52.0))
         .py(px(38.0))
         .line_height(relative(LINE))
@@ -464,7 +463,8 @@ fn pane(shell: &Shell, theme: &Theme, cx: &mut Context<Shell>) -> impl IntoEleme
                 }))
                 .child(page(shell, shell.panels.settings.page, theme, cx)),
         )
-        .children(seeker)
+        .children(seeker);
+    ScrollArea::div("settings-page", pane).tracked(scroll.as_ref())
 }
 
 /// What `page` holds.

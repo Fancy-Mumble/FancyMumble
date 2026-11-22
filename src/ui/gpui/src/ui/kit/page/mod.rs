@@ -122,6 +122,7 @@ impl PageView {
             follow,
         } = self;
         let selector = id.clone();
+        let state = list.clone();
         let list = gpui::list(list, move |at, window, cx| {
             let theme = ActiveTheme::get(cx);
             let painter = Painter::new(
@@ -137,10 +138,11 @@ impl PageView {
             element.into_any_element()
         })
         .size_full();
+        let bar = ElementId::Name(format!("page-{selector}-bar").into());
         div()
             .debug_selector(move || format!("page-{selector}"))
             .size_full()
-            .child(list)
+            .child(super::ScrollArea::list(bar, &state, list))
     }
 }
 

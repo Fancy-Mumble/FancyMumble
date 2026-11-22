@@ -282,6 +282,10 @@ impl RenderOnce for Table {
             .map(|card| edged(card, Edge::All, theme.skin.line_width))
             .border_color(theme.c.line)
             .child(header)
-            .child(list)
+            .child(super::ScrollArea::uniform(
+                SharedString::from(format!("{}-rows-bar", self.id)),
+                None,
+                list,
+            ))
     }
 }

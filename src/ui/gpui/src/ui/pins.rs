@@ -147,7 +147,7 @@ pub(super) fn render(
     let body = if shell.pins.is_empty() {
         nothing_pinned(theme).into_any_element()
     } else {
-        div()
+        crate::ui::kit::ScrollArea::div("pins-list", div()
             .id("pins-list")
             .p(px(6.0))
             .max_h(px(420.0))
@@ -161,7 +161,7 @@ pub(super) fn render(
                     .iter()
                     .enumerate()
                     .map(|(at, pin)| pin_row(pin, at, now_ms, theme, cx)),
-            )
+            ))
             .into_any_element()
     };
     // The sheet is the list; what holds it is what knows where it hangs

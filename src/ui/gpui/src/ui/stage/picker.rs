@@ -200,14 +200,14 @@ fn grid(picker: &Picker, theme: &Theme, cx: &mut Context<Shell>) -> AnyElement {
         .enumerate()
         .map(|(at, source)| card(picker, source, at, theme, cx))
         .collect();
-    div()
+    crate::ui::kit::ScrollArea::div("share-sources", div()
         .id("share-sources")
         .max_h(px(420.0))
         .overflow_y_scroll()
         .grid()
         .grid_cols(2)
         .gap(px(10.0))
-        .children(cards)
+        .children(cards))
         .into_any_element()
 }
 

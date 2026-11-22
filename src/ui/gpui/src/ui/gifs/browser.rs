@@ -477,13 +477,12 @@ fn grid(browser: &Browser, theme: &Theme, cx: &mut Context<Shell>) -> AnyElement
     }
     #[expect(clippy::cast_precision_loss, reason = "a few hundred rows at most")]
     let tall = browser.rows() as f32 * (TILE + GAP);
-    uniform_list("gif-rows", browser.rows(), cx.processor(Shell::gif_rows))
-        .track_scroll(&browser.scroll)
+    let rows = uniform_list("gif-rows", browser.rows(), cx.processor(Shell::gif_rows))
         .flex_none()
         .h(px(tall.min(GRID_MOST)))
         .px(px(INSET))
-        .pt(px(INSET))
-        .into_any_element()
+        .pt(px(INSET));
+    super::super::kit::ScrollArea::uniform("gif-rows", Some(&browser.scroll), rows).into_any_element()
 }
 
 /// The foot: how a GIF is sent, and who found it.

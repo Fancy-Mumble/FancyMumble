@@ -9,7 +9,7 @@ use gpui::{
 };
 
 use super::super::Shell;
-use super::super::kit::{LINE, Reachable};
+use super::super::kit::{LINE, Reachable, ScrollArea};
 use super::super::widgets::{EMPHASIS, icon};
 use super::{Page, search};
 use crate::theme::Theme;
@@ -52,7 +52,8 @@ pub(super) fn render(
                 .child(search_box(shell, theme))
                 .children(search::results(shell, theme, cx)),
         )
-        .child(
+        .child(ScrollArea::div(
+            "settings-pages",
             div()
                 .id("settings-pages")
                 .flex_1()
@@ -74,7 +75,7 @@ pub(super) fn render(
                         ),
                 )
                 .children(administration(shell, theme, cx)),
-        )
+        ))
 }
 
 /// A heading of the column, the web UI's `SectionLabel`: in the theme's

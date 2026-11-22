@@ -189,9 +189,8 @@ pub(super) fn render(
         body.child(view.listed(scrolled.list(), cx))
             .into_any_element()
     } else {
-        body.overflow_y_scroll()
-            .track_scroll(scrolled.scroll())
-            .child(view)
+        super::kit::ScrollArea::div("welcome-body", body.overflow_y_scroll().child(view))
+            .tracked(Some(scrolled.scroll()))
             .into_any_element()
     };
     Some(
