@@ -111,6 +111,19 @@ icons![
     "type",
 ];
 
+/// The application's icon, the web client's: the window's, the tray's and
+/// the desktop entry's.
+pub(crate) const APP_ICON: &[u8] = include_bytes!("../../tauri/icons/icon.png");
+
+/// The application's icon as pixels, for the window (X11 shows it; Wayland
+/// takes it from the desktop entry instead, see `desktop_entry`).
+pub(crate) fn app_icon() -> Option<std::sync::Arc<image::RgbaImage>> {
+    image::load_from_memory_with_format(APP_ICON, image::ImageFormat::Png)
+        .map(|image| std::sync::Arc::new(image.into_rgba8()))
+        .map_err(|error| eprintln!("the application's icon cannot be read: {error}"))
+        .ok()
+}
+
 /// Inter's bold, which the kit also reads letter outlines from
 /// (`ui::kit::lettering`).
 pub(crate) const INTER_BOLD: &[u8] = include_bytes!("../assets/fonts/Inter-Bold.ttf");

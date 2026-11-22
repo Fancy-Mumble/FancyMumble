@@ -19,8 +19,7 @@ pub(crate) use held::Tray;
 /// What the icon says when the pointer rests on it.
 const TOOLTIP: &str = "Fancy Mumble";
 
-/// The application's icon, the one the web client puts in the tray.
-const APP_ICON: &[u8] = include_bytes!("../../tauri/icons/icon.png");
+use crate::assets::APP_ICON;
 
 /// How many pixels a side the icon is handed to the system at: what a
 /// tray draws at twice the usual scale. The system shrinks it from there.

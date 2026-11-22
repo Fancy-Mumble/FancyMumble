@@ -15,6 +15,8 @@ mod bans;
 mod carry;
 mod console;
 mod demo;
+#[cfg(target_os = "linux")]
+mod desktop_entry;
 mod embed;
 mod engine;
 mod formats;
@@ -58,6 +60,10 @@ use gpui::{
 
 use theme::{ActiveTheme, Catalog, DEFAULT_THEME, Mode};
 use ui::Shell;
+
+/// The window's application id: on Wayland, the name of the desktop entry
+/// the compositor takes the window's icon and name from.
+const APP_ID: &str = "fancy-mumble";
 
 /// Starts the view: what `main` does on a desktop, and what the library
 /// entry point of the Android package does on a phone.
@@ -128,9 +134,12 @@ impl Launch {
             // The band is the title bar; the window draws its own frame.
             window_decorations: Some(WindowDecorations::Client),
             window_min_size: Some(size(px(720.0), px(480.0))),
-            app_id: Some("fancy-mumble".to_owned()),
+            app_id: Some(APP_ID.to_owned()),
+            icon: assets::app_icon(),
             ..WindowOptions::default()
         };
+        #[cfg(target_os = "linux")]
+        desktop_entry::ensure(APP_ID);
         // `FANCY_GPUI_TRAY=on|off`; else an icon with the real engine,
         // which is the one with a store.
         let in_tray = tray::wanted(
