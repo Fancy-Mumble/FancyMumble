@@ -3594,3 +3594,47 @@ fn a_picture_shared_as_a_file_goes_as_usual_and_is_shown_as_a_picture(cx: &mut T
     shell.read_with(cx, |shell, _| assert!(shell.lightbox.is_some()));
     let _ = std::fs::remove_dir_all(folder);
 }
+
+/// Walk the pointer from inside message `index` straight up onto its pill's
+/// react button, a step at a time, and rest there: the pill must be that
+/// message's at every step, and still be once the grace has run out.
+fn walk_up_to_the_pill(cx: &mut VisualTestContext, shell: &Entity<Shell>, index: usize) {
+    let selector: &'static str = Box::leak(format!("message-{index}").into_boxed_str());
+    let row = cx.debug_bounds(selector).expect("the message");
+    let start = gpui::point(row.left() + gpui::px(200.0), row.bottom() - gpui::px(8.0));
+    cx.simulate_mouse_move(start, None, Modifiers::none());
+    cx.run_until_parked();
+    let react = cx.debug_bounds("pill-Add reaction").expect("its pill").center();
+    let mut at = gpui::point(react.x, start.y);
+    while at.y > react.y {
+        cx.simulate_mouse_move(at, None, Modifiers::none());
+        cx.run_until_parked();
+        shell.read_with(cx, |shell, _| {
+            assert_eq!(shell.hovered_message(), Some(index), "at {at:?}");
+        });
+        at.y -= gpui::px(2.0);
+    }
+    cx.simulate_mouse_move(react, None, Modifiers::none());
+    cx.run_until_parked();
+    for _ in 0..5 {
+        cx.executor()
+            .advance_clock(std::time::Duration::from_millis(100));
+        cx.run_until_parked();
+        shell.read_with(cx, |shell, _| {
+            assert!(shell.on_pill(), "on the pill");
+            assert_eq!(shell.hovered_message(), Some(index));
+        });
+    }
+}
+
+#[gpui::test]
+fn the_pill_is_reached_across_the_message_above(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell(cx);
+    walk_up_to_the_pill(cx, &shell, 2);
+}
+
+#[gpui::test]
+fn the_topmost_message_keeps_its_pill(cx: &mut TestAppContext) {
+    let (shell, _engine, cx) = shell(cx);
+    walk_up_to_the_pill(cx, &shell, 0);
+}
