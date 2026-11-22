@@ -72,8 +72,9 @@ portal-probe = ["gpu"]
 [target.'cfg(target_os = "linux")'.dependencies]
 # screencast: the compositor's ScreenCast portal (capture + GNOME's native
 # source picker); camera: the AccessCamera consent dialog for the
-# GNOME-native camera share button.
-ashpd = { version = "0.13", default-features = false, features = ["tokio", "screencast", "camera"], optional = true }
+# GNOME-native camera share button. async-io, not tokio: GPUI's Linux
+# platform turns async-io on, and ashpd refuses both at once.
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "screencast", "camera"], optional = true }
 # 0.8 to stay on xcap's pipewire-sys (Cargo permits one links="pipewire-0.3").
 pipewire = { version = "0.8", optional = true }
 cros-codecs = { version = "0.0.6", features = ["vaapi"], optional = true }

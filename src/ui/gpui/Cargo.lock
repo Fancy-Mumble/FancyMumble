@@ -374,7 +374,6 @@ dependencies = [
  "getrandom 0.4.3",
  "serde",
  "serde_repr",
- "tokio",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols",
@@ -2064,8 +2063,7 @@ dependencies = [
 [[package]]
 name = "cros-libva"
 version = "0.0.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "902c9726e953b678595456bd38f95f31aaf1947c56dd9f4a2290f3f1eca4d228"
+source = "git+https://github.com/Fancy-Mumble/cros-libva?branch=fancy%2Flibva-1.23#0efe4268a2c3299879d5d668d48b76ff5a63785b"
 dependencies = [
  "bindgen 0.70.1",
  "bitflags 2.13.2",
@@ -10137,7 +10135,6 @@ dependencies = [
  "signal-hook-registry",
  "socket2 0.6.5",
  "tokio-macros",
- "tracing",
  "windows-sys 0.61.2",
 ]
 
@@ -12570,7 +12567,6 @@ dependencies = [
  "rustix 1.1.6",
  "serde",
  "serde_repr",
- "tokio",
  "tracing",
  "uds_windows",
  "uuid",

@@ -185,6 +185,9 @@ data-encoding = "2"
 async-process = { git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d" }
 async-task = { git = "https://github.com/zed-industries/async-task.git", rev = "015845a19fc31752c02367567d3b8900a406f9da" }
 calloop = { git = "https://github.com/zed-industries/calloop" }
+# libva 2.23 added two VP9 fields that cros-libva 0.0.12 does not fill in;
+# the same fork the workspace patches in.
+cros-libva = { git = "https://github.com/Fancy-Mumble/cros-libva", branch = "fancy/libva-1.23" }
 
 # Debug information for this package only. With it for all seven hundred
 # dependencies as well, a debug build is tens of gigabytes on disk.
