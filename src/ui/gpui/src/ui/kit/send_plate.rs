@@ -22,7 +22,10 @@ type OnClick = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 #[derive(IntoElement)]
 pub(crate) struct SendPlate {
     id: &'static str,
-    label: SharedString,
+    /// The word cut into it; none where the glyph says it alone (the
+    /// microphone that starts a voice message, as the web UI's plate has it).
+    label: Option<SharedString>,
+    glyph: &'static str,
     tip: Option<(SharedString, Option<SharedString>)>,
     /// Something to send: lit. Nothing: the accent, faded, and no gradient.
     ready: bool,
@@ -34,15 +37,31 @@ impl SendPlate {
     pub(crate) fn new(id: &'static str, label: impl Into<SharedString>) -> Self {
         Self {
             id,
-            label: label.into(),
+            label: Some(label.into()),
+            glyph: "send",
             tip: None,
             ready: false,
             on_click: None,
         }
     }
 
+    /// The plate with `glyph` alone on it, no word.
+    pub(crate) fn glyph_only(id: &'static str, glyph: &'static str) -> Self {
+        Self {
+            label: None,
+            glyph,
+            ..Self::new(id, "")
+        }
+    }
+
     pub(crate) fn ready(mut self, ready: bool) -> Self {
         self.ready = ready;
+        self
+    }
+
+    /// What it says under the pointer.
+    pub(crate) fn tip(mut self, says: impl Into<SharedString>) -> Self {
+        self.tip = Some((says.into(), None));
         self
     }
 
@@ -108,18 +127,24 @@ impl RenderOnce for SendPlate {
                     .border_2()
                     .border_color(theme.c.accent_text),
             })
+            .when_some(self.label, |button, label| {
+                button.child(
+                    div()
+                        .relative()
+                        .italic()
+                        .font_weight(gpui::FontWeight::EXTRA_BOLD)
+                        .text_size(px(12.5))
+                        .line_height(px(12.5))
+                        .letter_spacing(0.12)
+                        .text_color(ink)
+                        .child(SharedString::from(label.to_uppercase())),
+                )
+            })
             .child(
                 div()
                     .relative()
-                    .italic()
-                    .font_weight(gpui::FontWeight::EXTRA_BOLD)
-                    .text_size(px(12.5))
-                    .line_height(px(12.5))
-                    .letter_spacing(0.12)
-                    .text_color(ink)
-                    .child(SharedString::from(self.label.to_uppercase())),
+                    .child(crate::ui::widgets::icon(self.glyph, 14.0, ink)),
             )
-            .child(div().relative().child(crate::ui::widgets::icon("send", 14.0, ink)))
             .when_some(self.tip, |button, (says, key)| {
                 button.tooltip(super::keyed_tip(says, key))
             })

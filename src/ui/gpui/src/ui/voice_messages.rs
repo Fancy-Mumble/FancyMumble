@@ -447,28 +447,64 @@ impl Shell {
         Some(bar.into_any_element())
     }
 
-    /// The composer's round button where it is about a voice message: the
-    /// microphone while one is offered, send while one is recorded.
-    pub(super) fn voice_button(&self, armed: bool, cx: &mut Context<Self>) -> Option<IconButton> {
-        use super::kit::{Corner, Variant};
-        let button = |id: &'static str, glyph: &'static str, tip: SharedString| {
-            IconButton::new(id, glyph)
-                .tip(tip)
-                .size(32.0)
-                .corner(Corner::Pill)
-                .variant(Variant::Solid)
-        };
+    /// The composer's button where it is about a voice message: the
+    /// microphone while one is offered, send while one is recorded. Round,
+    /// or on Send's plate where the theme plates the composer (`plates`), as
+    /// the web UI's drawn skin has it.
+    pub(super) fn voice_button(
+        &self,
+        armed: bool,
+        plates: bool,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        use super::kit::{Corner, SendPlate, Variant};
+        type OnClick = Box<dyn Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App)>;
+        // Unlit where it has no click: a take that is already going.
+        let button =
+            |id: &'static str, glyph: &'static str, tip: SharedString, click: Option<OnClick>| {
+                let lit = click.is_some();
+                if plates {
+                    let plate = if glyph == "send" {
+                        SendPlate::new(id, t!("Send"))
+                    } else {
+                        SendPlate::glyph_only(id, glyph)
+                    };
+                    let plate = plate.ready(lit).tip(tip);
+                    match click {
+                        Some(click) => plate.on_click(click).into_any_element(),
+                        None => plate.into_any_element(),
+                    }
+                } else {
+                    let round = IconButton::new(id, glyph)
+                        .tip(tip)
+                        .size(32.0)
+                        .corner(Corner::Pill)
+                        .variant(Variant::Solid)
+                        .faded(!lit);
+                    match click {
+                        Some(click) => round.on_click(click).into_any_element(),
+                        None => round.into_any_element(),
+                    }
+                }
+            };
         if let Some(take) = &self.voice.take {
-            let send = button("voice-send", "send", t!("Send voice message")).faded(take.sending);
-            return Some(if take.sending {
-                send
-            } else {
-                send.on_click(cx.listener(|shell, _, _, cx| shell.send_voice(cx)))
-            });
+            let click: Option<OnClick> = (!take.sending)
+                .then(|| Box::new(cx.listener(|shell, _, _, cx| shell.send_voice(cx))) as OnClick);
+            return Some(button(
+                "voice-send",
+                "send",
+                t!("Send voice message"),
+                click,
+            ));
         }
         self.voice_offered(armed).then(|| {
-            button("voice-record", "mic", t!("Record a voice message"))
-                .on_click(cx.listener(|shell, _, _, cx| shell.start_voice(cx)))
+            let click = Box::new(cx.listener(|shell, _, _, cx| shell.start_voice(cx))) as OnClick;
+            button(
+                "voice-record",
+                "mic",
+                t!("Record a voice message"),
+                Some(click),
+            )
         })
     }
 }

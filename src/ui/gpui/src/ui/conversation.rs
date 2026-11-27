@@ -917,8 +917,8 @@ fn composer(shell: &Shell, window: &Window, cx: &mut Context<Shell>) -> impl Int
         .unwrap_or_else(|| shell.composer.clone().into_any_element());
     let waiting_tip = uploading.then(|| crate::words::t!("Waiting for the upload to finish"));
     // No voice message is offered while a file goes up: Send stands, unlit.
-    let voice = if uploading { None } else { shell.voice_button(armed, cx) };
-    let send = voice.map(IntoElement::into_any_element).unwrap_or_else(|| {
+    let voice = if uploading { None } else { shell.voice_button(armed, plates, cx) };
+    let send = voice.unwrap_or_else(|| {
         let says = waiting_tip.clone().unwrap_or_else(|| crate::words::t!("Send"));
         if plates {
             super::kit::SendPlate::new("send", crate::words::t!("Send"))
